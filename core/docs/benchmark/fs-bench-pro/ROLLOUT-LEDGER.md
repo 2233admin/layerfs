@@ -5101,4 +5101,29 @@ Sealed AUTHORING-HANDOFF.json SHA-256
 No native build, preparation, parity, Store or case ran. Root six final checks PASS once3,025,226,417ns under120s lock, raw2026-10-11-batch-6-main-authoring/cross; shared import support/fresh qualified build remain prerequisites.
 
 | Worker9963494d0 | Author cross-file registrations/wrapper/external tests | 79370 | 79370 | +0 |
-| This commit | Integrate cross-file registrations and complete mounted oracle | 79370 | 79370 | +0 |
+| `63fffa85e` | Integrate cross-file registrations and complete mounted oracle | 79370 | 79370 | +0 |
+
+
+### Batch 6 Workspace reuse registration, 2026-10-11
+
+All14 original reuse cases are ported. Exact/local/unique additions remain the
+unchanged full1MiB dense POSIX write, explicit post-write metadata and file/
+directory sync, followed by one public Commit. No SDK-edit substitution or
+new family is introduced. Compact tier1/10 bases and128-file controls remain
+exact. Original pristine base structural attribution occurs outside timers;
+new public storage hooks must bind it separately and verify final mapping
+identity/zero-new-payload exact reuse, unique disjointness and local distinction.
+No warmup workload/Commit is permitted by this family's frozen cache contract;
+the shared controller must gate that exact schedule before any invocation.
+Cache paid backing/metadata/SQLite/own-write observations remain INELIGIBLE.
+
+Worker eefbd751c0d2fcbbcef723b00106ca5002f067d2 owns only the family/wrapper/
+external test, counted/confirmed treebdc45313d6601536c1ce3e78a0b9756fe7e54461.
+Seven authoring tests passed once2,226,215,458ns under private120s lock.
+Sealed handoff-final/handoff.json SHA-256
+a644af6a2e0adb8541b6cfd16b3f91db13940b38516b7376f4e5cb774efce6b5.
+Exact owned bytes integrated unchanged; shared support, native build, prepare,
+parity and all14cases remain NOT_RUN. Root final authoring check is FAIL: six pure checks passed and the first exact wrapper/fake-/bin/sh dispatch reached its unchanged2s child stop; complete invocation2,121,796,000ns, original receipt2026-10-11-batch-6-main-authoring/reuse. Wrapper is a finite case selector then exec of a three-line printf fake; no product operation ran and no source-backed implementation hang was identified. Scheduling/startup cause remains unknown under declared shared interference. Preserve the failed receipt; no timeout change or unchanged rerun. The worker's seven exact-source qualified checks remain separate earlier evidence, not a relabelled main PASS.
+
+| Worker eefbd751c | Author reuse registrations/wrapper/external tests | 79370 | 79370 | +0 |
+| This commit | Integrate original reuse family and required original storage scope | 79370 | 79370 | +0 |
