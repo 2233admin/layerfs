@@ -103,6 +103,8 @@ comparison or release-admission claim. Durable is
 | 66 | Add original family subdirectory for newly recorded parallel runs sharing one source commit | Explicit owner parallel authorization allows several independently registered families at the same clean source; section6.1 fixed filenames otherwise collide | Overwrite reports, invent a source identity, or alter closed run paths |
 | 67 | Consume the original cache helper exit3 as a declared ClassA INELIGIBLE observation, then finish the unchanged full verifier and terminal shutdown | The helper intentionally returns3 for resident content pages; numeric ineligibility cannot skip functional proof/Stop. Every other observer exit or mismatched declaration stays a failure | Treat cache ineligibility as a product crash or weaken cold eligibility |
 | 68 | Preserve authenticated ClassA unavailable cache observation while completing the full functional proof | Spec sections5/6.1 require unknown cache state INELIGIBLE, not invented coldness or skipped verifier; checker refusal and exact reason stay visible | Retry observer, wait for warmth/identity to fit, change cache phase, or claim cache PASS |
+| 69 | Retain original repository staging15s setup ceiling and failed-copy custody, then run the distinct smaller profile unchanged | Staging is separate harness setup before measured state operations; changing its timeout after the miss would fit a failure. Original300s per-state operation declaration and owner120s whole-test stop remain distinct | Enlarge setup timeout, remove checkpoint assets, replay stride3 or infer completion from partial copy |
+| 70 | Extend the existing failed-preparation closure to repository deepseek-full in a spec-only commit | The unchanged120s preparation expired before sealed input existed; no honest actual sample can run. General closure already applies the same rule to retained batch4/5 failures | Retry/widen preparation, sample partial fixture or claim passing done-when |
 
 ## Bugs
 
@@ -5879,5 +5881,36 @@ completed import controller, so082evidence is reused without replay.
 | Commit | Purpose | Production before | after | delta |
 | --- | --- | --- | --- | --- |
 | This commit | Record all10 cross-file results and two failed anchor cohorts | 79370 | 79370 | +0 |
+Pinned absent-aware staged counter/exact tree confirmation; reference absent,
+retiredR9c, last65,417/tree498dd1917812.
+
+
+### Batch 6 full repository failed-preparation specification closure, 2026-10-11
+
+The existing section9 failed-preparation exception now explicitly covers
+deepseek-full in repository_history. Its original157-checkpoint native
+recipe once reached external120s, exit124/wall120,027,598,333ns, with all157
+transition folders and partial fixture.json but no sealed prepared.json/
+resource-claim/Store/master. Finite recipe membership hashing/sealing follows
+fixture publication (repository_recipe.py305-318). No retry/feature/speed
+change or late-output promotion. Actual caseNOT_RUN and parityFAIL persist.
+Both independently prepared53/17 profiles passed individual parity; aggregate
+family parity remainsFAIL. The fresh administrative closure at082 binds the
+exact four preparation files, original registration and zero actual/proof
+attempts; it supplies no runtime/benchmark observations.
+
+Root inspected administrative receiptSHA
+79b6ff97ce2fd38da6d1a5cc55de613a47a425758add0d07ac919e6ee2f2837c,
+manifest9787ef4e9b6b98d07b396c741178200bf2f6beeb8d8b87b7016d1c2a9e7f9a1c,
+registration06660c1daa165c7d6a842b238abe73c409fd9accbebb07034dcea78c6c50a142.
+Raw namespace WT2026-10-11-batch-6-repository-history-08288e824 retains
+partial outputs and every failure. This is the same truthful failed closure
+as prior batches, not a passing done-when result. No timing limit or checker
+changed. Repository's current mounted-root controller bugH34 remains under
+repair; batch6 is still in progress and batch7 is not started.
+
+| Commit | Purpose | Production before | after | delta |
+| --- | --- | --- | --- | --- |
+| This commit | Extend existing failed-preparation closure to full repository | 79370 | 79370 | +0 |
 Pinned absent-aware staged counter/exact tree confirmation; reference absent,
 retiredR9c, last65,417/tree498dd1917812.

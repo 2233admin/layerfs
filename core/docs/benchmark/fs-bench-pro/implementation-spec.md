@@ -429,6 +429,15 @@ process later reported a complete sealed input, but late output does not
 promote the failed authorized invocation. Both failed preparations and every
 late artifact stay unchanged; no individual native state error or product
 correctness bug was identified, and neither case is sampled from that input.
+The same failed-preparation closure also applies to batch-6 `repository_history`
+`deepseek-full`: its one unchanged 120-second native-input preparation expired
+after the 157 selected checkpoint directories and partial `fixture.json` were
+written, before the sealed `prepared.json` and resource claim existed. Those
+partial native outputs do not establish passing preparation or authorize an
+actual history sample. Retain preparation `FAIL`, actual case `NOT_RUN` and
+aggregate parity `FAIL`; independently prepared and parity-passing cases may
+continue once. No preparation retry, deadline extension or late-output
+promotion is permitted.
 
 ## 10. Prerequisites and open decisions
 
