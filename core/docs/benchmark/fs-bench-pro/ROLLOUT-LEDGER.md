@@ -23,7 +23,7 @@ comparison or release-admission claim. Durable is
 | 3 Trees and tools | COMPLETE: all33 original cases ported/parity/sampled, full applicable proofs and clean closePASS; numeric33INELIGIBLE; first snapshotFAIL retained separately; localitydense500 and snapshot EXCEEDED | Shared3c697ae92; directory50c297c68/ad4f95503; locality2590a4536/26c037d90; snapshot0344bfdc6/fix03033abdc/results98d3be30a/70d568e94; Git acebd7cbd/guard031d427a7/results31fff4d49 | Begin batch4 after this committed closure, no identified fixable product correctness bug |
 | 4 History on one branch | CLOSED WITH FAILURES: all 43 original cases ported and recorded; 31 functional/proof/clean-close passes, 11 retained actual failures, one failed preparation with actual NOT_RUN; mixed aggregate parity FAIL retained under section 9 exception; no identified fixable product correctness bug remains | H11 2b52bdf17; H12 ea7148a19; H13 8ae040cdd; H14 e09c61bbd; product H15 a05ed6027; H16 9dfb70ee4; fresh seal3c67e9249; affected Init8f24e39a4; boundary88a2bd27b; partial bd3016957; mixed1a21ebfc3; dedup closure27708c11d | Begin batch 5 after this committed failed closure; verify existing public SDK Fork and History |
 | 5 Branches and Workspaces | CLOSED WITH FAILURES: all17 original cases ported/recorded; eight functional/proof/clean-close passes, eight actual concurrent refusal failures, one failed-preparation actual NOT_RUN; branch aggregate parity FAIL retained under section9 | SDK proof711593c5f; H21/22 4a40fb690; setup exceptionc23ac0cfd; H23 68209bdb7; H24 669bc4853; H25 2f7160c92; H26 616947cb6; branch305bee680; multicb3a003ac; historicalb0b2cd386 | Begin batch6 under this truthful failed closure, preserving all original failures/limits/proofs/resources |
-| 6 Dedup and storage | IN_PROGRESS: all54 ported, support/seal qualified; fresh install H28 repair; failed first7 receipts retained; reuse live | CDC77ebaa34e; cross63fffa85e; reusea442c8879; footprint5505bff73; repository55a323f2f; native86baeb91c; controllers149d40bac; report specfe07454d3 | Repair existing public installation boundary, retain original cohort; complete unaffected reuse and remaining fresh/repository cases once |
+| 6 Dedup and storage | IN_PROGRESS: four families closed with45 complete functional/proof/clean-close passes and6 actual proof failures; repository full-prep and stride3 staging failures retained, stride10 H34 fixed pending one affected run | definitions77eb/63ff/a442/5505/55a3; support86ba/149d; H28 1cc; H30/31 082; H32 0a8; H33 fe205; footprint8b684a3b1, reuse4d725864f, crossad21161eb, CDC79ad08b2a | Sample only affected repository stride10 once at corrected identity, retain old cohort; then close batch6 before batch7 |
 | 7 Reliability | PENDING | — | Wait for batch 6 completion |
 
 ## Decisions
@@ -114,6 +114,7 @@ comparison or release-admission claim. Durable is
 | H-31 | Footprint unique100000 at1cc25d4de | KeyError after actual Committed ACK | Init step indexed instead of declared mutation step and eager missing top-level fallback | 08288e824 | Three strict operation expectation guards; original red retained |
 | H-32 | Footprint unique100000 at08288e824 | Completed paid work/End/Gone, then cache-observation exit3 skipped proof and Stop | Controller treated the cache helper declared INELIGIBLE status as an execution error | This commit | test_actual_ineligible_a_observation_retains_miss_and_completed_cleanup plus eleven error/forgery refusals; parent red retained |
 | H-33 | Footprint unique100000 at0a8d15f0e | Completed paid work then original cache identity refusal skipped verification/Stop | Unknown cache classification incorrectly became a functional execution failure | This commit | Original UNAVAILABLE/status4 reproduction red; strict malformed/error refusal vectors and cache classifier INELIGIBLE guards |
+| H-34 | repository deepseek-stride10 at08288e824 | First original importer refuses target as notFUSE; actual mount was/workspaces/1 | Workload defaulted/workspace instead of authenticated actual mount root, for both apply and fresh verifier | Workera85f0ab97 / this integration | Parent full17 wrongtarget RED; nine final strict choreography/actualACK/custody tests PASS |
 | H-1 | C07 | Workload and verifier passed, unmount returned, residency helper refused changed file identity | Harness inspected overlay while automatic post-unmount reclamation was still mutating backing | `a1f2c259c` | `test_backing_observer_waits_for_original_reclamation_to_finish` |
 
 | H-3 | Generic mounted pilot proofs and prospective SDK proofs | Reachable path walk omitted exhaustive inode-table membership from original canonical verifier | Runtime compared declared paths/bytes but never enumerated current inode table | `37ec6826b` | edit_oracle_complete_membership_accepts_exact_and_rejects_unreachable_or_missing_rows |
@@ -5992,5 +5993,59 @@ unqualified and shared-host/DockerVM interference unquantified.
 | Commit | Purpose | Production before | after | delta |
 | --- | --- | --- | --- | --- |
 | This commit | Record all21 CDC outcomes and retained original failed cohort | 79370 | 79370 | +0 |
+Pinned absent-aware staged counter/exact tree confirmation; reference absent,
+retiredR9c, last65,417/tree498dd1917812.
+
+
+### H34 bind unchanged repository helpers to actual acknowledged mount, 2026-10-11
+
+Original repository stride3 setup failed at the unchanged15s docker cp
+stop before any Fork/Mount/Exec/Commit: outer53,208,544,375ns, copied command
+wall15,007,938,000ns. Host sealed code has78,416 members/863,044,487B:
+78,352 checkpoint manifest/blob assets,53 complete oracleJSONs,11 other
+helpers. It is separate setup, not the original300s per-state operation.
+Single later bounded read-only metadata census sees70,171files/703,945,215B;
+this is partial presence, not byte equality/continuous progress/remote
+cancellation/success. No15s limit, copy tree, payload or workload is changed
+to fit. Actual case remains failed before measurement, zero attempted
+operations, proofNOT_RUN and remote custody unknown.
+
+Stride10 at082 stages successfully, Forks and actually mounts/workspaces/1.
+Its original storage-smoke-import then refuses 'target is not a FUSE mount':
+controller's workload.sh default/workspace is wrong. Actual command_admission
+directory is/workspaces/1 but noLAYERFS_WORKSPACE_ROOT was supplied. No
+CommitACK exists. Outer34,387,208,041ns, one attemptedoperation/completed0/
+proofattempt0, no outer120s expiry. KnownEnd/Gone/Stop are unobserved.
+
+H34 uses the actual mount ACK event/key/incarnation/namespace/canonical
+directory, once after active mount custody is recorded; missing/wrong
+ACKs fail before commands and retain the published key. It supplies only
+quoted scopedLAYERFS_WORKSPACE_ROOT to the unchanged original apply and
+fresh native verify command bodies. No extra process/product operation,
+new native source, payload, verifier, schedule, cache treatment or timeout.
+Two synthetic valid-mount fixtures now return actual matching fields; every
+original assertion remains. Parent external full17 RED fails with the same
+wrong-target cause in186,347,917ns. Final worker9PASS592,418,542ns includes
+17paid/17freshverify commands, tenbad paid ACK mutations and twofresh
+negatives; root integrated9PASS744579667ns, eachprivate/main120s, noexpiry.
+Sealed worker handoff555fdaaf9a218d7440d660cfe40d3042b3116da8d3c19478a16f3c09c4035a1f
+and manifest3cbbb855a8b0634eef990b302298daed3817f6c6e7363b609b98e8625fbe4d16
+bind original red, final tests, exact3files and stagedLOC/resulttree.
+
+Preserve all original repository082 resources:
+- stride3 runtime8eeb73a0e2833f6c6f0101b01287500c0eeb1ab146094c2a4a349199e4d763e7; volumelayerfs-fsb-sample-cb89e3a4c9f54c29; setup remote cancellation/Stop unknown.
+- stride10 runtimed9cd853ee652bfdfe453c449ecb2edb743409b294d8f53381ece13323dbee107; volumelayerfs-fsb-sample-ffb7a6f707e74b56; actual mount451ef75d0cdbbbf65c4f03b24f0fa4e1a32c5abfc53902f4e9f56d3dd72d7f2e/ns1, noEnd/Gone/Stop inferred.
+
+The full failed preparation and stride3 failed staging are unaffected and
+will not run again. Only stride10 may receive one affected attempt at this
+new executed controller identity. Product9ac/runtime7766/eight other compiled
+assets unchanged, qualified seal reused without native build. Original
+300s state/14400s family declarations remain visible beside overriding
+owner120s whole-test ceiling; no original timer changed. Batch7 stays pending.
+
+| Commit | Purpose | Production before | after | delta |
+| --- | --- | --- | --- | --- |
+| Workera85f0ab97 | Actual repository root binding and external regression | 79370 | 79370 | +0 |
+| This commit | Integrate strict repository actual-root binding | 79370 | 79370 | +0 |
 Pinned absent-aware staged counter/exact tree confirmation; reference absent,
 retiredR9c, last65,417/tree498dd1917812.

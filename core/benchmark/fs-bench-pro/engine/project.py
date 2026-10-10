@@ -816,6 +816,26 @@ def repository_host_check(runtime):
     return runtime.host_observer.check()
 
 
+def repository_mount_root(mount, key):
+    """Bind the original helper to the actual acknowledged native mount."""
+    fields = mount.get('fields') if isinstance(mount, dict) else None
+    namespace = fields.get('workspace_namespace') if isinstance(fields, dict) else None
+    if (not isinstance(mount, dict) or mount.get('event') != 'mount'
+            or not isinstance(fields, dict) or type(key) is not str or len(key) != 64
+            or any(character not in '0123456789abcdef' for character in key)
+            or fields.get('key') != key or fields.get('workspace_incarnation') != key
+            or type(namespace) is not int or not 0 < namespace < 2**64
+            or fields.get('directory') != f'/workspaces/{namespace}'):
+        raise ValueError('repository actual mount acknowledgement root/token binding differs')
+    return fields['directory']
+
+
+def repository_helper_body(action, case, index, path, mounted_root):
+    import shlex
+    return ('LAYERFS_WORKSPACE_ROOT=' + shlex.quote(mounted_root) + ' ' +
+            shlex.join(['/bin/bash', '/code/workload.sh', action, case, str(index), path]))
+
+
 def repository_stop(runtime, stop):
     from . import workspace
     repository_host_check(runtime)
@@ -903,7 +923,6 @@ def repository_graph_proof(case, prepared, build, output, runtime, row, stop):
 def one_repository_history(case, prepared_folder, build_folder, output):
     """One exact original history, frozen before fresh mounted same-volume proofs."""
     import secrets
-    import shlex
     import time
     from . import fixtures, oracle, workspace
     from .recipes import repository_history as recipe
@@ -955,6 +974,7 @@ def one_repository_history(case, prepared_folder, build_folder, output):
         key = secrets.token_hex(32)
         mount = workspace.context_send(runtime,'mount-branch',key,'history',deadline=stop)
         active[runtime.container]=key
+        mounted_root = repository_mount_root(mount, key)
         repository_host_check(runtime)
         guards = {'before':workspace.history_resource_guard(runtime,build,phase,'resources-before'),'steps':[]}
         row['resource_guards']=guards
@@ -969,7 +989,7 @@ def one_repository_history(case, prepared_folder, build_folder, output):
                 phase,f'transfer-{index}',workspace.operation_deadline(stop,120)-time.monotonic())
             repository_host_check(runtime)
             # Exact admitted own helper bytes; source corpus is never read here.
-            body = shlex.join(['/bin/bash','/code/workload.sh','apply',case['id'],str(index),state['runtime_input']])
+            body = repository_helper_body('apply', case['id'], index, state['runtime_input'], mounted_root)
             command = runtime.send('command',key,workspace.script(phase,f'step-{index}.sh',body),deadline=stop)
             repository_host_check(runtime)
             commit = runtime.send('commit',key,deadline=stop)
@@ -1024,11 +1044,12 @@ def one_repository_history(case, prepared_folder, build_folder, output):
             if forked['fields']['root']!=fields['root'] or forked['fields']['head']!=fields['commit_id']:
                 raise ValueError('repository actual historical Fork root/head differs')
             repository_host_check(verify)
-            key=secrets.token_hex(32);workspace.context_send(verify,'mount-branch',key,label,deadline=stop);active[verify.container]=key
+            key=secrets.token_hex(32);mounted=workspace.context_send(verify,'mount-branch',key,label,deadline=stop);active[verify.container]=key
+            mounted_root = repository_mount_root(mounted, key)
             repository_host_check(verify)
             observed=f'/input/observed-{index}.tsv'
             native=verify.send('verify',key,workspace.script(verify_phase,f'observe-{index}.sh',
-                shlex.join(['/bin/bash','/code/workload.sh','verify',case['id'],str(index),observed])),deadline=stop)
+                repository_helper_body('verify', case['id'], index, observed, mounted_root)),deadline=stop)
             repository_host_check(verify)
             local=verify_phase/f'observed-{index}.tsv'
             receipts.command(['docker','--host','unix://'+build['socket'],'cp',verify.container+':'+observed,str(local)],verify_phase,

@@ -117,7 +117,11 @@ class RepositoryController(unittest.TestCase):
                 actions.append((label,'start',clone['volume']));return runtime,folder
             def context(runtime,op,key='',path=None,deadline=None):
                 actions.append((runtime.label,op,str(path)))
-                if op=='mount-branch':return {'span':{'duration_ns':3},'fields':{}}
+                if op=='mount-branch':
+                    namespace=1 if runtime.label=='performance' else 100+int(path.split('-')[-1])
+                    return {'event':'mount','span':{'duration_ns':3},'fields':{
+                        'key':key,'directory':f'/workspaces/{namespace}',
+                        'workspace_incarnation':key,'workspace_namespace':namespace}}
                 body=Path(path).read_text().strip().split('\t');index=int(key.split('-')[-1]);return {'fields':{'root':f'{index:064x}','head':'12'+f'{index:064x}'}}
             def fork(runtime,selected,spec,graph,out,stop):
                 fields={'branch_id':'11'+'5'*32,'name':'history','stack':'31'+'3'*32,'base_layer':'32'+'4'*64,'root':'0'*64,'head':'-'}
