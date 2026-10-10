@@ -502,7 +502,8 @@ def one_family_case(family, case, prepared_folder, build_folder, output):
             bindings["warmup_unmount"] = endpoint(warm_end)
             row["warmup_cleanup"] = readiness(runtime, warm)
             row["cache"].update(fresh_mount=True, warmup_terminal_unmount=True, warmup_cleanup="Gone",
-                                declaration="same untimed ordinary workload on prior mount, then terminal cleanup; fresh measured connection; setup warmth declared; no cold claim")
+                                declaration=("prior read-only mount ended without Exec; fresh measured connection; setup warmth declared; no cold claim" if body is None else
+                                             "same untimed ordinary workload on prior mount, then terminal cleanup; fresh measured connection; setup warmth declared; no cold claim"))
         selected = secrets.token_hex(32)
         clock.begin(time.monotonic_ns())
         row.update(attempted_operation_count=1, sample_count=1)

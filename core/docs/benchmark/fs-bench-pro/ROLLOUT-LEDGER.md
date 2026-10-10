@@ -1887,4 +1887,37 @@ trees and four scan trees shared by the two scan modes; samples stay independent
 Product79,366 unchanged, reference absent, exact pinned staged counting method.
 
 | `5773c34fb` (worker) | Register twelve original directory cases | 79366 | 79366 | +0 |
-| This commit | Integrate directory registration and its scoped contracts | 79366 | 79366 | +0 |
+| `50c297c68` | Integrate directory registration and its scoped contracts | 79366 | 79366 | +0 |
+
+Locality registration/writer integrated from `fa69ab6b7`. All16 original cases
+retain clean Commit/fixed move/distributed edits/dense rewrite at the four
+frozen tiers. Clean uses control_only with no workload Exec; distributed edits
+reuse the unchanged original sdk_edits ranked paths and exact4KiB XOR0x5a
+replacements at offset0/delete4096 via ordinary pwrite, original target-length
+guard, checked close and exact metadata restoration. There is no suffix copy,
+read, truncate, splice feature or new dependency. The precise fixture staging
+condition additionally copies the edit-linux binary for ordinary_sdk_edits;
+its independent native oracle remains the original ordinary workload verifier.
+The clean cache declaration now describes the actual prior read-only mount
+without Exec. Retired host Store RSS/spool peaks remain declared gaps.
+
+Two owning mechanical locality contracts PASS0.028s on main; two sealed-native
+qualifiers were explicitly NOT_RUN there pending changed writer compilation.
+Worker final clean build at67ec7f464 PASS<=97s with actual pinned Linux source
+hashes before/after, unchanged daemon f44900.../runtime fb203158..., new edit-host
+aab49ace5121d8c7a8b39baf6590d4ec5b6b3b754f4ee2c647d25daa5e1d77c4 and edit-linux
+efc81ac5d393630e1d41b1c7d09fcea5430eb399e8b460624df0d770d92201b6. Passing build
+container removed; OWNER-3 refusal retained. After source was sealed during
+build, the Python-only clean declaration correction was committed960a7f81e;
+compiled-input validation admits that exact unchanged binary set. All four
+mechanical/native qualifiers PASS3.775s at final source: full compact original
+oracle, selected stable inodes/suffix/background/modes/mtime, intentional byte
+corruption refusal and wrong selected length refusal before mutation. No
+product or original source changed, no sample has yet been reported.
+Production LOC79,366 unchanged, reference absent, pinned staged method.
+
+| `fa69ab6b7` (worker) | Register sixteen locality cases and ordinary positional adapter | 79366 | 79366 | +0 |
+| `c66af2c19` (directory worker) | Apply exact shared ordinary source without lead ledger | 79366 | 79366 | +0 |
+| `67ec7f464` (locality worker) | Apply shared source and precise edit helper staging | 79366 | 79366 | +0 |
+| `960a7f81e` (locality worker) | Correct clean mount provenance without compiled changes | 79366 | 79366 | +0 |
+| This commit | Integrate locality adapter/registration and exact helper provenance | 79366 | 79366 | +0 |

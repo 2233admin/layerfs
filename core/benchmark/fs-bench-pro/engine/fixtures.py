@@ -301,7 +301,7 @@ def prepare_workspace(recipe, folder, build_folder):
     helpers = assets(folder / "code")
     copies = [(Path(build["binaries"]["workload-linux"]["path"]), "writers/workload"),
               (identity.ROOT / "core/benchmark/fs-bench-pro/families" / family["family"] / "workload.sh", "workload.sh")]
-    if case.get("sdk_scenario") or history is not None:
+    if case.get("sdk_scenario") or case.get("ordinary_sdk_edits") or history is not None:
         copies.append((Path(build["binaries"]["edit-linux"]["path"]), "writers/edit"))
     for origin, relative in copies:
         target = Path(helpers["root"]) / relative

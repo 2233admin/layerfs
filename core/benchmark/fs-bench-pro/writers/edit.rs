@@ -182,10 +182,66 @@ fn apply(id: &str) -> reference::Result<()> {
     Ok(())
 }
 
+fn apply_workspace(id: &str) -> reference::Result<()> {
+    use reference::workspace_common::{self as common, EntryKind};
+    let case = reference::workspace_registry::resolve(id)?;
+    if case.family != "workspace_change_locality" || case.kind != "workspace-distributed-sdk-edit" {
+        return Err("original distributed locality edit case required".into());
+    }
+    let edits = reference::ordinary_workloads::sdk_edits(&case, 1)?;
+    let entries = reference::workspace_registry::fixture(&case, 1)?;
+    let by_path: std::collections::BTreeMap<_, _> = entries
+        .iter()
+        .map(|entry| (entry.path.as_str(), entry))
+        .collect();
+    if edits.len() != case.tier {
+        return Err("original distributed edit count differs".into());
+    }
+    let mut work = Progress::default();
+    for edit in &edits {
+        let entry = by_path
+            .get(edit.path.as_str())
+            .ok_or("original SDK target absent")?;
+        let EntryKind::File(content) = &entry.kind else {
+            return Err("original SDK target is not a regular file".into());
+        };
+        if edit.start != 0 || edit.delete_len != 4096 || edit.replacement.len() != 4096 {
+            return Err("original distributed edit range/replacement differs".into());
+        }
+        let file = OpenOptions::new().write(true).open(&edit.path)?;
+        let changed = (|| -> reference::Result<()> {
+            if file.metadata()?.len() != content.len() {
+                return Err("original distributed target fixture length differs".into());
+            }
+            write_exact_at(&file, &edit.replacement, edit.start, &mut work)?;
+            common::set_metadata(Path::new(&edit.path), entry)?;
+            Ok(())
+        })();
+        let closed = checked_close(file);
+        if let Err(error) = changed {
+            if let Err(close_error) = closed {
+                eprintln!("independent_close_failure={close_error}");
+            }
+            return Err(error);
+        }
+        closed?;
+    }
+    common::set_metadata(
+        Path::new("."),
+        by_path.get(".").ok_or("original root metadata missing")?,
+    )?;
+    eprintln!("ordinary_edit_writes={} ordinary_edit_write_bytes={} ordinary_edit_truncates={} ordinary_edit_reads={} ordinary_edit_read_bytes={}",
+        work.write_calls, work.write_bytes, work.truncate_calls, work.read_calls, work.read_bytes);
+    println!("mutation_status=pass\ncase={}\noriginal_sdk_edit_members={}\nreplacement_bytes={}\nreplacement_definition=original-sdk_edits-seed1-XOR0x5a",
+        case.id, edits.len(), work.write_bytes);
+    Ok(())
+}
+
 fn main() -> reference::Result<()> {
     let args: Vec<String> = std::env::args().collect();
     match args.as_slice() {
         [_, mode, id] if mode == "apply" => apply(id),
+        [_, mode, id] if mode == "apply-workspace" => apply_workspace(id),
         [_, mode, manifest] if mode == "verify-manifest" => {
             let entries =
                 reference::workspace_common::decode_manifest(&std::fs::read_to_string(manifest)?)?;
@@ -206,6 +262,6 @@ fn main() -> reference::Result<()> {
             }
             Ok(())
         }
-        _ => Err("apply CASE | verify CASE STEP required".into()),
+        _ => Err("apply CASE | apply-workspace CASE | verify CASE STEP | verify-manifest MANIFEST required".into()),
     }
 }
