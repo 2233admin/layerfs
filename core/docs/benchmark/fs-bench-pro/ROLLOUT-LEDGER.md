@@ -110,6 +110,7 @@ comparison or release-admission claim. Durable is
 | 73 | Reuse no whole reliability-case proof; source-review all28 and independently qualify the two expressible current-format cases | Exact closed receipt review found0 scope-identical whole current-case proofs; earlier150round receipts are not500Exec/600s and do not cover the frozen complete fixture/physical guards | Widen closedR8 receipts or relabel released v0.1.5 proof as current-source evidence |
 | 74 | Preserve actual owned named-file and runtime-file zero guards, exact namespace-row release and≤2GiB backing boundaries separately for the early integrity paths | Current overlay is shared per daemon; shared file persists beyond Workspace release. Source-backed exhaustive named ownership and actual observations are required; missing coverage fails full proof, never guessed zero. Per-Workspace physical peak remainsUNAVAILABLE | Equate Gone or zero SQL rows with zero shared-file size, omit cleanup, or replace canonical corruption with compressed-frame damage |
 | 75 | Remove89 exact owned passing closed setup masters after fresh identity/connection and custody admission; retain19 uncertain/failed/future candidates | Passing setup SDKKnownStop/container removal and source witness hashes establish custody; different frozen reliability fixture prevents reuse. No failed/uncertain sample resource, historical master or owner resource is selected | Keep unnecessary passing volumes or remove candidates by prefix/guess/force |
+| 76 | Generate exact supported RAWsingleton through existing public encoders and mutate only a same-length canonical target byte; delete only selected locator/advisory closure for missing fault | Current32768BWholeFile differs from retired firstChunk; sharedpack framing must remain valid and unrelated records unchanged. Existing public APIs and stdlibsqlite3 avoid newdependencies/features. Current wholepackSHA refusal is supplemental only; ordinary originalFUSE EIO0 remains mandatory | Corruptcompressed frame/CRC, handwriteproductencoding, disableFK/triggers, or acceptbroadIO/startup errors asfullproof |
 
 ## Bugs
 
@@ -6389,5 +6390,60 @@ explicit120s, fakeDockeronly/readreporttemplate, noactualcase or build.
 | Commit | Purpose | Production before | after | delta |
 | --- | --- | --- | --- | --- |
 | This commit | Admit truthful original integrity-copy installation scope | 79370 | 79370 | +0 |
+Pinned absent-aware staged counter/exact tree confirmation; reference absent,
+retiredR9c,last65,417/tree498dd1917812.
+
+
+### Batch7 current public initial/RAW target/fault native support, 2026-10-11
+
+Native host Runtime adds onlyverify-reliability-initial/control/fault;
+workspacewriter adds exact originaltwo-case materialize/verify-native routes.
+Complete original23paths/1,048,534regularfilebytes (nominalfixture1MiB
+includesalias+symlink lengths), metadata, hardlinkclasses, symlinktargets and
+completeinode-table membership are verified through existingpublic APIs.
+Authenticatedfirstmappingtarget is sentinels/f0003.dat, current32768BWholeFile
+inplace of retiredChunk. Existing record::encode_stored(Singleton),build_group,
+assemble produce supportedRAWsingleton; parsedRAWframe determineslasttarget
+byte. Completepositivecontrol reads exactcanonicalbytes before anyfault.
+The faulthelper authenticatesallotheroriginaltree state withpriorcanonical
+targetbytes explicitlysubstituted only for that failedobject; it doesnot
+pretend the faultedtargetpassescanonical proof.
+
+Missing exacttarget returnsObjectMissing(exacttarget). Corruptsingleton
+acquisition firstauthenticatesfullpackSHA inport/read_pack.rs16–18, yielding
+exactIoOther(innerPersistenceError::Malformed) throughstore/error.rs173–185
+before canonicaldependency identity. Nativehelper accepts onlythis actual
+downcast plus exacttarget/isolatedRAWlocator/one-byte audit; arbitraryIO
+errors remain failures. This is supplemental FaultVerified, not accepted
+originalearlyStore-open/mountsuccess. Fullcase still requires unchanged
+ordinaryFUSE read-corrupt EIO5/zerobytes, End/Gone/KnownStop andalloriginal
+resource/namedfile/runtimefile guards. No productfeature, SQLmutation in
+Runtime, dependency/lockfile orrootfrozen-source edit. Python controller
+owns exactclosed-copy SQL fault injection/audit separately.
+
+Imported five ownedfiles fromnativehandoffSHA155ecc55f27fc5277784e9fc2aa172a17a3bb9bd09e9f5c280acfa3f7551f96d,
+ownedpatchSHA1fe41aefdad386279cd8eb4e7ce95caa7917980bff1262a2ca74fadd34d2ee04
+at cappedprivate359 source; no privatecommit. Native initialmissingroute
+RED retained; firstno-run wrongcurrentBranchRecord field failed, corrected
+tocurrenthead_commit withoutproductchange. Firstnative5checks4PASS1FAIL
+0.17s retained (oldlate errorcategory); affected changedsource1PASS0.35s
+followingno-run8.69s. PrivatefixtureCLI3PASS0.917s followingARMrustc6s,
+fulltree/alias/SHA/wrongpayload/extraname/existingoutput/unrelatedcaseguards.
+
+Rootfinalexactsource no-runPASS8,601,399,292ns; externalRusttarget22PASS
+84,494,787,459ns/120s. Root omittedprivatefilter, so17additionalfrozen inline
+contracts ran; dedup_branch_history::mixed_v2_contract logs>60s thenpasses.
+No hang/repeat/limit change; existingharness8dead-codewarnings retained.
+Read-onlyownedPID69010 stackdiagnosticSHA97ae53e41e091e9005e4628e561546889920713fc5a1df9a9f294ef6c39c44f3,
+not benchmarktiming/causeproof. One premature recipebuild invocation was
+R4_LOCK_BUSYexit75 after13,358,083ns, before compilation; no overlapping
+build/test andnoautomaticretry. Finalsealednine-assetbuild will own the
+actualnewrecipe compilation onceclean committed integration exists. Raw:
+benchmark-results/fs-bench-pro/2026-10-11-b7-root-native-checks/.
+No actualprepare/parity/proof/Dockerinvocation occurred inthiscommit.
+
+| Commit | Purpose | Production before | after | delta |
+| --- | --- | --- | --- | --- |
+| This commit | Add exact original integrity native fixture and public proof adapters | 79370 | 79370 | +0 |
 Pinned absent-aware staged counter/exact tree confirmation; reference absent,
 retiredR9c,last65,417/tree498dd1917812.

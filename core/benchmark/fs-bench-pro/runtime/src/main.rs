@@ -9,6 +9,7 @@ mod edit_oracle;
 mod events;
 mod fixture;
 mod project;
+mod reliability;
 mod repository_history;
 mod runtime;
 mod session;
@@ -51,6 +52,9 @@ fn main() -> Result<()> {
         "verify-init" => project::verify(&args, &mut events),
         "verify-footprint" => store_footprint::verify(&args, &mut events),
         "verify-repository" => repository_history::verify(&args, &mut events),
+        "verify-reliability-initial" => reliability::verify_initial(&args, &mut events),
+        "verify-reliability-control" => reliability::verify_control(&args, &mut events),
+        "verify-reliability-fault" => reliability::verify_fault(&args, &mut events),
         "verify-reuse-initial" => {
             workspace_oracle::verify_reuse_initial(&args, &mut events).map_err(Into::into)
         }
