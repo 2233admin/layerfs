@@ -17,7 +17,8 @@ WORKSPACE_FAMILIES = ("payload_create_read", "tiny_file_churn", "namespace_mutat
                      "edit_length_preserving", "edit_length_changing", "edit_length_changing_capped",
                      "edit_canonical_chunk_count", "small_file_delta_smoke",
                      "directory_construction_traversal", "git_tool_workflow", "local_snapshot",
-                     "workspace_change_locality")
+                     "workspace_change_locality", "file_size_transition",
+                     "dedup_branch_history", "mixed_load_bearing")
 
 
 def family_case(recipe):

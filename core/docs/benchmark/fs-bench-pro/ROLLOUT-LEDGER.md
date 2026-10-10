@@ -21,7 +21,7 @@ comparison or release-admission claim. Durable is
 | 1 Pilot | COMPLETE: 36 functional/proof/clean-close passes; 7 recorded scoped B PASS, 29 INELIGIBLE; full numeric qualification of the 7 is unverified | Init `c1d7dd0e8`/`39bbcbd6b`; payload `200f81493`/`c1d9b6c58`; parallel routing `b3c96ecb1`; tiny `36849bcc2`/`d6e0ef952`; namespace `98b14b233`/`be1f56a23`; H-2 fix `222526fa0`; closure `d4314ed62`; membership supplement `cca598d0b` | Batch 2, retaining original receipts plus exhaustive membership supplement |
 | 2 Edits | COMPLETE: all62 cases ported/parity/sampled once/recorded;39 strict proof and clean-close passes (numeric INELIGIBLE),20 strict retention failures and3 original capped-watchdog failures retained | Canonical `a34b5d44b`/`beeb7ad69`; preserving `b9ffa63be`; capped `4d8ccfc93`; changing `05ffbf971`; small-delta `c0c99a4a3`/`2e6a508b5`/`1c975ba30` | Begin batch3; no identified fixable product correctness defect remains in batch2 |
 | 3 Trees and tools | COMPLETE: all33 original cases ported/parity/sampled, full applicable proofs and clean closePASS; numeric33INELIGIBLE; first snapshotFAIL retained separately; localitydense500 and snapshot EXCEEDED | Shared3c697ae92; directory50c297c68/ad4f95503; locality2590a4536/26c037d90; snapshot0344bfdc6/fix03033abdc/results98d3be30a/70d568e94; Git acebd7cbd/guard031d427a7/results this commit | Begin batch4 after this committed closure, no identified fixable product correctness bug |
-| 4 History on one branch | PENDING | — | Wait for batch 3 completion |
+| 4 History on one branch | IN_PROGRESS: three worktree authors active; all43 cases unrun, shared native models/oracles and guards being composed | Routing this commit; worker native/P3/model/family commits pending integration | Complete source/oracle qualification, then per-family parity and one attempt per case |
 | 5 Branches and Workspaces | PENDING | — | Wait for batch 4; verify existing P-1 SDK methods |
 | 6 Dedup and storage | PENDING | — | Wait for batch 5 completion |
 | 7 Reliability | PENDING | — | Wait for batch 6 completion |
@@ -84,6 +84,9 @@ comparison or release-admission claim. Durable is
 | 37 | Retain the failed full-size debug proof and qualify the benchmark's prescribed release compilation at identical fixture/oracle/30s stop | Debug child reached its stop during the first25k state, without an error or completed root; engine builds the host runtime in release; no source speed change is selected | Enlarging the stop, shrinking the test or optimizing product source |
 | 38 | Preserve Git's frozen41s work cutoff,45s cleanup deadline and59s publication deadline with0.25s guard, cumulatively charging prior qualification/custody/final proof | Original selected verifier reserves4s within45s, not an added allowance; public current offline graph requires early Stop/export, also conservatively charged before graph work | Dropping reserve, omitting receipt hashing/publication or granting each verification subphase a fresh45s |
 | 39 | Publish original receipt/manifest once and require bound completion; revoke only an owned provisional completion link after an observed overrun, preserving its exact attempt bytes | A lost late-failure sidecar must not let a provisional proof qualify; original immutable receipt and all metrics remain available | Overwriting original receipts, accepting missing completion or omitting a late final write from the guard |
+| 40 | Add an unfiltered read-only current SQLite Commit census of a custody-qualified closed export, alongside mandatory public typed history/content proof | Original dedup history queries the complete global set and parents; anchored ancestry cannot detect an extra unreachable Commit | Adding a product enumeration feature, counting only rows, filtering by stack/ancestry or silently omitting the original census |
+| 41 | M1 uses independent shadow/range algebra and only original explicit attributes, helper-created directory modes and declared byte ranges; two exhaustive IDs are proof-only | Frozen generic expected() returns pristine fixture for M1; actual original exhaustive scope checks20 cycle-end roots plus all100 Commit IDs/parents, not all100 stage payloads | Using a wrong generic manifest, inventing timed performance or normalizing automatic mtimes to fit an oracle |
+| 42 | Preserve strict boundary-alias parent-directory mtime compatibility failure without restoring the parent in the workload | Frozen ordinary helper changes the parent during its final atomic save, while original executable verifier requires fixture mtime; changing the helper/checker is forbidden | Normalizing parent mtime, dropping metadata verification or making a product change for an incompatible original definition |
 
 ## Bugs
 
@@ -2309,3 +2312,49 @@ under the same separate-worktree/current-batch-only policy.
 
 | `76545dd1b` (worker) | Record four original Git outcomes without replay | 79366 | 79366 | +0 |
 | This commit | Integrate Git CSVs and close all33 batch3 cases | 79366 | 79366 | +0 |
+
+Batch4 begins only after31fff4d49476219b9a172e010abe37f4e4056ee0 committed
+batch3 closure. Three existing managed worktrees take exact original families
+file_size_transition7, dedup_branch_history26, mixed_load_bearing10. Leadowns
+shared Python/controller/public-runtime/census and ledger integration; worker
+ownership is isolated for the native recipe CLI, independent model, P3 writer
+and eachfamily. Old branches/raw receipts/resources remain recoverable. Private
+locks/targets and sharedhost/DockerVM interference retain decision33's scope.
+No batch5 and no stage4 sample while sharedsupport is unqualified. Routing adds
+only these existing family names; pending cases remain unsampleable before
+clone/mount/claim. Owning17 engine checks PASS0.107s, locked<=120s; the new
+pending-family refusal uses isolated prospective registrations so it remains
+valid after actual families are ported. No product/compiled source changed in
+this routing commit, no new family or limit.
+
+Read-only plans established three essential distinctions before authoring.
+Dedup globalcensus must stream all current Commit rows, validate raw BLOB tags/
+widths and complete five-field tuples, custody/hash/no-sidecar closure and real
+current schema/binding; public typed proof remains mandatory. Pythonstandard
+SQLite read-only/immutable/query-only/synchronousOFF can observe a separate
+closedcopy without a product feature or data-serving path; no checkpoint,
+repair, deletion or retry on that input. Extra valid unreachableCommit is the
+required external regression, not only a malformedrow test.
+
+M1 fixtures follow executable decimal high-water arithmetic: initial4,984/
+29,984regularnames,99,934,464/499,934,464B, initial64/314dirs includingroot,
+5,048/30,298entries; caps5,000/30,000names and100,000,000/500,000,000B reserve
+16names/65,536B. Role-data dirs53/303 and additional10 come fromsource; frozen
+fixture prose differs and staysunchanged. Common guard is per-file500MiB and
+aggregate<1GiB, so no bypass is authorized. Two verify-only exhaustive cases
+retain original120/300s declarations and currentowner120s testceiling separately;
+never split/extend a test to wait out that ceiling. Current routines preserve
+five sequential stages, original14POSIX+2orderedP3 edits at stage2, original
+ranges including exact131072/empty-byte omission and required modes/attributes.
+No concurrent discard/reopen is added to sequential cases. Automatic mtime
+normalization is forbidden.
+
+Boundary alias byte model requires original hardlink class forstates0–4,
+separate alias/target at5, executable finaltarget131072 vsalias131071; roots
+canrepeat but actualCommitIDs/parents cannot. Original workspace_bench2315–2347
+and workspace_verify865–875 require final directorymtime; unchanged atomic
+helper does not restoredata/ parent after temporary-name changes. The native
+compatibility refusal stays strict and visible, not a benchmarkPASS or a new
+workload call. Final caseclosure waits actual qualified source/evidence.
+
+| This commit | Activate only current three history-family routes while pending remains refused | 79366 | 79366 | +0 |
