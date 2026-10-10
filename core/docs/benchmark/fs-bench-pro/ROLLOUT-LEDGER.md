@@ -5046,4 +5046,36 @@ No build/test/measurement overlaps within a checkout; no extra worktree or
 push/PR/tag/publication/GitHub change is selected. Only local main receives
 integrated purpose commits. Final all25 iteration completion is still pending.
 
-| This commit | Close batch5 with all original dispositions and release batch6 | 79370 | 79370 | +0 |
+| `7ccb44cb2` | Close batch5 with all original dispositions and release batch6 | 79370 | 79370 | +0 |
+
+
+### Batch 6 CDC registration and shared support, 2026-10-11
+
+Decision58: retain the expressible original fresh verifier Fork/mount/full-native
+check/End/Gone/KnownStop for both directory-import families. The initial worker
+authoring proposed an offline-only substitute; the integration review corrects
+that proposal before any sample. Independent public typed storage proof is an
+additional required half, with current authenticated framing explicitly adapted.
+Alternative: drop the original mounted half; rejected because public Fork/mount
+already exists and the frozen oracle must not be weakened.
+
+All21 CDC IDs are now ported as native-directory imports, not ordinary mutations.
+Seed1 and the all3seed boundary fixture remain exact. Boundary has60 regular
+files,26 directories,884745 logical bytes,54 current positive whole-file objects
+and6 empty states. Original independent CDC shape and exact transcript guards
+remain separate from actual persisted representation; sharing metrics are
+diagnostic and carry no new threshold. Raw native/preparation/parity/actual
+execution is still NOT_RUN pending shared support and a fresh qualified build.
+
+Worker owned-only commit6727d7793e6306044bb5d23140eba80c38e8340a has counted
+confirmed tree666d4197235f8c1463ef4dca2013c537fd6c4367, product9ac unchanged.
+Four external authoring checks passed once at2,282,674,000ns under private120s
+lock; no native build, preparation, parity or case ran. Sealed worker handoff
+family-authoring-handoff.json SHA-256
+bc6a43575a9db8892a8eaee4a9c483ea0c3b9f9b743014be2a8a033020da3203.
+Integration corrects only proposed verifier topology/resource descriptions;
+original measured import/fixture/oracle obligations and frozen source are exact.
+Root final four definition checks PASS once at3,248,940,542ns under the120s lock; raw scoped-tests completion retained under2026-10-11-batch-6-main-authoring/cdc. No product or frozen source changed.
+
+| Worker6727d7793 | Author CDC registrations/wrapper/external tests | 79370 | 79370 | +0 |
+| This commit | Integrate CDC registration with original mounted oracle retained | 79370 | 79370 | +0 |
