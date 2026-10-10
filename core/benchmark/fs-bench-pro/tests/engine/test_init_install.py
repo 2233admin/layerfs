@@ -25,7 +25,9 @@ class InitInstall(unittest.TestCase):
             'source':str(source),'source_uid':501,'source_gid':20,'fixture':{'files':1,'entries':3,'logical_bytes':1048576},
             'source_qualification':{'status':'PASS'},'cache':'setup warmth unknown'}
         build={'socket':'/socket','binaries':{name:{'path':'/'+name,'sha256':name} for name in ('runtime','daemon','workload-linux')}}
-        current={'source_commit':'c'*40,'product_tree':'d'*40,'files':{}}
+        current={'source_commit':'c'*40,'product_tree':'d'*40,'files':{
+            'core/benchmark/fs-bench-pro/engine/workspace.py':'e'*64,
+            'core/benchmark/fs-bench-pro/engine/receipts.py':'f'*64}}
         calls=[];self.owners=[]
         class Stream:
             def __init__(self):self.writes=[]

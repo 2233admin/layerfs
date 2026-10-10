@@ -5502,6 +5502,65 @@ are next. Product9ac and every original workload/cache/worker/limit unchanged.
 | Worker3e37aa36f | Actual retained Init/public install native boundary | 79370 | 79370 | +0 |
 | Workerf05010629 | Existing SDK installation/custody import controller | 79370 | 79370 | +0 |
 | Worker11635c9b | Immutable observer copy and actual proof-clock anchor | 79370 | 79370 | +0 |
-| This commit | Fix fresh installation through existing SDK and footprint wiring | 79370 | 79370 | +0 |
+| 1cc25d4de | Fix fresh installation through existing SDK and footprint wiring | 79370 | 79370 | +0 |
 Pinned absent-aware staged counter and exact resulting tree confirmation;
 reference absent/retiredR9c, last65,417/tree498dd1917812.
+
+
+### H30 acknowledgement/claim and H31 operation expectation correction, 2026-10-11
+
+H28 actual public installation now succeeds at source1cc25d4de/runtime7766209e.
+CDC overwrite1 and cross anchor both subsequently FAIL on H30: actual runtime
+emits a successful mount ACK, while imported verifier EventProcess.send waits
+literal mount-branch. Existing context_send maps the same original request to
+mount; one-line correction preserves target, body, deadline and one attempt.
+Other call mappings reviewed source-correct. Original local mounted=False after
+mismatched wait does not prove absence of the published mount. Separate bound
+old event/custody supplements record actual key/ns/incarnation/NativeReady/root/
+Fork without modifying failed receipts or claiming End/Gone/Stop.
+
+Worker25b8c5af original actual-event RED10,940,166ns, final three schedule/
+wrong-root/short-write guards PASS25,516,417ns/private120. Handoff SHA-256
+4e59c87a975ff371f6b23ef917ee3b588748eb21e64818ed10952bd669092ecb.
+Capped08332d117 also closes the prospective identity bug: imported Init claim
+now pins executed workspace and receipt guard hashes. Legacy namespace
+identity stays exact, commit-only changes do not enable replay, old claims
+remain untouched. Original four-vector RED retained, final three checks
+PASS207,974,542ns; handofff68bc2f6687a0c78ab1b4af107e0d6063b35e3d72b82d8a098b40e1c5fab15d9.
+Root three claim guards PASS193,472,125ns; three actual mount protocol guards
+PASS320,378,292ns. Initial integrated H28 tests failed3of9 because their
+synthetic source_identity fixture lacked the newly required source hashes;
+only fixture pins were added, final9PASS380,794,500ns. No guard was weakened.
+
+H31: corrected-source footprint unique100000 completes actual Init/install,
+fresh mount, ordinary original10B edit and a Committed ACK, then controller
+KeyError expected_commit before terminal End. Its definition has Init step0
+and one mutation step1, whose expected_committed outcome is already explicit;
+generic controller erroneously indexed Init and eagerly evaluated a missing
+top-level fallback. Fix selects exactly the one declared committed mutation,
+requires schedule and step both Committed, and rejects missing/duplicate/
+UpToDate/mismatched declarations before an attempt. Ordinary nonordered
+families keep their existing top-level expectation; ordered explicit outcomes
+remain strict. No registration/workload/oracle change. Original external RED
+258,182,375ns retained; final three strict step/model guards PASS261,965,917ns;
+retention8PASS372,473,959ns and workspacePASS358,014,833ns. A mistakenly
+selected nonexistent test_batch4_history.py invoked0tests and FAILED(exit5);
+this is not a passing check. Actual owning history controller finalPASS
+417,600,333ns. Main120/child100 stops, no expiry. Python syntax/diff checksPASS.
+
+All three newly failed actual receipts/resources remain retained; no unchanged
+resampling. Old1cc counts: CDC1FAIL+20NOT_RUN, cross1FAIL+9NOT_RUN, footprint
+1FAIL+5NOT_RUN. Full actual case/native/verifier End/Gone/Stop not established
+for these first cases despite preceding successful SDK effects. Their generated
+CSV pairs are committed separately. Product9ac unchanged; Runtime7766 and eight
+qualified assets remain source-matched, so this Python-only correction needs
+no new native build. Next each affected first case may be sampled once at the
+new exact executed-code identity; untouched selections continue once.
+
+| Commit | Purpose | Production before | after | delta |
+| --- | --- | --- | --- | --- |
+| Worker25b8c5af0 | Consume actual public mount ACK | 79370 | 79370 | +0 |
+| Worker08332d117 | Pin imported verifier/guard treatment identity | 79370 | 79370 | +0 |
+| This commit | Correct declared operation/acknowledgement and claim interpretation | 79370 | 79370 | +0 |
+Pinned absent-aware staged counter/exact tree confirmation; reference absent,
+retiredR9c, last65,417/tree498dd1917812; no product/speed/limit/cache change.

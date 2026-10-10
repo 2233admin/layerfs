@@ -88,7 +88,7 @@ def verify_import_mount(case, prepared, build, output, row, deadlines):
                 or fork["fields"].get("head")!="-" or fork["fields"].get("stack")!=row["init"]["fields"]["stack"]):
             raise ValueError("original verifier Fork differs from exact imported Layer")
         row["verification"]["fork"] = fork
-        runtime.send("mount-branch",key,"verify-import",deadline=stop())
+        context_send(runtime,"mount-branch",key,"verify-import",deadline=stop())
         mounted = True
         body = "/code/writers/workload workspace-verify-tree "+shlex.quote(case["v016_case"])+" 1 0"
         verified = runtime.send("verify",key,script(output,"import-native-proof.sh",body),deadline=stop(45))
@@ -851,6 +851,23 @@ def m1_created_modes(command, prior):
     return result
 
 
+def operation_commit_expectation(case, index):
+    """Select the actual mutation declaration; Init is a separate operation."""
+    if case.get("store_footprint_schedule"):
+        mutations = [step for step in case["steps"] if step.get("run") and step.get("commit")]
+        if (index != 1 or len(mutations) != 1
+                or mutations[0].get("expected_commit") != "Committed"
+                or case["store_footprint_schedule"].get("expected_commit") != "Committed"):
+            raise ValueError("original footprint requires exactly one declared Committed mutation")
+        return mutations[0]["expected_commit"]
+    value = case["steps"][index-1].get("expected_commit")
+    if value is None:
+        value = case.get("expected_commit")
+    if value not in ("Committed", "UpToDate"):
+        raise ValueError("explicit original Commit outcome required")
+    return value
+
+
 def one_family_case(family, case, prepared_folder, build_folder, output, *, preparation_only=False):
     """Single ordinary call/Commit through the same SDK/Sandbox machinery."""
     if case.get('historical_access'):
@@ -880,6 +897,8 @@ def one_family_case(family, case, prepared_folder, build_folder, output, *, prep
     if footprint and (family!="store_footprint" or footprint.get("schema")!="original-store-footprint-init-edit-v1"
                       or prepared["schema"]!="fs-bench-pro-prepared-native-footprint-v1"):
         raise ValueError("exact original fresh Init/edit footprint preparation required")
+    if footprint:
+        operation_commit_expectation(case, 1)
     owner_stop = started_test_ns/1_000_000_000+120 if proof_only else None
     body = None if case.get("control_only") else "/bin/bash /code/workload.sh apply " + shlex.quote(case["v016_case"])
     if footprint:
@@ -1119,7 +1138,7 @@ def one_family_case(family, case, prepared_folder, build_folder, output, *, prep
             committed = runtime.send("commit", selected, deadline=operation_deadline(step_stop, operation_seconds))
             row["phases"]["commit_ns"] += committed["span"]["duration_ns"]
             row["commit"] = committed
-            expected_kind = case["steps"][index-1].get("expected_commit",case["expected_commit"]) if ordered else case["expected_commit"]
+            expected_kind = operation_commit_expectation(case, index) if ordered or footprint else case["expected_commit"]
             if committed["fields"]["commit_kind"] != expected_kind:
                 raise ValueError("original known Commit outcome differs from frozen mutation/read-only case")
             if footprint or case.get("original_ordinary_guards"):

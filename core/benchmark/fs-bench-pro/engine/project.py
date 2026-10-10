@@ -316,6 +316,23 @@ def fresh_init_close(handle, row, error=None):
             raise RuntimeError("original Init/install close observation failed: " + "; ".join(failures))
 
 
+def init_treatment(family, case, prepared, build, current):
+    """Exact executed Init scope; legacy namespace identity stays unchanged."""
+    from . import fixtures
+    treatment = {"family": family, "case": case, "fixture": prepared["fixture"],
+                 "product": current["product_tree"], "runtime_sha256": build["binaries"]["runtime"]["sha256"],
+                 "execution_files": {name: digest for name, digest in current["files"].items()
+                    if name in ("core/benchmark/fs-bench-pro/engine/project.py", "core/benchmark/fs-bench-pro/engine/fixtures.py",
+                                "core/benchmark/fs-bench-pro/engine/identity.py", "core/benchmark/fs-bench-pro/engine/recipes/namespace.rs")},
+                 "workload_sha256": identity.sha256(identity.ROOT / "core/benchmark/fs-bench-pro/families" / family / "workload.sh"),
+                 "image": identity.IMAGE}
+    if family in fixtures.IMPORT_FAMILIES:
+        for path in ("core/benchmark/fs-bench-pro/engine/workspace.py",
+                     "core/benchmark/fs-bench-pro/engine/receipts.py"):
+            treatment["execution_files"][path] = current["files"][path]
+    return treatment
+
+
 def one_init(case, prepared_folder, build_folder, output, *, family="init_namespace"):
     from . import fixtures
     current = identity.source_identity()
@@ -332,13 +349,7 @@ def one_init(case, prepared_folder, build_folder, output, *, family="init_namesp
     proof_only = case.get("proof_only") is True
     output = Path(output).resolve()
     output.mkdir(parents=True, exist_ok=False)
-    treatment = {"family": family, "case": case, "fixture": prepared["fixture"],
-                 "product": current["product_tree"], "runtime_sha256": build["binaries"]["runtime"]["sha256"],
-                 "execution_files": {name: digest for name, digest in current["files"].items()
-                    if name in ("core/benchmark/fs-bench-pro/engine/project.py", "core/benchmark/fs-bench-pro/engine/fixtures.py",
-                                "core/benchmark/fs-bench-pro/engine/identity.py", "core/benchmark/fs-bench-pro/engine/recipes/namespace.rs")},
-                 "workload_sha256": identity.sha256(identity.ROOT / "core/benchmark/fs-bench-pro/families" / family / "workload.sh"),
-                 "image": identity.IMAGE}
+    treatment = init_treatment(family, case, prepared, build, current)
     key = hashlib.sha256(json.dumps(treatment, sort_keys=True).encode()).hexdigest()
     claims = identity.ROOT / "benchmark-results/fs-bench-pro/claims"
     claims.mkdir(parents=True, exist_ok=True)
