@@ -2559,4 +2559,34 @@ claim. Final full sealed Linux/host build waits runtime/controller composition.
 | `5a7dac7a6` (worker) | Original selective checkpoint/payload preparation | 79366 | 79366 | +0 |
 | `9a434a6f5` (worker) | Correct native M1 staged recipe path | 79366 | 79366 | +0 |
 | `a05b850dd` (worker) | Include original14POSIX edits before test's two P3 members | 79366 | 79366 | +0 |
-| This commit | Integrate selective preparations and qualify original prepared splice support | 79366 | 79366 | +0 |
+| `364e1a87a` | Integrate selective preparations and qualify original prepared splice support | 79366 | 79366 | +0 |
+
+
+Batch4 unfiltered closed-Store census source integrates Capped70c61a91f.
+It streams every globalCommit row toEOF using read-only immutable/query-only
+SQLite/OFF/timeout0; exact K uniquefive-field raw typedBLOB tuples, actual
+schema/application/source/definition identity, provisioning binding and current
+mandatory public provider validation are required. ExportKnownStop/container/
+volume/local/remote paths/hash/size and actual original successful Dockerexport
+completion/runtimeevents/manifest/transcript hashes are independently bound.
+No cursor or binding-key material is returned. Public typed offline proof runs
+on a separate bytecopy; original census export must remain unchanged and free
+of all-WAL/SHM/journal sidecars evenempty.
+
+Eight owning schema/census unitchecks PASS0.291s and existing3oraclechecks
+PASS0.033s underprivate120s locks, exact unchanged integrated filehashes reused.
+These use isolated synthetic six-schema WAL/OFF SQLite fixtures and mocked
+provider/custody attestations; extra unreachable tagged/FK-bound row is rejected,
+130rows prove bounded batch-toEOF, and substitution/missingtuple/type/tag/schema/
+binding/sidecar/hash/custody corruption are refused. They are not yet the
+required genuine public canonical extraCommit regression: source review found
+fixture IDs/rootbytes are invented, not actual publiccreated savedobjects.
+Namespace/Capped are preparing a separate current-publicStore extraCommit
+proof with anchoredtypedverificationPASS and unfilteredcensusFAIL. Decision40
+qualification remainspending until that actual external test; no productfeature
+or claim from syntheticvalidity. Rawowning tests/census-supplement.json remain
+in Capped's2026-10-10-batch-4-history-authoring folder. No realcase/export/resource
+was created by the synthetic checks.
+
+| `70c61a91f` (worker) | Unfiltered immutable current-schema Commit census and synthetic guards | 79366 | 79366 | +0 |
+| This commit | Integrate unfiltered census, retaining genuine public extraCommit test prerequisite | 79366 | 79366 | +0 |

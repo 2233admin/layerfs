@@ -4,12 +4,262 @@ The frozen cell tree and Git-index checkers are reused intact. This module is
 also a container CLI; its output is outside the Workspace and every timer.
 """
 import argparse
+from contextlib import closing
 import hashlib
 import json
 from pathlib import Path
+import sqlite3
 import subprocess
 import sys
 import time
+
+ROOT = Path(__file__).resolve().parents[4]
+CENSUS_SQL = 'SELECT commit_id,layer_stack_id,root_id,parent_commit_id,base_layer_id FROM "commit" ORDER BY commit_id'
+DEFINITION_SQL = "SELECT type,name,sql FROM sqlite_schema WHERE substr(name,1,7)!='sqlite_' ORDER BY type,name"
+CENSUS_COLUMNS = ("commit_id", "layer_stack_id", "root_id", "parent_commit_id", "base_layer_id")
+PROVIDER_KEYS = ("provider_validation", "catalog_id", "catalog_incarnation", "binding_sha256", "stack_id", "branch_id",
+                 "base_layer_id", "initial_root", "final_head_commit_id", "final_head_root", "acknowledged_transcript_sha256",
+                 "provider_store_sha256", "provider_store_size", "provider_store_after_sha256", "provider_store_after_size", "provider_store_unchanged")
+CUSTODY_KEYS = ("custody", "container", "volume", "remote_source", "local_source", "source_sha256", "source_size",
+                "prepared_manifest", "prepared_manifest_sha256", "transcript", "transcript_sha256",
+                "export_completion", "export_completion_sha256", "runtime_events", "runtime_events_sha256")
+SCHEMA_PINS = {
+    "core/crates/layerfs-persistence/src/backend/sqlite/schema.rs": "d5e4d452a1f53e4bb5a5175a3a70d6cbf4ef346d40cbd066a3a4cb6e33ee6299",
+    "core/crates/layerfs-persistence/sql/sqlite/objects.sql": "e5aa57bd69bb3d2a60ce7c6b4b00400316ac2269344d1d05ddca8790cf6e6e80",
+    "core/crates/layerfs-persistence/sql/sqlite/objects_units.sql": "d0d464efda7b48dd88240ddeb4670b1b397a5c28373d907b9c16856e47d5d6bc",
+    "core/crates/layerfs-persistence/sql/sqlite/objects_units_index.sql": "d888eeaeadf65e5845483c39ca7a2af007b0a7950a4d94b4d71184b061222d46",
+    "core/crates/layerfs-persistence/sql/sqlite/metadata.sql": "bfea5532191e5be4f8dc72c04601afe468a7251ee69befe051a3688a5c470cbd",
+    "core/crates/layerfs-persistence/sql/sqlite/history.sql": "469e4bae00a6d23711f21dc41e2091d18d2d4e4f9a4c4dbec8377c3929faf2ef",
+    "core/crates/layerfs-persistence/sql/sqlite/acquisition/schema.sql": "76c8bcaef4562497456628a7ddcd0598317cdc0dcba5a37eb4c3bf015a651d6d",
+    "core/crates/layerfs-bridge/src/provision_wire.rs": "1c73c25ee7ba9d04dbca9b169aa9b0b0abdf59e55a10d44cd59e81684ccf34e2",
+    "core/crates/layerfs-bridge/src/wire.rs": "536ee0d655e16b8b89a84670b3acabeac44757d588888442e24a20dcd2dbc26f",
+}
+
+
+def _hex(value, length, tag=None):
+    if (type(value) is not str or len(value) != 2*length
+            or any(char not in "0123456789abcdef" for char in value)):
+        raise ValueError("census typed identity must be exact lowercase hexadecimal")
+    raw = bytes.fromhex(value)
+    if tag is not None and raw[0] != tag:
+        raise ValueError("census typed identity tag differs")
+    return raw
+
+
+def _blob(value, length, tag=None):
+    if type(value) is not bytes or len(value) != length or tag is not None and value[0] != tag:
+        raise ValueError("census raw SQLite BLOB type/length/tag differs")
+    return value
+
+
+def _sealed_identity(path):
+    path = Path(path)
+    if path.is_symlink() or not path.is_file():
+        raise ValueError("census requires an exact regular exported Store file")
+    if any(Path(str(path)+suffix).exists() or Path(str(path)+suffix).is_symlink()
+           for suffix in ("-wal", "-shm", "-journal")):
+        raise ValueError("census refuses every Store sidecar, including empty sidecars")
+    before = path.stat().st_size
+    digest = file_sha(path)
+    if path.stat().st_size != before:
+        raise ValueError("census Store changed while hashing")
+    return {"sha256": digest, "size": before}
+
+
+def _schema_source(version):
+    if type(version) is not int or version not in range(1, 7):
+        raise ValueError("census unsupported current SQLite schema version")
+    scripts = {}
+    for relative, digest in SCHEMA_PINS.items():
+        path = ROOT / relative
+        if file_sha(path) != digest:
+            raise ValueError("census authoritative schema/wire source pin changed")
+        scripts[relative] = path.read_text()
+    prefix = "core/crates/layerfs-persistence/sql/sqlite/"
+    layout = (version-1)%3+1
+    source = scripts[prefix+("objects.sql" if layout == 1 else "objects_units.sql")]
+    if layout == 3:
+        source += scripts[prefix+"objects_units_index.sql"]
+    for name in ("metadata.sql", "history.sql"):
+        source += scripts[prefix+name].replace("schema_version=1", f"schema_version={version}")
+    if version >= 4:
+        source += scripts[prefix+"acquisition/schema.sql"]
+    with closing(sqlite3.connect(":memory:", isolation_level=None, timeout=0)) as native:
+        native.execute("PRAGMA synchronous=OFF")
+        native.executescript(source)
+        definition = "".join(value+"\n" for row in native.execute(DEFINITION_SQL) for value in row)
+        tables = [row[0] for row in native.execute("SELECT name FROM sqlite_schema WHERE type='table' ORDER BY name")]
+    return source, definition, tables
+
+
+def _manifest_identity(path):
+    """Pinned existing StoreManifest wire; authority bytes are never returned."""
+    data = Path(path).read_bytes()
+    if len(data) > 8192 or not data.startswith(b"LFSI\x01\x01\x02"):
+        raise ValueError("census requires the existing SQLite Disposable manifest")
+    position = 7
+    def take(length):
+        nonlocal position
+        end = position+length
+        if end > len(data):
+            raise ValueError("census manifest truncated")
+        value = data[position:end]; position = end
+        return value
+    def blob(maximum):
+        length = int.from_bytes(take(2), "big")
+        if length > maximum:
+            raise ValueError("census manifest field exceeds current wire bound")
+        return take(length)
+    locator = blob(4096).decode("utf-8")
+    binding = blob(128)
+    cursor = take(32)
+    stack, branch, root = take(17), take(17), take(32)
+    sealed_bytes = int.from_bytes(take(8), "big")
+    versions = [blob(64).decode("utf-8") for _ in range(2)]
+    if (position != len(data) or locator != "/layerfs-store/global/store.sqlite" or not binding
+            or cursor == bytes(32) or not sealed_bytes or not versions[0]
+            or any(value and any(not (33 <= ord(char) <= 126) for char in value) for value in versions)):
+        raise ValueError("census manifest identity/profile/locator differs")
+    return {"stack_id": _blob(stack,17,0x31).hex(), "branch_id": _blob(branch,17,0x11).hex(),
+            "initial_root": _blob(root,32).hex(), "binding_sha256": hashlib.sha256(binding).hexdigest()}
+
+
+def commit_census(sealed_path, acknowledged_tuples, provider_fields, export_custody):
+    """Unfiltered global membership, independently bound to public typed proof.
+
+    The immutable census export is never the provider's writable offline copy.
+    No ancestry filter, join, result limit, checkpoint, Store mutation or retry.
+    """
+    path = Path(sealed_path)
+    before = _sealed_identity(path)
+    custody, provider = dict(export_custody), dict(provider_fields)
+    if (custody.get("custody") != "KNOWN_STOP" or custody.get("remote_source") != "/layerfs-store/global/store.sqlite"
+            or Path(custody.get("local_source", "")).resolve() != path.resolve()
+            or custody.get("source_sha256") != before["sha256"] or custody.get("source_size") != before["size"]
+            or type(custody.get("container")) is not str or len(custody["container"]) != 64
+            or any(char not in "0123456789abcdef" for char in custody["container"])
+            or type(custody.get("volume")) is not str or not custody["volume"].startswith("layerfs-fsb-sample-")):
+        raise ValueError("census exact known-Stop/export resource custody differs")
+    manifest = Path(custody["prepared_manifest"])
+    transcript = Path(custody["transcript"])
+    if file_sha(manifest) != custody.get("prepared_manifest_sha256") or file_sha(transcript) != custody.get("transcript_sha256"):
+        raise ValueError("census prepared manifest/transcript hash binding differs")
+    export = Path(custody["export_completion"])
+    runtime_events = Path(custody["runtime_events"])
+    if file_sha(export) != custody.get("export_completion_sha256") or file_sha(runtime_events) != custody.get("runtime_events_sha256"):
+        raise ValueError("census export/runtime custody receipt hashes differ")
+    exported = json.loads(export.read_text())
+    argv = exported.get("argv", [])
+    directory_copy = [custody["container"]+":/layerfs-store/global", str(path.parent.resolve())]
+    file_copy = [custody["container"]+":/layerfs-store/global/store.sqlite", str(path.resolve())]
+    if (exported.get("status") != "PASS" or exported.get("exit_code") != 0 or exported.get("attempts") != 1
+            or len(argv) != 6 or argv[:2] != ["docker", "--host"] or not argv[2].startswith("unix://")
+            or argv[3] != "cp" or argv[4:] not in (directory_copy,file_copy)):
+        raise ValueError("census exact acknowledged export command differs")
+    events = [json.loads(line) for line in runtime_events.read_text().splitlines()]
+    setup = [item for item in events if item.get("event") == "daemon_setup"]
+    stopped = [item for item in events if item.get("event") == "container_stopped"]
+    created = [item for item in events if item.get("event") == "sandbox_create_attempt"]
+    if (not events or len(setup) != 1 or setup[0].get("fields",{}).get("container") != custody["container"]
+            or len(stopped) != 1 or stopped[0].get("value") != custody["container"]
+            or events[-1].get("event") != "finished" or stopped[0].get("sequence",0) >= events[-1].get("sequence",0)
+            or len(created) != 1 or created[0].get("value","").split(" ")[0] != "volume="+custody["volume"]):
+        raise ValueError("census known stopped runtime/container/volume custody differs")
+    bound = _manifest_identity(manifest)
+    if (provider.get("provider_validation") != "current-public-schema-source-binding-validated"
+            or provider.get("provider_store_sha256") != before["sha256"] or provider.get("provider_store_size") != before["size"]
+            or provider.get("acknowledged_transcript_sha256") != custody["transcript_sha256"]
+            or any(provider.get(key) != value for key,value in bound.items())
+            or type(provider.get("catalog_incarnation")) is not int or not 0 < provider["catalog_incarnation"] <= 2**63-1
+            or type(provider.get("provider_store_unchanged")) is not int or provider["provider_store_unchanged"] not in (0,1)
+            or type(provider.get("provider_store_after_size")) is not int or provider["provider_store_after_size"] <= 0):
+        raise ValueError("census mandatory public provider validation/input/identity binding differs")
+    _hex(provider["catalog_id"],32); _hex(provider["binding_sha256"],32)
+    _hex(provider["provider_store_after_sha256"],32)
+    unchanged = (provider["provider_store_after_sha256"] == before["sha256"] and provider["provider_store_after_size"] == before["size"])
+    if provider["provider_store_unchanged"] != int(unchanged):
+        raise ValueError("census public writable-copy after-seal observation differs")
+    _hex(provider["base_layer_id"],33,0x32)
+    expected, previous = [], None
+    for row in acknowledged_tuples:
+        if set(row) != set(CENSUS_COLUMNS):
+            raise ValueError("census acknowledgement requires all five typed fields")
+        values = (_hex(row["commit_id"],33,0x12), _hex(row["layer_stack_id"],17,0x31), _hex(row["root_id"],32),
+                  None if row["parent_commit_id"] is None else _hex(row["parent_commit_id"],33,0x12), _hex(row["base_layer_id"],33,0x32))
+        if values[3] != previous or row["layer_stack_id"] != provider["stack_id"] or row["base_layer_id"] != provider["base_layer_id"]:
+            raise ValueError("census original first-parent/stack/base acknowledgement differs")
+        previous = values[0]; expected.append(values)
+    if (not expected or len({row[0] for row in expected}) != len(expected)
+            or provider.get("final_head_commit_id") != expected[-1][0].hex()
+            or provider.get("final_head_root") != expected[-1][2].hex()):
+        raise ValueError("census exact unique acknowledged Commit set/final head differs")
+    transcript_rows = transcript.read_text().splitlines()
+    if len(transcript_rows) != len(expected)+1:
+        raise ValueError("census full acknowledgement transcript cardinality differs")
+    for step,line in enumerate(transcript_rows):
+        columns = line.split("\t")
+        wanted = ["-","-",provider["initial_root"]] if step == 0 else [expected[step-1][0].hex(),
+                  expected[step-1][3].hex() if expected[step-1][3] is not None else "-", expected[step-1][2].hex()]
+        if len(columns) != 5 or columns[0] != str(step) or columns[1:4] != wanted:
+            raise ValueError("census typed tuples differ from complete retained acknowledgement transcript")
+    expected.sort()
+    count, batches, prior, mismatch = 0, 0, None, False
+    digest = hashlib.sha256()
+    connection = None
+    try:
+        connection = sqlite3.connect(path.resolve().as_uri()+"?mode=ro&immutable=1", uri=True, timeout=0, isolation_level=None)
+        connection.execute("PRAGMA query_only=ON"); connection.execute("PRAGMA synchronous=OFF")
+        if connection.execute("PRAGMA query_only").fetchone() != (1,) or connection.execute("PRAGMA synchronous").fetchone() != (0,):
+            raise ValueError("census read-only Disposable connection profile differs")
+        app, version = connection.execute("PRAGMA application_id").fetchone()[0], connection.execute("PRAGMA user_version").fetchone()[0]
+        if app != 1279677264:
+            raise ValueError("census current SQLite application identity differs")
+        source, definition, tables = _schema_source(version)
+        actual_definition = "".join(value+"\n" for row in connection.execute(DEFINITION_SQL) for value in row)
+        actual_tables = [row[0] for row in connection.execute("SELECT name FROM sqlite_schema WHERE type='table' ORDER BY name")]
+        meta = connection.execute("SELECT catalog_id,catalog_incarnation,binding_key,identity_format,schema_version,schema_source,schema_definition,next_stage_token FROM history_meta WHERE id=1").fetchall()
+        policy = connection.execute("SELECT schema_version FROM store_policy WHERE id=1").fetchall()
+        if (actual_definition != definition or actual_tables != tables or len(meta) != 1 or policy != [(version,)]) :
+            raise ValueError("census full authoritative SQLite schema/definition/table contract differs")
+        record = meta[0]
+        if (_blob(record[0],32).hex() != provider["catalog_id"] or type(record[1]) is not int or record[1] != provider["catalog_incarnation"]
+                or type(record[2]) is not bytes or not 1 <= len(record[2]) <= 128 or hashlib.sha256(record[2]).hexdigest() != provider["binding_sha256"]
+                or record[3] != 1 or record[4] != version or record[5] != source or record[6] != definition
+                or type(record[7]) is not int or record[7] <= 0):
+            raise ValueError("census publicly bound catalog/metadata/source/definition differs")
+        branch = connection.execute("SELECT layer_stack_id,base_layer_id,head_commit_id FROM branch WHERE branch_id=?", (_hex(provider["branch_id"],17,0x11),)).fetchall()
+        if branch != [(_hex(provider["stack_id"],17,0x31), _hex(provider["base_layer_id"],33,0x32), previous)]:
+            raise ValueError("census manifest Branch/base/final head differs")
+        layer = connection.execute("SELECT layer_stack_id,root_id,parent_layer_id,source_branch_id,source_commit_id FROM layer WHERE layer_id=?", (_hex(provider["base_layer_id"],33,0x32),)).fetchall()
+        if layer != [(_hex(provider["stack_id"],17,0x31), _hex(provider["initial_root"],32), None, None, None)]:
+            raise ValueError("census manifest initial Layer/stack differs")
+        stack = connection.execute("SELECT head_layer_id FROM layer_stack WHERE layer_stack_id=?", (_hex(provider["stack_id"],17,0x31),)).fetchall()
+        if stack != [(_hex(provider["base_layer_id"],33,0x32),)]:
+            raise ValueError("census manifest LayerStack head/base differs")
+        cursor = connection.execute(CENSUS_SQL)
+        while True:
+            rows = cursor.fetchmany(127); batches += 1
+            if not rows: break
+            for row in rows:
+                values = (_blob(row[0],33,0x12), _blob(row[1],17,0x31), _blob(row[2],32),
+                          None if row[3] is None else _blob(row[3],33,0x12), _blob(row[4],33,0x32))
+                if prior is not None and values[0] <= prior:
+                    raise ValueError("census global Commit IDs are not unique sorted BLOBs")
+                if count >= len(expected) or values != expected[count]: mismatch = True
+                digest.update(json.dumps([value.hex() if value is not None else None for value in values],separators=(",",":")).encode()+b"\n")
+                prior = values[0]; count += 1
+        if mismatch or count != len(expected):
+            raise ValueError("census global Commit membership or five-field tuples differ")
+    finally:
+        if connection is not None: connection.close()
+        if _sealed_identity(path) != before:
+            raise ValueError("census immutable export SHA/size changed during read-only proof")
+    return {"schema":"fs-bench-pro-global-commit-census-v1", "status":"PASS", "commit_count":count,
+            "fetch_batches_including_eof":batches, "query":CENSUS_SQL, "tuple_sha256":digest.hexdigest(),
+            "source":before, "public_provider":{key:provider[key] for key in PROVIDER_KEYS},
+            "custody":{key:custody[key] for key in CUSTODY_KEYS}, "schema_version":version, "schema_source_sha256":hashlib.sha256(source.encode()).hexdigest(),
+            "schema_definition_sha256":hashlib.sha256(definition.encode()).hexdigest(), "authoritative_source_pins":SCHEMA_PINS,
+            "scope":"unfiltered global Commit table to EOF; exact all acknowledged typed tuples and public catalog/manifest identity; immutable read-only source unchanged; provider validation used a separate writable offline Disposable copy"}
 
 
 def helpers(directory=None):
