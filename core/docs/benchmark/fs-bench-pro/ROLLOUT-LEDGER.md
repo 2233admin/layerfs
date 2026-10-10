@@ -5126,4 +5126,29 @@ Exact owned bytes integrated unchanged; shared support, native build, prepare,
 parity and all14cases remain NOT_RUN. Root final authoring check is FAIL: six pure checks passed and the first exact wrapper/fake-/bin/sh dispatch reached its unchanged2s child stop; complete invocation2,121,796,000ns, original receipt2026-10-11-batch-6-main-authoring/reuse. Wrapper is a finite case selector then exec of a three-line printf fake; no product operation ran and no source-backed implementation hang was identified. Scheduling/startup cause remains unknown under declared shared interference. Preserve the failed receipt; no timeout change or unchanged rerun. The worker's seven exact-source qualified checks remain separate earlier evidence, not a relabelled main PASS.
 
 | Worker eefbd751c | Author reuse registrations/wrapper/external tests | 79370 | 79370 | +0 |
-| This commit | Integrate original reuse family and required original storage scope | 79370 | 79370 | +0 |
+| `a442c8879` | Integrate original reuse family and required original storage scope | 79370 | 79370 | +0 |
+
+
+### Batch 6 Store-footprint registration, 2026-10-11
+
+Allsix original controls are ported with exact500MB large controls and5/10MB
+low controls,100000/100/10 infrastructure tiers,100000/100/10 file geometry
+and seed1. Original full native fixture/digest construction remains setup-only;
+its public directory Init is measured and never replaced by a prepared Store.
+One unchanged namespace-edit, one Created Commit and terminal End follow.
+The final oracle preserves its intentionally clipped selected-file boundary
+(65536B either side of the10B E000000001 marker) and exact full file length;
+unselected final namespace/bytes remain explicitly omitted. Initial typed inode
+census and actual global Commit membership strengthen identity only.
+
+Original4GiB main Store,2GiB owned spool, Store/spool arithmetic,2CPU/2GiB/
+noSwap/256PID/OOM and zero host swaps remain required with exact actual owner
+scopes. No inaccessible retired counter is a fabricated zero/physical proof;
+current raw observations and availability are separate from functional proof.
+No performance/storage ratio or product feature is introduced. Five owning
+external source/geometry/topology/limit/oracle/ordinary-dispatch checks PASS
+once713,244,834ns under main120s lock, raw2026-10-11-batch-6-main-authoring/
+footprint. Native preparation, initial+final SDK/FUSE run and storage accounting
+qualification remain NOT_RUN pending shared/native support.
+
+| This commit | Port six original fresh Init/edit Store-footprint controls | 79370 | 79370 | +0 |
