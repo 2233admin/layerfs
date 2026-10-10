@@ -2,6 +2,21 @@
 
 
 def validate(cache_class, evidence):
+    if cache_class in ("B", "C"):
+        own_written = evidence.get("has_own_write_input")
+        if type(own_written) is not bool:
+            return "INELIGIBLE"
+        if own_written:
+            cold = evidence.get("own_write_cold_observation")
+            started = evidence.get("commit_started_monotonic_ns")
+            if not (isinstance(cold, dict) and cold.get("status") == "VERIFIED_COLD"
+                    and cold.get("phase") == "before_commit"
+                    and type(cold.get("resident_pages")) is int and cold["resident_pages"] == 0
+                    and cold.get("metadata_state") == "VERIFIED_COLD"
+                    and cold.get("identity_checked") is True
+                    and type(cold.get("observed_monotonic_ns")) is int
+                    and type(started) is int and cold["observed_monotonic_ns"] < started):
+                return "INELIGIBLE"
     if cache_class == "A":
         pages = evidence.get("resident_pages")
         metadata = evidence.get("metadata_state")

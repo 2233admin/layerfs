@@ -75,7 +75,8 @@ comparison or release-admission claim. Durable is
 | --- | --- | --- | --- | --- | --- |
 | H-1 | C07 | Workload and verifier passed, unmount returned, residency helper refused changed file identity | Harness inspected overlay while automatic post-unmount reclamation was still mutating backing | `a1f2c259c` | `test_backing_observer_waits_for_original_reclamation_to_finish` |
 
-| H-3 | Generic mounted pilot proofs and prospective SDK proofs | Reachable path walk omitted exhaustive inode-table membership from original canonical verifier | Runtime compared declared paths/bytes but never enumerated current inode table | This commit | edit_oracle_complete_membership_accepts_exact_and_rejects_unreachable_or_missing_rows |
+| H-3 | Generic mounted pilot proofs and prospective SDK proofs | Reachable path walk omitted exhaustive inode-table membership from original canonical verifier | Runtime compared declared paths/bytes but never enumerated current inode table | `37ec6826b` | edit_oracle_complete_membership_accepts_exact_and_rejects_unreachable_or_missing_rows |
+| H-4 | Prospective B/C Commit eligibility | Zero source demands could credit own-written backing without independent pre-Commit coldness | Cache classifier checked source demand/lifetime but not own-written phase inputs | This commit | test_zero_source_demands_cannot_credit_own_written_commit_input |
 | H-2 | 36 batch-1 reviewed registrations | source_commit was an annotated tag object; parity accepted it and rejected the actual peeled commit | git rev-parse on an annotated reference returns the tag object unless peeled | `222526fa0` | test_review_identity.py rejects the tag through both parity routes, admits the peeled commit and checks every ported review |
 
 H-1 and H-2 are harness faults, not product correctness or performance defects.
@@ -1148,4 +1149,40 @@ LOC79,366->79,366(delta+0), pinned absent-aware method; reference absent
 retiredR9c,lastcount65,417.
 
 | `8e02fbed9` (worker) | Add typed edit-retention and exhaustive inode membership oracle | 79366 | 79366 | +0 |
-| This commit | Restore complete current inode membership and SDK edit proofs | 79366 | 79366 | +0 |
+| `37ec6826b` | Restore complete current inode membership and SDK edit proofs | 79366 | 79366 | +0 |
+
+H-4 own-write cache classification: the zero source-demand/lifetime guard
+was insufficient when Commit consumes newly written backing pages. The
+external regression fails before the fix (ELIGIBLE rather than INELIGIBLE),
+with exact failed output retained under
+benchmark-results/fs-bench-pro/2026-10-10-batch-2-shared-oracle-checks/own-write-before.*.
+B/C eligibility now requires explicit knowledge of own-written input; modified
+input additionally needs independent actual pre-Commit verified-cold page/
+metadata/identity observations with a preceding monotonic timestamp. No
+existing observer supplies that proof here, so committed mutations are
+INELIGIBLE. Read-only UpToDate cases explicitly declare no own-written input;
+actual original zero source demands and cache lifetimes still apply. No
+eviction, warm-state change, new hint, limit, workload, request or product
+optimization is introduced to obtain eligibility. The seven pilot numeric
+PASS rows are read-only UpToDate; all pilot mutations were already INELIGIBLE.
+Earlier cell receipts remain unchanged; their missing own-write declaration
+is not evidence of numerical cache qualification, regardless of functional
+proof/count equality. No speed or release claim is made from them.
+
+Completed counts/storage can also be collected once after a separately failed
+closed-Store graph proof, provided Stop is known and telemetry has never been
+requested. This is read-only receipt completion after the proof clock ends;
+no product operation is replayed, no missing response is guessed and the
+original graph failure remains primary. Collection errors are independent
+observation failures. Passing-case timer/order remains unchanged. A scoped
+test verifies original failure/status remain FAIL while measured counts are
+preserved through the read-only collection helper. Ten final workspace
+evidence/cache tests PASS0.056s under main120s lock. Raw final test output is
+workspace-final.* in the same checks root.
+
+These are stricter harness evidence guards only; product source unchanged.
+Shared build/remaining final owning checks and pilot membership audits remain
+pending, with no SDK case setup/sample started. Production LOC79,366->79,366
+(delta+0), same pinned absent-aware method; reference absent retiredR9c.
+
+| This commit | Guard own-write cache qualification and preserve failed-proof metrics | 79366 | 79366 | +0 |

@@ -264,6 +264,23 @@ def one_cell(cell, prepared_folder, build_folder, output):
     return row
 
 
+def collect_family_observations(runtime, row, build, output, bindings):
+    docker = ["docker", "--host", "unix://" + build["socket"]]
+    logs = receipts.command([*docker, "logs", "--timestamps=false", runtime.container], output, "daemon-logs", 15)
+    groups = {}
+    for path in (logs["stdout"], logs["stderr"]):
+        groups.update(cell_runner.telemetry(path))
+    words = lambda value: [int(value[index:index+16], 16) for index in range(0, 64, 16)]
+    for group in groups.values():
+        if group[0]["daemon"] != words(runtime.daemon_instance) or group[0]["scope"] != words(runtime.scope):
+            raise ValueError("original numeric daemon/scope differs from authenticated channel")
+    totals, priced, correlated = price(groups, runtime.rows, bindings, "measured command and Commit")
+    row.update(counts=totals, phase_counts=priced, control_correlation=correlated)
+    cell_runner.snapshot_observations(runtime, row["observations"])
+    cell_runner.ingest_observations(groups, row["observations"], row["cache"])
+    row["cache"]["status"] = cache.validate("B", row["cache"])
+
+
 def one_family_case(family, case, prepared_folder, build_folder, output):
     """Single ordinary call/Commit through the same SDK/Sandbox machinery."""
     current = identity.source_identity()
@@ -333,9 +350,13 @@ def one_family_case(family, case, prepared_folder, build_folder, output):
         row["phases"]["mount_ns"] = mount["span"]["duration_ns"]
         command = runtime.send("command", selected, script(output, "command.sh", body), deadline=time.monotonic() + 120)
         row["phases"]["command_ns"] = command["span"]["duration_ns"]
+        row["cache"]["commit_started_monotonic_ns"] = time.monotonic_ns()
         committed = runtime.send("commit", selected, deadline=time.monotonic() + 120)
         row["phases"]["commit_ns"] = committed["span"]["duration_ns"]
         row["commit"] = committed
+        row["cache"].update(has_own_write_input=committed["fields"]["commit_kind"] == "Committed",
+                            own_write_cold_observation=None,
+                            own_write_cache_reason="no independent pre-Commit cold backing/metadata observation; own-write warmth is not eligible")
         if committed["fields"]["commit_kind"] != case["expected_commit"]:
             raise ValueError("original known Commit outcome differs from frozen mutation/read-only case")
         runtime.send("snapshot", selected, deadline=time.monotonic() + 15)
@@ -394,22 +415,10 @@ def one_family_case(family, case, prepared_folder, build_folder, output):
         row.update(proof_status="PASS", proof_wall_ns=time.monotonic_ns() - proof_started,
                    verification={"scope": case["oracle"]["scope"], "omissions": case["oracle"]["omissions"],
                                  "native": proof, "persisted": proof_events[0]})
-        logs = receipts.command([*docker, "logs", "--timestamps=false", runtime.container], output, "daemon-logs", 15)
-        groups = {}
-        for path in (logs["stdout"], logs["stderr"]):
-            groups.update(cell_runner.telemetry(path))
-        words = lambda value: [int(value[index:index+16], 16) for index in range(0, 64, 16)]
-        for group in groups.values():
-            if group[0]["daemon"] != words(runtime.daemon_instance) or group[0]["scope"] != words(runtime.scope):
-                raise ValueError("original numeric daemon/scope differs from authenticated channel")
-        totals, priced, correlated = price(groups, runtime.rows, bindings, "measured command and Commit")
-        row.update(counts=totals, phase_counts=priced, control_correlation=correlated)
-        cell_runner.snapshot_observations(runtime, row["observations"])
-        cell_runner.ingest_observations(groups, row["observations"], row["cache"])
-        row["cache"]["status"] = cache.validate("B", row["cache"])
+        collect_family_observations(runtime, row, build, output, bindings)
         row.update(status="PASS" if row["cache"]["status"] == "ELIGIBLE" else "INELIGIBLE", functional_status="PASS")
         if row["status"] == "INELIGIBLE":
-            row["tag"] = "class B source-demand precondition not met; functional/native/persisted proofs and clean unmount pass"
+            row["tag"] = "class B source demands or own-write cold backing precondition unavailable; functional/native/persisted proofs and clean unmount pass"
         state = receipts.command([*docker, "inspect", runtime.container, "--format", "{{.State.Running}}"], output, "container-state", 15)
         if Path(state["stdout"]).read_text().strip() != "false":
             raise ValueError("original container Stop not confirmed")
@@ -423,6 +432,11 @@ def one_family_case(family, case, prepared_folder, build_folder, output):
             row["complete_wall_ns"] = clock.observe(time.monotonic_ns())["performance_ns"]
         if proof_started is not None:
             row["proof_wall_ns"] = time.monotonic_ns() - proof_started
+        if runtime is not None and row.get("custody") == "KNOWN_STOP" and not (output / "daemon-logs.attempt.json").exists():
+            try:
+                collect_family_observations(runtime, row, build, output, bindings)
+            except BaseException as observing:
+                row["independent_observation_failure"] = str(observing)
         if runtime is None:
             runtime = getattr(error, "event_process", None)
         if runtime is not None:

@@ -56,7 +56,8 @@ class WorkspaceEvidence(unittest.TestCase):
             self.assertEqual(residency, {"resident_pages": 1})
 
     def test_b_requires_original_terminal_cleanup_and_actual_zero_demands(self):
-        good = dict(fresh_mount=True, warmup_terminal_unmount=True, warmup_cleanup="Gone", object_demands=0)
+        good = dict(fresh_mount=True, warmup_terminal_unmount=True, warmup_cleanup="Gone",
+                    object_demands=0, has_own_write_input=False)
         self.assertEqual(cache.validate("B", good), "ELIGIBLE")
         for name in good:
             self.assertEqual(cache.validate("B", {key: value for key, value in good.items() if key != name}), "INELIGIBLE")
@@ -67,7 +68,38 @@ class WorkspaceEvidence(unittest.TestCase):
         self.assertEqual(cache.validate("A", {"resident_pages": 0}), "INELIGIBLE")
         self.assertEqual(cache.validate("A", {"resident_pages": False, "metadata_state": "VERIFIED_COLD"}), "INELIGIBLE")
         self.assertEqual(cache.validate("C", {"same_mount": True, "warm_interval_ns": 60_000_000_000}), "INELIGIBLE")
-        self.assertEqual(cache.validate("C", {"same_mount": True, "warm_interval_ns": 59_999_999_999}), "ELIGIBLE")
+        self.assertEqual(cache.validate("C", {"same_mount": True, "warm_interval_ns": 59_999_999_999,
+                                               "has_own_write_input": False}), "ELIGIBLE")
+
+    def test_zero_source_demands_cannot_credit_own_written_commit_input(self):
+        good = dict(fresh_mount=True, warmup_terminal_unmount=True, warmup_cleanup="Gone",
+                    object_demands=0, has_own_write_input=True)
+        self.assertEqual(cache.validate("B", good), "INELIGIBLE")
+        self.assertEqual(cache.validate("B", {**good, "own_write_cache_state": "UNAVAILABLE"}), "INELIGIBLE")
+
+    def test_completed_metrics_collection_keeps_a_separate_graph_failure(self):
+        from types import SimpleNamespace
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory)
+            stdout, stderr = output / "logs.stdout", output / "logs.stderr"
+            stdout.write_text("")
+            stderr.write_text("")
+            runtime = SimpleNamespace(container="owned-stopped", daemon_instance="a" * 64,
+                                      scope="b" * 64, rows=[])
+            row = {"status": "FAIL", "original_failure": "untouched mapping differs",
+                   "observations": {}, "cache": {"has_own_write_input": True}}
+            with patch.object(workspace.receipts, "command", return_value={"stdout": str(stdout), "stderr": str(stderr)}) as read, \
+                    patch.object(workspace.cell_runner, "telemetry", return_value={}), \
+                    patch.object(workspace, "price", return_value=({"requests": 16, "owner_jobs": 140, "statements": 645}, [], {})), \
+                    patch.object(workspace.cell_runner, "snapshot_observations"), \
+                    patch.object(workspace.cell_runner, "ingest_observations"):
+                workspace.collect_family_observations(runtime, row, {"socket": "/socket"}, output, {})
+            self.assertEqual(row["original_failure"], "untouched mapping differs")
+            self.assertEqual(row["status"], "FAIL")
+            self.assertEqual(row["counts"], {"requests": 16, "owner_jobs": 140, "statements": 645})
+            self.assertEqual(row["cache"]["status"], "INELIGIBLE")
+            self.assertEqual(read.call_count, 1)
+            self.assertEqual(read.call_args.args[0][3:5], ["logs", "--timestamps=false"])
 
     def test_failed_clone_retains_original_failure_and_has_no_sample_credit(self):
         with tempfile.TemporaryDirectory() as directory:
