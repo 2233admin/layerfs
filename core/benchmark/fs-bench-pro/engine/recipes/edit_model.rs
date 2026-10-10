@@ -12,7 +12,25 @@ pub fn scenario(id: &str) -> Option<Scenario> {
         .find(|row| row.id == id)
 }
 
+/// Complete expected tree, including the canonical family's final byte digest.
 pub fn entries(id: &str, step: usize) -> reference::Result<Vec<Entry>> {
+    let entries = descriptors(id, step)?;
+    let canonical = scenario(id)
+        .filter(|row| row.family_id == reference::edit_canonical_chunk_count::FAMILY_ID);
+    if let (1, Some(row)) = (step, canonical) {
+        if original_fixture_hash(&entries)?
+            != reference::edit_canonical_chunk_count::expected(&row).final_sha256
+        {
+            return Err("original canonical final byte digest differs".into());
+        }
+    }
+    Ok(entries)
+}
+
+/// The same tree without generating its bytes. The timed writer needs only the
+/// metadata descriptors; preparation, verification and the oracle keep the
+/// digest check through `entries`.
+pub fn descriptors(id: &str, step: usize) -> reference::Result<Vec<Entry>> {
     let Some(row) = scenario(id) else {
         let case = reference::workspace_registry::resolve(id)?;
         return reference::workspace_registry::expected(&case, 1, step);
@@ -59,12 +77,6 @@ pub fn entries(id: &str, step: usize) -> reference::Result<Vec<Entry>> {
         }
     {
         return Err("original SDK expected file length differs".into());
-    }
-    if step == 1
-        && row.family_id == reference::edit_canonical_chunk_count::FAMILY_ID
-        && content.digest()? != reference::edit_canonical_chunk_count::expected(&row).final_sha256
-    {
-        return Err("original canonical final byte digest differs".into());
     }
     let entries = vec![Entry::directory("."), Entry::file("payload.bin", content)];
     reference::workspace_common::validate_entries(&entries)?;

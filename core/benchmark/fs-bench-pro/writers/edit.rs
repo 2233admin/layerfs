@@ -150,7 +150,7 @@ fn apply(id: &str) -> reference::Result<()> {
     {
         return Err("original replacement length/hash differs".into());
     }
-    let entries = edit_model::entries(id, 1)?;
+    let entries = edit_model::descriptors(id, 1)?;
     let file = OpenOptions::new()
         .read(true)
         .write(true)
