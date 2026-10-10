@@ -703,4 +703,33 @@ reuses its qualifying scoped evidence; no unchanged sample is repeated.
 Production LOC 79,366 -> 79,366 (delta +0), same pinned absent-aware method.
 
 | `c4c137c13` (worker) | Port twenty tiny-file cases at isolated worktree source | 79366 | 79366 | +0 |
-| This commit | Integrate tiny-file registration with master ledger | 79366 | 79366 | +0 |
+| `36849bcc2` | Integrate tiny-file registration with master ledger | 79366 | 79366 | +0 |
+
+Batch 1 / namespace_mutation registration integrated locally onto main from
+worker dac8212de. All four original compact-v2/mixed-v4 IDs, fixtures, tiers,
+seed1, original subtree rename/delete/normalization/sync requests and known
+Committed outcomes are preserved. The complete mounted/persisted byte/tree
+proof is explicitly declared as stronger than the historical mixed-v4 selected
+paths/ranges and moved/deleted witnesses. Original report/work/hard/operation
+limits remain 15/45/59/120 seconds. No product/shared engine changes.
+
+Worker qualified the compact native rename/deletion transcript and corruption
+rejection with two scoped tests PASS in 0.134 s under its own 120 s lock; three
+catalogue tests PASS in 3.297 s. The initial test-only expectation used the
+word bytes while the verifier emits native content mismatch; native.stderr
+retains that failure. The final assertion strengthens matching to the exact
+content-mismatch path and offset; native-fixed.stderr retains PASS. No workload
+or verifier was weakened. All four original native input/final-state checks,
+public Init/seal/install and parity PASS at fixed dac8212de.
+
+The worker has finished four single samples with both independent proofs,
+Gone and KNOWN_STOP. Results are integrated separately; existing samples and
+receipt identities are never changed or replayed. Full raw qualification,
+preparation, parity and measured evidence remains in its attached worktree
+/Users/yifanxu/.codex/worktrees/fs-bench-pro-namespace-mutation/layerfs/benchmark-results/fs-bench-pro/.
+This integration preserves its exact registered bytes and reuses those scoped
+qualifications. Production LOC 79,366 -> 79,366 (delta +0), pinned absent-aware
+method; reference absent (retired R9c, last counted 65,417).
+
+| `dac8212de` (worker) | Port four namespace mutation cases and scoped qualification | 79366 | 79366 | +0 |
+| This commit | Integrate namespace registration with master ledger | 79366 | 79366 | +0 |
