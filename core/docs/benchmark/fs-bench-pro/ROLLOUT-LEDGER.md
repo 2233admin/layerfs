@@ -75,7 +75,7 @@ comparison or release-admission claim. Durable is
 | --- | --- | --- | --- | --- | --- |
 | H-1 | C07 | Workload and verifier passed, unmount returned, residency helper refused changed file identity | Harness inspected overlay while automatic post-unmount reclamation was still mutating backing | `a1f2c259c` | `test_backing_observer_waits_for_original_reclamation_to_finish` |
 
-| H-2 | 36 batch-1 reviewed registrations | source_commit was an annotated tag object; parity accepted it and rejected the actual peeled commit | git rev-parse on an annotated reference returns the tag object unless peeled | This commit | test_review_identity.py rejects the tag through both parity routes, admits the peeled commit and checks every ported review |
+| H-2 | 36 batch-1 reviewed registrations | source_commit was an annotated tag object; parity accepted it and rejected the actual peeled commit | git rev-parse on an annotated reference returns the tag object unless peeled | `222526fa0` | test_review_identity.py rejects the tag through both parity routes, admits the peeled commit and checks every ported review |
 
 H-1 and H-2 are harness faults, not product correctness or performance defects.
 The original file-identity checker remains intact; no product source changed.
@@ -810,4 +810,90 @@ boundary claim is manufactured. Corrected parity evidence will be recorded
 without any product sample replay. Production LOC 79,366 -> 79,366 (delta +0),
 pinned absent-aware method; reference absent (retired R9c, last counted 65,417).
 
-| This commit | Correct annotated recovery tag/source commit review identity | 79366 | 79366 | +0 |
+| `222526fa0` | Correct annotated recovery tag/source commit review identity | 79366 | 79366 | +0 |
+
+Batch 1 / tiny_file_churn complete: worker results commit 323cd6dfa is
+integrated on main with every original case in both twenty-row CSVs under
+baselines/core/2026-10-10-c4c137c13/. All twenty cases were sampled once at
+clean c4c137c13, passed the full mounted native and closed persisted semantic
+proofs with exact acknowledged Commit/UpToDate root, and ended both measured
+and verifier mounts with Gone and KNOWN_STOP. All passing sample containers/
+volumes and setup/copy containers were removed by their creating worker.
+There was no product bug, failed/NA case or exceeded product/proof limit.
+
+All four tiny-stat rows are numeric PASS with zero source demands. Eight
+tiny-create/unlink rows are INELIGIBLE with three actual demands each; eight
+bulk-create/delete rows are INELIGIBLE with four each. The strict guard remains
+unchanged; completed work/clean proofs remain functional PASS independently.
+No case was repeated to obtain a different cache observation.
+
+| Case | Functional / proof | Numeric | Complete wall ns | Proof wall ns | Requests / jobs / statements | Store logical / allocated B | Overlay logical / allocated B |
+| --- | --- | --- | ---: | ---: | --- | --- | --- |
+| tiny-create-1-compact-v2 | PASS / PASS | INELIGIBLE | 172780583 | 2170305458 | 16 / 140 / 645 | 1405656 / 1409024 | 229376 / 268664832 |
+| tiny-create-10-compact-v2 | PASS / PASS | INELIGIBLE | 171092084 | 2549466792 | 115 / 956 / 4452 | 11084912 / 11087872 | 266240 / 268701696 |
+| tiny-create-100-mixed-v4 | PASS / PASS | INELIGIBLE | 270797708 | 5553232500 | 736 / 5745 / 27408 | 106945928 / 106946560 | 548864 / 268984320 |
+| tiny-create-500-mixed-v4 | PASS / PASS | INELIGIBLE | 566336917 | 16850427292 | 3496 / 28841 / 134888 | 534873568 / 534876160 | 1847296 / 270282752 |
+| tiny-stat-1-compact-v2 | PASS / PASS | PASS | 180196833 | 2107919500 | 4 / 51 / 249 | 1347976 / 1351680 | 229376 / 268664832 |
+| tiny-stat-10-compact-v2 | PASS / PASS | PASS | 203780416 | 2550262542 | 22 / 69 / 501 | 10985888 / 10989568 | 262144 / 268697600 |
+| tiny-stat-100-mixed-v4 | PASS / PASS | PASS | 199141125 | 5670476250 | 112 / 159 / 1671 | 107327904 / 107331584 | 389120 / 268824576 |
+| tiny-stat-500-mixed-v4 | PASS / PASS | PASS | 255376583 | 16564206042 | 512 / 559 / 6871 | 532681120 / 532684800 | 598016 / 269033472 |
+| tiny-unlink-1-compact-v2 | PASS / PASS | INELIGIBLE | 193983458 | 2233676000 | 12 / 122 / 594 | 1372696 / 1376256 | 229376 / 268664832 |
+| tiny-unlink-10-compact-v2 | PASS / PASS | INELIGIBLE | 191469000 | 2653523250 | 75 / 608 / 3301 | 11018848 / 11022336 | 262144 / 268697600 |
+| tiny-unlink-100-mixed-v4 | PASS / PASS | INELIGIBLE | 233279625 | 5783532667 | 435 / 3035 / 17991 | 107435168 / 107438080 | 389120 / 268824576 |
+| tiny-unlink-500-mixed-v4 | PASS / PASS | INELIGIBLE | 410351250 | 16350211959 | 2035 / 13939 / 83655 | 532792048 / 532795392 | 565248 / 269000704 |
+| tiny-bulk-create-1-compact-v2 | PASS / PASS | INELIGIBLE | 366151625 | 2475651167 | 1429 / 15063 / 65179 | 1426280 / 1429504 | 1495040 / 269930496 |
+| tiny-bulk-create-10-compact-v2 | PASS / PASS | INELIGIBLE | 837759583 | 3245791000 | 4651 / 43140 / 196321 | 13705216 / 13705216 | 11735040 / 280170496 |
+| tiny-bulk-create-100-mixed-v3 | PASS / PASS | INELIGIBLE | 1918278000 | 5651561541 | 8709 / 80032 / 375318 | 111820800 / 111820800 | 108724224 / 377163776 |
+| tiny-bulk-create-500-mixed-v3 | PASS / PASS | INELIGIBLE | 13508792208 | 18308321000 | 39665 / 351248 / 1669693 | 536412160 / 536416256 | 541491200 / 809930752 |
+| tiny-bulk-delete-1-compact-v2 | PASS / PASS | INELIGIBLE | 318064125 | 2024159625 | 1145 / 9966 / 53086 | 1422088 / 1425408 | 348160 / 268783616 |
+| tiny-bulk-delete-10-compact-v2 | PASS / PASS | INELIGIBLE | 509469958 | 2184369209 | 3012 / 22772 / 129867 | 11039520 / 11042816 | 634880 / 269070336 |
+| tiny-bulk-delete-100-mixed-v3 | PASS / PASS | INELIGIBLE | 761838833 | 2889839417 | 4987 / 36093 / 210354 | 107774848 / 107778048 | 913408 / 269348864 |
+| tiny-bulk-delete-500-mixed-v3 | PASS / PASS | INELIGIBLE | 2643373875 | 5621920792 | 21187 / 146056 / 872798 | 533111632 / 533114880 | 3248128 / 271683584 |
+
+The largest complete product wall is 13,508,792,208 ns for original
+tiny-bulk-create-500-mixed-v3 (15,000,000,000 ns reported limit), with separate
+proof 18,308,321,000 ns (45,000,000,000 ns work / 59 s hard limit). Its
+39,665 requests / 351,248 jobs / 1,669,693 statements are recorded without
+judgment or comparison. Every row includes its original released reference
+provenance. Raw preparation/parity/run receipts remain under
+/Users/yifanxu/.codex/worktrees/fs-bench-pro-tiny-file-churn/layerfs/benchmark-results/fs-bench-pro/
+2026-10-10-batch-1-tiny-prepared/, -parity/ and -c4c137c13/ respectively.
+The twenty immutable prepared masters are listed explicitly below; they remain
+closed reusable setup, never direct measurement:
+
+| Prepared case | Owned master volume |
+| --- | --- |
+| tiny-create-1-compact-v2 | layerfs-fsb-master-tiny-file-churn-d8611b3edb224292 |
+| tiny-create-10-compact-v2 | layerfs-fsb-master-tiny-file-churn-4b582e0f3a314380 |
+| tiny-create-100-mixed-v4 | layerfs-fsb-master-tiny-file-churn-9aeb5aba230e420e |
+| tiny-create-500-mixed-v4 | layerfs-fsb-master-tiny-file-churn-6e39c5ff6dd247a3 |
+| tiny-stat-1-compact-v2 | layerfs-fsb-master-tiny-file-churn-1dbdf1f9afe5439f |
+| tiny-stat-10-compact-v2 | layerfs-fsb-master-tiny-file-churn-a329b9fd36d54027 |
+| tiny-stat-100-mixed-v4 | layerfs-fsb-master-tiny-file-churn-d89da5abc69e450f |
+| tiny-stat-500-mixed-v4 | layerfs-fsb-master-tiny-file-churn-307f1d1ac9d7400e |
+| tiny-unlink-1-compact-v2 | layerfs-fsb-master-tiny-file-churn-6a25097b09874030 |
+| tiny-unlink-10-compact-v2 | layerfs-fsb-master-tiny-file-churn-262566f5b9ae4d01 |
+| tiny-unlink-100-mixed-v4 | layerfs-fsb-master-tiny-file-churn-f1511e0f2f824988 |
+| tiny-unlink-500-mixed-v4 | layerfs-fsb-master-tiny-file-churn-93b0b33df1684caa |
+| tiny-bulk-create-1-compact-v2 | layerfs-fsb-master-tiny-file-churn-9e8ec14e26e1446b |
+| tiny-bulk-create-10-compact-v2 | layerfs-fsb-master-tiny-file-churn-1db068255c914185 |
+| tiny-bulk-create-100-mixed-v3 | layerfs-fsb-master-tiny-file-churn-fe3860c319e64160 |
+| tiny-bulk-create-500-mixed-v3 | layerfs-fsb-master-tiny-file-churn-254ce6c1f22543d6 |
+| tiny-bulk-delete-1-compact-v2 | layerfs-fsb-master-tiny-file-churn-13f68d6d9c8d49fd |
+| tiny-bulk-delete-10-compact-v2 | layerfs-fsb-master-tiny-file-churn-42fdc1d872284079 |
+| tiny-bulk-delete-100-mixed-v3 | layerfs-fsb-master-tiny-file-churn-92c7d60100c841a9 |
+| tiny-bulk-delete-500-mixed-v3 | layerfs-fsb-master-tiny-file-churn-37f4306ee67a4e15 |
+
+bench.py report validates the original retained manifests and emits all twenty
+performance/proof rows without product replay. The worker's original scoped
+catalogue/syntax qualification is reused; this integration changes only CSVs/
+documents. Ignored raw evidence is retained in its attached worktree. No
+archive/deletion of that evidence or any protected resource has occurred.
+Worker cohorts and old review-tag labels remain immutable in their receipts;
+main's H-2 correction changes only prospective metadata and strict parity
+validation, with no measured case replay. Corrected parity for all four
+batch-1 families is the remaining batch checkpoint before batch 2 starts.
+Production LOC 79,366 -> 79,366 (delta +0), same pinned absent-aware method.
+
+| `323cd6dfa` (worker) | Record twenty tiny-file samples and generated CSVs | 79366 | 79366 | +0 |
+| This commit | Integrate complete tiny-file outcomes with master ledger | 79366 | 79366 | +0 |
