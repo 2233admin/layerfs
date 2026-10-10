@@ -53,10 +53,24 @@ def admit(document):
         for path, digest in review['files'].items():
             assert hashlib.sha256((ROOT/path).read_bytes()).hexdigest() == digest
         if ident in INTEGRITY:
-            assert row['status'] == 'ported'
+            assert row['status'] == 'not-applicable'
+            assert row['not_applicable_reason'] == row['applicability']['reason']
+            assert row['not_applicable_reason'] and row['needs']
+            assert row['applicability']['missing_creation_time_sandbox_profile'] is True
+            profile=row['applicability']['creation_time_sandbox_profile']
+            assert profile['original_required_before_start'] is True
+            assert profile['public_sdk_profile_available'] is False
+            assert profile['public_pre_start_hook_available'] is False
+            assert profile['public_authenticated_adoption_available'] is False
+            assert profile['post_start_update_is_equivalent'] is False
+            assert profile['private_wire_proxy_allowed'] is False
+            assert profile['original_profile'] == guard['container_profile']
+            assert profile['current_public_source_hashes']
+            for path,digest in profile['current_public_source_hashes'].items():
+                assert hashlib.sha256((ROOT/path).read_bytes()).hexdigest() == digest
             assert physical['reachable'] is False
             assert physical['bypass_original_driver_lines'] == [360, 385]
-            assert row['applicability']['classification'] == 'expressible'
+            assert row['applicability']['classification'] == 'not-applicable'
             integrity = row['reliability_integrity']
             assert integrity['selected_path'] == 'sentinels/f0003.dat'
             assert integrity['selected_mapping_extent'] == 'first'
@@ -134,44 +148,52 @@ class ReliabilityMetadata(unittest.TestCase):
         bad=copy.deepcopy(self.document);bad['cases'][index]['reliability_integrity']['cleanup']['actual_unmounted']=False
         with self.assertRaises(AssertionError):admit(bad)
 
-    def test_shell_requires_bound_absolute_mount_and_preserves_native_argv(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            root=Path(temporary).resolve();mount=root/'mount';mount.mkdir();log=root/'log.json'
-            helper=root/'helper';helper.write_text('#!/usr/bin/env python3\nimport json,os,sys\nfrom pathlib import Path\nPath(os.environ["HELPER_LOG"]).write_text(json.dumps({"argv":sys.argv[1:],"cwd":os.getcwd()}))\n')
-            helper.chmod(0o755)
-            env={**os.environ,'WORKLOAD_HELPER':str(helper),'HELPER_LOG':str(log)}
-            for ident in sorted(INTEGRITY):
-                for action, expected in [('verify-initial',['workspace-reliability-verify',ident,'initial','0']),
-                                         ('read-corrupt',['workspace-reliability-workload',ident,'read-corrupt','0'])]:
-                    out=subprocess.run(['/bin/bash',str(FAMILY/'workload.sh'),action,ident],cwd=root,
-                                       env={**env,'LAYERFS_WORKSPACE_ROOT':str(mount)},capture_output=True,timeout=3)
-                    self.assertEqual(out.returncode,0,out.stderr)
-                    self.assertEqual(json.loads(log.read_text()),{'argv':expected,'cwd':str(mount)})
-                    log.unlink()
-            for env_extra in [{},{'LAYERFS_WORKSPACE_ROOT':'relative'}]:
-                out=subprocess.run(['/bin/bash',str(FAMILY/'workload.sh'),'read-corrupt',sorted(INTEGRITY)[0]],
-                                   cwd=root,env={**env,**env_extra},capture_output=True,timeout=3)
-                self.assertNotEqual(out.returncode,0)
-                self.assertFalse(log.exists())
-            out=subprocess.run(['/bin/bash',str(FAMILY/'workload.sh'),'apply',sorted(INTEGRITY)[0]],
-                               env={**env,'LAYERFS_WORKSPACE_ROOT':str(mount)},capture_output=True,timeout=3)
-            self.assertNotEqual(out.returncode,0);self.assertFalse(log.exists())
-
-    def test_all26_na_routes_refuse_before_helper_and_name_exact_reason(self):
+    def test_creation_time_profile_gap_cannot_be_promoted_or_patched_after_start(self):
         admit(self.document)
+        index=next(i for i,r in enumerate(self.document['cases']) if r['id'] in INTEGRITY)
+        for change in [lambda r:r.update(status='ported'),
+                       lambda r:r['applicability']['creation_time_sandbox_profile'].update(public_sdk_profile_available=True),
+                       lambda r:r['applicability']['creation_time_sandbox_profile'].update(public_pre_start_hook_available=True),
+                       lambda r:r['applicability']['creation_time_sandbox_profile'].update(post_start_update_is_equivalent=True),
+                       lambda r:r['applicability']['creation_time_sandbox_profile'].update(private_wire_proxy_allowed=True),
+                       lambda r:r['applicability'].update(missing_creation_time_sandbox_profile=False),
+                       lambda r:r.update(needs='')]:
+            bad=copy.deepcopy(self.document);change(bad['cases'][index])
+            with self.assertRaises(AssertionError):admit(bad)
+        path=next(iter(self.document['cases'][index]['applicability']['creation_time_sandbox_profile']['current_public_source_hashes']))
+        bad=copy.deepcopy(self.document)
+        bad['cases'][index]['applicability']['creation_time_sandbox_profile']['current_public_source_hashes'][path]='0'*64
+        with self.assertRaises(AssertionError):admit(bad)
+
+    def test_all28_na_routes_refuse_before_helper_and_name_exact_reason(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary).resolve();mount=root/'mount';mount.mkdir()
+            sentinel=root/'called';helper=root/'helper'
+            helper.write_text('#!/bin/sh\ntouch "$HELPER_LOG"\n');helper.chmod(0o755)
+            env={**os.environ,'WORKLOAD_HELPER':str(helper),'HELPER_LOG':str(sentinel),
+                 'LAYERFS_WORKSPACE_ROOT':str(mount)}
+            for row in self.document['cases']:
+                for action in ['verify-initial','read-corrupt']:
+                    result=subprocess.run(['/bin/bash',str(FAMILY/'workload.sh'),action,row['id']],
+                                          cwd=root,env=env,capture_output=True,text=True,timeout=3)
+                    self.assertEqual(result.returncode,3,(row['id'],result.stderr))
+                    self.assertEqual(result.stdout,'')
+                    self.assertIn('case='+row['id'],result.stderr)
+                    self.assertIn('reason='+str(row['not_applicable_reason']),result.stderr)
+                    self.assertIn('needs='+row['needs'],result.stderr)
+                    self.assertFalse(sentinel.exists())
+
+    def test_shell_unknown_action_id_or_arity_cannot_run_helper(self):
         with tempfile.TemporaryDirectory() as temporary:
             root=Path(temporary).resolve();sentinel=root/'called';helper=root/'helper'
             helper.write_text('#!/bin/sh\ntouch "$HELPER_LOG"\n');helper.chmod(0o755)
-            env={**os.environ,'WORKLOAD_HELPER':str(helper),'HELPER_LOG':str(sentinel)}
-            for row in self.document['cases']:
-                if row['id'] in INTEGRITY:continue
-                result=subprocess.run(['/bin/bash',str(FAMILY/'workload.sh'),'read-corrupt',row['id']],
-                                      cwd=root,env=env,capture_output=True,text=True,timeout=3)
-                self.assertEqual(result.returncode,3)
-                self.assertEqual(result.stdout,'')
-                self.assertIn('case='+row['id'],result.stderr)
-                self.assertIn('reason='+row['not_applicable_reason'],result.stderr)
-                self.assertIn('needs='+row['needs'],result.stderr)
+            env={**os.environ,'WORKLOAD_HELPER':str(helper),'HELPER_LOG':str(sentinel),
+                 'LAYERFS_WORKSPACE_ROOT':str(root)}
+            for argv in [['apply',sorted(INTEGRITY)[0]],['read-corrupt','unknown-case'],
+                         [],['read-corrupt'],['read-corrupt',sorted(INTEGRITY)[0],'extra']]:
+                result=subprocess.run(['/bin/bash',str(FAMILY/'workload.sh'),*argv],
+                                      cwd=root,env=env,capture_output=True,timeout=3)
+                self.assertEqual(result.returncode,64,result.stderr)
                 self.assertFalse(sentinel.exists())
 
 

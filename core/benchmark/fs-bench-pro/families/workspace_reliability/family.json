@@ -3261,7 +3261,7 @@
     {
       "id": "workspace-corrupt-descendant-compact-v2-proof",
       "v016_case": "workspace-corrupt-descendant-compact-v2-proof",
-      "status": "ported",
+      "status": "not-applicable",
       "fixture": {
         "recipe": "workspace-corrupt-descendant-compact-v2-proof",
         "seed": 1,
@@ -3318,7 +3318,7 @@
         "roots": "same original initial Branch/root and acknowledged Commit conditions; integrity cases make zero Commits and preserve namespace/history during isolated target fault",
         "original_complete_scope": "benchmark/fs-bench-pro/src/workspace_reliability.rs and unchanged native reliability_workloads.rs; all original checkpoints, errno/byte/inode and cleanup/resource conditions preserved",
         "current_additional_scope": "public authenticated typed root/mapping and complete inode-table membership; actual SDK tokens/readiness and immutable fault/reference/source custody",
-        "omissions": "No exact closed whole-case proof reuse; no performance/cold-cache qualification. Retired canonical IDs/physical schema do not transfer. For26NA cases mandatory physical observability and per-case legacy gaps remain absent; no partial primitive proof claims PASS."
+        "omissions": "No complete-case current proof or exact closed whole-case reuse. This early integrity path bypasses the original physical_state call, but the original from-creation Sandbox CPU/memory/swap/PID profile is unavailable through the permitted public SDK route. Native/fault/initial primitive proofs cannot substitute for the missing complete-case resource guard. Original canonical, selected first-extent fault, zero-byte EIO/integrity and cleanup obligations remain unchanged and unmet."
       },
       "budget": {
         "command_ms": null,
@@ -3344,6 +3344,10 @@
         {
           "what": "Current physical schema adapter selects same declared original payload by public authenticated mapping; fault is on a closed independent sample only",
           "why": "Current canonical envelopes/pack/object locators differ from retired format; initial full proof, valid target positive control, exact fault scope and original EIO/cleanup semantics stay intact."
+        },
+        {
+          "what": "Original stopped-create resource profile cannot be set before public SDK startup; complete original case is not-applicable",
+          "why": "The original runner creates the sample container with 2 CPUs, 2 GiB memory, memory-swap=memory (zero swap), and 256 PIDs before Start, then independently validates that exact HostConfig. Current public SandboxApi::create performs private Create, Upload, Start and authenticated startup as one SDK lifecycle. SandboxCreate/SandboxRequest has no resource-profile input, pre-Start callback or public authenticated adoption of a separately created stopped container; the backend HostConfig omits all four limits. A post-Start Docker update cannot preserve the original from-creation profile, and recreating private wire/authentication/Hello ownership or adding a product feature is prohibited. The original early integrity path bypasses physical_state, but that does not remove this mandatory container-profile guard."
         }
       ],
       "registry": {
@@ -3370,10 +3374,11 @@
           "benchmark/fs-bench-pro/workload/workspace_common.rs": "e38728457343d2075a54d498b8e15d0064d868cd03c7351f886fee67e389cc35",
           "benchmark/fs-bench-pro/workload/dedup_workloads.rs": "bf15a4391755d4c23c48c0f6efa466d3f801e1d937ccc1dd6ef8d4fed7e00207",
           "benchmark/fs-bench-pro/shared/runner.py": "66c8d5b23a514da27f5ebb371f75a4c0e0406adb4d595e6b61a41d7da7686201",
-          "benchmark/fs-bench-pro/verify-selected.py": "4b77a64817f2c44a58f77459537bf886e83ff3e736a16c861f9079db7b2bc01e"
+          "benchmark/fs-bench-pro/verify-selected.py": "4b77a64817f2c44a58f77459537bf886e83ff3e736a16c861f9079db7b2bc01e",
+          "benchmark/fs-bench-pro/shared/runtime.py": "36fd4a6c2bb3df8a263ef827e24364105ff97b8390a21c65c91ed4a3669cbc7a"
         },
-        "operation_transcription": "All28 IDs in original order; exact native action/state/ordinal and original SDK/fault schedules retained in reliability_proof. Only two integrity routes use unchanged read-corrupt/initial helpers;26 original guards refuse applicability without hidden work.",
-        "oracle_coverage": "Original full semantic/native/canonical/checkpoint/outcome/fault reachability and cleanup/resource guards retained. All26 initial physical_state calls remain mandatory and unavailable; two early integrity paths bypass that call by original source, not a weakened oracle.",
+        "operation_transcription": "All28 IDs retain original order/action/state/ordinal. This early integrity case retains all four semantic/fault/cleanup step descriptors and unchanged native helper tokens as unmet original obligations; shell execution refuses applicability before helper.",
+        "oracle_coverage": "Original early integrity canonical/target/EIO/cleanup conditions remain intact. The physical_state bypass is source-proven; original creation-time2CPU/2GiB/noSwap/256PID HostConfig remains mandatory and unavailable through public SDK. No partial proof is marked PASS.",
         "source_scope": "Frozen v0.1.6 driver and std-only family/native/registry/oracle sources, byte-identical to reference-v0.1.6-final. Retired SDK APIs read at tag only; current public API/product scope separately source-hashed.",
         "budgets": "Original regular45s work/59s publication/4s cleanup reserve/.25s publication margin; owner120s invocation; no performance timer. Internal sustained900/600/30s and minimum600s preserved, released optional NOT_RUN retained.",
         "resource_limits": "Original exact per-Workspace2GiB physical current/peak Some/errors0 cannot be substituted; named-spool2GiB and zero final files, actual cgroups/runtime-file cleanup, container2CPU/2GiB/no-swap/256PIDs remain declared."
@@ -3474,13 +3479,15 @@
             212
           ]
         },
-        "extra_missing_scope": [],
+        "extra_missing_scope": [
+          "Original creation-time 2CPU/2GiB/noSwap/256PID profile is not expressible through current public SDK lifecycle; post-Start update or private wire adoption cannot substitute."
+        ],
         "exact_full_case_reuse": "NOT_PROVEN",
         "scope_is_original_full_case": true
       },
       "applicability": {
         "schema": "original-reliability-applicability-v1",
-        "classification": "expressible",
+        "classification": "not-applicable",
         "reviewed_source_commit": "359c3c7d0cf84f4072a4af1ec8bd37497a75b722",
         "reviewed_product_tree": "9ac88edb2cc44d44edd4a53f9ad89f4dee063a58",
         "source_commit": "d296981ace76fe751bebf00dee52818fe18a3eef",
@@ -3493,16 +3500,112 @@
           "core/crates/layerfs-bridge/src/control_types.rs": "d18ff0a0cc22ad7f8772b591c970806e889de49730362cd2e9a5200533e23c4b",
           "core/crates/layerfs-daemon/src/control/status.rs": "8af1702074151c7c13c476f7d4b9fffb7d659877e93efbfcae578a8cd47431f4",
           "core/crates/layerfs-daemon/src/control/operations.rs": "d388a4c2f649c42630cc15d5cf1a4aa3cf9f46e2ec7b2cab0cd949d56717c257",
-          "core/crates/layerfs-sandbox/src/backend/docker/streams.rs": "0b0bf328fe0d2d8bb30c7c11ae66c4bc5ef2b6dbe8d1f0042cdede92d0682f17"
+          "core/crates/layerfs-sandbox/src/backend/docker/streams.rs": "0b0bf328fe0d2d8bb30c7c11ae66c4bc5ef2b6dbe8d1f0042cdede92d0682f17",
+          "core/crates/layerfs-api/sdk/src/sandbox/lifecycle.rs": "283833627bc8f83ee854d8820670ae519ea95d655ca3ffbcc512a1a8e53417b3",
+          "core/crates/layerfs-api/sdk/src/sandbox/types.rs": "05dd9814a861dd5a32b0448b75d3b09db777eb4a1cdd10d6cbd028ca4b4f180d",
+          "core/crates/layerfs-sandbox/src/backend/docker/container_types.rs": "bdf4094acf9b04b72bb80c9d9ab1beb933dbe5c2f69053cc39e12e81c0b3b368",
+          "core/crates/layerfs-sandbox/src/backend/docker/container.rs": "6c1b68823a8a78c38aa1aa5b760241917b9838273111a0f45a2ecc6537df1608",
+          "core/crates/layerfs-sandbox/src/backend/docker/mod.rs": "de3b6b5fc4e630e9e4230d28005ad280f4361cfdc3dc25d52205e694f56165fd"
         },
-        "reason": "",
-        "needs": "",
+        "reason": "The original runner creates the sample container with 2 CPUs, 2 GiB memory, memory-swap=memory (zero swap), and 256 PIDs before Start, then independently validates that exact HostConfig. Current public SandboxApi::create performs private Create, Upload, Start and authenticated startup as one SDK lifecycle. SandboxCreate/SandboxRequest has no resource-profile input, pre-Start callback or public authenticated adoption of a separately created stopped container; the backend HostConfig omits all four limits. A post-Start Docker update cannot preserve the original from-creation profile, and recreating private wire/authentication/Hello ownership or adding a product feature is prohibited. The original early integrity path bypasses physical_state, but that does not remove this mandatory container-profile guard.",
+        "needs": "A supported public SDK resource-profile input applied during the original stopped-container Create before Start, or an explicitly supported public pre-Start/adoption lifecycle preserving the authenticated owner, with exact original 2 CPU/2 GiB/no-swap/256 PID creation-time readback. This product/API capability is absent and new features are prohibited in this iteration. All original 23-path fixture, exact target fault, canonical/EIO and cleanup/resource proof obligations remain required; native helper or format-aware partial proof alone cannot qualify the complete case.",
         "missing_exact_physical_peak": false,
         "original_guard_bypass_proven": true,
-        "guard_replacement_allowed": false
+        "guard_replacement_allowed": false,
+        "missing_creation_time_sandbox_profile": true,
+        "creation_time_sandbox_profile": {
+          "original_required_before_start": true,
+          "original_profile": {
+            "cpus": 2,
+            "memory_bytes": 2147483648,
+            "memory_swap_bytes": 2147483648,
+            "pids_limit": 256
+          },
+          "public_sdk_profile_available": false,
+          "public_pre_start_hook_available": false,
+          "public_authenticated_adoption_available": false,
+          "post_start_update_is_equivalent": false,
+          "private_wire_proxy_allowed": false,
+          "new_product_feature_selected": false,
+          "reviewed_source_commit": "f572354ff74b778ee7cc4f194effa6b903d16a7c",
+          "reviewed_product_tree": "9ac88edb2cc44d44edd4a53f9ad89f4dee063a58",
+          "current_public_source_hashes": {
+            "core/crates/layerfs-api/sdk/src/sandbox/api.rs": "625401c1a5f3e322552e2371072d045f9b1ac2f955281f95a3c7793838437a8f",
+            "core/crates/layerfs-api/sdk/src/sandbox/lifecycle.rs": "283833627bc8f83ee854d8820670ae519ea95d655ca3ffbcc512a1a8e53417b3",
+            "core/crates/layerfs-api/sdk/src/sandbox/types.rs": "05dd9814a861dd5a32b0448b75d3b09db777eb4a1cdd10d6cbd028ca4b4f180d",
+            "core/crates/layerfs-sandbox/src/backend/docker/container_types.rs": "bdf4094acf9b04b72bb80c9d9ab1beb933dbe5c2f69053cc39e12e81c0b3b368",
+            "core/crates/layerfs-sandbox/src/backend/docker/container.rs": "6c1b68823a8a78c38aa1aa5b760241917b9838273111a0f45a2ecc6537df1608",
+            "core/crates/layerfs-sandbox/src/backend/docker/mod.rs": "de3b6b5fc4e630e9e4230d28005ad280f4361cfdc3dc25d52205e694f56165fd"
+          },
+          "current_public_source_refs": [
+            {
+              "path": "core/crates/layerfs-api/sdk/src/sandbox/api.rs",
+              "sha256": "625401c1a5f3e322552e2371072d045f9b1ac2f955281f95a3c7793838437a8f",
+              "lines": [
+                10,
+                34
+              ]
+            },
+            {
+              "path": "core/crates/layerfs-api/sdk/src/sandbox/lifecycle.rs",
+              "sha256": "283833627bc8f83ee854d8820670ae519ea95d655ca3ffbcc512a1a8e53417b3",
+              "lines": [
+                12,
+                67
+              ]
+            },
+            {
+              "path": "core/crates/layerfs-api/sdk/src/sandbox/types.rs",
+              "sha256": "05dd9814a861dd5a32b0448b75d3b09db777eb4a1cdd10d6cbd028ca4b4f180d",
+              "lines": [
+                14,
+                29
+              ]
+            },
+            {
+              "path": "core/crates/layerfs-sandbox/src/backend/docker/container_types.rs",
+              "sha256": "bdf4094acf9b04b72bb80c9d9ab1beb933dbe5c2f69053cc39e12e81c0b3b368",
+              "lines": [
+                5,
+                11
+              ]
+            },
+            {
+              "path": "core/crates/layerfs-sandbox/src/backend/docker/container.rs",
+              "sha256": "6c1b68823a8a78c38aa1aa5b760241917b9838273111a0f45a2ecc6537df1608",
+              "lines": [
+                11,
+                36
+              ]
+            },
+            {
+              "path": "core/crates/layerfs-sandbox/src/backend/docker/mod.rs",
+              "sha256": "de3b6b5fc4e630e9e4230d28005ad280f4361cfdc3dc25d52205e694f56165fd",
+              "lines": [
+                1,
+                30
+              ]
+            }
+          ],
+          "original_create_guard_source": {
+            "path": "benchmark/fs-bench-pro/shared/runtime.py",
+            "sha256": "36fd4a6c2bb3df8a263ef827e24364105ff97b8390a21c65c91ed4a3669cbc7a",
+            "creation_lines": [
+              362,
+              386
+            ],
+            "readback_lines": [
+              492,
+              497
+            ]
+          },
+          "current_lifecycle": "public SandboxApi::create -> private lifecycle Create -> Upload -> Start -> listener/authentication/Hello; caller receives owner after startup",
+          "backend_stopped_create_scope": "Docker::create_sandbox is public and stopped, but public SandboxApi provides no adoption/configuration route for its actual private deployment/authenticated Control owner",
+          "complete_case_status": "NOT_APPLICABLE; no preparation, native case proof or SDK attempt has run; partial source/native helper qualification is not complete proof"
+        }
       },
-      "not_applicable_reason": null,
-      "needs": "Harness-only current-format exact target fault and independent provider/native/custody proof; no product addition or dependency.",
+      "not_applicable_reason": "The original runner creates the sample container with 2 CPUs, 2 GiB memory, memory-swap=memory (zero swap), and 256 PIDs before Start, then independently validates that exact HostConfig. Current public SandboxApi::create performs private Create, Upload, Start and authenticated startup as one SDK lifecycle. SandboxCreate/SandboxRequest has no resource-profile input, pre-Start callback or public authenticated adoption of a separately created stopped container; the backend HostConfig omits all four limits. A post-Start Docker update cannot preserve the original from-creation profile, and recreating private wire/authentication/Hello ownership or adding a product feature is prohibited. The original early integrity path bypasses physical_state, but that does not remove this mandatory container-profile guard.",
+      "needs": "A supported public SDK resource-profile input applied during the original stopped-container Create before Start, or an explicitly supported public pre-Start/adoption lifecycle preserving the authenticated owner, with exact original 2 CPU/2 GiB/no-swap/256 PID creation-time readback. This product/API capability is absent and new features are prohibited in this iteration. All original 23-path fixture, exact target fault, canonical/EIO and cleanup/resource proof obligations remain required; native helper or format-aware partial proof alone cannot qualify the complete case.",
       "reliability_integrity": {
         "schema": "original-reliability-integrity-v1",
         "kind": "corrupt-descendant",
@@ -3566,7 +3669,7 @@
     {
       "id": "workspace-missing-descendant-compact-v2-proof",
       "v016_case": "workspace-missing-descendant-compact-v2-proof",
-      "status": "ported",
+      "status": "not-applicable",
       "fixture": {
         "recipe": "workspace-missing-descendant-compact-v2-proof",
         "seed": 1,
@@ -3623,7 +3726,7 @@
         "roots": "same original initial Branch/root and acknowledged Commit conditions; integrity cases make zero Commits and preserve namespace/history during isolated target fault",
         "original_complete_scope": "benchmark/fs-bench-pro/src/workspace_reliability.rs and unchanged native reliability_workloads.rs; all original checkpoints, errno/byte/inode and cleanup/resource conditions preserved",
         "current_additional_scope": "public authenticated typed root/mapping and complete inode-table membership; actual SDK tokens/readiness and immutable fault/reference/source custody",
-        "omissions": "No exact closed whole-case proof reuse; no performance/cold-cache qualification. Retired canonical IDs/physical schema do not transfer. For26NA cases mandatory physical observability and per-case legacy gaps remain absent; no partial primitive proof claims PASS."
+        "omissions": "No complete-case current proof or exact closed whole-case reuse. This early integrity path bypasses the original physical_state call, but the original from-creation Sandbox CPU/memory/swap/PID profile is unavailable through the permitted public SDK route. Native/fault/initial primitive proofs cannot substitute for the missing complete-case resource guard. Original canonical, selected first-extent fault, zero-byte EIO/integrity and cleanup obligations remain unchanged and unmet."
       },
       "budget": {
         "command_ms": null,
@@ -3649,6 +3752,10 @@
         {
           "what": "Current physical schema adapter selects same declared original payload by public authenticated mapping; fault is on a closed independent sample only",
           "why": "Current canonical envelopes/pack/object locators differ from retired format; initial full proof, valid target positive control, exact fault scope and original EIO/cleanup semantics stay intact."
+        },
+        {
+          "what": "Original stopped-create resource profile cannot be set before public SDK startup; complete original case is not-applicable",
+          "why": "The original runner creates the sample container with 2 CPUs, 2 GiB memory, memory-swap=memory (zero swap), and 256 PIDs before Start, then independently validates that exact HostConfig. Current public SandboxApi::create performs private Create, Upload, Start and authenticated startup as one SDK lifecycle. SandboxCreate/SandboxRequest has no resource-profile input, pre-Start callback or public authenticated adoption of a separately created stopped container; the backend HostConfig omits all four limits. A post-Start Docker update cannot preserve the original from-creation profile, and recreating private wire/authentication/Hello ownership or adding a product feature is prohibited. The original early integrity path bypasses physical_state, but that does not remove this mandatory container-profile guard."
         }
       ],
       "registry": {
@@ -3675,10 +3782,11 @@
           "benchmark/fs-bench-pro/workload/workspace_common.rs": "e38728457343d2075a54d498b8e15d0064d868cd03c7351f886fee67e389cc35",
           "benchmark/fs-bench-pro/workload/dedup_workloads.rs": "bf15a4391755d4c23c48c0f6efa466d3f801e1d937ccc1dd6ef8d4fed7e00207",
           "benchmark/fs-bench-pro/shared/runner.py": "66c8d5b23a514da27f5ebb371f75a4c0e0406adb4d595e6b61a41d7da7686201",
-          "benchmark/fs-bench-pro/verify-selected.py": "4b77a64817f2c44a58f77459537bf886e83ff3e736a16c861f9079db7b2bc01e"
+          "benchmark/fs-bench-pro/verify-selected.py": "4b77a64817f2c44a58f77459537bf886e83ff3e736a16c861f9079db7b2bc01e",
+          "benchmark/fs-bench-pro/shared/runtime.py": "36fd4a6c2bb3df8a263ef827e24364105ff97b8390a21c65c91ed4a3669cbc7a"
         },
-        "operation_transcription": "All28 IDs in original order; exact native action/state/ordinal and original SDK/fault schedules retained in reliability_proof. Only two integrity routes use unchanged read-corrupt/initial helpers;26 original guards refuse applicability without hidden work.",
-        "oracle_coverage": "Original full semantic/native/canonical/checkpoint/outcome/fault reachability and cleanup/resource guards retained. All26 initial physical_state calls remain mandatory and unavailable; two early integrity paths bypass that call by original source, not a weakened oracle.",
+        "operation_transcription": "All28 IDs retain original order/action/state/ordinal. This early integrity case retains all four semantic/fault/cleanup step descriptors and unchanged native helper tokens as unmet original obligations; shell execution refuses applicability before helper.",
+        "oracle_coverage": "Original early integrity canonical/target/EIO/cleanup conditions remain intact. The physical_state bypass is source-proven; original creation-time2CPU/2GiB/noSwap/256PID HostConfig remains mandatory and unavailable through public SDK. No partial proof is marked PASS.",
         "source_scope": "Frozen v0.1.6 driver and std-only family/native/registry/oracle sources, byte-identical to reference-v0.1.6-final. Retired SDK APIs read at tag only; current public API/product scope separately source-hashed.",
         "budgets": "Original regular45s work/59s publication/4s cleanup reserve/.25s publication margin; owner120s invocation; no performance timer. Internal sustained900/600/30s and minimum600s preserved, released optional NOT_RUN retained.",
         "resource_limits": "Original exact per-Workspace2GiB physical current/peak Some/errors0 cannot be substituted; named-spool2GiB and zero final files, actual cgroups/runtime-file cleanup, container2CPU/2GiB/no-swap/256PIDs remain declared."
@@ -3778,13 +3886,15 @@
             212
           ]
         },
-        "extra_missing_scope": [],
+        "extra_missing_scope": [
+          "Original creation-time 2CPU/2GiB/noSwap/256PID profile is not expressible through current public SDK lifecycle; post-Start update or private wire adoption cannot substitute."
+        ],
         "exact_full_case_reuse": "NOT_PROVEN",
         "scope_is_original_full_case": true
       },
       "applicability": {
         "schema": "original-reliability-applicability-v1",
-        "classification": "expressible",
+        "classification": "not-applicable",
         "reviewed_source_commit": "359c3c7d0cf84f4072a4af1ec8bd37497a75b722",
         "reviewed_product_tree": "9ac88edb2cc44d44edd4a53f9ad89f4dee063a58",
         "source_commit": "d296981ace76fe751bebf00dee52818fe18a3eef",
@@ -3797,16 +3907,112 @@
           "core/crates/layerfs-bridge/src/control_types.rs": "d18ff0a0cc22ad7f8772b591c970806e889de49730362cd2e9a5200533e23c4b",
           "core/crates/layerfs-daemon/src/control/status.rs": "8af1702074151c7c13c476f7d4b9fffb7d659877e93efbfcae578a8cd47431f4",
           "core/crates/layerfs-daemon/src/control/operations.rs": "d388a4c2f649c42630cc15d5cf1a4aa3cf9f46e2ec7b2cab0cd949d56717c257",
-          "core/crates/layerfs-sandbox/src/backend/docker/streams.rs": "0b0bf328fe0d2d8bb30c7c11ae66c4bc5ef2b6dbe8d1f0042cdede92d0682f17"
+          "core/crates/layerfs-sandbox/src/backend/docker/streams.rs": "0b0bf328fe0d2d8bb30c7c11ae66c4bc5ef2b6dbe8d1f0042cdede92d0682f17",
+          "core/crates/layerfs-api/sdk/src/sandbox/lifecycle.rs": "283833627bc8f83ee854d8820670ae519ea95d655ca3ffbcc512a1a8e53417b3",
+          "core/crates/layerfs-api/sdk/src/sandbox/types.rs": "05dd9814a861dd5a32b0448b75d3b09db777eb4a1cdd10d6cbd028ca4b4f180d",
+          "core/crates/layerfs-sandbox/src/backend/docker/container_types.rs": "bdf4094acf9b04b72bb80c9d9ab1beb933dbe5c2f69053cc39e12e81c0b3b368",
+          "core/crates/layerfs-sandbox/src/backend/docker/container.rs": "6c1b68823a8a78c38aa1aa5b760241917b9838273111a0f45a2ecc6537df1608",
+          "core/crates/layerfs-sandbox/src/backend/docker/mod.rs": "de3b6b5fc4e630e9e4230d28005ad280f4361cfdc3dc25d52205e694f56165fd"
         },
-        "reason": "",
-        "needs": "",
+        "reason": "The original runner creates the sample container with 2 CPUs, 2 GiB memory, memory-swap=memory (zero swap), and 256 PIDs before Start, then independently validates that exact HostConfig. Current public SandboxApi::create performs private Create, Upload, Start and authenticated startup as one SDK lifecycle. SandboxCreate/SandboxRequest has no resource-profile input, pre-Start callback or public authenticated adoption of a separately created stopped container; the backend HostConfig omits all four limits. A post-Start Docker update cannot preserve the original from-creation profile, and recreating private wire/authentication/Hello ownership or adding a product feature is prohibited. The original early integrity path bypasses physical_state, but that does not remove this mandatory container-profile guard.",
+        "needs": "A supported public SDK resource-profile input applied during the original stopped-container Create before Start, or an explicitly supported public pre-Start/adoption lifecycle preserving the authenticated owner, with exact original 2 CPU/2 GiB/no-swap/256 PID creation-time readback. This product/API capability is absent and new features are prohibited in this iteration. All original 23-path fixture, exact target fault, canonical/EIO and cleanup/resource proof obligations remain required; native helper or format-aware partial proof alone cannot qualify the complete case.",
         "missing_exact_physical_peak": false,
         "original_guard_bypass_proven": true,
-        "guard_replacement_allowed": false
+        "guard_replacement_allowed": false,
+        "missing_creation_time_sandbox_profile": true,
+        "creation_time_sandbox_profile": {
+          "original_required_before_start": true,
+          "original_profile": {
+            "cpus": 2,
+            "memory_bytes": 2147483648,
+            "memory_swap_bytes": 2147483648,
+            "pids_limit": 256
+          },
+          "public_sdk_profile_available": false,
+          "public_pre_start_hook_available": false,
+          "public_authenticated_adoption_available": false,
+          "post_start_update_is_equivalent": false,
+          "private_wire_proxy_allowed": false,
+          "new_product_feature_selected": false,
+          "reviewed_source_commit": "f572354ff74b778ee7cc4f194effa6b903d16a7c",
+          "reviewed_product_tree": "9ac88edb2cc44d44edd4a53f9ad89f4dee063a58",
+          "current_public_source_hashes": {
+            "core/crates/layerfs-api/sdk/src/sandbox/api.rs": "625401c1a5f3e322552e2371072d045f9b1ac2f955281f95a3c7793838437a8f",
+            "core/crates/layerfs-api/sdk/src/sandbox/lifecycle.rs": "283833627bc8f83ee854d8820670ae519ea95d655ca3ffbcc512a1a8e53417b3",
+            "core/crates/layerfs-api/sdk/src/sandbox/types.rs": "05dd9814a861dd5a32b0448b75d3b09db777eb4a1cdd10d6cbd028ca4b4f180d",
+            "core/crates/layerfs-sandbox/src/backend/docker/container_types.rs": "bdf4094acf9b04b72bb80c9d9ab1beb933dbe5c2f69053cc39e12e81c0b3b368",
+            "core/crates/layerfs-sandbox/src/backend/docker/container.rs": "6c1b68823a8a78c38aa1aa5b760241917b9838273111a0f45a2ecc6537df1608",
+            "core/crates/layerfs-sandbox/src/backend/docker/mod.rs": "de3b6b5fc4e630e9e4230d28005ad280f4361cfdc3dc25d52205e694f56165fd"
+          },
+          "current_public_source_refs": [
+            {
+              "path": "core/crates/layerfs-api/sdk/src/sandbox/api.rs",
+              "sha256": "625401c1a5f3e322552e2371072d045f9b1ac2f955281f95a3c7793838437a8f",
+              "lines": [
+                10,
+                34
+              ]
+            },
+            {
+              "path": "core/crates/layerfs-api/sdk/src/sandbox/lifecycle.rs",
+              "sha256": "283833627bc8f83ee854d8820670ae519ea95d655ca3ffbcc512a1a8e53417b3",
+              "lines": [
+                12,
+                67
+              ]
+            },
+            {
+              "path": "core/crates/layerfs-api/sdk/src/sandbox/types.rs",
+              "sha256": "05dd9814a861dd5a32b0448b75d3b09db777eb4a1cdd10d6cbd028ca4b4f180d",
+              "lines": [
+                14,
+                29
+              ]
+            },
+            {
+              "path": "core/crates/layerfs-sandbox/src/backend/docker/container_types.rs",
+              "sha256": "bdf4094acf9b04b72bb80c9d9ab1beb933dbe5c2f69053cc39e12e81c0b3b368",
+              "lines": [
+                5,
+                11
+              ]
+            },
+            {
+              "path": "core/crates/layerfs-sandbox/src/backend/docker/container.rs",
+              "sha256": "6c1b68823a8a78c38aa1aa5b760241917b9838273111a0f45a2ecc6537df1608",
+              "lines": [
+                11,
+                36
+              ]
+            },
+            {
+              "path": "core/crates/layerfs-sandbox/src/backend/docker/mod.rs",
+              "sha256": "de3b6b5fc4e630e9e4230d28005ad280f4361cfdc3dc25d52205e694f56165fd",
+              "lines": [
+                1,
+                30
+              ]
+            }
+          ],
+          "original_create_guard_source": {
+            "path": "benchmark/fs-bench-pro/shared/runtime.py",
+            "sha256": "36fd4a6c2bb3df8a263ef827e24364105ff97b8390a21c65c91ed4a3669cbc7a",
+            "creation_lines": [
+              362,
+              386
+            ],
+            "readback_lines": [
+              492,
+              497
+            ]
+          },
+          "current_lifecycle": "public SandboxApi::create -> private lifecycle Create -> Upload -> Start -> listener/authentication/Hello; caller receives owner after startup",
+          "backend_stopped_create_scope": "Docker::create_sandbox is public and stopped, but public SandboxApi provides no adoption/configuration route for its actual private deployment/authenticated Control owner",
+          "complete_case_status": "NOT_APPLICABLE; no preparation, native case proof or SDK attempt has run; partial source/native helper qualification is not complete proof"
+        }
       },
-      "not_applicable_reason": null,
-      "needs": "Harness-only current-format exact target fault and independent provider/native/custody proof; no product addition or dependency.",
+      "not_applicable_reason": "The original runner creates the sample container with 2 CPUs, 2 GiB memory, memory-swap=memory (zero swap), and 256 PIDs before Start, then independently validates that exact HostConfig. Current public SandboxApi::create performs private Create, Upload, Start and authenticated startup as one SDK lifecycle. SandboxCreate/SandboxRequest has no resource-profile input, pre-Start callback or public authenticated adoption of a separately created stopped container; the backend HostConfig omits all four limits. A post-Start Docker update cannot preserve the original from-creation profile, and recreating private wire/authentication/Hello ownership or adding a product feature is prohibited. The original early integrity path bypasses physical_state, but that does not remove this mandatory container-profile guard.",
+      "needs": "A supported public SDK resource-profile input applied during the original stopped-container Create before Start, or an explicitly supported public pre-Start/adoption lifecycle preserving the authenticated owner, with exact original 2 CPU/2 GiB/no-swap/256 PID creation-time readback. This product/API capability is absent and new features are prohibited in this iteration. All original 23-path fixture, exact target fault, canonical/EIO and cleanup/resource proof obligations remain required; native helper or format-aware partial proof alone cannot qualify the complete case.",
       "reliability_integrity": {
         "schema": "original-reliability-integrity-v1",
         "kind": "missing-descendant",

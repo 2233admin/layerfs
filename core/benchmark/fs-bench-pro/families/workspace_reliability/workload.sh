@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
-# Frozen reliability primitives only; controller owns all fault/SDK/custody work.
+# Original complete-case applicability refuses all28 before native helpers or SDK work.
 if [[ $# -ne 2 ]]; then printf "%s\n" "usage: workload.sh verify-initial|read-corrupt ORIGINAL_CASE" >&2; exit 64; fi
 action=$1
 id=$2
+case "$action" in
+  verify-initial|read-corrupt) ;;
+  *) printf "%s\n" "unknown reliability action: $action" >&2; exit 64 ;;
+esac
 case "$id" in
-  workspace-corrupt-descendant-compact-v2-proof|workspace-missing-descendant-compact-v2-proof) ;;
   workspace-invalid-sdk-edit-compact-v2-proof)
     reason='The original initial live proof unconditionally requires exact per-Workspace physical_spool_allocated_bytes and mutation-event physical_spool_peak_bytes as Some, observation_errors=0 and both <=2GiB. Current shared-overlay public accounting does not expose these physical axes; no sampled shared database size, logical count or lifetime peak substitutes. Additional original scope: Missing public SDK atomic file-range edit/rejection; ordinary pwrite beyond EOF extends a file, and a harness prevalidation rejection would not prove product rejection.'
     needs='Exact original-scope per-Workspace physical current/peak/error observability and a public proof interface are required. Adding that product observability feature is prohibited in this iteration. Additional requirements: Missing public SDK atomic file-range edit/rejection; ordinary pwrite beyond EOF extends a file, and a harness prevalidation rejection would not prove product rejection.'
@@ -81,6 +84,16 @@ case "$id" in
     needs='Exact original-scope per-Workspace physical current/peak/error observability and a public proof interface are required. Adding that product observability feature is prohibited in this iteration. Additional requirements: No verification_disconnect_workspace_execution API or original InfrastructureLost output-reader state; closing an attached stream does not terminate process/descendants or establish that state.'
     printf "%s\n" "not-applicable case=$id reason=$reason needs=$needs" >&2
     exit 3 ;;
+  workspace-corrupt-descendant-compact-v2-proof)
+    reason='The original runner creates the sample container with 2 CPUs, 2 GiB memory, memory-swap=memory (zero swap), and 256 PIDs before Start, then independently validates that exact HostConfig. Current public SandboxApi::create performs private Create, Upload, Start and authenticated startup as one SDK lifecycle. SandboxCreate/SandboxRequest has no resource-profile input, pre-Start callback or public authenticated adoption of a separately created stopped container; the backend HostConfig omits all four limits. A post-Start Docker update cannot preserve the original from-creation profile, and recreating private wire/authentication/Hello ownership or adding a product feature is prohibited. The original early integrity path bypasses physical_state, but that does not remove this mandatory container-profile guard.'
+    needs='A supported public SDK resource-profile input applied during the original stopped-container Create before Start, or an explicitly supported public pre-Start/adoption lifecycle preserving the authenticated owner, with exact original 2 CPU/2 GiB/no-swap/256 PID creation-time readback. This product/API capability is absent and new features are prohibited in this iteration. All original 23-path fixture, exact target fault, canonical/EIO and cleanup/resource proof obligations remain required; native helper or format-aware partial proof alone cannot qualify the complete case.'
+    printf "%s\n" "not-applicable case=$id reason=$reason needs=$needs" >&2
+    exit 3 ;;
+  workspace-missing-descendant-compact-v2-proof)
+    reason='The original runner creates the sample container with 2 CPUs, 2 GiB memory, memory-swap=memory (zero swap), and 256 PIDs before Start, then independently validates that exact HostConfig. Current public SandboxApi::create performs private Create, Upload, Start and authenticated startup as one SDK lifecycle. SandboxCreate/SandboxRequest has no resource-profile input, pre-Start callback or public authenticated adoption of a separately created stopped container; the backend HostConfig omits all four limits. A post-Start Docker update cannot preserve the original from-creation profile, and recreating private wire/authentication/Hello ownership or adding a product feature is prohibited. The original early integrity path bypasses physical_state, but that does not remove this mandatory container-profile guard.'
+    needs='A supported public SDK resource-profile input applied during the original stopped-container Create before Start, or an explicitly supported public pre-Start/adoption lifecycle preserving the authenticated owner, with exact original 2 CPU/2 GiB/no-swap/256 PID creation-time readback. This product/API capability is absent and new features are prohibited in this iteration. All original 23-path fixture, exact target fault, canonical/EIO and cleanup/resource proof obligations remain required; native helper or format-aware partial proof alone cannot qualify the complete case.'
+    printf "%s\n" "not-applicable case=$id reason=$reason needs=$needs" >&2
+    exit 3 ;;
   workspace-parallel-read-write-compact-v2-proof)
     reason='The original initial live proof unconditionally requires exact per-Workspace physical_spool_allocated_bytes and mutation-event physical_spool_peak_bytes as Some, observation_errors=0 and both <=2GiB. Current shared-overlay public accounting does not expose these physical axes; no sampled shared database size, logical count or lifetime peak substitutes.'
     needs='Exact original-scope per-Workspace physical current/peak/error observability and a public proof interface are required. Adding that product observability feature is prohibited in this iteration.'
@@ -137,13 +150,4 @@ case "$id" in
     printf "%s\n" "not-applicable case=$id reason=$reason needs=$needs" >&2
     exit 3 ;;
   *) printf "%s\n" "unknown original reliability case: $id" >&2; exit 64 ;;
-esac
-root=${LAYERFS_WORKSPACE_ROOT:?controller-authenticated original mount directory required}
-case "$root" in /*) ;; *) printf "%s\n" "absolute authenticated mount directory required" >&2; exit 64 ;; esac
-cd -- "$root"
-helper=${WORKLOAD_HELPER:-/code/writers/workload}
-case "$action" in
-  verify-initial) exec "$helper" workspace-reliability-verify "$id" initial 0 ;;
-  read-corrupt) exec "$helper" workspace-reliability-workload "$id" read-corrupt 0 ;;
-  *) printf "%s\n" "unsupported reliability action: $action" >&2; exit 64 ;;
 esac

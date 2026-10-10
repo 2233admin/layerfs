@@ -24,7 +24,7 @@ comparison or release-admission claim. Durable is
 | 4 History on one branch | CLOSED WITH FAILURES: all 43 original cases ported and recorded; 31 functional/proof/clean-close passes, 11 retained actual failures, one failed preparation with actual NOT_RUN; mixed aggregate parity FAIL retained under section 9 exception; no identified fixable product correctness bug remains | H11 2b52bdf17; H12 ea7148a19; H13 8ae040cdd; H14 e09c61bbd; product H15 a05ed6027; H16 9dfb70ee4; fresh seal3c67e9249; affected Init8f24e39a4; boundary88a2bd27b; partial bd3016957; mixed1a21ebfc3; dedup closure27708c11d | Begin batch 5 after this committed failed closure; verify existing public SDK Fork and History |
 | 5 Branches and Workspaces | CLOSED WITH FAILURES: all17 original cases ported/recorded; eight functional/proof/clean-close passes, eight actual concurrent refusal failures, one failed-preparation actual NOT_RUN; branch aggregate parity FAIL retained under section9 | SDK proof711593c5f; H21/22 4a40fb690; setup exceptionc23ac0cfd; H23 68209bdb7; H24 669bc4853; H25 2f7160c92; H26 616947cb6; branch305bee680; multicb3a003ac; historicalb0b2cd386 | Begin batch6 under this truthful failed closure, preserving all original failures/limits/proofs/resources |
 | 6 Dedup and storage | CLOSED WITH FAILURES: all54 original cases ported/recorded;45 functional/proof/clean-close passes (44 numericINELIGIBLE, one verification-onlyPASS),8 failed outcomes, one failed-preparation actualNOT_RUN; repository aggregateparityFAIL undersection9; no identified fixable product correctness cause remains | definitions77eb/63ff/a442/5505/55a3; support86ba/149d; H28 1cc; H30/31 082; H32 0a8; H33 fe205; footprint8b684a3b1; reuse4d725864f; crossad21161eb; CDC79ad08b2a; H34 08e1; H35 fad966f7e; repositoryoldf8752231d / this closure | Begin batch7 at this committed truthful failure closure; preserve all limits, failed/ineligible/unrun rows and exact resources |
-| 7 Reliability | IN_PROGRESS: all28 original definitions reviewed;26 source-backed not-applicable, two early descendant-integrity proofs ported for faithful controller qualification | Metadata this commit; batch6 closure359c3c7d0 | Qualify exact initial fixture/fault/provider/native/cleanup proofs; run each expressible integrity case once |
+| 7 Reliability | IN_PROGRESS: all28 complete cases source-backednot-applicable;26 physical-accounting gaps andtwo original from-creation resource-profile gaps | Metadata b1cc05833 / decision77thiscommit; native f7074d033; batch6closure359c3c7d0 | Source-only applicability parity and zero-attempt28-row reports; no actualcase execution |
 
 ## Decisions
 | Number | What | Why | Alternative |
@@ -111,6 +111,7 @@ comparison or release-admission claim. Durable is
 | 74 | Preserve actual owned named-file and runtime-file zero guards, exact namespace-row release and≤2GiB backing boundaries separately for the early integrity paths | Current overlay is shared per daemon; shared file persists beyond Workspace release. Source-backed exhaustive named ownership and actual observations are required; missing coverage fails full proof, never guessed zero. Per-Workspace physical peak remainsUNAVAILABLE | Equate Gone or zero SQL rows with zero shared-file size, omit cleanup, or replace canonical corruption with compressed-frame damage |
 | 75 | Remove89 exact owned passing closed setup masters after fresh identity/connection and custody admission; retain19 uncertain/failed/future candidates | Passing setup SDKKnownStop/container removal and source witness hashes establish custody; different frozen reliability fixture prevents reuse. No failed/uncertain sample resource, historical master or owner resource is selected | Keep unnecessary passing volumes or remove candidates by prefix/guess/force |
 | 76 | Generate exact supported RAWsingleton through existing public encoders and mutate only a same-length canonical target byte; delete only selected locator/advisory closure for missing fault | Current32768BWholeFile differs from retired firstChunk; sharedpack framing must remain valid and unrelated records unchanged. Existing public APIs and stdlibsqlite3 avoid newdependencies/features. Current wholepackSHA refusal is supplemental only; ordinary originalFUSE EIO0 remains mandatory | Corruptcompressed frame/CRC, handwriteproductencoding, disableFK/triggers, or acceptbroadIO/startup errors asfullproof |
+| 77 | Classify the two early integrity complete cases not-applicable before setup/sample; preserve every native/fault/EIO/cleanup/resource obligation | Public SandboxApi has private atomicCreate→Upload→Start with no CPU/memory/swap/PIDprofile, callback or adoption. Stopped backend create exists, but completing its owner would recreate SDK wire authentication/Hello. Post-Start limits cannot preserve frozen from-creation2CPU/2GiB/no-swap/256PID profile | Add forbidden productfeature/newwireowner/proxy, apply limits afterStart, or claim partial native diagnostics ascompletecasePASS |
 
 ## Bugs
 
@@ -6445,5 +6446,54 @@ No actualprepare/parity/proof/Dockerinvocation occurred inthiscommit.
 | Commit | Purpose | Production before | after | delta |
 | --- | --- | --- | --- | --- |
 | This commit | Add exact original integrity native fixture and public proof adapters | 79370 | 79370 | +0 |
+Pinned absent-aware staged counter/exact tree confirmation; reference absent,
+retiredR9c,last65,417/tree498dd1917812.
+
+
+### Decision77 complete reliability applicability correction, 2026-10-11
+
+Two prospective integrity cases additionally cannot express the complete
+original frozen resource profile through current publicSDK. SandboxCreate
+and backendSandboxRequest expose image/volume/port but no CPU/memory/swap/
+PIDlimits. SandboxApi::create delegatesprivateCreate→Upload→Start, with no
+callback/barrier/profile or publicadoption/resume. BackendstoppedCreate/
+upload/Start arepublic, but ManagedSandbox.command_identity/privateSDK
+Docker/controlcomposition prevent adopting that stagedowner without
+recreatingauth/Hello/wire-control ownership. ExactcurrentAPI/backend source
+hashes and originalcontainer creation/readback pins are preserved in the
+two NA declarations. StartingunboundedthenDockerupdate would weaken the
+frozenfrom-creation2CPU/2GiB/no-swap/256PIDguard. No newfeature/proxy/wire
+replacement or caseattempt is authorized.
+
+All28 current reliability cases are now not-applicable. Former26 complete
+physical-accounting cases arebyte-identical; onlytwo caseobjects change
+status/applicability/reason/needs/sourcecapability pins. Their original
+23pathfixture, four semanticfault/positivecontrol/EIO/cleanupsteps, XOR/
+locator/zeroCommit/strictdetection descriptors and every budget/guard/oracle
+remainverbatim. verification_attempts_if_applicable=1 isconditionaloriginal
+obligation, not an actualattempt: actual current proofs/samples are0.
+Full-native initial/RAW/helper diagnostics passed on host atf707, but cannot
+qualify missing runtimeprofile/resource/FUSE/cleanup scope. No actual
+reliability preparation, master/sampleDockerresource, parityproof or mounted
+case was attempted. No sealednewnine-assetbuild is needed for source-only
+NA disposition; new native adapter/Linuxrecipe seal remainsNOT_RUN.
+
+MetadatahandoffSHA4af7a02e955aba21fc6fb4aaf15f2378672b100752edae860b350cfac33c6848,
+manifest a5fb9d2bcd12d22dce9cb1d8563e0666d75587d6107a6c0737e105895367e9ef.
+Finalfamily.jsonSHAf45e761b8d97e48975769341dc70bda0786539e7faf70cbe1b2a43a41be8c6d9;
+shellSHA199a1f6b3fa7a6c98ce6c20dd0ea335ad9bc66fce0c857bec4d081263f6786e5;
+externalmetadata/shelltestSHA03ae0cc0cf1ce6bd52afc7fc766698c2e158ff42005b99433030dcd27b8875d0.
+New6checks RED againstformer2ported/helperroutes2FAIL1,057,987,750ns retained;
+finalprivate6PASS742,265,541ns/syntaxPASS17,197,667ns. Root importedfinal
+6PASS820,646,750ns/R4120s at raw2026-10-11-b7-final-metadata-checks.
+All28 shellroutes refusebeforehelper; unknownaction/ID/arity64. These
+checks preserve guards and are source-applicability tests, notcase proofs.
+The rich prospective controller prototype is preservedignored/unqualified;
+shippedengine will admit exactsource-onlyNAparity and refuseprepare/one_case
+before resources. No test, verifier or product guard is weakened.
+
+| Commit | Purpose | Production before | after | delta |
+| --- | --- | --- | --- | --- |
+| This commit | Preserve original resource guards and classify two SDK-inexpressible cases | 79370 | 79370 | +0 |
 Pinned absent-aware staged counter/exact tree confirmation; reference absent,
 retiredR9c,last65,417/tree498dd1917812.
