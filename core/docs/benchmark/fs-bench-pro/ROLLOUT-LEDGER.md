@@ -21,7 +21,7 @@ comparison or release-admission claim. Durable is
 | 1 Pilot | COMPLETE: 36 functional/proof/clean-close passes; 7 recorded scoped B PASS, 29 INELIGIBLE; full numeric qualification of the 7 is unverified | Init `c1d7dd0e8`/`39bbcbd6b`; payload `200f81493`/`c1d9b6c58`; parallel routing `b3c96ecb1`; tiny `36849bcc2`/`d6e0ef952`; namespace `98b14b233`/`be1f56a23`; H-2 fix `222526fa0`; closure `d4314ed62`; membership supplement `cca598d0b` | Batch 2, retaining original receipts plus exhaustive membership supplement |
 | 2 Edits | COMPLETE: all62 cases ported/parity/sampled once/recorded;39 strict proof and clean-close passes (numeric INELIGIBLE),20 strict retention failures and3 original capped-watchdog failures retained | Canonical `a34b5d44b`/`beeb7ad69`; preserving `b9ffa63be`; capped `4d8ccfc93`; changing `05ffbf971`; small-delta `c0c99a4a3`/`2e6a508b5`/`1c975ba30` | Begin batch3; no identified fixable product correctness defect remains in batch2 |
 | 3 Trees and tools | COMPLETE: all33 original cases ported/parity/sampled, full applicable proofs and clean closePASS; numeric33INELIGIBLE; first snapshotFAIL retained separately; localitydense500 and snapshot EXCEEDED | Shared3c697ae92; directory50c297c68/ad4f95503; locality2590a4536/26c037d90; snapshot0344bfdc6/fix03033abdc/results98d3be30a/70d568e94; Git acebd7cbd/guard031d427a7/results31fff4d49 | Begin batch4 after this committed closure, no identified fixable product correctness bug |
-| 4 History on one branch | IN_PROGRESS: all43 original cases ported; shared source/oracles/seal qualified; boundary7 and dedup26 preparation/parity PASS; mixed preparation underway; first boundary/dedup H11 FAIL retained; H11 fixed/actual recovery qualified; changed-source43selection execution active with lastmixedprepFAIL/NOT_RUN | Routing65f0c1fbe; nativea921bedbd; portsfc9e71fae/6a5433e79/4762b720c; prepared364e1a87a; guarded5ebdac535/report65df42e91; controller686344e8f/guard91cf97fab; public93f0d3dfe/census7d9380fe0; finalseal a70f3197b; preparation dispatch87857f5bd; first failed CSVs this commit | Complete each family's original one-attempt cases and commit its two CSVs with retained failures/custody |
+| 4 History on one branch | IN_PROGRESS: all 43 original cases ported; boundary closed with six passes and one strict failure; old dedup three and mixed four passes retained; corrected product build admitted; remaining 23 dedup and five prepared M1 cases executing once, with first new dedup watchdog FAIL and first M1 strict metadata FAIL retained; final mixed preparation FAIL/actual NOT_RUN | Routing65f0c1fbe; nativea921bedbd; portsfc9e71fae/6a5433e79/4762b720c; H11 2b52bdf17; H12 ea7148a19; H13 8ae040cdd; H14 e09c61bbd; product H15 a05ed6027; H16 9dfb70ee4; current build dispatch3c67e9249; affected Init8f24e39a4 | Finish each remaining original case, preserve failures and uncertain custody, then commit both complete CSVs per source and close batch 4 |
 | 5 Branches and Workspaces | PENDING | — | Wait for batch 4; verify existing P-1 SDK methods |
 | 6 Dedup and storage | PENDING | — | Wait for batch 5 completion |
 | 7 Reliability | PENDING | — | Wait for batch 6 completion |
@@ -94,6 +94,9 @@ comparison or release-admission claim. Durable is
 | 47 | Keep separate authenticated runs and CSV pairs when a shared harness fix interrupts a family; select unaffected earlier results by their actual source in the final family report | Each run binds one source, and completed unaffected cases must not be repeated or relabelled | Copying earlier receipts into a new source run, inventing a common measured identity, or repeating all earlier cases |
 | 48 | Correct Disposable startup by moving the existing selected synchronization calls before any SQLite initialization, preserving every statement/profile check | Actual public-API VFS evidence found24 forbidden sync calls; this is the owner's required profile, not a speed target | Leaving the violation, suppressing observer callbacks, skipping initialization checks, changing profile or optimizing unrelated work |
 
+| 49 | Preserve strict M1 atomic-save metadata failures without changing the frozen helper, oracle or correct product write/rename semantics | Original helper sets mtime before the write; original shadow retains that old mtime, and retained metadata plus a native exact-order diagnostic confirm the inconsistency | Resetting timestamps after writes, weakening the assertion or changing product POSIX behavior to force PASS |
+| 50 | Bind an external watchdog failure in a separate administrative closure when the original driver cannot publish a complete product receipt | The outer 120 s stop interrupted the attempt after actual Commits; no terminal, complete timing, final count/storage or publication witness can be manufactured | Inventing a complete receipt, calling the attempted case NOT_RUN, or retrying the unchanged schedule |
+
 ## Bugs
 
 | Bug | Case | Symptom | Cause | Fix commit | External test |
@@ -115,6 +118,8 @@ comparison or release-admission claim. Durable is
 | H-14 | Offline closed-Store normalization before remaining batch4 cases | Fresh target enters WAL initialization while SQLite synchronous is still default FULL(2) | synchronous=OFF was applied only after journal_mode=WAL in prepare_closed_store | `e09c61bbd`, harness only; product analogue under investigation | Real sqlite3.Connection subclass observes FULL(2) before journal switch on old helper; final10 normalization checks PASS0.352s and8 controller checks PASS0.159s |
 | H-15 (product) | Public Disposable Store create across three layouts and two acquisition schemas | Actual VFS observer records24 forbidden xSync calls during creation; later Save/seal/reopen issue0 | Selected synchronous/fullfsync applied only after acquisition and WAL initialization had written main/journal | Workera9d8b0453 / integration `a05ed6027` | External public-API disposable_startup_sync.rs observes24 on old source; finalhost14/Linux6 covering checks PASS with Store sync0 and positive control1 |
 | H-16 | Aggregate formatting during Disposable startup product verification | cargo fmt cannot resolve two daemon example/test digest modules | Stage0.2 missed the two old fs-bench-pro-storage-content import paths | `9dfb70ee4`, path-only example/test correction | Owning example/test no-run PASS16.27s; existingseven startup/digest receipt tests PASS0.10s; aggregatefmtPASS |
+| H-17 (frozen workload/oracle) | Mixed M1 100 MB K10 at fa70bbb01 | Fresh-mount verifier rejects d000/f00054 mtime after ten successful commands and Commit ACKs | Frozen atomic save sets stage4 mtime before writing the temporary; writing updates it, while the original shadow retains stage4 mtime | No product or frozen-source change; strict failure retained | Exact original source/scope seals plus retained stat and bounded native sequence confirm correct POSIX write/rename behavior |
+| H-18 (watchdog failure) | Dedup distributed500 at e308118a9 | Unchanged 120 s outer stop expires after 377 acknowledged Commits; no complete receipt/proof/End/Stop | The finite original 500-step schedule does not finish within the bounded attempt; ongoing progress observed, no source-backed deadlock or wrong result identified | No retry, optimization or timeout change; partial attempt stays FAIL with uncertain custody | Administrative external-supervisor closure binds original selection, invocation exit, runtime stream and clone; complete metrics remain unavailable |
 
 H-1 and H-2 are harness faults, not product correctness or performance defects.
 The original file-identity checker remains intact; no product source changed.
@@ -3513,4 +3518,92 @@ Disposable/WAL/OFF remains explicit and Durable stays
 NOT_RUN — disabled by owner until explicit reauthorization. Remaining batch 4
 case execution continues before any later batch.
 
-| This commit | Record four changed-product Init checkpoints and both complete CSVs | 79370 | 79370 | +0 |
+| `8f24e39a4` | Record four changed-product Init checkpoints and both complete CSVs | 79370 | 79370 | +0 |
+
+
+The first changed-source dedup distributed500 attempt at private clean
+`e308118a9a01b6fb79cb82db5fbf2c8d5ef7da56` passed the full H13 authenticated
+helper staging check, then reached the unchanged 120 s outer watchdog. Its
+external driver exited 124 after 120,023,452,708 ns. The retained runtime stream
+contains 377 successful Committed acknowledgements, followed by the parent
+termination's stdin/BrokenPipe failure. The original finite 500-step schedule
+was still progressing; no wrong result, refused operation or source-backed
+deadlock was identified. This attempt is FAILED under the owner's test ceiling,
+with no retry, speed change or expanded limit. The registered product soft
+limit remains 15 s and verifier limit 45 s. A complete product wall, complete
+request/owner-job/statement counts, final storage, independent proof, End/Gone,
+Stop and publication/outer acknowledgement are unavailable.
+
+Raw evidence is Capped's
+`benchmark-results/fs-bench-pro/2026-10-10-batch-4-dedup-e308118a9/run/dedup-history-distributed-500/`.
+The separate administrative closure has SHA-256
+`8739171b767d18018ee99d27ab558fac0304a92f9ceda851ca233b20296c5b13`.
+Root authenticated every bound selection, invocation, runtime and clone file,
+the exact 377 acknowledgement rows and last ID/root. It records sample/actual
+operation attempt 1, completed 0, with external wall and partial progress only
+as diagnostics. No product receipt is fabricated. Existing reporting retains
+FAIL/proof NOT_RUN and unavailable complete metrics; it also withholds partial
+receipt limit fields, so their known registered declarations are given above.
+Container `046adc09eb527af87ad8eb781c6004089656ebcfd941ed6eb185a6c901d24625`
+and sample volume `layerfs-fsb-sample-23b0cb54e27f4674` remain retained with
+uncertain custody. Remaining 22 distinct dedup cases may each proceed once;
+old three completed cases and this attempted distributed500 are not repeated.
+
+The first changed-source M1 case,
+`v016-mixed-development-100mb-5000-k10-v1`, ran at private clean
+`fa70bbb01c413a0bbbadd5c10d81652580b046f8`. All ten original workload commands
+succeeded and all ten Commits were acknowledged. The fresh-mount native final
+verifier failed on `d000/f00054` metadata. Expected regular file, 4096 B and
+mode 0640 all match retained actual stat. Expected mtime is
+1700000020.123456789; actual is 1791646338.023150971. This is an atomic-save
+destination, link-target index 4, replaced by the actual cycle-2 new inode.
+P-3 insertion/deletion targets are different paths and cannot explain it.
+
+The frozen `v016_m1.rs` atomic-save sequence sets the copied stage-4 mtime on
+an empty temporary before write_all and sync, then renames it. POSIX writes
+update its mtime; rename preserves that new inode's attributes. The frozen
+`v016_oracle.rs` stage-5 shadow changes the content while retaining stage-4
+mtime, then requires those declared seconds. The current port retains that
+assertion; this failure is not just stricter nanosecond comparison. Root
+reviewed product write/rename source: it applies the current write timestamp
+and preserves the moved inode's attributes. A single tiny native exact-order
+diagnostic confirmed the same timestamp change and rename preservation in
+73,542,166 ns under the private 120 s stop, with no Store, preparation or case
+replay. A single read-only stat on the retained verifier mount took
+83,638,625 ns under 15 s. Product, frozen helper and oracle remain unchanged.
+No timestamp normalization or product behavior change is authorized by this
+inconsistency. The strict case remains FAIL; later independent public persisted
+and census proof steps were not reached and remain unverified.
+
+The sealed diagnosis is Mixed's
+`benchmark-results/fs-bench-pro/2026-10-10-mixed-m1-metadata-diagnosis-fa70/diagnosis.json`,
+SHA-256 `8bf26f7790c069e348b04e70bcbe364174752f76d074bf035ed556e3ac7eea6d`;
+Root authenticated its six original/transcribed source and prepared scope
+seals. Failed container
+`17104e241466b65645273b056fd534d72632f0b5f594593b41e4fdc09d60d497`,
+sample volume `layerfs-fsb-sample-7b1776f836b24ae4` and verifier Workspace key
+`055bcf6d443c9f062e4061b25a5b8f5c6d7196f02eedc9f3ad85a968cc1ab29b`
+remain retained. Measured mount Gone does not qualify the leaked verifier mount
+or establish Stop; no inferred teardown is recorded. The other four expressible
+prepared M1 cases proceed individually once at unchanged source and limits,
+preserving each actual outcome. The incomplete final preparation is untouched.
+
+A read-only audit at main 8f24e39a4 covers all 138 original cases of closed
+batches 1–3 plus boundary7. It found exact paired CSV membership and no missing
+records or contradictory final closures. There are 114 functional/proof passes,
+24 failed mandatory cases, and 134 complete clean closes with four unestablished
+closures (capped3 and boundary alias1). The seven historical scoped numeric
+PASS labels remain explicitly unqualified for full numeric cache admission;
+107 numeric rows are INELIGIBLE. New Init checkpoints are authoritative only
+for their affected product route, with original Init4 preserved separately.
+Original snapshot failure and H11 boundary failure/unrun rows are also retained.
+Two final completed cases exceed their 15 s soft limits: locality dense500
+15,251,166,166 ns and snapshot 24,397,444,499 ns. The original failed snapshot's
+22,049,536,459 ns exceedance stays historical. No speed verdict follows.
+Audit JSON is Tiny's ignored
+`benchmark-results/fs-bench-pro/2026-10-10-closed-evidence-inventory-8f24e39a4/inventory.json`,
+SHA-256 `63b5d464da1845d032e11a2931d4b454696adfa1205991e095cf68016a7ec8c6`,
+verified by Root. This audit runs no product/test/measurement or Docker mutation.
+Later batches remain pending; no completion claim is made while batch 4 runs.
+
+| This commit | Preserve first bounded dedup and strict M1 failures with source diagnosis and unaffected evidence audit | 79370 | 79370 | +0 |
