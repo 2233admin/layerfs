@@ -101,7 +101,8 @@ comparison or release-admission claim. Durable is
 | H-2 | 36 batch-1 reviewed registrations | source_commit was an annotated tag object; parity accepted it and rejected the actual peeled commit | git rev-parse on an annotated reference returns the tag object unless peeled | `222526fa0` | test_review_identity.py rejects the tag through both parity routes, admits the peeled commit and checks every ported review |
 | H-6 | local-snapshot-create-25000-onebyte-v1 | Original native witness exited0, then controller raised dictionary update #5 after measuredEnd | Frozen sample receipt has multiline path/range values and no verification_status; harness assumed full-tree key/value receipt | `03033abdc` | test_original_multiline_sample_with_successful_exit_is_preserved fails beforefix; altered paths/ranges/scope/exit are rejected afterfix |
 | H-7 | Prospective Git4, found before first sample | Late observation publication followed by failed failure-sidecar write or process death before final post-check could reload provisional PASS | Draft guard bound timestamp before the observation write and lacked mandatory completion/known outer return | `031d427a7` | slow observation/completion publication plus failed failure-sidecar and os._exit(91) regressions fail before correction; missing completion/outer acknowledgement remain failed |
-| H-8 | Prospective batch4, found before any attempt | Output-close or final publication failure could retain FAIL after deleting sample resources | Administrative container/volume removal occurred before finally close/verdict/publication and driver acknowledgement; partial removal also claimed blanket retained custody | This commit | test_close_failure_after_all_proofs_keeps_container_and_volume fails against a921bedbd with both rm calls observed; missing outer ACK/failed return do no removal, partial lost-volume acknowledgement remains uncertain and immutable bound |
+| H-8 | Prospective batch4, found before any attempt | Output-close or final publication failure could retain FAIL after deleting sample resources | Administrative container/volume removal occurred before finally close/verdict/publication and driver acknowledgement; partial removal also claimed blanket retained custody | `56a422544` | test_close_failure_after_all_proofs_keeps_container_and_volume fails against a921bedbd with both rm calls observed; missing outer ACK/failed return do no removal, partial lost-volume acknowledgement remains uncertain and immutable bound |
+| H-9 | Prospective two verification-only cases | Overall output-closeFAIL could disappear in CSV when performance wasN/A and semantic proof retainedPASS | Original proof-only mask omitted the independent full-outcome failure tag | Worker2fe8e9b2e / integration this commit | test_overall_failure_and_close_cause_stay_visible_when_semantic_proof_passed fails beforefix; final5reportchecks PASS0.048s |
 
 H-1 and H-2 are harness faults, not product correctness or performance defects.
 The original file-identity checker remains intact; no product source changed.
@@ -2607,4 +2608,25 @@ and unqualified until its own coveringtests. Rawpublication supplement is in
 Capped's2026-10-10-batch-4-history-authoring folder.
 
 | `c8a5a72db` (worker) | General original-family guarded publication and outer acknowledgement | 79366 | 79366 | +0 |
-| This commit | Integrate family guarded publication without altering closed Git scope | 79366 | 79366 | +0 |
+| `5ebdac535` | Integrate family guarded publication without altering closed Git scope | 79366 | 79366 | +0 |
+
+
+Batch4 verification-only reporting integrates Capped6d47e3be3/2fe8e9b2e.
+Authoritative original case.proof_only masks performance status/cache/time/
+phases/limits/counts/storage/reference timing as literalN/A, including unrun
+cases. Verification retains actualsemanticproof status/wall/originaldeclared
+bound/cleanup/source and reasons, with original rawdiagnostic metrics unchanged.
+Driver requires verification-only mode, sample_count0, verification_attempt_count1;
+proof success does not credit any performance cache state. Neither case is
+closed as not-applicable simply because performance isN/A. H9visibility fix
+retains original overallFAIL and exact original/close cause in CSV tags even
+when semanticbytespassed. Red regression remainsraw, final5reportchecks
+PASS0.048s and4driverchecks PASS0.020s underprivate120s locks. Integratedfinal
+receipts/bench hashes equal worker's f1ac20a... /70580094..., so covering exact
+scope evidence is reused. No sample/preparation/resource has executed yet.
+Controller owner120s invocation ceiling remains separate from original120/
+300s proof definitions and is not a widened or silently rewritten declaration.
+
+| `6d47e3be3` (worker) | Verification-only performance N/A and explicit no-sample driver | 79366 | 79366 | +0 |
+| `2fe8e9b2e` (worker) | Keep overallFAIL/close cause visible beside semantic proofPASS | 79366 | 79366 | +0 |
+| This commit | Integrate verification-only reporting and H9 outcome visibility | 79366 | 79366 | +0 |

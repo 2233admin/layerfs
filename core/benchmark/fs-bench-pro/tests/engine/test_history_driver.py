@@ -60,5 +60,25 @@ class HistoryDriver(unittest.TestCase):
             _,calls=self.drive(Path(temporary).resolve(),case,result,ack_failure=True)
             self.assertEqual(calls,["attempt","ack"])
 
+    def test_verification_only_driver_uses_real_proof_and_never_performance_eligibility(self):
+        case={"id":"case","v016_case":"case","status":"ported","fixture":{"recipe":"case"},"proof_only":True}
+        result={"case":"case","status":"INELIGIBLE","functional_status":"PASS","proof_status":"PASS",
+                "proof_only":True,"performance_mode":"verification-only","sample_count":0,"verification_attempt_count":1,
+                "publication_guard":{"scope":receipts.HISTORY_PUBLICATION_SCOPE}}
+        with tempfile.TemporaryDirectory() as temporary:
+            returned,calls=self.drive(Path(temporary).resolve(),case,result)
+            self.assertEqual(returned,0)
+            self.assertEqual(calls,["attempt","ack","dispose"])
+        with tempfile.TemporaryDirectory() as temporary:
+            returned,_=self.drive(Path(temporary).resolve(),case,{**result,"proof_status":"FAIL","status":"FAIL"})
+            self.assertEqual(returned,1)
+
+    def test_verification_only_cannot_claim_a_performance_sample(self):
+        case={"id":"case","v016_case":"case","status":"ported","fixture":{"recipe":"case"},"proof_only":True}
+        result={"case":"case","status":"PASS","proof_only":True,"performance_mode":"verification-only","sample_count":1,"verification_attempt_count":1}
+        with tempfile.TemporaryDirectory() as temporary:
+            with self.assertRaisesRegex(ValueError,"no performance sample"):
+                self.drive(Path(temporary).resolve(),case,result)
+
 
 if __name__=="__main__":unittest.main()

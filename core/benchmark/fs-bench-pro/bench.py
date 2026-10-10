@@ -105,12 +105,18 @@ def main(argv=None):
                 result = project.one_init(case, prepared, args.build, output / cell)
             else:
                 result = workspace.one_family_case(args.family, case, prepared, args.build, output / cell)
+            proof_only = case.get("proof_only") is True
+            if proof_only and (result.get("proof_only") is not True or result.get("performance_mode") != "verification-only"
+                               or type(result.get("sample_count")) is not int or result["sample_count"] != 0
+                               or type(result.get("verification_attempt_count")) is not int or result["verification_attempt_count"] != 1):
+                raise ValueError("verification-only driver requires one proof attempt and no performance sample")
             if result.get("publication_guard"):
                 receipts.acknowledge_guarded(output / cell, result)
             if args.family in fixtures.WORKSPACE_FAMILIES:
                 workspace.dispose_family_resources(output / cell, result)
             print(json.dumps({key: result.get(key) for key in ("case", "status", "counts", "cleanup", "container", "original_failure", "evidence")}))
-            failed |= result["status"] != "PASS"
+            failed |= ((result.get("proof_status") != "PASS" or result.get("functional_status") != "PASS" or result["status"] == "FAIL")
+                       if proof_only else result["status"] != "PASS")
         return 1 if failed else 0
     if args.command == "verify":
         from engine import fixtures, oracle, project, receipts

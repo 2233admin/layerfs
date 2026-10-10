@@ -423,6 +423,7 @@ def _publication_overlay(folder, row, selection, *, require_outer_ack=True):
 
 PERFORMANCE_COLUMNS = "family case v016_case status cache_class complete_wall_ns mount_ns command_ns commit_ns unmount_ns declared_limit_ns limit_status requests owner_jobs statements store_logical_bytes store_allocated_bytes overlay_logical_bytes overlay_allocated_bytes cleanup reference_release reference_timer reference_ns reference_profile source_commit product_tree daemon_sha256 image evidence tag".split()
 VERIFICATION_COLUMNS = "family case v016_case proof_status proof_wall_ns declared_limit_ns oracle_scope omissions cleanup source_commit product_tree image evidence tag".split()
+PROOF_ONLY_PERFORMANCE_COLUMNS = "status cache_class complete_wall_ns mount_ns command_ns commit_ns unmount_ns declared_limit_ns limit_status requests owner_jobs statements store_logical_bytes store_allocated_bytes overlay_logical_bytes overlay_allocated_bytes reference_timer reference_ns reference_profile".split()
 
 
 def result_rows(selection, recorded):
@@ -463,6 +464,20 @@ def result_rows(selection, recorded):
                      declared_limit_ns=result.get("verifier_limit_ns", "UNAVAILABLE"),
                      oracle_scope=result.get("verification", {}).get("scope", "UNAVAILABLE"),
                      omissions=result.get("verification", {}).get("omissions", "UNAVAILABLE"))
+        if case.get("proof_only") is True or result.get("proof_only") is True:
+            if case.get("proof_only") is not True or "proof_only" in result and result["proof_only"] is not True:
+                raise ValueError("verification-only registration/receipt mode differs")
+            if proof["declared_limit_ns"] == "UNAVAILABLE" and type(case.get("budget",{}).get("verifier_ms")) is int:
+                proof["declared_limit_ns"] = case["budget"]["verifier_ms"]*1_000_000
+            for name in PROOF_ONLY_PERFORMANCE_COLUMNS:
+                row[name] = "N/A"
+            note = "verification-only; performance N/A; diagnostic timing/count/storage observations remain in raw receipt"
+            outcome = ""
+            if result.get("status") == "FAIL":
+                detail = result.get("original_failure") or "; ".join(result.get("independent_close_failures",[]))
+                outcome = "; ".join(filter(None,("original overall result FAIL",detail)))
+            row["tag"] = "; ".join(filter(None,(note,outcome,row.get("tag"))))
+            proof["tag"] = "; ".join(filter(None,("verification-only",outcome,proof.get("tag"))))
         performance.append(row)
         verification.append(proof)
     return performance, verification
