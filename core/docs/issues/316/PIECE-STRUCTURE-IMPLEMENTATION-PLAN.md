@@ -216,8 +216,8 @@ at the end: emit the trailing edit if anything is pending or b < base size
 ### 4.3 Edit engine: measured
 
 The engine is unchanged. One external test
-(`core/crates/layerfs-content/tests/edit_shift_scaling.rs`, untracked) applied
-single edits through `apply_indexed_edits_view_backed`:
+(`core/crates/layerfs-content/tests/edit_shift_scaling.rs`, committed
+`f5bfa0afa`) applied single edits through `apply_indexed_edits_view_backed`:
 
 | Edit | Size | Tree pages read | Objects offered | File bytes read | Right-hand leaves reused |
 | --- | --- | --- | --- | --- | --- |
@@ -570,7 +570,7 @@ Tests are external, in each package's `tests/`. Every test command stops at
 
 | Phase | Package | Tests to add or extend |
 | --- | --- | --- |
-| 1 | content | `edit_shift_scaling` (exists, untracked); the extent cursor; chunk identity equals the tree's id |
+| 1 | content | `edit_shift_scaling` (exists, `f5bfa0afa`); the extent cursor; chunk identity equals the tree's id |
 | 1 | overlay | Piece rows in every shape; cells win over pieces in one layer; truncate and regrow in the boundary cell; four layers; Reference step equals the payload pass (extend `captured_runs`); retirement after install, unlink while open, failed-capture fold, close; bounded reclaim steps (as `reclaim_cost`); query plans |
 | 1 | workspace | Edit script, table-driven: unchanged, insert, delete, replace, several edits, backward reference, other root; end to end in `captured_file_edits`: pieces written through the overlay API, Commit, remount, byte compare, counts at two sizes |
 | 2 | workspace, daemon | Recognizer: gate, continue, search, search budget; slice extents and whole-file bases miss safely; slot eviction |
@@ -598,8 +598,8 @@ was verified at the parent of this branch.
 
 ### 10.3 Iteration procedure
 
-Three tiers. The benchmark subset is fixed here so it is not chosen after
-seeing results.
+Four tiers, narrow and fast first. The benchmark subsets are fixed here so
+they are not chosen after seeing results.
 
 **Tier 1, every change.** Only the tests of the crate being edited:
 
@@ -626,10 +626,12 @@ creates a piece, and the benchmark cannot show a gain.
 | Regression | `workspace-dense-rewrite-100-mixed-v4` | Existing files overwritten with new bytes: search without a match |
 | Regression | `tiny-bulk-create-100-mixed-v3` | Many small files |
 
-- Before the first run: the implementing branch needs a base that carries the
-  runnable ports of these families. Branch `issue316-fsb-rescue` is based at
-  `2590a4536`; issue 317 reports the ports at local main `27708c11d`. Take a
-  control sample of the nine cases at that base.
+- Before the first run: take a control sample of the nine cases on branch
+  `issue316-fsb-rescue` (based at `2590a4536`) before any piece code exists.
+  All nine are registered as `ported` there (checked 2026-10-11), as are the
+  four edit families of tier 3. `file_size_transition`, `git_tool_workflow`,
+  `dedup_branch_history` and `mixed_load_bearing` are `pending` at that base
+  and are not run from it.
 - End of phase 1: run once; counts must equal the control.
 - Phases 2 and 3: run at every stage commit.
 - Compare in this order: overlay bytes of the target cases; Commit writer jobs
@@ -640,8 +642,13 @@ creates a piece, and the benchmark cannot show a gain.
 - The 10 MiB and 500 MiB insert pair shows independence from file size:
   overlay bytes and Commit jobs should be nearly equal for both.
 
-**Tier 3, hand-back only.** Every family in 10.2, warning-denying Clippy,
-formatting, the boundary guard and the mounted proofs.
+**Tier 3, end of phases 2 and 3.** Every case of `edit_length_changing`,
+`edit_length_preserving`, `edit_canonical_chunk_count` and
+`edit_length_changing_capped`: 61 cases, one sample each.
+
+**Tier 4, hand-back only.** The other runnable families in 10.2, full package
+tests, warning-denying Clippy, formatting, the boundary guard and the mounted
+proofs.
 
 Two rules for the loop:
 
