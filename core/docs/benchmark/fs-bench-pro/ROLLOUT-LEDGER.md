@@ -5914,3 +5914,83 @@ repair; batch6 is still in progress and batch7 is not started.
 | This commit | Extend existing failed-preparation closure to full repository | 79370 | 79370 | +0 |
 Pinned absent-aware staged counter/exact tree confirmation; reference absent,
 retiredR9c, last65,417/tree498dd1917812.
+
+
+### Batch 6 CDC locality closed with one proof failure, 2026-10-11
+
+All21 original cases at08288e824 reuse their exact sealed native inputs
+and admitted7766runtime/eight other assets. Frozen parity21PASS. Nineteen
+routine cases fully complete actual Init/install, original fresh FUSE/native
+verifier, independent typed proof and End/Gone/KnownStop, numericINELIGIBLE.
+BoundaryproofPASS has sample_count0/verification_attempt_count1 and performance
+N/A. All20 passing cases have bound outer publication/removal;40 owned
+passing containers and20 sample volumes removed. No15s Init or45s verifier
+reported soft limit exceeded. One scattered500 retainsFAIL at the original
+41s work cutoff with native/remote completion and End/Gone/Stop unknown.
+
+| Original case | Status | Paid Init ns | Proof ns | Cleanup/custody |
+| --- | --- | ---: | ---: | --- |
+| dedup-cdc-overwrite-1 | INELIGIBLE | 24974542 | 4102044708 | Gone/KNOWN_STOP |
+| dedup-cdc-overwrite-10 | INELIGIBLE | 32021125 | 4893376084 | Gone/KNOWN_STOP |
+| dedup-cdc-overwrite-100 | INELIGIBLE | 171007875 | 8853970292 | Gone/KNOWN_STOP |
+| dedup-cdc-overwrite-500 | INELIGIBLE | 392115833 | 27433961709 | Gone/KNOWN_STOP |
+| dedup-cdc-insert-1 | INELIGIBLE | 24343041 | 3952965167 | Gone/KNOWN_STOP |
+| dedup-cdc-insert-10 | INELIGIBLE | 32001125 | 4643832750 | Gone/KNOWN_STOP |
+| dedup-cdc-insert-100 | INELIGIBLE | 111739042 | 8548539958 | Gone/KNOWN_STOP |
+| dedup-cdc-insert-500 | INELIGIBLE | 466466708 | 27163424250 | Gone/KNOWN_STOP |
+| dedup-cdc-delete-1 | INELIGIBLE | 24225125 | 3964578125 | Gone/KNOWN_STOP |
+| dedup-cdc-delete-10 | INELIGIBLE | 36872084 | 4467767375 | Gone/KNOWN_STOP |
+| dedup-cdc-delete-100 | INELIGIBLE | 128189291 | 8872616667 | Gone/KNOWN_STOP |
+| dedup-cdc-delete-500 | INELIGIBLE | 620201750 | 29357699459 | Gone/KNOWN_STOP |
+| dedup-cdc-common-body-1 | INELIGIBLE | 26928125 | 4149867042 | Gone/KNOWN_STOP |
+| dedup-cdc-common-body-10 | INELIGIBLE | 47437708 | 4303130542 | Gone/KNOWN_STOP |
+| dedup-cdc-common-body-100 | INELIGIBLE | 221259458 | 9271582375 | Gone/KNOWN_STOP |
+| dedup-cdc-common-body-500 | INELIGIBLE | 1162854958 | 31583453458 | Gone/KNOWN_STOP |
+| dedup-cdc-scattered-1 | INELIGIBLE | 29525500 | 3987727875 | Gone/KNOWN_STOP |
+| dedup-cdc-scattered-10 | INELIGIBLE | 75690333 | 4566803834 | Gone/KNOWN_STOP |
+| dedup-cdc-scattered-100 | INELIGIBLE | 629160917 | 11811095750 | Gone/KNOWN_STOP |
+| dedup-cdc-scattered-500 | FAIL | 3139060500 | 41005073333 | UNAVAILABLE/UNAVAILABLE |
+| dedup-cdc-boundaries-proof | PASS | N/A | 4174873500 | Gone/KNOWN_STOP |
+
+Scattered500 proof41,005,073,333ns exceeds the original work cutoff by
+5,073,333ns;45s minus4s cleanup reserve is unchanged. Public SDK Init
+3,139,060,500ns, independent typed project_verified PASS26,772,498,458ns,
+actual public installation/installerStop and Fork/mount are acknowledged.
+Native original verification began once with at most4.414s remaining work;
+no verify/known exit/End/Gone/verifierStop followed. Original streams0B and
+no byte mismatch/crash was observed. Later bounded read-only State/top/logs
+show runningdaemon/OOMKilledfalse, only daemon process at observation and
+no Bash/workload process. ConnectionFailure/UnexpectedEof follows host fence,
+not successful native completion. Source native verify_native scans finite
+503 paths/501 positive1MiBfiles; offsets advance, but read_exact may block on
+FUSE. These observations cannot exclude an earlier stuck FUSE read or infer
+success; uncertainty remains, no identified fixable cause permits a product
+fix. No extra kill, unmount, replay, timeout increase or optimization.
+
+Original1cc overwritten1H30FAIL+20NOT_RUN stays in both21-row CSVs alongside
+final082 rows, with boundaryperformanceN/A. Worker oldhandoff calls that
+protocol bugH29; the actual mount acknowledgement mismatch is rootH30.
+No historical raw receipt or claim is edited. Exact retained custody:
+- 1cc25d4de / dedup-cdc-overwrite-1: containersce269da4e9dffab830e1229337c8de2df9bd3f97a3bb50a8de2833e9912456a6,f2f1ea0c8bb4c187a9cc2a2d12b4c98568693b7244b6e5c8233d0085c27f2e6a; volumelayerfs-fsb-sample-65f8d08d9719414e; old H29 mismatched mount acknowledgement; native/End/Gone/Stop unverified.
+- 08288e824 / dedup-cdc-scattered-500: containersd54824de048bf87ea8afa5b0b2d1ef46f6ff6802e787e5a4565f1b29d78a3ee8,1dec045d2cbee6d3c86569fcc9a929bdd877b03fd0fb7296158296e125f471ee; volumelayerfs-fsb-sample-79578db1bf654f23; original41s proof work cutoff; remote completion and mount cleanup unknown.
+
+Final handoff:
+/Users/yifanxu/.codex/worktrees/fs-bench-pro-edit-capped/layerfs/benchmark-results/fs-bench-pro/2026-10-11-batch-6-cdc-08288e824/family-handoff.json
+SHAe334775b2c58a91f56c7f94116c243b784a89df3a8d656a412b3d38f48e1902d;
+manifestc6a0dd78c333c2144ce40f1d422700f887a7450d7aabc37e0de97a006d0ef2b9.
+Final performanceCSV47ff64872189413f208898bfa990a816f81b600e64b4f7ee3035433efc057347;
+verificationCSV1fb3c44dd2625a87571d9cf4b1e89c4e08b39fec77ca5e57499d66065c154d15.
+Read-only diagnosisSHA459c8c73934189b9f6eada3ab3e9223868e40dc4d7876356aa21c8e67aa90c1c.
+Retainedverify1(exit1,20PASS/1FAIL) wall2,072,307,375ns; first report request
+was refused by the private lock before execution while verify still ran;
+report ran once after known completion. Both source pairs imported byte
+identically, all21 cases beside their original references, no ratio/verdict.
+Host Init paid daemon/FUSE request/job/statement axes UNAVAILABLE; verifier
+telemetry separately scoped. Source/backing/metadata cache preconditions
+unqualified and shared-host/DockerVM interference unquantified.
+
+| Commit | Purpose | Production before | after | delta |
+| --- | --- | --- | --- | --- |
+| This commit | Record all21 CDC outcomes and retained original failed cohort | 79370 | 79370 | +0 |
+Pinned absent-aware staged counter/exact tree confirmation; reference absent,
+retiredR9c, last65,417/tree498dd1917812.
