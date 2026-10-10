@@ -1,0 +1,825 @@
+{
+  "family": "dedup_cdc_locality",
+  "engine": "workspace",
+  "cases": [
+    {
+      "id": "dedup-cdc-overwrite-1",
+      "v016_case": "dedup-cdc-overwrite-1",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/dedup_cdc_locality/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "dedup-cdc-overwrite-1",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "34"
+      },
+      "differences": [],
+      "registry": {
+        "family": "dedup_cdc_locality",
+        "case": "dedup-cdc-overwrite-1",
+        "kind": "overwrite",
+        "tier": "1",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "dedup-cdc-overwrite-10",
+      "v016_case": "dedup-cdc-overwrite-10",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/dedup_cdc_locality/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "dedup-cdc-overwrite-10",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "35"
+      },
+      "differences": [],
+      "registry": {
+        "family": "dedup_cdc_locality",
+        "case": "dedup-cdc-overwrite-10",
+        "kind": "overwrite",
+        "tier": "10",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "dedup-cdc-overwrite-100",
+      "v016_case": "dedup-cdc-overwrite-100",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/dedup_cdc_locality/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "dedup-cdc-overwrite-100",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "36"
+      },
+      "differences": [],
+      "registry": {
+        "family": "dedup_cdc_locality",
+        "case": "dedup-cdc-overwrite-100",
+        "kind": "overwrite",
+        "tier": "100",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "dedup-cdc-overwrite-500",
+      "v016_case": "dedup-cdc-overwrite-500",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/dedup_cdc_locality/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "dedup-cdc-overwrite-500",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "37"
+      },
+      "differences": [],
+      "registry": {
+        "family": "dedup_cdc_locality",
+        "case": "dedup-cdc-overwrite-500",
+        "kind": "overwrite",
+        "tier": "500",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "dedup-cdc-insert-1",
+      "v016_case": "dedup-cdc-insert-1",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/dedup_cdc_locality/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "dedup-cdc-insert-1",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "38"
+      },
+      "differences": [],
+      "registry": {
+        "family": "dedup_cdc_locality",
+        "case": "dedup-cdc-insert-1",
+        "kind": "insert",
+        "tier": "1",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "dedup-cdc-insert-10",
+      "v016_case": "dedup-cdc-insert-10",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/dedup_cdc_locality/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "dedup-cdc-insert-10",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "39"
+      },
+      "differences": [],
+      "registry": {
+        "family": "dedup_cdc_locality",
+        "case": "dedup-cdc-insert-10",
+        "kind": "insert",
+        "tier": "10",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "dedup-cdc-insert-100",
+      "v016_case": "dedup-cdc-insert-100",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/dedup_cdc_locality/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "dedup-cdc-insert-100",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "40"
+      },
+      "differences": [],
+      "registry": {
+        "family": "dedup_cdc_locality",
+        "case": "dedup-cdc-insert-100",
+        "kind": "insert",
+        "tier": "100",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "dedup-cdc-insert-500",
+      "v016_case": "dedup-cdc-insert-500",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/dedup_cdc_locality/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "dedup-cdc-insert-500",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "41"
+      },
+      "differences": [],
+      "registry": {
+        "family": "dedup_cdc_locality",
+        "case": "dedup-cdc-insert-500",
+        "kind": "insert",
+        "tier": "500",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "dedup-cdc-delete-1",
+      "v016_case": "dedup-cdc-delete-1",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/dedup_cdc_locality/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "dedup-cdc-delete-1",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "42"
+      },
+      "differences": [],
+      "registry": {
+        "family": "dedup_cdc_locality",
+        "case": "dedup-cdc-delete-1",
+        "kind": "delete",
+        "tier": "1",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "dedup-cdc-delete-10",
+      "v016_case": "dedup-cdc-delete-10",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/dedup_cdc_locality/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "dedup-cdc-delete-10",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "43"
+      },
+      "differences": [],
+      "registry": {
+        "family": "dedup_cdc_locality",
+        "case": "dedup-cdc-delete-10",
+        "kind": "delete",
+        "tier": "10",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "dedup-cdc-delete-100",
+      "v016_case": "dedup-cdc-delete-100",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/dedup_cdc_locality/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "dedup-cdc-delete-100",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "44"
+      },
+      "differences": [],
+      "registry": {
+        "family": "dedup_cdc_locality",
+        "case": "dedup-cdc-delete-100",
+        "kind": "delete",
+        "tier": "100",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "dedup-cdc-delete-500",
+      "v016_case": "dedup-cdc-delete-500",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/dedup_cdc_locality/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "dedup-cdc-delete-500",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "45"
+      },
+      "differences": [],
+      "registry": {
+        "family": "dedup_cdc_locality",
+        "case": "dedup-cdc-delete-500",
+        "kind": "delete",
+        "tier": "500",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "dedup-cdc-common-body-1",
+      "v016_case": "dedup-cdc-common-body-1",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/dedup_cdc_locality/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "dedup-cdc-common-body-1",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "46"
+      },
+      "differences": [],
+      "registry": {
+        "family": "dedup_cdc_locality",
+        "case": "dedup-cdc-common-body-1",
+        "kind": "common-body",
+        "tier": "1",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "dedup-cdc-common-body-10",
+      "v016_case": "dedup-cdc-common-body-10",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/dedup_cdc_locality/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "dedup-cdc-common-body-10",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "47"
+      },
+      "differences": [],
+      "registry": {
+        "family": "dedup_cdc_locality",
+        "case": "dedup-cdc-common-body-10",
+        "kind": "common-body",
+        "tier": "10",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "dedup-cdc-common-body-100",
+      "v016_case": "dedup-cdc-common-body-100",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/dedup_cdc_locality/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "dedup-cdc-common-body-100",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "48"
+      },
+      "differences": [],
+      "registry": {
+        "family": "dedup_cdc_locality",
+        "case": "dedup-cdc-common-body-100",
+        "kind": "common-body",
+        "tier": "100",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "dedup-cdc-common-body-500",
+      "v016_case": "dedup-cdc-common-body-500",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/dedup_cdc_locality/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "dedup-cdc-common-body-500",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "49"
+      },
+      "differences": [],
+      "registry": {
+        "family": "dedup_cdc_locality",
+        "case": "dedup-cdc-common-body-500",
+        "kind": "common-body",
+        "tier": "500",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "dedup-cdc-scattered-1",
+      "v016_case": "dedup-cdc-scattered-1",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/dedup_cdc_locality/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "dedup-cdc-scattered-1",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "50"
+      },
+      "differences": [],
+      "registry": {
+        "family": "dedup_cdc_locality",
+        "case": "dedup-cdc-scattered-1",
+        "kind": "scattered",
+        "tier": "1",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "dedup-cdc-scattered-10",
+      "v016_case": "dedup-cdc-scattered-10",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/dedup_cdc_locality/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "dedup-cdc-scattered-10",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "51"
+      },
+      "differences": [],
+      "registry": {
+        "family": "dedup_cdc_locality",
+        "case": "dedup-cdc-scattered-10",
+        "kind": "scattered",
+        "tier": "10",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "dedup-cdc-scattered-100",
+      "v016_case": "dedup-cdc-scattered-100",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/dedup_cdc_locality/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "dedup-cdc-scattered-100",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "52"
+      },
+      "differences": [],
+      "registry": {
+        "family": "dedup_cdc_locality",
+        "case": "dedup-cdc-scattered-100",
+        "kind": "scattered",
+        "tier": "100",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "dedup-cdc-scattered-500",
+      "v016_case": "dedup-cdc-scattered-500",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/dedup_cdc_locality/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "dedup-cdc-scattered-500",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "53"
+      },
+      "differences": [],
+      "registry": {
+        "family": "dedup_cdc_locality",
+        "case": "dedup-cdc-scattered-500",
+        "kind": "scattered",
+        "tier": "500",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "dedup-cdc-boundaries-proof",
+      "v016_case": "dedup-cdc-boundaries-proof",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/dedup_cdc_locality/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "dedup-cdc-boundaries-proof",
+        "kind": "verification",
+        "source_file": "release-notes/0.1.5/benchmark-verification.csv",
+        "source_row": "54"
+      },
+      "differences": [],
+      "registry": {
+        "family": "dedup_cdc_locality",
+        "case": "dedup-cdc-boundaries-proof",
+        "kind": "boundaries",
+        "tier": "1",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    }
+  ]
+}

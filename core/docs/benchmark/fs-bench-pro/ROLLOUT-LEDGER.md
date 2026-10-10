@@ -16,7 +16,7 @@ comparison or release-admission claim. Durable is
 | Handoff specification | COMPLETE | `3c32fbc97` | Harvest released references |
 | 0.1 Released references | COMPLETE | `8e4a78fa0` | Stage 0.2 move-only organization |
 | 0.2 Move-only organization | COMPLETE, historical check failures retained | `13f9dec38`; routing follow-up in this commit | Update routing guide, then stage 0.3 catalogue |
-| 0.3 Case catalogue | PENDING | — | Inventory the frozen root registry and older-commit binding |
+| 0.3 Case catalogue | COMPLETE | This commit; prerequisite correction `30b798192` | Stage 0.4 reproducible engine |
 | 0.4 Reproducible engine | PENDING | — | Read retained working scripts and rebuild preparation |
 | 1 Pilot | PENDING | — | Wait for stage 0.4 completion |
 | 2 Edits | PENDING | — | Wait for batch 1 completion |
@@ -41,6 +41,9 @@ comparison or release-admission claim. Durable is
 | 7 | Specify supporting-file destinations and permit path-only root/manifest/asset adjustments; retain historical source-gated tests | Section 4 omitted `r7-tools`, shared files and the old runner; depth changes require more than import text; old tests name retired product drivers | Inventing silent destinations or restoring retired product source |
 
 | 8 | Correct P-1 and reuse existing public ProjectApi fork/history; record the ForkSource::Commit route for P-2 | Source at handed-over product tree already exports both methods and validates ancestor membership; duplication would add no capability | Adding duplicate SDK methods or bypassing the SDK with wire requests |
+
+| 9 | Catalogue all 273 original IDs as pending; leave execution fields explicitly unset until each family is ported | The root contains 269 Rust registrations plus three repository-history profiles and one small-file-delta case; release rows are not the complete registry | Dropping unreleased/proof/extended cases or inventing runnable definitions |
+| 10 | Resolve the original Rust registry using a std-only metadata exporter; read both Python wrapper registries separately | Root SDK cannot build after retirement, while its product-neutral workload definitions compile without product dependencies | Restoring retired crates or guessing formatted IDs from text |
 
 ## Bugs
 
@@ -140,3 +143,49 @@ P-1/P-2 source correction: source checked in `project/history.rs`,
 was repeated. Public native route is verified when batch 5 is reached. This
 specification-only commit keeps Production LOC 79,366 -> 79,366 (delta +0),
 pinned absent-aware method. Catalogue work remains unstaged for its own commit.
+
+Stage 0.3: `bench.py list` reports exactly 25 families and 273 unique case IDs,
+all pending. This includes inherited, proof-only, capped and extended IDs.
+Forty-seven exact IDs have no released timing; every one is listed in
+`baselines/v0.1.6/missing.md`. No 26th family was found in the root directories,
+Rust registries, SDK edit registries or Python wrappers; storage-smoke aliases
+remain profiles of existing families. No P-6 family was added.
+
+The original std-only workload module supplied 269 registrations; the original
+repository-history registry supplied three more and small-file-delta its one.
+The exporter includes harness definitions only and invokes no product, fixture,
+workload or verifier. It was compiled with toolchain 1.85.1 and the ARM64 flags
+under a 120 s checkout lock. Three owning catalogue tests pass in 4.843 s,
+including mechanical membership against the compiled original registry and the
+Python wrapper registry, and the product-free CLI. No workload case sampled.
+Raw catalogue/check evidence is retained under
+`benchmark-results/fs-bench-pro/2026-10-10-stage-0-3-catalogue/`.
+
+P-2 source check: direct SDK bind selects the Branch's coherent current
+snapshot. Existing public `ProjectApi::fork` can use `ForkSource::Commit`;
+Persistence validates ancestry and returns the selected Commit root. The
+existing native mounted-cycle source tests demonstrate the related-root
+composition. Its actual SDK/mounted verification belongs to batch 5; an extra
+Branch must be declared as a difference in historical-access ports. No missing
+feature or not-applicable verdict is invented at the catalogue stage.
+
+Stage 0.3 Production LOC: 79,366 -> 79,366 (delta +0); active core only,
+reference absent (retired R9c; last counted 65,417 at `498dd1917812`), pinned
+absent-aware parent/staged archive method. Engine execution is not implemented
+or claimed by this catalogue. Containers/volumes created: none.
+
+## Production LOC by commit
+
+All comparisons use the same pinned absent-aware counter over exact first-parent
+and committed snapshots; active core only, reference absent as recorded above.
+
+| Commit | Purpose | Before | After | Signed delta |
+| --- | --- | ---: | ---: | ---: |
+| `3c32fbc97` | Preserve handoff and initialize ledger | 79366 | 79366 | +0 |
+| `d5d33a73b` | Correct verification-source count/units | 79366 | 79366 | +0 |
+| `8e4a78fa0` | Stage 0.1 reference harvest | 79366 | 79366 | +0 |
+| `abcfad75c` | Clarify supporting-file relocation | 79366 | 79366 | +0 |
+| `13f9dec38` | Stage 0.2 move-only reorganization | 79366 | 79366 | +0 |
+| `9af29e01e` | Current routing guide | 79366 | 79366 | +0 |
+| `30b798192` | Correct existing SDK History methods | 79366 | 79366 | +0 |
+| This commit | Stage 0.3 case catalogue | 79366 | 79366 | +0 |

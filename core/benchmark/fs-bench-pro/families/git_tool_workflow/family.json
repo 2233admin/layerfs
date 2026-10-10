@@ -1,0 +1,162 @@
+{
+  "family": "git_tool_workflow",
+  "engine": "workspace",
+  "cases": [
+    {
+      "id": "git-tool-1-compact-v2",
+      "v016_case": "git-tool-1-compact-v2",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/git_tool_workflow/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "git-tool-1-compact-v2",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "192"
+      },
+      "differences": [],
+      "registry": {
+        "family": "git_tool_workflow",
+        "case": "git-tool-1-compact-v2",
+        "kind": "git-tool",
+        "tier": "1",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "git-tool-10-compact-v2",
+      "v016_case": "git-tool-10-compact-v2",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/git_tool_workflow/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "git-tool-10-compact-v2",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "193"
+      },
+      "differences": [],
+      "registry": {
+        "family": "git_tool_workflow",
+        "case": "git-tool-10-compact-v2",
+        "kind": "git-tool",
+        "tier": "10",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "git-tool-100-mixed-v4",
+      "v016_case": "git-tool-100-mixed-v4",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/git_tool_workflow/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "git-tool-100-mixed-v4",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "194"
+      },
+      "differences": [],
+      "registry": {
+        "family": "git_tool_workflow",
+        "case": "git-tool-100-mixed-v4",
+        "kind": "git-tool",
+        "tier": "100",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "git-tool-500-mixed-v4",
+      "v016_case": "git-tool-500-mixed-v4",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/git_tool_workflow/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "git-tool-500-mixed-v4",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "195"
+      },
+      "differences": [],
+      "registry": {
+        "family": "git_tool_workflow",
+        "case": "git-tool-500-mixed-v4",
+        "kind": "git-tool",
+        "tier": "500",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    }
+  ]
+}

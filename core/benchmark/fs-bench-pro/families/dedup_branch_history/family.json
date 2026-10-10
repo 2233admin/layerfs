@@ -1,0 +1,1020 @@
+{
+  "family": "dedup_branch_history",
+  "engine": "workspace",
+  "cases": [
+    {
+      "id": "dedup-history-distributed-1",
+      "v016_case": "dedup-history-distributed-1",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/dedup_branch_history/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "dedup-history-distributed-1",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "172"
+      },
+      "differences": [],
+      "registry": {
+        "family": "dedup_branch_history",
+        "case": "dedup-history-distributed-1",
+        "kind": "distributed",
+        "tier": "1",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "dedup-history-distributed-10",
+      "v016_case": "dedup-history-distributed-10",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/dedup_branch_history/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "dedup-history-distributed-10",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "173"
+      },
+      "differences": [],
+      "registry": {
+        "family": "dedup_branch_history",
+        "case": "dedup-history-distributed-10",
+        "kind": "distributed",
+        "tier": "10",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "dedup-history-distributed-100",
+      "v016_case": "dedup-history-distributed-100",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/dedup_branch_history/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "dedup-history-distributed-100",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "174"
+      },
+      "differences": [],
+      "registry": {
+        "family": "dedup_branch_history",
+        "case": "dedup-history-distributed-100",
+        "kind": "distributed",
+        "tier": "100",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "dedup-history-distributed-500",
+      "v016_case": "dedup-history-distributed-500",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/dedup_branch_history/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "dedup-history-distributed-500",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "175"
+      },
+      "differences": [],
+      "registry": {
+        "family": "dedup_branch_history",
+        "case": "dedup-history-distributed-500",
+        "kind": "distributed",
+        "tier": "500",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "dedup-history-hotset-1",
+      "v016_case": "dedup-history-hotset-1",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/dedup_branch_history/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "dedup-history-hotset-1",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "176"
+      },
+      "differences": [],
+      "registry": {
+        "family": "dedup_branch_history",
+        "case": "dedup-history-hotset-1",
+        "kind": "hotset",
+        "tier": "1",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "dedup-history-hotset-10",
+      "v016_case": "dedup-history-hotset-10",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/dedup_branch_history/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "dedup-history-hotset-10",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "177"
+      },
+      "differences": [],
+      "registry": {
+        "family": "dedup_branch_history",
+        "case": "dedup-history-hotset-10",
+        "kind": "hotset",
+        "tier": "10",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "dedup-history-hotset-100",
+      "v016_case": "dedup-history-hotset-100",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/dedup_branch_history/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "dedup-history-hotset-100",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "178"
+      },
+      "differences": [],
+      "registry": {
+        "family": "dedup_branch_history",
+        "case": "dedup-history-hotset-100",
+        "kind": "hotset",
+        "tier": "100",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "dedup-history-hotset-500",
+      "v016_case": "dedup-history-hotset-500",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/dedup_branch_history/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "dedup-history-hotset-500",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "179"
+      },
+      "differences": [],
+      "registry": {
+        "family": "dedup_branch_history",
+        "case": "dedup-history-hotset-500",
+        "kind": "hotset",
+        "tier": "500",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "dedup-history-recurring-1",
+      "v016_case": "dedup-history-recurring-1",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/dedup_branch_history/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "dedup-history-recurring-1",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "180"
+      },
+      "differences": [],
+      "registry": {
+        "family": "dedup_branch_history",
+        "case": "dedup-history-recurring-1",
+        "kind": "recurring",
+        "tier": "1",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "dedup-history-recurring-10",
+      "v016_case": "dedup-history-recurring-10",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/dedup_branch_history/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "dedup-history-recurring-10",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "181"
+      },
+      "differences": [],
+      "registry": {
+        "family": "dedup_branch_history",
+        "case": "dedup-history-recurring-10",
+        "kind": "recurring",
+        "tier": "10",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "dedup-history-recurring-100",
+      "v016_case": "dedup-history-recurring-100",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/dedup_branch_history/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "dedup-history-recurring-100",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "182"
+      },
+      "differences": [],
+      "registry": {
+        "family": "dedup_branch_history",
+        "case": "dedup-history-recurring-100",
+        "kind": "recurring",
+        "tier": "100",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "dedup-history-recurring-500",
+      "v016_case": "dedup-history-recurring-500",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/dedup_branch_history/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "dedup-history-recurring-500",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "183"
+      },
+      "differences": [],
+      "registry": {
+        "family": "dedup_branch_history",
+        "case": "dedup-history-recurring-500",
+        "kind": "recurring",
+        "tier": "500",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "dedup-history-metadata-1",
+      "v016_case": "dedup-history-metadata-1",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/dedup_branch_history/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "dedup-history-metadata-1",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "184"
+      },
+      "differences": [],
+      "registry": {
+        "family": "dedup_branch_history",
+        "case": "dedup-history-metadata-1",
+        "kind": "metadata",
+        "tier": "1",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "dedup-history-metadata-10",
+      "v016_case": "dedup-history-metadata-10",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/dedup_branch_history/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "dedup-history-metadata-10",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "185"
+      },
+      "differences": [],
+      "registry": {
+        "family": "dedup_branch_history",
+        "case": "dedup-history-metadata-10",
+        "kind": "metadata",
+        "tier": "10",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "dedup-history-metadata-100",
+      "v016_case": "dedup-history-metadata-100",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/dedup_branch_history/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "dedup-history-metadata-100",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "186"
+      },
+      "differences": [],
+      "registry": {
+        "family": "dedup_branch_history",
+        "case": "dedup-history-metadata-100",
+        "kind": "metadata",
+        "tier": "100",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "dedup-history-metadata-500",
+      "v016_case": "dedup-history-metadata-500",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/dedup_branch_history/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "dedup-history-metadata-500",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "187"
+      },
+      "differences": [],
+      "registry": {
+        "family": "dedup_branch_history",
+        "case": "dedup-history-metadata-500",
+        "kind": "metadata",
+        "tier": "500",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "dedup-history-unrelated-1",
+      "v016_case": "dedup-history-unrelated-1",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/dedup_branch_history/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "dedup-history-unrelated-1",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "188"
+      },
+      "differences": [],
+      "registry": {
+        "family": "dedup_branch_history",
+        "case": "dedup-history-unrelated-1",
+        "kind": "unrelated",
+        "tier": "1",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "dedup-history-unrelated-10",
+      "v016_case": "dedup-history-unrelated-10",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/dedup_branch_history/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "dedup-history-unrelated-10",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "189"
+      },
+      "differences": [],
+      "registry": {
+        "family": "dedup_branch_history",
+        "case": "dedup-history-unrelated-10",
+        "kind": "unrelated",
+        "tier": "10",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "dedup-history-unrelated-100-mixed-v2",
+      "v016_case": "dedup-history-unrelated-100-mixed-v2",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/dedup_branch_history/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "dedup-history-unrelated-100-mixed-v2",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "190"
+      },
+      "differences": [],
+      "registry": {
+        "family": "dedup_branch_history",
+        "case": "dedup-history-unrelated-100-mixed-v2",
+        "kind": "unrelated",
+        "tier": "100",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "dedup-history-unrelated-500-mixed-v2",
+      "v016_case": "dedup-history-unrelated-500-mixed-v2",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/dedup_branch_history/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "dedup-history-unrelated-500-mixed-v2",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "191"
+      },
+      "differences": [],
+      "registry": {
+        "family": "dedup_branch_history",
+        "case": "dedup-history-unrelated-500-mixed-v2",
+        "kind": "unrelated",
+        "tier": "500",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "v016-history-large-hotset-k10-v1",
+      "v016_case": "v016-history-large-hotset-k10-v1",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/dedup_branch_history/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.6",
+        "row": "v016-history-large-hotset-k10-v1",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.6/benchmark-performance.csv",
+        "source_row": "23"
+      },
+      "differences": [],
+      "registry": {
+        "family": "dedup_branch_history",
+        "case": "v016-history-large-hotset-k10-v1",
+        "kind": "large-hotset",
+        "tier": "10",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "v016-history-large-hotset-k100-v1",
+      "v016_case": "v016-history-large-hotset-k100-v1",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/dedup_branch_history/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.6",
+        "row": "v016-history-large-hotset-k100-v1",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.6/benchmark-performance.csv",
+        "source_row": "24"
+      },
+      "differences": [],
+      "registry": {
+        "family": "dedup_branch_history",
+        "case": "v016-history-large-hotset-k100-v1",
+        "kind": "large-hotset",
+        "tier": "100",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "v016-history-namespace-inode-k10-v1",
+      "v016_case": "v016-history-namespace-inode-k10-v1",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/dedup_branch_history/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.6",
+        "row": "v016-history-namespace-inode-k10-v1",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.6/benchmark-performance.csv",
+        "source_row": "25"
+      },
+      "differences": [],
+      "registry": {
+        "family": "dedup_branch_history",
+        "case": "v016-history-namespace-inode-k10-v1",
+        "kind": "namespace-inode",
+        "tier": "10",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "v016-history-namespace-inode-k100-v1",
+      "v016_case": "v016-history-namespace-inode-k100-v1",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/dedup_branch_history/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.6",
+        "row": "v016-history-namespace-inode-k100-v1",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.6/benchmark-performance.csv",
+        "source_row": "26"
+      },
+      "differences": [],
+      "registry": {
+        "family": "dedup_branch_history",
+        "case": "v016-history-namespace-inode-k100-v1",
+        "kind": "namespace-inode",
+        "tier": "100",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "v016-history-boundary-cycle-k10-v1",
+      "v016_case": "v016-history-boundary-cycle-k10-v1",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/dedup_branch_history/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.6",
+        "row": "v016-history-boundary-cycle-k10-v1",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.6/benchmark-performance.csv",
+        "source_row": "21"
+      },
+      "differences": [],
+      "registry": {
+        "family": "dedup_branch_history",
+        "case": "v016-history-boundary-cycle-k10-v1",
+        "kind": "boundary-cycle",
+        "tier": "10",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "v016-history-boundary-cycle-k100-v1",
+      "v016_case": "v016-history-boundary-cycle-k100-v1",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/dedup_branch_history/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.6",
+        "row": "v016-history-boundary-cycle-k100-v1",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.6/benchmark-performance.csv",
+        "source_row": "22"
+      },
+      "differences": [],
+      "registry": {
+        "family": "dedup_branch_history",
+        "case": "v016-history-boundary-cycle-k100-v1",
+        "kind": "boundary-cycle",
+        "tier": "100",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    }
+  ]
+}

@@ -1,0 +1,474 @@
+{
+  "family": "directory_construction_traversal",
+  "engine": "workspace",
+  "cases": [
+    {
+      "id": "directory-construct-1-compact-v2",
+      "v016_case": "directory-construct-1-compact-v2",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/directory_construction_traversal/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "directory-construct-1-compact-v2",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "144"
+      },
+      "differences": [],
+      "registry": {
+        "family": "directory_construction_traversal",
+        "case": "directory-construct-1-compact-v2",
+        "kind": "directory-construct",
+        "tier": "1",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "directory-construct-10-compact-v2",
+      "v016_case": "directory-construct-10-compact-v2",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/directory_construction_traversal/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "directory-construct-10-compact-v2",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "145"
+      },
+      "differences": [],
+      "registry": {
+        "family": "directory_construction_traversal",
+        "case": "directory-construct-10-compact-v2",
+        "kind": "directory-construct",
+        "tier": "10",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "directory-construct-100-mixed-v4",
+      "v016_case": "directory-construct-100-mixed-v4",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/directory_construction_traversal/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "directory-construct-100-mixed-v4",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "146"
+      },
+      "differences": [],
+      "registry": {
+        "family": "directory_construction_traversal",
+        "case": "directory-construct-100-mixed-v4",
+        "kind": "directory-construct",
+        "tier": "100",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "directory-construct-500-mixed-v4",
+      "v016_case": "directory-construct-500-mixed-v4",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/directory_construction_traversal/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "directory-construct-500-mixed-v4",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "147"
+      },
+      "differences": [],
+      "registry": {
+        "family": "directory_construction_traversal",
+        "case": "directory-construct-500-mixed-v4",
+        "kind": "directory-construct",
+        "tier": "500",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "directory-metadata-scan-1-compact-v2",
+      "v016_case": "directory-metadata-scan-1-compact-v2",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/directory_construction_traversal/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "directory-metadata-scan-1-compact-v2",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "148"
+      },
+      "differences": [],
+      "registry": {
+        "family": "directory_construction_traversal",
+        "case": "directory-metadata-scan-1-compact-v2",
+        "kind": "directory-metadata-scan",
+        "tier": "1",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "directory-metadata-scan-10-compact-v2",
+      "v016_case": "directory-metadata-scan-10-compact-v2",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/directory_construction_traversal/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "directory-metadata-scan-10-compact-v2",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "149"
+      },
+      "differences": [],
+      "registry": {
+        "family": "directory_construction_traversal",
+        "case": "directory-metadata-scan-10-compact-v2",
+        "kind": "directory-metadata-scan",
+        "tier": "10",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "directory-metadata-scan-100-mixed-v4",
+      "v016_case": "directory-metadata-scan-100-mixed-v4",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/directory_construction_traversal/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "directory-metadata-scan-100-mixed-v4",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "150"
+      },
+      "differences": [],
+      "registry": {
+        "family": "directory_construction_traversal",
+        "case": "directory-metadata-scan-100-mixed-v4",
+        "kind": "directory-metadata-scan",
+        "tier": "100",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "directory-metadata-scan-500-mixed-v4",
+      "v016_case": "directory-metadata-scan-500-mixed-v4",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/directory_construction_traversal/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "directory-metadata-scan-500-mixed-v4",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "151"
+      },
+      "differences": [],
+      "registry": {
+        "family": "directory_construction_traversal",
+        "case": "directory-metadata-scan-500-mixed-v4",
+        "kind": "directory-metadata-scan",
+        "tier": "500",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "directory-content-scan-1-compact-v2",
+      "v016_case": "directory-content-scan-1-compact-v2",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/directory_construction_traversal/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "directory-content-scan-1-compact-v2",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "152"
+      },
+      "differences": [],
+      "registry": {
+        "family": "directory_construction_traversal",
+        "case": "directory-content-scan-1-compact-v2",
+        "kind": "directory-content-scan",
+        "tier": "1",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "directory-content-scan-10-compact-v2",
+      "v016_case": "directory-content-scan-10-compact-v2",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/directory_construction_traversal/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "directory-content-scan-10-compact-v2",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "153"
+      },
+      "differences": [],
+      "registry": {
+        "family": "directory_construction_traversal",
+        "case": "directory-content-scan-10-compact-v2",
+        "kind": "directory-content-scan",
+        "tier": "10",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "directory-content-scan-100-mixed-v4",
+      "v016_case": "directory-content-scan-100-mixed-v4",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/directory_construction_traversal/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "directory-content-scan-100-mixed-v4",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "154"
+      },
+      "differences": [],
+      "registry": {
+        "family": "directory_construction_traversal",
+        "case": "directory-content-scan-100-mixed-v4",
+        "kind": "directory-content-scan",
+        "tier": "100",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "directory-content-scan-500-mixed-v4",
+      "v016_case": "directory-content-scan-500-mixed-v4",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/directory_construction_traversal/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "directory-content-scan-500-mixed-v4",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "155"
+      },
+      "differences": [],
+      "registry": {
+        "family": "directory_construction_traversal",
+        "case": "directory-content-scan-500-mixed-v4",
+        "kind": "directory-content-scan",
+        "tier": "500",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    }
+  ]
+}

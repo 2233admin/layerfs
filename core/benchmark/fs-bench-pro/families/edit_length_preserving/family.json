@@ -1,0 +1,474 @@
+{
+  "family": "edit_length_preserving",
+  "engine": "workspace",
+  "cases": [
+    {
+      "id": "overwrite-head-4k-on-1mib-ops-1",
+      "v016_case": "overwrite-head-4k-on-1mib-ops-1",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/edit_length_preserving/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "overwrite-head-4k-on-1mib-ops-1",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "54"
+      },
+      "differences": [],
+      "registry": {
+        "family": "edit_length_preserving",
+        "case": "overwrite-head-4k-on-1mib-ops-1",
+        "kind": "sdk-edit",
+        "tier": "1",
+        "fixture_bytes": "1048576",
+        "fixture_files": "1",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "overwrite-head-4k-on-10mib-ops-1",
+      "v016_case": "overwrite-head-4k-on-10mib-ops-1",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/edit_length_preserving/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "overwrite-head-4k-on-10mib-ops-1",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "55"
+      },
+      "differences": [],
+      "registry": {
+        "family": "edit_length_preserving",
+        "case": "overwrite-head-4k-on-10mib-ops-1",
+        "kind": "sdk-edit",
+        "tier": "1",
+        "fixture_bytes": "10485760",
+        "fixture_files": "1",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "overwrite-head-4k-on-100mib-ops-1",
+      "v016_case": "overwrite-head-4k-on-100mib-ops-1",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/edit_length_preserving/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "overwrite-head-4k-on-100mib-ops-1",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "56"
+      },
+      "differences": [],
+      "registry": {
+        "family": "edit_length_preserving",
+        "case": "overwrite-head-4k-on-100mib-ops-1",
+        "kind": "sdk-edit",
+        "tier": "1",
+        "fixture_bytes": "104857600",
+        "fixture_files": "1",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "overwrite-head-4k-on-500mib-ops-1",
+      "v016_case": "overwrite-head-4k-on-500mib-ops-1",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/edit_length_preserving/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "overwrite-head-4k-on-500mib-ops-1",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "57"
+      },
+      "differences": [],
+      "registry": {
+        "family": "edit_length_preserving",
+        "case": "overwrite-head-4k-on-500mib-ops-1",
+        "kind": "sdk-edit",
+        "tier": "1",
+        "fixture_bytes": "524288000",
+        "fixture_files": "1",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "overwrite-middle-4k-on-1mib-ops-1",
+      "v016_case": "overwrite-middle-4k-on-1mib-ops-1",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/edit_length_preserving/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "overwrite-middle-4k-on-1mib-ops-1",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "58"
+      },
+      "differences": [],
+      "registry": {
+        "family": "edit_length_preserving",
+        "case": "overwrite-middle-4k-on-1mib-ops-1",
+        "kind": "sdk-edit",
+        "tier": "1",
+        "fixture_bytes": "1048576",
+        "fixture_files": "1",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "overwrite-middle-4k-on-10mib-ops-1",
+      "v016_case": "overwrite-middle-4k-on-10mib-ops-1",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/edit_length_preserving/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "overwrite-middle-4k-on-10mib-ops-1",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "59"
+      },
+      "differences": [],
+      "registry": {
+        "family": "edit_length_preserving",
+        "case": "overwrite-middle-4k-on-10mib-ops-1",
+        "kind": "sdk-edit",
+        "tier": "1",
+        "fixture_bytes": "10485760",
+        "fixture_files": "1",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "overwrite-middle-4k-on-100mib-ops-1",
+      "v016_case": "overwrite-middle-4k-on-100mib-ops-1",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/edit_length_preserving/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "overwrite-middle-4k-on-100mib-ops-1",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "60"
+      },
+      "differences": [],
+      "registry": {
+        "family": "edit_length_preserving",
+        "case": "overwrite-middle-4k-on-100mib-ops-1",
+        "kind": "sdk-edit",
+        "tier": "1",
+        "fixture_bytes": "104857600",
+        "fixture_files": "1",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "overwrite-middle-4k-on-500mib-ops-1",
+      "v016_case": "overwrite-middle-4k-on-500mib-ops-1",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/edit_length_preserving/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "overwrite-middle-4k-on-500mib-ops-1",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "61"
+      },
+      "differences": [],
+      "registry": {
+        "family": "edit_length_preserving",
+        "case": "overwrite-middle-4k-on-500mib-ops-1",
+        "kind": "sdk-edit",
+        "tier": "1",
+        "fixture_bytes": "524288000",
+        "fixture_files": "1",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "overwrite-tail-4k-on-1mib-ops-1",
+      "v016_case": "overwrite-tail-4k-on-1mib-ops-1",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/edit_length_preserving/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "overwrite-tail-4k-on-1mib-ops-1",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "62"
+      },
+      "differences": [],
+      "registry": {
+        "family": "edit_length_preserving",
+        "case": "overwrite-tail-4k-on-1mib-ops-1",
+        "kind": "sdk-edit",
+        "tier": "1",
+        "fixture_bytes": "1048576",
+        "fixture_files": "1",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "overwrite-tail-4k-on-10mib-ops-1",
+      "v016_case": "overwrite-tail-4k-on-10mib-ops-1",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/edit_length_preserving/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "overwrite-tail-4k-on-10mib-ops-1",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "63"
+      },
+      "differences": [],
+      "registry": {
+        "family": "edit_length_preserving",
+        "case": "overwrite-tail-4k-on-10mib-ops-1",
+        "kind": "sdk-edit",
+        "tier": "1",
+        "fixture_bytes": "10485760",
+        "fixture_files": "1",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "overwrite-tail-4k-on-100mib-ops-1",
+      "v016_case": "overwrite-tail-4k-on-100mib-ops-1",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/edit_length_preserving/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "overwrite-tail-4k-on-100mib-ops-1",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "64"
+      },
+      "differences": [],
+      "registry": {
+        "family": "edit_length_preserving",
+        "case": "overwrite-tail-4k-on-100mib-ops-1",
+        "kind": "sdk-edit",
+        "tier": "1",
+        "fixture_bytes": "104857600",
+        "fixture_files": "1",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "overwrite-tail-4k-on-500mib-ops-1",
+      "v016_case": "overwrite-tail-4k-on-500mib-ops-1",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/edit_length_preserving/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "overwrite-tail-4k-on-500mib-ops-1",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "65"
+      },
+      "differences": [],
+      "registry": {
+        "family": "edit_length_preserving",
+        "case": "overwrite-tail-4k-on-500mib-ops-1",
+        "kind": "sdk-edit",
+        "tier": "1",
+        "fixture_bytes": "524288000",
+        "fixture_files": "1",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    }
+  ]
+}

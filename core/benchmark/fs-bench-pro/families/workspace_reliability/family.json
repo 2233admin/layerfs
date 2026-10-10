@@ -1,0 +1,1098 @@
+{
+  "family": "workspace_reliability",
+  "engine": "workspace",
+  "cases": [
+    {
+      "id": "workspace-invalid-sdk-edit-compact-v2-proof",
+      "v016_case": "workspace-invalid-sdk-edit-compact-v2-proof",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/workspace_reliability/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "workspace-invalid-sdk-edit-compact-v2-proof",
+        "kind": "verification",
+        "source_file": "release-notes/0.1.5/benchmark-verification.csv",
+        "source_row": "201"
+      },
+      "differences": [],
+      "registry": {
+        "family": "workspace_reliability",
+        "case": "workspace-invalid-sdk-edit-compact-v2-proof",
+        "kind": "invalid-sdk-edit",
+        "tier": "1",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "workspace-invalid-namespace-compact-v2-proof",
+      "v016_case": "workspace-invalid-namespace-compact-v2-proof",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/workspace_reliability/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "workspace-invalid-namespace-compact-v2-proof",
+        "kind": "verification",
+        "source_file": "release-notes/0.1.5/benchmark-verification.csv",
+        "source_row": "202"
+      },
+      "differences": [],
+      "registry": {
+        "family": "workspace_reliability",
+        "case": "workspace-invalid-namespace-compact-v2-proof",
+        "kind": "invalid-namespace",
+        "tier": "1",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "workspace-lease-lifecycle-compact-v2-proof",
+      "v016_case": "workspace-lease-lifecycle-compact-v2-proof",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/workspace_reliability/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "workspace-lease-lifecycle-compact-v2-proof",
+        "kind": "verification",
+        "source_file": "release-notes/0.1.5/benchmark-verification.csv",
+        "source_row": "203"
+      },
+      "differences": [],
+      "registry": {
+        "family": "workspace_reliability",
+        "case": "workspace-lease-lifecycle-compact-v2-proof",
+        "kind": "lease-lifecycle",
+        "tier": "1",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "workspace-open-writer-busy-compact-v2-proof",
+      "v016_case": "workspace-open-writer-busy-compact-v2-proof",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/workspace_reliability/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "workspace-open-writer-busy-compact-v2-proof",
+        "kind": "verification",
+        "source_file": "release-notes/0.1.5/benchmark-verification.csv",
+        "source_row": "204"
+      },
+      "differences": [],
+      "registry": {
+        "family": "workspace_reliability",
+        "case": "workspace-open-writer-busy-compact-v2-proof",
+        "kind": "open-writer-busy",
+        "tier": "1",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "workspace-live-execution-busy-compact-v2-proof",
+      "v016_case": "workspace-live-execution-busy-compact-v2-proof",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/workspace_reliability/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "workspace-live-execution-busy-compact-v2-proof",
+        "kind": "verification",
+        "source_file": "release-notes/0.1.5/benchmark-verification.csv",
+        "source_row": "205"
+      },
+      "differences": [],
+      "registry": {
+        "family": "workspace_reliability",
+        "case": "workspace-live-execution-busy-compact-v2-proof",
+        "kind": "live-execution-busy",
+        "tier": "1",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "workspace-candidate-failure-retry-compact-v2-proof",
+      "v016_case": "workspace-candidate-failure-retry-compact-v2-proof",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/workspace_reliability/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "workspace-candidate-failure-retry-compact-v2-proof",
+        "kind": "verification",
+        "source_file": "release-notes/0.1.5/benchmark-verification.csv",
+        "source_row": "206"
+      },
+      "differences": [],
+      "registry": {
+        "family": "workspace_reliability",
+        "case": "workspace-candidate-failure-retry-compact-v2-proof",
+        "kind": "candidate-failure-retry",
+        "tier": "1",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "workspace-admission-batch-failure-retry-compact-v2-proof",
+      "v016_case": "workspace-admission-batch-failure-retry-compact-v2-proof",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/workspace_reliability/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "workspace-admission-batch-failure-retry-compact-v2-proof",
+        "kind": "verification",
+        "source_file": "release-notes/0.1.5/benchmark-verification.csv",
+        "source_row": "207"
+      },
+      "differences": [],
+      "registry": {
+        "family": "workspace_reliability",
+        "case": "workspace-admission-batch-failure-retry-compact-v2-proof",
+        "kind": "admission-batch-failure-retry",
+        "tier": "1",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "workspace-final-publication-failure-retry-compact-v2-proof",
+      "v016_case": "workspace-final-publication-failure-retry-compact-v2-proof",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/workspace_reliability/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "workspace-final-publication-failure-retry-compact-v2-proof",
+        "kind": "verification",
+        "source_file": "release-notes/0.1.5/benchmark-verification.csv",
+        "source_row": "208"
+      },
+      "differences": [],
+      "registry": {
+        "family": "workspace_reliability",
+        "case": "workspace-final-publication-failure-retry-compact-v2-proof",
+        "kind": "final-publication-failure-retry",
+        "tier": "1",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "workspace-published-presentation-failure-smoke-v3-proof",
+      "v016_case": "workspace-published-presentation-failure-smoke-v3-proof",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/workspace_reliability/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "workspace-published-presentation-failure-smoke-v3-proof",
+        "kind": "verification",
+        "source_file": "release-notes/0.1.5/benchmark-verification.csv",
+        "source_row": "209"
+      },
+      "differences": [],
+      "registry": {
+        "family": "workspace_reliability",
+        "case": "workspace-published-presentation-failure-smoke-v3-proof",
+        "kind": "published-presentation-failure",
+        "tier": "1",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "workspace-dirty-end-discard-compact-v2-proof",
+      "v016_case": "workspace-dirty-end-discard-compact-v2-proof",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/workspace_reliability/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "workspace-dirty-end-discard-compact-v2-proof",
+        "kind": "verification",
+        "source_file": "release-notes/0.1.5/benchmark-verification.csv",
+        "source_row": "210"
+      },
+      "differences": [],
+      "registry": {
+        "family": "workspace_reliability",
+        "case": "workspace-dirty-end-discard-compact-v2-proof",
+        "kind": "dirty-end-discard",
+        "tier": "1",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "workspace-dirty-net-zero-compact-v2-proof",
+      "v016_case": "workspace-dirty-net-zero-compact-v2-proof",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/workspace_reliability/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "workspace-dirty-net-zero-compact-v2-proof",
+        "kind": "verification",
+        "source_file": "release-notes/0.1.5/benchmark-verification.csv",
+        "source_row": "211"
+      },
+      "differences": [],
+      "registry": {
+        "family": "workspace_reliability",
+        "case": "workspace-dirty-net-zero-compact-v2-proof",
+        "kind": "dirty-net-zero",
+        "tier": "1",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "workspace-short-spool-write-compact-v2-proof",
+      "v016_case": "workspace-short-spool-write-compact-v2-proof",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/workspace_reliability/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "workspace-short-spool-write-compact-v2-proof",
+        "kind": "verification",
+        "source_file": "release-notes/0.1.5/benchmark-verification.csv",
+        "source_row": "212"
+      },
+      "differences": [],
+      "registry": {
+        "family": "workspace_reliability",
+        "case": "workspace-short-spool-write-compact-v2-proof",
+        "kind": "short-spool-write",
+        "tier": "1",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "workspace-deferred-nospace-compact-v2-proof",
+      "v016_case": "workspace-deferred-nospace-compact-v2-proof",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/workspace_reliability/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "workspace-deferred-nospace-compact-v2-proof",
+        "kind": "verification",
+        "source_file": "release-notes/0.1.5/benchmark-verification.csv",
+        "source_row": "213"
+      },
+      "differences": [],
+      "registry": {
+        "family": "workspace_reliability",
+        "case": "workspace-deferred-nospace-compact-v2-proof",
+        "kind": "deferred-nospace",
+        "tier": "1",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "workspace-workload-cancel-compact-v2-proof",
+      "v016_case": "workspace-workload-cancel-compact-v2-proof",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/workspace_reliability/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "workspace-workload-cancel-compact-v2-proof",
+        "kind": "verification",
+        "source_file": "release-notes/0.1.5/benchmark-verification.csv",
+        "source_row": "214"
+      },
+      "differences": [],
+      "registry": {
+        "family": "workspace_reliability",
+        "case": "workspace-workload-cancel-compact-v2-proof",
+        "kind": "workload-cancel",
+        "tier": "1",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "workspace-dirty-runtime-disconnect-compact-v2-proof",
+      "v016_case": "workspace-dirty-runtime-disconnect-compact-v2-proof",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/workspace_reliability/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "workspace-dirty-runtime-disconnect-compact-v2-proof",
+        "kind": "verification",
+        "source_file": "release-notes/0.1.5/benchmark-verification.csv",
+        "source_row": "215"
+      },
+      "differences": [],
+      "registry": {
+        "family": "workspace_reliability",
+        "case": "workspace-dirty-runtime-disconnect-compact-v2-proof",
+        "kind": "dirty-runtime-disconnect",
+        "tier": "1",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "workspace-corrupt-descendant-compact-v2-proof",
+      "v016_case": "workspace-corrupt-descendant-compact-v2-proof",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/workspace_reliability/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "workspace-corrupt-descendant-compact-v2-proof",
+        "kind": "verification",
+        "source_file": "release-notes/0.1.5/benchmark-verification.csv",
+        "source_row": "216"
+      },
+      "differences": [],
+      "registry": {
+        "family": "workspace_reliability",
+        "case": "workspace-corrupt-descendant-compact-v2-proof",
+        "kind": "corrupt-descendant",
+        "tier": "1",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "workspace-missing-descendant-compact-v2-proof",
+      "v016_case": "workspace-missing-descendant-compact-v2-proof",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/workspace_reliability/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "workspace-missing-descendant-compact-v2-proof",
+        "kind": "verification",
+        "source_file": "release-notes/0.1.5/benchmark-verification.csv",
+        "source_row": "217"
+      },
+      "differences": [],
+      "registry": {
+        "family": "workspace_reliability",
+        "case": "workspace-missing-descendant-compact-v2-proof",
+        "kind": "missing-descendant",
+        "tier": "1",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "workspace-parallel-read-write-compact-v2-proof",
+      "v016_case": "workspace-parallel-read-write-compact-v2-proof",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/workspace_reliability/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "workspace-parallel-read-write-compact-v2-proof",
+        "kind": "verification",
+        "source_file": "release-notes/0.1.5/benchmark-verification.csv",
+        "source_row": "218"
+      },
+      "differences": [],
+      "registry": {
+        "family": "workspace_reliability",
+        "case": "workspace-parallel-read-write-compact-v2-proof",
+        "kind": "parallel-read-write",
+        "tier": "1",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "workspace-shared-path-contention-compact-v2-proof",
+      "v016_case": "workspace-shared-path-contention-compact-v2-proof",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/workspace_reliability/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "workspace-shared-path-contention-compact-v2-proof",
+        "kind": "verification",
+        "source_file": "release-notes/0.1.5/benchmark-verification.csv",
+        "source_row": "219"
+      },
+      "differences": [],
+      "registry": {
+        "family": "workspace_reliability",
+        "case": "workspace-shared-path-contention-compact-v2-proof",
+        "kind": "shared-path-contention",
+        "tier": "1",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "workspace-hardlink-alias-compact-v2-proof",
+      "v016_case": "workspace-hardlink-alias-compact-v2-proof",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/workspace_reliability/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "workspace-hardlink-alias-compact-v2-proof",
+        "kind": "verification",
+        "source_file": "release-notes/0.1.5/benchmark-verification.csv",
+        "source_row": "220"
+      },
+      "differences": [],
+      "registry": {
+        "family": "workspace_reliability",
+        "case": "workspace-hardlink-alias-compact-v2-proof",
+        "kind": "hardlink-alias",
+        "tier": "1",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "workspace-symlink-semantics-compact-v2-proof",
+      "v016_case": "workspace-symlink-semantics-compact-v2-proof",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/workspace_reliability/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "workspace-symlink-semantics-compact-v2-proof",
+        "kind": "verification",
+        "source_file": "release-notes/0.1.5/benchmark-verification.csv",
+        "source_row": "221"
+      },
+      "differences": [],
+      "registry": {
+        "family": "workspace_reliability",
+        "case": "workspace-symlink-semantics-compact-v2-proof",
+        "kind": "symlink-semantics",
+        "tier": "1",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "workspace-open-rename-unlink-compact-v2-proof",
+      "v016_case": "workspace-open-rename-unlink-compact-v2-proof",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/workspace_reliability/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "workspace-open-rename-unlink-compact-v2-proof",
+        "kind": "verification",
+        "source_file": "release-notes/0.1.5/benchmark-verification.csv",
+        "source_row": "222"
+      },
+      "differences": [],
+      "registry": {
+        "family": "workspace_reliability",
+        "case": "workspace-open-rename-unlink-compact-v2-proof",
+        "kind": "open-rename-unlink",
+        "tier": "1",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "workspace-metadata-chmod-compact-v2-proof",
+      "v016_case": "workspace-metadata-chmod-compact-v2-proof",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/workspace_reliability/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "workspace-metadata-chmod-compact-v2-proof",
+        "kind": "verification",
+        "source_file": "release-notes/0.1.5/benchmark-verification.csv",
+        "source_row": "223"
+      },
+      "differences": [],
+      "registry": {
+        "family": "workspace_reliability",
+        "case": "workspace-metadata-chmod-compact-v2-proof",
+        "kind": "metadata-chmod",
+        "tier": "1",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "workspace-metadata-mtime-compact-v2-proof",
+      "v016_case": "workspace-metadata-mtime-compact-v2-proof",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/workspace_reliability/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "workspace-metadata-mtime-compact-v2-proof",
+        "kind": "verification",
+        "source_file": "release-notes/0.1.5/benchmark-verification.csv",
+        "source_row": "224"
+      },
+      "differences": [],
+      "registry": {
+        "family": "workspace_reliability",
+        "case": "workspace-metadata-mtime-compact-v2-proof",
+        "kind": "metadata-mtime",
+        "tier": "1",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "workspace-metadata-xattr-compact-v2-proof",
+      "v016_case": "workspace-metadata-xattr-compact-v2-proof",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/workspace_reliability/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "workspace-metadata-xattr-compact-v2-proof",
+        "kind": "verification",
+        "source_file": "release-notes/0.1.5/benchmark-verification.csv",
+        "source_row": "225"
+      },
+      "differences": [],
+      "registry": {
+        "family": "workspace_reliability",
+        "case": "workspace-metadata-xattr-compact-v2-proof",
+        "kind": "metadata-xattr",
+        "tier": "1",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "workspace-exec-500-compact-v2-proof",
+      "v016_case": "workspace-exec-500-compact-v2-proof",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/workspace_reliability/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "workspace-exec-500-compact-v2-proof",
+        "kind": "verification",
+        "source_file": "release-notes/0.1.5/benchmark-verification.csv",
+        "source_row": "226"
+      },
+      "differences": [],
+      "registry": {
+        "family": "workspace_reliability",
+        "case": "workspace-exec-500-compact-v2-proof",
+        "kind": "exec-500",
+        "tier": "1",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "workspace-repeat-publication-compact-v2-proof",
+      "v016_case": "workspace-repeat-publication-compact-v2-proof",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/workspace_reliability/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "workspace-repeat-publication-compact-v2-proof",
+        "kind": "verification",
+        "source_file": "release-notes/0.1.5/benchmark-verification.csv",
+        "source_row": "227"
+      },
+      "differences": [],
+      "registry": {
+        "family": "workspace_reliability",
+        "case": "workspace-repeat-publication-compact-v2-proof",
+        "kind": "repeat-publication",
+        "tier": "1",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "workspace-sustained-600s-compact-v2-proof",
+      "v016_case": "workspace-sustained-600s-compact-v2-proof",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/workspace_reliability/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "workspace-sustained-600s-compact-v2-proof",
+        "kind": "verification",
+        "source_file": "release-notes/0.1.5/benchmark-verification.csv",
+        "source_row": "228"
+      },
+      "differences": [],
+      "registry": {
+        "family": "workspace_reliability",
+        "case": "workspace-sustained-600s-compact-v2-proof",
+        "kind": "sustained-600s",
+        "tier": "1",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    }
+  ]
+}

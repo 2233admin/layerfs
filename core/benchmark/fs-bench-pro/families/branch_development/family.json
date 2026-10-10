@@ -1,0 +1,240 @@
+{
+  "family": "branch_development",
+  "engine": "workspace",
+  "cases": [
+    {
+      "id": "v016-branch-mixed-100mb-5000-k10-v1",
+      "v016_case": "v016-branch-mixed-100mb-5000-k10-v1",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/branch_development/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.6",
+        "row": "v016-branch-mixed-100mb-5000-k10-v1",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.6/benchmark-performance.csv",
+        "source_row": "17"
+      },
+      "differences": [],
+      "registry": {
+        "family": "branch_development",
+        "case": "v016-branch-mixed-100mb-5000-k10-v1",
+        "kind": "v016-m1-branch",
+        "tier": "10",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "v016-branch-mixed-100mb-5000-k100-v1",
+      "v016_case": "v016-branch-mixed-100mb-5000-k100-v1",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/branch_development/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.6",
+        "row": "v016-branch-mixed-100mb-5000-k100-v1",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.6/benchmark-performance.csv",
+        "source_row": "18"
+      },
+      "differences": [],
+      "registry": {
+        "family": "branch_development",
+        "case": "v016-branch-mixed-100mb-5000-k100-v1",
+        "kind": "v016-m1-branch",
+        "tier": "100",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "v016-branch-mixed-500mb-30000-k10-v1",
+      "v016_case": "v016-branch-mixed-500mb-30000-k10-v1",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/branch_development/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.6",
+        "row": "v016-branch-mixed-500mb-30000-k10-v1",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.6/benchmark-performance.csv",
+        "source_row": "19"
+      },
+      "differences": [],
+      "registry": {
+        "family": "branch_development",
+        "case": "v016-branch-mixed-500mb-30000-k10-v1",
+        "kind": "v016-m1-branch",
+        "tier": "10",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "v016-branch-mixed-500mb-30000-k100-v1",
+      "v016_case": "v016-branch-mixed-500mb-30000-k100-v1",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/branch_development/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.6",
+        "row": "v016-branch-mixed-500mb-30000-k100-v1",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.6/benchmark-performance.csv",
+        "source_row": "20"
+      },
+      "differences": [],
+      "registry": {
+        "family": "branch_development",
+        "case": "v016-branch-mixed-500mb-30000-k100-v1",
+        "kind": "v016-m1-branch",
+        "tier": "100",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "v016-branch-convergent-content-v1",
+      "v016_case": "v016-branch-convergent-content-v1",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/branch_development/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.6",
+        "row": "v016-branch-convergent-content-v1",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.6/benchmark-performance.csv",
+        "source_row": "15"
+      },
+      "differences": [],
+      "registry": {
+        "family": "branch_development",
+        "case": "v016-branch-convergent-content-v1",
+        "kind": "v016-compact-control",
+        "tier": "10",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "v016-branch-fork-descendant-v1",
+      "v016_case": "v016-branch-fork-descendant-v1",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/branch_development/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.6",
+        "row": "v016-branch-fork-descendant-v1",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.6/benchmark-performance.csv",
+        "source_row": "16"
+      },
+      "differences": [],
+      "registry": {
+        "family": "branch_development",
+        "case": "v016-branch-fork-descendant-v1",
+        "kind": "v016-compact-control",
+        "tier": "10",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    }
+  ]
+}

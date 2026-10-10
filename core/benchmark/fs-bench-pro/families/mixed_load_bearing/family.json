@@ -1,0 +1,396 @@
+{
+  "family": "mixed_load_bearing",
+  "engine": "workspace",
+  "cases": [
+    {
+      "id": "agent-episodes-1-compact-v2",
+      "v016_case": "agent-episodes-1-compact-v2",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/mixed_load_bearing/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "agent-episodes-1-compact-v2",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "196"
+      },
+      "differences": [],
+      "registry": {
+        "family": "mixed_load_bearing",
+        "case": "agent-episodes-1-compact-v2",
+        "kind": "agent-episodes",
+        "tier": "1",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "agent-episodes-10-compact-v2",
+      "v016_case": "agent-episodes-10-compact-v2",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/mixed_load_bearing/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "agent-episodes-10-compact-v2",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "197"
+      },
+      "differences": [],
+      "registry": {
+        "family": "mixed_load_bearing",
+        "case": "agent-episodes-10-compact-v2",
+        "kind": "agent-episodes",
+        "tier": "10",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "agent-episodes-100",
+      "v016_case": "agent-episodes-100",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/mixed_load_bearing/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "agent-episodes-100",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "198"
+      },
+      "differences": [],
+      "registry": {
+        "family": "mixed_load_bearing",
+        "case": "agent-episodes-100",
+        "kind": "agent-episodes",
+        "tier": "100",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "agent-episodes-500",
+      "v016_case": "agent-episodes-500",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/mixed_load_bearing/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "agent-episodes-500",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "199"
+      },
+      "differences": [],
+      "registry": {
+        "family": "mixed_load_bearing",
+        "case": "agent-episodes-500",
+        "kind": "agent-episodes",
+        "tier": "500",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "v016-mixed-development-100mb-5000-k10-v1",
+      "v016_case": "v016-mixed-development-100mb-5000-k10-v1",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/mixed_load_bearing/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.6",
+        "row": "v016-mixed-development-100mb-5000-k10-v1",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.6/benchmark-performance.csv",
+        "source_row": "27"
+      },
+      "differences": [],
+      "registry": {
+        "family": "mixed_load_bearing",
+        "case": "v016-mixed-development-100mb-5000-k10-v1",
+        "kind": "v016-m1-sequential",
+        "tier": "10",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "v016-mixed-development-100mb-5000-k100-v1",
+      "v016_case": "v016-mixed-development-100mb-5000-k100-v1",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/mixed_load_bearing/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.6",
+        "row": "v016-mixed-development-100mb-5000-k100-v1",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.6/benchmark-performance.csv",
+        "source_row": "28"
+      },
+      "differences": [],
+      "registry": {
+        "family": "mixed_load_bearing",
+        "case": "v016-mixed-development-100mb-5000-k100-v1",
+        "kind": "v016-m1-sequential",
+        "tier": "100",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "v016-mixed-development-500mb-30000-k10-v1",
+      "v016_case": "v016-mixed-development-500mb-30000-k10-v1",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/mixed_load_bearing/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.6",
+        "row": "v016-mixed-development-500mb-30000-k10-v1",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.6/benchmark-performance.csv",
+        "source_row": "29"
+      },
+      "differences": [],
+      "registry": {
+        "family": "mixed_load_bearing",
+        "case": "v016-mixed-development-500mb-30000-k10-v1",
+        "kind": "v016-m1-sequential",
+        "tier": "10",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "v016-mixed-development-500mb-30000-k100-v1",
+      "v016_case": "v016-mixed-development-500mb-30000-k100-v1",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/mixed_load_bearing/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.6",
+        "row": "v016-mixed-development-500mb-30000-k100-v1",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.6/benchmark-performance.csv",
+        "source_row": "30"
+      },
+      "differences": [],
+      "registry": {
+        "family": "mixed_load_bearing",
+        "case": "v016-mixed-development-500mb-30000-k100-v1",
+        "kind": "v016-m1-sequential",
+        "tier": "100",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "v016-mixed-exhaustive-100mb-5000-k100-v1",
+      "v016_case": "v016-mixed-exhaustive-100mb-5000-k100-v1",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/mixed_load_bearing/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.6",
+        "row": "v016-mixed-exhaustive-100mb-5000-k100-v1",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.6/benchmark-performance.csv",
+        "source_row": "35"
+      },
+      "differences": [],
+      "registry": {
+        "family": "mixed_load_bearing",
+        "case": "v016-mixed-exhaustive-100mb-5000-k100-v1",
+        "kind": "v016-m1-exhaustive",
+        "tier": "100",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "v016-mixed-exhaustive-500mb-30000-k100-v1",
+      "v016_case": "v016-mixed-exhaustive-500mb-30000-k100-v1",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/mixed_load_bearing/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.6",
+        "row": "v016-mixed-exhaustive-500mb-30000-k100-v1",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.6/benchmark-performance.csv",
+        "source_row": "36"
+      },
+      "differences": [],
+      "registry": {
+        "family": "mixed_load_bearing",
+        "case": "v016-mixed-exhaustive-500mb-30000-k100-v1",
+        "kind": "v016-m1-exhaustive",
+        "tier": "100",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    }
+  ]
+}

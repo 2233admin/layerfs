@@ -1,0 +1,162 @@
+{
+  "family": "init_namespace",
+  "engine": "project",
+  "cases": [
+    {
+      "id": "namespace-100-compact-v3",
+      "v016_case": "namespace-100-compact-v3",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/init_namespace/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "namespace-100-compact-v3",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "110"
+      },
+      "differences": [],
+      "registry": {
+        "family": "init_namespace",
+        "case": "namespace-100-compact-v3",
+        "kind": "init",
+        "tier": "100",
+        "fixture_bytes": "5000000",
+        "fixture_files": "100",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "namespace-1000-compact-v3",
+      "v016_case": "namespace-1000-compact-v3",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/init_namespace/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "namespace-1000-compact-v3",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "111"
+      },
+      "differences": [],
+      "registry": {
+        "family": "init_namespace",
+        "case": "namespace-1000-compact-v3",
+        "kind": "init",
+        "tier": "1000",
+        "fixture_bytes": "20000000",
+        "fixture_files": "1000",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "namespace-10000",
+      "v016_case": "namespace-10000",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/init_namespace/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "namespace-10000",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "112"
+      },
+      "differences": [],
+      "registry": {
+        "family": "init_namespace",
+        "case": "namespace-10000",
+        "kind": "init",
+        "tier": "10000",
+        "fixture_bytes": "300000000",
+        "fixture_files": "10000",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "namespace-100000",
+      "v016_case": "namespace-100000",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/init_namespace/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "namespace-100000",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "113"
+      },
+      "differences": [],
+      "registry": {
+        "family": "init_namespace",
+        "case": "namespace-100000",
+        "kind": "init",
+        "tier": "100000",
+        "fixture_bytes": "500000000",
+        "fixture_files": "100000",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    }
+  ]
+}

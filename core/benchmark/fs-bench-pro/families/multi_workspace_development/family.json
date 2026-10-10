@@ -1,0 +1,201 @@
+{
+  "family": "multi_workspace_development",
+  "engine": "workspace",
+  "cases": [
+    {
+      "id": "v016-workspace-mixed-100mb-5000-k10-v1",
+      "v016_case": "v016-workspace-mixed-100mb-5000-k10-v1",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/multi_workspace_development/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.6",
+        "row": "v016-workspace-mixed-100mb-5000-k10-v1",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.6/benchmark-performance.csv",
+        "source_row": "31"
+      },
+      "differences": [],
+      "registry": {
+        "family": "multi_workspace_development",
+        "case": "v016-workspace-mixed-100mb-5000-k10-v1",
+        "kind": "v016-m1-concurrent",
+        "tier": "10",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "v016-workspace-mixed-100mb-5000-k100-v1",
+      "v016_case": "v016-workspace-mixed-100mb-5000-k100-v1",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/multi_workspace_development/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.6",
+        "row": "v016-workspace-mixed-100mb-5000-k100-v1",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.6/benchmark-performance.csv",
+        "source_row": "32"
+      },
+      "differences": [],
+      "registry": {
+        "family": "multi_workspace_development",
+        "case": "v016-workspace-mixed-100mb-5000-k100-v1",
+        "kind": "v016-m1-concurrent",
+        "tier": "100",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "v016-workspace-mixed-500mb-30000-k10-v1",
+      "v016_case": "v016-workspace-mixed-500mb-30000-k10-v1",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/multi_workspace_development/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.6",
+        "row": "v016-workspace-mixed-500mb-30000-k10-v1",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.6/benchmark-performance.csv",
+        "source_row": "33"
+      },
+      "differences": [],
+      "registry": {
+        "family": "multi_workspace_development",
+        "case": "v016-workspace-mixed-500mb-30000-k10-v1",
+        "kind": "v016-m1-concurrent",
+        "tier": "10",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "v016-workspace-mixed-500mb-30000-k100-v1",
+      "v016_case": "v016-workspace-mixed-500mb-30000-k100-v1",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/multi_workspace_development/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.6",
+        "row": "v016-workspace-mixed-500mb-30000-k100-v1",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.6/benchmark-performance.csv",
+        "source_row": "34"
+      },
+      "differences": [],
+      "registry": {
+        "family": "multi_workspace_development",
+        "case": "v016-workspace-mixed-500mb-30000-k100-v1",
+        "kind": "v016-m1-concurrent",
+        "tier": "100",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "v016-workspace-four-100mb-5000-k100-v1",
+      "v016_case": "v016-workspace-four-100mb-5000-k100-v1",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/multi_workspace_development/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.6",
+        "row": "v016-workspace-four-100mb-5000-k100-v1",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.6/benchmark-performance.csv",
+        "source_row": "37"
+      },
+      "differences": [],
+      "registry": {
+        "family": "multi_workspace_development",
+        "case": "v016-workspace-four-100mb-5000-k100-v1",
+        "kind": "v016-m1-four",
+        "tier": "100",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    }
+  ]
+}

@@ -1,0 +1,162 @@
+{
+  "family": "namespace_mutation",
+  "engine": "workspace",
+  "cases": [
+    {
+      "id": "namespace-subtree-relocate-delete-1-compact-v2",
+      "v016_case": "namespace-subtree-relocate-delete-1-compact-v2",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/namespace_mutation/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "namespace-subtree-relocate-delete-1-compact-v2",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "140"
+      },
+      "differences": [],
+      "registry": {
+        "family": "namespace_mutation",
+        "case": "namespace-subtree-relocate-delete-1-compact-v2",
+        "kind": "namespace-subtree-relocate-delete",
+        "tier": "1",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "namespace-subtree-relocate-delete-10-compact-v2",
+      "v016_case": "namespace-subtree-relocate-delete-10-compact-v2",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/namespace_mutation/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "namespace-subtree-relocate-delete-10-compact-v2",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "141"
+      },
+      "differences": [],
+      "registry": {
+        "family": "namespace_mutation",
+        "case": "namespace-subtree-relocate-delete-10-compact-v2",
+        "kind": "namespace-subtree-relocate-delete",
+        "tier": "10",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "namespace-subtree-relocate-delete-100-mixed-v4",
+      "v016_case": "namespace-subtree-relocate-delete-100-mixed-v4",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/namespace_mutation/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "namespace-subtree-relocate-delete-100-mixed-v4",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "142"
+      },
+      "differences": [],
+      "registry": {
+        "family": "namespace_mutation",
+        "case": "namespace-subtree-relocate-delete-100-mixed-v4",
+        "kind": "namespace-subtree-relocate-delete",
+        "tier": "100",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "namespace-subtree-relocate-delete-500-mixed-v4",
+      "v016_case": "namespace-subtree-relocate-delete-500-mixed-v4",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/namespace_mutation/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {
+        "release": "0.1.5",
+        "row": "namespace-subtree-relocate-delete-500-mixed-v4",
+        "kind": "performance",
+        "source_file": "release-notes/0.1.5/benchmark-performance.csv",
+        "source_row": "143"
+      },
+      "differences": [],
+      "registry": {
+        "family": "namespace_mutation",
+        "case": "namespace-subtree-relocate-delete-500-mixed-v4",
+        "kind": "namespace-subtree-relocate-delete",
+        "tier": "500",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    }
+  ]
+}

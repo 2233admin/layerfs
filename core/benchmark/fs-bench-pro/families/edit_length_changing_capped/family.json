@@ -1,0 +1,171 @@
+{
+  "family": "edit_length_changing_capped",
+  "engine": "workspace",
+  "cases": [
+    {
+      "id": "insert-middle-4k-input-524283904b-result-500mib-ops-1-capped-v1",
+      "v016_case": "insert-middle-4k-input-524283904b-result-500mib-ops-1-capped-v1",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/edit_length_changing_capped/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {},
+      "differences": [],
+      "registry": {
+        "family": "edit_length_changing_capped",
+        "case": "insert-middle-4k-input-524283904b-result-500mib-ops-1-capped-v1",
+        "kind": "insert-middle-4k",
+        "tier": "500",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "append-tail-4k-input-524283904b-result-500mib-ops-1-capped-v1",
+      "v016_case": "append-tail-4k-input-524283904b-result-500mib-ops-1-capped-v1",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/edit_length_changing_capped/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {},
+      "differences": [],
+      "registry": {
+        "family": "edit_length_changing_capped",
+        "case": "append-tail-4k-input-524283904b-result-500mib-ops-1-capped-v1",
+        "kind": "append-tail-4k",
+        "tier": "500",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "prepend-head-4k-input-524283904b-result-500mib-ops-1-capped-v1",
+      "v016_case": "prepend-head-4k-input-524283904b-result-500mib-ops-1-capped-v1",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/edit_length_changing_capped/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {},
+      "differences": [],
+      "registry": {
+        "family": "edit_length_changing_capped",
+        "case": "prepend-head-4k-input-524283904b-result-500mib-ops-1-capped-v1",
+        "kind": "prepend-head-4k",
+        "tier": "500",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "replace-grow-middle-2k-to-4k-input-524285952b-result-500mib-ops-1-capped-v1",
+      "v016_case": "replace-grow-middle-2k-to-4k-input-524285952b-result-500mib-ops-1-capped-v1",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/edit_length_changing_capped/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {},
+      "differences": [],
+      "registry": {
+        "family": "edit_length_changing_capped",
+        "case": "replace-grow-middle-2k-to-4k-input-524285952b-result-500mib-ops-1-capped-v1",
+        "kind": "replace-grow-middle-2k-to-4k",
+        "tier": "500",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    },
+    {
+      "id": "zero-extend-tail-4k-input-524283904b-result-500mib-ops-1-capped-v1",
+      "v016_case": "zero-extend-tail-4k-input-524283904b-result-500mib-ops-1-capped-v1",
+      "status": "pending",
+      "fixture": {
+        "recipe": null,
+        "seed": 1,
+        "definition_source": "benchmark/fs-bench-pro/families/edit_length_changing_capped/mod.rs"
+      },
+      "steps": [],
+      "cache_class": null,
+      "oracle": {
+        "scope": null,
+        "roots": null
+      },
+      "budget": {
+        "command_ms": null,
+        "verifier_ms": null
+      },
+      "reference": {},
+      "differences": [],
+      "registry": {
+        "family": "edit_length_changing_capped",
+        "case": "zero-extend-tail-4k-input-524283904b-result-500mib-ops-1-capped-v1",
+        "kind": "zero-extend-tail-4k",
+        "tier": "500",
+        "fixture_bytes": "UNAVAILABLE",
+        "fixture_files": "UNAVAILABLE",
+        "source_commit": "9af29e01efb83785d0e992d257d36b29d5c2b737",
+        "definition_sha256": "a56eafc07fa39e8ea243929d9dbf0f64cd936426a692d3c82d0bdc06773f1802"
+      },
+      "port_review": null
+    }
+  ]
+}
