@@ -112,8 +112,8 @@ comparison or release-admission claim. Durable is
 | H-19 (harness) | Batch5 explicit parity-build CLI authoring | Branch/multi CLI rejected before parity despite implemented context setup/controller | Their two original family names were omitted from the CLI workspace allowlist | `821624cb3` | External CLI wiring red retained; final legacy/no-build and branch/explicit-build check PASS; no actual case |
 | H-20 (harness) | Fresh empty preparation for P1 at9da25b495 | Copied native oracle crashes importing /code/engine/oracle.py, before Store Init or SDK test | Module-level repository-root parents4 resolution assumes deep host checkout | `e60a1aa2c` | External shallow-copy import red; final copied CLI and pinned host census/legacy oracle scope PASS; failed prep/resources retained |
 
-| H-21 (harness) | Historical access result before first actual access invocation | Driver would reject completed access before publication ACK and disposal | Controller used a descriptive N/A performance_mode while bench.py requires canonical verification-only | This commit | Actual controller result through real bench.main fails at parent; final driver publishes before disposal, samples0/attempt1 unchanged |
-| H-22 (harness) | Paired historical input setup authoring | No explicit complete closed-producer reuse path; two paired selections would replay an identical setup producer | CLI and fixture adapter only created a new producer and required source commit equality, despite unchanged setup scope | This commit | Parent reuse regression retained; exact original identity/files/AST/blob seals and full custody/graph/Store checks qualify reuse without a replay |
+| H-21 (harness) | Historical access result before first actual access invocation | Driver would reject completed access before publication ACK and disposal | Controller used a descriptive N/A performance_mode while bench.py requires canonical verification-only | `4a40fb690` | Actual controller result through real bench.main fails at parent; final driver publishes before disposal, samples0/attempt1 unchanged |
+| H-22 (harness) | Paired historical input setup authoring | No explicit complete closed-producer reuse path; two paired selections would replay an identical setup producer | CLI and fixture adapter only created a new producer and required source commit equality, despite unchanged setup scope | `4a40fb690` | Parent reuse regression retained; exact original identity/files/AST/blob seals and full custody/graph/Store checks qualify reuse without a replay |
 
 H-1 and H-2 are harness faults, not product correctness or performance defects.
 The original file-identity checker remains intact; no product source changed.
@@ -4444,4 +4444,47 @@ PASS and proceed once. Full cutoff/custody and source closure will accompany
 the final family results. No limit, checkpoint, cache, workers or product
 speed change is selected. Durable execution remains disabled.
 
-| This commit | Repair historical driver result contract and qualify explicit complete setup-producer reuse | 79370 | 79370 | +0 |
+| `4a40fb690` | Repair historical driver result contract and qualify explicit complete setup-producer reuse | 79370 | 79370 | +0 |
+
+
+### Batch 5 bounded branch preparation closure, 2026-10-11
+
+Section9's existing failed-preparation rule now explicitly also names the
+original branch500/K100 case. At clean private1bc68451d its external120 s
+R4 preparation supervisor exits124, without an outer completion receipt.
+An immediate later read-only inspection sees no remaining original host
+process; inner stdout reports PASS and prepared.json/manifest exist. These
+late artifacts establish no known return inside the original wall stop and
+cannot promote the invocation. Complete preparation wall is UNAVAILABLE;
+actual product/sample attempts0. The reused500MB master
+layerfs-fsb-master-branch-development-35913130b8a24310 came from passingK10
+setup, and this failing preparation created no additional master. All raw
+files, failed supervisor and late artifacts are retained.
+
+Owning raw folder2026-10-11-batch-5-branch-1bc68451d in the edit-capped
+worktree; prepare-500-k100-administrative-failure.json SHA-256
+65f1881dab20b5c7112462aa95b2dd19548df5e1fcc7b5e4afb5a12d7e1b4cb8. Both CSVs will retain actual500/K100 NOT_RUN with explicit
+failed setup reason. The qualified-prepared view contains only the otherfive
+original inputs; aggregate parity has five PASS and one FAIL for absence of
+an admissible500/K100 manifest, SHA-256
+5a48a44b5f18625cc16f991c8101827a75dfb0d102d6b20587e28381ca638f4c,
+complete21,718,825,584 ns/120 s. No source, timer, checkpoint, fixture, cache,
+worker or product speed change is selected. This is a failed batch closure
+exception, never parity PASS or a performance/capability verdict.
+
+The first branch100/K10 and multi100/K10 actual concurrent cases have since
+failed with ordinary Stage1 EAGAIN before proof. Their receipts/resources are
+retained and unattempted contextual cases are held for source-backed diagnosis.
+The current integration contract explicitly permits global writer/serial
+reservation Busy before effect; diagnosis must distinguish that selected
+outcome from a wrong result or a refusal that should succeed. No product fix,
+retry or contention-masking change is selected at this checkpoint.
+
+Read-only main commit-message inventory through4a40fb690 contains111 local
+rollout commits, each with one production LOC line, this session's attribution
+and reference-absent scope declaration. Raw inventory folder
+2026-10-11-rollout-commit-loc-inventory-4a40fb690; SHA-256
+41791f991bf7e11e34989f1429613b6d517c22b31ddfca83384fd6e194cdefae.
+This audits messages only and does not substitute for each staged counter.
+
+| This commit | Explicitly preserve batch5 late-input preparation failure under section9 | 79370 | 79370 | +0 |

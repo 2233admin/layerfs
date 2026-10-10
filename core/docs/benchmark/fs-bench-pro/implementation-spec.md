@@ -419,8 +419,13 @@ remain explicitly failed for the unprepared case, with both CSVs retaining
 every original selection. That truthful failed closure permits the next
 batch; it is not a passing done-when result. This exception applies to the
 retained batch-4 `v016-mixed-exhaustive-500mb-30000-k100-v1` preparation,
-which reached 120 seconds after fifteen of twenty selected native states;
-no individual state error or product correctness bug was identified.
+which reached 120 seconds after fifteen of twenty selected native states,
+and batch-5 `v016-branch-mixed-500mb-30000-k100-v1`, whose external
+120-second preparation supervisor expired before known return. Its inner
+process later reported a complete sealed input, but late output does not
+promote the failed authorized invocation. Both failed preparations and every
+late artifact stay unchanged; no individual native state error or product
+correctness bug was identified, and neither case is sampled from that input.
 
 ## 10. Prerequisites and open decisions
 
