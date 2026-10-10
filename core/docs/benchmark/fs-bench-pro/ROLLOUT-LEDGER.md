@@ -109,6 +109,7 @@ comparison or release-admission claim. Durable is
 | 72 | Classify26 complete reliability cases not-applicable while retaining their original schedules and guards; port only the two original early integrity paths | Originalrun:413/live:175 unconditionally requires current and mutation-event peak physical per-Workspace allocation Some/errors0/both≤2GiB; current shared-overlay public accounting lacks these axes. Integrity paths360–385 bypass that call in the original source | Add observability features, substitute logical/shared/sampled counters, or claim partial primitive proof as full-casePASS |
 | 73 | Reuse no whole reliability-case proof; source-review all28 and independently qualify the two expressible current-format cases | Exact closed receipt review found0 scope-identical whole current-case proofs; earlier150round receipts are not500Exec/600s and do not cover the frozen complete fixture/physical guards | Widen closedR8 receipts or relabel released v0.1.5 proof as current-source evidence |
 | 74 | Preserve actual owned named-file and runtime-file zero guards, exact namespace-row release and≤2GiB backing boundaries separately for the early integrity paths | Current overlay is shared per daemon; shared file persists beyond Workspace release. Source-backed exhaustive named ownership and actual observations are required; missing coverage fails full proof, never guessed zero. Per-Workspace physical peak remainsUNAVAILABLE | Equate Gone or zero SQL rows with zero shared-file size, omit cleanup, or replace canonical corruption with compressed-frame damage |
+| 75 | Remove89 exact owned passing closed setup masters after fresh identity/connection and custody admission; retain19 uncertain/failed/future candidates | Passing setup SDKKnownStop/container removal and source witness hashes establish custody; different frozen reliability fixture prevents reuse. No failed/uncertain sample resource, historical master or owner resource is selected | Keep unnecessary passing volumes or remove candidates by prefix/guess/force |
 
 ## Bugs
 
@@ -6276,5 +6277,57 @@ records/registrations/receipts remain untouched.
 | Commit | Purpose | Production before | after | delta |
 | --- | --- | --- | --- | --- |
 | This commit | Port original reliability schedules and source-backed applicability | 79370 | 79370 | +0 |
+Pinned absent-aware staged counter/exact tree confirmation; reference absent,
+retiredR9c,last65,417/tree498dd1917812.
+
+
+### Passing setup master disposal administration, 2026-10-11
+
+Exactly89 old owned closed passing setup masters were removed, once each,
+with no force/retry. SourceinventorySHA2c2f034b0de13ef51a1c2ebf37bc14ddc2c85c1ed2d4f772023bd8917468b744
+qualified their creation, immutable prepared/provision witnesses, SDKKnownStop,
+stoppedsetupreadback andsetupcontainerremovedACK. Before each action root
+rehashed every cited metadata/evidence file, freshly inspected exact Docker
+Name/Driver/CreatedAt/Scope against original snapshot and freshly required
+zeroallcontainers connected to that specific volume. Each removal returned
+exit0 with exactvolumeACK. All89 qualified, zero uncertain removal results.
+
+Administration underrootR4120s completed≤7s; percommand5swallstop, one
+attempt. These are administrative timings, not benchmark/test measurements.
+No build/test/sample/control/force/signal ran; every failed/uncertain sample
+resource remains. Allrawsetup andcasefiles remain; no mutatedsample reuse.
+Genericempty/big64m andall19uncertain/failed/future masters were excluded.
+Passing setup resources are no longer reusable Docker inputs; their raw
+Store/fixture/receipt evidence remains. Current reliability uses its exact
+originalsentinels/work/alias/symlink fixture, not one of these different trees.
+
+Rawsourceinventory, exact89names and each freshinspection/connection/one
+removal input, stdout/stderr, completion and disposition:
+benchmark-results/fs-bench-pro/2026-10-11-owned-master-disposal/.
+Finaldispositions.jsonSHA1d48715f96d8ed39211327be8e86c465f6412e025dc7e7f8e1b2b428d9302abf.
+Retained candidates (no removal attempted):
+- layerfs-fsb-history-master-055a6f6661654877
+- layerfs-fsb-history-master-0df72c727aad49fb
+- layerfs-fsb-history-master-1111924d4ce54923
+- layerfs-fsb-history-master-155a78f97c524a2f
+- layerfs-fsb-history-master-3eae8ec291cd495a
+- layerfs-fsb-history-master-4b3d7b52eff1427d
+- layerfs-fsb-history-master-5a359f0a232d4304
+- layerfs-fsb-history-master-7a018e5791fe4f74
+- layerfs-fsb-history-master-83b64d7980194c20
+- layerfs-fsb-history-master-bc13a64b0c71471d
+- layerfs-fsb-history-master-c6f37813fff648fd
+- layerfs-fsb-history-master-ee5766588f4a4d83
+- layerfs-fsb-master-big64m-c60eb32e5145496b
+- layerfs-fsb-master-branch-development-35913130b8a24310
+- layerfs-fsb-master-empty-4e709a73985e48b2
+- layerfs-fsb-master-empty-95af702904c04049
+- layerfs-fsb-master-empty-ee794ff64e0a4bcb
+- layerfs-fsb-master-repository-history-710a07b5f29a42a1
+- layerfs-fsb-master-repository-history-ae97db5087604bc7
+
+| Commit | Purpose | Production before | after | delta |
+| --- | --- | --- | --- | --- |
+| This commit | Record exact passing setup disposal and retained custody | 79370 | 79370 | +0 |
 Pinned absent-aware staged counter/exact tree confirmation; reference absent,
 retiredR9c,last65,417/tree498dd1917812.
