@@ -243,23 +243,147 @@ def build(folder, root=ROOT):
     return result
 
 
+def compilation_files(files):
+    return {name: digest for name, digest in files.items() if name.startswith(
+        ("core/crates/", "core/vendor/", "core/benchmark/fs-bench-pro/runtime/", ".cargo/"))
+        or (name.startswith(("core/benchmark/fs-bench-pro/engine/recipes/", "core/benchmark/fs-bench-pro/writers/"))
+            and name.endswith((".rs", ".c")))
+        or name in ("core/benchmark/fs-bench-pro/engine/recipes/namespace.rs", "core/benchmark/fs-bench-pro/engine/recipes/workspace.rs")
+        or (name.startswith(("benchmark/fs-bench-pro/workload/", "benchmark/fs-bench-pro/families/")) and name.endswith(".rs"))
+        or name in ("core/Cargo.toml", "core/Cargo.lock")}
+
 def load_build(folder):
     from . import receipts
     folder = Path(folder)
     receipts.verify_manifest(folder)
     result = json.loads((folder / "build.json").read_text())
     current = source_identity()
-    def compilation(files):
-        return {name: digest for name, digest in files.items() if name.startswith(
-            ("core/crates/", "core/vendor/", "core/benchmark/fs-bench-pro/runtime/", ".cargo/"))
-            or (name.startswith(("core/benchmark/fs-bench-pro/engine/recipes/", "core/benchmark/fs-bench-pro/writers/"))
-                and name.endswith((".rs", ".c")))
-            or name in ("core/benchmark/fs-bench-pro/engine/recipes/namespace.rs", "core/benchmark/fs-bench-pro/engine/recipes/workspace.rs")
-            or (name.startswith(("benchmark/fs-bench-pro/workload/", "benchmark/fs-bench-pro/families/")) and name.endswith(".rs"))
-            or name in ("core/Cargo.toml", "core/Cargo.lock")}
-    if compilation(current["files"]) != compilation(result["identity"]["files"]):
+    if compilation_files(current["files"]) != compilation_files(result["identity"]["files"]):
         raise ValueError("build inputs differ from the sealed release build")
     for binary in result["binaries"].values():
         if sha256(binary["path"]) != binary["sha256"]:
             raise ValueError("sealed executable bytes changed")
+    return result
+
+
+BINARY_KEYS = frozenset(("runtime", "daemon", "namespace-writer", "workspace-writer",
+                         "workload-host", "workload-linux", "edit-host", "edit-linux"))
+RUNTIME_SCOPE = "core/benchmark/fs-bench-pro/runtime/"
+FUSER_REFUSALS = {
+    "core/benchmark/cluster-two/passthrough/Cargo.lock: locked fuser has a local/replacement source",
+    "core/benchmark/cluster-two/passthrough/Cargo.toml: patch override of fuser is not the authorized timestamp patch",
+}
+
+
+def reuse_runtime_inputs(before, previous, flags):
+    """Admit only a host-runtime change; every reused compiled input is exact."""
+    expected = {"schema": "fs-bench-pro-build-v1", "status": "PASS", "image": IMAGE,
+                "global_profile": "Disposable/WAL/OFF", "overlay_profile": "MEMORY/OFF/EXCLUSIVE",
+                "construction_workers": 1,
+                "durable": "NOT_RUN — disabled by owner until explicit reauthorization",
+                "flags": ".cargo/config.toml ARM64 profile; explicit override recorded",
+                "explicit_rustflags": flags,
+                "fuser_disposition": "OWNER-3's two passthrough refusals retained; no checker PASS claimed"}
+    if any(previous.get(key) != value for key, value in expected.items()):
+        raise ValueError("reused build profile, image, flags or disposition differs")
+    if set(previous.get("binaries", {})) != BINARY_KEYS:
+        raise ValueError("reused build must contain exactly the eight sealed binary keys")
+    left, right = compilation_files(previous["identity"]["files"]), compilation_files(before["files"])
+    changed = sorted(name for name in left.keys() | right.keys() if left.get(name) != right.get(name))
+    if any(not name.startswith(RUNTIME_SCOPE) for name in changed):
+        raise ValueError("reused product/recipe/workload/writer compiled inputs differ: " + repr(changed))
+    if before["product_tree"] != previous["identity"]["product_tree"]:
+        raise ValueError("reused product tree differs")
+    return changed
+
+
+def original_build_evidence(folder, previous):
+    """Bind a full build's source checks, flags, image and known refusal to its manifest."""
+    from . import receipts
+    manifest = receipts.verify_manifest(folder)
+    def read(name):
+        if name not in manifest["files"]:
+            raise ValueError("reused original build lacks evidence: " + name)
+        return (folder / name).read_text()
+    if json.loads(read("build.json")) != previous:
+        raise ValueError("reused build metadata is outside its original manifest")
+    if not previous["identity"].get("source_clean") or any(
+            json.loads(read(name)) != previous["identity"]
+            for name in ("source-before.json", "source-after.json")):
+        raise ValueError("reused original source identities differ")
+    source_checks = "".join(digest + "  /work/" + name + "\n"
+                            for name, digest in previous["identity"]["files"].items())
+    # write_new sorts JSON keys, while the original source checksum list used
+    # Git's path ordering. Compare records rather than depending on JSON order.
+    if sorted(read("container-source.sha256").splitlines()) != sorted(source_checks.splitlines()):
+        raise ValueError("reused original container source hashes differ")
+    linux = json.loads(read("linux-release.completion.json"))
+    if linux.get("status") != "PASS" or linux not in previous["builds"]:
+        raise ValueError("reused original Linux build did not pass")
+    output = read("linux-release.stdout").splitlines()
+    if any(output.count("/work/" + name + ": OK") != 2 for name in previous["identity"]["files"]):
+        raise ValueError("reused original Linux source checks were not complete before and after build")
+    create = json.loads(read("linux-create.attempt.json"))
+    if IMAGE not in create["argv"] or shlex.join(ARM64_FLAGS) not in create["argv"][-1]:
+        raise ValueError("reused original Linux image or ARM64 flags differ")
+    if read("image.stdout").strip() != IMAGE:
+        raise ValueError("reused original image readback differs")
+    refusal = json.loads(read("fuser-integrity.completion.json"))
+    if (refusal != previous["fuser_check"] or refusal.get("exit_code") != 1
+            or set(json.loads(read("fuser-integrity.stdout")).get("errors", [])) != FUSER_REFUSALS):
+        raise ValueError("reused original fuser refusal disposition differs")
+    for binary in previous["binaries"].values():
+        if sha256(binary["path"]) != binary["sha256"] or Path(binary["path"]).stat().st_size != binary["bytes"]:
+            raise ValueError("reused sealed executable bytes changed")
+
+
+def build_runtime(folder, original, root=ROOT):
+    """Rebuild only the host runtime, with qualified immutable full-build reuse.
+
+    A failed child retains its attempts and custody. No Docker container is
+    created and no prior build or binary is modified by this narrow route.
+    """
+    from . import receipts
+    import shutil
+    folder, original = Path(folder).resolve(), Path(original).resolve()
+    before = source_identity(root)
+    previous = json.loads((original / "build.json").read_text())
+    changed = reuse_runtime_inputs(before, previous, os.environ.get("RUSTFLAGS"))
+    original_build_evidence(original, previous)
+    socket = docker_socket()
+    if socket != previous["socket"]:
+        raise ValueError("reused build's authentic Docker socket differs")
+    folder.mkdir(parents=True, exist_ok=False)
+    receipts.write_new(folder / "source-before.json", before)
+    receipts.write_new(folder / "reuse-scope.json", {
+        "previous_build": str(original), "previous_manifest_sha256": sha256(original / "manifest.json"),
+        "previous_identity": previous["identity"], "changed_compiled_inputs": changed,
+        "unchanged_nonruntime_compiled_files": {name: digest for name, digest in compilation_files(before["files"]).items()
+                                               if not name.startswith(RUNTIME_SCOPE)},
+        "reused_binaries": {name: value for name, value in previous["binaries"].items() if name != "runtime"},
+        "reuse": "seven exact immutable binaries; original pinned-image before/after source checks and native qualifications retained"})
+    environment = {**os.environ, "CARGO_TARGET_DIR": str(root / "core/target/r7-host-release"),
+                   "LAYERFS_CONSTRUCTION_WORKERS": "1"}
+    host = receipts.command(["cargo", "+1.85.1", "build", "--manifest-path",
+                             "core/benchmark/fs-bench-pro/runtime/Cargo.toml", "--locked", "--offline", "--release"],
+                            folder, "host-runtime-release", 120, cwd=root, environment=environment)
+    after = source_identity(root)
+    if before != after:
+        raise ValueError("source changed during the locked host runtime build")
+    path = root / "core/target/r7-host-release/release/layerfs-r7-runtime"
+    digest = sha256(path)
+    archive = root / "benchmark-results/fs-bench-pro/binary-archive" / digest / path.name
+    archive.parent.mkdir(parents=True, exist_ok=True)
+    if not archive.exists():
+        shutil.copy2(path, archive)
+    if sha256(archive) != digest:
+        raise ValueError("immutable binary archive differs")
+    binaries = {**previous["binaries"], "runtime": {"path": str(archive), "sha256": digest, "bytes": path.stat().st_size}}
+    result = {**previous, "identity": before, "binaries": binaries, "builds": [host],
+              "reused_build": str(original), "reused_build_manifest_sha256": sha256(original / "manifest.json"),
+              "incremental_reuse": "host runtime rebuilt; seven unchanged compiled scopes/binary hashes reused with original Linux/flags/profile provenance"}
+    receipts.write_new(folder / "source-after.json", after)
+    receipts.write_new(folder / "build.json", result)
+    receipts.manifest(folder)
+    load_build(folder)
     return result

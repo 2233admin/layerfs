@@ -1752,4 +1752,32 @@ qualification claim follows from harness-only checks.
 | `cf9fe706e` (worker) | Qualify unchanged native importer through original module | 79366 | 79366 | +0 |
 | `561b5ec10` (worker) | Apply main H-5 guard without duplicate main integration | 79366 | 79366 | +0 |
 | `53853a02e` (worker) | Preserve payload mechanism and per-state proof stops | 79366 | 79366 | +0 |
-| This commit | Integrate reviewed small-delta support before preparation/sample | 79366 | 79366 | +0 |
+| `c0c99a4a3` | Integrate reviewed small-delta support before preparation/sample | 79366 | 79366 | +0 |
+
+Qualified compiled-support reuse integrated from worker `dbcae7b12`. The
+committed entry point now accepts bench.py build --reuse-unchanged ORIGINAL:
+only host-runtime compiled inputs may differ. Exact eight binary keys,
+hashes/sizes, original full build manifest, clean before/after source identities,
+both complete Linux source hash passes, pinned image/readback, ARM64 flags,
+Disposable/overlay/worker profiles, product tree and exact OWNER-3 refusal
+evidence are checked before reuse. Changed product, recipe, workload or writer
+bytes refuse admission. Failure retains declared scope and attempted child
+custody without a successful seal. No Docker resource is created by the narrow
+host build. Chained host-only seals are not accepted as original full builds.
+
+Eight owning build identity tests PASS 0.012 seconds under the main120s lock;
+worker eight PASS0.018 seconds and original full-build evidence validation PASS.
+The earlier ad hoc host diagnostic rebuilt in8seconds but remains diagnostic
+and unsampled. The committed route created a separate supported final seal in
+<=3seconds at dbcae7b12, runtime
+fb2031585ac06026a4871f755d63d79420db7a7d3d1d63ceb68f0c1b9dd33c2f,
+seven immutable support binaries reused and daemon f44900... unchanged.
+Raw worker build directory is benchmark-results/fs-bench-pro/
+2026-10-10-batch-2-small-delta-build-dbcae7b12-supported. Final case preparation
+is in progress; no sample outcome is yet claimed. This implements decision32
+without changing the product, workload, cache, worker count or any limit.
+Production LOC79,366 ->79,366 (delta+0), pinned staged absent-aware method;
+reference absent (retired R9c; last counted65,417).
+
+| `dbcae7b12` (worker) | Add qualified host-only build support to bench.py | 79366 | 79366 | +0 |
+| This commit | Integrate qualified immutable support reuse and its scoped checks | 79366 | 79366 | +0 |

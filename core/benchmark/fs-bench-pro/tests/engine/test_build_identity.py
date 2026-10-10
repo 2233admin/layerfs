@@ -58,3 +58,98 @@ class BuildIdentity(unittest.TestCase):
             self.assertEqual(result["files"], {})
             self.assertEqual(result["excluded_untracked"][0]["path"], protected)
             self.assertEqual(len(result["excluded_untracked"][0]["sha256"]), 64)
+
+
+class RuntimeBuildReuse(unittest.TestCase):
+    def qualified(self):
+        files = {"core/crates/content/src/lib.rs": "product", ".cargo/config.toml": "flags",
+                 "core/benchmark/fs-bench-pro/runtime/src/main.rs": "old-runtime",
+                 "core/benchmark/fs-bench-pro/writers/edit.rs": "writer",
+                 "core/benchmark/fs-bench-pro/engine/recipes/workspace.rs": "recipe",
+                 "benchmark/fs-bench-pro/workload/main.rs": "workload"}
+        return {"schema": "fs-bench-pro-build-v1", "status": "PASS", "image": identity.IMAGE,
+                "global_profile": "Disposable/WAL/OFF", "overlay_profile": "MEMORY/OFF/EXCLUSIVE",
+                "construction_workers": 1, "explicit_rustflags": None,
+                "durable": "NOT_RUN — disabled by owner until explicit reauthorization",
+                "flags": ".cargo/config.toml ARM64 profile; explicit override recorded",
+                "fuser_disposition": "OWNER-3's two passthrough refusals retained; no checker PASS claimed",
+                "identity": {"files": files, "product_tree": "exact-product-tree", "source_clean": True},
+                "binaries": {name: {"path": "/immutable/" + name, "sha256": "digest", "bytes": 123}
+                             for name in identity.BINARY_KEYS}, "socket": "/original/socket"}
+
+    def test_only_host_runtime_change_is_admitted(self):
+        previous = self.qualified()
+        before = {**previous["identity"], "files": {**previous["identity"]["files"],
+                   "core/benchmark/fs-bench-pro/runtime/src/main.rs": "new-runtime"}}
+        self.assertEqual(identity.reuse_runtime_inputs(before, previous, None),
+                         ["core/benchmark/fs-bench-pro/runtime/src/main.rs"])
+        for name in ("core/crates/content/src/lib.rs", ".cargo/config.toml",
+                     "core/benchmark/fs-bench-pro/writers/edit.rs",
+                     "core/benchmark/fs-bench-pro/engine/recipes/workspace.rs",
+                     "benchmark/fs-bench-pro/workload/main.rs"):
+            with self.subTest(name=name):
+                changed = {**before, "files": {**before["files"], name: "changed"}}
+                with self.assertRaisesRegex(ValueError, "compiled inputs differ"):
+                    identity.reuse_runtime_inputs(changed, previous, None)
+
+    def test_missing_binary_profile_image_flags_and_product_tree_are_refused(self):
+        previous = self.qualified()
+        for field, value in (("image", "other-image"), ("global_profile", "Durable"),
+                             ("construction_workers", 2), ("explicit_rustflags", "other-flags"),
+                             ("fuser_disposition", "PASS")):
+            with self.subTest(field=field), self.assertRaisesRegex(ValueError, "profile, image, flags or disposition"):
+                identity.reuse_runtime_inputs(previous["identity"], {**previous, field: value}, None)
+        with self.assertRaisesRegex(ValueError, "eight sealed binary"):
+            identity.reuse_runtime_inputs(previous["identity"], {**previous, "binaries": {}}, None)
+        with self.assertRaisesRegex(ValueError, "product tree differs"):
+            identity.reuse_runtime_inputs({**previous["identity"], "product_tree": "changed"}, previous, None)
+
+    def test_failed_host_build_retains_declared_reuse_without_a_successful_seal(self):
+        from engine import receipts
+        previous = self.qualified()
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            original, output = base / "original", base / "fresh"
+            original.mkdir()
+            (original / "build.json").write_text(json.dumps(previous))
+            (original / "manifest.json").write_text("original-evidence")
+            with patch.object(identity, "source_identity", return_value=previous["identity"]), \
+                    patch.object(identity, "original_build_evidence"), \
+                    patch.object(identity, "docker_socket", return_value=previous["socket"]), \
+                    patch.object(receipts, "command", side_effect=RuntimeError("compiler failed")) as attempted:
+                with self.assertRaisesRegex(RuntimeError, "compiler failed"):
+                    identity.build_runtime(output, original, base)
+            self.assertEqual(attempted.call_count, 1)
+            self.assertTrue((output / "source-before.json").exists())
+            self.assertTrue((output / "reuse-scope.json").exists())
+            self.assertFalse((output / "build.json").exists())
+            self.assertEqual(json.loads((original / "build.json").read_text()), previous)
+
+
+    def test_tampered_reused_binary_is_refused_even_with_valid_source_receipts(self):
+        from engine import receipts
+        previous = self.qualified()
+        linux = {"status": "PASS"}
+        refusal = {"exit_code": 1}
+        previous.update(builds=[linux], fuser_check=refusal)
+        files = previous["identity"]["files"]
+        evidence = {
+            "build.json": json.dumps(previous),
+            "source-before.json": json.dumps(previous["identity"]),
+            "source-after.json": json.dumps(previous["identity"]),
+            "container-source.sha256": "".join(d + "  /work/" + n + "\n" for n, d in files.items()),
+            "linux-release.completion.json": json.dumps(linux),
+            "linux-release.stdout": "".join("/work/" + n + ": OK\n" for n in files) * 2,
+            "linux-create.attempt.json": json.dumps({"argv": [identity.IMAGE, identity.shlex.join(identity.ARM64_FLAGS)]}),
+            "image.stdout": identity.IMAGE,
+            "fuser-integrity.completion.json": json.dumps(refusal),
+            "fuser-integrity.stdout": json.dumps({"errors": sorted(identity.FUSER_REFUSALS)}),
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            folder = Path(directory)
+            for name, content in evidence.items():
+                (folder / name).write_text(content)
+            with patch.object(receipts, "verify_manifest", return_value={"files": evidence}), \
+                    patch.object(identity, "sha256", return_value="tampered"):
+                with self.assertRaisesRegex(ValueError, "sealed executable bytes changed"):
+                    identity.original_build_evidence(folder, previous)

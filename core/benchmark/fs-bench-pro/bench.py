@@ -29,6 +29,8 @@ def main(argv=None):
     listing.add_argument("--json", action="store_true")
     building = commands.add_parser("build", help="locked release runtime and pinned-image daemon")
     building.add_argument("--out", type=Path)
+    building.add_argument("--reuse-unchanged", type=Path,
+                          help="qualified full build; rebuild host runtime only and retain exact unchanged binary scopes")
     preparing = commands.add_parser("prepare", help="build a sealed fixture master from a committed recipe")
     preparing.add_argument("fixture")
     preparing.add_argument("--build", type=Path, required=True)
@@ -58,7 +60,8 @@ def main(argv=None):
         output = output.resolve()
         if not output.is_relative_to(results.resolve()):
             parser.error("build output must be a fresh directory under benchmark-results/fs-bench-pro")
-        result = identity.build(output)
+        result = (identity.build_runtime(output, args.reuse_unchanged)
+                  if args.reuse_unchanged is not None else identity.build(output))
         print(json.dumps({"build": str(output), "status": result["status"],
                           "binaries": result["binaries"]}, indent=2))
         return
