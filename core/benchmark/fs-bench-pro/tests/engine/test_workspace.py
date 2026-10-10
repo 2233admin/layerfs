@@ -1,0 +1,75 @@
+"""Missing evidence and custody never become a successful mounted sample."""
+import json
+from pathlib import Path
+import sys
+import tempfile
+import unittest
+from unittest.mock import patch
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from engine import cache, receipts, workspace
+
+
+class WorkspaceEvidence(unittest.TestCase):
+    def test_b_requires_original_terminal_cleanup_and_actual_zero_demands(self):
+        good = dict(fresh_mount=True, warmup_terminal_unmount=True, warmup_cleanup="Gone", object_demands=0)
+        self.assertEqual(cache.validate("B", good), "ELIGIBLE")
+        for name in good:
+            self.assertEqual(cache.validate("B", {key: value for key, value in good.items() if key != name}), "INELIGIBLE")
+        for value in (True, -1, 1, "0", None):
+            self.assertEqual(cache.validate("B", {**good, "object_demands": value}), "INELIGIBLE")
+
+    def test_content_pages_alone_do_not_prove_a_and_c_lifetime_is_bounded(self):
+        self.assertEqual(cache.validate("A", {"resident_pages": 0}), "INELIGIBLE")
+        self.assertEqual(cache.validate("C", {"same_mount": True, "warm_interval_ns": 60_000_000_000}), "INELIGIBLE")
+        self.assertEqual(cache.validate("C", {"same_mount": True, "warm_interval_ns": 59_999_999_999}), "ELIGIBLE")
+
+    def test_failed_clone_retains_original_failure_and_has_no_sample_credit(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            current = dict(source_commit="source", product_tree="product", files={})
+            build = dict(binaries={name: {"sha256": name} for name in ("runtime", "daemon")})
+            prepared = dict(fixture={"fixture_sha256": "fixture"})
+            with patch.object(workspace.identity, "ROOT", root), \
+                    patch.object(workspace.identity, "source_identity", return_value=current), \
+                    patch.object(workspace.identity, "load_build", return_value=build), \
+                    patch.object(workspace.fixtures, "load", return_value=prepared), \
+                    patch.object(workspace.fixtures, "clone", side_effect=ValueError("original clone mismatch")):
+                result = workspace.one_cell("C01", "prepared", "build", root / "result")
+                self.assertEqual(result["status"], "FAIL")
+                self.assertEqual(result["original_failure"], "original clone mismatch")
+                self.assertEqual((result["sample_count"], result["completed_operation_count"]), (0, 0))
+                self.assertNotIn("complete_wall_ns", result)
+                self.assertEqual(receipts.verify_manifest(root / "result")["schema"], "fs-bench-pro-evidence-v1")
+                with self.assertRaises(FileExistsError):
+                    workspace.one_cell("C01", "prepared", "build", root / "another")
+
+    def test_report_keeps_every_case_and_exceeded_is_independent_of_pass(self):
+        selection = {"family": "cluster-two/cells", "cases": [{"id": "C01"}, {"id": "C02"}, {"id": "C03"}]}
+        recorded = {"C01": {"status": "PASS", "proof_status": "PASS", "complete_wall_ns": 16,
+                            "declared_limit_ns": 15, "counts": {"requests": 0}, "cleanup": "Gone"},
+                    "C02": {"status": "FAIL", "original_failure": "original refused operation"}}
+        performance, proof = receipts.result_rows(selection, recorded)
+        self.assertEqual(len(performance), 3)
+        self.assertEqual([row["status"] for row in performance], ["PASS", "FAIL", "NOT_RUN"])
+        self.assertEqual(performance[0]["limit_status"], "EXCEEDED")
+        self.assertEqual(performance[0]["requests"], 0)
+        self.assertEqual(performance[1]["requests"], "UNAVAILABLE")
+        self.assertEqual(performance[1]["tag"], "original refused operation")
+        self.assertEqual(proof[0]["proof_status"], "PASS")
+        self.assertEqual(set(performance[0]), set(receipts.PERFORMANCE_COLUMNS))
+        self.assertEqual(set(proof[0]), set(receipts.VERIFICATION_COLUMNS))
+
+    def test_csv_output_is_generated_once_and_missing_metrics_stay_unavailable(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            run = home / "run"
+            run.mkdir()
+            receipts.write_new(run / "run.json", {"family": "cluster-two/cells", "cases": [{"id": "C01"}],
+                                                   "date": "2026-10-10", "source_commit": "commit", "product_tree": "product"})
+            result = receipts.report(run, home / "csv")
+            self.assertEqual(result["cases"], 1)
+            self.assertIn("NOT_RUN", (home / "csv/performance.csv").read_text())
+            self.assertIn("UNAVAILABLE", (home / "csv/verification.csv").read_text())
+            with self.assertRaises(FileExistsError):
+                receipts.report(run, home / "csv")

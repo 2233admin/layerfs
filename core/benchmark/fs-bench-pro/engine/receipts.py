@@ -158,3 +158,90 @@ def verify_manifest(folder):
         if value.hexdigest() != wanted:
             raise ValueError("retained evidence changed: " + relative)
     return record
+
+
+PERFORMANCE_COLUMNS = "family case v016_case status cache_class complete_wall_ns mount_ns command_ns commit_ns unmount_ns declared_limit_ns limit_status requests owner_jobs statements store_logical_bytes store_allocated_bytes overlay_logical_bytes overlay_allocated_bytes cleanup reference_release reference_timer reference_ns reference_profile source_commit product_tree daemon_sha256 image evidence tag".split()
+VERIFICATION_COLUMNS = "family case v016_case proof_status proof_wall_ns declared_limit_ns oracle_scope omissions cleanup source_commit product_tree image evidence tag".split()
+
+
+def result_rows(selection, recorded):
+    """One row per registration, including failed and absent observations."""
+    performance, verification = [], []
+    for case in selection["cases"]:
+        result = recorded.get(case["id"], {})
+        row = {name: "UNAVAILABLE" for name in PERFORMANCE_COLUMNS}
+        row.update(family=selection["family"], case=case["id"], v016_case=case.get("v016_case", ""),
+                   status=result.get("status", "NOT_APPLICABLE" if case.get("status") == "not-applicable" else "NOT_RUN"),
+                   cache_class=result.get("cache_class", case.get("cache_class", "UNAVAILABLE")),
+                   tag=result.get("tag", result.get("original_failure", case.get("reason", "not sampled" if not result else ""))))
+        for name in ("complete_wall_ns", "declared_limit_ns", "cleanup", "source_commit", "product_tree", "daemon_sha256", "image", "evidence"):
+            row[name] = result.get(name, selection.get(name, "UNAVAILABLE"))
+        for name in ("mount_ns", "command_ns", "commit_ns", "unmount_ns"):
+            row[name] = result.get("phases", {}).get(name, "UNAVAILABLE")
+        for name in ("requests", "owner_jobs", "statements"):
+            row[name] = result.get("counts", {}).get(name, "UNAVAILABLE")
+        for name in ("store_logical_bytes", "store_allocated_bytes", "overlay_logical_bytes", "overlay_allocated_bytes"):
+            observation = result.get("observations", {}).get(name, {})
+            if observation.get("status") == "AVAILABLE":
+                row[name] = observation["value"]
+        if type(row["complete_wall_ns"]) is int and type(row["declared_limit_ns"]) is int:
+            row["limit_status"] = "EXCEEDED" if row["complete_wall_ns"] > row["declared_limit_ns"] else "WITHIN"
+        reference = case.get("reference") or {}
+        for column, key in (("reference_release", "release"), ("reference_timer", "timer"), ("reference_ns", "value_ns"), ("reference_profile", "profile")):
+            row[column] = reference.get(key, "")
+        proof = {name: row.get(name, "UNAVAILABLE") for name in VERIFICATION_COLUMNS}
+        proof.update(proof_status=result.get("proof_status", "NOT_RUN"),
+                     proof_wall_ns=result.get("proof_wall_ns", "UNAVAILABLE"),
+                     declared_limit_ns=result.get("verifier_limit_ns", "UNAVAILABLE"),
+                     oracle_scope=result.get("verification", {}).get("scope", "UNAVAILABLE"),
+                     omissions=result.get("verification", {}).get("omissions", "UNAVAILABLE"))
+        performance.append(row)
+        verification.append(proof)
+    return performance, verification
+
+
+def load_run(folder):
+    folder = Path(folder).resolve()
+    selection = json.loads((folder / "run.json").read_text())
+    recorded = {}
+    for case in selection["cases"]:
+        receipt = folder / case["id"] / "receipt.json"
+        if receipt.exists():
+            verify_manifest(receipt.parent)
+            result = json.loads(receipt.read_text())
+            if (result["case"], result["source_commit"], result["product_tree"]) != (
+                    case["id"], selection["source_commit"], selection["product_tree"]):
+                raise ValueError("recorded case/source differs from original run registration")
+            recorded[case["id"]] = result
+        elif receipt.parent.exists():
+            recorded[case["id"]] = {"status": "FAIL", "proof_status": "NOT_RUN",
+                                    "tag": "partial original attempt; completed receipt unavailable",
+                                    "evidence": str(receipt.parent.relative_to(ROOT))}
+    return selection, recorded
+
+
+def report(folder, destination=None):
+    selection, recorded = load_run(folder)
+    performance, verification = result_rows(selection, recorded)
+    root = ROOT / "core/benchmark"
+    parent = root / ("cluster-two/baselines" if selection["family"] == "cluster-two/cells" else "fs-bench-pro/baselines/core")
+    destination = Path(destination) if destination else parent / (selection["date"] + "-" + selection["source_commit"][:9])
+    destination.mkdir(parents=True, exist_ok=True)
+    for name, columns, rows in (("performance.csv", PERFORMANCE_COLUMNS, performance), ("verification.csv", VERIFICATION_COLUMNS, verification)):
+        with (destination / name).open("x", newline="") as stream:
+            writer = csv.DictWriter(stream, fieldnames=columns, lineterminator="\n")
+            writer.writeheader()
+            writer.writerows(rows)
+    lines = ["Reference from each named release, different topology and clock. No ratio or comparison verdict.",
+             "| Family / case | Status | Complete ns / bound | Mount / command / commit / unmount ns | Requests / owner jobs / statements | Store / overlay allocated B | Verifier ns / bound | Cache / cleanup | Reference timer / ns |",
+             "| --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
+    for row, proof in zip(performance, verification):
+        value = lambda key: str(row[key])
+        lines.append("| " + " | ".join((row["family"] + " / " + row["case"], row["status"],
+            value("complete_wall_ns") + " / " + value("declared_limit_ns") + " " + row["limit_status"],
+            " / ".join(value(key) for key in ("mount_ns", "command_ns", "commit_ns", "unmount_ns")),
+            " / ".join(value(key) for key in ("requests", "owner_jobs", "statements")),
+            value("store_allocated_bytes") + " / " + value("overlay_allocated_bytes"),
+            str(proof["proof_wall_ns"]) + " / " + str(proof["declared_limit_ns"]),
+            row["cache_class"] + " / " + row["cleanup"], row["reference_timer"] + " / " + str(row["reference_ns"]))) + " |")
+    return {"destination": str(destination), "table": "\n".join(lines), "cases": len(performance)}

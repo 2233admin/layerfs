@@ -15,9 +15,9 @@ comparison or release-admission claim. Durable is
 | --- | --- | --- | --- |
 | Handoff specification | COMPLETE | `3c32fbc97` | Harvest released references |
 | 0.1 Released references | COMPLETE | `8e4a78fa0` | Stage 0.2 move-only organization |
-| 0.2 Move-only organization | COMPLETE, historical check failures retained | `13f9dec38`; routing follow-up in this commit | Update routing guide, then stage 0.3 catalogue |
+| 0.2 Move-only organization | COMPLETE, historical check failures retained | `13f9dec38`; routing `9af29e01e` | Update routing guide, then stage 0.3 catalogue |
 | 0.3 Case catalogue | COMPLETE | `f182e9a63`; prerequisite correction `30b798192` | Stage 0.4 reproducible engine |
-| 0.4 Reproducible engine | IN_PROGRESS | Cell-route correction `bb8e07df8`; build support `c496025fc`; oracle support `7a27a4f26`; fixture support in this commit | Implement fixture preparation, oracle, workspace execution and CSV reports; then twelve cells |
+| 0.4 Reproducible engine | IN_PROGRESS | Cell-route correction `bb8e07df8`; build support `c496025fc`; oracle support `7a27a4f26`; fixture support `516c2f009`; workspace/report support in this commit | Build, prepare independent masters, reproduce twelve cells |
 | 1 Pilot | PENDING | — | Wait for stage 0.4 completion |
 | 2 Edits | PENDING | — | Wait for batch 1 completion |
 | 3 Trees and tools | PENDING | — | Wait for batch 2 completion |
@@ -53,6 +53,8 @@ comparison or release-admission claim. Durable is
 | 14 | Reuse the intact cell tree/index checkers and the recovered version-pinned Git policy; collect actual image Git/config witnesses anew | Preserves the original full-tree and index exclusions/checks; copied policy plus provenance removes its untracked data dependency | Guessing defaults, comparing raw native/FUSE index stat caches, or weakening tree checks |
 
 | 15 | Rebuild empty and full-written 64 MiB-zero masters through the existing SDK provision mode; retain prepared masters during the rollout and remove only passing sample resources | Same initial acquisition/install boundary as the working path; setup masters are needed for independent byte-copy reuse | Mounting a master for measurement or depending on old /tmp trees/master volumes |
+
+| 16 | Freeze the twelve original B:L cells, enforce class B using actual demand counters and original terminal cleanup, generate all twelve result rows | Stage 0.4 requires exact count reproduction through bench.py; unavailable evidence stays unavailable and soft limits remain separate | Sampling pending workload families before the engine proof or filling absent measurements with zeros |
 
 ## Bugs
 
@@ -201,7 +203,7 @@ and committed snapshots; active core only, reference absent as recorded above.
 | `bb8e07df8` | Define separate cell execution/report route | 79366 | 79366 | +0 |
 | `c496025fc` | Stage 0.4 build and receipt custody support | 79366 | 79366 | +0 |
 | `7a27a4f26` | Stage 0.4 independent tree/index oracle | 79366 | 79366 | +0 |
-| This commit | Stage 0.4 fixture provisioning and clone support | 79366 | 79366 | +0 |
+| `516c2f009` | Stage 0.4 fixture provisioning and clone support | 79366 | 79366 | +0 |
 
 Stage 0.4 entry-point clarification: docs-only; no sample or product change.
 Production LOC 79,366 -> 79,366 (delta +0), pinned absent-aware method.
@@ -264,3 +266,30 @@ Raw checks: `benchmark-results/fs-bench-pro/2026-10-10-stage-0-4-fixture-tests/`
 No actual build, Store, Docker resource, prepare or sample has run in this step.
 Workspace execution/cache enforcement and CSV reporting remain to implement.
 Production LOC 79,366 -> 79,366 (delta +0), pinned absent-aware method.
+
+Stage 0.4 workspace/report support adds one-shot cell execution through the
+existing SDK runtime, original command bodies, independent native tree/index
+oracles, terminal unmount plus observed automatic cleanup and known Stop.
+Raw numeric telemetry is correlated with original control identities and priced
+using the unchanged matrix helpers; exact totals are checked against the pinned
+closed baseline (SHA-256 `a6ada570050f14bb6ff5bd61c74c0d0fda439f323f695fdea1212b26b590d3f8`).
+Class B requires fresh measured mount, successful untimed warm terminal cleanup
+and actual zero immutable object demands. Residency observation, setup, cleanup
+and Stop are separate from the matrix performance clock. No cold claim is made.
+
+`run cluster-two/cells --case Cxx` appends a fresh case to a source-fixed run
+registration; the original claim refuses unchanged re-sampling. `verify`
+compares retained independent observations without replaying product work.
+`report` exclusively generates both exact section 6.1 CSV schemas with all
+registered cases, raw ns/bytes/counts, original failure reasons and UNAVAILABLE
+for missing values. A completed EXCEEDED row remains functionally PASS.
+
+Twenty-one scoped engine tests pass at final source in 0.275 s under the 120 s
+lock. The first invocation exposed macOS temporary-path aliasing in the new
+receipt finalizer; resolving the comparison root fixed it without changing the
+original failure or assertions. Both logs are retained under
+`benchmark-results/fs-bench-pro/2026-10-10-stage-0-4-workspace-tests/`.
+CLI help/whitespace pass. No Store, mount or Docker resource has yet run.
+Production LOC 79,366 -> 79,366 (delta +0), pinned absent-aware method.
+
+| This commit | Stage 0.4 workspace/cache/CSV support | 79366 | 79366 | +0 |

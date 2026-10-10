@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Single entry point for the fs-bench-pro workload rollout."""
 import argparse
+from datetime import datetime
 import json
 from pathlib import Path
 import uuid
@@ -32,6 +33,16 @@ def main(argv=None):
     preparing.add_argument("fixture", choices=("empty", "big64m"))
     preparing.add_argument("--build", type=Path, required=True)
     preparing.add_argument("--out", type=Path)
+    running = commands.add_parser("run", help="one sample per selected case at this clean identity")
+    running.add_argument("family")
+    running.add_argument("--case")
+    running.add_argument("--build", type=Path, required=True)
+    running.add_argument("--prepared", type=Path, required=True)
+    running.add_argument("--out", type=Path, required=True)
+    verifying = commands.add_parser("verify", help="verify retained observations without replaying a sample")
+    verifying.add_argument("run", type=Path)
+    reporting = commands.add_parser("report", help="generate the two CSVs and report-template table")
+    reporting.add_argument("run", type=Path)
     args = parser.parse_args(argv)
     if args.command == "build":
         from engine import identity
@@ -43,6 +54,59 @@ def main(argv=None):
         result = identity.build(output)
         print(json.dumps({"build": str(output), "status": result["status"],
                           "binaries": result["binaries"]}, indent=2))
+        return
+    if args.command == "run":
+        from engine import fixtures, identity, receipts, workspace
+        current = identity.source_identity()
+        if args.family != "cluster-two/cells":
+            parser.error("family workload runner is not implemented yet; all workload cases remain visible in list")
+        registered = [{"id": cell, "cache_class": "B", "v016_case": ""} for cell in fixtures.CELL_RECIPES]
+        if args.case and args.case not in fixtures.CELL_RECIPES:
+            parser.error("case is not in the frozen twelve-cell selection")
+        output = args.out.resolve()
+        results = identity.ROOT / "benchmark-results/fs-bench-pro"
+        if not output.is_relative_to(results.resolve()):
+            parser.error("run output must be under benchmark-results/fs-bench-pro")
+        output.mkdir(parents=True, exist_ok=True)
+        selection_file = output / "run.json"
+        if selection_file.exists():
+            selection = json.loads(selection_file.read_text())
+            if (selection["family"], selection["source_commit"], selection["product_tree"], selection["cases"]) != (
+                    args.family, current["source_commit"], current["product_tree"], registered):
+                parser.error("run registration differs; append-only run cannot change identity")
+        else:
+            receipts.write_new(selection_file, {"family": args.family, "cases": registered,
+                "source_commit": current["source_commit"], "source_tree": current["source_tree"],
+                "product_tree": current["product_tree"], "image": identity.IMAGE,
+                "date": datetime.now().strftime("%Y-%m-%d"), "identity": current,
+                "build": str(args.build.resolve()), "prepared": str(args.prepared.resolve())})
+        selected = [args.case] if args.case else list(fixtures.CELL_RECIPES)
+        failed = False
+        for cell in selected:
+            recipe = fixtures.CELL_RECIPES[cell]
+            prepared = args.prepared if (args.prepared / "prepared.json").exists() else args.prepared / recipe
+            result = workspace.one_cell(cell, prepared, args.build, output / cell)
+            print(json.dumps({key: result.get(key) for key in ("case", "status", "counts", "cleanup", "container", "original_failure", "evidence")}))
+            failed |= result["status"] != "PASS"
+        return 1 if failed else 0
+    if args.command == "verify":
+        from engine import oracle, receipts
+        selection, recorded = receipts.load_run(args.run)
+        results = []
+        for case in selection["cases"]:
+            folder = args.run / case["id"]
+            if (folder / "actual/observation.json").exists() and (folder / "expected/observation.json").exists():
+                result = oracle.compare_recorded(folder / "expected", folder / "actual", case["id"])
+            else:
+                result = {"case": case["id"], "status": "NOT_RUN", "reason": "complete retained oracle evidence unavailable"}
+            results.append(result)
+        print(json.dumps(results, indent=2))
+        return 1 if any(row["status"] != "PASS" for row in results) else 0
+    if args.command == "report":
+        from engine import receipts
+        result = receipts.report(args.run)
+        print(result["table"])
+        print("CSV destination: " + result["destination"])
         return
     if args.command == "prepare":
         from engine import fixtures, identity
@@ -68,4 +132,4 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
