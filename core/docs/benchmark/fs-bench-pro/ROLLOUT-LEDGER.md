@@ -18,7 +18,7 @@ comparison or release-admission claim. Durable is
 | 0.2 Move-only organization | COMPLETE, historical check failures retained | `13f9dec38`; routing `9af29e01e` | Update routing guide, then stage 0.3 catalogue |
 | 0.3 Case catalogue | COMPLETE | `f182e9a63`; prerequisite correction `30b798192` | Stage 0.4 reproducible engine |
 | 0.4 Reproducible engine | CLOSED: functional proof complete; exact reproduction FAILED C10/C12 | Cell-route correction `bb8e07df8`; build support `c496025fc`; oracle support `7a27a4f26`; fixture support `516c2f009`; workspace/report support `358eca082`; cleanup-observer correction `a1f2c259c` | Begin batch 1 under failed-reproduction closure recorded below |
-| 1 Pilot | COMPLETE: 36 functional/proof/clean-close passes; 7 numeric PASS, 29 INELIGIBLE | Init `c1d7dd0e8`/`39bbcbd6b`; payload `200f81493`/`c1d9b6c58`; parallel routing `b3c96ecb1`; tiny `36849bcc2`/`d6e0ef952`; namespace `98b14b233`/`be1f56a23`; H-2 fix `222526fa0`; closure `d4314ed62`; membership supplement `cca598d0b` | Batch 2, retaining original receipts plus exhaustive membership supplement |
+| 1 Pilot | COMPLETE: 36 functional/proof/clean-close passes; 7 recorded scoped B PASS, 29 INELIGIBLE; full numeric qualification of the 7 is unverified | Init `c1d7dd0e8`/`39bbcbd6b`; payload `200f81493`/`c1d9b6c58`; parallel routing `b3c96ecb1`; tiny `36849bcc2`/`d6e0ef952`; namespace `98b14b233`/`be1f56a23`; H-2 fix `222526fa0`; closure `d4314ed62`; membership supplement `cca598d0b` | Batch 2, retaining original receipts plus exhaustive membership supplement |
 | 2 Edits | IN_PROGRESS: canonical 12 and preserving 12 closed; capped 5 closed (2 functional passes, 3 watchdog failures); changing 32 closed (12 strict passes, 20 retention failures); small-delta authoring | Model `e2840c270`; writer `8dd9d99a8`; graph `37ec6826b`; cache `98b6b7260`; routing `ac7beb4dd`; seal/audit `cca598d0b`; reuse `849b0aff1`; canonical `a34b5d44b` / this commit | Integrate the two completed workers, finish changing and small-delta; no batch 3 |
 | 3 Trees and tools | PENDING | — | Wait for batch 2 completion |
 | 4 History on one branch | PENDING | — | Wait for batch 3 completion |
@@ -72,6 +72,8 @@ comparison or release-admission claim. Durable is
 | 27 | Reuse a validated closed sibling master for an exactly matching complete initial tree, product, UID/GID and Disposable profile; keep expected/helper trees case-specific and sample byte clones independent | Setup reuse policy requires compatible sealed inputs; the changing family has six unique initial sizes despite 32 cases | Duplicate Init/install for the same input, reusing a mutated sample, or claiming coldness |
 
 | 28 | Canonical preparation references the preserving worker's four immutable closed masters through explicit prepared-parent links, then validates the complete original seals and exact semantic fixture digest | Identical initial trees and unchanged product make those setup masters compatible; all 12 canonical expectations/helpers remain new and sample byte copies independent | Duplicate Init/install or borrowing a previously measured sample |
+
+| 29 | Distinguish the declared B/C daemon/mount predicate from full per-phase OS/backing/metadata/SQLite qualification; preserve old scoped labels and fail closed for future unknown inputs | Owner forbids setup or earlier-phase OS warmth; zero canonical object demand does not prove the still-paid history read's input cache state | Treating a post-unmount mincore observation or zero demand as full coldness, editing old verdicts, or changing cache treatment |
 
 ## Bugs
 
@@ -1598,4 +1600,49 @@ optimization, no Clippy/CI claim. Production LOC 79,366 -> 79,366 (delta +0),
 pinned staged absent-aware method; reference absent (retired R9c; last 65,417).
 
 | `b4ef6e208` (worker) | Record all 32 changing cases and preserve twenty strict failures | 79366 | 79366 | +0 |
-| This commit | Integrate changing closure and exact retained failed resources | 79366 | 79366 | +0 |
+| `05ffbf971` | Integrate changing closure and exact retained failed resources | 79366 | 79366 | +0 |
+
+
+H-5 cache qualification scope audit: at the original seven pilot read-only
+numeric PASS receipts, Class B's daemon canonical-object predicate passed, but
+full per-phase backing/metadata/SQLite cache eligibility was not established.
+S8-PROOF-PLAN-20261008.md section 6 says B still pays the history read and must
+declare Store residency; cluster-two/cache/README.md:32–35 explicitly limits
+ELIGIBLE to the tested predicate and leaves metadata/reader/SQLite scope
+separate. Actual bind still invokes read_handle::snapshot -> history.branch_snapshot
+independently of canonical-object counters. Every reviewed row has UpToDate
+and zero object-batch delta, but no pre-mount cold backing/metadata/reader proof.
+Mincore runs only after measured unmount and automatic Gone, without eviction.
+
+| Original recorded scoped-B PASS case | Post-phase Store resident/total pages |
+| --- | --- |
+| payload-random-read-1-compact-v2 | 301 / 301 |
+| payload-random-read-10-compact-v2 | 2634 / 2634 |
+| payload-random-read-100 | 121178 / 129564 |
+| tiny-stat-1-compact-v2 | 306 / 306 |
+| tiny-stat-10-compact-v2 | 2658 / 2658 |
+| tiny-stat-100-mixed-v4 | 26179 / 26179 |
+| tiny-stat-500-mixed-v4 | 121665 / 130025 |
+
+These post-phase observations cannot establish pre-attempt state or attribute
+warmth. Original receipt/CSV labels, walls, counts, storage and functional proofs
+remain unchanged as history; the seven labels establish only their original
+scoped predicate and must not be read as full numerical cache qualification.
+All 36 pilot cases retain functional proof/clean closure, with the missing
+membership check separately completed. No pilot replay or numerical performance
+claim follows from the scope audit. The lead previously summarized those labels
+as numeric PASS without this qualification; this supplement corrects that
+interpretation, without relabeling or promoting a historical receipt.
+
+The spec's cache paragraph is clarified in its own commit to follow the owner's
+absolute no-setup/earlier-phase warmth rule. B/C remain the requested product
+regimes, while full cache eligibility needs identity-bound pre-phase backing,
+metadata and SQLite/reader evidence. Future missing/unknown scope fails closed
+INELIGIBLE, without eviction, cache/workload/limit changes, or product changes.
+The current guard correction and its external failing regression are pending
+next, with no new sample begun. Small-delta already declares unavailable own-write
+coldness and INELIGIBLE; its authoring continues independently. Production LOC
+79,366 -> 79,366 (delta +0), pinned absent-aware staged method; reference absent
+retired R9c, last counted 65,417. Documents only, no tests or measurement replay.
+
+| This commit | Clarify full phase-cache qualification and preserve old scoped predicates | 79366 | 79366 | +0 |

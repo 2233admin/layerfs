@@ -233,6 +233,16 @@ overlay MEMORY/OFF/EXCLUSIVE, `LAYERFS_CONSTRUCTION_WORKERS=1` (Init keeps its
 supported parallel profile), the pinned image by digest, one sample per case.
 Durable is `NOT_RUN — disabled by owner until explicit reauthorization`.
 
+The B/C warm-daemon or same-mount predicate is only the declared product
+regime. It does not establish the cache state of still-paid OS backing,
+kernel metadata or SQLite/reader work. Numeric eligibility additionally needs
+independent identity-bound observations before each paid phase, with the
+phase boundary and cold backing/metadata/reader state verified. A zero object
+demand counter or an observation after unmount cannot supply that proof.
+Unknown phase input state is `INELIGIBLE`; no cache treatment is changed to
+obtain eligibility. Earlier receipts retain their original scoped labels,
+with missing full qualification recorded separately in the rollout ledger.
+
 Every result reports time and storage together, and the exact request,
 owner-job and statement counts the daemon already exposes. Counts are exact
 observations of that execution; a time is one sample. Kernel READ batching and
