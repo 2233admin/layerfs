@@ -80,6 +80,8 @@ comparison or release-admission claim. Durable is
 | 49 | Preserve strict M1 atomic-save metadata failures without changing the frozen helper, oracle or correct product write/rename semantics | Original helper sets mtime before the write; original shadow retains that old mtime, and retained metadata plus a native exact-order diagnostic confirm the inconsistency | Resetting timestamps after writes, weakening the assertion or changing product POSIX behavior to force PASS |
 | 50 | Bind an external watchdog failure in a separate administrative closure when the original driver cannot publish a complete product receipt | The outer 120 s stop interrupted the attempt after actual Commits; no terminal, complete timing, final count/storage or publication witness can be manufactured | Inventing a complete receipt, calling the attempted case NOT_RUN, or retrying the unchanged schedule |
 
+| 51 | Correct P-2: the original historical-access driver already forks a separate selected-Commit Branch before mounting | Frozen v016_access.rs344–350/396–403 directly show that route; current ForkSource::Commit preserves the same topology and zero-copy ancestry | Calling the existing access Branch an extra new operation or adding a direct Commit-bind feature |
+
 ## Bugs
 
 | Bug | Case | Symptom | Cause | Fix commit | External test |
@@ -3809,3 +3811,39 @@ NOT_RUN — disabled by owner until explicit reauthorization.
 | `e308118a9` (worker sync) | Import exact reviewed main source before remaining dedup attempts | 79370 | 79370 | +0 |
 | `c4aea655d` (worker) | Record18 completed and five bounded dedup attempts plus three prior-source references | 79370 | 79370 | +0 |
 | This commit | Integrate final dedup CSV pair and close batch4 with every retained failure | 79370 | 79370 | +0 |
+
+
+Batch5 source review begins after committed batch4 closure27708c11d. The three
+original families have17 cases: branch_development6, multi_workspace_development5
+and historical_access6. Existing worktrees retain disjoint family ownership;
+Root owns shared runtime, fixture/controller/oracle integration and SDK route
+qualification. No batch5 preparation, native work, parity or sample has begun.
+The original public ProjectApi fork/history facades already send one existing
+Fork/History request; no duplicate SDK method or product feature is required.
+
+P-2's earlier proposed difference is corrected in this separate spec commit.
+Frozen v016_access.rs344–350 calls fork_branch from the selected source Branch
+and Commit, then396–403 mounts the resulting access Branch. This is already
+the original selected lane, not a new extra Branch introduced by current core.
+Current persistence/history/branch.rs verifies source stack and actual ancestry,
+then stores the selected Commit's own base and head on the new Branch without
+copying content or history rows. The direct Branch-only mount route therefore
+has a prospective existing expression, still requiring actual SDK/proof
+qualification. Original producer heads, selected roots, local ancestry and
+reference-versus-distinct-Commit cardinality remain binding. Earlier decision8
+and P-2 planning statements are historical; decision51 corrects the topology
+interpretation before any historical-access sample. The spec changes only this
+source-backed prerequisite recommendation; no workload, guard or limit changes.
+
+The original source also distinguishes common segment-start barriers from
+per-stage barriers, actual K/2 discard for two-worker M1, and legal identical
+compact A/B Commit tuple reuse. Family authors are preserving executable
+behavior and documenting disagreements with older prose. They retain H17's
+frozen timestamp assertion. Shared machinery must preserve original workers,
+ordered writes, concurrent histories, ancestry and exact tuple deduplication;
+no serialization to fit, invented threshold or weaker census is selected.
+Upcoming implementation and proofs remain pending. This docs-only commit has
+no product/harness change or test invocation. Durable remains
+NOT_RUN — disabled by owner until explicit reauthorization.
+
+| This commit | Correct original historical-access Fork topology in P-2 before batch5 execution | 79370 | 79370 | +0 |
