@@ -2447,4 +2447,27 @@ including refused missing workspace-linux reuse;120s wallstop/main lock;
 raw benchmark-results/fs-bench-pro/2026-10-10-batch-4-linux-recipe-asset-authoring.
 No product source or Docker resource changed in this authoring check.
 
-| This commit | Seal Linux copy of current native selective recipe in future full builds | 79366 | 79366 | +0 |
+| `cc8c239b8` | Seal Linux copy of current native selective recipe in future full builds | 79366 | 79366 | +0 |
+
+
+Batch4 file_size_transition authoring is integrated from Tinyff03191bd,
+e4f7f76cb and4b18789cf: exact seven originalIDs, all19Commit steps and26
+initial/published states, original overwrite/roundtrip/alias helper calls,
+strict exclusive131072-byte representation contract, every0..N proof index,
+and sealed prepared-P3 payload hook with unchanged native fallback. Limits,
+fixtures, worker count and original alias syscall sequence are unchanged.
+Lead5owning definition/shell/native-alias checks PASS with explicit120s stop;
+exact new native binaries substituted only for authoring load_build, no full
+clean seal or sample claim. The unchanged BA helper completes allfive calls,
+keeps expected complete file bytes/identity/link classes, and its final
+strict native metadata checker refuses changeddata/mtime as predicted. This
+is retained definition incompatibility, not a passing benchmark or authorized
+parent-restoration change. Raw qualification:
+benchmark-results/fs-bench-pro/2026-10-10-batch-4-boundary-family-root. Actual
+family parity/preparation/one-attempt case execution remains pending final
+shared support. No product source or Docker resource changed.
+
+| `ff03191bd` (worker) | Register original seven boundary cases and calls | 79366 | 79366 | +0 |
+| `e4f7f76cb` (worker) | Native alias strict compatibility qualification | 79366 | 79366 | +0 |
+| `4b18789cf` (worker) | Bind every boundary proof step and prepared SDK payloads | 79366 | 79366 | +0 |
+| This commit | Integrate original boundary family with owning native qualification | 79366 | 79366 | +0 |
