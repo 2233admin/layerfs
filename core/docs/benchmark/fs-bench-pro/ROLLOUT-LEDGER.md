@@ -1218,4 +1218,21 @@ sealed-writer qualification, actual build and pilot census remain pending.
 No product change. Production LOC 79,366 -> 79,366 (delta +0), pinned staged
 absent-aware method; reference absent (retired R9c; last counted 65,417).
 
-| This commit | Seal SDK writer routing, frozen group watchdog and offline pilot census | 79366 | 79366 | +0 |
+| `ac7beb4dd` | Seal SDK writer routing, frozen group watchdog and offline pilot census | 79366 | 79366 | +0 |
+
+
+Prospective edit proof declarations integrated from workers `27713d9c7` and
+`637d22460`: changing cases explicitly require exhaustive current inode-table
+membership, current authenticated mapping grammar and complete summaries,
+unchanged allocation scope/serial, and the strict retained-ID subset rule.
+Capped cases additionally declare independent pre-Commit own-write cold backing
+as an eligibility prerequisite; absence yields INELIGIBLE. Workloads, payloads,
+limits, cache treatment and strict checkers do not change. These are pre-sample
+metadata corrections, with no prepared SDK fixture or SDK sample yet. Final
+owning six changing/capped contract tests PASS under the 120 s lock. Both worker
+commits and this integration count unchanged product 79,366 -> 79,366, delta +0;
+reference absent, pinned staged absent-aware counter.
+
+| `27713d9c7` (worker) | Declare strict current edit and inode proof scope | 79366 | 79366 | +0 |
+| `637d22460` (worker) | Declare independent own-write cache evidence for capped Commits | 79366 | 79366 | +0 |
+| This commit | Integrate prospective edit proof and cache declarations | 79366 | 79366 | +0 |
