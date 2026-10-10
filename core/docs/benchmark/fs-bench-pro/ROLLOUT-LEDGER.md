@@ -19,8 +19,8 @@ comparison or release-admission claim. Durable is
 | 0.3 Case catalogue | COMPLETE | `f182e9a63`; prerequisite correction `30b798192` | Stage 0.4 reproducible engine |
 | 0.4 Reproducible engine | CLOSED: functional proof complete; exact reproduction FAILED C10/C12 | Cell-route correction `bb8e07df8`; build support `c496025fc`; oracle support `7a27a4f26`; fixture support `516c2f009`; workspace/report support `358eca082`; cleanup-observer correction `a1f2c259c` | Begin batch 1 under failed-reproduction closure recorded below |
 | 1 Pilot | COMPLETE: 36 functional/proof/clean-close passes; 7 recorded scoped B PASS, 29 INELIGIBLE; full numeric qualification of the 7 is unverified | Init `c1d7dd0e8`/`39bbcbd6b`; payload `200f81493`/`c1d9b6c58`; parallel routing `b3c96ecb1`; tiny `36849bcc2`/`d6e0ef952`; namespace `98b14b233`/`be1f56a23`; H-2 fix `222526fa0`; closure `d4314ed62`; membership supplement `cca598d0b` | Batch 2, retaining original receipts plus exhaustive membership supplement |
-| 2 Edits | IN_PROGRESS: canonical 12 and preserving 12 closed; capped 5 closed (2 functional passes, 3 watchdog failures); changing 32 closed (12 strict passes, 20 retention failures); small-delta registered and reviewed, sample pending | Canonical `a34b5d44b`/`beeb7ad69`; preserving `b9ffa63be`; capped `4d8ccfc93`; changing `05ffbf971`; small-delta support this commit | Seal final small-delta compiled identity, parity/prepare/sample once; no batch 3 |
-| 3 Trees and tools | PENDING | — | Wait for batch 2 completion |
+| 2 Edits | COMPLETE: all62 cases ported/parity/sampled once/recorded;39 strict proof and clean-close passes (numeric INELIGIBLE),20 strict retention failures and3 original capped-watchdog failures retained | Canonical `a34b5d44b`/`beeb7ad69`; preserving `b9ffa63be`; capped `4d8ccfc93`; changing `05ffbf971`; small-delta `c0c99a4a3`/`2e6a508b5`/this commit | Begin batch3; no identified fixable product correctness defect remains in batch2 |
+| 3 Trees and tools | READY: batch2 closed; read-only original-source planning complete | — | Author/run four original families in parallel worktrees within this batch |
 | 4 History on one branch | PENDING | — | Wait for batch 3 completion |
 | 5 Branches and Workspaces | PENDING | — | Wait for batch 4; verify existing P-1 SDK methods |
 | 6 Dedup and storage | PENDING | — | Wait for batch 5 completion |
@@ -1780,4 +1780,57 @@ Production LOC79,366 ->79,366 (delta+0), pinned staged absent-aware method;
 reference absent (retired R9c; last counted65,417).
 
 | `dbcae7b12` (worker) | Add qualified host-only build support to bench.py | 79366 | 79366 | +0 |
-| This commit | Integrate qualified immutable support reuse and its scoped checks | 79366 | 79366 | +0 |
+| `2e6a508b5` | Integrate qualified immutable support reuse and its scoped checks | 79366 | 79366 | +0 |
+
+Small-file-delta closed from worker result commit `be5fc295e`. One sample at
+clean dbcae7b12: all30 original whole-file imports and Created/Committed
+acknowledgements completed on one Workspace. All31 actual roots from the same
+closed measured Store passed complete bytes/metadata/ancestry/inode proof,
+7,624,960 verified bytes and341 total paths. Authenticated regular-file payload
+DELTA dependency existence passed,257 per-state record observations (repeated
+content IDs possible, not a unique-object count). Final fresh native verifier
+PASS, measured and verifier terminal unmounts Gone and KNOWN_STOP. Numeric
+INELIGIBLE stays visible because initial/warm interval, full paid backing,
+metadata/SQLite and own-write coldness are unavailable. No product bug surfaced
+and the case was not repeated.
+
+Recorded complete product wall1,688,425,918ns; raw absolute mount-through-End
+wall5,420,649,583ns includes60 read-only original resource-observer intervals
+totaling3,732,223,665ns, retained individually. Phases are mount8,160,042ns,
+commands1,289,511,875ns, Commits236,492,002ns and unmount4,011,125ns. Separate
+proof2,402,421,666ns; max importer+Commit step71,246,667ns and max selected-root
+proof child43,129,417ns. All original600s phase and30s per-state stops are
+WITHIN, with no limit or workload changes. Counts402 requests/3142 owner
+jobs/14764 statements. Store logical2,412,624B/allocated2,416,640B; overlay
+logical286,720B/allocated268,722,176B. Original2CPU/2GiB/no-swap/256PID profile
+readback is exact; all30 resource checks record zero OOM/OOM-kill/swap. The
+53,334,016B VmHWM is process-lifetime diagnostic only, not a phase peak.
+
+Raw run remains in the tiny worker at
+/Users/yifanxu/.codex/worktrees/fs-bench-pro-tiny-file-churn/layerfs/
+benchmark-results/fs-bench-pro/2026-10-10-batch-2-small-delta-dbcae7b12/.
+Retained receipt verification PASS, report generated once. The two generated
+CSVs under baselines/core/2026-10-10-dbcae7b12 have the exact30/14-column
+schemas and one row each (performance INELIGIBLE/proof PASS). Functionally
+passing sample container
+96cfc0e55fae6165dd4362632339ffd2112e9f47d37bd25b2bd9964c771f12e4 and sample
+volume layerfs-fsb-sample-60324439af044ce5 were removed with successful cleanup
+receipts. Closed initial master
+layerfs-fsb-master-small-file-delta-smoke-7ab14dadc3d1479c remains for reuse.
+All earlier failed/uncertain resources, protected resources and unsampled
+diagnostic builds remain untouched.
+
+Batch2 closure: five original families/all62 cases registered as ported,
+parity passed with differences declared, one sample each, generated CSVs
+committed with every row/reference. Canonical12, preserving12, changing12,
+capped2 and small-delta1 have strict proof/clean-close PASS;39 numeric rows
+are INELIGIBLE. Changing20 strict original retention failures and capped3
+watchdog failures remain FAIL with the source-backed reasons and resources
+recorded above. None establishes a fixable wrong-byte/publication/refusal/
+deadlock product defect; no optimization or new splice feature is authorized.
+All batch2 declared reporting limits are WITHIN. The rollout now has98 ported
+cases across nine families and175 pending cases across sixteen families.
+Product79,366 unchanged; no speed, release or reference-comparison verdict.
+
+| `be5fc295e` (worker) | Record one small-delta sample with all31 root proofs | 79366 | 79366 | +0 |
+| This commit | Integrate small-delta CSVs and close all62 batch2 cases | 79366 | 79366 | +0 |
