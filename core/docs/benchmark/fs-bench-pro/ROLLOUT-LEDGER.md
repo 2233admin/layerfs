@@ -3953,4 +3953,38 @@ progress under the recorded disjoint owners. Batches6–7 remain pending; all
 protected resources, failed sample custody and historical evidence are preserved.
 
 | `4329298a5` (worker) | Add contextual native model/recipe/prepared writer and external qualification | 79370 | 79370 | +0 |
-| This commit | Integrate exact qualified contextual native support | 79370 | 79370 | +0 |
+| `7c9e011ff` | Integrate exact qualified contextual native support | 79370 | 79370 | +0 |
+
+
+### Batch 5 contextual fixture admission, 2026-10-11
+
+Imported only worker19a6dbf798ad6ff9066bacbf7803266cc824ac48's fixture
+module and external contextual fixture tests. The new prepared-context schema
+binds the exact committed case and model/native source, initial role and full
+materialization manifest, selected original role/local checkpoints, prepared
+SDK members and scripts, helper binaries, receipt hashes and role-specific
+actual-mode scope. It never treats materialization modes as measured observations.
+Legacy batch1–4 interfaces, schemas, source/profile guards and member checks
+remain unchanged. The original two-worker Discard witness is a sealed native
+recipe asset; branch/four-worker records require its absence.
+
+Twenty-five final owning tests passed once in2.869 s under a private4/120 s
+wall stop, including ten context admission tests and fifteen unchanged legacy
+fixture tests. Earlier mocked checks are development evidence; final changed
+asset coverage was run at final owned source. No native asset generation,
+Store preparation, Docker action, parity, case or Linux seal was performed.
+Fixture/module SHA-256dda1a0f51d5a5a3fe82ca8f34eb796124dc41e9fd9acf9efcce10b9d627dfdb2;
+test SHA-256840579f911e0e9da4977cfc6a5f0f6b0c895e581f27baaaf618d5a8ec805396e.
+The unchanged owning qualification is reused on import. Root's separate native
+discard CLI and controller are still being implemented; no partially integrated
+source is presented as prepared or sampled.
+
+The fixture worker proceeds to source-only historical producer dependency
+admission. Every access fixture will derive from a new complete closed producer
+setup and its exact typed transcript, retaining initial master reuse without
+reusing a mutated measured sample. The runtime and independent oracle workers
+retain their disjoint ownership. P1/public SDK/Linux/actual cases remain pending.
+Durable stays NOT_RUN — disabled by owner until explicit reauthorization.
+
+| `19a6dbf79` (worker) | Add exact contextual fixture/prepared-member and discard admission;25 final tests pass | 79370 | 79370 | +0 |
+| This commit | Integrate qualified contextual fixture admission | 79370 | 79370 | +0 |

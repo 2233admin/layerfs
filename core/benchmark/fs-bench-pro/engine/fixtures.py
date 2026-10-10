@@ -21,6 +21,493 @@ WORKSPACE_FAMILIES = ("payload_create_read", "tiny_file_churn", "namespace_mutat
                      "dedup_branch_history", "mixed_load_bearing")
 RECIPE_HISTORY_SCHEMAS = ("original-v016-boundary-sequence-v1", "original-dedup-history-sequence-v1",
                           "original-m1-commit-sequence-v1")
+CONTEXT_PREPARED_SCHEMA = "fs-bench-pro-prepared-context-workspace-v1"
+CONTEXT_SOURCE_FILES = ("core/benchmark/fs-bench-pro/engine/recipes/edit_model.rs",
+                        "core/benchmark/fs-bench-pro/engine/recipes/workspace.rs",
+                        "core/benchmark/fs-bench-pro/writers/edit.rs")
+
+
+def context_plan(case):
+    """Read declared roles/checkpoints/member counts, never infer from outputs."""
+    branch, topology = case.get("branch_schedule"), case.get("topology_schedule")
+    if bool(branch) == bool(topology):
+        raise ValueError("exactly one original context schedule required")
+    roles, limits, runs, selected = [], {}, {}, []
+    if branch:
+        if branch.get("schema") != "original-branch-development-v1":
+            raise ValueError("original branch context schema required")
+        for item in branch["branches"]:
+            role = item["role"]
+            if role not in ("trunk", "a", "b", "c") or role in limits:
+                raise ValueError("original branch context roles differ")
+            if type(item.get("local_commits")) is not int or item["local_commits"] < 1:
+                raise ValueError("positive original context limits required")
+            roles.append(role); limits[role] = item["local_commits"]
+        if not roles or roles[0] != "trunk":
+            raise ValueError("initial branch fixture requires trunk context")
+        for role in roles:
+            rows = [step for step in case["steps"] if step.get("role") == role]
+            if [step.get("local_index") for step in rows] != list(range(1, limits[role] + 1)):
+                raise ValueError("exact original role-local operation sequence required")
+            runs[role] = rows
+        if sum(limits.values()) != len(case["steps"]):
+            raise ValueError("undeclared branch context operations")
+        selected = [{"role": item["role"], "index": item["local_index"]}
+                    for item in branch["payload_checkpoints"]]
+    else:
+        if topology.get("schema") != "original-v016-m1-topology-v1":
+            raise ValueError("original multi-workspace context schema required")
+        count = topology["per_worker_commits"]
+        if type(count) is not int or count < 1:
+            raise ValueError("positive original context limits required")
+        for index, worker in enumerate(topology["workers"]):
+            if type(worker.get("index")) is not int or worker["index"] != index or index > 3:
+                raise ValueError("original multi-workspace context roles differ")
+            role = str(index); roles.append(role); limits[role] = count
+            rows = case["steps"]
+            if [step.get("index") for step in rows] != list(range(1, count + 1)):
+                raise ValueError("exact original worker-local operation sequence required")
+            runs[role] = rows
+            selected.extend({"role": role, "index": step}
+                            for step in topology["verification_steps_by_worker"][role])
+        if (len(roles) not in (2, 4) or set(topology["verification_steps_by_worker"]) != set(roles)
+                or topology["total_commits"] != sum(limits.values())):
+            raise ValueError("original multi-workspace context cardinality differs")
+    if any(type(limit) is not int or limit < 1 for limit in limits.values()):
+        raise ValueError("positive original context limits required")
+    pairs = [(item["role"], item["index"]) for item in selected]
+    if (not pairs or len(set(pairs)) != len(pairs)
+            or any(role not in limits or type(step) is not int or not 1 <= step <= limits[role]
+                   for role, step in pairs)
+            or any((role, limits[role]) not in pairs for role in roles)
+            or case.get("m1_schedule") and any(step % 5 for _, step in pairs)):
+        raise ValueError("exact declared contextual payload checkpoints required")
+    sdk, original_runs = [], {role: {} for role in roles}
+    for role in roles:
+        for index, step in enumerate(runs[role], 1):
+            count = step.get("ordinary_edit_members", 0)
+            expected = 2 if index % 5 == 2 else 0 if case.get("m1_schedule") else 1
+            if not case.get("m1_schedule"):
+                expected = 1
+            if type(count) is not int or count != expected or not step.get("commit"):
+                raise ValueError("original contextual SDK member schedule differs")
+            original = step["run"] + (" " + role if topology else "")
+            original_runs[role][str(index)] = original
+            if count:
+                sdk.append({"role": role, "index": index, "members": count, "original_run": original})
+    return {"initial_role": roles[0], "roles": roles, "local_commits": limits,
+            "checkpoints": selected, "sdk_steps": sdk, "original_context_runs": original_runs,
+            "case_definition_sha256": hashlib.sha256(json.dumps(case, sort_keys=True).encode()).hexdigest()}
+
+
+def context_source_binding(case, current):
+    return {"source_commit": current["source_commit"], "source_tree": current["source_tree"],
+            "case_definition_sha256": context_plan(case)["case_definition_sha256"],
+            "model_files": {path: current["files"][path] for path in CONTEXT_SOURCE_FILES}}
+
+
+def context_role_records(case, plan):
+    records = {}
+    for role in plan["roles"]:
+        inherited = ["trunk", role] if case.get("branch_schedule") and role != "trunk" else [role]
+        records[role] = {"local_commits": plan["local_commits"][role],
+                         "created_modes_schema": "original-context-created-modes-v1" if case.get("m1_schedule") else None,
+                         "created_mode_scope_roles": inherited if case.get("m1_schedule") else [],
+                         "actual_created_modes": "NOT_OBSERVED_IN_PREPARATION; measured helper maps required"}
+    return records
+
+
+def historical_producer_dependency(case):
+    """Support declaration only; Root owns the new closed producer execution."""
+    fixture = case["fixture"]
+    return {"schema": "fs-bench-pro-historical-producer-dependency-v1", "case": case["v016_case"],
+            "producer": fixture.get("producer"), "producer_family": fixture.get("producer_family"),
+            "seed": fixture["seed"], "status": "EXECUTION_PENDING_ROOT",
+            "required_custody": "new closed preparation with original producer acknowledgements and full history",
+            "allowed_reuse": "initial immutable masters, exact recipes and qualified proof identities",
+            "forbidden_reuse": "mutated measured batch4 sample or relabelled measurement receipt"}
+
+
+def prepare_context_native(case, folder, build, binding):
+    """Initial full native input; only declared role-specific payload checkpoints."""
+    plan = context_plan(case); writer = build["binaries"]["workspace-writer"]
+    manifests = folder / "context-manifests"; manifests.mkdir()
+    native, checkpoints, expectation = {}, [], {}
+    def materialize(role, step, root, label):
+        root.parent.mkdir(parents=True, exist_ok=True)
+        argv = [writer["path"], "materialize-context", case["v016_case"], role, str(step), str(root)]
+        made = receipts.command(argv, folder, label, 120)
+        summary = json.loads(Path(made["stdout"]).read_text())
+        full = root.with_suffix(".manifest.tsv")
+        scope = root.with_suffix(".scope.tsv") if case.get("m1_schedule") else full
+        if (summary.get("case") != case["v016_case"] or summary.get("role") != role
+                or type(summary.get("step")) is not int or summary["step"] != step
+                or type(summary.get("seed")) is not int or summary["seed"] != 1
+                or summary.get("manifest_sha256") != identity.sha256(full)
+                or summary.get("context_manifest_sha256") != identity.sha256(scope)
+                or not isinstance(summary.get("recipe_sha256"), str) or len(summary["recipe_sha256"]) != 64
+                or any(char not in "0123456789abcdef" for char in summary["recipe_sha256"])
+                or type(summary.get("entries")) is not int or summary["entries"] < 1
+                or type(summary.get("logical_bytes")) is not int or summary["logical_bytes"] < 0
+                or full.read_text().splitlines()[0] != "workspace-independent-manifest-v1"
+                or scope.read_text().splitlines()[0] != ("original-m1-selective-scope-v1" if case.get("m1_schedule") else "workspace-independent-manifest-v1")):
+            raise ValueError("original contextual native source/role/step/manifest binding differs")
+        summary.update(fixture_digest=identity.sha256(full), recipe_identity=summary["recipe_sha256"],
+                       files=sum(row.split("\t")[1] == "file" for row in full.read_text().splitlines()[1:]))
+        recipe = {"argv": argv, "binary_sha256": writer["sha256"], "source_binding": binding,
+                  "receipt": str(Path(made["stdout"]).resolve()), "receipt_sha256": identity.sha256(made["stdout"])}
+        return summary, full, scope, recipe
+    def verify_full(root, manifest, label):
+        proof = receipts.command([build["binaries"]["edit-host"]["path"], "verify-manifest", str(manifest)],
+                                 folder, label, 120, cwd=root)
+        result = dict(line.split("=", 1) for line in Path(proof["stdout"]).read_text().splitlines())
+        if result.get("verification_status") != "pass":
+            raise ValueError("original contextual full native input verification failed")
+        native[label] = result
+    source = folder / "source"
+    fixture, initial_manifest, _, initial_recipe = materialize(plan["initial_role"], 0, source, "native-context-initial")
+    verify_full(source, initial_manifest, "original-context-initial-check")
+    for selected in plan["checkpoints"]:
+        role, step = selected["role"], selected["index"]
+        root = folder / "context-native" / role / f"state-{step}"
+        summary, full, scope, recipe = materialize(role, step, root, f"native-context-{role}-{step}")
+        if not case.get("m1_schedule"):
+            verify_full(root, full, f"original-context-{role}-{step}-check")
+        destination = manifests / role / f"state-{step}.tsv"; destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(scope, destination)
+        checkpoints.append({"role": role, "index": step, "native_root": str(root), "summary": summary,
+                            "native_manifest": str(full), "native_manifest_sha256": identity.sha256(full),
+                            "manifest": str(destination), "manifest_sha256": identity.sha256(destination),
+                            "staged_manifest": f"/code/context/{role}/manifests/state-{step}.tsv",
+                            "native_recipe": recipe, "verification_scope": "original-m1-selective-scope-v1" if case.get("m1_schedule") else "complete-original-native-state",
+                            "materialization_metadata": "None mode observations; selected M1 automatic fields are placeholders, not proof" if case.get("m1_schedule") else "original full compact state"})
+        if step == plan["local_commits"][role]:
+            expectation[role] = summary
+    return fixture, expectation, native, checkpoints, initial_recipe
+
+
+def context_descriptor(path, case, selected):
+    rows = Path(path).read_text().splitlines(); role, step, count = selected["role"], selected["index"], selected["members"]
+    if rows[:5] != ["original-context-step-payloads-v1", "case\t" + case["v016_case"],
+                   "role\t" + role, f"step\t{step}", f"members\t{count}"] or len(rows) != count + 5:
+        raise ValueError("original contextual descriptor case/role/step/member binding differs")
+    payloads = {}
+    for member, row in enumerate(rows[5:], 1):
+        fields = row.split("\t"); name = f"member-{member}.bin"
+        if len(fields) != 12 or fields[0] != str(member) or fields[11] != name:
+            raise ValueError("original contextual member order/path differs")
+        target = fields[1]
+        if not target or any(part in ("", ".", "..") for part in target.split("/")) or any(c in target for c in "\0\\\r\n"):
+            raise ValueError("unsafe original contextual SDK target")
+        start, deleted, before, after, size = [int(value) for value in fields[2:7]]
+        mode, seconds, nanos = int(fields[8], 8), int(fields[9]), int(fields[10])
+        payload = Path(path).parent / name
+        if (any(value < 0 or value > 2**64-1 for value in (start, deleted, before, after, size))
+                or start+deleted > before or before-deleted+size != after or mode < 0 or mode & ~0o7777
+                or not -(2**63) <= seconds < 2**63 or not 0 <= nanos < 1_000_000_000
+                or payload.stat().st_size != size or identity.sha256(payload) != fields[7]):
+            raise ValueError("original contextual payload/geometry/metadata differs")
+        payloads[name] = {"sha256": fields[7], "bytes": size}
+    return payloads
+
+
+def prepare_context_payloads(case, folder, build, binding):
+    records = []; writer = build["binaries"]["edit-host"]
+    for selected in context_plan(case)["sdk_steps"]:
+        role, step = selected["role"], selected["index"]
+        output = folder / "context-payloads" / role / f"step-{step}"; output.parent.mkdir(parents=True, exist_ok=True)
+        argv = [writer["path"], "prepare-context-step", case["v016_case"], role, str(step), str(output)]
+        made = receipts.command(argv, folder, f"original-context-payloads-{role}-{step}", 120)
+        summary = json.loads(Path(made["stdout"]).read_text()); descriptor = output / "descriptor.tsv"
+        if (summary.get("case") != case["v016_case"] or summary.get("role") != role or type(summary.get("step")) is not int
+                or summary["step"] != step or type(summary.get("members")) is not int or summary["members"] != selected["members"]
+                or summary.get("descriptor_sha256") != identity.sha256(descriptor)):
+            raise ValueError("original contextual SDK generator identity differs")
+        staged = f"/code/context/{role}/payloads/step-{step}/descriptor.tsv"
+        operator = ["/code/writers/edit", "apply-context-step-prepared", case["v016_case"], role, str(step), staged, identity.sha256(descriptor)]
+        records.append({**selected, "generator": {"argv": argv, "binary_sha256": writer["sha256"],
+                                                 "source_binding": binding, "receipt": str(Path(made["stdout"]).resolve()),
+                                                 "receipt_sha256": identity.sha256(made["stdout"])},
+                        "descriptor": str(descriptor), "descriptor_sha256": identity.sha256(descriptor),
+                        "payloads": context_descriptor(descriptor, case, selected), "staged_descriptor": staged,
+                        "operator": "apply-context-step-prepared", "argv": operator,
+                        "member_argv": [operator + [str(member)] for member in range(1, selected["members"] + 1)],
+                        "prepared_run": f"context/{role}/steps/step-{step}.sh"})
+    return records
+
+
+def context_discard_required(case):
+    topology = case.get("topology_schedule")
+    if not topology:
+        return False
+    discard = topology.get("discard_reopen")
+    concurrent = topology.get("topology") == "concurrent"
+    if concurrent:
+        if (len(topology["workers"]) != 2 or not isinstance(discard, dict)
+                or type(discard.get("worker")) is not int or discard["worker"] != 0
+                or type(discard.get("witness_bytes")) is not int or discard["witness_bytes"] != 256):
+            raise ValueError("original two-worker discard witness declaration differs")
+    elif discard is not None:
+        raise ValueError("undeclared original contextual discard witness")
+    return concurrent
+
+
+def context_discard_descriptor(path, case):
+    body = Path(path).read_bytes().decode("utf-8"); rows = body.splitlines()
+    if len(rows) != 2 or rows[0] != "original-context-discard-witness-v1":
+        raise ValueError("original contextual discard witness header differs")
+    fields = rows[1].split("\t")
+    if len(fields) != 4 or fields[:2] != [case["v016_case"], "0"]:
+        raise ValueError("original contextual discard witness case/role differs")
+    target, value = fields[2:]
+    if (not target or any(part in ("", ".", "..") for part in target.split("/"))
+            or any(char in target for char in "\0\\\r\n")
+            or len(value) != 512 or any(char not in "0123456789abcdef" for char in value)
+            or body != "\n".join(rows) + "\n"):
+        raise ValueError("original contextual discard witness path/bytes differ")
+    return {"case": case["v016_case"], "role": "0", "path": target, "hex": value,
+            "bytes": 256, "payload_sha256": hashlib.sha256(bytes.fromhex(value)).hexdigest()}
+
+
+def context_discard_receipt(summary, record):
+    if (any(summary.get(key) != record[key] for key in ("case", "role", "path", "payload_sha256", "descriptor_sha256"))
+            or type(summary.get("bytes")) is not int or summary["bytes"] != 256):
+        raise ValueError("original contextual discard witness source receipt differs")
+
+
+def prepare_context_discard(case, folder, build, binding):
+    if not context_discard_required(case):
+        return None
+    output = folder / "context-discard"; writer = build["binaries"]["workspace-writer"]
+    argv = [writer["path"], "prepare-context-discard", case["v016_case"], str(output)]
+    made = receipts.command(argv, folder, "original-context-discard-witness", 120)
+    descriptor = output / "witness.tsv"
+    record = {**context_discard_descriptor(descriptor, case), "descriptor": str(descriptor),
+              "descriptor_sha256": identity.sha256(descriptor), "staged_descriptor": "/code/context/discard-witness.tsv",
+              "generator": {"argv": argv, "binary_sha256": writer["sha256"], "source_binding": binding,
+                            "receipt": str(Path(made["stdout"]).resolve()), "receipt_sha256": identity.sha256(made["stdout"])}}
+    context_discard_receipt(json.loads(Path(made["stdout"]).read_text()), record)
+    return record
+
+
+def validate_context_discard(case, prepared, build, binding, helper):
+    record = prepared.get("original_discard_witness")
+    if not context_discard_required(case):
+        if record is not None:
+            raise ValueError("undeclared original contextual discard witness asset")
+        return set()
+    if not isinstance(record, dict):
+        raise ValueError("original two-worker discard witness asset required")
+    descriptor = Path(record["descriptor"]); relative = "context/discard-witness.tsv"
+    generator = record["generator"]; argv = generator["argv"]
+    if (not descriptor.is_absolute() or descriptor.name != "witness.tsv"
+            or record.get("staged_descriptor") != "/code/" + relative
+            or argv[1:] != ["prepare-context-discard", case["v016_case"], str(descriptor.parent)]
+            or generator.get("source_binding") != binding
+            or generator.get("binary_sha256") != build["binaries"]["workspace-writer"]["sha256"]
+            or identity.sha256(argv[0]) != generator["binary_sha256"]
+            or identity.sha256(descriptor) != record["descriptor_sha256"]
+            or identity.sha256(generator["receipt"]) != generator["receipt_sha256"]):
+        raise ValueError("original contextual discard witness generator/source/staged binding differs")
+    source = context_discard_descriptor(descriptor, case)
+    if (any(record.get(key) != value for key, value in source.items())
+            or context_discard_descriptor(helper(relative, record["descriptor_sha256"]), case) != source):
+        raise ValueError("original contextual discard witness staged/source bytes differ")
+    context_discard_receipt(json.loads(Path(generator["receipt"]).read_text()), record)
+    return {relative}
+
+
+def validate_context_helpers(case, prepared, build):
+    plan = context_plan(case); binding = prepared.get("context_binding", {})
+    if (prepared.get("schema") != CONTEXT_PREPARED_SCHEMA or prepared.get("case") != case["id"]
+            or prepared.get("context_roles") != context_role_records(case, plan)
+            or binding.get("case_definition_sha256") != plan["case_definition_sha256"]):
+        raise ValueError("exact prepared contextual case/source/role binding required")
+    for path in CONTEXT_SOURCE_FILES:
+        if binding.get("model_files", {}).get(path) != identity.sha256(identity.ROOT / path):
+            raise ValueError("prepared contextual model source changed")
+    root = Path(prepared["helpers"]["root"]); seals = prepared["helpers"]["files"]
+    def helper(relative, wanted):
+        if seals.get(relative) != wanted or identity.sha256(root / relative) != wanted:
+            raise ValueError("current contextual helper seal differs: " + relative)
+        return root / relative
+    binaries = {"writers/workload": "workload-linux", "writers/edit": "edit-linux", "writers/recipe": "workspace-linux"}
+    for relative, binary in binaries.items():
+        helper(relative, build["binaries"][binary]["sha256"])
+    helper("workload.sh", identity.sha256(identity.ROOT / "core/benchmark/fs-bench-pro/families" / case["registry"]["family"] / "workload.sh"))
+    initial = prepared.get("context_initial_recipe", {}); initial_argv = initial.get("argv", [])
+    if (len(initial_argv) != 6 or initial_argv[1:5] != ["materialize-context", case["v016_case"], plan["initial_role"], "0"]
+            or initial.get("source_binding") != binding
+            or initial.get("binary_sha256") != build["binaries"]["workspace-writer"]["sha256"]
+            or identity.sha256(initial_argv[0]) != initial["binary_sha256"]
+            or identity.sha256(initial["receipt"]) != initial["receipt_sha256"]):
+        raise ValueError("exact pristine initial contextual fixture binding required")
+    initial_summary = json.loads(Path(initial["receipt"]).read_text())
+    initial_digest = identity.sha256(Path(initial_argv[-1]).with_suffix(".manifest.tsv"))
+    if (initial_summary.get("case") != case["v016_case"] or initial_summary.get("role") != plan["initial_role"]
+            or type(initial_summary.get("step")) is not int or initial_summary["step"] != 0
+            or type(initial_summary.get("seed")) is not int or initial_summary["seed"] != 1
+            or initial_summary.get("manifest_sha256") != initial_digest
+            or prepared.get("fixture", {}).get("fixture_digest") != initial_digest):
+        raise ValueError("pristine contextual fixture source receipt differs")
+    states = prepared.get("context_checkpoints", [])
+    if (not isinstance(states, list) or any(not isinstance(s, dict) for s in states)
+            or [{"role": s.get("role"), "index": s.get("index")} for s in states] != plan["checkpoints"]):
+        raise ValueError("exact original contextual native checkpoints required")
+    manifests = set()
+    for state in states:
+        role, step = state["role"], state["index"]; relative = f"context/{role}/manifests/state-{step}.tsv"
+        if (state.get("staged_manifest") != "/code/" + relative
+                or identity.sha256(state["manifest"]) != state["manifest_sha256"]
+                or identity.sha256(state["native_manifest"]) != state["native_manifest_sha256"]
+                or state["native_recipe"].get("source_binding") != binding
+                or state["native_recipe"].get("binary_sha256") != build["binaries"]["workspace-writer"]["sha256"]
+                or identity.sha256(state["native_recipe"]["receipt"]) != state["native_recipe"]["receipt_sha256"]):
+            raise ValueError("contextual native/scoped/source/binary seals differ")
+        native_argv = state["native_recipe"]["argv"]
+        if (native_argv[1:] != ["materialize-context", case["v016_case"], role, str(step), state["native_root"]]
+                or identity.sha256(native_argv[0]) != state["native_recipe"]["binary_sha256"]):
+            raise ValueError("contextual native generator correspondence differs")
+        summary = json.loads(Path(state["native_recipe"]["receipt"]).read_text())
+        if (summary.get("case") != case["v016_case"] or summary.get("role") != role
+                or type(summary.get("step")) is not int or summary["step"] != step
+                or summary.get("manifest_sha256") != state["native_manifest_sha256"]
+                or summary.get("context_manifest_sha256") != state["manifest_sha256"]
+                or summary.get("recipe_sha256") != state.get("summary", {}).get("recipe_sha256")):
+            raise ValueError("contextual native/scoped source receipt differs")
+        helper(relative, state["manifest_sha256"]); manifests.add(relative)
+    records, runs = prepared.get("sdk_context_steps", []), prepared.get("prepared_context_runs", {})
+    if (not isinstance(records, list) or not isinstance(runs, dict) or any(not isinstance(item, dict) for item in records)
+            or [{k: item.get(k) for k in ("role", "index", "members", "original_run")} for item in records] != plan["sdk_steps"]
+            or set(runs) != set(plan["roles"])):
+        raise ValueError("exact original contextual SDK role/step/member map required")
+    payload_assets, scripts = set(), set()
+    for role in plan["roles"]:
+        if not isinstance(runs[role], dict) or set(runs[role]) != {str(item["index"]) for item in records if item["role"] == role}:
+            raise ValueError("exact original contextual prepared run map required")
+    for record in records:
+        role, step = record["role"], record["index"]; relative = f"context/{role}/payloads/step-{step}/descriptor.tsv"
+        staged = "/code/" + relative; run = f"context/{role}/steps/step-{step}.sh"
+        descriptor = Path(record["descriptor"]); wanted = record["descriptor_sha256"]
+        expected = ["/code/writers/edit", "apply-context-step-prepared", case["v016_case"], role, str(step), staged, wanted]
+        generator = record["generator"]; source_argv = generator["argv"]
+        if (record.get("prepared_run") != run or runs[role][str(step)] != run or record.get("staged_descriptor") != staged
+                or record.get("operator") != "apply-context-step-prepared" or record.get("argv") != expected
+                or record.get("member_argv") != [expected + [str(i)] for i in range(1, record["members"] + 1)]
+                or not descriptor.is_absolute() or descriptor.name != "descriptor.tsv"
+                or source_argv[1:] != ["prepare-context-step", case["v016_case"], role, str(step), str(descriptor.parent)]
+                or generator.get("source_binding") != binding or generator.get("binary_sha256") != build["binaries"]["edit-host"]["sha256"]
+                or identity.sha256(source_argv[0]) != generator["binary_sha256"] or identity.sha256(descriptor) != wanted
+                or identity.sha256(generator["receipt"]) != generator["receipt_sha256"]):
+            raise ValueError("original contextual SDK operator/generator/run binding differs")
+        actual = helper(relative, wanted); payloads = context_descriptor(actual, case, record)
+        summary = json.loads(Path(generator["receipt"]).read_text())
+        if (summary.get("case") != case["v016_case"] or summary.get("role") != role
+                or type(summary.get("step")) is not int or summary["step"] != step
+                or type(summary.get("members")) is not int or summary["members"] != record["members"]
+                or summary.get("descriptor_sha256") != wanted):
+            raise ValueError("original contextual SDK source receipt differs")
+        if payloads != record["payloads"] or payloads != context_descriptor(descriptor, case, record):
+            raise ValueError("original contextual staged/source payload seals differ")
+        payload_assets.add(relative)
+        for name, seal in payloads.items():
+            relative_payload = f"context/{role}/payloads/step-{step}/{name}"
+            helper(relative_payload, seal["sha256"]); payload_assets.add(relative_payload)
+        body = sdk_step_script(record); helper(run, hashlib.sha256(body.encode()).hexdigest()); scripts.add(run)
+    discard_assets = validate_context_discard(case, prepared, build, binding, helper)
+    wanted_assets = manifests | payload_assets | scripts | discard_assets | {"context/native-recipes.json", "context/payloads.json"}
+    if {path for path in seals if path.startswith("context/")} != wanted_assets:
+        raise ValueError("undeclared contextual payload/script/manifest helper asset")
+    for path, field in (("context/native-recipes.json", "context_native_metadata"), ("context/payloads.json", "context_payload_metadata")):
+        if json.loads(helper(path, seals[path]).read_text()) != prepared.get(field):
+            raise ValueError("contextual helper metadata correspondence differs")
+    return {"schema": "fs-bench-pro-context-helper-admission-v1", "status": "PASS",
+            "context_roles": plan["roles"], "sdk_context_pairs": [[item["role"], item["index"]] for item in records],
+            "scope": "exact original case/role/step/native/source/binary/descriptor/member/script seals; no mutation or regeneration"}
+
+
+def prepare_context_workspace(family, case, folder, build_folder):
+    """New closed contextual setup; ordinary sample cloning remains unchanged."""
+    plan = context_plan(case)
+    build, current = identity.load_build(build_folder), identity.source_identity()
+    binding = context_source_binding(case, current)
+    folder = Path(folder).resolve(); folder.mkdir(parents=True, exist_ok=False)
+    fixture, expectation, native, checkpoints, initial_recipe = prepare_context_native(case, folder, build, binding)
+    source = folder / "source"
+    fixture.update(recipe=case["fixture"]["recipe"], fixture_sha256=fixture["fixture_digest"])
+    sdk = prepare_context_payloads(case, folder, build, binding)
+    discard = prepare_context_discard(case, folder, build, binding)
+    helpers = assets(folder / "code"); code = Path(helpers["root"])
+    copies = [(Path(build["binaries"][binary]["path"]), relative)
+              for binary, relative in (("workload-linux", "writers/workload"), ("edit-linux", "writers/edit"),
+                                       ("workspace-linux", "writers/recipe"))]
+    copies.append((identity.ROOT / "core/benchmark/fs-bench-pro/families" / family["family"] / "workload.sh", "workload.sh"))
+    for origin, relative in copies:
+        destination = code / relative; destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(origin, destination); destination.chmod(0o555)
+        helpers["files"][relative] = identity.sha256(destination)
+    context = code / "context"; context.mkdir()
+    if discard:
+        shutil.copy2(discard["descriptor"], context / "discard-witness.tsv")
+    for state in checkpoints:
+        destination = code / state["staged_manifest"].removeprefix("/code/")
+        destination.parent.mkdir(parents=True, exist_ok=True); shutil.copy2(state["manifest"], destination)
+    for record in sdk:
+        destination = code / record["staged_descriptor"].removeprefix("/code/")
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(record["descriptor"], destination)
+        for name in record["payloads"]:
+            shutil.copy2(Path(record["descriptor"]).parent / name, destination.parent / name)
+        script = code / record["prepared_run"]; script.parent.mkdir(parents=True, exist_ok=True)
+        script.write_text(sdk_step_script(record))
+    roles = context_role_records(case, plan)
+    native_metadata = {"schema": "fs-bench-pro-original-context-native-recipes-v1", "case": case["v016_case"],
+                       "context_binding": binding, "initial_recipe": initial_recipe,
+                       "context_roles": roles, "states": checkpoints, "performance_samples": 0,
+                       "scope": "only declared contextual payload checkpoints; actual created modes are not preparation evidence"}
+    payload_metadata = {"schema": "fs-bench-pro-original-context-sdk-payloads-v1", "case": case["v016_case"],
+                        "context_binding": binding, "steps": sdk, "original_discard_witness": discard, "performance_samples": 0}
+    receipts.write_new(context / "native-recipes.json", native_metadata)
+    receipts.write_new(context / "payloads.json", payload_metadata)
+    for path in sorted(context.rglob("*")):
+        if path.is_file():
+            path.chmod(0o444); helpers["files"][str(path.relative_to(code))] = identity.sha256(path)
+    helpers["sha256"] = hashlib.sha256(json.dumps(helpers["files"], sort_keys=True).encode()).hexdigest()
+    context_fields = {"schema": CONTEXT_PREPARED_SCHEMA, "case": case["id"], "fixture": fixture, "context_binding": binding,
+                      "context_roles": roles, "context_initial_recipe": initial_recipe, "context_checkpoints": checkpoints,
+                      "sdk_context_steps": sdk, "original_discard_witness": discard,
+                      "context_native_metadata": native_metadata, "context_payload_metadata": payload_metadata,
+                      "prepared_context_runs": {role: {str(record["index"]): record["prepared_run"]
+                                               for record in sdk if record["role"] == role} for role in plan["roles"]}, "helpers": helpers}
+    validate_context_helpers(case, context_fields, build)
+    reused, reuse = compatible_master(folder, fixture, current, source.stat().st_uid, source.stat().st_gid)
+    if reused is None:
+        volume = "layerfs-fsb-master-" + family["family"].replace("_", "-") + "-" + uuid.uuid4().hex[:16]
+        receipts.write_new(folder / "resource-claim.json", {"volume": volume, "created_by_this_run": True,
+                           "purpose": "new immutable contextual preparation; never measure directly"})
+        docker = ["docker", "--host", "unix://" + build["socket"]]
+        made = receipts.command([*docker, "volume", "create", volume], folder, "master-volume", 15)
+        if Path(made["stdout"]).read_text().strip() != volume:
+            raise ValueError("original contextual master volume acknowledgement differs")
+        provisioned = project.provision(source, volume, folder / "project", build)
+    else:
+        volume, provisioned = reused["master_volume"], reused["provision"]
+        receipts.write_new(folder / "resource-claim.json", {"volume": volume, "created_by_this_run": False,
+                           "purpose": "exact initial immutable master reused; independent sample byte copy only", "reuse": reuse})
+    result = {**context_fields, "status": "PASS", "family": family["family"],
+              "recipe": case["fixture"]["recipe"], "identity": current, "fixture": fixture, "expectation": expectation,
+              "native_verification": native, "context_binding": binding, "context_roles": roles,
+              "context_initial_recipe": initial_recipe, "context_checkpoints": checkpoints, "sdk_context_steps": sdk,
+              "context_native_metadata": native_metadata, "context_payload_metadata": payload_metadata,
+              "prepared_context_runs": {role: {str(record["index"]): record["prepared_run"]
+                                       for record in sdk if record["role"] == role} for role in plan["roles"]},
+              "helpers": helpers, "master_volume": volume, "provision": provisioned, "master_reuse": reuse,
+              "source_uid": source.stat().st_uid, "source_gid": source.stat().st_gid, "master_measurement_mounts": 0,
+              "global_profile": "Disposable/WAL/OFF", "overlay_profile": "MEMORY/OFF/EXCLUSIVE", "construction_workers": 1,
+              "setup": "full pristine initial native input independently verified; role-scoped original checkpoints/descriptors sealed; selected M1 metadata placeholders are not actual proof; one closed Init/master, independent sample byte clones",
+              "cache": "setup/native materialization warmth explicit; cloning establishes no cold paid-phase claim"}
+    receipts.write_new(folder / "prepared.json", result); receipts.manifest(folder)
+    return result
 
 
 def family_case(recipe):
@@ -195,7 +682,7 @@ def compatible_master(folder, fixture, current, uid, gid):
         if candidate.parent == Path(folder):
             continue
         summary = json.loads(candidate.read_text())
-        if (summary.get("schema") != "fs-bench-pro-prepared-workspace-v1"
+        if (summary.get("schema") not in ("fs-bench-pro-prepared-workspace-v1", CONTEXT_PREPARED_SCHEMA)
                 or summary.get("status") != "PASS"
                 or summary.get("global_profile") != "Disposable/WAL/OFF"
                 or summary.get("identity", {}).get("product_tree") != current["product_tree"]
@@ -446,6 +933,8 @@ def sdk_step_script(record):
 
 def validate_runtime_helpers(case, prepared, build):
     """Fail before claims/clones if original P-3 placement or helper seals differ."""
+    if case.get("branch_schedule") or case.get("topology_schedule"):
+        return validate_context_helpers(case, prepared, build)
     history = case.get("history_schedule", {}).get("schema") in RECIPE_HISTORY_SCHEMAS
     if not history and case.get("registry", {}).get("family") != "mixed_load_bearing":
         return {"status": "NOT_APPLICABLE", "scope": "existing non-batch4 helper admission unchanged"}
@@ -587,6 +1076,11 @@ def prepare_sdk_payloads(case, folder, build):
 
 def prepare_workspace(recipe, folder, build_folder):
     family, case = family_case(recipe)
+    if case.get("branch_schedule") or case.get("topology_schedule"):
+        return prepare_context_workspace(family, case, folder, build_folder)
+    if family["family"] == "historical_access":
+        dependency = historical_producer_dependency(case)
+        raise NotImplementedError("historical producer execution pending Root; new closed preparation required: " + str(dependency["producer"]))
     if family["family"] not in WORKSPACE_FAMILIES:
         raise ValueError("this family's workspace fixture port is not implemented yet")
     build = identity.load_build(build_folder)
