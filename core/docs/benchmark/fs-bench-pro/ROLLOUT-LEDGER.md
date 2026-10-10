@@ -5197,4 +5197,66 @@ worktrees own separate native/import/footprint/repository components; source
 and compiler/test failures remain retained and no speed work is selected.
 
 | Worker dd6fa4b77 | Author repository selections/wrapper/native corpus recipe/tests | 79370 | 79370 | +0 |
-| This commit | Integrate exact repository-history definitions and independent corpus recipe | 79370 | 79370 | +0 |
+| 55a323f2f | Integrate exact repository-history definitions and independent corpus recipe | 79370 | 79370 | +0 |
+
+
+### Batch 6 native verification integration, 2026-10-11
+
+This commit integrates the independent std-only CDC input/chunk scanner,
+source census CLI, public Init ACK qualification, exact typed dedup/reuse
+proof, original footprint clipped-boundary proof, and repository all-selected
+ACK/Created-only proof. SDK mount/unmount receipts now retain the actual
+Workspace incarnation and numeric namespace so a closed overlay observation
+can authenticate all original owners. All code is harness scope; product
+9ac88edb2cc44d44edd4a53f9ad89f4dee063a58 remains unchanged.
+
+Worker evidence is reused at the exact imported implementation: Init five
+checks PASS6,598,234,625ns/e8866e973; dedup five unaffected proofs reused plus
+final genuine public Init/Save/Commit/ACK-tamper check PASS1,322,236,250ns/
+44bbead833; footprint four final affected/new checks PASS7,758,521,666ns/
+a39490f48 and four unaffected checks reused; repository two real public
+C1/C5 proofs PASS1,179,039,208ns/8d06d11f9. These are synthetic independent
+proof qualification, not actual family samples, FUSE results or timing claims.
+Private pinned handoffs remain under their authoring roots, listed in the
+preceding working ledger and subsequent shared support record.
+
+Root native boundary CLI compile initially failed from a JSON format closing
+brace; corrected compilation PASS4,923,825,875ns. First CLI tamper test used
+an unpromised verification_status key and failed; the corrected test binds
+actual dedup_transcript_status plus input transcript SHA and rejects native
+byte tamper, PASS683,401,792ns. Root runtime all-test compilation initially
+failed because census_fixture lacked its crate-root dedup_input declaration;
+after that correction PASS8,638,524,500ns. Final integration added repository
+proof wrapper and exposed the same missing declaration there: compiler FAIL,
+then corrected all-test compilation PASS7,112,072,875ns. Raw failures are
+unchanged under 2026-10-11-batch-6-import-engine-checks. Owned native format
+check FAIL147,899,542ns only on new session receipt formatting, corrected
+without changing operation or workload. Final formatted all-test compilation PASS10,349,770,625ns; five protocol_
+checks PASS1,064,147,125ns with19 frozen inline tests filtered, main120s
+outer/110s child stops. No test expiry or actual mounted case occurred.
+
+Worker native authoring failures also stay visible: first dedup API compile
+errors; WrongLogicalRole from a synthetic unsorted serial fixture; missing
+inner decode/ACK binding; first footprint FileView PendingScope/include-doc
+compile errors; incorrect synthetic initial NamespaceRef1 (actual initial0);
+and footprint provider-after identity originally taken from the owner input
+rather than the actual independent typed copy. Each is a harness/test error,
+corrected in the above worker commits and qualified by unchanged strong
+oracles plus affected external negative tests. No product fix or physical
+resource claim resulted. Raw failed synthetic native roots remain retained:
+/var/folders/s4/xpkmz7wn6yq97w1ls_4f_dfc0000gn/T/fsb-batch5-footprint-positive-12135
+and fsb-batch5-footprint-corrupt-12135 at the same parent.
+
+All54 actual batch6 cases still NOT_RUN. Next step is commit shared Python
+machinery, seal nine assets from clean source, prepare/parity and sample once.
+
+| Commit | Purpose | Production before | after | delta |
+| --- | --- | --- | --- | --- |
+| Worker e8866e973 | Public import ACK proof | 79370 | 79370 | +0 |
+| Worker 44bbead83 | Exact dedup/reuse public proof | 79370 | 79370 | +0 |
+| Worker a39490f48 | Footprint actual typed provider/census binding | 79370 | 79370 | +0 |
+| Worker 8d06d11f9 | Repository all-selected native proof | 79370 | 79370 | +0 |
+| This commit | Integrate native batch6 fixtures and independent proof adapters | 79370 | 79370 | +0 |
+
+Each comparison uses the pinned absent-aware staged counter and confirms the
+resulting commit tree. Reference absent, retired R9c; last65,417/tree498dd1917812.

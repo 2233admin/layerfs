@@ -1,6 +1,9 @@
 //! Public current objects and Stores exercise actual selective proof failures.
 //! Synthetic selective fixtures qualify the oracle, never a benchmark sample.
 #[allow(dead_code)]
+#[path = "../../engine/recipes/dedup_input.rs"]
+mod dedup_input;
+#[allow(dead_code)]
 #[path = "../../engine/recipes/namespace.rs"]
 pub(crate) mod namespace;
 pub(crate) mod project {

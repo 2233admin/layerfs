@@ -1,5 +1,8 @@
 //! Synthetic protocol admission and receipt concurrency; no mounted case.
 #[allow(dead_code)]
+#[path = "../../engine/recipes/dedup_input.rs"]
+mod dedup_input;
+#[allow(dead_code)]
 #[path = "../../engine/recipes/namespace.rs"]
 pub(crate) mod namespace;
 pub(crate) mod project {

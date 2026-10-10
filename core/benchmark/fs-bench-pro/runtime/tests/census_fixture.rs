@@ -1,4 +1,7 @@
 //! Export one genuine public Store for the independent canonical census regression.
+#[allow(dead_code)]
+#[path = "../../engine/recipes/dedup_input.rs"]
+mod dedup_input;
 #[path = "batch4_oracle.rs"]
 mod support;
 pub(crate) use support::{

@@ -1,6 +1,9 @@
 //! Actual current public Stores/Forks/Commits qualify topology proof only.
 //! Native object construction is a synthetic oracle fixture, never mounted work.
 #[allow(dead_code)]
+#[path = "../../engine/recipes/dedup_input.rs"]
+mod dedup_input;
+#[allow(dead_code)]
 #[path = "../../engine/recipes/namespace.rs"]
 pub(crate) mod namespace;
 pub(crate) mod project {

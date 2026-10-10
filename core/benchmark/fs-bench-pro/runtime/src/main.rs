@@ -1,13 +1,18 @@
 //! SDK-driven host provisioning and persistent real-daemon benchmark control.
 mod args;
+#[allow(dead_code)]
+#[path = "../../engine/recipes/dedup_input.rs"]
+mod dedup_input;
 #[path = "../../engine/recipes/edit_model.rs"]
 mod edit_model;
 mod edit_oracle;
 mod events;
 mod fixture;
 mod project;
+mod repository_history;
 mod runtime;
 mod session;
+mod store_footprint;
 mod workspace_oracle;
 
 use args::Args;
@@ -43,6 +48,11 @@ fn main() -> Result<()> {
         "serve" => session::serve(&args, &mut events),
         "init" => project::initialize(&args, &mut events),
         "verify-init" => project::verify(&args, &mut events),
+        "verify-footprint" => store_footprint::verify(&args, &mut events),
+        "verify-repository" => repository_history::verify(&args, &mut events),
+        "verify-reuse-initial" => {
+            workspace_oracle::verify_reuse_initial(&args, &mut events).map_err(Into::into)
+        }
         "verify-workspace" | "verify-membership" => workspace_oracle::verify(&args, &mut events),
         "verify-history" => workspace_oracle::verify_history(&args, &mut events),
         "verify-topology" => workspace_oracle::verify_topology(&args, &mut events),

@@ -25,6 +25,131 @@ use std::{
 #[path = "../../engine/recipes/namespace.rs"]
 pub(crate) mod namespace;
 
+/// Only the frozen native-import registries admit this complete count plan.
+/// Namespace Init retains its existing independent sampled plan below.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ImportCounts {
+    pub family: &'static str,
+    pub entries: u64,
+    pub files: u64,
+    pub directories: u64,
+    pub logical_bytes: u64,
+}
+
+pub fn import_counts(case: &str) -> Result<Option<ImportCounts>> {
+    use namespace::reference::{store_footprint as footprint, workspace_common::EntryKind};
+    if let Ok(control) = footprint::control(case) {
+        let (files, directories, logical_bytes) = if control.kind == footprint::Kind::LargeObject {
+            let files = if control.infra_tier == 100_000 {
+                100
+            } else {
+                control.infra_tier.min(100)
+            };
+            let size = if control.infra_tier == 100_000 {
+                5_000_000
+            } else {
+                1_000_000
+            };
+            (files, 2, files * size)
+        } else {
+            // These are the actual source generator's namespace geometries,
+            // never invented labels attached to a large-object fixture.
+            let id = match control.infra_tier {
+                100 => "namespace-100-compact-v3",
+                1_000 => "namespace-1000-compact-v3",
+                10_000 => "namespace-10000",
+                100_000 => "namespace-100000",
+                _ => return Err("original Store footprint geometry absent".into()),
+            };
+            let plan = namespace::reference::namespace_plan(id)?;
+            (
+                plan.scenario.regular_files,
+                plan.scenario.data_directories + 1,
+                plan.scenario.logical_bytes,
+            )
+        };
+        if files != control.regular_files || logical_bytes != control.logical_bytes {
+            return Err("original Store footprint control differs from native geometry".into());
+        }
+        return Ok(Some(ImportCounts {
+            family: footprint::FAMILY_ID,
+            entries: files + directories,
+            files,
+            directories,
+            logical_bytes,
+        }));
+    }
+    let Ok(selected) = namespace::reference::workspace_registry::resolve(case) else {
+        return Ok(None);
+    };
+    if !matches!(selected.family, "dedup_cross_file" | "dedup_cdc_locality") {
+        return Ok(None);
+    }
+    let entries = crate::edit_model::entries(case, 0)?;
+    let logical_bytes = namespace::reference::workspace_common::validate_entries(&entries)?;
+    let files = entries
+        .iter()
+        .filter(|entry| matches!(entry.kind, EntryKind::File(_)))
+        .count() as u64;
+    let directories = entries
+        .iter()
+        .filter(|entry| matches!(entry.kind, EntryKind::Directory))
+        .count() as u64;
+    if files + directories != entries.len() as u64
+        || entries
+            .iter()
+            .filter(|entry| entry.path == "." && matches!(entry.kind, EntryKind::Directory))
+            .count()
+            != 1
+    {
+        return Err("original dedup import requires exact regular/directory/root entries".into());
+    }
+    Ok(Some(ImportCounts {
+        family: selected.family,
+        entries: entries.len() as u64,
+        files,
+        directories,
+        logical_bytes,
+    }))
+}
+
+/// Validate the actual Init acknowledgement; it is not inferred from native
+/// fixture counts or a guessed successful close.
+pub fn validate_import_ack(plan: ImportCounts, project: &layerfs_sdk::SealedProject) -> Result<()> {
+    use layerfs_bridge::provision::{ProviderKind, StoreProfile};
+    let initialized = &project.initialized;
+    let branch = &project.branch;
+    if plan.files.checked_add(plan.directories) != Some(plan.entries)
+        || initialized.entries != plan.entries
+        || initialized.namespace_work.entries as u64 != plan.entries
+        || initialized.namespace_work.jobs as u64 != plan.files
+        || initialized.namespace_work.unique_files as u64 != plan.files
+        || initialized.namespace_work.regular_aliases != 0
+        || branch.effective_root != initialized.root
+        || branch.base_root != initialized.root
+        || branch.head_root.is_some()
+        || branch.branch.head_commit.is_some()
+        || branch.branch.stack != initialized.stack.id
+        || branch.branch.base_layer != initialized.stack.head_layer
+        || branch.scope != initialized.stack.scope
+        || branch.profile != layerfs_content::filesystem::profile_id()
+        || initialized.stack.profile != branch.profile
+        || project.manifest.root != initialized.root.to_bytes()
+        || project.manifest.branch != branch.branch.id.to_bytes()
+        || project.manifest.stack != initialized.stack.id.to_bytes()
+        || project.manifest.provider != ProviderKind::Sqlite
+        || project.manifest.profile != StoreProfile::Disposable
+        || project.store.profile != SqlitePersistenceProfile::Disposable
+        || project.manifest.bytes != project.store.bytes
+    {
+        return Err(
+            "original import Init counts/typed Branch/root/head/profile acknowledgement differs"
+                .into(),
+        );
+    }
+    Ok(())
+}
+
 pub fn initialize(args: &Args, events: &mut Events) -> Result<()> {
     let source = args
         .source
@@ -33,7 +158,16 @@ pub fn initialize(args: &Args, events: &mut Events) -> Result<()> {
         .canonicalize()?;
     let sealed = args.sealed.as_ref().ok_or("--sealed required")?;
     let case = args.case.as_deref().ok_or("--case required")?;
-    let plan = namespace::reference::namespace_plan(case)?;
+    let generic = import_counts(case)?;
+    let (entries, files) = if let Some(plan) = generic {
+        (plan.entries, plan.files)
+    } else {
+        let plan = namespace::reference::namespace_plan(case)?;
+        (
+            plan.scenario.regular_files + plan.scenario.data_directories + 1,
+            plan.scenario.regular_files,
+        )
+    };
     let stack_key = native::generate_keypair()?.public;
     let branch_key = native::generate_keypair()?.public;
     let mut stack = [0; 16];
@@ -64,12 +198,14 @@ pub fn initialize(args: &Args, events: &mut Events) -> Result<()> {
     })
     .0?;
     let elapsed = events.span(begun);
-    if project.initialized.entries
-        != plan.scenario.regular_files + plan.scenario.data_directories + 1
-        || project.initialized.namespace_work.unique_files as u64 != plan.scenario.regular_files
+    if project.initialized.entries != entries
+        || project.initialized.namespace_work.unique_files as u64 != files
         || project.branch.effective_root != project.initialized.root
     {
         return Err("original acknowledged Init counts/Branch root differ from frozen plan".into());
+    }
+    if let Some(plan) = generic {
+        validate_import_ack(plan, &project)?;
     }
     let metadata = project.store.path.metadata()?;
     let mut manifest = fs::OpenOptions::new()
@@ -90,7 +226,7 @@ pub fn initialize(args: &Args, events: &mut Events) -> Result<()> {
         ],
         &[
             ("entries", project.initialized.entries),
-            ("files", plan.scenario.regular_files),
+            ("files", files),
             ("logical_bytes", metadata.len()),
             ("allocated_bytes", metadata.blocks() * 512),
         ],
@@ -99,6 +235,18 @@ pub fn initialize(args: &Args, events: &mut Events) -> Result<()> {
 }
 
 pub fn verify(args: &Args, events: &mut Events) -> Result<()> {
+    let case = args.case.as_deref().ok_or("--case required")?;
+    if let Some(plan) = import_counts(case)? {
+        if matches!(plan.family, "dedup_cross_file" | "dedup_cdc_locality") {
+            // This offline full typed proof complements the original fresh FUSE
+            // native verifier owned by the controller; it never substitutes for it.
+            return crate::workspace_oracle::verify_import(args, events).map_err(Into::into);
+        }
+        return Err(
+            "Store-footprint initial/final proof requires its separately scoped runtime route"
+                .into(),
+        );
+    }
     let manifest = StoreManifest::decode(&fs::read(&args.manifest)?)?;
     let plan =
         namespace::reference::namespace_plan(args.case.as_deref().ok_or("--case required")?)?;

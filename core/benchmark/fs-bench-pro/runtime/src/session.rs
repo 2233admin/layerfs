@@ -767,6 +767,10 @@ pub fn serve(args: &Args, events: &mut Events) -> Result<()> {
                     &[
                         ("key", key.into()),
                         ("directory", mounted.ready.directory.clone()),
+                        (
+                            "workspace_incarnation",
+                            crate::hex(&mounted.bound.token.workspace.to_bytes()),
+                        ),
                         ("branch_label", label.into()),
                         ("branch_id", crate::hex(&branch.to_bytes())),
                         (
@@ -795,6 +799,10 @@ pub fn serve(args: &Args, events: &mut Events) -> Result<()> {
                         ("scope", crate::hex(&scopes[channel])),
                     ],
                     &[
+                        (
+                            "workspace_namespace",
+                            u64::try_from(mounted.bound.token.namespace)?,
+                        ),
                         ("control_send_records_before", before),
                         ("control_send_records_after", after),
                         ("control_receive_records_before", receive_before),
@@ -953,7 +961,7 @@ pub fn serve(args: &Args, events: &mut Events) -> Result<()> {
                 let elapsed = events.span(begun);
                 let after = control.channel_work().0.records;
                 let receive_after = control.channel_work().1.records;
-                events.numeric_fields("unmount", Some(elapsed), &format!("key={key} token={token:?}; logical_terminal=true; physical_cleanup requires its own original observation"), &[("key",key.into()),("channel",channel.to_string()),("scope",crate::hex(&scopes[channel]))], &[("control_send_records_before",before),("control_send_records_after",after),("control_receive_records_before",receive_before),("control_receive_records_after",receive_after)])?;
+                events.numeric_fields("unmount", Some(elapsed), &format!("key={key} token={token:?}; logical_terminal=true; physical_cleanup requires its own original observation"), &[("key",key.into()),("workspace_incarnation",crate::hex(&token.workspace.to_bytes())),("channel",channel.to_string()),("scope",crate::hex(&scopes[channel]))], &[("workspace_namespace",u64::try_from(token.namespace)?),("control_send_records_before",before),("control_send_records_after",after),("control_receive_records_before",receive_before),("control_receive_records_after",receive_after)])?;
                 mounts.remove(key);
                 closed.insert(key.to_owned(), (token, channel));
             }
@@ -977,10 +985,15 @@ pub fn serve(args: &Args, events: &mut Events) -> Result<()> {
                     &[
                         ("key", key.into()),
                         ("state", format!("{state:?}")),
+                        (
+                            "workspace_incarnation",
+                            crate::hex(&token.workspace.to_bytes()),
+                        ),
                         ("channel", channel.to_string()),
                         ("scope", crate::hex(&scopes[channel])),
                     ],
                     &[
+                        ("workspace_namespace", u64::try_from(token.namespace)?),
                         ("control_send_records_before", before),
                         ("control_send_records_after", after),
                         ("control_receive_records_before", receive_before),

@@ -25,6 +25,16 @@ use std::{
 
 pub fn verify(args: &Args, events: &mut Events) -> Result<()> {
     let case = args.case.as_deref().ok_or("--case required")?;
+    if reference::workspace_registry::resolve(case)
+        .is_ok_and(|selected| selected.family == "dedup_workspace_reuse")
+    {
+        if args.mode == "verify-membership" {
+            return Err(
+                "workspace reuse requires its full initial/final byte and storage proof".into(),
+            );
+        }
+        return verify_dedup_store(args, events, DedupProof::ReuseFinal);
+    }
     let entries = match reference::workspace_registry::resolve(case) {
         Ok(selected) if selected.kind == "git-tool" => git_hybrid_entries(
             case,
@@ -74,6 +84,593 @@ pub fn verify(args: &Args, events: &mut Events) -> Result<()> {
     handles.seal()?;
     events.numeric_fields("workspace_verified", Some(events.span(begun)), "independent current typed/authenticated reads; complete names/kinds/metadata/link classes and inode-table membership; membership-only mode reuses prior byte proof, full mode checks every payload byte and applicable original edit identity/retention; no retired format substituted", &[("status", "PASS".into()), ("root", root)], &[("paths", paths), ("verified_bytes", verified_bytes), ("membership_only", u64::from(args.mode == "verify-membership"))])?;
     Ok(())
+}
+
+/// Fresh import's public Store half; the controller separately proves native FUSE reads.
+pub fn verify_import(args: &Args, events: &mut Events) -> std::result::Result<(), String> {
+    verify_dedup_store(args, events, DedupProof::Import).map_err(|error| error.to_string())
+}
+
+/// Original outside-operation pristine payload attribution, on a separate typed copy.
+pub fn verify_reuse_initial(args: &Args, events: &mut Events) -> std::result::Result<(), String> {
+    verify_dedup_store(args, events, DedupProof::ReuseInitial).map_err(|error| error.to_string())
+}
+
+#[derive(Clone, Copy)]
+enum DedupProof {
+    Import,
+    ReuseInitial,
+    ReuseFinal,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
+pub struct DedupSpan {
+    pub payload: ObjectId,
+    pub source: u64,
+    pub len: u64,
+    pub payload_len: u64,
+}
+
+#[derive(Clone, Debug)]
+pub struct DedupFile {
+    pub root: ObjectId,
+    pub spans: Vec<DedupSpan>,
+}
+
+struct OriginalBytes<'a> {
+    content: &'a Content,
+    offset: u64,
+}
+impl Read for OriginalBytes<'_> {
+    fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+        let read = self
+            .content
+            .read_at(self.offset, buffer)
+            .map_err(|error| std::io::Error::other(error.to_string()))?;
+        self.offset += read as u64;
+        Ok(read)
+    }
+}
+
+fn dedup_case(id: &str) -> Result<reference::workspace_common::Case> {
+    let selected = reference::workspace_registry::resolve(id)?;
+    if !matches!(
+        selected.family,
+        "dedup_cross_file" | "dedup_cdc_locality" | "dedup_workspace_reuse"
+    ) {
+        return Err("exact original dedup import/reuse case required".into());
+    }
+    Ok(selected)
+}
+
+/// Decode every current span, validating public grammar and authenticated payload lengths.
+pub fn dedup_spans(reader: &dyn AuthenticatedObjects, root: ObjectId) -> Result<Vec<DedupSpan>> {
+    let view = Timing::disabled("independent.dedup.mapping", |timer| {
+        FileView::open(reader, root, timer.child("open"))
+    })
+    .0?;
+    verify_mapping(reader, &view)?;
+    if let Some(bytes) = view.whole_file_bytes()? {
+        return Ok(vec![DedupSpan {
+            payload: root,
+            source: 0,
+            len: bytes.len() as u64,
+            payload_len: bytes.len() as u64,
+        }]);
+    }
+    let state = view
+        .file_state()?
+        .ok_or("dedup current file state missing")?;
+    let mut pending = vec![(state.mapping_root, true)];
+    let mut spans = Vec::new();
+    while let Some((id, root_page)) = pending.pop() {
+        match mapping::decode_node_with_context(&reader.read_canonical(id)?, root_page)? {
+            mapping::ExtentNode::Leaf { extents, .. } => {
+                for extent in extents {
+                    let payload = reader.read_canonical(extent.payload_object_id())?;
+                    let value = layerfs_content::object::decode_bytes_object(&payload)?;
+                    let bytes = mapping::decode_chunk_payload(value)?;
+                    if u64::from(extent.source_offset()) + u64::from(extent.logical_length())
+                        > bytes.len() as u64
+                    {
+                        return Err("dedup current payload slice exceeds actual raw payload".into());
+                    }
+                    spans.push(DedupSpan {
+                        payload: extent.payload_object_id(),
+                        source: extent.source_offset().into(),
+                        len: extent.logical_length().into(),
+                        payload_len: bytes.len() as u64,
+                    });
+                }
+            }
+            mapping::ExtentNode::Branch { children, .. } => {
+                pending.extend(
+                    children
+                        .into_iter()
+                        .rev()
+                        .map(|child| (child.child_object_id, false)),
+                );
+            }
+        }
+    }
+    Ok(spans)
+}
+
+/// Original partitions independently derive current canonical IDs, never retired extent IDs.
+pub fn verify_dedup_files(
+    reader: &dyn AuthenticatedObjects,
+    id: &str,
+    step: usize,
+    files: &BTreeMap<String, FileIdentity>,
+) -> Result<BTreeMap<String, DedupFile>> {
+    let selected = dedup_case(id)?;
+    if step > usize::from(selected.family == "dedup_workspace_reuse") {
+        return Err("original dedup state outside initial/final schedule".into());
+    }
+    let expected = crate::dedup_input::expected(id, step)?;
+    crate::dedup_input::validate_contract(id, step, &expected)?;
+    let entries = crate::edit_model::entries(id, step)?;
+    let mut actual = BTreeMap::new();
+    for entry in entries {
+        let EntryKind::File(content) = entry.kind else {
+            continue;
+        };
+        let identity = files
+            .get(&entry.path)
+            .ok_or("dedup exact file identity missing")?;
+        let spans = dedup_spans(reader, identity.content_root)?;
+        let mut adapted = Vec::new();
+        let mut partitions = Vec::new();
+        let mut position = 0_u64;
+        crate::dedup_input::scan(
+            OriginalBytes {
+                content: &content,
+                offset: 0,
+            },
+            |bytes| {
+                let payload = mapping::encode_chunk_object(bytes)?;
+                adapted.push(DedupSpan {
+                    payload: ObjectId::for_bytes(&payload),
+                    source: 0,
+                    len: bytes.len() as u64,
+                    payload_len: bytes.len() as u64,
+                });
+                partitions.push((
+                    position,
+                    bytes.len() as u64,
+                    reference::sdk_edit_common::sha256_hex(bytes),
+                ));
+                position += bytes.len() as u64;
+                Ok(())
+            },
+        )?;
+        let chunks = expected
+            .get(&entry.path)
+            .ok_or("independent dedup input transcript missing")?;
+        if partitions
+            != chunks
+                .iter()
+                .map(|chunk| (chunk.logical_start, chunk.len, chunk.raw_sha256.clone()))
+                .collect::<Vec<_>>()
+            || position != content.len()
+        {
+            return Err("independent dedup source partition transcript differs".into());
+        }
+        if content.len() > 0 && content.len() < 131_072 {
+            // Original CDC shape still qualifies the input; current storage uses one WholeFile.
+            let mut bytes = Vec::new();
+            content.write_to(&mut bytes)?;
+            let canonical = layerfs_content::file::encode_whole_file_payload(&bytes)?;
+            adapted = vec![DedupSpan {
+                payload: ObjectId::for_bytes(&canonical),
+                source: 0,
+                len: content.len(),
+                payload_len: content.len(),
+            }];
+        }
+        if spans != adapted {
+            return Err(format!(
+                "dedup current ordered payload spans differ from independent source: {}",
+                entry.path
+            )
+            .into());
+        }
+        actual.insert(
+            entry.path,
+            DedupFile {
+                root: identity.content_root,
+                spans,
+            },
+        );
+    }
+    if actual.len() != files.len() || actual.len() != expected.len() {
+        return Err("dedup exact complete file transcript membership differs".into());
+    }
+    require_dedup_storage(id, step, &actual)?;
+    Ok(actual)
+}
+
+fn payload_union<'a>(
+    files: impl Iterator<Item = &'a DedupFile>,
+) -> Result<BTreeMap<ObjectId, u64>> {
+    let mut union = BTreeMap::new();
+    for file in files {
+        for span in &file.spans {
+            if span.source != 0 || span.len != span.payload_len || span.len == 0 {
+                return Err("original fresh dedup construction has partial payload span".into());
+            }
+            if union
+                .insert(span.payload, span.payload_len)
+                .is_some_and(|old| old != span.payload_len)
+            {
+                return Err("dedup payload ID has inconsistent actual lengths".into());
+            }
+        }
+    }
+    Ok(union)
+}
+
+/// Profile-specific semantic obligations; storage ratios are diagnostic, never thresholds.
+pub fn require_dedup_storage(
+    id: &str,
+    step: usize,
+    files: &BTreeMap<String, DedupFile>,
+) -> Result<()> {
+    let case = dedup_case(id)?;
+    if step > usize::from(case.family == "dedup_workspace_reuse") {
+        return Err("dedup storage state outside original initial/final schedule".into());
+    }
+    let expected_names = crate::edit_model::entries(id, step)?
+        .into_iter()
+        .filter(|entry| matches!(entry.kind, EntryKind::File(_)))
+        .map(|entry| entry.path)
+        .collect::<BTreeSet<_>>();
+    if files.keys().cloned().collect::<BTreeSet<_>>() != expected_names {
+        return Err("dedup storage exact original file membership differs".into());
+    }
+    payload_union(files.values())?;
+    if case.family == "dedup_cross_file" {
+        let anchor = files
+            .get("files/f0000.dat")
+            .ok_or("cross-file anchor missing")?;
+        let mut bases = BTreeMap::new();
+        for i in 0..case.tier {
+            let file = files
+                .get(&format!("files/f{i:04}.dat"))
+                .ok_or("cross-file original member missing")?;
+            let ordinal = match case.kind {
+                "anchor" | "identical" => 0,
+                "unique" => i,
+                "mixed" => 3 * (i / 4) + (i % 4).saturating_sub(1),
+                _ => return Err("cross-file original profile required".into()),
+            };
+            if case.kind == "identical" && (file.spans != anchor.spans || file.root != anchor.root)
+            {
+                return Err("identical cross-file mappings/content roots differ".into());
+            }
+            if bases
+                .insert(ordinal, file)
+                .is_some_and(|old: &DedupFile| old.spans != file.spans)
+            {
+                return Err("mixed cross-file original exact pair differs".into());
+            }
+        }
+        let occurrences = bases.values().map(|file| file.spans.len()).sum::<usize>();
+        if payload_union(bases.values().copied())?.len() != occurrences {
+            return Err("unintended duplicate chunk in distinct cross-file bases".into());
+        }
+    } else if case.family == "dedup_workspace_reuse" {
+        let n = reference::dedup_workspace_reuse::base_file_count(&case)?;
+        let base = files
+            .iter()
+            .filter(|(path, _)| path.starts_with("base/"))
+            .map(|(_, file)| file)
+            .collect::<Vec<_>>();
+        if base.len() != n
+            || payload_union(base.iter().copied())?.len()
+                != base.iter().map(|file| file.spans.len()).sum::<usize>()
+        {
+            return Err("workspace reuse base count/internal payload uniqueness differs".into());
+        }
+        let added = files
+            .iter()
+            .filter(|(path, _)| path.starts_with("added/"))
+            .map(|(_, file)| file)
+            .collect::<Vec<_>>();
+        if step > 1 || added.len() != if step == 0 { 0 } else { case.tier } {
+            return Err("workspace reuse addition cardinality differs".into());
+        }
+        let p = payload_union(base.iter().copied())?;
+        let a = payload_union(added.iter().copied())?;
+        if case.kind == "unique"
+            && (a.keys().any(|id| p.contains_key(id))
+                || a.len() != added.iter().map(|file| file.spans.len()).sum::<usize>())
+        {
+            return Err("unique workspace additions intersect base or duplicate internally".into());
+        }
+        if case.kind == "local"
+            && added
+                .iter()
+                .map(|file| &file.spans)
+                .collect::<BTreeSet<_>>()
+                .len()
+                != added.len()
+        {
+            return Err("local workspace addition complete mappings are not distinct".into());
+        }
+        if case.kind == "exact" {
+            if a.keys().any(|id| !p.contains_key(id)) {
+                return Err("exact additions inserted new regular payload".into());
+            }
+            for i in 0..added.len() {
+                let file = &files[&format!("added/a{i:04}.dat")];
+                let before = &files[&format!("base/b{:04}.dat", i % n)];
+                if file.spans != before.spans || file.root != before.root {
+                    return Err(
+                        "exact addition did not reuse selected base mapping/content root".into(),
+                    );
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+fn verify_dedup_store(args: &Args, events: &mut Events, proof_mode: DedupProof) -> Result<()> {
+    let begun = Instant::now();
+    let id = args.case.as_deref().ok_or("exact dedup --case required")?;
+    let case = dedup_case(id)?;
+    if matches!(proof_mode, DedupProof::Import)
+        != matches!(case.family, "dedup_cross_file" | "dedup_cdc_locality")
+        || args.source.is_some()
+        || (args.history_file.is_some() && !matches!(proof_mode, DedupProof::ReuseFinal))
+        || args.history_step.is_some()
+    {
+        return Err("dedup import/reuse mode or independent source scope differs".into());
+    }
+    let manifest = StoreManifest::decode(&fs::read(&args.manifest)?)?;
+    if manifest.profile != layerfs_bridge::provision::StoreProfile::Disposable {
+        return Err("dedup requires explicit Disposable manifest".into());
+    }
+    let sealed = args
+        .sealed
+        .as_ref()
+        .ok_or("dedup separate closed --sealed copy required")?;
+    let before = file_identity(sealed)?;
+    let handles = Handles::open_writable(
+        PersistenceConfig::sqlite(sealed).with_sqlite_profile(SqlitePersistenceProfile::Disposable),
+        &manifest.binding,
+        manifest.cursor_key,
+    )?;
+    let catalog = handles.history.catalog_id();
+    let incarnation = handles.history.incarnation();
+    let branch = BranchId::from_bytes(manifest.branch)?;
+    let stack = LayerStackId::from_bytes(manifest.stack)?;
+    let initial = ObjectId::from_bytes(&manifest.root)?;
+    let snapshot = handles
+        .history
+        .branch_snapshot(branch)?
+        .ok_or("dedup persisted original Branch missing")?;
+    let base = handles
+        .history
+        .layer(snapshot.branch.base_layer)?
+        .ok_or("dedup initial Layer missing")?;
+    let stack_record = handles
+        .history
+        .layer_stack(stack)?
+        .ok_or("dedup original LayerStack missing")?;
+    if catalog != CatalogId::derive(&manifest.binding)?
+        || snapshot.base_root != initial
+        || base.root != initial
+        || snapshot.branch.stack != stack
+        || base.stack != stack
+        || stack_record.scope != snapshot.scope
+        || stack_record.profile != snapshot.profile
+        || handles.profile().persistence != SqlitePersistenceProfile::Disposable
+        || handles.profile().journal_mode.to_ascii_lowercase() != "wal"
+        || handles.profile().synchronous != 0
+    {
+        return Err(
+            "dedup public provider/initial root/Branch/stack/profile binding differs".into(),
+        );
+    }
+    let step = usize::from(matches!(proof_mode, DedupProof::ReuseFinal));
+    let mut acknowledgement_hash = None;
+    if step == 0 && (snapshot.branch.head_commit.is_some() || snapshot.effective_root != initial) {
+        return Err("dedup pristine initial Branch has a Commit or moved root".into());
+    }
+    if step == 1 {
+        let head = snapshot
+            .branch
+            .head_commit
+            .ok_or("workspace reuse requires its one actual Commit")?;
+        let commit = handles
+            .history
+            .commit(head)?
+            .ok_or("workspace reuse actual Commit missing")?;
+        if commit.parent.is_some()
+            || head != CommitId::derive(commit.root, commit.parent, commit.base_layer)
+            || commit.stack != stack
+            || commit.root != snapshot.effective_root
+            || commit.base_layer != base.id
+        {
+            return Err("workspace reuse actual first Commit/root/base binding differs".into());
+        }
+        let page = handles
+            .history
+            .commit_history(&layerfs_history::CommitHistoryRequest {
+                branch,
+                start: Some(head),
+                cursor: None,
+                limit: 32,
+            })?;
+        if page.records != vec![commit.clone()] || page.continuation.is_some() {
+            return Err(
+                "workspace reuse actual public single-Commit history did not reach exact EOF"
+                    .into(),
+            );
+        }
+        acknowledgement_hash = Some(reuse_acknowledgement(args, initial, &commit)?);
+    }
+    let storage = Storage::new(handles.storage.clone())?;
+    let reader = storage.reader()?;
+    let mut paths = 0;
+    let mut bytes = 0;
+    let mut initial_files = None;
+    let mut final_map = BTreeMap::new();
+    for state in 0..=step {
+        let root = if state == 0 {
+            initial
+        } else {
+            snapshot.effective_root
+        };
+        if FilesystemRead::new(&reader, FilesystemRootId(root))?
+            .root()
+            .scope()
+            .object()
+            != snapshot.scope
+        {
+            return Err("dedup filesystem allocation scope differs from public stack".into());
+        }
+        let tree = verify_tree(
+            &reader,
+            root,
+            &crate::edit_model::entries(id, state)?,
+            false,
+            None,
+            true,
+        )?;
+        paths += tree.paths;
+        bytes += tree.bytes;
+        final_map = verify_dedup_files(&reader, id, state, &tree.files)?;
+        if state == 0 {
+            initial_files = Some(tree.files);
+        } else {
+            for (path, identity) in initial_files
+                .as_ref()
+                .ok_or("reuse pristine identities missing")?
+            {
+                if tree.files.get(path) != Some(identity) {
+                    return Err("reuse changed pristine base file inode/content identity".into());
+                }
+            }
+        }
+    }
+    let diagnostics =
+        crate::dedup_input::validate_contract(id, step, &crate::dedup_input::expected(id, step)?)?;
+    let union = payload_union(final_map.values())?;
+    let positive_whole = final_map
+        .values()
+        .filter(|file| file.spans.len() == 1 && file.spans[0].len < 131_072)
+        .count();
+    let empty = final_map
+        .values()
+        .filter(|file| file.spans.is_empty())
+        .count();
+    if case.kind == "boundaries" && (positive_whole, empty) != (54, 6) {
+        return Err(
+            "CDC boundaries require54 current WholeFile positives and6 canonical empties".into(),
+        );
+    }
+    let diagnostic_fields = diagnostics
+        .iter()
+        .map(|(key, value)| (key.as_str(), value.clone()))
+        .collect::<Vec<_>>();
+    events.fields("dedup_input_diagnostics", None, "independent original CDC partition/sharing observations; diagnostics are not acceptance ratios or legacy encoded object IDs", &diagnostic_fields)?;
+    let final_head = snapshot
+        .branch
+        .head_commit
+        .map(|head| crate::hex(head.as_slice()))
+        .unwrap_or_else(|| "-".into());
+    drop(reader);
+    drop(storage);
+    handles.seal()?;
+    let after = file_identity(sealed)?;
+    let store_allocated = std::os::unix::fs::MetadataExt::blocks(&fs::metadata(sealed)?)
+        .checked_mul(512)
+        .ok_or("dedup Store allocation overflow")?;
+    let event = match proof_mode {
+        DedupProof::Import => "project_verified",
+        DedupProof::ReuseInitial => "reuse_initial_verified",
+        DedupProof::ReuseFinal => "workspace_verified",
+    };
+    let mut fields = vec![
+        ("status", "PASS".into()),
+        ("case", id.into()),
+        ("root", crate::hex(snapshot.effective_root.as_bytes())),
+        ("initial_root", crate::hex(initial.as_bytes())),
+        (
+            "final_head_root",
+            crate::hex(snapshot.effective_root.as_bytes()),
+        ),
+        ("final_head_commit_id", final_head),
+        (
+            "provider_validation",
+            "current-public-schema-source-binding-validated".into(),
+        ),
+        ("catalog_id", crate::hex(catalog.as_slice())),
+        (
+            "binding_sha256",
+            reference::sdk_edit_common::sha256_hex(&manifest.binding),
+        ),
+        ("stack_id", crate::hex(stack.as_slice())),
+        ("branch_id", crate::hex(branch.as_slice())),
+        ("base_layer_id", crate::hex(base.id.as_slice())),
+        ("provider_store_sha256", before.0.clone()),
+        ("provider_store_after_sha256", after.0.clone()),
+    ];
+    if let Some(hash) = acknowledgement_hash {
+        fields.push(("acknowledged_transcript_sha256", hash));
+    }
+    events.numeric_fields(event, Some(events.span(begun)), "complete original independent bytes/metadata/inode census; current public authenticated payload grammar and explicitly adapted original CDC partitions/identity reuse. Final reuse binds the original actual initial/ACK transcript and public History EOF. Fresh Init provenance, FUSE/native Fork/mount/End/Gone/Stop and global SQL Commit census are separately bound controller obligations, not inferred here",
+        &fields,
+        &[("paths",paths),("verified_paths",paths),("verified_bytes",bytes),("roots",(step+1) as u64),("commits",step as u64),("verified_files",final_map.len() as u64),("distinct_payload_count",union.len() as u64),("distinct_payload_bytes",union.values().sum()),("positive_whole_files",positive_whole as u64),("empty_files",empty as u64),("catalog_incarnation",incarnation),("store_logical_bytes",after.1),("store_allocated_bytes",store_allocated),("provider_store_size",before.1),("provider_store_after_size",after.1),("provider_store_unchanged",u64::from(before==after))])?;
+    Ok(())
+}
+
+fn reuse_acknowledgement(
+    args: &Args,
+    initial: ObjectId,
+    commit: &layerfs_history::CommitRecord,
+) -> Result<String> {
+    let body = fs::read_to_string(
+        args.history_file
+            .as_ref()
+            .ok_or("reuse final requires actual two-row --history-file acknowledgement")?,
+    )?;
+    let rows = body.lines().collect::<Vec<_>>();
+    if rows.len() != 2 || !body.ends_with('\n') || body.contains(['\r', '\0']) {
+        return Err("reuse acknowledgement requires canonical two-row LF transcript".into());
+    }
+    for (step, row) in rows.into_iter().enumerate() {
+        let fields = row.split('\t').collect::<Vec<_>>();
+        let root = if step == 0 { initial } else { commit.root };
+        let id = if step == 0 {
+            "-".into()
+        } else {
+            crate::hex(commit.id.as_slice())
+        };
+        if fields.len() != 5
+            || fields[0] != step.to_string()
+            || fields[1] != id
+            || fields[2] != "-"
+            || fields[3] != crate::hex(root.as_bytes())
+            || fields[4] == "-"
+        {
+            return Err("reuse actual initial/Commit/parent/root acknowledgement differs".into());
+        }
+        let expected = reference::workspace_common::manifest(&crate::edit_model::entries(
+            args.case.as_deref().ok_or("reuse exact case required")?,
+            step,
+        )?)?;
+        if fs::read_to_string(fields[4])? != expected {
+            return Err(
+                "reuse acknowledged selected manifest differs from independent original state"
+                    .into(),
+            );
+        }
+    }
+    Ok(reference::sdk_edit_common::sha256_hex(body.as_bytes()))
 }
 
 fn git_hybrid_entries(case: &str, custody: &Path) -> Result<Vec<Entry>> {

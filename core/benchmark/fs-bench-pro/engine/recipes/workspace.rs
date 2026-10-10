@@ -1,4 +1,6 @@
 //! Native-only fixture/expectation materialization from frozen ordinary recipes.
+#[allow(dead_code)]
+mod dedup_input;
 mod edit_model;
 #[allow(dead_code)]
 #[path = "../../../../../benchmark/fs-bench-pro/workload/main.rs"]
@@ -290,6 +292,56 @@ fn prepare_context_discard(id: &str, folder: &Path) -> reference::Result<()> {
 
 fn main() -> reference::Result<()> {
     let args: Vec<_> = std::env::args().collect();
+    if let [_, mode, id, step, root] = args.as_slice() {
+        if mode == "import-qualified" {
+            let step = step.parse::<usize>()?;
+            let qualified = dedup_input::qualify_native(id, step, Path::new(root))?;
+            fn quoted(value: &str) -> String {
+                let mut out = String::from("\"");
+                for character in value.chars() {
+                    match character {
+                        '"' => out.push_str("\\\""),
+                        '\\' => out.push_str("\\\\"),
+                        '\n' => out.push_str("\\n"),
+                        '\r' => out.push_str("\\r"),
+                        '\t' => out.push_str("\\t"),
+                        c if c.is_control() => out.push_str(&format!("\\u{:04x}", u32::from(c))),
+                        c => out.push(c),
+                    }
+                }
+                out.push('"');
+                out
+            }
+            let receipt = qualified
+                .receipt
+                .iter()
+                .map(|(key, value)| format!("{}:{}", quoted(key), quoted(value)))
+                .collect::<Vec<_>>()
+                .join(",");
+            let transcripts = qualified
+                .transcripts
+                .iter()
+                .map(|(path, chunks)| {
+                    let chunks = chunks
+                        .iter()
+                        .map(|chunk| {
+                            format!(
+                                "{{\"logical_start\":{},\"len\":{},\"raw_sha256\":{}}}",
+                                chunk.logical_start,
+                                chunk.len,
+                                quoted(&chunk.raw_sha256)
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                        .join(",");
+                    format!("{}:[{chunks}]", quoted(path))
+                })
+                .collect::<Vec<_>>()
+                .join(",");
+            println!("{{\"schema\":\"fs-bench-pro-independent-dedup-input-v1\",\"status\":\"PASS\",\"case\":{},\"step\":{step},\"regular_files\":{},\"logical_bytes\":{},\"transcript_sha256\":{},\"receipt\":{{{receipt}}},\"transcripts\":{{{transcripts}}}}}", quoted(id), qualified.files, qualified.logical_bytes, quoted(&qualified.transcript_sha256));
+            return Ok(());
+        }
+    }
     if let [_, mode, id, folder] = args.as_slice() {
         if mode == "prepare-context-discard" {
             return prepare_context_discard(id, Path::new(folder));
