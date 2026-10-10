@@ -105,6 +105,8 @@ def main(argv=None):
                 result = project.one_init(case, prepared, args.build, output / cell)
             else:
                 result = workspace.one_family_case(args.family, case, prepared, args.build, output / cell)
+            if case.get("git_workflow") and result.get("publication_guard"):
+                receipts.acknowledge_guarded(output / cell, result)
             print(json.dumps({key: result.get(key) for key in ("case", "status", "counts", "cleanup", "container", "original_failure", "evidence")}))
             failed |= result["status"] != "PASS"
         return 1 if failed else 0

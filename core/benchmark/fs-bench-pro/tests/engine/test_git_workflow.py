@@ -1,6 +1,9 @@
 """Complete Git custody cannot replace independently authored source/semantics."""
 import hashlib
+import importlib.util
+import io
 import json
+from contextlib import ExitStack, redirect_stdout
 from pathlib import Path
 import sys
 import tempfile
@@ -26,6 +29,134 @@ def fields(body):
 
 
 class GitCustody(unittest.TestCase):
+    def test_outer_driver_acknowledges_only_a_known_returned_finalization(self):
+        spec = importlib.util.spec_from_file_location("fsb_git_driver", BENCH / "bench.py")
+        bench = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(bench)
+        for interrupted in (False, True):
+            with self.subTest(interrupted=interrupted), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary).resolve()
+                calls = []
+                case_id = "git-tool-1-compact-v2"
+                row = {"case": case_id, "status": "INELIGIBLE", "proof_status": "PASS",
+                       "publication_guard": {"schema": "fs-bench-pro-publication-guard-v1"}}
+                def sampled(*args):
+                    calls.append("sample")
+                    if interrupted:
+                        raise OSError("original finalizer did not return")
+                    calls.append("known-return")
+                    return row
+                def acknowledged(folder, returned):
+                    calls.append("outer-ack")
+                    self.assertEqual(folder.name, case_id)
+                    self.assertIs(returned, row)
+                current = {"source_commit": "a"*40, "source_tree": "b"*40, "product_tree": "c"*40}
+                output = root / "benchmark-results/fs-bench-pro/run"
+                with patch.object(workspace.identity, "ROOT", root), \
+                        patch.object(workspace.identity, "source_identity", return_value=current), \
+                        patch.object(workspace, "one_family_case", side_effect=sampled), \
+                        patch.object(receipts, "acknowledge_guarded", side_effect=acknowledged), \
+                        redirect_stdout(io.StringIO()):
+                    args = ["run", "git_tool_workflow", "--case", case_id, "--build", str(root / "build"),
+                            "--prepared", str(root / "prepared"), "--out", str(output)]
+                    if interrupted:
+                        with self.assertRaisesRegex(OSError, "did not return"):
+                            bench.main(args)
+                    else:
+                        self.assertEqual(bench.main(args), 1)  # Numeric INELIGIBLE remains visible.
+                self.assertEqual(calls, ["sample"] if interrupted else ["sample", "known-return", "outer-ack"])
+
+    def test_frozen_deadlines_charge_prior_work_and_keep_cleanup_and_publication_distinct(self):
+        case = {"git_workflow": True, "budget": {"verifier_ms": 45000, "verification_hard_watchdog_ms": 59000}}
+        with patch.object(workspace.time, "monotonic", return_value=100):
+            self.assertEqual(workspace.git_proof_deadlines(case, 3_000_000_000),
+                             {"work": 138, "cleanup": 142, "publication": 156})
+        for charged in (True, -1, None, "0"):
+            with self.subTest(charged=charged), self.assertRaises(ValueError):
+                workspace.git_proof_deadlines(case, charged)
+        for changed in (44000, 46000):
+            with self.assertRaises(ValueError):
+                workspace.git_proof_deadlines({**case, "budget": {**case["budget"], "verifier_ms": changed}}, 0)
+
+    def test_controller_discards_prior_qualification_and_orders_custody_before_commit_and_git(self):
+        for fail_at in ("commit", "fresh-custody"):
+            with self.subTest(fail_at=fail_at), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary).resolve()
+                calls = []
+                class Runtime:
+                    container = "owned-container"
+                    selector = raw = stderr = None
+                    process = SimpleNamespace(stdin=None, stdout=None)
+                    rows = []
+                    def event(self, *args):
+                        return None
+                    def send(self, operation, key="", path=None, **options):
+                        label = operation
+                        if operation == "command":
+                            label = "prior" if Path(path).name == "prior-qualification.sh" else "performance"
+                        calls.append(label)
+                        if operation == "commit" and fail_at == "commit":
+                            raise ValueError("known Commit refusal")
+                        result = {"sequence": len(calls), "event": operation, "span": {"duration_ns": 1},
+                                  "fields": {"state": "Gone", "commit_kind": "Committed", "root": "acknowledged-root"}}
+                        if operation == "snapshot":
+                            result["event"] = "workspace_status"
+                        self.rows.append(result)
+                        return result
+                    def retain(self, error):
+                        return {"cause": str(error), "remote_stop": "NOT_ESTABLISHED"}
+                runtime = Runtime()
+                current = dict(source_commit="source", product_tree="product", files={})
+                build = dict(socket="/socket", binaries={name: {"sha256": name, "path": "/"+name} for name in ("runtime", "daemon")})
+                prepared = dict(fixture={"fixture_sha256": "fixture"}, helpers={"files": {}},
+                                provision={"manifest": "/manifest"}, source_uid=1, source_gid=1)
+                case = {"id": "git-tool-1-compact-v2", "v016_case": "git-tool-1-compact-v2", "git_workflow": True,
+                        "git_qualification": {"run": "workload.sh qualify git-tool-1-compact-v2"}, "expected_commit": "Committed",
+                        "fixture": {"recipe": "git-tool-1-compact-v2"}, "budget": {"command_ms": 15000,
+                        "verifier_ms": 45000, "verification_hard_watchdog_ms": 59000}}
+                def precommit(*args):
+                    calls.append("precommit-custody")
+                    self.assertLessEqual(args[-1], 41)
+                    return {"path": str(root / "exact-original-index-manifest")}
+                def fresh(*args):
+                    calls.append("fresh-custody")
+                    self.assertLessEqual(args[-1], 41)
+                    raise ValueError("known fresh index stat bytes differ")
+                with ExitStack() as patches:
+                    for module, name, options in (
+                        (workspace.identity, "ROOT", {"new": root}),
+                        (workspace.identity, "source_identity", {"return_value": current}),
+                        (workspace.identity, "load_build", {"return_value": build}),
+                        (workspace.fixtures, "load", {"return_value": prepared}),
+                        (workspace.fixtures, "clone", {"return_value": {"volume": "owned-volume"}}),
+                        (workspace.fixtures, "stage", {"return_value": {"status": "PASS"}}),
+                        (workspace.cell_runner, "EventProcess", {"return_value": runtime}),
+                        (workspace, "verify_git_qualification", {"return_value": {"status": "PASS"}}),
+                        (workspace, "before_git_commit", {"side_effect": precommit}),
+                        (workspace, "verify_git_custody", {"side_effect": fresh}),
+                        (workspace, "terminal_cache_observation", {"return_value": ([{"fields": {"state": "Gone"}}], {})}),
+                    ):
+                        patches.enter_context(patch.object(module, name, **options))
+                    result = workspace.one_family_case("git_tool_workflow", case, "prepared", "build", root / "case")
+                self.assertEqual(calls[:5], ["mount", "prior", "unmount", "cleanup", "mount"])
+                self.assertEqual(calls[5:8], ["performance", "precommit-custody", "commit"])
+                self.assertEqual(calls.count("commit"), 1)
+                self.assertEqual(calls.count("performance"), 1)
+                self.assertEqual(calls.count("prior"), 1)
+                self.assertEqual(result["status"], "FAIL")
+                self.assertEqual(result["proof_status"], "FAIL")
+                self.assertEqual(result["sample_count"], 1)
+                self.assertGreater(result["prior_proof_wall_ns"], 0)
+                self.assertGreaterEqual(result["proof_wall_ns"], result["prior_proof_wall_ns"])
+                self.assertEqual(len(result["retained_mount_keys"]), 1)
+                self.assertTrue(result.get("publication_guard"))
+                self.assertNotIn("verify", calls)
+                self.assertNotIn("stop", calls)
+                if fail_at == "fresh-custody":
+                    self.assertEqual(calls[-2:], ["mount", "fresh-custody"])
+                    self.assertEqual(result["cleanup"], "Gone")
+                receipts.verify_manifest(root / "case")
+
     def test_complete_index_bytes_canonical_names_and_identity_are_required(self):
         original = custody()
         self.assertEqual(workspace.git_custody_values(original, fields(original))["repository_paths"], 2)

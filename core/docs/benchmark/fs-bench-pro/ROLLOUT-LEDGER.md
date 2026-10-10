@@ -19,8 +19,8 @@ comparison or release-admission claim. Durable is
 | 0.3 Case catalogue | COMPLETE | `f182e9a63`; prerequisite correction `30b798192` | Stage 0.4 reproducible engine |
 | 0.4 Reproducible engine | CLOSED: functional proof complete; exact reproduction FAILED C10/C12 | Cell-route correction `bb8e07df8`; build support `c496025fc`; oracle support `7a27a4f26`; fixture support `516c2f009`; workspace/report support `358eca082`; cleanup-observer correction `a1f2c259c` | Begin batch 1 under failed-reproduction closure recorded below |
 | 1 Pilot | COMPLETE: 36 functional/proof/clean-close passes; 7 recorded scoped B PASS, 29 INELIGIBLE; full numeric qualification of the 7 is unverified | Init `c1d7dd0e8`/`39bbcbd6b`; payload `200f81493`/`c1d9b6c58`; parallel routing `b3c96ecb1`; tiny `36849bcc2`/`d6e0ef952`; namespace `98b14b233`/`be1f56a23`; H-2 fix `222526fa0`; closure `d4314ed62`; membership supplement `cca598d0b` | Batch 2, retaining original receipts plus exhaustive membership supplement |
-| 2 Edits | COMPLETE: all62 cases ported/parity/sampled once/recorded;39 strict proof and clean-close passes (numeric INELIGIBLE),20 strict retention failures and3 original capped-watchdog failures retained | Canonical `a34b5d44b`/`beeb7ad69`; preserving `b9ffa63be`; capped `4d8ccfc93`; changing `05ffbf971`; small-delta `c0c99a4a3`/`2e6a508b5`/this commit | Begin batch3; no identified fixable product correctness defect remains in batch2 |
-| 3 Trees and tools | IN_PROGRESS: directory12, locality16 and corrected snapshot1 closed; original snapshotFAIL retained; Git4 authored, final controller guards/build/preparation/sample pending | Shared3c697ae92; directory50c297c68/ad4f95503; locality2590a4536/26c037d90; snapshot0344bfdc6/fix03033abdc/results98d3be30a/70d568e94; Git support this commit | Finish original Git publication/cleanup guards, seal compiled support, qualify/prepare/parity/sample Git4; no batch4 |
+| 2 Edits | COMPLETE: all62 cases ported/parity/sampled once/recorded;39 strict proof and clean-close passes (numeric INELIGIBLE),20 strict retention failures and3 original capped-watchdog failures retained | Canonical `a34b5d44b`/`beeb7ad69`; preserving `b9ffa63be`; capped `4d8ccfc93`; changing `05ffbf971`; small-delta `c0c99a4a3`/`2e6a508b5`/`1c975ba30` | Begin batch3; no identified fixable product correctness defect remains in batch2 |
+| 3 Trees and tools | IN_PROGRESS: directory12, locality16 and corrected snapshot1 closed; original snapshotFAIL retained; Git4 authored, full build passed, final guards and preparation pending | Shared3c697ae92; directory50c297c68/ad4f95503; locality2590a4536/26c037d90; snapshot0344bfdc6/fix03033abdc/results98d3be30a/70d568e94; Git support acebd7cbd/guard this commit | Complete guarded source, native preparation/parity and single Git4 samples; no batch4 |
 | 4 History on one branch | PENDING | — | Wait for batch 3 completion |
 | 5 Branches and Workspaces | PENDING | — | Wait for batch 4; verify existing P-1 SDK methods |
 | 6 Dedup and storage | PENDING | — | Wait for batch 5 completion |
@@ -82,6 +82,8 @@ comparison or release-admission claim. Durable is
 | 35 | Git's prior untimed mount runs the original verification variant before End without Commit; the fresh measured call retains the exact performance variant | Preserves actual mounted intermediate porcelain/diff/temp-save guards without adding timed filesystem reads or replaying a measured call | Claiming native-only intermediate coverage or modifying the timed workload |
 | 36 | Reuse original native fixture/C1 generator for local snapshot, derive C2/C3 with frozen97*j/byte equations and verify every state with unchanged original native checker | Avoids changing compiled recipe support solely to select an already defined expected step; runtime also compares each manifest with original Rust expected(case,step) | Guessing state bytes or compiling another fixture producer |
 | 37 | Retain the failed full-size debug proof and qualify the benchmark's prescribed release compilation at identical fixture/oracle/30s stop | Debug child reached its stop during the first25k state, without an error or completed root; engine builds the host runtime in release; no source speed change is selected | Enlarging the stop, shrinking the test or optimizing product source |
+| 38 | Preserve Git's frozen41s work cutoff,45s cleanup deadline and59s publication deadline with0.25s guard, cumulatively charging prior qualification/custody/final proof | Original selected verifier reserves4s within45s, not an added allowance; public current offline graph requires early Stop/export, also conservatively charged before graph work | Dropping reserve, omitting receipt hashing/publication or granting each verification subphase a fresh45s |
+| 39 | Publish original receipt/manifest once and require bound completion; revoke only an owned provisional completion link after an observed overrun, preserving its exact attempt bytes | A lost late-failure sidecar must not let a provisional proof qualify; original immutable receipt and all metrics remain available | Overwriting original receipts, accepting missing completion or omitting a late final write from the guard |
 
 ## Bugs
 
@@ -93,7 +95,8 @@ comparison or release-admission claim. Durable is
 | H-4 | Prospective B/C Commit eligibility | Zero source demands could credit own-written backing without independent pre-Commit coldness | Cache classifier checked source demand/lifetime but not own-written phase inputs | `98b6b7260` | test_zero_source_demands_cannot_credit_own_written_commit_input |
 | H-5 | Seven recorded pilot read-only B labels; future B/C rows | Scoped zero canonical-object demand was treated as full numerical cache qualification | Still-paid backing/metadata/SQLite pre-phase domains absent; terminal mincore and an object-demand interval ending before unmount cannot establish them | `25719de3b` (prospective only) | test_zero_object_demands_do_not_qualify_unobserved_paid_phase_inputs; test_each_phase_proof_rejects_late_unknown_wrong_identity_or_warm_inputs |
 | H-2 | 36 batch-1 reviewed registrations | source_commit was an annotated tag object; parity accepted it and rejected the actual peeled commit | git rev-parse on an annotated reference returns the tag object unless peeled | `222526fa0` | test_review_identity.py rejects the tag through both parity routes, admits the peeled commit and checks every ported review |
-| H-6 | local-snapshot-create-25000-onebyte-v1 | Original native witness exited0, then controller raised dictionary update #5 after measuredEnd | Frozen sample receipt has multiline path/range values and no verification_status; harness assumed full-tree key/value receipt | This commit | test_original_multiline_sample_with_successful_exit_is_preserved fails beforefix; altered paths/ranges/scope/exit are rejected afterfix |
+| H-6 | local-snapshot-create-25000-onebyte-v1 | Original native witness exited0, then controller raised dictionary update #5 after measuredEnd | Frozen sample receipt has multiline path/range values and no verification_status; harness assumed full-tree key/value receipt | `03033abdc` | test_original_multiline_sample_with_successful_exit_is_preserved fails beforefix; altered paths/ranges/scope/exit are rejected afterfix |
+| H-7 | Prospective Git4, found before first sample | Late observation publication followed by failed failure-sidecar write could reload provisional PASS | Draft guard bound timestamp before the observation write and lacked mandatory final completion | This commit | slow observation/completion publication plus failed failure-sidecar regression fails before correction; missing completion remains failed |
 
 H-1 and H-2 are harness faults, not product correctness or performance defects.
 The original file-identity checker remains intact; no product source changed.
@@ -2161,4 +2164,101 @@ All previous failed/uncertain/protected resources and receipt identities remain.
 
 | `ce47e2b18` (worker) | Apply lead shared source without ledger duplication | 79366 | 79366 | +0 |
 | `d73fb8a08` (worker) | Original Git workload and complete custody support | 79366 | 79366 | +0 |
-| This commit | Integrate Git support before final guarded-run qualification | 79366 | 79366 | +0 |
+| `acebd7cbd` | Integrate Git support before final guarded-run qualification | 79366 | 79366 | +0 |
+
+Git final controller review preserves the frozen ordinary policy: cumulative
+proof work stops at41s (45s less original4s cleanup reserve), cleanup at45s,
+and receipt publication at59s with original0.25s margin. Prior mounted original
+verification and precommit custody are charged once, including their real
+read/export/hash/cleanup walls. Measured performance remains outside proof time.
+The current offline oracle requires early terminal unmount/known Stop/closed
+export before graph reads; their cost remains conservatively charged before
+remaining graph work. No new allowance, operation, cache treatment or timer
+extension is introduced. Final counts/log collection, resource checks, passing
+removal and stream closure are bounded in their declared work/cleanup domains.
+The final prepublication proof wall includes these intervals; separate bound
+publication observations retain hash/write durations, rather than substituting
+an earlier graph-only wall. Prior/custody exhaustion fails before measured
+Commit; no replay or automatic cleanup of an uncertain failure.
+
+Root's six Git engine tests PASS at the composed controller, including exact
+41/45/59 deadline arithmetic and rejection of changed budgets; one original
+qualification discarded before fresh performance; custody before the single
+Commit; fresh custody before any semantic Git; refusal/mismatch remain failed,
+retain exact mounted ownership and charged proof wall. Shared engine16PASS,
+receipt-custody4PASS, frozen Git family4PASS. Current tests use original declared
+fixtures only where relevant; controller fault tests do not constitute samples.
+No product source or compiled input changed after acebd7cbd's support seal.
+
+H7 was found in the prospective publisher during source review, before Git's
+first sample. External regression at the initial guard returned provisional
+PASS/PASS after a late observation write and an OSError creating the failure
+sidecar. Additional absent-manifest regression raised FileNotFoundError and
+prevented a failed case CSV. Keep actual before-fix outputs in tiny worker
+benchmark-results/fs-bench-pro/2026-10-10-publication-completion-guard/.
+Original receipt/manifest remain immutable. Mandatory completion binds their
+SHAs, source/product/case/image/binary identity, exact observation SHA, clock,
+deadline, retained completion-attempt bytes and declared scope. A late or
+interrupted attempt/link retains exact raw bytes and removes only its own
+provisional successful completion link before optional failure emission; missing
+completion fails closed even when failure emission also fails. A guarded attempt
+with no original manifest reports FAIL using registration identity only; all
+unauthenticated metrics are UNAVAILABLE. Existing tampered seals still reject.
+All historic unguarded load/finalization behavior remains scoped unchanged.
+
+Git full8-binary build at acebd7cbd PASS under its private120s lock in<=73s,
+host release21.91s; pinned Linux source hash checks before/after and host source
+unchanged. Passing build container removed, OWNER-3 exact refusal retained.
+Runtime faf3b953674eb72ae7d6958141e99aba86d9ef2716f23cfea5ba0362731ece74;
+workspace writer5fa075450ba74f3fea041d4a8212697dd766060defb8e1080cc76ff62d3bc13b;
+daemon f44900cfc975901b7101f4874f708390b6f7401981e06d608b3df52a50848c0e.
+Declared compiler cache copies are independent private byte copies of closed
+main registry/incremental artifacts; actual8scope rebuild and source verification
+still ran, no writable main target or binary substitution. Seal remains capped
+worker benchmark-results/fs-bench-pro/2026-10-10-batch-3-git-full-build-acebd7cbd.
+All4 native preparations and parity PASS at this source, zero samples, original
+Git2.39.5 and independent HEAD/tree/parent/source/fsck/clean/two-commit guards.
+Initial real .git/source logical bytes2,120,903/8,467,515/70,886,251/95,873,900;
+complete files243/558/4850/10865. Transient bytes38,859,392/45,254,556/
+104,085,977/129,928,663 retain original256MiB bound. Closed masters retained:
+layerfs-fsb-master-git-tool-workflow-5126837eb6534685,
+layerfs-fsb-master-git-tool-workflow-6808aa0ae3474ff4,
+layerfs-fsb-master-git-tool-workflow-0b236dd02e6f4192,
+layerfs-fsb-master-git-tool-workflow-24100f1f10984c27.
+Passing native/provision helpers removed with receipts. Prepared parent and
+parity remain under worker2026-10-10-batch-3-git-prepared-acebd7cbd and
+2026-10-10-batch-3-git-parity-acebd7cbd; final guard-source parity still required
+before sampling. No product bug or preparation failure; full coldness and all
+original topology/format omissions remain explicit. No batch4 started.
+
+The H7 completion review also reproduced actual process death: a bounded child
+os._exit(91) immediately after provisional link creation, before its post-check,
+left an old draft load reporting PASS/PASS. Raw failed-before-outer-ack.txt is
+retained. The final bench.py driver invokes acknowledge_guarded exactly once,
+only after one_family_case returns. A successful guarded report requires that
+known outer return, exact completion SHA, original receipt/manifest identity and
+nonpromoted returned verdict. Missing or partial acknowledgement is FAIL with
+all authenticated metrics retained; altered bindings reject. Its emission is
+explicitly outside the original59s family timer, and does not claim its own
+unwitnessed write duration. It attests that the guarded finalizer returned after
+its post-publication deadline check, closing the prior process-death gap without
+rewriting any receipt or inventing a successful unknown operation.
+
+Final Root composed checks:50 engine tests PASS0.531s (23 publication,7 Git
+including actual outer driver ordering/refusal,16 shared workspace/report/cache,
+4 original receipt custody), locked<=120s. Frozen Git family/catalogue checks
+PASS; exact25families/273IDs retained. No native/mounted workload repeated for
+these harness corrections. Worker final23 publication checks PASS0.258s and
+16 shared checks PASS0.064s, strict original0.25 margin and monotonic numeric
+clocks. Four worker purpose commits and original guard scaffold all have exact
+pinned absent-aware+0 LOC/tree confirmation. No product change/optimization.
+Compilation and prepared source checks remain source-qualified at acebd7cbd,
+with unchanged compiled bytes; final guard-source parity precedes Git sampling.
+Concurrent private worktrees and protected/retained containers share host and
+DockerVM; this unquantified interference remains declared, no numeric eligibility.
+
+| `b8f1d4c36` (worker) | Append-only original Git publication guard scaffold | 79366 | 79366 | +0 |
+| `524a8bded` (worker) | Mandatory completion, late-link revocation and partial-manifest failure rows | 79366 | 79366 | +0 |
+| `1ccdbeb65` (worker) | Freeze0.25 margin and validate monotonic numeric clocks | 79366 | 79366 | +0 |
+| `3d92ebb10` (worker) | Require known outer finalization acknowledgement after post-check | 79366 | 79366 | +0 |
+| This commit | Complete original Git deadlines and H7 guarded finalization before sampling | 79366 | 79366 | +0 |

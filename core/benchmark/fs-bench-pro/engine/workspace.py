@@ -266,9 +266,10 @@ def one_cell(cell, prepared_folder, build_folder, output):
     return row
 
 
-def collect_family_observations(runtime, row, build, output, bindings):
+def collect_family_observations(runtime, row, build, output, bindings, deadline=None):
     docker = ["docker", "--host", "unix://" + build["socket"]]
-    logs = receipts.command([*docker, "logs", "--timestamps=false", runtime.container], output, "daemon-logs", 15)
+    logs = receipts.command([*docker, "logs", "--timestamps=false", runtime.container], output, "daemon-logs",
+                            15 if deadline is None else operation_deadline(deadline, 15)-time.monotonic())
     groups = {}
     for path in (logs["stdout"], logs["stderr"]):
         groups.update(cell_runner.telemetry(path))
@@ -384,7 +385,7 @@ def ordinary_resource_values(row, before=None):
     return row
 
 
-def ordinary_resource_guard(runtime, build, output, label, before=None):
+def ordinary_resource_guard(runtime, build, output, label, before=None, seconds=15):
     """Observe only the actual sample's backing stat/cgroup outside product time."""
     body = """import json
 from pathlib import Path
@@ -396,7 +397,7 @@ print(json.dumps({'store_main_logical_bytes':store.st_size,'store_main_allocated
 """
     docker = ["docker", "--host", "unix://" + build["socket"]]
     attempted = receipts.command([*docker, "exec", "--user", "0:0", runtime.container,
-                                  "python3", "-B", "-c", body], output, label, 15)
+                                  "python3", "-B", "-c", body], output, label, seconds)
     row = json.loads(Path(attempted["stdout"]).read_text())
     row["scope"] = "original 4GiB main Store apparent/allocated bound; actual own container OOM/swap; retired host Store RSS/physical-spool peak not asserted"
     return ordinary_resource_values(row, before)
@@ -526,6 +527,17 @@ def verify_git_qualification(command, case):
             "scope": "unchanged original verify variant: exact first-status paths/statuses, native reference tracked diff bytes/membership and alternating temporary-save readback/rename absence; prior mounted original genesis, discarded without Commit"}
 
 
+def git_proof_deadlines(case, charged_ns):
+    """Frozen ordinary work/cleanup/publication policy, cumulative across proofs."""
+    if (not case.get("git_workflow") or type(charged_ns) is not int or charged_ns < 0
+            or case["budget"]["verifier_ms"] != 45000
+            or case["budget"]["verification_hard_watchdog_ms"] != 59000):
+        raise ValueError("original Git 45s work/4s cleanup reserve/59s hard policy required")
+    now = time.monotonic()
+    return {"work": now+41-charged_ns/1e9, "cleanup": now+45-charged_ns/1e9,
+            "publication": now+59-charged_ns/1e9}
+
+
 def history_observer(clock, row, label, action):
     """Retain raw observer wall and exclude it even when a resource guard fails."""
     started = time.monotonic_ns()
@@ -598,6 +610,8 @@ def one_family_case(family, case, prepared_folder, build_folder, output):
     clock = cell_runner.PerformanceClock()
     proof_started = None
     preproof_ns = 0
+    publication_stop = None
+    proof_cleanup_stop = None
     try:
         row["clone"] = fixtures.clone(prepared, output / "clone", build)
         environment = output / "environment.txt"
@@ -628,7 +642,14 @@ def one_family_case(family, case, prepared_folder, build_folder, output):
         else:
             warm = secrets.token_hex(32)
             git_proof_start = time.monotonic_ns() if case.get("git_workflow") else None
-            git_proof_stop = time.monotonic() + min(case["budget"]["verifier_ms"], case["budget"]["verification_hard_watchdog_ms"])/1000 if git_proof_start is not None else None
+            git_deadlines = git_proof_deadlines(case, preproof_ns) if git_proof_start is not None else None
+            git_proof_stop = git_deadlines["work"] if git_deadlines else None
+            git_cleanup_stop = git_deadlines["cleanup"] if git_deadlines else None
+            if git_deadlines:
+                publication_stop = git_deadlines["publication"]
+                row["git_proof_policy"] = {"work_limit_seconds": 45, "cleanup_reserve_seconds": 4,
+                    "hard_limit_seconds": 59, "publication_guard_seconds": .25,
+                    "scope": "cumulative prior qualification, precommit custody and final proof; required early mount cleanup/Stop/export also charged, measured performance interval excluded"}
             try:
                 runtime.send("mount", warm, deadline=operation_deadline(git_proof_stop, 15))
                 mounted.add(warm)
@@ -640,15 +661,16 @@ def one_family_case(family, case, prepared_folder, build_folder, output):
                         "disposition": "original mounted verification variant; End without Commit discards changes before exact performance variant"}
                 elif body is not None:
                     runtime.send("command", warm, script(output, "warmup.sh", body), deadline=time.monotonic() + 120)
-                warm_end = runtime.send("unmount", warm, deadline=operation_deadline(git_proof_stop, 15))
+                warm_end = runtime.send("unmount", warm, deadline=operation_deadline(git_cleanup_stop, 15))
                 mounted.remove(warm)
-                cleanup_seconds = 5 if git_proof_stop is None else min(5, git_proof_stop-time.monotonic())
+                cleanup_seconds = 5 if git_cleanup_stop is None else min(5, git_cleanup_stop-time.monotonic())
                 if cleanup_seconds <= 0:
                     raise TimeoutError("original Git prior qualification watchdog expired before cleanup")
                 row["warmup_cleanup"] = readiness(runtime, warm, cleanup_seconds)
             finally:
                 if git_proof_start is not None:
                     preproof_ns += time.monotonic_ns()-git_proof_start
+                    publication_stop = git_proof_deadlines(case, preproof_ns)["publication"]
                     row["prior_proof_wall_ns"] = preproof_ns
                     row["proof_status"] = "FAIL"
             bindings["warmup_unmount"] = endpoint(warm_end)
@@ -691,12 +713,17 @@ def one_family_case(family, case, prepared_folder, build_folder, output):
             if case.get("git_workflow"):
                 custody_start = time.monotonic_ns()
                 try:
-                    seconds = min(case["budget"]["verifier_ms"], case["budget"]["verification_hard_watchdog_ms"])/1000-preproof_ns/1e9
+                    deadlines = git_proof_deadlines(case, preproof_ns)
+                    publication_stop = deadlines["publication"]
+                    seconds = deadlines["work"]-time.monotonic()
                     row["git_precommit"] = history_observer(clock, row, "git-precommit-custody-proof",
                         lambda: before_git_commit(runtime, selected, prepared, build, output, seconds))
                 finally:
                     preproof_ns += time.monotonic_ns()-custody_start
+                    publication_stop = git_proof_deadlines(case, preproof_ns)["publication"]
                     row["prior_proof_wall_ns"] = preproof_ns
+                if preproof_ns >= 41_000_000_000:
+                    raise TimeoutError("original cumulative Git proof work allowance exhausted before measured Commit")
                 row["counts_scope"] = "measured Git command, excluded precommit custody verifier FUSE/SQL work and Commit; only original Status observer adjusted; no guessed verifier subtraction"
             row["cache"]["commit_started_monotonic_ns"] = time.monotonic_ns()
             committed = runtime.send("commit", selected, deadline=operation_deadline(step_stop, operation_seconds))
@@ -731,11 +758,15 @@ def one_family_case(family, case, prepared_folder, build_folder, output):
         row["proof_status"] = "FAIL"
         proof_started = time.monotonic_ns()
         proof_stop = time.monotonic() + case["budget"]["verification_hard_watchdog_ms"] / 1000-preproof_ns/1e9
-        proof_work_stop = time.monotonic()+case["budget"]["verifier_ms"]/1000-preproof_ns/1e9 if case.get("git_workflow") else None
-        def proof_seconds(limit):
+        git_deadlines = git_proof_deadlines(case, preproof_ns) if case.get("git_workflow") else None
+        proof_work_stop = git_deadlines["work"] if git_deadlines else None
+        proof_cleanup_stop = git_deadlines["cleanup"] if git_deadlines else None
+        if git_deadlines:
+            proof_stop = publication_stop = git_deadlines["publication"]
+        def proof_seconds(limit, cleanup=False):
             left = proof_stop - time.monotonic()
             if proof_work_stop is not None:
-                left = min(left, proof_work_stop-time.monotonic())
+                left = min(left, (proof_cleanup_stop if cleanup else proof_work_stop)-time.monotonic())
             if left <= 0:
                 raise TimeoutError("original frozen verification hard watchdog expired")
             return min(limit, left)
@@ -757,19 +788,19 @@ def one_family_case(family, case, prepared_folder, build_folder, output):
         proof = verify_native_receipt(case, verified)
         if case.get("git_workflow"):
             row["git_semantics"] = verify_git_semantic_fields(proof, prepared)
-        runtime.send("unmount", verify_mount, deadline=time.monotonic() + native_seconds(15))
+        runtime.send("unmount", verify_mount, deadline=time.monotonic() + (proof_seconds(15, cleanup=True) if git_deadlines else native_seconds(15)))
         mounted.remove(verify_mount)
-        row["verification_cleanup"] = readiness(runtime, verify_mount, native_seconds(5))
+        row["verification_cleanup"] = readiness(runtime, verify_mount, proof_seconds(5, cleanup=True) if git_deadlines else native_seconds(5))
         if case.get("original_ordinary_guards"):
             row["ordinary_resource_guards"]["after_native_proof"] = ordinary_resource_guard(runtime, build, output,
-                "ordinary-resources-after-native-proof", row["ordinary_resource_guards"]["before"])
+                "ordinary-resources-after-native-proof", row["ordinary_resource_guards"]["before"], proof_seconds(15) if git_deadlines else 15)
         if small_history:
             row["resource_guards"]["after_native_proof"] = history_resource_guard(runtime, build, output,
                 "history-resources-after-native-proof", row["resource_guards"]["before"])
-        runtime.send("observe", deadline=time.monotonic() + proof_seconds(15))
-        runtime.send("stop", deadline=time.monotonic() + proof_seconds(15))
-        runtime.event("finished", time.monotonic() + proof_seconds(15))
-        if runtime.process.wait(timeout=1) != 0:
+        runtime.send("observe", deadline=time.monotonic() + proof_seconds(15, cleanup=True))
+        runtime.send("stop", deadline=time.monotonic() + proof_seconds(15, cleanup=True))
+        runtime.event("finished", time.monotonic() + proof_seconds(15, cleanup=True))
+        if runtime.process.wait(timeout=proof_seconds(1, cleanup=True) if git_deadlines else 1) != 0:
             raise ValueError("original runtime exit differs after known Stop")
         row["custody"] = "KNOWN_STOP"
         row["completed_operation_count"] = 1
@@ -838,7 +869,9 @@ def one_family_case(family, case, prepared_folder, build_folder, output):
         row.update(proof_status="PASS", proof_wall_ns=time.monotonic_ns() - proof_started+preproof_ns,
                    verification={"scope": case["oracle"]["scope"], "omissions": case["oracle"]["omissions"],
                                  "native": proof, "persisted": proof_events[0]})
-        collect_family_observations(runtime, row, build, output, bindings)
+        collect_family_observations(runtime, row, build, output, bindings, proof_work_stop)
+        if git_deadlines:
+            proof_seconds(.001)
         row.update(status="PASS" if row["cache"]["status"] == "ELIGIBLE" else "INELIGIBLE", functional_status="PASS")
         if small_history:
             row["semantic_proof_status"] = "PASS"
@@ -852,11 +885,11 @@ def one_family_case(family, case, prepared_folder, build_folder, output):
                           "class B source demands or own-write cold backing precondition unavailable; functional/native/persisted proofs and clean unmount pass")
             if case.get("git_workflow"):
                 row["tag"] += "; prior original verification reads and full paid cache inputs unqualified; numeric counts include excluded precommit custody verifier FUSE/SQL work"
-        state = receipts.command([*docker, "inspect", runtime.container, "--format", "{{.State.Running}}"], output, "container-state", 15)
+        state = receipts.command([*docker, "inspect", runtime.container, "--format", "{{.State.Running}}"], output, "container-state", proof_seconds(15, cleanup=True) if git_deadlines else 15)
         if Path(state["stdout"]).read_text().strip() != "false":
             raise ValueError("original container Stop not confirmed")
-        receipts.command([*docker, "rm", runtime.container], output, "remove-passing-container", 15)
-        receipts.command([*docker, "volume", "rm", row["clone"]["volume"]], output, "remove-passing-volume", 15)
+        receipts.command([*docker, "rm", runtime.container], output, "remove-passing-container", proof_seconds(15, cleanup=True) if git_deadlines else 15)
+        receipts.command([*docker, "volume", "rm", row["clone"]["volume"]], output, "remove-passing-volume", proof_seconds(15, cleanup=True) if git_deadlines else 15)
         row["resource_disposition"] = "functionally passing sample container/volume removed after both proofs and known Stop; numeric eligibility remains separate"
     except BaseException as error:
         row.update(status="FAIL", original_failure_type=type(error).__name__, original_failure=str(error),
@@ -888,6 +921,15 @@ def one_family_case(family, case, prepared_folder, build_folder, output):
                         row["status"] = "FAIL"
         row["timing_scope"] = "matrix controller from measured mount through command/Commit/terminal unmount; read-only resource-observer intervals excluded and separately retained; absolute phase stop includes those intervals; setup/warmup/cleanup/fresh native and persisted verification/Stop separate"
         row["evidence"] = str(output.relative_to(identity.ROOT.resolve()))
-        receipts.write_new(output / "receipt.json", row)
-        receipts.manifest(output)
+        if case.get("git_workflow") and publication_stop is not None:
+            if proof_started is not None:
+                row["proof_wall_ns"] = time.monotonic_ns()-proof_started+preproof_ns
+                row["proof_wall_scope"] = "cumulative prior qualification/precommit custody/final proof and known cleanup/observations through prepublication close; publication timing is separately bound in publication receipts"
+            if proof_cleanup_stop is not None and time.monotonic() >= proof_cleanup_stop:
+                row.update(status="FAIL", proof_status="FAIL",
+                           tag="; ".join(filter(None, (row.get("tag"), "original cumulative45s verification cleanup deadline reached before publication"))))
+            row.update(receipts.finalize_guarded(output, row, publication_stop))
+        else:
+            receipts.write_new(output / "receipt.json", row)
+            receipts.manifest(output)
     return row
