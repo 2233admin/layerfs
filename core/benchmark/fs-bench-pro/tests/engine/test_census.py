@@ -1,4 +1,8 @@
-"""Unfiltered exact Commit membership on isolated current-schema WAL/OFF files."""
+"""Synthetic schema/FK/BLOB guards on isolated current-schema WAL/OFF files.
+
+IDs, roots and provider observation fields here are synthetic. Canonical public
+Store/Commit/provider qualification is a separate external integration test.
+"""
 import hashlib
 import importlib.util
 import json
@@ -107,11 +111,11 @@ class CommitCensus(unittest.TestCase):
                 self.assertNotIn(fixture.binding.decode(),json.dumps(result))
                 self.assertFalse(any(Path(str(fixture.path)+s).exists() for s in ("-wal","-shm","-journal")))
 
-    def test_extra_unreachable_valid_commit_is_not_hidden_by_ancestry(self):
+    def test_extra_unreachable_synthetic_row_is_not_hidden_by_ancestry(self):
         with tempfile.TemporaryDirectory(prefix="fsb-census-test-") as temporary:
             fixture=StoreFixture(Path(temporary))
-            # Valid tagged/FK-bound Commit, same authenticated root/base, with
-            # no reference from the branch's acknowledged ancestry.
+            # Synthetic tagged/FK-bound SQL row outside the expected ancestry.
+            # This is not a canonical public Commit or authenticated root.
             fixture.mutate('INSERT INTO "commit" VALUES(?,?,?,?,?)',
                 (ident(0x12,33,999),fixture.stack,bytes.fromhex(fixture.expected[0]["root_id"]),None,fixture.base))
             with oracle.closing(sqlite3.connect(fixture.path)) as check:

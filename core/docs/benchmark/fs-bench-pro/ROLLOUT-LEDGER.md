@@ -2751,4 +2751,34 @@ with exact eightasset reuse before anyfamily preparation/measurement. No stale
 old handler is qualified as a B4execution path. Producttree/79366 unchanged.
 
 | `62246886d` (worker) | Currentpublic full/selected history proof and original step bounds | 79366 | 79366 | +0 |
-| This commit | Integrate public history proof, preserved failures and qualified unchanged assets | 79366 | 79366 | +0 |
+| `93f0d3dfe` | Integrate public history proof, preserved failures and qualified unchanged assets | 79366 | 79366 | +0 |
+
+
+Decision40genuine-extraCommit qualification closes with Capped0a6887af4,
+dependency Namespace62246886d. Dedicated native publicfixture buildsactual
+savedfilesystemobjects andK2 history, publishesC3 via publicHistoryCatalog,
+checksCommitId::derive andretrievesexactrow. C3 parent isC2, root is savedC1
+and differsfromC2. AfterHandles::seal, onlyisolated WAL/OFFcopy branchhead
+is restoredC3toC2; allthreeCommit rows remain. Actualruntime anchoredoriginal
+K2typedproofPASS on separatecopy, then exactlysameimmutableSQL/schema/provider/
+tuplecore rejectsvalidunreachableC3 as expected. No fabricatedDockerStopped/
+exportevents are used: publicsamplewrapper stillenforces actualDockerKnownStop
+custody; nativefixtureexercises privateunchanged-readonlycore explicitly.
+Synthetic8unitguards are now prospectively labelledsynthetic, receiptsunchanged.
+
+Singleexactexporter1PASS0.04s reused; oneactualPython regressionPASS2.857s /
+2,943,888,792ns supervisor<=4/120, typedchild25s stop. BaselinecensusPASS2;
+retainedextra EXPECTED_FAIL 'global Commit membership or five-field tuples
+differ'. Immutable reset217,088B/hash860b1193c6f05cde5bab691ed4f7016cf2a2d88c9c1fce136940e01a6c0a5c48
+staysunchanged. CanonicalC3
+1213fdbaa48a28294b483f5d63051ec2b11b42b80ffe4b8df3f3d0632194a0aeb1.
+ActualprivatequalifiedruntimeSHAaacd4e5867495f2036d6ae6a216aa32fbbb4f57d663d09a3e76c1be3c17dcdfb.
+Postfactor8syntheticguardsPASS0.327s. RawCappedcanonical-census-fixture/
+python-canonical-check/qualification.json SHA5a4e106a30bcbb3994aba695c36bf7fcfe5c4a21d5a9aae469f4869012ce9dfe;
+canonical-census-supplement.json SHAfc582d62e7e8b26ad3a0f7069debe0e1a020ae63b7be0f7ddf8c6dfd38b79426. Rootcreates no
+secondfixture or unchangedproof replay. No mounted/Dockercase/preparation/
+measurement/resourceoperations. Final source/binary handoff and familyparity/
+actual43oneattempts are next; batch4remainsIN_PROGRESS andall43UNRUN.
+
+| `0a6887af4` (worker) | Qualify actual canonical unreachableCommit and exact readonlycensus | 79366 | 79366 | +0 |
+| This commit | Integrate genuine publiccensus regression and close native qualification gap | 79366 | 79366 | +0 |

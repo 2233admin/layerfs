@@ -165,10 +165,26 @@ def commit_census(sealed_path, acknowledged_tuples, provider_fields, export_cust
             or events[-1].get("event") != "finished" or stopped[0].get("sequence",0) >= events[-1].get("sequence",0)
             or len(created) != 1 or created[0].get("value","").split(" ")[0] != "volume="+custody["volume"]):
         raise ValueError("census known stopped runtime/container/volume custody differs")
+    result = _commit_census_read_only(path, acknowledged_tuples, provider, manifest, transcript, before=before)
+    result["custody"] = {key:custody[key] for key in CUSTODY_KEYS}
+    return result
+
+
+def _commit_census_read_only(sealed_path, acknowledged_tuples, provider_fields, prepared_manifest, transcript_path, *, before=None):
+    """Shared immutable SQL/provider proof, also qualified on native sealed fixtures.
+
+    Public samples enter only through commit_census and its actual Docker custody
+    checks. Native public-API regressions must never manufacture Docker events.
+    """
+    path = Path(sealed_path)
+    before = _sealed_identity(path) if before is None else before
+    provider = dict(provider_fields)
+    manifest, transcript = Path(prepared_manifest), Path(transcript_path)
+    transcript_sha256 = file_sha(transcript)
     bound = _manifest_identity(manifest)
     if (provider.get("provider_validation") != "current-public-schema-source-binding-validated"
             or provider.get("provider_store_sha256") != before["sha256"] or provider.get("provider_store_size") != before["size"]
-            or provider.get("acknowledged_transcript_sha256") != custody["transcript_sha256"]
+            or provider.get("acknowledged_transcript_sha256") != transcript_sha256
             or any(provider.get(key) != value for key,value in bound.items())
             or type(provider.get("catalog_incarnation")) is not int or not 0 < provider["catalog_incarnation"] <= 2**63-1
             or type(provider.get("provider_store_unchanged")) is not int or provider["provider_store_unchanged"] not in (0,1)
@@ -257,7 +273,7 @@ def commit_census(sealed_path, acknowledged_tuples, provider_fields, export_cust
     return {"schema":"fs-bench-pro-global-commit-census-v1", "status":"PASS", "commit_count":count,
             "fetch_batches_including_eof":batches, "query":CENSUS_SQL, "tuple_sha256":digest.hexdigest(),
             "source":before, "public_provider":{key:provider[key] for key in PROVIDER_KEYS},
-            "custody":{key:custody[key] for key in CUSTODY_KEYS}, "schema_version":version, "schema_source_sha256":hashlib.sha256(source.encode()).hexdigest(),
+            "schema_version":version, "schema_source_sha256":hashlib.sha256(source.encode()).hexdigest(),
             "schema_definition_sha256":hashlib.sha256(definition.encode()).hexdigest(), "authoritative_source_pins":SCHEMA_PINS,
             "scope":"unfiltered global Commit table to EOF; exact all acknowledged typed tuples and public catalog/manifest identity; immutable read-only source unchanged; provider validation used a separate writable offline Disposable copy"}
 
