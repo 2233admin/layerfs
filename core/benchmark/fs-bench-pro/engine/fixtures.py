@@ -468,8 +468,19 @@ def historical_native_selection(case, plan, folder, build, binding):
                                     "receipt": str(Path(checked["stdout"]).resolve()), "receipt_sha256": identity.sha256(checked["stdout"])}}
 
 
-def install_closed_history_store(closed, genesis, folder, build, *, deadline=None, sample=False):
+def install_closed_history_store(closed, genesis, folder, build, *, deadline=None, sample=False, integrity_case=None):
     """Setup-only independent byte install of complete closed history; no Init."""
+    if integrity_case is not None and (not sample or integrity_case not in (
+            "workspace-corrupt-descendant-compact-v2-proof", "workspace-missing-descendant-compact-v2-proof")):
+        raise ValueError("exact original integrity sample installation case required")
+    purpose = ("original descendant integrity proof " + integrity_case +
+               "; independent faulted closed byte copy; no measured Init; no additional Init"
+               if integrity_case else "fresh measured Init byte installation into owned sample volume" if sample else
+               "new immutable full historical producer byte copy; never a measured/mutated sample")
+    scope = ("original descendant integrity proof " + integrity_case +
+             "; complete independent faulted closed Store copied unchanged; no measured Init; no additional Init"
+             if integrity_case else "complete freshly sealed measured Init copied unchanged into owned sample volume; no additional Init" if sample else
+             "complete known-Stop normalized producer copied unchanged, full history preserved, no selected-root Init or pre-read")
     folder.mkdir(); store = folder / "store.sqlite"; manifest = folder / "installed.manifest"
     shutil.copy2(closed["sealed_store"], store); shutil.copy2(closed["manifest"], manifest)
     if identity.sha256(store) != closed["store_sha256"] or identity.sha256(manifest) != closed["manifest_sha256"]:
@@ -477,7 +488,7 @@ def install_closed_history_store(closed, genesis, folder, build, *, deadline=Non
     volume = ("layerfs-fsb-sample-" if sample else "layerfs-fsb-history-master-") + uuid.uuid4().hex[:16]
     container = "layerfs-fsb-history-install-" + uuid.uuid4().hex[:16]
     receipts.write_new(folder / "resource-claim.json", {"volume": volume, "container": container, "created_by_this_run": True,
-                       "purpose": "fresh measured Init byte installation into owned sample volume" if sample else "new immutable full historical producer byte copy; never a measured/mutated sample",
+                       "purpose": purpose,
                        "failure_disposition": "retain failed/uncertain resources, no retry"})
     docker = ["docker", "--host", "unix://" + build["socket"]]
     def call(argv, label):
@@ -511,7 +522,9 @@ def install_closed_history_store(closed, genesis, folder, build, *, deadline=Non
               "manifest_sha256": identity.sha256(manifest), "global_profile": "Disposable/WAL/OFF",
               "construction_workers": 1, "attempt": installed, "source": closed["sealed_store"],
               "backing_owner": "0:0", "backing_directory_mode": "0700", "backing_store_mode": "0600",
-              "scope": "complete freshly sealed measured Init copied unchanged into owned sample volume; no additional Init" if sample else "complete known-Stop normalized producer copied unchanged, full history preserved, no selected-root Init or pre-read"}
+              "scope": scope}
+    if integrity_case is not None:
+        result["integrity_case"] = integrity_case
     receipts.write_new(folder / "installed-history.json", result)
     return volume, result
 

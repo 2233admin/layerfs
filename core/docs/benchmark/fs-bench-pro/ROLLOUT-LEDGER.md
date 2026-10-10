@@ -122,6 +122,7 @@ comparison or release-admission claim. Durable is
 | H-34 | repository deepseek-stride10 at08288e824 | First original importer refuses target as notFUSE; actual mount was/workspaces/1 | Workload defaulted/workspace instead of authenticated actual mount root, for both apply and fresh verifier | Workera85f0ab97 / this integration | Parent full17 wrongtarget RED; nine final strict choreography/actualACK/custody tests PASS |
 | H-35 | repository deepseek-full administrative failed-prep closure | First report displayed actual caseFAIL although actual operation/proof attempts were0 | Generic status field copied administrative preparation verdict instead of actual case disposition | This commit | Parent external actualcase-status RED and27 negative vectors; final2 new/5proof-only/4incomplete-report tests PASS |
 | H-36 (harness/reporting) | Prospective26 unattempted reliabilityNA rows | ProofCSV defaultedNOT_RUN and omitted declared missing capability; naiveNA fallback could mask an unexpected actual failed receipt | Reporter lacked source-reviewed not_applicable_reason/default and did not distinguish absent vs actual receipt | This commit | External wrong-proof-status and realmetadata missing-reason REDs; unexpectedFAIL masking RED; final2new/5proof-only/4incomplete checksPASS |
+| H-37 (harness scope) | Prospective reliability faulted closed sample installation | Existing sample=True installer metadata describes fresh measured Init, which is false for isolated integrity-copy proof input | Generic sample naming and measured-Init purpose were conflated | This commit | Exact original two-case purpose/byte-seal guard RED; wrong case/master refused beforefolder/Docker; final2new+14historical checksPASS |
 | H-1 | C07 | Workload and verifier passed, unmount returned, residency helper refused changed file identity | Harness inspected overlay while automatic post-unmount reclamation was still mutating backing | `a1f2c259c` | `test_backing_observer_waits_for_original_reclamation_to_finish` |
 
 | H-3 | Generic mounted pilot proofs and prospective SDK proofs | Reachable path walk omitted exhaustive inode-table membership from original canonical verifier | Runtime compared declared paths/bytes but never enumerated current inode table | `37ec6826b` | edit_oracle_complete_membership_accepts_exact_and_rejects_unreachable_or_missing_rows |
@@ -6361,5 +6362,32 @@ was attempted. Current report repair needs no new product qualification.
 | Commit | Purpose | Production before | after | delta |
 | --- | --- | --- | --- | --- |
 | This commit | Preserve explicit NA reasons and every actual failure in proof CSV | 79370 | 79370 | +0 |
+Pinned absent-aware staged counter/exact tree confirmation; reference absent,
+retiredR9c,last65,417/tree498dd1917812.
+
+
+### H37 exact integrity closed-copy installation purpose, 2026-10-11
+
+The existing unchanged byte installation helper gains an optional
+integrity_case, accepted only forsample=True and the two exact original
+descendant IDs. It refuses all other cases/master use before creating a
+folder/resource or calling Docker. New claim and installed-history scope
+accurately record original integrityproof, independentfaultedclosedbytes,
+no measuredInit/noadditionalInit andexactcaseID. The byte SHA/installed
+manifest seals, sourcecopy, UID/GID/backing0:0/0700/0600, resource custody,
+noInit, singleDockeroperation sequence andolddefault scopes remainunchanged.
+No old receipt is edited or relabelled. This is harness metadata/route
+support, no product feature or integrity success claim.
+
+Rawowning qualification:benchmark-results/fs-bench-pro/2026-10-11-b7-install-scope-checks/.
+Parent unsupported-routeREDexit1/wall168,862,083ns retained. First wording
+checkpoint2FAIL173,931,542ns retained; code explicitlystatesbothno-measured
+andno-additionalInitwithout changing guard. Final2checksPASS169,811,833ns;
+existing14historicalfixturechecksPASS2,585,641,750ns. Allprivate-free rootR4
+explicit120s, fakeDockeronly/readreporttemplate, noactualcase or build.
+
+| Commit | Purpose | Production before | after | delta |
+| --- | --- | --- | --- | --- |
+| This commit | Admit truthful original integrity-copy installation scope | 79370 | 79370 | +0 |
 Pinned absent-aware staged counter/exact tree confirmation; reference absent,
 retiredR9c,last65,417/tree498dd1917812.
