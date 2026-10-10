@@ -2048,7 +2048,7 @@ census/RSS/spool diagnostics and full coldness remain explicitly unverified.
 Production79,366unchanged, referenceabsent, pinnedstagedmethod; CSV/docs only.
 
 | `f9d6e366e` (worker) | Record twelve complete directory outcomes | 79366 | 79366 | +0 |
-| This commit | Integrate directory CSVs and complete family custody | 79366 | 79366 | +0 |
+| `ad4f95503` | Integrate directory CSVs and complete family custody | 79366 | 79366 | +0 |
 
 Locality cohort integrated from7f29c1dc4: all16 original cases sampledonce at
 960a7f81e, fullnative/persisted/inode proofPASS, Gone/KNOWN_STOP and removed
@@ -2081,4 +2081,18 @@ absent, pinnedstagedcount; CSV/docsonly. Currentbatch28of33distinctcases closed,
 onefailedsnapshotattemptretained pendingcorrectedsource, fourGitunsampled.
 
 | `7f29c1dc4` (worker) | Record sixteen locality cases and dense500EXCEEDED | 79366 | 79366 | +0 |
-| This commit | Integrate locality outcomes without optimizing the soft-limit miss | 79366 | 79366 | +0 |
+| `26c037d90` | Integrate locality outcomes without optimizing the soft-limit miss | 79366 | 79366 | +0 |
+
+First failed local-snapshot CSVs integrated unchanged from3a7c3fd96, exact
+30/14columns/one row each underbaselines/core/2026-10-10-0344bfdc6. StatusFAIL,
+proofFAIL, wall22,049,536,459ns/15sEXCEEDED; unknowncounts/storage andStop
+remainUNAVAILABLE, no inferredcleanup. H6fixed03033abdc is prospective only:
+the failedrows/verifierstdout/source/raw/resourcecustody stay original.
+Workerb1f8150e applies exactthreefileH6fix withoutleadledger, staged/committed
+tree1f81185621f54cd278b68935274d66e9905f6244 and79,366unchanged. Owningthree
+receipt checksPASS0.012s. Exactoldpreparedmaster/helper/fixture andcompiled
+seal reused; correctedparity/newsource sample is pending. No setup/native/
+debugproof replay. No productfix/optimization or publicationclaim.
+
+| `b1f8150e` (worker) | Apply exact sampled-receipt fix at changed case identity | 79366 | 79366 | +0 |
+| This commit | Integrate original failed snapshot rows without relabeling | 79366 | 79366 | +0 |
