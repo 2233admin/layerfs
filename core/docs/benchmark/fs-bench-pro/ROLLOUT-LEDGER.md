@@ -13,7 +13,7 @@ comparison or release-admission claim. Durable is
 
 | Stage | Status | Commits | Next step |
 | --- | --- | --- | --- |
-| Handoff specification | COMPLETE | This commit | Harvest released references |
+| Handoff specification | COMPLETE | `3c32fbc97` | Harvest released references |
 | 0.1 Released references | PENDING | — | Copy all source rows with provenance |
 | 0.2 Move-only organization | PENDING | — | Map existing files and their owning tests |
 | 0.3 Case catalogue | PENDING | — | Inventory the frozen root registry and older-commit binding |
@@ -35,6 +35,8 @@ comparison or release-admission claim. Durable is
 | 3 | Preserve cache eligibility separately from functional observations; unknown preconditions yield INELIGIBLE | Measurement rules remain binding; functional completion cannot invent cold eligibility | Claiming PASS for unknown cache state |
 | 4 | Create no additional family under P-6 and make no GitHub changes under P-7 | Explicit handoff scope supersedes proposal recommendations | Adding per-call families or closing issues |
 | 5 | Use `Co-Authored-By: Codex <noreply@openai.com>` for this session's commits | This is a Codex session; no other attribution line was supplied in its instructions | Copying the prior agent's attribution |
+
+| 6 | Correct section 8 to state the verification source has 227 total rows (28 reliability); preserve original seconds beside labelled decimal-to-ns conversion | Source CSV and its generator agree on 227; the handoff requires every row | Harvesting only the 28 reliability rows or inventing precision |
 
 ## Bugs
 
@@ -60,3 +62,7 @@ Initial active core: 79,366. Reference absent (retired R9c; last counted
 No containers or volumes created by this run yet. Protected handoff scripts,
 prepared inputs, master volumes, running containers, merged worktrees and the
 untracked `PROMPT-R8-R9-NEXT-AGENT-20261010.md` remain untouched.
+
+Specification correction commit: docs-only; source rows counted directly and
+whitespace checked. Production LOC 79,366 -> 79,366 (delta +0), same pinned
+absent-aware method. Handoff spec/README tree preserved at `3c32fbc97`.

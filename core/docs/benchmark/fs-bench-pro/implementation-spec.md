@@ -286,7 +286,7 @@ The released records already hold more than the v0.1.6 closeout alone:
 | --- | --- | --- |
 | `release-notes/0.1.6/benchmark-performance.csv` | 5: `branch_development`, `dedup_branch_history`, `file_size_transition`, `mixed_load_bearing`, `multi_workspace_development`. `historical_access` has six rows, all verification only | 36, of which 28 timed |
 | `release-notes/0.1.5/benchmark-performance.csv` | 16: `dedup_branch_history`, `dedup_cdc_locality`, `dedup_cross_file`, `dedup_workspace_reuse`, `directory_construction_traversal`, `edit_canonical_chunk_count`, `edit_length_changing`, `edit_length_preserving`, `git_tool_workflow`, `init_namespace`, `mixed_load_bearing`, `namespace_mutation`, `payload_create_read`, `store_footprint`, `tiny_file_churn`, `workspace_change_locality` | 198 |
-| `release-notes/0.1.5/benchmark-verification.csv` | none: `workspace_reliability`, verification only | 28 |
+| `release-notes/0.1.5/benchmark-verification.csv` | `workspace_reliability` adds 28 verification-only rows; the other 199 rows retain the released proofs for the remaining selections | 227 total |
 | No released number found | `edit_length_changing_capped`, `local_snapshot`, `repository_history`, `small_file_delta_smoke` | — |
 
 So 19 families have a released timing: 3 only in the 0.1.6 record, 14 only in
@@ -310,7 +310,10 @@ keeps each row's timer name and disposition so the two are never mixed.
 | `README.md` | Each source, its topology, clock and cache contract, and what may not be concluded from it |
 | `missing.md` | Families and cases with no released number, and where else was searched |
 
-Rows are copied, never recomputed. A side-by-side table always carries the
+Rows are copied, never recomputed. All 227 verification rows are retained,
+including proofs for selections already in the performance source. A source
+that records seconds retains that original value; decimal unit conversion
+to nanoseconds is labelled and adds no precision. A side-by-side table always carries the
 label "reference from release X, different topology and clock" and never
 prints a ratio as a verdict.
 
