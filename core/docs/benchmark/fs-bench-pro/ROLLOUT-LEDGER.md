@@ -5818,3 +5818,66 @@ paths do not affect this completed149 reuse evidence; it is reused unchanged.
 | This commit | Record all14 reuse outcomes and retained3 proof failures | 79370 | 79370 | +0 |
 Pinned absent-aware staged counter/exact tree confirmation; reference absent,
 retiredR9c, last65,417/tree498dd1917812.
+
+
+### Batch 6 cross-file dedup complete, 2026-10-11
+
+All10 original cases at08288e824/runtime7766 completed actual paid Init,
+retained public installation, full original fresh FUSE/native verifier,
+current exact typed membership/dedup proof and End/Gone/KnownStop. Guarded
+publication/outer ACK and bound removal PASS for20 owned passing containers
+and10 sample volumes. Numeric10INELIGIBLE: ClassA source-page/host-metadata
+coldness was unavailable. No paid15s/proof45s limit exceeded. Original
+10native prepared inputs reused unchanged; no master volumes were created.
+
+| Original case | Paid Init parent ns | Independent proof ns | Sealed Store B | Function/proof/close |
+| --- | ---: | ---: | ---: | --- |
+| dedup-cross-file-anchor-1 | 36335334 | 4044610375 | 1232896 | PASS/PASS/Gone+KnownStop |
+| dedup-cross-file-unique-10 | 81173375 | 4459818250 | 10797056 | PASS/PASS/Gone+KnownStop |
+| dedup-cross-file-unique-100 | 599792167 | 9565501292 | 106270720 | PASS/PASS/Gone+KnownStop |
+| dedup-cross-file-unique-500 | 2698613375 | 32340981459 | 530804736 | PASS/PASS/Gone+KnownStop |
+| dedup-cross-file-identical-10 | 49557750 | 4177071000 | 1232896 | PASS/PASS/Gone+KnownStop |
+| dedup-cross-file-identical-100 | 85611792 | 6482228292 | 1236992 | PASS/PASS/Gone+KnownStop |
+| dedup-cross-file-identical-500 | 320223334 | 16991380250 | 1236992 | PASS/PASS/Gone+KnownStop |
+| dedup-cross-file-mixed-10 | 63272333 | 4343617209 | 7614464 | PASS/PASS/Gone+KnownStop |
+| dedup-cross-file-mixed-100 | 750255792 | 9028288625 | 79769600 | PASS/PASS/Gone+KnownStop |
+| dedup-cross-file-mixed-500 | 2417079958 | 28155462875 | 398168064 | PASS/PASS/Gone+KnownStop |
+
+Paid Init ends at actual acknowledgement; public installation/native and
+typed proof are independent proof work. Host Init has no daemon/FUSE
+request, owner-job or statement counters: those paid axes remain unavailable,
+while verifier-only telemetry stays separately scoped. Store logical/
+allocated and payload counters have actual Init/closed proof scope. Sampled
+PID RSS is an observed maximum with sampling gaps, not lifetime/continuous
+peak; host swaps use declared reaped-child aggregate scope.
+
+Two old anchor failures stay unchanged:149H28startupFAIL plus9NOT_RUN,
+1ccH30actualmount/wrongACKFAIL plus9NOT_RUN. H28/H30 corrected controller
+identities justified only the affected anchor runs. This commit imports all
+three exact ten-row CSV pairs, each original reference/source/receipt preserved.
+No CSV record is relabelled or old NOT_RUN hidden.
+
+Source149d40bac retained resources: {"acknowledged_startup_failed_container": "a3e9a084d2fdb8d9cf80869cee4d4479aaa0e459bab43e8a7a809c5e26a25ada", "installer_containers": [], "verifier_container": null, "volume": "layerfs-fsb-sample-44984fcf450d46a6"}.
+
+Source1cc25d4de retained resources: {"installer_containers": ["fcb8284e733aa79b3732fff7dad85aed0d29012f3c6b0a2b71e02a6037a3d05e"], "verifier_container": "5d47e443a941479e7f5ce899ba895bb05fa8f77666c0d220e4ae2b483983cccd", "volume": "layerfs-fsb-sample-4441d6043ca446f5"}.
+
+The1ccactual Mount supplement SHA
+c0e6c691c9b5c0fcf9c11b87d4ef1c00c79f29187dcd78732975a1e9977ebc44
+binds actual successful key/ns/incarnation/NativeReady/Fork/root; the old
+mounted=False field is not absence proof. End/Gone/Stop remain unobserved
+for those failed resources; none was removed. Final sealed handoff:
+/Users/yifanxu/.codex/worktrees/fs-bench-pro-tiny-file-churn/layerfs/benchmark-results/fs-bench-pro/2026-10-11-batch6-dedup-cross-file-08288e824/final-handoff/HANDOFF.json
+SHA82ecf3518a5ec0b05cad0772fe900de08f1d44e5a3eec2026f703984861d453d,
+manifest0f3f8563ea2d03c2b5ed192190a96b4fd7e135075a439b4a619e628e00152c2c.
+PerformanceCSV5c3f157c9185b5ded8720d4e9874afd24bafa3e2622caadbb70358cbfb98343f,
+verificationCSV07d300cfa575ef4577ca75c42d29d82930bdefb14b3a49da1d14d22174e94743.
+Retained-evidence verifyPASS1,870,757,875ns/reportPASS1,591,824,667ns, each
+private120s. Shared-host/DockerVM interference unquantified; no speed/storage
+comparison or release gate. H32/H33 footprint code does not affect this
+completed import controller, so082evidence is reused without replay.
+
+| Commit | Purpose | Production before | after | delta |
+| --- | --- | --- | --- | --- |
+| This commit | Record all10 cross-file results and two failed anchor cohorts | 79370 | 79370 | +0 |
+Pinned absent-aware staged counter/exact tree confirmation; reference absent,
+retiredR9c, last65,417/tree498dd1917812.
