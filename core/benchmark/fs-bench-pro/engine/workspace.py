@@ -43,6 +43,17 @@ def endpoint(event, position="last"):
     return {"event_sequence": event["sequence"], "event": event["event"], "position": position}
 
 
+def terminal_cache_observation(runtime, key, build, output):
+    # Reclamation mutates overlay bytes after unmount. Establish the original
+    # physical terminal boundary before observing stable backing identity.
+    cleaned = readiness(runtime, key)
+    observer = ["docker", "--host", "unix://" + build["socket"], "exec", "--user", "0:0", runtime.container,
+                "python3", "-B", "/code/cache/residency.py", "--class", "B",
+                "--store", "/layerfs-store/global/store.sqlite", "--overlay", "/layerfs-local/overlay/overlay.sqlite"]
+    observed = receipts.command(observer, output, "cache-observation", 15)
+    return cleaned, json.loads(Path(observed["stdout"]).read_text())
+
+
 def price(groups, events, bindings):
     correlated = counts.correlate(events, groups)
     selectors = [{"label": "measured command", "before": "measured_mount_attach", "end": "command_end_status"},
@@ -175,12 +186,7 @@ def one_cell(cell, prepared_folder, build_folder, output):
         row["performance_clock"] = clock.observe(time.monotonic_ns())
         # This per-file mincore observer is outside product time. No eviction,
         # sync call, cache coldness claim or missing-counter credit is added.
-        observer = ["docker", "--host", "unix://" + build["socket"], "exec", "--user", "0:0", runtime.container,
-                    "python3", "-B", "/code/cache/residency.py", "--class", "B",
-                    "--store", "/layerfs-store/global/store.sqlite", "--overlay", "/layerfs-local/overlay/overlay.sqlite"]
-        observed_cache = receipts.command(observer, output, "cache-observation", 15)
-        row["cache"]["residency"] = json.loads(Path(observed_cache["stdout"]).read_text())
-        row["cleanup_observations"] = readiness(runtime, measured)
+        row["cleanup_observations"], row["cache"]["residency"] = terminal_cache_observation(runtime, measured, build, output)
         row["cleanup"] = "Gone"
         runtime.send("observe", deadline=time.monotonic() + 15)
         runtime.send("stop", deadline=time.monotonic() + 15)

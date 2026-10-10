@@ -17,7 +17,7 @@ comparison or release-admission claim. Durable is
 | 0.1 Released references | COMPLETE | `8e4a78fa0` | Stage 0.2 move-only organization |
 | 0.2 Move-only organization | COMPLETE, historical check failures retained | `13f9dec38`; routing `9af29e01e` | Update routing guide, then stage 0.3 catalogue |
 | 0.3 Case catalogue | COMPLETE | `f182e9a63`; prerequisite correction `30b798192` | Stage 0.4 reproducible engine |
-| 0.4 Reproducible engine | IN_PROGRESS | Cell-route correction `bb8e07df8`; build support `c496025fc`; oracle support `7a27a4f26`; fixture support `516c2f009`; workspace/report support in this commit | Build, prepare independent masters, reproduce twelve cells |
+| 0.4 Reproducible engine | IN_PROGRESS | Cell-route correction `bb8e07df8`; build support `c496025fc`; oracle support `7a27a4f26`; fixture support `516c2f009`; workspace/report support `358eca082`; cleanup-observer correction in this commit | Build, prepare independent masters, reproduce twelve cells |
 | 1 Pilot | PENDING | — | Wait for stage 0.4 completion |
 | 2 Edits | PENDING | — | Wait for batch 1 completion |
 | 3 Trees and tools | PENDING | — | Wait for batch 2 completion |
@@ -58,13 +58,22 @@ comparison or release-admission claim. Durable is
 
 ## Bugs
 
-None observed yet. Each entry will name case, symptom, source-backed cause,
-fix commit and external regression test.
+| Bug | Case | Symptom | Cause | Fix commit | External test |
+| --- | --- | --- | --- | --- | --- |
+| H-1 | C07 | Workload and verifier passed, unmount returned, residency helper refused changed file identity | Harness inspected overlay while automatic post-unmount reclamation was still mutating backing | This commit | `test_backing_observer_waits_for_original_reclamation_to_finish` |
+
+H-1 is a harness ordering fault, not a product correctness or performance defect.
+The original file-identity checker remains intact; no product source changed.
 
 ## Failed, ineligible, not-applicable and unrun cases
 
-No case has been sampled. All families remain unrun pending the committed
-catalogue and engine. No case is closed by this statement.
+At `358eca082`, C01–C06 passed with exact baseline request/owner-job/statement
+counts, independent verifier PASS, automatic cleanup Gone and known Stop. C07
+failed on H-1 after successful command, verifier and unmount. C08–C12 remain
+NOT_RUN in this source's two generated CSVs. All 273 workload cases remain
+pending; this checkpoint closes none of them. Corrected-source sampling covers
+C07 and the remaining five cells only; unaffected successful cells are retained,
+not re-sampled.
 
 ## Checks and source size
 
@@ -77,7 +86,21 @@ Initial active core: 79,366. Reference absent (retired R9c; last counted
 
 ## Resource custody
 
-No containers or volumes created by this run yet. Protected handoff scripts,
+New immutable masters retained for setup reuse:
+`layerfs-fsb-master-empty-ee794ff64e0a4bcb` and
+`layerfs-fsb-master-big64m-c60eb32e5145496b`. Passing build, provision, native
+oracle, byte-copy and C01–C06 sample containers have been removed; their exact
+names and acknowledged removal are in raw receipts. Passing sample volumes
+also removed.
+
+H-1 failed resources retained: running container
+`3b5974a094800d78dc72648dbeb08c75cdea933957ed188891a812bb7cad6483`, sample volume
+`layerfs-fsb-sample-09fa81ddc18a4c0c`. No mounted key remained at the failure;
+known Stop and physical cleanup were not established. Host runtime group was
+fenced once with original-cause custody retained, not interpreted as Docker
+Stop. Read-only inspection confirms the original container still running.
+
+Protected handoff scripts,
 prepared inputs, master volumes, running containers, merged worktrees and the
 untracked `PROMPT-R8-R9-NEXT-AGENT-20261010.md` remain untouched.
 
@@ -292,4 +315,28 @@ original failure or assertions. Both logs are retained under
 CLI help/whitespace pass. No Store, mount or Docker resource has yet run.
 Production LOC 79,366 -> 79,366 (delta +0), pinned absent-aware method.
 
-| This commit | Stage 0.4 workspace/cache/CSV support | 79366 | 79366 | +0 |
+| `358eca082` | Stage 0.4 workspace/cache/CSV support | 79366 | 79366 | +0 |
+
+Stage 0.4 actual build/prepare: host and pinned-image Linux release builds pass,
+with in-container source hashes checked before/after Cargo. Binary hashes match
+the retained working path: runtime `fdd962b7258903252bf097cd1be22f8acd56d3047369d08b68affe4c491d0573`,
+daemon `f44900cfc975901b7101f4874f708390b6f7401981e06d608b3df52a50848c0e`.
+Exact OWNER-3 passthrough refusals remain recorded as FAIL; no checker success
+claimed. Both fresh recipes provisioned through public Init/seal/install and
+built independent native expectations for all twelve cells. Existing masters,
+/tmp inputs and containers were untouched. Raw build/preparation paths:
+`benchmark-results/fs-bench-pro/2026-10-10-stage-0-4-build/` and
+`benchmark-results/fs-bench-pro/2026-10-10-stage-0-4-prepared/`.
+
+Original C01–C07 receipts are under
+`benchmark-results/fs-bench-pro/2026-10-10-stage-0-4-cells-358eca082/`; generated
+CSV files preserve six PASS, one FAIL and five NOT_RUN rows. No measured limit
+exceeded among these seven observations. H-1 moves the same unmodified backing
+observer after read-only original cleanup observations reach Gone, still outside
+product time. It changes no workload, timer limit, cache class or demand-counter
+eligibility. Twenty-two scoped engine tests pass at corrected final source;
+raw checks are in `benchmark-results/fs-bench-pro/2026-10-10-stage-0-4-cache-order-tests/`.
+No product change or product check is claimed. Remaining cells run only after
+this harness correction is committed. Production LOC 79,366 -> 79,366 (delta +0).
+
+| This commit | Fix H-1 and preserve first cell run results | 79366 | 79366 | +0 |

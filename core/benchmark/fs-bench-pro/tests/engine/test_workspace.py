@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 import sys
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -11,6 +12,27 @@ from engine import cache, receipts, workspace
 
 
 class WorkspaceEvidence(unittest.TestCase):
+    def test_backing_observer_waits_for_original_reclamation_to_finish(self):
+        with tempfile.TemporaryDirectory() as directory:
+            states = iter(("Queued", "Gone"))
+            observed = []
+            def send(operation, key, **options):
+                self.assertEqual((operation, key), ("cleanup", "original-key"))
+                state = next(states)
+                observed.append(state)
+                return {"fields": {"state": state}}
+            runtime = SimpleNamespace(container="original-container", send=send)
+            def command(argv, folder, label, seconds):
+                self.assertEqual(observed, ["Queued", "Gone"])
+                self.assertNotIn("--evict", argv)
+                path = Path(folder) / "observer.stdout"
+                path.write_text('{"resident_pages": 1}')
+                return {"stdout": str(path)}
+            with patch.object(workspace.receipts, "command", side_effect=command):
+                cleaned, residency = workspace.terminal_cache_observation(runtime, "original-key", {"socket": "/socket"}, directory)
+            self.assertEqual([row["fields"]["state"] for row in cleaned], ["Queued", "Gone"])
+            self.assertEqual(residency, {"resident_pages": 1})
+
     def test_b_requires_original_terminal_cleanup_and_actual_zero_demands(self):
         good = dict(fresh_mount=True, warmup_terminal_unmount=True, warmup_cleanup="Gone", object_demands=0)
         self.assertEqual(cache.validate("B", good), "ELIGIBLE")
