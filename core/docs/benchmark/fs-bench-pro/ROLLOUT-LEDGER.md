@@ -21,7 +21,7 @@ comparison or release-admission claim. Durable is
 | 1 Pilot | COMPLETE: 36 functional/proof/clean-close passes; 7 recorded scoped B PASS, 29 INELIGIBLE; full numeric qualification of the 7 is unverified | Init `c1d7dd0e8`/`39bbcbd6b`; payload `200f81493`/`c1d9b6c58`; parallel routing `b3c96ecb1`; tiny `36849bcc2`/`d6e0ef952`; namespace `98b14b233`/`be1f56a23`; H-2 fix `222526fa0`; closure `d4314ed62`; membership supplement `cca598d0b` | Batch 2, retaining original receipts plus exhaustive membership supplement |
 | 2 Edits | COMPLETE: all62 cases ported/parity/sampled once/recorded;39 strict proof and clean-close passes (numeric INELIGIBLE),20 strict retention failures and3 original capped-watchdog failures retained | Canonical `a34b5d44b`/`beeb7ad69`; preserving `b9ffa63be`; capped `4d8ccfc93`; changing `05ffbf971`; small-delta `c0c99a4a3`/`2e6a508b5`/`1c975ba30` | Begin batch3; no identified fixable product correctness defect remains in batch2 |
 | 3 Trees and tools | COMPLETE: all33 original cases ported/parity/sampled, full applicable proofs and clean closePASS; numeric33INELIGIBLE; first snapshotFAIL retained separately; localitydense500 and snapshot EXCEEDED | Shared3c697ae92; directory50c297c68/ad4f95503; locality2590a4536/26c037d90; snapshot0344bfdc6/fix03033abdc/results98d3be30a/70d568e94; Git acebd7cbd/guard031d427a7/results31fff4d49 | Begin batch4 after this committed closure, no identified fixable product correctness bug |
-| 4 History on one branch | IN_PROGRESS: all43 original cases ported; shared source/oracles/seal qualified; boundary7 and dedup26 preparation/parity PASS; mixed preparation underway; first boundary/dedup attempts FAIL H11; further attempts stopped; mixed9prepared and lastprepFAIL | Routing65f0c1fbe; nativea921bedbd; portsfc9e71fae/6a5433e79/4762b720c; prepared364e1a87a; guarded5ebdac535/report65df42e91; controller686344e8f/guard91cf97fab; public93f0d3dfe/census7d9380fe0; finalseal a70f3197b; preparation dispatch87857f5bd; first failed CSVs this commit | Correct H11 closed-WAL export with external red regression, then complete each family's original one-attempt cases and commit its two CSVs with retained failures/custody |
+| 4 History on one branch | IN_PROGRESS: all43 original cases ported; shared source/oracles/seal qualified; boundary7 and dedup26 preparation/parity PASS; mixed preparation underway; first boundary/dedup H11 FAIL retained; H11 fixed/actual recovery qualified; changed-source43selection execution active with lastmixedprepFAIL/NOT_RUN | Routing65f0c1fbe; nativea921bedbd; portsfc9e71fae/6a5433e79/4762b720c; prepared364e1a87a; guarded5ebdac535/report65df42e91; controller686344e8f/guard91cf97fab; public93f0d3dfe/census7d9380fe0; finalseal a70f3197b; preparation dispatch87857f5bd; first failed CSVs this commit | Complete each family's original one-attempt cases and commit its two CSVs with retained failures/custody |
 | 5 Branches and Workspaces | PENDING | — | Wait for batch 4; verify existing P-1 SDK methods |
 | 6 Dedup and storage | PENDING | — | Wait for batch 5 completion |
 | 7 Reliability | PENDING | — | Wait for batch 6 completion |
@@ -105,10 +105,10 @@ comparison or release-admission claim. Durable is
 | H-6 | local-snapshot-create-25000-onebyte-v1 | Original native witness exited0, then controller raised dictionary update #5 after measuredEnd | Frozen sample receipt has multiline path/range values and no verification_status; harness assumed full-tree key/value receipt | `03033abdc` | test_original_multiline_sample_with_successful_exit_is_preserved fails beforefix; altered paths/ranges/scope/exit are rejected afterfix |
 | H-7 | Prospective Git4, found before first sample | Late observation publication followed by failed failure-sidecar write or process death before final post-check could reload provisional PASS | Draft guard bound timestamp before the observation write and lacked mandatory completion/known outer return | `031d427a7` | slow observation/completion publication plus failed failure-sidecar and os._exit(91) regressions fail before correction; missing completion/outer acknowledgement remain failed |
 | H-8 | Prospective batch4, found before any attempt | Output-close or final publication failure could retain FAIL after deleting sample resources | Administrative container/volume removal occurred before finally close/verdict/publication and driver acknowledgement; partial removal also claimed blanket retained custody | `56a422544` | test_close_failure_after_all_proofs_keeps_container_and_volume fails against a921bedbd with both rm calls observed; missing outer ACK/failed return do no removal, partial lost-volume acknowledgement remains uncertain and immutable bound |
-| H-9 | Prospective two verification-only cases | Overall output-closeFAIL could disappear in CSV when performance wasN/A and semantic proof retainedPASS | Original proof-only mask omitted the independent full-outcome failure tag | Worker2fe8e9b2e / integration this commit | test_overall_close_failure_remains_visible_beside_passing_semantic_proof fails beforefix; final5reportchecks PASS0.048s |
-| H-10 | Prospective batch4 prepared SDK routes | Missing/partial prepared-step map could invoke native fallback and regenerate original payloads inside measuredwork; stale sealed helpers could disagree with reported current build | Controller trusted optional prepared records without mandatory originalstep/binary/descriptor/payload/script correspondence admission | Workera8c56d570 / integration this commit | test_helper_refusal_precedes_case_claim_and_any_clone_or_mount fails at686344e8f; exact-source temporary assets reject five old-admission bypasses and all15guard checks PASS |
-| H-11 | v016-boundary-small-control-v1 and dedup-history-distributed-1 first attempts | Native proof/acknowledged Commits/Gone/KnownStop pass, independent public history proof fails acknowledged Commit missing | Controller copies only exported main file into typed-store, dropping closed WAL; immutable main-only census would also miss WAL | Workerf2c143b37 / integration this commit | Real closed-WAL controller regression sees0 of100 acknowledged test rows on old main-only copy; red0.067s under120s mainlock |
-| H-12 | Mixed final failed preparation and prospective failed family parity | First missing/invalid preparation aborts parity without retaining earlier/later original case outcomes; CLI propagates only an exception | parity_workspace raises inside first failed case before writing parity.json | Worker47e5a5500 / integration this commit | Missing middle preparation red fails old behavior; all original membership/pin/bytes/native/seal guards retain FAIL reasons,22checksPASS; CLI old exception red retained,new5driverchecksPASS |
+| H-9 | Prospective two verification-only cases | Overall output-closeFAIL could disappear in CSV when performance wasN/A and semantic proof retainedPASS | Original proof-only mask omitted the independent full-outcome failure tag | Worker2fe8e9b2e / integration65df42e91 | test_overall_close_failure_remains_visible_beside_passing_semantic_proof fails beforefix; final5reportchecks PASS0.048s |
+| H-10 | Prospective batch4 prepared SDK routes | Missing/partial prepared-step map could invoke native fallback and regenerate original payloads inside measuredwork; stale sealed helpers could disagree with reported current build | Controller trusted optional prepared records without mandatory originalstep/binary/descriptor/payload/script correspondence admission | Workera8c56d570 / integration91cf97fab | test_helper_refusal_precedes_case_claim_and_any_clone_or_mount fails at686344e8f; exact-source temporary assets reject five old-admission bypasses and all15guard checks PASS |
+| H-11 | v016-boundary-small-control-v1 and dedup-history-distributed-1 first attempts | Native proof/acknowledged Commits/Gone/KnownStop pass, independent public history proof fails acknowledged Commit missing | Controller copies only exported main file into typed-store, dropping closed WAL; immutable main-only census would also miss WAL | Workerf2c143b37 / integration2b52bdf17 | Real closed-WAL controller regression sees0 of100 acknowledged test rows on old main-only copy; red0.067s under120s mainlock |
+| H-12 | Mixed final failed preparation and prospective failed family parity | First missing/invalid preparation aborts parity without retaining earlier/later original case outcomes; CLI propagates only an exception | parity_workspace raises inside first failed case before writing parity.json | Worker47e5a5500 / integrationea7148a19 | Missing middle preparation red fails old behavior; all original membership/pin/bytes/native/seal guards retain FAIL reasons,22checksPASS; CLI old exception red retained,new5driverchecksPASS |
 
 H-1 and H-2 are harness faults, not product correctness or performance defects.
 The original file-identity checker remains intact; no product source changed.
@@ -3012,4 +3012,60 @@ is partof that diagnosis. Producttree/79,366 unchanged; allninecompiledassets
 stillmatch finalseal, so no redundantbuild is required. Batch4 remainsinprogress.
 
 | `f2c143b37` (worker) | Normalize complete closed WAL snapshots with strict unchanged raw/census custody | 79366 | 79366 | +0 |
-| This commit | Wire H11 complete WAL recovery before independent public/census proof | 79366 | 79366 | +0 |
+| `2b52bdf17` | Wire H11 complete WAL recovery before independent public/census proof | 79366 | 79366 | +0 |
+
+
+H11 actual KnownStop sample recovery qualifies at Tiny private
+ e2461e160e529c03dc31f0346f6851f565389132, sourcebyte-exact reviewedmain2b52,
+countedtreebc7bd355c08a99cd2ba3f6e01d009d3f21514814/+0. Finalninebuildinput/
+actualbinary hashes allPASS, runtime4f1a7d...unchanged, no rebuild. Exactlyone
+newartifact from actual completefailed rawStore: currenthelperproducesWALformat
+217,088B/SHA3d4b147a6b3dac1fa979bd02639b5f846fdb4e16651838c6569db2bf6e077f1d.
+Original publicverify-history argv/case/manifest/UID501/GID20/completeacknowledged
+transcript remain, onlysealedinput and newreceipt differ. Independenttypedcopy
+PASS48,923,875ns, allthree selectedroots0/1/2 andtwoacknowledgements, real
+publicschema/catalog/binding/requiredDisposableWALOFF profile qualification.
+Actualunfiltered immutablecensusPASS2, exactfivefieldtuples/head/firstparents/
+stack/base/catalog/manifest/actualDockerStop/export/runtime/normalizationcustody.
+Originalmain/WAL/SHM SHA/sizebeforeafter unchanged. Whole newhelper/public/census
+within25s absolutestop, privateouter<=2/120. Thisis retainedcause diagnosis,
+no workload/Commit/mount replay, no originalFAIL promotion orfailedresource
+removal. Rootverified diagnosticSHA
+5c373ffb08f0d1fb92b94c39460cb2d39aaf07e4db5562d24e10e15bf3201ac3;
+normalizationreceiptSHAa1215a3fefb73832171ff667322eec6ecba87570a1f084dff12efa262d919534.
+Raw Tiny originalcampaign/diagnosis-h11-e2461e160/diagnostic.json. Capped9-test
+qualification evidence is explicitly retainedconsoletranscription, not arerun,
+originalcampaign/h11-normalization-qualification.jsonSHA
+d5f02ab0e804ad40de80484b3d09718972c1740a36cdf5dc399b311ac6b52dfc.
+
+Sourcequalification/coldpolicy/originalcase declarations remainfixed; changed
+Pythononly source affects proof machinery, not product/compiledassets. Root
+GO dispatches originalsevenboundary cases at e246,26dedup cases at clean
+7905e26a2a01af93d9dfacdd9b5256dc4f8fc43e/treea195e225520d43cccdc19e08c3334a63aa7e0a67,
+ninemixed preparedcases atclean5faaa263c275f2a747adefab232e51d65be68f4b/
+tree7b9fe57b9b7d03d3f51a80f73d7a1bb31255d45c. Eachprivatesync79366delta0,
+ownedfamily/workloadhashes unchanged and allninecompiledsource/binarysealsPASS.
+Closed originalpreparedinputs reused, nevermutatedsamples orfailedpreparation.
+Onlyfirstboundarysmall/distributed1 are affected-source retests; all other
+actualcases receivefirstattempts. No unchangedcase repetition orbestof.
+
+Corrected dedupparity PASS26/zerosamples7,615,398,416ns/<=9/120. Mixed whole
+parity exactlyonceFAIL34,618,928,375ns/<=35/120,10orderedrows: exactlyninePASS
+andlast500MBmissingprepared.json FileNotFoundErrorFAIL. AggregateFAIL unchanged;
+no failedselection omitted/promoted. Tiny reuses exactqualifiedsevenunchanged
+per-case guards/preparationparity, no redundantnewparity replay. Newrunroots:
+Tiny newrunpath willbe recordedfrom itsfinalhandoff; Capped
+2026-10-10-batch-4-dedup-7905e26a2, Namespace
+2026-10-10-batch-4-mixed-cases-h11-5faaa263c. Firstchangedboundarysmall completes
+functional/native/public/globalK2PASS/Gone/KnownStop, numericINELIGIBLE;
+223,655,332ns wall,1,802,061,417ns proof,14requests/192jobs/857statements,
+no limitmiss; passing administrativepair removal follows knownouterACK.
+Remainingcases underway; no family/batchcompletion claimedhere. Original
+failedfirstpairs and CSVs remain unchanged. LastmixedpreparationFAIL/actual
+NOT_RUN receives explicit administrativeclosure withzero actualattempts and
+no fabricatedbenchmark/proofmetrics. Laterbatches remainpending.
+
+| `e2461e160` (worker) | Sync current H11/failed-parity source and qualify actual retained WAL recovery | 79366 | 79366 | +0 |
+| `7905e26a2` (worker) | Sync current shared source before corrected dedup one-attempt cases | 79366 | 79366 | +0 |
+| `5faaa263c` (worker) | Sync current shared source before mixed failed-aggregate parity and ninecases | 79366 | 79366 | +0 |
+| This commit | Record genuine H11 recovery and dispatch qualified changed-source cases | 79366 | 79366 | +0 |
