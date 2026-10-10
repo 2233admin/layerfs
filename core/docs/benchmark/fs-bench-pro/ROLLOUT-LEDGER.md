@@ -4142,3 +4142,29 @@ Root owns integration/ledger/parity/build and live execution.
 
 | `615c3df22` (worker) | Author closed historical producer fixture admission and owning qualification | 79370 | 79370 | +0 |
 | This commit | Integrate exact closed historical producer fixture admission | 79370 | 79370 | +0 |
+
+
+### Batch 5 public SDK Fork and History covering test, 2026-10-11
+
+Imported only the independent external P1/P2 test CLI. It has no canonical
+family registration or performance sample: test IDpublic-sdk-fork-history,
+sample0, diagnostic clocks. Planned actual route uses current SDK Fork/History,
+trunk one/two Commits, an ancestor child, child Commit, a further Fork through
+the child's inherited ancestor, exact typed public histories toEOF and every
+fresh key's End/Gone plus channel EndSession/fences/KnownStop. Independent
+post-Stop toy SQL census rejects extra Commit/Branch rows; no live host data
+route or fabricated canonical topology proof is used. Passing owned pairs
+remain until Root sees the sealed test manifest and actual outer return; failed
+resources retain custody without replay or teardown guesses.
+
+Four source-only checks passed in0.052 s under private120 s stop; the affected
+final typed EOF check also passed once after boolean cursor evidence was
+rejected. Empty/profile/source seals, exact tuple/EOF, single failed sender
+attempt and unfiltered-extra-row refusal are covered. Actual SDK/Docker,
+preparation, build seal and live covering test remain NOT_RUN. The CLI retains
+inner60 s and outer120 s explicit stops. Raw handoff:
+benchmark-results/fs-bench-pro/2026-10-11-batch-5-oracle-authoring/p1-handoff.json
+SHA-256b81ebc84083890be9dd7a6c0135f814e43f48131f112f76d45bcf67c5657363b.
+
+| `e7bd36c3f` (worker) | Author public SDK Fork and History covering test and owning qualification | 79370 | 79370 | +0 |
+| This commit | Integrate exact public SDK Fork and History covering test | 79370 | 79370 | +0 |
