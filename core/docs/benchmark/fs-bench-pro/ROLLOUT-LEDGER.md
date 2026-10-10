@@ -1235,4 +1235,51 @@ reference absent, pinned staged absent-aware counter.
 
 | `27713d9c7` (worker) | Declare strict current edit and inode proof scope | 79366 | 79366 | +0 |
 | `637d22460` (worker) | Declare independent own-write cache evidence for capped Commits | 79366 | 79366 | +0 |
-| This commit | Integrate prospective edit proof and cache declarations | 79366 | 79366 | +0 |
+| `f11ed53d1` | Integrate prospective edit proof and cache declarations | 79366 | 79366 | +0 |
+
+
+H-3 pilot closure supplement at `f11ed53d1`: all 32 mounted pilot exported
+Stores pass exhaustive current inode-table membership, complete paths/kinds/
+metadata/aliases and exact original acknowledged root binding. Payload 8,
+tiny 20 and namespace 4 audits use independent byte copies; every original
+receipt manifest verifies again after its census. No original receipt or CSV
+was modified, no case was replayed, no mount or Docker resource was created,
+and every audit records zero samples. The four Init-only cases retain their
+original selected-prefix verifier and are outside the mounted canonical census.
+No product defect was found by this stronger check. Pilot batch completion
+now includes the supplemental missing membership proof.
+
+Raw supplemental receipts:
+benchmark-results/fs-bench-pro/2026-10-10-pilot-payload-membership-f11ed53d1/;
+benchmark-results/fs-bench-pro/2026-10-10-pilot-tiny-membership-f11ed53d1/;
+benchmark-results/fs-bench-pro/2026-10-10-pilot-namespace-membership-f11ed53d1/.
+Original per-family sources, measured walls/counts/storage/cache dispositions
+and cleanup claims remain exactly those of their existing two CSVs.
+
+Shared release build PASS under the 120 s lock (wall <=42 s), at clean
+`f11ed53d1`, with host Cargo +1.85.1 locked/offline, repository ARM64 flags,
+pinned image and actual source SHA-256 checks inside Linux before/after build.
+OWNER-3's exact two passthrough refusals remain FAIL, not hidden or relabeled.
+Build: benchmark-results/fs-bench-pro/2026-10-10-batch-2-edit-build-f11ed53d1/.
+Runtime SHA-256 30fdd82303cf8f958386d0b68e0fae534ab037459baf75e14a5a697c406187e3;
+daemon unchanged f44900cfc975901b7101f4874f708390b6f7401981e06d608b3df52a50848c0e;
+edit host 50713e6f1eba811cc3c37bf813154dbac2d6bfd2f9f05d3abda98e6081f6151c;
+edit Linux def64be844b0d5edf96af3903af0eae9511dbdc9161e7066daafa8f533e96fa1.
+Native sealed writer qualification's three tests PASS 3.438 s, including all
+11 original small shapes, complete bytes/metadata/native inode identity,
+wrong-length refusal before mutation and detection of an untouched-byte
+corruption. It ran once with the sealed compiled inputs before any SDK setup.
+No product source changed; no full product/Clippy/CI claim is made.
+
+The lead releases the current batch's three subagents to prepare/parity/sample
+preserving, changing and capped families in their separate worktrees. Each
+uses a new run branch from this audited integration plus a meaningful final
+family registration/proof declaration commit; prior branches/receipts stay
+intact. This keeps each two-CSV date/source destination distinct. Sealed
+compiled inputs can be reused only if exact bytes still match; no shared
+writable Cargo target is reused. Shared host/Docker VM interference is declared.
+The lead owns the remaining canonical and small-delta families in batch 2.
+No later batch has started. Production LOC 79,366 -> 79,366 (delta +0), pinned
+absent-aware staged method; reference absent (retired R9c; last 65,417).
+
+| This commit | Close pilot membership supplement and release qualified edit workers | 79366 | 79366 | +0 |
