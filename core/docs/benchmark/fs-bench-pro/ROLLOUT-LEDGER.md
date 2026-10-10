@@ -1069,4 +1069,37 @@ Production LOC79,366->79,366(delta+0), pinned absent-aware method.
 
 | `d03f8435b` (worker) | Port five original capped-v1 edit scenarios | 79366 | 79366 | +0 |
 | `90029a1fe` (worker) | Freeze active original2s group/current oracle obligations | 79366 | 79366 | +0 |
-| This commit | Integrate capped registration and exact prospective constraints | 79366 | 79366 | +0 |
+| `b9f955976` | Integrate capped registration and exact prospective constraints | 79366 | 79366 | +0 |
+
+Batch 2 / shared ordinary edit writer integrated from cdf7fa635 and test-only
+exact error attribution d7cce5759. One pure std Unix program executes all four
+SDK scenario registries: original exact ranges/payloads,64KiB scratch, backward
+suffix movement on growth, forward on shrink, exact final truncate, metadata
+normalization and consumed checked close. Same-length overwrite moves no suffix.
+Errors/zero IO preserve cause; successful short IO makes byte progress without
+resending an error. No new fsync request, product API/encoder or dependency is
+added. Independent native verification uses the unchanged full original checker
+over the original expected algebra, never the mutation algorithm as its oracle.
+
+At composed main source, Rust1.85.1/ARM64 compilation PASS in4s under120s
+lock. Two dead-code warnings name model fixture-only helper functions unused
+by this writer; they are retained, with no compiler/Clippy-clean claim. A fresh
+independent byte copy of the native1MiB input receives one overwrite-head,
+preserves native inode and exactly matches every independent expected byte;
+its original complete native verifier PASS. No product Store, SDK, mount or
+measurement ran. Raw native qualification:
+benchmark-results/fs-bench-pro/2026-10-10-batch-2-edit-model-checks/
+writer-apply.*, writer-verify.*, writer-native-checked.json. The original
+model input/expected receipt trees remain unchanged.
+
+The meaningful sealed-build qualification test covers all11 original small
+overwrite/splice shapes, full bytes/metadata/native inode, wrong-length refusal
+before effects, and an intentionally corrupted untouched byte. It requires a
+matching immutable sealed build; it has not run before that prerequisite.
+Writer/provenance syntax/format/whitespace PASS; full shared runtime/build and
+final owning suite remain pending. All SDK samples remain unattempted.
+Production LOC79,366->79,366(delta+0), pinned absent-aware method.
+
+| `cdf7fa635` (worker) | Add shared positional writer and native qualification | 79366 | 79366 | +0 |
+| `d7cce5759` (worker) | Pin exact original content-corruption cause before first test | 79366 | 79366 | +0 |
+| This commit | Integrate bounded positional writer with native source qualification | 79366 | 79366 | +0 |
