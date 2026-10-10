@@ -121,6 +121,7 @@ comparison or release-admission claim. Durable is
 | H-33 | Footprint unique100000 at0a8d15f0e | Completed paid work then original cache identity refusal skipped verification/Stop | Unknown cache classification incorrectly became a functional execution failure | This commit | Original UNAVAILABLE/status4 reproduction red; strict malformed/error refusal vectors and cache classifier INELIGIBLE guards |
 | H-34 | repository deepseek-stride10 at08288e824 | First original importer refuses target as notFUSE; actual mount was/workspaces/1 | Workload defaulted/workspace instead of authenticated actual mount root, for both apply and fresh verifier | Workera85f0ab97 / this integration | Parent full17 wrongtarget RED; nine final strict choreography/actualACK/custody tests PASS |
 | H-35 | repository deepseek-full administrative failed-prep closure | First report displayed actual caseFAIL although actual operation/proof attempts were0 | Generic status field copied administrative preparation verdict instead of actual case disposition | This commit | Parent external actualcase-status RED and27 negative vectors; final2 new/5proof-only/4incomplete-report tests PASS |
+| H-36 (harness/reporting) | Prospective26 unattempted reliabilityNA rows | ProofCSV defaultedNOT_RUN and omitted declared missing capability; naiveNA fallback could mask an unexpected actual failed receipt | Reporter lacked source-reviewed not_applicable_reason/default and did not distinguish absent vs actual receipt | This commit | External wrong-proof-status and realmetadata missing-reason REDs; unexpectedFAIL masking RED; final2new/5proof-only/4incomplete checksPASS |
 | H-1 | C07 | Workload and verifier passed, unmount returned, residency helper refused changed file identity | Harness inspected overlay while automatic post-unmount reclamation was still mutating backing | `a1f2c259c` | `test_backing_observer_waits_for_original_reclamation_to_finish` |
 
 | H-3 | Generic mounted pilot proofs and prospective SDK proofs | Reachable path walk omitted exhaustive inode-table membership from original canonical verifier | Runtime compared declared paths/bytes but never enumerated current inode table | `37ec6826b` | edit_oracle_complete_membership_accepts_exact_and_rejects_unreachable_or_missing_rows |
@@ -6329,5 +6330,36 @@ Retained candidates (no removal attempted):
 | Commit | Purpose | Production before | after | delta |
 | --- | --- | --- | --- | --- |
 | This commit | Record exact passing setup disposal and retained custody | 79370 | 79370 | +0 |
+Pinned absent-aware staged counter/exact tree confirmation; reference absent,
+retiredR9c,last65,417/tree498dd1917812.
+
+
+### H36 explicit source applicability report disposition, 2026-10-11
+
+Source-reviewed unattempted reliability selections now reportproof_status
+NOT_APPLICABLE and their exactnot_applicable_reason; performance staysN/A,
+proofwallUNAVAILABLE andoriginal45slimitretained. Any actualrecordedreceipt
+retains its ownproof_status; an unexpected actualFAIL withoutproof result is
+NOT_RUN plusvisibleoverallFAIL, never masked asnot-applicable. No recorded
+receipt/case/history changed; no workload/verifier/Docker/product execution.
+
+Retained root RED evidence:
+- 2026-10-11-b7-cli-report-checks/report-red: expectedNA vsoldNOT_RUN.
+- 2026-10-11-b7-cli-real-metadata-red/report: actualmetadata declarednot_applicable_reason omitted fromtag.
+- 2026-10-11-h36-na-report-checks/red: unexpectedactualFAIL maskedbyNA fallback,1FAIL/1PASS.
+Finalowning2checksPASS107,251,500ns; existingproof-only5PASS141,671,625ns;
+existingincompletecontext4PASS147,780,000ns. AllR4explicit120s/readreporttemplate.
+One mistakenfilename test_incomplete_context_reporting.py discovered0tests,
+exit5/68,750,708ns FAIL retained; actualscopedfile resolvedwithrg and invoked
+once, no testexpiry/repeat/workload resample.
+
+CLI realmetadata source-route RED also exposed its wrongreasonkey; root
+fixedprospectively andawaitscomplete engine integration/owning final check
+in its separate controller commit. That red is retained and noactualcase
+was attempted. Current report repair needs no new product qualification.
+
+| Commit | Purpose | Production before | after | delta |
+| --- | --- | --- | --- | --- |
+| This commit | Preserve explicit NA reasons and every actual failure in proof CSV | 79370 | 79370 | +0 |
 Pinned absent-aware staged counter/exact tree confirmation; reference absent,
 retiredR9c,last65,417/tree498dd1917812.

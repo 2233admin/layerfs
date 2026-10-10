@@ -538,7 +538,7 @@ def result_rows(selection, recorded):
         row.update(family=selection["family"], case=case["id"], v016_case=case.get("v016_case", ""),
                    status=actual_case_status(selection, case, result),
                    cache_class=result.get("cache_class", case.get("cache_class", "UNAVAILABLE")),
-                   tag=result.get("tag", result.get("original_failure", case.get("reason", "not sampled" if not result else ""))))
+                   tag=result.get("tag", result.get("original_failure", case.get("not_applicable_reason", case.get("reason", "not sampled" if not result else "")))))
         for name in ("complete_wall_ns", "declared_limit_ns", "cleanup", "source_commit", "product_tree", "daemon_sha256", "image", "evidence"):
             row[name] = result.get(name, selection.get(name, "UNAVAILABLE"))
         for name in ("mount_ns", "command_ns", "commit_ns", "unmount_ns"):
@@ -565,7 +565,7 @@ def result_rows(selection, recorded):
         for column, key in (("reference_release", "release"), ("reference_timer", "timer"), ("reference_ns", "value_ns"), ("reference_profile", "profile")):
             row[column] = reference.get(key, "")
         proof = {name: row.get(name, "UNAVAILABLE") for name in VERIFICATION_COLUMNS}
-        proof.update(proof_status=result.get("proof_status", "NOT_RUN"),
+        proof.update(proof_status=result.get("proof_status", "NOT_APPLICABLE" if case.get("status") == "not-applicable" and not result else "NOT_RUN"),
                      proof_wall_ns=result.get("proof_wall_ns", "UNAVAILABLE"),
                      declared_limit_ns=result.get("verifier_limit_ns", "UNAVAILABLE"),
                      oracle_scope=result.get("verification", {}).get("scope", "UNAVAILABLE"),
