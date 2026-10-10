@@ -2470,4 +2470,31 @@ shared support. No product source or Docker resource changed.
 | `ff03191bd` (worker) | Register original seven boundary cases and calls | 79366 | 79366 | +0 |
 | `e4f7f76cb` (worker) | Native alias strict compatibility qualification | 79366 | 79366 | +0 |
 | `4b18789cf` (worker) | Bind every boundary proof step and prepared SDK payloads | 79366 | 79366 | +0 |
-| This commit | Integrate original boundary family with owning native qualification | 79366 | 79366 | +0 |
+| `fc9e71fae` | Integrate original boundary family with owning native qualification | 79366 | 79366 | +0 |
+
+
+Batch4 dedup_branch_history authoring integrates Capped2789b9dac,
+44f2048c4 and26e414cb0:26original IDs and3,385orderedCommit steps,
+unchanged seed1 fixtures and original checkpoint lists/budgets. Full routine
+checkpoint coverage for unrelated-mixed-v2 is explicitly additional proof;
+frozen executable2534–2597 checks global measuredCommit membership/parents
+and final bounded payload sample before bypassing the routine fast checkpoint
+loop. Nativegenesis is a Layer, not a fabricated Commit: current Init also
+starts branchheadNone, transcript hasK+1roots but globalcensus must haveexactK
+measured CommitIDs with firstparentNone. Prepared descriptor hooks preserve
+original ordinary SDK member order and native fallback, including HNstage2.
+
+Reuse exact owning worktree evidence by final changed-file scope: initial6
+family checks PASS0.338s; affected mixed-v2 scope check PASS0.003s after44f;
+affected shell/prepared descriptor route check PASS2.650s after26e. No changed
+scope remains unqualified, and no duplicate native preparation or performance
+sample is used. Raw receipts and each worker countedtree remain at
+benchmark-results/fs-bench-pro/2026-10-10-batch-4-history-authoring in the
+Cappedworktree. Strict immutable globalcensus and composed persisted/native
+proof support are still authoring prerequisites;26actualcases remainunrun.
+No product source or resources changed by this port.
+
+| `2789b9dac` (worker) | Register all26 original branch-history cases | 79366 | 79366 | +0 |
+| `44f2048c4` (worker) | Label original mixed-v2 final sample versus added routine full proofs | 79366 | 79366 | +0 |
+| `26e414cb0` (worker) | Bound prepared SDK descriptors with native fallback | 79366 | 79366 | +0 |
+| This commit | Integrate original dedup branch history family | 79366 | 79366 | +0 |
