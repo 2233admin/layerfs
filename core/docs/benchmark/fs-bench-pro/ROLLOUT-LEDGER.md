@@ -17,7 +17,7 @@ comparison or release-admission claim. Durable is
 | 0.1 Released references | COMPLETE | `8e4a78fa0` | Stage 0.2 move-only organization |
 | 0.2 Move-only organization | COMPLETE, historical check failures retained | `13f9dec38`; routing follow-up in this commit | Update routing guide, then stage 0.3 catalogue |
 | 0.3 Case catalogue | COMPLETE | `f182e9a63`; prerequisite correction `30b798192` | Stage 0.4 reproducible engine |
-| 0.4 Reproducible engine | IN_PROGRESS | Cell-route correction `bb8e07df8`; build support in this commit | Implement fixture preparation, oracle, workspace execution and CSV reports; then twelve cells |
+| 0.4 Reproducible engine | IN_PROGRESS | Cell-route correction `bb8e07df8`; build support `c496025fc`; oracle support in this commit | Implement fixture preparation, oracle, workspace execution and CSV reports; then twelve cells |
 | 1 Pilot | PENDING | — | Wait for stage 0.4 completion |
 | 2 Edits | PENDING | — | Wait for batch 1 completion |
 | 3 Trees and tools | PENDING | — | Wait for batch 2 completion |
@@ -49,6 +49,8 @@ comparison or release-admission claim. Durable is
 
 | 12 | A source identity reports the protected untracked handoff but excludes it from compilation; refuse all other untracked source and tracked dirt | The owner requires that prompt remain untracked; it supplies no product, harness or workload bytes | Staging it or pretending an arbitrary untracked executable is clean |
 | 13 | Preserve OWNER-3 checker failures as FAIL records and admit a build only when the exact two known passthrough refusals are the entire error set | Owner explicitly retains those refusals; daemon builds use the authorized product patch, while any new provenance error must stop | Weakening the checker or claiming its aggregate PASS |
+
+| 14 | Reuse the intact cell tree/index checkers and the recovered version-pinned Git policy; collect actual image Git/config witnesses anew | Preserves the original full-tree and index exclusions/checks; copied policy plus provenance removes its untracked data dependency | Guessing defaults, comparing raw native/FUSE index stat caches, or weakening tree checks |
 
 ## Bugs
 
@@ -195,7 +197,8 @@ and committed snapshots; active core only, reference absent as recorded above.
 | `30b798192` | Correct existing SDK History methods | 79366 | 79366 | +0 |
 | `f182e9a63` | Stage 0.3 case catalogue | 79366 | 79366 | +0 |
 | `bb8e07df8` | Define separate cell execution/report route | 79366 | 79366 | +0 |
-| This commit | Stage 0.4 build and receipt custody support | 79366 | 79366 | +0 |
+| `c496025fc` | Stage 0.4 build and receipt custody support | 79366 | 79366 | +0 |
+| This commit | Stage 0.4 independent tree/index oracle | 79366 | 79366 | +0 |
 
 Stage 0.4 entry-point clarification: docs-only; no sample or product change.
 Production LOC 79,366 -> 79,366 (delta +0), pinned absent-aware method.
@@ -212,3 +215,24 @@ Raw tests: `benchmark-results/fs-bench-pro/2026-10-10-stage-0-4-build-tests/`.
 No new release build, preparation, container, volume or measurement has been
 attempted by this step; execution waits for the committed engine inputs.
 Production LOC 79,366 -> 79,366 (delta +0), pinned absent-aware method.
+
+Stage 0.4 oracle support reuses the original cell tree comparison, hard-link
+classes and semantic Git index/TREE/checksum checker without editing them.
+Expected state is built on an independent native root outside every timer;
+observations and comparisons are append-only. All ordinary cell payload bytes
+are hashed. The original timing-cell inode/time exclusions stay explicit;
+C12 retains its exact scoped index stat-cache exclusions and checks actual
+Git binary, version, config and effective values through the existing query
+collector. Paired pin witnesses follow that collector's existing same-context
+rule; actual independent witnesses remain in each observation.
+
+The recovered C12 Git policy and a source/provenance record are now committed
+under engine recipes; runtime reads these committed files, not their historical
+`/tmp` origins. Their version-pinned primary-source hashes/review receipt remain
+unchanged. This reuses policy evidence only, never a measurement or a native
+control arm. Three scoped external oracle tests pass in 0.047 s: exact bytes,
+namespace/hard-link mismatch and tampered evidence refusal. Raw checks are under
+`benchmark-results/fs-bench-pro/2026-10-10-stage-0-4-oracle-tests/`.
+No Store, mount, Docker resource or measured case was invoked. Fixture preparation
+and mounted execution remain next. Production LOC 79,366 -> 79,366 (delta +0),
+pinned absent-aware method.
