@@ -18,7 +18,7 @@ comparison or release-admission claim. Durable is
 | 0.2 Move-only organization | COMPLETE, historical check failures retained | `13f9dec38`; routing `9af29e01e` | Update routing guide, then stage 0.3 catalogue |
 | 0.3 Case catalogue | COMPLETE | `f182e9a63`; prerequisite correction `30b798192` | Stage 0.4 reproducible engine |
 | 0.4 Reproducible engine | CLOSED: functional proof complete; exact reproduction FAILED C10/C12 | Cell-route correction `bb8e07df8`; build support `c496025fc`; oracle support `7a27a4f26`; fixture support `516c2f009`; workspace/report support `358eca082`; cleanup-observer correction `a1f2c259c` | Begin batch 1 under failed-reproduction closure recorded below |
-| 1 Pilot | IN_PROGRESS | Init port/runtime `c1d7dd0e8`; Init results `39bbcbd6b`; payload port `200f81493`; parallel batch-1 routing in this commit | Sample payload; isolated tiny-file and namespace workers prepare/port/run their families |
+| 1 Pilot | IN_PROGRESS | Init port/runtime `c1d7dd0e8`; Init results `39bbcbd6b`; payload port `200f81493`; parallel batch-1 routing `b3c96ecb1` | Payload results in this commit; isolated tiny-file and namespace workers prepare/port/run their families |
 | 2 Edits | PENDING | — | Wait for batch 1 completion |
 | 3 Trees and tools | PENDING | — | Wait for batch 2 completion |
 | 4 History on one branch | PENDING | — | Wait for batch 3 completion |
@@ -597,4 +597,77 @@ Final-source scoped engine/catalogue checks are recorded with this commit.
 Production LOC 79,366 -> 79,366 (delta +0), pinned absent-aware method;
 reference absent (retired R9c; last counted 65,417 at tree 498dd1917812).
 
-| This commit | Enable isolated concurrent batch-1 family work and declare interference | 79366 | 79366 | +0 |
+| `b3c96ecb1` | Enable isolated concurrent batch-1 family work and declare interference | 79366 | 79366 | +0 |
+
+Batch 1 / payload_create_read complete: all eight original cases prepared and
+parity PASS; every case sampled once at clean b3c96ecb1 with sealed binary
+reuse from the payload build at 200f81493. All eight functional/native/persisted
+proofs PASS, exact acknowledged Commit/UpToDate roots match, terminal measured
+and verifier mounts reach Gone, and Stop/container state is confirmed. All
+eight passing sample containers/volumes were removed by their creating run.
+No product correctness bug surfaced. Full allocated/logical bytes and numeric
+counts are retained, without speed judgment or comparison verdict.
+
+Numeric class B eligibility remains separate: the four creation cases each
+record three measured source demands and the largest random-read case records
+657; their rows are INELIGIBLE. The other three random-read cases record zero
+and are PASS. All eight complete walls are WITHIN the unchanged 15 s reported
+limit and all separate proofs are WITHIN the 45 s work / 59 s hard limits.
+The unmodified actual demand guard is never bypassed or retried. All three
+authorized worktrees share host/Docker VM resources and retained protected
+services; source receipts contain the explicit interference declaration.
+
+| Case | Functional / proof | Numeric | Complete wall ns | Proof wall ns | Requests / jobs / statements | Store logical / allocated B | Overlay logical / allocated B | Source demands / close |
+| --- | --- | --- | ---: | ---: | --- | --- | --- | --- |
+| payload-create-1m-compact-v2 | PASS / PASS | INELIGIBLE | 181987875 | 1486514208 | 22 / 241 / 1178 | 1411992 / 1413120 | 1294336 / 269729792 | 3 / Gone; KNOWN_STOP |
+| payload-create-10m-compact-v2 | PASS / PASS | INELIGIBLE | 297180584 | 1799140334 | 94 / 1177 / 6290 | 12738560 / 12738560 | 10895360 / 279330816 | 3 / Gone; KNOWN_STOP |
+| payload-create-100m | PASS / PASS | INELIGIBLE | 1275518541 | 3791561250 | 814 / 10537 / 57410 | 109649920 / 109649920 | 106856448 / 375291904 | 3 / Gone; KNOWN_STOP |
+| payload-create-500m | PASS / PASS | INELIGIBLE | 9449516000 | 11953190375 | 4014 / 52137 / 284610 | 534945792 / 534953984 | 533385216 / 801824768 | 3 / Gone; KNOWN_STOP |
+| payload-random-read-1-compact-v2 | PASS / PASS | PASS | 178474292 | 1471486375 | 6 / 52 / 236 | 1327496 / 1331200 | 229376 / 268664832 | 0 / Gone; KNOWN_STOP |
+| payload-random-read-10-compact-v2 | PASS / PASS | PASS | 160773916 | 1673532375 | 15 / 61 / 254 | 10887584 / 10891264 | 229376 / 268664832 | 0 / Gone; KNOWN_STOP |
+| payload-random-read-100 | PASS / PASS | PASS | 171707875 | 11578540166 | 105 / 151 / 434 | 530792864 / 530796544 | 229376 / 268664832 | 0 / Gone; KNOWN_STOP |
+| payload-random-read-500 | PASS / PASS | INELIGIBLE | 318755417 | 12251908917 | 503 / 550 / 1232 | 530792864 / 530800640 | 229376 / 268664832 | 657 / Gone; KNOWN_STOP |
+
+The two CSVs under baselines/core/2026-10-10-b3c96ecb1/ contain every one of
+the eight cases beside its released reference provenance. bench.py verify
+checks retained original evidence hashes and reports eight PASS without
+replaying any product operation. Raw samples:
+benchmark-results/fs-bench-pro/2026-10-10-batch-1-payload-b3c96ecb1/.
+Verify/report stdout/stderr and template reads:
+benchmark-results/fs-bench-pro/2026-10-10-batch-1-parallel-routing-checks/.
+A mistyped short read-case CLI ID was refused before selection or any sample
+attempt; the correct original ID then received its sole sample. That refusal
+is retained in refused-short-case-id.json, with zero product/mount attempts.
+
+Prepared immutable masters remain owned setup for affected-case source-change
+reuse, and are never measured directly:
+
+| Prepared case | Owned master volume |
+| --- | --- |
+| payload-create-1m-compact-v2 | layerfs-fsb-master-payload-create-read-382a946a21d44b51 |
+| payload-create-10m-compact-v2 | layerfs-fsb-master-payload-create-read-9a9f6e961def4a02 |
+| payload-create-100m | layerfs-fsb-master-payload-create-read-3a2c1e8cf03b4064 |
+| payload-create-500m | layerfs-fsb-master-payload-create-read-1abdd3a8148a4972 |
+| payload-random-read-1-compact-v2 | layerfs-fsb-master-payload-create-read-e148a8fb9ca84eb1 |
+| payload-random-read-10-compact-v2 | layerfs-fsb-master-payload-create-read-390b40805ee04325 |
+| payload-random-read-100 | layerfs-fsb-master-payload-create-read-b8fab313624045c7 |
+| payload-random-read-500 | layerfs-fsb-master-payload-create-read-b869121a3e1143e5 |
+
+The attached worktrees are
+/Users/yifanxu/.codex/worktrees/fs-bench-pro-tiny-file-churn/layerfs and
+/Users/yifanxu/.codex/worktrees/fs-bench-pro-namespace-mutation/layerfs,
+both created from b3c96ecb1. Their own ignored lock scripts point to their
+respective core/target/r4.lock files. The workers reuse immutable verified
+binary archives, without sharing writable Cargo targets. They own no product
+changes. Tiny registration c4c137c13 and namespace registration dac8212de
+are locally committed in their respective codex/ branches and remain the
+actual fixed preparation/sample identities even after later main integration.
+Their results are pending; no later batch has started.
+
+Unchanged engine/runtime scoped checks from the port and routing commits are
+reused; this commit changes only results/documents. No new failed or uncertain
+sample resources were created. H-1/C10/C12 and all protected resources remain
+untouched. Production LOC 79,366 -> 79,366 (delta +0), pinned absent-aware
+method; reference absent (retired R9c; last counted 65,417).
+
+| This commit | Record eight payload samples and generated CSVs | 79366 | 79366 | +0 |
