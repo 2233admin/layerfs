@@ -72,6 +72,30 @@ class WalFixture:
 
 
 class ClosedStoreNormalization(unittest.TestCase):
+    def test_target_selects_off_before_wal_can_initialize_file(self):
+        with tempfile.TemporaryDirectory(prefix="fsb-closed-initial-profile-") as temporary:
+            home = Path(temporary).resolve()
+            fixture = WalFixture(home)
+            real_connect = sqlite3.connect
+            observed = []
+            owner = self
+            class Target(sqlite3.Connection):
+                def execute(self, sql, *args):
+                    if sql == "PRAGMA journal_mode=WAL":
+                        profile = super().execute("PRAGMA synchronous").fetchone()
+                        observed.append(profile)
+                        owner.assertEqual(profile, (0,), "WAL initialization must never inherit default FULL synchronization")
+                    return super().execute(sql, *args)
+            def connect(*args, **kwargs):
+                if not kwargs.get("uri"):
+                    kwargs["factory"] = Target
+                return real_connect(*args, **kwargs)
+            with patch.object(oracle.sqlite3, "connect", side_effect=connect):
+                result = fixture.normalize(home)
+            self.assertEqual(observed, [(0,)])
+            self.assertEqual(fixture.identities(), fixture.before)
+            self.assertEqual(oracle._sealed_identity(result["path"]), result["normalized_identity"])
+
     def test_wal_rows_survive_normalization_and_strict_census(self):
         with tempfile.TemporaryDirectory(prefix="fsb-closed-wal-") as temporary:
             home = Path(temporary).resolve()

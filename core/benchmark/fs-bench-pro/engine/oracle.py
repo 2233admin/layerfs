@@ -209,13 +209,15 @@ def prepare_closed_store(raw_directory, normalized_path, absolute_stop):
             raise ValueError("closed Store source requires explicit read-only WAL/OFF")
         _closed_store_deadline(absolute_stop)
         target = sqlite3.connect(target_path, isolation_level=None, timeout=0)
+        target.execute("PRAGMA synchronous=OFF")
+        if target.execute("PRAGMA synchronous").fetchone() != (0,):
+            raise ValueError("closed Store target requires synchronous OFF before initialization")
         page_size = source.execute("PRAGMA page_size").fetchone()[0]
         if type(page_size) is not int or page_size < 512 or page_size > 65536 or page_size & (page_size-1):
             raise ValueError("closed Store source SQLite page size differs")
         target.execute(f"PRAGMA page_size={page_size}")
         if target.execute("PRAGMA journal_mode=WAL").fetchone() != ("wal",):
             raise ValueError("closed Store target requires explicit WAL")
-        target.execute("PRAGMA synchronous=OFF")
         if target.execute("PRAGMA synchronous").fetchone() != (0,):
             raise ValueError("closed Store target requires synchronous OFF")
         def advance(status, remaining, total):

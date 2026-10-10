@@ -111,6 +111,7 @@ comparison or release-admission claim. Durable is
 | H-11 | v016-boundary-small-control-v1 and dedup-history-distributed-1 first attempts | Native proof/acknowledged Commits/Gone/KnownStop pass, independent public history proof fails acknowledged Commit missing | Controller copies only exported main file into typed-store, dropping closed WAL; immutable main-only census would also miss WAL | Workerf2c143b37 / integration2b52bdf17 | Real closed-WAL controller regression sees0 of100 acknowledged test rows on old main-only copy; red0.067s under120s mainlock |
 | H-12 | Mixed final failed preparation and prospective failed family parity | First missing/invalid preparation aborts parity without retaining earlier/later original case outcomes; CLI propagates only an exception | parity_workspace raises inside first failed case before writing parity.json | Worker47e5a5500 / integrationea7148a19 | Missing middle preparation red fails old behavior; all original membership/pin/bytes/native/seal guards retain FAIL reasons,22checksPASS; CLI old exception red retained,new5driverchecksPASS |
 | H-13 | dedup-history-distributed-500 setup at7905 | stage-code-check exits255: exec /bin/bash argument list too long, before any mount/product operation | fixtures.stage embeds all500 prepared-step/helper SHA rows into one165,872B Bash -c argv | PENDING file-backed complete authenticated checksum manifest | Worker owns external500-step/complete-row/remote-manifest/payload tamper regression; original fullchecker retained |
+| H-14 | Offline closed-Store normalization before remaining batch4 cases | Fresh target enters WAL initialization while SQLite synchronous is still default FULL(2) | synchronous=OFF was applied only after journal_mode=WAL in prepare_closed_store | This commit, harness only; product analogue under investigation | Real sqlite3.Connection subclass observes FULL(2) before journal switch on old helper; final10 normalization checks PASS0.352s and8 controller checks PASS0.159s |
 
 H-1 and H-2 are harness faults, not product correctness or performance defects.
 The original file-identity checker remains intact; no product source changed.
@@ -3201,4 +3202,41 @@ cache claim, threshold, workload or limit is introduced.
 
 | `672f33206` (worker) | Preserve three dedup passes, failed500 setup and22 unrun rows | 79366 | 79366 | +0 |
 | `36cd1ee26` (worker) | Preserve four mixed passes and every remaining selection with failed preparation reason | 79366 | 79366 | +0 |
-| This commit | Integrate both partial source CSV pairs and preserve evidence across the staging fix | 79366 | 79366 | +0 |
+| `bd3016957` | Integrate both partial source CSV pairs and preserve evidence across the staging fix | 79366 | 79366 | +0 |
+
+
+H14 corrects the offline snapshot helper's initial profile selection. Source
+review found that target journal_mode=WAL ran before synchronous=OFF. A real
+sqlite3.Connection subclass regression queried synchronous immediately before
+that journal switch and observed FULL(2), failing against the integrated H11
+helper in0.030s/120s main lock. That is a concrete initial-profile ordering
+error, distinct from the already-fixed missing WAL. It does not establish a
+lost Commit or alter earlier byte/history/census outcomes. Earlier backup and
+data writes did verify WAL/OFF, but initial header/journal setup did not have
+OFF selected; actual earlier sync syscall counts were not recorded. Preserve
+all original receipts and that limitation, without promoting their initial
+profile claim or repeating unaffected completed cases.
+
+The helper now selects and verifies synchronous=OFF immediately after target
+connect, before page-size/journal initialization, and retains the existing
+post-WAL and post-backup profile checks. No new profile, limit, cache state,
+workload, retry, product feature or dependency is added. Final owning ten
+normalization tests PASS0.352s and eight controller tests PASS0.159s, each once
+at this changed source under explicit120s main locks. The retained red and
+final stdout/stderr are under benchmark-results/fs-bench-pro/
+2026-10-10-h14-normalization-initial-profile-red and -fixed. Product source,
+compiled binaries and production total remain unchanged by this correction.
+
+Read-only product inspection found the analogous create path in persistence
+backend/sqlite/profile.rs: journal_mode is selected before synchronous in its
+later configuration loop; Session::connect has no earlier OFF setting. Capped
+owns an external public Disposable Store create/seal regression observing real
+SQLite VFS xSync calls, with no third-party edits or new dependencies. No product
+fix or defect verdict is claimed until that evidence. The product test builds
+with --no-run first and has an explicit120s private stop; Durable remains
+NOT_RUN. All new cases remain stopped. H13's separate qualified file-manifest
+commit359b63686 is ready for integration; its proof and prior failed stage are
+retained. After the product investigation closes or fixes the defect with the
+required covering checks, dispatch will use exact reviewed final sources.
+
+| This commit | Select OFF before offline snapshot journal initialization and retain initial-profile limitation | 79366 | 79366 | +0 |
