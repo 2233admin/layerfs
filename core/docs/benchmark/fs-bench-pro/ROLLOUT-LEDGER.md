@@ -18,8 +18,8 @@ comparison or release-admission claim. Durable is
 | 0.2 Move-only organization | COMPLETE, historical check failures retained | `13f9dec38`; routing `9af29e01e` | Update routing guide, then stage 0.3 catalogue |
 | 0.3 Case catalogue | COMPLETE | `f182e9a63`; prerequisite correction `30b798192` | Stage 0.4 reproducible engine |
 | 0.4 Reproducible engine | CLOSED: functional proof complete; exact reproduction FAILED C10/C12 | Cell-route correction `bb8e07df8`; build support `c496025fc`; oracle support `7a27a4f26`; fixture support `516c2f009`; workspace/report support `358eca082`; cleanup-observer correction `a1f2c259c` | Begin batch 1 under failed-reproduction closure recorded below |
-| 1 Pilot | COMPLETE: 36 functional/proof/clean-close passes; 7 numeric PASS, 29 INELIGIBLE | Init `c1d7dd0e8`/`39bbcbd6b`; payload `200f81493`/`c1d9b6c58`; parallel routing `b3c96ecb1`; tiny `36849bcc2`/`d6e0ef952`; namespace `98b14b233`/`be1f56a23`; H-2 fix `222526fa0`; closure in this commit | Begin batch 2, retaining all original receipts/cache dispositions |
-| 2 Edits | IN_PROGRESS | Shared model in this commit; isolated preserving/changing/capped registrations pending integration | Compose exact writer/current-format oracle, seal build, parity and run; no batch-2 sample started |
+| 1 Pilot | COMPLETE: 36 functional/proof/clean-close passes; 7 numeric PASS, 29 INELIGIBLE | Init `c1d7dd0e8`/`39bbcbd6b`; payload `200f81493`/`c1d9b6c58`; parallel routing `b3c96ecb1`; tiny `36849bcc2`/`d6e0ef952`; namespace `98b14b233`/`be1f56a23`; H-2 fix `222526fa0`; closure `d4314ed62`; membership supplement `cca598d0b` | Batch 2, retaining original receipts plus exhaustive membership supplement |
+| 2 Edits | IN_PROGRESS: canonical 12 closed; preserving 12 and capped 5 workers closed, integration next; changing sampling; small-delta authoring | Model `e2840c270`; writer `8dd9d99a8`; graph `37ec6826b`; cache `98b6b7260`; routing `ac7beb4dd`; seal/audit `cca598d0b`; reuse `849b0aff1`; canonical `a34b5d44b` / this commit | Integrate the two completed workers, finish changing and small-delta; no batch 3 |
 | 3 Trees and tools | PENDING | — | Wait for batch 2 completion |
 | 4 History on one branch | PENDING | — | Wait for batch 3 completion |
 | 5 Branches and Workspaces | PENDING | — | Wait for batch 4; verify existing P-1 SDK methods |
@@ -70,6 +70,8 @@ comparison or release-admission claim. Durable is
 | 26 | Correct port_review.source_commit to the peeled reference commit and preserve the annotated tag object as source_tag_object; require both exact objects in parity | The annotated recovery tag is ae3310f..., while its source commit is d296981...; reviewed source bytes remain identical and old receipts remain valid at their actual source | Keeping a misleading commit label, deleting the tag pin, or replaying unchanged samples |
 
 | 27 | Reuse a validated closed sibling master for an exactly matching complete initial tree, product, UID/GID and Disposable profile; keep expected/helper trees case-specific and sample byte clones independent | Setup reuse policy requires compatible sealed inputs; the changing family has six unique initial sizes despite 32 cases | Duplicate Init/install for the same input, reusing a mutated sample, or claiming coldness |
+
+| 28 | Canonical preparation references the preserving worker's four immutable closed masters through explicit prepared-parent links, then validates the complete original seals and exact semantic fixture digest | Identical initial trees and unchanged product make those setup masters compatible; all 12 canonical expectations/helpers remain new and sample byte copies independent | Duplicate Init/install or borrowing a previously measured sample |
 
 ## Bugs
 
@@ -1353,4 +1355,45 @@ their unaffected earlier qualification. Production LOC 79,366 -> 79,366 (delta
 | `7c4273669` (worker) | Integrate closed-master setup reuse for preserving cohort | 79366 | 79366 | +0 |
 | `6fee225f4` (worker) | Integrate closed-master setup reuse for changing cohort | 79366 | 79366 | +0 |
 | `1479e4d07` (worker) | Integrate closed-master setup reuse for capped cohort | 79366 | 79366 | +0 |
-| This commit | Port all twelve canonical chunk-count cases with strict original counts | 79366 | 79366 | +0 |
+| `a34b5d44b` | Port all twelve canonical chunk-count cases with strict original counts | 79366 | 79366 | +0 |
+
+
+Canonical cohort closure at clean `a34b5d44b`: every one of the twelve
+original cases has sample/attempt/completed count exactly one, strict frozen
+initial/final canonical counts and final digests PASS, complete native/current
+persisted graph and inode census PASS, Gone and known Stop. All 12 numeric
+rows are INELIGIBLE: measured source demands 5/7/9 across tiers and independent
+pre-Commit own-write cold backing/metadata proof unavailable. No case failed,
+no limit exceeded and no product defect surfaced. Maximum complete wall
+3,090,631,083 ns; maximum independent proof 17,830,134,041 ns, against unchanged
+15,000,000,000 and 45,000,000,000 ns. Counts/storage per original case are in
+the generated two CSVs, with no ratio or speed judgment.
+
+All twelve native preparations and parity passed before the first sample.
+Their complete initial tree digests match the already sealed preserving inputs;
+the explicit reuse-inputs.json plus four links in the prepared parent record
+that setup reuse. Each reused origin is validated by committed compatible_master
+before selecting its unchanged master volume. No new master volume was created
+for canonical; all 24 passing sample container/volume removal receipts PASS.
+No old or other worker resource is removed. Root mode/mtime normalization,
+POSIX surface/timer, retired-format identities/resource assertions and unknown
+coldness differences remain declared; strict count/byte/inode guards remain.
+
+Raw root benchmark-results/fs-bench-pro/2026-10-10-batch-2-canonical-a34b5d44b/;
+prepared/parity/build siblings retain original identities. Retained bench.py
+verify PASS twelve cases without replay; report generated exactly 30-column
+performance and 14-column verification CSVs, twelve rows each, under
+baselines/core/2026-10-10-a34b5d44b/. One controller inspection attempted to
+read report CSV before the async report command finished and got FileNotFound;
+waiting for that existing command then reading its completed output corrected
+the inspection, with no report rerun or sample. Source/build/proof receipts
+were unaffected. Final source build uses runtime
+51e6d7fd03e933ca753d99d557c50da6d2c964e18fae2f95244382f4157d4132,
+edit-host 0acfd6b498d19b5156014091bc337bfeb1a7e3126a01bbc5bb094a3c26a7bfff,
+edit-Linux a2060e5795c3e3b1bb4b904cf2acb762b135c14bd36aa654e4af5bc99786ac56;
+daemon unchanged f44900cfc975901b7101f4874f708390b6f7401981e06d608b3df52a50848c0e.
+Linux source hashes verified before/after; known OWNER-3 refusals remain FAIL.
+No additional product tests/Clippy/CI claim. Production LOC 79,366 -> 79,366
+(delta +0), pinned absent-aware staged method; reference absent retired R9c.
+
+| This commit | Record twelve canonical cases, full strict proofs and numeric ineligibility | 79366 | 79366 | +0 |
