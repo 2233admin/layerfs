@@ -4267,3 +4267,31 @@ SHA-2561db22049ca16613b74b3702ba7428f7cbb30b7530ba2c14405913025a42d7334.
 
 | `d4a665f0e` (worker final) | Author verification-only historical access controller; exact final owning checks | 79370 | 79370 | +0 |
 | This commit | Integrate exact verification-only historical access controller | 79370 | 79370 | +0 |
+
+
+### Batch 5 source-aware prepared batch-five parity, 2026-10-11
+
+Imported only parity engine and its new external tests. Batch5 requires an
+independently admitted sealed build, authenticated prepared input and actual
+helper admission before parity PASS. Original membership/pins/frozen hashes/
+differences/oracle/all-case failure sealing remain. M1 preparation proves
+initial full native input and selected recipe/scope hashes; actual directory
+modes remain NOT_OBSERVED and measured proof NOT_RUN. Compact requires every
+original selected full-native checkpoint check. Historical binds complete
+closed producer ACK/reference/distinct-ID/custody/source/Store/transcript,
+exact original/normalized role/local ancestor and independent full read
+expectation, with both actual reader statuses NOT_RUN. No fabricated final
+M1 verifier or current access result is obtained from preparation.
+
+Final13 source-only checks passed in0.204 s under private120 stop, including
+four unchanged legacy parity guards and actual helper admission rejecting an
+authenticated stale Linux helper against the independently admitted build.
+Failed-before M1 scope regression and initial authoring assertions remain
+visible. No actual parity/native/build/preparation/Docker/case ran. Owning
+handoff benchmark-results/fs-bench-pro/2026-10-11-batch-5-parity-authoring/handoff.json
+SHA-25686c996aa977f925fb32010e588d0df8ca73696034ec6abae1eaa87ef5c4b5e27.
+Root's prior821624cb3 CLI wiring supplies explicit --build and the two original
+context family names; all17 batch5 source definitions are now connected.
+
+| `4661ff5e8` (worker final) | Author source-aware prepared batch-five parity; exact final owning checks | 79370 | 79370 | +0 |
+| This commit | Integrate exact source-aware prepared batch-five parity | 79370 | 79370 | +0 |

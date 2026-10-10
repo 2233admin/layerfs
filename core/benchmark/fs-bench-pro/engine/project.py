@@ -233,7 +233,90 @@ def parity_namespace(family, prepared_parent, output):
     return result
 
 
-def parity_workspace(family, prepared_parent, output):
+def _parity_context(case, prepared, build):
+    """Preparation witnesses never substitute for measured contextual proof."""
+    from . import fixtures
+    plan = fixtures.context_plan(case)
+    admitted = fixtures.validate_runtime_helpers(case, prepared, build)
+    if admitted.get("status") != "PASS":
+        raise ValueError("original contextual prepared helper admission did not pass")
+    states, native = prepared["context_checkpoints"], prepared["native_verification"]
+    m1 = bool(case.get("m1_schedule"))
+    wanted = {"original-context-initial-check"}
+    if not m1:
+        wanted.update(f"original-context-{s['role']}-{s['index']}-check" for s in states)
+    if (set(native) != wanted
+            or any(item.get("verification_status") != "pass" for item in native.values())):
+        raise ValueError("exact original contextual native verification scope required")
+    metadata = prepared["context_native_metadata"]
+    if (metadata.get("schema") != "fs-bench-pro-original-context-native-recipes-v1"
+            or metadata.get("case") != case["v016_case"]
+            or metadata.get("context_binding") != prepared["context_binding"]
+            or metadata.get("initial_recipe") != prepared["context_initial_recipe"]
+            or metadata.get("context_roles") != prepared["context_roles"]
+            or metadata.get("states") != states
+            or type(metadata.get("performance_samples")) is not int or metadata["performance_samples"] != 0):
+        raise ValueError("exact original contextual recipe witness correspondence required")
+    expected = {s["role"]: s["summary"] for s in states
+                if s["index"] == plan["local_commits"][s["role"]]}
+    if prepared["expectation"] != expected:
+        raise ValueError("contextual final recipe expectation correspondence differs")
+    scope = "original-m1-selective-scope-v1" if m1 else "complete-original-native-state"
+    materialization = ("None mode observations; selected M1 automatic fields are placeholders, not proof"
+                       if m1 else "original full compact state")
+    if any(s.get("verification_scope") != scope or s.get("materialization_metadata") != materialization for s in states):
+        raise ValueError("contextual placeholder/native verification scope differs")
+    return {"kind": "contextual-preparation", "helper_admission": admitted, "plan": plan,
+            "initial_native_verification": native["original-context-initial-check"],
+            "selected_native_verification": {} if m1 else {k: v for k, v in native.items() if k != "original-context-initial-check"},
+            "checkpoint_witnesses": [{"role": s["role"], "local": s["index"],
+                "recipe_sha256": s["summary"]["recipe_sha256"],
+                "native_manifest_sha256": s["native_manifest_sha256"], "scope_sha256": s["manifest_sha256"],
+                "qualification_status": "PASS", "qualification_scope": "recipe/source and selective scope only" if m1 else "complete original native state",
+                "actual_created_modes": "NOT_OBSERVED_IN_PREPARATION" if m1 else "NOT_APPLICABLE",
+                "measured_proof_status": "NOT_RUN"} for s in states],
+            "sdk_descriptor_witnesses": [{"role": s["role"], "local": s["index"], "members": s["members"],
+                "original_run": s["original_run"], "prepared_run": s["prepared_run"],
+                "descriptor_sha256": s["descriptor_sha256"], "generator_sha256": s["generator"]["binary_sha256"]}
+                for s in prepared["sdk_context_steps"]],
+            "source_binding": prepared["context_binding"], "actual_created_modes": prepared["context_roles"],
+            "scope": ("full pristine native input independently verified; exact original roles/local operations/checkpoints and prepared SDK descriptors admitted; "
+                      "M1 checkpoint recipes and selective scopes are source evidence with unobserved actual modes; measured native/persisted proofs NOT_RUN"
+                      if m1 else "full pristine native input and original selected compact states independently verified; exact original roles/local operations/checkpoints and prepared SDK descriptors admitted; measured native/persisted proofs NOT_RUN")}
+
+
+def _parity_access(case, prepared, build):
+    """Bind closed producer and selected native algebra without reading a mount."""
+    from . import fixtures
+    plan = fixtures.historical_plan(case)
+    admitted = fixtures.validate_runtime_helpers(case, prepared, build)
+    if admitted.get("status") != "PASS":
+        raise ValueError("original historical prepared helper admission did not pass")
+    selected, closed = prepared["historical_selection"], prepared["closed_producer"]
+    native = prepared["native_verification"]
+    if (set(native) != {"historical_selected"}
+            or native["historical_selected"].get("verification_status") != "pass"):
+        raise ValueError("exact original historical selected native verification required")
+    acknowledgements = closed["acknowledgements"]
+    return {"kind": "historical-access-preparation", "helper_admission": admitted, "plan": plan,
+            "closed_producer": {"case": plan["producer_case"], "source_commit": closed["source_commit"],
+                "receipt_sha256": closed["receipt_sha256"], "transcript_sha256": closed["transcript_sha256"],
+                "store_sha256": closed["store_sha256"], "custody": closed["custody"],
+                "acknowledgements": acknowledgements, "acknowledgement_count": len(acknowledgements),
+                "retained_root_references": len(acknowledgements) + 1,
+                "distinct_commit_tuples": len({s["commit_id"] for s in acknowledgements})},
+            "selected": {"original_source_role": selected["original_source_role"],
+                "source_role": selected["source_role"], "local": selected["local"],
+                "acknowledged_commit": selected["acknowledged_commit"], "manifest_sha256": selected["manifest_sha256"],
+                "native_verification": native["historical_selected"],
+                "read_targets": [{**{k: s[k] for k in ("path", "bytes", "sha256")}, "range": original["range"]}
+                                 for s, original in zip(selected["read_targets"], case["historical_access"]["reads"])],
+                "absent": selected["absent"]}, "source_binding": prepared["producer_dependency"]["source_binding"],
+            "reader_status": "NOT_RUN", "verifier_reader_status": "NOT_RUN", "measured_proof_status": "NOT_RUN",
+            "scope": "closed original producer dependency with every typed acknowledgement/fork/head and known Stop; selected role/local native state and independent full read-target bytes/SHA bound; neither original reader pass executed"}
+
+
+def parity_workspace(family, prepared_parent, output, build_folder=None):
     """Keep every case outcome, then reject any failed original parity guard."""
     from . import fixtures
     output = Path(output).resolve()
@@ -241,6 +324,8 @@ def parity_workspace(family, prepared_parent, output):
     registered = identity.reference_catalogue(identity.ROOT / "core/target/fs-bench-pro-catalogue")
     membership = {(row["family"], row["case"]) for row in registered}
     rows = []
+    build = None
+    batch5 = family["family"] in ("branch_development", "multi_workspace_development", "historical_access")
     for case in family["cases"]:
         try:
             if (family["family"], case["v016_case"]) not in membership:
@@ -255,17 +340,29 @@ def parity_workspace(family, prepared_parent, output):
             for path, digest in review["files"].items():
                 if identity.sha256(identity.ROOT / path) != digest:
                     raise ValueError("reviewed original fixture/operation/oracle source changed")
-            if any(item["verification_status"] != "pass" for item in prepared["native_verification"].values()):
-                raise ValueError("original complete native fixture/oracle check not passed")
+            scoped = batch5 or case.get("branch_schedule") or case.get("topology_schedule") or case.get("historical_access")
+            if scoped:
+                if build_folder is None:
+                    raise ValueError("batch-five prepared parity requires an independently admitted sealed build")
+                if build is None:
+                    build = identity.load_build(build_folder)
+                mechanical = (_parity_access(case, prepared, build) if family["family"] == "historical_access" or case.get("historical_access")
+                              else _parity_context(case, prepared, build))
+            else:
+                if any(item["verification_status"] != "pass" for item in prepared["native_verification"].values()):
+                    raise ValueError("original complete native fixture/oracle check not passed")
+                mechanical = prepared["native_verification"]
             rows.append({"case": case["id"], "status": "PASS", "fixture": prepared["fixture"],
-                         "expectation": prepared["expectation"], "mechanical": prepared["native_verification"],
+                         "expectation": prepared["expectation"], "mechanical": mechanical,
                          "review": review, "oracle": case["oracle"], "differences": case["differences"]})
         except Exception as error:
             rows.append({"case": case["id"], "status": "FAIL", "reason": str(error),
                          "error_type": type(error).__name__})
     result = {"schema": "fs-bench-pro-parity-v1", "family": family["family"],
               "status": "FAIL" if any(row["status"] == "FAIL" for row in rows) else "PASS", "cases": rows,
-              "samples": 0, "scope": "original membership, full deterministic native fixture/final counts+bytes+content digest; reviewed unchanged ordinary calls and complete native/persisted verification"}
+              "samples": 0, "scope": ("original membership and pinned source; independently admitted sealed preparation with case-specific native/recipe/closed-producer scope recorded per row; actual contextual or historical-access proof is not a parity sample"
+                  if batch5 or any(case.get("branch_schedule") or case.get("topology_schedule") or case.get("historical_access") for case in family["cases"])
+                  else "original membership, full deterministic native fixture/final counts+bytes+content digest; reviewed unchanged ordinary calls and complete native/persisted verification")}
     receipts.write_new(output / "parity.json", result)
     receipts.manifest(output)
     if result["status"] == "FAIL":
