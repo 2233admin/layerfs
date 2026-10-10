@@ -23,7 +23,7 @@ comparison or release-admission claim. Durable is
 | 3 Trees and tools | COMPLETE: all33 original cases ported/parity/sampled, full applicable proofs and clean closePASS; numeric33INELIGIBLE; first snapshotFAIL retained separately; localitydense500 and snapshot EXCEEDED | Shared3c697ae92; directory50c297c68/ad4f95503; locality2590a4536/26c037d90; snapshot0344bfdc6/fix03033abdc/results98d3be30a/70d568e94; Git acebd7cbd/guard031d427a7/results31fff4d49 | Begin batch4 after this committed closure, no identified fixable product correctness bug |
 | 4 History on one branch | CLOSED WITH FAILURES: all 43 original cases ported and recorded; 31 functional/proof/clean-close passes, 11 retained actual failures, one failed preparation with actual NOT_RUN; mixed aggregate parity FAIL retained under section 9 exception; no identified fixable product correctness bug remains | H11 2b52bdf17; H12 ea7148a19; H13 8ae040cdd; H14 e09c61bbd; product H15 a05ed6027; H16 9dfb70ee4; fresh seal3c67e9249; affected Init8f24e39a4; boundary88a2bd27b; partial bd3016957; mixed1a21ebfc3; dedup closure27708c11d | Begin batch 5 after this committed failed closure; verify existing public SDK Fork and History |
 | 5 Branches and Workspaces | CLOSED WITH FAILURES: all17 original cases ported/recorded; eight functional/proof/clean-close passes, eight actual concurrent refusal failures, one failed-preparation actual NOT_RUN; branch aggregate parity FAIL retained under section9 | SDK proof711593c5f; H21/22 4a40fb690; setup exceptionc23ac0cfd; H23 68209bdb7; H24 669bc4853; H25 2f7160c92; H26 616947cb6; branch305bee680; multicb3a003ac; historicalb0b2cd386 | Begin batch6 under this truthful failed closure, preserving all original failures/limits/proofs/resources |
-| 6 Dedup and storage | IN_PROGRESS: four families closed with45 complete functional/proof/clean-close passes and6 actual proof failures; repository full-prep and stride3 staging failures retained, stride10 H34 fixed pending one affected run | definitions77eb/63ff/a442/5505/55a3; support86ba/149d; H28 1cc; H30/31 082; H32 0a8; H33 fe205; footprint8b684a3b1, reuse4d725864f, crossad21161eb, CDC79ad08b2a | Sample only affected repository stride10 once at corrected identity, retain old cohort; then close batch6 before batch7 |
+| 6 Dedup and storage | CLOSED WITH FAILURES: all54 original cases ported/recorded;45 functional/proof/clean-close passes (44 numericINELIGIBLE, one verification-onlyPASS),8 failed outcomes, one failed-preparation actualNOT_RUN; repository aggregateparityFAIL undersection9; no identified fixable product correctness cause remains | definitions77eb/63ff/a442/5505/55a3; support86ba/149d; H28 1cc; H30/31 082; H32 0a8; H33 fe205; footprint8b684a3b1; reuse4d725864f; crossad21161eb; CDC79ad08b2a; H34 08e1; H35 fad966f7e; repositoryoldf8752231d / this closure | Begin batch7 at this committed truthful failure closure; preserve all limits, failed/ineligible/unrun rows and exact resources |
 | 7 Reliability | PENDING | — | Wait for batch 6 completion |
 
 ## Decisions
@@ -6144,5 +6144,86 @@ once at08e1, still active; this is an old cohort commit, not batch closure.
 | Commit | Purpose | Production before | after | delta |
 | --- | --- | --- | --- | --- |
 | This commit | Record repository original failed/unrun cohort | 79370 | 79370 | +0 |
+Pinned absent-aware staged counter/exact tree confirmation; reference absent,
+retiredR9c, last65,417/tree498dd1917812.
+
+
+### Batch 6 repository final failed closure and batch completion, 2026-10-11
+
+Only affectedstride10 ran once at corrected08e1. The sole outer attempt
+reached original owner120s ceiling, exit124/wall120,025,972,458ns. All17
+original importer commands report actual exit0 and17 Committed ACKs, exact
+SDK History EOF17, measured unmount/Gone, EndSession/native fencing and a
+container-stopped event. The original controller published neither final
+receipt/manifest nor finished event/known host wait/outer ACK; final native
+verifier/public typed roots/immutable census did not begin. Last native
+event181 is BrokenPipe after the outer stdout peer closed. Native progress
+continues through final Commit3,640,069,583ns and terminal operations; no
+wrong result/crash or identified fixable product correctness cause appears.
+No limit extension, speed change or unchanged case replay is selected.
+
+Fresh ADMINISTRATIVE supervisor supplement records attempted caseFAIL/
+proofNOT_RUN/functionFAIL, sample1/attempt1/completedwholecase0/proofattempt0.
+It binds original registration/selection/claim, outerinput+exit/streams and
+native event hashes, with all headline benchmark timing/count/storage/cache
+observations absent. Actual17ACKs and terminal observations remain
+diagnostic, not qualified proof/completion/cleanup authority. Its schema is
+fs-bench-pro-supervisor-unpublished-failure-v1, receipt_kind supervisor-failure;
+it is explicitly written after the expired invocation, not a product or
+controller success receipt. Single bounded administrative closure
+98,459,417ns and report111,595,500ns PASS/private120s, no signal/control/remove.
+A bounded hostps finds owned RustPID absent, but cannot manufacture an
+authorized hostwait or final aggregate swap result.
+
+Fresh supervisor receiptSHAf9a235e8fe19582556dccd2bf43b36f985d8fb6309fc66d342bcac29fd8af8db,
+manifestefc0dd3e9cdd7f2567b5591cdfb97ccae00bf93633d1ab72c3d27b5e73b15a81.
+Complete handoff:
+/Users/yifanxu/.codex/worktrees/fs-bench-pro-namespace-mutation/layerfs/benchmark-results/fs-bench-pro/2026-10-11-batch-6-repository-history-h34-08e1fb910/family-handoff/handoff.json
+SHA2e3a75ec3b684a1ca4266ce94e04c869407e5401c8384b013d46c8277534347e,
+manifesta2065ae9602e041fd5c18a43e9e13c455dee6406c1dfa127e1b878fc0e1b24c5;
+acknowledged-progress.jsona133f32bd23184cd251d9d8a8d2cb95b33d520dfe0cdcdc6cad525760dd140b1.
+Final own pair retained: containerb78f735f3463bc4120b55c4ee7c0fd810220413b5adeea1b82bed2c82a8e28c7,
+volumelayerfs-fsb-sample-688f2e1e16f64d6d; key/incarnation
+f1216e0b40d40d1fa842f7a885751be28f7a30298617bceb3c132c45b14d01d5/ns1.
+CustodyUNKNOWN/cleanupUNAVAILABLE remain; no removal or inferred proof.
+
+This commit imports the unchanged08e1 three-row CSV pair:
+performance846db6db688cb6ce4dd12a43a07d4437f127093fb12a7018e43619d53a96b68f,
+verification01a49f23310d844262b975d646073a6ffd672155faaa795cd815c1b3f580076c.
+Other two08e1 rows are defaultNOT_RUN, with no receipts/attempts; final
+authoritative family selection explicitly reuses full082actualNOT_RUN
+failedprep, stride3original082setupFAIL and corrected08e1stride10FAIL.
+Later placeholders do not replace original retained failures. Both source
+pairs and the old worker administrative report bytes remain visible.
+
+Batch6 is now truthfully closed with54 original ported selections:
+| Family | Cases | Full functional/proof/clean passes | Failed | ActualNOT_RUN |
+| --- | ---: | ---: | ---: | ---: |
+| dedup_cdc_locality | 21 | 20 | 1 | 0 |
+| dedup_cross_file | 10 | 10 | 0 | 0 |
+| dedup_workspace_reuse | 14 | 11 | 3 | 0 |
+| store_footprint | 6 | 4 | 2 | 0 |
+| repository_history | 3 | 0 | 2 | 1 |
+
+All source definitions/parity differences and every current/historical CSV
+row are committed. Four families have original complete parityPASS;
+repository individualstride3/stride10PASS, full/aggregateparityFAIL retained
+under section9 failed-preparation exception. Original workload/verifier/
+limits unchanged. H28/H30/H31/H32/H33/H34/H35 repairs were source-backed
+harness bugs with external reds/covering checks; only affected treatments
+ran once at changed executed identities. No batch6 product change or
+optimization; product9ac remains79,370LOC. Original physical-exclusive
+spool/peak axes and unknown paid cache scopes remain unverified/unavailable,
+never zero/PASS. Shared host/DockerVM interference unquantified.
+
+After batches1–6,245 original selections are ported/recorded:192 full
+functional passes,50 failed outcomes,3actualNOT_RUN after failed preparation.
+28 reliability selections remain pending. Stage0.4 exactcountsC10/C12FAIL
+and all historical attempts stay distinct. This failed closure authorizes
+batch7 under the unchanged iteration rules; it is not passing release evidence.
+
+| Commit | Purpose | Production before | after | delta |
+| --- | --- | --- | --- | --- |
+| This commit | Record repaired repository attempt and close all54 batch6 selections | 79370 | 79370 | +0 |
 Pinned absent-aware staged counter/exact tree confirmation; reference absent,
 retiredR9c, last65,417/tree498dd1917812.
