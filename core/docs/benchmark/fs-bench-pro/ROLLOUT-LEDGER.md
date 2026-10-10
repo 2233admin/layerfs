@@ -4197,3 +4197,18 @@ unverified; no Store/container/volume was created by these source checks.
 
 | `5e6dbd260` (worker) | Author authenticated concurrent SDK runtime and owning qualification | 79370 | 79370 | +0 |
 | This commit | Integrate exact authenticated concurrent SDK runtime | 79370 | 79370 | +0 |
+
+
+### Batch 5 covering-test native History protocol correction, 2026-10-11
+
+The source-only P1/P2 test now matches the actual committed runtime protocol:
+request32 records, EOF cursor_path minus, integer cursor_bytes0 and absent
+continuation hash. Every exact typed tuple, cardinality, branch binding and
+one-exchange guard remains intact. Four final source-only checks passed once
+in0.050 s under private120 s lock; prior authoring qualification is retained
+without relabeling. No live128 request, refused SDK call, retry or weakened EOF
+check occurred. Actual live covering proof remains NOT_RUN until a full nine-
+asset seal and fresh empty preparation are qualified.
+
+| `52479b485` (worker) | Author covering-test native History protocol correction and owning qualification | 79370 | 79370 | +0 |
+| This commit | Integrate exact covering-test native History protocol correction | 79370 | 79370 | +0 |

@@ -47,7 +47,7 @@ def typed(fields):
 
 
 def history_records(runtime, label, branch, anchor, wanted, folder, stop):
-    request = workspace.script(folder, f"history-{label}-{len(runtime.rows)}.tsv", f"{anchor}\t-\t128\n")
+    request = workspace.script(folder, f"history-{label}-{len(runtime.rows)}.tsv", f"{anchor}\t-\t32\n")
     before = len(runtime.rows)
     final = workspace.context_send(runtime, "history", label, request, deadline=stop)
     rows = [event["fields"] for event in runtime.rows[before:] if event["event"] == "history_record"]
@@ -58,7 +58,7 @@ def history_records(runtime, label, branch, anchor, wanted, folder, stop):
 def verify_history_page(rows, final, label, branch, wanted):
     if (final.get("label") != label or final.get("branch_id") != branch
             or type(final.get("records")) is not int or final["records"] != len(wanted)
-            or final.get("cursor") != "-" or type(final.get("cursor_bytes")) is not int or final["cursor_bytes"] != 0
+            or final.get("cursor_path") != "-" or "cursor_sha256" in final or type(final.get("cursor_bytes")) is not int or final["cursor_bytes"] != 0
             or len(rows) != len(wanted)):
         raise ValueError("exact anchored SDK History cardinality/EOF/binding differs")
     for row, expected in zip(rows, wanted):
@@ -309,12 +309,13 @@ class SourceChecks(unittest.TestCase):
         record={"commit_id":"12"+"01"*32,"stack":"31"+"02"*16,"root":"03"*32,"parent":"-","base_layer":"32"+"04"*32}
         branch="11"+"05"*16
         rows=[{**record,"label":"child","branch_id":branch}]
-        final={"label":"child","branch_id":branch,"records":1,"cursor":"-","cursor_bytes":0,
+        final={"label":"child","branch_id":branch,"records":1,"cursor_path":"-","cursor_bytes":0,
                "control_send_records_before":4,"control_send_records_after":5,"control_receive_records_before":4,"control_receive_records_after":5}
         verify_history_page(rows,final,"child",branch,[record])
         for altered in ({**rows[0],"root":"99"*32},{**rows[0],"parent":"12"+"06"*32}):
             with self.assertRaises(ValueError):verify_history_page([altered],final,"child",branch,[record])
-        with self.assertRaises(ValueError):verify_history_page(rows,{**final,"cursor":"partial"},"child",branch,[record])
+        with self.assertRaises(ValueError):verify_history_page(rows,{**final,"cursor_path":"partial"},"child",branch,[record])
+        with self.assertRaises(ValueError):verify_history_page(rows,{**final,"cursor_sha256":"unexpected"},"child",branch,[record])
         with self.assertRaises(ValueError):verify_history_page(rows,{**final,"cursor_bytes":False},"child",branch,[record])
         with self.assertRaises(ValueError):verify_history_page(rows,{**final,"control_send_records_after":6},"child",branch,[record])
 
