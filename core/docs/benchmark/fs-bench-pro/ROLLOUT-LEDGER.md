@@ -18,8 +18,8 @@ comparison or release-admission claim. Durable is
 | 0.2 Move-only organization | COMPLETE, historical check failures retained | `13f9dec38`; routing `9af29e01e` | Update routing guide, then stage 0.3 catalogue |
 | 0.3 Case catalogue | COMPLETE | `f182e9a63`; prerequisite correction `30b798192` | Stage 0.4 reproducible engine |
 | 0.4 Reproducible engine | CLOSED: functional proof complete; exact reproduction FAILED C10/C12 | Cell-route correction `bb8e07df8`; build support `c496025fc`; oracle support `7a27a4f26`; fixture support `516c2f009`; workspace/report support `358eca082`; cleanup-observer correction `a1f2c259c` | Begin batch 1 under failed-reproduction closure recorded below |
-| 1 Pilot | IN_PROGRESS | Init port/runtime `c1d7dd0e8`; Init results `39bbcbd6b`; payload port `200f81493`; parallel batch-1 routing `b3c96ecb1` | Init/payload/namespace complete; finish isolated tiny-file samples/results before batch 2 |
-| 2 Edits | PENDING | — | Wait for batch 1 completion |
+| 1 Pilot | COMPLETE: 36 functional/proof/clean-close passes; 7 numeric PASS, 29 INELIGIBLE | Init `c1d7dd0e8`/`39bbcbd6b`; payload `200f81493`/`c1d9b6c58`; parallel routing `b3c96ecb1`; tiny `36849bcc2`/`d6e0ef952`; namespace `98b14b233`/`be1f56a23`; H-2 fix `222526fa0`; closure in this commit | Begin batch 2, retaining all original receipts/cache dispositions |
+| 2 Edits | READY | — | Port five original families with exact positional writes; no batch-2 sample started |
 | 3 Trees and tools | PENDING | — | Wait for batch 2 completion |
 | 4 History on one branch | PENDING | — | Wait for batch 3 completion |
 | 5 Branches and Workspaces | PENDING | — | Wait for batch 4; verify existing P-1 SDK methods |
@@ -896,4 +896,38 @@ batch-1 families is the remaining batch checkpoint before batch 2 starts.
 Production LOC 79,366 -> 79,366 (delta +0), same pinned absent-aware method.
 
 | `323cd6dfa` (worker) | Record twenty tiny-file samples and generated CSVs | 79366 | 79366 | +0 |
-| This commit | Integrate complete tiny-file outcomes with master ledger | 79366 | 79366 | +0 |
+| `d6e0ef952` | Integrate complete tiny-file outcomes with master ledger | 79366 | 79366 | +0 |
+
+Batch 1 closed: all four families meet the done-when list with every original
+case ported, parity PASS, one functional/proof/clean-close sample each, and
+the two complete CSVs per original source run integrated on main. There are
+36 cases: Init4, payload8, tiny20 and namespace4. Seven numeric rows are PASS
+and 29 INELIGIBLE; no numeric eligibility is upgraded by functional completion.
+All registered product/proof limits are WITHIN. Every passing mounted sample
+resource was removed by its creating run; prepared masters and all ignored raw
+evidence remain retained and explicitly owned. No product bug or unrun/failed/
+not-applicable pilot case remains. H-1 and H-2 are fixed harness faults; stage
+0.4's unchanged C10/C12 exact-count failures remain historical FAIL.
+
+After H-2, at clean d6e0ef952 each corrected strict parity route passed once
+without any new product sample: Init4 (13 s wall stop receipt), payload8
+(5 s), tiny20 (18 s), namespace4 (individual 120 s wall stop). Each consumes
+its previously sealed original native fixture/final-state evidence, validates
+all reviewed source hashes and both exact source commit/tag objects, and
+records zero samples. Raw roots are benchmark-results/fs-bench-pro/
+2026-10-10-review-pin-init-parity/, -payload-parity/, -tiny-parity/ and
+-namespace-parity/. These are metadata-check observations, with no performance
+claim. The complete failed H-2 regression receipt remains under
+2026-10-10-review-pin-fix-checks/before.*.
+
+Batch 2 can now begin. The owner-authorized workers will be reused for
+separate original edit families while the lead owns shared exact-write
+machinery, production bugs and ledger/integration. Their pilot branches and
+ignored receipt trees remain intact; later family work uses new local
+branches from the completed main checkpoint, without resetting saved work.
+No later batch may start until batch 2's complete outcome is recorded.
+This closure changes documents only, reusing all final-source scoped checks.
+Production LOC 79,366 -> 79,366 (delta +0), same pinned absent-aware method;
+reference absent (retired R9c, last counted 65,417).
+
+| This commit | Close all four pilot families and corrected source-pin parity | 79366 | 79366 | +0 |
