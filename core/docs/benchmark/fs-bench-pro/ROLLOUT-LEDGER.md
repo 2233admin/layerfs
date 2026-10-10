@@ -3896,3 +3896,20 @@ Durable stays NOT_RUN — disabled by owner until explicit reauthorization.
 
 | `cd89fa6d7` (worker) | Author five original multi-workspace cases and owning tests | 79370 | 79370 | +0 |
 | This commit | Integrate exact multi_workspace_development registration | 79370 | 79370 | +0 |
+
+
+### Batch 5 historical_access registration, 2026-10-11
+
+Imported only worker `1c1a99917433d0af1ec6fbfe8a93f81c2b76272b`'s exact three owned registration/wrapper/test
+files. This records six original historical-access cases, preserving the exact producer case, source Branch/local ordinal, independent read target algebra, reader then verifier on one mount with zero Commits, original Fork-then-mount topology, alias/inode checks, unchanged producer heads/census and original 25/35 s proof limits.
+Four owning authoring tests passed once in 1.930 s under the private 120 s wall lock. No producer preparation or mounted access invocation was performed.
+The owning source qualification is reused; no unchanged test or case is replayed.
+
+All source hashes and independent original limits remain declared in family.json.
+Preparation, final SDK/runtime qualification, parity and actual case attempts remain
+NOT_RUN. Shared fixture/runtime/oracle work is in progress under disjoint worktree
+ownership. Closed prior receipts and protected/failed resources are unchanged.
+Durable stays NOT_RUN — disabled by owner until explicit reauthorization.
+
+| `1c1a99917` (worker) | Author six original historical-access cases and owning tests | 79370 | 79370 | +0 |
+| This commit | Integrate exact historical_access registration | 79370 | 79370 | +0 |
