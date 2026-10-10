@@ -1011,4 +1011,28 @@ No product source or workload limit changed. Production LOC79,366->79,366
 (delta+0), same pinned absent-aware method; reference absent retiredR9c.
 
 | `98fa838f4` (worker) | Port twelve exact length-preserving scenarios | 79366 | 79366 | +0 |
-| This commit | Integrate length-preserving registration and master ledger | 79366 | 79366 | +0 |
+| `5e8dc5fd6` | Integrate length-preserving registration and master ledger | 79366 | 79366 | +0 |
+
+Batch 2 / edit_length_changing registration integrated from681413760.
+All32 original plans and their ordered positional edit remain frozen, including
+five original growing500MiB capped-v2 IDs/inputs already defined by registry().
+Their final length is exactly500MiB; no new cap is added. Insert/delete/append/
+prepend/grow/shrink/truncate/zero-extend offsets, payload seeds/digests, six
+original input byte hashes and independent plan seals are retained. Every
+sdk_scenario field independently reproduces the frozen registry TSV digest
+f59a1a68a19b95e1dcc8e6e5e273c7279c69fca373adca9980a9a9ffbd9fa517.
+
+Worker two scoped plan/provenance/capped-input tests PASS0.042s, catalogue
+three PASS0.115s under its own120s lock; syntax/whitespace PASS. No input,
+Store, mount or sample exists yet; original checks are reused for this byte-
+identical integration. Explicit differences record P-3 ordinary suffix movement/
+pwrite/truncate, deterministic rootmtime, actual cache/route/resource scope and
+current typed grammar/retention identifiers rather than retired format fields.
+Final shared runtime/writer build, fixture/parity,32 samples and both CSVs
+remain pending. Raw worker checks:
+/Users/yifanxu/.codex/worktrees/fs-bench-pro-namespace-mutation/layerfs/benchmark-results/fs-bench-pro/2026-10-10-batch-2-length-changing-tests/.
+No product or budget change. Production LOC79,366->79,366(delta+0), pinned
+absent-aware method; reference absent retiredR9c.
+
+| `681413760` (worker) | Port32 original length-changing scenarios and plan checks | 79366 | 79366 | +0 |
+| This commit | Integrate length-changing registration and master ledger | 79366 | 79366 | +0 |
