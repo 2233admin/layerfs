@@ -7,6 +7,15 @@ from pathlib import Path
 from . import identity, receipts
 
 
+class ParityFailure(ValueError):
+    """Failed case guards with complete retained family parity evidence."""
+    def __init__(self, result, output):
+        self.result = result
+        self.output = Path(output)
+        first = next(row for row in result["cases"] if row["status"] == "FAIL")
+        super().__init__(f"{result['family']} parity failed: {first['reason']}; see {self.output / 'parity.json'}")
+
+
 def audit_membership(run, build_folder, output):
     """Supplement prior byte proofs with a new census; original exports stay intact."""
     import shutil
@@ -225,6 +234,7 @@ def parity_namespace(family, prepared_parent, output):
 
 
 def parity_workspace(family, prepared_parent, output):
+    """Keep every case outcome, then reject any failed original parity guard."""
     from . import fixtures
     output = Path(output).resolve()
     output.mkdir(parents=True, exist_ok=False)
@@ -232,25 +242,32 @@ def parity_workspace(family, prepared_parent, output):
     membership = {(row["family"], row["case"]) for row in registered}
     rows = []
     for case in family["cases"]:
-        if (family["family"], case["v016_case"]) not in membership:
-            raise ValueError("frozen original case membership differs")
-        prepared = fixtures.load(Path(prepared_parent) / case["fixture"]["recipe"], case["fixture"]["recipe"])
-        if prepared["case"] != case["id"] or prepared["family"] != family["family"]:
-            raise ValueError("original fixture was prepared for another case")
-        review = case["port_review"]
-        if (review["source_commit"] != identity.git(identity.ROOT, "rev-parse", "reference-v0.1.6-final^{commit}")
-                or review["source_tag_object"] != identity.git(identity.ROOT, "rev-parse", "reference-v0.1.6-final")):
-            raise ValueError("reviewed operation pin differs")
-        for path, digest in review["files"].items():
-            if identity.sha256(identity.ROOT / path) != digest:
-                raise ValueError("reviewed original fixture/operation/oracle source changed")
-        if any(item["verification_status"] != "pass" for item in prepared["native_verification"].values()):
-            raise ValueError("original complete native fixture/oracle check not passed")
-        rows.append({"case": case["id"], "status": "PASS", "fixture": prepared["fixture"],
-                     "expectation": prepared["expectation"], "mechanical": prepared["native_verification"],
-                     "review": review, "oracle": case["oracle"], "differences": case["differences"]})
-    result = {"schema": "fs-bench-pro-parity-v1", "family": family["family"], "status": "PASS", "cases": rows,
+        try:
+            if (family["family"], case["v016_case"]) not in membership:
+                raise ValueError("frozen original case membership differs")
+            prepared = fixtures.load(Path(prepared_parent) / case["fixture"]["recipe"], case["fixture"]["recipe"])
+            if prepared["case"] != case["id"] or prepared["family"] != family["family"]:
+                raise ValueError("original fixture was prepared for another case")
+            review = case["port_review"]
+            if (review["source_commit"] != identity.git(identity.ROOT, "rev-parse", "reference-v0.1.6-final^{commit}")
+                    or review["source_tag_object"] != identity.git(identity.ROOT, "rev-parse", "reference-v0.1.6-final")):
+                raise ValueError("reviewed operation pin differs")
+            for path, digest in review["files"].items():
+                if identity.sha256(identity.ROOT / path) != digest:
+                    raise ValueError("reviewed original fixture/operation/oracle source changed")
+            if any(item["verification_status"] != "pass" for item in prepared["native_verification"].values()):
+                raise ValueError("original complete native fixture/oracle check not passed")
+            rows.append({"case": case["id"], "status": "PASS", "fixture": prepared["fixture"],
+                         "expectation": prepared["expectation"], "mechanical": prepared["native_verification"],
+                         "review": review, "oracle": case["oracle"], "differences": case["differences"]})
+        except Exception as error:
+            rows.append({"case": case["id"], "status": "FAIL", "reason": str(error),
+                         "error_type": type(error).__name__})
+    result = {"schema": "fs-bench-pro-parity-v1", "family": family["family"],
+              "status": "FAIL" if any(row["status"] == "FAIL" for row in rows) else "PASS", "cases": rows,
               "samples": 0, "scope": "original membership, full deterministic native fixture/final counts+bytes+content digest; reviewed unchanged ordinary calls and complete native/persisted verification"}
     receipts.write_new(output / "parity.json", result)
     receipts.manifest(output)
+    if result["status"] == "FAIL":
+        raise ParityFailure(result, output)
     return result

@@ -108,6 +108,7 @@ comparison or release-admission claim. Durable is
 | H-9 | Prospective two verification-only cases | Overall output-closeFAIL could disappear in CSV when performance wasN/A and semantic proof retainedPASS | Original proof-only mask omitted the independent full-outcome failure tag | Worker2fe8e9b2e / integration this commit | test_overall_close_failure_remains_visible_beside_passing_semantic_proof fails beforefix; final5reportchecks PASS0.048s |
 | H-10 | Prospective batch4 prepared SDK routes | Missing/partial prepared-step map could invoke native fallback and regenerate original payloads inside measuredwork; stale sealed helpers could disagree with reported current build | Controller trusted optional prepared records without mandatory originalstep/binary/descriptor/payload/script correspondence admission | Workera8c56d570 / integration this commit | test_helper_refusal_precedes_case_claim_and_any_clone_or_mount fails at686344e8f; exact-source temporary assets reject five old-admission bypasses and all15guard checks PASS |
 | H-11 | v016-boundary-small-control-v1 and dedup-history-distributed-1 first attempts | Native proof/acknowledged Commits/Gone/KnownStop pass, independent public history proof fails acknowledged Commit missing | Controller copies only exported main file into typed-store, dropping closed WAL; immutable main-only census would also miss WAL | PENDING shared harness correction | Real closed-WAL controller regression sees0 of100 acknowledged test rows on old main-only copy; red0.067s under120s mainlock |
+| H-12 | Mixed final failed preparation and prospective failed family parity | First missing/invalid preparation aborts parity without retaining earlier/later original case outcomes; CLI propagates only an exception | parity_workspace raises inside first failed case before writing parity.json | Worker47e5a5500 / integration this commit | Missing middle preparation red fails old behavior; all original membership/pin/bytes/native/seal guards retain FAIL reasons,22checksPASS; CLI old exception red retained,new5driverchecksPASS |
 
 H-1 and H-2 are harness faults, not product correctness or performance defects.
 The original file-identity checker remains intact; no product source changed.
@@ -2930,4 +2931,33 @@ state error or identified product correctness bug. No preparation replay is
 selected. Root owns guarded report/CLI visibility; worker will preserve original
 per-case parity assertions and make failed selections visible without promotion.
 
-| This commit | Specify truthful failed closure for the original unprepared exhaustive case | 79366 | 79366 | +0 |
+| `1ba406e30` | Specify truthful failed closure for the original unprepared exhaustive case | 79366 | 79366 | +0 |
+
+
+H12 preserves complete failed parity evidence without weakening any original
+check. Worker47e5a5500 keeps membership, peeledreference/tagobject, reviewed
+sourceSHA, preparedcase/family, nativeverification and fixtureseal assertions
+verbatim inside per-case handling. Every original selection yields ordered
+PASS or FAIL(reason,error_type), overallFAIL ifanycasefails. It writes new
+parity.json/manifest once, then raises ParityFailure(ValueError) carrying exact
+.result/.output and first original reason. Existing ValueError rejection tests
+remain unchanged, all-PASS return unchanged; global catalogue/output/publication
+exceptions stillraise without inventing case verdicts. No missingcase omission
+or aggregateFAIL promotion. Worker external missing-middle regressionFAIL on
+parent; final4new+3unchangedreview+15fixture checks22PASS0.485s/637,248,167ns
+supervisor<=2/120. A first candidate test-fixture macOSpathalias failure remains
+raw; resolving expectedpath didnot changeimplementation/guards. Raw private
+2026-10-10-batch-4-parity-failure-visibility and -fixed.
+
+Root CLI catches only that typedfailed-parity exception, prints retained
+family/statusFAIL/allcasecount/samples0/evidence, returns1; all-PASS returns0.
+Red driver isolatedexception propagated beforefix, retained under
+benchmark-results/fs-bench-pro/2026-10-10-parity-failure-cli-red. Final5driver
+checksPASS0.020s/120mainlock at integratedsource, raw -fixed. Previouslyqualified
+workerchecks sourcehashmatched and reused, not replayed. No real parity,
+nativepreparation/actualcase/retry/product/source-speed change occurs here.
+Mixed will retain allten rows, including finalpreparationFAIL/actualNOT_RUN;
+only individual unchangedparityPASS cases can be dispatched after H11 closes.
+
+| `47e5a5500` (worker) | Retain every failed parity outcome with original guard rejection API | 79366 | 79366 | +0 |
+| This commit | Integrate complete failed parity evidence and CLI nonzero summary | 79366 | 79366 | +0 |

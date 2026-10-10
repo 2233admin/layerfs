@@ -154,11 +154,17 @@ def main(argv=None):
         if args.family not in ("init_namespace", *fixtures.WORKSPACE_FAMILIES):
             parser.error("this family's parity transcription is not implemented yet")
         family = json.loads((HERE / "families" / args.family / "family.json").read_text())
-        result = (project.parity_namespace(family, args.prepared, args.out) if args.family == "init_namespace"
-                  else project.parity_workspace(family, args.prepared, args.out))
+        try:
+            result = (project.parity_namespace(family, args.prepared, args.out) if args.family == "init_namespace"
+                      else project.parity_workspace(family, args.prepared, args.out))
+        except project.ParityFailure as failure:
+            result = failure.result
+            print(json.dumps({"family": result["family"], "status": "FAIL", "cases": len(result["cases"]),
+                              "samples": 0, "evidence": str(failure.output)}, indent=2))
+            return 1
         print(json.dumps({"family": result["family"], "status": result["status"],
                           "cases": len(result["cases"]), "samples": 0}, indent=2))
-        return
+        return 0
     if args.command == "prepare":
         from engine import fixtures, identity
         results = identity.ROOT / "benchmark-results/fs-bench-pro"

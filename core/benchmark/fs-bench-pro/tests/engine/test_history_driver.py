@@ -13,10 +13,26 @@ BENCH=Path(__file__).resolve().parents[2]
 sys.path.insert(0,str(BENCH))
 spec=importlib.util.spec_from_file_location("history_bench",BENCH/"bench.py")
 bench=importlib.util.module_from_spec(spec);spec.loader.exec_module(bench)
-from engine import fixtures,identity,receipts,workspace
+from engine import fixtures,identity,project,receipts,workspace
 
 
 class HistoryDriver(unittest.TestCase):
+    def test_failed_parity_returns_nonzero_with_retained_case_summary(self):
+        class Failure(ValueError):
+            result={'family':'dedup_branch_history','status':'FAIL','cases':[{'case':'missing','status':'FAIL'}]}
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary);error=Failure('prepared input absent');error.output=root/'parity'
+            output=io.StringIO()
+            with patch.object(project,'ParityFailure',Failure,create=True), \
+                    patch.object(project,'parity_workspace',side_effect=error),redirect_stdout(output):
+                returned=bench.main(['parity','dedup_branch_history','--prepared',str(root/'prepared'),
+                                     '--out',str(error.output)])
+            self.assertEqual(returned,1)
+            result=json.loads(output.getvalue())
+            self.assertEqual(result['status'],'FAIL')
+            self.assertEqual(result['cases'],1)
+            self.assertEqual(result['evidence'],str(error.output))
+
     def drive(self,root,case,result,ack_failure=False):
         here=root/"bench";family=here/"families/dedup_branch_history";family.mkdir(parents=True)
         (family/"family.json").write_text(json.dumps({"family":"dedup_branch_history","cases":[case]}))
