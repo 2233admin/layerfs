@@ -335,7 +335,7 @@ impl Overlay {
             48,
             Piece::decode,
         )?;
-        if rows.len() == WINDOW_ROWS {
+        if rows.len() >= WINDOW_ROWS {
             return Err(OverlayError::Invalid("pieces of one read window"));
         }
         let mut taken = 0;
@@ -345,27 +345,39 @@ impl Overlay {
             if from >= to || self.stale(ns, serial, layer, piece.offset, piece.epoch)? {
                 continue;
             }
-            let slots = &mut decided[(from - start) as usize..(to - start) as usize];
-            // The range reported is the hull of the bytes this piece supplies.
-            let Some(low) = slots.iter().position(|slot| *slot == 0) else {
-                continue;
-            };
-            let high = slots.iter().rposition(|slot| *slot == 0).unwrap_or(low) + 1;
-            let tag = read.references.len() + 2;
-            if read.references.len() == READ_REFERENCES || tag > u8::MAX as usize {
-                return Err(OverlayError::Invalid("reference ranges of one read window"));
+            // A range is a run of the piece's cells that still hold an
+            // undecided byte. The piece decides every such byte, so no other
+            // piece of any layer supplies a byte of these cells.
+            let (mut at, mut run) = (from, None::<u64>);
+            while at < to {
+                let next = to.min(at - at % CELL + CELL);
+                let slots = &mut decided[(at - start) as usize..(next - start) as usize];
+                if slots.iter().all(|slot| *slot != 0) {
+                    (at, run) = (next, None);
+                    continue;
+                }
+                if run.is_none() {
+                    if read.references.len() == READ_REFERENCES {
+                        return Err(OverlayError::Invalid("reference ranges of one read window"));
+                    }
+                    read.references.push(ReferenceRange {
+                        offset: at,
+                        length: 0,
+                        source: piece.source,
+                        source_offset: piece.source_offset as u64 + (at - piece.offset as u64),
+                    });
+                    run = Some(at);
+                }
+                let tag = (read.references.len() + 1) as u8;
+                for slot in slots.iter_mut().filter(|slot| **slot == 0) {
+                    *slot = tag;
+                    taken += 1;
+                }
+                if let Some(range) = read.references.last_mut() {
+                    range.length = next - range.offset;
+                }
+                at = next;
             }
-            for slot in slots[low..high].iter_mut().filter(|slot| **slot == 0) {
-                *slot = tag as u8;
-                taken += 1;
-            }
-            let offset = from + low as u64;
-            read.references.push(ReferenceRange {
-                offset,
-                length: (high - low) as u64,
-                source: piece.source,
-                source_offset: piece.source_offset as u64 + (offset - piece.offset as u64),
-            });
         }
         Ok(taken)
     }

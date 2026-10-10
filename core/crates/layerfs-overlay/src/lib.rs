@@ -58,7 +58,7 @@ pub use payload::captured_types::{
 pub use profile::{DatabaseProfile, ProfileConfig};
 pub use reclaim::ReclaimStep;
 pub use types::{
-    BaseSource, Binding, Capture, Cell, Changes, ClaimedRange, DirectoryEntry,
+    reference_bytes, BaseSource, Binding, Capture, Cell, Changes, ClaimedRange, DirectoryEntry,
     DirectoryEntryChange, DirectoryEntryWindow, Generation, Inode, InodeKind, Lease, LeaseKind,
     LocalRead, NameLayers, OperationRecord, PayloadWrite, Publication, ReferenceRange, Route,
     WorkspaceState, WriteClaims, CELL_BYTES, COMPOUND_DIRECTORY_ENTRIES, COMPOUND_INODES,

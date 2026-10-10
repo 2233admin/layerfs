@@ -186,4 +186,8 @@ pub struct CapturedRunWork {
 pub struct CapturedRunReply {
     pub step: CapturedRunStep,
     pub work: CapturedRunWork,
+    /// Some layer of the file holds reference pieces: a later unit of the
+    /// pass may be a `Reference` step or a window with reference ranges. It
+    /// is the same for every unit of one pass that is not the end.
+    pub referenced: bool,
 }

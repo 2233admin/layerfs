@@ -1,4 +1,5 @@
-//! One bounded byte write: the inode's size and time with its cell window.
+//! One bounded byte write: the inode's size and time with its cell window,
+//! and the reference pieces of the ranges the caller claimed.
 use crate::eval::{refuse, Eval};
 use crate::{Position, Refusal, Time, WorkspaceResult, WriteData};
 use layerfs_overlay::{Changes, Inode, InodeKind, PayloadWrite, WRITE_WINDOW};
@@ -64,6 +65,13 @@ pub(crate) fn write(
         mtime_nanoseconds: now.nanoseconds,
         ..old
     };
+    // Claims describe the bytes at the offset their caller stated: a write
+    // that resolved its own offset or was clipped stores every byte.
+    let claims = data
+        .1
+        .as_ref()
+        .filter(|_| matches!(position, Position::At(_)) && !clip)
+        .map(|claims| Box::new(layerfs_overlay::WriteClaims::clone(claims)));
     // No base payload is read: bytes this window does not cover stay
     // inherited through the layer's cut-off.
     let changes = Changes {
@@ -73,6 +81,7 @@ pub(crate) fn write(
             offset,
             data: bytes,
         }),
+        claims,
         ..Changes::default()
     };
     Ok(Some((Some(changes), new)))

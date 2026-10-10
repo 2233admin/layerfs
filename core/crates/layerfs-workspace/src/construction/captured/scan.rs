@@ -4,7 +4,7 @@ use crate::{OverlayCapturedRuns, OverlayOperationRecords};
 use layerfs_content::{ContentError, ContentResult, FileRun};
 use layerfs_overlay::{
     CapturedGap, CapturedReader, CapturedRunCursor, CapturedRunStep, InodeKind, LocalRead,
-    RUN_BYTES,
+    READ_REFERENCES, RUN_BYTES,
 };
 
 enum Pending {
@@ -19,6 +19,13 @@ enum Pending {
         start: u64,
         end: u64,
     },
+    /// Committed bytes of `root` from `source`, named by one reference piece.
+    Reference {
+        start: u64,
+        end: u64,
+        root: [u8; 32],
+        source: u64,
+    },
 }
 pub(super) struct Scan {
     reader: CapturedReader,
@@ -27,12 +34,33 @@ pub(super) struct Scan {
     base_size: u64,
     cursor: CapturedRunCursor,
     pending: Option<Pending>,
+    referenced: bool,
+}
+/// Where the bytes of one span of the final file come from.
+#[derive(Clone, Copy, Eq, PartialEq)]
+pub(super) enum Origin {
+    /// New bytes of the captured file: written cells or zeros.
+    Local,
+    /// Bytes of the file's own base at the same offset.
+    Inherited,
+    /// Committed bytes of content root `root` from `source`.
+    Reference { root: [u8; 32], source: u64 },
 }
 #[derive(Clone, Copy)]
 pub(super) struct Span {
-    pub start: u64,
     pub end: u64,
-    pub changed: bool,
+    pub origin: Origin,
+}
+/// What the construction source hands out for one span.
+pub(super) enum Supply {
+    Run(FileRun),
+    /// Bytes to read from committed content: the file's own base when `root`
+    /// is none.
+    Committed {
+        root: Option<[u8; 32]>,
+        offset: u64,
+        length: u64,
+    },
 }
 impl Scan {
     pub fn new(
@@ -69,11 +97,18 @@ impl Scan {
             base_size,
             cursor,
             pending: None,
+            referenced: false,
         })
+    }
+    /// Whether a unit of this pass reported that the file holds pieces.
+    pub fn referenced(&self) -> bool {
+        self.referenced
     }
     fn bounds(&self) -> Option<(u64, u64)> {
         match self.pending.as_ref()? {
-            Pending::Gap { start, end, .. } | Pending::Local { start, end } => Some((*start, *end)),
+            Pending::Gap { start, end, .. }
+            | Pending::Local { start, end }
+            | Pending::Reference { start, end, .. } => Some((*start, *end)),
             Pending::Window(read) => Some((read.offset, read.offset + read.data.len() as u64)),
         }
     }
@@ -129,6 +164,7 @@ impl Scan {
                     .checked_add(reply.work.stale_rows)
                     .ok_or(ContentError::LengthOverflow)?;
             }
+            self.referenced |= reply.referenced;
             let valid = |next: CapturedRunCursor| {
                 next.reader() == self.reader
                     && next.serial() == self.serial
@@ -175,6 +211,14 @@ impl Scan {
                         && read.base_root == Some(self.reader.root())
                         && (read.inherited.is_empty()
                             || read.inherited.len() == read.data.len().div_ceil(8))
+                        && read.references.len() <= READ_REFERENCES
+                        && read.referenced.capacity() <= RUN_BYTES / 8
+                        && read.referenced.len()
+                            == if read.references.is_empty() {
+                                0
+                            } else {
+                                read.data.len().div_ceil(8)
+                            }
                         && at.checked_add(read.data.len() as u64) == Some(next.offset())
                         && next.offset() <= self.size =>
                 {
@@ -200,6 +244,29 @@ impl Scan {
                     self.cursor = next;
                     return Ok(());
                 }
+                CapturedRunStep::Reference {
+                    offset,
+                    length,
+                    root,
+                    source_offset,
+                    next,
+                } if valid(next)
+                    && reply.referenced
+                    && offset == at
+                    && length != 0
+                    && offset.checked_add(length) == Some(next.offset())
+                    && source_offset.checked_add(length).is_some()
+                    && next.offset() <= self.size =>
+                {
+                    self.pending = Some(Pending::Reference {
+                        start: at,
+                        end: next.offset(),
+                        root,
+                        source: source_offset,
+                    });
+                    self.cursor = next;
+                    return Ok(());
+                }
                 _ => {
                     return Err(shared
                         .borrow_mut()
@@ -217,47 +284,99 @@ impl Scan {
     ) -> ContentResult<Span> {
         self.ensure(provider, shared, at, normalization)?;
         match self.pending.as_ref().ok_or(ContentError::UnexpectedEof)? {
-            Pending::Gap { end, kind, .. } => Ok(Span {
-                start: at,
-                end: if *kind == CapturedGap::Inherited && at < self.base_size {
-                    (*end).min(self.base_size)
+            Pending::Gap { end, kind, .. } => {
+                Ok(if *kind == CapturedGap::Inherited && at < self.base_size {
+                    Span {
+                        end: (*end).min(self.base_size),
+                        origin: Origin::Inherited,
+                    }
                 } else {
-                    *end
-                },
-                changed: *kind == CapturedGap::Zero || at >= self.base_size,
-            }),
+                    Span {
+                        end: *end,
+                        origin: Origin::Local,
+                    }
+                })
+            }
             Pending::Local { end, .. } => Ok(Span {
-                start: at,
                 end: *end,
-                changed: true,
+                origin: Origin::Local,
+            }),
+            Pending::Reference {
+                start,
+                end,
+                root,
+                source,
+            } => Ok(Span {
+                end: *end,
+                origin: Origin::Reference {
+                    root: *root,
+                    source: source + (at - start),
+                },
             }),
             Pending::Window(read) => {
                 let index = (at - read.offset) as usize;
-                let inherited = |at: usize| {
-                    !read.inherited.is_empty() && read.inherited[at / 8] & (1 << (at % 8)) != 0
+                // A byte is inherited (2), supplied by a reference range (1)
+                // or local (0).
+                let bit = |mask: &[u8], at: usize| {
+                    !mask.is_empty() && mask[at / 8] & (1 << (at % 8)) != 0
                 };
-                let first = inherited(index);
+                let class = |at: usize| {
+                    if bit(&read.inherited, at) {
+                        2
+                    } else {
+                        u8::from(bit(&read.referenced, at))
+                    }
+                };
+                let first = class(index);
+                // The one range that holds a referenced byte bounds its span.
+                let range = if first == 1 {
+                    Some(
+                        read.references
+                            .iter()
+                            .find(|range| range.offset <= at && at - range.offset < range.length)
+                            .ok_or(ContentError::InvalidRecord("captured reference range"))?,
+                    )
+                } else {
+                    None
+                };
+                let limit = range.map_or(read.data.len(), |range| {
+                    read.data
+                        .len()
+                        .min((range.offset + range.length - read.offset) as usize)
+                });
                 // No mask means every byte of the window is local.
-                let mut end = if read.inherited.is_empty() {
+                let mut end = if read.inherited.is_empty() && read.referenced.is_empty() {
                     read.data.len()
                 } else {
                     index + 1
                 };
-                while end < read.data.len() && inherited(end) == first {
+                while end < limit && class(end) == first {
                     end += 1;
                 }
-                Ok(Span {
-                    start: at,
-                    end: if first && at < self.base_size {
-                        (read.offset + end as u64).min(self.base_size)
-                    } else {
-                        read.offset + end as u64
+                let end = read.offset + end as u64;
+                Ok(match (first, range) {
+                    (2, _) if at < self.base_size => Span {
+                        end: end.min(self.base_size),
+                        origin: Origin::Inherited,
                     },
-                    changed: !first || at >= self.base_size,
+                    (_, Some(range)) => Span {
+                        end,
+                        origin: Origin::Reference {
+                            root: range.source,
+                            source: range.source_offset + (at - range.offset),
+                        },
+                    },
+                    _ => Span {
+                        end,
+                        origin: Origin::Local,
+                    },
                 })
             }
         }
     }
+    /// The bytes of a span of new content at `at`, at most `limit` of them.
+    /// A span the base or a reference supplies names its committed source;
+    /// the caller reads it.
     pub fn read<P: OverlayCapturedRuns + OverlayOperationRecords + ?Sized>(
         &mut self,
         provider: &P,
@@ -265,18 +384,36 @@ impl Scan {
         at: u64,
         limit: u64,
         output: &mut [u8],
-    ) -> ContentResult<FileRun> {
+    ) -> ContentResult<Supply> {
         let span = self.span(provider, shared, at, false)?;
-        if !span.changed {
-            return Err(shared.borrow_mut().content(ContentError::InvalidRecord(
-                "inherited captured replacement",
-            )));
-        }
         let length = (span.end - at).min(limit);
+        match span.origin {
+            Origin::Local => {}
+            // Only the script of a file with pieces replaces inherited bytes.
+            Origin::Inherited if self.referenced => {
+                return Ok(Supply::Committed {
+                    root: None,
+                    offset: at,
+                    length,
+                })
+            }
+            Origin::Inherited => {
+                return Err(shared.borrow_mut().content(ContentError::InvalidRecord(
+                    "inherited captured replacement",
+                )))
+            }
+            Origin::Reference { root, source } => {
+                return Ok(Supply::Committed {
+                    root: Some(root),
+                    offset: source,
+                    length,
+                })
+            }
+        }
         match self.pending.as_ref().ok_or(ContentError::UnexpectedEof)? {
-            Pending::Gap { .. } => Ok(FileRun::Zero(length)),
+            Pending::Gap { .. } => Ok(Supply::Run(FileRun::Zero(length))),
             // A shapes-only pass holds no bytes to hand out.
-            Pending::Local { .. } => Err(shared
+            Pending::Local { .. } | Pending::Reference { .. } => Err(shared
                 .borrow_mut()
                 .content(ContentError::InvalidRecord("captured shape read"))),
             Pending::Window(read) => {
@@ -285,7 +422,7 @@ impl Scan {
                 {
                     // span() established authenticated base EOF. Bytes behind
                     // inherited bits never carry replacement authority.
-                    return Ok(FileRun::Zero(length));
+                    return Ok(Supply::Run(FileRun::Zero(length)));
                 }
                 let count = usize::try_from(length)
                     .unwrap_or(usize::MAX)
@@ -293,14 +430,13 @@ impl Scan {
                 if count == 0 {
                     return Err(ContentError::InvalidRecord("captured replacement output"));
                 }
-                let start = (at - read.offset) as usize;
-                let bytes = &read.data[start..start + count];
-                if bytes.iter().all(|byte| *byte == 0) {
-                    Ok(FileRun::Zero(count as u64))
+                let bytes = &read.data[index..index + count];
+                Ok(Supply::Run(if bytes.iter().all(|byte| *byte == 0) {
+                    FileRun::Zero(count as u64)
                 } else {
                     output[..count].copy_from_slice(bytes);
-                    Ok(FileRun::Data(count))
-                }
+                    FileRun::Data(count)
+                }))
             }
         }
     }

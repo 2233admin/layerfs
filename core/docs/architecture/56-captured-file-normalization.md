@@ -23,6 +23,54 @@ new-file stream and before its End. Where the text below says that source
 lookup rechecks the sealed context, that now applies to a lookup that reads a
 record.
 
+Issue 316 update, 2026-10-11 (reference pieces, overlay schema 33): the final
+changes of a file are an
+[edit script](../../crates/layerfs-workspace/src/construction/captured/script.rs).
+One forward pass with constant state reads the captured spans in file order.
+A span is retained when its bytes are bytes of the file's own committed base
+at or after the base cursor: inherited bytes, or a `Reference` step (or a
+reference range of a window) whose root is that base. Every other span is new
+bytes. New bytes wait until the next retained span, which closes them and the
+base bytes it skipped into one `Edit::new(start, start + skipped, new)`. An
+edit is in the coordinates of the result so far, so its start is its own
+offset in the final file, and the construction source reads its replacement
+there. The end of the file closes what is pending and removes the base bytes
+not consumed.
+
+| Final file | Sealed edits |
+| --- | --- |
+| A piece equal to the base at its own offset | none; the root is the base root |
+| `k` new bytes at `p`, then the base from `p` | `insert(p, k)` |
+| The base from `p + d` at `p` | `delete(p, p + d)` |
+| Both, apart | one edit each, each at its final offset |
+| A reference behind the base cursor, or to another root | an edit that covers it; its bytes are read from committed content |
+
+- **What cannot be retained is read.** A reference to another committed root,
+  and the part of a reference or of inherited bytes that lies behind the base
+  cursor, are new bytes. The construction source reads them from committed
+  content by root and offset through the operation's client and offers them
+  as new bytes: correct for any source, and linear in those bytes.
+  `CapturedFileWork::committed_bytes` counts them.
+- **A file without pieces keeps its edits.** A unit of the cursor says whether
+  the file holds pieces (`CapturedRunReply::referenced`). Without them the
+  pass stops at the surviving base as before and seals the same records: an
+  equal-length overwrite for each changed run and one trailing insert or
+  delete. With them it visits the file to its end, because a piece beyond the
+  surviving base may name base bytes that no earlier edit consumed (an insert
+  longer than the tail it moves).
+- **Context version 2.** The sealed context records whether the edits are a
+  script. A script edit is checked for a start not after its end, a
+  replacement within the final length and a nonempty change; the edits of a
+  file without pieces keep their exact checks. Edit records are unchanged.
+
+The external test `captured_piece_edits` writes pieces through the ordinary
+Workspace write with claims, compares the live and the sealed view with the
+final bytes, and checks the sealed records, the committed bytes and the
+byte-source canonical root for each row above. An insert in the middle seals
+one edit with the same 4 normalization steps, 1 source step and 5 rows over a
+1 MiB and a 6 MiB base; object reads were 4 and 7. Only tests create a piece
+in this phase.
+
 `CapturedFileEdits::prepare(workspace, provider, reader, serial, records_scope)`
 selects one regular file in an actual retained capture. It accepts no declared
 file root, base length or final length. The Workspace route must equal the exact

@@ -537,7 +537,10 @@ fn walk(
                         .inherited
                         .get(index / 8)
                         .is_some_and(|bits| bits & (1 << (index % 8)) != 0);
-                    let referenced = read.reference_map.get(index).is_some_and(|tag| *tag != 0);
+                    let referenced = read
+                        .referenced
+                        .get(index / 8)
+                        .is_some_and(|bits| bits & (1 << (index % 8)) != 0);
                     classes.push(match (inherited, referenced) {
                         (true, _) => b'I',
                         (_, true) => b'R',

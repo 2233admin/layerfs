@@ -37,6 +37,9 @@ pub struct CapturedFileWork {
     /// Successfully retained immutable file classifications; failed opens are
     /// represented by their original cause rather than counted as success.
     pub classifications: u64,
+    /// Bytes of references and inherited ranges that the edit script could
+    /// not retain, read from committed content and offered as new bytes.
+    pub committed_bytes: u64,
 }
 /// Exact retained reader, record scope and first-original errors for caller fences.
 /// This value and its Drop perform no reader/operation release or retry.
@@ -236,6 +239,7 @@ impl<'a, P: OverlayCapturedRuns + OverlayOperationRecords + ?Sized> CapturedFile
             facts,
             self.count,
             &self.context,
+            self.base.as_ref(),
         )?;
         if let Some(view) = &self.file {
             let client = self

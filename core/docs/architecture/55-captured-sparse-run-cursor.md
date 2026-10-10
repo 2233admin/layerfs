@@ -41,7 +41,10 @@ at the cursor's byte (the row at or before it, then the first row after it):
 at most two rows of a layer in a unit, whatever the length of a piece. The
 cursor holds no piece state, so its size and `metadata_advanced_from` are
 unchanged, and a stale piece only bounds a unit. A file with no such layer
-runs the unit described below, with the same statements as before. The
+runs the unit described below, with the same statements as before. Every
+reply says which of the two it was (`CapturedRunReply::referenced`), so a
+consumer learns from its first unit whether a later one may be a `Reference`.
+The
 external test `pieces` walks sealed files with both cursor modes: 12 units for
 a file with two pieces, a masked cell, two dense rows and a regrown tail, and
 equal units, rows and statements for a piece of 256 KiB and one of 6 MiB.

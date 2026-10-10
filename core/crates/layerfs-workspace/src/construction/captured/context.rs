@@ -6,9 +6,19 @@ use super::{
 use crate::OverlayOperationRecords;
 use layerfs_content::{ContentError, ContentResult, Edit};
 
-pub(super) fn encode(facts: Facts, count: usize, sealed: bool) -> ContentResult<Vec<u8>> {
+/// Offset of the byte that says the sealed edits are a script: edits that
+/// may change length anywhere, each at its own offset in the final file.
+const SCRIPTED: usize = 3;
+/// `sealed` is none for the open context and otherwise says whether the file
+/// holds pieces, which selects the form its edits are checked against.
+pub(super) fn encode(facts: Facts, count: usize, sealed: Option<bool>) -> ContentResult<Vec<u8>> {
     let mut value = Vec::with_capacity(256);
-    value.extend_from_slice(&[1, u8::from(sealed), u8::from(facts.file_root.is_some())]);
+    value.extend_from_slice(&[
+        2,
+        u8::from(sealed.is_some()),
+        u8::from(facts.file_root.is_some()),
+        u8::from(sealed == Some(true)),
+    ]);
     for number in [
         facts.reader.capture().route().namespace() as u64,
         facts.reader.owner_id(),
@@ -71,7 +81,17 @@ pub(super) fn edit<P: OverlayOperationRecords + ?Sized>(
         Err(original) => return Err(owner.content(original)),
     };
     let trailing = index + 1 == count && facts.base_size != facts.final_size;
-    let valid = if trailing && facts.final_size < facts.base_size {
+    let valid = if expected.get(SCRIPTED) == Some(&1) {
+        // A script edit removes base bytes and supplies final bytes at its
+        // own final offset; the first one starts where the base still does.
+        edit.start() <= edit.end()
+            && (edit.start() < edit.end() || edit.replacement_len() != 0)
+            && edit
+                .start()
+                .checked_add(edit.replacement_len())
+                .is_some_and(|end| end <= facts.final_size)
+            && (index != 0 || edit.end() <= facts.base_size)
+    } else if trailing && facts.final_size < facts.base_size {
         edit == Edit::delete(facts.final_size, facts.base_size)
     } else if trailing {
         edit == Edit::insert(facts.base_size, facts.final_size - facts.base_size)

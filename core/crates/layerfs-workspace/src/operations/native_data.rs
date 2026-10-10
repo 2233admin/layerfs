@@ -82,9 +82,12 @@ impl NativeDataVisit {
     pub const fn mount(&self) -> NativeMount {
         self.mount
     }
-    /// The reply's bound: the window's bytes and one inherited bit for each.
+    /// The reply's bound: the window's bytes, one inherited bit for each, and
+    /// the reference ranges with their map.
     pub fn charge(&self) -> usize {
-        self.length as usize + (self.length as usize).div_ceil(8)
+        self.length as usize
+            + (self.length as usize).div_ceil(8)
+            + layerfs_overlay::reference_bytes(self.length as usize)
     }
     /// The visit always decides: what memory does not answer about the base
     /// is left to the one read that follows outside the owner.
@@ -134,20 +137,25 @@ impl NativeWindow {
     /// The reply itself, when the visit decided every byte of a file window.
     pub fn whole(&self, link: bool) -> Option<&[u8]> {
         match &self.local {
-            Some(local) if !link && local.kind == InodeKind::File && local.span.is_none() => {
+            Some(local)
+                if !link
+                    && local.kind == InodeKind::File
+                    && local.span.is_none()
+                    && local.references.is_empty() =>
+            {
                 Some(&local.data)
             }
             _ => None,
         }
     }
-    /// Whether the reply needs the base: an inherited byte, or a fact the
-    /// visit could not take from memory. A refusal, a window decided locally
+    /// Whether the reply needs the base: an inherited byte, a byte a reference
+    /// range supplies, or a fact the visit could not take from memory. A refusal, a window decided locally
     /// and a window at or beyond a known end of file need nothing.
     pub fn inherits(&self, offset: u64, link: bool) -> bool {
         match (&self.local, self.base) {
             (None, None) => true,
             _ if self.refusal(link).is_some() => false,
-            (Some(local), _) => local.span.is_some(),
+            (Some(local), _) => local.span.is_some() || !local.references.is_empty(),
             (None, Some(_)) => link || self.length.is_none_or(|length| offset < length),
         }
     }

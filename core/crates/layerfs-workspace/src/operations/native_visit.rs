@@ -84,8 +84,8 @@ impl NativeInput {
     }
     fn charge(&self) -> usize {
         match self {
-            Self::Write { data, .. } => data.len(),
-            Self::Named(Operation::Write { data, .. }) => data.len(),
+            Self::Write { data, .. } => data.charge(),
+            Self::Named(Operation::Write { data, .. }) => data.charge(),
             _ => 0,
         }
     }

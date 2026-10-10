@@ -171,24 +171,44 @@ impl<'a> File<'a> {
             }
         }
         // A byte a reference range supplies is read from that range's source.
-        assert_eq!(local.reference_map.is_empty(), local.references.is_empty());
+        assert_eq!(local.referenced.is_empty(), local.references.is_empty());
         assert!(local.references.len() <= READ_REFERENCES);
-        for (slot, tag) in local.reference_map.iter().enumerate() {
-            if *tag == 0 {
-                continue;
-            }
-            let inherited = local.inherited.get(slot / 8);
-            assert!(inherited.is_none_or(|bits| bits & (1 << (slot % 8)) == 0));
-            let range = local.references[*tag as usize - 1];
-            let at = local.offset + slot as u64;
-            assert!(at >= range.offset && at < range.offset + range.length);
+        if !local.references.is_empty() {
+            assert_eq!(local.referenced.len(), data.len().div_ceil(8));
+        }
+        let mut supplied = vec![false; data.len()];
+        for range in &local.references {
+            // A range lies in the window and starts on a cell of it. It ends
+            // on a cell, with the window, or where a shrink cut its piece.
+            let (from, to) = (range.offset, range.offset + range.length);
+            assert!(from >= local.offset && to <= local.offset + data.len() as u64 && from < to);
+            assert!(from % 4096 == 0 || from == local.offset);
             let content = &self
                 .sources
                 .iter()
                 .find(|(root, _)| *root == range.source)
                 .expect("source of a reference range")
                 .1;
-            data[slot] = content[(range.source_offset + (at - range.offset)) as usize];
+            let mut any = false;
+            for at in from..to {
+                let slot = (at - local.offset) as usize;
+                assert!(!supplied[slot], "ranges overlap");
+                supplied[slot] = true;
+                if local.referenced[slot / 8] & (1 << (slot % 8)) != 0 {
+                    let inherited = local.inherited.get(slot / 8);
+                    assert!(inherited.is_none_or(|bits| bits & (1 << (slot % 8)) == 0));
+                    data[slot] = content[(range.source_offset + (at - range.offset)) as usize];
+                    any = true;
+                }
+            }
+            assert!(any, "a range supplies a byte");
+        }
+        for (slot, held) in supplied.iter().enumerate() {
+            let bit = local
+                .referenced
+                .get(slot / 8)
+                .is_some_and(|bits| bits & (1 << (slot % 8)) != 0);
+            assert!(*held || !bit, "a referenced byte outside every range");
         }
         data
     }

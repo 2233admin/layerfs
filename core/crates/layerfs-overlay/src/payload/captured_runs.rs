@@ -52,10 +52,7 @@ impl Overlay {
         }
         let mut work = CapturedRunWork::default();
         if cursor.at == cursor.size {
-            return Ok(CapturedRunReply {
-                step: CapturedRunStep::End,
-                work,
-            });
+            return Ok(reply(CapturedRunStep::End, work));
         }
         if layers.iter().any(|layer| layer.referenced) {
             // A layer holds pieces: the layers decide in order.
@@ -67,10 +64,7 @@ impl Overlay {
             self.probe_cell(ns, serial, layer, probe, cursor.at, &mut work)?;
         }
         if cursor.probes[..needed].iter().any(|probe| !probe.ready) {
-            return Ok(CapturedRunReply {
-                step: CapturedRunStep::Continue(cursor),
-                work,
-            });
+            return Ok(reply(CapturedRunStep::Continue(cursor), work));
         }
         // A window ends with the widest row that holds its first byte, so a
         // row is composed once, not once for each of its cells.
@@ -116,7 +110,7 @@ impl Overlay {
                 next: cursor.advance(end),
             }
         };
-        Ok(CapturedRunReply { step, work })
+        Ok(reply(step, work))
     }
 }
 
@@ -266,8 +260,13 @@ impl Overlay {
     }
 }
 
+/// The reply of a unit of a file without pieces.
 pub(crate) fn reply(step: CapturedRunStep, work: CapturedRunWork) -> CapturedRunReply {
-    CapturedRunReply { step, work }
+    CapturedRunReply {
+        step,
+        work,
+        referenced: false,
+    }
 }
 /// The layers that can decide byte `at`, the end of the gap that starts
 /// there when none does, and whether that gap is zero.

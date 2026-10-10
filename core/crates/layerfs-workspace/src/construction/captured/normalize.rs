@@ -3,6 +3,7 @@ use super::{
     context,
     owner::Facts,
     scan::Scan,
+    script::Script,
     state::{change, encode, key, Shared, CONTEXT, EDITS},
 };
 use crate::{OverlayCapturedRuns, OverlayOperationRecords};
@@ -46,7 +47,7 @@ pub(super) fn prepare<P: OverlayCapturedRuns + OverlayOperationRecords + ?Sized>
     shared: &Shared<'_, P>,
     facts: Facts,
 ) -> ContentResult<(usize, Vec<u8>)> {
-    let initial = context::encode(facts, 0, false)?;
+    let initial = context::encode(facts, 0, None)?;
     shared
         .borrow_mut()
         .apply(vec![change(CONTEXT, 0, initial.clone())])?;
@@ -60,43 +61,37 @@ pub(super) fn prepare<P: OverlayCapturedRuns + OverlayOperationRecords + ?Sized>
         changes: Vec::with_capacity(BATCH),
         count: 0,
     };
+    let mut script = Script::new(facts.file_root.map(|root| root.to_bytes()), facts.base_size);
+    let mut emit = |edit| writer.push(shared, edit);
     let mut at = 0;
     let surviving = facts.base_size.min(facts.final_size);
-    let mut changed = None;
-    // Bytes beyond the surviving base are one trailing insert whatever they
-    // hold; the construction source reads them once and rejects an inherited
-    // one there, so this pass does not visit them.
-    while at < surviving {
+    // In a file without pieces, bytes beyond the surviving base are one
+    // trailing insert whatever they hold; the construction source reads them
+    // once and rejects an inherited one there, so this pass does not visit
+    // them. A file with pieces is visited to its end: a piece there may name
+    // base bytes that an earlier edit has not consumed.
+    let mut limit = surviving;
+    while at < limit {
         let span = scan.span(provider, shared, at, true)?;
-        let end = span.end.min(surviving);
+        if scan.referenced() {
+            limit = facts.final_size;
+        }
+        let end = span.end.min(limit);
         if end <= at {
             return Err(ContentError::InvalidRecord(
                 "captured normalization progress",
             ));
         }
-        if span.changed {
-            let (start, _) = changed.unwrap_or((span.start, at));
-            changed = Some((start, end));
-        } else if let Some((start, end)) = changed.take() {
-            writer.push(shared, Edit::overwrite(start, end))?;
-        }
+        script.span(end - at, span.origin, &mut emit)?;
         at = end;
     }
-    if let Some((start, end)) = changed.take() {
-        writer.push(shared, Edit::overwrite(start, end))?;
+    let scripted = scan.referenced();
+    if !scripted {
+        script.overwrite(&mut emit)?;
     }
-    match facts.final_size.cmp(&facts.base_size) {
-        std::cmp::Ordering::Less => {
-            writer.push(shared, Edit::delete(facts.final_size, facts.base_size))?;
-        }
-        std::cmp::Ordering::Greater => writer.push(
-            shared,
-            Edit::insert(facts.base_size, facts.final_size - facts.base_size),
-        )?,
-        std::cmp::Ordering::Equal => {}
-    }
+    script.finish(facts.final_size, &mut emit)?;
     writer.flush(shared)?;
-    let sealed = context::encode(facts, writer.count, true)?;
+    let sealed = context::encode(facts, writer.count, Some(scripted))?;
     shared.borrow_mut().apply(vec![EditRecordChange {
         key: key(CONTEXT, 0),
         expected: EditRecordExpected::ExactBytes(initial),

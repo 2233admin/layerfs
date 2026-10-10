@@ -20,9 +20,20 @@ pub const WRITE_WINDOW: usize = 128 * 1024;
 pub const READ_WINDOW: usize = 128 * 1024;
 /// Most claimed ranges of one write job: one per matched run of a window.
 pub const WRITE_CLAIMS: usize = 18;
-/// Most reference ranges of one read window: each of at most four layers
-/// holds the piece over the window's first byte and those that start inside.
-pub const READ_REFERENCES: usize = 4 * (READ_WINDOW / CELL_BYTES + 1);
+/// Most reference ranges of one read window: a range is a run of whole
+/// cells of the window, and no two ranges share a cell.
+pub const READ_REFERENCES: usize = READ_WINDOW / CELL_BYTES + 1;
+/// Bytes the reference ranges and their mask add to a read reply of `length`
+/// bytes, at most: one bit a byte and one range a cell.
+pub const fn reference_bytes(length: usize) -> usize {
+    let cells = length / CELL_BYTES + 2;
+    let ranges = if cells < READ_REFERENCES {
+        cells
+    } else {
+        READ_REFERENCES
+    };
+    length.div_ceil(8) + ranges * std::mem::size_of::<ReferenceRange>()
+}
 /// Maximum changed inodes in one compound namespace job, not a namespace limit.
 pub const COMPOUND_INODES: usize = 4;
 /// Maximum changed name bindings in one compound namespace job.
@@ -194,11 +205,13 @@ pub struct LocalRead {
     /// input. Ordinary current-source reads use the source's bound root.
     pub base_root: Option<[u8; 32]>,
     /// Ranges of committed content that supply bytes of this window, at most
-    /// `READ_REFERENCES`. Empty for a file without reference pieces.
+    /// `READ_REFERENCES`. Each is a run of cells clipped to the window, and no
+    /// two overlap. Empty for a file without reference pieces.
     pub references: Vec<ReferenceRange>,
-    /// Empty when `references` is; otherwise one entry per byte of `data`:
-    /// `n + 1` for a byte that range `n` supplies and 0 for any other byte.
-    pub reference_map: Vec<u8>,
+    /// Empty when `references` is; otherwise one bit per byte of `data`, in
+    /// the form of `inherited`: set for a byte that the one range holding it
+    /// supplies. A clear bit inside a range is a byte decided otherwise.
+    pub referenced: Vec<u8>,
 }
 /// Local rows of one name: the active generation and the latest lower one.
 /// The outer None is "no row"; the inner None is a whiteout.

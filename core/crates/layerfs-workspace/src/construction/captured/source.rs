@@ -1,6 +1,11 @@
 //! Fallible indexed edits and exact captured replacement runs over one owner.
-use super::{context, owner::Facts, scan::Scan, state::Shared};
-use crate::{OverlayCapturedRuns, OverlayOperationRecords};
+use super::{
+    context,
+    owner::Facts,
+    scan::{Scan, Supply},
+    state::Shared,
+};
+use crate::{BaseContent, BaseView, OverlayCapturedRuns, OverlayOperationRecords};
 use layerfs_content::{
     ContentError, ContentResult, Edit, EditRecordApply, EditRecordChange, EditRecordKey,
     EditSequence, FileRun, FileRuns, IndexedEditBacking, IndexedEditSource,
@@ -16,6 +21,9 @@ pub(super) struct Input<'s, 'a, P: OverlayCapturedRuns + OverlayOperationRecords
     scan: RefCell<Scan>,
     position: Cell<u64>,
     restarted: Cell<bool>,
+    base: Option<&'s BaseView>,
+    /// The committed content last read for a span that could not be retained.
+    committed: RefCell<Option<BaseContent>>,
 }
 impl<'s, 'a, P: OverlayCapturedRuns + OverlayOperationRecords + ?Sized> Input<'s, 'a, P> {
     pub fn new(
@@ -24,6 +32,7 @@ impl<'s, 'a, P: OverlayCapturedRuns + OverlayOperationRecords + ?Sized> Input<'s
         facts: Facts,
         count: usize,
         context: &'s [u8],
+        base: Option<&'s BaseView>,
     ) -> ContentResult<Self> {
         Ok(Self {
             provider,
@@ -39,6 +48,43 @@ impl<'s, 'a, P: OverlayCapturedRuns + OverlayOperationRecords + ?Sized> Input<'s
             )?),
             position: Cell::new(0),
             restarted: Cell::new(false),
+            base,
+            committed: RefCell::new(None),
+        })
+    }
+    /// Bytes of a reference or of inherited content that the script could
+    /// not retain: read from committed content and offered as new bytes.
+    /// Correct for any source, and linear in these bytes.
+    fn committed(
+        &self,
+        root: Option<[u8; 32]>,
+        offset: u64,
+        length: u64,
+        output: &mut [u8],
+    ) -> ContentResult<FileRun> {
+        let count = usize::try_from(length)
+            .unwrap_or(usize::MAX)
+            .min(output.len());
+        let root = root.or(self.facts.file_root.map(|root| root.to_bytes()));
+        let (Some(root), Some(base), true) = (root, self.base, count != 0) else {
+            return Err(ContentError::InvalidRecord("captured committed source"));
+        };
+        let mut held = self.committed.borrow_mut();
+        if held.as_ref().is_none_or(|content| content.root() != root) {
+            *held = Some(base.content(root)?);
+        }
+        let content = held.as_ref().ok_or(ContentError::UnexpectedEof)?;
+        content.read(offset, count as u64, &mut &mut output[..count])?;
+        let mut owner = self.shared.borrow_mut();
+        owner.work.committed_bytes = owner
+            .work
+            .committed_bytes
+            .checked_add(count as u64)
+            .ok_or(ContentError::LengthOverflow)?;
+        Ok(if output[..count].iter().all(|byte| *byte == 0) {
+            FileRun::Zero(count as u64)
+        } else {
+            FileRun::Data(count)
         })
     }
     fn edit(&self, index: usize) -> ContentResult<Edit> {
@@ -71,7 +117,15 @@ impl<'s, 'a, P: OverlayCapturedRuns + OverlayOperationRecords + ?Sized> Input<'s
         let result = self
             .scan
             .borrow_mut()
-            .read(self.provider, self.shared, at, length, output);
+            .read(self.provider, self.shared, at, length, output)
+            .and_then(|supply| match supply {
+                Supply::Run(run) => Ok(run),
+                Supply::Committed {
+                    root,
+                    offset,
+                    length,
+                } => self.committed(root, offset, length, output),
+            });
         let run = result.map_err(|error| self.shared.borrow_mut().content(error))?;
         let length = match run {
             FileRun::Data(count) => count as u64,

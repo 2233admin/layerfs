@@ -81,9 +81,13 @@ fn visit(
         .native_data_visit(client, mount, serial, None, offset, length)
         .unwrap();
     assert_eq!(visit.mount(), mount);
+    // The window's bytes, one inherited bit a byte, and the reference ranges
+    // with their mask.
     assert_eq!(
         visit.charge(),
-        length as usize + (length as usize).div_ceil(8)
+        length as usize
+            + (length as usize).div_ceil(8)
+            + layerfs_overlay::reference_bytes(length as usize)
     );
     let (demand, before) = (b.demand(), snapshot(b));
     let window = visit.perform(&b.overlay).unwrap();

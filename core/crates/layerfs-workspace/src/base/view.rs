@@ -199,6 +199,47 @@ impl BaseView {
         })
     }
 }
+/// One committed regular file named by its content root alone: the source a
+/// reference piece names, whichever base bound that file.
+pub struct BaseContent {
+    client: Arc<CanonicalClient>,
+    file: FileView,
+}
+impl BaseView {
+    /// Opens committed file content by its root: one authenticated object
+    /// through this view's client and no namespace lookup.
+    pub fn content(&self, root: [u8; 32]) -> ContentResult<BaseContent> {
+        let root = layerfs_content::ObjectId::from_bytes(&root)?;
+        let file = Timing::disabled("base.content", |scope| {
+            FileView::open(self.client.as_ref(), root, scope.child("file"))
+        })
+        .0?;
+        Ok(BaseContent {
+            client: self.client.clone(),
+            file,
+        })
+    }
+}
+impl BaseContent {
+    pub fn root(&self) -> [u8; 32] {
+        self.file.root().to_bytes()
+    }
+    pub fn length(&self) -> u64 {
+        self.file.logical_len()
+    }
+    /// Appends exactly `length` committed bytes from `offset`. A range that
+    /// passes the end of the content is an error, never zeros.
+    pub fn read(&self, offset: u64, length: u64, sink: &mut dyn Write) -> ContentResult<()> {
+        let end = offset
+            .checked_add(length)
+            .ok_or(ContentError::LengthOverflow)?;
+        Timing::disabled("base.content", |scope| {
+            self.file
+                .read_range(self.client.as_ref(), offset..end, sink, scope)
+        })
+        .0
+    }
+}
 impl BaseRead {
     pub fn length(&self) -> u64 {
         self.end - self.start

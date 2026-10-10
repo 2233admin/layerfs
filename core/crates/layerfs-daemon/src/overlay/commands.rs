@@ -385,7 +385,8 @@ impl Command {
                 std::mem::size_of::<layerfs_overlay::CapturedRunReply>()
                     + std::mem::size_of::<layerfs_overlay::LocalRead>()
                     + layerfs_overlay::RUN_BYTES
-                    + layerfs_overlay::RUN_BYTES / 8,
+                    + layerfs_overlay::RUN_BYTES / 8
+                    + layerfs_overlay::reference_bytes(layerfs_overlay::RUN_BYTES),
             ),
             Self::ReaderInode { .. } => (0, std::mem::size_of::<Inode>()),
             Self::ReaderParentDirectoryEntries { after, .. } => (
@@ -400,13 +401,15 @@ impl Command {
                     + CELL_BYTES.div_ceil(8)
                     + std::mem::size_of::<layerfs_overlay::LocalRead>(),
             ),
-            // Decided bytes plus one inherited bit per byte of the window.
+            // Decided bytes plus one inherited bit per byte of the window, and
+            // the reference ranges with their map.
             Self::SourceRead { length, .. }
             | Self::FileRead { length, .. }
             | Self::CapturedRead { length, .. } => (
                 0,
                 *length as usize
                     + (*length as usize).div_ceil(8)
+                    + layerfs_overlay::reference_bytes(*length as usize)
                     + std::mem::size_of::<layerfs_overlay::LocalRead>(),
             ),
             // The boxed job, its bounded facts/names, and at most one reply of

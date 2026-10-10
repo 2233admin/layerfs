@@ -166,6 +166,10 @@ pub enum Do<'a> {
     Remove(&'a str),
     Rename(&'a str, &'a str),
     Write(&'a str, u64, &'a [u8]),
+    /// A write whose bytes the caller claims to equal committed content of
+    /// the given root from the given offset: the same bytes to the model.
+    #[allow(dead_code)]
+    Claimed(&'a str, u64, &'a [u8], [u8; 32], u64),
     Truncate(&'a str, u64),
     Chmod(&'a str, u32),
     Utimens(&'a str, Stamp),
@@ -283,6 +287,21 @@ impl<'a> Session<'a> {
                     position: Position::At(offset),
                     data: data.into(),
                 },
+                Do::Claimed(path, offset, data, source, source_offset) => Operation::Write {
+                    serial: resolve(operation, view, path).serial,
+                    position: Position::At(offset),
+                    data: layerfs_workspace::WriteData::from(data).claimed(
+                        layerfs_overlay::WriteClaims {
+                            source,
+                            after: None,
+                            ranges: vec![layerfs_overlay::ClaimedRange {
+                                offset,
+                                length: data.len() as u64,
+                                source_offset,
+                            }],
+                        },
+                    ),
+                },
                 Do::Truncate(path, size) => Operation::SetAttributes {
                     serial: resolve(operation, view, path).serial,
                     mode: None,
@@ -331,7 +350,9 @@ impl<'a> Session<'a> {
             Do::Link(existing, path) => self.model.link(existing, path, stamp),
             Do::Remove(path) => self.model.remove(path, stamp),
             Do::Rename(from, to) => self.model.rename(from, to, stamp),
-            Do::Write(path, offset, data) => self.model.write(path, offset as usize, data, stamp),
+            Do::Write(path, offset, data) | Do::Claimed(path, offset, data, ..) => {
+                self.model.write(path, offset as usize, data, stamp)
+            }
             Do::Truncate(path, size) => self.model.truncate(path, size as usize, stamp),
             Do::Chmod(path, mode) => self.model.chmod(path, mode),
             Do::Utimens(path, mtime) => self.model.utimens(path, mtime),
@@ -342,6 +363,16 @@ impl<'a> Session<'a> {
             "{step:?}: Workspace and model disagree on whether anything changed"
         );
     }
+}
+
+/// The content root of a regular file in the Workspace's current base.
+#[allow(dead_code)]
+pub fn content_root(workspace: &BoundWorkspace, path: &str) -> [u8; 32] {
+    window(workspace, |operation, view| {
+        let serial = resolve(operation, view, path).serial;
+        let value = view.base().inode(serial).unwrap().value;
+        value.content_root.to_bytes()
+    })
 }
 
 /// Complete walk of the live effective view through ordinary Workspace reads.

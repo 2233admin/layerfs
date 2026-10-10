@@ -61,7 +61,7 @@ impl NamespaceJob {
         let data = match &self.operation {
             Operation::Write { data, .. }
             | Operation::WriteOpen { data, .. }
-            | Operation::StoreOpen { data, .. } => data.len(),
+            | Operation::StoreOpen { data, .. } => data.charge(),
             _ => 0,
         };
         // Operation names and one symlink target are bounded by their grammar.

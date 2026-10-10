@@ -15,6 +15,23 @@ row over bytes no higher layer decided as one slice, and marks a wholly
 inherited window with one fill. Workspace moves inherited bytes into a window
 one run at a time. The composed bytes and the inherited bitmap are unchanged.
 
+Issue 316 update, 2026-10-11 (Workspace read of reference ranges): the
+composed read copies, after the inherited range, the bytes of each reference
+range of the plan from the committed content the range names, at its source
+offset ([`BaseView::content`](../../crates/layerfs-workspace/src/base/view.rs):
+one authenticated root object, then the same bounded range read, through the
+operation's client and so the same object cache and read lanes as an
+inherited read). Ranges never overlap; only bytes whose `referenced` bit is
+set are copied from a range. Consecutive ranges of one source
+share one opened root. A range beyond the end of its source is an error,
+never zeros. A native window with a reference range is not answered from the
+visit: it needs the base like an inherited byte. Read replies are charged for
+the mask and the ranges (`reference_bytes`: one bit a byte and one range a
+cell). `Operation::Write` carries claims
+with its bytes (`WriteData::claimed`); a write that resolves its own offset
+(append) or is clipped (mapped store) drops them. No request path supplies a
+claim in this phase.
+
 Issue 316 update, 2026-10-11 (overlay schema 33): reference pieces.
 A compound job's write may carry claims: ranges of its window whose bytes the
 caller established to equal committed content of one immutable root
@@ -49,10 +66,16 @@ rules:
   revision of that earlier job's publication, and the row has not been
   written since. Otherwise the claim starts at the window.
 
-A read plan reports pieces as `LocalRead::references`, at most 132 ranges, and
-`reference_map`, one entry per window byte that names the range supplying it.
-Both are empty for a file without pieces, and then no piece statement runs:
-the layer rows carry the flag. The caller reads each range from committed
+A read plan reports pieces as `LocalRead::references` and `referenced`. A
+range is a run of a piece's cells, clipped to the window, in which the piece
+supplies at least one byte. A piece decides every byte of its cells that
+nothing newer decided, so no two ranges share a cell: a window of 128 KiB
+holds at most 33. `referenced` is one bit per window byte, in the form of the
+inherited mask: set for a byte that the one range holding it supplies, clear
+inside a range for a byte a cell decided. A reply therefore grows by one
+eighth of the window and at most 33 ranges, never by a byte per byte. Both
+are empty for a file without pieces, and then no piece statement runs: the
+layer rows carry the flag. The caller reads each range from committed
 content at its source offset. The statements are a cover seek (the last row
 at or before a byte), a window seek with a literal limit, an insert, a length
 update, a range delete that returns its rows, and the shrink cut; each is one

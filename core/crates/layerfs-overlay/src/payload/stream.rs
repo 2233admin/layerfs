@@ -278,7 +278,7 @@ impl Overlay {
             span: None,
             base_root: None,
             references: Vec::new(),
-            reference_map: Vec::new(),
+            referenced: Vec::new(),
         };
         if first.kind == InodeKind::Directory || start == end {
             return Ok(Some(read));
@@ -394,16 +394,18 @@ impl Overlay {
             read.span = Some((start + low as u64, start + high as u64));
         }
         if !read.references.is_empty() {
-            for state in &mut decided {
-                *state = state.saturating_sub(1);
+            read.referenced = vec![0; decided.len().div_ceil(8)];
+            for (bits, states) in read.referenced.iter_mut().zip(decided.chunks(8)) {
+                for (bit, state) in states.iter().enumerate() {
+                    *bits |= u8::from(*state > 1) << bit;
+                }
             }
-            read.reference_map = decided;
         }
         let mut observed = self.payload_work.get();
         observed.read_local_copy_bytes = observed.read_local_copy_bytes.saturating_add(copied);
         observed.read_window_zeroed_bytes = observed
             .read_window_zeroed_bytes
-            .saturating_add(read.inherited.len() as u64);
+            .saturating_add((read.inherited.len() + read.referenced.len()) as u64);
         self.payload_work.set(observed);
         Ok(Some(read))
     }
