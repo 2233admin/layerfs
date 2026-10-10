@@ -888,9 +888,8 @@ def one_family_case(family, case, prepared_folder, build_folder, output):
         state = receipts.command([*docker, "inspect", runtime.container, "--format", "{{.State.Running}}"], output, "container-state", proof_seconds(15, cleanup=True) if git_deadlines else 15)
         if Path(state["stdout"]).read_text().strip() != "false":
             raise ValueError("original container Stop not confirmed")
-        receipts.command([*docker, "rm", runtime.container], output, "remove-passing-container", proof_seconds(15, cleanup=True) if git_deadlines else 15)
-        receipts.command([*docker, "volume", "rm", row["clone"]["volume"]], output, "remove-passing-volume", proof_seconds(15, cleanup=True) if git_deadlines else 15)
-        row["resource_disposition"] = "functionally passing sample container/volume removed after both proofs and known Stop; numeric eligibility remains separate"
+        row["resource_removal_pending"] = True
+        row["resource_disposition"] = "known stopped sample container/volume retained pending final publication and known outer return; administrative removal separate"
     except BaseException as error:
         row.update(status="FAIL", original_failure_type=type(error).__name__, original_failure=str(error),
                    retained_mount_keys=sorted(mounted), resource_disposition="original resources retained; no inferred unmount/Stop/removal")
@@ -933,3 +932,64 @@ def one_family_case(family, case, prepared_folder, build_folder, output):
             receipts.write_new(output / "receipt.json", row)
             receipts.manifest(output)
     return row
+
+
+def dispose_family_resources(folder, returned_row):
+    """Driver-only administration after publication and an actual known return.
+
+    End, Gone, Stop and their deadlines stay inside the original case. Docker
+    removal is outside those clocks. Failed/uncertain publication causes no
+    deletion; partial deletion has exact separate custody, never a retry.
+    """
+    folder = Path(folder)
+    if returned_row.get("resource_removal_pending") is not True:
+        return None
+    receipts.verify_manifest(folder)
+    original = json.loads((folder / "receipt.json").read_text())
+    effective = receipts._publication_overlay(folder, original, original)
+    names = ("family", "case", "source_commit", "product_tree", "image", "container", "clone")
+    if any(returned_row.get(name) != original.get(name) for name in names):
+        raise ValueError("resource removal returned source/resource identity differs")
+    if (returned_row.get("status") not in ("PASS", "INELIGIBLE")
+            or effective.get("status") not in ("PASS", "INELIGIBLE")
+            or any(row.get("functional_status") != "PASS" or row.get("proof_status") != "PASS"
+                   or row.get("custody") != "KNOWN_STOP" or row.get("cleanup") != "Gone"
+                   for row in (returned_row, effective))):
+        return None
+    container, volume = original["container"], original["clone"]["volume"]
+    if (not isinstance(container, str) or len(container) != 64
+            or any(char not in "0123456789abcdef" for char in container)
+            or not isinstance(volume, str) or not volume.startswith("layerfs-fsb-sample-")):
+        raise ValueError("exact owned sample resource identity required for removal")
+    build = json.loads((Path(original["build"]) / "build.json").read_text())
+    docker = ["docker", "--host", "unix://" + build["socket"]]
+    output = folder / "resource-removal"
+    output.mkdir(exist_ok=False)
+    binding = {"schema": "fs-bench-pro-resource-removal-v1",
+        "receipt_sha256": identity.sha256(folder / "receipt.json"),
+        "manifest_sha256": identity.sha256(folder / "manifest.json"),
+        "outer_ack_sha256": identity.sha256(folder / "publication-outer-acknowledgement.json")
+            if original.get("publication_guard") else None,
+        "identity": {name: original.get(name) for name in names},
+        "known_outer_return": True, "container": container, "volume": volume,
+        "scope": "post-publication Docker administration; original mount cleanup/Stop proof and timing unchanged",
+        "container_custody": "KNOWN_STOP_RETAINED", "volume_custody": "RETAINED"}
+    receipts.write_new(output / "attempt.json", binding)
+    record = dict(binding)
+    try:
+        state = receipts.command([*docker, "inspect", container, "--format", "{{.State.Running}}"], output, "state", 15)
+        if Path(state["stdout"]).read_text().strip() != "false":
+            raise ValueError("owned sample Stop readback differs before administrative removal")
+        record["container_custody"] = "REMOVAL_ATTEMPT_UNCERTAIN"
+        receipts.command([*docker, "rm", container], output, "container", 15)
+        record["container_custody"] = "REMOVED"
+        record["volume_custody"] = "REMOVAL_ATTEMPT_UNCERTAIN"
+        receipts.command([*docker, "volume", "rm", volume], output, "volume", 15)
+        record.update(volume_custody="REMOVED", status="PASS")
+    except BaseException as error:
+        record.update(status="FAIL", failure_type=type(error).__name__, failure=str(error))
+    record["resource_disposition"] = "container=" + record["container_custody"] + "; volume=" + record["volume_custody"]
+    receipts.write_new(output / "completion.json", record)
+    receipts.manifest(output)
+    returned_row["resource_disposition"] = record["resource_disposition"]
+    return record

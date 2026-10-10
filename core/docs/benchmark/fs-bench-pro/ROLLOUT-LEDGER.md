@@ -87,6 +87,7 @@ comparison or release-admission claim. Durable is
 | 40 | Add an unfiltered read-only current SQLite Commit census of a custody-qualified closed export, alongside mandatory public typed history/content proof | Original dedup history queries the complete global set and parents; anchored ancestry cannot detect an extra unreachable Commit | Adding a product enumeration feature, counting only rows, filtering by stack/ancestry or silently omitting the original census |
 | 41 | M1 uses independent shadow/range algebra and only original explicit attributes, helper-created directory modes and declared byte ranges; two exhaustive IDs are proof-only | Frozen generic expected() returns pristine fixture for M1; actual original exhaustive scope checks20 cycle-end roots plus all100 Commit IDs/parents, not all100 stage payloads | Using a wrong generic manifest, inventing timed performance or normalizing automatic mtimes to fit an oracle |
 | 42 | Preserve strict boundary-alias parent-directory mtime compatibility failure without restoring the parent in the workload | Frozen ordinary helper changes the parent during its final atomic save, while original executable verifier requires fixture mtime; changing the helper/checker is forbidden | Normalizing parent mtime, dropping metadata verification or making a product change for an incompatible original definition |
+| 43 | Retain owned sample resources through finalization and outer acknowledgement; remove only afterwards with separate bound administrative custody | Late output-close/publication failure must retain its diagnostic container/volume; partial Docker deletion must never claim both resources retained | Deleting before final verdict or overwriting the original receipt after deletion |
 
 ## Bugs
 
@@ -100,6 +101,7 @@ comparison or release-admission claim. Durable is
 | H-2 | 36 batch-1 reviewed registrations | source_commit was an annotated tag object; parity accepted it and rejected the actual peeled commit | git rev-parse on an annotated reference returns the tag object unless peeled | `222526fa0` | test_review_identity.py rejects the tag through both parity routes, admits the peeled commit and checks every ported review |
 | H-6 | local-snapshot-create-25000-onebyte-v1 | Original native witness exited0, then controller raised dictionary update #5 after measuredEnd | Frozen sample receipt has multiline path/range values and no verification_status; harness assumed full-tree key/value receipt | `03033abdc` | test_original_multiline_sample_with_successful_exit_is_preserved fails beforefix; altered paths/ranges/scope/exit are rejected afterfix |
 | H-7 | Prospective Git4, found before first sample | Late observation publication followed by failed failure-sidecar write or process death before final post-check could reload provisional PASS | Draft guard bound timestamp before the observation write and lacked mandatory completion/known outer return | `031d427a7` | slow observation/completion publication plus failed failure-sidecar and os._exit(91) regressions fail before correction; missing completion/outer acknowledgement remain failed |
+| H-8 | Prospective batch4, found before any attempt | Output-close or final publication failure could retain FAIL after deleting sample resources | Administrative container/volume removal occurred before finally close/verdict/publication and driver acknowledgement; partial removal also claimed blanket retained custody | This commit | test_close_failure_after_all_proofs_keeps_container_and_volume fails against a921bedbd with both rm calls observed; missing outer ACK/failed return do no removal, partial lost-volume acknowledgement remains uncertain and immutable bound |
 
 H-1 and H-2 are harness faults, not product correctness or performance defects.
 The original file-identity checker remains intact; no product source changed.
@@ -2404,4 +2406,27 @@ changes or sample until the reviewed source/seal handoff.
 | `f938d7faa` (worker) | Native selected checkpoint recipe | 79366 | 79366 | +0 |
 | `f5280d654` (worker) | Native original selective M1 proof | 79366 | 79366 | +0 |
 | `e5e8216f3` (worker) | Generic ordered ordinary SDK splice writer | 79366 | 79366 | +0 |
-| This commit | Integrate and qualify batch4 native model/recipe/writer | 79366 | 79366 | +0 |
+| `a921bedbd` | Integrate and qualify batch4 native model/recipe/writer | 79366 | 79366 | +0 |
+
+
+Prospective H8 correction retains exact successful sample resources pending
+finalization/known driver return. Original End, automaticGone, Stop, export,
+independent proof and deadlines stay unchanged. Administrative Docker removal
+moves after successful guarded outerACK (where required) and authentic final
+functional/proof/cleanup custody. Separate resource-removal attempt/completion
+and manifest bind the original receipt/manifest/ACK and exact64-hex container /
+owned sample volume. Any finalization failure attempts no deletion. A first
+successful deletion followed by missing volume acknowledgement records
+containerREMOVED / volumeREMOVAL_ATTEMPT_UNCERTAIN; no inferred replay, retry or
+both-retained claim. Original receipts remain immutable and report loading
+validates the separate administrative custody without promoting a verdict.
+
+External regression at exact parenta921bedbd observed both original rm calls
+before output-closeFAIL, so failed as intended. Corrected source3retention
+checks PASS; existing7Git controller checks and23publication checks PASS,
+explicit120s wallstops/main lock. Rawbefore/after evidence is append-only under
+benchmark-results/fs-bench-pro/2026-10-10-h8-resource-retention. No actual Docker
+resources, prepared inputs or benchmark samples were created by these isolated
+controller tests; old recorded removals/receipts remain unchanged.
+
+| This commit | Retain failed finalization resources and bind separate administrative custody | 79366 | 79366 | +0 |

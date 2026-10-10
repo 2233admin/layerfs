@@ -490,12 +490,40 @@ def load_run(folder):
             if (result["case"], result["source_commit"], result["product_tree"]) != (
                     case["id"], selection["source_commit"], selection["product_tree"]):
                 raise ValueError("recorded case/source differs from original run registration")
-            recorded[case["id"]] = _publication_overlay(receipt.parent, result, selection)
+            recorded[case["id"]] = resource_disposition(receipt.parent, _publication_overlay(receipt.parent, result, selection))
         elif receipt.parent.exists():
             recorded[case["id"]] = {"status": "FAIL", "proof_status": "NOT_RUN",
                                     "tag": "partial original attempt; completed receipt unavailable",
                                     "evidence": str(receipt.parent.relative_to(ROOT))}
     return selection, recorded
+
+
+def resource_disposition(folder, row):
+    """Read separately bound administrative custody without changing a verdict."""
+    folder = Path(folder)
+    output = folder / "resource-removal"
+    if not output.exists():
+        return row
+    if not (output / "completion.json").exists() or not (output / "manifest.json").exists():
+        return {**row, "administrative_removal_status": "UNCERTAIN",
+                "resource_disposition": "administrative removal incomplete; inspect exact retained attempts, no both-retained claim"}
+    verify_manifest(output)
+    record = json.loads((output / "completion.json").read_text())
+    original = json.loads((folder / "receipt.json").read_text())
+    digest = lambda path: hashlib.sha256(path.read_bytes()).hexdigest()
+    acknowledgement = folder / "publication-outer-acknowledgement.json"
+    names = ("family", "case", "source_commit", "product_tree", "image", "container", "clone")
+    if (record.get("schema") != "fs-bench-pro-resource-removal-v1"
+            or record.get("receipt_sha256") != digest(folder / "receipt.json")
+            or record.get("manifest_sha256") != digest(folder / "manifest.json")
+            or record.get("outer_ack_sha256") != (digest(acknowledgement) if original.get("publication_guard") else None)
+            or record.get("identity") != {name: original.get(name) for name in names}
+            or record.get("known_outer_return") is not True
+            or record.get("container") != original.get("container")
+            or record.get("volume") != original.get("clone", {}).get("volume")):
+        raise ValueError("administrative resource removal original receipt/manifest/return binding differs")
+    return {**row, "administrative_removal_status": record["status"],
+            "resource_disposition": record["resource_disposition"]}
 
 
 def report(folder, destination=None):
