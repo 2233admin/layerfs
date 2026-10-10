@@ -18,7 +18,7 @@ comparison or release-admission claim. Durable is
 | 0.2 Move-only organization | COMPLETE, historical check failures retained | `13f9dec38`; routing `9af29e01e` | Update routing guide, then stage 0.3 catalogue |
 | 0.3 Case catalogue | COMPLETE | `f182e9a63`; prerequisite correction `30b798192` | Stage 0.4 reproducible engine |
 | 0.4 Reproducible engine | CLOSED: functional proof complete; exact reproduction FAILED C10/C12 | Cell-route correction `bb8e07df8`; build support `c496025fc`; oracle support `7a27a4f26`; fixture support `516c2f009`; workspace/report support `358eca082`; cleanup-observer correction `a1f2c259c` | Begin batch 1 under failed-reproduction closure recorded below |
-| 1 Pilot | IN_PROGRESS | Init port/runtime `c1d7dd0e8`; Init results `39bbcbd6b`; payload port `200f81493`; parallel batch-1 routing `b3c96ecb1` | Payload results `c1d9b6c58`; isolated tiny-file and namespace workers prepare/port/run their families |
+| 1 Pilot | IN_PROGRESS | Init port/runtime `c1d7dd0e8`; Init results `39bbcbd6b`; payload port `200f81493`; parallel batch-1 routing `b3c96ecb1` | Init/payload/namespace complete; finish isolated tiny-file samples/results before batch 2 |
 | 2 Edits | PENDING | — | Wait for batch 1 completion |
 | 3 Trees and tools | PENDING | — | Wait for batch 2 completion |
 | 4 History on one branch | PENDING | — | Wait for batch 3 completion |
@@ -732,4 +732,45 @@ qualifications. Production LOC 79,366 -> 79,366 (delta +0), pinned absent-aware
 method; reference absent (retired R9c, last counted 65,417).
 
 | `dac8212de` (worker) | Port four namespace mutation cases and scoped qualification | 79366 | 79366 | +0 |
-| This commit | Integrate namespace registration with master ledger | 79366 | 79366 | +0 |
+| `98b14b233` | Integrate namespace registration with master ledger | 79366 | 79366 | +0 |
+
+Batch 1 / namespace_mutation complete: worker results commit 3eaf14d95 is
+integrated on main with all four original cases present in both CSVs under
+baselines/core/2026-10-10-dac8212de/. All four original single samples at
+clean dac8212de completed ordinary workload/public Commit, both full mounted
+native and closed persisted-root independent proofs, exact acknowledged root,
+terminal Gone and KNOWN_STOP. All functionally passing sample containers and
+volumes, and passing setup/copy containers, were removed by their creating
+worker. No product correctness bug, failed/NA case or limit exceedance surfaced.
+All four numeric rows remain INELIGIBLE because exactly three actual measured
+source-object demands violate the strict class B zero-demand guard. No
+checker, workload, limit, source identity or receipt is changed to make PASS.
+
+| Case | Functional / proof | Numeric | Complete wall ns | Proof wall ns | Requests / jobs / statements | Store logical / allocated B | Overlay logical / allocated B | Close |
+| --- | --- | --- | ---: | ---: | --- | --- | --- | --- |
+| namespace-subtree-relocate-delete-1-compact-v2 | PASS / PASS | INELIGIBLE | 185745666 | 1910991458 | 129 / 890 / 5287 | 938736 / 942080 | 245760 / 268685312 | Gone; KNOWN_STOP |
+| namespace-subtree-relocate-delete-10-compact-v2 | PASS / PASS | INELIGIBLE | 279461750 | 1783612417 | 1092 / 7581 / 45196 | 1483504 / 1486848 | 380928 / 268820480 | Gone; KNOWN_STOP |
+| namespace-subtree-relocate-delete-100-mixed-v4 | PASS / PASS | INELIGIBLE | 231905500 | 6029095334 | 832 / 5738 / 34262 | 106984296 / 106987520 | 360448 / 268800000 | Gone; KNOWN_STOP |
+| namespace-subtree-relocate-delete-500-mixed-v4 | PASS / PASS | INELIGIBLE | 678906875 | 17898625750 | 4072 / 27726 / 166750 | 534258584 / 534261760 | 802816 / 269238272 | Gone; KNOWN_STOP |
+
+bench.py verify checks all four retained independent records and immutable
+original manifests PASS without replaying a product operation. All clocks,
+phase counts, original reference rows, helper/fixture/source/binary/image
+identities and removal receipts remain in the attached worker raw tree:
+/Users/yifanxu/.codex/worktrees/fs-bench-pro-namespace-mutation/layerfs/benchmark-results/fs-bench-pro/2026-10-10-batch-1-namespace-dac8212de/.
+Preparation, parity and tests are in the sibling -prepared/, -parity/ and
+-tests/ roots. Root-ready exact handoff is /tmp/fsbench-namespace-handoff.json.
+The four immutable preparation masters remain retained for valid source-change
+reuse, never direct measurement: layerfs-fsb-master-namespace-mutation-
+b9ef36d8567e402d, e3115545ed674d03, 245fb63fd78946b3 and 29a2b1062e35457b
+(each suffix uses that full prefix). Ignored receipts must be preserved before
+any managed archive; no archive or deletion has been performed.
+
+All samples explicitly declare shared host/Docker VM interference and make
+no isolated timing, speed comparison or release-admission claim. The passed
+scoped qualifications from registration are reused; this integration changes
+only generated results/documents. Production LOC 79,366 -> 79,366 (delta +0),
+same pinned absent-aware method.
+
+| `3eaf14d95` (worker) | Record four namespace samples and generated CSVs | 79366 | 79366 | +0 |
+| This commit | Integrate complete namespace outcomes with master ledger | 79366 | 79366 | +0 |
