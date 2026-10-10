@@ -1,5 +1,5 @@
 //! Public startup functional proofs; outputs/artifacts persist for root receipts.
-#[path = "../../../benchmark/fs-bench-pro-storage-content/src/workload/digest.rs"]
+#[path = "../../../benchmark/cluster-one/storage-content/src/workload/digest.rs"]
 #[allow(dead_code, clippy::needless_range_loop)]
 mod digest;
 #[path = "../examples/e2_startup/driver.rs"]

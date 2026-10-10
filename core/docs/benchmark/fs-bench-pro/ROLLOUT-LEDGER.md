@@ -110,8 +110,9 @@ comparison or release-admission claim. Durable is
 | H-10 | Prospective batch4 prepared SDK routes | Missing/partial prepared-step map could invoke native fallback and regenerate original payloads inside measuredwork; stale sealed helpers could disagree with reported current build | Controller trusted optional prepared records without mandatory originalstep/binary/descriptor/payload/script correspondence admission | Workera8c56d570 / integration91cf97fab | test_helper_refusal_precedes_case_claim_and_any_clone_or_mount fails at686344e8f; exact-source temporary assets reject five old-admission bypasses and all15guard checks PASS |
 | H-11 | v016-boundary-small-control-v1 and dedup-history-distributed-1 first attempts | Native proof/acknowledged Commits/Gone/KnownStop pass, independent public history proof fails acknowledged Commit missing | Controller copies only exported main file into typed-store, dropping closed WAL; immutable main-only census would also miss WAL | Workerf2c143b37 / integration2b52bdf17 | Real closed-WAL controller regression sees0 of100 acknowledged test rows on old main-only copy; red0.067s under120s mainlock |
 | H-12 | Mixed final failed preparation and prospective failed family parity | First missing/invalid preparation aborts parity without retaining earlier/later original case outcomes; CLI propagates only an exception | parity_workspace raises inside first failed case before writing parity.json | Worker47e5a5500 / integrationea7148a19 | Missing middle preparation red fails old behavior; all original membership/pin/bytes/native/seal guards retain FAIL reasons,22checksPASS; CLI old exception red retained,new5driverchecksPASS |
-| H-13 | dedup-history-distributed-500 setup at7905 | stage-code-check exits255: exec /bin/bash argument list too long, before any mount/product operation | fixtures.stage embeds all500 prepared-step/helper SHA rows into one165,872B Bash -c argv | Worker359b63686 / integration this commit | Worker owns external500-step/complete-row/remote-manifest/payload tamper regression; original fullchecker retained |
+| H-13 | dedup-history-distributed-500 setup at7905 | stage-code-check exits255: exec /bin/bash argument list too long, before any mount/product operation | fixtures.stage embeds all500 prepared-step/helper SHA rows into one165,872B Bash -c argv | Worker359b63686 / integration8ae040cdd | Worker owns external500-step/complete-row/remote-manifest/payload tamper regression; original fullchecker retained |
 | H-14 | Offline closed-Store normalization before remaining batch4 cases | Fresh target enters WAL initialization while SQLite synchronous is still default FULL(2) | synchronous=OFF was applied only after journal_mode=WAL in prepare_closed_store | `e09c61bbd`, harness only; product analogue under investigation | Real sqlite3.Connection subclass observes FULL(2) before journal switch on old helper; final10 normalization checks PASS0.352s and8 controller checks PASS0.159s |
+| H-16 | Aggregate formatting during Disposable startup product verification | cargo fmt cannot resolve two daemon example/test digest modules | Stage0.2 missed the two old fs-bench-pro-storage-content import paths | This commit, path-only example/test correction | Owning example/test no-run PASS16.27s; existingseven startup/digest receipt tests PASS0.10s; aggregatefmtPASS |
 
 H-1 and H-2 are harness faults, not product correctness or performance defects.
 The original file-identity checker remains intact; no product source changed.
@@ -3291,4 +3292,35 @@ necessary exact-source checks, remaining case dispatch will include H13 and
 H14; earlier unaffected case records will not be relabelled or replayed.
 
 | `359b63686` (worker) | Authenticate complete file-backed helper checks without oversized argv | 79366 | 79366 | +0 |
-| This commit | Integrate H13 with complete pinned checksum and tamper qualification | 79366 | 79366 | +0 |
+| `8ae040cdd` | Integrate H13 with complete pinned checksum and tamper qualification | 79366 | 79366 | +0 |
+
+
+H16 repairs two missed Stage0.2 imports discovered by the product check's
+aggregate formatting failure. The daemon e2_startup example and its external
+receipt tests still named the retired benchmark/fs-bench-pro-storage-content
+location. Both now use the exact existing relocated
+benchmark/cluster-one/storage-content/src/workload/digest.rs. Only the two path
+strings change; the digest implementation and every test/check remain intact.
+This changes no product source or closed R7/R8/R9 record, registration or receipt.
+
+Owning host example/test build uses +1.85.1, --locked/--offline, repository
+ARM64 flags and main-private r7-host-release target under120s main lock;
+--no-run PASS16.27s/<=17/120. Existingseven e2_startup receipt/digest tests
+PASS0.10s/<=3/120, with no new test or benchmark attempt. Their diagnostic
+explicitly reports global persistence NOT_IN_SCOPE; its local overlay/profile
+and ordinary refusal/Stop assertions are unchanged. Aggregate cargo fmt --all
+--check nowPASS/<=4/120 at this path-corrected source. Raw
+benchmark-results/fs-bench-pro/2026-10-10-stage-0-relocated-digest-import keeps
+all no-run/test/fmt stdout/stderr. The earlier failed fmt remains in Capped's
+product qualification, without promotion. Exact product integration will also
+run its required final-source formatting after importing the changed files.
+
+The separately qualified product startup correction a9d8b0453 is ready; it
+has not yet been imported by this path-only commit. Actual host red observed
+24 delegated xSync calls during six Disposable creates, and final host/Linux
+checks observed zero Store syncs. Root is preserving that evidence and will
+integrate the minimal selected-policy ordering change as its own product
+commit with the exact +4 productionLOC and completed final-source checks.
+No new sample, speed result or Durable execution is selected by H16.
+
+| This commit | Correct the two relocated digest imports without changing their content or proofs | 79366 | 79366 | +0 |
