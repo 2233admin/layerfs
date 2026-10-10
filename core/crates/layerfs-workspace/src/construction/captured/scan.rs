@@ -14,6 +14,11 @@ enum Pending {
         kind: CapturedGap,
     },
     Window(Box<LocalRead>),
+    /// Local bytes reported without payload to a shapes-only pass.
+    Local {
+        start: u64,
+        end: u64,
+    },
 }
 pub(super) struct Scan {
     reader: CapturedReader,
@@ -36,8 +41,27 @@ impl Scan {
         size: u64,
         base_size: u64,
     ) -> ContentResult<Self> {
+        Self::start(reader, serial, size, base_size, false)
+    }
+    /// A pass that learns only which bytes are local and never reads them.
+    pub fn shapes(
+        reader: CapturedReader,
+        serial: u64,
+        size: u64,
+        base_size: u64,
+    ) -> ContentResult<Self> {
+        Self::start(reader, serial, size, base_size, true)
+    }
+    fn start(
+        reader: CapturedReader,
+        serial: u64,
+        size: u64,
+        base_size: u64,
+        shapes: bool,
+    ) -> ContentResult<Self> {
         let cursor = CapturedRunCursor::new(reader, serial, 0, size)
             .map_err(|_| ContentError::InvalidRecord("captured file cursor"))?;
+        let cursor = if shapes { cursor.shapes_only() } else { cursor };
         Ok(Self {
             reader,
             serial,
@@ -49,7 +73,7 @@ impl Scan {
     }
     fn bounds(&self) -> Option<(u64, u64)> {
         match self.pending.as_ref()? {
-            Pending::Gap { start, end, .. } => Some((*start, *end)),
+            Pending::Gap { start, end, .. } | Pending::Local { start, end } => Some((*start, *end)),
             Pending::Window(read) => Some((read.offset, read.offset + read.data.len() as u64)),
         }
     }
@@ -109,6 +133,7 @@ impl Scan {
                 next.reader() == self.reader
                     && next.serial() == self.serial
                     && next.logical_size() == self.size
+                    && next.is_shapes_only() == self.cursor.is_shapes_only()
             };
             match reply.step {
                 CapturedRunStep::Continue(next)
@@ -157,6 +182,24 @@ impl Scan {
                     self.cursor = next;
                     return Ok(());
                 }
+                CapturedRunStep::Local {
+                    offset,
+                    length,
+                    next,
+                } if valid(next)
+                    && self.cursor.is_shapes_only()
+                    && offset == at
+                    && length != 0
+                    && offset.checked_add(length) == Some(next.offset())
+                    && next.offset() <= self.size =>
+                {
+                    self.pending = Some(Pending::Local {
+                        start: at,
+                        end: next.offset(),
+                    });
+                    self.cursor = next;
+                    return Ok(());
+                }
                 _ => {
                     return Err(shared
                         .borrow_mut()
@@ -183,13 +226,23 @@ impl Scan {
                 },
                 changed: *kind == CapturedGap::Zero || at >= self.base_size,
             }),
+            Pending::Local { end, .. } => Ok(Span {
+                start: at,
+                end: *end,
+                changed: true,
+            }),
             Pending::Window(read) => {
                 let index = (at - read.offset) as usize;
                 let inherited = |at: usize| {
                     !read.inherited.is_empty() && read.inherited[at / 8] & (1 << (at % 8)) != 0
                 };
                 let first = inherited(index);
-                let mut end = index + 1;
+                // No mask means every byte of the window is local.
+                let mut end = if read.inherited.is_empty() {
+                    read.data.len()
+                } else {
+                    index + 1
+                };
                 while end < read.data.len() && inherited(end) == first {
                     end += 1;
                 }
@@ -222,6 +275,10 @@ impl Scan {
         let length = (span.end - at).min(limit);
         match self.pending.as_ref().ok_or(ContentError::UnexpectedEof)? {
             Pending::Gap { .. } => Ok(FileRun::Zero(length)),
+            // A shapes-only pass holds no bytes to hand out.
+            Pending::Local { .. } => Err(shared
+                .borrow_mut()
+                .content(ContentError::InvalidRecord("captured shape read"))),
             Pending::Window(read) => {
                 let index = (at - read.offset) as usize;
                 if !read.inherited.is_empty() && read.inherited[index / 8] & (1 << (index % 8)) != 0

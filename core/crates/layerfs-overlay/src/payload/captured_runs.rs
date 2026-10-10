@@ -9,6 +9,8 @@ use crate::{
 
 const CELL: u64 = CELL_BYTES as u64;
 const RUN: u64 = RUN_BYTES as u64;
+/// Rows one shapes-only unit may join; a fixed bound on its statements.
+const SHAPE_ROWS: usize = 64;
 
 impl Overlay {
     /// Consume at most one metadata row per relevant retained layer (the
@@ -62,42 +64,8 @@ impl Overlay {
                 probe.ready = true;
                 continue;
             }
-            let rows = self.query(
-                StatementKind::Payload,
-                sql::CAPTURED_CELL_METADATA,
-                &[
-                    &ns,
-                    &serial,
-                    &layer.gen,
-                    &integer(probe.after)?,
-                    &integer(layer.size)?,
-                    &integer(cursor.at - cursor.at % CELL)?,
-                ],
-                48,
-                |row| {
-                    let offset = unsigned(row, 0)?;
-                    let epoch: i64 = row.get(1)?;
-                    let length = unsigned(row, 2)?;
-                    let mask: Option<u64> = row
-                        .get::<_, Option<i64>>(3)?
-                        .map(|v| u64::try_from(v).map_err(|_| rusqlite::Error::InvalidQuery))
-                        .transpose()?;
-                    // One cell at most, or a dense row of whole cells.
-                    if offset % CELL != 0
-                        || length == 0
-                        || epoch < 0
-                        || mask.is_some_and(|bytes| bytes != length.div_ceil(8))
-                        || (length > CELL
-                            && (mask.is_some()
-                                || length % CELL != 0
-                                || offset % RUN + length > RUN))
-                    {
-                        return Err(rusqlite::Error::InvalidQuery);
-                    }
-                    Ok((CellMetadata { offset, length }, epoch))
-                },
-            )?;
-            match rows.into_iter().next() {
+            let floor = cursor.at - cursor.at % CELL;
+            match self.next_cell(ns, serial, layer, probe.after, floor)? {
                 None => probe.ready = true,
                 Some((cell, epoch)) => {
                     work.metadata_rows += 1;
@@ -134,7 +102,13 @@ impl Overlay {
                 }
             }
         }
-        let step = if let Some(row_end) = window {
+        let step = if let Some(next) = self.local_shape(ns, serial, &layers, cursor, &mut work)? {
+            CapturedRunStep::Local {
+                offset: cursor.at,
+                length: next.at - cursor.at,
+                next,
+            }
+        } else if let Some(row_end) = window {
             let to = cursor.size.min(row_end);
             let mut read = self
                 .compose_layers(ns, serial, cursor.at, (to - cursor.at) as u32, layers)?
@@ -160,6 +134,116 @@ impl Overlay {
             }
         };
         Ok(CapturedRunReply { step, work })
+    }
+}
+
+impl Overlay {
+    /// The first physical row of one layer at or after `after` that ends
+    /// beyond `floor`, with its epoch. One indexed statement.
+    fn next_cell(
+        &self,
+        ns: i64,
+        serial: i64,
+        layer: &Layer,
+        after: u64,
+        floor: u64,
+    ) -> OverlayResult<Option<(CellMetadata, i64)>> {
+        let rows = self.query(
+            StatementKind::Payload,
+            sql::CAPTURED_CELL_METADATA,
+            &[
+                &ns,
+                &serial,
+                &layer.gen,
+                &integer(after)?,
+                &integer(layer.size)?,
+                &integer(floor)?,
+            ],
+            48,
+            |row| {
+                let offset = unsigned(row, 0)?;
+                let epoch: i64 = row.get(1)?;
+                let length = unsigned(row, 2)?;
+                let mask: Option<u64> = row
+                    .get::<_, Option<i64>>(3)?
+                    .map(|v| u64::try_from(v).map_err(|_| rusqlite::Error::InvalidQuery))
+                    .transpose()?;
+                // One cell at most, or a dense row of whole cells.
+                if offset % CELL != 0
+                    || length == 0
+                    || epoch < 0
+                    || mask.is_some_and(|bytes| bytes != length.div_ceil(8))
+                    || (length > CELL
+                        && (mask.is_some() || length % CELL != 0 || offset % RUN + length > RUN))
+                {
+                    return Err(rusqlite::Error::InvalidQuery);
+                }
+                let dense = mask.is_none();
+                Ok((
+                    CellMetadata {
+                        offset,
+                        length,
+                        dense,
+                    },
+                    epoch,
+                ))
+            },
+        )?;
+        Ok(rows.into_iter().next())
+    }
+    /// For a shapes-only cursor whose first byte lies in a live dense row of
+    /// the newest layer: the cursor after that row and the dense live rows
+    /// that follow it without a gap, at most `SHAPE_ROWS` physical rows. The
+    /// newest layer decides those bytes whatever lower layers hold, so no
+    /// payload is composed. None leaves the cursor to the ordinary window.
+    fn local_shape(
+        &self,
+        ns: i64,
+        serial: i64,
+        layers: &[Layer],
+        mut cursor: CapturedRunCursor,
+        work: &mut CapturedRunWork,
+    ) -> OverlayResult<Option<CapturedRunCursor>> {
+        let (Some(layer), true) = (layers.first(), cursor.shapes) else {
+            return Ok(None);
+        };
+        let Some(first) = cursor.probes[0]
+            .cell
+            .filter(|cell| cell.dense && cell.offset <= cursor.at)
+        else {
+            return Ok(None);
+        };
+        let mut to = cursor.size.min(first.offset + first.length);
+        let mut rows = 1;
+        // A row that stops inside a cell leaves that cell's tail undecided.
+        while rows < SHAPE_ROWS && to < cursor.size && to % CELL == 0 {
+            let probe = &mut cursor.probes[0];
+            if probe.after >= layer.size {
+                break;
+            }
+            let Some((cell, epoch)) = self.next_cell(ns, serial, layer, probe.after, to)? else {
+                probe.cell = None;
+                probe.ready = true;
+                break;
+            };
+            rows += 1;
+            work.metadata_rows += 1;
+            probe.after = cell
+                .offset
+                .checked_add(cell.length.div_ceil(CELL) * CELL)
+                .ok_or(OverlayError::Invalid("captured cell boundary"))?;
+            if self.stale(ns, serial, layer, integer(cell.offset)?, epoch)? {
+                work.stale_rows += 1;
+                continue;
+            }
+            probe.cell = Some(cell);
+            probe.ready = true;
+            if cell.offset != to || !cell.dense {
+                break;
+            }
+            to = cursor.size.min(cell.offset + cell.length);
+        }
+        Ok(Some(cursor.advance(to)))
     }
 }
 

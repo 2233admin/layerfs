@@ -5,6 +5,8 @@ use crate::{CapturedReader, LocalRead, OverlayError, OverlayResult, RUN_BYTES};
 pub(crate) struct CellMetadata {
     pub offset: u64,
     pub length: u64,
+    /// No validity mask: every stored byte is a written byte.
+    pub dense: bool,
 }
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub(crate) struct Probe {
@@ -24,6 +26,7 @@ pub struct CapturedRunCursor {
     pub(crate) probes: [Probe; 4],
     pub(crate) generations: [i64; 4],
     pub(crate) layer_count: Option<usize>,
+    pub(crate) shapes: bool,
 }
 impl CapturedRunCursor {
     /// Start a new stable read pass at a requested position. SQLite's existing
@@ -52,7 +55,18 @@ impl CapturedRunCursor {
             }; 4],
             generations: [0; 4],
             layer_count: None,
+            shapes: false,
         })
+    }
+    /// The same pass for a caller that needs only which bytes are local. Live
+    /// dense rows of the newest layer are then reported as `Local` without
+    /// their payload; every other shape is still a composed window.
+    pub const fn shapes_only(mut self) -> Self {
+        self.shapes = true;
+        self
+    }
+    pub const fn is_shapes_only(self) -> bool {
+        self.shapes
     }
     pub const fn reader(self) -> CapturedReader {
         self.reader
@@ -75,6 +89,7 @@ impl CapturedRunCursor {
             || self.serial != previous.serial
             || self.at != previous.at
             || self.size != previous.size
+            || self.shapes != previous.shapes
             || self.layer_count.is_none()
             || previous.layer_count.is_some_and(|count| {
                 self.layer_count != Some(count) || self.generations != previous.generations
@@ -138,6 +153,13 @@ pub enum CapturedRunStep {
     },
     Window {
         read: Box<LocalRead>,
+        next: CapturedRunCursor,
+    },
+    /// Only for a shapes-only cursor: every byte of the interval is a live
+    /// written byte of the newest layer. No payload is read or returned.
+    Local {
+        offset: u64,
+        length: u64,
         next: CapturedRunCursor,
     },
     End,

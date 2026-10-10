@@ -578,7 +578,8 @@ fn new_hole_above_four_gib_uses_bounded_original_run_work() {
     assert_eq!(result.root, oracle.file.root);
     assert_eq!(result.logical_len, length);
     assert_eq!(attempt.custody.work.normalized_edits, 1);
-    assert_eq!(attempt.custody.work.normalization_steps, 1);
+    // A new file has no surviving base bytes, so normalization visits nothing.
+    assert_eq!(attempt.custody.work.normalization_steps, 0);
     assert_eq!(attempt.custody.work.source_steps, 1);
     case.release(attempt.custody, false);
 }
@@ -781,6 +782,7 @@ impl OverlayCapturedRuns for InheritedPort<'_> {
                 let next = match &original.step {
                     layerfs_overlay::CapturedRunStep::Window { next, .. }
                     | layerfs_overlay::CapturedRunStep::Gap { next, .. }
+                    | layerfs_overlay::CapturedRunStep::Local { next, .. }
                     | layerfs_overlay::CapturedRunStep::Continue(next) => *next,
                     layerfs_overlay::CapturedRunStep::End => panic!("nonempty original input"),
                 };

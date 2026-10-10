@@ -12,6 +12,7 @@ fn collect(db: &Overlay, mut cursor: CapturedRunCursor, base: &[u8]) -> (Vec<u8>
         work.stale_rows += reply.work.stale_rows;
         match reply.step {
             CapturedRunStep::End => return (bytes, work),
+            CapturedRunStep::Local { .. } => panic!("shape step on a payload cursor"),
             CapturedRunStep::Continue(next) => {
                 assert!(reply.work.metadata_rows > 0);
                 assert_eq!(next.offset(), cursor.offset());
@@ -288,6 +289,7 @@ fn a_row_of_several_cells_is_one_metadata_row_and_one_window() {
                 CapturedRunStep::End => return (seen, rows),
                 CapturedRunStep::Continue(next) => cursor = next,
                 CapturedRunStep::Gap { .. } => panic!("no gap in a dense file"),
+                CapturedRunStep::Local { .. } => panic!("shape step on a payload cursor"),
                 CapturedRunStep::Window { read, next } => {
                     let at = read.offset as usize;
                     assert_eq!(read.data, file.expect[at..at + read.data.len()]);

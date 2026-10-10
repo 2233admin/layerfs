@@ -48,17 +48,19 @@ pub(super) fn edit<P: OverlayOperationRecords + ?Sized>(
     count: usize,
     index: usize,
 ) -> ContentResult<Edit> {
+    // A cached edit was validated against the sealed context when it was
+    // read; only a read of the records needs that check again.
+    if let Some((cached, edit)) = shared.borrow().cache {
+        if cached == index {
+            return Ok(edit);
+        }
+    }
     verify(shared, expected)?;
     let mut owner = shared.borrow_mut();
     if index >= count {
         return Err(owner.content(ContentError::InvalidEdit {
             what: "captured file edit index",
         }));
-    }
-    if let Some((cached, edit)) = owner.cache {
-        if cached == index {
-            return Ok(edit);
-        }
     }
     let number = u64::try_from(index).map_err(|_| ContentError::LengthOverflow)?;
     let raw = owner

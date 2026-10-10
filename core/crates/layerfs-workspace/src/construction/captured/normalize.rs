@@ -50,7 +50,7 @@ pub(super) fn prepare<P: OverlayCapturedRuns + OverlayOperationRecords + ?Sized>
     shared
         .borrow_mut()
         .apply(vec![change(CONTEXT, 0, initial.clone())])?;
-    let mut scan = Scan::new(
+    let mut scan = Scan::shapes(
         facts.reader,
         facts.serial,
         facts.final_size,
@@ -63,34 +63,24 @@ pub(super) fn prepare<P: OverlayCapturedRuns + OverlayOperationRecords + ?Sized>
     let mut at = 0;
     let surviving = facts.base_size.min(facts.final_size);
     let mut changed = None;
-    while at < facts.final_size {
+    // Bytes beyond the surviving base are one trailing insert whatever they
+    // hold; the construction source reads them once and rejects an inherited
+    // one there, so this pass does not visit them.
+    while at < surviving {
         let span = scan.span(provider, shared, at, true)?;
-        let end = if at < surviving {
-            span.end.min(surviving)
-        } else {
-            span.end
-        };
+        let end = span.end.min(surviving);
         if end <= at {
             return Err(ContentError::InvalidRecord(
                 "captured normalization progress",
             ));
         }
-        if at < surviving {
-            if span.changed {
-                let (start, _) = changed.unwrap_or((span.start, at));
-                changed = Some((start, end));
-            } else if let Some((start, end)) = changed.take() {
-                writer.push(shared, Edit::overwrite(start, end))?;
-            }
-        } else if !span.changed {
-            return Err(ContentError::InvalidRecord("inherited captured extension"));
+        if span.changed {
+            let (start, _) = changed.unwrap_or((span.start, at));
+            changed = Some((start, end));
+        } else if let Some((start, end)) = changed.take() {
+            writer.push(shared, Edit::overwrite(start, end))?;
         }
         at = end;
-        if at == surviving {
-            if let Some((start, end)) = changed.take() {
-                writer.push(shared, Edit::overwrite(start, end))?;
-            }
-        }
     }
     if let Some((start, end)) = changed.take() {
         writer.push(shared, Edit::overwrite(start, end))?;

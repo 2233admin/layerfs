@@ -291,12 +291,10 @@ impl Overlay {
         let mut copied = 0_u64;
         let mut open = decided.len();
         let settle = |decided: &mut [u8], open: &mut usize, from: u64, to: u64| {
-            for slot in &mut decided
-                [(from.clamp(start, end) - start) as usize..(to.clamp(start, end) - start) as usize]
-            {
-                *open -= usize::from(*slot == 0);
-                *slot = 1;
-            }
+            let range = &mut decided[(from.clamp(start, end) - start) as usize
+                ..(to.clamp(start, end) - start) as usize];
+            *open -= range.iter().filter(|slot| **slot == 0).count();
+            range.fill(1);
         };
         for (depth, layer) in layers.iter().enumerate() {
             if depth != 0 {
@@ -327,6 +325,20 @@ impl Overlay {
                 let cell = cell as u64;
                 let from = start.max(cell);
                 let to = end.min(cell + stored.data.len() as u64);
+                if from >= to {
+                    continue;
+                }
+                let slots = (from - start) as usize..(to - start) as usize;
+                // A dense row over bytes no higher layer decided is one copy.
+                if stored.validity.is_none() && decided[slots.clone()].iter().all(|slot| *slot == 0)
+                {
+                    let source = &stored.data[(from - cell) as usize..(to - cell) as usize];
+                    read.data[slots.clone()].copy_from_slice(source);
+                    decided[slots.clone()].fill(1);
+                    copied += slots.len() as u64;
+                    open -= slots.len();
+                    continue;
+                }
                 for at in from..to {
                     let (slot, index) = ((at - start) as usize, (at - cell) as usize);
                     if decided[slot] == 0 && stored.valid(index) {
@@ -343,16 +355,26 @@ impl Overlay {
                 break;
             }
         }
-        if open != 0 {
+        if open == decided.len() {
+            // Nothing local in the window: every bit is set in one fill.
+            read.inherited = vec![u8::MAX; decided.len().div_ceil(8)];
+            if decided.len() % 8 != 0 {
+                let tail = read.inherited.len() - 1;
+                read.inherited[tail] = (1 << (decided.len() % 8)) - 1;
+            }
+            read.span = Some((start, end));
+        } else if open != 0 {
             read.inherited = vec![0; decided.len().div_ceil(8)];
-            let (mut low, mut high) = (usize::MAX, 0);
-            for (slot, state) in decided.iter().enumerate() {
-                if *state == 0 {
-                    read.inherited[slot / 8] |= 1 << (slot % 8);
-                    low = low.min(slot);
-                    high = slot + 1;
+            for (bits, states) in read.inherited.iter_mut().zip(decided.chunks(8)) {
+                for (bit, state) in states.iter().enumerate() {
+                    *bits |= u8::from(*state == 0) << bit;
                 }
             }
+            let low = decided.iter().position(|state| *state == 0).unwrap_or(0);
+            let high = decided
+                .iter()
+                .rposition(|state| *state == 0)
+                .map_or(0, |slot| slot + 1);
             read.span = Some((start + low as u64, start + high as u64));
         }
         let mut observed = self.payload_work.get();

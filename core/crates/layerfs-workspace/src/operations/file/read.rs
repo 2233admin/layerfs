@@ -139,11 +139,40 @@ pub(crate) fn file_window(
         let mut inherited = Vec::with_capacity(plan.length() as usize);
         plan.emit(&mut inherited)?;
         let first = (from - local.offset) as usize;
-        for slot in first..first + span as usize {
-            if local.inherited[slot / 8] & (1 << (slot % 8)) != 0 {
-                // The base file ends where it ends; beyond that is zero.
-                local.data[slot] = inherited.get(slot - first).copied().unwrap_or(0);
+        let end = first + span as usize;
+        let bit = |slot: usize| local.inherited[slot / 8] & (1 << (slot % 8)) != 0;
+        let mut slot = first;
+        while slot < end {
+            // Whole mask bytes move eight slots at a time, in a run or a gap.
+            let whole = |slot: usize, bits: u8| {
+                slot % 8 == 0 && slot + 8 <= end && local.inherited[slot / 8] == bits
+            };
+            if whole(slot, 0) {
+                slot += 8;
+                continue;
             }
+            if !bit(slot) {
+                slot += 1;
+                continue;
+            }
+            let start = slot;
+            while slot < end {
+                if whole(slot, u8::MAX) {
+                    slot += 8;
+                } else if bit(slot) {
+                    slot += 1;
+                } else {
+                    break;
+                }
+            }
+            // The base file ends where it ends; beyond that is zero.
+            let held = inherited
+                .len()
+                .saturating_sub(start - first)
+                .min(slot - start);
+            local.data[start..start + held]
+                .copy_from_slice(&inherited[start - first..start - first + held]);
+            local.data[start + held..slot].fill(0);
         }
     }
     Ok(local.data)

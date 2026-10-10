@@ -131,8 +131,11 @@ pub(super) struct Complete<'s, 'a, P: OverlayCapturedRuns + OverlayOperationReco
 }
 impl<P: OverlayCapturedRuns + OverlayOperationRecords + ?Sized> FileRuns for Complete<'_, '_, P> {
     fn read_run(&mut self, output: &mut [u8]) -> ContentResult<FileRun> {
-        context::verify(self.input.shared, self.input.context)?;
+        // The caller checked the sealed context before the first run; it is
+        // checked again before the stream may end, so no file completes over
+        // a context that changed underneath it.
         if self.position == self.input.facts.final_size {
+            context::verify(self.input.shared, self.input.context)?;
             return Ok(FileRun::End);
         }
         let run = self.input.run(
