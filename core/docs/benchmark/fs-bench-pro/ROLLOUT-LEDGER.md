@@ -14,7 +14,7 @@ comparison or release-admission claim. Durable is
 | Stage | Status | Commits | Next step |
 | --- | --- | --- | --- |
 | Handoff specification | COMPLETE | `3c32fbc97` | Harvest released references |
-| 0.1 Released references | COMPLETE | This commit | Stage 0.2 move-only organization |
+| 0.1 Released references | COMPLETE | `8e4a78fa0` | Stage 0.2 move-only organization |
 | 0.2 Move-only organization | PENDING | — | Map existing files and their owning tests |
 | 0.3 Case catalogue | PENDING | — | Inventory the frozen root registry and older-commit binding |
 | 0.4 Reproducible engine | PENDING | — | Read retained working scripts and rebuild preparation |
@@ -37,6 +37,8 @@ comparison or release-admission claim. Durable is
 | 5 | Use `Co-Authored-By: Codex <noreply@openai.com>` for this session's commits | This is a Codex session; no other attribution line was supplied in its instructions | Copying the prior agent's attribution |
 
 | 6 | Correct section 8 to state the verification source has 227 total rows (28 reliability); preserve original seconds beside labelled decimal-to-ns conversion | Source CSV and its generator agree on 227; the handoff requires every row | Harvesting only the 28 reliability rows or inventing precision |
+
+| 7 | Specify supporting-file destinations and permit path-only root/manifest/asset adjustments; retain historical source-gated tests | Section 4 omitted `r7-tools`, shared files and the old runner; depth changes require more than import text; old tests name retired product drivers | Inventing silent destinations or restoring retired product source |
 
 ## Bugs
 
@@ -71,3 +73,7 @@ Stage 0.1: harvested 461 rows, preserving original fields and source hashes.
 Scoped reference tests run under the checkout lock with a 120 s wall stop.
 No benchmark invocation; no container/volume created. Harness/docs-only
 production LOC 79,366 -> 79,366 (delta +0), pinned absent-aware method.
+
+Stage 0.2 specification clarification is docs-only. It does not permit an
+expectation change or weakening a checker. Production LOC 79,366 -> 79,366
+(delta +0); pinned absent-aware method.

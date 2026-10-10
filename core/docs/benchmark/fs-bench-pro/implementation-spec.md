@@ -126,6 +126,27 @@ core/benchmark/
     tests/                               (moved with their subjects)
 ```
 
+Supporting files keep their existing names inside these subjects. The old
+`runner.py`, `campaign_disposable_init.py`, `shared/` and `diagnostics/` move
+into `cluster-one/init/`; `init_namespace.py` joins the other Init modules.
+The two history modules move into `cluster-one/history/`. The old
+`cluster_two_evidence.py` moves into `cluster-two/registry/`. `r7-tools` files
+join `cluster-two/cells/`, alongside the existing matrix modules. The retired
+`shell_package.py` joins the six retired Workspace modules. The shell-package
+registration joins `cluster-two/registry/`. Tests move under each cluster's
+`tests/` with their existing subject directory names; storage-content's Rust
+and Python tests remain inside its moved harness.
+
+A move may adjust import/search paths, repository-relative executable and
+fixture paths, relative Cargo dependencies, repository-root discovery and
+checker manifest paths. These are relocation changes only; no workload,
+algorithm, threshold, expected result, registration content or historical
+receipt changes. Closed tools and tests that depend on removed product source
+remain historical; their source availability is reported separately from
+relocation verification at HEAD. Stage 0.2 runs all product-free tests that
+remain applicable, preserves any pre-existing failure, and adds no replacement
+product route to make a historical test run.
+
 Root `benchmark/fs-bench-pro` is not touched. It stays the frozen v0.1.6
 definition until every family is ported or declared not applicable.
 
@@ -331,7 +352,7 @@ step. Nothing below starts a sample before its registration is committed.
 | Step | Work | Done when |
 | --- | --- | --- |
 | 0.1 | Harvest the released numbers into `baselines/v0.1.6/` | Every row of the three source files is present with its provenance; `missing.md` lists the rest |
-| 0.2 | Move-only reorganization into `fs-bench-pro`, `cluster-one`, `cluster-two` | No file content changes except import paths; the existing harness tests pass from their new locations |
+| 0.2 | Move-only reorganization into `fs-bench-pro`, `cluster-one`, `cluster-two` | Only the relocation path changes defined in section 4; applicable existing harness tests pass from their new locations, with historical source-gated checks retained explicitly |
 | 0.3 | Catalogue: every case of the 25 families as a `pending` entry in its `family.json` | `bench.py list` shows every v0.1.6 case; the total matches the root harness's own registry |
 | 0.4 | Engine built from the working cluster-two path, with `prepare` replacing the `/tmp` state, and `report` writing the tables of section 6.1 | The twelve cells of 2026-10-10 reproduce through `bench.py` from a clean checkout with identical request, owner-job and statement counts |
 
