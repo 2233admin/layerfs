@@ -21,8 +21,8 @@ comparison or release-admission claim. Durable is
 | 1 Pilot | COMPLETE: 36 functional/proof/clean-close passes; 7 recorded scoped B PASS, 29 INELIGIBLE; full numeric qualification of the 7 is unverified | Init `c1d7dd0e8`/`39bbcbd6b`; payload `200f81493`/`c1d9b6c58`; parallel routing `b3c96ecb1`; tiny `36849bcc2`/`d6e0ef952`; namespace `98b14b233`/`be1f56a23`; H-2 fix `222526fa0`; closure `d4314ed62`; membership supplement `cca598d0b` | Batch 2, retaining original receipts plus exhaustive membership supplement |
 | 2 Edits | COMPLETE: all62 cases ported/parity/sampled once/recorded;39 strict proof and clean-close passes (numeric INELIGIBLE),20 strict retention failures and3 original capped-watchdog failures retained | Canonical `a34b5d44b`/`beeb7ad69`; preserving `b9ffa63be`; capped `4d8ccfc93`; changing `05ffbf971`; small-delta `c0c99a4a3`/`2e6a508b5`/`1c975ba30` | Begin batch3; no identified fixable product correctness defect remains in batch2 |
 | 3 Trees and tools | COMPLETE: all33 original cases ported/parity/sampled, full applicable proofs and clean closePASS; numeric33INELIGIBLE; first snapshotFAIL retained separately; localitydense500 and snapshot EXCEEDED | Shared3c697ae92; directory50c297c68/ad4f95503; locality2590a4536/26c037d90; snapshot0344bfdc6/fix03033abdc/results98d3be30a/70d568e94; Git acebd7cbd/guard031d427a7/results31fff4d49 | Begin batch4 after this committed closure, no identified fixable product correctness bug |
-| 4 History on one branch | CLOSED WITH FAILURES: all 43 original cases ported and recorded; 31 functional/proof/clean-close passes, 11 retained actual failures, one failed preparation with actual NOT_RUN; mixed aggregate parity FAIL retained under section 9 exception; no identified fixable product correctness bug remains | H11 2b52bdf17; H12 ea7148a19; H13 8ae040cdd; H14 e09c61bbd; product H15 a05ed6027; H16 9dfb70ee4; fresh seal3c67e9249; affected Init8f24e39a4; boundary88a2bd27b; partial bd3016957; mixed1a21ebfc3; dedup closure this commit | Begin batch 5 after this committed failed closure; verify existing public SDK Fork and History |
-| 5 Branches and Workspaces | READY, not started | — | Verify existing P-1 SDK Fork/History, then port three original families |
+| 4 History on one branch | CLOSED WITH FAILURES: all 43 original cases ported and recorded; 31 functional/proof/clean-close passes, 11 retained actual failures, one failed preparation with actual NOT_RUN; mixed aggregate parity FAIL retained under section 9 exception; no identified fixable product correctness bug remains | H11 2b52bdf17; H12 ea7148a19; H13 8ae040cdd; H14 e09c61bbd; product H15 a05ed6027; H16 9dfb70ee4; fresh seal3c67e9249; affected Init8f24e39a4; boundary88a2bd27b; partial bd3016957; mixed1a21ebfc3; dedup closure27708c11d | Begin batch 5 after this committed failed closure; verify existing public SDK Fork and History |
+| 5 Branches and Workspaces | IN_PROGRESS: ordered family source review and registration; runtime preparation, P-1 proof, parity and samples pending | P-2 source correction19344b6a3; registration this commit | Qualify the existing public SDK Fork/History and shared context machinery before any sample |
 | 6 Dedup and storage | PENDING | — | Wait for batch 5 completion |
 | 7 Reliability | PENDING | — | Wait for batch 6 completion |
 
@@ -3810,7 +3810,7 @@ NOT_RUN — disabled by owner until explicit reauthorization.
 
 | `e308118a9` (worker sync) | Import exact reviewed main source before remaining dedup attempts | 79370 | 79370 | +0 |
 | `c4aea655d` (worker) | Record18 completed and five bounded dedup attempts plus three prior-source references | 79370 | 79370 | +0 |
-| This commit | Integrate final dedup CSV pair and close batch4 with every retained failure | 79370 | 79370 | +0 |
+| `27708c11d` | Integrate final dedup CSV pair and close batch4 with every retained failure | 79370 | 79370 | +0 |
 
 
 Batch5 source review begins after committed batch4 closure27708c11d. The three
@@ -3846,4 +3846,36 @@ Upcoming implementation and proofs remain pending. This docs-only commit has
 no product/harness change or test invocation. Durable remains
 NOT_RUN — disabled by owner until explicit reauthorization.
 
-| This commit | Correct original historical-access Fork topology in P-2 before batch5 execution | 79370 | 79370 | +0 |
+| `19344b6a3` | Correct original historical-access Fork topology in P-2 before batch5 execution | 79370 | 79370 | +0 |
+
+
+### Batch 5 branch registration, 2026-10-11
+
+Imported worker commit `de61928039ecb4d6eea39f452667dfba4d04433f`'s
+three owned files unchanged: six original branch registrations, their shell
+wrapper and external family tests. The worker's private clean tree retained the
+frozen original hashes, names, role-local stages, ancestor Fork points, common
+child start barrier, operation order, seed, selected proof checkpoints, resource
+profile and independent watchdogs. Trunk has ten Commits; A/B fork from its
+fifth, and descendant C forks from A's fifth. Canonical identical A/B Commit
+tuples remain legal; all Created acknowledgements are counted separately.
+Strict H17 metadata assertions remain. No case or limit is reduced.
+
+Four owning authoring tests passed once in 2.305 s, complete invocation
+2,402,266,041 ns, under the private 120 s wall lock. Their unchanged source
+qualification is reused here; no native preparation, parity, mounted sample or
+P1 SDK proof is claimed by this registration commit. Raw qualification remains
+in the owning worktree under
+`benchmark-results/fs-bench-pro/2026-10-11-branch-authoring-tests`.
+
+The explicitly authorized three existing worktrees continue disjoint work.
+Root owns Python controller and integration; Capped, after finishing contextual
+native support, now owns runtime session/runtime/events/main/args and scoped
+external runtime tests; Namespace owns fixture admission; Tiny owns Python and
+Rust independent graph/access oracles. Each checkout has its own lock and
+target. Shared host/VM interference is unquantified and retained in numeric
+eligibility. No measurement begins until the common SDK route and final build
+are qualified. Batches 6 and 7 remain pending.
+
+| `de6192803` (worker) | Register six original branch cases and wrapper; four owning tests pass | 79370 | 79370 | +0 |
+| This commit | Integrate exact branch registration and record batch 5 ownership | 79370 | 79370 | +0 |
