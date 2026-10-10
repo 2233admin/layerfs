@@ -21,13 +21,12 @@ comparison or release-admission claim. Durable is
 | 1 Pilot | COMPLETE: 36 functional/proof/clean-close passes; 7 recorded scoped B PASS, 29 INELIGIBLE; full numeric qualification of the 7 is unverified | Init `c1d7dd0e8`/`39bbcbd6b`; payload `200f81493`/`c1d9b6c58`; parallel routing `b3c96ecb1`; tiny `36849bcc2`/`d6e0ef952`; namespace `98b14b233`/`be1f56a23`; H-2 fix `222526fa0`; closure `d4314ed62`; membership supplement `cca598d0b` | Batch 2, retaining original receipts plus exhaustive membership supplement |
 | 2 Edits | COMPLETE: all62 cases ported/parity/sampled once/recorded;39 strict proof and clean-close passes (numeric INELIGIBLE),20 strict retention failures and3 original capped-watchdog failures retained | Canonical `a34b5d44b`/`beeb7ad69`; preserving `b9ffa63be`; capped `4d8ccfc93`; changing `05ffbf971`; small-delta `c0c99a4a3`/`2e6a508b5`/`1c975ba30` | Begin batch3; no identified fixable product correctness defect remains in batch2 |
 | 3 Trees and tools | COMPLETE: all33 original cases ported/parity/sampled, full applicable proofs and clean closePASS; numeric33INELIGIBLE; first snapshotFAIL retained separately; localitydense500 and snapshot EXCEEDED | Shared3c697ae92; directory50c297c68/ad4f95503; locality2590a4536/26c037d90; snapshot0344bfdc6/fix03033abdc/results98d3be30a/70d568e94; Git acebd7cbd/guard031d427a7/results31fff4d49 | Begin batch4 after this committed closure, no identified fixable product correctness bug |
-| 4 History on one branch | IN_PROGRESS: all 43 original cases ported; boundary closed with six passes and one strict failure; old dedup three and mixed four passes retained; corrected product build admitted; remaining 23 dedup and five prepared M1 cases executing once, with first new dedup watchdog FAIL and first M1 strict metadata FAIL retained; final mixed preparation FAIL/actual NOT_RUN | Routing65f0c1fbe; nativea921bedbd; portsfc9e71fae/6a5433e79/4762b720c; H11 2b52bdf17; H12 ea7148a19; H13 8ae040cdd; H14 e09c61bbd; product H15 a05ed6027; H16 9dfb70ee4; current build dispatch3c67e9249; affected Init8f24e39a4 | Finish each remaining original case, preserve failures and uncertain custody, then commit both complete CSVs per source and close batch 4 |
+| 4 History on one branch | IN_PROGRESS: all 43 original cases ported; boundary closed with six passes and one strict failure; old dedup three and mixed four passes retained; corrected product build admitted; remaining dedup cases executing once; mixed closed with four earlier passes, five strict M1 failures and one actual NOT_RUN; new dedup watchdog failures retained; final mixed preparation FAIL/actual NOT_RUN | Routing65f0c1fbe; nativea921bedbd; portsfc9e71fae/6a5433e79/4762b720c; H11 2b52bdf17; H12 ea7148a19; H13 8ae040cdd; H14 e09c61bbd; product H15 a05ed6027; H16 9dfb70ee4; current build dispatch3c67e9249; affected Init8f24e39a4 | Finish each remaining original case, preserve failures and uncertain custody, then commit both complete CSVs per source and close batch 4 |
 | 5 Branches and Workspaces | PENDING | — | Wait for batch 4; verify existing P-1 SDK methods |
 | 6 Dedup and storage | PENDING | — | Wait for batch 5 completion |
 | 7 Reliability | PENDING | — | Wait for batch 6 completion |
 
 ## Decisions
-
 | Number | What | Why | Alternative |
 | --- | --- | --- | --- |
 | 1 | Commit the supplied spec and README addition unchanged before implementation; include this initial ledger | Explicit handoff; the ledger accompanies the work it describes | Editing the proposal before preserving its handed-over identity |
@@ -35,44 +34,29 @@ comparison or release-admission claim. Durable is
 | 3 | Preserve cache eligibility separately from functional observations; unknown preconditions yield INELIGIBLE | Measurement rules remain binding; functional completion cannot invent cold eligibility | Claiming PASS for unknown cache state |
 | 4 | Create no additional family under P-6 and make no GitHub changes under P-7 | Explicit handoff scope supersedes proposal recommendations | Adding per-call families or closing issues |
 | 5 | Use `Co-Authored-By: Codex <noreply@openai.com>` for this session's commits | This is a Codex session; no other attribution line was supplied in its instructions | Copying the prior agent's attribution |
-
 | 6 | Correct section 8 to state the verification source has 227 total rows (28 reliability); preserve original seconds beside labelled decimal-to-ns conversion | Source CSV and its generator agree on 227; the handoff requires every row | Harvesting only the 28 reliability rows or inventing precision |
-
 | 7 | Specify supporting-file destinations and permit path-only root/manifest/asset adjustments; retain historical source-gated tests | Section 4 omitted `r7-tools`, shared files and the old runner; depth changes require more than import text; old tests name retired product drivers | Inventing silent destinations or restoring retired product source |
-
 | 8 | Correct P-1 and reuse existing public ProjectApi fork/history; record the ForkSource::Commit route for P-2 | Source at handed-over product tree already exports both methods and validates ancestor membership; duplication would add no capability | Adding duplicate SDK methods or bypassing the SDK with wire requests |
-
 | 9 | Catalogue all 273 original IDs as pending; leave execution fields explicitly unset until each family is ported | The root contains 269 Rust registrations plus three repository-history profiles and one small-file-delta case; release rows are not the complete registry | Dropping unreleased/proof/extended cases or inventing runnable definitions |
 | 10 | Resolve the original Rust registry using a std-only metadata exporter; read both Python wrapper registries separately | Root SDK cannot build after retirement, while its product-neutral workload definitions compile without product dependencies | Restoring retired crates or guessing formatted IDs from text |
-
 | 11 | Route stage 0.4 through `bench.py run cluster-two/cells` and put its generated CSVs in cluster-two baselines | The spec requires the twelve existing cells through bench.py but only named family execution; separate subjects must remain separate | Treating cells as a 26th workload family or adding a second entry point |
-
 | 12 | A source identity reports the protected untracked handoff but excludes it from compilation; refuse all other untracked source and tracked dirt | The owner requires that prompt remain untracked; it supplies no product, harness or workload bytes | Staging it or pretending an arbitrary untracked executable is clean |
 | 13 | Preserve OWNER-3 checker failures as FAIL records and admit a build only when the exact two known passthrough refusals are the entire error set | Owner explicitly retains those refusals; daemon builds use the authorized product patch, while any new provenance error must stop | Weakening the checker or claiming its aggregate PASS |
-
 | 14 | Reuse the intact cell tree/index checkers and the recovered version-pinned Git policy; collect actual image Git/config witnesses anew | Preserves the original full-tree and index exclusions/checks; copied policy plus provenance removes its untracked data dependency | Guessing defaults, comparing raw native/FUSE index stat caches, or weakening tree checks |
-
 | 15 | Rebuild empty and full-written 64 MiB-zero masters through the existing SDK provision mode; retain prepared masters during the rollout and remove only passing sample resources | Same initial acquisition/install boundary as the working path; setup masters are needed for independent byte-copy reuse | Mounting a master for measurement or depending on old /tmp trees/master volumes |
-
 | 16 | Freeze the twelve original B:L cells, enforce class B using actual demand counters and original terminal cleanup, generate all twelve result rows | Stage 0.4 requires exact count reproduction through bench.py; unavailable evidence stays unavailable and soft limits remain separate | Sampling pending workload families before the engine proof or filling absent measurements with zeros |
-
 | 17 | Close stage 0.4 exact reproduction as FAILED for C10/C12, preserve strict checker/results, amend only the stage closure in its own spec commit and continue | All twelve functional proofs/terminal unmounts pass at clean identities with identical daemon/product; kernel batching and conditional reclamation probes prevent a semantic equality claim; handoff explicitly permits source-backed spec correction | Resampling unchanged cases, injecting requests/probes, altering workloads or pretending exact equality passed |
-
 | 18 | Port the actual frozen Init-only infra route and original deterministic bytes/sample set; use current public Init and existing public read APIs | `src/infra.rs` selects namespace_init_diagnostic, not the older auxiliary edit/Commit function; sampled prefixes/metadata/reopen root match the selected verifier | Timing a different historical function or omitting undeclared auxiliary mutations |
 | 19 | Init preparation creates only native inputs; every measured Init gets a fresh Store. Label setup warmth and unavailable host cold metadata as INELIGIBLE | Initial full acquisition must remain measured; preparing/cloning an already initialized Store would remove its product work; unknown coldness cannot receive PASS | Cloning a Store for an initialization case or claiming coldness from file generation |
 | 20 | Reuse original product-neutral Rust planner/stream/digest definitions and compile native-only fixture/verifier tools | Guarantees original names, modes, mtime, count/byte allocation and exact content digest without restoring retired product code | Guessing fixtures or building the retired SDK |
-
 | 21 | Reuse unchanged original product-neutral syscall program for payload work; fully check fresh mounted and persisted current-format roots | Exact generated bytes/read offsets/normalization/fsync requests remain in the frozen program; current public readers validate current representation and complete declared semantic tree outside timers | Transcribing random offsets by guess, weakening byte checks or interpreting retired encodings as current |
 | 22 | Export only the new stopped sample Store for an independent offline oracle; current daemon remains the complete live data path | Closed export permits independent current Content/Storage/History reads without a host/server serving route or second constructor; root is tied to the original typed Commit reply | Reading a live WAL inconsistently or making the host a runtime data adapter |
 | 23 | Copy generic original verification 45 s work / 59 s hard limits, preserve 15 s reported product limit and original 120 s operation watchdog | The frozen selected-verification policy declares these values; separate timers/topology are recorded as differences before any payload sample | Widening a limit after a miss or shrinking payload tiers |
 | 24 | Owner-authorized subagents use separate new worktrees for tiny_file_churn and namespace_mutation while the lead samples payload_create_read; all remain in batch 1 | Latest owner instruction explicitly requests concurrent families in worktrees and supersedes the earlier no-extra-worktree restriction; independent worktree locks/targets retain local serialization | Serial family authoring or starting a later batch |
 | 25 | Integrate worker changes locally onto main; keep engine, product fixes and the master ledger under the lead; record shared Docker VM interference in each source receipt through LAYERFS_BENCH_INTERFERENCE | Isolated family edits avoid conflicts; parallel samples share host/VM resources and cannot claim isolated timing; original workloads/cache/limits remain fixed | Multiple owners editing the engine, hiding interference, or pushing worker branches |
 | 26 | Correct port_review.source_commit to the peeled reference commit and preserve the annotated tag object as source_tag_object; require both exact objects in parity | The annotated recovery tag is ae3310f..., while its source commit is d296981...; reviewed source bytes remain identical and old receipts remain valid at their actual source | Keeping a misleading commit label, deleting the tag pin, or replaying unchanged samples |
-
 | 27 | Reuse a validated closed sibling master for an exactly matching complete initial tree, product, UID/GID and Disposable profile; keep expected/helper trees case-specific and sample byte clones independent | Setup reuse policy requires compatible sealed inputs; the changing family has six unique initial sizes despite 32 cases | Duplicate Init/install for the same input, reusing a mutated sample, or claiming coldness |
-
 | 28 | Canonical preparation references the preserving worker's four immutable closed masters through explicit prepared-parent links, then validates the complete original seals and exact semantic fixture digest | Identical initial trees and unchanged product make those setup masters compatible; all 12 canonical expectations/helpers remain new and sample byte copies independent | Duplicate Init/install or borrowing a previously measured sample |
-
 | 29 | Distinguish the declared B/C daemon/mount predicate from full per-phase OS/backing/metadata/SQLite qualification; preserve old scoped labels and fail closed for future unknown inputs | Owner forbids setup or earlier-phase OS warmth; zero canonical object demand does not prove the still-paid history read's input cache state | Treating a post-unmount mincore observation or zero demand as full coldness, editing old verdicts, or changing cache treatment |
 | 30 | Prove all retained small-delta roots through public offline current-format history/filesystem reads; declare omitted historical kernel Fork/Mount topology | Direct mounting takes a Branch and the existing batch-5 Fork route has not yet been qualified; final native remount/cleanup remain required | Manufacturing a feature or claiming identical proof topology |
 | 31 | Preserve original payload DELTA existence and thirty-second per-state proof stops | The frozen selected contract requires actual DELTA reconstruction and bounds each state, independently of numeric storage/latency targets | Treating reported DELTA counts as optional or replacing per-state stops with only a phase stop |
@@ -93,7 +77,6 @@ comparison or release-admission claim. Durable is
 | 46 | Close original500MB exhaustive preparation as FAIL and its caseNOT_RUN; preserve failed parity/batch closure while permitting other originalcases and laterbatches | One unchanged120s preparation expired after15of20 native expectations; a sealed fixture cannot be invented, another attempt/limit increase/scope reduction is forbidden, and no product correctness defect was identified | Retrying setup, shrinking original proof scope, pretending whole-family parityPASS or indefinitely blocking runnable originalcases |
 | 47 | Keep separate authenticated runs and CSV pairs when a shared harness fix interrupts a family; select unaffected earlier results by their actual source in the final family report | Each run binds one source, and completed unaffected cases must not be repeated or relabelled | Copying earlier receipts into a new source run, inventing a common measured identity, or repeating all earlier cases |
 | 48 | Correct Disposable startup by moving the existing selected synchronization calls before any SQLite initialization, preserving every statement/profile check | Actual public-API VFS evidence found24 forbidden sync calls; this is the owner's required profile, not a speed target | Leaving the violation, suppressing observer callbacks, skipping initialization checks, changing profile or optimizing unrelated work |
-
 | 49 | Preserve strict M1 atomic-save metadata failures without changing the frozen helper, oracle or correct product write/rename semantics | Original helper sets mtime before the write; original shadow retains that old mtime, and retained metadata plus a native exact-order diagnostic confirm the inconsistency | Resetting timestamps after writes, weakening the assertion or changing product POSIX behavior to force PASS |
 | 50 | Bind an external watchdog failure in a separate administrative closure when the original driver cannot publish a complete product receipt | The outer 120 s stop interrupted the attempt after actual Commits; no terminal, complete timing, final count/storage or publication witness can be manufactured | Inventing a complete receipt, calling the attempted case NOT_RUN, or retrying the unchanged schedule |
 
@@ -3606,4 +3589,104 @@ SHA-256 `63b5d464da1845d032e11a2931d4b454696adfa1205991e095cf68016a7ec8c6`,
 verified by Root. This audit runs no product/test/measurement or Docker mutation.
 Later batches remain pending; no completion claim is made while batch 4 runs.
 
-| This commit | Preserve first bounded dedup and strict M1 failures with source diagnosis and unaffected evidence audit | 79370 | 79370 | +0 |
+| `fa9d4c8fa` | Preserve first bounded dedup and strict M1 failures with source diagnosis and unaffected evidence audit | 79370 | 79370 | +0 |
+
+
+Batch 4 / mixed_load_bearing is truthfully closed with all ten original cases
+ported and visible: four prior-source episode functional/proof/clean-close
+passes (numeric INELIGIBLE), five new strict M1 failures, and one failed
+preparation with actual execution NOT_RUN. The full aggregate parity remains
+FAIL for the last unprepared case; nine completed preparations retain their
+individual unchanged parity PASS. This closure follows the specific failed
+preparation exception in spec section 9 and keeps that failure visible. It
+claims no passing full done-when result. No identified fixable product
+correctness defect remains from the frozen M1 timestamp inconsistency.
+
+The four episode results stay in the existing source5faaa263c CSV pair. The new
+source is `fa70bbb01c413a0bbbadd5c10d81652580b046f8`, product9ac88edb2,
+with the exact admitted a05ed6027 nine-asset build. Its two ten-row CSVs are
+integrated from worker commit `dae0c5ba63bc0b7a658b83c33eb79005bc9d73cb`,
+tree `c5058858487c4680e946d1f3ea4fd9f8bff6e95d`. Root authenticated both
+CSV hashes, exact original order, six receipt manifests, all five actual
+acknowledged Commit counts, failed volume/container bindings, and both sealed
+handoffs. New performance rows are four NOT_RUN, four FAIL and two N/A; proof
+rows are five FAIL and five NOT_RUN. Prior episode rows contain only exact
+old-source receipt references in their tags; no old observation is relabelled,
+copied into a new receipt or replayed. The old CSVs and all failures remain.
+
+Each prepared M1 case ran once. Every declared command and Commit completed,
+then final mounted native verification rejected the frozen atomic-save mtime.
+The 100 MB cases fail at d000/f00054; 500 MB cases at corresponding d003/f00004.
+All five failed verifier mounts and their containers/volumes remain retained.
+Measured mount Gone does not establish verifier cleanup or KnownStop. All
+closed persisted public proofs, exhaustive cycle-end payload proofs and
+unfiltered global census steps are NOT_REACHED. Request/job/statement counts
+and final Store/overlay storage stay UNAVAILABLE; raw empty dictionaries do
+not become zero. Original created-mode observation prefixes and final
+17-domain maps remain in raw evidence. H17's source-backed native diagnosis is
+preserved without product, helper, oracle, fixture, workload or limit changes.
+
+| Original case | Commit ACKs | Sample / proof attempt | Product phase ns | Proof wall ns | Outer wall ns / 120 s | Actual outcome |
+| --- | ---: | --- | ---: | ---: | ---: | --- |
+| v016-mixed-development-100mb-5000-k10-v1 | 10 | 1 / 0 | 1274316748 | 1496499708 | 11103476500 | FAIL, frozen M1 metadata assertion |
+| v016-mixed-development-100mb-5000-k100-v1 | 100 | 1 / 0 | 11798344667 | 1895425000 | 38179369625 | FAIL, frozen M1 metadata assertion |
+| v016-mixed-development-500mb-30000-k10-v1 | 10 | 1 / 0 | 2101087669 | 9688224875 | 28481784791 | FAIL, frozen M1 metadata assertion |
+| v016-mixed-development-500mb-30000-k100-v1 | 100 | 1 / 0 | 21059319673 | 9343090875 | 70322889458 | FAIL, frozen M1 metadata assertion |
+| v016-mixed-exhaustive-100mb-5000-k100-v1 | 100 | 0 / 1 | N/A (raw diagnostic 12491242382) | 50993633416 | 52235080209 | FAIL, frozen M1 metadata assertion |
+
+The 500 MB K100 ordinary case records EXCEEDED:21,059,319,673 ns against the
+unchanged 15,000,000,000 ns soft product limit. It still completed its declared
+commands/Commits; its final metadata verifier failure is retained separately.
+No speed change or limit adjustment follows. Exhaustive100MB is verification
+only: sample0, proofattempt1, performance N/A, with the raw phase clock merely
+diagnostic. Its 50,993,633,416 ns proof clock covers the whole verification-only
+scope. Original 120 s operation/300 s proof declarations remain distinct from
+the owner's effective 120 s whole invocation ceiling. All five outer commands
+exit1 within their 120 s stops; no outer expiry or retry occurred.
+
+| Failed case | Retained container | Retained volume | Verifier Workspace key |
+| --- | --- | --- | --- |
+| v016-mixed-development-100mb-5000-k10-v1 | `17104e241466b65645273b056fd534d72632f0b5f594593b41e4fdc09d60d497` | `layerfs-fsb-sample-7b1776f836b24ae4` | `055bcf6d443c9f062e4061b25a5b8f5c6d7196f02eedc9f3ad85a968cc1ab29b` |
+| v016-mixed-development-100mb-5000-k100-v1 | `934e370752ddec15080428e8f1e406ec1abb1e05cc7ccf40832f9b9dd33c5336` | `layerfs-fsb-sample-a65f4f9bc9164028` | `84d4d3246f3b242334a88ccb134f03853c41d9e53758f5ccc4a8e85b516ff966` |
+| v016-mixed-development-500mb-30000-k10-v1 | `634ab49ac260d895e8ad28d72e48ed3c1ea13be89a94f91c6fa96c20500a2616` | `layerfs-fsb-sample-91d006f84a304656` | `f4ee509d079378156c15610a0f7d022943d110c8c1f86917227afb4c40658618` |
+| v016-mixed-development-500mb-30000-k100-v1 | `00001cd2d7c3721819e408a16670acf8aa292044c9cdde9b82ec8cdb90e9e6af` | `layerfs-fsb-sample-17a6d767cd95424b` | `825a1c474ea98e055b93494796fd876534a94bb7535be1878c367438e6524b97` |
+| v016-mixed-exhaustive-100mb-5000-k100-v1 | `bb8b22eec8835a8d519db0b2fc91ec7dc4d81bd8f024978426a8e3b3e03d1af3` | `layerfs-fsb-sample-db4c34b2f9c845a0` | `e4198fad4556a1b45055f30ac07beeb0b993fe4c25a22310a063a8bb7512ef4c` |
+
+The final exhaustive500MB case has only the separately authenticated
+administrative preparation closure. Its original source4c83d1c79 preparation
+failed at120,033,743,083 ns/exit124 and has no sealed complete input. Actual
+case/sample/proof attempts all remain0, with no benchmark observations or
+resource custody invented. Its original partial step80 and all raw hashes
+remain untouched; no reprepare or sample claim is made. Both proof-only
+performance rows are N/A, and their differing proof/actual dispositions are
+explicit in verification CSVs and tags.
+
+Compact handoff is private Mixed
+`benchmark-results/fs-bench-pro/2026-10-10-batch-4-mixed-product-fix-sync/compact-handoff/handoff.json`,
+SHA-256 `d1a4d5b6963bd8b12c2cc1ee507efbd94f9b3528b5f11e313018b63353abaede`.
+The sibling final-handoff/handoff.json is
+`e06a27c476b693684de7f2e96ef0970d3fb16e9cb710bca15d71a174e6d39240`.
+These bind exact preparations, binary/image/source identities, actual ordered
+Commit tuples and parent chains, final mounts, all mode prefixes, native
+stderr, original scopes/omissions and resource uncertainty. The report adapter's
+first invocation failed with KeyError before any CSV write; both that tool and
+its stdout/stderr remain. A corrected derived step count then wrote the two
+CSV outputs once under the explicit 120 s stop, without any case or verifier
+replay. This changes no committed harness or product source; qualified owning
+checks remain reused at exact bytes. Shared host/Docker VM interference and
+cache limitations are still declared. Remaining dedup execution must close
+before batch 4 closure and any batch 5 work.
+
+Tiny's read-only prepared-master inventory also authenticated original
+creation/provision/known-Stop/removal provenance for68 exact master volumes
+covering closed batches1–3 and boundary7. No missing/conflicting provenance was
+found. Current Docker existence/live use remains UNAVAILABLE: no Docker
+inspection or deletion occurred. Ignored master-custody.json beside its case
+inventory has SHA-256
+`a7b3ad8f2158eb891b232fdf1d3c8c49051d9b0e2fc9e48d91fcb028d49453f1`,
+verified by Root. Original owner resources and failed sample resources are
+excluded. Prepared masters remain retained for declared reuse during rollout.
+
+| `fa70bbb01` (worker sync) | Import exact reviewed corrected product/harness into Mixed worktree | 79366 | 79370 | +4 |
+| `dae0c5ba6` (worker) | Record every new M1 failure and original unrun selection in both CSVs | 79370 | 79370 | +0 |
+| This commit | Integrate complete mixed family result pair with strict failed closure and custody | 79370 | 79370 | +0 |
