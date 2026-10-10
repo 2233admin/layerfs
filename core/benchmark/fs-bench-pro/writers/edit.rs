@@ -186,6 +186,17 @@ fn main() -> reference::Result<()> {
     let args: Vec<String> = std::env::args().collect();
     match args.as_slice() {
         [_, mode, id] if mode == "apply" => apply(id),
+        [_, mode, manifest] if mode == "verify-manifest" => {
+            let entries =
+                reference::workspace_common::decode_manifest(&std::fs::read_to_string(manifest)?)?;
+            for (key, value) in
+                reference::workspace_common::verify_native(Path::new("."), &entries)?
+            {
+                println!("{key}={value}");
+            }
+            println!("manifest_provenance=sealed-independent-original-source-SHA256");
+            Ok(())
+        }
         [_, mode, id, step] if mode == "verify" => {
             let entries = edit_model::entries(id, step.parse()?)?;
             for (key, value) in

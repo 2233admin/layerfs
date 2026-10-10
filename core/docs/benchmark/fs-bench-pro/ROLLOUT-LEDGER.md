@@ -19,7 +19,7 @@ comparison or release-admission claim. Durable is
 | 0.3 Case catalogue | COMPLETE | `f182e9a63`; prerequisite correction `30b798192` | Stage 0.4 reproducible engine |
 | 0.4 Reproducible engine | CLOSED: functional proof complete; exact reproduction FAILED C10/C12 | Cell-route correction `bb8e07df8`; build support `c496025fc`; oracle support `7a27a4f26`; fixture support `516c2f009`; workspace/report support `358eca082`; cleanup-observer correction `a1f2c259c` | Begin batch 1 under failed-reproduction closure recorded below |
 | 1 Pilot | COMPLETE: 36 functional/proof/clean-close passes; 7 recorded scoped B PASS, 29 INELIGIBLE; full numeric qualification of the 7 is unverified | Init `c1d7dd0e8`/`39bbcbd6b`; payload `200f81493`/`c1d9b6c58`; parallel routing `b3c96ecb1`; tiny `36849bcc2`/`d6e0ef952`; namespace `98b14b233`/`be1f56a23`; H-2 fix `222526fa0`; closure `d4314ed62`; membership supplement `cca598d0b` | Batch 2, retaining original receipts plus exhaustive membership supplement |
-| 2 Edits | IN_PROGRESS: canonical 12 and preserving 12 closed; capped 5 closed (2 functional passes, 3 watchdog failures); changing 32 closed (12 strict passes, 20 retention failures); small-delta authoring | Model `e2840c270`; writer `8dd9d99a8`; graph `37ec6826b`; cache `98b6b7260`; routing `ac7beb4dd`; seal/audit `cca598d0b`; reuse `849b0aff1`; canonical `a34b5d44b` / this commit | Integrate the two completed workers, finish changing and small-delta; no batch 3 |
+| 2 Edits | IN_PROGRESS: canonical 12 and preserving 12 closed; capped 5 closed (2 functional passes, 3 watchdog failures); changing 32 closed (12 strict passes, 20 retention failures); small-delta registered and reviewed, sample pending | Canonical `a34b5d44b`/`beeb7ad69`; preserving `b9ffa63be`; capped `4d8ccfc93`; changing `05ffbf971`; small-delta support this commit | Seal final small-delta compiled identity, parity/prepare/sample once; no batch 3 |
 | 3 Trees and tools | PENDING | — | Wait for batch 2 completion |
 | 4 History on one branch | PENDING | — | Wait for batch 3 completion |
 | 5 Branches and Workspaces | PENDING | — | Wait for batch 4; verify existing P-1 SDK methods |
@@ -74,6 +74,9 @@ comparison or release-admission claim. Durable is
 | 28 | Canonical preparation references the preserving worker's four immutable closed masters through explicit prepared-parent links, then validates the complete original seals and exact semantic fixture digest | Identical initial trees and unchanged product make those setup masters compatible; all 12 canonical expectations/helpers remain new and sample byte copies independent | Duplicate Init/install or borrowing a previously measured sample |
 
 | 29 | Distinguish the declared B/C daemon/mount predicate from full per-phase OS/backing/metadata/SQLite qualification; preserve old scoped labels and fail closed for future unknown inputs | Owner forbids setup or earlier-phase OS warmth; zero canonical object demand does not prove the still-paid history read's input cache state | Treating a post-unmount mincore observation or zero demand as full coldness, editing old verdicts, or changing cache treatment |
+| 30 | Prove all retained small-delta roots through public offline current-format history/filesystem reads; declare omitted historical kernel Fork/Mount topology | Direct mounting takes a Branch and the existing batch-5 Fork route has not yet been qualified; final native remount/cleanup remain required | Manufacturing a feature or claiming identical proof topology |
+| 31 | Preserve original payload DELTA existence and thirty-second per-state proof stops | The frozen selected contract requires actual DELTA reconstruction and bounds each state, independently of numeric storage/latency targets | Treating reported DELTA counts as optional or replacing per-state stops with only a phase stop |
+| 32 | Reuse exact unchanged compiled support with original source/provenance receipts when only host control/oracle support changes | Unaffected evidence may be reused when actual compiled inputs and binary hashes remain identical | Rebuilding unaffected binaries or reusing a measured sample |
 
 ## Bugs
 
@@ -83,7 +86,7 @@ comparison or release-admission claim. Durable is
 
 | H-3 | Generic mounted pilot proofs and prospective SDK proofs | Reachable path walk omitted exhaustive inode-table membership from original canonical verifier | Runtime compared declared paths/bytes but never enumerated current inode table | `37ec6826b` | edit_oracle_complete_membership_accepts_exact_and_rejects_unreachable_or_missing_rows |
 | H-4 | Prospective B/C Commit eligibility | Zero source demands could credit own-written backing without independent pre-Commit coldness | Cache classifier checked source demand/lifetime but not own-written phase inputs | `98b6b7260` | test_zero_source_demands_cannot_credit_own_written_commit_input |
-| H-5 | Seven recorded pilot read-only B labels; future B/C rows | Scoped zero canonical-object demand was treated as full numerical cache qualification | Still-paid backing/metadata/SQLite pre-phase domains absent; terminal mincore and an object-demand interval ending before unmount cannot establish them | This commit (prospective only) | test_zero_object_demands_do_not_qualify_unobserved_paid_phase_inputs; test_each_phase_proof_rejects_late_unknown_wrong_identity_or_warm_inputs |
+| H-5 | Seven recorded pilot read-only B labels; future B/C rows | Scoped zero canonical-object demand was treated as full numerical cache qualification | Still-paid backing/metadata/SQLite pre-phase domains absent; terminal mincore and an object-demand interval ending before unmount cannot establish them | `25719de3b` (prospective only) | test_zero_object_demands_do_not_qualify_unobserved_paid_phase_inputs; test_each_phase_proof_rejects_late_unknown_wrong_identity_or_warm_inputs |
 | H-2 | 36 batch-1 reviewed registrations | source_commit was an annotated tag object; parity accepted it and rejected the actual peeled commit | git rev-parse on an annotated reference returns the tag object unless peeled | `222526fa0` | test_review_identity.py rejects the tag through both parity routes, admits the peeled commit and checks every ported review |
 
 H-1 and H-2 are harness faults, not product correctness or performance defects.
@@ -1687,4 +1690,66 @@ counts remain paid observations, not disk/cache-miss/coldness proof. History
 snapshot reads are not canonical-object batches. This guard avoids using that
 scoped scalar as an all-phase cache certificate.
 
-| This commit | Require complete pre-phase cache evidence beyond B/C scoped predicates | 79366 | 79366 | +0 |
+| `25719de3b` | Require complete pre-phase cache evidence beyond B/C scoped predicates | 79366 | 79366 | +0 |
+
+Small-file-delta support integrated from worker commits `bec3a0e75`,
+`cf9fe706e` and `53853a02e`; worker `561b5ec10` carries the identical H-5
+Python guard already on main and is not duplicated. Registration is committed
+before preparation or sampling. The unchanged original builder supplies ten
+files (245,760 initial bytes), thirty whole-file fs::copy imports and thirty-one
+independent semantic manifests. Current public History/Filesystem/Storage reads
+bind every actual acknowledged Commit, parent, stack/base and final head to the
+same stopped sample Store, check every byte/path/mode/mtime and exhaustive inode
+membership, then inspect authenticated selected regular-file payload records.
+The historical kernel Fork/Mount proof topology is declared as an omission;
+the final fresh mounted native proof and terminal cleanup remain required.
+
+Original actual DELTA-path execution remains an existence condition independent
+of complete semantic proof. Known FULL-only output or unavailable payload
+encoding evidence leaves the case FAIL and retains stopped resources; generic
+metadata links do not substitute. No count/percentage or latency/storage quota
+is added. Every retained state is proved by its own child with a thirty-second
+stop, while each child also validates all thirty-one acknowledgement rows and
+the final head. The original absolute 600-second phase stop is unchanged.
+Original resource/free-space guards run at their original boundaries; exact
+read-only observer walls are retained and excluded from product time using the
+existing PerformanceClock exclusion API, but still consume the absolute phase
+deadline. The actual own sample container must read back the original two-CPU,
+2-GiB/no-swap/256-PID profile. No master or protected resource is configured.
+
+Pre-sample authoring failures remain visible: the first host --no-run found an
+extra extracted-verifier borrow and missing PackPersistence trait import, fixed
+in harness support; a formatting invocation followed modules into six frozen
+files, which were restored exactly and checked against the recovery source
+before any commit/sample; the first broad history/workspace test selection
+included unrelated frozen reference self-checks and reached the 120-second
+ceiling (FAILED/hang), diagnosed from the full-size debug history self-check.
+Final restored-source builds and explicitly scoped complete_history_ and
+workspace_graph_ tests passed without weakening any test. The first native
+qualification failed E0603 on the frozen wrapper's private storage_smoke module;
+the corrected test compiles the unchanged original module directly. Final
+native qualification PASS 6.846 seconds covers all thirty-one states, thirty
+full imports, metadata/inode preservation and intentional final-byte corruption
+rejection; its first failed receipt stays retained. No product bug or sample
+replay occurred during these authoring checks.
+
+At integrated source the five mechanical family tests PASS 0.256 seconds; the
+native test is explicitly skipped because its qualified worker seal is reused.
+Thirteen owning workspace/cache tests PASS 0.061 seconds, both under the
+120-second lock. One lead discovery invocation mistakenly named the parent
+tests directory, found zero tests and returned failure; corrected discovery
+names tests/engine and runs all thirteen. Read-only probes also named nonexistent
+engine module paths; corrected file inventory established the owning paths.
+Neither invocation touched product/source or repeated a benchmark. Worker final
+external complete/selected-old-root ancestry and byte-corruption tests pass;
+the final host compiled identity is still being sealed before any sample.
+Product tree remains 10bd8215443766fa2509fa5f90cf0044200ba7be. Production LOC
+79,366 -> 79,366 (delta +0), exact pinned staged absent-aware method; reference
+absent (retired R9c; last counted 65,417). No Clippy/CI or numerical cache
+qualification claim follows from harness-only checks.
+
+| `bec3a0e75` (worker) | Register original small-delta fixture/history support | 79366 | 79366 | +0 |
+| `cf9fe706e` (worker) | Qualify unchanged native importer through original module | 79366 | 79366 | +0 |
+| `561b5ec10` (worker) | Apply main H-5 guard without duplicate main integration | 79366 | 79366 | +0 |
+| `53853a02e` (worker) | Preserve payload mechanism and per-state proof stops | 79366 | 79366 | +0 |
+| This commit | Integrate reviewed small-delta support before preparation/sample | 79366 | 79366 | +0 |

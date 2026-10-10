@@ -35,6 +35,14 @@ fn selected<'a>(
 /// Keeps daemon caches, Store sessions and one overlay alive across explicit calls.
 pub fn serve(args: &Args, events: &mut Events) -> Result<()> {
     let manifest = StoreManifest::decode(&fs::read(&args.manifest)?)?;
+    if args.case.as_deref() == Some("small-file-delta-10x30-v1") {
+        events.fields(
+            "history_initial_root",
+            None,
+            "exact initial sealed Store manifest root; no additional control call",
+            &[("root", crate::hex(&manifest.root))],
+        )?;
+    }
     let branch = BranchId::from_bytes(manifest.branch)?;
     let mut owner = runtime::start(args, Some(manifest), events)?;
     let mut mounts = BTreeMap::new();
@@ -127,15 +135,30 @@ pub fn serve(args: &Args, events: &mut Events) -> Result<()> {
                     CommitStagedOutcome::Committed(record) => record.root,
                     CommitStagedOutcome::UpToDate { root, .. } => *root,
                 };
+                let mut fields = vec![
+                    ("key", key.into()),
+                    ("commit_kind", commit_kind.into()),
+                    ("root", crate::hex(&root.to_bytes())),
+                ];
+                if let CommitStagedOutcome::Committed(record) = &outcome {
+                    fields.extend([
+                        ("commit_id", crate::hex(&record.id.to_bytes())),
+                        (
+                            "parent",
+                            record
+                                .parent
+                                .map(|id| crate::hex(&id.to_bytes()))
+                                .unwrap_or_else(|| "-".into()),
+                        ),
+                        ("base_layer", crate::hex(&record.base_layer.to_bytes())),
+                        ("stack", crate::hex(&record.stack.to_bytes())),
+                    ]);
+                }
                 events.numeric_fields(
                     "commit",
                     Some(elapsed),
                     &format!("key={key} original_outcome={outcome:?}"),
-                    &[
-                        ("key", key.into()),
-                        ("commit_kind", commit_kind.into()),
-                        ("root", crate::hex(&root.to_bytes())),
-                    ],
+                    &fields,
                     &[
                         ("control_send_records_before", before),
                         ("control_send_records_after", after),

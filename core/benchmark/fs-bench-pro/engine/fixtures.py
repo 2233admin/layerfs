@@ -15,7 +15,7 @@ CELL_RECIPES = {f"C{n:02}": "big64m" if n in (9, 10, 11) else "empty" for n in r
 NAMESPACE_RECIPES = ("namespace-100-compact-v3", "namespace-1000-compact-v3", "namespace-10000", "namespace-100000")
 WORKSPACE_FAMILIES = ("payload_create_read", "tiny_file_churn", "namespace_mutation",
                      "edit_length_preserving", "edit_length_changing", "edit_length_changing_capped",
-                     "edit_canonical_chunk_count")
+                     "edit_canonical_chunk_count", "small_file_delta_smoke")
 
 
 def family_case(recipe):
@@ -207,6 +207,64 @@ def compatible_master(folder, fixture, current, uid, gid):
     return None, None
 
 
+def prepare_ordered_fixture(case, folder, build):
+    """Frozen native history builder, independent complete SHA manifests per state."""
+    import importlib.util
+    path = identity.ROOT / case["fixture"]["history_recipe"]
+    if identity.sha256(path) != case["port_review"]["files"][case["fixture"]["history_recipe"]]:
+        raise ValueError("original native history recipe changed")
+    spec = importlib.util.spec_from_file_location("frozen_history_fixture", path)
+    original = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(original)
+    built = original.build(folder / "original")[case["v016_case"]]
+    states = list(original.states())
+    if len(states) != len(case["history_schedule"]["states"]):
+        raise ValueError("original retained-state cardinality differs")
+    source = folder / "source"
+    shutil.copytree(Path(built["input"]) / "initial", source, copy_function=shutil.copy2)
+    native, history = {}, []
+    manifests = folder / "history-manifests"
+    manifests.mkdir()
+    expected = folder / "expected-native"
+    for step, files in enumerate(states):
+        seal = case["history_schedule"]["states"][step]
+        oracle = Path(built["input"]) / f"oracle-{step}.json"
+        if json.loads(oracle.read_text()) != original.oracle(files) or identity.sha256(oracle) != seal["original_oracle_sha256"]:
+            raise ValueError("independent original history oracle differs")
+        body = "workspace-independent-manifest-v1\n.\tdirectory\t0\t755\t1000000000\t0\t-\n"
+        for name, data in sorted(files.items()):
+            body += f"{name}\tfile\t{len(data)}\t644\t1000000000\t0\t{hashlib.sha256(data).hexdigest()}\n"
+        manifest = manifests / f"state-{step}.tsv"
+        manifest.write_text(body)
+        if identity.sha256(manifest) != seal["manifest_sha256"]:
+            raise ValueError("frozen independent state manifest differs")
+        if step == 0:
+            root = source
+        else:
+            root = expected if step == len(states)-1 else folder / "native-states" / f"state-{step}"
+            root.mkdir(parents=True)
+            for name, data in files.items():
+                item = root / name
+                item.write_bytes(data)
+                item.chmod(0o644)
+                os.utime(item, ns=(1_000_000_000_000_000_000,) * 2)
+            root.chmod(0o755)
+            os.utime(root, ns=(1_000_000_000_000_000_000,) * 2)
+        proof = receipts.command([build["binaries"]["edit-host"]["path"], "verify-manifest", str(manifest)],
+                                 folder, f"original-state-{step}-check", 120, cwd=root)
+        checked = dict(line.split("=", 1) for line in Path(proof["stdout"]).read_text().splitlines())
+        if checked.get("verification_status") != "pass":
+            raise ValueError("original complete native history verification failed")
+        native[f"state-{step}"] = checked
+        history.append({"index": step, "manifest": str(manifest), "manifest_sha256": identity.sha256(manifest),
+                        "original_oracle_sha256": identity.sha256(oracle), "logical_bytes": sum(map(len, files.values()))})
+    def summary(step):
+        return {"case": case["id"], "files": len(states[step]), "entries": len(states[step])+1,
+                "logical_bytes": history[step]["logical_bytes"], "fixture_digest": history[step]["manifest_sha256"],
+                "recipe_identity": history[step]["original_oracle_sha256"], "seed": 1}
+    return summary(0), summary(len(states)-1), native, history, built
+
+
 def prepare_workspace(recipe, folder, build_folder):
     family, case = family_case(recipe)
     if family["family"] not in WORKSPACE_FAMILIES:
@@ -216,11 +274,15 @@ def prepare_workspace(recipe, folder, build_folder):
     folder = Path(folder).resolve()
     folder.mkdir(parents=True, exist_ok=False)
     source, expected = folder / "source", folder / "expected-native"
-    writer = build["binaries"]["workspace-writer"]["path"]
-    made = receipts.command([writer, "fixture", case["v016_case"], str(source)], folder, "native-fixture", 120)
-    fixture = json.loads(Path(made["stdout"]).read_text())
-    authored = receipts.command([writer, "expected", case["v016_case"], str(expected)], folder, "native-expected", 120)
-    expectation = json.loads(Path(authored["stdout"]).read_text())
+    history = None
+    if case.get("history_schedule"):
+        fixture, expectation, native, history, original_history = prepare_ordered_fixture(case, folder, build)
+    else:
+        writer = build["binaries"]["workspace-writer"]["path"]
+        made = receipts.command([writer, "fixture", case["v016_case"], str(source)], folder, "native-fixture", 120)
+        fixture = json.loads(Path(made["stdout"]).read_text())
+        authored = receipts.command([writer, "expected", case["v016_case"], str(expected)], folder, "native-expected", 120)
+        expectation = json.loads(Path(authored["stdout"]).read_text())
     def original_check(root, step, label):
         argv = ([build["binaries"]["edit-host"]["path"], "verify", case["v016_case"], str(step)]
                 if case.get("sdk_scenario") else
@@ -228,15 +290,16 @@ def prepare_workspace(recipe, folder, build_folder):
         proof = receipts.command(argv,
                                  folder, label, 120, cwd=root)
         return dict(line.split("=", 1) for line in Path(proof["stdout"]).read_text().splitlines())
-    native = {"fixture": original_check(source, 0, "original-fixture-check"),
-              "expected": original_check(expected, 1, "original-expected-check")}
+    if history is None:
+        native = {"fixture": original_check(source, 0, "original-fixture-check"),
+                  "expected": original_check(expected, 1, "original-expected-check")}
     if any(item.get("verification_status") != "pass" for item in native.values()):
         raise ValueError("original native fixture/expectation check failed")
     fixture.update(recipe=recipe, fixture_sha256=fixture["fixture_digest"])
     helpers = assets(folder / "code")
     copies = [(Path(build["binaries"]["workload-linux"]["path"]), "writers/workload"),
               (identity.ROOT / "core/benchmark/fs-bench-pro/families" / family["family"] / "workload.sh", "workload.sh")]
-    if case.get("sdk_scenario"):
+    if case.get("sdk_scenario") or history is not None:
         copies.append((Path(build["binaries"]["edit-linux"]["path"]), "writers/edit"))
     for origin, relative in copies:
         target = Path(helpers["root"]) / relative
@@ -244,6 +307,15 @@ def prepare_workspace(recipe, folder, build_folder):
         shutil.copy2(origin, target)
         target.chmod(0o555)
         helpers["files"][relative] = identity.sha256(target)
+    if history is not None:
+        base = Path(helpers["root"]) / "history"
+        shutil.copytree(folder / "history-manifests", base / "manifests")
+        for state in original_history["states"]:
+            shutil.copytree(state["input"], base / "checkpoints" / f"step-{state['index']}")
+        for path in sorted(base.rglob("*")):
+            if path.is_file():
+                path.chmod(0o444)
+                helpers["files"][str(path.relative_to(helpers["root"]))] = identity.sha256(path)
     helpers["sha256"] = hashlib.sha256(json.dumps(helpers["files"], sort_keys=True).encode()).hexdigest()
     reused, reuse = compatible_master(folder, fixture, current, source.stat().st_uid, source.stat().st_gid)
     if reused is None:
@@ -262,6 +334,7 @@ def prepare_workspace(recipe, folder, build_folder):
     result = {"schema": "fs-bench-pro-prepared-workspace-v1", "status": "PASS", "recipe": recipe,
               "family": family["family"], "case": case["id"], "identity": current, "fixture": fixture,
               "expectation": expectation, "native_verification": native, "helpers": helpers,
+              "history_states": history,
               "master_volume": volume, "provision": provisioned, "source_uid": source.stat().st_uid,
               "master_reuse": reuse,
               "source_gid": source.stat().st_gid, "global_profile": "Disposable/WAL/OFF",

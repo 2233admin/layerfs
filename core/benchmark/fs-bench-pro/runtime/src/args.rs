@@ -19,6 +19,8 @@ pub struct Args {
     pub environment: Vec<String>,
     pub observation_scope: [u8; 32],
     pub case: Option<String>,
+    pub history_file: Option<PathBuf>,
+    pub history_step: Option<usize>,
 }
 impl Args {
     pub fn parse() -> Result<Self> {
@@ -51,6 +53,14 @@ impl Args {
         }
         let source = values.remove("--source-copy").map(PathBuf::from);
         let case = values.remove("--case");
+        let history_file = values.remove("--history-file").map(PathBuf::from);
+        let history_step = values
+            .remove("--history-step")
+            .map(|value| value.parse())
+            .transpose()?;
+        if history_step.is_some_and(|step| step > 30) {
+            return Err("original retained history step must be0..30".into());
+        }
         let sealed = values.remove("--sealed").map(PathBuf::from);
         let init_seconds = values
             .remove("--init-seconds")
@@ -124,6 +134,8 @@ impl Args {
             environment,
             observation_scope,
             case,
+            history_file,
+            history_step,
         })
     }
 }

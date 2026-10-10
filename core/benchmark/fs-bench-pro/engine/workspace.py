@@ -44,21 +44,22 @@ def endpoint(event, position="last"):
     return {"event_sequence": event["sequence"], "event": event["event"], "position": position}
 
 
-def terminal_cache_observation(runtime, key, build, output):
+def terminal_cache_observation(runtime, key, build, output, cache_class="B"):
     # Reclamation mutates overlay bytes after unmount. Establish the original
     # physical terminal boundary before observing stable backing identity.
     cleaned = readiness(runtime, key)
     observer = ["docker", "--host", "unix://" + build["socket"], "exec", "--user", "0:0", runtime.container,
-                "python3", "-B", "/code/cache/residency.py", "--class", "B",
+                "python3", "-B", "/code/cache/residency.py", "--class", cache_class,
                 "--store", "/layerfs-store/global/store.sqlite", "--overlay", "/layerfs-local/overlay/overlay.sqlite"]
     observed = receipts.command(observer, output, "cache-observation", 15)
     return cleaned, json.loads(Path(observed["stdout"]).read_text())
 
 
-def price(groups, events, bindings, measured_label="measured command"):
+def price(groups, events, bindings, measured_label="measured command", with_warm_mount=True):
     correlated = counts.correlate(events, groups)
-    selectors = [{"label": measured_label, "before": "measured_mount_attach", "end": "command_end_status"},
-                 {"label": "measured mount after warm terminal", "before": "warmup_unmount", "end": "measured_mount_attach"}]
+    selectors = [{"label": measured_label, "before": "measured_mount_attach", "end": "command_end_status"}]
+    if with_warm_mount:
+        selectors.append({"label": "measured mount after warm terminal", "before": "warmup_unmount", "end": "measured_mount_attach"})
     resolved = counts.resolve_selectors(selectors, bindings, correlated)
     priced = []
     for row in resolved:
@@ -274,11 +275,12 @@ def collect_family_observations(runtime, row, build, output, bindings):
     for group in groups.values():
         if group[0]["daemon"] != words(runtime.daemon_instance) or group[0]["scope"] != words(runtime.scope):
             raise ValueError("original numeric daemon/scope differs from authenticated channel")
-    totals, priced, correlated = price(groups, runtime.rows, bindings, "measured command and Commit")
+    totals, priced, correlated = price(groups, runtime.rows, bindings, "measured command and Commit",
+                                      with_warm_mount="warmup_unmount" in bindings)
     row.update(counts=totals, phase_counts=priced, control_correlation=correlated)
     cell_runner.snapshot_observations(runtime, row["observations"])
     cell_runner.ingest_observations(groups, row["observations"], row["cache"])
-    row["cache"]["status"] = cache.validate("B", row["cache"])
+    row["cache"]["status"] = cache.validate(row.get("cache_class", "B"), row["cache"])
 
 
 def operation_deadline(group_stop, seconds):
@@ -290,6 +292,95 @@ def operation_deadline(group_stop, seconds):
     return stop
 
 
+def history_free_space(output):
+    import shutil
+    free = shutil.disk_usage(output).free
+    if free < 50 * 1024**3:
+        raise RuntimeError("smoke free disk reserve")
+    return free
+
+
+def history_resource_guard(runtime, build, output, label, before=None):
+    """Original smoke guards in current ownership domains; no mounted payload read."""
+    free = history_free_space(output)
+    body = """import json,os
+from pathlib import Path
+def disk(root):
+    return sum(os.lstat(Path(base)/name).st_blocks*512 for base,_,files in os.walk(root) for name in files)
+cgroup={}
+for name in ('cpu.stat','memory.events','memory.stat'):
+    for line in Path('/sys/fs/cgroup/'+name).read_text().splitlines():
+        key,value=line.split();cgroup[key]=int(value)
+for key,name in (('memory_peak','memory.peak'),('memory_current','memory.current'),('swap_current','memory.swap.current')):
+    cgroup[key]=int(Path('/sys/fs/cgroup/'+name).read_text())
+store=[Path('/layerfs-store/global/store.sqlite'+suffix) for suffix in ('','-wal','-shm','-journal')]
+print(json.dumps({'cgroup':cgroup,'spool_allocated_bytes':disk('/layerfs-local'),'staging_allocated_bytes':disk('/code'),
+ 'store_logical_bytes':sum(p.stat().st_size for p in store if p.exists()),'store_allocated_bytes':sum(p.stat().st_blocks*512 for p in store if p.exists())}))
+"""
+    docker = ["docker", "--host", "unix://" + build["socket"]]
+    observed = receipts.command([*docker, "exec", "--user", "0:0", runtime.container,
+                                 "python3", "-B", "-c", body], output, label, 30)
+    row = json.loads(Path(observed["stdout"]).read_text())
+    row["host_free_bytes"] = free
+    row["receipt_allocated_bytes"] = sum(path.stat().st_blocks * 512 for path in Path(output).rglob("*") if path.is_file())
+    row["scope"] = "actual own container cgroup; current overlay/local backing and staged helpers; host receipt tree; lifetime peaks diagnostic only"
+    for key in ("oom", "oom_kill", "swap_current"):
+        if type(row["cgroup"].get(key)) is not int:
+            raise ValueError("original smoke resource observation unavailable: " + key)
+    if row["cgroup"]["swap_current"] or before and any(row["cgroup"][key] != before["cgroup"][key] for key in ("oom", "oom_kill")):
+        raise RuntimeError("container OOM/swap")
+    if row["spool_allocated_bytes"] + row["staging_allocated_bytes"] > 16 * 1024**3 or row["receipt_allocated_bytes"] > 32 * 1024**3:
+        raise RuntimeError("smoke disk budget")
+    if row["store_logical_bytes"] > 16 * 1024**3 or row["store_allocated_bytes"] > 16 * 1024**3:
+        raise RuntimeError("storage smoke Store budget")
+    return row
+
+
+def history_container_profile(runtime, build, output):
+    """Select the frozen original container profile before any measured work."""
+    docker = ["docker", "--host", "unix://" + build["socket"]]
+    receipts.command([*docker, "update", "--cpus", "2", "--memory", "2147483648", "--memory-swap", "2147483648", "--pids-limit", "256", runtime.container],
+                     output, "history-container-profile", 30)
+    observed = receipts.command([*docker, "inspect", runtime.container, "--format", "{{json .HostConfig}}"],
+                                output, "history-container-profile-readback", 30)
+    config = json.loads(Path(observed["stdout"]).read_text())
+    wanted = {"NanoCpus": 2_000_000_000, "Memory": 2_147_483_648, "MemorySwap": 2_147_483_648, "PidsLimit": 256}
+    if any(config.get(name) != value for name, value in wanted.items()):
+        raise ValueError("original small-delta container resource profile differs")
+    return wanted
+
+
+def history_observer(clock, row, label, action):
+    """Retain raw observer wall and exclude it even when a resource guard fails."""
+    started = time.monotonic_ns()
+    clock.begin_verifier(started)
+    try:
+        return action()
+    finally:
+        ended = time.monotonic_ns()
+        clock.end_verifier(ended)
+        row.setdefault("observer_intervals", []).append({"label": label, "start_monotonic_ns": started,
+            "end_monotonic_ns": ended, "complete_wall_ns": ended-started,
+            "scope": "read-only original resource guard; excluded from product time, included in absolute phase watchdog"})
+
+
+def qualify_history_mechanism(proofs):
+    """Frozen existence condition, separate from byte/history proof and quotas."""
+    known = all(type(item.get("fields", {}).get("payload_dependency_records")) is int
+                and item["fields"]["payload_dependency_records"] >= 0
+                and type(item["fields"].get("payload_objects")) is int
+                and item["fields"]["payload_objects"] > 0 for item in proofs)
+    if len(proofs) != 31 or not known:
+        return {"status": "FAIL", "reason": "original actual payload DELTA-path evidence unavailable",
+                "semantic_proof_status": "PASS", "payload_dependency_record_observations": "UNAVAILABLE"}
+    count = sum(item["fields"]["payload_dependency_records"] for item in proofs)
+    return {"status": "PASS" if any(item["fields"]["payload_dependency_records"] for item in proofs) else "FAIL",
+            "reason": "authenticated selected payload dependency reconstruction observed" if count else
+                      "original actual payload DELTA-path condition unmet: all selected payload records FULL",
+            "semantic_proof_status": "PASS", "payload_dependency_record_observations": count,
+            "scope": "existence only; per-state/file observations may repeat content IDs; no count/percentage/storage/latency quota; retired schema10 counters N/A"}
+
+
 def one_family_case(family, case, prepared_folder, build_folder, output):
     """Single ordinary call/Commit through the same SDK/Sandbox machinery."""
     current = identity.source_identity()
@@ -297,9 +388,13 @@ def one_family_case(family, case, prepared_folder, build_folder, output):
     prepared = fixtures.load(prepared_folder, case["fixture"]["recipe"])
     output = Path(output).resolve()
     output.mkdir(parents=True, exist_ok=False)
+    ordered = bool(case.get("history_schedule"))
     body = "/bin/bash /code/workload.sh apply " + shlex.quote(case["v016_case"])
+    bodies = ["/bin/bash /code/" + step["run"] for step in case["steps"]] if ordered else [body]
+    if ordered and (len(bodies) != 30 or any(not step.get("commit") for step in case["steps"])):
+        raise ValueError("original ordered history requires thirty importer saves and Commits")
     treatment = {"family": family, "case": case, "fixture": prepared["fixture"]["fixture_sha256"],
-                 "product": current["product_tree"], "body": body, "helpers": prepared["helpers"]["files"],
+                 "product": current["product_tree"], "body": bodies, "helpers": prepared["helpers"]["files"],
                  "binaries": {name: row["sha256"] for name, row in build["binaries"].items()},
                  "engine": identity.sha256(__file__), "image": identity.IMAGE}
     key = hashlib.sha256(json.dumps(treatment, sort_keys=True).encode()).hexdigest()
@@ -312,7 +407,7 @@ def one_family_case(family, case, prepared_folder, build_folder, output):
            "build": str(Path(build_folder).resolve()), "prepared": str(Path(prepared_folder).resolve()),
            "daemon_sha256": build["binaries"]["daemon"]["sha256"], "runtime_sha256": build["binaries"]["runtime"]["sha256"],
            "image": identity.IMAGE, "status": "NOT_RUN", "proof_status": "NOT_RUN", "counts": {}, "phases": {},
-           "observations": {}, "cache_class": "B", "cache": {"class": "B"}, "cleanup": "UNAVAILABLE",
+           "observations": {}, "cache_class": case.get("cache_class", "B"), "cache": {"class": case.get("cache_class", "B")}, "cleanup": "UNAVAILABLE",
            "declared_limit_ns": case["budget"]["command_ms"] * 1_000_000,
            "verifier_limit_ns": case["budget"]["verifier_ms"] * 1_000_000,
            "global_profile": "Disposable/WAL/OFF", "overlay_profile": "MEMORY/OFF/EXCLUSIVE", "construction_workers": 1,
@@ -334,22 +429,32 @@ def one_family_case(family, case, prepared_folder, build_folder, output):
                 "--manifest", prepared["provision"]["manifest"], "--receipt", str(output / "runtime.events.jsonl"),
                 "--uid", str(prepared["source_uid"]), "--gid", str(prepared["source_gid"]),
                 "--environment-file", str(environment), "--observation-scope", secrets.token_hex(32)]
+        if ordered:
+            argv.extend(["--case", case["v016_case"]])
         runtime = cell_runner.EventProcess(argv, output, "runtime")
         runtime.event("protocol_ready", time.monotonic() + 15)
         row["container"] = runtime.container
         if runtime.container is None:
             raise ValueError("original container acknowledgement unavailable")
+        if ordered:
+            row["container_profile"] = history_container_profile(runtime, build, output)
         row["staging"] = fixtures.stage(runtime.container, prepared, output / "staging", build)
-        warm = secrets.token_hex(32)
-        runtime.send("mount", warm, deadline=time.monotonic() + 15)
-        mounted.add(warm)
-        runtime.send("command", warm, script(output, "warmup.sh", body), deadline=time.monotonic() + 120)
-        warm_end = runtime.send("unmount", warm, deadline=time.monotonic() + 15)
-        mounted.remove(warm)
-        bindings["warmup_unmount"] = endpoint(warm_end)
-        row["warmup_cleanup"] = readiness(runtime, warm)
-        row["cache"].update(fresh_mount=True, warmup_terminal_unmount=True, warmup_cleanup="Gone",
-                            declaration="same untimed ordinary workload on prior mount, then terminal cleanup; fresh measured connection; setup warmth declared; no cold claim")
+        if ordered:
+            row["resource_guards"] = {"before": history_resource_guard(runtime, build, output, "history-resources-before"), "steps": []}
+            row["cache"].update(same_mount=True, warm_interval_ns=None,
+                declaration="one original Workspace for thirty saves/Commits; setup and prior own-write cache uncontrolled; no warmup Commit or independent coldness proof")
+            row["history"] = {"initial_root": next(event for event in runtime.rows if event["event"] == "history_initial_root")["fields"]["root"], "commits": []}
+        else:
+            warm = secrets.token_hex(32)
+            runtime.send("mount", warm, deadline=time.monotonic() + 15)
+            mounted.add(warm)
+            runtime.send("command", warm, script(output, "warmup.sh", body), deadline=time.monotonic() + 120)
+            warm_end = runtime.send("unmount", warm, deadline=time.monotonic() + 15)
+            mounted.remove(warm)
+            bindings["warmup_unmount"] = endpoint(warm_end)
+            row["warmup_cleanup"] = readiness(runtime, warm)
+            row["cache"].update(fresh_mount=True, warmup_terminal_unmount=True, warmup_cleanup="Gone",
+                                declaration="same untimed ordinary workload on prior mount, then terminal cleanup; fresh measured connection; setup warmth declared; no cold claim")
         selected = secrets.token_hex(32)
         clock.begin(time.monotonic_ns())
         row.update(attempted_operation_count=1, sample_count=1)
@@ -362,27 +467,41 @@ def one_family_case(family, case, prepared_folder, build_folder, output):
         row["edit_commit_end_group"] = {"watchdog_ms": group_ms,
                                        "scope": "ordinary edit, Commit and terminal unmount; excludes measured mount/setup/warmup/proof"}
         operation_seconds = case["budget"].get("operation_watchdog_ms", 120000) / 1000
-        command = runtime.send("command", selected, script(output, "command.sh", body),
-                               deadline=operation_deadline(group_stop, operation_seconds))
-        row["phases"]["command_ns"] = command["span"]["duration_ns"]
-        row["cache"]["commit_started_monotonic_ns"] = time.monotonic_ns()
-        committed = runtime.send("commit", selected, deadline=operation_deadline(group_stop, operation_seconds))
-        row["phases"]["commit_ns"] = committed["span"]["duration_ns"]
-        row["commit"] = committed
+        phase_stop = time.monotonic() + case["budget"]["command_ms"] / 1000 if ordered else group_stop
+        row["phases"].update(command_ns=0, commit_ns=0)
+        for index, command_body in enumerate(bodies, 1):
+            if ordered:
+                history_observer(clock, row, f"free-space-before-state-{index}", lambda: history_free_space(output))
+            step_started = time.monotonic_ns()
+            step_stop = operation_deadline(phase_stop, operation_seconds) if ordered else group_stop
+            command = runtime.send("command", selected, script(output, f"command-{index}.sh" if ordered else "command.sh", command_body),
+                                   deadline=operation_deadline(step_stop, operation_seconds))
+            row["phases"]["command_ns"] += command["span"]["duration_ns"]
+            row["cache"]["commit_started_monotonic_ns"] = time.monotonic_ns()
+            committed = runtime.send("commit", selected, deadline=operation_deadline(step_stop, operation_seconds))
+            row["phases"]["commit_ns"] += committed["span"]["duration_ns"]
+            row["commit"] = committed
+            if committed["fields"]["commit_kind"] != case["expected_commit"]:
+                raise ValueError("original known Commit outcome differs from frozen mutation/read-only case")
+            if ordered:
+                record = {"index": index, "command": command, "commit": committed,
+                          "step_wall_ns": time.monotonic_ns() - step_started}
+                row["history"]["commits"].append(record)
+                row["resource_guards"]["steps"].append(history_observer(clock, row, f"resources-step-{index}",
+                    lambda: history_resource_guard(runtime, build, output, f"history-resources-step-{index}",
+                                                    row["resource_guards"]["before"])))
         row["cache"].update(has_own_write_input=committed["fields"]["commit_kind"] == "Committed",
                             own_write_cold_observation=None,
                             own_write_cache_reason="no independent pre-Commit cold backing/metadata observation; own-write warmth is not eligible")
-        if committed["fields"]["commit_kind"] != case["expected_commit"]:
-            raise ValueError("original known Commit outcome differs from frozen mutation/read-only case")
-        runtime.send("snapshot", selected, deadline=operation_deadline(group_stop, 15))
+        runtime.send("snapshot", selected, deadline=operation_deadline(phase_stop, 15))
         bindings["command_end_status"] = endpoint(next(event for event in reversed(runtime.rows) if event["event"] == "workspace_status"))
-        end = runtime.send("unmount", selected, deadline=operation_deadline(group_stop, 15))
+        end = runtime.send("unmount", selected, deadline=operation_deadline(phase_stop, 15))
         mounted.remove(selected)
         row["phases"]["unmount_ns"] = end["span"]["duration_ns"]
         clock.finish(time.monotonic_ns())
         row["complete_wall_ns"] = clock.observe(time.monotonic_ns())["performance_ns"]
         row["performance_clock"] = clock.observe(time.monotonic_ns())
-        row["cleanup_observations"], row["cache"]["residency"] = terminal_cache_observation(runtime, selected, build, output)
+        row["cleanup_observations"], row["cache"]["residency"] = terminal_cache_observation(runtime, selected, build, output, row["cache_class"])
         row["cleanup"] = "Gone"
         row["proof_status"] = "FAIL"
         proof_started = time.monotonic_ns()
@@ -392,19 +511,28 @@ def one_family_case(family, case, prepared_folder, build_folder, output):
             if left <= 0:
                 raise TimeoutError("original frozen verification hard watchdog expired")
             return min(limit, left)
+        native_stop = min(proof_stop, time.monotonic() + operation_seconds) if ordered else proof_stop
+        def native_seconds(limit):
+            left = native_stop - time.monotonic()
+            if left <= 0:
+                raise TimeoutError("original per-state native proof watchdog expired")
+            return min(proof_seconds(limit), left)
         verify_mount = secrets.token_hex(32)
-        runtime.send("mount", verify_mount, deadline=time.monotonic() + proof_seconds(15))
+        runtime.send("mount", verify_mount, deadline=time.monotonic() + native_seconds(15))
         mounted.add(verify_mount)
         verify_body = "/bin/bash /code/workload.sh verify " + shlex.quote(case["v016_case"])
         verified = runtime.send("verify", verify_mount, script(output, "verify.sh", verify_body),
-                                deadline=time.monotonic() + proof_seconds(case["budget"]["verifier_ms"] / 1000))
+                                deadline=time.monotonic() + native_seconds(case["budget"]["verifier_ms"] / 1000))
         text = Path(verified["fields"]["stdout"]).read_text()
         proof = dict(line.split("=", 1) for line in text.splitlines())
         if proof.get("verification_status") != "pass":
             raise ValueError("original complete native verifier refused freshly remounted published root")
-        runtime.send("unmount", verify_mount, deadline=time.monotonic() + proof_seconds(15))
+        runtime.send("unmount", verify_mount, deadline=time.monotonic() + native_seconds(15))
         mounted.remove(verify_mount)
-        row["verification_cleanup"] = readiness(runtime, verify_mount, proof_seconds(5))
+        row["verification_cleanup"] = readiness(runtime, verify_mount, native_seconds(5))
+        if ordered:
+            row["resource_guards"]["after_native_proof"] = history_resource_guard(runtime, build, output,
+                "history-resources-after-native-proof", row["resource_guards"]["before"])
         runtime.send("observe", deadline=time.monotonic() + proof_seconds(15))
         runtime.send("stop", deadline=time.monotonic() + proof_seconds(15))
         runtime.event("finished", time.monotonic() + proof_seconds(15))
@@ -421,19 +549,66 @@ def one_family_case(family, case, prepared_folder, build_folder, output):
                       "--manifest", prepared["provision"]["manifest"], "--sealed", str(output / "graph-store/store.sqlite"),
                       "--case", case["v016_case"], "--receipt", str(output / "graph.events.jsonl"),
                       "--uid", str(prepared["source_uid"]), "--gid", str(prepared["source_gid"])]
-        graph = receipts.command(graph_args, output, "independent-graph", proof_seconds(case["budget"]["verifier_ms"] / 1000),
-                                 environment={**os.environ, "LAYERFS_CONSTRUCTION_WORKERS": "1"})
-        events = [json.loads(line) for line in (output / "graph.events.jsonl").read_text().splitlines()]
-        proof_events = [item for item in events if item["event"] == "workspace_verified"]
-        if len(proof_events) != 1 or events[-1]["event"] != "finished" or proof_events[0]["fields"]["root"] != committed["fields"]["root"]:
-            raise ValueError("original persisted root proof differs from exact acknowledged Commit root")
+        if ordered:
+            history_rows = [f"0\t-\t-\t{row['history']['initial_root']}\t{prepared['history_states'][0]['manifest']}"]
+            for record in row["history"]["commits"]:
+                fields = record["commit"]["fields"]
+                history_rows.append(f"{record['index']}\t{fields['commit_id']}\t{fields['parent']}\t{fields['root']}\t{prepared['history_states'][record['index']]['manifest']}")
+            transcript = script(output, "acknowledged-history.tsv", "\n".join(history_rows) + "\n")
+            graph_args[1] = "verify-history"
+            graph_args.extend(["--history-file", str(transcript)])
+        if ordered:
+            graph_events, roots, physical = [], [], []
+            wanted = [row["history"]["initial_root"], *[item["commit"]["fields"]["root"] for item in row["history"]["commits"]]]
+            for step, expected_root in enumerate(wanted):
+                history_free_space(output)
+                seconds = proof_seconds(operation_seconds)
+                events_path = output / f"graph-state-{step}.events.jsonl"
+                state_args = [*graph_args, "--history-step", str(step)]
+                state_args[state_args.index("--receipt") + 1] = str(events_path)
+                attempted = receipts.command(state_args, output, f"independent-graph-state-{step}", seconds,
+                    environment={**os.environ, "LAYERFS_CONSTRUCTION_WORKERS": "1"})
+                events = [json.loads(line) for line in events_path.read_text().splitlines()]
+                proved = [item for item in events if item["event"] == "workspace_verified"]
+                selected_roots = [item for item in events if item["event"] == "history_root_verified"]
+                encoding = [item for item in events if item["event"] == "history_payload_encoding"]
+                if (len(proved) != 1 or events[-1]["event"] != "finished"
+                        or proved[0]["fields"]["root"] != expected_root
+                        or proved[0]["fields"]["final_head_root"] != committed["fields"]["root"]
+                        or len(selected_roots) != 1 or selected_roots[0]["fields"]["step"] != step
+                        or selected_roots[0]["fields"]["root"] != expected_root):
+                    raise ValueError("independent selected state/full-acknowledgement history binding differs")
+                roots.extend(selected_roots)
+                graph_events.extend(proved)
+                if len(encoding) == 1 and encoding[0]["fields"].get("root") == expected_root:
+                    physical.extend(encoding)
+                row["history"].setdefault("proof_attempts", []).append({"index": step, "wall_stop_seconds": seconds,
+                    "attempt": attempted, "root": expected_root, "semantic_proof": proved[0], "payload_encoding": encoding})
+            row["history"]["verified_roots"] = roots
+            row["mechanism"] = qualify_history_mechanism(physical)
+            proof_events = [graph_events[-1]]
+        else:
+            graph = receipts.command(graph_args, output, "independent-graph", proof_seconds(case["budget"]["verifier_ms"] / 1000),
+                                     environment={**os.environ, "LAYERFS_CONSTRUCTION_WORKERS": "1"})
+            events = [json.loads(line) for line in (output / "graph.events.jsonl").read_text().splitlines()]
+            proof_events = [item for item in events if item["event"] == "workspace_verified"]
+            if len(proof_events) != 1 or events[-1]["event"] != "finished" or proof_events[0]["fields"]["root"] != committed["fields"]["root"]:
+                raise ValueError("original persisted root proof differs from exact acknowledged Commit root")
         row.update(proof_status="PASS", proof_wall_ns=time.monotonic_ns() - proof_started,
                    verification={"scope": case["oracle"]["scope"], "omissions": case["oracle"]["omissions"],
                                  "native": proof, "persisted": proof_events[0]})
         collect_family_observations(runtime, row, build, output, bindings)
         row.update(status="PASS" if row["cache"]["status"] == "ELIGIBLE" else "INELIGIBLE", functional_status="PASS")
+        if ordered:
+            row["semantic_proof_status"] = "PASS"
+            row["verification"]["mechanism"] = row["mechanism"]
+            if row["mechanism"]["status"] != "PASS":
+                row.update(status="FAIL", proof_status="FAIL", functional_status="FAIL", tag=row["mechanism"]["reason"])
+                row["resource_disposition"] = "known stopped container and sample volume retained for unmet original mechanism condition; all31 byte/history/census proofs and clean unmount remain PASS"
+                return row
         if row["status"] == "INELIGIBLE":
-            row["tag"] = "class B source demands or own-write cold backing precondition unavailable; functional/native/persisted proofs and clean unmount pass"
+            row["tag"] = ("same-mount history paid backing/metadata/SQLite, own-write coldness and initial/warm interval evidence unavailable; all31 semantic/ancestry/actual-dependency proofs and clean unmount pass" if ordered else
+                          "class B source demands or own-write cold backing precondition unavailable; functional/native/persisted proofs and clean unmount pass")
         state = receipts.command([*docker, "inspect", runtime.container, "--format", "{{.State.Running}}"], output, "container-state", 15)
         if Path(state["stdout"]).read_text().strip() != "false":
             raise ValueError("original container Stop not confirmed")
@@ -466,7 +641,7 @@ def one_family_case(family, case, prepared_folder, build_folder, output):
                     except BaseException as closing:
                         row.setdefault("independent_close_failures", []).append(str(closing))
                         row["status"] = "FAIL"
-        row["timing_scope"] = "matrix controller from measured mount through command/Commit/terminal unmount; setup/warmup/cleanup/fresh native and persisted verification/Stop separate"
+        row["timing_scope"] = "matrix controller from measured mount through command/Commit/terminal unmount; read-only resource-observer intervals excluded and separately retained; absolute phase stop includes those intervals; setup/warmup/cleanup/fresh native and persisted verification/Stop separate"
         row["evidence"] = str(output.relative_to(identity.ROOT.resolve()))
         receipts.write_new(output / "receipt.json", row)
         receipts.manifest(output)
