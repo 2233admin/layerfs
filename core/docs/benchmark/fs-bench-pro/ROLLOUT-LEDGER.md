@@ -109,6 +109,7 @@ comparison or release-admission claim. Durable is
 | H-10 | Prospective batch4 prepared SDK routes | Missing/partial prepared-step map could invoke native fallback and regenerate original payloads inside measuredwork; stale sealed helpers could disagree with reported current build | Controller trusted optional prepared records without mandatory originalstep/binary/descriptor/payload/script correspondence admission | Workera8c56d570 / integration91cf97fab | test_helper_refusal_precedes_case_claim_and_any_clone_or_mount fails at686344e8f; exact-source temporary assets reject five old-admission bypasses and all15guard checks PASS |
 | H-11 | v016-boundary-small-control-v1 and dedup-history-distributed-1 first attempts | Native proof/acknowledged Commits/Gone/KnownStop pass, independent public history proof fails acknowledged Commit missing | Controller copies only exported main file into typed-store, dropping closed WAL; immutable main-only census would also miss WAL | Workerf2c143b37 / integration2b52bdf17 | Real closed-WAL controller regression sees0 of100 acknowledged test rows on old main-only copy; red0.067s under120s mainlock |
 | H-12 | Mixed final failed preparation and prospective failed family parity | First missing/invalid preparation aborts parity without retaining earlier/later original case outcomes; CLI propagates only an exception | parity_workspace raises inside first failed case before writing parity.json | Worker47e5a5500 / integrationea7148a19 | Missing middle preparation red fails old behavior; all original membership/pin/bytes/native/seal guards retain FAIL reasons,22checksPASS; CLI old exception red retained,new5driverchecksPASS |
+| H-13 | dedup-history-distributed-500 setup at7905 | stage-code-check exits255: exec /bin/bash argument list too long, before any mount/product operation | fixtures.stage embeds all500 prepared-step/helper SHA rows into one165,872B Bash -c argv | PENDING file-backed complete authenticated checksum manifest | Worker owns external500-step/complete-row/remote-manifest/payload tamper regression; original fullchecker retained |
 
 H-1 and H-2 are harness faults, not product correctness or performance defects.
 The original file-identity checker remains intact; no product source changed.
@@ -3068,4 +3069,88 @@ no fabricatedbenchmark/proofmetrics. Laterbatches remainpending.
 | `e2461e160` (worker) | Sync current H11/failed-parity source and qualify actual retained WAL recovery | 79366 | 79366 | +0 |
 | `7905e26a2` (worker) | Sync current shared source before corrected dedup one-attempt cases | 79366 | 79366 | +0 |
 | `5faaa263c` (worker) | Sync current shared source before mixed failed-aggregate parity and ninecases | 79366 | 79366 | +0 |
-| This commit | Record genuine H11 recovery and dispatch qualified changed-source cases | 79366 | 79366 | +0 |
+| `ba000f704` | Record genuine H11 recovery and dispatch qualified changed-source cases | 79366 | 79366 | +0 |
+
+
+Batch4 file_size_transition family closes allsevenoriginalcases at reviewed
+privatee2461e160, resultse1081cb4b3f06f85f1530d7f33de1fb9f0b9d1e6 /
+treef2723a686189653485be1eaf578b91a391c81aad/+0. Bothsevenrow CSVs at
+baselines/core/2026-10-10-e2461e160 are importedunchanged. Root verified exact
+rawhandoffSHAfb2eeaea43061ebe7d1f27814f3017cc6218828b1c66cf192c4a7800a68d0854
+and row/cardinality/status alignment. Raw privateTiny
+2026-10-10-batch-4-file-size-transition-e2461e160/FAMILY-HANDOFF.json includes
+allsource/build/prepared/checkpoint/census/cache/metrics/limits/removal hashes.
+Sixcases strictnative/publicselectedroot/inode/globalcensusPASS, Gone/KnownStop,
+passingpairs removedafterguardedpub+outerACK; numericall6INELIGIBLE(H5),
+no cachequalificationor speedclaim. Alloriginalfive overwrite K2 checkpoints
+and SDKroundtrip K4 checkpoints/censuses qualified. No limit exceeded.
+
+| Original boundary case | Complete ns | Proof ns | Requests/jobs/statements | Store allocated B | Overlay allocated B | Outcome |
+| --- | ---: | ---: | --- | ---: | ---: | --- |
+| `v016-boundary-small-control-v1` | 223655332 | 1802061417 | 14/192/857 | 397312 | 268668928 | functional/proofPASS; numericINELIGIBLE; Gone/KnownStop |
+| `v016-boundary-below-v1` | 237781501 | 1738565250 | 14/194/865 | 790528 | 268664832 | functional/proofPASS; numericINELIGIBLE; Gone/KnownStop |
+| `v016-boundary-exact-v1` | 221404584 | 1754203709 | 14/272/1357 | 532480 | 268664832 | functional/proofPASS; numericINELIGIBLE; Gone/KnownStop |
+| `v016-boundary-above-v1` | 195659750 | 1710119667 | 14/272/1357 | 532480 | 268664832 | functional/proofPASS; numericINELIGIBLE; Gone/KnownStop |
+| `v016-boundary-large-control-v1` | 233357666 | 1804117333 | 14/272/1357 | 1466368 | 268668928 | functional/proofPASS; numericINELIGIBLE; Gone/KnownStop |
+| `v016-boundary-roundtrip-v1` | 337660999 | 1724911667 | 26/407/1900 | 729088 | 268668928 | functional/proofPASS; numericINELIGIBLE; Gone/KnownStop |
+| `v016-boundary-alias-roundtrip-v1` | 376628789 | 30703500 | UNAVAILABLE/UNAVAILABLE/UNAVAILABLE | UNAVAILABLE | UNAVAILABLE | strictnativeFAIL; verifiermount/StopNOT_ESTABLISHED |
+
+Alias executedallfive originalcommands withfiveCommitted acknowledgements and
+measuredEnd/Gone, thenstrictnativefinalFAIL: data mode750/mtime
+1791643360.694999760 differs fromexpectedmode750/1700000000.0. Frozenatomic
+replacementhelper updatesparentmtime; its own nativeauthoringproof already
+refuses that laststate. No parentrestore, weakenedmetadataoracle orproduct
+change is authorized. Persistedproof/globalcensus/finalcounts/storageNOT_RUN
+orUNAVAILABLE, neverzero/lifetime substitute. Failedverificationmount
+ df6da775e176678746558265196886a4e1853ae9c8874365eab37d255fbc0d49 remains
+retained; KnownStop notestablished, hostfencePermissionError/observedhostexit1
+retained. Failedcontainer
+fc826216619af5bc2907d540e8df3301835282b22c719708827d80b4ad375910 and
+volume layerfs-fsb-sample-6edfcf62abf74b08 stayretained. OnlymeasuredmountGone
+is established; completecase cleanclose is notclaimed. This is retained
+originaldefinition/metadata compatibilityFAIL, no identifiedfixableproductbug.
+Siximmutablepreparedmasters andoldH11failedsmallpair remainretained.
+LaterH13stagingfix doesnotaffectthese completedreceipts; nonearerun.
+
+Dedup at7905 completeddistributed1/10/100 once: allfunctional/proofPASS,
+numericINELIGIBLE/Gone/KnownStop andpassingpairsremoved. Nextdistributed500
+failssetup stage-code-check exit255 with165,872BsingleBash-c argument, before
+anymount/productoperation (sample_count0/attempted_operation_count0). Every
+preparedhelperSHA/path is expandedinto that argv byfixtures.stage. Raw
+Capped2026-10-10-batch-4-dedup-7905e26a2/run/dedup-history-distributed-500/
+staging/stage-code-check.attempt.json andstderr retained. Failedcontainer
+2af4f1956a1853e695b5c8b916a849355be16de2112944c5e9c894a816e65ac4 and
+volume layerfs-fsb-sample-c60f0a7c016f438a retained; cleanupUNAVAILABLE/
+Stopnotestablished/mountkeys[]. Rootstopped furtherunattemptedcases, preserving
+currentoriginalsource andallpreps. Workerowns H13 smallestfile-backed full
+manifest correction: authenticate exactremotechecksumfileSHA, thenunchanged
+sha256sum fullfilechecker; no omittedentries/truncation/tamper/retry/largeargv,
+newdependency/product/workload/limit change. Earliercompletedcases unaffected.
+
+Mixed at5faaa completedfouroriginalepisodes once(allstrictfunctional/proofPASS,
+numericINELIGIBLE/Gone/KnownStop withpassingpairsremovedafterpubACK):
+product/proof ns 1=193,719,124/2,480,153,458;
+10=247,202,416/2,808,790,250;
+100=1,048,731,959/18,072,620,625;
+500=4,548,366,793/17,816,215,666.
+Counts95/461/2367,833/3349/18118,8213/37158/190372,41013/186571/952225.
+Externalwalls6.569/7.322/27.508/33.558s<120; noadditionalactualcases underway
+whenSTOP honored. Preserve thissource/run withallten CSVselectionrows;
+remainingfivepreparedM1 cases willusefreshcorrectedsource/run, earlierfour
+neverrelabelled/rerun/copiedinto newrun. Finalfamily ledgerselects unaffected
+oldfour+newfive+failedprep byexactsource andbothper-runCSVpairs.
+
+Root inspectedlastmixed administrativeunrun-preparationclosure atold5faaa,
+receiptSHA38a46e650bae7cc5f74540dc2b5b45cd817c75c4f03a44af2ecbccec085c35a4,
+manifestSHA5159e3bafdbcffac69f16d278ca2af2e895e0db751f65d699e084985a49ce323;
+allfour referencedoriginalfailedprep rawfilesSHA match. Correctschema/current
+source-product-image/original4c83preparedsource, statusFAIL butactualcase/
+functional/proofNOT_RUN, zero sample/verification/actualattempt counts;
+allbenchmarktiming/count/cache/cleanup/storage fieldsabsent. Preparationwall
+120,033,743,083ns is explicitlysetup only, notbenchmark/proofmeasurement.
+ReportpreservesperformanceN/A/originaldeclared300s verifier plusactualNOT_RUN
+reason; no finalcase bench.run/claim/retry invoked. Laterclosure mayrefer the
+samefailedsetup atnewsource withoutinventing anotherattempt orsample.
+
+| `e1081cb4b` (worker) | Record allsevenboundary outcomes, completeproofs and retainedstrictfailure | 79366 | 79366 | +0 |
+| This commit | Integrate completed boundary CSV pair and preserve H13/partial mixed custody | 79366 | 79366 | +0 |
