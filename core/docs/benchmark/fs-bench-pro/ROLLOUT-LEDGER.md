@@ -91,6 +91,7 @@ comparison or release-admission claim. Durable is
 | 44 | Recover failed agent service compaction in the same worktree with a fresh context and reuse exact completed qualifications | Two service stream failures left source and receipts intact; source-hash-matched final6tests had already passed | Replaying tests/exporter or discarding unfinished source |
 | 45 | Seal final stable native/Linux assets once, then rebuild only the changed host oracle with qualified eight-binary reuse | Pinned Linux/CPP scopes are final and unchanged by subsequent runtime-only proof work | Duplicating unchanged Linux/native builds or using an unqualified stale binary |
 | 46 | Close original500MB exhaustive preparation as FAIL and its caseNOT_RUN; preserve failed parity/batch closure while permitting other originalcases and laterbatches | One unchanged120s preparation expired after15of20 native expectations; a sealed fixture cannot be invented, another attempt/limit increase/scope reduction is forbidden, and no product correctness defect was identified | Retrying setup, shrinking original proof scope, pretending whole-family parityPASS or indefinitely blocking runnable originalcases |
+| 47 | Keep separate authenticated runs and CSV pairs when a shared harness fix interrupts a family; select unaffected earlier results by their actual source in the final family report | Each run binds one source, and completed unaffected cases must not be repeated or relabelled | Copying earlier receipts into a new source run, inventing a common measured identity, or repeating all earlier cases |
 
 ## Bugs
 
@@ -3153,4 +3154,51 @@ reason; no finalcase bench.run/claim/retry invoked. Laterclosure mayrefer the
 samefailedsetup atnewsource withoutinventing anotherattempt orsample.
 
 | `e1081cb4b` (worker) | Record allsevenboundary outcomes, completeproofs and retainedstrictfailure | 79366 | 79366 | +0 |
-| This commit | Integrate completed boundary CSV pair and preserve H13/partial mixed custody | 79366 | 79366 | +0 |
+| `88a2bd27b` | Integrate completed boundary CSV pair and preserve H13/partial mixed custody | 79366 | 79366 | +0 |
+
+
+The first corrected dedup and mixed source runs are committed without changing
+any original receipt. Dedup worker672f3320623762b735f61bae3de483f2136657fd,
+tree5109ff7cdff6f62e66ca79d1e21690b39b899a51, adds only the CSV pair under
+baselines/core/2026-10-10-7905e26a2. Both files have all26 original selections:
+three functional/proof PASS with numeric INELIGIBLE, distributed500 setup FAIL
+with proof NOT_RUN/sample_count0, and22 NOT_RUN. Root checked cardinality and
+ordered case alignment. This does not claim that all26 cases ran or passed.
+The original7e594 H11 failure remains separately committed.
+
+Mixed worker36cd1ee26387787834c83246dd8a4df000e68585,
+tree6680657b71c02ecbf4c979cd7ba46d53089baa8f, adds only the CSV pair under
+baselines/core/2026-10-10-5faaa263c. Both files preserve allten original cases:
+four ordinary episode proof PASS/numeric INELIGIBLE; five prepared M1 cases
+NOT_RUN; final unprepared exhaustive case proof NOT_RUN with explicit failed
+preparation reason, zero actual attempts and performance N/A. Both exhaustive
+selections have performance N/A, with original declared proof limits retained.
+Root verified exact performance SHA
+6cd83a5ba8ed950a494772a61fff9298081dfbd66cb357a5ec9afb127f54d3c1
+and verification SHA
+045c9f1b6192ef5b44c27ccc1e76a3afb2d2a3688ba3c7372872bf1ebfb86170,
+ordered ten-row membership and four PASS/six NOT_RUN proof outcomes.
+Worker report376,161,416ns is reporting only, with no replay. The complete raw
+handoff is private namespaceworktree
+benchmark-results/fs-bench-pro/2026-10-10-batch-4-mixed-h11-sync/first-source-handoff/handoff.json,
+SHAf3d2c04c9e3915630eccc576733dc497e70b08b55b2272e283dcddb509e13c62;
+its manifest SHA is71cb9407b897a54ab214556235c7a68c51a06b8ceb28c26f4e4edcd6eb412337.
+
+| Batch4 family | Original cases | Current recorded position | Remaining work |
+| --- | ---: | --- | --- |
+| file_size_transition | 7 | Six strict proof and clean-close PASS, numeric INELIGIBLE; one original strict metadata failure with verifier mount/Stop unestablished; allseven attempted | Closed failed case retained; reuse unaffected evidence after H13 |
+| dedup_branch_history | 26 | Three corrected-source strict passes; one setup argument-size FAIL;22 unrun; older H11 failure retained | Qualify H13, then original23 affected/unattempted cases once at new source |
+| mixed_load_bearing | 10 | Four strict passes at5faaa; five prepared cases unrun; final preparation FAIL/actual NOT_RUN; aggregate parity FAIL withnine individual PASS | Qualify H13, then originalfive prepared cases once at new source; retain failed preparation |
+
+The new source runs will again select every original case, preserving NOT_RUN
+rows for earlier unaffected cases and citing their earlier authenticated runs
+in the final family report. Raw receipts remain at their actual source; no
+receipt is copied into a different source registration. The two CSVs per run
+keep this distinction explicit. Root will assemble family completion from the
+unaffected earlier results and genuinely affected/new attempts, with every
+failed and unrun selection visible. No new result ratio, comparison verdict,
+cache claim, threshold, workload or limit is introduced.
+
+| `672f33206` (worker) | Preserve three dedup passes, failed500 setup and22 unrun rows | 79366 | 79366 | +0 |
+| `36cd1ee26` (worker) | Preserve four mixed passes and every remaining selection with failed preparation reason | 79366 | 79366 | +0 |
+| This commit | Integrate both partial source CSV pairs and preserve evidence across the staging fix | 79366 | 79366 | +0 |
