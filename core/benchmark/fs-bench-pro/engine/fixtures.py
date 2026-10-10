@@ -183,6 +183,29 @@ def prepare_namespace(recipe, folder, build_folder):
     return result
 
 
+def compatible_master(folder, fixture, current, uid, gid):
+    """Reuse only a sealed sibling setup with the identical complete input tree."""
+    for candidate in sorted(Path(folder).parent.glob("*/prepared.json")):
+        if candidate.parent == Path(folder):
+            continue
+        summary = json.loads(candidate.read_text())
+        if (summary.get("schema") != "fs-bench-pro-prepared-workspace-v1"
+                or summary.get("status") != "PASS"
+                or summary.get("global_profile") != "Disposable/WAL/OFF"
+                or summary.get("identity", {}).get("product_tree") != current["product_tree"]
+                or (summary.get("source_uid"), summary.get("source_gid")) != (uid, gid)
+                or summary.get("fixture", {}).get("fixture_sha256") != fixture["fixture_sha256"]):
+            continue
+        prepared = load(candidate.parent)
+        return prepared, {"prepared": str(candidate.parent.resolve()),
+                          "prepared_manifest_sha256": identity.sha256(candidate.parent / "manifest.json"),
+                          "master_volume": prepared["master_volume"],
+                          "store_sha256": prepared["provision"]["store_sha256"],
+                          "input_fixture_sha256": fixture["fixture_sha256"],
+                          "scope": "closed immutable setup only; case-specific expected tree/helpers remain new; independent sample byte copy; no cold claim"}
+    return None, None
+
+
 def prepare_workspace(recipe, folder, build_folder):
     family, case = family_case(recipe)
     if family["family"] not in WORKSPACE_FAMILIES:
@@ -221,18 +244,25 @@ def prepare_workspace(recipe, folder, build_folder):
         target.chmod(0o555)
         helpers["files"][relative] = identity.sha256(target)
     helpers["sha256"] = hashlib.sha256(json.dumps(helpers["files"], sort_keys=True).encode()).hexdigest()
-    volume = "layerfs-fsb-master-" + family["family"].replace("_", "-") + "-" + uuid.uuid4().hex[:16]
-    docker = ["docker", "--host", "unix://" + build["socket"]]
-    receipts.write_new(folder / "resource-claim.json", {"volume": volume, "created_by_this_run": True,
-                       "purpose": "new immutable SDK-provisioned workspace input; never sample directly"})
-    made_volume = receipts.command([*docker, "volume", "create", volume], folder, "master-volume", 15)
-    if Path(made_volume["stdout"]).read_text().strip() != volume:
-        raise ValueError("original master volume acknowledgement differs")
-    provisioned = project.provision(source, volume, folder / "project", build)
+    reused, reuse = compatible_master(folder, fixture, current, source.stat().st_uid, source.stat().st_gid)
+    if reused is None:
+        volume = "layerfs-fsb-master-" + family["family"].replace("_", "-") + "-" + uuid.uuid4().hex[:16]
+        docker = ["docker", "--host", "unix://" + build["socket"]]
+        receipts.write_new(folder / "resource-claim.json", {"volume": volume, "created_by_this_run": True,
+                           "purpose": "new immutable SDK-provisioned workspace input; never sample directly"})
+        made_volume = receipts.command([*docker, "volume", "create", volume], folder, "master-volume", 15)
+        if Path(made_volume["stdout"]).read_text().strip() != volume:
+            raise ValueError("original master volume acknowledgement differs")
+        provisioned = project.provision(source, volume, folder / "project", build)
+    else:
+        volume, provisioned = reused["master_volume"], reused["provision"]
+        receipts.write_new(folder / "resource-claim.json", {"volume": volume, "created_by_this_run": False,
+                           "purpose": "compatible closed prepared master reused; never a mutated sample", "reuse": reuse})
     result = {"schema": "fs-bench-pro-prepared-workspace-v1", "status": "PASS", "recipe": recipe,
               "family": family["family"], "case": case["id"], "identity": current, "fixture": fixture,
               "expectation": expectation, "native_verification": native, "helpers": helpers,
               "master_volume": volume, "provision": provisioned, "source_uid": source.stat().st_uid,
+              "master_reuse": reuse,
               "source_gid": source.stat().st_gid, "global_profile": "Disposable/WAL/OFF",
               "overlay_profile": "MEMORY/OFF/EXCLUSIVE", "construction_workers": 1,
               "setup": "native fixture and independent algebraic final state fully verified; public Init/seal/install once; sample uses independent closed byte clone",

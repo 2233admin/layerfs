@@ -12,6 +12,44 @@ from engine import fixtures
 
 
 class Fixtures(unittest.TestCase):
+    def test_master_reuse_requires_exact_input_profile_product_and_identity(self):
+        good = {"schema": "fs-bench-pro-prepared-workspace-v1", "status": "PASS",
+                "global_profile": "Disposable/WAL/OFF", "identity": {"product_tree": "product"},
+                "source_uid": 501, "source_gid": 20, "fixture": {"fixture_sha256": "fixture"},
+                "master_volume": "immutable-master", "provision": {"store_sha256": "sealed"}}
+        variants = ({}, {"global_profile": "Durable"}, {"identity": {"product_tree": "other"}},
+                    {"source_uid": 502}, {"source_gid": 21}, {"fixture": {"fixture_sha256": "other"}},
+                    {"status": "FAIL"})
+        for changed in variants:
+            with self.subTest(changed=changed), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                prior = root / "prior"
+                prior.mkdir()
+                (prior / "prepared.json").write_text(json.dumps({**good, **changed}))
+                (prior / "manifest.json").write_text("sealed prior evidence")
+                with patch.object(fixtures, "load", return_value=good) as checked:
+                    reused, record = fixtures.compatible_master(root / "new", {"fixture_sha256": "fixture"},
+                                                               {"product_tree": "product"}, 501, 20)
+                self.assertEqual(checked.call_count, 0 if changed else 1)
+                if changed:
+                    self.assertIsNone(reused)
+                    self.assertIsNone(record)
+                else:
+                    self.assertEqual(reused["master_volume"], "immutable-master")
+                    self.assertEqual(record["store_sha256"], "sealed")
+
+    def test_a_matching_corrupt_master_is_refused_without_fallback(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            prior = root / "prior"
+            prior.mkdir()
+            (prior / "prepared.json").write_text(json.dumps({"schema": "fs-bench-pro-prepared-workspace-v1",
+                "status": "PASS", "global_profile": "Disposable/WAL/OFF", "identity": {"product_tree": "product"},
+                "source_uid": 501, "source_gid": 20, "fixture": {"fixture_sha256": "fixture"}}))
+            with patch.object(fixtures, "load", side_effect=ValueError("retained evidence changed")):
+                with self.assertRaisesRegex(ValueError, "retained evidence changed"):
+                    fixtures.compatible_master(root / "new", {"fixture_sha256": "fixture"}, {"product_tree": "product"}, 501, 20)
+
     def test_recipe_is_independent_of_output_path_and_never_overwrites(self):
         with tempfile.TemporaryDirectory() as directory:
             home = Path(directory)

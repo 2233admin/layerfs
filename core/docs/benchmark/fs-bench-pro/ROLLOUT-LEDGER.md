@@ -69,6 +69,8 @@ comparison or release-admission claim. Durable is
 | 25 | Integrate worker changes locally onto main; keep engine, product fixes and the master ledger under the lead; record shared Docker VM interference in each source receipt through LAYERFS_BENCH_INTERFERENCE | Isolated family edits avoid conflicts; parallel samples share host/VM resources and cannot claim isolated timing; original workloads/cache/limits remain fixed | Multiple owners editing the engine, hiding interference, or pushing worker branches |
 | 26 | Correct port_review.source_commit to the peeled reference commit and preserve the annotated tag object as source_tag_object; require both exact objects in parity | The annotated recovery tag is ae3310f..., while its source commit is d296981...; reviewed source bytes remain identical and old receipts remain valid at their actual source | Keeping a misleading commit label, deleting the tag pin, or replaying unchanged samples |
 
+| 27 | Reuse a validated closed sibling master for an exactly matching complete initial tree, product, UID/GID and Disposable profile; keep expected/helper trees case-specific and sample byte clones independent | Setup reuse policy requires compatible sealed inputs; the changing family has six unique initial sizes despite 32 cases | Duplicate Init/install for the same input, reusing a mutated sample, or claiming coldness |
+
 ## Bugs
 
 | Bug | Case | Symptom | Cause | Fix commit | External test |
@@ -1282,4 +1284,37 @@ The lead owns the remaining canonical and small-delta families in batch 2.
 No later batch has started. Production LOC 79,366 -> 79,366 (delta +0), pinned
 absent-aware staged method; reference absent (retired R9c; last 65,417).
 
-| This commit | Close pilot membership supplement and release qualified edit workers | 79366 | 79366 | +0 |
+| `cca598d0b` | Close pilot membership supplement and release qualified edit workers | 79366 | 79366 | +0 |
+
+
+Batch 2 setup reuse correction: the changing worker found no cross-case master
+reuse mechanism in the preparation controller. The Python-only helper now
+selects only a sibling sealed PASS workspace preparation with identical full
+initial native fixture digest, unchanged product, explicit Disposable/WAL/OFF
+profile and exact UID/GID. It validates all old evidence, closed host Store,
+installed manifest and helper seals before reuse. A matching corrupt candidate
+fails explicitly, with no fallback/reprepare/retry. New native expected trees
+and executable helper seals remain case-specific; every measured sample still
+gets an independent closed byte copy and original cache checks. No input,
+workload, timeout, verifier or cache treatment changes. Resource receipts mark
+reused master ownership false and name its prior sealed preparation. Setup
+warmth remains explicit; reuse never establishes coldness. Existing prepared
+cases are preserved without replay. Only preparation machinery changes; the
+qualified compiled runtime/writer/daemon bytes can be reused unchanged.
+
+Six scoped fixture tests PASS 0.028 s under the main 120 s lock, including
+wrong input/profile/product/UID/GID rejection and refusal of a corrupt matching
+master. No new measurement. Capped worker's first original insert preparation
+already passed at `4f52124e4` (27 s) and is retained as the compatible closed
+524,283,904-byte initial master:
+layerfs-fsb-master-edit-length-changing-capped-d2b25e60d4de4cdb.
+Other workers have not prepared an SDK case. Their prospective declarations
+are `e1062c6d0` preserving and `d5336c13b` changing; all three are unchanged
+product 79,366 -> 79,366 (delta +0), pinned staged absent-aware method. The
+lead's canonical changes remain unstaged and are not part of this Python-only
+reuse commit; workers must not take unrelated compiled-source changes.
+
+| `4f52124e4` (worker) | Bind capped root and full payload proof declaration | 79366 | 79366 | +0 |
+| `e1062c6d0` (worker) | Declare final preserving current graph/cache obligations | 79366 | 79366 | +0 |
+| `d5336c13b` (worker) | Bind changing current oracle and own-write eligibility scope | 79366 | 79366 | +0 |
+| This commit | Reuse compatible closed initial masters without reusing measurement | 79366 | 79366 | +0 |
