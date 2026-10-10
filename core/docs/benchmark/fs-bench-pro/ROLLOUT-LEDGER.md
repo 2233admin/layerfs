@@ -24,7 +24,7 @@ comparison or release-admission claim. Durable is
 | 4 History on one branch | CLOSED WITH FAILURES: all 43 original cases ported and recorded; 31 functional/proof/clean-close passes, 11 retained actual failures, one failed preparation with actual NOT_RUN; mixed aggregate parity FAIL retained under section 9 exception; no identified fixable product correctness bug remains | H11 2b52bdf17; H12 ea7148a19; H13 8ae040cdd; H14 e09c61bbd; product H15 a05ed6027; H16 9dfb70ee4; fresh seal3c67e9249; affected Init8f24e39a4; boundary88a2bd27b; partial bd3016957; mixed1a21ebfc3; dedup closure27708c11d | Begin batch 5 after this committed failed closure; verify existing public SDK Fork and History |
 | 5 Branches and Workspaces | CLOSED WITH FAILURES: all17 original cases ported/recorded; eight functional/proof/clean-close passes, eight actual concurrent refusal failures, one failed-preparation actual NOT_RUN; branch aggregate parity FAIL retained under section9 | SDK proof711593c5f; H21/22 4a40fb690; setup exceptionc23ac0cfd; H23 68209bdb7; H24 669bc4853; H25 2f7160c92; H26 616947cb6; branch305bee680; multicb3a003ac; historicalb0b2cd386 | Begin batch6 under this truthful failed closure, preserving all original failures/limits/proofs/resources |
 | 6 Dedup and storage | CLOSED WITH FAILURES: all54 original cases ported/recorded;45 functional/proof/clean-close passes (44 numericINELIGIBLE, one verification-onlyPASS),8 failed outcomes, one failed-preparation actualNOT_RUN; repository aggregateparityFAIL undersection9; no identified fixable product correctness cause remains | definitions77eb/63ff/a442/5505/55a3; support86ba/149d; H28 1cc; H30/31 082; H32 0a8; H33 fe205; footprint8b684a3b1; reuse4d725864f; crossad21161eb; CDC79ad08b2a; H34 08e1; H35 fad966f7e; repositoryoldf8752231d / this closure | Begin batch7 at this committed truthful failure closure; preserve all limits, failed/ineligible/unrun rows and exact resources |
-| 7 Reliability | CLOSED AS NOT_APPLICABLE: all28 original cases source-reviewed/recorded;26 exactphysical-accounting gaps andtwo from-creationSDKprofile gaps; zero samples/fullcaseproofs, no missing-capability feature added | b1cc/dda917/f572/f707/a022/f560; spec04e1142f0; this28-rowreportclosure | Write iteration completion with all25families/273cases and retained failures/resources |
+| 7 Reliability | CLOSED AS NOT_APPLICABLE: all28 original cases source-reviewed/recorded;26 exactphysical-accounting gaps andtwo from-creationSDKprofile gaps; zero samples/fullcaseproofs, no missing-capability feature added | b1cc/dda917/f572/f707/a022/f560; spec04e1142f0; 093fe2068 | Iteration1 completion recorded; no further case work selected |
 
 ## Decisions
 | Number | What | Why | Alternative |
@@ -120,6 +120,8 @@ comparison or release-admission claim. Durable is
 
 | Bug | Case | Symptom | Cause | Fix commit | External test |
 | --- | --- | --- | --- | --- | --- |
+| H-27 (harness custody) | Prospective multi-runtime disposer and legacy partial-loss receipt | Removal reader rejected after primary removal because an optional None key appeared in legacy seven-key identity | Generic identity builder added absent optional keys instead of exact conditional schema | 149d40bac; worker19b7de1a4 | Original root/worker RED retained; seven worker and eight integrated retention guards PASS, all Docker actions mocked |
+| H-28 (harness installation) | First cross anchor and six footprint cases at149d40bac | Daemon refused existing installation metadata before readiness | Byte install copied host Init manifest with daemon_sqlite=None without public install qualification | 1cc25d4de; native3e37aa36f and controllerf05010629/11635c9b | External actual held-SealedProject SDK install RED; four native and nine Python final guards PASS; failed receipts kept and affected cases sampled once at corrected source |
 | H-30 | CDC overwrite1 and cross anchor1 at1cc25d4de | Actual successful mount ACK followed by controller timeout; imported claim missed executed guard hashes | Waited for literal mount-branch instead of actual mount acknowledgement; claim omitted workspace/receipts hashes | 08288e824 | Three actual mount protocol and three claim identity guards; original red retained |
 | H-31 | Footprint unique100000 at1cc25d4de | KeyError after actual Committed ACK | Init step indexed instead of declared mutation step and eager missing top-level fallback | 08288e824 | Three strict operation expectation guards; original red retained |
 | H-32 | Footprint unique100000 at08288e824 | Completed paid work/End/Gone, then cache-observation exit3 skipped proof and Stop | Controller treated the cache helper declared INELIGIBLE status as an execution error | This commit | test_actual_ineligible_a_observation_retains_miss_and_completed_cleanup plus eleven error/forgery refusals; parent red retained |
@@ -6689,5 +6691,53 @@ unknownacquisition/Stop fields, without anyforeign/protectedresourceaction.
 | Commit | Purpose | Production before | after | delta |
 | --- | --- | --- | --- | --- |
 | This commit | Preserve refused final master custody and exact retained probe identities | 79370 | 79370 | +0 |
+Pinned absent-aware staged counter/exact tree confirmation; reference absent,
+retiredR9c,last65,417/tree498dd1917812.
+
+
+### Iteration1 final completion, 2026-10-11
+
+ITERATION-1-COMPLETION.md records all25originalfamilies/273authoritative
+case outcomes:192functional/verifier/clean-closePASS,50failed,3actual
+NOT_RUN after solefailedpreparation and28complete-caseNOT_APPLICABLE.
+It includes everycase/source/cleanupstatus, all53failed/unrun reasons,
+all28NA needs/originalverification references, six authoritative/four
+historicalsoftlimitmisses, everybug/cause/fix/regression, all80decisions,
+155prior mainLOC statements+thiscompletioncommit andeachretainedresource
+identity. H27/H28 source-backed fixes fromdatedappendsections nowalso
+appear in thefrontbugindex; historicalreceipts/details areunchanged.
+
+First245 cases use sealedmap1f3756bab0ae61eebc23d2f0566be009122cacf1c8e4fcc40e653e04fb998cde;
+all40oldCSVpairs and154historical/defaultrows reauthenticated unchanged.
+B7f560 adds28NA rows, total41pairs/427rowsperCSV. Oldpilot7scopedBlabels
+keepfullnumericalqualificationUNVERIFIED; no newcold/speed/comparison
+claim. Stage0.4C10/C12exactcountsFAIL, frozenoracles/limits/legalrefusals/
+unknownterminal/physicalscopes/prepared-inputtestexceptions/OWNER-3/noCI/
+noDurable/newnativeLinuxNOT_RUN remainexplicit. OnlyproductH15+4;
+no newfeatures/optimizations/family/unchangedrepeat/limitchange orforeign
+resourceaction. Existingrawreceipts/inputfiles/threefamilyworktrees remain
+forprimaryevidence. All89passing master removalACKs and85recordedretained
+containerIDs/92volumenames, including3failedreadonlyprobes, aredocumented.
+
+Scoped document/source/CSV crosscheckPASS271,408,250ns/R4120s/readreport
+template:25families/273exactuniqueIDs/statuscounts,36uniquebugs(H29alias),
+decisions1–80,41sourcepairs,155mainLOCstatements(+4onlya05ed6027), all
+relativefilelinksresolve andeveryoldCSVhashunchanged. Raw:
+benchmark-results/fs-bench-pro/2026-10-11-iteration-completion-authoring/validation.json.
+No product/runtime/SDK/Docker/testsuite/benchmark replay occurred. One
+initialdocumentationgeneration snippet had anunterminatedPythonstring
+andwrote noartifact; correctedretainedgenerator produced thecomplete
+document. This is documentauthoring, not a sampledcase orproductbug.
+
+The owner's stoppingcriterion ismet by truthfulclosure: allremaining
+cases areexplicitfailed/unrunafterfailedprep/NA, withnoidentifiedfixable
+product correctnesscause left. Thecompletiondoesnotclaim allcasespassed,
+exactcountreproduction, numericalperformancequalification orreleasegate.
+CurrentbenchmarkREADME anddocumentationindex linkthecompletion and
+replace stale82pending/batch1–5 status; earlierproposalskeep theirhistory.
+
+| Commit | Purpose | Production before | after | delta |
+| --- | --- | --- | --- | --- |
+| This commit | Complete the273-case iteration handoff and document every remaining limit | 79370 | 79370 | +0 |
 Pinned absent-aware staged counter/exact tree confirmation; reference absent,
 retiredR9c,last65,417/tree498dd1917812.

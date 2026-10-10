@@ -1,6 +1,6 @@
 # fs-bench-pro workload benchmark
 
-> **Status:** Current planning checklist; no release candidate exists.
+> **Status:** First iteration closed with failures and not-applicable cases; no release admission is established.
 
 The [implementation spec](../../docs/benchmark/fs-bench-pro/implementation-spec.md)
 and [rollout ledger](../../docs/benchmark/fs-bench-pro/ROLLOUT-LEDGER.md) define
@@ -11,16 +11,15 @@ comparison or release gate is selected.
 Stage 0.1 has harvested all 461 released source rows into
 [the reference catalogue](baselines/v0.1.6/README.md). Stage 0.2 has moved the
 working SDK runtime here and separated cluster-one and cluster-two harnesses.
-The catalogue contains all 25 original families and 273 cases. Batches 1–5
-have 19 ported families and 191 cases with recorded results; batch 6 and
-reliability retain 82 pending cases. Batch 5 closes with eight complete
-functional/proof/clean-close passes, eight retained concurrent contention
-failures and one failed-preparation unrun case. Completed rows preserve their
-separate cache eligibility; historical access is verification only. The
-[rollout ledger](../../docs/benchmark/fs-bench-pro/ROLLOUT-LEDGER.md) names
-every source, failure, fix, retained resource, reuse decision and original CSV
-pair. These are function and diagnostic observations, with no speed,
-comparison or release gate.
+The catalogue contains all 25 original families and 273 cases. All seven batches
+are truthfully closed: 192 functional/verifier/clean-close passes, 50 failed
+outcomes, three actual cases unrun after failed preparation, and 28 complete
+reliability cases not applicable. Source-only reliability parity preserves the
+missing physical accounting and creation-profile requirements; it is not a
+native or mounted proof. The [iteration completion](../../docs/benchmark/fs-bench-pro/ITERATION-1-COMPLETION.md)
+records every case, failed or unavailable scope, limit miss, fix, decision,
+source pair and production LOC. Raw receipts and claims remain append-only;
+closed results are not authorization to repeat an unchanged sample.
 
 Use `bench.py build --out <fresh-results-path>`, then
 `bench.py prepare empty|big64m --build <seal> --out <fresh-results-path>`.
