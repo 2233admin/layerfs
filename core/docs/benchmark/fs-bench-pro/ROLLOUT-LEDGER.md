@@ -4910,4 +4910,86 @@ Busy semantics, strict metadata oracle failures and all failed/uncertain
 resources remain. Durable execution remains disabled.
 
 | `df901bfd0` (worker) | Correlate exact empty command Control ranges; qualify separate retained-count supplement | 79370 | 79370 | +0 |
-| This commit | Integrate isolated count mapper without changing historical execution or receipts | 79370 | 79370 | +0 |
+| `616947cb6` | Integrate isolated count mapper without changing historical execution or receipts | 79370 | 79370 | +0 |
+
+
+### Batch 5 historical_access final family results, 2026-10-11
+
+Imported exact worker434dc0a3c and6d3eecb3c pairs at
+baselines/core/2026-10-11-c79eb607f and2026-10-11-5cea1710d. Each preserves
+allsix original IDs. The first pair has fourPASS, oneFAIL and oneNOT_RUN;
+the latter has two actualPASS and fourNOT_RUN because those four qualified
+prior passes are reused unchanged. Original pre-H23 c6ec3e467 pair remains.
+No allsix-at-new-source execution is claimed and no passing proof is replayed.
+Composite authoritative family result is six functional/proof/clean-closePASS,
+performance samples0 and one authoritative proof attempt percase. Two earlier
+failed attempts remain in history at their exact source identities.
+
+| Original access case | Authoritative source | Selected role/local | Separate complete proof-attempt ns / 25s | Both full read bytes | Full global Commit rows / ACKs / Branches | Closure |
+| --- | --- | --- | ---: | ---: | --- | --- |
+| v016-access-boundary-before-v1 | c79eb607f | main/48 | 4501832209 | 262142 | 100/100/2 | Gone / KnownStop |
+| v016-access-boundary-after-v1 | c79eb607f | main/49 | 5011988667 | 262144 | 100/100/2 | Gone / KnownStop |
+| v016-access-inode-before-v1 | c79eb607f | main/94 | 5067557042 | 16384 | 100/100/2 | Gone / KnownStop |
+| v016-access-inode-after-v1 | c79eb607f | main/95 | 5093394291 | 8192 | 100/100/2 | Gone / KnownStop |
+| v016-access-fork-point-v1 | 5cea1710d | trunk/5 | 4651186917 | 131072 | 15/30/5 | Gone / KnownStop |
+| v016-access-divergent-head-v1 | 5cea1710d | b/10 | 4818232875 | 131072 | 35/40/6 | Gone / KnownStop |
+
+All diagnostic proof-attempt walls remain within original25 s bound; no
+verifier limit exceeded. Every access uses one fresh mount, original reader
+then independent verifier, complete full bytes, declared alias/absence/inode
+relations, public selected-root/fork/source-head binding, complete typed
+producer ancestry and unfiltered closed SQL census including new zero-ACK
+access Branch. Each has original End/Gone, authenticated fence, known runtime
+return/Stop, guarded publication and outer acknowledgement. Allsix own passing
+pairs were removed via separately bound authenticated administration.
+
+Performance fields are N/A by original verification-only contract. Raw cache
+INELIGIBLE and summary requests/ownerjobs/statements UNAVAILABLE remain;
+source diagnostic arrays are retained and no positive numeric/peak/cold claim
+is made. Storage values use exact original external snapshot scope, including
+explicitly observed Store/Overlay sidecars, not an independent residency proof:
+
+| Access case | Store logical / allocated B | Overlay logical / allocated B | Authoritative receipt SHA-256 |
+| --- | --- | --- | --- |
+| v016-access-boundary-before-v1 | 3084392/3088384 | 229376/268664832 | d6b74d6b163ec178ca3e645265f75fd597c33a5b38c1011e9d1ee38dfbee0e1e |
+| v016-access-boundary-after-v1 | 3084392/3088384 | 229376/268664832 | 74ff776b5a44bbac86ba7bbcc9b5413d5cb6b61f3c46b226d8433c4a93df46e0 |
+| v016-access-inode-before-v1 | 3534952/3538944 | 229376/268664832 | a3f7ff69688e4d28bfa057faabc9310963a59eb4aa4e94ae7dc1b9349fddc2d5 |
+| v016-access-inode-after-v1 | 3534952/3538944 | 229376/268664832 | 3f1b7ff06545b24308d2219fb573779be02d3c1dff36bf2671e4e6baddcbe09c |
+| v016-access-fork-point-v1 | 3129448/3133440 | 229376/268664832 | 66382e31c67ee51ca747618ac811aa4f5eb954875ed7a62793fb90b109b044e6 |
+| v016-access-divergent-head-v1 | 3461224/3465216 | 229376/268664832 | 1bfa60235da313f88ebe46de8a564742df297f597bff5fe8936d81812211edef |
+
+Four complete setup-only producer executions and zero producer replays supply
+all original selections. Boundary and inode each retain100ACKs/101reference
+roots; convergent30ACK/15distinct, descendant40ACK/35distinct. All graph
+forks/parents/heads and retained histories stay complete. Exact independent
+input byte copies and case-specific selected native manifests are preserved.
+Firstfour c79 passes are unaffected by the compact transcript ordering fix.
+The affected fork-point runs once at5cea and divergent runs for the firsttime;
+no unchanged repeat or best-of is used.
+
+Pair SHA-256 performance/verification:
+c79:33c0c4760a6bc5682e0040fc46a9970e2373fa6efdfc1f4a06030ca73a82deb9 /
+e7e35b5d8ea94b83d5100c819562646991d1b937f6d00bc41cb3e17d59350c51;
+5cea:dea395298e5fac38de025091f4aa4cc444393d5dc71c1d4e192a1c9b6f981836 /
+686bfa8039f3e29251ba15c130f61327ee79846719058018fa40067397d78d92.
+Final COMPLETION-HANDOFF.json SHA-256
+161a09495a50213f86ce5ad3c550e5fea5835054f6fcbdd90133937fb1ef257a
+in tiny-file worktree2026-10-11-historical-access-h25-fixed binds each case's
+actual source/receipt/master/product/image/build/profile/selected tuple,
+producer closure, limits, storage/count scope, original failures and removal.
+Current Docker existence of retained masters was not separately re-inspected;
+exact creation/preparation custody is retained, not a present-state claim.
+
+Keep historical failed own pairs unchanged: H23 startup container
+4891bb1c3fa69f0103c187219108c4ff2dab86c48fa972c925d5f0787bb66a37 /
+layerfs-fsb-sample-1dc1bc4c39e947b6; H25 stopped proof-failure container
+3be01f6f3ca00b08e5f73ffbabce3ad485d39139a1025b64ef6e06d48713d2d2 /
+layerfs-fsb-sample-31c5ae8a461041fc. Sixteen input masters remain under exact
+custody for rollout; old H23 placements are failed-input evidence and are
+never silently repaired. No product change or Durable execution occurred.
+
+| `c79eb607f` (worker) | Sync reviewed private historical installer and qualifying source | 79370 | 79370 | +0 |
+| `434dc0a3c` (worker) | Retain four access passes, ordered-transcript failure and unrun case | 79370 | 79370 | +0 |
+| `5cea1710d` (worker) | Sync strict original-order access serializer/source admission | 79370 | 79370 | +0 |
+| `6d3eecb3c` (worker) | Retain two actual final access passes and four reused earlier proofs | 79370 | 79370 | +0 |
+| This commit | Import final historical access pairs and six-case authoritative closure | 79370 | 79370 | +0 |
