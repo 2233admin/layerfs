@@ -434,10 +434,11 @@ def one_family_case(family, case, prepared_folder, build_folder, output):
     output = Path(output).resolve()
     output.mkdir(parents=True, exist_ok=False)
     ordered = bool(case.get("history_schedule"))
+    small_history = ordered and case["v016_case"] == "small-file-delta-10x30-v1"
     body = None if case.get("control_only") else "/bin/bash /code/workload.sh apply " + shlex.quote(case["v016_case"])
     bodies = ["/bin/bash /code/" + step["run"] for step in case["steps"]] if ordered else [body]
-    if ordered and (len(bodies) != 30 or any(not step.get("commit") for step in case["steps"])):
-        raise ValueError("original ordered history requires thirty importer saves and Commits")
+    if ordered and (len(bodies) != case["history_schedule"]["commits"] or any(not step.get("commit") for step in case["steps"])):
+        raise ValueError("original ordered history requires all declared saves and Commits")
     treatment = {"family": family, "case": case, "fixture": prepared["fixture"]["fixture_sha256"],
                  "product": current["product_tree"], "body": bodies, "helpers": prepared["helpers"]["files"],
                  "binaries": {name: row["sha256"] for name, row in build["binaries"].items()},
@@ -487,9 +488,10 @@ def one_family_case(family, case, prepared_folder, build_folder, output):
         if case.get("original_ordinary_guards"):
             row["ordinary_resource_guards"] = {"before": ordinary_resource_guard(runtime, build, output, "ordinary-resources-before"), "steps": []}
         if ordered:
-            row["resource_guards"] = {"before": history_resource_guard(runtime, build, output, "history-resources-before"), "steps": []}
+            if small_history:
+                row["resource_guards"] = {"before": history_resource_guard(runtime, build, output, "history-resources-before"), "steps": []}
             row["cache"].update(same_mount=True, warm_interval_ns=None,
-                declaration="one original Workspace for thirty saves/Commits; setup and prior own-write cache uncontrolled; no warmup Commit or independent coldness proof")
+                declaration="one original Workspace for all declared saves/Commits; setup and prior own-write cache uncontrolled; no warmup Commit or independent coldness proof")
             row["history"] = {"initial_root": next(event for event in runtime.rows if event["event"] == "history_initial_root")["fields"]["root"], "commits": []}
         else:
             warm = secrets.token_hex(32)
@@ -516,10 +518,10 @@ def one_family_case(family, case, prepared_folder, build_folder, output):
         row["edit_commit_end_group"] = {"watchdog_ms": group_ms,
                                        "scope": "ordinary edit, Commit and terminal unmount; excludes measured mount/setup/warmup/proof"}
         operation_seconds = case["budget"].get("operation_watchdog_ms", 120000) / 1000
-        phase_stop = time.monotonic() + case["budget"]["command_ms"] / 1000 if ordered else group_stop
+        phase_stop = time.monotonic() + case["budget"].get("performance_hard_watchdog_ms", case["budget"]["command_ms"]) / 1000 if ordered else group_stop
         row["phases"].update(command_ns=0, commit_ns=0)
         for index, command_body in enumerate(bodies, 1):
-            if ordered:
+            if small_history:
                 history_observer(clock, row, f"free-space-before-state-{index}", lambda: history_free_space(output))
             step_started = time.monotonic_ns()
             step_stop = operation_deadline(phase_stop, operation_seconds) if ordered else group_stop
@@ -547,9 +549,10 @@ def one_family_case(family, case, prepared_folder, build_folder, output):
                 record = {"index": index, "command": command, "commit": committed,
                           "step_wall_ns": time.monotonic_ns() - step_started}
                 row["history"]["commits"].append(record)
-                row["resource_guards"]["steps"].append(history_observer(clock, row, f"resources-step-{index}",
-                    lambda: history_resource_guard(runtime, build, output, f"history-resources-step-{index}",
-                                                    row["resource_guards"]["before"])))
+                if small_history:
+                    row["resource_guards"]["steps"].append(history_observer(clock, row, f"resources-step-{index}",
+                        lambda: history_resource_guard(runtime, build, output, f"history-resources-step-{index}",
+                                                        row["resource_guards"]["before"])))
         row["cache"].update(has_own_write_input=committed["fields"]["commit_kind"] == "Committed",
                             own_write_cold_observation=None,
                             own_write_cache_reason="no independent pre-Commit cold backing/metadata observation; own-write warmth is not eligible")
@@ -593,7 +596,7 @@ def one_family_case(family, case, prepared_folder, build_folder, output):
         if case.get("original_ordinary_guards"):
             row["ordinary_resource_guards"]["after_native_proof"] = ordinary_resource_guard(runtime, build, output,
                 "ordinary-resources-after-native-proof", row["ordinary_resource_guards"]["before"])
-        if ordered:
+        if small_history:
             row["resource_guards"]["after_native_proof"] = history_resource_guard(runtime, build, output,
                 "history-resources-after-native-proof", row["resource_guards"]["before"])
         runtime.send("observe", deadline=time.monotonic() + proof_seconds(15))
@@ -620,7 +623,7 @@ def one_family_case(family, case, prepared_folder, build_folder, output):
             transcript = script(output, "acknowledged-history.tsv", "\n".join(history_rows) + "\n")
             graph_args[1] = "verify-history"
             graph_args.extend(["--history-file", str(transcript)])
-        if ordered:
+        if small_history:
             graph_events, roots, physical = [], [], []
             wanted = [row["history"]["initial_root"], *[item["commit"]["fields"]["root"] for item in row["history"]["commits"]]]
             for step, expected_root in enumerate(wanted):
@@ -657,12 +660,18 @@ def one_family_case(family, case, prepared_folder, build_folder, output):
             proof_events = [item for item in events if item["event"] == "workspace_verified"]
             if len(proof_events) != 1 or events[-1]["event"] != "finished" or proof_events[0]["fields"]["root"] != committed["fields"]["root"]:
                 raise ValueError("original persisted root proof differs from exact acknowledged Commit root")
+            if ordered:
+                roots = [item for item in events if item["event"] == "history_root_verified"]
+                wanted = [row["history"]["initial_root"], *[item["commit"]["fields"]["root"] for item in row["history"]["commits"]]]
+                if len(roots) != len(wanted) or [item["fields"]["root"] for item in roots] != wanted:
+                    raise ValueError("complete original sequence proof differs from all acknowledged states")
+                row["history"]["verified_roots"] = roots
         row.update(proof_status="PASS", proof_wall_ns=time.monotonic_ns() - proof_started,
                    verification={"scope": case["oracle"]["scope"], "omissions": case["oracle"]["omissions"],
                                  "native": proof, "persisted": proof_events[0]})
         collect_family_observations(runtime, row, build, output, bindings)
         row.update(status="PASS" if row["cache"]["status"] == "ELIGIBLE" else "INELIGIBLE", functional_status="PASS")
-        if ordered:
+        if small_history:
             row["semantic_proof_status"] = "PASS"
             row["verification"]["mechanism"] = row["mechanism"]
             if row["mechanism"]["status"] != "PASS":
@@ -670,7 +679,7 @@ def one_family_case(family, case, prepared_folder, build_folder, output):
                 row["resource_disposition"] = "known stopped container and sample volume retained for unmet original mechanism condition; all31 byte/history/census proofs and clean unmount remain PASS"
                 return row
         if row["status"] == "INELIGIBLE":
-            row["tag"] = ("same-mount history paid backing/metadata/SQLite, own-write coldness and initial/warm interval evidence unavailable; all31 semantic/ancestry/actual-dependency proofs and clean unmount pass" if ordered else
+            row["tag"] = ("same-mount history paid backing/metadata/SQLite, own-write coldness and initial/warm interval evidence unavailable; all declared retained-state proofs and clean unmount pass" if ordered else
                           "class B source demands or own-write cold backing precondition unavailable; functional/native/persisted proofs and clean unmount pass")
         state = receipts.command([*docker, "inspect", runtime.container, "--format", "{{.State.Running}}"], output, "container-state", 15)
         if Path(state["stdout"]).read_text().strip() != "false":

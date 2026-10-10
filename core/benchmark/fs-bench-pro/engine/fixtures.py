@@ -267,6 +267,59 @@ def prepare_ordered_fixture(case, folder, build):
     return summary(0), summary(len(states)-1), native, history, built
 
 
+def snapshot_manifest(step):
+    """Independent transcription of the frozen25k/97*j/one-byte equations."""
+    if step not in range(4):
+        raise ValueError("original local snapshot states are0..3")
+    body = "workspace-independent-manifest-v1\n.\tdirectory\t0\t755\t1700000000\t0\t-\n"
+    if step:
+        edited = {97*j for j in range(256)} if step == 2 else set()
+        for ordinal in range(25000):
+            byte = (ordinal + (ordinal in edited)) % 251
+            body += f"f{ordinal:05}\tfile\t1\t644\t1700000000\t0\t{hashlib.sha256(bytes([byte])).hexdigest()}\n"
+    return body
+
+
+def prepare_snapshot_fixture(case, folder, build):
+    """Existing frozen Rust generator plus independent equations/native all-state proof."""
+    if case["v016_case"] != "local-snapshot-create-25000-onebyte-v1":
+        raise ValueError("original local snapshot case required")
+    source, final = folder / "source", folder / "expected-native"
+    initial = receipts.command([build["binaries"]["workspace-writer"]["path"], "fixture", case["id"], str(source)],
+                               folder, "native-fixture", 120)
+    fixture = json.loads(Path(initial["stdout"]).read_text())
+    state1 = folder / "native-states" / "state-1"
+    state1.parent.mkdir()
+    made = receipts.command([build["binaries"]["workspace-writer"]["path"], "expected", case["id"], str(state1)],
+                            folder, "native-state-1", 120)
+    expectation = json.loads(Path(made["stdout"]).read_text())
+    if source.with_suffix(".manifest.tsv").read_text() != snapshot_manifest(0) or state1.with_suffix(".manifest.tsv").read_text() != snapshot_manifest(1):
+        raise ValueError("independent snapshot equations differ from original Rust fixture/state")
+    state2 = folder / "native-states" / "state-2"
+    shutil.copytree(state1, state2, copy_function=shutil.copy2)
+    for ordinal in (97*j for j in range(256)):
+        path = state2 / f"f{ordinal:05}"
+        path.write_bytes(bytes([(ordinal+1) % 251]))
+        os.utime(path, ns=(MTIME_NS, MTIME_NS))
+    os.utime(state2, ns=(MTIME_NS, MTIME_NS))
+    shutil.copytree(state1, final, copy_function=shutil.copy2)
+    manifests = folder / "history-manifests"
+    manifests.mkdir()
+    history, native = [], {}
+    for step, root in enumerate((source, state1, state2, final)):
+        body = snapshot_manifest(step)
+        wanted = case["history_schedule"]["states"][step]["manifest_sha256"]
+        if hashlib.sha256(body.encode()).hexdigest() != wanted:
+            raise ValueError("original snapshot state registration changed")
+        manifest = manifests / f"state-{step}.tsv"
+        manifest.write_text(body)
+        checked = receipts.command([build["binaries"]["workload-host"]["path"], "workspace-verify-tree", case["id"], "1", str(step)],
+                                   folder, f"original-state-{step}-check", 120, cwd=root)
+        native[f"state-{step}"] = dict(line.split("=", 1) for line in Path(checked["stdout"]).read_text().splitlines())
+        history.append({"index": step, "manifest": str(manifest), "manifest_sha256": wanted, "logical_bytes": 25000 if step else 0})
+    return fixture, expectation, native, history, None
+
+
 def prepare_workspace(recipe, folder, build_folder):
     family, case = family_case(recipe)
     if family["family"] not in WORKSPACE_FAMILIES:
@@ -277,7 +330,9 @@ def prepare_workspace(recipe, folder, build_folder):
     folder.mkdir(parents=True, exist_ok=False)
     source, expected = folder / "source", folder / "expected-native"
     history = None
-    if case.get("history_schedule"):
+    if case.get("history_schedule", {}).get("schema") == "original-ordinary-commit-sequence-v1":
+        fixture, expectation, native, history, original_history = prepare_snapshot_fixture(case, folder, build)
+    elif case.get("history_schedule"):
         fixture, expectation, native, history, original_history = prepare_ordered_fixture(case, folder, build)
     else:
         writer = build["binaries"]["workspace-writer"]["path"]
@@ -312,7 +367,7 @@ def prepare_workspace(recipe, folder, build_folder):
     if history is not None:
         base = Path(helpers["root"]) / "history"
         shutil.copytree(folder / "history-manifests", base / "manifests")
-        for state in original_history["states"]:
+        for state in original_history["states"] if original_history is not None else ():
             shutil.copytree(state["input"], base / "checkpoints" / f"step-{state['index']}")
         for path in sorted(base.rglob("*")):
             if path.is_file():

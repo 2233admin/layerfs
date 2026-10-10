@@ -57,11 +57,14 @@ impl AuthenticatedObjects for Bag {
     }
 }
 fn metadata(bag: &mut Bag, kind: InodeKind, mode: u32) -> ObjectId {
+    metadata_at(bag, kind, mode, 1000000000)
+}
+fn metadata_at(bag: &mut Bag, kind: InodeKind, mode: u32, seconds: i64) -> ObjectId {
     let reader = bag.clone();
     let mut objects = FilesystemObjects::new(&reader, bag);
     let portable = PortableMetadata {
         mode,
-        mtime_seconds: 1000000000,
+        mtime_seconds: seconds,
         mtime_nanoseconds: 0,
     };
     let mode = emit_value(&mut objects, &portable.mode_bytes(kind).unwrap()).unwrap();
@@ -164,6 +167,9 @@ fn constructed(scope: InodeScope, step: u8) -> (ObjectId, Bag) {
     (root.0, bag)
 }
 fn proof(home: &Path, label: &str, selected: Option<usize>) -> bool {
+    proof_case(home, label, selected, "small-file-delta-10x30-v1", 10)
+}
+fn proof_case(home: &Path, label: &str, selected: Option<usize>, case: &str, seconds: u64) -> bool {
     let mut command = Command::new(env!("CARGO_BIN_EXE_layerfs-r7-runtime"));
     command
         .args([
@@ -175,7 +181,7 @@ fn proof(home: &Path, label: &str, selected: Option<usize>) -> bool {
             "--daemon",
             "/unused",
             "--case",
-            "small-file-delta-10x30-v1",
+            case,
             "--uid",
             "1",
             "--gid",
@@ -200,7 +206,7 @@ fn proof(home: &Path, label: &str, selected: Option<usize>) -> bool {
         command.arg("--history-step").arg(step.to_string());
     }
     let mut child = command.spawn().unwrap();
-    let stop = Instant::now() + Duration::from_secs(10);
+    let stop = Instant::now() + Duration::from_secs(seconds);
     loop {
         if let Some(status) = child.try_wait().unwrap() {
             return status.success();
@@ -218,6 +224,225 @@ fn proof(home: &Path, label: &str, selected: Option<usize>) -> bool {
         }
         std::thread::sleep(Duration::from_millis(5));
     }
+}
+
+fn snapshot_constructed(scope: InodeScope, step: usize) -> (ObjectId, Bag) {
+    let case =
+        reference::workspace_registry::resolve("local-snapshot-create-25000-onebyte-v1").unwrap();
+    let entries = reference::workspace_registry::expected(&case, 1, step).unwrap();
+    let mut bag = Bag::default();
+    let file_metadata = metadata_at(&mut bag, InodeKind::RegularFile, 0o644, 1700000000);
+    let directory_metadata = metadata_at(&mut bag, InodeKind::Directory, 0o755, 1700000000);
+    let mut inodes = vec![InodeUpdate {
+        serial: 1,
+        value: InodeValue {
+            kind: InodeKind::Directory,
+            namespace_ref_count: 0,
+            content_root: ObjectId::for_bytes(b"replaced directory"),
+            metadata_root: directory_metadata,
+        },
+    }];
+    let policy = layerfs_content::ConstructionPolicy::frozen_default();
+    let mut changes = Vec::new();
+    for (index, entry) in entries.iter().skip(1).enumerate() {
+        let reference::workspace_common::EntryKind::File(
+            reference::workspace_common::Content::Literal(bytes),
+        ) = &entry.kind
+        else {
+            panic!("original snapshot one-byte file required")
+        };
+        let root = Timing::disabled("external.snapshot.bytes", |timer| {
+            layerfs_content::construct_bytes(
+                policy,
+                &policy.capacities(),
+                bytes,
+                &mut bag,
+                timer.child("file"),
+            )
+        })
+        .0
+        .unwrap()
+        .root;
+        let serial = index as u64 + 2;
+        changes.push((PathName::new(&entry.path).unwrap(), Some(serial)));
+        inodes.push(InodeUpdate {
+            serial,
+            value: InodeValue {
+                kind: InodeKind::RegularFile,
+                namespace_ref_count: 0,
+                content_root: root,
+                metadata_root: file_metadata,
+            },
+        });
+    }
+    let dirs = [DirectoryUpdate { parent: 1, changes }];
+    let serials = (1..=25001).collect::<Vec<_>>();
+    let input = FilesystemInput {
+        base: None,
+        scope,
+        root_serial: 1,
+        directories: &dirs,
+        inodes: &inodes,
+        new_inodes: &serials,
+        resources: FilesystemResources::default(),
+    };
+    let reader = bag.clone();
+    let mut objects = FilesystemObjects::new(&reader, &mut bag);
+    let root = build_filesystem(&mut objects, &input, None).unwrap().root;
+    (root.0, bag)
+}
+
+#[test]
+fn complete_snapshot_history_all_original_states_accept_restored_root_and_reject_old_bytes() {
+    let case =
+        reference::workspace_registry::resolve("local-snapshot-create-25000-onebyte-v1").unwrap();
+    let home = std::env::temp_dir().join(format!("fsb-snapshot-history-{}", std::process::id()));
+    fs::create_dir(&home).unwrap();
+    reference::workspace_common::create_fixture(
+        &home.join("source"),
+        &reference::workspace_registry::fixture(&case, 1).unwrap(),
+    )
+    .unwrap();
+    let project = Timing::disabled("external.snapshot.init", |timer| {
+        ProjectApi::new().init(
+            InitRequest {
+                source: home.join("source"),
+                store: PersistenceConfig::sqlite(home.join("store.sqlite"))
+                    .with_sqlite_profile(SqlitePersistenceProfile::Disposable),
+                locator: "/layerfs-store/global/store.sqlite".into(),
+                policy: StoragePolicy::frozen_default(),
+                catalog: HistoryCatalogConfig {
+                    binding_key: b"external-snapshot".to_vec(),
+                    cursor_key: [71; 32],
+                    incarnation: 1,
+                },
+                stack: LayerStackId::from_authority([72; 16]),
+                stack_name: HistoryName::new("snapshot").unwrap(),
+                branch: BranchId::from_authority([73; 16]),
+                branch_name: HistoryName::new("main").unwrap(),
+                scope_seed: [74; 32],
+                deadline: Instant::now() + Duration::from_secs(5),
+            },
+            timer,
+        )
+    })
+    .0
+    .unwrap();
+    fs::write(home.join("manifest"), project.manifest.encode().unwrap()).unwrap();
+    let handles = Handles::open_writable(
+        PersistenceConfig::sqlite(home.join("store.sqlite"))
+            .with_sqlite_profile(SqlitePersistenceProfile::Disposable),
+        &project.manifest.binding,
+        project.manifest.cursor_key,
+    )
+    .unwrap();
+    let storage = Storage::new(handles.storage.clone()).unwrap();
+    let reader = storage.reader().unwrap();
+    let initial = ObjectId::from_bytes(&project.manifest.root).unwrap();
+    let scope = layerfs_content::filesystem::root::FilesystemRoot::decode(
+        &reader.read_canonical(initial).unwrap(),
+    )
+    .unwrap()
+    .scope();
+    drop(reader);
+    let state = home.join("state-0.tsv");
+    fs::write(
+        &state,
+        reference::workspace_common::manifest(
+            &reference::workspace_registry::expected(&case, 1, 0).unwrap(),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    let mut transcript = format!(
+        "0\t-\t-\t{}\t{}\n",
+        hex(&initial.to_bytes()),
+        state.display()
+    );
+    let mut published = Vec::new();
+    for step in 1..=3 {
+        let branch = handles
+            .history
+            .branch_snapshot(BranchId::from_bytes(project.manifest.branch).unwrap())
+            .unwrap()
+            .unwrap();
+        let (root, bag) = snapshot_constructed(scope, step);
+        let save = storage.begin_save().unwrap();
+        for object in bag.objects {
+            save.accept(object).unwrap();
+        }
+        save.finish().unwrap();
+        let outcome = handles
+            .history
+            .stage_and_commit(&StageRequest {
+                workspace: WorkspaceId::from_authority([75; 32]).unwrap(),
+                branch: branch.branch.id,
+                expected_head: branch.branch.head_commit,
+                expected_base: branch.branch.base_layer,
+                expected_root: branch.effective_root,
+                construction_base_root: branch.effective_root,
+                intended_commit_base: branch.branch.base_layer,
+                candidate_root: root,
+                profile: branch.profile,
+                scope: branch.scope,
+                generation: step as u64,
+            })
+            .unwrap();
+        let CommitStagedOutcome::Committed(record) = outcome else {
+            panic!("distinct state must Commit")
+        };
+        let state = home.join(format!("state-{step}.tsv"));
+        fs::write(
+            &state,
+            reference::workspace_common::manifest(
+                &reference::workspace_registry::expected(&case, 1, step).unwrap(),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        transcript += &format!(
+            "{step}\t{}\t{}\t{}\t{}\n",
+            hex(&record.id.to_bytes()),
+            record
+                .parent
+                .map(|id| hex(&id.to_bytes()))
+                .unwrap_or_else(|| "-".into()),
+            hex(&root.to_bytes()),
+            state.display()
+        );
+        published.push(root);
+    }
+    assert_eq!(
+        published[0], published[2],
+        "restored canonical root can repeat"
+    );
+    drop(storage);
+    handles.seal().unwrap();
+    fs::write(home.join("history.tsv"), &transcript).unwrap();
+    assert!(proof_case(&home, "snapshot-complete", None, &case.id, 30));
+    let body = fs::read_to_string(home.join("snapshot-complete.jsonl")).unwrap();
+    assert!(body.contains("\"roots\":4"));
+    assert!(body.contains("\"verified_bytes\":75000"));
+    assert!(body.contains("\"paths\":75004"));
+    fs::write(
+        home.join("state-2.tsv"),
+        reference::workspace_common::manifest(
+            &reference::workspace_registry::expected(&case, 1, 1).unwrap(),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert!(!proof_case(
+        &home,
+        "snapshot-wrong-old",
+        Some(2),
+        &case.id,
+        30
+    ));
+    assert!(fs::read_to_string(home.join("snapshot-wrong-old.stderr"))
+        .unwrap()
+        .contains("differs from original complete state"));
+    fs::remove_dir_all(home).unwrap();
 }
 fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()

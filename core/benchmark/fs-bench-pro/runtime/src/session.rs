@@ -35,7 +35,7 @@ fn selected<'a>(
 /// Keeps daemon caches, Store sessions and one overlay alive across explicit calls.
 pub fn serve(args: &Args, events: &mut Events) -> Result<()> {
     let manifest = StoreManifest::decode(&fs::read(&args.manifest)?)?;
-    if args.case.as_deref() == Some("small-file-delta-10x30-v1") {
+    if args.case.is_some() {
         events.fields(
             "history_initial_root",
             None,

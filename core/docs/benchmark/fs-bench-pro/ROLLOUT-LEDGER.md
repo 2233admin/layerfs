@@ -79,6 +79,9 @@ comparison or release-admission claim. Durable is
 | 32 | Reuse exact unchanged compiled support with original source/provenance receipts when only host control/oracle support changes | Unaffected evidence may be reused when actual compiled inputs and binary hashes remain identical | Rebuilding unaffected binaries or reusing a measured sample |
 | 33 | Parallelize only the four current batch3 families after committed batch2 closure; lead owns shared controller and local snapshot, workers own directory/Git/locality | Owner explicitly authorized separate worktrees; previous batch done-when conditions are now closed | Starting later batches or editing one shared checkout concurrently |
 | 34 | Clean locality case skips warm-up and measured Exec; scan/construction proofs validate recorded original semantic operation counts | Frozen clean case is owner-only; final tree equality alone cannot prove a read-only traversal visited every required path | Running a no-op Exec or replaying the workload to reconstruct its counters |
+| 35 | Git's prior untimed mount runs the original verification variant before End without Commit; the fresh measured call retains the exact performance variant | Preserves actual mounted intermediate porcelain/diff/temp-save guards without adding timed filesystem reads or replaying a measured call | Claiming native-only intermediate coverage or modifying the timed workload |
+| 36 | Reuse original native fixture/C1 generator for local snapshot, derive C2/C3 with frozen97*j/byte equations and verify every state with unchanged original native checker | Avoids changing compiled recipe support solely to select an already defined expected step; runtime also compares each manifest with original Rust expected(case,step) | Guessing state bytes or compiling another fixture producer |
+| 37 | Retain the failed full-size debug proof and qualify the benchmark's prescribed release compilation at identical fixture/oracle/30s stop | Debug child reached its stop during the first25k state, without an error or completed root; engine builds the host runtime in release; no source speed change is selected | Enlarging the stop, shrinking the test or optimizing product source |
 
 ## Bugs
 
@@ -1920,4 +1923,50 @@ Production LOC79,366 unchanged, reference absent, pinned staged method.
 | `c66af2c19` (directory worker) | Apply exact shared ordinary source without lead ledger | 79366 | 79366 | +0 |
 | `67ec7f464` (locality worker) | Apply shared source and precise edit helper staging | 79366 | 79366 | +0 |
 | `960a7f81e` (locality worker) | Correct clean mount provenance without compiled changes | 79366 | 79366 | +0 |
-| This commit | Integrate locality adapter/registration and exact helper provenance | 79366 | 79366 | +0 |
+| `2590a4536` | Integrate locality adapter/registration and exact helper provenance | 79366 | 79366 | +0 |
+
+Local snapshot registration/shared history support: one original25k one-byte
+case, one Workspace, exactlyC1 create25000/C2 edit256 ordinals97*j/C3 restore
+original bytes, three distinct Commit operations. Existing frozen fixture/C1
+generator is unchanged; independent Python equations produce all four semantic
+manifests and C2/C3 native inputs, checked by the unchanged original full native
+verifier before sampling. Runtime compares each local manifest against the
+original Rust expected state, binds all actual acknowledgements/parent/stack/
+base/finalhead and checks every retained root's bytes/metadata/complete inode
+census. Equal C1/C3 immutable roots are valid; distinct Commit identities and
+correct parent ancestry remain required. Small-delta's31-state uniqueness and
+payload DELTA existence guard remain intact. Final native proof uses the exact
+original deterministic root/seven-file sample; all75,004 retained paths/75,000
+bytes have complete independent persisted coverage.
+
+The local15s reporting limit is separate from its original120s execution
+allowance; no soft limit is used as the sequence watchdog. Original45s proof/
+59s hard remain. ClassC initial/own-write/full paid cache evidence is unknown
+and numericINELIGIBLE. Retired-format object census and retired host Store RSS/
+spool peaks remain explicit gaps. No product or frozen source changed.
+
+Checks at this source: host history --no-run PASS11.70s, exact existing
+complete_history_ proof PASS1.73s (twenty imported tests filtered). The new
+complete_snapshot_history_ debug test FAILED/hang at its original30s child
+stop, total34.54s; retained child Store/transcript/events at
+/var/folders/s4/xpkmz7wn6yq97w1ls_4f_dfc0000gn/T/fsb-snapshot-history-91527/.
+Only initial-root verification finished; stderr was empty and first25k-root
+work was unfinished at fencing. No failure output is relabeled or deleted.
+One read-only diagnostic incorrectly assumed /tmp, then mishandled a null
+event span; corrected inspection found the exact retained evidence. Source
+uses full canonical reads and complete membership, and benchmark compilation
+is release. At the separate prescribed release identity, --no-run PASS7.51s
+and the unchanged full-size external test PASS10.30s, including restored-root
+equality and deliberate C2 oracle corruption refusal. Same30s child stop,
+same25000/256 data, same verifier, outer120s; no timeout/test/workload weakening
+or product optimization. The debug failure remains unverified as a debug
+performance problem; it is not claimed repaired. Existing two unused fixture
+helper warnings remain visible; no Clippy/CI claim.
+
+Two local mechanical tests PASS0.187s, sealed-native qualification explicitly
+pending committed final build. Sixteen owning workspace and six fixture checks
+PASS under120s locks; bash/skip_children rustfmt/whitespace PASS. No local
+snapshot preparation or sample yet. Production79,366 unchanged, reference
+absent (retiredR9c,last65,417), exact pinned staged absent-aware method.
+
+| This commit | Register original three-Commit local snapshot and full retained state proof | 79366 | 79366 | +0 |

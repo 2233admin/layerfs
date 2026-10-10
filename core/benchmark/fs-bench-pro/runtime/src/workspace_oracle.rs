@@ -232,8 +232,14 @@ fn identity_bytes<const N: usize>(value: &str) -> Result<[u8; N]> {
 }
 
 pub fn verify_history(args: &Args, events: &mut Events) -> Result<()> {
-    if args.case.as_deref() != Some("small-file-delta-10x30-v1") {
-        return Err("complete original small-delta history case required".into());
+    let small = args.case.as_deref() == Some("small-file-delta-10x30-v1");
+    let snapshot_case = args.case.as_deref() == Some("local-snapshot-create-25000-onebyte-v1");
+    if !small && !snapshot_case {
+        return Err("complete original registered history case required".into());
+    }
+    let commits = if small { 30 } else { 3 };
+    if args.history_step.is_some_and(|step| step > commits) {
+        return Err("selected history state exceeds original schedule".into());
     }
     let body = fs::read_to_string(
         args.history_file
@@ -241,8 +247,8 @@ pub fn verify_history(args: &Args, events: &mut Events) -> Result<()> {
             .ok_or("--history-file required")?,
     )?;
     let rows = body.lines().collect::<Vec<_>>();
-    if rows.len() != 31 {
-        return Err("original history requires initial and all thirty roots".into());
+    if rows.len() != commits + 1 {
+        return Err("original history requires initial and all declared roots".into());
     }
     let manifest = StoreManifest::decode(&fs::read(&args.manifest)?)?;
     let config = PersistenceConfig::sqlite(args.sealed.as_ref().ok_or("--sealed required")?)
@@ -274,7 +280,7 @@ pub fn verify_history(args: &Args, events: &mut Events) -> Result<()> {
             return Err("history transcript index/cardinality differs".into());
         }
         let root = ObjectId::from_bytes(&identity_bytes::<32>(columns[3])?)?;
-        if !roots.insert(root) {
+        if !roots.insert(root) && small {
             return Err("history state roots are not distinct".into());
         }
         if step == 0 {
@@ -309,17 +315,34 @@ pub fn verify_history(args: &Args, events: &mut Events) -> Result<()> {
         if args.history_step.is_none_or(|selected| selected == step) {
             let entries =
                 reference::workspace_common::decode_manifest(&fs::read_to_string(columns[4])?)?;
+            if snapshot_case {
+                let original = crate::edit_model::entries(args.case.as_deref().unwrap(), step)?;
+                if reference::workspace_common::manifest(&original)?
+                    != fs::read_to_string(columns[4])?
+                {
+                    return Err(
+                        "local snapshot manifest differs from original complete state".into(),
+                    );
+                }
+            }
             let (count, bytes, files) = verify_entries(&reader, root, &entries, false)?;
             file_roots.extend(files);
             selected_root = root;
             verified_roots += 1;
-            if count != 11 {
-                return Err("original ten-file history namespace cardinality differs".into());
+            let expected_paths = if small {
+                11
+            } else if step == 0 {
+                1
+            } else {
+                25001
+            };
+            if count != expected_paths {
+                return Err("original retained state namespace cardinality differs".into());
             }
             paths += count;
             verified_bytes += bytes;
             events.numeric_fields("history_root_verified", None,
-            "independent original SHA-256/modes/mtime/lengths; current authenticated reads and complete inode census; full31-acknowledgement ancestry bound even for one selected state",
+            "independent original SHA-256/modes/mtime/lengths; current authenticated reads and complete inode census; full original acknowledgement ancestry bound even for one selected state",
             &[("root", columns[3].into()), ("commit_id", columns[1].into()), ("parent", columns[2].into())],
             &[("step", step as u64), ("paths", count), ("verified_bytes", bytes)])?;
         }
@@ -328,17 +351,19 @@ pub fn verify_history(args: &Args, events: &mut Events) -> Result<()> {
     if previous != snapshot.branch.head_commit || final_root != snapshot.effective_root {
         return Err("complete history final head/root differs".into());
     }
-    let payload_dependencies = payload_dependencies(&handles, &file_roots)?;
-    events.numeric_fields("history_payload_encoding", None,
+    if small {
+        let payload_dependencies = payload_dependencies(&handles, &file_roots)?;
+        events.numeric_fields("history_payload_encoding", None,
         "bounded authenticated public pack reads; actual current WholeFile/PREFIX dependency records; complete byte proof already reconstructed these objects; retired schema10 encoding not asserted",
         &[("root",crate::hex(&selected_root.to_bytes()))], &[("payload_objects",file_roots.len() as u64), ("payload_dependency_records",payload_dependencies)])?;
+    }
     drop(reader);
     drop(storage);
     handles.seal()?;
     events.numeric_fields("workspace_verified", Some(events.span(begun)),
-        "all31 retained roots; exact original names/modes/mtime/bytes/SHA-256; current typed/authenticated graph and exhaustive inode census; all30 known Commit ancestry and final head",
+        "all declared retained roots; exact original names/modes/mtime/bytes/SHA-256; current typed/authenticated graph and exhaustive inode census; complete known Commit ancestry and final head",
         &[("status", "PASS".into()), ("root", crate::hex(&selected_root.to_bytes())), ("final_head_root", crate::hex(&final_root.to_bytes()))],
-        &[("roots",verified_roots), ("commits",30), ("paths",paths), ("verified_bytes",verified_bytes)])?;
+        &[("roots",verified_roots), ("commits",commits as u64), ("paths",paths), ("verified_bytes",verified_bytes)])?;
     Ok(())
 }
 
