@@ -20,7 +20,7 @@ comparison or release-admission claim. Durable is
 | 0.4 Reproducible engine | CLOSED: functional proof complete; exact reproduction FAILED C10/C12 | Cell-route correction `bb8e07df8`; build support `c496025fc`; oracle support `7a27a4f26`; fixture support `516c2f009`; workspace/report support `358eca082`; cleanup-observer correction `a1f2c259c` | Begin batch 1 under failed-reproduction closure recorded below |
 | 1 Pilot | COMPLETE: 36 functional/proof/clean-close passes; 7 recorded scoped B PASS, 29 INELIGIBLE; full numeric qualification of the 7 is unverified | Init `c1d7dd0e8`/`39bbcbd6b`; payload `200f81493`/`c1d9b6c58`; parallel routing `b3c96ecb1`; tiny `36849bcc2`/`d6e0ef952`; namespace `98b14b233`/`be1f56a23`; H-2 fix `222526fa0`; closure `d4314ed62`; membership supplement `cca598d0b` | Batch 2, retaining original receipts plus exhaustive membership supplement |
 | 2 Edits | COMPLETE: all62 cases ported/parity/sampled once/recorded;39 strict proof and clean-close passes (numeric INELIGIBLE),20 strict retention failures and3 original capped-watchdog failures retained | Canonical `a34b5d44b`/`beeb7ad69`; preserving `b9ffa63be`; capped `4d8ccfc93`; changing `05ffbf971`; small-delta `c0c99a4a3`/`2e6a508b5`/this commit | Begin batch3; no identified fixable product correctness defect remains in batch2 |
-| 3 Trees and tools | IN_PROGRESS: directory/Git/locality authors in separate worktrees; lead owns local snapshot and shared support | Shared controller this commit | Commit private registrations and qualified shared support before preparation/sample |
+| 3 Trees and tools | IN_PROGRESS: directory12 and locality16 closed; snapshot firstFAIL/H6fix, corrected run active; Git4 controller pending | Shared3c697ae92; directory50c297c68/results; locality2590a4536/results; snapshot0344bfdc6/fix03033abdc | Finish corrected snapshot and Git4; no batch4 |
 | 4 History on one branch | PENDING | — | Wait for batch 3 completion |
 | 5 Branches and Workspaces | PENDING | — | Wait for batch 4; verify existing P-1 SDK methods |
 | 6 Dedup and storage | PENDING | — | Wait for batch 5 completion |
@@ -2049,3 +2049,36 @@ Production79,366unchanged, referenceabsent, pinnedstagedmethod; CSV/docs only.
 
 | `f9d6e366e` (worker) | Record twelve complete directory outcomes | 79366 | 79366 | +0 |
 | This commit | Integrate directory CSVs and complete family custody | 79366 | 79366 | +0 |
+
+Locality cohort integrated from7f29c1dc4: all16 original cases sampledonce at
+960a7f81e, fullnative/persisted/inode proofPASS, Gone/KNOWN_STOP and removed
+sample resources. Numeric16INELIGIBLE underH5, including zero-demand clean
+cases whose actual no-Exec behavior/command_ns0/UpToDate is recorded. Counts
+and allphase/storage fields come directly from originalreceipts, not revisited
+measurement. Complete rawHANDOFF.json remains in tinyworker
+benchmark-results/fs-bench-pro/2026-10-10-batch-3-locality-960a7f81e/.
+Both16-row CSVs exact30/14columns verified. Original generic tags retained,
+H5 paid backing/metadata/SQLite denial specified separately; retiredcanonical
+format/hostRSS/spoolpeak remain explicitgaps. Retainedverify16PASS, reportonce.
+One reportwrapper attemptR4_LOCK_BUSY75 refused while verifier stillactive;
+no reportexecuted/overlap or caseattempt, corrected invocation onlyafterknown
+verifyexit0/noCSVdestination, then generatedonce. Keep this orchestrationfailure.
+
+Dense500 original15s reportinglimit EXCEEDED:15,251,166,166ns, excess
+251,166,166ns; separateproof20,002,030,708ns WITHIN45s/59s, no120s hang.
+Requests33359/ownerjobs282059/statements1353145. Storelogical1,066,713,088B /
+allocated1,066,717,184B; overlaylogical541,495,296B/allocated809,934,848B.
+Slowcase completesfunctionally and remainsnumericINELIGIBLE. No optimization,
+limit/workload/cache/worker/fixture alteration or repeat; no productbug.
+Four ownclosedmasters retained:
+layerfs-fsb-master-workspace-change-locality-d26a3afb0f06417a,
+layerfs-fsb-master-workspace-change-locality-1570757bb67b4c04,
+layerfs-fsb-master-workspace-change-locality-7094f06f0f3542eb,
+layerfs-fsb-master-workspace-change-locality-f5fe3ef6c5d94aa5.
+Allpassingsamplepairs/helpercontainers removedwithoriginalreceipts; prior
+failed/uncertain/protectedresources untouched. Product79,366unchanged, reference
+absent, pinnedstagedcount; CSV/docsonly. Currentbatch28of33distinctcases closed,
+onefailedsnapshotattemptretained pendingcorrectedsource, fourGitunsampled.
+
+| `7f29c1dc4` (worker) | Record sixteen locality cases and dense500EXCEEDED | 79366 | 79366 | +0 |
+| This commit | Integrate locality outcomes without optimizing the soft-limit miss | 79366 | 79366 | +0 |
