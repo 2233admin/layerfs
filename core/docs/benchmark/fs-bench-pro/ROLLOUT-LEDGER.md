@@ -986,4 +986,29 @@ writer/oracle integration; none is claimed complete here. Production LOC
 79,366 -> 79,366 (delta+0), same pinned absent-aware method; reference absent
 (retired R9c, last counted65,417).
 
-| This commit | Add original SDK-edit native fixture and expected-tree algebra | 79366 | 79366 | +0 |
+| `e2840c270` | Add original SDK-edit native fixture and expected-tree algebra | 79366 | 79366 | +0 |
+
+Batch 2 / edit_length_preserving registration integrated from worker98fa838f4.
+All twelve original head/middle/tail-by-tier cases preserve exact fixture
+bytes, range starts, 4096-byte deletion/replacement, payload seeds/digests and
+original plan/registry seals. The original standard native file0640, root0750
+and filemtime are pinned; rootmtime normalization is an explicit topology
+difference. The thin script uses the shared exact edit writer; no SDK/product
+implementation is placed in the family. Every proposed current verifier
+retains inode identity, full bytes/current grammar and applicable untouched
+current payload IDs; retired source-format and SDK-only zero-FUSE/resource
+fields remain explicit differences, never fabricated current zero values.
+
+Worker scoped original registry/provenance/fixture qualification PASS in
+3.416s, catalogue three PASS in0.134s; syntax/whitespace PASS, all under its
+120s wall/own lock. Registration commit's exact parent/staged/committed
+production comparison is79,366->79,366+0. Qualifying unchanged definitions/
+checks are reused on integration. Shared final compile/verification, new
+prepared inputs, parity, all twelve samples and CSVs remain pending; no
+sample or mounted resource has been created for this family. Raw checks:
+/Users/yifanxu/.codex/worktrees/fs-bench-pro-tiny-file-churn/layerfs/benchmark-results/fs-bench-pro/2026-10-10-batch-2-length-preserving-tests/.
+No product source or workload limit changed. Production LOC79,366->79,366
+(delta+0), same pinned absent-aware method; reference absent retiredR9c.
+
+| `98fa838f4` (worker) | Port twelve exact length-preserving scenarios | 79366 | 79366 | +0 |
+| This commit | Integrate length-preserving registration and master ledger | 79366 | 79366 | +0 |
