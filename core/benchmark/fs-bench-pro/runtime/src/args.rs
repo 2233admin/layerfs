@@ -21,6 +21,7 @@ pub struct Args {
     pub case: Option<String>,
     pub history_file: Option<PathBuf>,
     pub history_step: Option<usize>,
+    pub installed_manifest: Option<PathBuf>,
 }
 impl Args {
     pub fn parse() -> Result<Self> {
@@ -54,6 +55,10 @@ impl Args {
         let source = values.remove("--source-copy").map(PathBuf::from);
         let case = values.remove("--case");
         let history_file = values.remove("--history-file").map(PathBuf::from);
+        let installed_manifest = values.remove("--installed-manifest").map(PathBuf::from);
+        if (mode == "init-install") != installed_manifest.is_some() {
+            return Err("--installed-manifest required only for init-install".into());
+        }
         if matches!(mode.as_str(), "verify-topology" | "verify-access")
             && (case.is_none() || history_file.is_none())
         {
@@ -149,6 +154,7 @@ impl Args {
             case,
             history_file,
             history_step,
+            installed_manifest,
         })
     }
 }

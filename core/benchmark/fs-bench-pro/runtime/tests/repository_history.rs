@@ -423,6 +423,7 @@ fn prove(
         executable: "/unused".into(),
         receipt: folder.join("proof.jsonl"),
         manifest: fixture.home.join("manifest"),
+        installed_manifest: None,
         uid: 1,
         gid: 1,
         source: Some(folder.clone()),

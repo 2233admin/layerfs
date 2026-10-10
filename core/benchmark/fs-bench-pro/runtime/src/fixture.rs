@@ -12,6 +12,7 @@ use std::{
     fs::OpenOptions,
     io::Write,
     os::unix::fs::{MetadataExt, OpenOptionsExt},
+    path::Path,
     time::{Duration, Instant},
 };
 
@@ -66,9 +67,21 @@ pub fn provision(args: &Args, events: &mut Events) -> Result<()> {
     let elapsed = events.span(begun);
     let sealed_stat = project.store.path.metadata()?;
     events.phase("host_init_setup", Some(elapsed), &format!("sealed={} logical_bytes={} allocated_bytes={} entries={} sqlite={} root={:?} diagnostics={:?} namespace_work={:?}", project.store.path.display(), sealed_stat.len(), sealed_stat.blocks()*512, project.initialized.entries, project.store.sqlite_version, project.initialized.root, project.initialized.diagnostics, project.initialized.namespace_work))?;
+    install_sealed(args, &project, &args.manifest, events)
+}
+
+/// One public installation of the actual closed Init result, followed by the
+/// original setup snapshot, EndSession and known container Stop.
+pub fn install_sealed(
+    args: &Args,
+    project: &layerfs_sdk::SealedProject,
+    manifest_path: &Path,
+    events: &mut Events,
+) -> Result<()> {
+    crate::project::install_ready(project)?;
     let mut owner = runtime::start(args, None, events)?;
     let begun = Instant::now();
-    let installed = owner.control.install_project(&project)?;
+    let installed = owner.control.install_project(project)?;
     let elapsed = events.span(begun);
     events.phase(
         "install_setup",
@@ -82,9 +95,31 @@ pub fn provision(args: &Args, events: &mut Events) -> Result<()> {
         .write(true)
         .create_new(true)
         .mode(0o600)
-        .open(&args.manifest)?;
-    manifest.write_all(&installed.manifest.encode()?)?;
-    events.value("installed_manifest", &args.manifest.display().to_string())?;
+        .open(manifest_path)?;
+    let encoded_manifest = installed.manifest.encode()?;
+    manifest.write_all(&encoded_manifest)?;
+    events.value("installed_manifest", &manifest_path.display().to_string())?;
+    if args.mode == "init-install" {
+        let source_metadata = project.store.path.metadata()?;
+        events.numeric_fields(
+            "project_install", Some(elapsed),
+            "actual public SealedProject installed once; manifest now carries acknowledged daemon SQLite",
+            &[
+                ("installed_manifest", manifest_path.display().to_string()),
+                ("daemon_sqlite", installed.manifest.daemon_sqlite.clone().ok_or("actual installed daemon SQLite missing")?),
+                ("host_sqlite", installed.manifest.host_sqlite.clone()),
+                ("container", owner.runtime.identity().to_string()),
+                ("root", crate::hex(&installed.manifest.root)),
+                ("stack", crate::hex(&installed.manifest.stack)),
+                ("branch", crate::hex(&installed.manifest.branch)),
+                ("profile", "Disposable/WAL/OFF".into()),
+                ("installed_manifest_sha256", crate::reference::sdk_edit_common::sha256_hex(&encoded_manifest)),
+                ("host_manifest_sha256", crate::reference::sdk_edit_common::sha256_hex(&project.manifest.encode()?)),
+                ("allocated_bytes_scope", "actual host sealed main file; installed destination allocation not returned by public SDK".into()),
+            ],
+            &[("logical_bytes", installed.manifest.bytes), ("allocated_bytes", source_metadata.blocks()*512)],
+        )?;
+    }
     runtime::snapshot(&owner, &args.socket, events)?;
     if owner.control.call(Request::EndSession)? != Reply::SessionEnded {
         return Err("unexpected original EndSession acknowledgement".into());

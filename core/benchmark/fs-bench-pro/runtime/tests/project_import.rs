@@ -21,6 +21,12 @@ pub(crate) mod edit_oracle;
 #[path = "../src/events.rs"]
 pub(crate) mod events;
 #[allow(dead_code)]
+#[path = "../src/fixture.rs"]
+pub(crate) mod fixture;
+#[allow(dead_code)]
+#[path = "../src/runtime.rs"]
+pub(crate) mod runtime;
+#[allow(dead_code)]
 #[path = "../src/workspace_oracle.rs"]
 pub(crate) mod workspace_oracle;
 
@@ -253,6 +259,7 @@ fn project_import_real_disposable_init_ack_rejects_count_root_profile_and_identi
         executable: "/unused".into(),
         receipt: root.join("wrong-count.events.jsonl"),
         manifest: root.join("wrong-count.manifest"),
+        installed_manifest: None,
         uid: 1,
         gid: 1,
         source: Some(wrong_source),

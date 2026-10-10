@@ -121,6 +121,201 @@ def provision(source, volume, folder, build):
     return result
 
 
+
+def fresh_init_start(case, prepared, build, output, row, *, deadline, host_rss_limit_bytes):
+    """Retain the exact measured SealedProject for one later public install."""
+    import uuid
+    from . import workspace
+    output = Path(output).resolve()
+    volume = "layerfs-fsb-sample-" + uuid.uuid4().hex[:16]
+    handle = {"runtime": None, "observer": None, "ack": None, "volume": volume,
+              "host_manifest": output / "project.manifest", "sealed": output / "store.sqlite",
+              "installed_manifest": output / "installed.manifest", "completed": False, "closed": False}
+    row["clone"] = {"volume": volume, "clone_method": "fresh empty volume; exact actual measured Init installed once by public SDK"}
+    receipts.write_new(output / "init-install-volume.json", {"volume": volume, "created_by_this_run": True,
+        "scope": "empty owned sample backing created before imported paid Init launch; no Store/Init during setup",
+        "failure_disposition": "retain failed/uncertain owned volume, no retry or inferred removal"})
+    try:
+        left = min(15, deadline - time.monotonic())
+        if left <= 0:
+            raise TimeoutError("fresh Init volume admission deadline expired")
+        made = receipts.command(["docker", "--host", "unix://" + build["socket"], "volume", "create", volume],
+                                output, "init-install-empty-volume", left)
+        if Path(made["stdout"]).read_text().strip() != volume:
+            raise ValueError("exact fresh owned Init volume acknowledgement differs")
+        if time.monotonic() >= deadline:
+            raise TimeoutError("fresh Init launch deadline expired")
+        if os.environ.get("LAYERFS_CONSTRUCTION_WORKERS") != "1":
+            raise ValueError("one explicit construction worker required")
+        argv = [build["binaries"]["runtime"]["path"], "init-install", "--socket", build["socket"],
+            "--volume", volume, "--daemon", build["binaries"]["daemon"]["path"],
+            "--manifest", str(handle["host_manifest"]), "--installed-manifest", str(handle["installed_manifest"]),
+            "--source-copy", prepared["source"], "--sealed", str(handle["sealed"]),
+            "--case", case["v016_case"], "--init-seconds", "120", "--uid", str(prepared["source_uid"]),
+            "--gid", str(prepared["source_gid"]), "--image", identity.IMAGE,
+            "--receipt", str(output / "init-install.events.jsonl")]
+        receipts.write_new(output / "init-install-attempt.json", {"argv": argv, "attempts": 1,
+            "scope": "parent launch-to-project_init acknowledgement paid Init; later original public install distinct"})
+        begun = time.monotonic_ns()
+        runtime = workspace.cell_runner.EventProcess(argv, output, "init-install")
+        handle["runtime"] = runtime
+        observer = receipts.HostProcessObserver(runtime.process, output, "init-install", host_rss_limit_bytes)
+        handle["observer"] = observer
+        ack = runtime.event("project_init", deadline)
+        acknowledged = time.monotonic_ns()
+        handle.update(ack=ack, init_complete_wall_ns=acknowledged-begun,
+                      init_acknowledged_ns=acknowledged)
+        # Identity hashing occurs only after the paid acknowledgement boundary.
+        observer.check()
+        fields = ack["fields"]
+        fixture = case["fixture"]
+        entries = fixture.get("entries", fixture.get("paths"))
+        if entries is None:
+            entries = fixture["regular_files"] + fixture["directories_including_root"]
+        if (fields.get("case") != case["v016_case"] or fields.get("profile") != "Disposable/WAL/OFF"
+                or fields.get("files") != fixture["regular_files"] or fields.get("entries") != entries
+                or fields.get("manifest_path") != str(handle["host_manifest"])
+                or fields.get("manifest_sha256") != identity.sha256(handle["host_manifest"])
+                or fields.get("logical_bytes") != handle["sealed"].stat().st_size
+                or fields.get("allocated_bytes") != handle["sealed"].stat().st_blocks * 512
+                or any(not isinstance(fields.get(key), str) or len(fields[key]) != length
+                    or any(char not in "0123456789abcdef" for char in fields[key])
+                    for key, length in (("root", 64), ("stack", 34), ("branch", 34)))):
+            raise ValueError("actual fresh Init identity/counts/encoded host manifest differs")
+        for suffix in ("-wal", "-shm", "-journal"):
+            if Path(str(handle["sealed"])+suffix).exists():
+                raise ValueError("actual consuming Init seal left sidecars")
+        handle["store_sha256"] = identity.sha256(handle["sealed"])
+        return handle
+    except BaseException as error:
+        if handle["runtime"] is None:
+            handle["runtime"] = getattr(error, "event_process", None)
+        fresh_init_close(handle, row, error)
+        raise
+
+
+def fresh_init_finish(handle, row, *, deadline):
+    """Install the retained exact project once, then require original Stop/wait."""
+    if handle.get("install_attempted"):
+        raise ValueError("original install already attempted; no resend")
+    if time.monotonic() >= deadline:
+        raise TimeoutError("original install not sent after expired proof deadline")
+    runtime, ack = handle["runtime"], handle["ack"]
+    handle["install_attempted"] = True
+    if runtime.process.stdin.write(b"install\n") != len(b"install\n"):
+        raise RuntimeError("short original install write; outcome uncertain; no resend")
+    runtime.process.stdin.flush()
+    installed = runtime.event("project_install", deadline)
+    handle["install_ack"] = installed
+    fields, initial = installed["fields"], ack["fields"]
+    cid = fields.get("container")
+    if isinstance(cid, str) and len(cid) == 64 and all(char in "0123456789abcdef" for char in cid):
+        row.setdefault("additional_containers", []).append(cid)
+    else:
+        raise ValueError("actual public installer canonical container acknowledgement differs")
+    if (any(fields.get(key) != initial.get(key) for key in
+            ("root", "stack", "branch", "profile", "host_sqlite", "logical_bytes"))
+            or fields.get("profile") != "Disposable/WAL/OFF"
+            or not isinstance(fields.get("daemon_sqlite"), str) or not fields["daemon_sqlite"]
+            or fields.get("host_manifest_sha256") != initial["manifest_sha256"]
+            or identity.sha256(handle["host_manifest"]) != initial["manifest_sha256"]
+            or handle["installed_manifest"] == handle["host_manifest"]
+            or fields.get("installed_manifest") != str(handle["installed_manifest"])
+            or fields.get("installed_manifest_sha256") != identity.sha256(handle["installed_manifest"])
+            or identity.sha256(handle["sealed"]) != handle["store_sha256"]
+            or handle["sealed"].stat().st_size != initial["logical_bytes"]):
+        raise ValueError("actual public installed manifest/Init identity/size binding differs")
+    stopped = runtime.event("setup_container_stopped", deadline)
+    if stopped.get("value") != cid:
+        raise ValueError("actual original installer Stop container differs")
+    runtime.event("finished", deadline)
+    if any(sum(event.get("event") == name for event in runtime.rows) != 1
+           for name in ("project_init", "project_install", "setup_container_stopped", "finished")):
+        raise ValueError("exact one original Init/install/Stop/finished acknowledgement required")
+    left = min(1, deadline-time.monotonic())
+    if left <= 0 or runtime.process.wait(timeout=left) != 0:
+        raise ValueError("original Init/install host wait unavailable or not known zero")
+    observation = handle["observer"].finish()
+    result = {"schema": "fs-bench-pro-public-init-install-v1", "status": "PASS", "volume": handle["volume"],
+        "manifest": str(handle["installed_manifest"]), "manifest_sha256": fields["installed_manifest_sha256"],
+        "host_manifest": str(handle["host_manifest"]), "host_manifest_sha256": initial["manifest_sha256"],
+        "sealed_store": str(handle["sealed"]), "store_sha256": handle["store_sha256"],
+        "global_profile": "Disposable/WAL/OFF", "container": cid, "container_disposition": "known Stop retained until final family outer acknowledgement",
+        "events": str(runtime.child_event_receipts[0]) if getattr(runtime, "child_event_receipts", None) else str(runtime.folder / "init-install.events.jsonl"),
+        "attempt": {"project_init": ack, "project_install": installed, "setup_container_stopped": stopped},
+        "host_observation": observation, "host_sqlite": fields["host_sqlite"], "daemon_sqlite": fields["daemon_sqlite"],
+        "scope": "actual retained measured SealedProject installed once through public SDK; no second Init or fabricated daemon metadata"}
+    handle["completed"] = True
+    row["installation"] = result
+    row["clone"].update(store_sha256=handle["store_sha256"])
+    return result
+
+
+def fresh_init_observer_copy(handle, output, row, *, deadline):
+    """Keep physical verification writes away from the held immutable SDK source."""
+    import shutil
+    if time.monotonic() >= deadline:
+        raise TimeoutError("original typed Init copy proof deadline expired")
+    original = handle["sealed"]
+    before = identity.sha256(original)
+    if before != handle["store_sha256"]:
+        raise ValueError("held actual Init source changed before independent typed copy")
+    folder = Path(output) / "typed-init"
+    folder.mkdir(exist_ok=False)
+    copied = folder / "store.sqlite"
+    shutil.copy2(original, copied)
+    copied_sha, after = identity.sha256(copied), identity.sha256(original)
+    observation = {"source": str(original), "copy": str(copied), "source_sha256_before": before,
+        "copy_sha256_before": copied_sha, "source_sha256_after_copy": after,
+        "source_size": original.stat().st_size, "copy_size_before": copied.stat().st_size,
+        "scope": "exact independent observer byte copy after paid Init ACK; typed proof may physically modify only its copy; copying charged to original proof budget"}
+    row["init_observer_copy"] = observation
+    receipts.write_new(folder / "copy.json", observation)
+    if copied_sha != before or after != before or observation["copy_size_before"] != observation["source_size"]:
+        raise ValueError("independent typed Init copy/source identity differs")
+    if time.monotonic() >= deadline:
+        raise TimeoutError("original typed Init copy exceeded proof work deadline")
+    return copied
+
+
+def fresh_init_close(handle, row, error=None):
+    """Fence unknown host custody only; never infer or remove remote resources."""
+    if handle.get("closed"):
+        return
+    handle["closed"] = True
+    runtime, observer = handle.get("runtime"), handle.get("observer")
+    failures = []
+    if runtime is not None and (error is not None or not handle.get("completed")):
+        cause = error or RuntimeError("original Init/install completion unknown")
+        row["status"] = "FAIL"
+        try:
+            row["retained_init_install_host_custody"] = runtime.retain(cause)
+        except BaseException as retaining:
+            failures.append(str(retaining))
+        cid = runtime.container
+        if (isinstance(cid, str) and len(cid) == 64 and all(char in "0123456789abcdef" for char in cid)
+                and cid not in row.setdefault("additional_containers", [])):
+            row["additional_containers"].append(cid)
+    if observer is not None:
+        try:
+            row["init_install_host_observation"] = observer.finish()
+        except BaseException as observing:
+            failures.append(str(observing))
+    if runtime is not None:
+        for value in (runtime.selector, runtime.raw, runtime.stderr,
+                      getattr(runtime.process, "stdin", None), getattr(runtime.process, "stdout", None)):
+            if value is not None:
+                try:
+                    value.close()
+                except BaseException as closing:
+                    failures.append(str(closing))
+    if failures:
+        row.update(status="FAIL", proof_status="FAIL")
+        row.setdefault("independent_close_failures", []).extend(failures)
+        if error is None:
+            raise RuntimeError("original Init/install close observation failed: " + "; ".join(failures))
+
+
 def one_init(case, prepared_folder, build_folder, output, *, family="init_namespace"):
     from . import fixtures
     current = identity.source_identity()
@@ -177,17 +372,24 @@ def one_init(case, prepared_folder, build_folder, output, *, family="init_namesp
               "--uid", str(os.getuid()), "--gid", str(os.getgid()), "--image", identity.IMAGE]
     environment = {**os.environ, "LAYERFS_CONSTRUCTION_WORKERS": "1"}
     publication_stop = None
+    interactive_init = None
     proof_started = time.monotonic_ns() if proof_only else None
     try:
         init_seconds = 41 if imported and proof_only else 120
         row.update(attempted_operation_count=1, sample_count=0 if proof_only else 1)
-        init = receipts.command([build["binaries"]["runtime"]["path"], "init", *common,
-                                "--receipt", str(output / "init.events.jsonl")], output, "public-init", init_seconds, environment=environment,
-                                host_rss_limit_bytes=2*1024**3 if imported else None, host_swap_guard=imported)
-        events = [json.loads(line) for line in (output / "init.events.jsonl").read_text().splitlines()]
-        found = [item for item in events if item["event"] == "project_init"]
-        if len(found) != 1 or events[-1]["event"] != "finished":
-            raise ValueError("original known Init/seal completion unavailable")
+        if imported:
+            interactive_init = fresh_init_start(case, prepared, build, output, row,
+                deadline=time.monotonic()+init_seconds, host_rss_limit_bytes=2*1024**3)
+            init = {"complete_wall_ns": interactive_init["init_complete_wall_ns"]}
+            found = [interactive_init["ack"]]
+        else:
+            init = receipts.command([build["binaries"]["runtime"]["path"], "init", *common,
+                                    "--receipt", str(output / "init.events.jsonl")], output, "public-init", init_seconds, environment=environment,
+                                    host_rss_limit_bytes=2*1024**3 if imported else None, host_swap_guard=imported)
+            events = [json.loads(line) for line in (output / "init.events.jsonl").read_text().splitlines()]
+            found = [item for item in events if item["event"] == "project_init"]
+            if len(found) != 1 or events[-1]["event"] != "finished":
+                raise ValueError("original known Init/seal completion unavailable")
         row.update(complete_wall_ns=init["complete_wall_ns"], completed_operation_count=1,
                    phases={"command_ns": found[0]["span"]["duration_ns"]}, init=found[0])
         row["observations"] = {"store_" + name: {"status": "AVAILABLE", "value": found[0]["fields"][name],
@@ -198,7 +400,7 @@ def one_init(case, prepared_folder, build_folder, output, *, family="init_namesp
             if any(found[0]["fields"][name] > 4*1024**3 for name in ("logical_bytes", "allocated_bytes")):
                 raise RuntimeError("original main Store exceeds4GiB guard")
             if proof_started is None:
-                proof_started = time.monotonic_ns()
+                proof_started = interactive_init["init_acknowledged_ns"]
             charged_ns = time.monotonic_ns()-proof_started
             from . import workspace
             deadlines = workspace.import_proof_deadlines(case, charged_ns)
@@ -213,6 +415,11 @@ def one_init(case, prepared_folder, build_folder, output, *, family="init_namesp
         if imported:
             index = verification_common.index("--source-copy")
             del verification_common[index:index+2]
+            observer_copy = fresh_init_observer_copy(interactive_init, output, row, deadline=deadlines["work"])
+            verification_common[verification_common.index("--sealed")+1] = str(observer_copy)
+            seconds = min(row["verifier_limit_ns"]/1e9, deadlines["work"]-time.monotonic())
+            if seconds <= 0:
+                raise TimeoutError("original import proof expired after independent typed copy")
         verified = receipts.command([build["binaries"]["runtime"]["path"], "verify-init", *verification_common,
                                      "--receipt", str(output / "verify.events.jsonl")], output, "independent-verifier",
                                      seconds, environment=environment)
@@ -220,12 +427,23 @@ def one_init(case, prepared_folder, build_folder, output, *, family="init_namesp
         proof = [item for item in events if item["event"] == "project_verified"]
         if len(proof) != 1 or proof[0]["fields"]["status"] != "PASS" or events[-1]["event"] != "finished":
             raise ValueError("original independent proof completion unavailable")
-        sidecars = [str(output / ("store.sqlite" + suffix)) for suffix in ("-wal", "-shm", "-journal")
-                    if (output / ("store.sqlite" + suffix)).exists()]
+        checked_stores = [output / "store.sqlite", observer_copy] if imported else [output / "store.sqlite"]
+        sidecars = [str(store)+suffix for store in checked_stores for suffix in ("-wal", "-shm", "-journal")
+                    if Path(str(store)+suffix).exists()]
         if sidecars:
             raise ValueError("original consuming Store close left sidecars: " + repr(sidecars))
         if imported:
+            observation = row["init_observer_copy"]
+            observation.update(source_sha256_after_proof=identity.sha256(interactive_init["sealed"]),
+                copy_sha256_after_proof=identity.sha256(observer_copy), copy_size_after_proof=observer_copy.stat().st_size)
+            observation["source_unchanged"] = observation["source_sha256_after_proof"] == interactive_init["store_sha256"]
+            receipts.write_new(observer_copy.parent / "proof-copy-completion.json", observation)
+            if not observation["source_unchanged"]:
+                raise ValueError("held actual Init source changed during independent typed proof")
+            if proof[0]["fields"].get("root") != found[0]["fields"]["root"]:
+                raise ValueError("independent imported root differs from actual Init acknowledgement")
             row["verification"] = {"persisted": proof[0], "scope": case["oracle"]["scope"], "omissions": case["oracle"]["omissions"]}
+            fresh_init_finish(interactive_init, row, deadline=deadlines["work"])
             workspace.verify_import_mount(case, prepared, build, output, row, deadlines)
             row.update(proof_status="PASS", proof_wall_ns=time.monotonic_ns()-proof_started,
                        status="PASS" if proof_only else "INELIGIBLE", functional_status="PASS",
@@ -243,7 +461,13 @@ def one_init(case, prepared_folder, build_folder, output, *, family="init_namesp
             if path.exists():
                 row[key_name] = json.loads(path.read_text())["complete_wall_ns"]
     finally:
-        row["timing_scope"] = "complete host Init child launch-to-exit; public Init/seal span is command_ns; fixture setup and independent verifier separate"
+        if interactive_init is not None:
+            try:
+                fresh_init_close(interactive_init, row, RuntimeError(row.get("original_failure", "failed original proof")) if row["status"] == "FAIL" else None)
+            except BaseException as closing:
+                row.update(status="FAIL", proof_status="FAIL", original_close_failure=str(closing))
+        row["timing_scope"] = ("parent launch-to-project_init acknowledgement; public Init/seal span retained separately as command_ns; empty-volume setup excluded; actual public installation and independent proof separate"
+            if imported else "complete host Init child launch-to-exit; public Init/seal span is command_ns; fixture setup and independent verifier separate")
         if imported and proof_started is not None:
             row["proof_wall_ns"] = time.monotonic_ns()-proof_started
             row["proof_wall_scope"] = "independent typed reopen, sealed sample install, public Fork/fresh mounted native proof, original guards, End/Gone/Stop and observations; boundary includes its verification-only Init; publication separately bound"

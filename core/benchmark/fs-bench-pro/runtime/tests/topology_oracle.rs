@@ -394,6 +394,7 @@ fn args(home: &Path, mode: &str, case: &str) -> args::Args {
         executable: "unused-offline".into(),
         receipt: home.join(format!("{mode}.events.jsonl")),
         manifest: home.join("manifest"),
+        installed_manifest: None,
         uid: 501,
         gid: 20,
         source: None,

@@ -5444,6 +5444,64 @@ The corrected actual-project public installation path is independently authored
 and qualifies before each affected case gets one changed-identity attempt.
 No workload, fixture, worker count, cache state, timeout or limit changes.
 
-| This commit | Record all6 original failed footprint attempts and resource custody | 79370 | 79370 | +0 |
+| c451c2b1f | Record all6 original failed footprint attempts and resource custody | 79370 | 79370 | +0 |
 Pinned absent-aware staged counter/actual commit-tree confirmation; active
 product9ac unchanged; reference absent/retiredR9c, last65,417/tree498dd1917812.
+
+
+### H28 existing public installation correction, 2026-10-11
+
+Root integrates Capped3e37aa36f actual-project native init-install mode and
+Tinyf05010629/11635c9b original-clock controller/copy correction. Exact actual
+SealedProject remains in the native process after its paid Init ACK; one bounded
+install-LF instruction passes it once to the existing public SDK installer.
+The installed manifest is a distinct0600/create_new output. Its daemon_sqlite
+and full root/stack/Branch/profile/size/SHA authority derive from actual SDK
+ACK, followed by original snapshot/EndSession/fence/known setup Stop/finished.
+No project reconstruction, new Init, fabricated metadata or product feature.
+Native input uses finite unbuffered fd poll/read; EOF, wrong frame and deadline
+refuse, no retry or reader thread.
+
+For imports, the parent pays launch through actual Init ACK; subsequent source
+fingerprinting, exact observer-copy creation, public typed proof, original SDK
+installation and fresh Fork/FUSE proof/End/Gone/Stop all charge original41/45/59
+proof allowance. Copy-only physical mutation is recorded separately; the actual
+held sealed file must retain exact bytes/size. Boundary's verification-only Init
+is itself charged. For footprint, the original full current controller phase
+includes fresh Init/actual SDK installation/setup through ordinary edit/Commit/
+End; required read-only resource observer intervals are excluded and retained.
+Old incomplete timings/receipts keep their original clocks. Installer CIDs remain
+authenticated additional owned containers until full case/outer publication ACK;
+failed/uncertain pairs remain retained. Old namespace Init route is unchanged.
+
+Worker native final no-run PASS9,589,165,334ns and four external guards
+PASS1,172,393,667ns/private120,19 frozen inline tests filtered. Native handoff
+SHA-256d7664619db9e69e3623d61d7fb53649d0f56998df3ef203b8a3900e78ee1ddea.
+Python original parent RED6,899,375ns retained; four corrected checks PASS,
+then namespace mock fixture lacked its temporary workload and FAILED. Only
+fixture corrected, affected check PASS8,196,792ns; installation-custody guard
+PASS4,518,792ns. Copy/clock supplement four affected checks PASS40,951,833ns,
+five unchanged guards reused. Handoffs52285053d6466077b3fdd41619b18f4a91b28df09fa19fc368d56cf4b8dbeb82
+and44fad016822c18f102e7fb224aee4d0067b1ab550c4b1a1c7cc6abe754d7b542.
+
+Root external Args fixtures add only installed_manifest:None; project_import
+wrapper initially failed native compile because new production-free fixture
+helper lacked its module declaration. Original compiler FAIL retained; exact
+fixture/runtime declarations added, final all-test no-run PASS7,345,622,042ns.
+Four H28 native guards PASS1,016,092,875ns under main120s/child110s and frozen
+inline tests filtered. Integrated nine Python guards PASS428,530,625ns;
+import admission6 PASS314,049,333ns; workspace PASS384,491,792ns;
+retention8 PASS365,561,500ns, main120/child100. Owned Rust formatting, Python
+syntax and diff checks PASS. Raw2026-10-11-h28-main-integration retains all
+compile/qualification failures and final outputs. No actual corrected SDK
+installation/case is claimed; clean runtime seal and affected one-time samples
+are next. Product9ac and every original workload/cache/worker/limit unchanged.
+
+| Commit | Purpose | Production before | after | delta |
+| --- | --- | --- | --- | --- |
+| Worker3e37aa36f | Actual retained Init/public install native boundary | 79370 | 79370 | +0 |
+| Workerf05010629 | Existing SDK installation/custody import controller | 79370 | 79370 | +0 |
+| Worker11635c9b | Immutable observer copy and actual proof-clock anchor | 79370 | 79370 | +0 |
+| This commit | Fix fresh installation through existing SDK and footprint wiring | 79370 | 79370 | +0 |
+Pinned absent-aware staged counter and exact resulting tree confirmation;
+reference absent/retiredR9c, last65,417/tree498dd1917812.

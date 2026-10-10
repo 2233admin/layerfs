@@ -40,13 +40,15 @@ def verify_import_mount(case, prepared, build, output, row, deadlines):
         return operation_deadline(deadline, limit)
     def seconds(limit=15, cleanup=False):
         return stop(limit, cleanup)-time.monotonic()
-    store, manifest = output/"store.sqlite", output/"project.manifest"
-    closed = {"sealed_store": str(store), "store_sha256": identity.sha256(store),
-              "manifest": str(manifest), "manifest_sha256": identity.sha256(manifest)}
-    volume, provision = fixtures.install_closed_history_store(closed, prepared, output/"verification-install", build,
-                                                              deadline=deadlines["work"], sample=True)
-    row["clone"] = {"volume": volume, "store_sha256": closed["store_sha256"],
-                    "clone_method": "byte-identical sealed import copied only after measured Init; verification-only"}
+    provision = row.get("installation")
+    if (not isinstance(provision, dict) or provision.get("schema") != "fs-bench-pro-public-init-install-v1"
+            or provision.get("status") != "PASS" or provision.get("global_profile") != "Disposable/WAL/OFF"
+            or provision.get("volume") != row.get("clone", {}).get("volume")
+            or provision.get("container") not in row.get("additional_containers", [])
+            or identity.sha256(Path(provision["manifest"])) != provision.get("manifest_sha256")
+            or identity.sha256(output/"store.sqlite") != provision.get("store_sha256")):
+        raise ValueError("actual public installation of exact measured Init required before fresh verifier")
+    volume = provision["volume"]
     row["verification"]["installation"] = provision
     helpers = fixtures.assets(output/"verification-code")
     binary = Path(helpers["root"])/"writers/workload"
@@ -920,6 +922,7 @@ def one_family_case(family, case, prepared_folder, build_folder, output, *, prep
     receipts.write_new(output / "selection.json", row)
     runtime = None
     host_observer = None
+    fresh_init_handle = None
     mounted = set()
     bindings = {}
     clock = cell_runner.PerformanceClock()
@@ -932,31 +935,21 @@ def one_family_case(family, case, prepared_folder, build_folder, output, *, prep
     final_modes = None
     try:
         if footprint:
+            from . import project
             row.update(attempted_operation_count=1,sample_count=1)
             clock.begin(time.monotonic_ns())
-            init_args = [build["binaries"]["runtime"]["path"],"init","--socket",build["socket"],
-                "--volume","unused-fresh-footprint-init","--daemon",build["binaries"]["daemon"]["path"],
-                "--manifest",str(output/"initial.manifest"),"--source-copy",prepared["source"],
-                "--sealed",str(output/"initial-store.sqlite"),"--case",case["v016_case"],
-                "--receipt",str(output/"initial.events.jsonl"),"--uid",str(prepared["source_uid"]),
-                "--gid",str(prepared["source_gid"]),"--init-seconds","120"]
-            init = receipts.command(init_args,output,"measured-fresh-init",120,host_swap_guard=True,
-                environment={**os.environ,"LAYERFS_CONSTRUCTION_WORKERS":"1"})
-            initial_events=[json.loads(line) for line in (output/"initial.events.jsonl").read_text().splitlines()]
-            acknowledged=[event for event in initial_events if event["event"]=="project_init"]
-            if len(acknowledged)!=1 or initial_events[-1]["event"]!="finished":
-                raise ValueError("original fresh footprint Init/seal acknowledgement missing")
-            if any(acknowledged[0]["fields"][name]>4*1024**3 for name in ("logical_bytes","allocated_bytes")):
+            fresh_init_handle = project.fresh_init_start(case, prepared, build, output, row,
+                deadline=clock.started/1e9+120, host_rss_limit_bytes=None)
+            acknowledged = fresh_init_handle["ack"]
+            if any(acknowledged["fields"][name]>4*1024**3 for name in ("logical_bytes","allocated_bytes")):
                 raise RuntimeError("original initialized main Store exceeds4GiB")
-            row["initialization"]={"attempt":init,"ack":acknowledged[0],"scope":"measured original fresh public directory import plus current Store/main Branch/seal; never setup Init"}
-            row["phases"]["init_ns"]=acknowledged[0]["span"]["duration_ns"]
-            closed={"sealed_store":str(output/"initial-store.sqlite"),"store_sha256":identity.sha256(output/"initial-store.sqlite"),
-                "manifest":str(output/"initial.manifest"),"manifest_sha256":identity.sha256(output/"initial.manifest")}
-            volume,provision=fixtures.install_closed_history_store(closed,prepared,output/"initial-install",build,sample=True,
-                deadline=clock.started/1e9+120)
-            row["clone"]={"volume":volume,"store_sha256":closed["store_sha256"],"clone_method":"current sealed fresh measured Init installed once; no pre-existing Store or extra Init"}
-            prepared={**prepared,"provision":provision}
-            row["initialization"]["installation"]=provision
+            row["initialization"] = {"ack": acknowledged,
+                "complete_wall_ns": fresh_init_handle["init_complete_wall_ns"],
+                "scope": "measured original fresh public directory Init plus current Store/main Branch/seal; exact actual SealedProject retained for one public install"}
+            row["phases"]["init_ns"] = acknowledged["span"]["duration_ns"]
+            provision = project.fresh_init_finish(fresh_init_handle, row, deadline=clock.started/1e9+120)
+            prepared = {**prepared, "provision": provision}
+            row["initialization"]["installation"] = provision
         if reuse:
             import shutil
             initial_store = output/"pristine-store.sqlite"
@@ -1432,6 +1425,9 @@ def one_family_case(family, case, prepared_folder, build_folder, output, *, prep
             row["retained_host_custody"] = runtime.retain(error)
             row["container"] = runtime.container
     finally:
+        if fresh_init_handle is not None:
+            from . import project
+            project.fresh_init_close(fresh_init_handle, row)
         if host_observer is not None:
             try:
                 row["host_process_observations"] = host_observer.finish()
@@ -1449,7 +1445,7 @@ def one_family_case(family, case, prepared_folder, build_folder, output, *, prep
                         row["status"] = "FAIL"
         row["timing_scope"] = "matrix controller from measured mount through command/Commit/terminal unmount; read-only resource-observer intervals excluded and separately retained; absolute phase stop includes those intervals; setup/warmup/cleanup/fresh native and persisted verification/Stop separate"
         if footprint:
-            row["timing_scope"] = "controller from original fresh measured public Init through sealed byte installation, SDK runtime/setup, first fresh mount, ordinary clipped edit, Commit and terminal End; declared read-only resource-observer intervals excluded and retained; cleanup/fresh mounted and typed verification/Stop separate"
+            row["timing_scope"] = "controller from original fresh measured public Init through actual-project public SDK installation, SDK runtime/setup, first fresh mount, ordinary clipped edit, Commit and terminal End; declared read-only resource-observer intervals excluded and retained; cleanup/fresh mounted and typed verification/Stop separate"
         if proof_only:
             row["proof_wall_ns"]=time.monotonic_ns()-started_test_ns
             row["proof_wall_scope"]="verification-only complete invocation from source/build/prepared admission through setup, all original calls/Commits, native/public/census proof, required cleanup/Stop and prepublication close; owner120s ceiling separately enforced"

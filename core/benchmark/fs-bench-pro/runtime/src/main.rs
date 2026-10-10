@@ -47,6 +47,7 @@ fn main() -> Result<()> {
         "provision" => fixture::provision(&args, &mut events),
         "serve" => session::serve(&args, &mut events),
         "init" => project::initialize(&args, &mut events),
+        "init-install" => project::initialize_install(&args, &mut events),
         "verify-init" => project::verify(&args, &mut events),
         "verify-footprint" => store_footprint::verify(&args, &mut events),
         "verify-repository" => repository_history::verify(&args, &mut events),

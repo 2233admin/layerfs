@@ -455,6 +455,7 @@ fn args(home: &Path, case: &str, label: &str) -> args::Args {
         executable: "/unused".into(),
         receipt: home.join(format!("{label}.jsonl")),
         manifest: home.join("manifest"),
+        installed_manifest: None,
         uid: 1,
         gid: 1,
         source: None,
