@@ -20,6 +20,17 @@ than a persisted cross-profile lock. Page size4096, foreign keys1, checkpoint
 interval1000, journal limit4194304, cache−2048, mmap0, temporary storage2,
 DEFENSIVE and checked busy timeout0 are retained.
 
+The connection applies the selected `synchronous` and `fullfsync` settings
+before page/acquisition setup, WAL selection or schema creation. Selecting WAL
+on a new file can itself write the main file and rollback journal; validating
+OFF after that transition cannot establish Disposable startup behavior. The
+external [Disposable VFS regression](../../crates/layerfs-persistence/tests/disposable_startup_sync.rs)
+delegates actual SQLite VFS operations and checks that public create, Save,
+seal and writable reopen issue no `xSync` calls across all three layouts with
+and without acquisition tables. Its separate non-Store control proves the
+observer forwards and counts `xSync`. This is a persistence profile correction,
+with no new performance qualification or change to existing receipt verdicts.
+
 Every mutation makes one `BEGIN IMMEDIATE` attempt. Busy/Locked/Protocol lock
 codes retain a typed `Busy` through Persistence, Storage and History. A busy
 begin executes no body, starts no transaction, performs no rollback and leaves

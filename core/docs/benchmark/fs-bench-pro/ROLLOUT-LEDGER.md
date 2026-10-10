@@ -92,6 +92,7 @@ comparison or release-admission claim. Durable is
 | 45 | Seal final stable native/Linux assets once, then rebuild only the changed host oracle with qualified eight-binary reuse | Pinned Linux/CPP scopes are final and unchanged by subsequent runtime-only proof work | Duplicating unchanged Linux/native builds or using an unqualified stale binary |
 | 46 | Close original500MB exhaustive preparation as FAIL and its caseNOT_RUN; preserve failed parity/batch closure while permitting other originalcases and laterbatches | One unchanged120s preparation expired after15of20 native expectations; a sealed fixture cannot be invented, another attempt/limit increase/scope reduction is forbidden, and no product correctness defect was identified | Retrying setup, shrinking original proof scope, pretending whole-family parityPASS or indefinitely blocking runnable originalcases |
 | 47 | Keep separate authenticated runs and CSV pairs when a shared harness fix interrupts a family; select unaffected earlier results by their actual source in the final family report | Each run binds one source, and completed unaffected cases must not be repeated or relabelled | Copying earlier receipts into a new source run, inventing a common measured identity, or repeating all earlier cases |
+| 48 | Correct Disposable startup by moving the existing selected synchronization calls before any SQLite initialization, preserving every statement/profile check | Actual public-API VFS evidence found24 forbidden sync calls; this is the owner's required profile, not a speed target | Leaving the violation, suppressing observer callbacks, skipping initialization checks, changing profile or optimizing unrelated work |
 
 ## Bugs
 
@@ -112,7 +113,8 @@ comparison or release-admission claim. Durable is
 | H-12 | Mixed final failed preparation and prospective failed family parity | First missing/invalid preparation aborts parity without retaining earlier/later original case outcomes; CLI propagates only an exception | parity_workspace raises inside first failed case before writing parity.json | Worker47e5a5500 / integrationea7148a19 | Missing middle preparation red fails old behavior; all original membership/pin/bytes/native/seal guards retain FAIL reasons,22checksPASS; CLI old exception red retained,new5driverchecksPASS |
 | H-13 | dedup-history-distributed-500 setup at7905 | stage-code-check exits255: exec /bin/bash argument list too long, before any mount/product operation | fixtures.stage embeds all500 prepared-step/helper SHA rows into one165,872B Bash -c argv | Worker359b63686 / integration8ae040cdd | Worker owns external500-step/complete-row/remote-manifest/payload tamper regression; original fullchecker retained |
 | H-14 | Offline closed-Store normalization before remaining batch4 cases | Fresh target enters WAL initialization while SQLite synchronous is still default FULL(2) | synchronous=OFF was applied only after journal_mode=WAL in prepare_closed_store | `e09c61bbd`, harness only; product analogue under investigation | Real sqlite3.Connection subclass observes FULL(2) before journal switch on old helper; final10 normalization checks PASS0.352s and8 controller checks PASS0.159s |
-| H-16 | Aggregate formatting during Disposable startup product verification | cargo fmt cannot resolve two daemon example/test digest modules | Stage0.2 missed the two old fs-bench-pro-storage-content import paths | This commit, path-only example/test correction | Owning example/test no-run PASS16.27s; existingseven startup/digest receipt tests PASS0.10s; aggregatefmtPASS |
+| H-15 (product) | Public Disposable Store create across three layouts and two acquisition schemas | Actual VFS observer records24 forbidden xSync calls during creation; later Save/seal/reopen issue0 | Selected synchronous/fullfsync applied only after acquisition and WAL initialization had written main/journal | Workera9d8b0453 / integration this commit | External public-API disposable_startup_sync.rs observes24 on old source; finalhost14/Linux6 covering checks PASS with Store sync0 and positive control1 |
+| H-16 | Aggregate formatting during Disposable startup product verification | cargo fmt cannot resolve two daemon example/test digest modules | Stage0.2 missed the two old fs-bench-pro-storage-content import paths | `9dfb70ee4`, path-only example/test correction | Owning example/test no-run PASS16.27s; existingseven startup/digest receipt tests PASS0.10s; aggregatefmtPASS |
 
 H-1 and H-2 are harness faults, not product correctness or performance defects.
 The original file-identity checker remains intact; no product source changed.
@@ -3323,4 +3325,91 @@ integrate the minimal selected-policy ordering change as its own product
 commit with the exact +4 productionLOC and completed final-source checks.
 No new sample, speed result or Durable execution is selected by H16.
 
-| This commit | Correct the two relocated digest imports without changing their content or proofs | 79366 | 79366 | +0 |
+| `9dfb70ee4` | Correct the two relocated digest imports without changing their content or proofs | 79366 | 79366 | +0 |
+
+
+H15 is the first identified product defect in this rollout. The external public
+Disposable Store regression delegates the actual SQLite VFS and observes all
+four file classes (main/WAL/journal/other), with opens/writes/close/error coverage.
+A separate non-Store control forwards one real xSync and resets counters before
+each Store phase; it never syncs Disposable backing itself. Before the fix,
+three layouts without acquisition each issued1 main+1 journal sync, and three
+with acquisition tables each issued2 main+4 journal sync:24 total. Every sync
+used SQLITE_SYNC_NORMAL flags2; no VFS errors or unclosed files. Save, seal,
+writable reopen and reopen-seal issued0. The single host red exited101 in
+0.04s/776,134,167ns supervisor under<=1/120; every configuration was recorded.
+The failed fixture remains at
+/var/folders/s4/xpkmz7wn6yq97w1ls_4f_dfc0000gn/T/layerfs-disposable-startup-sync-41956.
+Initial test compilation found only a macOS ffi alias mismatch; the external
+signature was corrected to equivalent *const c_char before final no-run and
+this single red. No third-party source or product test hook was changed.
+
+Source cause: profile::apply selected page/acquisition/WAL initialization before
+its later synchronous/fullfsync loop. The correction moves those same two
+selected calls to the beginning, preserving every PRAGMA, count and profile
+validation, WAL-only existing-Store guard, public API, format and one-attempt
+behavior. It adds no retry, dependency, feature, benchmark branch, new profile,
+threshold, index or construction producer. This is enforcement of the existing
+Disposable requirement, with no speed result or optimization claim. The shared
+Store architecture guide describes the implemented ordering and external proof.
+Root read the optimization guides for the applicable path and retained the
+owner's no-optimization scope; no query-plan/performance claim is made.
+
+Worker a9d8b0453295d769c92c3eed7b57317e63ffefbb contains only profile.rs,
+external tests/disposable_startup_sync.rs and the architecture guide. Exact
+private counter79366->79370(delta+4), countedtree
+5de64ace7306a830715e4a929391c8b6ab011b14. Root verified source SHA
+941e502affb580b71d833dc46b793eecf1717fe47b0756bf955a2099709418c7,
+externaltestSHAcaf639cc693a33a7e44fe27d872b0ce11936cf91c909ac1c27c2c6156841debc,
+and guideSHA47c4be76bec2cabfd329b73007202b2713bf45f8fc09085a1e89e34a34421b35.
+The rest of the qualified persistence/dependency source is unchanged; only
+Root's separately tested nonproduct digest-import paths differ elsewhere.
+
+At final product bytes: host14 covering tests PASS4,430,852,208ns, pinnedLinux6
+applicable tests PASS228,708,666ns. The portable VFS test exercises allsix
+layout/acquisition configurations on both platforms, now0 Store xSync in every
+create/Save/seal/reopen phase, with positive control1 and no hook/close gap.
+The two macOS-only targets execute0 Linux tests, not claimed as coverage there.
+Actual SQLite versions3.51.0 host/3.53.2 Linux are witnessed by those binaries.
+Each test used no-run first and explicit<=120s private lock, one final-source
+invocation. Host/Linux persistence all-targets Clippy-Dwarnings PASS
+4,220,645,583ns/5,379,079,917ns; boundaryPASS674 files494,431,750ns;
+all50 tooling testsPASS0.149s/314,040,042ns supervisor. These exact source-matched
+covering/guard results are reused, not repeated. Scoped persistence fmtPASS;
+old aggregatefmtFAIL from H16 remains raw. Root's exact integrated final-source
+aggregate cargo fmt --all --check nowPASS/<=5/120 after H16 correction, raw
+benchmark-results/fs-bench-pro/2026-10-10-product-disposable-startup-integration.
+
+Pinned image remains sha256:378b799ef43343fc64008b6a5ef456dd6bf0cb8f6ea4cec72e7b42dfc17d2cd6.
+All1,328 host source/manifests hashes were verified inside before Linux build
+and after tests/Clippy; manifestSHA
+41c3e37ff20464e3b5286711de2d456f0debad2e55aa1fffaebedb9761d307bb.
+The first offline no-run failed before compilation because the image-default
+Cargo cache lacked libproc index metadata; that failure is retained. An existing
+private Linux Cargo cache was copied to the owned target volume, with no new
+dependency/network substitution. Changed preparation then no-runPASS
+45,708,458,250ns and all tests/ClippyPASS. Owned Linux container
+3895cb42a80d62e6a1d6bd25a847ea83798f29625cc832a29d5c0f408b986fce
+(name layerfs-product-sync-h15-capped) and volume
+layerfs-product-sync-h15-capped-target remain stopped/retained conservatively
+because of the initial failed preparation; no other container/volume was touched.
+Host failed fixture and all raw receipts remain. Full qualification is private
+Capped benchmark-results/fs-bench-pro/2026-10-10-product-disposable-startup-sync-green/qualification.json,
+SHA43f600aa6214622dc61a863df3352ef2e10604244be56de2ec38e86a2a7dafc7,
+verified by Root; the sibling red/source/binary receipts remain immutable.
+
+Earlier receipts are history: their final WAL/OFF checks did not observe these
+initial create syncs. No old result is promoted or overwritten. The profile's
+format and saved roots do not change, so closed prepared bytes remain compatible
+setup inputs. Existing-Store Workspace phases had no create path and their
+unaffected functional receipts remain at original sources. The measured Init
+namespace checkpoint creates Stores and will receive exactly one changed-source
+attempt per originalcase after a fresh current nine-asset build. No timing
+comparison or Durable reauthorization follows. Durable is
+NOT_RUN — disabled by owner until explicit reauthorization. Fresh sealed build,
+affected Init checkpoint and remaining batch4 cases are next; later batches
+remain pending. No speed, release gate, VM/kernel crash or full unrelated suite
+qualification is claimed.
+
+| `a9d8b0453` (worker) | Enforce selected Disposable synchronization before SQLite creation writes | 79366 | 79370 | +4 |
+| This commit | Integrate H15 public VFS regression, minimal product fix and exact required checks | 79366 | 79370 | +4 |
