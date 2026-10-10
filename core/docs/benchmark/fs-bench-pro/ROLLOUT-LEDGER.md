@@ -118,7 +118,9 @@ comparison or release-admission claim. Durable is
 | H-21 (harness) | Historical access result before first actual access invocation | Driver would reject completed access before publication ACK and disposal | Controller used a descriptive N/A performance_mode while bench.py requires canonical verification-only | `4a40fb690` | Actual controller result through real bench.main fails at parent; final driver publishes before disposal, samples0/attempt1 unchanged |
 | H-22 (harness) | Paired historical input setup authoring | No explicit complete closed-producer reuse path; two paired selections would replay an identical setup producer | CLI and fixture adapter only created a new producer and required source commit equality, despite unchanged setup scope | `4a40fb690` | Parent reuse regression retained; exact original identity/files/AST/blob seals and full custody/graph/Store checks qualify reuse without a replay |
 
-| H-23 (harness) | First historical boundary-before at c6ec3e467 | Sandbox Listener EOF before readiness or mount; exact daemon stderr private directory ownership/mode/type | Historical installer conflated Workspace source UID501:20 with daemon backing UID0:0 and retained file0644 | This commit | External installer regression fails at parent; final39 covering checks and wrong-owner/mode refusal variants PASS; old actual failure/resources retained |
+| H-23 (harness) | First historical boundary-before at c6ec3e467 | Sandbox Listener EOF before readiness or mount; exact daemon stderr private directory ownership/mode/type | Historical installer conflated Workspace source UID501:20 with daemon backing UID0:0 and retained file0644 | `68209bdb7` | External installer regression fails at parent; final39 covering checks and wrong-owner/mode refusal variants PASS; old actual failure/resources retained |
+
+| H-24 (harness/reporting) | Failed concurrent branch and multi rounds | CSV reader copied initialized0 command/Commit/unmount totals despite observed partial work | Controller fails before accumulating a whole round; reporter treated all phase values as complete case metrics | This commit | Parent external report tests fail; final13 custody/report checks PASS; retained sealed actual rows read without changing receipts |
 
 H-1 and H-2 are harness faults, not product correctness or performance defects.
 The original file-identity checker remains intact; no product source changed.
@@ -4560,4 +4562,61 @@ phase totals to measured durations. Root owns that reporting correction;
 original failed receipts will remain unchanged. No new source is sent to
 actual cases merely for formatting. Durable remains disabled.
 
-| This commit | Correct private historical backing ownership/mode without changing producer or product | 79370 | 79370 | +0 |
+| `68209bdb7` | Correct private historical backing ownership/mode without changing producer or product | 79370 | 79370 | +0 |
+
+
+### Batch 5 incomplete context phase-total reporting correction, 2026-10-11
+
+Actual branch/multi concurrent failures have initialized phase totals even
+though raw streams contain successful peer commands/Commit ACKs. No complete
+round sum was published. The CSV reader now withholds all four aggregate
+phase totals when an actual context case is FAIL and has no integer complete
+work wall; both CSV tags explain that partial runtime spans remain diagnostic
+raw evidence. Original status, failure, available counts/storage, source and
+receipts are unchanged. A completed workload with later proof failure retains
+its exact measured totals; completed compact and other routes keep legitimate
+zero values. Administrative NOT_RUN rows acquire no partial-work claim.
+
+Four new external report checks fail at the parent for the incomplete totals.
+Final13 report/proof-only/custody checks PASS in343,651,667 ns under120 s R4.
+Read-only qualification loads each sealed actual branch/multi retained run,
+checks failed totals unavailable and completed compact phases exact, and
+confirms original receipt hashes unchanged. No product, Store, Docker,
+preparation, measurement or runtime operation was replayed. Raw qualification
+2026-10-11-incomplete-context-report-regression, SHA-256
+3faaeea55b0225c3e252d13c30e58d26c07f825a02b07f9c1dc400da79be43b6. Workers can import only this reader and its owning tests to generate
+their original-source CSV pairs without changing or replaying a case.
+
+Branch500/K100 now has an explicit administrative unrun closure in its fresh,
+never-invoked run case folder: schemafs-bench-pro-administrative-unrun-case-v1,
+zero operation/sample/proof attempts, original case/source/product and exact
+failed120s preparation reason. It binds the original65f1881d supervisor
+closure and5a48a44b aggregate parity without a timer/count/storage/custody
+claim. Receipt SHA-256986f24219040950a1dd2af710de07dffd21dcb4e7161fdfa816f237ac2d3faf9;
+manifest648d37c227be3c57ff1b92bfa6304cc9a00b904899eba77af3640a953347a085.
+All originals remain immutable. Retained verify observes two passing compact
+proofs, three actual failures with proof NOT_RUN and this unrun case, returning
+exit1 under120 s; no product operation ran.
+
+Allfive original multi cases are now attempted once atafbbd6c03: fiveFAIL,
+proof NOT_RUN and no End/Gone/KnownStop. There are210 actual partial Commit
+ACKs across peers; no completed totals, independent proof or clean custody is
+inferred. Final raw handoff SHA-256
+ea36449055aea0715c459abd9d36532c19aabe4543521b346b12fc942bfcac31,
+manifest6748917d2bc0260b27f014056adfc6bcc4c6b56c3a537b7aa5d5cbbed0f49b93,
+partial-eventsdbb1c7850dfb155296a5c66010241b2168af9abc5079d04fda62420dfec6b0da
+are in the namespace worktree's2026-10-11-batch-5-multi-afbbd6c03/final-raw-handoff.
+Fivefailed containers/volumes and twelve measured keys remain retained.
+The independent host-group fence PermissionError stays visible and proves
+no remote cancellation or filesystem drain.
+
+Branch final raw results are three actual concurrent FAIL, two compact
+functional/proof/clean-close PASS with numericINELIGIBLE, and one failed-setup
+actualNOT_RUN. Compact convergent30ACK/15distinct and descendant40ACK/35distinct
+pass full native/public/closed unfiltered graph proofs and known terminal
+custody; own passing sample pairs are removed through authenticated disposal.
+Full final family pairs and exact case/resource metrics remain to integrate.
+Historical H23 fresh preparations are in progress atc79eb607f; actual new
+accesses await allsix unchanged parity checks. Batch6/7 stay pending.
+
+| This commit | Withhold uncompleted context phase totals without altering retained outcomes | 79370 | 79370 | +0 |

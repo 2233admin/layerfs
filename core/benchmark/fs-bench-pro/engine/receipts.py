@@ -443,6 +443,12 @@ def result_rows(selection, recorded):
             row[name] = result.get(name, selection.get(name, "UNAVAILABLE"))
         for name in ("mount_ns", "command_ns", "commit_ns", "unmount_ns"):
             row[name] = result.get("phases", {}).get(name, "UNAVAILABLE")
+        if (result.get("status") == "FAIL" and selection["family"] in ("branch_development", "multi_workspace_development")
+                and type(result.get("complete_wall_ns")) is not int):
+            for name in ("mount_ns", "command_ns", "commit_ns", "unmount_ns"):
+                row[name] = "UNAVAILABLE"
+            note = "incomplete original context phase totals; partial events remain diagnostic raw evidence"
+            row["tag"] = "; ".join(filter(None, (row["tag"], note)))
         for name in ("requests", "owner_jobs", "statements"):
             row[name] = result.get("counts", {}).get(name, "UNAVAILABLE")
         for name in ("store_logical_bytes", "store_allocated_bytes", "overlay_logical_bytes", "overlay_allocated_bytes"):
