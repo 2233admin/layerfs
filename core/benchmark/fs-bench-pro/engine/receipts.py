@@ -695,7 +695,12 @@ def report(folder, destination=None):
     performance, verification = result_rows(selection, recorded)
     root = ROOT / "core/benchmark"
     parent = root / ("cluster-two/baselines" if selection["family"] == "cluster-two/cells" else "fs-bench-pro/baselines/core")
-    destination = Path(destination) if destination else parent / (selection["date"] + "-" + selection["source_commit"][:9])
+    if destination is None:
+        destination = parent / (selection["date"] + "-" + selection["source_commit"][:9])
+        if selection["family"] != "cluster-two/cells":
+            destination = destination / selection["family"]
+    else:
+        destination = Path(destination)
     destination.mkdir(parents=True, exist_ok=True)
     for name, columns, rows in (("performance.csv", PERFORMANCE_COLUMNS, performance), ("verification.csv", VERIFICATION_COLUMNS, verification)):
         with (destination / name).open("x", newline="") as stream:

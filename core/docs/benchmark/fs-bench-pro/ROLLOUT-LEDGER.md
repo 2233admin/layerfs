@@ -23,7 +23,7 @@ comparison or release-admission claim. Durable is
 | 3 Trees and tools | COMPLETE: all33 original cases ported/parity/sampled, full applicable proofs and clean closePASS; numeric33INELIGIBLE; first snapshotFAIL retained separately; localitydense500 and snapshot EXCEEDED | Shared3c697ae92; directory50c297c68/ad4f95503; locality2590a4536/26c037d90; snapshot0344bfdc6/fix03033abdc/results98d3be30a/70d568e94; Git acebd7cbd/guard031d427a7/results31fff4d49 | Begin batch4 after this committed closure, no identified fixable product correctness bug |
 | 4 History on one branch | CLOSED WITH FAILURES: all 43 original cases ported and recorded; 31 functional/proof/clean-close passes, 11 retained actual failures, one failed preparation with actual NOT_RUN; mixed aggregate parity FAIL retained under section 9 exception; no identified fixable product correctness bug remains | H11 2b52bdf17; H12 ea7148a19; H13 8ae040cdd; H14 e09c61bbd; product H15 a05ed6027; H16 9dfb70ee4; fresh seal3c67e9249; affected Init8f24e39a4; boundary88a2bd27b; partial bd3016957; mixed1a21ebfc3; dedup closure27708c11d | Begin batch 5 after this committed failed closure; verify existing public SDK Fork and History |
 | 5 Branches and Workspaces | CLOSED WITH FAILURES: all17 original cases ported/recorded; eight functional/proof/clean-close passes, eight actual concurrent refusal failures, one failed-preparation actual NOT_RUN; branch aggregate parity FAIL retained under section9 | SDK proof711593c5f; H21/22 4a40fb690; setup exceptionc23ac0cfd; H23 68209bdb7; H24 669bc4853; H25 2f7160c92; H26 616947cb6; branch305bee680; multicb3a003ac; historicalb0b2cd386 | Begin batch6 under this truthful failed closure, preserving all original failures/limits/proofs/resources |
-| 6 Dedup and storage | IN_PROGRESS: all54 original definitions ported; shared support/prepare/parity/actual execution pending | CDC77ebaa34e; cross63fffa85e; reusea442c8879; footprint5505bff73; repository in this commit | Qualify shared/native support, seal build, then prepare/parity/one actual case per identity |
+| 6 Dedup and storage | IN_PROGRESS: all54 ported, support/seal qualified; fresh install H28 repair; failed first7 receipts retained; reuse live | CDC77ebaa34e; cross63fffa85e; reusea442c8879; footprint5505bff73; repository55a323f2f; native86baeb91c; controllers149d40bac; report specfe07454d3 | Repair existing public installation boundary, retain original cohort; complete unaffected reuse and remaining fresh/repository cases once |
 | 7 Reliability | PENDING | — | Wait for batch 6 completion |
 
 ## Decisions
@@ -5380,4 +5380,27 @@ retained, with no unchanged rerun. No product fix or passing case is claimed.
 Failed resources remain retained; exact all7 container/volume pairs and both
 original CSV pairs are recorded in the following result integration commit.
 
-| This commit | Correct parallel result directory in specification | 79370 | 79370 | +0 |
+| fe07454d3 | Correct parallel result directory in specification | 79370 | 79370 | +0 |
+
+
+### Parallel CSV path implementation, 2026-10-11
+
+The report default now implements Decision66 and specificationfe07454d3:
+new workload reports use the original family beneath date/commit. Explicit
+previous destinations and cluster-two/cells routing retain exact paths.
+No CSV schema, recorded value, case verdict or closed report was altered.
+External collision/closed-flat-file regression initially FAIL197,667,500ns;
+final two path guards PASS185,063,958ns. Existing verification-only report
+checks PASS149,420,917ns and incomplete-context report checks PASS147,555,625ns
+at their unchanged result_rows source. All under main120s/child100s, no expiry.
+Raw2026-10-11-batch-6-import-engine-checks retains original failures.
+
+The first lead report CLI attempted unsupported --out and was refused before
+writing anything (exit2); the public report command has no such option. The
+subsequent ordinary bench.py report used its corrected default path and read
+original receipts without repeating measurements. Old source149 footprint
+six-row CSVs exist, and their independent result ledger is committed next.
+
+| This commit | Implement collision-free report default/explicit path compatibility | 79370 | 79370 | +0 |
+Pinned absent-aware staged counter, first-parent/final exact trees; product
+9ac unchanged. Reference absent, retiredR9c, last65,417/tree498dd1917812.
