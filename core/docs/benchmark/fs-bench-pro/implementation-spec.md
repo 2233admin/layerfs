@@ -57,7 +57,7 @@ implement them, run them and fix bugs, not to optimize.
 | The one working Workspace path | `core/benchmark/fs-bench-pro/r7` with the Rust harness `core/benchmark/r7-runtime`. It produced the [timing baseline](../../issues/307/TIMING-BASELINE-20261010.md) |
 | What that path depends on outside the repository | Untracked driver scripts under `core/target/`, about 360 prepared inputs under `/tmp`, two Docker master volumes. None can be rebuilt from a command today |
 | Core benchmark directories | Eight siblings: `fs-bench-pro`, `fs-bench-pro-storage-content`, `r7-runtime`, `r7-tools`, `r8-tools`, `r7-passthrough`, `r7-cache`, `cluster2-platform` |
-| SDK surface | `ProjectApi` init and install; `WorkspaceApi` bind, mount, commit, status, unmount, force unmount, cleanup; `SandboxApi` create, exec, status. The control protocol has `Fork` and `History` requests; the SDK has no public method for either |
+| SDK surface | `ProjectApi` init and install; `WorkspaceApi` bind, mount, commit, status, unmount, force unmount, cleanup; `SandboxApi` create, exec, status. `ProjectApi::fork` and `ProjectApi::history` are already public thin methods over the existing control requests (source correction, 2026-10-10) |
 
 ## 3. Rules the design follows
 
@@ -384,8 +384,8 @@ A batch is done when, for each of its families:
 
 | ID | Question | Blocks | Recommendation |
 | --- | --- | --- | --- |
-| P-1 | Fork and History exist in the control protocol but have no public SDK method | Batch 5 | Add the two SDK methods as thin calls over the existing requests, as a counted product change with tests, when batch 5 is reached; do not drive the control protocol from the harness. This is the one product addition the first iteration allows |
-| P-2 | Can a Workspace bind to an older commit of a Branch? Not verified for this spec | `historical_access` | Check in stage 0.3; if it cannot, those cases are `not-applicable` until the product supports it |
+| P-1 | Source correction: `ProjectApi::fork` and `ProjectApi::history` already exist in `core/crates/layerfs-api/sdk/src/project/history.rs`, exported by `project/mod.rs` at the handed-over product tree | Batch 5 | Reuse and verify these existing thin SDK methods when batch 5 is reached; do not duplicate them or drive the control protocol from the harness. No product addition is needed for P-1 |
+| P-2 | Source check: direct bind takes a Branch only; existing `ForkSource::Commit` selects an ancestor and returns a Branch snapshot at its root | `historical_access` | Stage 0.3 records the existing public Fork-then-mount route and its extra Branch as a difference; verify it in batch 5 before sampling. If that route cannot express the case, retain it as `not-applicable` rather than adding a feature |
 | P-3 | Workloads that used v0.1.6 SDK edit calls have no shell equivalent yet | Batch 2 | Express them as ordinary writes through `writers/` and record the difference |
 | P-4 | Old registrations pin harness files by path and hash; after the move they can only be re-checked at their own commit | Stage 0.2 | Accept; they are closed |
 | P-5 | The largest v0.1.6 fixtures are 500 MB and 30,000 files with 100 Commits; some cases exceeded 15 s on v0.1.6 itself | Batches 4 and 5 | Keep the v0.1.6 case's own declared limit; a case that cannot fit is recorded with its measured wall, not shrunk |

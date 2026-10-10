@@ -22,7 +22,7 @@ comparison or release-admission claim. Durable is
 | 2 Edits | PENDING | — | Wait for batch 1 completion |
 | 3 Trees and tools | PENDING | — | Wait for batch 2 completion |
 | 4 History on one branch | PENDING | — | Wait for batch 3 completion |
-| 5 Branches and Workspaces | PENDING | — | Wait for batch 4; add P-1 SDK forwarding methods |
+| 5 Branches and Workspaces | PENDING | — | Wait for batch 4; verify existing P-1 SDK methods |
 | 6 Dedup and storage | PENDING | — | Wait for batch 5 completion |
 | 7 Reliability | PENDING | — | Wait for batch 6 completion |
 
@@ -39,6 +39,8 @@ comparison or release-admission claim. Durable is
 | 6 | Correct section 8 to state the verification source has 227 total rows (28 reliability); preserve original seconds beside labelled decimal-to-ns conversion | Source CSV and its generator agree on 227; the handoff requires every row | Harvesting only the 28 reliability rows or inventing precision |
 
 | 7 | Specify supporting-file destinations and permit path-only root/manifest/asset adjustments; retain historical source-gated tests | Section 4 omitted `r7-tools`, shared files and the old runner; depth changes require more than import text; old tests name retired product drivers | Inventing silent destinations or restoring retired product source |
+
+| 8 | Correct P-1 and reuse existing public ProjectApi fork/history; record the ForkSource::Commit route for P-2 | Source at handed-over product tree already exports both methods and validates ancestor membership; duplication would add no capability | Adding duplicate SDK methods or bypassing the SDK with wire requests |
 
 ## Bugs
 
@@ -131,3 +133,10 @@ Routing follow-up: update the current harness guide and add its README to
 point to moved subjects and this rollout. Local links and whitespace checked.
 Documentation-only; Production LOC 79,366 -> 79,366 (delta +0), pinned
 absent-aware method. No runtime check or workload sample repeated.
+
+P-1/P-2 source correction: source checked in `project/history.rs`,
+`project/mod.rs`, Workspace binding, Persistence History fork, and the existing
+`mounted_cycles` ancestor-fork test. No product execution or capability proof
+was repeated. Public native route is verified when batch 5 is reached. This
+specification-only commit keeps Production LOC 79,366 -> 79,366 (delta +0),
+pinned absent-aware method. Catalogue work remains unstaged for its own commit.
