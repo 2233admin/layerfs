@@ -132,7 +132,7 @@ class HistoricalFixtures(unittest.TestCase):
             plan = fixtures.historical_plan(case)
             if argv[0] == "docker":
                 if label == "historical-master-volume": value = argv[-1] + "\n"
-                elif label == "historical-master-install": value = ("0" * 64 if bad_install else holder["closed"]["store_sha256"]) + "  /dest/global/store.sqlite\n"
+                elif label == "historical-master-install": value = "backing_directory=0:0:700\nbacking_store=0:0:600\n" + ("0" * 64 if bad_install else holder["closed"]["store_sha256"]) + "  /dest/global/store.sqlite\n"
                 else: value = "mocked Docker, no actual execution\n"
                 output.write_text(value)
             elif argv[1] in ("expected-step", "materialize-context"):
@@ -303,6 +303,38 @@ class HistoricalFixtures(unittest.TestCase):
         self.assertEqual(fixtures.historical_fixture_scope(source), fixtures.historical_fixture_scope(source.replace('"exact_source_files"', '"same_count"')))
         self.assertNotEqual(fixtures.historical_fixture_scope(source), fixtures.historical_fixture_scope(source.replace('"v016-access-boundary-before-v1"', '"changed-original-case"')))
         self.assertNotEqual(fixtures.historical_fixture_scope(source), fixtures.historical_fixture_scope(source.replace('master_measurement_mounts", 0) != 0', 'master_measurement_mounts", 0) != 1')))
+
+    def test_historical_install_keeps_private_daemon_backing_separate_from_workspace_uid(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            _,_,_,genesis,calls,_=self.prepared(Path(temporary),declared())
+            self.assertEqual((genesis["source_uid"],genesis["source_gid"]),(501,20))
+            create=next(argv for argv,label,_,_ in calls if label=="historical-master-create")
+            body=create[-1]
+            self.assertIn("chown 0:0 /dest/global /dest/global/store.sqlite",body)
+            self.assertIn("chmod 600 /dest/global/store.sqlite",body)
+            self.assertNotIn("chown 501:20",body)
+            self.assertEqual(create[create.index("--user")+1],"0:0")
+            self.assertIn("backing_directory=%u:%g:%a",body)
+            self.assertIn("backing_store=%u:%g:%a",body)
+
+    def test_bad_daemon_backing_readback_is_refused_before_passing_removal(self):
+        original_tools=self.tools
+        for before,after in (("backing_directory=0:0:700","backing_directory=501:20:700"),
+                             ("backing_store=0:0:600","backing_store=501:20:600"),
+                             ("backing_store=0:0:600","backing_store=0:0:644")):
+            calls=[]
+            def tools(case, observed, holder, **options):
+                command=original_tools(case,observed,holder,**options)
+                def invoke(argv,out,label,seconds,**keywords):
+                    calls.append(label);result=command(argv,out,label,seconds,**keywords)
+                    if label=="historical-master-install":
+                        path=Path(result["stdout"]);path.write_text(path.read_text().replace(before,after))
+                    return result
+                return invoke
+            with self.subTest(after=after),tempfile.TemporaryDirectory() as temporary,patch.object(self,"tools",side_effect=tools):
+                with self.assertRaisesRegex(ValueError,"Store installation differs"):
+                    self.prepared(Path(temporary),declared())
+            self.assertNotIn("historical-master-remove-passing",calls)
 
     def test_bad_selected_native_binding_and_bad_install_are_retained_without_retry(self):
         for variant in ("native","install"):

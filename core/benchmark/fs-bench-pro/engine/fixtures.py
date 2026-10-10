@@ -191,7 +191,7 @@ def historical_fixture_scope(source):
     """Exact producer code; exclude only the reviewed access reuse adapters."""
     module = ast.parse(source)
     adapters = {"historical_fixture_scope", "historical_source_admission", "load_closed_history_producer",
-                "validate_closed_history_producer", "prepare_historical_workspace"}
+                "validate_closed_history_producer", "prepare_historical_workspace", "install_closed_history_store"}
     module.body = [node for node in module.body
                    if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) or node.name not in adapters]
     module.body = [node for node in module.body if not isinstance(node, ast.Import)
@@ -472,19 +472,23 @@ def install_closed_history_store(closed, genesis, folder, build):
         raise ValueError("original producer genesis ownership required")
     body = ("set -eu; test ! -e /dest/global; printf '%s\\n' " + shlex.quote(closed["store_sha256"] + "  /input.sqlite") +
             " | sha256sum --check -; mkdir -m 700 /dest/global; cp --reflink=never --sparse=never --preserve=mode,timestamps /input.sqlite /dest/global/store.sqlite; "
-            "cmp /input.sqlite /dest/global/store.sqlite; chown " + str(uid) + ":" + str(gid) +
-            " /dest/global /dest/global/store.sqlite; sha256sum /dest/global/store.sqlite")
-    receipts.command([*docker, "create", "--name", container, "--network", "none", "-v", volume + ":/dest",
+            "cmp /input.sqlite /dest/global/store.sqlite; chown 0:0 /dest/global /dest/global/store.sqlite; "
+            "chmod 600 /dest/global/store.sqlite; stat -c 'backing_directory=%u:%g:%a' /dest/global; "
+            "stat -c 'backing_store=%u:%g:%a' /dest/global/store.sqlite; sha256sum /dest/global/store.sqlite")
+    receipts.command([*docker, "create", "--name", container, "--user", "0:0", "--network", "none", "-v", volume + ":/dest",
                       identity.IMAGE, "/bin/bash", "-euo", "pipefail", "-c", body], folder, "historical-master-create", 15)
     receipts.command([*docker, "cp", "--archive", str(store), container + ":/input.sqlite"], folder, "historical-master-input", 15)
     installed = receipts.command([*docker, "start", "--attach", container], folder, "historical-master-install", 15)
-    if [line.split()[0] for line in Path(installed["stdout"]).read_text().splitlines()[-1:]] != [closed["store_sha256"]]:
+    lines = Path(installed["stdout"]).read_text().splitlines()
+    if (lines[-3:-1] != ["backing_directory=0:0:700", "backing_store=0:0:600"]
+            or [line.split()[0] for line in lines[-1:]] != [closed["store_sha256"]]):
         raise ValueError("independent closed full historical Store installation differs")
     receipts.command([*docker, "rm", container], folder, "historical-master-remove-passing", 15)
     result = {"schema": "fs-bench-pro-installed-history-store-v1", "status": "PASS", "volume": volume,
               "sealed_store": str(store), "store_sha256": identity.sha256(store), "manifest": str(manifest),
               "manifest_sha256": identity.sha256(manifest), "global_profile": "Disposable/WAL/OFF",
               "construction_workers": 1, "attempt": installed, "source": closed["sealed_store"],
+              "backing_owner": "0:0", "backing_directory_mode": "0700", "backing_store_mode": "0600",
               "scope": "complete known-Stop normalized producer copied unchanged, full history preserved, no selected-root Init or pre-read"}
     receipts.write_new(folder / "installed-history.json", result)
     return volume, result

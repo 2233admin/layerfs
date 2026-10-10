@@ -86,6 +86,9 @@ comparison or release-admission claim. Durable is
 
 | 54 | Explicitly reuse each new, complete closed setup producer for its paired historical access case, retaining original identity and immutable receipts | Six access selections use four complete original producer graphs; exact compiled/controller/model/workload/fixture admission avoids replaying setup and keeps each access independent | Running boundary100 and inode100 twice, reusing measured Stores, or forging the current source on an earlier producer |
 
+| 55 | Retain the actual concurrent Stage1 EAGAIN and Commit Begin Busy workload failures without a product contention fix | Current integration3.3 explicitly requires serial/save refusal before effect, zero busy_timeout and no retries or writer gate; unique EAGAIN mapping identifies a contended creating mutation | Adding a retry/gate/serialization feature or weakening the original unconditional-success workload |
+| 56 | Install historical backing as daemon-owned root0:0, directory0700 and file0600; keep Workspace UID/GID501:20 unchanged | Daemon private-directory/file guards require its own effective identity; source UID is filesystem fixture ownership, not backing authority | Weakening the guard, running daemon as fixture UID, or relabeling bad masters as repaired |
+
 ## Bugs
 
 | Bug | Case | Symptom | Cause | Fix commit | External test |
@@ -114,6 +117,8 @@ comparison or release-admission claim. Durable is
 
 | H-21 (harness) | Historical access result before first actual access invocation | Driver would reject completed access before publication ACK and disposal | Controller used a descriptive N/A performance_mode while bench.py requires canonical verification-only | `4a40fb690` | Actual controller result through real bench.main fails at parent; final driver publishes before disposal, samples0/attempt1 unchanged |
 | H-22 (harness) | Paired historical input setup authoring | No explicit complete closed-producer reuse path; two paired selections would replay an identical setup producer | CLI and fixture adapter only created a new producer and required source commit equality, despite unchanged setup scope | `4a40fb690` | Parent reuse regression retained; exact original identity/files/AST/blob seals and full custody/graph/Store checks qualify reuse without a replay |
+
+| H-23 (harness) | First historical boundary-before at c6ec3e467 | Sandbox Listener EOF before readiness or mount; exact daemon stderr private directory ownership/mode/type | Historical installer conflated Workspace source UID501:20 with daemon backing UID0:0 and retained file0644 | This commit | External installer regression fails at parent; final39 covering checks and wrong-owner/mode refusal variants PASS; old actual failure/resources retained |
 
 H-1 and H-2 are harness faults, not product correctness or performance defects.
 The original file-identity checker remains intact; no product source changed.
@@ -4487,4 +4492,72 @@ and reference-absent scope declaration. Raw inventory folder
 41791f991bf7e11e34989f1429613b6d517c22b31ddfca83384fd6e194cdefae.
 This audits messages only and does not substitute for each staged counter.
 
-| This commit | Explicitly preserve batch5 late-input preparation failure under section9 | 79370 | 79370 | +0 |
+| `c23ac0cfd` | Explicitly preserve batch5 late-input preparation failure under section9 | 79370 | 79370 | +0 |
+
+
+### Batch 5 historical private backing installer correction, 2026-10-11
+
+First original historical boundary-before attempt at privatec6ec3e467 failed
+before protocol readiness, mount or either reader. The actual50 stderr bytes
+are daemon I/O: private directory ownership/mode/type. Read-only inspection
+binds acknowledged own container4891bb1c3fa69f0103c187219108c4ff2dab86c48fa972c925d5f0787bb66a37
+(exited1, OOMfalse, effective Config.User0:0) and clone volume
+layerfs-fsb-sample-1dc1bc4c39e947b6. Both remain retained. Raw original folder
+2026-10-11-historical-access-af7dbdd3c/run-c6ec3e467/v016-access-boundary-before-v1
+in the tiny-file worktree and separate readonly listener diagnostics are
+unchanged. Receipt container is unavailable because startup never emitted its
+normal ready event; the explicit original create acknowledgement still names
+exact custody. No mount, successful reader, clean End or KnownStop is inferred.
+The otherfive original selections remain unrun at that identity.
+
+Source confirms the product guard is correct. Historical installer had
+chowned global directory/file501:20 and preserved source0644, while root
+Sandbox daemon requires its private directory owned by effective UID and
+protected file0600. The installer now explicitly uses0:0, preserves exact
+Store bytes and fixture UID/GID, sets backing directory0700/file0600 and
+checks actual root/mode stat output plus Store SHA before declaring PASS.
+Wrong ownership or mode refuses before passing container removal. The change
+adds no product feature, retry, Store write, fsync, Init or measured pre-read.
+
+Explicit source reuse admission now additionally excludes the reviewed
+install_closed_history_store access adapter from producer AST comparison:
+that function installs the independent historical access master, and is
+never invoked by the complete setup producer. Every original producer
+function/model/helper/workload/compiled file still matches; existing summary,
+raw Store/WAL, graph, ACKs, source identity and custody remain untouched.
+The six old prepared inputs/masters cannot be repaired in place. Prepare six
+new copies at this changed source via explicit --reuse-producer, each using
+its same original full closed producer. Sample the affected first case once
+at new identity, then the still-unattempted five once. Rebuild is unnecessary
+because all nine compiled scopes are unchanged.
+
+Parent installer regression retained. Final39 covering checks PASS in
+6,072,853,750 ns, and additional wrong-directory-owner, wrong-file-owner and
+file0644 readback refusal check PASS in336,415,542 ns, each explicit120 s
+R4 stop. A test-selector authoring error invoked zero tests and is preserved;
+only the selector was corrected before the actual red. Raw qualification
+2026-10-11-historical-backing-ownership-regression, SHA-256
+cd1f5e61660f8f58b01fac04bc1fdede7c91c6d0df9a0dac6f973522fe05d05e. These are mocked external harness checks; no actual new install,
+SDK access or Docker operation has yet qualified the correction.
+
+Concurrent branch/multi evidence now also includes actual typed SDK refusals
+Busy at Commit Begin with detail Store busy before effect. These agree with
+current integration3.3, including original no-effect serial reservation and
+Save Begin refusal. The unique explicit EAGAIN mapping is Declined::Contended
+on a creating mutation with no locally reserved serial; early refill Busy
+keeps its serial. Branchfirstpath inference is d039/f00000, and actual B
+failure overlaps A command1 but no A Commit; local session try_lock versus
+SQLite BEGIN contention remains unknown. The retained syscall wrapper did
+not capture syscall/path. No unknown cause is promoted to a precise assertion,
+no product defect or fix is claimed, and each remaining original case runs
+once. Capped source diagnosis SHA7e1ddc674 is in its raw family folder;
+namespace first-case readonly daemon log SHA-256
+0c93d71c13538fd554deb7e5ad5a491b7ad2bd14196571dec10894a309bac43e
+contains540 observation rows and only two EOF connection diagnostics.
+
+The formatter must separately avoid promoting partial-context initializer0
+phase totals to measured durations. Root owns that reporting correction;
+original failed receipts will remain unchanged. No new source is sent to
+actual cases merely for formatting. Durable remains disabled.
+
+| This commit | Correct private historical backing ownership/mode without changing producer or product | 79370 | 79370 | +0 |
