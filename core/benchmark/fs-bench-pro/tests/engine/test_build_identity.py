@@ -99,8 +99,11 @@ class RuntimeBuildReuse(unittest.TestCase):
                              ("fuser_disposition", "PASS")):
             with self.subTest(field=field), self.assertRaisesRegex(ValueError, "profile, image, flags or disposition"):
                 identity.reuse_runtime_inputs(previous["identity"], {**previous, field: value}, None)
-        with self.assertRaisesRegex(ValueError, "eight sealed binary"):
+        with self.assertRaisesRegex(ValueError, "nine sealed binary"):
             identity.reuse_runtime_inputs(previous["identity"], {**previous, "binaries": {}}, None)
+        legacy = {name: value for name, value in previous["binaries"].items() if name != "workspace-linux"}
+        with self.assertRaisesRegex(ValueError, "nine sealed binary"):
+            identity.reuse_runtime_inputs(previous["identity"], {**previous, "binaries": legacy}, None)
         with self.assertRaisesRegex(ValueError, "product tree differs"):
             identity.reuse_runtime_inputs({**previous["identity"], "product_tree": "changed"}, previous, None)
 

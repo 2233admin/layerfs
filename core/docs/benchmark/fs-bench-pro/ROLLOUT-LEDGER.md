@@ -2429,4 +2429,22 @@ benchmark-results/fs-bench-pro/2026-10-10-h8-resource-retention. No actual Docke
 resources, prepared inputs or benchmark samples were created by these isolated
 controller tests; old recorded removals/receipts remain unchanged.
 
-| This commit | Retain failed finalization resources and bind separate administrative custody | 79366 | 79366 | +0 |
+| `56a422544` | Retain failed finalization resources and bind separate administrative custody | 79366 | 79366 | +0 |
+
+
+Batch4 full builds now compile/archive the same workspace native recipe CLI
+for Linux as workspace-linux, alongside its host workspace-writer. This
+supports actual original selective M1 native proof in the pinned image rather
+than routing the frozen generic expected() pristine fixture as M1's oracle.
+There are nine prospective sealed binary keys; runtime-only rebuilds require
+the nine-key full seal and reuse eight unchanged binaries. Closed eight-key
+build receipts remain immutable; current changed recipe/writer scopes already
+require a new full seal, so none is relabelled as nine-key qualification.
+Linux compilation retains host source checksum validation before and after,
+locked offline daemon build, pinned image and repository ARM64 flags. Full
+build/execution has not occurred yet. Owning8build-identity tests PASS0.018s,
+including refused missing workspace-linux reuse;120s wallstop/main lock;
+raw benchmark-results/fs-bench-pro/2026-10-10-batch-4-linux-recipe-asset-authoring.
+No product source or Docker resource changed in this authoring check.
+
+| This commit | Seal Linux copy of current native selective recipe in future full builds | 79366 | 79366 | +0 |
