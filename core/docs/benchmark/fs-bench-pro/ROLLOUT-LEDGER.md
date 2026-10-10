@@ -124,7 +124,7 @@ comparison or release-admission claim. Durable is
 
 | H-24 (harness/reporting) | Failed concurrent branch and multi rounds | CSV reader copied initialized0 command/Commit/unmount totals despite observed partial work | Controller fails before accumulating a whole round; reporter treated all phase values as complete case metrics | `669bc4853` | Parent external report tests fail; final13 custody/report checks PASS; retained sealed actual rows read without changing receipts |
 
-| H-25 (harness) | Historical fork-point atc79eb607f | Native selected-root/all-Branch proof PASS, but Python full ordered ACK transcript check FAIL | JSON-sorted closed graph was serialized alphabetically a,b,initial,trunk rather than original initial,trunk,a,b | This commit | Sorted-JSON regression fails at parent for both compact producers; final42 scoped checks plus exact retained30ACK/15distinct/5Branch corrected-order check PASS; strict checker unchanged |
+| H-25 (harness) | Historical fork-point atc79eb607f | Native selected-root/all-Branch proof PASS, but Python full ordered ACK transcript check FAIL | JSON-sorted closed graph was serialized alphabetically a,b,initial,trunk rather than original initial,trunk,a,b | `2f7160c92` | Sorted-JSON regression fails at parent for both compact producers; final42 scoped checks plus exact retained30ACK/15distinct/5Branch corrected-order check PASS; strict checker unchanged |
 
 H-1 and H-2 are harness faults, not product correctness or performance defects.
 The original file-identity checker remains intact; no product source changed.
@@ -4721,4 +4721,76 @@ attempt divergent-head once. Reuse the unaffected firstfour proof receipts.
 No batch6/7 starts yet; concurrent count-mapper omission is being tested in
 its owning separate worktree without a measurement replay.
 
-| This commit | Preserve original ordered historical ACKs through JSON-sealed graph reuse | 79370 | 79370 | +0 |
+| `2f7160c92` | Preserve original ordered historical ACKs through JSON-sealed graph reuse | 79370 | 79370 | +0 |
+
+
+### Batch 5 branch_development final family results, 2026-10-11
+
+Imported exact worker222e0cd5d CSV pair atbaselines/core/2026-10-11-1bc68451d.
+Allsix original cases remain: three actual concurrent FAIL, one failed-setup
+actualNOT_RUN, two compact functional/proof/clean-close PASS with numeric
+INELIGIBLE. Performance/verification SHA-256
+b1c199edb2fea526115cc7c967e84af7a107da22cd71670bc73563f4ba124f05 /
+93537b68a8ea18f034d2f8c451bf530965c2a4c322c225b2809b7f3f0d8a6312.
+Execution source1bc68451d and product9ac88edb2cc44d44edd4a53f9ad89f4dee063a58
+are unchanged; report-only private0754e1547 imports exact669bc4853 reader.
+No case, setup, product operation or receipt is repeated or relabeled.
+Original parity remains aggregateFAIL with five eligiblePASS and failed500/K100
+setup absence, under committed section9 exceptionc23ac0cfd.
+
+| Original branch case | Actual outcome | Outer invocation diagnostic ns | Complete command+Commit ns | Separate proof ns | Actual ACKs Trunk/A/B/C | Closure |
+| --- | --- | ---: | ---: | ---: | --- | --- |
+| v016-branch-mixed-100mb-5000-k10-v1 | FAIL | 10162822166 | UNAVAILABLE | UNAVAILABLE | 10/10/0/0 | UNAVAILABLE / UNAVAILABLE |
+| v016-branch-mixed-100mb-5000-k100-v1 | FAIL | 23748204292 | UNAVAILABLE | UNAVAILABLE | 10/100/0/0 | UNAVAILABLE / UNAVAILABLE |
+| v016-branch-mixed-500mb-30000-k10-v1 | FAIL | 26793157458 | UNAVAILABLE | UNAVAILABLE | 10/0/10/0 | UNAVAILABLE / UNAVAILABLE |
+| v016-branch-mixed-500mb-30000-k100-v1 | NOT_RUN | UNAVAILABLE | UNAVAILABLE | UNAVAILABLE | 0 actual case attempts | NOT_RUN / NOT_RUN |
+| v016-branch-convergent-content-v1 | INELIGIBLE | 8816724958 | 1391780251 | 2065161417 | 10/10/10/0 | Gone / KNOWN_STOP |
+| v016-branch-fork-descendant-v1 | INELIGIBLE | 9407897125 | 1878857337 | 2184426209 | 10/10/10/10 | Gone / KNOWN_STOP |
+
+Outer invocation walls include setup/driver and are never substituted for the
+original completed pure-call clock. Failed prefix phases remain raw diagnostics;
+all incomplete aggregate CSV phase totals are UNAVAILABLE. Compact convergent
+and descendant are within15s reported and25s verification limits, with no
+completed limit exceeded. Unknown setup/own-write coldness, paid preconditions
+and declared shared host/VM/protected/failed-service interference retain cache
+INELIGIBLE. No speed, reference ratio or acceptance verdict is made.
+
+Convergent storage logical/allocated B: Store4,655,120/4,657,152,
+Overlay229,376/268,664,832; descendant Store6,138,320/6,139,904,
+Overlay229,376/268,664,832. These are the original observer scopes.
+Convergent complete graph has30ACK/15distinctCommit tuples/fourBranches;
+descendant40ACK/35distinct/fiveBranches. Exact declared selected roots have
+native full-payload, public current typed-root/history and complete unfiltered
+closed SQL census proofs, one final authenticated control fence and clean
+End/Gone/KnownStop. Both own passing pairs were removed after publication/outer
+ACK. Original numeric counts remain UNAVAILABLE in this pair because the
+mapper rejected genuine empty ordinary-command ranges; that separate source
+bug is being qualified offline, without changing these closed records.
+
+The three concurrent failures agree with required before-effect contention
+refusals:100/K10 and100/K100 Binitial creating-mutation EAGAIN,500/K10
+ACommit Begin typedBusy. They do not reach full original graph, native M1
+proof, public census or whole End/Stop. Trunk alone ended cleanly; child
+mount custody remains uncertain. Keep every failed container/volume/key:
+
+| Case | Retained container | Retained volume | Child keys A / B |
+| --- | --- | --- | --- |
+| v016-branch-mixed-100mb-5000-k10-v1 | a2bd5be44af29eed2d22f6094907e9895f9874326552bacbea342709b0690f32 | layerfs-fsb-sample-bf467b65bfc44fd6 | ee4409af92dde503e1b3a36b99a227c38f5a8d56286132c49ed3ecf831a38f9d / 4efbba7a0e9a926cc3c122e9bf3d034b322adff44938cfc3f189df069e11bf1f |
+| v016-branch-mixed-100mb-5000-k100-v1 | df382f92fbf74c30444cce63c785aa71a10fc760a262ad1d61a70296bb7d57b8 | layerfs-fsb-sample-838f42e9bc614e3c | c87645e138eb2517f48ce748e482ec3730a92318ed4ebc3942c429e86f4da886 / 58adaad6df16e8d3d5900515e8046131280e00252bf65dec419620a723ddb1bf |
+| v016-branch-mixed-500mb-30000-k10-v1 | 6c8186e0744503a58718bedbb88783f5054ae171a1c333d7abb731247f0c1a2c | layerfs-fsb-sample-1f9422d10aed4c6c | 08717f4ca8b19319e9b1963fff3385bf8a801ef94b9fff7900ad1f4729d64591 / d303093216d1dd9ad8863ff307edd8ab33ce743ba87d435a410829a6fb714b8b |
+
+The three original immutable masters remain for rollout reuse. Failed500/K100
+preparation and its late sealed artifacts stay unqualified; its separate
+administrativeNOT_RUN row binds exact original120s failure and zero actual
+case attempts. Neither a changed limit nor a retry/workload/checkpoint reduction
+is used. Full family-handoff-final.json SHA-256
+6fc4858eda77e401bdd39f46fcb2a37a82a823454eaf120a5cf19fa9e76b6e29
+in edit-capped worktree raw2026-10-11-batch-5-branch-1bc68451d binds all
+metrics/limits/resources/seals/omissions. Read-only count diagnosis SHA-256
+4acd2c0d65f8a67292b6d01edda87b6e6cb38e33e0477d397cc2cc8465f21479
+identifies only30/40 authenticated empty command ranges in original pre-proof
+prefixes, with complete genuine observer groups; counts are not invented.
+
+| `0754e1547` (worker) | Import reviewed incomplete context reporting only | 79370 | 79370 | +0 |
+| `222e0cd5d` (worker) | Commit exact six-case branch CSV pair | 79370 | 79370 | +0 |
+| This commit | Import final branch family result pair and exact retained custody | 79370 | 79370 | +0 |
