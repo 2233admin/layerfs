@@ -120,6 +120,67 @@
           }
         ],
         "operations": "C1 creates25000 f00000..f24999 withbyte ordinal%251; C2 changes256 ordinals97*j to(ordinal+1)%251; C3 restoresoriginalbytes; oneWorkspace thenEnd, three distinct operations, never repetitions"
+      },
+      "native_verifier": {
+        "schema": "original-local-snapshot-sample-v1",
+        "sampled_paths": [
+          ".",
+          "f00000",
+          "f00001",
+          "f00097",
+          "f00194",
+          "f12500",
+          "f24998",
+          "f24999"
+        ],
+        "sampled_ranges": {
+          "f00000": [
+            [
+              0,
+              1
+            ]
+          ],
+          "f00001": [
+            [
+              0,
+              1
+            ]
+          ],
+          "f00097": [
+            [
+              0,
+              1
+            ]
+          ],
+          "f00194": [
+            [
+              0,
+              1
+            ]
+          ],
+          "f12500": [
+            [
+              0,
+              1
+            ]
+          ],
+          "f24998": [
+            [
+              0,
+              1
+            ]
+          ],
+          "f24999": [
+            [
+              0,
+              1
+            ]
+          ]
+        },
+        "absent_paths": [],
+        "full_namespace_verified": false,
+        "full_file_bytes_verified": false,
+        "omissions": "unselected paths, bytes beyond selected ranges, exhaustive inode/object/reference census, alias and failure injection semantics"
       }
     }
   ]

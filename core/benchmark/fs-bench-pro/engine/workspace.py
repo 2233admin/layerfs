@@ -292,6 +292,27 @@ def operation_deadline(group_stop, seconds):
     return stop
 
 
+def verify_native_receipt(case, verified):
+    text = Path(verified["fields"]["stdout"]).read_text()
+    if case["v016_case"] == "local-snapshot-create-25000-onebyte-v1":
+        paths = [".", *[f"f{i:05}" for i in (0, 1, 97, 194, 12500, 24998, 24999)]]
+        omissions = "unselected paths, bytes beyond selected ranges, exhaustive inode/object/reference census, alias and failure injection semantics"
+        contract = {"schema": "original-local-snapshot-sample-v1", "sampled_paths": paths,
+                    "sampled_ranges": {path: [[0, 1]] for path in paths[1:]}, "absent_paths": [],
+                    "full_namespace_verified": False, "full_file_bytes_verified": False, "omissions": omissions}
+        expected = ("absent_paths=\nfull_file_bytes_verified=false\nfull_namespace_verified=false\nomissions=" + omissions +
+                    "\nsampled_paths=" + "\n".join(paths) + "\nsampled_ranges=" + "\n".join(path + ":0..1" for path in paths[1:]) + "\n")
+        if case.get("native_verifier") != contract or verified["fields"].get("exit_code") != "0" or text != expected:
+            raise ValueError("original local snapshot sample receipt/selection/successful exit differs")
+        return {**contract, "status": "PASS", "original_omissions": omissions,
+                "original_stdout_sha256": hashlib.sha256(text.encode()).hexdigest(),
+                "scope": "unchanged original bounded native sample; full four-root/public census proof remains separately required"}
+    proof = dict(line.split("=", 1) for line in text.splitlines())
+    if proof.get("verification_status") != "pass":
+        raise ValueError("original complete native verifier refused freshly remounted published root")
+    return proof
+
+
 def history_free_space(output):
     import shutil
     free = shutil.disk_usage(output).free
@@ -586,10 +607,7 @@ def one_family_case(family, case, prepared_folder, build_folder, output):
         verify_body = "/bin/bash /code/workload.sh verify " + shlex.quote(case["v016_case"])
         verified = runtime.send("verify", verify_mount, script(output, "verify.sh", verify_body),
                                 deadline=time.monotonic() + native_seconds(case["budget"]["verifier_ms"] / 1000))
-        text = Path(verified["fields"]["stdout"]).read_text()
-        proof = dict(line.split("=", 1) for line in text.splitlines())
-        if proof.get("verification_status") != "pass":
-            raise ValueError("original complete native verifier refused freshly remounted published root")
+        proof = verify_native_receipt(case, verified)
         runtime.send("unmount", verify_mount, deadline=time.monotonic() + native_seconds(15))
         mounted.remove(verify_mount)
         row["verification_cleanup"] = readiness(runtime, verify_mount, native_seconds(5))

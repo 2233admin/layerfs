@@ -93,6 +93,7 @@ comparison or release-admission claim. Durable is
 | H-4 | Prospective B/C Commit eligibility | Zero source demands could credit own-written backing without independent pre-Commit coldness | Cache classifier checked source demand/lifetime but not own-written phase inputs | `98b6b7260` | test_zero_source_demands_cannot_credit_own_written_commit_input |
 | H-5 | Seven recorded pilot read-only B labels; future B/C rows | Scoped zero canonical-object demand was treated as full numerical cache qualification | Still-paid backing/metadata/SQLite pre-phase domains absent; terminal mincore and an object-demand interval ending before unmount cannot establish them | `25719de3b` (prospective only) | test_zero_object_demands_do_not_qualify_unobserved_paid_phase_inputs; test_each_phase_proof_rejects_late_unknown_wrong_identity_or_warm_inputs |
 | H-2 | 36 batch-1 reviewed registrations | source_commit was an annotated tag object; parity accepted it and rejected the actual peeled commit | git rev-parse on an annotated reference returns the tag object unless peeled | `222526fa0` | test_review_identity.py rejects the tag through both parity routes, admits the peeled commit and checks every ported review |
+| H-6 | local-snapshot-create-25000-onebyte-v1 | Original native witness exited0, then controller raised dictionary update #5 after measuredEnd | Frozen sample receipt has multiline path/range values and no verification_status; harness assumed full-tree key/value receipt | This commit | test_original_multiline_sample_with_successful_exit_is_preserved fails beforefix; altered paths/ranges/scope/exit are rejected afterfix |
 
 H-1 and H-2 are harness faults, not product correctness or performance defects.
 The original file-identity checker remains intact; no product source changed.
@@ -1969,4 +1970,57 @@ PASS under120s locks; bash/skip_children rustfmt/whitespace PASS. No local
 snapshot preparation or sample yet. Production79,366 unchanged, reference
 absent (retiredR9c,last65,417), exact pinned staged absent-aware method.
 
-| This commit | Register original three-Commit local snapshot and full retained state proof | 79366 | 79366 | +0 |
+| `0344bfdc6` | Register original three-Commit local snapshot and full retained state proof | 79366 | 79366 | +0 |
+
+H-6 first local snapshot sample at0344bfdc6 FAILED after all three measured
+Committed replies and measured terminalEnd/Gone, then native witness exit0.
+The controller could not parse the original multiline sampled_paths/ranges;
+that receipt intentionally has no verification_status. Measured product wall
+22,049,536,459ns is EXCEEDED against15s, with command13,025,547,001ns,
+Commit8,851,071,916ns, mount9,189,333ns and unmount33,389,042ns. Counts/storage
+remain UNAVAILABLE in its original row, not guessed. Original final witness
+is runtime.events.artifacts/000062-verify.stdout. Its six exact fields specify
+root/seven paths/seven one-byte ranges, no absent paths, full namespace/file
+coverage false and original omissions. Actual checks succeeded; full persisted
+four-root proof had not yet run. This is a harness contract mismatch, not a
+wrong-byte/publication/product defect.
+
+Failed sample container
+f23dc735b265869a9ff91544ba366b5568787993fe23ad9d9df62a173a442bf9 is still running;
+volume layerfs-fsb-sample-b86ad3b8b2b94919 retained, verifier mount and Stop
+uncertain, host fenced-9. Do not infer teardown or remove it. Initial master
+layerfs-fsb-master-local-snapshot-ec2d6edff2f14397 remains. Failed worker raw
+run2026-10-10-batch-3-local-snapshot-0344bfdc6, handoff-failed.json and both
+generated FAIL/EXCEEDED CSVs are retained at worker commit3a7c3fd96; root
+integration is pending. One earlier parity call named the sealed case folder
+instead of its parent, failed before fixture load, retained; a fresh wrapper
+link and correct parent passed with zero samples and no setup replay.
+
+H-6 fixed prospectively by a case/schema-bound exact original six-field
+sample-receipt comparison plus known exit0. It preserves all multiline values,
+exact path/range/absence selection and false coverage flags/omissions; it does
+not invent verification_status or promote the bounded witness into a full
+native tree proof. Existing full-verifier PASS check stays required elsewhere;
+independent full four-root/history/census proof stays required after this
+witness. Regression fails at the before-source parser with the original #5
+ValueError, raw before.stdout/stderr under
+benchmark-results/fs-bench-pro/2026-10-10-local-snapshot-native-receipt-fix/.
+Three final scoped native-receipt tests PASS and sixteen owning workspace
+checks PASS0.063s under120s locks. Altered paths/ranges/absence/coverage, extra
+inventedstatus and missing/nonzero exit are rejected. Source/runtime/workload
+compiled inputs unchanged: reuse qualified native/build/external proofs.
+Only affected local snapshot may be sampled once at the corrected committed
+engine identity; failed original row/resources remain visible. No product
+change, optimization, limit/cache/workload/test reduction or unchanged replay.
+Production79,366 unchanged; reference absent; pinned staged absent-aware method.
+
+The qualified release history authoring check is source-qualified reuse, not
+an identical-binary claim: main --release --test emitted runtime9bcf33f9...,
+worker sealed release9a9e7fd5...; all four checked source hashes match0344bfdc6.
+The main authoring checks.json identifies summary vs original tool-transcript
+evidence explicitly. Worker native qualification PASS11.124s is a separate
+actual sealed-binary check. Native/preparation/runtime/source identities stay
+distinct; no evidence or original verdict is relabeled.
+
+| `3a7c3fd96` (worker) | Preserve first local snapshot FAIL/EXCEEDED and uncertain resources | 79366 | 79366 | +0 |
+| This commit | Fix exact original sampled-native receipt contract without weakening proof | 79366 | 79366 | +0 |
