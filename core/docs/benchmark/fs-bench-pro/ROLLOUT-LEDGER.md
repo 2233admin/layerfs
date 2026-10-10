@@ -21,8 +21,8 @@ comparison or release-admission claim. Durable is
 | 1 Pilot | COMPLETE: 36 functional/proof/clean-close passes; 7 recorded scoped B PASS, 29 INELIGIBLE; full numeric qualification of the 7 is unverified | Init `c1d7dd0e8`/`39bbcbd6b`; payload `200f81493`/`c1d9b6c58`; parallel routing `b3c96ecb1`; tiny `36849bcc2`/`d6e0ef952`; namespace `98b14b233`/`be1f56a23`; H-2 fix `222526fa0`; closure `d4314ed62`; membership supplement `cca598d0b` | Batch 2, retaining original receipts plus exhaustive membership supplement |
 | 2 Edits | COMPLETE: all62 cases ported/parity/sampled once/recorded;39 strict proof and clean-close passes (numeric INELIGIBLE),20 strict retention failures and3 original capped-watchdog failures retained | Canonical `a34b5d44b`/`beeb7ad69`; preserving `b9ffa63be`; capped `4d8ccfc93`; changing `05ffbf971`; small-delta `c0c99a4a3`/`2e6a508b5`/`1c975ba30` | Begin batch3; no identified fixable product correctness defect remains in batch2 |
 | 3 Trees and tools | COMPLETE: all33 original cases ported/parity/sampled, full applicable proofs and clean closePASS; numeric33INELIGIBLE; first snapshotFAIL retained separately; localitydense500 and snapshot EXCEEDED | Shared3c697ae92; directory50c297c68/ad4f95503; locality2590a4536/26c037d90; snapshot0344bfdc6/fix03033abdc/results98d3be30a/70d568e94; Git acebd7cbd/guard031d427a7/results31fff4d49 | Begin batch4 after this committed closure, no identified fixable product correctness bug |
-| 4 History on one branch | IN_PROGRESS: all 43 original cases ported; boundary closed with six passes and one strict failure; old dedup three and mixed four passes retained; corrected product build admitted; remaining dedup cases executing once; mixed closed with four earlier passes, five strict M1 failures and one actual NOT_RUN; new dedup watchdog failures retained; final mixed preparation FAIL/actual NOT_RUN | Routing65f0c1fbe; nativea921bedbd; portsfc9e71fae/6a5433e79/4762b720c; H11 2b52bdf17; H12 ea7148a19; H13 8ae040cdd; H14 e09c61bbd; product H15 a05ed6027; H16 9dfb70ee4; current build dispatch3c67e9249; affected Init8f24e39a4 | Finish each remaining original case, preserve failures and uncertain custody, then commit both complete CSVs per source and close batch 4 |
-| 5 Branches and Workspaces | PENDING | — | Wait for batch 4; verify existing P-1 SDK methods |
+| 4 History on one branch | CLOSED WITH FAILURES: all 43 original cases ported and recorded; 31 functional/proof/clean-close passes, 11 retained actual failures, one failed preparation with actual NOT_RUN; mixed aggregate parity FAIL retained under section 9 exception; no identified fixable product correctness bug remains | H11 2b52bdf17; H12 ea7148a19; H13 8ae040cdd; H14 e09c61bbd; product H15 a05ed6027; H16 9dfb70ee4; fresh seal3c67e9249; affected Init8f24e39a4; boundary88a2bd27b; partial bd3016957; mixed1a21ebfc3; dedup closure this commit | Begin batch 5 after this committed failed closure; verify existing public SDK Fork and History |
+| 5 Branches and Workspaces | READY, not started | — | Verify existing P-1 SDK Fork/History, then port three original families |
 | 6 Dedup and storage | PENDING | — | Wait for batch 5 completion |
 | 7 Reliability | PENDING | — | Wait for batch 6 completion |
 
@@ -3689,4 +3689,123 @@ excluded. Prepared masters remain retained for declared reuse during rollout.
 
 | `fa70bbb01` (worker sync) | Import exact reviewed corrected product/harness into Mixed worktree | 79366 | 79370 | +4 |
 | `dae0c5ba6` (worker) | Record every new M1 failure and original unrun selection in both CSVs | 79370 | 79370 | +0 |
-| This commit | Integrate complete mixed family result pair with strict failed closure and custody | 79370 | 79370 | +0 |
+| `1a21ebfc3` | Integrate complete mixed family result pair with strict failed closure and custody | 79370 | 79370 | +0 |
+
+
+Batch 4 / dedup_branch_history is closed with all26 original cases ported,
+prepared and parity-qualified, and every directed actual attempt recorded.
+Three distributed cases completed at original source7905e26a2 remain unchanged.
+At clean sourcee308118a9,18 new cases passed functional/native/public persisted
+history proofs and the unfiltered global Commit census, with Gone, KNOWN_STOP,
+bound publication/outer acknowledgement and authenticated administrative removal.
+Five original500-step cases failed at the fixed external120 s ceiling while
+still progressing. Aggregate family outcome is21 functional/proof/clean-close
+passes and five bounded failures. Every complete numeric observation remains
+INELIGIBLE; no coldness or isolated timing qualification is asserted.
+
+Root integrates exactly two26-row CSVs from worker
+`c4aea655d74b5277086000d397e7ee00520d10b4`, tree
+`1e73a1bdd06ffa3ce63c72e126d6be8d01205010`. Their SHA-256 values are
+`2302821d4fbec8cf06db11ceee222e38db69f9fde25cd3dacf8306e13c9a2509`
+and `d260d24abcc242d99b6757589210689327e10c4a73263dbb9ac61b9ff7fcb95d`.
+New source selection has18 INELIGIBLE, five FAIL and three NOT_RUN rows, with
+proof18 PASS/five NOT_RUN/three prior-source NOT_RUN. The original three are
+linked in tags at their exact source and receipt hashes; no observation is
+relabeled or replayed. Older H11 and H13 failed receipts and their CSVs remain.
+
+Root authenticated all18 passed receipt manifests and guarded return/removal
+evidence in the owning Capped checkout, both CSV hashes and original ordered
+membership, and all five separate administrative external-failure bindings,
+actual acknowledged Commit counts and last IDs. An initial read-only inspector
+used main's relative-path context for a private partial directory and refused
+it; the inspector was then run in its correct checkout context. This was no
+product, test, verifier or case invocation. No receipt or source was changed.
+The final handoff is Capped's
+`benchmark-results/fs-bench-pro/2026-10-10-batch-4-dedup-e308118a9/family-handoff.json`,
+SHA-256 `d9669ca7d715bdf5e6d698e71a13c525cf9143a0e4fb6731e0c98479294d6996`.
+It binds the final source/build, all preparations/helpers, binary identities,
+counts/storage, case limits, source-separated references and resource dispositions.
+Run registration remains dated2026-10-10; local closeout is2026-10-11.
+
+| New completed case | Measured phase ns | Proof ns | Requests / jobs / statements | Store logical / allocated B | Overlay logical / allocated B |
+| --- | ---: | ---: | --- | --- | --- |
+| dedup-history-hotset-1 | 201370084 | 3162223333 | 11 / 108 / 496 | 1434304 / 1437696 | 245760 / 268681216 |
+| dedup-history-hotset-10 | 766349919 | 12492346125 | 201 / 1273 / 6776 | 2159424 / 2162688 | 245760 / 268685312 |
+| dedup-history-hotset-100 | 5800506292 | 10699432917 | 741 / 10273 / 46736 | 6106760 / 6107136 | 245760 / 268685312 |
+| dedup-history-recurring-1 | 146911542 | 2910611083 | 10 / 104 / 479 | 1483744 / 1486848 | 278528 / 268713984 |
+| dedup-history-recurring-10 | 579336499 | 7329841459 | 55 / 960 / 4306 | 1817464 / 1818624 | 278528 / 268713984 |
+| dedup-history-recurring-100 | 4447416838 | 5131018166 | 505 / 9510 / 42556 | 5348304 / 5349376 | 278528 / 268718080 |
+| dedup-history-metadata-1 | 193854126 | 2993447917 | 8 / 86 / 390 | 1434304 / 1437696 | 245760 / 268681216 |
+| dedup-history-metadata-10 | 657671290 | 7499832667 | 35 / 798 / 3569 | 1768024 / 1769472 | 245760 / 268681216 |
+| dedup-history-metadata-100 | 5369214828 | 5783784041 | 305 / 7908 / 35339 | 5327704 / 5328896 | 245760 / 268685312 |
+| dedup-history-unrelated-1 | 523610125 | 3315491083 | 2206 / 10450 / 52021 | 2649704 / 2650112 | 1548288 / 269983744 |
+| dedup-history-unrelated-10 | 3300676626 | 15962014542 | 19027 / 100279 / 476416 | 15855616 / 15855616 | 1548288 / 269983744 |
+| dedup-history-unrelated-100-mixed-v2 | 7645023676 | 5489526250 | 6315 / 56515 / 269052 | 109027328 / 109027328 | 1306624 / 269742080 |
+| v016-history-large-hotset-k10-v1 | 714443125 | 2356735208 | 59 / 1341 / 6658 | 3711664 / 3715072 | 241664 / 268677120 |
+| v016-history-large-hotset-k100-v1 | 5398337128 | 2507814209 | 539 / 13139 / 65204 | 7175648 / 7176192 | 241664 / 268677120 |
+| v016-history-namespace-inode-k10-v1 | 704197708 | 2334659583 | 162 / 1688 / 8014 | 3711640 / 3715072 | 237568 / 268673024 |
+| v016-history-namespace-inode-k100-v1 | 5685274293 | 2509333500 | 1530 / 16761 / 79337 | 7409312 / 7409664 | 237568 / 268673024 |
+| v016-history-boundary-cycle-k10-v1 | 670640959 | 2335999667 | 115 / 1472 / 7083 | 3530384 / 3530752 | 233472 / 268668928 |
+| v016-history-boundary-cycle-k100-v1 | 5286368682 | 2442578625 | 1105 / 14612 / 70308 | 7192056 / 7192576 | 233472 / 268668928 |
+
+All completed measured phases and proof clocks are within their unchanged
+reported limits. Original inherited declarations retain15 s product/45 s
+proof/59 s publication, with120 s execution; the six original v0.1.6 cases
+retain15 s product/25 s proof/35 s publication, with60 s execution. Every
+external invocation still has the owner's120 s ceiling. No new limit is added
+or adjusted. Five incomplete attempts have no complete product/proof clock,
+final counts/storage or complete-limit verdict. Their external elapsed wall and
+partial acknowledgements are diagnostics, not substitute headline metrics.
+
+| Failed original case | External wall ns / 120 s ceiling | Partial acknowledged Commits | Retained container | Retained sample volume |
+| --- | ---: | ---: | --- | --- |
+| dedup-history-distributed-500 | 120023452708 | 377 | `046adc09eb527af87ad8eb781c6004089656ebcfd941ed6eb185a6c901d24625` | `layerfs-fsb-sample-23b0cb54e27f4674` |
+| dedup-history-hotset-500 | 120025993167 | 431 | `d30bb0206b2b8581b3154b6aaeef0d6986955ebe317a88a2e0bc3f2eb948f220` | `layerfs-fsb-sample-dced6d7107df42e4` |
+| dedup-history-recurring-500 | 120032936166 | 378 | `952df1ec53aa8e6e3544f00aab745e416cc1ab54a32896621ac0d8d472331b86` | `layerfs-fsb-sample-143c263052c348d0` |
+| dedup-history-metadata-500 | 120031003000 | 387 | `4e3c949e7dabf7aaffec07563be8894a7967bea9273df84439f7bb3af46f74ef` | `layerfs-fsb-sample-a4e29256c1544436` |
+| dedup-history-unrelated-500-mixed-v2 | 120023031709 | 349 | `24df68fac6a06f11b05bcb5484abf03bda708049d6a9e44bfe5aef3c4970c1ac` | `layerfs-fsb-sample-ce9a815415e844b9` |
+
+All five outer attempts exited124. Final runtime events report parent stdin
+ending without explicit Stop, with no complete receipt, End/Gone, KnownStop,
+verifier or publication/outer ACK. Separate administrative closures preserve
+actual sample/operation attempt1, completed0, functional unverified and proof
+NOT_RUN. Their original cloned volumes and containers remain untouched. A
+read-only finite-schedule review found exactly500 commands/required Commits,
+ordered bounded command inspection and bounded Commit waits; recent successful
+work continued to the cutoff. No concrete source-backed deadlock, step500
+refusal, nonzero completed command or owner panic was identified. A lost Commit
+reply remains unknown publication/cancellation state. No retry, speed change,
+workload reduction, new producer or expanded timeout is selected. The review's
+sealed handoff is private Mixed
+`benchmark-results/fs-bench-pro/2026-10-10-batch-4-dedup-watchdog-readonly-e308/handoff.json`,
+SHA-256 `b1cbf97e68785b8a3ab6e470fb0bf836551dafd7ef415b5aa695a91ef7cc9309`,
+authenticated by Root. Full original500 completion remains unverified.
+
+Only owned passing sample containers/volumes were removed after guarded proofs
+and acknowledgements. All five immutable dedup masters, original failed sample
+resources, protected owner resources and preparation bytes remain preserved.
+There was no fixture regeneration, redundant build, unchanged-case repeat,
+optimization, cache/worker/profile change or later-batch execution. All six
+original v0.1.6 cases completed their original proofs; no new product correctness
+bug surfaced. This result/doc integration reuses exact qualified owning checks
+and changes no product or harness source.
+
+Batch4 is now truthfully closed with43 original selections across its three
+families: boundary6 pass/one strict metadata failure, dedup21 pass/five bounded
+failures, mixedfour pass/five strict M1 failures/one failed preparation whose
+actual case is NOT_RUN. Thus31 functional/proof/clean-close passes,11 retained
+actual failures and one retained unrun actual case. All new complete numeric
+rows remain INELIGIBLE; proof-only rows remain performance N/A. The mixed
+aggregate parity stillFAILs its missing sealed preparation, and the explicit
+section9 exception permits continuation while preserving that failure. The
+500 MB K100 ordinary mixed clock21,059,319,673 ns exceeds15 s; no optimization
+or speed verdict follows. Known H11/H12/H13/H14/H16 harness faults and H15
+product policy defect are fixed and qualified; H17 frozen inconsistency and
+H18 bounded failures remain visible. No identified fixable product correctness
+bug remains. Batch5 may now begin using the existing public SDK Fork/History
+methods; batches6–7 remain pending. Durable stays
+NOT_RUN — disabled by owner until explicit reauthorization.
+
+| `e308118a9` (worker sync) | Import exact reviewed main source before remaining dedup attempts | 79370 | 79370 | +0 |
+| `c4aea655d` (worker) | Record18 completed and five bounded dedup attempts plus three prior-source references | 79370 | 79370 | +0 |
+| This commit | Integrate final dedup CSV pair and close batch4 with every retained failure | 79370 | 79370 | +0 |
