@@ -162,6 +162,7 @@ def verify_manifest(folder):
 
 
 PUBLICATION_SCOPE = "original Git cumulative verification hard deadline through receipt write, evidence hashing, manifest publication, publication-observation write/hash and guarded completion publication; monotonic host clock; no measured performance interval charged"
+HISTORY_PUBLICATION_SCOPE = "original family history cumulative verification hard deadline through receipt write, evidence hashing, manifest publication, publication-observation write/hash and guarded completion publication; monotonic host clock; no measured performance interval charged"
 PUBLICATION_COMPLETION_SCOPE = "post-write/hash monotonic boundary witnesses receipt, manifest and publication observation completion; attestation attempt emission follows this boundary without claiming its own write timestamp; successful completion link requires guarded admission and post-publication check, and is revoked on failure with exact attempt bytes retained"
 PUBLICATION_ADMISSION_REASON = "original publication guard reached before receipt write"
 PUBLICATION_COMPLETION_REASON = "original publication guard reached before completion publication"
@@ -202,7 +203,7 @@ def _publication_clock(previous=None):
     return value
 
 
-def finalize_guarded(folder, row, absolute_stop, publication_guard_seconds=PUBLICATION_GUARD_SECONDS):
+def finalize_guarded(folder, row, absolute_stop, publication_guard_seconds=PUBLICATION_GUARD_SECONDS, *, scope=PUBLICATION_SCOPE):
     """Append-only publication; a late seal gains a bound failure, never a rewrite.
 
     Return the effective row. Callers returning an existing row from a finally
@@ -215,7 +216,8 @@ def finalize_guarded(folder, row, absolute_stop, publication_guard_seconds=PUBLI
     """
     if (type(absolute_stop) not in (int, float) or not math.isfinite(absolute_stop) or absolute_stop <= 0
             or type(publication_guard_seconds) not in (int, float)
-            or publication_guard_seconds != PUBLICATION_GUARD_SECONDS):
+            or publication_guard_seconds != PUBLICATION_GUARD_SECONDS
+            or scope not in (PUBLICATION_SCOPE, HISTORY_PUBLICATION_SCOPE)):
         raise ValueError("finite positive numeric deadline and frozen 0.25 s publication guard required")
     folder = Path(folder)
     if any((folder / name).exists() for name in
@@ -226,7 +228,7 @@ def finalize_guarded(folder, row, absolute_stop, publication_guard_seconds=PUBLI
     started = _publication_clock()
     declaration = {"schema": "fs-bench-pro-publication-guard-v1", "absolute_stop_monotonic": absolute_stop,
                    "publication_guard_seconds": publication_guard_seconds, "started_monotonic": started,
-                   "scope": PUBLICATION_SCOPE}
+                   "scope": scope}
     original = {**row, "publication_guard": declaration}
     late_admission = started >= absolute_stop-publication_guard_seconds
     if late_admission:
@@ -251,7 +253,7 @@ def finalize_guarded(folder, row, absolute_stop, publication_guard_seconds=PUBLI
             "started_monotonic": started, "finished_monotonic": ended,
             "absolute_stop_monotonic": absolute_stop, "publication_guard_seconds": publication_guard_seconds,
             "complete_publication_elapsed_ns": int((ended-started)*1_000_000_000),
-            "scope": PUBLICATION_SCOPE})
+            "scope": scope})
         return _publication_failed(original, reason)
     if late_admission or finished >= absolute_stop:
         return failed_publication(finished, PUBLICATION_ADMISSION_REASON if late_admission else PUBLICATION_DEADLINE_REASON)
@@ -341,7 +343,7 @@ def _publication_overlay(folder, row, selection, *, require_outer_ack=True):
             or "image" in selection and row.get("image") != selection["image"]):
         raise ValueError("guarded publication run identity differs")
     if (declaration.get("schema") != "fs-bench-pro-publication-guard-v1"
-            or declaration.get("scope") != PUBLICATION_SCOPE):
+            or declaration.get("scope") not in (PUBLICATION_SCOPE, HISTORY_PUBLICATION_SCOPE)):
         raise ValueError("guarded publication declaration differs")
     if (any(type(declaration.get(name)) not in (int, float) or not math.isfinite(declaration[name])
             for name in ("started_monotonic", "absolute_stop_monotonic", "publication_guard_seconds"))

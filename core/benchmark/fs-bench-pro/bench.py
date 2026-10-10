@@ -105,7 +105,7 @@ def main(argv=None):
                 result = project.one_init(case, prepared, args.build, output / cell)
             else:
                 result = workspace.one_family_case(args.family, case, prepared, args.build, output / cell)
-            if case.get("git_workflow") and result.get("publication_guard"):
+            if result.get("publication_guard"):
                 receipts.acknowledge_guarded(output / cell, result)
             if args.family in fixtures.WORKSPACE_FAMILIES:
                 workspace.dispose_family_resources(output / cell, result)

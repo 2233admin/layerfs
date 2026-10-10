@@ -2589,4 +2589,22 @@ in Capped's2026-10-10-batch-4-history-authoring folder. No realcase/export/resou
 was created by the synthetic checks.
 
 | `70c61a91f` (worker) | Unfiltered immutable current-schema Commit census and synthetic guards | 79366 | 79366 | +0 |
-| This commit | Integrate unfiltered census, retaining genuine public extraCommit test prerequisite | 79366 | 79366 | +0 |
+| `1fa7facc4` | Integrate unfiltered census, retaining genuine public extraCommit test prerequisite | 79366 | 79366 | +0 |
+
+
+Batch4 guardedpublication integrates Cappedc8a5a72db. Exact closed Git scope
+string remains unchanged; new HISTORY_PUBLICATION_SCOPE identifies original
+family cumulative proof/publication separately. Only those two scope constants
+are admitted; same0.25s margin, immutable receipt/manifest/observation, guarded
+completion attempt/link/post-check and mandatory known outerreturn apply.
+Driver acknowledges every guarded result before existingH8administrative
+resource removal, independent of family name. No original receipt/verdict is
+rewritten. Owning newhistory3checks PASS0.009s, retained oldpublication23checks
+PASS0.234s and2driverorderingchecks PASS0.008s, eachprivate120slock; final exact
+changed sourcefilehashes reused. No actualcase/export/resource executed;
+controller original work/reserve/hard budget integration remainsuncommitted
+and unqualified until its own coveringtests. Rawpublication supplement is in
+Capped's2026-10-10-batch-4-history-authoring folder.
+
+| `c8a5a72db` (worker) | General original-family guarded publication and outer acknowledgement | 79366 | 79366 | +0 |
+| This commit | Integrate family guarded publication without altering closed Git scope | 79366 | 79366 | +0 |
