@@ -686,6 +686,46 @@ pub fn is_m1(id: &str) -> bool {
     matches!(stages::mixed_case(id), Ok(Some(case)) if case.topology == stages::Topology::Sequential)
 }
 
+fn apply_m1_prefix(
+    fixture: &v016::LoadFixture,
+    shadow: &mut ShadowState,
+    steps: usize,
+    cycle_start: usize,
+    tag: u64,
+    salt: &str,
+    observed: &BTreeMap<String, u32>,
+) -> reference::Result<()> {
+    for completed in 1..=steps {
+        let cycle = (completed - 1) / stages::STAGES + cycle_start;
+        match stages::Stage::from_ordinal((completed - 1) % stages::STAGES + 1)? {
+            stages::Stage::Refresh => apply_stage1(fixture, cycle, salt, shadow)?,
+            stages::Stage::Edits => {
+                apply_stage2(fixture, cycle, shadow)?;
+                apply_sdk_stage2(fixture, cycle, shadow)?;
+            }
+            stages::Stage::Directories => apply_stage3(fixture, cycle, shadow, observed)?,
+            stages::Stage::AttrsLinks => apply_stage4(fixture, cycle, tag, shadow)?,
+            stages::Stage::InodeSubtree => apply_stage5(fixture, cycle, salt, shadow, observed)?,
+        }
+    }
+    Ok(())
+}
+
+fn require_created_modes(
+    required: &BTreeSet<String>,
+    observed: &BTreeMap<String, u32>,
+) -> reference::Result<()> {
+    for path in required {
+        let mode = observed
+            .get(path)
+            .ok_or_else(|| format!("original helper created mode missing: {path}"))?;
+        if mode & !0o1777 != 0 {
+            return Err("original helper created mode outside frozen mode envelope".into());
+        }
+    }
+    Ok(())
+}
+
 /// Original sequential M1 state after `step` acknowledged Commits. Passing
 /// `None` is materialization-only; actual proof must supply sealed helper modes.
 pub fn m1_state(
@@ -706,31 +746,14 @@ pub fn m1_state(
     let mut shadow = shadow_from_fixture(&fixture);
     let empty = BTreeMap::new();
     let observed = created_modes.unwrap_or(&empty);
-    for completed in 1..=step {
-        let cycle = (completed - 1) / stages::STAGES + 1;
-        match stages::Stage::from_ordinal((completed - 1) % stages::STAGES + 1)? {
-            stages::Stage::Refresh => apply_stage1(&fixture, cycle, "branch0", &mut shadow)?,
-            stages::Stage::Edits => {
-                apply_stage2(&fixture, cycle, &mut shadow)?;
-                apply_sdk_stage2(&fixture, cycle, &mut shadow)?;
-            }
-            stages::Stage::Directories => apply_stage3(&fixture, cycle, &mut shadow, observed)?,
-            stages::Stage::AttrsLinks => apply_stage4(&fixture, cycle, 0, &mut shadow)?,
-            stages::Stage::InodeSubtree => {
-                apply_stage5(&fixture, cycle, "branch0", &mut shadow, observed)?;
-            }
-        }
-    }
+    apply_m1_prefix(&fixture, &mut shadow, step, 1, 0, "branch0", observed)?;
     if let Some(observed) = created_modes {
-        for path in &shadow.required_created {
-            let mode = observed
-                .get(path)
-                .ok_or_else(|| format!("original helper created mode missing: {path}"))?;
-            if mode & !0o1777 != 0 {
-                return Err("original helper created mode outside frozen mode envelope".into());
-            }
-        }
+        require_created_modes(&shadow.required_created, observed)?;
     }
+    finish_m1(tier, shadow)
+}
+
+fn finish_m1(tier: &v016::LoadTier, shadow: ShadowState) -> reference::Result<M1State> {
     let file_mtimes = shadow
         .mtimes
         .iter()
@@ -884,6 +907,205 @@ pub fn m1_scope_tsv(state: &M1State) -> reference::Result<String> {
     Ok(output)
 }
 
+pub type ContextCreatedModes = BTreeMap<String, BTreeMap<String, u32>>;
+
+/// Roles are selected from the frozen case registry, never receipt metadata.
+pub fn context_roles(id: &str) -> reference::Result<Vec<&'static str>> {
+    if let Some(case) = stages::mixed_case(id)? {
+        return match case.topology {
+            stages::Topology::Branch => Ok(vec!["trunk", "a", "b"]),
+            stages::Topology::Concurrent => Ok(vec!["0", "1"]),
+            stages::Topology::Four => Ok(vec!["0", "1", "2", "3"]),
+            _ => Err("original contextual M1 topology required".into()),
+        };
+    }
+    let compact = stages::compact_case(id)?.ok_or("original contextual case required")?;
+    Ok(compact
+        .roles()
+        .into_iter()
+        .map(stages::CompactRole::of)
+        .collect())
+}
+
+pub fn context_limit(id: &str, role: &str) -> reference::Result<usize> {
+    if !context_roles(id)?.contains(&role) {
+        return Err("original contextual role is not declared".into());
+    }
+    Ok(match stages::mixed_case(id)? {
+        Some(case) if role != "trunk" => case.k,
+        _ => stages::COMPACT_TRUNK_COMMITS,
+    })
+}
+
+pub fn is_context_m1(id: &str) -> bool {
+    matches!(stages::mixed_case(id), Ok(Some(case)) if case.topology != stages::Topology::Sequential)
+}
+
+fn context_m1_parameters(
+    id: &str,
+    role: &str,
+) -> reference::Result<(stages::MixedCase, u64, usize)> {
+    context_limit(id, role)?;
+    let case = stages::mixed_case(id)?.ok_or("original contextual M1 required")?;
+    let tag = match case.topology {
+        stages::Topology::Branch => match role {
+            "trunk" => 0,
+            "a" => 1,
+            "b" => 2,
+            _ => return Err("original branch role differs".into()),
+        },
+        stages::Topology::Concurrent | stages::Topology::Four => role.parse()?,
+        _ => return Err("original contextual M1 topology required".into()),
+    };
+    let cycle_start = if case.topology == stages::Topology::Branch && role != "trunk" {
+        2
+    } else {
+        1
+    };
+    Ok((case, tag, cycle_start))
+}
+
+/// `None` is native materialization only. Actual proofs supply role-bound maps;
+/// inherited trunk observations never get overwritten by a child's own map.
+pub fn context_m1_state(
+    id: &str,
+    role: &str,
+    step: usize,
+    created_modes: Option<&ContextCreatedModes>,
+) -> reference::Result<M1State> {
+    if step > context_limit(id, role)? {
+        return Err("original contextual local step outside schedule".into());
+    }
+    let (case, tag, cycle_start) = context_m1_parameters(id, role)?;
+    let tier = if case.tier == "L100" {
+        &v016::L100
+    } else {
+        &v016::L500
+    };
+    let fixture = v016::load_fixture(tier, 1)?;
+    let mut shadow = shadow_from_fixture(&fixture);
+    let empty = BTreeMap::new();
+    let mut inherited_required = BTreeSet::new();
+    if cycle_start == 2 {
+        let inherited = created_modes
+            .and_then(|maps| maps.get("trunk"))
+            .unwrap_or(&empty);
+        apply_m1_prefix(&fixture, &mut shadow, 5, 1, 0, "branch0", inherited)?;
+        if created_modes.is_some() {
+            require_created_modes(&shadow.required_created, inherited)?;
+        }
+        inherited_required = std::mem::take(&mut shadow.required_created);
+    }
+    let own = created_modes
+        .and_then(|maps| maps.get(role))
+        .unwrap_or(&empty);
+    apply_m1_prefix(
+        &fixture,
+        &mut shadow,
+        step,
+        cycle_start,
+        tag,
+        &format!("branch{tag}"),
+        own,
+    )?;
+    if created_modes.is_some() {
+        require_created_modes(&shadow.required_created, own)?;
+    }
+    shadow.required_created.extend(inherited_required);
+    finish_m1(tier, shadow)
+}
+
+fn compact_role(
+    id: &str,
+    role: &str,
+) -> reference::Result<(stages::CompactCase, stages::CompactRole)> {
+    context_limit(id, role)?;
+    let case = stages::compact_case(id)?.ok_or("original compact case required")?;
+    let role = case
+        .roles()
+        .into_iter()
+        .find(|item| item.of() == role)
+        .ok_or("original compact role missing")?;
+    Ok((case, role))
+}
+
+fn compact_entries(id: &str, role: &str, step: usize) -> reference::Result<Vec<Entry>> {
+    let (compact, selected) = compact_role(id, role)?;
+    if step > context_limit(id, role)? {
+        return Err("original compact local step outside schedule".into());
+    }
+    reference::branch_development::compact_expected_at(1, compact, selected, step)
+}
+
+pub fn context_entries(id: &str, role: &str, step: usize) -> reference::Result<Vec<Entry>> {
+    if is_context_m1(id) {
+        Ok(context_m1_state(id, role, step, None)?.entries)
+    } else {
+        compact_entries(id, role, step)
+    }
+}
+
+pub fn context_manifest(id: &str, role: &str, step: usize) -> reference::Result<String> {
+    if is_context_m1(id) {
+        m1_scope_tsv(&context_m1_state(id, role, step, None)?)
+    } else {
+        reference::workspace_common::manifest(&context_entries(id, role, step)?)
+    }
+}
+
+/// Strict original role/name domains; future cumulative rows may be present,
+/// but actual selected-state verification still requires its own observations.
+pub fn parse_context_created_modes(id: &str, body: &str) -> reference::Result<ContextCreatedModes> {
+    if !is_context_m1(id) {
+        return Err("original contextual M1 mode observations required".into());
+    }
+    let mut lines = body.lines();
+    if lines.next() != Some("original-context-created-modes-v1")
+        || lines.next() != Some("role\tpath\tmode")
+    {
+        return Err("context created modes header differs".into());
+    }
+    let domains = context_roles(id)?
+        .into_iter()
+        .map(|role| {
+            Ok((
+                role,
+                context_m1_state(id, role, context_limit(id, role)?, None)?
+                    .required_created_directory_modes,
+            ))
+        })
+        .collect::<reference::Result<BTreeMap<_, _>>>()?;
+    let mut maps = ContextCreatedModes::new();
+    for line in lines {
+        let fields = line.split('\t').collect::<Vec<_>>();
+        if fields.len() != 3
+            || fields[1].is_empty()
+            || fields[1].contains(['\0', '\\', '\r'])
+            || fields[1]
+                .split('/')
+                .any(|part| matches!(part, "" | "." | ".."))
+            || fields[2].is_empty()
+            || !fields[2].bytes().all(|byte| matches!(byte, b'0'..=b'7'))
+            || !domains
+                .get(fields[0])
+                .is_some_and(|domain| domain.contains(fields[1]))
+        {
+            return Err("context created mode is malformed or undeclared".into());
+        }
+        let mode = u32::from_str_radix(fields[2], 8)?;
+        if mode & !0o1777 != 0
+            || maps
+                .entry(fields[0].to_owned())
+                .or_default()
+                .insert(fields[1].to_owned(), mode)
+                .is_some()
+        {
+            return Err("context created mode duplicate or outside frozen envelope".into());
+        }
+    }
+    Ok(maps)
+}
+
 /// Original named edit member and its exact declared input/output length.
 pub struct SdkSplice {
     pub edit: SdkEdit,
@@ -945,42 +1167,14 @@ pub fn sdk_step(id: &str, step: usize) -> reference::Result<Vec<SdkSplice>> {
             1,
         )?;
         let cycle = (step - 1) / 5 + 1;
-        let mut result = Vec::new();
-        for (_, operation) in stages::stage2_plan(&fixture, cycle)? {
-            if !stages::is_sdk_row(&operation) {
-                continue;
-            }
-            let (path, kind, start) = stages::sdk_edit_target(&fixture, cycle, &operation)?;
-            let replacement = if kind == "insert" {
-                let content = dedup::content(
-                    v016::FAMILY_MIXED,
-                    "v016-sdk-stage2",
-                    1,
-                    cycle * 2 + result.len(),
-                    &format!("{kind}-c{cycle}"),
-                    256,
-                )?;
-                let mut bytes = Vec::new();
-                content.write_to(&mut bytes)?;
-                bytes
-            } else {
-                Vec::new()
-            };
-            result.push(SdkEdit {
-                path,
-                start,
-                delete_len: if kind == "delete" { 256 } else { 0 },
-                replacement,
-            });
-        }
-        if result.len() != stages::STAGE2_SDK_CALLS {
-            return Err("original M1 SDK cardinality differs".into());
-        }
-        result
+        m1_sdk_edits(&fixture, cycle)?
     } else {
         return Err("original named SDK history case required".into());
     };
-    let before = entries(id, step - 1)?;
+    sdk_splices(entries(id, step - 1)?, edits)
+}
+
+fn sdk_splices(before: Vec<Entry>, edits: Vec<SdkEdit>) -> reference::Result<Vec<SdkSplice>> {
     let mut result = Vec::new();
     for edit in edits {
         let metadata = before
@@ -1011,4 +1205,78 @@ pub fn sdk_step(id: &str, step: usize) -> reference::Result<Vec<SdkSplice>> {
         });
     }
     Ok(result)
+}
+
+fn m1_sdk_edits(fixture: &v016::LoadFixture, cycle: usize) -> reference::Result<Vec<SdkEdit>> {
+    let mut result = Vec::new();
+    for (_, operation) in stages::stage2_plan(&fixture, cycle)? {
+        if !stages::is_sdk_row(&operation) {
+            continue;
+        }
+        let (path, kind, start) = stages::sdk_edit_target(&fixture, cycle, &operation)?;
+        let replacement = if kind == "insert" {
+            let content = dedup::content(
+                v016::FAMILY_MIXED,
+                "v016-sdk-stage2",
+                1,
+                cycle * 2 + result.len(),
+                &format!("{kind}-c{cycle}"),
+                256,
+            )?;
+            let mut bytes = Vec::new();
+            content.write_to(&mut bytes)?;
+            bytes
+        } else {
+            Vec::new()
+        };
+        result.push(SdkEdit {
+            path,
+            start,
+            delete_len: if kind == "delete" { 256 } else { 0 },
+            replacement,
+        });
+    }
+    if result.len() != stages::STAGE2_SDK_CALLS {
+        return Err("original M1 SDK cardinality differs".into());
+    }
+    Ok(result)
+}
+
+pub fn context_sdk_step(id: &str, role: &str, step: usize) -> reference::Result<Vec<SdkSplice>> {
+    if step == 0 || step > context_limit(id, role)? {
+        return Err("original contextual SDK step outside schedule".into());
+    }
+    let edits = if is_context_m1(id) {
+        let (case, _, cycle_start) = context_m1_parameters(id, role)?;
+        if (step - 1) % stages::STAGES != 1 {
+            return Err("original contextual M1 SDK pair occurs only at stage2".into());
+        }
+        let fixture = v016::load_fixture(
+            if case.tier == "L100" {
+                &v016::L100
+            } else {
+                &v016::L500
+            },
+            1,
+        )?;
+        m1_sdk_edits(&fixture, (step - 1) / stages::STAGES + cycle_start)?
+    } else {
+        let (case, selected) = compact_role(id, role)?;
+        let ancestral = case.fork_ancestry(selected) + step;
+        let mut replacement = Vec::new();
+        stages::compact_payload(
+            v016::FAMILY_BRANCH,
+            1,
+            ancestral,
+            stages::compact_salt(case, selected),
+        )?
+        .write_to(&mut replacement)?;
+        vec![SdkEdit {
+            path: reference::v016_compact::s_medium_path(0),
+            start: stages::compact_offset(ancestral)?,
+            delete_len: 256,
+            replacement,
+        }]
+    };
+    sdk_splices(context_entries(id, role, step - 1)?, edits)
 }

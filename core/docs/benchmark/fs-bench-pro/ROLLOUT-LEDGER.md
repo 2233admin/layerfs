@@ -3878,7 +3878,7 @@ eligibility. No measurement begins until the common SDK route and final build
 are qualified. Batches 6 and 7 remain pending.
 
 | `de6192803` (worker) | Register six original branch cases and wrapper; four owning tests pass | 79370 | 79370 | +0 |
-| This commit | Integrate exact branch registration and record batch 5 ownership | 79370 | 79370 | +0 |
+| `c45de8d94` | Integrate exact branch registration and record batch 5 ownership | 79370 | 79370 | +0 |
 
 
 ### Batch 5 multi_workspace_development registration, 2026-10-11
@@ -3895,7 +3895,7 @@ ownership. Closed prior receipts and protected/failed resources are unchanged.
 Durable stays NOT_RUN — disabled by owner until explicit reauthorization.
 
 | `cd89fa6d7` (worker) | Author five original multi-workspace cases and owning tests | 79370 | 79370 | +0 |
-| This commit | Integrate exact multi_workspace_development registration | 79370 | 79370 | +0 |
+| `f4dcb18a7` | Integrate exact multi_workspace_development registration | 79370 | 79370 | +0 |
 
 
 ### Batch 5 historical_access registration, 2026-10-11
@@ -3912,4 +3912,45 @@ ownership. Closed prior receipts and protected/failed resources are unchanged.
 Durable stays NOT_RUN — disabled by owner until explicit reauthorization.
 
 | `1c1a99917` (worker) | Author six original historical-access cases and owning tests | 79370 | 79370 | +0 |
-| This commit | Integrate exact historical_access registration | 79370 | 79370 | +0 |
+| `7d071e39f` | Integrate exact historical_access registration | 79370 | 79370 | +0 |
+
+
+### Batch 5 contextual native model/writer support, 2026-10-11
+
+Imported only `4329298a56930b3990d8af67f1fa83687d58250c`'s four owned
+harness files: context model, native materialization/verifier recipe, authenticated
+prepared writer and external model tests. Original sequential APIs and descriptor
+schema remain compatible. Role/local-step APIs preserve ancestor-prefix content,
+compact original algebra and separate inherited/own actual M1 created-directory
+modes. No fixture/default mode substitutes for an actual observation. Context
+prepared descriptors bind the case, role, local step, exact ordered member
+geometry, explicit attributes and payload hashes; measured application consumes
+sealed inputs without recipe generation.
+
+The worker compiled native assets and external test targets first, with
+Rust1.85.1 and repository ARM64 flags, under private locks. Six context checks
+passed once in2.61 s (6,725,614,542 ns complete), five unchanged legacy M1
+checks passed once in0.29 s (1,637,344,042 ns complete), and one additional
+legacy prepared-header/member compatibility check passed once in0.11 s. Every
+test invocation had an explicit120 s stop. Scoped rustfmt with skip_children
+passed. Frozen Rust sources independently matched recovery commitd296981ac.
+The final qualification receipt in the Capped worktree is
+`benchmark-results/fs-bench-pro/2026-10-11-context-native-final-tests/qualification.json`,
+SHA-256 `ce0e148a9bfa3f50cd2789ba82c1c09f993241fe125b40dc080d78a5de4ccc2a`.
+
+Development failures are retained: an initial external-test field typo failed
+compilation; an initial rustfmt invocation followed includes and reformatted six
+frozen files. The worker restored exactly its accidental original-byte changes,
+checked recovery-source hashes, and rebuilt final native assets before final
+qualification. No frozen change survives and no failed receipt is relabeled.
+Neither error establishes a product defect. The unchanged owning qualification
+is reused on import. Linux build seal, real public SDK Fork/History proof,
+preparation, parity and all17 batch5 actual cases remain unverified.
+
+All17 registrations are now committed on main. Shared Rust runtime, fixture
+admission, Python controller and independent graph/access oracles remain in
+progress under the recorded disjoint owners. Batches6–7 remain pending; all
+protected resources, failed sample custody and historical evidence are preserved.
+
+| `4329298a5` (worker) | Add contextual native model/recipe/prepared writer and external qualification | 79370 | 79370 | +0 |
+| This commit | Integrate exact qualified contextual native support | 79370 | 79370 | +0 |

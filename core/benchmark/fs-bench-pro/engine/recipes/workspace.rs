@@ -12,7 +12,6 @@ use std::{
 };
 
 fn verify_m1(id: &str, step: usize, root: &Path, modes: &Path) -> reference::Result<()> {
-    use reference::workspace_common::{self as common, EntryKind};
     if !edit_model::is_m1(id) {
         return Err("original M1 selective case required".into());
     }
@@ -42,6 +41,17 @@ fn verify_m1(id: &str, step: usize, root: &Path, modes: &Path) -> reference::Res
         }
     }
     let state = edit_model::m1_state(id, step, Some(&created_modes))?;
+    verify_m1_state(id, step, root, &mode_text, state)
+}
+
+fn verify_m1_state(
+    id: &str,
+    step: usize,
+    root: &Path,
+    mode_text: &str,
+    state: edit_model::M1State,
+) -> reference::Result<()> {
+    use reference::workspace_common::{self as common, EntryKind};
     let paths = common::native_paths(root)?;
     if paths
         != state
@@ -187,8 +197,66 @@ fn verify_m1(id: &str, step: usize, root: &Path, modes: &Path) -> reference::Res
     Ok(())
 }
 
+fn verify_context(
+    id: &str,
+    role: &str,
+    step: usize,
+    root: &Path,
+    modes: &str,
+) -> reference::Result<()> {
+    if edit_model::is_context_m1(id) {
+        let body = fs::read_to_string(modes)?;
+        let observations = edit_model::parse_context_created_modes(id, &body)?;
+        let state = edit_model::context_m1_state(id, role, step, Some(&observations))?;
+        verify_m1_state(id, step, root, &body, state)?;
+    } else {
+        if modes != "-" {
+            return Err("original compact context requires modes sentinel".into());
+        }
+        let entries = edit_model::context_entries(id, role, step)?;
+        reference::workspace_common::verify_native(root, &entries)?;
+    }
+    let scope = edit_model::context_manifest(id, role, step)?;
+    let digest = reference::sdk_edit_common::sha256_hex(scope.as_bytes());
+    println!("{{\"case\":\"{id}\",\"role\":\"{role}\",\"step\":{step},\"verification_status\":\"pass\",\"context_manifest_sha256\":\"{digest}\"}}");
+    Ok(())
+}
+
+fn materialize_context(id: &str, role: &str, step: usize, root: &Path) -> reference::Result<()> {
+    use reference::workspace_common as common;
+    let manifest = root.with_extension("manifest.tsv");
+    let scope = root.with_extension("scope.tsv");
+    if root.exists() || manifest.exists() || scope.exists() {
+        return Err("fresh contextual root/manifest/scope required".into());
+    }
+    let entries = edit_model::context_entries(id, role, step)?;
+    let complete_manifest = common::manifest(&entries)?;
+    let scoped_manifest = edit_model::context_manifest(id, role, step)?;
+    common::create_fixture(root, &entries)?;
+    fs::write(&manifest, &complete_manifest)?;
+    if edit_model::is_context_m1(id) {
+        fs::write(&scope, &scoped_manifest)?;
+    }
+    let manifest_digest = reference::sdk_edit_common::sha256_hex(complete_manifest.as_bytes());
+    let scope_digest = reference::sdk_edit_common::sha256_hex(scoped_manifest.as_bytes());
+    let recipe = common::recipe_identity(&entries)?;
+    let bytes = common::validate_entries(&entries)?;
+    println!("{{\"case\":\"{id}\",\"role\":\"{role}\",\"step\":{step},\"seed\":1,\"manifest_sha256\":\"{manifest_digest}\",\"context_manifest_sha256\":\"{scope_digest}\",\"recipe_sha256\":\"{recipe}\",\"entries\":{},\"logical_bytes\":{bytes}}}", entries.len());
+    Ok(())
+}
+
 fn main() -> reference::Result<()> {
     let args: Vec<_> = std::env::args().collect();
+    if let [_, mode, id, role, step, root] = args.as_slice() {
+        if mode == "materialize-context" {
+            return materialize_context(id, role, step.parse()?, Path::new(root));
+        }
+    }
+    if let [_, mode, id, role, step, root, modes] = args.as_slice() {
+        if mode == "verify-context" {
+            return verify_context(id, role, step.parse()?, Path::new(root), modes);
+        }
+    }
     if let [_, mode, id, step, root, modes] = args.as_slice() {
         if mode == "verify-m1-step" {
             return verify_m1(id, step.parse()?, Path::new(root), Path::new(modes));

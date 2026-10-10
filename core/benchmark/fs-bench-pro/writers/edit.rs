@@ -354,16 +354,42 @@ fn read_prepared(path: &Path) -> reference::Result<Vec<u8>> {
 }
 
 fn prepare_sdk_step(id: &str, step: usize, folder: &Path) -> reference::Result<()> {
+    prepare_step_payloads(id, None, step, folder, edit_model::sdk_step(id, step)?)
+}
+
+fn prepare_context_step(id: &str, role: &str, step: usize, folder: &Path) -> reference::Result<()> {
+    prepare_step_payloads(
+        id,
+        Some(role),
+        step,
+        folder,
+        edit_model::context_sdk_step(id, role, step)?,
+    )
+}
+
+fn prepare_step_payloads(
+    id: &str,
+    role: Option<&str>,
+    step: usize,
+    folder: &Path,
+    edits: Vec<edit_model::SdkSplice>,
+) -> reference::Result<()> {
     use std::fmt::Write;
-    let edits = edit_model::sdk_step(id, step)?;
     if edits.is_empty() {
         return Err("original SDK step has no declared edit".into());
     }
     std::fs::create_dir(folder)?;
-    let mut descriptor = format!(
-        "original-sdk-step-payloads-v1\ncase\t{id}\nstep\t{step}\nmembers\t{}\n",
+    let mut descriptor = if let Some(role) = role {
+        format!(
+        "original-context-step-payloads-v1\ncase\t{id}\nrole\t{role}\nstep\t{step}\nmembers\t{}\n",
         edits.len()
-    );
+    )
+    } else {
+        format!(
+            "original-sdk-step-payloads-v1\ncase\t{id}\nstep\t{step}\nmembers\t{}\n",
+            edits.len()
+        )
+    };
     for (index, selected) in edits.iter().enumerate() {
         if !safe_relative(&selected.edit.path) || selected.metadata.path != selected.edit.path {
             return Err("original prepared SDK target path differs".into());
@@ -389,6 +415,10 @@ fn prepare_sdk_step(id: &str, step: usize, folder: &Path) -> reference::Result<(
     }
     std::fs::write(folder.join("descriptor.tsv"), &descriptor)?;
     let digest = sdk_edit_common::sha256_hex(descriptor.as_bytes());
+    if let Some(role) = role {
+        println!("{{\"case\":\"{id}\",\"role\":\"{role}\",\"step\":{step},\"members\":{},\"descriptor_sha256\":\"{digest}\",\"scope\":\"untimed original contextual payload and target geometry\"}}", edits.len());
+        return Ok(());
+    }
     println!("{{\"case\":\"{id}\",\"step\":{step},\"members\":{},\"descriptor_sha256\":\"{digest}\",\"scope\":\"untimed original sdk_step payload and target geometry\"}}", edits.len());
     Ok(())
 }
@@ -400,9 +430,24 @@ fn apply_prepared_sdk_step(
     wanted_digest: &str,
     member: Option<usize>,
 ) -> reference::Result<()> {
+    apply_prepared_step(id, None, step, descriptor, wanted_digest, member)
+}
+
+fn apply_prepared_step(
+    id: &str,
+    role: Option<&str>,
+    step: usize,
+    descriptor: &Path,
+    wanted_digest: &str,
+    member: Option<usize>,
+) -> reference::Result<()> {
     use reference::workspace_common::{Content, Entry, SdkEdit};
     let case = reference::workspace_registry::resolve(id)?;
-    let eligible = if edit_model::is_m1(id) {
+    let eligible = if let Some(role) = role {
+        step > 0
+            && step <= edit_model::context_limit(id, role)?
+            && (!edit_model::is_context_m1(id) || step % 5 == 2)
+    } else if edit_model::is_m1(id) {
         let plan = reference::v016_stages::mixed_case(id)?.ok_or("original M1 case missing")?;
         step > 0 && step <= plan.k && step % 5 == 2
     } else if case.family == "file_size_transition" {
@@ -432,19 +477,31 @@ fn apply_prepared_sdk_step(
     }
     let text = std::str::from_utf8(&bytes)?;
     let mut lines = text.lines();
+    let schema = if role.is_some() {
+        "original-context-step-payloads-v1"
+    } else {
+        "original-sdk-step-payloads-v1"
+    };
     if step == 0
-        || lines.next() != Some("original-sdk-step-payloads-v1")
+        || lines.next() != Some(schema)
         || lines.next() != Some(format!("case\t{id}").as_str())
-        || lines.next() != Some(format!("step\t{step}").as_str())
     {
         return Err("original prepared SDK case/step/header differs".into());
+    }
+    if role.is_some_and(|role| lines.next() != Some(format!("role\t{role}").as_str()))
+        || lines.next() != Some(format!("step\t{step}").as_str())
+    {
+        return Err("original prepared context role/step header differs".into());
     }
     let count = lines
         .next()
         .and_then(|row| row.strip_prefix("members\t"))
         .ok_or("original prepared SDK member count missing")?
         .parse::<usize>()?;
-    if count == 0 || member.is_some_and(|value| value == 0 || value > count) {
+    if count == 0
+        || member.is_some_and(|value| value == 0 || value > count)
+        || role.is_some() && count != if edit_model::is_context_m1(id) { 2 } else { 1 }
+    {
         return Err("original prepared SDK member outside schedule".into());
     }
     let mut edits = Vec::new();
@@ -508,7 +565,11 @@ fn apply_prepared_sdk_step(
     if edits.len() != count {
         return Err("original prepared SDK member cardinality differs".into());
     }
-    apply_sdk_members(id, step, member, edits)
+    apply_sdk_members(id, step, member, edits)?;
+    if let Some(role) = role {
+        println!("context_role={role}");
+    }
+    Ok(())
 }
 
 fn main() -> reference::Result<()> {
@@ -522,6 +583,15 @@ fn main() -> reference::Result<()> {
         }
         [_, mode, id, step, folder] if mode == "prepare-sdk-step" => {
             prepare_sdk_step(id, step.parse()?, Path::new(folder))
+        }
+        [_, mode, id, role, step, folder] if mode == "prepare-context-step" => {
+            prepare_context_step(id, role, step.parse()?, Path::new(folder))
+        }
+        [_, mode, id, role, step, descriptor, digest] if mode == "apply-context-step-prepared" => {
+            apply_prepared_step(id, Some(role), step.parse()?, Path::new(descriptor), digest, None)
+        }
+        [_, mode, id, role, step, descriptor, digest, member] if mode == "apply-context-step-prepared" => {
+            apply_prepared_step(id, Some(role), step.parse()?, Path::new(descriptor), digest, Some(member.parse()?))
         }
         [_, mode, id, step, descriptor, digest] if mode == "apply-sdk-step-prepared" => {
             apply_prepared_sdk_step(id, step.parse()?, Path::new(descriptor), digest, None)
