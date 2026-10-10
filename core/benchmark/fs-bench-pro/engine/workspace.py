@@ -158,8 +158,18 @@ def terminal_cache_observation(runtime, key, build, output, cache_class="B"):
     observer = ["docker", "--host", "unix://" + build["socket"], "exec", "--user", "0:0", runtime.container,
                 "python3", "-B", "/code/cache/residency.py", "--class", cache_class,
                 "--store", "/layerfs-store/global/store.sqlite", "--overlay", "/layerfs-local/overlay/overlay.sqlite"]
-    observed = receipts.command(observer, output, "cache-observation", 15)
-    return cleaned, json.loads(Path(observed["stdout"]).read_text())
+    observed = receipts.command(observer, output, "cache-observation", 15, allow_failure=True)
+    residency = json.loads(Path(observed["stdout"]).read_text())
+    if observed["exit_code"] != 0:
+        declared_miss = (observed["exit_code"] == 3 and cache_class == "A"
+            and residency.get("cache_class") == "A" and residency.get("status") == "INELIGIBLE"
+            and type(residency.get("resident_pages")) is int and residency["resident_pages"] > 0
+            and type(residency.get("attempts")) is int and residency["attempts"] == 0
+            and residency.get("exploratory") is True and residency.get("admission_eligible") is False
+            and type(residency.get("payload_bytes_read")) is int and residency["payload_bytes_read"] == 0)
+        if not declared_miss:
+            raise RuntimeError(f"cache-observation failed with exit {observed['exit_code']}; see {output}")
+    return cleaned, residency
 
 
 def price(groups, events, bindings, measured_label="measured command", with_warm_mount=True):

@@ -101,11 +101,15 @@ comparison or release-admission claim. Durable is
 
 | 65 | Keep the actual sealed public Init result alive across an interactive installation boundary, using the existing public install API | A host Init manifest intentionally lacks daemon_sqlite; byte copying cannot qualify installation. Init ACK ends its paid phase before original verification-only installation | Fabricate daemon metadata, reopen Init or weaken startup installation guard |
 | 66 | Add original family subdirectory for newly recorded parallel runs sharing one source commit | Explicit owner parallel authorization allows several independently registered families at the same clean source; section6.1 fixed filenames otherwise collide | Overwrite reports, invent a source identity, or alter closed run paths |
+| 67 | Consume the original cache helper exit3 as a declared ClassA INELIGIBLE observation, then finish the unchanged full verifier and terminal shutdown | The helper intentionally returns3 for resident content pages; numeric ineligibility cannot skip functional proof/Stop. Every other observer exit or mismatched declaration stays a failure | Treat cache ineligibility as a product crash or weaken cold eligibility |
 
 ## Bugs
 
 | Bug | Case | Symptom | Cause | Fix commit | External test |
 | --- | --- | --- | --- | --- | --- |
+| H-30 | CDC overwrite1 and cross anchor1 at1cc25d4de | Actual successful mount ACK followed by controller timeout; imported claim missed executed guard hashes | Waited for literal mount-branch instead of actual mount acknowledgement; claim omitted workspace/receipts hashes | 08288e824 | Three actual mount protocol and three claim identity guards; original red retained |
+| H-31 | Footprint unique100000 at1cc25d4de | KeyError after actual Committed ACK | Init step indexed instead of declared mutation step and eager missing top-level fallback | 08288e824 | Three strict operation expectation guards; original red retained |
+| H-32 | Footprint unique100000 at08288e824 | Completed paid work/End/Gone, then cache-observation exit3 skipped proof and Stop | Controller treated the cache helper declared INELIGIBLE status as an execution error | This commit | test_actual_ineligible_a_observation_retains_miss_and_completed_cleanup plus eleven error/forgery refusals; parent red retained |
 | H-1 | C07 | Workload and verifier passed, unmount returned, residency helper refused changed file identity | Harness inspected overlay while automatic post-unmount reclamation was still mutating backing | `a1f2c259c` | `test_backing_observer_waits_for_original_reclamation_to_finish` |
 
 | H-3 | Generic mounted pilot proofs and prospective SDK proofs | Reachable path walk omitted exhaustive inode-table membership from original canonical verifier | Runtime compared declared paths/bytes but never enumerated current inode table | `37ec6826b` | edit_oracle_complete_membership_accepts_exact_and_rejects_unreachable_or_missing_rows |
@@ -5564,3 +5568,45 @@ new exact executed-code identity; untouched selections continue once.
 | This commit | Correct declared operation/acknowledgement and claim interpretation | 79370 | 79370 | +0 |
 Pinned absent-aware staged counter/exact tree confirmation; reference absent,
 retiredR9c, last65,417/tree498dd1917812; no product/speed/limit/cache change.
+
+
+### H32 declared cache ineligibility must finish the proof, 2026-10-11
+
+Root082 footprint unique100000 ran actual Init/public install/edit/Committed,
+End and an authenticated read-only Gone acknowledgement. Its complete paid
+wall is14,657,679,166ns, within unchanged15s soft limit. The original cache
+helper returned3 with ClassA/statusINELIGIBLE, eight resident Store SHM pages,
+zero payload bytes read, exploratory=true/admission_eligible=false. The
+controller raised before independent verifier/known Stop and recorded FAIL;
+that receipt is retained without promotion. Raw root cohort
+2026-10-11-h30-h31-store-footprint-run holds oneFAIL and fiveNOT_RUN.
+
+Source residency.py intentionally maps INELIGIBLE to exit3, and observation
+errors to exit4. H32 accepts only exact exit3 plus ClassA, positive integer
+resident_pages, zero integer attempts/payload reads, exploratory=true and
+admission_eligible=false. It retains the complete observation and numeric
+INELIGIBLE; all other nonzero exits and mismatches still fail. Original
+readiness, cache classifier, verifier, proof deadlines and shutdown are
+unchanged. External parent RED had one ERROR out of two tests in tool wall
+0.177723834s; the second negative-refusal test passed. Final two checks
+PASS273,475,250ns, existing workspace17PASS331,229,000ns, retention8
+PASS381,877,959ns, history controller8PASS401,969,583ns, each explicit120s
+R4. Raw2026-10-11-h32-terminal-cache-status-checks records commands and results.
+
+Retain failed actual performance runtime
+9d484e598c9f9599c4ec80bb2def6e6b9bb3e78486dd04e629dbbc9837283b76,
+known-stopped installation runtime
+d23155a3a5ef18645580cae1f45a29f476ba9bbbcb998ceba91abf29ac021090,
+and volume layerfs-fsb-sample-a459275354b44434. No verifier/Stop is inferred
+from End/Gone. No product change or optimization; product9ac/runtime7766
+remain qualified. The affected first case may run once at corrected source;
+the five untouched footprint selections then run once in original order.
+Parallel CDC/cross imports use their separate proof controller; repository
+ClassC uses a separate recipe route. Those unchanged082 cohorts continue
+without replay, with shared-host/Docker interference unquantified.
+
+| Commit | Purpose | Production before | after | delta |
+| --- | --- | --- | --- | --- |
+| This commit | Preserve declared cache miss and complete functional proof | 79370 | 79370 | +0 |
+Pinned absent-aware staged counter/exact tree confirmation; reference absent,
+retiredR9c, last65,417/tree498dd1917812; no workload/limit/cache treatment change.

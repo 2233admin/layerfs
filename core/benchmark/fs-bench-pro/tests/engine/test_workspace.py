@@ -159,12 +159,12 @@ class WorkspaceEvidence(unittest.TestCase):
                 observed.append(state)
                 return {"fields": {"state": state}}
             runtime = SimpleNamespace(container="original-container", send=send)
-            def command(argv, folder, label, seconds):
+            def command(argv, folder, label, seconds, *, allow_failure=False):
                 self.assertEqual(observed, ["Queued", "Gone"])
                 self.assertNotIn("--evict", argv)
                 path = Path(folder) / "observer.stdout"
                 path.write_text('{"resident_pages": 1}')
-                return {"stdout": str(path)}
+                return {"exit_code": 0, "stdout": str(path)}
             with patch.object(workspace.receipts, "command", side_effect=command):
                 cleaned, residency = workspace.terminal_cache_observation(runtime, "original-key", {"socket": "/socket"}, directory)
             self.assertEqual([row["fields"]["state"] for row in cleaned], ["Queued", "Gone"])
