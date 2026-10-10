@@ -18,7 +18,8 @@ WORKSPACE_FAMILIES = ("payload_create_read", "tiny_file_churn", "namespace_mutat
                      "edit_canonical_chunk_count", "small_file_delta_smoke",
                      "directory_construction_traversal", "git_tool_workflow", "local_snapshot",
                      "workspace_change_locality", "file_size_transition",
-                     "dedup_branch_history", "mixed_load_bearing", "historical_access")
+                     "dedup_branch_history", "mixed_load_bearing", "branch_development",
+                     "multi_workspace_development", "historical_access")
 RECIPE_HISTORY_SCHEMAS = ("original-v016-boundary-sequence-v1", "original-dedup-history-sequence-v1",
                           "original-m1-commit-sequence-v1")
 CONTEXT_PREPARED_SCHEMA = "fs-bench-pro-prepared-context-workspace-v1"

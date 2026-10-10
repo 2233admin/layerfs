@@ -52,6 +52,8 @@ def main(argv=None):
     parity.add_argument("family")
     parity.add_argument("--prepared", type=Path, required=True)
     parity.add_argument("--out", type=Path, required=True)
+    parity.add_argument("--build", type=Path,
+                        help="sealed runtime/native build required by contextual and historical parity")
     args = parser.parse_args(argv)
     if args.command == "build":
         from engine import identity
@@ -156,7 +158,8 @@ def main(argv=None):
         family = json.loads((HERE / "families" / args.family / "family.json").read_text())
         try:
             result = (project.parity_namespace(family, args.prepared, args.out) if args.family == "init_namespace"
-                      else project.parity_workspace(family, args.prepared, args.out))
+                      else project.parity_workspace(family, args.prepared, args.out, build_folder=args.build)
+                      if args.build is not None else project.parity_workspace(family, args.prepared, args.out))
         except project.ParityFailure as failure:
             result = failure.result
             print(json.dumps({"family": result["family"], "status": "FAIL", "cases": len(result["cases"]),

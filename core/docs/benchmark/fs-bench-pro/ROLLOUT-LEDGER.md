@@ -4196,7 +4196,7 @@ Actual SDK/concurrency/Linux/sharedbuild/preparation/parity/cases remain
 unverified; no Store/container/volume was created by these source checks.
 
 | `5e6dbd260` (worker) | Author authenticated concurrent SDK runtime and owning qualification | 79370 | 79370 | +0 |
-| This commit | Integrate exact authenticated concurrent SDK runtime | 79370 | 79370 | +0 |
+| `794a66380` | Integrate exact authenticated concurrent SDK runtime | 79370 | 79370 | +0 |
 
 
 ### Batch 5 covering-test native History protocol correction, 2026-10-11
@@ -4211,4 +4211,29 @@ check occurred. Actual live covering proof remains NOT_RUN until a full nine-
 asset seal and fresh empty preparation are qualified.
 
 | `52479b485` (worker) | Author covering-test native History protocol correction and owning qualification | 79370 | 79370 | +0 |
-| This commit | Integrate exact covering-test native History protocol correction | 79370 | 79370 | +0 |
+| `985136704` | Integrate exact covering-test native History protocol correction | 79370 | 79370 | +0 |
+
+
+### Batch 5 explicit parity build and CLI family routing, 2026-10-11
+
+Parity has an optional explicit --build forwarded to the workspace parity
+engine. Context and historical admission will require the real sealed build
+to authenticate native/helper bytes; no expected seal is inferred from its own
+prepared metadata. Legacy parity calls retain their argument-less route.
+The source-only CLI wiring test exposed that branch/multi preparation and
+controllers existed but those two original names were absent from the CLI's
+WORKSPACE_FAMILIES allowlist. It failed before a parity call. Root added only
+branch_development and multi_workspace_development; unported families remain
+refused. This is a harness routing omission, not a product or case failure.
+
+The failed external authoring receipt is retained. Its mock result was updated
+to the actual CLI response grammar, and the final changed test exercises a
+real legacy family without build plus branch with explicit build; it passed
+once at final source under120 s. Intermediate changed-test evidence remains
+separate; no benchmark, producer, real parity or SDK operation ran. Raw
+qualification is benchmark-results/fs-bench-pro/2026-10-11-parity-build-cli-qualification.
+This routing change does not claim current Linux/P1/mounted concurrency.
+Root is preparing the final nine-asset build from the clean integrated runtime;
+access controller and source-aware parity remain in their private worktrees.
+
+| This commit | Expose original context families and explicit sealed parity build in CLI | 79370 | 79370 | +0 |
