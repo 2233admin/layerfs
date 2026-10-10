@@ -114,6 +114,7 @@ comparison or release-admission claim. Durable is
 | 77 | Classify the two early integrity complete cases not-applicable before setup/sample; preserve every native/fault/EIO/cleanup/resource obligation | Public SandboxApi has private atomicCreate→Upload→Start with no CPU/memory/swap/PIDprofile, callback or adoption. Stopped backend create exists, but completing its owner would recreate SDK wire authentication/Hello. Post-Start limits cannot preserve frozen from-creation2CPU/2GiB/no-swap/256PID profile | Add forbidden productfeature/newwireowner/proxy, apply limits afterStart, or claim partial native diagnostics ascompletecasePASS |
 | 78 | Ship only exact source admission/parity and pre-side-effect refusal for all28 reliabilityNA cases; retain rich prospective controller ignored/unqualified | No complete frozen case can execute under current capabilities; an unused runtime implementation would not qualify missing guards. Current-source NA skipping checks actual product/source; retained historical verification preserves original policy rather than masking recorded failures | Run incomplete cases, treat source parity as native proof, fabricate zero-cost samples, or drop failed/NA rows |
 | 79 | Clarify spec with named source-applicability module, NA parity scope and verification-only performanceN/A/proof disposition | Section4 omitted the source-only reliability machinery; section6.1 omittedN/A despite verification-only cases; section7 did not distinguish honest missing-capability source checks from runtime proofs. Existing original guards/limits/schema columns/receipts stay unchanged | Claim fullruntime parity for unexpressible cases, hideNA in performanceN/A, or invent unnamed source paths |
+| 80 | Retain all19 uncertain masters andthree new failedread-only custodyprobes after strictsidecar admission refused | Three previously future-kept passing setups have present0-byteWAL/32768-byteSHM; no-sidecar proof failed before hashing. Freshreadonly observations establishexit1/noOOM, not an admitted closed-byte proof; no unchanged retry, relaxedguard or deletion follows | Delete despite failedcustody, ignore SHM/WAL or rerun a weakened probe |
 
 ## Bugs
 
@@ -6641,5 +6642,52 @@ Completiondocument/finalretainedresourceclosure follows; no extra sample.
 | Commit | Purpose | Production before | after | delta |
 | --- | --- | --- | --- | --- |
 | This commit | Record all28 reliability applicability rows and close batch7 | 79370 | 79370 | +0 |
+Pinned absent-aware staged counter/exact tree confirmation; reference absent,
+retiredR9c,last65,417/tree498dd1917812.
+
+
+### Final exact generic-master custody refusal, 2026-10-11
+
+B7allNA resolves the potential need for three generic masters. Root verified
+everyoriginalownership/provision/SDKKnownStop/setupremoved witnessSHA,
+freshly inspected exactName/localDriver/localScope/nooptions andzero
+connectedcontainers, thencreated onepinned-image/read-only/no-network helper
+permaster. The originalstrictno-sidecar guard failedexit1 beforehashing
+for allthree; no StoreSQLopen/write, FUSEmount, SDK/test/benchmark or global
+volume mutation occurred. No helpers ormasters were deleted/retried.
+WholeadministrationR4≤2s/120s, eachoperation5swallstop. These are
+administrative observations, notcase failures, productbugs or benchmarktimes.
+
+Subsequentoneboundedreadonlyinspectandglobalcopy perexactfailedhelper
+returnedexit0: eachStateRunningfalse/ExitCode1/OOMKilledfalse, main172,032B,
+0-byteWAL and32,768-byteSHM present. This diagnoses strictsidecar admission
+refusal, not a productwrongresult/crash or successfulclosed-copy proof.
+Hashingcopiesforobservation doesnotpromote thefailedoriginalprobe. Source
+diagnosisSHA12465eb830716f6dd2f9a11f61927397353e3d963a6570747eb1fef2433d8409.
+Rawallcommands,creationidentity, readonlymounts, streams, deadlines,
+statuses andsourcecopies underbenchmark-results/fs-bench-pro/2026-10-11-final-generic-master-disposal/.
+
+| Master volume | Retained exact failed own helper | Recorded disposition |
+| --- | --- | --- |
+| layerfs-fsb-master-big64m-c60eb32e5145496b | 2f208a9e9397b6e2b76881a30fc3bc6fc8612e10eb5ee4427239a9370b557297 | Knownexit1; strictsidecar proof refused; retainboth |
+| layerfs-fsb-master-empty-4e709a73985e48b2 | 7c373fc93595f84340ba236ee8dc8dab380f4be491ad128bbe7a3a8d4c1beee2 | Knownexit1; strictsidecar proof refused; retainboth |
+| layerfs-fsb-master-empty-ee794ff64e0a4bcb | 3672d824e5e3440d82839372f9922f8c6b33b446e8b601d63613e2fcd857573b | Knownexit1; strictsidecar proof refused; retainboth |
+
+Previously89admitted passing setupmaster removals remain89; all19excluded
+masters stayretained, with future-only reason for thesethree superseded by
+thisactualfailedcustody admission. Allfailed/uncertaincase/sample/prep/
+qualificationresources remain recorded. Source-only retainedresource
+inventorySHAe03e7d6d7f469f2ab9dd9d959336ae182462c4ebe535c37dbd4fbc33a59f9ae3
+fromtinyignoredresource-inventory-f572354ff enumerates82containeridentities/
+92volumenames,50authoritativefailedcases/19earlierfailedattempts andstage0/
+H15/H20/preparedmaster custody. It excludes242exactpassinghelperremovalACKs
+and89removedmasters; currentexistence isnotinferred. Addthethreeabove
+newhelpers (85recordedcontaineridentities total), same92volumenames.
+Completefinaldocument willpreserve eachidentifier/reason/evidence and
+unknownacquisition/Stop fields, without anyforeign/protectedresourceaction.
+
+| Commit | Purpose | Production before | after | delta |
+| --- | --- | --- | --- | --- |
+| This commit | Preserve refused final master custody and exact retained probe identities | 79370 | 79370 | +0 |
 Pinned absent-aware staged counter/exact tree confirmation; reference absent,
 retiredR9c,last65,417/tree498dd1917812.
