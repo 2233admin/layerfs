@@ -505,6 +505,27 @@ VERIFICATION_COLUMNS = "family case v016_case proof_status proof_wall_ns declare
 PROOF_ONLY_PERFORMANCE_COLUMNS = "status cache_class complete_wall_ns mount_ns command_ns commit_ns unmount_ns declared_limit_ns limit_status requests owner_jobs statements store_logical_bytes store_allocated_bytes overlay_logical_bytes overlay_allocated_bytes reference_timer reference_ns reference_profile".split()
 
 
+def actual_case_status(selection, case, result):
+    if result.get("receipt_kind") != "unrun-preparation-closure":
+        return result.get("status", "NOT_APPLICABLE" if case.get("status") == "not-applicable" else "NOT_RUN")
+    preparation = result.get("preparation", {})
+    if (result.get("schema") != "fs-bench-pro-unrun-preparation-closure-v1"
+            or result.get("status") != "FAIL" or result.get("functional_status") != "NOT_RUN"
+            or result.get("proof_status") != "NOT_RUN" or result.get("case") != case["id"]
+            or case.get("proof_only") is True or result.get("proof_only") is True
+            or any(result.get(key) != selection.get(key) for key in ("family", "source_commit", "product_tree", "image"))
+            or result.get("preparation_source_commit") != selection.get("source_commit")
+            or any(type(result.get(key)) is not int or result[key] != 0 for key in
+                   ("sample_count", "attempted_operation_count", "completed_operation_count", "verification_attempt_count"))
+            or any(key in result for key in ("complete_wall_ns", "phases", "counts", "observations", "cache", "cleanup", "custody", "verification"))
+            or preparation.get("status") != "FAIL" or preparation.get("expired") is not True
+            or preparation.get("outer_exit_code") != 124 or preparation.get("wall_stop_seconds") != 120
+            or type(preparation.get("outer_wall_ns")) is not int or preparation["outer_wall_ns"] < 120_000_000_000
+            or preparation.get("sealed_prepared_available") is not False or preparation.get("resource_claim_available") is not False):
+        raise ValueError("unrun preparation closure cannot mask an actual attempt, wrong source or observed result")
+    return "NOT_RUN"
+
+
 def result_rows(selection, recorded):
     """One row per registration, including failed and absent observations."""
     performance, verification = [], []
@@ -515,7 +536,7 @@ def result_rows(selection, recorded):
         result = recorded.get(case["id"], {})
         row = {name: "UNAVAILABLE" for name in PERFORMANCE_COLUMNS}
         row.update(family=selection["family"], case=case["id"], v016_case=case.get("v016_case", ""),
-                   status=result.get("status", "NOT_APPLICABLE" if case.get("status") == "not-applicable" else "NOT_RUN"),
+                   status=actual_case_status(selection, case, result),
                    cache_class=result.get("cache_class", case.get("cache_class", "UNAVAILABLE")),
                    tag=result.get("tag", result.get("original_failure", case.get("reason", "not sampled" if not result else ""))))
         for name in ("complete_wall_ns", "declared_limit_ns", "cleanup", "source_commit", "product_tree", "daemon_sha256", "image", "evidence"):

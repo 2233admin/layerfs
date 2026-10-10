@@ -105,6 +105,7 @@ comparison or release-admission claim. Durable is
 | 68 | Preserve authenticated ClassA unavailable cache observation while completing the full functional proof | Spec sections5/6.1 require unknown cache state INELIGIBLE, not invented coldness or skipped verifier; checker refusal and exact reason stay visible | Retry observer, wait for warmth/identity to fit, change cache phase, or claim cache PASS |
 | 69 | Retain original repository staging15s setup ceiling and failed-copy custody, then run the distinct smaller profile unchanged | Staging is separate harness setup before measured state operations; changing its timeout after the miss would fit a failure. Original300s per-state operation declaration and owner120s whole-test stop remain distinct | Enlarge setup timeout, remove checkpoint assets, replay stride3 or infer completion from partial copy |
 | 70 | Extend the existing failed-preparation closure to repository deepseek-full in a spec-only commit | The unchanged120s preparation expired before sealed input existed; no honest actual sample can run. General closure already applies the same rule to retained batch4/5 failures | Retry/widen preparation, sample partial fixture or claim passing done-when |
+| 71 | Report the authenticated failed-preparation administrative record as actual caseNOT_RUN, preserving original preparationFAIL | No actual case or proof operation occurred; section6.1 status must describe the case rather than its preparation. Strict zeroattempt/source/schema/metrics guards prevent masking attempted failures | Treat preparation as an actual sampleFAIL or discard its failed receipt |
 
 ## Bugs
 
@@ -115,6 +116,7 @@ comparison or release-admission claim. Durable is
 | H-32 | Footprint unique100000 at08288e824 | Completed paid work/End/Gone, then cache-observation exit3 skipped proof and Stop | Controller treated the cache helper declared INELIGIBLE status as an execution error | This commit | test_actual_ineligible_a_observation_retains_miss_and_completed_cleanup plus eleven error/forgery refusals; parent red retained |
 | H-33 | Footprint unique100000 at0a8d15f0e | Completed paid work then original cache identity refusal skipped verification/Stop | Unknown cache classification incorrectly became a functional execution failure | This commit | Original UNAVAILABLE/status4 reproduction red; strict malformed/error refusal vectors and cache classifier INELIGIBLE guards |
 | H-34 | repository deepseek-stride10 at08288e824 | First original importer refuses target as notFUSE; actual mount was/workspaces/1 | Workload defaulted/workspace instead of authenticated actual mount root, for both apply and fresh verifier | Workera85f0ab97 / this integration | Parent full17 wrongtarget RED; nine final strict choreography/actualACK/custody tests PASS |
+| H-35 | repository deepseek-full administrative failed-prep closure | First report displayed actual caseFAIL although actual operation/proof attempts were0 | Generic status field copied administrative preparation verdict instead of actual case disposition | This commit | Parent external actualcase-status RED and27 negative vectors; final2 new/5proof-only/4incomplete-report tests PASS |
 | H-1 | C07 | Workload and verifier passed, unmount returned, residency helper refused changed file identity | Harness inspected overlay while automatic post-unmount reclamation was still mutating backing | `a1f2c259c` | `test_backing_observer_waits_for_original_reclamation_to_finish` |
 
 | H-3 | Generic mounted pilot proofs and prospective SDK proofs | Reachable path walk omitted exhaustive inode-table membership from original canonical verifier | Runtime compared declared paths/bytes but never enumerated current inode table | `37ec6826b` | edit_oracle_complete_membership_accepts_exact_and_rejects_unreachable_or_missing_rows |
@@ -6047,5 +6049,48 @@ owner120s whole-test ceiling; no original timer changed. Batch7 stays pending.
 | --- | --- | --- | --- | --- |
 | Workera85f0ab97 | Actual repository root binding and external regression | 79370 | 79370 | +0 |
 | This commit | Integrate strict repository actual-root binding | 79370 | 79370 | +0 |
+Pinned absent-aware staged counter/exact tree confirmation; reference absent,
+retiredR9c, last65,417/tree498dd1917812.
+
+
+### H35 actual NOT_RUN remains distinct from failed preparation, 2026-10-11
+
+The immutable082 full-preparation administrative receipt recordsFAIL for the
+preparation and explicit functional/proofNOT_RUN, all four attempt/sample/
+completion counters0 and no benchmark observations. Generic report copied
+the administrative status into actual case statusFAIL. H35 now reports
+NOT_RUN only for the exact closure schema/kind, source/family/case/product/
+image agreement, original expired124/120s preparation, absence of sealed
+input/resourceclaim, exact integer zeroattempts and absent timing/count/
+cache/storage/cleanup/verification fields. Any observed work, wrong source,
+invalid mode or changed preparation declaration is refused. Original receipt
+FAIL, error and raw preparation survive; no attempted failure is masked.
+
+Original external two-test RED had27 failing vectors; actualFAIL-versus-
+NOT_RUN mismatch is retained. Final two tests include27 negative mutations
+and all metrics remainingUNAVAILABLE. Five existing proof-only and four
+incomplete-context report checks retain their assertions. A misnamed
+test_proof_only_reporting.py invocation ran0tests and FAILED(exit5), kept
+separately; the actual owning files were then resolved and invoked once.
+Exact command results under explicit120s R4:
+- final-1.json: exit0, wall299602625ns.
+- final-2.json: exit5, wall66233375ns.
+- final-3.json: exit0, wall150066083ns.
+- final-4.json: exit0, wall143866583ns.
+- red.json: exit1, wall306992042ns.
+
+Read-only actual original receipt classification now yields fullNOT_RUN,
+stride3FAILsetup, stride10FAILactual wrongtarget. Old worker first generated
+threeFAIL CSV bytes remain in ignored SHA-bound custody31ac274bdd86473c455a65a4edb318ffeee8ebeb6372149ce7b196f697722751
+andf19bfea2e80fe7b4e1f5831244d55c2b3379dd0fb9e86f62562ad1d693b37ad1.
+A fresh corrected report reads the same original run, without overwriting
+those files/receipts or replaying any case; main will commit only its actual
+corrected pair. Reporting-only code does not justify a workload repeat.
+Repository affectedstride10 is running once at integrated08e1 identity,
+using its unchanged sealed input and qualified assets; no batch7 work yet.
+
+| Commit | Purpose | Production before | after | delta |
+| --- | --- | --- | --- | --- |
+| This commit | Report actual unrun case and retain preparation failure | 79370 | 79370 | +0 |
 Pinned absent-aware staged counter/exact tree confirmation; reference absent,
 retiredR9c, last65,417/tree498dd1917812.
