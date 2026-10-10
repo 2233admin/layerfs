@@ -3879,3 +3879,20 @@ are qualified. Batches 6 and 7 remain pending.
 
 | `de6192803` (worker) | Register six original branch cases and wrapper; four owning tests pass | 79370 | 79370 | +0 |
 | This commit | Integrate exact branch registration and record batch 5 ownership | 79370 | 79370 | +0 |
+
+
+### Batch 5 multi_workspace_development registration, 2026-10-11
+
+Imported only worker `cd89fa6d7ba3eeb22bce152b7faf2aa62bd85c86`'s exact three owned registration/wrapper/test
+files. This records five original multi-workspace cases, preserving two original workers or the original four-worker extension, one segment-start barrier, worker-local command/Commit order, exact K/2 Discard and same-Branch fresh-key reopen, full ACK topology and selected original M1 payload obligations.
+Five owning authoring tests passed once in 4.777 s under a private 120 s wall stop. Bash syntax passed. The initial valid SHA witness exposed macOS Bash repeat-count portability; the wrapper now checks lowercase hex and exact 512-character length separately without changing any workload. The initial failure is retained.
+The owning source qualification is reused; no unchanged test or case is replayed.
+
+All source hashes and independent original limits remain declared in family.json.
+Preparation, final SDK/runtime qualification, parity and actual case attempts remain
+NOT_RUN. Shared fixture/runtime/oracle work is in progress under disjoint worktree
+ownership. Closed prior receipts and protected/failed resources are unchanged.
+Durable stays NOT_RUN — disabled by owner until explicit reauthorization.
+
+| `cd89fa6d7` (worker) | Author five original multi-workspace cases and owning tests | 79370 | 79370 | +0 |
+| This commit | Integrate exact multi_workspace_development registration | 79370 | 79370 | +0 |
