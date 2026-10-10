@@ -21,7 +21,7 @@ comparison or release-admission claim. Durable is
 | 1 Pilot | COMPLETE: 36 functional/proof/clean-close passes; 7 recorded scoped B PASS, 29 INELIGIBLE; full numeric qualification of the 7 is unverified | Init `c1d7dd0e8`/`39bbcbd6b`; payload `200f81493`/`c1d9b6c58`; parallel routing `b3c96ecb1`; tiny `36849bcc2`/`d6e0ef952`; namespace `98b14b233`/`be1f56a23`; H-2 fix `222526fa0`; closure `d4314ed62`; membership supplement `cca598d0b` | Batch 2, retaining original receipts plus exhaustive membership supplement |
 | 2 Edits | COMPLETE: all62 cases ported/parity/sampled once/recorded;39 strict proof and clean-close passes (numeric INELIGIBLE),20 strict retention failures and3 original capped-watchdog failures retained | Canonical `a34b5d44b`/`beeb7ad69`; preserving `b9ffa63be`; capped `4d8ccfc93`; changing `05ffbf971`; small-delta `c0c99a4a3`/`2e6a508b5`/`1c975ba30` | Begin batch3; no identified fixable product correctness defect remains in batch2 |
 | 3 Trees and tools | COMPLETE: all33 original cases ported/parity/sampled, full applicable proofs and clean closePASS; numeric33INELIGIBLE; first snapshotFAIL retained separately; localitydense500 and snapshot EXCEEDED | Shared3c697ae92; directory50c297c68/ad4f95503; locality2590a4536/26c037d90; snapshot0344bfdc6/fix03033abdc/results98d3be30a/70d568e94; Git acebd7cbd/guard031d427a7/results31fff4d49 | Begin batch4 after this committed closure, no identified fixable product correctness bug |
-| 4 History on one branch | IN_PROGRESS: all43 original cases authored in three worktrees; allunrun; shared persisted proof/census/preparation/controller being qualified | Routing65f0c1fbe; nativea921bedbd; portsfc9e71fae/6a5433e79/4762b720c; prepared364e1a87a; guarded5ebdac535/report65df42e91; controller686344e8f/guard91cf97fab; public93f0d3dfe/census7d9380fe0; finalseal this commit | Complete source/oracle qualification, then per-family parity and one attempt per case |
+| 4 History on one branch | IN_PROGRESS: all43 original cases ported; shared source/oracles/seal qualified; boundary7 and dedup26 preparation/parity PASS; mixed preparation underway; original one-attempt execution dispatched | Routing65f0c1fbe; nativea921bedbd; portsfc9e71fae/6a5433e79/4762b720c; prepared364e1a87a; guarded5ebdac535/report65df42e91; controller686344e8f/guard91cf97fab; public93f0d3dfe/census7d9380fe0; finalseal a70f3197b; preparation dispatch this commit | Complete each family's original one-attempt cases and commit its two CSVs with retained failures/custody |
 | 5 Branches and Workspaces | PENDING | — | Wait for batch 4; verify existing P-1 SDK methods |
 | 6 Dedup and storage | PENDING | — | Wait for batch 5 completion |
 | 7 Reliability | PENDING | — | Wait for batch 6 completion |
@@ -2807,4 +2807,47 @@ recorded; no laterbatch or unchangedresampling. Nativealias scope already
 qualified atfc9e71fae; only genuinelyaffected finalsource checks are permitted.
 All43actualcases stillUNRUN at this checkpoint, before dispatched preparation.
 
-| This commit | Record final hostruntime seal with qualified eight-binary reuse and dispatch current families | 79366 | 79366 | +0 |
+| `a70f3197b` | Record final hostruntime seal with qualified eight-binary reuse and dispatch current families | 79366 | 79366 | +0 |
+
+
+The batch4 workers imported reviewed maina70f3197b harness bytes into their
+same existing private worktrees. Exact synchronization commits are
+Tinyd57450ed36b1b1ec12d9ca3b45ac3870cf9a0a36 and
+Capped7e594f61579dfc7da1b1c96a5608715c7cd456c0, both tree
+2c59ed1088c0cdb56189029e267ce974de480532; mixed4c83d1c79.
+Each reported exact final nine-binary/compilation-input validation, unchanged
+owned family/workload bytes, clean source and unchanged79366 productionLOC.
+No redundant build or already-qualified native/public proof was replayed.
+
+Boundary preparation7/7 and parity7 PASS; dedup preparation26/26 and parity26
+PASS with zero samples during parity. Closed setup masters are reused only
+through exact immutable fixture-digest compatibility. Boundary retains six
+owned immutable masters ef90327722e54bf2,31d03200fe4a404e,
+838717697a554c50,70cc7bd57bfe4b21,239e74723af54fe8,083f065425ff4f29
+(fullprefix layerfs-fsb-master-file-size-transition; exact names remain in
+raw prepared.json records). Dedup retains five owned immutable masters
+2550381b32d04032,9eeb4a6867d044b0,1e35ef1e53ab4836,
+b32f7508b7d24f29,e7d5133801934842, fullprefix
+layerfs-fsb-master-dedup-branch-history-. These closed setup volumes are
+retained for declared setup reuse, never reused as mutated measurements.
+Mixed preparation9/10 PASS at this checkpoint; exhaustive100MB preparation
+70.123s under120s, exhaustive500MB preparation underway. No whole-family
+mixed parity or actual case outcome is claimed by this checkpoint.
+
+Actual original case executions are dispatched after each family's parity.
+Every worker invocation uses its private r4 lock and an explicit external
+wall stop at most120s. The original internal operation/proof/publication
+limits are retained, including declarations which can exceed the outer
+ceiling in combination. The outer ceiling is never extended to accommodate
+those declarations; expiry remains FAIL with diagnostic resources retained.
+Separate worktrees serialize their own builds/tests/samples, while host and
+DockerVM interference from concurrent workers, protected owners and retained
+failed containers remains unquantified and disclosed. No unchanged repeat,
+case reduction, workload/limit/cache change or optimization is authorized.
+Root owns integration/ledger/product fixes; workers own disjoint families and
+report exact failed/uncertain resource custody before any corrective source
+change. Raw roots are the workers'2026-10-10-batch-4-file-size-transition-d57450ed3,
+2026-10-10-batch-4-dedup-7e594f615 and mixed current run under their private
+benchmark-results/fs-bench-pro directories. No later batch has begun.
+
+| This commit | Record qualified parallel preparation/parity and fixed invocation ceiling | 79366 | 79366 | +0 |
