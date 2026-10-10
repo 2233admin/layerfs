@@ -5401,6 +5401,49 @@ subsequent ordinary bench.py report used its corrected default path and read
 original receipts without repeating measurements. Old source149 footprint
 six-row CSVs exist, and their independent result ledger is committed next.
 
-| This commit | Implement collision-free report default/explicit path compatibility | 79370 | 79370 | +0 |
+| 80c39e522 | Implement collision-free report default/explicit path compatibility | 79370 | 79370 | +0 |
 Pinned absent-aware staged counter, first-parent/final exact trees; product
 9ac unchanged. Reference absent, retiredR9c, last65,417/tree498dd1917812.
+
+
+### Store-footprint initial failed cohort, 2026-10-11, source149d40bac
+
+All6 exact native-only preparations PASS once (32,273,440,459;
+33,919,402,500;6,907,970,792;1,532,905,042;1,513,304,541;1,590,651,291ns
+in original registered order). Complete original native-source family parity
+PASS6 under main120s, samples0; original fixture geometry/digest remains exact.
+All6 actual single attempts then FAIL at H28 fresh daemon startup. They remain
+visible in the generated two CSVs at
+baselines/core/2026-10-11-149d40bac/store_footprint/. No unmount or successful
+Stop is inferred; the daemon refused before mount. Actual host Init succeeded
+and sealed each source, but full case/required verifier did not complete.
+
+| Case | Observed incomplete controller ns | Public Init ns | Initialized host Store allocated B | Retained acknowledged failed container | Retained owned sample volume |
+| --- | --- | --- | --- | --- | --- |
+| store-footprint-unique-100000 | 19252977375 | 7626703833 | 516325376 | 8e59c3f22d3b37aef2c88cbc729501cca3886315616e80e855fea0283d9d960c | layerfs-fsb-sample-6add3e811bc54857 |
+| store-footprint-metadata-cardinality-100000 | 28248898417 | 15900226417 | 555814912 | 29ccc2d42d3fd8fa4eb460dff321a98f1c0d7dfbd3795d145a0e8c7f4a18b94f | layerfs-fsb-sample-2ea273f9e2c545b4 |
+| store-footprint-large-object-500m | 13893280667 | 2786687458 | 506150912 | 889be9d51533aacc675e8960927f29a37451d01745dd00f4fff3f14adcd13410 | layerfs-fsb-sample-133f985fe0e145f2 |
+| store-footprint-unique-100-low-v1 | 1036525375 | 47998000 | 5255168 | fb44a4fc7d4ae33f80bc5a044c848584df928397c3b2895a31ad48ec0d9ffd16 | layerfs-fsb-sample-82896e5628c94d3f |
+| store-footprint-metadata-cardinality-100-low-v1 | 1067808500 | 53190042 | 5300224 | 826b235f4bc81af6d637c9f00b4e37d842502363d2648555bc68f8204de32653 | layerfs-fsb-sample-59def66dadeb4c14 |
+| store-footprint-large-object-10m-low-v1 | 1170153708 | 68016708 | 10301440 | 33f068ceef5a77c2a153a77e1b5349f719bac0dad672d2bd842cce4de820e5e2 | layerfs-fsb-sample-438a507c259c4d8b |
+
+The first two incomplete elapsed observations already exceed the original15s
+soft limit (19,252,977,375 and28,248,898,417ns); CSVs mark EXCEEDED and retain
+FAIL because installation/mount/verifier never completed. These are incomplete
+attempt durations, not finished-case performance or speed results. The four
+other incomplete durations are WITHIN15s. Final Store/overlay and daemon
+request/job/statement counts remain UNAVAILABLE; initialized host Store bytes
+above are separately scoped, never substituted for final case storage.
+
+Raw all6 receipts and exact native failed events remain under
+2026-10-11-batch-6-store-footprint-149d40bac/run/; passing setup installer shell
+containers were removed after their own byte-install ACK, but the six failed
+actual daemon/sample pairs above are retained. Root orchestration did not stop
+between its distinct cases on the shared H28 diagnosis; no case was repeated.
+The corrected actual-project public installation path is independently authored
+and qualifies before each affected case gets one changed-identity attempt.
+No workload, fixture, worker count, cache state, timeout or limit changes.
+
+| This commit | Record all6 original failed footprint attempts and resource custody | 79370 | 79370 | +0 |
+Pinned absent-aware staged counter/actual commit-tree confirmation; active
+product9ac unchanged; reference absent/retiredR9c, last65,417/tree498dd1917812.
