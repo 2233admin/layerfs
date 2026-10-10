@@ -19,7 +19,8 @@ CREATE TABLE accounting (
     owner_details INTEGER NOT NULL DEFAULT 0 CHECK(owner_details>=0),
     retire_targets INTEGER NOT NULL DEFAULT 0 CHECK(retire_targets>=0),
     maintenance_targets INTEGER NOT NULL DEFAULT 0 CHECK(maintenance_targets>=0),
-    ready_targets INTEGER NOT NULL DEFAULT 0 CHECK(ready_targets>=0)
+    ready_targets INTEGER NOT NULL DEFAULT 0 CHECK(ready_targets>=0),
+    reference_rows INTEGER NOT NULL DEFAULT 0 CHECK(reference_rows>=0)
 ) STRICT;
 INSERT INTO accounting(ns) VALUES(0);
 CREATE TRIGGER workspace_account_insert AFTER INSERT ON workspace BEGIN
@@ -47,6 +48,12 @@ END;
 -- OLD.validity would make every delete load both values in full.
 CREATE TRIGGER payload_account_delete BEFORE DELETE ON payload BEGIN
     UPDATE accounting SET payload_cells=payload_cells-1,payload_bytes=payload_bytes-(SELECT length(data)+ifnull(length(validity),0) FROM payload WHERE rowid=OLD.rowid) WHERE ns=OLD.ns;
+END;
+CREATE TRIGGER payload_reference_account_insert AFTER INSERT ON payload_reference BEGIN
+    UPDATE accounting SET reference_rows=reference_rows+1 WHERE ns=NEW.ns;
+END;
+CREATE TRIGGER payload_reference_account_delete AFTER DELETE ON payload_reference BEGIN
+    UPDATE accounting SET reference_rows=reference_rows-1 WHERE ns=OLD.ns;
 END;
 CREATE TRIGGER shrink_account_insert AFTER INSERT ON shrink BEGIN
     UPDATE accounting SET shrink_rows=shrink_rows+1 WHERE ns=NEW.ns;

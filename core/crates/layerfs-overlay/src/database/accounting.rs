@@ -9,6 +9,8 @@ pub struct StoredCounts {
     pub payload_cells: u64,
     pub payload_bytes: u64,
     pub shrink_rows: u64,
+    /// Reference pieces: rows that name committed content and hold no bytes.
+    pub reference_rows: u64,
     pub operation_record_rows: u64,
     pub operation_record_bytes: u64,
     pub orphan_rows: u64,
@@ -30,8 +32,8 @@ pub struct Resources {
     /// Declared logical bytes/metadata upper bound, not exclusive physical debt.
     pub debt_upper_bytes: u64,
 }
-const COUNTS: &str = "SELECT namespaces,inode_rows,directory_entry_rows,payload_cells,payload_bytes,shrink_rows,operation_record_rows,operation_record_bytes,orphan_rows,owner_rows,source_rows,owner_details,retire_targets,maintenance_targets,ready_targets,wait_refs FROM accounting WHERE ns=?1";
-const TOTALS: &str = "SELECT ifnull(sum(namespaces),0),ifnull(sum(inode_rows),0),ifnull(sum(directory_entry_rows),0),ifnull(sum(payload_cells),0),ifnull(sum(payload_bytes),0),ifnull(sum(shrink_rows),0),ifnull(sum(operation_record_rows),0),ifnull(sum(operation_record_bytes),0),ifnull(sum(orphan_rows),0),ifnull(sum(owner_rows),0),ifnull(sum(source_rows),0),ifnull(sum(owner_details),0),ifnull(sum(retire_targets),0),ifnull(sum(maintenance_targets),0),ifnull(sum(ready_targets),0),ifnull(sum(wait_refs),0) FROM accounting WHERE ns>?1";
+const COUNTS: &str = "SELECT namespaces,inode_rows,directory_entry_rows,payload_cells,payload_bytes,shrink_rows,operation_record_rows,operation_record_bytes,orphan_rows,owner_rows,source_rows,owner_details,retire_targets,maintenance_targets,ready_targets,wait_refs,reference_rows FROM accounting WHERE ns=?1";
+const TOTALS: &str = "SELECT ifnull(sum(namespaces),0),ifnull(sum(inode_rows),0),ifnull(sum(directory_entry_rows),0),ifnull(sum(payload_cells),0),ifnull(sum(payload_bytes),0),ifnull(sum(shrink_rows),0),ifnull(sum(operation_record_rows),0),ifnull(sum(operation_record_bytes),0),ifnull(sum(orphan_rows),0),ifnull(sum(owner_rows),0),ifnull(sum(source_rows),0),ifnull(sum(owner_details),0),ifnull(sum(retire_targets),0),ifnull(sum(maintenance_targets),0),ifnull(sum(ready_targets),0),ifnull(sum(wait_refs),0),ifnull(sum(reference_rows),0) FROM accounting WHERE ns>?1";
 impl Overlay {
     /// None is the daemon aggregate; a route reads one namespace's exact counts.
     /// Page/file observations remain shared and never imply exclusive attribution.
@@ -60,6 +62,7 @@ impl Overlay {
                         payload_cells: unsigned(r, 3)?,
                         payload_bytes: unsigned(r, 4)?,
                         shrink_rows: unsigned(r, 5)?,
+                        reference_rows: unsigned(r, 16)?,
                         operation_record_rows: unsigned(r, 6)?,
                         operation_record_bytes: unsigned(r, 7)?,
                         orphan_rows: unsigned(r, 8)?,
@@ -87,6 +90,7 @@ impl Overlay {
             .saturating_add(counts.directory_entry_rows)
             .saturating_add(counts.payload_cells)
             .saturating_add(counts.shrink_rows)
+            .saturating_add(counts.reference_rows)
             .saturating_add(counts.operation_record_rows)
             .saturating_add(counts.orphan_rows)
             .saturating_add(counts.owner_rows)

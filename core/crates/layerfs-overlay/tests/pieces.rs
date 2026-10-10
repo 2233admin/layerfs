@@ -1,0 +1,536 @@
+//! Reference pieces through the public compound job. A claimed write reads
+//! exactly like the same plain write in every piece shape; a claim replaces
+//! cells and an ordinary write never touches a piece; a shrink cuts the
+//! crossing piece; bytes of an earlier request join a piece only while the
+//! content sequence holds; and every piece statement is an indexed seek.
+mod payload_support;
+use layerfs_overlay::*;
+use payload_support::*;
+use std::sync::Arc;
+
+const ROOT: [u8; 32] = [77; 32];
+const CELL: u64 = CELL_BYTES as u64;
+const WINDOW: u64 = WRITE_WINDOW as u64;
+
+fn claims(after: Option<i64>, ranges: &[(u64, u64, u64)]) -> WriteClaims {
+    WriteClaims {
+        source: ROOT,
+        after,
+        ranges: ranges
+            .iter()
+            .map(|&(offset, length, source_offset)| ClaimedRange {
+                offset,
+                length,
+                source_offset,
+            })
+            .collect(),
+    }
+}
+/// Reference rows and payload rows of one Workspace.
+fn rows(db: &Overlay, route: Route) -> (u64, u64) {
+    let counts = db.resources(Some(route)).unwrap().counts;
+    (counts.reference_rows, counts.payload_cells)
+}
+/// A file whose committed content is `content`, which is also what a piece
+/// of it may name.
+fn committed<'a>(db: &'a Overlay, source: BaseSource, content: &[u8]) -> File<'a> {
+    let mut file = File::new(db, source, 7, content.to_vec());
+    file.sources.push((ROOT, content.to_vec()));
+    file
+}
+fn part(content: &[u8], from: u64, length: u64) -> &[u8] {
+    &content[from as usize..(from + length) as usize]
+}
+
+#[test]
+fn claimed_ranges_become_pieces_and_read_like_the_plain_write() {
+    let temp = Temp::new();
+    let db = temp.db();
+    let route = db.open_workspace([1; 32], [2; 32]).unwrap();
+    let source = db.acquire_base_source(route, 1).unwrap();
+    let content = noise(4 << 20, 5);
+    let mut file = committed(&db, source, &content);
+
+    // A whole aligned window of committed content: one piece and no cell.
+    let at = 8 * CELL;
+    file.write_claimed(
+        at,
+        part(&content, 0, WINDOW),
+        claims(None, &[(at, WINDOW, 0)]),
+    );
+    file.check();
+    assert_eq!(rows(&db, route), (1, 0));
+    // The next window continues the same content: the one row is extended.
+    let next = at + WINDOW;
+    file.write_claimed(
+        next,
+        part(&content, WINDOW, WINDOW),
+        claims(None, &[(next, WINDOW, WINDOW)]),
+    );
+    file.check();
+    assert_eq!(rows(&db, route), (1, 0));
+
+    // A claim that is not cell-aligned: its whole cells are a piece and its
+    // two ragged edges are stored bytes.
+    let ragged = 100 * CELL + 100;
+    file.write_claimed(
+        ragged,
+        part(&content, 5000, 3 * CELL),
+        claims(None, &[(ragged, 3 * CELL, 5000)]),
+    );
+    file.check();
+    assert_eq!(rows(&db, route), (2, 2));
+
+    // Cells win inside a layer: an ordinary write inside a piece adds its
+    // cell and changes no piece row.
+    file.write(9 * CELL + 10, b"literal bytes inside a piece");
+    file.check();
+    assert_eq!(rows(&db, route), (2, 3));
+    // A claim replaces cells: the cell is deleted, and the piece that
+    // already names these bytes takes them without a new row.
+    file.write_claimed(
+        9 * CELL,
+        part(&content, CELL, CELL),
+        claims(None, &[(9 * CELL, CELL, CELL)]),
+    );
+    file.check();
+    assert_eq!(rows(&db, route), (2, 2));
+
+    // Other content inside a piece splits it: before, the claim, after.
+    file.write_claimed(
+        16 * CELL,
+        part(&content, 300 * CELL, 2 * CELL),
+        claims(None, &[(16 * CELL, 2 * CELL, 300 * CELL)]),
+    );
+    file.check();
+    assert_eq!(rows(&db, route), (4, 2));
+
+    // Two claims of one window with literal bytes between them.
+    let mut data = part(&content, 50 * CELL, 2 * CELL).to_vec();
+    data.extend(noise(CELL_BYTES, 99));
+    data.extend_from_slice(part(&content, 700, 2 * CELL));
+    let at = 200 * CELL;
+    file.write_claimed(
+        at,
+        &data,
+        claims(
+            None,
+            &[(at, 2 * CELL, 50 * CELL), (at + 3 * CELL, 2 * CELL, 700)],
+        ),
+    );
+    file.check();
+    assert_eq!(rows(&db, route), (6, 3));
+
+    // A claim over a wide row of the layer keeps the row's cells outside it.
+    file.write(232 * CELL, &noise(RUN_BYTES, 4));
+    assert_eq!(rows(&db, route), (6, 4));
+    let at = 234 * CELL;
+    file.write_claimed(
+        at,
+        part(&content, 9 * CELL, 2 * CELL),
+        claims(None, &[(at, 2 * CELL, 9 * CELL)]),
+    );
+    file.check();
+    assert_eq!(rows(&db, route), (7, 5));
+}
+
+#[test]
+fn a_shrink_cuts_the_crossing_piece_and_regrown_bytes_read_zero() {
+    let temp = Temp::new();
+    let db = temp.db();
+    let route = db.open_workspace([3; 32], [4; 32]).unwrap();
+    let source = db.acquire_base_source(route, 1).unwrap();
+    let content = noise(4 << 20, 9);
+    let mut file = committed(&db, source, &content);
+    // One piece of 64 cells that names other bytes than the base holds there.
+    let far = 128 * CELL;
+    for window in 0..2 {
+        let at = window * WINDOW;
+        file.write_claimed(
+            at,
+            part(&content, far + at, WINDOW),
+            claims(None, &[(at, WINDOW, far + at)]),
+        );
+    }
+    file.check();
+    assert_eq!(rows(&db, route), (1, 0));
+
+    // A shrink inside a cell: the piece ends at the new size.
+    file.resize(10 * CELL + 1000);
+    file.check();
+    file.resize(40 * CELL);
+    file.check();
+    // A write into the boundary cell beyond the cut.
+    file.write(10 * CELL + 2000, b"x");
+    file.check();
+    assert_eq!(rows(&db, route), (1, 1));
+
+    // A claim across the cut end: the older piece gives up the range and
+    // the cell inside it is deleted.
+    file.write_claimed(
+        8 * CELL,
+        part(&content, 500 * CELL, 4 * CELL),
+        claims(None, &[(8 * CELL, 4 * CELL, 500 * CELL)]),
+    );
+    file.check();
+    assert_eq!(rows(&db, route), (2, 0));
+
+    // A shrink to a cell boundary, a regrow and a claim that starts there.
+    file.resize(9 * CELL);
+    file.check();
+    file.resize(20 * CELL);
+    file.check();
+    file.write_claimed(
+        9 * CELL,
+        part(&content, 9 * CELL, 2 * CELL),
+        claims(None, &[(9 * CELL, 2 * CELL, 9 * CELL)]),
+    );
+    file.check();
+    assert_eq!(rows(&db, route), (3, 0));
+
+    // Pieces beyond a shrink are stale: a regrow reads zero over them, an
+    // ordinary write lands above them and a claim removes the ones it meets.
+    file.resize(4 * CELL);
+    file.resize(30 * CELL);
+    file.check();
+    file.write(9 * CELL + 7, b"above a stale piece");
+    file.check();
+    file.write_claimed(
+        8 * CELL,
+        part(&content, 0, 2 * CELL),
+        claims(None, &[(8 * CELL, 2 * CELL, 0)]),
+    );
+    file.check();
+    assert_eq!(rows(&db, route), (2, 0));
+
+    file.resize(0);
+    file.resize(5 * CELL);
+    file.check();
+    assert_eq!(file.read(0, 5 * CELL as u32), vec![0; 5 * CELL_BYTES]);
+}
+
+#[test]
+fn bytes_of_an_earlier_request_join_the_piece_only_while_the_sequence_holds() {
+    let temp = Temp::new();
+    let db = temp.db();
+    let route = db.open_workspace([5; 32], [6; 32]).unwrap();
+    let source = db.acquire_base_source(route, 1).unwrap();
+    let content = noise(1 << 20, 13);
+    let mut file = committed(&db, source, &content);
+    // The file is rewritten in place with its own committed bytes.
+    // Request 1 ends inside a chunk that starts at 32768: the bytes after
+    // that boundary are stored as cells.
+    file.write_claimed(
+        0,
+        part(&content, 0, 40_000),
+        claims(None, &[(0, 32_768, 0)]),
+    );
+    file.check();
+    assert_eq!(rows(&db, route), (1, 2));
+    // Request 2 completes the chunk. Its claim starts in the bytes request 1
+    // stored, and nothing was published since: they join the piece.
+    let after = file.revision;
+    file.write_claimed(
+        40_000,
+        part(&content, 40_000, 40_000),
+        claims(Some(after), &[(32_768, 47_232, 32_768)]),
+    );
+    file.check();
+    assert_eq!(rows(&db, route), (1, 1));
+
+    // Another publication changes a byte request 2 stored. Request 3 still
+    // names the earlier sequence, so its claim starts at its own window.
+    let after = file.revision;
+    file.write(79_000, &[content[79_000] ^ 0xff]);
+    file.write_claimed(
+        80_000,
+        part(&content, 80_000, 40_000),
+        claims(Some(after), &[(77_824, 42_176, 77_824)]),
+    );
+    file.check();
+    assert_eq!(file.read(79_000, 1), [content[79_000] ^ 0xff]);
+    // The piece of the window is a second row: 81920 is not where the first ends.
+    assert_eq!(rows(&db, route).0, 2);
+
+    // A claim that names no sequence never takes earlier bytes.
+    file.write_claimed(
+        120_000,
+        part(&content, 120_000, 20_000),
+        claims(None, &[(118_784, 21_216, 118_784)]),
+    );
+    file.check();
+    assert_eq!(rows(&db, route).0, 3);
+}
+
+#[test]
+fn malformed_claims_are_refused_before_any_row_changes() {
+    let temp = Temp::new();
+    let db = temp.db();
+    let route = db.open_workspace([7; 32], [8; 32]).unwrap();
+    let source = db.acquire_base_source(route, 1).unwrap();
+    let content = noise(1 << 20, 17);
+    let mut file = committed(&db, source, &content);
+    file.write(0, b"a first local row");
+    let at = 64 * CELL;
+    let job = |claims: Option<WriteClaims>, write: bool| Changes {
+        inodes: vec![file.inode(1 << 20)],
+        write: write.then(|| PayloadWrite {
+            serial: 7,
+            offset: at,
+            data: Arc::from(part(&content, 0, 8 * CELL)),
+        }),
+        claims: claims.map(Box::new),
+        ..Changes::default()
+    };
+    let before = db.resources(Some(route)).unwrap().counts;
+    let many: Vec<(u64, u64, u64)> = (0..WRITE_CLAIMS as u64 + 1)
+        .map(|index| (at + index * 8, 4, 0))
+        .collect();
+    let refused: [&[(u64, u64, u64)]; 10] = [
+        // Nothing claimed, and an empty range.
+        &[],
+        &[(at, 0, 0)],
+        // Overlapping, and out of order.
+        &[(at, 2 * CELL, 0), (at + CELL, CELL, 0)],
+        &[(at + 2 * CELL, CELL, 0), (at, CELL, 0)],
+        // Beyond the window, and wholly before it.
+        &[(at + 7 * CELL, 2 * CELL, 0)],
+        &[(at - CELL, CELL, 0)],
+        // More than one chunk before the window.
+        &[(at - RUN_BYTES as u64 - 1, RUN_BYTES as u64 + 2, 0)],
+        // A second range that starts before the window.
+        &[(at - 2 * CELL, CELL + 1, 0), (at - CELL + 1, CELL, 0)],
+        // A source range that no offset can name.
+        &[(at, CELL, u64::MAX - 100)],
+        &many,
+    ];
+    for ranges in refused {
+        let result = db.apply(source, &job(Some(claims(None, ranges)), true));
+        assert!(
+            matches!(result, Err(OverlayError::Invalid("write claims"))),
+            "{ranges:?}: {result:?}"
+        );
+    }
+    let result = db.apply(source, &job(Some(claims(None, &[(at, CELL, 0)])), false));
+    assert!(matches!(result, Err(OverlayError::Invalid("write claims"))));
+    assert_eq!(db.resources(Some(route)).unwrap().counts, before);
+    file.check();
+}
+
+/// One window of committed content at any alignment with up to three claimed
+/// ranges; every byte outside them differs from the content.
+fn scattered(file: &mut File, content: &[u8], random: &mut Random) {
+    let size = file.expect.len() as u64;
+    let length = 1 + random.next(WINDOW) as usize;
+    let from = random.next((content.len() - length) as u64 + 1) as usize;
+    let mut offset = random.next(size + 20_000);
+    if random.next(2) == 0 {
+        offset -= offset % CELL;
+    }
+    let mut cuts: Vec<usize> = (0..6)
+        .map(|_| random.next(length as u64 + 1) as usize)
+        .collect();
+    cuts.sort_unstable();
+    if random.next(3) == 0 {
+        cuts = vec![0, length];
+    }
+    let mut data = content[from..from + length].to_vec();
+    let mut kept = vec![false; length];
+    let mut ranges = Vec::new();
+    for cut in cuts.chunks(2).filter(|cut| cut[0] < cut[1]) {
+        kept[cut[0]..cut[1]].fill(true);
+        let length = (cut[1] - cut[0]) as u64;
+        ranges.push((offset + cut[0] as u64, length, (from + cut[0]) as u64));
+    }
+    for (byte, kept) in data.iter_mut().zip(kept) {
+        if !kept {
+            *byte ^= 0x5a;
+        }
+    }
+    if ranges.is_empty() {
+        file.write(offset, &data);
+    } else {
+        file.write_claimed(offset, &data, claims(None, &ranges));
+    }
+}
+/// Three sequential requests of one run of committed content. Each claim
+/// ends inside its window and the next one starts in those bytes, as a
+/// recognizer that carries a partial chunk claims them. Sometimes another
+/// publication lands between two requests.
+fn run(file: &mut File, content: &[u8], random: &mut Random) {
+    let mut offset = random.next(file.expect.len() as u64 + 1);
+    if random.next(3) != 0 {
+        offset -= offset % CELL;
+    }
+    let mut from = random.next(content.len() as u64 / 2);
+    let (mut tail, mut after) = (0, None);
+    for _ in 0..3 {
+        let length = 20_000 + random.next(60_000);
+        if from + length > content.len() as u64 {
+            break;
+        }
+        let left = random.next(9_000);
+        let claimed = (offset - tail, length + tail - left, from - tail);
+        file.write_claimed(
+            offset,
+            part(content, from, length),
+            claims(after, &[claimed]),
+        );
+        after = Some(file.revision);
+        (offset, from, tail) = (offset + length, from + length, left);
+        match random.next(4) {
+            0 if tail != 0 => file.write(offset - 1 - random.next(tail), &[0xa5]),
+            1 => file.write(random.next(offset), &[0x5a]),
+            _ => {}
+        }
+    }
+}
+
+#[test]
+fn claimed_and_plain_writes_match_a_reference_model_across_resizes_capture_and_install() {
+    let temp = Temp::new();
+    let db = temp.db();
+    let route = db.open_workspace([9; 32], [10; 32]).unwrap();
+    let mut source = db.acquire_base_source(route, 1).unwrap();
+    let mut random = Random(11);
+    let content = noise(600_000, 3);
+    let mut file = File::new(&db, source, 2, content.clone());
+    file.sources.push((ROOT, content.clone()));
+    let mut most = 0;
+    for round in 0..5 {
+        for step in 0..80 {
+            let size = file.expect.len() as u64;
+            match random.next(10) {
+                0..=1 => {
+                    let offset = random.next(size + 20_000);
+                    let length = 1 + random.next([3, 5_000, 40_000, WINDOW][step % 4]);
+                    file.write(offset, &pattern(length as usize, (round * 16 + step) as u8));
+                }
+                2..=5 => scattered(&mut file, &content, &mut random),
+                6 => run(&mut file, &content, &mut random),
+                7 => file.resize(random.next(size + 1)),
+                8 => file.resize(if random.next(4) == 0 {
+                    0
+                } else {
+                    size - size % 4096
+                }),
+                _ => file.resize(size + random.next(30_000)),
+            }
+            if step % 5 == 0 {
+                file.check();
+            }
+        }
+        file.check();
+        most = most.max(rows(&db, route).0);
+        // Seal the generation. Its view stays exactly readable while the
+        // next layer shrinks, regrows and claims above it.
+        db.release_base_source(source).unwrap();
+        let capture = db.capture(route).unwrap();
+        let sealed = (file.expect.clone(), file.base.clone());
+        source = db.acquire_base_source(route, 100 + round as u64).unwrap();
+        file.source = source;
+        file.resize(file.expect.len() as u64 / 3);
+        scattered(&mut file, &content, &mut random);
+        run(&mut file, &content, &mut random);
+        file.check();
+        let mut offset = 0;
+        while offset < sealed.0.len() {
+            let local = db
+                .captured_read(capture, 2, offset as u64, READ_WINDOW as u32)
+                .unwrap()
+                .unwrap();
+            assert_eq!(local.size, sealed.0.len() as u64);
+            let got = file.compose(&local, &sealed.1);
+            assert!(!got.is_empty());
+            assert!(
+                got == sealed.0[offset..offset + got.len()],
+                "sealed window at {offset}"
+            );
+            offset += got.len();
+        }
+        // Known install: the next base is exactly the sealed view. Pieces of
+        // the layer above keep naming their own source.
+        db.release_base_source(source).unwrap();
+        db.install(capture, [round as u8 + 20; 32]).unwrap();
+        source = db.acquire_base_source(route, 200 + round as u64).unwrap();
+        file.source = source;
+        file.base = sealed.0;
+        file.check();
+    }
+    assert!(most > 8, "{most}");
+}
+
+#[test]
+fn piece_statements_are_indexed_and_their_work_does_not_grow_with_the_piece() {
+    let temp = Temp::new();
+    let db = temp.db();
+    let route = db.open_workspace([11; 32], [12; 32]).unwrap();
+    let source = db.acquire_base_source(route, 1).unwrap();
+    let plans = db.explain_pieces(source).unwrap();
+    println!("PIECE_PLANS {plans:#?}");
+    for plan in &plans {
+        assert!(
+            !plan.contains("SCAN") && !plan.contains("TEMP B-TREE") && !plan.contains("AUTO"),
+            "{plan}"
+        );
+    }
+    for label in [
+        "piece-cover",
+        "piece-window",
+        "piece-length",
+        "pieces-take",
+        "piece-cut",
+    ] {
+        let seek = format!("{label}: SEARCH payload_reference USING PRIMARY KEY");
+        assert!(
+            plans.iter().any(|plan| plan.starts_with(&seek)),
+            "{plans:?}"
+        );
+    }
+    assert!(plans
+        .iter()
+        .any(|plan| plan.starts_with("layer-referenced: SEARCH inode USING PRIMARY KEY")));
+    assert!(plans
+        .iter()
+        .any(|plan| plan.starts_with("piece-put: vm-program") && plan.ends_with("scan-opcodes=0")));
+
+    // The runtime profile of the same statements: `work` fails on a full
+    // scan step, a sort or an automatic index of any statement family.
+    let content = noise(8 << 20, 21);
+    let mut file = committed(&db, source, &content);
+    let far = 1 << 20;
+    let claim = |file: &mut File, window: u64| {
+        let at = window * WINDOW;
+        work(&db, || {
+            file.write_claimed(
+                at,
+                part(&content, far + at, WINDOW),
+                claims(None, &[(at, WINDOW, far + at)]),
+            )
+        })
+    };
+    let first = claim(&mut file, 0);
+    let second = claim(&mut file, 1);
+    let read_short = work(&db, || drop(file.read(WINDOW + 5, READ_WINDOW as u32)));
+    for window in 2..48 {
+        claim(&mut file, window);
+    }
+    let last = claim(&mut file, 48);
+    let read_long = work(&db, || drop(file.read(40 * WINDOW + 5, READ_WINDOW as u32)));
+    assert_eq!(rows(&db, route), (1, 0));
+    println!(
+        "PIECE_WORK first={first:?} second={second:?} last={last:?} read_short={read_short:?} \
+         read_long={read_long:?}"
+    );
+    // Extending a piece of one window and of 48 windows is the same work, and
+    // so is a read inside it: statements and changed rows are equal, VM steps
+    // differ by at most the depth of the index.
+    assert_eq!((second.0, second.2), (last.0, last.2));
+    assert!(last.1 <= second.1 + 16, "{second:?} {last:?}");
+    assert_eq!((read_short.0, read_short.2), (read_long.0, read_long.2));
+    assert!(
+        read_long.1 <= read_short.1 + 16,
+        "{read_short:?} {read_long:?}"
+    );
+    file.check();
+}

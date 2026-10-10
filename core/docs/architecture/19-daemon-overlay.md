@@ -6,6 +6,22 @@ schema16. Earlier algorithm and proof pins retain their original scope; see
 
 > **Status:** Current general guide.
 
+Issue 316 update, 2026-10-11 (overlay schema 33, phase 1 of the
+[reference-piece plan](../issues/316/PIECE-STRUCTURE-IMPLEMENTATION-PLAN.md)):
+a file range of a layer has a fourth kind, the reference piece. The new table
+`payload_reference (ns, gen, serial, file_offset, length, epoch, source,
+source_offset)`, `WITHOUT ROWID` with primary key `(ns, gen, serial,
+file_offset)`, holds one row per piece: `length` bytes of the layer from
+`file_offset` are the committed bytes of content root `source` from
+`source_offset`. A piece holds no bytes and starts on a cell boundary.
+`inode` gains `referenced` (this layer has held a piece; a layer without it
+issues no piece statement) and `sequence` (the Workspace revision that last
+wrote the row). `maintenance.kind` admits 12, and `accounting` gains
+`reference_rows` with an insert and a delete trigger: 57 accounting triggers.
+`PRAGMA user_version` and its startup readback are 33. The rules of the rows
+are in [payload layers](31-payload-streams.md). In this phase only tests write
+a piece: no request path sends a claim.
+
 R7 update, 2026-10-09 (overlay schema 32): `native_directory` gains
 `floor INTEGER NOT NULL DEFAULT 0`, the first cookie that is still an offset
 of an open directory handle. A READDIR at offset 0 over published replies

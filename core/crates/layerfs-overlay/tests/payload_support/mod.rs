@@ -39,6 +39,10 @@ pub struct File<'a> {
     pub base: Vec<u8>,
     pub expect: Vec<u8>,
     pub touched: bool,
+    /// Committed content a reference piece may name, by its root.
+    pub sources: Vec<([u8; 32], Vec<u8>)>,
+    /// Revision of this file's last publication.
+    pub revision: i64,
 }
 impl<'a> File<'a> {
     pub fn new(db: &'a Overlay, source: BaseSource, serial: u64, base: Vec<u8>) -> Self {
@@ -49,6 +53,8 @@ impl<'a> File<'a> {
             expect: base.clone(),
             base,
             touched: false,
+            sources: Vec::new(),
+            revision: 0,
         }
     }
     pub fn inode(&self, size: u64) -> Inode {
@@ -68,6 +74,14 @@ impl<'a> File<'a> {
         }
     }
     pub fn apply(&mut self, size: u64, write: Option<PayloadWrite>) {
+        self.apply_claimed(size, write, None)
+    }
+    pub fn apply_claimed(
+        &mut self,
+        size: u64,
+        write: Option<PayloadWrite>,
+        claims: Option<WriteClaims>,
+    ) {
         let publication = self
             .db
             .apply(
@@ -75,12 +89,32 @@ impl<'a> File<'a> {
                 &Changes {
                     inodes: vec![self.inode(size)],
                     write,
+                    claims: claims.map(Box::new),
                     ..Changes::default()
                 },
             )
             .unwrap();
+        self.revision = publication.revision();
         self.db.reply_attempted(publication).unwrap();
         self.touched = true;
+    }
+    /// A write whose claimed ranges the caller made equal to committed
+    /// content. The expected view is that of the same plain write.
+    pub fn write_claimed(&mut self, offset: u64, data: &[u8], claims: WriteClaims) {
+        let end = offset as usize + data.len();
+        if self.expect.len() < end {
+            self.expect.resize(end, 0);
+        }
+        self.expect[offset as usize..end].copy_from_slice(data);
+        self.apply_claimed(
+            self.expect.len() as u64,
+            Some(PayloadWrite {
+                serial: self.serial,
+                offset,
+                data: Arc::from(data),
+            }),
+            Some(claims),
+        );
     }
     pub fn write(&mut self, offset: u64, data: &[u8]) {
         let end = offset as usize + data.len();
@@ -114,6 +148,11 @@ impl<'a> File<'a> {
             return self.base[(offset as usize).min(end)..end].to_vec();
         };
         assert_eq!(local.size, self.expect.len() as u64);
+        self.compose(&local, &self.base)
+    }
+    /// The bytes of one local read plan over `base`: local bytes, the one
+    /// inherited span from the base, and each reference range from its source.
+    pub fn compose(&self, local: &LocalRead, base: &[u8]) -> Vec<u8> {
         let mut data = local.data.clone();
         assert_eq!(local.span.is_some(), !local.inherited.is_empty());
         if let Some((from, to)) = local.span {
@@ -128,8 +167,28 @@ impl<'a> File<'a> {
                 let at = local.offset as usize + slot;
                 let (from, to) = local.span.unwrap();
                 assert!((from as usize..to as usize).contains(&at));
-                *byte = self.base.get(at).copied().unwrap_or(0);
+                *byte = base.get(at).copied().unwrap_or(0);
             }
+        }
+        // A byte a reference range supplies is read from that range's source.
+        assert_eq!(local.reference_map.is_empty(), local.references.is_empty());
+        assert!(local.references.len() <= READ_REFERENCES);
+        for (slot, tag) in local.reference_map.iter().enumerate() {
+            if *tag == 0 {
+                continue;
+            }
+            let inherited = local.inherited.get(slot / 8);
+            assert!(inherited.is_none_or(|bits| bits & (1 << (slot % 8)) == 0));
+            let range = local.references[*tag as usize - 1];
+            let at = local.offset + slot as u64;
+            assert!(at >= range.offset && at < range.offset + range.length);
+            let content = &self
+                .sources
+                .iter()
+                .find(|(root, _)| *root == range.source)
+                .expect("source of a reference range")
+                .1;
+            data[slot] = content[(range.source_offset + (at - range.offset)) as usize];
         }
         data
     }
@@ -163,6 +222,11 @@ pub fn pattern(length: usize, seed: u8) -> Vec<u8> {
     (0..length)
         .map(|i| ((i * 31 + i / 251) as u8).wrapping_add(seed) | 1)
         .collect()
+}
+/// Bytes without a period, so a wrong source offset reads different bytes.
+pub fn noise(length: usize, seed: u64) -> Vec<u8> {
+    let mut random = Random(seed);
+    (0..length).map(|_| random.next(256) as u8).collect()
 }
 pub struct Random(pub u64);
 impl Random {

@@ -15,6 +15,50 @@ row over bytes no higher layer decided as one slice, and marks a wholly
 inherited window with one fill. Workspace moves inherited bytes into a window
 one run at a time. The composed bytes and the inherited bitmap are unchanged.
 
+Issue 316 update, 2026-10-11 (overlay schema 33): reference pieces.
+A compound job's write may carry claims: ranges of its window whose bytes the
+caller established to equal committed content of one immutable root
+(`Changes::claims`, at most 18 ranges, in file order, none overlapping). The
+engine trusts a claim and verifies only its shape.
+[Piece rows](../../crates/layerfs-overlay/src/payload/pieces/rows.rs) own the
+rules:
+
+- **Whole cells only.** A claimed range is trimmed inward to cell boundaries.
+  Its whole cells become one row of `payload_reference`; its ragged edges and
+  every unclaimed byte of the window are stored as cells, as an unclaimed
+  write stores them.
+- **A claim replaces cells.** Cells of the same layer inside the claimed cells
+  are deleted in the same transaction, and a live wide row that crosses an
+  edge keeps its cells outside. An older piece gives up the range and keeps
+  what it names before and after it. No byte is held twice.
+- **One row per run.** When the piece that ends at the claim, or already
+  covers its start, names the same source at the matching offset, that row is
+  extended. Otherwise a row is inserted.
+- **Cells win inside a layer.** An unclaimed write never reads, trims or
+  splits a piece. Composition applies a layer's cells, then its live pieces
+  to the bytes still undecided, then the cutoff.
+- **Rows never overlap, live or stale.** A piece is stale by its first byte
+  and its stamp, with the staircase test of a payload row.
+- **Shrink.** The piece that crosses the new size is cut to end at it, by one
+  statement, and keeps its stamp; later pieces become stale through the same
+  staircase step as later cells. This is the one case of a piece that does
+  not end on a cell boundary.
+- **Earlier bytes.** Only the first range of a job may start before its
+  window, by at most 32 KiB: those bytes were stored by an earlier job. That
+  part is honoured only when the claim names the row's content sequence, the
+  revision of that earlier job's publication, and the row has not been
+  written since. Otherwise the claim starts at the window.
+
+A read plan reports pieces as `LocalRead::references`, at most 132 ranges, and
+`reference_map`, one entry per window byte that names the range supplying it.
+Both are empty for a file without pieces, and then no piece statement runs:
+the layer rows carry the flag. The caller reads each range from committed
+content at its source offset. The statements are a cover seek (the last row
+at or before a byte), a window seek with a literal limit, an insert, a length
+update, a range delete that returns its rows, and the shrink cut; each is one
+seek of the primary key. Retirement, orphan migration, fold and terminal
+reclaim of pieces are the next checkpoint; until then only tests write one.
+
 The selected [payload derivation](../issues/307/S5-PAYLOAD-CONTRACT.md) describes
 schema v8. Each live inode generation has a lower-view cutoff, shrink epoch and
 indexed shrink staircase. Cells store bytes only through their last valid byte;

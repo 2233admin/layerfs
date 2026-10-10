@@ -108,6 +108,8 @@ impl Overlay {
                         gen: row.get(11)?,
                         epoch: row.get(12)?,
                         height: row.get(13)?,
+                        referenced: row.get(14)?,
+                        sequence: row.get(15)?,
                     })
                 },
             )?
@@ -158,9 +160,11 @@ impl Overlay {
             Some(seen) if !orphan => seen.take(serial),
             _ => None,
         };
+        // A row this job inserts holds no piece and has no earlier sequence.
+        let new = (false, -1);
         let fresh = (inode.inherited_cutoff, inode.inherited_cutoff, 0, 0);
-        let (active, (size, cutoff, epoch, height)) = match known {
-            _ if created => (false, fresh),
+        let (active, (size, cutoff, epoch, height), (referenced, sequence)) = match known {
+            _ if created => (false, fresh, new),
             // The active row's value as this job read it.
             Some(Some(row)) if row.gen == gen => (
                 true,
@@ -170,21 +174,27 @@ impl Overlay {
                     row.epoch,
                     row.height,
                 ),
+                (row.referenced, row.sequence),
             ),
             // The latest row is a lower generation's: its length is inherited.
-            Some(Some(row)) => (false, (row.inode.size, row.inode.size, 0, 0)),
-            Some(None) => (false, fresh),
+            Some(Some(row)) => (false, (row.inode.size, row.inode.size, 0, 0), new),
+            Some(None) => (false, fresh, new),
             None => match self
                 .query(
                     StatementKind::Inode,
                     sql::LAYER_ACTIVE,
                     &[&route.ns, &serial, &gen],
                     24,
-                    |r| Ok((unsigned(r, 0)?, unsigned(r, 1)?, r.get(2)?, r.get(3)?)),
+                    |r| {
+                        Ok((
+                            (unsigned(r, 0)?, unsigned(r, 1)?, r.get(2)?, r.get(3)?),
+                            (r.get(4)?, r.get(5)?),
+                        ))
+                    },
                 )?
                 .pop()
             {
-                Some(layer) => (true, layer),
+                Some((layer, piece)) => (true, layer, piece),
                 None => {
                     let lower = self
                         .query(
@@ -196,7 +206,7 @@ impl Overlay {
                         )?
                         .pop()
                         .unwrap_or(inode.inherited_cutoff);
-                    (false, (lower, lower, 0, 0))
+                    (false, (lower, lower, 0, 0), new)
                 }
             },
         };
@@ -208,6 +218,8 @@ impl Overlay {
             cutoff,
             epoch,
             height,
+            referenced,
+            sequence,
         };
         if inode.kind == InodeKind::File && inode.size < layer.size {
             self.shrink(route.ns, serial, &mut layer, inode.size)?;
@@ -236,8 +248,11 @@ impl Overlay {
                 &integer(inode.subdirs)?,
                 &layer.epoch,
                 &layer.height,
+                // The revision this job publishes: no later row write of
+                // this serial can carry the same value.
+                &(state.revision + 1),
             ],
-            120,
+            128,
         )?;
         if changed != 1 {
             return Err(OverlayError::Invalid("inode row of the running job"));

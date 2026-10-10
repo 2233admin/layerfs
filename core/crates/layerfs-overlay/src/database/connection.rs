@@ -28,6 +28,11 @@ pub struct Overlay {
     /// deletes the last one, and restored when a job fails, so it is exact:
     /// while false no orphan row and no orphan-domain inode row exists.
     pub(crate) orphan_seen: Cell<bool>,
+    /// Whether this engine has ever written a reference piece. Set before
+    /// the only statement that inserts one and restored when a job fails, so
+    /// while it is false no piece row exists and no path issues a piece
+    /// statement. It is never cleared.
+    pub(crate) pieces_seen: Cell<bool>,
     /// Whether the running atomic job may still finish one orphan's release
     /// itself. Set when a job starts, cleared by the first last reference
     /// that uses it and by every maintenance step, so one job does at most
@@ -241,11 +246,12 @@ impl Overlay {
         }
         self.transaction.set(Transaction::Wanted { cleanup });
         self.release_step.set(true);
-        let orphans = self.orphan_seen.get();
+        let (orphans, pieces) = (self.orphan_seen.get(), self.pieces_seen.get());
         let result = job();
-        // A failed job's orphan rows are as they were before it.
+        // A failed job's orphan and piece rows are as they were before it.
         if result.is_err() {
             self.orphan_seen.set(orphans);
+            self.pieces_seen.set(pieces);
         }
         // A ticket exists for its holder only once its job has succeeded.
         let issued = std::mem::take(&mut *self.issued.borrow_mut());

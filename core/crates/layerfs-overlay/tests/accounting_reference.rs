@@ -140,6 +140,7 @@ fn reference(raw: &rusqlite::Connection) -> StoredCounts {
             "SELECT ifnull(sum(length(data)+ifnull(length(validity),0)),0) FROM payload",
         ),
         shrink_rows: rows("shrink"),
+        reference_rows: rows("payload_reference"),
         operation_record_rows: records.iter().map(|table| rows(table)).sum(),
         operation_record_bytes: records
             .iter()

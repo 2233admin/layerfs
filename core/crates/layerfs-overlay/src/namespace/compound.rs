@@ -139,6 +139,7 @@ impl Overlay {
                 return Err(OverlayError::Invalid("compound write window"));
             }
         }
+        crate::payload::pieces::check_claims(changes)?;
         Ok(CheckedChanges {
             keys,
             moved_directory,
@@ -234,13 +235,11 @@ impl Overlay {
             self.put_cell(route, integer(*serial)?, layer(*serial)?, cell)?;
         }
         if let Some(write) = &changes.write {
-            self.write_cells(
-                route.ns,
-                integer(write.serial)?,
-                layer(write.serial)?,
-                write.offset,
-                &write.data,
-            )?;
+            let (serial, layer) = (integer(write.serial)?, layer(write.serial)?);
+            match &changes.claims {
+                None => self.write_cells(route.ns, serial, layer, write.offset, &write.data)?,
+                Some(claims) => self.write_claimed(route.ns, serial, layer, write, claims)?,
+            }
         }
         for inode in &changes.inodes {
             if inode.kind == crate::InodeKind::File || changes.detached == Some(inode.serial) {
@@ -262,7 +261,7 @@ impl Overlay {
         let mut row: Vec<&dyn rusqlite::ToSql> = vec![&ns, &one, &state.active.0, &one];
         row.extend([&zero as &dyn rusqlite::ToSql; 3]);
         row.push(&one);
-        row.extend([&zero as &dyn rusqlite::ToSql; 7]);
+        row.extend([&zero as &dyn rusqlite::ToSql; 8]);
         let mut plans = Vec::new();
         for (label, statement, params) in [
             (

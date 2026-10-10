@@ -33,6 +33,10 @@ CREATE TABLE inode (
     subdirs INTEGER NOT NULL CHECK(subdirs>=0 AND (kind=2 OR subdirs=0)),
     epoch INTEGER NOT NULL CHECK(epoch>=0),
     height INTEGER NOT NULL CHECK(height>=0 AND height<=epoch),
+    -- Whether this layer of the file has ever held a reference piece.
+    referenced INTEGER NOT NULL DEFAULT 0 CHECK(referenced IN(0,1)),
+    -- Content sequence: the Workspace revision that last wrote this row.
+    sequence INTEGER NOT NULL DEFAULT 0 CHECK(sequence>=0),
     PRIMARY KEY(ns,serial,gen)
 ) STRICT, WITHOUT ROWID;
 CREATE INDEX inode_capture ON inode(ns,gen,serial);
@@ -67,6 +71,21 @@ CREATE TABLE shrink (
     cell_offset INTEGER NOT NULL CHECK(cell_offset>=0 AND cell_offset%4096=0),
     epoch INTEGER NOT NULL CHECK(epoch>0),
     PRIMARY KEY(ns,serial,gen,depth)
+) STRICT, WITHOUT ROWID;
+-- A reference piece: `length` bytes of one layer from `file_offset` are the
+-- committed bytes of content root `source` from `source_offset`. It holds no
+-- bytes. Pieces of one layer never overlap, live or stale; a piece is stale
+-- by its first byte and its stamp, like a payload row.
+CREATE TABLE payload_reference (
+    ns INTEGER NOT NULL REFERENCES workspace(ns),
+    gen INTEGER NOT NULL CHECK(gen=-1 OR gen>0),
+    serial INTEGER NOT NULL CHECK(serial>0),
+    file_offset INTEGER NOT NULL CHECK(file_offset>=0 AND file_offset%4096=0),
+    length INTEGER NOT NULL CHECK(length>0),
+    epoch INTEGER NOT NULL CHECK(epoch>=0),
+    source BLOB NOT NULL CHECK(length(source)=32),
+    source_offset INTEGER NOT NULL CHECK(source_offset>=0),
+    PRIMARY KEY(ns,gen,serial,file_offset)
 ) STRICT, WITHOUT ROWID;
 CREATE INDEX payload_generation ON payload(ns,gen,serial,cell_offset);
 CREATE INDEX shrink_generation ON shrink(ns,gen,serial,depth);
@@ -104,7 +123,7 @@ CREATE INDEX reclaim_ready ON reclaim(queue_key,ns);
 CREATE INDEX lease_resource ON lease(ns,kind,resource,owner);
 CREATE TABLE maintenance (
     ns INTEGER NOT NULL REFERENCES workspace(ns),
-    kind INTEGER NOT NULL CHECK(kind BETWEEN 1 AND 11),
+    kind INTEGER NOT NULL CHECK(kind BETWEEN 1 AND 12),
     resource INTEGER NOT NULL CHECK(resource>=0),
     target INTEGER NOT NULL CHECK(target<>0),
     phase INTEGER NOT NULL DEFAULT 0 CHECK(phase>=0),
@@ -253,4 +272,4 @@ CREATE TABLE native_cookie (
     FOREIGN KEY(ns,owner) REFERENCES native_directory(ns,owner)
 ) STRICT, WITHOUT ROWID;
 CREATE INDEX native_cookie_after ON native_cookie(ns,owner,after,first_cookie);
-PRAGMA user_version=32;
+PRAGMA user_version=33;

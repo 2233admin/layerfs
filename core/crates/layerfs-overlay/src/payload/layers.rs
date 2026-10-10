@@ -17,6 +17,12 @@ pub(crate) struct Layer {
     pub cutoff: u64,
     pub epoch: i64,
     pub height: i64,
+    /// Whether this layer has ever held a reference piece. A layer without
+    /// one issues no piece statement.
+    pub referenced: bool,
+    /// Content sequence of the row as it was read: the revision that last
+    /// wrote it. Negative for a row the running job inserts.
+    pub sequence: i64,
 }
 impl Overlay {
     /// Rows of one inode, newest first, within `(installed, top]`.
@@ -46,6 +52,8 @@ impl Overlay {
                     epoch: row.get(4)?,
                     height: row.get(5)?,
                     nlink: unsigned(row, 6)?,
+                    referenced: row.get(7)?,
+                    sequence: row.get(8)?,
                 })
             },
         )
@@ -164,6 +172,11 @@ impl Overlay {
                     None => self.keep(&shape, inside as i64)?,
                 }
             }
+        }
+        if layer.referenced {
+            // The piece that crosses the new size ends at it. It keeps its
+            // stamp: it starts below the boundary, so it is not stale.
+            self.cut_piece(ns, serial, layer.gen, to)?;
         }
         let boundary = to.div_ceil(CELL).checked_mul(CELL).map(i64::try_from);
         let Some(Ok(boundary)) = boundary else {

@@ -3,7 +3,7 @@
 /// its payload-layer columns: a job that publishes the serial reads no layer
 /// row again.
 pub(crate) const INODE_LOOKUP: &str =
-    "SELECT serial,kind,mode,mtime_seconds,mtime_nanoseconds,nlink,size,inherited_cutoff,born,entries,subdirs,gen,epoch,height
+    "SELECT serial,kind,mode,mtime_seconds,mtime_nanoseconds,nlink,size,inherited_cutoff,born,entries,subdirs,gen,epoch,height,referenced,sequence
     FROM inode WHERE ns=?1 AND serial=?2 AND gen<=?3 AND gen>?4 ORDER BY gen DESC LIMIT 1";
 pub(crate) const INODE_CAPTURE: &str =
     "SELECT serial,kind,mode,mtime_seconds,mtime_nanoseconds,nlink,size,inherited_cutoff,born,entries,subdirs
@@ -45,15 +45,44 @@ pub(crate) const CAPTURED_CELL_METADATA: &str =
     "SELECT cell_offset,epoch,length(data),length(validity) FROM payload
     WHERE ns=?1 AND serial=?2 AND gen=?3 AND cell_offset>=?4 AND cell_offset<?5
     AND cell_offset+length(data)>?6 ORDER BY cell_offset LIMIT 1";
+/// The last piece of one layer that starts at or before byte ?4.
+pub(crate) const PIECE_COVER: &str =
+    "SELECT file_offset,length,epoch,source,source_offset FROM payload_reference
+    WHERE ns=?1 AND gen=?2 AND serial=?3 AND file_offset<=?4 ORDER BY file_offset DESC LIMIT 1";
+/// The pieces of one layer that can hold a byte of [?4, ?5): the last one
+/// that starts at or before ?4 and those that start inside. The LIMIT is
+/// `pieces::rows::WINDOW_ROWS`, kept equal by hand: a bound limit would make
+/// SQLite prepare the statement again whenever its value is bound.
+pub(crate) const PIECE_WINDOW: &str =
+    "SELECT file_offset,length,epoch,source,source_offset FROM payload_reference
+    WHERE ns=?1 AND gen=?2 AND serial=?3 AND file_offset>=ifnull((SELECT max(file_offset)
+    FROM payload_reference WHERE ns=?1 AND gen=?2 AND serial=?3 AND file_offset<=?4),?4)
+    AND file_offset<?5 ORDER BY file_offset LIMIT 34";
+pub(crate) const PIECE_PUT: &str = "INSERT INTO payload_reference VALUES(?1,?2,?3,?4,?5,?6,?7,?8)";
+pub(crate) const PIECE_LENGTH: &str = "UPDATE payload_reference SET length=?5
+    WHERE ns=?1 AND gen=?2 AND serial=?3 AND file_offset=?4";
+/// Removes the pieces of one layer that start in [?4, ?5) and returns them.
+pub(crate) const PIECES_TAKE: &str = "DELETE FROM payload_reference
+    WHERE ns=?1 AND gen=?2 AND serial=?3 AND file_offset>=?4 AND file_offset<?5
+    RETURNING file_offset,length,epoch,source,source_offset";
+/// Ends the piece that crosses byte ?4 of one layer at that byte.
+pub(crate) const PIECE_CUT: &str = "UPDATE payload_reference SET length=?4-file_offset
+    WHERE ns=?1 AND gen=?2 AND serial=?3 AND file_offset=(SELECT max(file_offset)
+    FROM payload_reference WHERE ns=?1 AND gen=?2 AND serial=?3 AND file_offset<?4)
+    AND file_offset+length>?4";
+pub(crate) const LAYER_REFERENCED: &str =
+    "UPDATE inode SET referenced=1 WHERE ns=?1 AND serial=?2 AND gen=?3";
 pub(crate) const STEP_GET: &str =
     "SELECT cell_offset,epoch FROM shrink WHERE ns=?1 AND serial=?2 AND gen=?3 AND depth=?4";
 pub(crate) const STEP_PUT: &str = "INSERT INTO shrink VALUES(?1,?2,?3,?4,?5,?6)
     ON CONFLICT(ns,serial,gen,depth) DO UPDATE SET cell_offset=excluded.cell_offset,
     epoch=excluded.epoch";
 pub(crate) const LAYERS: &str =
-    "SELECT gen,kind,size,inherited_cutoff,epoch,height,nlink FROM inode
+    "SELECT gen,kind,size,inherited_cutoff,epoch,height,nlink,referenced,sequence FROM inode
     WHERE ns=?1 AND serial=?2 AND gen<=?3 AND gen>?4 ORDER BY gen DESC LIMIT 4";
-pub(crate) const LAYER_ACTIVE: &str = "SELECT size,inherited_cutoff,epoch,height FROM inode
+pub(crate) const LAYER_ACTIVE: &str =
+    "SELECT size,inherited_cutoff,epoch,height,referenced,sequence
+    FROM inode
     WHERE ns=?1 AND serial=?2 AND gen=?3";
 pub(crate) const LAYER_LOWER: &str = "SELECT size FROM inode
     WHERE ns=?1 AND serial=?2 AND gen<?3 AND gen>?4 ORDER BY gen DESC LIMIT 1";
@@ -115,13 +144,14 @@ pub(crate) const CAPTURED_DIRECTORY_ENTRY: &str =
 pub(crate) const OPERATION_RECORD_PAGE: &str = "SELECT kind,key,value FROM operation_record
     WHERE ns=?1 AND operation=?2 AND kind=?3 AND key>?4 ORDER BY key LIMIT 64";
 /// The first row of a serial in a generation. A row that already exists is a
-/// constraint failure, never an update.
+/// constraint failure, never an update. A new layer holds no reference piece.
 pub(crate) const INODE_INSERT: &str = "INSERT INTO inode
-    VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15)";
-/// Every value of a row that exists, with the parameters of the insert.
+    VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,0,?16)";
+/// Every value of a row that exists, with the parameters of the insert. The
+/// reference flag is not a value of the job: only a published piece sets it.
 pub(crate) const INODE_UPDATE: &str = "UPDATE inode SET kind=?4,mode=?5,
     mtime_seconds=?6,mtime_nanoseconds=?7,nlink=?8,size=?9,inherited_cutoff=?10,
-    born=?11,entries=?12,subdirs=?13,epoch=?14,height=?15
+    born=?11,entries=?12,subdirs=?13,epoch=?14,height=?15,sequence=?16
     WHERE ns=?1 AND serial=?2 AND gen=?3";
 pub(crate) const DIRECTORY_ENTRY_ACTIVE: &str =
     "SELECT serial,inherited FROM directory_entry WHERE ns=?1 AND parent=?2 AND name=?3 AND gen=?4";

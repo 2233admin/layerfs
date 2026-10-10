@@ -132,8 +132,9 @@ impl Overlay {
                 &0_i64,
                 &0_i64,
                 &0_i64,
+                &(state.revision + 1),
             ],
-            120,
+            128,
         )?;
         // Migration serves a descriptor or a reader. Under kernel lookups
         // alone nothing is queued: the last lookup's release queues the

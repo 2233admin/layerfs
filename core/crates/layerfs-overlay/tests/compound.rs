@@ -106,6 +106,7 @@ fn compound_job_publishes_every_final_value_with_one_ticket_or_nothing() {
         directory_entries: vec![bound(10, b"bin\xff\0name", 20)],
         cell: Some((20, cell.clone())),
         write: None,
+        claims: None,
     };
     let publication = db.apply(source, &changes).unwrap();
     let state = db.state(route).unwrap();
@@ -148,6 +149,7 @@ fn compound_job_publishes_every_final_value_with_one_ticket_or_nothing() {
         directory_entries: vec![bound(10, b"later", 30)],
         cell: None,
         write: None,
+        claims: None,
     };
     assert!(matches!(
         db.apply(source, &refused),
@@ -458,6 +460,7 @@ fn compound_statements_keep_point_work_as_the_namespace_grows() {
                     directory_entries: vec![bound(1, &from, count), bound(1, &to, count + 1)],
                     cell: None,
                     write: None,
+                    claims: None,
                 },
             )
             .unwrap(),
@@ -488,6 +491,7 @@ fn compound_statements_keep_point_work_as_the_namespace_grows() {
                     directory_entries: vec![removed(1, &from, false), bound(1, &to, count)],
                     cell: None,
                     write: None,
+                    claims: None,
                 },
             )
             .unwrap();

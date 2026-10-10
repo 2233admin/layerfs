@@ -824,6 +824,8 @@ impl OverlayCapturedRuns for InheritedPort<'_> {
                         inherited,
                         span: Some((offset, end)),
                         base_root: Some(cursor.reader().root()),
+                        references: Vec::new(),
+                        reference_map: Vec::new(),
                     }),
                     next,
                 }

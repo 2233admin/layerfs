@@ -61,5 +61,6 @@ pub(crate) fn remove(
         directory_entries: vec![unbind(parent, name, inherited)],
         cell: None,
         write: None,
+        claims: None,
     }))
 }

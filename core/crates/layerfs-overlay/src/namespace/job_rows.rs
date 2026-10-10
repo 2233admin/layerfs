@@ -10,6 +10,8 @@ pub(crate) struct LocalRow {
     pub gen: i64,
     pub epoch: i64,
     pub height: i64,
+    pub referenced: bool,
+    pub sequence: i64,
 }
 /// The latest local row of the serials one atomic job read, so that a later
 /// evaluation round and the job's own publication do not read them again. It

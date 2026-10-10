@@ -277,11 +277,14 @@ impl Overlay {
             inherited: Vec::new(),
             span: None,
             base_root: None,
+            references: Vec::new(),
+            reference_map: Vec::new(),
         };
         if first.kind == InodeKind::Directory || start == end {
             return Ok(Some(read));
         }
-        // 0: undecided, 1: decided locally (a written byte or a zero).
+        // 0: undecided, 1: decided locally (a written byte or a zero),
+        // n + 2: supplied by reference range n.
         let mut decided = vec![0_u8; read.data.len()];
         let mut observed = self.payload_work.get();
         observed.read_window_zeroed_bytes = observed
@@ -293,8 +296,16 @@ impl Overlay {
         let settle = |decided: &mut [u8], open: &mut usize, from: u64, to: u64| {
             let range = &mut decided[(from.clamp(start, end) - start) as usize
                 ..(to.clamp(start, end) - start) as usize];
-            *open -= range.iter().filter(|slot| **slot == 0).count();
-            range.fill(1);
+            let free = range.iter().filter(|slot| **slot == 0).count();
+            *open -= free;
+            if free == range.len() {
+                range.fill(1);
+            } else {
+                // A byte a reference range supplies stays that range's.
+                for slot in range.iter_mut().filter(|slot| **slot == 0) {
+                    *slot = 1;
+                }
+            }
         };
         for (depth, layer) in layers.iter().enumerate() {
             if depth != 0 {
@@ -349,6 +360,11 @@ impl Overlay {
                     }
                 }
             }
+            if layer.referenced && open != 0 {
+                // Cells won inside this layer; its pieces decide what is left.
+                let window = (start, end);
+                open -= self.compose_pieces(ns, serial, layer, window, &mut decided, &mut read)?;
+            }
             // Nothing at or above the cutoff falls through to the lower view.
             settle(&mut decided, &mut open, layer.cutoff, end);
             if open == 0 {
@@ -376,6 +392,12 @@ impl Overlay {
                 .rposition(|state| *state == 0)
                 .map_or(0, |slot| slot + 1);
             read.span = Some((start + low as u64, start + high as u64));
+        }
+        if !read.references.is_empty() {
+            for state in &mut decided {
+                *state = state.saturating_sub(1);
+            }
+            read.reference_map = decided;
         }
         let mut observed = self.payload_work.get();
         observed.read_local_copy_bytes = observed.read_local_copy_bytes.saturating_add(copied);
