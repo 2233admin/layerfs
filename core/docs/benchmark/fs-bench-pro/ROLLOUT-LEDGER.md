@@ -75,6 +75,7 @@ comparison or release-admission claim. Durable is
 | --- | --- | --- | --- | --- | --- |
 | H-1 | C07 | Workload and verifier passed, unmount returned, residency helper refused changed file identity | Harness inspected overlay while automatic post-unmount reclamation was still mutating backing | `a1f2c259c` | `test_backing_observer_waits_for_original_reclamation_to_finish` |
 
+| H-3 | Generic mounted pilot proofs and prospective SDK proofs | Reachable path walk omitted exhaustive inode-table membership from original canonical verifier | Runtime compared declared paths/bytes but never enumerated current inode table | This commit | edit_oracle_complete_membership_accepts_exact_and_rejects_unreachable_or_missing_rows |
 | H-2 | 36 batch-1 reviewed registrations | source_commit was an annotated tag object; parity accepted it and rejected the actual peeled commit | git rev-parse on an annotated reference returns the tag object unless peeled | `222526fa0` | test_review_identity.py rejects the tag through both parity routes, admits the peeled commit and checks every ported review |
 
 H-1 and H-2 are harness faults, not product correctness or performance defects.
@@ -1102,4 +1103,49 @@ Production LOC79,366->79,366(delta+0), pinned absent-aware method.
 
 | `cdf7fa635` (worker) | Add shared positional writer and native qualification | 79366 | 79366 | +0 |
 | `d7cce5759` (worker) | Pin exact original content-corruption cause before first test | 79366 | 79366 | +0 |
-| This commit | Integrate bounded positional writer with native source qualification | 79366 | 79366 | +0 |
+| `8dd9d99a8` | Integrate bounded positional writer with native source qualification | 79366 | 79366 | +0 |
+
+H-3 current-format proof coverage correction: source review found the original
+canonical verifier requires exhaustive inode-table membership, beyond reachable
+path traversal. Earlier generic full byte/tree proofs did not enumerate that
+table. Their sealed receipts remain unchanged and do not gain an unperformed
+check. The integrated current oracle uses public typed rows_after with actual
+root context, validates all unique serial rows, and rejects any unreachable,
+missing or duplicate membership against the full resolved namespace. Existing
+native byte, metadata, alias, root and current-format checks remain intact.
+A membership-only offline mode reuses the previously proven bytes and will
+audit independent copies of the32 retained pilot Store exports before any
+SDK case setup/sample. Those audits are separate changed-oracle verification,
+never a measurement replay or rewrite of old receipts. No product defect is
+yet established; complete pilot qualification awaits those retained audits.
+
+The SDK offline route now reuses the exact frozen edit model and validates
+initial/final current roots: unchanged allocation scope plus inode serial,
+original lengths, complete authenticated mapping grammar and parent/child
+counts/lengths/levels, old untouched-payload subset rule using current IDs, and
+capped strict shifted source-offset transcript for unchanged ranges. Guards
+remain strict. A P-3 suffix rewrite may fail a legacy SDK representation
+property; any failure will be retained and diagnosed against source/contracts,
+without weakening a guard, adding a feature, optimizing storage/speed or
+resampling unchanged work. Retired format/root/object IDs are never used as
+current expectations.
+
+Worker8e02fbed9's five external tests PASS0.01s after no-run compilation in
+its own target, with19 frozen inline tests explicitly filtered. They cover
+missing/unreachable table rows, insertion/deletion retention, scope/serial
+replacement, capped shifted offsets and forged complete mapping summaries.
+Composed main no-run initially failed on a harness ObjectId argument type
+(borrow/success propagation), corrected to the actual public from_bytes API.
+The host compiler failure is retained in tool output, not claimed a product
+bug. Corrected main no-run PASS3.86s; same five scoped tests PASS0.01s under
+separate120s locks. Owned rustfmt check PASS with skip_children=true; frozen
+reference source is not formatted or modified. Two fixture-only unused helper
+warnings remain visible, with no warnings-clean/Clippy claim. Basic persisted
+full-byte/corruption tests are also checked at this source. Raw composed
+checks: benchmark-results/fs-bench-pro/2026-10-10-batch-2-shared-oracle-checks/.
+No new measured case, mount or Docker resource has been created. Production
+LOC79,366->79,366(delta+0), pinned absent-aware method; reference absent
+retiredR9c,lastcount65,417.
+
+| `8e02fbed9` (worker) | Add typed edit-retention and exhaustive inode membership oracle | 79366 | 79366 | +0 |
+| This commit | Restore complete current inode membership and SDK edit proofs | 79366 | 79366 | +0 |

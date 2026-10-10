@@ -1,5 +1,8 @@
 //! SDK-driven host provisioning and persistent real-daemon benchmark control.
 mod args;
+#[path = "../../engine/recipes/edit_model.rs"]
+mod edit_model;
+mod edit_oracle;
 mod events;
 mod fixture;
 mod project;
@@ -9,6 +12,7 @@ mod workspace_oracle;
 
 use args::Args;
 use events::Events;
+use project::namespace::reference;
 use std::error::Error;
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
@@ -39,7 +43,7 @@ fn main() -> Result<()> {
         "serve" => session::serve(&args, &mut events),
         "init" => project::initialize(&args, &mut events),
         "verify-init" => project::verify(&args, &mut events),
-        "verify-workspace" => workspace_oracle::verify(&args, &mut events),
+        "verify-workspace" | "verify-membership" => workspace_oracle::verify(&args, &mut events),
         _ => Err("mode must be provision or serve".into()),
     };
     match result {

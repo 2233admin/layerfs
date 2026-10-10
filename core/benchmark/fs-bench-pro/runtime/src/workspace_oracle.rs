@@ -21,9 +21,8 @@ use std::{
 };
 
 pub fn verify(args: &Args, events: &mut Events) -> Result<()> {
-    let case =
-        reference::workspace_registry::resolve(args.case.as_deref().ok_or("--case required")?)?;
-    let entries = reference::workspace_registry::expected(&case, 1, 1)?;
+    let case = args.case.as_deref().ok_or("--case required")?;
+    let entries = crate::edit_model::entries(case, 1)?;
     let expected = entries
         .iter()
         .map(|entry| (entry.path.clone(), entry))
@@ -42,6 +41,7 @@ pub fn verify(args: &Args, events: &mut Events) -> Result<()> {
     let mut tree = FilesystemRead::new(&reader, FilesystemRootId(snapshot.effective_root))?;
     let mut pending = VecDeque::from([".".to_owned()]);
     let mut seen = BTreeSet::new();
+    let mut reachable_inodes = BTreeSet::new();
     let mut attributes = AttributeReadWork::default();
     let mut inode_classes = BTreeMap::new();
     let mut class_inodes = BTreeMap::new();
@@ -64,6 +64,7 @@ pub fn verify(args: &Args, events: &mut Events) -> Result<()> {
             .ok_or("unexpected persisted namespace path")?;
         let logical = LogicalPath::new(if path == "." { "" } else { &path })?;
         let resolved = tree.resolve(&logical)?;
+        reachable_inodes.insert(resolved.serial);
         let inode = resolved.value;
         let metadata = read_portable(&reader, inode.metadata_root, inode.kind, &mut attributes)?;
         if metadata.mode != entry.mode
@@ -123,6 +124,9 @@ pub fn verify(args: &Args, events: &mut Events) -> Result<()> {
                 {
                     return Err("persisted alias classes differ".into());
                 }
+                if args.mode == "verify-membership" {
+                    continue;
+                }
                 let bytes =
                     Timing::disabled("independent.persisted.bytes", |timer| -> Result<u64> {
                         let view =
@@ -176,11 +180,22 @@ pub fn verify(args: &Args, events: &mut Events) -> Result<()> {
     if seen.len() != expected.len() {
         return Err("persisted namespace path count differs".into());
     }
+    crate::edit_oracle::require_complete_membership(&reader, tree.root(), &reachable_inodes)?;
+    if args.mode != "verify-membership" {
+        if let Some(scenario) = crate::edit_model::scenario(case) {
+            crate::edit_oracle::verify_edit(
+                &reader,
+                layerfs_content::object::ObjectId::from_bytes(&manifest.root)?,
+                snapshot.effective_root,
+                &scenario,
+            )?;
+        }
+    }
     let root = crate::hex(&snapshot.effective_root.to_bytes());
     drop(tree);
     drop(reader);
     drop(storage);
     handles.seal()?;
-    events.numeric_fields("workspace_verified", Some(events.span(begun)), "independent current typed/authenticated reads; complete declared names/kinds/portable metadata/link classes and every payload byte; existing current format checked transitively, no retired format substituted", &[("status", "PASS".into()), ("root", root)], &[("paths", seen.len() as u64), ("verified_bytes", verified_bytes)])?;
+    events.numeric_fields("workspace_verified", Some(events.span(begun)), "independent current typed/authenticated reads; complete names/kinds/metadata/link classes and inode-table membership; membership-only mode reuses prior byte proof, full mode checks every payload byte and applicable original edit identity/retention; no retired format substituted", &[("status", "PASS".into()), ("root", root)], &[("paths", seen.len() as u64), ("verified_bytes", verified_bytes), ("membership_only", u64::from(args.mode == "verify-membership"))])?;
     Ok(())
 }
