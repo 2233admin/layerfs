@@ -2096,3 +2096,28 @@ debugproof replay. No productfix/optimization or publicationclaim.
 
 | `b1f8150e` (worker) | Apply exact sampled-receipt fix at changed case identity | 79366 | 79366 | +0 |
 | This commit | Integrate original failed snapshot rows without relabeling | 79366 | 79366 | +0 |
+
+Local snapshot corrected-source closure froma95ca5375: one sample atb1f8150e,
+originalthree25k/256/restoreoperations, threeCommitted replies, exact native
+samplePASS and completeactualsameStore4roots/3Commitancestry/75004paths/
+75000bytes/inodecensusPASS. RestoredC1/C3 rootexactlyequal. BothmountsGone,
+KNOWN_STOP, passingcontainer67298f865bd6d1db6d252613ec982aa11c7cf55f9d82bd51a5e52a394cea3b54
+andvolumelayerfs-fsb-sample-40a7ee17335e48df removed. NumericINELIGIBLE underH5,
+wall24,397,444,499ns EXCEEDED15s (excess9,397,444,499ns), proof11,633,937,583ns
+WITHIN45s/59s, no120s hang. Counts177581/1456520/6956183; Storelogical921712B/
+allocated925696B; overlaylogical28672000B/allocated297111552B. Absolutecontroller
+24,965,019,583ns minus6read-onlyobservers567,575,084ns matches recordedproductwall.
+FinalretainedverifyPASS/reportonce; exact30/14-columnone-rowCSVs integrated.
+Raw bothattempts/arithmetic/proofidentity/resource inventory remains namespace
+worker benchmark-results/fs-bench-pro/2026-10-10-batch-3-local-snapshot-b1f8150eb/handoff.json.
+Fiveoriginalpassingremovalreceiptsaudited, no teardownreplay. Initialmaster
+layerfs-fsb-master-local-snapshot-ec2d6edff2f14397 retained; firstfailedlive
+container/volumeverifiermount retained, includingmountkey
+ a442fd804322640166fdeaa1d505535fbe1ea76e94417c63f7389969465f02fe.
+No productbug/feature/optimization/limit/cache/workloadchange. FirstFAILrow
+and correctedINELIGIBLErow remain separate at originalsources. Currentbatch
+29of33distinctcasesclosed; Git4pending, no batch4. Production79,366unchanged,
+referenceabsent, pinnedstagedcounter. Allsource/binaryreuse gaps remainexplicit.
+
+| `a95ca5375` (worker) | Record corrected snapshot proof/closure withEXCEEDED | 79366 | 79366 | +0 |
+| This commit | Integrate corrected snapshot while retaining failed history | 79366 | 79366 | +0 |
