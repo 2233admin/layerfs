@@ -126,6 +126,8 @@ comparison or release-admission claim. Durable is
 
 | H-25 (harness) | Historical fork-point atc79eb607f | Native selected-root/all-Branch proof PASS, but Python full ordered ACK transcript check FAIL | JSON-sorted closed graph was serialized alphabetically a,b,initial,trunk rather than original initial,trunk,a,b | `2f7160c92` | Sorted-JSON regression fails at parent for both compact producers; final42 scoped checks plus exact retained30ACK/15distinct/5Branch corrected-order check PASS; strict checker unchanged |
 
+| H-26 (harness/counting) | Completed compact branch telemetry | Exact count summaries unavailable despite all original source observation frames retained | Mapper did not classify ordinary Sandbox commands with authenticated nonadvancing Control counters | Workerdf901bfd0 / this commit | Parent RED, final6 worker and6 integrated count guards PASS; separately bound original pre-proof prefixes qualify162/2844/12628 and216/3806/16873 without replay |
+
 H-1 and H-2 are harness faults, not product correctness or performance defects.
 The original file-identity checker remains intact; no product source changed.
 
@@ -4855,4 +4857,57 @@ these failed attempts. Every original case is present; no later batch began.
 
 | `a4756a0e6` (worker) | Import exact reviewed report reader only | 79370 | 79370 | +0 |
 | `087191e1` (worker) | Commit original-source five-case multi pair | 79370 | 79370 | +0 |
-| This commit | Import all multi-workspace failures and exact retained custody | 79370 | 79370 | +0 |
+| `cb3a003ac` | Import all multi-workspace failures and exact retained custody | 79370 | 79370 | +0 |
+
+
+### Batch 5 authenticated empty command ranges and offline count supplement, 2026-10-11
+
+Source-backed read-only diagnosis found the first ordinary command at sequence16,
+Trunk1/channel0 had exact send4→4 and receive4→4. Ordinary Sandbox commands
+send no filesystem Control request; treating their authenticated empty range
+as an unclassified positive range made the completed compact numeric mapper
+stop. The original pre-proof capture contains45/60 genuine numeric groups,
+plus30/40 exact empty command ranges, with complete observation-cost flags.
+No positive Control range is missing and no later proof/fence frame is included.
+
+Integrated only workerdf901bfd0 context_numeric_counts and owning external
+count tests. A pre/post AST comparison confirms all other workspace functions,
+including the H25 access serializer, remain unchanged. Ordinary empty ranges
+are explicitly correlated with same authenticated scope/channel, exact integer
+and paired unchanged send/receive counters and empty numeric identities.
+Advancing, foreign, missing and unpaired ranges remain refused. All existing
+positive-range/frame/window/observer-cost/terminal-owner guards stay intact.
+No zero counter is invented. Parent red and worker finalsix checks are retained;
+integrated finalsix guards PASS under120 s mainR4, no native/product/Docker,
+setup, sample or resource operation.
+
+A separate authenticated read-only supplement qualifies the original capture
+prefixes, without changing the original UNAVAILABLE receipts/CSV/cache status:
+
+| Original compact case | Requests | Owner jobs | Statements | Captured last event / observed call | Native terminal owners |
+| --- | ---: | ---: | ---: | --- | --- |
+| v016-branch-convergent-content-v1 | 162 | 2844 | 12628 | 274 / 49 | 1,90,172; each54requests |
+| v016-branch-fork-descendant-v1 | 216 | 3806 | 16873 | 363 / 65 | 1,90,172,258; each54requests |
+
+Original manifest, runtime and daemon frame-set equality, complete observer
+cost and distinct terminal connections pass. Raw receipt/runtime/daemon hashes
+remain identical, and later verification/ControlEndSession events stay outside
+the declared prefix. Numeric cache eligibility is still INELIGIBLE. This is
+an offline count-availability supplement, not a new timing/sample or speed
+claim. Owned raw compact-counts-qualified-supplement/supplement.json SHA-256
+5546b4ebdeccd9381ae2a8a9b695e781d920a7b5c844fb64f5b44d3022fb2b83;
+count-mapper-final-handoff.json0d8ff16569b77b7aeb02a22621fb4b2d64023a0811a7a22859ddca5282e23ba3
+in edit-capped2026-10-11-batch-5-branch-1bc68451d binds all original/final
+source, tests, qualified arithmetic, immutable raw input and exact LOC.
+Original family CSVs remain historical; the supplement supplies their exact
+otherwise unavailable completed-case counts. Root integration checks live in
+2026-10-11-context-count-mapper-integration.
+
+All actual batch5 execution is now closed; final historical pair/composite
+handoff remains to import before the batch record can close. Batch6/7 have
+not begun. No new product or workload feature is added; current global writer
+Busy semantics, strict metadata oracle failures and all failed/uncertain
+resources remain. Durable execution remains disabled.
+
+| `df901bfd0` (worker) | Correlate exact empty command Control ranges; qualify separate retained-count supplement | 79370 | 79370 | +0 |
+| This commit | Integrate isolated count mapper without changing historical execution or receipts | 79370 | 79370 | +0 |

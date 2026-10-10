@@ -11,6 +11,19 @@ from engine import workspace
 
 
 class ContextCounts(unittest.TestCase):
+    def ordinary_command(self, events):
+        before = next(index for index, row in enumerate(events)
+                      if row['event'] == 'commit' and row['fields']['channel'] == 0)
+        fields = copy.deepcopy(events[before]['fields'])
+        fields.update(control_send_records_before=5, control_send_records_after=5,
+                      control_receive_records_before=5, control_receive_records_after=5,
+                      role='a', local_step='1')
+        command = {'event': 'command', 'sequence': 0, 'fields': fields}
+        events.insert(before, command)
+        for index, row in enumerate(events, 1):
+            row['sequence'] = index
+        return command
+
     def fixture(self):
         scopes = ['01' * 32, '02' * 32]
         daemon = (1, 2, 3, 4)
@@ -54,6 +67,55 @@ class ContextCounts(unittest.TestCase):
         self.assertEqual(result['totals'], {'requests': 300, 'owner_jobs': 34, 'statements': 64})
         self.assertEqual(result['observer'], {'jobs': 6, 'statement_executions': 6})
         self.assertEqual(len(result['kernel_connections']), 2)
+
+    def test_authenticated_empty_command_range_remains_correlated_without_observer_cost(self):
+        groups, values, events = self.fixture()
+        command = self.ordinary_command(events)
+        with patch.object(workspace.counts, 'decode', side_effect=lambda group: values[workspace.counts.identity(group)]):
+            result = workspace.context_numeric_counts(groups, events)
+        self.assertEqual(result['totals'], {'requests': 300, 'owner_jobs': 34, 'statements': 64})
+        self.assertEqual(result['observer'], {'jobs': 6, 'statement_executions': 6})
+        correlated = next(row for row in result['correlation'] if row['event'] == 'command')
+        self.assertEqual(correlated['event_sequence'], command['sequence'])
+        self.assertEqual(correlated['identities'], [])
+        self.assertEqual(correlated['control_range'], {
+            'scope': command['fields']['scope'], 'send': [5, 5], 'receive': [5, 5],
+            'classification': 'authenticated ordinary command with no Control call'})
+
+    def test_command_advanced_missing_foreign_or_unpaired_ranges_are_refused(self):
+        variants = [
+            {'control_send_records_after': 6},
+            {'control_receive_records_after': 6},
+            {'control_receive_records_before': 4, 'control_receive_records_after': 4},
+            {'control_receive_records_before': True},
+            {'control_receive_records_after': None},
+            {'control_send_records_before': 4, 'control_send_records_after': 4},
+            {'scope': None}, {'scope': '03' * 32}, {'channel': 2},
+        ]
+        for changed in variants:
+            with self.subTest(changed=changed):
+                groups, values, events = self.fixture()
+                command = self.ordinary_command(events)
+                command['fields'].update(changed)
+                with patch.object(workspace.counts, 'decode', side_effect=lambda group: values[workspace.counts.identity(group)]):
+                    with self.assertRaises(ValueError):
+                        workspace.context_numeric_counts(groups, events)
+
+    def test_empty_unknown_event_and_extra_authentic_group_remain_refused(self):
+        groups, values, events = self.fixture()
+        command = self.ordinary_command(events)
+        command['event'] = 'unclassified'
+        with patch.object(workspace.counts, 'decode', side_effect=lambda group: values[workspace.counts.identity(group)]):
+            with self.assertRaisesRegex(ValueError, 'unclassified'):
+                workspace.context_numeric_counts(groups, events)
+        command['event'] = 'command'
+        key = next(key for key in groups if key[2] == 9)
+        extra = (key[0], key[1], 999)
+        groups[extra] = [{**groups[key][0], 'call': 999}]
+        values[extra] = {**values[key], 'identity': extra}
+        with patch.object(workspace.counts, 'decode', side_effect=lambda group: values[workspace.counts.identity(group)]):
+            with self.assertRaisesRegex(ValueError, 'fully acknowledged'):
+                workspace.context_numeric_counts(groups, events)
 
     def test_missing_original_group_or_shared_scope_is_refused(self):
         groups, values, events = self.fixture()

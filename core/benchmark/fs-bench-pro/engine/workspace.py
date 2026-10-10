@@ -2127,10 +2127,19 @@ def context_numeric_counts(groups, events):
             raise ValueError('exact per-channel original completed send ranges differ')
         codes = counts.OPERATIONS.get(event['event'])
         if codes is None:
-            if event['event'] not in ('fork', 'history_finished') or after != before + 1:
-                raise ValueError('unclassified original context control range')
-            previous[channel] = after
-            continue
+            if event['event'] == 'command':
+                receive_before = fields.get('control_receive_records_before')
+                receive_after = fields.get('control_receive_records_after')
+                if (fields.get('scope') is None or after != before
+                        or type(receive_before) is not int or type(receive_after) is not int
+                        or receive_before != before or receive_after != after):
+                    raise ValueError('authenticated ordinary command must retain an exact empty Control range')
+                codes = ()
+            else:
+                if event['event'] not in ('fork', 'history_finished') or after != before + 1:
+                    raise ValueError('unclassified original context control range')
+                previous[channel] = after
+                continue
         if after - before != len(codes):
             raise ValueError('exact successful facade call geometry differs')
         identities = []
@@ -2140,8 +2149,13 @@ def context_numeric_counts(groups, events):
             if len(matches) != 1 or matches[0] in mapped:
                 raise ValueError('original context observed call missing, duplicated or substituted')
             identities.append(matches[0]); mapped.add(matches[0])
-        correlation.append({'event_sequence': event['sequence'], 'event': event['event'],
-                            'key': fields.get('key'), 'channel': channel, 'identities': identities})
+        correlated = {'event_sequence': event['sequence'], 'event': event['event'],
+                      'key': fields.get('key'), 'channel': channel, 'identities': identities}
+        if event['event'] == 'command':
+            correlated['control_range'] = {'scope': fields['scope'], 'send': [before, after],
+                'receive': [receive_before, receive_after],
+                'classification': 'authenticated ordinary command with no Control call'}
+        correlation.append(correlated)
         previous[channel] = after
     if mapped != set(decoded):
         raise ValueError('original concurrent numeric groups are not fully acknowledged')
