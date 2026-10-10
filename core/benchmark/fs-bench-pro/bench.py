@@ -41,6 +41,9 @@ def main(argv=None):
     running.add_argument("--out", type=Path, required=True)
     verifying = commands.add_parser("verify", help="verify retained observations without replaying a sample")
     verifying.add_argument("run", type=Path)
+    verifying.add_argument("--membership-audit", type=Path,
+                           help="fresh offline census of copies of retained closed Stores; no sample replay")
+    verifying.add_argument("--build", type=Path)
     reporting = commands.add_parser("report", help="generate the two CSVs and report-template table")
     reporting.add_argument("run", type=Path)
     parity = commands.add_parser("parity", help="original fixture/operation/oracle parity for a ported family")
@@ -103,7 +106,15 @@ def main(argv=None):
             failed |= result["status"] != "PASS"
         return 1 if failed else 0
     if args.command == "verify":
-        from engine import fixtures, oracle, receipts
+        from engine import fixtures, oracle, project, receipts
+        if args.membership_audit is not None:
+            if args.build is None:
+                parser.error("a membership audit requires --build")
+            result = project.audit_membership(args.run, args.build, args.membership_audit)
+            print(json.dumps(result, indent=2))
+            return 1 if result["status"] != "PASS" else 0
+        if args.build is not None:
+            parser.error("--build is selected only with --membership-audit")
         selection, recorded = receipts.load_run(args.run)
         results = []
         for case in selection["cases"]:

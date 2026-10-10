@@ -77,6 +77,16 @@ class WorkspaceEvidence(unittest.TestCase):
         self.assertEqual(cache.validate("B", good), "INELIGIBLE")
         self.assertEqual(cache.validate("B", {**good, "own_write_cache_state": "UNAVAILABLE"}), "INELIGIBLE")
 
+    def test_original_group_deadline_is_shared_and_never_extended_per_call(self):
+        with patch.object(workspace.time, "monotonic", return_value=10.0):
+            self.assertEqual(workspace.operation_deadline(12.0, 120), 12.0)
+            self.assertEqual(workspace.operation_deadline(None, 15), 25.0)
+        with patch.object(workspace.time, "monotonic", return_value=11.5):
+            self.assertEqual(workspace.operation_deadline(12.0, 120), 12.0)
+        with patch.object(workspace.time, "monotonic", return_value=12.0):
+            with self.assertRaisesRegex(TimeoutError, "group watchdog expired"):
+                workspace.operation_deadline(12.0, 120)
+
     def test_completed_metrics_collection_keeps_a_separate_graph_failure(self):
         from types import SimpleNamespace
         with tempfile.TemporaryDirectory() as directory:

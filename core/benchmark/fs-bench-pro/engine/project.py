@@ -7,6 +7,72 @@ from pathlib import Path
 from . import identity, receipts
 
 
+def audit_membership(run, build_folder, output):
+    """Supplement prior byte proofs with a new census; original exports stay intact."""
+    import shutil
+    from . import fixtures
+    current = identity.source_identity()
+    build = identity.load_build(build_folder)
+    selection, recorded = receipts.load_run(run)
+    if selection["family"] not in fixtures.WORKSPACE_FAMILIES:
+        raise ValueError("membership audit needs a complete mounted-family run")
+    output = Path(output).resolve()
+    if not output.is_relative_to((identity.ROOT / "benchmark-results/fs-bench-pro").resolve()):
+        raise ValueError("audit output must be under benchmark-results/fs-bench-pro")
+    output.mkdir(parents=True, exist_ok=False)
+    result = {"schema": "fs-bench-pro-membership-audit-v1", "status": "PASS",
+              "identity": current, "original_run": str(Path(run).resolve()),
+              "original_source_commit": selection["source_commit"], "samples": 0,
+              "runtime_sha256": build["binaries"]["runtime"]["sha256"], "cases": []}
+    for case in selection["cases"]:
+        folder = output / case["id"]
+        folder.mkdir()
+        row = {"case": case["id"], "status": "FAIL", "samples": 0}
+        try:
+            old = recorded[case["id"]]
+            if old["proof_status"] != "PASS" or old["custody"] != "KNOWN_STOP" or old["cleanup"] != "Gone":
+                raise ValueError("original complete byte proof and terminal custody unavailable")
+            if old["product_tree"] != current["product_tree"]:
+                raise ValueError("membership audit cannot substitute a changed product")
+            prepared = fixtures.load(old["prepared"], case["fixture"]["recipe"])
+            original = Path(run).resolve() / case["id"]
+            sealed = original / "graph-store/store.sqlite"
+            before = identity.sha256(sealed)
+            copied = folder / "store.sqlite"
+            shutil.copy2(sealed, copied)
+            if identity.sha256(copied) != before:
+                raise ValueError("offline census copy differs from retained closed Store")
+            row.update(original_store_sha256=before, acknowledged_root=old["commit"]["fields"]["root"])
+            argv = [build["binaries"]["runtime"]["path"], "verify-membership", "--socket", build["socket"],
+                    "--volume", "unused-offline-census", "--daemon", build["binaries"]["daemon"]["path"],
+                    "--manifest", prepared["provision"]["manifest"], "--sealed", str(copied),
+                    "--case", case["v016_case"], "--receipt", str(folder / "census.events.jsonl"),
+                    "--uid", str(prepared["source_uid"]), "--gid", str(prepared["source_gid"])]
+            row["attempt"] = receipts.command(argv, folder, "membership-census", 120,
+                environment={**os.environ, "LAYERFS_CONSTRUCTION_WORKERS": "1"})
+            events = [json.loads(line) for line in (folder / "census.events.jsonl").read_text().splitlines()]
+            proofs = [event for event in events if event["event"] == "workspace_verified"]
+            if len(proofs) != 1 or events[-1]["event"] != "finished" or proofs[0]["fields"]["root"] != row["acknowledged_root"]:
+                raise ValueError("offline census root differs from exact original Commit acknowledgement")
+            row.update(status="PASS", proof=proofs[0],
+                       scope="exhaustive current inode-table census, complete paths/metadata/aliases; prior byte proof reused")
+        except BaseException as error:
+            row.update(original_failure=str(error), original_failure_type=type(error).__name__)
+        finally:
+            try:
+                receipts.verify_manifest(Path(run) / case["id"])
+            except BaseException as error:
+                row.update(status="FAIL", independent_original_evidence_failure=str(error))
+            receipts.write_new(folder / "audit.json", row)
+            receipts.manifest(folder)
+            result["cases"].append(row)
+            if row["status"] != "PASS":
+                result["status"] = "FAIL"
+    receipts.write_new(output / "audit.json", result)
+    receipts.manifest(output)
+    return result
+
+
 def provision(source, volume, folder, build):
     folder = Path(folder)
     folder.mkdir(parents=True, exist_ok=False)

@@ -76,7 +76,7 @@ comparison or release-admission claim. Durable is
 | H-1 | C07 | Workload and verifier passed, unmount returned, residency helper refused changed file identity | Harness inspected overlay while automatic post-unmount reclamation was still mutating backing | `a1f2c259c` | `test_backing_observer_waits_for_original_reclamation_to_finish` |
 
 | H-3 | Generic mounted pilot proofs and prospective SDK proofs | Reachable path walk omitted exhaustive inode-table membership from original canonical verifier | Runtime compared declared paths/bytes but never enumerated current inode table | `37ec6826b` | edit_oracle_complete_membership_accepts_exact_and_rejects_unreachable_or_missing_rows |
-| H-4 | Prospective B/C Commit eligibility | Zero source demands could credit own-written backing without independent pre-Commit coldness | Cache classifier checked source demand/lifetime but not own-written phase inputs | This commit | test_zero_source_demands_cannot_credit_own_written_commit_input |
+| H-4 | Prospective B/C Commit eligibility | Zero source demands could credit own-written backing without independent pre-Commit coldness | Cache classifier checked source demand/lifetime but not own-written phase inputs | `98b6b7260` | test_zero_source_demands_cannot_credit_own_written_commit_input |
 | H-2 | 36 batch-1 reviewed registrations | source_commit was an annotated tag object; parity accepted it and rejected the actual peeled commit | git rev-parse on an annotated reference returns the tag object unless peeled | `222526fa0` | test_review_identity.py rejects the tag through both parity routes, admits the peeled commit and checks every ported review |
 
 H-1 and H-2 are harness faults, not product correctness or performance defects.
@@ -1185,4 +1185,37 @@ Shared build/remaining final owning checks and pilot membership audits remain
 pending, with no SDK case setup/sample started. Production LOC79,366->79,366
 (delta+0), same pinned absent-aware method; reference absent retiredR9c.
 
-| This commit | Guard own-write cache qualification and preserve failed-proof metrics | 79366 | 79366 | +0 |
+| `98b6b7260` | Guard own-write cache qualification and preserve failed-proof metrics | 79366 | 79366 | +0 |
+
+
+Batch 2 shared execution route: sealed builds now compile/archive both host and
+pinned-image edit writers, and compilation reuse binds every current recipe and
+writer source. Original native SDK fixtures and expected states use the shared
+frozen model; native preflight invokes the original full-byte verifier through
+the edit tool, and each prepared helper seal includes the actual Linux writer.
+The three committed SDK edit families are routed through the existing ordinary
+Bash/Commit path. Capped cases retain their frozen 2,000 ms combined edit/Commit/
+End watchdog; command, Commit, observer snapshot and End share one absolute
+stop. Per-operation watchdogs never extend that group. Setup/warmup/mount/proof
+are outside the original group. No SDK sample has begun.
+
+`bench.py verify <run> --membership-audit <fresh-output> --build <seal>` adds
+only the outstanding H-3 census over independent copies of retained stopped
+Store exports. It requires the prior byte proof, Gone, known Stop, unchanged
+product, sealed prepared manifest, exact original acknowledged root, and
+unchanged old evidence hashes after each audit. It records zero samples and
+leaves failed audit copies visible. Pilot audits remain pending until the
+new sealed build exists; this commit claims no new oracle result.
+
+Scoped final checks under separate 120 s locks: workspace evidence/cache/group
+11 tests PASS 0.058 s; fixtures four PASS 0.011 s; offline audit copy/root-binding
+one test (two root outcomes) PASS 0.013 s; build identity four PASS at corrected
+import scope. The first added build-identity test invocation failed to import
+the engine when run alone; use the same explicit module path as the owning
+suite, preserving that failure in tool output. It now rejects changed model
+and writer inputs before old executable use. Whitespace check PASS. Native
+sealed-writer qualification, actual build and pilot census remain pending.
+No product change. Production LOC 79,366 -> 79,366 (delta +0), pinned staged
+absent-aware method; reference absent (retired R9c; last counted 65,417).
+
+| This commit | Seal SDK writer routing, frozen group watchdog and offline pilot census | 79366 | 79366 | +0 |

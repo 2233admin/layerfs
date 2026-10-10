@@ -1,17 +1,31 @@
 """Build admission rejects dirty/untracked source before external operations."""
-import importlib.util
+import json
 from pathlib import Path
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
 
 BENCH = Path(__file__).resolve().parents[2]
-spec = importlib.util.spec_from_file_location("identity", BENCH / "engine/identity.py")
-identity = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(identity)
+sys.path.insert(0, str(BENCH))
+from engine import identity
 
 
 class BuildIdentity(unittest.TestCase):
+    def test_changed_edit_model_or_writer_refuses_an_old_build_before_binary_use(self):
+        from engine import receipts
+        for name in ("core/benchmark/fs-bench-pro/engine/recipes/edit_model.rs",
+                     "core/benchmark/fs-bench-pro/writers/edit.rs"):
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
+                folder = Path(directory)
+                (folder / "build.json").write_text(json.dumps({"identity": {"files": {name: "old"}},
+                                                               "binaries": {}}))
+                with patch.object(receipts, "verify_manifest"), \
+                        patch.object(identity, "source_identity", return_value={"files": {name: "changed"}}), \
+                        patch.object(identity, "sha256", side_effect=AssertionError("cannot use old executable")):
+                    with self.assertRaisesRegex(ValueError, "build inputs differ"):
+                        identity.load_build(folder)
+
     def test_dirty_tracked_source_is_refused_before_hashing(self):
         with patch.object(identity, "git", return_value="core/crates/changed.rs"), \
                 patch.object(identity, "sha256", side_effect=AssertionError("must not seal dirty input")):

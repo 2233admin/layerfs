@@ -281,6 +281,15 @@ def collect_family_observations(runtime, row, build, output, bindings):
     row["cache"]["status"] = cache.validate("B", row["cache"])
 
 
+def operation_deadline(group_stop, seconds):
+    stop = time.monotonic() + seconds
+    if group_stop is not None:
+        if time.monotonic() >= group_stop:
+            raise TimeoutError("original edit/Commit/End group watchdog expired")
+        stop = min(stop, group_stop)
+    return stop
+
+
 def one_family_case(family, case, prepared_folder, build_folder, output):
     """Single ordinary call/Commit through the same SDK/Sandbox machinery."""
     current = identity.source_identity()
@@ -348,10 +357,16 @@ def one_family_case(family, case, prepared_folder, build_folder, output):
         mounted.add(selected)
         bindings["measured_mount_attach"] = endpoint(mount)
         row["phases"]["mount_ns"] = mount["span"]["duration_ns"]
-        command = runtime.send("command", selected, script(output, "command.sh", body), deadline=time.monotonic() + 120)
+        group_ms = case["budget"].get("edit_commit_end_watchdog_ms")
+        group_stop = time.monotonic() + group_ms / 1000 if group_ms is not None else None
+        row["edit_commit_end_group"] = {"watchdog_ms": group_ms,
+                                       "scope": "ordinary edit, Commit and terminal unmount; excludes measured mount/setup/warmup/proof"}
+        operation_seconds = case["budget"].get("operation_watchdog_ms", 120000) / 1000
+        command = runtime.send("command", selected, script(output, "command.sh", body),
+                               deadline=operation_deadline(group_stop, operation_seconds))
         row["phases"]["command_ns"] = command["span"]["duration_ns"]
         row["cache"]["commit_started_monotonic_ns"] = time.monotonic_ns()
-        committed = runtime.send("commit", selected, deadline=time.monotonic() + 120)
+        committed = runtime.send("commit", selected, deadline=operation_deadline(group_stop, operation_seconds))
         row["phases"]["commit_ns"] = committed["span"]["duration_ns"]
         row["commit"] = committed
         row["cache"].update(has_own_write_input=committed["fields"]["commit_kind"] == "Committed",
@@ -359,9 +374,9 @@ def one_family_case(family, case, prepared_folder, build_folder, output):
                             own_write_cache_reason="no independent pre-Commit cold backing/metadata observation; own-write warmth is not eligible")
         if committed["fields"]["commit_kind"] != case["expected_commit"]:
             raise ValueError("original known Commit outcome differs from frozen mutation/read-only case")
-        runtime.send("snapshot", selected, deadline=time.monotonic() + 15)
+        runtime.send("snapshot", selected, deadline=operation_deadline(group_stop, 15))
         bindings["command_end_status"] = endpoint(next(event for event in reversed(runtime.rows) if event["event"] == "workspace_status"))
-        end = runtime.send("unmount", selected, deadline=time.monotonic() + 15)
+        end = runtime.send("unmount", selected, deadline=operation_deadline(group_stop, 15))
         mounted.remove(selected)
         row["phases"]["unmount_ns"] = end["span"]["duration_ns"]
         clock.finish(time.monotonic_ns())

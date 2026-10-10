@@ -13,7 +13,8 @@ MTIME_NS = 1_700_000_000_000_000_000
 BIG_BYTES = 64 * 1024 * 1024
 CELL_RECIPES = {f"C{n:02}": "big64m" if n in (9, 10, 11) else "empty" for n in range(1, 13)}
 NAMESPACE_RECIPES = ("namespace-100-compact-v3", "namespace-1000-compact-v3", "namespace-10000", "namespace-100000")
-WORKSPACE_FAMILIES = ("payload_create_read", "tiny_file_churn", "namespace_mutation")
+WORKSPACE_FAMILIES = ("payload_create_read", "tiny_file_churn", "namespace_mutation",
+                      "edit_length_preserving", "edit_length_changing", "edit_length_changing_capped")
 
 
 def family_case(recipe):
@@ -197,7 +198,10 @@ def prepare_workspace(recipe, folder, build_folder):
     authored = receipts.command([writer, "expected", case["v016_case"], str(expected)], folder, "native-expected", 120)
     expectation = json.loads(Path(authored["stdout"]).read_text())
     def original_check(root, step, label):
-        proof = receipts.command([build["binaries"]["workload-host"]["path"], "workspace-verify-tree", case["v016_case"], "1", str(step)],
+        argv = ([build["binaries"]["edit-host"]["path"], "verify", case["v016_case"], str(step)]
+                if case.get("sdk_scenario") else
+                [build["binaries"]["workload-host"]["path"], "workspace-verify-tree", case["v016_case"], "1", str(step)])
+        proof = receipts.command(argv,
                                  folder, label, 120, cwd=root)
         return dict(line.split("=", 1) for line in Path(proof["stdout"]).read_text().splitlines())
     native = {"fixture": original_check(source, 0, "original-fixture-check"),
@@ -208,6 +212,8 @@ def prepare_workspace(recipe, folder, build_folder):
     helpers = assets(folder / "code")
     copies = [(Path(build["binaries"]["workload-linux"]["path"]), "writers/workload"),
               (identity.ROOT / "core/benchmark/fs-bench-pro/families" / family["family"] / "workload.sh", "workload.sh")]
+    if case.get("sdk_scenario"):
+        copies.append((Path(build["binaries"]["edit-linux"]["path"]), "writers/edit"))
     for origin, relative in copies:
         target = Path(helpers["root"]) / relative
         target.parent.mkdir(parents=True, exist_ok=True)
