@@ -19,7 +19,7 @@ comparison or release-admission claim. Durable is
 | 0.3 Case catalogue | COMPLETE | `f182e9a63`; prerequisite correction `30b798192` | Stage 0.4 reproducible engine |
 | 0.4 Reproducible engine | CLOSED: functional proof complete; exact reproduction FAILED C10/C12 | Cell-route correction `bb8e07df8`; build support `c496025fc`; oracle support `7a27a4f26`; fixture support `516c2f009`; workspace/report support `358eca082`; cleanup-observer correction `a1f2c259c` | Begin batch 1 under failed-reproduction closure recorded below |
 | 1 Pilot | COMPLETE: 36 functional/proof/clean-close passes; 7 numeric PASS, 29 INELIGIBLE | Init `c1d7dd0e8`/`39bbcbd6b`; payload `200f81493`/`c1d9b6c58`; parallel routing `b3c96ecb1`; tiny `36849bcc2`/`d6e0ef952`; namespace `98b14b233`/`be1f56a23`; H-2 fix `222526fa0`; closure in this commit | Begin batch 2, retaining all original receipts/cache dispositions |
-| 2 Edits | READY | — | Port five original families with exact positional writes; no batch-2 sample started |
+| 2 Edits | IN_PROGRESS | Shared model in this commit; isolated preserving/changing/capped registrations pending integration | Compose exact writer/current-format oracle, seal build, parity and run; no batch-2 sample started |
 | 3 Trees and tools | PENDING | — | Wait for batch 2 completion |
 | 4 History on one branch | PENDING | — | Wait for batch 3 completion |
 | 5 Branches and Workspaces | PENDING | — | Wait for batch 4; verify existing P-1 SDK methods |
@@ -930,4 +930,60 @@ This closure changes documents only, reusing all final-source scoped checks.
 Production LOC 79,366 -> 79,366 (delta +0), same pinned absent-aware method;
 reference absent (retired R9c, last counted 65,417).
 
-| This commit | Close all four pilot families and corrected source-pin parity | 79366 | 79366 | +0 |
+| `d4314ed62` | Close all four pilot families and corrected source-pin parity | 79366 | 79366 | +0 |
+
+Batch 2 / shared native edit model: the original SDK scenario registries and
+payload algebra now define the same native payload.bin input/final trees for
+preserving, changing, canonical-count and capped families. Original start/
+delete/replacement lengths, existing capped inputs, payload generators/digests
+and exact final lengths are reused directly from frozen product-neutral Rust.
+The native fixture recipe accepts these cases through one shared adapter; it
+keeps the original full materialization/metadata/manifest/digest checks and
+explicitly validates the original fixture byte SHA. Existing ordinary cases
+continue through their unchanged original expected-state route. No product
+package or retired encoder is compiled or restored.
+
+The host native tool compiles with rustup1.85.1 and all repository ARM64 flags
+under the main120s lock (4 s). Its native 1MiB overwrite-head fixture and
+independent expected state qualify: exact original fixtureSHA
+d7dfe3d2828aceb85177e6efbeb600f23672a326c902e525e401c1545bb05bdc,
+replacementSHA faca857b3e7f8b1b8f46c19b1625a1b9995248ae9ac85eae672b85fbc9932375,
+all 1,044,480 suffix bytes unchanged, root0750/file0640 and fixed mtime
+1700000000000000000 ns. This is native-only preparation/model qualification,
+with no Store, SDK call, mount or measured product sample. Raw evidence:
+benchmark-results/fs-bench-pro/2026-10-10-batch-2-edit-model-checks/.
+
+Three isolated workers author preserving12, changing32 and capped5 cases.
+The added managed capped worktree is
+/Users/yifanxu/.codex/worktrees/fs-bench-pro-edit-capped/layerfs, from
+d4314ed62, with its own ignored lock script/targets. Existing pilot worktrees
+use new codex/ edit branches from that same checkpoint while retaining pilot
+branches and every ignored receipt/master. The preserving worker additionally
+owns only shared writers/edit.rs and its native qualification test; the
+changing worker additionally owns only new runtime/src/edit_oracle.rs and
+external tests for current untouched-payload/source-offset preservation and
+complete inode-table membership. The lead owns model/engine/runtime integration,
+production bugs and ledger. This independent ownership avoids overlap while
+shared source is composed. All dependent setup/sampling remains unattempted.
+
+Original capped-v1 has a two-second SDK-edit+Commit+End group watchdog. It will
+remain one two-second group for the ordinary edit+Commit+terminal unmount,
+excluding setup/warmup/mount/proof, with actual expiration retained. It is
+never substituted with a120s operation window. Standard SDK fixture rootmtime
+was not fixed in the old native preparation, so deterministic rootmtime is an
+explicit difference for the three direct SDK families. Capped inherited
+preparation already fixed rootmtime; it needs no such difference. All input
+root modes are0750 and payload modes0640. A mistaken pre-sample reviewer
+assumption of0755 was checked against both frozen sources and actual native
+stat, withdrawn and caused no source change or sample.
+
+The capped review identified original complete inode-index membership beyond
+reachable paths. The lead will restore that current-format check and audit
+retained pilot Store exports separately, without replaying measurements or
+altering sealed receipts; no completeness claim is silently widened.
+Final shared binary/native/runtime qualifications and case parity await the
+writer/oracle integration; none is claimed complete here. Production LOC
+79,366 -> 79,366 (delta+0), same pinned absent-aware method; reference absent
+(retired R9c, last counted65,417).
+
+| This commit | Add original SDK-edit native fixture and expected-tree algebra | 79366 | 79366 | +0 |
