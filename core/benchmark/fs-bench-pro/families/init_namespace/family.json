@@ -54,7 +54,7 @@
       },
       "port_review": {
         "reviewer": "Codex",
-        "source_commit": "ae3310fada4a1fe35cb99ab02270b7538a0d03f7",
+        "source_commit": "d296981ace76fe751bebf00dee52818fe18a3eef",
         "files": {
           "benchmark/fs-bench-pro/src/infra.rs": "6907c38db1f4fd0ae3ef899a80262fef5c31acdf839a4ec0a84b7a7c3131e176",
           "benchmark/fs-bench-pro/src/main.rs": "e85e4ff6123a1fcbc1c3a36e0a328bb8695334ba21b49efb72d429aaf35f88c7",
@@ -62,7 +62,8 @@
           "benchmark/fs-bench-pro/families/init_namespace/mod.rs": "288656cae0d6a31745505c039775f59b416533b877803fcf90179c40897f3b34"
         },
         "operations": "src/infra.rs performance dispatcher selects namespace_init_diagnostic (Init only), not namespace_performance_case (historical edit/Commit path). Transcribed fixture write loop from create_namespace_fixture uses original namespace_plan, NamespaceContentStream, fixed metadata and namespace_tree_digest. Fresh current public Init/seal once, separate process reopens exact first Branch/root and checks original namespace_verify_fast sample set.",
-        "oracle_coverage": "Same imported totals, root reopen equality, sampled paths, kinds, modes, mtime, file lengths and exact <=64KiB prefixes; additionally checks persisted first Branch."
+        "oracle_coverage": "Same imported totals, root reopen equality, sampled paths, kinds, modes, mtime, file lengths and exact <=64KiB prefixes; additionally checks persisted first Branch.",
+        "source_tag_object": "ae3310fada4a1fe35cb99ab02270b7538a0d03f7"
       }
     },
     {
@@ -117,7 +118,7 @@
       },
       "port_review": {
         "reviewer": "Codex",
-        "source_commit": "ae3310fada4a1fe35cb99ab02270b7538a0d03f7",
+        "source_commit": "d296981ace76fe751bebf00dee52818fe18a3eef",
         "files": {
           "benchmark/fs-bench-pro/src/infra.rs": "6907c38db1f4fd0ae3ef899a80262fef5c31acdf839a4ec0a84b7a7c3131e176",
           "benchmark/fs-bench-pro/src/main.rs": "e85e4ff6123a1fcbc1c3a36e0a328bb8695334ba21b49efb72d429aaf35f88c7",
@@ -125,7 +126,8 @@
           "benchmark/fs-bench-pro/families/init_namespace/mod.rs": "288656cae0d6a31745505c039775f59b416533b877803fcf90179c40897f3b34"
         },
         "operations": "src/infra.rs performance dispatcher selects namespace_init_diagnostic (Init only), not namespace_performance_case (historical edit/Commit path). Transcribed fixture write loop from create_namespace_fixture uses original namespace_plan, NamespaceContentStream, fixed metadata and namespace_tree_digest. Fresh current public Init/seal once, separate process reopens exact first Branch/root and checks original namespace_verify_fast sample set.",
-        "oracle_coverage": "Same imported totals, root reopen equality, sampled paths, kinds, modes, mtime, file lengths and exact <=64KiB prefixes; additionally checks persisted first Branch."
+        "oracle_coverage": "Same imported totals, root reopen equality, sampled paths, kinds, modes, mtime, file lengths and exact <=64KiB prefixes; additionally checks persisted first Branch.",
+        "source_tag_object": "ae3310fada4a1fe35cb99ab02270b7538a0d03f7"
       }
     },
     {
@@ -180,7 +182,7 @@
       },
       "port_review": {
         "reviewer": "Codex",
-        "source_commit": "ae3310fada4a1fe35cb99ab02270b7538a0d03f7",
+        "source_commit": "d296981ace76fe751bebf00dee52818fe18a3eef",
         "files": {
           "benchmark/fs-bench-pro/src/infra.rs": "6907c38db1f4fd0ae3ef899a80262fef5c31acdf839a4ec0a84b7a7c3131e176",
           "benchmark/fs-bench-pro/src/main.rs": "e85e4ff6123a1fcbc1c3a36e0a328bb8695334ba21b49efb72d429aaf35f88c7",
@@ -188,7 +190,8 @@
           "benchmark/fs-bench-pro/families/init_namespace/mod.rs": "288656cae0d6a31745505c039775f59b416533b877803fcf90179c40897f3b34"
         },
         "operations": "src/infra.rs performance dispatcher selects namespace_init_diagnostic (Init only), not namespace_performance_case (historical edit/Commit path). Transcribed fixture write loop from create_namespace_fixture uses original namespace_plan, NamespaceContentStream, fixed metadata and namespace_tree_digest. Fresh current public Init/seal once, separate process reopens exact first Branch/root and checks original namespace_verify_fast sample set.",
-        "oracle_coverage": "Same imported totals, root reopen equality, sampled paths, kinds, modes, mtime, file lengths and exact <=64KiB prefixes; additionally checks persisted first Branch."
+        "oracle_coverage": "Same imported totals, root reopen equality, sampled paths, kinds, modes, mtime, file lengths and exact <=64KiB prefixes; additionally checks persisted first Branch.",
+        "source_tag_object": "ae3310fada4a1fe35cb99ab02270b7538a0d03f7"
       }
     },
     {
@@ -243,7 +246,7 @@
       },
       "port_review": {
         "reviewer": "Codex",
-        "source_commit": "ae3310fada4a1fe35cb99ab02270b7538a0d03f7",
+        "source_commit": "d296981ace76fe751bebf00dee52818fe18a3eef",
         "files": {
           "benchmark/fs-bench-pro/src/infra.rs": "6907c38db1f4fd0ae3ef899a80262fef5c31acdf839a4ec0a84b7a7c3131e176",
           "benchmark/fs-bench-pro/src/main.rs": "e85e4ff6123a1fcbc1c3a36e0a328bb8695334ba21b49efb72d429aaf35f88c7",
@@ -251,7 +254,8 @@
           "benchmark/fs-bench-pro/families/init_namespace/mod.rs": "288656cae0d6a31745505c039775f59b416533b877803fcf90179c40897f3b34"
         },
         "operations": "src/infra.rs performance dispatcher selects namespace_init_diagnostic (Init only), not namespace_performance_case (historical edit/Commit path). Transcribed fixture write loop from create_namespace_fixture uses original namespace_plan, NamespaceContentStream, fixed metadata and namespace_tree_digest. Fresh current public Init/seal once, separate process reopens exact first Branch/root and checks original namespace_verify_fast sample set.",
-        "oracle_coverage": "Same imported totals, root reopen equality, sampled paths, kinds, modes, mtime, file lengths and exact <=64KiB prefixes; additionally checks persisted first Branch."
+        "oracle_coverage": "Same imported totals, root reopen equality, sampled paths, kinds, modes, mtime, file lengths and exact <=64KiB prefixes; additionally checks persisted first Branch.",
+        "source_tag_object": "ae3310fada4a1fe35cb99ab02270b7538a0d03f7"
       }
     }
   ]

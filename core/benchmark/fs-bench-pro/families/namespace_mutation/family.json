@@ -55,7 +55,7 @@
       },
       "port_review": {
         "reviewer": "Codex",
-        "source_commit": "ae3310fada4a1fe35cb99ab02270b7538a0d03f7",
+        "source_commit": "d296981ace76fe751bebf00dee52818fe18a3eef",
         "files": {
           "benchmark/fs-bench-pro/families/namespace_mutation/mod.rs": "b679b697280ad1b3888b1917c1acab13f17b894077f6fa63f3a6608818f1b140",
           "benchmark/fs-bench-pro/workload/ordinary_workloads.rs": "473196cbc53b8c22551253ed7739ed32b0800b267da609f215239f7d8af32695",
@@ -67,7 +67,8 @@
           "benchmark/fs-bench-pro/verify-selected.py": "4b77a64817f2c44a58f77459537bf886e83ff3e736a16c861f9079db7b2bc01e"
         },
         "operations": "Original namespace_mutation delegates fixture/expected/apply to ordinary_workloads, seed1 step0 performance body unchanged: rename source/tree-a to destination/moved-a, recursively remove source/tree-b with the original opendir/lstat/unlink/rmdir calls, then the original metadata normalization and sync completion. Compact tiers preserve 200 background files and 25 files per affected shard; mixed-v4 tiers preserve the original 2000/5000 mixed background files and 1/5 affected shards of 200 files per tree. Existing public SDK Commit once; expected Committed.",
-        "oracle_coverage": "Original mixed-v4 selected native/canonical background paths and three ranges per large file, moved subtree witness and deleted-tree absence are covered by complete original native namespace/mode/mtime/size/link-class/byte verification on a fresh post-Commit mount. Separate offline current typed/authenticated Content/Storage/History traversal compares the complete persisted semantic tree and every byte, tied to the exact acknowledged root. Current public validators replace the retired encoding grammar, declared as a format/topology difference."
+        "oracle_coverage": "Original mixed-v4 selected native/canonical background paths and three ranges per large file, moved subtree witness and deleted-tree absence are covered by complete original native namespace/mode/mtime/size/link-class/byte verification on a fresh post-Commit mount. Separate offline current typed/authenticated Content/Storage/History traversal compares the complete persisted semantic tree and every byte, tied to the exact acknowledged root. Current public validators replace the retired encoding grammar, declared as a format/topology difference.",
+        "source_tag_object": "ae3310fada4a1fe35cb99ab02270b7538a0d03f7"
       },
       "expected_commit": "Committed"
     },
@@ -124,7 +125,7 @@
       },
       "port_review": {
         "reviewer": "Codex",
-        "source_commit": "ae3310fada4a1fe35cb99ab02270b7538a0d03f7",
+        "source_commit": "d296981ace76fe751bebf00dee52818fe18a3eef",
         "files": {
           "benchmark/fs-bench-pro/families/namespace_mutation/mod.rs": "b679b697280ad1b3888b1917c1acab13f17b894077f6fa63f3a6608818f1b140",
           "benchmark/fs-bench-pro/workload/ordinary_workloads.rs": "473196cbc53b8c22551253ed7739ed32b0800b267da609f215239f7d8af32695",
@@ -136,7 +137,8 @@
           "benchmark/fs-bench-pro/verify-selected.py": "4b77a64817f2c44a58f77459537bf886e83ff3e736a16c861f9079db7b2bc01e"
         },
         "operations": "Original namespace_mutation delegates fixture/expected/apply to ordinary_workloads, seed1 step0 performance body unchanged: rename source/tree-a to destination/moved-a, recursively remove source/tree-b with the original opendir/lstat/unlink/rmdir calls, then the original metadata normalization and sync completion. Compact tiers preserve 200 background files and 25 files per affected shard; mixed-v4 tiers preserve the original 2000/5000 mixed background files and 1/5 affected shards of 200 files per tree. Existing public SDK Commit once; expected Committed.",
-        "oracle_coverage": "Original mixed-v4 selected native/canonical background paths and three ranges per large file, moved subtree witness and deleted-tree absence are covered by complete original native namespace/mode/mtime/size/link-class/byte verification on a fresh post-Commit mount. Separate offline current typed/authenticated Content/Storage/History traversal compares the complete persisted semantic tree and every byte, tied to the exact acknowledged root. Current public validators replace the retired encoding grammar, declared as a format/topology difference."
+        "oracle_coverage": "Original mixed-v4 selected native/canonical background paths and three ranges per large file, moved subtree witness and deleted-tree absence are covered by complete original native namespace/mode/mtime/size/link-class/byte verification on a fresh post-Commit mount. Separate offline current typed/authenticated Content/Storage/History traversal compares the complete persisted semantic tree and every byte, tied to the exact acknowledged root. Current public validators replace the retired encoding grammar, declared as a format/topology difference.",
+        "source_tag_object": "ae3310fada4a1fe35cb99ab02270b7538a0d03f7"
       },
       "expected_commit": "Committed"
     },
@@ -193,7 +195,7 @@
       },
       "port_review": {
         "reviewer": "Codex",
-        "source_commit": "ae3310fada4a1fe35cb99ab02270b7538a0d03f7",
+        "source_commit": "d296981ace76fe751bebf00dee52818fe18a3eef",
         "files": {
           "benchmark/fs-bench-pro/families/namespace_mutation/mod.rs": "b679b697280ad1b3888b1917c1acab13f17b894077f6fa63f3a6608818f1b140",
           "benchmark/fs-bench-pro/workload/ordinary_workloads.rs": "473196cbc53b8c22551253ed7739ed32b0800b267da609f215239f7d8af32695",
@@ -205,7 +207,8 @@
           "benchmark/fs-bench-pro/verify-selected.py": "4b77a64817f2c44a58f77459537bf886e83ff3e736a16c861f9079db7b2bc01e"
         },
         "operations": "Original namespace_mutation delegates fixture/expected/apply to ordinary_workloads, seed1 step0 performance body unchanged: rename source/tree-a to destination/moved-a, recursively remove source/tree-b with the original opendir/lstat/unlink/rmdir calls, then the original metadata normalization and sync completion. Compact tiers preserve 200 background files and 25 files per affected shard; mixed-v4 tiers preserve the original 2000/5000 mixed background files and 1/5 affected shards of 200 files per tree. Existing public SDK Commit once; expected Committed.",
-        "oracle_coverage": "Original mixed-v4 selected native/canonical background paths and three ranges per large file, moved subtree witness and deleted-tree absence are covered by complete original native namespace/mode/mtime/size/link-class/byte verification on a fresh post-Commit mount. Separate offline current typed/authenticated Content/Storage/History traversal compares the complete persisted semantic tree and every byte, tied to the exact acknowledged root. Current public validators replace the retired encoding grammar, declared as a format/topology difference."
+        "oracle_coverage": "Original mixed-v4 selected native/canonical background paths and three ranges per large file, moved subtree witness and deleted-tree absence are covered by complete original native namespace/mode/mtime/size/link-class/byte verification on a fresh post-Commit mount. Separate offline current typed/authenticated Content/Storage/History traversal compares the complete persisted semantic tree and every byte, tied to the exact acknowledged root. Current public validators replace the retired encoding grammar, declared as a format/topology difference.",
+        "source_tag_object": "ae3310fada4a1fe35cb99ab02270b7538a0d03f7"
       },
       "expected_commit": "Committed"
     },
@@ -262,7 +265,7 @@
       },
       "port_review": {
         "reviewer": "Codex",
-        "source_commit": "ae3310fada4a1fe35cb99ab02270b7538a0d03f7",
+        "source_commit": "d296981ace76fe751bebf00dee52818fe18a3eef",
         "files": {
           "benchmark/fs-bench-pro/families/namespace_mutation/mod.rs": "b679b697280ad1b3888b1917c1acab13f17b894077f6fa63f3a6608818f1b140",
           "benchmark/fs-bench-pro/workload/ordinary_workloads.rs": "473196cbc53b8c22551253ed7739ed32b0800b267da609f215239f7d8af32695",
@@ -274,7 +277,8 @@
           "benchmark/fs-bench-pro/verify-selected.py": "4b77a64817f2c44a58f77459537bf886e83ff3e736a16c861f9079db7b2bc01e"
         },
         "operations": "Original namespace_mutation delegates fixture/expected/apply to ordinary_workloads, seed1 step0 performance body unchanged: rename source/tree-a to destination/moved-a, recursively remove source/tree-b with the original opendir/lstat/unlink/rmdir calls, then the original metadata normalization and sync completion. Compact tiers preserve 200 background files and 25 files per affected shard; mixed-v4 tiers preserve the original 2000/5000 mixed background files and 1/5 affected shards of 200 files per tree. Existing public SDK Commit once; expected Committed.",
-        "oracle_coverage": "Original mixed-v4 selected native/canonical background paths and three ranges per large file, moved subtree witness and deleted-tree absence are covered by complete original native namespace/mode/mtime/size/link-class/byte verification on a fresh post-Commit mount. Separate offline current typed/authenticated Content/Storage/History traversal compares the complete persisted semantic tree and every byte, tied to the exact acknowledged root. Current public validators replace the retired encoding grammar, declared as a format/topology difference."
+        "oracle_coverage": "Original mixed-v4 selected native/canonical background paths and three ranges per large file, moved subtree witness and deleted-tree absence are covered by complete original native namespace/mode/mtime/size/link-class/byte verification on a fresh post-Commit mount. Separate offline current typed/authenticated Content/Storage/History traversal compares the complete persisted semantic tree and every byte, tied to the exact acknowledged root. Current public validators replace the retired encoding grammar, declared as a format/topology difference.",
+        "source_tag_object": "ae3310fada4a1fe35cb99ab02270b7538a0d03f7"
       },
       "expected_commit": "Committed"
     }

@@ -54,7 +54,7 @@
       },
       "port_review": {
         "reviewer": "Codex",
-        "source_commit": "ae3310fada4a1fe35cb99ab02270b7538a0d03f7",
+        "source_commit": "d296981ace76fe751bebf00dee52818fe18a3eef",
         "files": {
           "benchmark/fs-bench-pro/families/payload_create_read/mod.rs": "db530e2d819e6a3da80719b9a569f27748dea5ad697fbe5ebce15fcd59ce9a9f",
           "benchmark/fs-bench-pro/workload/ordinary_workloads.rs": "473196cbc53b8c22551253ed7739ed32b0800b267da609f215239f7d8af32695",
@@ -65,7 +65,8 @@
           "benchmark/fs-bench-pro/shared/runner.py": "66c8d5b23a514da27f5ebb371f75a4c0e0406adb4d595e6b61a41d7da7686201"
         },
         "operations": "Original ordinary_workloads::apply in performance mode, seed1 step0, unchanged native syscalls and dense byte generation; existing public SDK Commit once. No work uses the older product driver. Random-read case is read-only and Commit may be UpToDate without a new Commit. Fixture and expected state use original independent recipe algebra.",
-        "oracle_coverage": "Original complete independent namespace/mode/mtime/size/link-class/byte checker on a fresh post-Commit mount; separate offline current typed/authenticated Content/Storage/History traversal compares complete persisted semantic tree and every byte, tied to the exact acknowledged root. Old encoding grammar is replaced by current public validators, declared as a format/topology difference."
+        "oracle_coverage": "Original complete independent namespace/mode/mtime/size/link-class/byte checker on a fresh post-Commit mount; separate offline current typed/authenticated Content/Storage/History traversal compares complete persisted semantic tree and every byte, tied to the exact acknowledged root. Old encoding grammar is replaced by current public validators, declared as a format/topology difference.",
+        "source_tag_object": "ae3310fada4a1fe35cb99ab02270b7538a0d03f7"
       },
       "expected_commit": "Committed"
     },
@@ -121,7 +122,7 @@
       },
       "port_review": {
         "reviewer": "Codex",
-        "source_commit": "ae3310fada4a1fe35cb99ab02270b7538a0d03f7",
+        "source_commit": "d296981ace76fe751bebf00dee52818fe18a3eef",
         "files": {
           "benchmark/fs-bench-pro/families/payload_create_read/mod.rs": "db530e2d819e6a3da80719b9a569f27748dea5ad697fbe5ebce15fcd59ce9a9f",
           "benchmark/fs-bench-pro/workload/ordinary_workloads.rs": "473196cbc53b8c22551253ed7739ed32b0800b267da609f215239f7d8af32695",
@@ -132,7 +133,8 @@
           "benchmark/fs-bench-pro/shared/runner.py": "66c8d5b23a514da27f5ebb371f75a4c0e0406adb4d595e6b61a41d7da7686201"
         },
         "operations": "Original ordinary_workloads::apply in performance mode, seed1 step0, unchanged native syscalls and dense byte generation; existing public SDK Commit once. No work uses the older product driver. Random-read case is read-only and Commit may be UpToDate without a new Commit. Fixture and expected state use original independent recipe algebra.",
-        "oracle_coverage": "Original complete independent namespace/mode/mtime/size/link-class/byte checker on a fresh post-Commit mount; separate offline current typed/authenticated Content/Storage/History traversal compares complete persisted semantic tree and every byte, tied to the exact acknowledged root. Old encoding grammar is replaced by current public validators, declared as a format/topology difference."
+        "oracle_coverage": "Original complete independent namespace/mode/mtime/size/link-class/byte checker on a fresh post-Commit mount; separate offline current typed/authenticated Content/Storage/History traversal compares complete persisted semantic tree and every byte, tied to the exact acknowledged root. Old encoding grammar is replaced by current public validators, declared as a format/topology difference.",
+        "source_tag_object": "ae3310fada4a1fe35cb99ab02270b7538a0d03f7"
       },
       "expected_commit": "Committed"
     },
@@ -188,7 +190,7 @@
       },
       "port_review": {
         "reviewer": "Codex",
-        "source_commit": "ae3310fada4a1fe35cb99ab02270b7538a0d03f7",
+        "source_commit": "d296981ace76fe751bebf00dee52818fe18a3eef",
         "files": {
           "benchmark/fs-bench-pro/families/payload_create_read/mod.rs": "db530e2d819e6a3da80719b9a569f27748dea5ad697fbe5ebce15fcd59ce9a9f",
           "benchmark/fs-bench-pro/workload/ordinary_workloads.rs": "473196cbc53b8c22551253ed7739ed32b0800b267da609f215239f7d8af32695",
@@ -199,7 +201,8 @@
           "benchmark/fs-bench-pro/shared/runner.py": "66c8d5b23a514da27f5ebb371f75a4c0e0406adb4d595e6b61a41d7da7686201"
         },
         "operations": "Original ordinary_workloads::apply in performance mode, seed1 step0, unchanged native syscalls and dense byte generation; existing public SDK Commit once. No work uses the older product driver. Random-read case is read-only and Commit may be UpToDate without a new Commit. Fixture and expected state use original independent recipe algebra.",
-        "oracle_coverage": "Original complete independent namespace/mode/mtime/size/link-class/byte checker on a fresh post-Commit mount; separate offline current typed/authenticated Content/Storage/History traversal compares complete persisted semantic tree and every byte, tied to the exact acknowledged root. Old encoding grammar is replaced by current public validators, declared as a format/topology difference."
+        "oracle_coverage": "Original complete independent namespace/mode/mtime/size/link-class/byte checker on a fresh post-Commit mount; separate offline current typed/authenticated Content/Storage/History traversal compares complete persisted semantic tree and every byte, tied to the exact acknowledged root. Old encoding grammar is replaced by current public validators, declared as a format/topology difference.",
+        "source_tag_object": "ae3310fada4a1fe35cb99ab02270b7538a0d03f7"
       },
       "expected_commit": "Committed"
     },
@@ -255,7 +258,7 @@
       },
       "port_review": {
         "reviewer": "Codex",
-        "source_commit": "ae3310fada4a1fe35cb99ab02270b7538a0d03f7",
+        "source_commit": "d296981ace76fe751bebf00dee52818fe18a3eef",
         "files": {
           "benchmark/fs-bench-pro/families/payload_create_read/mod.rs": "db530e2d819e6a3da80719b9a569f27748dea5ad697fbe5ebce15fcd59ce9a9f",
           "benchmark/fs-bench-pro/workload/ordinary_workloads.rs": "473196cbc53b8c22551253ed7739ed32b0800b267da609f215239f7d8af32695",
@@ -266,7 +269,8 @@
           "benchmark/fs-bench-pro/shared/runner.py": "66c8d5b23a514da27f5ebb371f75a4c0e0406adb4d595e6b61a41d7da7686201"
         },
         "operations": "Original ordinary_workloads::apply in performance mode, seed1 step0, unchanged native syscalls and dense byte generation; existing public SDK Commit once. No work uses the older product driver. Random-read case is read-only and Commit may be UpToDate without a new Commit. Fixture and expected state use original independent recipe algebra.",
-        "oracle_coverage": "Original complete independent namespace/mode/mtime/size/link-class/byte checker on a fresh post-Commit mount; separate offline current typed/authenticated Content/Storage/History traversal compares complete persisted semantic tree and every byte, tied to the exact acknowledged root. Old encoding grammar is replaced by current public validators, declared as a format/topology difference."
+        "oracle_coverage": "Original complete independent namespace/mode/mtime/size/link-class/byte checker on a fresh post-Commit mount; separate offline current typed/authenticated Content/Storage/History traversal compares complete persisted semantic tree and every byte, tied to the exact acknowledged root. Old encoding grammar is replaced by current public validators, declared as a format/topology difference.",
+        "source_tag_object": "ae3310fada4a1fe35cb99ab02270b7538a0d03f7"
       },
       "expected_commit": "Committed"
     },
@@ -322,7 +326,7 @@
       },
       "port_review": {
         "reviewer": "Codex",
-        "source_commit": "ae3310fada4a1fe35cb99ab02270b7538a0d03f7",
+        "source_commit": "d296981ace76fe751bebf00dee52818fe18a3eef",
         "files": {
           "benchmark/fs-bench-pro/families/payload_create_read/mod.rs": "db530e2d819e6a3da80719b9a569f27748dea5ad697fbe5ebce15fcd59ce9a9f",
           "benchmark/fs-bench-pro/workload/ordinary_workloads.rs": "473196cbc53b8c22551253ed7739ed32b0800b267da609f215239f7d8af32695",
@@ -333,7 +337,8 @@
           "benchmark/fs-bench-pro/shared/runner.py": "66c8d5b23a514da27f5ebb371f75a4c0e0406adb4d595e6b61a41d7da7686201"
         },
         "operations": "Original ordinary_workloads::apply in performance mode, seed1 step0, unchanged native syscalls and dense byte generation; existing public SDK Commit once. No work uses the older product driver. Random-read case is read-only and Commit may be UpToDate without a new Commit. Fixture and expected state use original independent recipe algebra.",
-        "oracle_coverage": "Original complete independent namespace/mode/mtime/size/link-class/byte checker on a fresh post-Commit mount; separate offline current typed/authenticated Content/Storage/History traversal compares complete persisted semantic tree and every byte, tied to the exact acknowledged root. Old encoding grammar is replaced by current public validators, declared as a format/topology difference."
+        "oracle_coverage": "Original complete independent namespace/mode/mtime/size/link-class/byte checker on a fresh post-Commit mount; separate offline current typed/authenticated Content/Storage/History traversal compares complete persisted semantic tree and every byte, tied to the exact acknowledged root. Old encoding grammar is replaced by current public validators, declared as a format/topology difference.",
+        "source_tag_object": "ae3310fada4a1fe35cb99ab02270b7538a0d03f7"
       },
       "expected_commit": "UpToDate"
     },
@@ -389,7 +394,7 @@
       },
       "port_review": {
         "reviewer": "Codex",
-        "source_commit": "ae3310fada4a1fe35cb99ab02270b7538a0d03f7",
+        "source_commit": "d296981ace76fe751bebf00dee52818fe18a3eef",
         "files": {
           "benchmark/fs-bench-pro/families/payload_create_read/mod.rs": "db530e2d819e6a3da80719b9a569f27748dea5ad697fbe5ebce15fcd59ce9a9f",
           "benchmark/fs-bench-pro/workload/ordinary_workloads.rs": "473196cbc53b8c22551253ed7739ed32b0800b267da609f215239f7d8af32695",
@@ -400,7 +405,8 @@
           "benchmark/fs-bench-pro/shared/runner.py": "66c8d5b23a514da27f5ebb371f75a4c0e0406adb4d595e6b61a41d7da7686201"
         },
         "operations": "Original ordinary_workloads::apply in performance mode, seed1 step0, unchanged native syscalls and dense byte generation; existing public SDK Commit once. No work uses the older product driver. Random-read case is read-only and Commit may be UpToDate without a new Commit. Fixture and expected state use original independent recipe algebra.",
-        "oracle_coverage": "Original complete independent namespace/mode/mtime/size/link-class/byte checker on a fresh post-Commit mount; separate offline current typed/authenticated Content/Storage/History traversal compares complete persisted semantic tree and every byte, tied to the exact acknowledged root. Old encoding grammar is replaced by current public validators, declared as a format/topology difference."
+        "oracle_coverage": "Original complete independent namespace/mode/mtime/size/link-class/byte checker on a fresh post-Commit mount; separate offline current typed/authenticated Content/Storage/History traversal compares complete persisted semantic tree and every byte, tied to the exact acknowledged root. Old encoding grammar is replaced by current public validators, declared as a format/topology difference.",
+        "source_tag_object": "ae3310fada4a1fe35cb99ab02270b7538a0d03f7"
       },
       "expected_commit": "UpToDate"
     },
@@ -456,7 +462,7 @@
       },
       "port_review": {
         "reviewer": "Codex",
-        "source_commit": "ae3310fada4a1fe35cb99ab02270b7538a0d03f7",
+        "source_commit": "d296981ace76fe751bebf00dee52818fe18a3eef",
         "files": {
           "benchmark/fs-bench-pro/families/payload_create_read/mod.rs": "db530e2d819e6a3da80719b9a569f27748dea5ad697fbe5ebce15fcd59ce9a9f",
           "benchmark/fs-bench-pro/workload/ordinary_workloads.rs": "473196cbc53b8c22551253ed7739ed32b0800b267da609f215239f7d8af32695",
@@ -467,7 +473,8 @@
           "benchmark/fs-bench-pro/shared/runner.py": "66c8d5b23a514da27f5ebb371f75a4c0e0406adb4d595e6b61a41d7da7686201"
         },
         "operations": "Original ordinary_workloads::apply in performance mode, seed1 step0, unchanged native syscalls and dense byte generation; existing public SDK Commit once. No work uses the older product driver. Random-read case is read-only and Commit may be UpToDate without a new Commit. Fixture and expected state use original independent recipe algebra.",
-        "oracle_coverage": "Original complete independent namespace/mode/mtime/size/link-class/byte checker on a fresh post-Commit mount; separate offline current typed/authenticated Content/Storage/History traversal compares complete persisted semantic tree and every byte, tied to the exact acknowledged root. Old encoding grammar is replaced by current public validators, declared as a format/topology difference."
+        "oracle_coverage": "Original complete independent namespace/mode/mtime/size/link-class/byte checker on a fresh post-Commit mount; separate offline current typed/authenticated Content/Storage/History traversal compares complete persisted semantic tree and every byte, tied to the exact acknowledged root. Old encoding grammar is replaced by current public validators, declared as a format/topology difference.",
+        "source_tag_object": "ae3310fada4a1fe35cb99ab02270b7538a0d03f7"
       },
       "expected_commit": "UpToDate"
     },
@@ -523,7 +530,7 @@
       },
       "port_review": {
         "reviewer": "Codex",
-        "source_commit": "ae3310fada4a1fe35cb99ab02270b7538a0d03f7",
+        "source_commit": "d296981ace76fe751bebf00dee52818fe18a3eef",
         "files": {
           "benchmark/fs-bench-pro/families/payload_create_read/mod.rs": "db530e2d819e6a3da80719b9a569f27748dea5ad697fbe5ebce15fcd59ce9a9f",
           "benchmark/fs-bench-pro/workload/ordinary_workloads.rs": "473196cbc53b8c22551253ed7739ed32b0800b267da609f215239f7d8af32695",
@@ -534,7 +541,8 @@
           "benchmark/fs-bench-pro/shared/runner.py": "66c8d5b23a514da27f5ebb371f75a4c0e0406adb4d595e6b61a41d7da7686201"
         },
         "operations": "Original ordinary_workloads::apply in performance mode, seed1 step0, unchanged native syscalls and dense byte generation; existing public SDK Commit once. No work uses the older product driver. Random-read case is read-only and Commit may be UpToDate without a new Commit. Fixture and expected state use original independent recipe algebra.",
-        "oracle_coverage": "Original complete independent namespace/mode/mtime/size/link-class/byte checker on a fresh post-Commit mount; separate offline current typed/authenticated Content/Storage/History traversal compares complete persisted semantic tree and every byte, tied to the exact acknowledged root. Old encoding grammar is replaced by current public validators, declared as a format/topology difference."
+        "oracle_coverage": "Original complete independent namespace/mode/mtime/size/link-class/byte checker on a fresh post-Commit mount; separate offline current typed/authenticated Content/Storage/History traversal compares complete persisted semantic tree and every byte, tied to the exact acknowledged root. Old encoding grammar is replaced by current public validators, declared as a format/topology difference.",
+        "source_tag_object": "ae3310fada4a1fe35cb99ab02270b7538a0d03f7"
       },
       "expected_commit": "UpToDate"
     }

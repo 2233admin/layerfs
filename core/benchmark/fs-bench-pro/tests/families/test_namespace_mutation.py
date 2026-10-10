@@ -23,7 +23,7 @@ class NamespaceMutation(unittest.TestCase):
         ]
         self.assertEqual([row["id"] for row in family["cases"]], expected)
         pinned = subprocess.check_output(
-            ["git", "rev-parse", "reference-v0.1.6-final"], cwd=ROOT, text=True
+            ["git", "rev-parse", "reference-v0.1.6-final^{commit}"], cwd=ROOT, text=True
         ).strip()
         for row in family["cases"]:
             self.assertEqual(row["status"], "ported")

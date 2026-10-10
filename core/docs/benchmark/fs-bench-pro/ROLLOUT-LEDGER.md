@@ -67,14 +67,17 @@ comparison or release-admission claim. Durable is
 | 23 | Copy generic original verification 45 s work / 59 s hard limits, preserve 15 s reported product limit and original 120 s operation watchdog | The frozen selected-verification policy declares these values; separate timers/topology are recorded as differences before any payload sample | Widening a limit after a miss or shrinking payload tiers |
 | 24 | Owner-authorized subagents use separate new worktrees for tiny_file_churn and namespace_mutation while the lead samples payload_create_read; all remain in batch 1 | Latest owner instruction explicitly requests concurrent families in worktrees and supersedes the earlier no-extra-worktree restriction; independent worktree locks/targets retain local serialization | Serial family authoring or starting a later batch |
 | 25 | Integrate worker changes locally onto main; keep engine, product fixes and the master ledger under the lead; record shared Docker VM interference in each source receipt through LAYERFS_BENCH_INTERFERENCE | Isolated family edits avoid conflicts; parallel samples share host/VM resources and cannot claim isolated timing; original workloads/cache/limits remain fixed | Multiple owners editing the engine, hiding interference, or pushing worker branches |
+| 26 | Correct port_review.source_commit to the peeled reference commit and preserve the annotated tag object as source_tag_object; require both exact objects in parity | The annotated recovery tag is ae3310f..., while its source commit is d296981...; reviewed source bytes remain identical and old receipts remain valid at their actual source | Keeping a misleading commit label, deleting the tag pin, or replaying unchanged samples |
 
 ## Bugs
 
 | Bug | Case | Symptom | Cause | Fix commit | External test |
 | --- | --- | --- | --- | --- | --- |
-| H-1 | C07 | Workload and verifier passed, unmount returned, residency helper refused changed file identity | Harness inspected overlay while automatic post-unmount reclamation was still mutating backing | This commit | `test_backing_observer_waits_for_original_reclamation_to_finish` |
+| H-1 | C07 | Workload and verifier passed, unmount returned, residency helper refused changed file identity | Harness inspected overlay while automatic post-unmount reclamation was still mutating backing | `a1f2c259c` | `test_backing_observer_waits_for_original_reclamation_to_finish` |
 
-H-1 is a harness ordering fault, not a product correctness or performance defect.
+| H-2 | 36 batch-1 reviewed registrations | source_commit was an annotated tag object; parity accepted it and rejected the actual peeled commit | git rev-parse on an annotated reference returns the tag object unless peeled | This commit | test_review_identity.py rejects the tag through both parity routes, admits the peeled commit and checks every ported review |
+
+H-1 and H-2 are harness faults, not product correctness or performance defects.
 The original file-identity checker remains intact; no product source changed.
 
 ## Failed, ineligible, not-applicable and unrun cases
@@ -773,4 +776,38 @@ only generated results/documents. Production LOC 79,366 -> 79,366 (delta +0),
 same pinned absent-aware method.
 
 | `3eaf14d95` (worker) | Record four namespace samples and generated CSVs | 79366 | 79366 | +0 |
-| This commit | Integrate complete namespace outcomes with master ledger | 79366 | 79366 | +0 |
+| `be1f56a23` | Integrate complete namespace outcomes with master ledger | 79366 | 79366 | +0 |
+
+H-2 provenance correction: all 36 currently ported batch-1 review entries
+labelled annotated recovery tag object ae3310fada4a1fe35cb99ab02270b7538a0d03f7
+as source_commit. git cat-file confirms type tag. Peeling that same unchanged
+reference resolves actual commit d296981ace76fe751bebf00dee52818fe18a3eef.
+The reviewed file hashes were obtained through git show on the tag and are
+correct; neither frozen source bytes nor any workload, verifier or product
+operation was wrong. The two parity routes compared the misleading label
+to the tag object, admitting the wrong object type.
+
+Before the fix, three external scoped regression methods fail (38 assertions
+and two errors): both parity routes admit a tag as a commit, reject a valid
+peeled commit, and every ported review has the wrong label. The exact failed
+stdout/stderr is retained under benchmark-results/fs-bench-pro/
+2026-10-10-review-pin-fix-checks/before.*. The fix uses explicit ^{commit},
+retains source_tag_object separately in every review, and validates both
+objects in parity. The namespace qualification's pin assertion is updated
+to the true commit. All original reviewed hashes, steps, budgets, cache
+contracts, oracle scope and cases remain unchanged. Frozen root and closed
+records/registrations/receipts remain unchanged. Active tiny samples continue
+at their original isolated c4c137c13 source with no metadata/source mutation.
+No unchanged measured case is replayed for this labeling correction.
+
+At final changed source, all 27 engine tests PASS in 0.512 s; the changed
+namespace pin qualification PASS in 0.012 s; catalogue three tests PASS in
+0.114 s. Each invocation has its own 120 s lock/wall stop. The unaffected
+native transcript/corruption test is reused from its passing registration
+evidence. This is Python/JSON harness metadata only, with unchanged product
+and compiled inputs; no product regression, Linux product build, Clippy or
+boundary claim is manufactured. Corrected parity evidence will be recorded
+without any product sample replay. Production LOC 79,366 -> 79,366 (delta +0),
+pinned absent-aware method; reference absent (retired R9c, last counted 65,417).
+
+| This commit | Correct annotated recovery tag/source commit review identity | 79366 | 79366 | +0 |

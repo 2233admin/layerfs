@@ -142,7 +142,8 @@ def parity_namespace(family, prepared_parent, output):
         if (fixture["files"], fixture["logical_bytes"]) != (int(reference["fixture_files"]), int(reference["fixture_bytes"])):
             raise ValueError("original registry fixture totals differ")
         review = case["port_review"]
-        if review["source_commit"] != identity.git(identity.ROOT, "rev-parse", "reference-v0.1.6-final"):
+        if (review["source_commit"] != identity.git(identity.ROOT, "rev-parse", "reference-v0.1.6-final^{commit}")
+                or review["source_tag_object"] != identity.git(identity.ROOT, "rev-parse", "reference-v0.1.6-final")):
             raise ValueError("port review source pin differs from retained reference")
         for path, digest in review["files"].items():
             if identity.sha256(identity.ROOT / path) != digest:
@@ -171,7 +172,8 @@ def parity_workspace(family, prepared_parent, output):
         if prepared["case"] != case["id"] or prepared["family"] != family["family"]:
             raise ValueError("original fixture was prepared for another case")
         review = case["port_review"]
-        if review["source_commit"] != identity.git(identity.ROOT, "rev-parse", "reference-v0.1.6-final"):
+        if (review["source_commit"] != identity.git(identity.ROOT, "rev-parse", "reference-v0.1.6-final^{commit}")
+                or review["source_tag_object"] != identity.git(identity.ROOT, "rev-parse", "reference-v0.1.6-final")):
             raise ValueError("reviewed operation pin differs")
         for path, digest in review["files"].items():
             if identity.sha256(identity.ROOT / path) != digest:
