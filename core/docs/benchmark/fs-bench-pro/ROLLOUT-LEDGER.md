@@ -6094,3 +6094,55 @@ using its unchanged sealed input and qualified assets; no batch7 work yet.
 | This commit | Report actual unrun case and retain preparation failure | 79370 | 79370 | +0 |
 Pinned absent-aware staged counter/exact tree confirmation; reference absent,
 retiredR9c, last65,417/tree498dd1917812.
+
+
+### Batch 6 repository original cohort retained, 2026-10-11
+
+This commit records the original082 three-case cohort after corrected
+actual-case report classification, with no case/receipt replay. Full remains
+actualNOT_RUN after its sole failed120s preparation; stride3 remains
+setupFAIL before any measured operation; stride10 remains actualFAIL on H34
+wrong target before any Commit. The two source082 CSVs each include all
+three original selections, their zero/unknown axes and exact source/evidence
+paths. Both failed resources stay retained, as recorded above. Original
+worker report's administrative threeFAIL CSVs remain byte-identical in
+ignored custody; a fresh H35 reader report creates this main pair and keeps
+full-preparation FAIL in its tag. No former file or receipt is overwritten.
+
+| Case | Actual status | Proof | Timings/count/storage | Reason |
+| --- | --- | --- | --- | --- |
+| deepseek-full | NOT_RUN | NOT_RUN | UNAVAILABLE | Sole native recipe preparation exceeded120s before sealed input existed |
+| deepseek-stride3 | FAIL setup, actual operation attempts0 | NOT_RUN | UNAVAILABLE | Original docker cp staging15s expired; no Fork/mount/workload/Commit |
+| deepseek-stride10 | FAIL actual, operation attempt1/completed0 | NOT_RUN | UNAVAILABLE | Original importer used/workspace while actual ACK/workspaces/1 |
+
+Exact source082 family handoff
+/Users/yifanxu/.codex/worktrees/fs-bench-pro-namespace-mutation/layerfs/benchmark-results/fs-bench-pro/2026-10-11-batch-6-repository-history-08288e824/family-handoff/handoff.json
+SHA04b0ec26722d440e20da72c3fa69eaf564be1ee0a2aba2f7b8d30a11712ac2a6,
+manifest02ead0faa5fcda0100d01c8ef71ba985e87fe013d9c4bb767b7b41bfd1c27ca2.
+Case-ledger64127098eeab6407f1a241c627c1752716e9567fcce88b3e0bf8d5553db66c1f
+binds all11 outer commands, exact preps/native assets/parity and actual
+PID guards. Correction to an earlier worker note: actual host waits are
+known (-9forstride3,1forstride10), expanded host RUSAGE_CHILDREN swaps
+0→0PASS and observed current-PID maxima2,899,968B/3,211,264B. These do not
+prove remote Stop/drain/Gone or a continuous/lifetime RSS peak.
+
+Root fresh reader invocation:
+`perl core/target/r4-locked.pl 120 python3 -B core/benchmark/fs-bench-pro/bench.py report /Users/yifanxu/.codex/worktrees/fs-bench-pro-namespace-mutation/layerfs/benchmark-results/fs-bench-pro/2026-10-11-batch-6-repository-history-08288e824/run`
+PASS(exit0), R4wall≤1s. Its independent stopwatch isUNAVAILABLE: unified
+tool elapsed0.202109792s also includes preceding commit, never attributed
+to benchmark or exact standalone report wall. Report reads immutable
+receipts only, no product work; actual corrected CSV hashes:
+- core/benchmark/fs-bench-pro/baselines/core/2026-10-11-08288e824/repository_history/performance.csv: fa7d4d392432c18532aac5a0063423251d09b322b9fdab5dfd6ed35eeff912c9,3rows.
+- core/benchmark/fs-bench-pro/baselines/core/2026-10-11-08288e824/repository_history/verification.csv: f19bfea2e80fe7b4e1f5831244d55c2b3379dd0fb9e86f62562ad1d693b37ad1,3rows.
+
+Original14400s family/300s per-state declarations remain distinct from
+overriding120s owner test stop; no measured total is inferred from partial
+outer/SDK spans. Source/product/corpus identities, failed full/parity row
+and every existing Docker resource remain. Only affectedstride10 runs
+once at08e1, still active; this is an old cohort commit, not batch closure.
+
+| Commit | Purpose | Production before | after | delta |
+| --- | --- | --- | --- | --- |
+| This commit | Record repository original failed/unrun cohort | 79370 | 79370 | +0 |
+Pinned absent-aware staged counter/exact tree confirmation; reference absent,
+retiredR9c, last65,417/tree498dd1917812.
