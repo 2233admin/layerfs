@@ -18,7 +18,7 @@ comparison or release-admission claim. Durable is
 | 0.2 Move-only organization | COMPLETE, historical check failures retained | `13f9dec38`; routing `9af29e01e` | Update routing guide, then stage 0.3 catalogue |
 | 0.3 Case catalogue | COMPLETE | `f182e9a63`; prerequisite correction `30b798192` | Stage 0.4 reproducible engine |
 | 0.4 Reproducible engine | CLOSED: functional proof complete; exact reproduction FAILED C10/C12 | Cell-route correction `bb8e07df8`; build support `c496025fc`; oracle support `7a27a4f26`; fixture support `516c2f009`; workspace/report support `358eca082`; cleanup-observer correction `a1f2c259c` | Begin batch 1 under failed-reproduction closure recorded below |
-| 1 Pilot | IN_PROGRESS | Init port/runtime support in this commit | Release build, four fixture preparations, parity and four Init samples |
+| 1 Pilot | IN_PROGRESS | Init port/runtime `c1d7dd0e8`; Init results in this commit | Port payload_create_read; other pilot families remain pending |
 | 2 Edits | PENDING | — | Wait for batch 1 completion |
 | 3 Trees and tools | PENDING | — | Wait for batch 2 completion |
 | 4 History on one branch | PENDING | — | Wait for batch 3 completion |
@@ -468,4 +468,50 @@ whitespace passes. Product tree remains unchanged. Raw checks:
 Actual parity and four samples remain next. Production LOC 79,366 -> 79,366
 (delta +0), same pinned absent-aware method.
 
-| This commit | Port Init definitions and host runtime/parity support | 79366 | 79366 | +0 |
+| `c1d7dd0e8` | Port Init definitions and host runtime/parity support | 79366 | 79366 | +0 |
+
+Batch 1 / init_namespace complete: all four original mandatory cases are ported
+and parity PASS. Exact generated native counts, bytes and content digests match
+the original full native verifier; reviewed operation/coverage hashes are sealed.
+The locked release build passes with host source hashes checked inside Linux
+before/after its build. The new host runtime/native tools are archived by SHA;
+the daemon remains `f44900cfc975901b7101f4874f708390b6f7401981e06d608b3df52a50848c0e`.
+Four cases each sampled once at clean `c1d7dd0e8`, through public Init and a
+fresh Store; independent separate-process reopen/root/first Branch/sampled
+metadata-and-byte proofs all PASS. Stores seal/close without WAL/SHM/journal
+sidecars. No Docker sample resource or mount was created for this host route.
+
+All four numeric rows remain INELIGIBLE because source bytes were generated
+and read in preparation and host cold metadata cannot be verified. Functional
+completion is PASS for each; INELIGIBLE is preserved and no cold/performance
+qualification is asserted. Requests/owner jobs/daemon statements and overlay
+storage are UNAVAILABLE because this route uses no daemon/overlay. Complete
+wall is host child launch-to-exit; command_ns is the complete public Init/seal
+span. Neither includes fixture setup or independent proof. Reference rows
+retain release 0.1.5 and its different layerstack_init_ns timer/topology, without
+ratios. No declared 15 s wall or 9.5 s verifier limit exceeded.
+
+| Case | Functional / proof | Numeric status | Complete wall ns | Public Init/seal ns | Proof wall ns | Store logical = allocated B | Close |
+| --- | --- | --- | ---: | ---: | ---: | ---: | --- |
+| namespace-100-compact-v3 | PASS / PASS | INELIGIBLE | 3336290834 | 51216875 | 23149958 | 5263360 | SEALED_CLOSED; no mount |
+| namespace-1000-compact-v3 | PASS / PASS | INELIGIBLE | 182638250 | 166821125 | 22118958 | 20606976 | SEALED_CLOSED; no mount |
+| namespace-10000 | PASS / PASS | INELIGIBLE | 2127532084 | 2076532083 | 39871875 | 305762304 | SEALED_CLOSED; no mount |
+| namespace-100000 | PASS / PASS | INELIGIBLE | 7829361042 | 7694068833 | 187957917 | 516554752 | SEALED_CLOSED; no mount |
+
+The two CSVs were generated once by bench.py report under
+`core/benchmark/fs-bench-pro/baselines/core/2026-10-10-c1d7dd0e8/`; all four cases
+are present. bench.py verify checks retained proof records and immutable
+original evidence hashes, with four PASS and no product replay. Raw build,
+prepared input, parity and measured receipts are under
+`benchmark-results/fs-bench-pro/2026-10-10-batch-1-init-build/`,
+`benchmark-results/fs-bench-pro/2026-10-10-batch-1-init-prepared/`,
+`benchmark-results/fs-bench-pro/2026-10-10-batch-1-init-parity/` and
+`benchmark-results/fs-bench-pro/2026-10-10-batch-1-init-c1d7dd0e8/`. No product correctness bug surfaced.
+The complete prepared native trees and closed sample Store files remain owned
+raw setup/evidence; their paths are explicit in each receipt. No new failed or
+uncertain container/volume was created. Existing retained H-1/C10/C12 resources
+remain untouched. Unaffected engine/runtime scoped test evidence from the port
+commit is reused; this result/doc commit changes no harness or product source.
+Production LOC 79,366 -> 79,366 (delta +0), pinned absent-aware method.
+
+| This commit | Record four Init samples/parity and generated CSVs | 79366 | 79366 | +0 |

@@ -11,8 +11,9 @@ comparison or release gate is selected.
 Stage 0.1 has harvested all 461 released source rows into
 [the reference catalogue](baselines/v0.1.6/README.md). Stage 0.2 has moved the
 working SDK runtime here and separated cluster-one and cluster-two harnesses.
-Stage 0.3 catalogued all 273 cases as pending. Four Init cases now have ported
-definitions; their parity and samples are pending at this checkpoint.
+Stage 0.3 catalogued all 273 cases as pending. All four Init cases are ported with parity PASS, one functional/proof PASS
+each and closed Store ownership. Their numeric rows remain INELIGIBLE for
+unverified host cold-cache preconditions. The other 269 cases remain pending.
 `python3 -B core/benchmark/fs-bench-pro/bench.py list` lists every case and its
 released reference. The reproducible engine has build, prepare, twelve-cell run, retained verify and
 CSV report commands. Its twelve mounted cells completed functional proof and clean unmount; exact
