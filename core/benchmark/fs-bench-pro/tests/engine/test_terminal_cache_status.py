@@ -45,6 +45,24 @@ class TerminalCacheStatus(unittest.TestCase):
             with self.subTest(code=code, change=change, declared=declared), self.assertRaises((ValueError, RuntimeError)):
                 self.observe(code, {**good, **change}, declared)
 
+    def test_original_unavailable_a_observation_retains_error_without_cold_credit(self):
+        body = {"cache_class":"A", "status":"UNAVAILABLE", "attempts":0,
+                "errno":38, "error":"file identity changed during residency attestation"}
+        cleaned, observed = self.observe(4, body)
+        self.assertEqual(cleaned, [{"fields":{"state":"Gone"}}])
+        self.assertEqual(observed, body)
+        self.assertNotIn("resident_pages", observed)
+        self.assertEqual(workspace.cache.validate("A", {"residency":observed}), "INELIGIBLE")
+
+    def test_malformed_unavailable_records_cannot_bypass_observer_failure(self):
+        good = {"cache_class":"A", "status":"UNAVAILABLE", "attempts":0,
+                "errno":38, "error":"file identity changed during residency attestation"}
+        for change in ({"status":"ELIGIBLE"}, {"cache_class":"B"}, {"attempts":True},
+                {"attempts":1}, {"errno":None}, {"errno":True}, {"errno":-1},
+                {"error":""}, {"error":None}, {"admission_eligible":True}):
+            with self.subTest(change=change), self.assertRaises((ValueError, RuntimeError)):
+                self.observe(4, {**good, **change})
+
 
 if __name__ == "__main__":
     unittest.main()

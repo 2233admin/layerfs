@@ -167,7 +167,13 @@ def terminal_cache_observation(runtime, key, build, output, cache_class="B"):
             and type(residency.get("attempts")) is int and residency["attempts"] == 0
             and residency.get("exploratory") is True and residency.get("admission_eligible") is False
             and type(residency.get("payload_bytes_read")) is int and residency["payload_bytes_read"] == 0)
-        if not declared_miss:
+        declared_unknown = (observed["exit_code"] == 4 and cache_class == "A"
+            and residency.get("cache_class") == "A" and residency.get("status") == "UNAVAILABLE"
+            and type(residency.get("attempts")) is int and residency["attempts"] == 0
+            and type(residency.get("errno")) is int and residency["errno"] >= 0
+            and isinstance(residency.get("error"), str) and bool(residency["error"])
+            and residency.get("admission_eligible") is not True)
+        if not (declared_miss or declared_unknown):
             raise RuntimeError(f"cache-observation failed with exit {observed['exit_code']}; see {output}")
     return cleaned, residency
 
@@ -1427,6 +1433,8 @@ def one_family_case(family, case, prepared_folder, build_folder, output, *, prep
         if row["status"] == "INELIGIBLE":
             row["tag"] = ("same-mount history paid backing/metadata/SQLite, own-write coldness and initial/warm interval evidence unavailable; all declared retained-state proofs and clean unmount pass" if ordered else
                           "class B source demands or own-write cold backing precondition unavailable; functional/native/persisted proofs and clean unmount pass")
+            if footprint:
+                row["tag"] = "class A pre-phase backing/metadata/SQLite and own-write coldness unqualified; terminal cache observation " + row["cache"]["residency"]["status"] + "; functional/native/persisted proofs and clean unmount pass"
             if case.get("git_workflow"):
                 row["tag"] += "; prior original verification reads and full paid cache inputs unqualified; numeric counts include excluded precommit custody verifier FUSE/SQL work"
         state = receipts.command([*docker, "inspect", runtime.container, "--format", "{{.State.Running}}"], output, "container-state", proof_seconds(15, cleanup=True) if proof_deadlines else 15)

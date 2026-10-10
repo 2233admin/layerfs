@@ -102,6 +102,7 @@ comparison or release-admission claim. Durable is
 | 65 | Keep the actual sealed public Init result alive across an interactive installation boundary, using the existing public install API | A host Init manifest intentionally lacks daemon_sqlite; byte copying cannot qualify installation. Init ACK ends its paid phase before original verification-only installation | Fabricate daemon metadata, reopen Init or weaken startup installation guard |
 | 66 | Add original family subdirectory for newly recorded parallel runs sharing one source commit | Explicit owner parallel authorization allows several independently registered families at the same clean source; section6.1 fixed filenames otherwise collide | Overwrite reports, invent a source identity, or alter closed run paths |
 | 67 | Consume the original cache helper exit3 as a declared ClassA INELIGIBLE observation, then finish the unchanged full verifier and terminal shutdown | The helper intentionally returns3 for resident content pages; numeric ineligibility cannot skip functional proof/Stop. Every other observer exit or mismatched declaration stays a failure | Treat cache ineligibility as a product crash or weaken cold eligibility |
+| 68 | Preserve authenticated ClassA unavailable cache observation while completing the full functional proof | Spec sections5/6.1 require unknown cache state INELIGIBLE, not invented coldness or skipped verifier; checker refusal and exact reason stay visible | Retry observer, wait for warmth/identity to fit, change cache phase, or claim cache PASS |
 
 ## Bugs
 
@@ -110,6 +111,7 @@ comparison or release-admission claim. Durable is
 | H-30 | CDC overwrite1 and cross anchor1 at1cc25d4de | Actual successful mount ACK followed by controller timeout; imported claim missed executed guard hashes | Waited for literal mount-branch instead of actual mount acknowledgement; claim omitted workspace/receipts hashes | 08288e824 | Three actual mount protocol and three claim identity guards; original red retained |
 | H-31 | Footprint unique100000 at1cc25d4de | KeyError after actual Committed ACK | Init step indexed instead of declared mutation step and eager missing top-level fallback | 08288e824 | Three strict operation expectation guards; original red retained |
 | H-32 | Footprint unique100000 at08288e824 | Completed paid work/End/Gone, then cache-observation exit3 skipped proof and Stop | Controller treated the cache helper declared INELIGIBLE status as an execution error | This commit | test_actual_ineligible_a_observation_retains_miss_and_completed_cleanup plus eleven error/forgery refusals; parent red retained |
+| H-33 | Footprint unique100000 at0a8d15f0e | Completed paid work then original cache identity refusal skipped verification/Stop | Unknown cache classification incorrectly became a functional execution failure | This commit | Original UNAVAILABLE/status4 reproduction red; strict malformed/error refusal vectors and cache classifier INELIGIBLE guards |
 | H-1 | C07 | Workload and verifier passed, unmount returned, residency helper refused changed file identity | Harness inspected overlay while automatic post-unmount reclamation was still mutating backing | `a1f2c259c` | `test_backing_observer_waits_for_original_reclamation_to_finish` |
 
 | H-3 | Generic mounted pilot proofs and prospective SDK proofs | Reachable path walk omitted exhaustive inode-table membership from original canonical verifier | Runtime compared declared paths/bytes but never enumerated current inode table | `37ec6826b` | edit_oracle_complete_membership_accepts_exact_and_rejects_unreachable_or_missing_rows |
@@ -5610,3 +5612,45 @@ without replay, with shared-host/Docker interference unquantified.
 | This commit | Preserve declared cache miss and complete functional proof | 79370 | 79370 | +0 |
 Pinned absent-aware staged counter/exact tree confirmation; reference absent,
 retiredR9c, last65,417/tree498dd1917812; no workload/limit/cache treatment change.
+
+
+### H33 unknown cache observation preserves ineligibility, 2026-10-11
+
+At source0a8d15f0e the affected first footprint case again completes paid
+Init/edit/Committed and End/Gone. The unchanged observer exits4 with
+UNAVAILABLE, attempts0/errno38 and original error `file identity changed
+during residency attestation`. It returns no valid residency result. This
+identity refusal is retained; neither a file identity nor coldness is
+invented. Which backing file changed and the writer remain unobserved; no
+product correctness or progress conclusion follows. Original raw cohort
+2026-10-11-h32-store-footprint-run contains oneFAIL and fiveNOT_RUN.
+
+Spec sections5/6.1 classify unknown measured input cache state as INELIGIBLE.
+The functional controller now consumes only the declared ClassA unavailable
+status4 with actual zero integer attempts, nonnegative integer errno and
+nonempty error. Every nonmatching record, malformed output and other exit
+still fails. Original observer/checker exit4/completionFAIL and reason stay
+visible in raw evidence, cache state stays unavailable/ineligible; this grants
+no cold credit. No retry, observation phase/order, cache state, operation,
+verifier, stop, deadline or workload is changed. Original regression retains
+parent ERROR; final four tests include eleven original refusals and ten
+malformed unknown vectors, with unchanged workspace/retention guards.
+final-01: exit0, wall297231916ns
+final-02: exit0, wall331331000ns
+final-03: exit0, wall382590250ns
+parent-red: exit1, wall309062000ns
+
+Actual incomplete paid wall15462692251ns; proofNOT_RUN; no
+known runtime Stop/native or typed verifier is inferred. Preserve runtime
+647492bb2d4fb61380533d8c6a2cdb85ec421c2bbb89b5d78ab74db30476cd5a, installer
+3e84dd3e3176dccee70f838a4f1bcd8518a86ad415e5cf373bb99ddd0d739627,
+volumelayerfs-fsb-sample-6017ae5a999c477b. This failure and H32 remain history. At the
+new executed controller identity only this affected case may run again once;
+the five untouched selections run once. Imported parallel CDC/cross and
+repository separate controller paths are unaffected and retain082 identities.
+
+| Commit | Purpose | Production before | after | delta |
+| --- | --- | --- | --- | --- |
+| This commit | Retain unknown cache refusal and complete functional proof | 79370 | 79370 | +0 |
+Pinned absent-aware staged counter/exact tree confirmation; reference absent
+retiredR9c, last65,417/tree498dd1917812. Product9ac/runtime7766 unchanged.
