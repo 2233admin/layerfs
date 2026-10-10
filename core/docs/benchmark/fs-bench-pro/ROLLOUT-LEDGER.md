@@ -17,7 +17,7 @@ comparison or release-admission claim. Durable is
 | 0.1 Released references | COMPLETE | `8e4a78fa0` | Stage 0.2 move-only organization |
 | 0.2 Move-only organization | COMPLETE, historical check failures retained | `13f9dec38`; routing `9af29e01e` | Update routing guide, then stage 0.3 catalogue |
 | 0.3 Case catalogue | COMPLETE | `f182e9a63`; prerequisite correction `30b798192` | Stage 0.4 reproducible engine |
-| 0.4 Reproducible engine | IN_PROGRESS | Cell-route correction `bb8e07df8`; build support `c496025fc`; oracle support `7a27a4f26`; fixture support `516c2f009`; workspace/report support `358eca082`; cleanup-observer correction in this commit | Build, prepare independent masters, reproduce twelve cells |
+| 0.4 Reproducible engine | IN_PROGRESS; exact reproduction fails C10/C12 | Cell-route correction `bb8e07df8`; build support `c496025fc`; oracle support `7a27a4f26`; fixture support `516c2f009`; workspace/report support `358eca082`; cleanup-observer correction `a1f2c259c` | Build, prepare independent masters, reproduce twelve cells |
 | 1 Pilot | PENDING | — | Wait for stage 0.4 completion |
 | 2 Edits | PENDING | — | Wait for batch 1 completion |
 | 3 Trees and tools | PENDING | — | Wait for batch 2 completion |
@@ -339,4 +339,57 @@ raw checks are in `benchmark-results/fs-bench-pro/2026-10-10-stage-0-4-cache-ord
 No product change or product check is claimed. Remaining cells run only after
 this harness correction is committed. Production LOC 79,366 -> 79,366 (delta +0).
 
-| This commit | Fix H-1 and preserve first cell run results | 79366 | 79366 | +0 |
+| `a1f2c259c` | Fix H-1 and preserve first cell run results | 79366 | 79366 | +0 |
+
+Stage 0.4 corrected-source run: C07–C09 and C11 pass with identical baseline
+counts, independent verifier PASS, cleanup Gone and known Stop. C10 and C12
+complete all functional/cleanup checks but fail the unchanged exact count
+comparison. No latency limit exceeded. C10 observed 1,547 requests / 1,546 owner
+jobs / 14,406 statements versus 1,548 / 1,547 / 14,408. Its entire opcode delta
+is one READ (512 versus 513); the corresponding one Workspace and one Inode
+SQL execution account for both SQL deltas. Historical C10 receipts already
+show both 512 and 513 READ counts across product identities; they are evidence,
+not re-used measurements. The exact current daemon binary and product tree are
+the same as the frozen baseline. An exact kernel-request partition is not
+specified by the ordinary `cp` workload. The observed kernel is 6.12.76-linuxkit;
+[the corresponding upstream stable FUSE source](https://raw.githubusercontent.com/gregkh/linux/v6.12.76/fs/fuse/file.c)
+constructs asynchronous READ batches from the readahead window and congestion
+state (`fuse_readahead`, `fuse_send_readpages`). Request partition variation is
+an inference supported by that path and the observed READ-only delta; no
+per-request length trace exists to identify the exact split. Do not claim an
+EOF request or a proven individual kernel scheduling event.
+
+C12 observed 3,436 / 3,439 / 24,145 versus 3,436 / 3,439 / 24,146. Opcodes and
+job-class counts are identical. The sole difference is an Inode-family query
+with 164 SQL bytes, 16 bound bytes, zero returned/changed rows and 12 VM steps.
+Source identifies exactly that SQL text in
+`core/crates/layerfs-overlay/src/lifetime/orphan.rs:50`: the `gen=-1` orphan-inode
+probe. It is conditional on the live engine's `orphan_seen`; last-owner
+reclamation resets the flag after deleting orphan rows. Git rename/unlink and
+reclamation can interleave, so exact aggregate probe count is not a workload
+semantic invariant. Exact event attribution cannot be reconstructed from the
+bounded aggregates; this remains an explicitly labelled cause inference.
+There is no wrong byte, refused successful operation, leaked mount or crash in
+these two samples, and no authorized product correctness fix identified.
+
+Raw source-pinned arithmetic/provenance:
+`benchmark-results/fs-bench-pro/2026-10-10-stage-0-4-count-diagnostics/diagnostic.json`.
+Raw corrected run: `benchmark-results/fs-bench-pro/2026-10-10-stage-0-4-cells-a1f2c259c/`.
+Generated CSVs retain four PASS, two exact-count FAIL and six NOT_RUN rows for
+this identity. Independent retained verification confirms all six sampled
+case observations PASS; CLI completeness returns 1 because the other six
+registered cases are NOT_RUN at this identity, as intended. Earlier C01–C06
+functional/count receipts remain unaffected and are not repeated. Overall ten
+of twelve exact triples reproduced; twelve functional workloads verified.
+The strict stage 0.4 target has not been met and is not claimed as met.
+
+C10/C12 stopped failure containers and sample volumes are retained and named in
+their receipts; their exact IDs are included below. Passing C07–C09/C11 sample
+resources have been removed. H-1's original running container/volume remain.
+Production LOC 79,366 -> 79,366 (delta +0); docs/results only, same pinned method.
+
+| This commit | Preserve remaining twelve-cell outcomes and count diagnosis | 79366 | 79366 | +0 |
+
+Retained C10: container `96dd83a9e8ea10ad2e7a50aa3e4e2dd8d970509a22435c146569f20a16b8d200`, volume `layerfs-fsb-sample-070f622942e64f72`, acknowledged `KNOWN_STOP`.
+
+Retained C12: container `6a122c4664d39141006eabc62c538060796dbb1da57579e4beeb8495a5f2b0f5`, volume `layerfs-fsb-sample-bc7e58da1e4b4068`, acknowledged `KNOWN_STOP`.
