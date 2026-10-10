@@ -88,10 +88,9 @@ impl State<'_> {
                 signatures: &self.signatures,
             };
             if let Some(location) = view.location(object.id(), i64::MAX)? {
-                // EXPERIMENT (issue #316, to be reverted): no readback of the
-                // stored bytes of an object whose id, role and length match.
                 if location.role != object.role()
                     || location.canonical_length != object.canonical_len()
+                    || self.resolve(object.id())? != object.canonical()
                 {
                     return Err(StorageError::Collision(object.id()));
                 }
