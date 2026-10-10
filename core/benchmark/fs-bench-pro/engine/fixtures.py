@@ -12,6 +12,7 @@ from . import identity, project, receipts
 MTIME_NS = 1_700_000_000_000_000_000
 BIG_BYTES = 64 * 1024 * 1024
 CELL_RECIPES = {f"C{n:02}": "big64m" if n in (9, 10, 11) else "empty" for n in range(1, 13)}
+NAMESPACE_RECIPES = ("namespace-100-compact-v3", "namespace-1000-compact-v3", "namespace-10000", "namespace-100000")
 
 
 def generate(recipe, root):
@@ -110,6 +111,8 @@ def native_oracles(recipe, source, helpers, folder, build):
 
 
 def prepare(recipe, folder, build_folder):
+    if recipe in NAMESPACE_RECIPES:
+        return prepare_namespace(recipe, folder, build_folder)
     build = identity.load_build(build_folder)
     current = identity.source_identity()
     folder = Path(folder).resolve()
@@ -137,12 +140,44 @@ def prepare(recipe, folder, build_folder):
     return result
 
 
+def prepare_namespace(recipe, folder, build_folder):
+    build = identity.load_build(build_folder)
+    current = identity.source_identity()
+    folder = Path(folder).resolve()
+    folder.mkdir(parents=True, exist_ok=False)
+    source = folder / "source"
+    shell = identity.ROOT / "core/benchmark/fs-bench-pro/families/init_namespace/workload.sh"
+    made = receipts.command(["/bin/bash", str(shell), recipe, str(source)], folder, "native-fixture", 120,
+        environment={**os.environ, "NAMESPACE_WRITER": build["binaries"]["namespace-writer"]["path"]})
+    fixture = json.loads(Path(made["stdout"]).read_text())
+    verified = receipts.command([build["binaries"]["workload-host"]["path"], "namespace-verify", str(source), recipe],
+                                folder, "original-native-fixture-verifier", 120)
+    fields = dict(line.split("=", 1) for line in Path(verified["stdout"]).read_text().splitlines())
+    if (int(fields["regular_files"]), int(fields["logical_bytes"]), fields["namespace_digest"]) != (
+            fixture["files"], fixture["logical_bytes"], fixture["fixture_digest"]):
+        raise ValueError("original fixture count/byte/content digest differs from transcription")
+    fixture.update(recipe=recipe, fixture_sha256=fixture["fixture_digest"])
+    result = {"schema": "fs-bench-pro-prepared-native-init-v1", "status": "PASS", "recipe": recipe,
+              "source": str(source), "fixture": fixture, "identity": current,
+              "generator_sha256": build["binaries"]["namespace-writer"]["sha256"],
+              "original_verifier_sha256": build["binaries"]["workload-host"]["sha256"],
+              "master_volume": None, "setup_method": "fresh native input; no prior Store or Init",
+              "original_verification": fields,
+              "cache": "setup generated/wrote/read all native bytes; source warmth retained; no cold admission claimed",
+              "global_profile": "Disposable/WAL/OFF selected by the future Init; no Store executed during preparation"}
+    receipts.write_new(folder / "prepared.json", result)
+    receipts.manifest(folder)
+    return result
+
+
 def load(folder, recipe=None):
     folder = Path(folder)
     receipts.verify_manifest(folder)
     result = json.loads((folder / "prepared.json").read_text())
     if result["status"] != "PASS" or recipe is not None and result["recipe"] != recipe:
         raise ValueError("sealed fixture recipe/status differs")
+    if result["schema"] == "fs-bench-pro-prepared-native-init-v1":
+        return result
     if identity.sha256(result["provision"]["sealed_store"]) != result["provision"]["store_sha256"]:
         raise ValueError("sealed host Store changed")
     if identity.sha256(result["provision"]["manifest"]) != result["provision"]["manifest_sha256"]:

@@ -5,7 +5,7 @@ def validate(cache_class, evidence):
     if cache_class == "A":
         pages = evidence.get("resident_pages")
         metadata = evidence.get("metadata_state")
-        return "ELIGIBLE" if pages == 0 and metadata == "VERIFIED_COLD" else "INELIGIBLE"
+        return "ELIGIBLE" if type(pages) is int and pages == 0 and metadata == "VERIFIED_COLD" else "INELIGIBLE"
     if cache_class == "B":
         return "ELIGIBLE" if (evidence.get("fresh_mount") is True
                               and evidence.get("warmup_terminal_unmount") is True

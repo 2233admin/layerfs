@@ -43,6 +43,7 @@ class WorkspaceEvidence(unittest.TestCase):
 
     def test_content_pages_alone_do_not_prove_a_and_c_lifetime_is_bounded(self):
         self.assertEqual(cache.validate("A", {"resident_pages": 0}), "INELIGIBLE")
+        self.assertEqual(cache.validate("A", {"resident_pages": False, "metadata_state": "VERIFIED_COLD"}), "INELIGIBLE")
         self.assertEqual(cache.validate("C", {"same_mount": True, "warm_interval_ns": 60_000_000_000}), "INELIGIBLE")
         self.assertEqual(cache.validate("C", {"same_mount": True, "warm_interval_ns": 59_999_999_999}), "ELIGIBLE")
 
@@ -95,3 +96,14 @@ class WorkspaceEvidence(unittest.TestCase):
             self.assertIn("UNAVAILABLE", (home / "csv/verification.csv").read_text())
             with self.assertRaises(FileExistsError):
                 receipts.report(run, home / "csv")
+
+    def test_report_uses_preserved_source_row_and_never_promotes_proof_time(self):
+        selection = {"family": "init_namespace", "cases": [{"id": "namespace-100-compact-v3", "reference": {
+            "kind": "performance", "source_file": "release-notes/0.1.5/benchmark-performance.csv", "source_row": "110"}}]}
+        performance, _ = receipts.result_rows(selection, {})
+        self.assertEqual(performance[0]["reference_release"], "0.1.5")
+        self.assertEqual(performance[0]["reference_timer"], "layerstack_init_ns")
+        self.assertTrue(performance[0]["reference_ns"].isdigit())
+        selection["cases"][0]["reference"]["kind"] = "verification"
+        performance, _ = receipts.result_rows(selection, {})
+        self.assertEqual(performance[0]["reference_ns"], "")

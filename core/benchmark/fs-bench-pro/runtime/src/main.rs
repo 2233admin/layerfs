@@ -2,6 +2,7 @@
 mod args;
 mod events;
 mod fixture;
+mod project;
 mod runtime;
 mod session;
 
@@ -35,6 +36,8 @@ fn main() -> Result<()> {
     let result = match args.mode.as_str() {
         "provision" => fixture::provision(&args, &mut events),
         "serve" => session::serve(&args, &mut events),
+        "init" => project::initialize(&args, &mut events),
+        "verify-init" => project::verify(&args, &mut events),
         _ => Err("mode must be provision or serve".into()),
     };
     match result {

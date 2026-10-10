@@ -30,7 +30,7 @@ def main(argv=None):
     building = commands.add_parser("build", help="locked release runtime and pinned-image daemon")
     building.add_argument("--out", type=Path)
     preparing = commands.add_parser("prepare", help="build a sealed fixture master from a committed recipe")
-    preparing.add_argument("fixture", choices=("empty", "big64m"))
+    preparing.add_argument("fixture")
     preparing.add_argument("--build", type=Path, required=True)
     preparing.add_argument("--out", type=Path)
     running = commands.add_parser("run", help="one sample per selected case at this clean identity")
@@ -43,6 +43,10 @@ def main(argv=None):
     verifying.add_argument("run", type=Path)
     reporting = commands.add_parser("report", help="generate the two CSVs and report-template table")
     reporting.add_argument("run", type=Path)
+    parity = commands.add_parser("parity", help="original fixture/operation/oracle parity for a ported family")
+    parity.add_argument("family")
+    parity.add_argument("--prepared", type=Path, required=True)
+    parity.add_argument("--out", type=Path, required=True)
     args = parser.parse_args(argv)
     if args.command == "build":
         from engine import identity
@@ -56,13 +60,16 @@ def main(argv=None):
                           "binaries": result["binaries"]}, indent=2))
         return
     if args.command == "run":
-        from engine import fixtures, identity, receipts, workspace
+        from engine import fixtures, identity, project, receipts, workspace
         current = identity.source_identity()
-        if args.family != "cluster-two/cells":
+        if args.family not in ("cluster-two/cells", "init_namespace"):
             parser.error("family workload runner is not implemented yet; all workload cases remain visible in list")
-        registered = [{"id": cell, "cache_class": "B", "v016_case": ""} for cell in fixtures.CELL_RECIPES]
-        if args.case and args.case not in fixtures.CELL_RECIPES:
-            parser.error("case is not in the frozen twelve-cell selection")
+        registered = ([{"id": cell, "cache_class": "B", "v016_case": ""} for cell in fixtures.CELL_RECIPES]
+            if args.family == "cluster-two/cells" else json.loads((HERE / "families/init_namespace/family.json").read_text())["cases"])
+        if args.case and args.case not in {case["id"] for case in registered}:
+            parser.error("case is not in this frozen selection")
+        if any(case.get("status") == "pending" for case in registered):
+            parser.error("pending cases cannot be sampled")
         output = args.out.resolve()
         results = identity.ROOT / "benchmark-results/fs-bench-pro"
         if not output.is_relative_to(results.resolve()):
@@ -80,12 +87,14 @@ def main(argv=None):
                 "product_tree": current["product_tree"], "image": identity.IMAGE,
                 "date": datetime.now().strftime("%Y-%m-%d"), "identity": current,
                 "build": str(args.build.resolve()), "prepared": str(args.prepared.resolve())})
-        selected = [args.case] if args.case else list(fixtures.CELL_RECIPES)
+        selected = [args.case] if args.case else [case["id"] for case in registered]
         failed = False
         for cell in selected:
-            recipe = fixtures.CELL_RECIPES[cell]
+            case = next(item for item in registered if item["id"] == cell)
+            recipe = fixtures.CELL_RECIPES[cell] if args.family == "cluster-two/cells" else case["fixture"]["recipe"]
             prepared = args.prepared if (args.prepared / "prepared.json").exists() else args.prepared / recipe
-            result = workspace.one_cell(cell, prepared, args.build, output / cell)
+            result = (workspace.one_cell(cell, prepared, args.build, output / cell) if args.family == "cluster-two/cells"
+                      else project.one_init(case, prepared, args.build, output / cell))
             print(json.dumps({key: result.get(key) for key in ("case", "status", "counts", "cleanup", "container", "original_failure", "evidence")}))
             failed |= result["status"] != "PASS"
         return 1 if failed else 0
@@ -95,7 +104,11 @@ def main(argv=None):
         results = []
         for case in selection["cases"]:
             folder = args.run / case["id"]
-            if (folder / "actual/observation.json").exists() and (folder / "expected/observation.json").exists():
+            if selection["family"] == "init_namespace" and case["id"] in recorded:
+                row = recorded[case["id"]]
+                result = {"case": case["id"], "status": row["proof_status"],
+                          "scope": "sealed retained independent public-read proof and original evidence hashes", "proof": row.get("verification")}
+            elif (folder / "actual/observation.json").exists() and (folder / "expected/observation.json").exists():
                 result = oracle.compare_recorded(folder / "expected", folder / "actual", case["id"])
             else:
                 result = {"case": case["id"], "status": "NOT_RUN", "reason": "complete retained oracle evidence unavailable"}
@@ -107,6 +120,15 @@ def main(argv=None):
         result = receipts.report(args.run)
         print(result["table"])
         print("CSV destination: " + result["destination"])
+        return
+    if args.command == "parity":
+        from engine import project
+        if args.family != "init_namespace":
+            parser.error("this family's parity transcription is not implemented yet")
+        family = json.loads((HERE / "families/init_namespace/family.json").read_text())
+        result = project.parity_namespace(family, args.prepared, args.out)
+        print(json.dumps({"family": result["family"], "status": result["status"],
+                          "cases": len(result["cases"]), "samples": 0}, indent=2))
         return
     if args.command == "prepare":
         from engine import fixtures, identity

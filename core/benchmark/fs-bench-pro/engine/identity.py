@@ -127,6 +127,7 @@ def source_identity(root=ROOT):
                  "core/benchmark/fs-bench-pro/runtime/", "core/benchmark/fs-bench-pro/engine/",
                  "core/benchmark/fs-bench-pro/families/", "core/benchmark/fs-bench-pro/writers/",
                  "core/benchmark/cluster-two/cells/", "core/benchmark/cluster-two/cache/", ".cargo/"))
+                or (path.startswith(("benchmark/fs-bench-pro/workload/", "benchmark/fs-bench-pro/families/")) and path.endswith(".rs"))
                 or path in ("core/Cargo.toml", "core/Cargo.lock", "core/benchmark/fs-bench-pro/bench.py")]
     hashes = {path: sha256(root / path) for path in selected}
     return {"source_commit": git(root, "rev-parse", "HEAD"),
@@ -183,6 +184,12 @@ def build(folder, root=ROOT):
     host = receipts.command(["cargo", "+1.85.1", "build", "--manifest-path",
                              "core/benchmark/fs-bench-pro/runtime/Cargo.toml", "--locked", "--offline", "--release"],
                             folder, "host-release", 120, environment=environment)
+    namespace_writer = root / "core/target/fs-bench-pro-namespace-writer"
+    workload_host = root / "core/target/fs-bench-pro-workload-host"
+    for name, source, output in (("namespace-writer", root / "core/benchmark/fs-bench-pro/engine/recipes/namespace.rs", namespace_writer),
+                                 ("workload-host", root / "benchmark/fs-bench-pro/workload/main.rs", workload_host)):
+        receipts.command(["rustup", "run", "1.85.1", "rustc", "--edition=2021", "-O", *ARM64_FLAGS,
+                          str(source), "-o", str(output)], folder, name, 120)
     checks = folder / "container-source.sha256"
     checks.write_text("".join(digest + "  /work/" + path + "\n" for path, digest in before["files"].items()))
     container = "layerfs-fsb-build-" + uuid.uuid4().hex[:16]
@@ -201,7 +208,8 @@ def build(folder, root=ROOT):
     receipts.write_new(folder / "source-after.json", after)
     binaries = {}
     for name, path in (("runtime", root / "core/target/r7-host-release/release/layerfs-r7-runtime"),
-                       ("daemon", root / "core/target/r7-linux-release/release/layerfs-daemon")):
+                       ("daemon", root / "core/target/r7-linux-release/release/layerfs-daemon"),
+                       ("namespace-writer", namespace_writer), ("workload-host", workload_host)):
         digest = sha256(path)
         archive = root / "benchmark-results/fs-bench-pro/binary-archive" / digest / path.name
         archive.parent.mkdir(parents=True, exist_ok=True)
@@ -234,6 +242,8 @@ def load_build(folder):
     def compilation(files):
         return {name: digest for name, digest in files.items() if name.startswith(
             ("core/crates/", "core/vendor/", "core/benchmark/fs-bench-pro/runtime/", ".cargo/"))
+            or name == "core/benchmark/fs-bench-pro/engine/recipes/namespace.rs"
+            or (name.startswith(("benchmark/fs-bench-pro/workload/", "benchmark/fs-bench-pro/families/")) and name.endswith(".rs"))
             or name in ("core/Cargo.toml", "core/Cargo.lock")}
     if compilation(current["files"]) != compilation(result["identity"]["files"]):
         raise ValueError("build inputs differ from the sealed release build")

@@ -18,6 +18,7 @@ pub struct Args {
     pub init_seconds: u64,
     pub environment: Vec<String>,
     pub observation_scope: [u8; 32],
+    pub case: Option<String>,
 }
 impl Args {
     pub fn parse() -> Result<Self> {
@@ -49,6 +50,7 @@ impl Args {
             return Err("R7 pinned image required".into());
         }
         let source = values.remove("--source-copy").map(PathBuf::from);
+        let case = values.remove("--case");
         let sealed = values.remove("--sealed").map(PathBuf::from);
         let init_seconds = values
             .remove("--init-seconds")
@@ -121,6 +123,7 @@ impl Args {
             init_seconds,
             environment,
             observation_scope,
+            case,
         })
     }
 }

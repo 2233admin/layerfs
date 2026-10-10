@@ -16,3 +16,4 @@ layerfs-persistence = { path = "../../../crates/layerfs-persistence" }
 layerfs-storage = { path = "../../../crates/layerfs-storage" }
 layerfs-sandbox = { path = "../../../crates/layerfs-sandbox" }
 layerfs-telemetry = { path = "../../../crates/layerfs-telemetry" }
+layerfs-content = { path = "../../../crates/layerfs-content" }

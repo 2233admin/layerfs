@@ -18,7 +18,7 @@ comparison or release-admission claim. Durable is
 | 0.2 Move-only organization | COMPLETE, historical check failures retained | `13f9dec38`; routing `9af29e01e` | Update routing guide, then stage 0.3 catalogue |
 | 0.3 Case catalogue | COMPLETE | `f182e9a63`; prerequisite correction `30b798192` | Stage 0.4 reproducible engine |
 | 0.4 Reproducible engine | CLOSED: functional proof complete; exact reproduction FAILED C10/C12 | Cell-route correction `bb8e07df8`; build support `c496025fc`; oracle support `7a27a4f26`; fixture support `516c2f009`; workspace/report support `358eca082`; cleanup-observer correction `a1f2c259c` | Begin batch 1 under failed-reproduction closure recorded below |
-| 1 Pilot | NEXT | — | Port init_namespace first |
+| 1 Pilot | IN_PROGRESS | Init port/runtime support in this commit | Release build, four fixture preparations, parity and four Init samples |
 | 2 Edits | PENDING | — | Wait for batch 1 completion |
 | 3 Trees and tools | PENDING | — | Wait for batch 2 completion |
 | 4 History on one branch | PENDING | — | Wait for batch 3 completion |
@@ -57,6 +57,10 @@ comparison or release-admission claim. Durable is
 | 16 | Freeze the twelve original B:L cells, enforce class B using actual demand counters and original terminal cleanup, generate all twelve result rows | Stage 0.4 requires exact count reproduction through bench.py; unavailable evidence stays unavailable and soft limits remain separate | Sampling pending workload families before the engine proof or filling absent measurements with zeros |
 
 | 17 | Close stage 0.4 exact reproduction as FAILED for C10/C12, preserve strict checker/results, amend only the stage closure in its own spec commit and continue | All twelve functional proofs/terminal unmounts pass at clean identities with identical daemon/product; kernel batching and conditional reclamation probes prevent a semantic equality claim; handoff explicitly permits source-backed spec correction | Resampling unchanged cases, injecting requests/probes, altering workloads or pretending exact equality passed |
+
+| 18 | Port the actual frozen Init-only infra route and original deterministic bytes/sample set; use current public Init and existing public read APIs | `src/infra.rs` selects namespace_init_diagnostic, not the older auxiliary edit/Commit function; sampled prefixes/metadata/reopen root match the selected verifier | Timing a different historical function or omitting undeclared auxiliary mutations |
+| 19 | Init preparation creates only native inputs; every measured Init gets a fresh Store. Label setup warmth and unavailable host cold metadata as INELIGIBLE | Initial full acquisition must remain measured; preparing/cloning an already initialized Store would remove its product work; unknown coldness cannot receive PASS | Cloning a Store for an initialization case or claiming coldness from file generation |
+| 20 | Reuse original product-neutral Rust planner/stream/digest definitions and compile native-only fixture/verifier tools | Guarantees original names, modes, mtime, count/byte allocation and exact content digest without restoring retired product code | Guessing fixtures or building the retired SDK |
 
 ## Bugs
 
@@ -414,4 +418,54 @@ Scope of this commit: spec and ledger only. Whitespace/local links checked;
 no build/test/Store/mount invocation. Production LOC 79,366 -> 79,366 (delta +0)
 with the pinned absent-aware counter. Batch 1 is next, one family at a time.
 
-| This commit | Correct stage closure while preserving reproduction FAIL | 79366 | 79366 | +0 |
+| `1a8375dbe` | Correct stage closure while preserving reproduction FAIL | 79366 | 79366 | +0 |
+
+Batch 1 / init_namespace implementation: four cases now have frozen ported
+registrations and product-neutral workload.sh. Fixture generation transcribes
+only the native create_namespace_fixture write loop and calls the frozen
+std-only planner/content stream/metadata/tree digest. Preparation mechanically
+compares the generated native tree with the original full native namespace
+verifier (count, bytes, complete content digest). Parity binds original registry,
+reviewed source hashes/commit, fixture equality, ordered Init operation and
+original sampled verifier coverage. No preparation/sample has run yet at this
+new harness source; registration is committed before those operations.
+
+The runtime adds host-only `init` and separate-process `verify-init` modes over
+existing public ProjectApi and Content/Storage/History ports. Public Init creates
+one explicitly Disposable Store, constructs the complete root, publishes its
+first Branch and consumes its session with seal. Independent proof reopens the
+returned sealed root/first Branch and checks exactly the original <=11 sample
+set, metadata/lengths and <=64 KiB prefixes. No daemon, mount, host data server,
+product feature, encoder, optimization or product source change is added.
+Unselected paths/bytes remain explicit proof omissions. Global daemon counts
+are UNAVAILABLE for this host route, not invented as zero. A new release build
+will compile both original native-only tools and pin all included frozen source
+bytes. Existing dependencies/versions are preserved; the manifest/lock change
+only adds already-transitive first-party layerfs-content as a direct dependency.
+
+Two new external runtime tests pass in 2.00 s after locked --no-run compilation:
+sealed public Init/reopen proof and exact-byte corruption rejection. Every
+invocation had the explicit 120 s checkout lock and each child has a bounded
+12 s wait. An accidentally broad first selection also discovered historical
+inline tests through the frozen module; it was explicitly stopped at 77 s
+before the ceiling while the unrelated mixed_v2_contract CPU check ran. Its
+exit 143/logs are retained and it is not claimed passing. No historical test
+was weakened/edited; the final selection filters only the two new sdk_init_
+tests. Initial compile failures (manifest ID width/API field names) are retained.
+An offline lockfile-generation attempt also upgraded unrelated versions; those
+own draft changes were restored from the parent, leaving only the direct
+first-party dependency list addition. That initial unsealed build is not a
+release identity, measurement or dependency-change claim.
+
+Twenty-three engine tests pass in 0.319 s; three catalogue tests pass in 0.124 s.
+Report reference values now resolve the exact preserved released source row;
+verification-only timing is not promoted into a performance reference. Class A
+requires integer zero content-page residency and separately verified cold
+metadata; booleans cannot fabricate eligibility. Rust formatting checks use
+skip_children=true on the owned files to preserve frozen external modules;
+whitespace passes. Product tree remains unchanged. Raw checks:
+`benchmark-results/fs-bench-pro/2026-10-10-batch-1-init-harness-checks/`.
+Actual parity and four samples remain next. Production LOC 79,366 -> 79,366
+(delta +0), same pinned absent-aware method.
+
+| This commit | Port Init definitions and host runtime/parity support | 79366 | 79366 | +0 |

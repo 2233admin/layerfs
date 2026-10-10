@@ -462,6 +462,7 @@ name = "layerfs-r7-runtime"
 version = "0.1.0"
 dependencies = [
  "layerfs-bridge",
+ "layerfs-content",
  "layerfs-history",
  "layerfs-persistence",
  "layerfs-sandbox",

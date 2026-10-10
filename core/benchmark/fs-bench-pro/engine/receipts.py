@@ -167,6 +167,9 @@ VERIFICATION_COLUMNS = "family case v016_case proof_status proof_wall_ns declare
 def result_rows(selection, recorded):
     """One row per registration, including failed and absent observations."""
     performance, verification = [], []
+    reference_path = ROOT / "core/benchmark/fs-bench-pro/baselines/v0.1.6/reference.csv"
+    with reference_path.open(newline="") as stream:
+        references = {(r["source_file"], r["source_row"]): r for r in csv.DictReader(stream)}
     for case in selection["cases"]:
         result = recorded.get(case["id"], {})
         row = {name: "UNAVAILABLE" for name in PERFORMANCE_COLUMNS}
@@ -187,6 +190,10 @@ def result_rows(selection, recorded):
         if type(row["complete_wall_ns"]) is int and type(row["declared_limit_ns"]) is int:
             row["limit_status"] = "EXCEEDED" if row["complete_wall_ns"] > row["declared_limit_ns"] else "WITHIN"
         reference = case.get("reference") or {}
+        if reference.get("kind") == "performance":
+            reference = references[(reference["source_file"], reference["source_row"])]
+        elif reference.get("kind") == "verification":
+            reference = {}
         for column, key in (("reference_release", "release"), ("reference_timer", "timer"), ("reference_ns", "value_ns"), ("reference_profile", "profile")):
             row[column] = reference.get(key, "")
         proof = {name: row.get(name, "UNAVAILABLE") for name in VERIFICATION_COLUMNS}
