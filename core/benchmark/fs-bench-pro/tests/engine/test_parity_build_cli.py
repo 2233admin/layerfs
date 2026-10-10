@@ -12,7 +12,7 @@ sys.path.insert(0, str(BENCH))
 spec = importlib.util.spec_from_file_location('fsb_parity_cli', BENCH / 'bench.py')
 bench = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(bench)
-from engine import project
+from engine import fixtures, identity, project
 
 
 class ParityBuildCli(unittest.TestCase):
@@ -26,6 +26,16 @@ class ParityBuildCli(unittest.TestCase):
             self.assertEqual(positional[0]['family'], family)
             self.assertEqual(positional[1:], (Path('/closed/prepared'), Path('/fresh/parity')))
             self.assertEqual(parity.call_args.kwargs, {'build_folder': Path('/sealed/build')} if extra else {})
+
+    def test_explicit_historical_reuse_reaches_setup_adapter_without_new_producer(self):
+        with patch.object(fixtures, 'prepare_historical_workspace', return_value={'status':'PASS','master_volume':'mock','fixture':{}}) as reuse, \
+             patch.object(fixtures, 'prepare') as fresh, contextlib.redirect_stdout(io.StringIO()):
+            output=identity.ROOT/'benchmark-results/fs-bench-pro/mock-cli-route'
+            bench.main(['prepare','v016-access-boundary-after-v1','--build','/sealed/build','--reuse-producer','/closed/first-access','--out',str(output)])
+        fresh.assert_not_called()
+        self.assertEqual(reuse.call_args.args[1]['id'],'v016-access-boundary-after-v1')
+        self.assertEqual(reuse.call_args.kwargs,{'closed_producer_folder':Path('/closed/first-access')})
+
 
 
 if __name__ == '__main__':

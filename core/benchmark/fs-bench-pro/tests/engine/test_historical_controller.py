@@ -1,6 +1,8 @@
 """Original access controller qualification with mocked public bridge/tools only."""
 import copy
 import hashlib
+import contextlib
+import importlib.util
 import io
 import json
 from pathlib import Path
@@ -155,6 +157,24 @@ class HistoricalController(unittest.TestCase):
             self.assertTrue(result['resource_removal_pending']);self.assertEqual(runtime.retained,[])
             self.assertNotIn('public_proof',result['topology']);self.assertNotIn('global_census',result['topology'])
             self.assertTrue((root/'attempt/receipt.json').is_file())
+
+    def test_actual_access_result_is_accepted_by_bench_and_published_before_disposal(self):
+        spec=importlib.util.spec_from_file_location('historical_actual_cli', BENCH/'bench.py')
+        bench=importlib.util.module_from_spec(spec);spec.loader.exec_module(bench)
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary);case=declared();result,_,_=self.flow(root,case)
+            output=root/'benchmark-results/fs-bench-pro/access-run'
+            current={'source_commit':'mock-source','source_tree':'mock-tree','product_tree':'mock-product'}
+            calls=[]
+            with patch.object(workspace.identity,'ROOT',root), patch.object(workspace.identity,'source_identity',return_value=current), \
+                 patch.object(workspace,'one_family_case',return_value=result), \
+                 patch.object(workspace.receipts,'acknowledge_guarded',side_effect=lambda *args:calls.append('publication')), \
+                 patch.object(workspace,'dispose_family_resources',side_effect=lambda *args:calls.append('disposal')), \
+                 contextlib.redirect_stdout(io.StringIO()):
+                status=bench.main(['run','historical_access','--case',case['id'],'--build','build','--prepared','prepared','--out',str(output)])
+            self.assertEqual(status,0)
+            self.assertEqual(result['performance_mode'],'verification-only')
+            self.assertEqual(calls,['publication','disposal'])
 
     def test_unknown_mount_command_stop_and_bad_exit_retain_without_replay(self):
         for bad in ('mount','command','stop','exit','short'):

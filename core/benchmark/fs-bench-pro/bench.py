@@ -35,6 +35,7 @@ def main(argv=None):
     preparing.add_argument("fixture")
     preparing.add_argument("--build", type=Path, required=True)
     preparing.add_argument("--out", type=Path)
+    preparing.add_argument("--reuse-producer", type=Path, help="sealed historical setup preparation with the same complete original producer")
     running = commands.add_parser("run", help="one sample per selected case at this clean identity")
     running.add_argument("family")
     running.add_argument("--case")
@@ -175,7 +176,14 @@ def main(argv=None):
         output = output.resolve()
         if not output.is_relative_to(results.resolve()):
             parser.error("fixture output must be a fresh directory under benchmark-results/fs-bench-pro")
-        result = fixtures.prepare(args.fixture, output, args.build)
+        if args.reuse_producer is None:
+            result = fixtures.prepare(args.fixture, output, args.build)
+        else:
+            family, case = fixtures.family_case(args.fixture)
+            if family["family"] != "historical_access":
+                parser.error("--reuse-producer is limited to original historical access setup")
+            result = fixtures.prepare_historical_workspace(family, case, output, args.build,
+                                                          closed_producer_folder=args.reuse_producer)
         print(json.dumps({"prepared": str(output), "status": result["status"],
                           "master_volume": result["master_volume"], "fixture": result["fixture"]}, indent=2))
         return

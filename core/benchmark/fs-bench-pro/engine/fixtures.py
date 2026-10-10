@@ -1,10 +1,12 @@
 """Rebuild sealed fixture masters and independent byte-copy sample volumes."""
+import ast
 import hashlib
 import json
 import os
 from pathlib import Path, PurePosixPath
 import shlex
 import shutil
+import subprocess
 import uuid
 
 from . import identity, project, receipts
@@ -185,12 +187,83 @@ def history_ack(record, role):
             "parent_commit_id": None if fields["parent"] == "-" else fields["parent"], "base_layer_id": fields["base_layer"]}
 
 
+def historical_fixture_scope(source):
+    """Exact producer code; exclude only the reviewed access reuse adapters."""
+    module = ast.parse(source)
+    adapters = {"historical_fixture_scope", "historical_source_admission", "load_closed_history_producer",
+                "validate_closed_history_producer", "prepare_historical_workspace"}
+    module.body = [node for node in module.body
+                   if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) or node.name not in adapters]
+    module.body = [node for node in module.body if not isinstance(node, ast.Import)
+                   or [alias.name for alias in node.names] not in (["ast"], ["subprocess"])]
+    added_guard = ast.parse('if "source_admission" in dependency and dependency["source_admission"] != admitted["source_admission"]:\n    raise ValueError("historical producer source admission receipt changed")').body[0]
+    for node in module.body:
+        if isinstance(node, ast.FunctionDef) and node.name == "validate_historical_helpers":
+            node.body = [item for item in node.body if ast.dump(item, include_attributes=False)
+                         != ast.dump(added_guard, include_attributes=False)]
+    return ast.dump(module, include_attributes=False)
+
+
+def historical_source_admission(closed, attempt, current):
+    """Keep original identity and admit only unchanged closed producer execution."""
+    original = attempt.get("identity", {})
+    if (current.get("source_clean") is not True or original.get("source_clean") is not True
+            or original.get("source_commit") != closed["source_commit"]
+            or original.get("source_tree") != closed["source_tree"]
+            or original.get("product_tree") != closed["product_tree"]
+            or attempt.get("source_commit") != closed["source_commit"]
+            or closed["product_tree"] != current["product_tree"]):
+        raise ValueError("closed producer original clean execution identity required")
+    previous, active = original.get("files", {}), current.get("files", {})
+    if not previous or set(previous) != set(active):
+        raise ValueError("closed producer complete source membership changed")
+    prefix = "core/benchmark/fs-bench-pro/"
+    adapters = {prefix + "bench.py", prefix + "engine/fixtures.py", prefix + "engine/workspace.py"}
+    changed = [path for path in previous if previous[path] != active[path]]
+    if any(path not in adapters for path in changed):
+        raise ValueError("closed producer execution/model/workload source changed")
+    for path in changed:
+        if path.endswith("/bench.py"):
+            continue  # Setup invokes the controller directly, never this CLI.
+        old = subprocess.check_output(["git", "show", closed["source_commit"] + ":" + path],
+                                      cwd=identity.ROOT, timeout=15)
+        if hashlib.sha256(old).hexdigest() != previous[path]:
+            raise ValueError("closed producer original source blob seal differs")
+        new = (identity.ROOT / path).read_bytes()
+        if hashlib.sha256(new).hexdigest() != active[path]:
+            raise ValueError("closed producer current source blob seal differs")
+        if path.endswith("/fixtures.py"):
+            equal = historical_fixture_scope(old.decode()) == historical_fixture_scope(new.decode())
+        else:
+            before = b"'performance_mode': 'N/A \xe2\x80\x94 original historical-access VERIFY-ONLY'"
+            after = b"'performance_mode': 'verification-only', 'performance_description': 'original historical-access VERIFY-ONLY'"
+            equal = old.replace(before, after) == new
+        if not equal:
+            raise ValueError("closed producer reviewed adapter-only source scope differs")
+    return {"status": "PASS", "original_source_commit": closed["source_commit"],
+            "original_source_tree": closed["source_tree"], "current_source_commit": current["source_commit"],
+            "current_source_tree": current["source_tree"], "exact_source_files": len(previous) - len(changed),
+            "reviewed_adapter_only_changes": changed, "product_tree": current["product_tree"],
+            "scope": "unchanged original complete setup producer; original receipts and source identity preserved"}
+
+
+def load_closed_history_producer(folder, case, build, current):
+    """Explicit reuse of a sealed setup dependency, never a measured receipt."""
+    prior = load(folder)
+    if prior.get("schema") != HISTORICAL_PREPARED_SCHEMA or prior.get("family") != "historical_access":
+        raise ValueError("reuse requires a complete historical setup preparation")
+    closed = prior["closed_producer"]
+    plan = historical_plan(case)
+    genesis = historical_genesis(plan, Path(folder), None, build, current, closed["initial_prepared"])
+    validate_closed_history_producer(case, closed, genesis, current)
+    return closed, genesis
+
+
 def validate_closed_history_producer(case, closed, genesis, current):
     """Read authenticated setup custody/graph only; never open or repair its Store."""
     plan = historical_plan(case)
     if (closed.get("schema") != "fs-bench-pro-closed-history-producer-v1" or closed.get("status") != "PASS"
             or closed.get("producer_case") != plan["producer_case"] or closed.get("producer_family") != plan["producer_family"]
-            or closed.get("source_commit") != current["source_commit"] or closed.get("source_tree") != current["source_tree"]
             or closed.get("product_tree") != current["product_tree"] or type(closed.get("seed")) is not int or closed["seed"] != 1
             or closed.get("setup_only") is not True or type(closed.get("sample_count")) is not int or closed["sample_count"] != 0
             or closed.get("helpers") != genesis["helpers"] or Path(closed["initial_prepared"]).resolve() != Path(genesis["prepared_folder"]).resolve()):
@@ -263,9 +336,10 @@ def validate_closed_history_producer(case, closed, genesis, current):
     if (attempt.get("setup_only") is not True or type(attempt.get("sample_count")) is not int or attempt["sample_count"] != 0 or attempt.get("status") == "FAIL"
             or attempt.get("functional_status") != "PASS" or attempt.get("proof_status") != "PASS"
             or attempt.get("cleanup") != "Gone" or attempt.get("custody") != "KNOWN_STOP"
-            or attempt.get("case") != plan["producer_case"] or attempt.get("source_commit") != current["source_commit"]
+            or attempt.get("case") != plan["producer_case"] or attempt.get("source_commit") != closed["source_commit"]
             or attempt.get("product_tree") != current["product_tree"]):
         raise ValueError("original historical producer complete setup attempt and closure required")
+    source_admission = historical_source_admission(closed, attempt, current)
     branches = closed["graph"]["branches"]
     if set(branches) != set(plan["graph_roles"]):
         raise ValueError("complete original historical producer branch membership differs")
@@ -318,7 +392,7 @@ def validate_closed_history_producer(case, closed, genesis, current):
         fields = line.split("\t")
         if fields[:len(wanted)] != wanted or len(fields) != (12 if wanted[0] == "branch" else 10):
             raise ValueError("historical producer transcript tuple differs")
-    return {"plan": plan, "selected": by_role[plan["source_role"]][plan["selected_local"]],
+    return {"plan": plan, "source_admission": source_admission, "selected": by_role[plan["source_role"]][plan["selected_local"]],
             "distinct_commit_tuples": len(tuples), "scope": "all original role-local ACKs/forks/parents/heads and known closed setup custody; equal canonical tuples retained"}
 
 
@@ -416,14 +490,19 @@ def install_closed_history_store(closed, genesis, folder, build):
     return volume, result
 
 
-def prepare_historical_workspace(family, case, folder, build_folder, genesis_prepared_folder=None):
+def prepare_historical_workspace(family, case, folder, build_folder, genesis_prepared_folder=None, closed_producer_folder=None):
     from . import workspace
     plan = historical_plan(case)
     build, current = identity.load_build(build_folder), identity.source_identity()
     folder = Path(folder).resolve(); folder.mkdir(parents=True, exist_ok=False)
-    genesis = historical_genesis(plan, folder, build_folder, build, current, genesis_prepared_folder)
-    _, producer = family_case(plan["producer_case"])
-    closed = workspace.prepare_history_producer(plan["producer_family"], producer, genesis["prepared_folder"], build_folder, folder / "producer")
+    if closed_producer_folder is None:
+        genesis = historical_genesis(plan, folder, build_folder, build, current, genesis_prepared_folder)
+        _, producer = family_case(plan["producer_case"])
+        closed = workspace.prepare_history_producer(plan["producer_family"], producer, genesis["prepared_folder"], build_folder, folder / "producer")
+    else:
+        if genesis_prepared_folder is not None:
+            raise ValueError("closed producer supplies its exact original genesis")
+        closed, genesis = load_closed_history_producer(closed_producer_folder, case, build, current)
     admitted = validate_closed_history_producer(case, closed, genesis, current)
     binding = {"source_commit": current["source_commit"], "source_tree": current["source_tree"],
                "producer_definition_sha256": plan["producer_definition_sha256"], "access_definition_sha256": plan["access_definition_sha256"],
@@ -432,7 +511,9 @@ def prepare_historical_workspace(family, case, folder, build_folder, genesis_pre
     selected["acknowledged_commit"] = admitted["selected"]
     dependency = {**historical_producer_dependency(case), "status": "PASS", "plan": plan,
                   "initial_prepared": genesis["prepared_folder"], "initial_prepared_manifest_sha256": identity.sha256(Path(genesis["prepared_folder"]) / "manifest.json"),
-                  "source_binding": binding, "closed_producer_receipt_sha256": closed["receipt_sha256"]}
+                  "source_binding": binding, "source_admission": admitted["source_admission"],
+                  "reused_closed_producer": str(Path(closed_producer_folder).resolve()) if closed_producer_folder is not None else None,
+                  "closed_producer_receipt_sha256": closed["receipt_sha256"]}
     code = folder / "code"; code.mkdir(); (code / "writers").mkdir(); (code / "access").mkdir()
     copies = [(build["binaries"]["workload-linux"]["path"], "writers/workload"),
               (identity.ROOT / "core/benchmark/fs-bench-pro/families/historical_access/workload.sh", "workload.sh"),
@@ -449,7 +530,8 @@ def prepare_historical_workspace(family, case, folder, build_folder, genesis_pre
               "helpers": helpers, "closed_producer": closed, "producer_dependency": dependency, "historical_selection": selected,
               "initial_prepared": genesis["prepared_folder"], "source_uid": genesis["source_uid"], "source_gid": genesis["source_gid"],
               "master_measurement_mounts": 0, "global_profile": "Disposable/WAL/OFF", "overlay_profile": "MEMORY/OFF/EXCLUSIVE",
-              "construction_workers": 1, "setup": "new full closed producer; setup-only original complete history; independent immutable byte copy; no pre-read or warmup",
+              "construction_workers": 1, "setup": "explicit reused full closed setup-only producer" if closed_producer_folder is not None else "new full closed setup-only producer",
+              "setup_scope": "original complete history; independent immutable byte copy; no pre-read or warmup",
               "cache": "uncontrolled OS cache; original two-pass reader/verifier on same mount; verification only, no performance or cold claim"}
     validate_historical_helpers(case, result, build, genesis=genesis)
     result["master_volume"], result["provision"] = install_closed_history_store(closed, genesis, folder / "project", build)
@@ -467,6 +549,8 @@ def validate_historical_helpers(case, prepared, build, genesis=None):
     if genesis is None:
         genesis = {**load(prepared["initial_prepared"], plan["producer_case"]), "prepared_folder": prepared["initial_prepared"]}
     admitted = validate_closed_history_producer(case, prepared["closed_producer"], genesis, prepared["identity"])
+    if "source_admission" in dependency and dependency["source_admission"] != admitted["source_admission"]:
+        raise ValueError("historical producer source admission receipt changed")
     binding = dependency["source_binding"]
     if (binding.get("producer_definition_sha256") != plan["producer_definition_sha256"]
             or binding.get("access_definition_sha256") != plan["access_definition_sha256"]

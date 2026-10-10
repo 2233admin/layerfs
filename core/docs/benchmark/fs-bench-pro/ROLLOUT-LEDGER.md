@@ -22,7 +22,7 @@ comparison or release-admission claim. Durable is
 | 2 Edits | COMPLETE: all62 cases ported/parity/sampled once/recorded;39 strict proof and clean-close passes (numeric INELIGIBLE),20 strict retention failures and3 original capped-watchdog failures retained | Canonical `a34b5d44b`/`beeb7ad69`; preserving `b9ffa63be`; capped `4d8ccfc93`; changing `05ffbf971`; small-delta `c0c99a4a3`/`2e6a508b5`/`1c975ba30` | Begin batch3; no identified fixable product correctness defect remains in batch2 |
 | 3 Trees and tools | COMPLETE: all33 original cases ported/parity/sampled, full applicable proofs and clean closePASS; numeric33INELIGIBLE; first snapshotFAIL retained separately; localitydense500 and snapshot EXCEEDED | Shared3c697ae92; directory50c297c68/ad4f95503; locality2590a4536/26c037d90; snapshot0344bfdc6/fix03033abdc/results98d3be30a/70d568e94; Git acebd7cbd/guard031d427a7/results31fff4d49 | Begin batch4 after this committed closure, no identified fixable product correctness bug |
 | 4 History on one branch | CLOSED WITH FAILURES: all 43 original cases ported and recorded; 31 functional/proof/clean-close passes, 11 retained actual failures, one failed preparation with actual NOT_RUN; mixed aggregate parity FAIL retained under section 9 exception; no identified fixable product correctness bug remains | H11 2b52bdf17; H12 ea7148a19; H13 8ae040cdd; H14 e09c61bbd; product H15 a05ed6027; H16 9dfb70ee4; fresh seal3c67e9249; affected Init8f24e39a4; boundary88a2bd27b; partial bd3016957; mixed1a21ebfc3; dedup closure27708c11d | Begin batch 5 after this committed failed closure; verify existing public SDK Fork and History |
-| 5 Branches and Workspaces | IN_PROGRESS: ordered family source review and registration; runtime preparation, P-1 proof, parity and samples pending | P-2 source correction19344b6a3; registration this commit | Qualify the existing public SDK Fork/History and shared context machinery before any sample |
+| 5 Branches and Workspaces | IN_PROGRESS: all17 definitions ported; shared build and actual public SDK proof PASS; branch/multi preparing and sampling, access completing producer reuse | P-2 19344b6a3; full seal9da25b495; H20 e60a1aa2c; SDK proof711593c5f | Close every original case and aggregate parity truthfully; preserve branch500/K100 failed preparation and actual NOT_RUN |
 | 6 Dedup and storage | PENDING | — | Wait for batch 5 completion |
 | 7 Reliability | PENDING | — | Wait for batch 6 completion |
 
@@ -84,6 +84,8 @@ comparison or release-admission claim. Durable is
 | 52 | Build historical access from new setup-only full original producers; reuse immutable genesis inputs, never measured samples | Original access consumes a complete closed producer; sample0 and explicit setup custody keep phases distinct | Reusing a mutated measured Store or initializing only the selected ancestor |
 | 53 | Use explicit anchored32-record public SDK History pages and authenticated continuation artifacts | Existing native bridge HISTORY_WINDOW is32, while provider Page allows128; pagination expresses every original ancestry without a product feature or refusal/retry | Sending128, raising a product cap, truncating ancestry or classifying an expressible case not-applicable |
 
+| 54 | Explicitly reuse each new, complete closed setup producer for its paired historical access case, retaining original identity and immutable receipts | Six access selections use four complete original producer graphs; exact compiled/controller/model/workload/fixture admission avoids replaying setup and keeps each access independent | Running boundary100 and inode100 twice, reusing measured Stores, or forging the current source on an earlier producer |
+
 ## Bugs
 
 | Bug | Case | Symptom | Cause | Fix commit | External test |
@@ -109,6 +111,9 @@ comparison or release-admission claim. Durable is
 | H-18 (watchdog failure) | Dedup distributed500 at e308118a9 | Unchanged 120 s outer stop expires after 377 acknowledged Commits; no complete receipt/proof/End/Stop | The finite original 500-step schedule does not finish within the bounded attempt; ongoing progress observed, no source-backed deadlock or wrong result identified | No retry, optimization or timeout change; partial attempt stays FAIL with uncertain custody | Administrative external-supervisor closure binds original selection, invocation exit, runtime stream and clone; complete metrics remain unavailable |
 | H-19 (harness) | Batch5 explicit parity-build CLI authoring | Branch/multi CLI rejected before parity despite implemented context setup/controller | Their two original family names were omitted from the CLI workspace allowlist | `821624cb3` | External CLI wiring red retained; final legacy/no-build and branch/explicit-build check PASS; no actual case |
 | H-20 (harness) | Fresh empty preparation for P1 at9da25b495 | Copied native oracle crashes importing /code/engine/oracle.py, before Store Init or SDK test | Module-level repository-root parents4 resolution assumes deep host checkout | `e60a1aa2c` | External shallow-copy import red; final copied CLI and pinned host census/legacy oracle scope PASS; failed prep/resources retained |
+
+| H-21 (harness) | Historical access result before first actual access invocation | Driver would reject completed access before publication ACK and disposal | Controller used a descriptive N/A performance_mode while bench.py requires canonical verification-only | This commit | Actual controller result through real bench.main fails at parent; final driver publishes before disposal, samples0/attempt1 unchanged |
+| H-22 (harness) | Paired historical input setup authoring | No explicit complete closed-producer reuse path; two paired selections would replay an identical setup producer | CLI and fixture adapter only created a new producer and required source commit equality, despite unchanged setup scope | This commit | Parent reuse regression retained; exact original identity/files/AST/blob seals and full custody/graph/Store checks qualify reuse without a replay |
 
 H-1 and H-2 are harness faults, not product correctness or performance defects.
 The original file-identity checker remains intact; no product source changed.
@@ -4382,4 +4387,61 @@ original attempt, strict M1 assertions remain and counts missing exact evidence
 remain UNAVAILABLE. No batch6/7 work begins until batch5 is truthfully closed.
 Durable remains NOT_RUN — disabled by owner until explicit reauthorization.
 
-| This commit | Record one actual SDK Fork/History covering proof and owned passing-resource disposal | 79370 | 79370 | +0 |
+| `711593c5f` | Record one actual SDK Fork/History covering proof and owned passing-resource disposal | 79370 | 79370 | +0 |
+
+
+### Batch 5 historical result contract and explicit closed producer reuse, 2026-10-11
+
+Before any historical access invocation, the agent found that one_access_case
+returned descriptive performance_mode N/A while the actual driver requires
+verification-only. The external regression executes the actual controller
+result through bench.main; it fails at parent711593c5f before publication.
+The controller now uses the exact canonical mode and keeps the original
+verification-only description separately. Actual reader/verifier, zero Commit,
+sample0/attempt1, all budgets, publication guard and cleanup are unchanged.
+
+bench.py prepare now accepts explicit --reuse-producer pointing to an earlier
+sealed historical preparation. It creates a new independently installed byte
+copy and exact selected native expectations while reusing only the new full
+closed setup-only producer. It never invokes the producer again. The original
+summary, attempt identity, Store, raw WAL export, normalization, complete ACK
+list, Branch graph, selected tuple and receipt hashes stay unchanged.
+Cross-commit admission compares complete source membership and every producer
+execution/model/workload file. Only the reviewed CLI/access adapter changes
+are permitted: original/current fixture producer ASTs must be identical,
+including all generation, dispatch, model, helper and install functions; the
+only controller byte change admitted is H21's exact access-only mode label.
+Original Git blobs must match their authenticated hashes. The added admission
+receipt equality guard is itself checked without excluding any prior helper
+validation. Product/binaries, oracle normalization helper and source scope
+remain exact. Changed producer code is refused. No coldness is inferred.
+
+The historical worktree at af7dbdd3c completed four first-occurrence setup
+producers: boundary100, inode100, compact30 and descendant40. Authenticated
+producer attempts have zero samples, complete proofs, End/Gone/KnownStop and
+passing sample-resource removal. Four original source scopes pass a read-only
+adapter authoring check; neither those receipts nor their source identities
+were rewritten. Four-producer handoff SHA-256
+a870bc0de3e5e9352c1accef8891a4f54a3954d8f44723a1c952c35a29b86c08
+in that worktree's2026-10-11-historical-access-af7dbdd3c folder. Setup masters
+remain for rollout reuse. Paired two preparations and all six actual access
+attempts are still unrun at this commit, awaiting this reviewed source.
+
+Owning final38 harness checks PASS in5,940,744,291 ns under120 s main R4 stop.
+The two parent regressions, initial new-test path assertion failure (/var
+versus resolved/private/var), and authoring script's wrong divergent ID are
+retained. Corrected only the new assertion/script; no existing verifier was
+weakened. Raw qualification folder
+benchmark-results/fs-bench-pro/2026-10-11-historical-setup-reuse-qualification;
+qualification SHA-256 d1afa459905722b296b0422b852930bc93ee0f06eaf9e9865e015e5df87df36e. No build, Store, Docker operation
+or measurement ran during these checks. All nine compiled inputs still match
+the existing full seal; no rebuild is needed for this Python-only change.
+
+Branch500/K100 preparation reached its unchanged120 s outer stop in its
+worktree. Late inner sealed output cannot promote the failed invocation;
+actual case remains NOT_RUN and parity FAIL. Other five original parity rows
+PASS and proceed once. Full cutoff/custody and source closure will accompany
+the final family results. No limit, checkpoint, cache, workers or product
+speed change is selected. Durable execution remains disabled.
+
+| This commit | Repair historical driver result contract and qualify explicit complete setup-producer reuse | 79370 | 79370 | +0 |

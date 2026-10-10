@@ -1344,7 +1344,7 @@ def one_access_case(family, case, prepared_folder, build_folder, output):
         'image': identity.IMAGE, 'runtime_sha256': build['binaries']['runtime']['sha256'], 'daemon_sha256': build['binaries']['daemon']['sha256'],
         'status': 'NOT_RUN', 'functional_status': 'NOT_RUN', 'proof_status': 'NOT_RUN', 'proof_only': True,
         'sample_count': 0, 'verification_attempt_count': 1, 'attempted_operation_count': 1, 'completed_operation_count': 0,
-        'performance_mode': 'N/A — original historical-access VERIFY-ONLY', 'declared_limit_ns': 'N/A',
+        'performance_mode': 'verification-only', 'performance_description': 'original historical-access VERIFY-ONLY', 'declared_limit_ns': 'N/A',
         'verifier_limit_ns': 25_000_000_000, 'owner_test_ceiling_ns': 120_000_000_000, 'phases': {}, 'counts': {}, 'observations': {},
         'cache_class': 'B', 'cache': {'class': 'B', 'status': 'INELIGIBLE', 'declaration': case['cache_contract']},
         'global_profile': 'Disposable/WAL/OFF', 'overlay_profile': 'MEMORY/OFF/EXCLUSIVE', 'construction_workers': 1,

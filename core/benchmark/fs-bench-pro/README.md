@@ -54,3 +54,11 @@ commits through the SDK, terminally unmounts, verifies a fresh published-root
 mount and performs a separate offline current-format persisted proof. The
 runtime's `verify-workspace` mode is an independent harness oracle over a closed
 sample Store; the live daemon data path stays in-process in the shared volume.
+
+Historical access setup first creates a new complete closed original producer.
+For a paired selection of that same producer, use `bench.py prepare <access-case>
+--build <seal> --reuse-producer <first-access-prepared-folder> --out <fresh-path>`.
+The adapter admits original source/helper/graph/custody seals, preserves the
+original producer identity and installs a new independent complete Store byte
+copy. This reuses setup only; each original access gets its own fresh mount,
+reader and verifier, with zero performance samples and one proof attempt.

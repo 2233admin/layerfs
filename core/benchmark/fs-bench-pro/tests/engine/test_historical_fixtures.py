@@ -31,7 +31,7 @@ class HistoricalFixtures(unittest.TestCase):
             path = folder / name; path.write_text("mock sealed binary " + name)
             tools["binaries"][name] = {"path": str(path), "sha256": fixtures.identity.sha256(path)}
         current = {"source_commit": "mock-source", "source_tree": "mock-tree", "product_tree": "mock-product",
-                   "files": {path: fixtures.identity.sha256(fixtures.identity.ROOT / path) for path in fixtures.CONTEXT_SOURCE_FILES}}
+                   "source_clean": True, "files": {path: fixtures.identity.sha256(fixtures.identity.ROOT / path) for path in fixtures.CONTEXT_SOURCE_FILES}}
         plan = fixtures.historical_plan(case)
         genesis_folder = folder / "immutable-genesis"; genesis_folder.mkdir()
         store = genesis_folder / "initial.sqlite"; store.write_bytes(b"mocked genesis bytes, not SQLite")
@@ -101,7 +101,7 @@ class HistoricalFixtures(unittest.TestCase):
         attempt_folder = output / "mocked-attempt"; attempt_folder.mkdir(); attempt = attempt_folder / "receipt.json"
         attempt.write_text(json.dumps({"setup_only":True, "sample_count":0, "status":"INELIGIBLE", "functional_status":"PASS",
                                       "proof_status":"PASS", "cleanup":"Gone", "custody":"KNOWN_STOP", "case":plan["producer_case"],
-                                      "source_commit":current["source_commit"], "product_tree":current["product_tree"]}))
+                                      "source_commit":current["source_commit"], "product_tree":current["product_tree"], "identity":current}))
         fixtures.receipts.manifest(attempt_folder)
         result = {"schema": "fs-bench-pro-closed-history-producer-v1", "status": "PASS", "producer_case": plan["producer_case"],
                   "producer_family": plan["producer_family"], "source_commit": current["source_commit"], "source_tree": current["source_tree"],
@@ -259,6 +259,50 @@ class HistoricalFixtures(unittest.TestCase):
             with patch.object(fixtures,"load",return_value=genesis),patch.object(fixtures,"prepare") as prepared,patch.object(fixtures,"validate_runtime_helpers"):
                 fixtures.historical_genesis(plan,folder,"build",build,current)
             prepared.assert_called_once_with(plan["producer_case"],folder/"genesis","build")
+
+    def test_explicit_paired_reuse_preserves_closed_receipts_and_never_replays_producer(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            folder = Path(temporary); case = declared(1)
+            build, current, genesis = self.inputs(folder, case)
+            closed = self.closed(case, genesis, current, folder / "prior-producer")
+            before = {str(p): fixtures.identity.sha256(p) for p in (folder / "prior-producer").rglob("*") if p.is_file()}
+            calls = []; holder = {"closed": closed}
+            with patch.object(fixtures.identity, "load_build", return_value=build), \
+                 patch.object(fixtures.identity, "source_identity", return_value=current), \
+                 patch.object(fixtures, "load_closed_history_producer", return_value=(closed, genesis)) as reused, \
+                 patch.object(workspace, "prepare_history_producer") as replay, \
+                 patch.object(fixtures.receipts, "command", side_effect=self.tools(case, calls, holder)):
+                result = fixtures.prepare_historical_workspace({"family":"historical_access"}, case, folder / "paired", "mock-build",
+                                                               closed_producer_folder=folder / "first-access")
+            replay.assert_not_called(); reused.assert_called_once()
+            self.assertEqual(result["closed_producer"], closed)
+            self.assertEqual(result["historical_selection"]["local"], 49)
+            self.assertEqual(result["producer_dependency"]["source_admission"]["status"], "PASS")
+            self.assertEqual(result["producer_dependency"]["reused_closed_producer"], str((folder / "first-access").resolve()))
+            self.assertEqual(before, {str(p): fixtures.identity.sha256(p) for p in (folder / "prior-producer").rglob("*") if p.is_file()})
+
+    def test_reuse_requires_original_source_identity_and_exact_execution_files(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            folder=Path(temporary); case=declared(); _,current,genesis=self.inputs(folder,case)
+            closed=self.closed(case,genesis,current,folder/"producer")
+            attempt=json.loads(Path(closed["attempt_receipt"]).read_text())
+            changed=copy.deepcopy(current); changed["source_commit"]="new-doc-commit"; changed["source_tree"]="new-doc-tree"
+            result=fixtures.historical_source_admission(closed,attempt,changed)
+            self.assertEqual(result["original_source_commit"],current["source_commit"])
+            self.assertEqual(result["current_source_commit"],changed["source_commit"])
+            for variant in ("identity", "model", "membership"):
+                bad=copy.deepcopy(changed); old=copy.deepcopy(attempt)
+                if variant=="identity": old["identity"]["source_clean"]=False
+                elif variant=="model": bad["files"][fixtures.CONTEXT_SOURCE_FILES[0]]="0"*64
+                else: bad["files"]["undeclared.py"]="0"*64
+                with self.subTest(variant=variant), self.assertRaises(ValueError):
+                    fixtures.historical_source_admission(closed,old,bad)
+
+    def test_fixture_scope_excludes_only_reuse_adapters_and_retains_every_producer_function(self):
+        source=(BENCH/"engine/fixtures.py").read_text()
+        self.assertEqual(fixtures.historical_fixture_scope(source), fixtures.historical_fixture_scope(source.replace('"exact_source_files"', '"same_count"')))
+        self.assertNotEqual(fixtures.historical_fixture_scope(source), fixtures.historical_fixture_scope(source.replace('"v016-access-boundary-before-v1"', '"changed-original-case"')))
+        self.assertNotEqual(fixtures.historical_fixture_scope(source), fixtures.historical_fixture_scope(source.replace('master_measurement_mounts", 0) != 0', 'master_measurement_mounts", 0) != 1')))
 
     def test_bad_selected_native_binding_and_bad_install_are_retained_without_retry(self):
         for variant in ("native","install"):
