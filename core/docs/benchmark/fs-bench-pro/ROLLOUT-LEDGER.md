@@ -113,6 +113,7 @@ comparison or release-admission claim. Durable is
 | 76 | Generate exact supported RAWsingleton through existing public encoders and mutate only a same-length canonical target byte; delete only selected locator/advisory closure for missing fault | Current32768BWholeFile differs from retired firstChunk; sharedpack framing must remain valid and unrelated records unchanged. Existing public APIs and stdlibsqlite3 avoid newdependencies/features. Current wholepackSHA refusal is supplemental only; ordinary originalFUSE EIO0 remains mandatory | Corruptcompressed frame/CRC, handwriteproductencoding, disableFK/triggers, or acceptbroadIO/startup errors asfullproof |
 | 77 | Classify the two early integrity complete cases not-applicable before setup/sample; preserve every native/fault/EIO/cleanup/resource obligation | Public SandboxApi has private atomicCreate→Upload→Start with no CPU/memory/swap/PIDprofile, callback or adoption. Stopped backend create exists, but completing its owner would recreate SDK wire authentication/Hello. Post-Start limits cannot preserve frozen from-creation2CPU/2GiB/no-swap/256PID profile | Add forbidden productfeature/newwireowner/proxy, apply limits afterStart, or claim partial native diagnostics ascompletecasePASS |
 | 78 | Ship only exact source admission/parity and pre-side-effect refusal for all28 reliabilityNA cases; retain rich prospective controller ignored/unqualified | No complete frozen case can execute under current capabilities; an unused runtime implementation would not qualify missing guards. Current-source NA skipping checks actual product/source; retained historical verification preserves original policy rather than masking recorded failures | Run incomplete cases, treat source parity as native proof, fabricate zero-cost samples, or drop failed/NA rows |
+| 79 | Clarify spec with named source-applicability module, NA parity scope and verification-only performanceN/A/proof disposition | Section4 omitted the source-only reliability machinery; section6.1 omittedN/A despite verification-only cases; section7 did not distinguish honest missing-capability source checks from runtime proofs. Existing original guards/limits/schema columns/receipts stay unchanged | Claim fullruntime parity for unexpressible cases, hideNA in performanceN/A, or invent unnamed source paths |
 
 ## Bugs
 
@@ -6540,5 +6541,28 @@ Formalclean source-only parity/registration/report follows thiscommit.
 | Commit | Purpose | Production before | after | delta |
 | --- | --- | --- | --- | --- |
 | This commit | Admit source-only reliability dispositions through bench.py | 79370 | 79370 | +0 |
+Pinned absent-aware staged counter/exact tree confirmation; reference absent,
+retiredR9c,last65,417/tree498dd1917812.
+
+
+### Specification applicability/schema clarification, 2026-10-11
+
+Own speccommit names engine/reliability.py insection4/table6 and makes
+source-onlyNA parity explicit insection7, distinctfrom nativefixture/runtime
+proof. It clarifies verification-only performanceN/A versus actualproof/
+NA status inverification.csv and absenttimingUNAVAILABLE/zeroactualattempts.
+The original layout omitted this missing-capability routing, and statusvalues
+omittedN/A despite designatedverification-onlyfamilies/releasedproof-only
+format. Fullcurrentcase guards/limits/physicalobservability/creationprofile
+requirements andoriginaloperations remainmandatory. No case oracle, limit,
+workload, numerical cacheclaim, receipt/verdict, CSVcolumn or productfeature
+changes. All earlier source-onlyf560 parity/registration/report evidence is
+retained atitsactualidentity; docsclarification doesnot replay a case or
+reclassify a measured result. This is specification clarity, not a passing
+reliability-proof or comparison assertion.
+
+| Commit | Purpose | Production before | after | delta |
+| --- | --- | --- | --- | --- |
+| This commit | Clarify honest applicability and proof-only reporting in the spec | 79370 | 79370 | +0 |
 Pinned absent-aware staged counter/exact tree confirmation; reference absent,
 retiredR9c,last65,417/tree498dd1917812.

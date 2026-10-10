@@ -98,6 +98,7 @@ core/benchmark/
       oracle.py                     —    new   (independent verification)
       project.py                    —    new   (Init and history cases, no mount)
       receipts.py                   —    new
+      reliability.py                —    new   (complete-case source applicability and refusal)
       workspace.py                  —    new   (mount, run, commit, unmount)
       recipes/                      —    new   (fixture generators)
     runtime/                             (moved from r7-runtime)
@@ -227,6 +228,7 @@ What each module owns:
 | `cache` | Classes A (fresh mount, cold), B (fresh mount, warm daemon) and C (same mount, warm), each with its enforced precondition. A sample whose precondition is not met is `INELIGIBLE` |
 | `identity` | Source commit and tree, product tree, build seal, binary hashes, image digest, harness tree, workload and fixture hashes. A run refuses a dirty tree |
 | `receipts` | Append-only output under `benchmark-results/fs-bench-pro/<run>/`; a second sample of the same identity is refused |
+| `reliability` | Exact source applicability of complete frozen failure cases; retain original obligations and refuse unavailable cases before setup or runtime work. Source-only parity never qualifies a native or mounted proof |
 
 Fixed for every run: global Store Disposable/WAL/OFF selected explicitly,
 overlay MEMORY/OFF/EXCLUSIVE, `LAYERFS_CONSTRUCTION_WORKERS=1` (Init keeps its
@@ -289,11 +291,21 @@ source_commit, product_tree, image, evidence, tag
 
 | Column | Values and meaning |
 | --- | --- |
-| `status` | `PASS` (ran to the end, verifier passed, mount ended cleanly), `FAIL`, `INELIGIBLE` (cache precondition not met), `NOT_RUN`, `NOT_APPLICABLE`. A non-passing row keeps its reason in `tag` |
+| `status` | `PASS` (ran to the end, verifier passed, mount ended cleanly), `FAIL`, `INELIGIBLE` (cache precondition not met), `NOT_RUN`, `NOT_APPLICABLE`. Verification-only performance rows use `N/A`; their actual proof or applicability disposition remains in `verification.csv`. A non-passing row keeps its reason in `tag` |
 | `limit_status` | `WITHIN` or `EXCEEDED` against `declared_limit_ns`. In the first iteration this is recorded and not judged; an `EXCEEDED` row can still be `PASS` |
 | `reference_*` | Copied from `baselines/v0.1.6/reference.csv`: the release, the timer it used, its value and its profile. Empty when no released number exists |
 | `evidence` | Path of the receipt directory under `benchmark-results/` |
 | a value a receipt does not supply | `UNAVAILABLE`, never 0 |
+
+Verification-only selections have no performance sample: performance phase,
+time, count, storage, cache, limit and status cells are `N/A`. This does not
+hide a failed outcome or case inapplicability: `verification.csv` retains the
+actual proof status, original proof limit and reason; absent proof timing is
+`UNAVAILABLE`. An unattempted source-inapplicable selection is
+`NOT_APPLICABLE`, with zero actual workload and verification attempts. Native
+adapter diagnostics remain separately scoped raw evidence. They are not a
+whole-case proof or a numerical performance result. Existing CSV receipts and
+verdicts are unchanged by this schema clarification.
 
 There is no ratio column. The reference was measured on another version,
 topology and timer, and a printed ratio would read as a verdict the data
@@ -320,6 +332,20 @@ workloads are Rust code calling an SDK that no longer builds. Anything that
 cannot match goes in `differences` with its reason. Expected examples: v0.1.6
 kept the Store on the host and core keeps it in the VM; a v0.1.6 case that
 called an SDK edit method must become ordinary file writes.
+
+For a `not-applicable` case, parity verifies its exact original ID, reviewed
+fixture/ordered operation/oracle declarations, complete original guards and
+limits, the current clean product/source identities and the specific missing
+capability with its reason and needs. It records source applicability
+separately from native fixture or runtime parity. A source-applicability check
+may pass while `runtime_parity` remains `NOT_RUN`; it never establishes that
+the complete case verifier ran or passed. Every unavailable case remains in
+both result CSVs, with zero actual attempts. All original obligations remain
+required before any future ported classification; a sampled/shared/logical
+counter, post-Start resource limit, partial primitive proof or reused proof
+with narrower scope cannot replace them. This is the explicit applicability
+route for batch 7's 26 physical-accounting and two from-creation resource-profile
+gaps; it introduces no product capability or relaxed case oracle.
 
 ## 8. Reference numbers
 
