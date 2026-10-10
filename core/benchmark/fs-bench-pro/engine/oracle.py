@@ -315,7 +315,154 @@ def _normalization_binding(path, before, custody):
     return raw/"store.sqlite"
 
 
-def commit_census(sealed_path, acknowledged_tuples, provider_fields, export_custody):
+def _topology_transcript(path, acknowledged_tuples, provider):
+    """All role-local acknowledgements and explicit forks, never ancestry filtering."""
+    body = Path(path).read_text()
+    if not body.endswith("\n") or "\r" in body:
+        raise ValueError("topology transcript must be canonical LF rows")
+    rows = [line.split("\t") for line in body.splitlines()]
+    if not rows or len(rows[0]) != 2 or rows[0][0] != "topology-v1":
+        raise ValueError("topology transcript version/case required")
+    case = rows[0][1]
+    if provider.get("topology_case") != case:
+        raise ValueError("topology public selected case binding differs")
+    def ordinal(value):
+        if not value.isascii() or not value.isdecimal() or str(int(value)) != value:
+            raise ValueError("topology ordinal must be canonical unsigned decimal")
+        return int(value)
+    def optional_id(value):
+        return None if value == "-" else _hex(value, 33, 0x12)
+    roles, commits, ids, names = {}, [], set(), set()
+    for row in rows[1:]:
+        if row[0] == "branch" and len(row) == 12:
+            _, role, branch, name, stack, base, parent, initial, head, final, source, local = row
+            if (not role or any(char not in "abcdefghijklmnopqrstuvwxyz0123456789" for char in role)
+                    or role in roles or not name or len(name) > 63 or not name.isascii()
+                    or any(char not in "abcdefghijklmnopqrstuvwxyz0123456789._-" for char in name)
+                    or name[0] not in "abcdefghijklmnopqrstuvwxyz0123456789"
+                    or name[-1] not in "abcdefghijklmnopqrstuvwxyz0123456789"):
+                raise ValueError("topology duplicate/unsafe role or Branch name")
+            branch_id, stack_id, base_id = _hex(branch,17,0x11), _hex(stack,17,0x31), _hex(base,33,0x32)
+            if branch_id in ids or name in names or stack != provider["stack_id"] or base != provider["base_layer_id"]:
+                raise ValueError("topology Branch identity/name/stack/base differs")
+            ids.add(branch_id); names.add(name)
+            roles[role] = {"sql":(branch_id,stack_id,name,base_id,optional_id(head)), "parent":optional_id(parent),
+                           "initial":_hex(initial,32), "root":_hex(final,32), "source":source,
+                           "source_local":ordinal(local), "acks":[]}
+        elif row[0] == "commit" and len(row) == 10:
+            _, role, local, commit, stack, root, parent, base, selected, modes = row
+            if role not in roles or selected == "" or modes == "":
+                raise ValueError("topology acknowledgement role/scope differs")
+            values = (_hex(commit,33,0x12),_hex(stack,17,0x31),_hex(root,32),optional_id(parent),_hex(base,33,0x32))
+            if stack != provider["stack_id"] or base != provider["base_layer_id"]:
+                raise ValueError("topology acknowledgement stack/base differs")
+            if ordinal(local) != len(roles[role]["acks"])+1:
+                raise ValueError("topology exact role-local acknowledgement order differs")
+            roles[role]["acks"].append(values); commits.append(values)
+        else:
+            raise ValueError("topology transcript row grammar differs")
+    if not commits or not roles:
+        raise ValueError("topology complete Branch/acknowledgement set required")
+    wanted = []
+    for row in acknowledged_tuples:
+        if set(row) != set(CENSUS_COLUMNS):
+            raise ValueError("topology acknowledgement requires all five typed fields")
+        wanted.append((_hex(row["commit_id"],33,0x12),_hex(row["layer_stack_id"],17,0x31),_hex(row["root_id"],32),
+                       None if row["parent_commit_id"] is None else _hex(row["parent_commit_id"],33,0x12),
+                       _hex(row["base_layer_id"],33,0x32)))
+    if wanted != commits:
+        raise ValueError("topology complete original typed acknowledgement transcript differs")
+    distinct = {}
+    for values in commits:
+        if values[0] in distinct and distinct[values[0]] != values:
+            raise ValueError("topology duplicate Commit ID has conflicting full tuple")
+        distinct[values[0]] = values
+    for role, branch in roles.items():
+        if branch["source"] == "-":
+            if branch["source_local"] != 0 or branch["parent"] is not None or branch["initial"].hex() != provider["initial_root"]:
+                raise ValueError("topology genesis Layer fork binding differs")
+        else:
+            source = roles.get(branch["source"])
+            selected = branch["source_local"]
+            if source is None or branch["source"] == role or not 1 <= selected <= len(source["acks"]):
+                raise ValueError("topology source Branch membership ordinal differs")
+            fork = source["acks"][selected-1]
+            if branch["parent"] != fork[0] or branch["initial"] != fork[2]:
+                raise ValueError("topology selected historical fork parent/root differs")
+        previous, root = branch["parent"], branch["initial"]
+        for values in branch["acks"]:
+            if values[3] != previous:
+                raise ValueError("topology role-local first-parent edge differs")
+            previous, root = values[0], values[2]
+        if previous != branch["sql"][4] or root != branch["root"]:
+            raise ValueError("topology final Branch head/root differs")
+    manifest = [branch for branch in roles.values() if branch["sql"][0].hex() == provider["branch_id"]]
+    if len(manifest) != 1:
+        raise ValueError("topology original manifest Branch omitted or substituted")
+    original = manifest[0]
+    if (provider.get("final_head_commit_id") != (original["sql"][4].hex() if original["sql"][4] else "-")
+            or provider.get("final_head_root") != original["root"].hex()):
+        raise ValueError("topology public manifest Branch head/root differs")
+    for key, expected in (("topology_acknowledgements",len(commits)), ("topology_distinct_commits",len(distinct)),
+                          ("topology_branches",len(roles))):
+        if type(provider.get(key)) is not int or provider[key] != expected:
+            raise ValueError("topology public ACK/distinct-row/Branch counts differ")
+    return {"case":case,"tuples":sorted(distinct.values()), "acknowledgements":len(commits),
+            "manifest_head":original["sql"][4], "branches":sorted(branch["sql"] for branch in roles.values())}
+
+
+def graph_commit_census(sealed_path, acknowledged_tuples, provider_fields, export_custody):
+    """Existing known-Stop/authenticated-custody route with full topology binding."""
+    return commit_census(sealed_path, acknowledged_tuples, provider_fields, export_custody, topology=True)
+
+
+def verify_access_passes(case, reader_text, verifier_text, independent_events):
+    """Original repeated full-byte/inode oracle against typed frozen derivation."""
+    plan = case["historical_access"]
+    expected = [event["fields"] for event in independent_events if event.get("event") == "access_expected_read"]
+    absent = [event["fields"]["path"] for event in independent_events if event.get("event") == "access_expected_absent"]
+    if [(row["path"],row["bytes"]) for row in expected] != [(row["path"],row["bytes"]) for row in plan["reads"]] or absent != plan["absent"]:
+        raise ValueError("access independent original target/absence scope differs")
+    for row in expected:
+        payload = _hex(row["payload_hex"],row["bytes"])
+        if hashlib.sha256(payload).hexdigest() != row["sha256"]:
+            raise ValueError("access independent payload/SHA derivation differs")
+    observed = []
+    for phase, body in (("reader",reader_text),("verifier",verifier_text)):
+        rows = [line.split("=",1) for line in body.splitlines()]
+        prefix = [["access_case",case["id"]],["access_phase",phase],["access_reader_profile",plan["reader_profile"]],
+                  ["access_pre_read","0"],["access_commits","0"]]
+        if rows[:5] != prefix or rows[-1:] != [["access_status","pass"]]:
+            raise ValueError("access original helper phase/profile/Commit/status differs")
+        index, reads = 5, []
+        keys = ["access_target","access_declared_bytes","access_bytes","access_sha256","access_ino","access_dev","access_nlink","access_payload_hex"]
+        for wanted in expected:
+            selected = rows[index:index+8]; index += 8
+            if len(selected) != 8 or [row[0] for row in selected] != keys:
+                raise ValueError("access original complete read receipt grammar differs")
+            values = dict(selected)
+            for key in ("access_declared_bytes","access_bytes","access_ino","access_dev","access_nlink"):
+                value = values[key]
+                if not value.isascii() or not value.isdecimal() or str(int(value)) != value:
+                    raise ValueError("access original canonical numeric receipt differs")
+            if (values["access_target"] != wanted["path"] or int(values["access_declared_bytes"]) != wanted["bytes"]
+                    or int(values["access_bytes"]) != wanted["bytes"] or values["access_payload_hex"] != wanted["payload_hex"]
+                    or values["access_sha256"] != wanted["sha256"]):
+                raise ValueError("access mounted full bytes/SHA differ from independent frozen producer")
+            reads.append((values["access_dev"],values["access_ino"],int(values["access_nlink"])))
+        if rows[index:-1] != [["access_absent",path] for path in absent]:
+            raise ValueError("access original required ENOENT receipt differs")
+        if plan["read_plan"] == "InodePair" and (len(reads)!=2 or reads[0]!=reads[1] or reads[0][2]!=2):
+            raise ValueError("access alias device/inode/nlink equivalence differs")
+        observed.append(reads)
+    if [(device,inode) for device,inode,_ in observed[0]] != [(device,inode) for device,inode,_ in observed[1]]:
+        raise ValueError("access original repeated-read inode stability differs")
+    return {"schema":"fs-bench-pro-original-access-read-proof-v1","status":"PASS","case":case["id"],
+            "full_read_bytes":2*sum(row["bytes"] for row in expected),"read_passes":2,"commits_created":0,
+            "scope":"both original mounted passes equal complete independently derived payload bytes/SHA; declared absences, alias dev/ino/nlink and repeated inode stability"}
+
+
+def commit_census(sealed_path, acknowledged_tuples, provider_fields, export_custody, *, topology=False):
     """Unfiltered global membership, independently bound to public typed proof.
 
     The immutable census export is never the provider's writable offline copy.
@@ -359,7 +506,7 @@ def commit_census(sealed_path, acknowledged_tuples, provider_fields, export_cust
             or events[-1].get("event") != "finished" or stopped[0].get("sequence",0) >= events[-1].get("sequence",0)
             or len(created) != 1 or created[0].get("value","").split(" ")[0] != "volume="+custody["volume"]):
         raise ValueError("census known stopped runtime/container/volume custody differs")
-    result = _commit_census_read_only(path, acknowledged_tuples, provider, manifest, transcript, before=before)
+    result = _commit_census_read_only(path, acknowledged_tuples, provider, manifest, transcript, before=before, topology=topology)
     result["custody"] = {key:custody[key] for key in CUSTODY_KEYS}
     if normalized:
         _normalization_binding(path, _sealed_identity(path), custody)
@@ -367,7 +514,7 @@ def commit_census(sealed_path, acknowledged_tuples, provider_fields, export_cust
     return result
 
 
-def _commit_census_read_only(sealed_path, acknowledged_tuples, provider_fields, prepared_manifest, transcript_path, *, before=None):
+def _commit_census_read_only(sealed_path, acknowledged_tuples, provider_fields, prepared_manifest, transcript_path, *, before=None, topology=False):
     """Shared immutable SQL/provider proof, also qualified on native sealed fixtures.
 
     Public samples enter only through commit_census and its actual Docker custody
@@ -393,29 +540,33 @@ def _commit_census_read_only(sealed_path, acknowledged_tuples, provider_fields, 
     if provider["provider_store_unchanged"] != int(unchanged):
         raise ValueError("census public writable-copy after-seal observation differs")
     _hex(provider["base_layer_id"],33,0x32)
-    expected, previous = [], None
-    for row in acknowledged_tuples:
-        if set(row) != set(CENSUS_COLUMNS):
-            raise ValueError("census acknowledgement requires all five typed fields")
-        values = (_hex(row["commit_id"],33,0x12), _hex(row["layer_stack_id"],17,0x31), _hex(row["root_id"],32),
-                  None if row["parent_commit_id"] is None else _hex(row["parent_commit_id"],33,0x12), _hex(row["base_layer_id"],33,0x32))
-        if values[3] != previous or row["layer_stack_id"] != provider["stack_id"] or row["base_layer_id"] != provider["base_layer_id"]:
-            raise ValueError("census original first-parent/stack/base acknowledgement differs")
-        previous = values[0]; expected.append(values)
-    if (not expected or len({row[0] for row in expected}) != len(expected)
-            or provider.get("final_head_commit_id") != expected[-1][0].hex()
-            or provider.get("final_head_root") != expected[-1][2].hex()):
-        raise ValueError("census exact unique acknowledged Commit set/final head differs")
-    transcript_rows = transcript.read_text().splitlines()
-    if len(transcript_rows) != len(expected)+1:
-        raise ValueError("census full acknowledgement transcript cardinality differs")
-    for step,line in enumerate(transcript_rows):
-        columns = line.split("\t")
-        wanted = ["-","-",provider["initial_root"]] if step == 0 else [expected[step-1][0].hex(),
-                  expected[step-1][3].hex() if expected[step-1][3] is not None else "-", expected[step-1][2].hex()]
-        if len(columns) != 5 or columns[0] != str(step) or columns[1:4] != wanted:
-            raise ValueError("census typed tuples differ from complete retained acknowledgement transcript")
-    expected.sort()
+    graph = _topology_transcript(transcript, acknowledged_tuples, provider) if topology else None
+    if graph is not None:
+        expected, previous = graph["tuples"], graph["manifest_head"]
+    else:
+        expected, previous = [], None
+        for row in acknowledged_tuples:
+            if set(row) != set(CENSUS_COLUMNS):
+                raise ValueError("census acknowledgement requires all five typed fields")
+            values = (_hex(row["commit_id"],33,0x12), _hex(row["layer_stack_id"],17,0x31), _hex(row["root_id"],32),
+                      None if row["parent_commit_id"] is None else _hex(row["parent_commit_id"],33,0x12), _hex(row["base_layer_id"],33,0x32))
+            if values[3] != previous or row["layer_stack_id"] != provider["stack_id"] or row["base_layer_id"] != provider["base_layer_id"]:
+                raise ValueError("census original first-parent/stack/base acknowledgement differs")
+            previous = values[0]; expected.append(values)
+        if (not expected or len({row[0] for row in expected}) != len(expected)
+                or provider.get("final_head_commit_id") != expected[-1][0].hex()
+                or provider.get("final_head_root") != expected[-1][2].hex()):
+            raise ValueError("census exact unique acknowledged Commit set/final head differs")
+        transcript_rows = transcript.read_text().splitlines()
+        if len(transcript_rows) != len(expected)+1:
+            raise ValueError("census full acknowledgement transcript cardinality differs")
+        for step,line in enumerate(transcript_rows):
+            columns = line.split("\t")
+            wanted = ["-","-",provider["initial_root"]] if step == 0 else [expected[step-1][0].hex(),
+                      expected[step-1][3].hex() if expected[step-1][3] is not None else "-", expected[step-1][2].hex()]
+            if len(columns) != 5 or columns[0] != str(step) or columns[1:4] != wanted:
+                raise ValueError("census typed tuples differ from complete retained acknowledgement transcript")
+        expected.sort()
     count, batches, prior, mismatch = 0, 0, None, False
     digest = hashlib.sha256()
     connection = None
@@ -440,9 +591,14 @@ def _commit_census_read_only(sealed_path, acknowledged_tuples, provider_fields, 
                 or record[3] != 1 or record[4] != version or record[5] != source or record[6] != definition
                 or type(record[7]) is not int or record[7] <= 0):
             raise ValueError("census publicly bound catalog/metadata/source/definition differs")
-        branch = connection.execute("SELECT layer_stack_id,base_layer_id,head_commit_id FROM branch WHERE branch_id=?", (_hex(provider["branch_id"],17,0x11),)).fetchall()
-        if branch != [(_hex(provider["stack_id"],17,0x31), _hex(provider["base_layer_id"],33,0x32), previous)]:
-            raise ValueError("census manifest Branch/base/final head differs")
+        if graph is not None:
+            observed_branches = connection.execute("SELECT branch_id,layer_stack_id,name,base_layer_id,head_commit_id FROM branch ORDER BY branch_id").fetchall()
+            if observed_branches != graph["branches"]:
+                raise ValueError("census unfiltered global Branch membership/head/name/stack/base differs")
+        else:
+            branch = connection.execute("SELECT layer_stack_id,base_layer_id,head_commit_id FROM branch WHERE branch_id=?", (_hex(provider["branch_id"],17,0x11),)).fetchall()
+            if branch != [(_hex(provider["stack_id"],17,0x31), _hex(provider["base_layer_id"],33,0x32), previous)]:
+                raise ValueError("census manifest Branch/base/final head differs")
         layer = connection.execute("SELECT layer_stack_id,root_id,parent_layer_id,source_branch_id,source_commit_id FROM layer WHERE layer_id=?", (_hex(provider["base_layer_id"],33,0x32),)).fetchall()
         if layer != [(_hex(provider["stack_id"],17,0x31), _hex(provider["initial_root"],32), None, None, None)]:
             raise ValueError("census manifest initial Layer/stack differs")
@@ -467,12 +623,19 @@ def _commit_census_read_only(sealed_path, acknowledged_tuples, provider_fields, 
         if connection is not None: connection.close()
         if _sealed_identity(path) != before:
             raise ValueError("census immutable export SHA/size changed during read-only proof")
-    return {"schema":"fs-bench-pro-global-commit-census-v1", "status":"PASS", "commit_count":count,
+    result = {"schema":"fs-bench-pro-global-commit-census-v1", "status":"PASS", "commit_count":count,
             "fetch_batches_including_eof":batches, "query":CENSUS_SQL, "tuple_sha256":digest.hexdigest(),
             "source":before, "public_provider":{key:provider[key] for key in PROVIDER_KEYS},
             "schema_version":version, "schema_source_sha256":hashlib.sha256(source.encode()).hexdigest(),
             "schema_definition_sha256":hashlib.sha256(definition.encode()).hexdigest(), "authoritative_source_pins":SCHEMA_PINS,
             "scope":"unfiltered global Commit table to EOF; exact all acknowledged typed tuples and public catalog/manifest identity; immutable read-only source unchanged; provider validation used a separate writable offline Disposable copy"}
+    if graph is not None:
+        result.update(schema="fs-bench-pro-topology-commit-census-v1", topology_case=graph["case"],
+                      acknowledged_commit_count=graph["acknowledgements"], retained_root_references=graph["acknowledgements"]+1,
+                      identical_duplicate_acknowledgements=graph["acknowledgements"]-count,
+                      branch_count=len(graph["branches"]),
+                      scope=result["scope"]+"; exact role-local/fork edges and unfiltered Branch set including original manifest Branch and explicit forks; ACK/reference count distinct from persisted Commit rows")
+    return result
 
 
 def helpers(directory=None):

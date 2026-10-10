@@ -4040,7 +4040,7 @@ Shared runtime/oracle integration, final sealed Linux build, real P1/P2 SDK
 covering proof, historical preparation/admission, parity and all17 cases remain
 pending. No source-level test is represented as mounted or Linux qualification.
 
-| This commit | Add scoped context controller, fresh producer callback and original prepared witness CLI | 79370 | 79370 | +0 |
+| `604548cd7` | Add scoped context controller, fresh producer callback and original prepared witness CLI | 79370 | 79370 | +0 |
 
 
 Source review before any P1 call found that the current provider supports
@@ -4079,3 +4079,40 @@ tests passed once under120 s, including missing-group/shared-scope, duplicate
 terminal-owner and missing-observer failures. Qualification is
 `benchmark-results/fs-bench-pro/2026-10-11-context-concurrent-count-qualification`;
 no real daemon counter or case qualification is claimed.
+
+
+### Batch 5 independent topology and access oracle, 2026-10-11
+
+Imported the worker's four exact owned oracle/test files. The approved topology
+TSV binds every original role-local typed acknowledgement, historical Fork
+edge, published Branch, selected original payload root and provider identity.
+Public History reachesEOF; the independent read-only global SQL census checks
+ALL Commit and Branch tuples toEOF, including unused initial and access
+Branches. Identical full canonical Commit tuples are deduplicated only in
+physical-row union; acknowledgement and retained-reference counts remain
+separate. Access mode limits payload reads to original selected targets and
+compares independently derived full hex/SHA, absence, aliases and same-mount
+inode relations across reader/verifier. Existing oracle guards remain intact.
+
+Fourteen Python checks passed in0.526 s. Corrected exact compact native proof
+passed once in11.00 s (20 other tests filtered), with30 ACKs/15 actual distinct
+tuples,4 Branches and4 original selected roots. The unchanged native retained
+Trunk5 access proof passed and is reused:22 paths,65,536 B,5 Branches and30
+ACKs/15 distinct tuples. Native public fixtures are not live SDK P1 or mounted
+case qualifications. Initial compiler errors are retained. An initial unfiltered
+native invocation accidentally included frozen inline tests and was stopped
+bySIGTERM within its explicit76/120 s wall bound; it FAILED and is retained.
+The new fixture initially asserted20 distinct rows; exact frozen algebra shares
+child-local1..5 with trunk6..10, so its own new assertion was corrected to15.
+A first partial scripted correction missed that expanded assertion and failed
+again; only the corrected failed owning test reran. No oracle, frozen workload,
+limit or product test was weakened. Failed native fixtures65883 and66218 remain
+under the owning temporary root; no Docker action occurred.
+
+Owning raw handoff:
+benchmark-results/fs-bench-pro/2026-10-11-batch-5-oracle-authoring/handoff.json,
+SHA-25662905ee78d1c02d32e0ccc3e8b1da1a9dc81c07b768e842666091a2af2b4e94b.
+Runtime composition, Linux seal, realP1, preparation/parity/cases remain pending.
+
+| `24be90ced` (worker) | Author independent topology and access oracle and owning qualification | 79370 | 79370 | +0 |
+| This commit | Integrate exact independent topology and access oracle | 79370 | 79370 | +0 |

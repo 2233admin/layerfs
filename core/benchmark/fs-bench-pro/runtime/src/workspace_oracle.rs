@@ -960,3 +960,643 @@ fn payload_dependencies(handles: &Handles, files: &BTreeSet<ObjectId>) -> Result
     }
     Ok(dependencies)
 }
+
+#[derive(Clone)]
+pub struct TopologyBranch {
+    pub role: String,
+    pub id: BranchId,
+    pub name: String,
+    pub stack: LayerStackId,
+    pub base: layerfs_history::LayerId,
+    pub initial_parent: Option<CommitId>,
+    pub initial_root: ObjectId,
+    pub head: Option<CommitId>,
+    pub root: ObjectId,
+    pub source_role: String,
+    pub source_local: usize,
+}
+#[derive(Clone)]
+pub struct TopologyCommit {
+    pub role: String,
+    pub local: usize,
+    pub id: CommitId,
+    pub stack: LayerStackId,
+    pub root: ObjectId,
+    pub parent: Option<CommitId>,
+    pub base: layerfs_history::LayerId,
+    pub selected: String,
+    pub modes: String,
+}
+pub struct TopologyTranscript {
+    pub case: String,
+    pub branches: BTreeMap<String, TopologyBranch>,
+    pub commits: Vec<TopologyCommit>,
+}
+fn topology_optional(value: &str) -> Result<Option<CommitId>> {
+    if value == "-" {
+        Ok(None)
+    } else {
+        Ok(Some(CommitId::from_bytes(identity_bytes::<33>(value)?)?))
+    }
+}
+fn topology_ordinal(value: &str) -> Result<usize> {
+    let number = value.parse::<usize>()?;
+    if number.to_string() != value {
+        return Err("topology canonical ordinal required".into());
+    }
+    Ok(number)
+}
+/// Versioned role-local graph; scope files exist only at frozen payload checkpoints.
+pub fn parse_topology(body: &str) -> Result<TopologyTranscript> {
+    if !body.ends_with('\n') || body.contains('\r') {
+        return Err("topology canonical LF required".into());
+    }
+    let mut lines = body.lines();
+    let first = lines
+        .next()
+        .ok_or("topology header missing")?
+        .split('\t')
+        .collect::<Vec<_>>();
+    if first.len() != 2 || first[0] != "topology-v1" {
+        return Err("topology version/case differs".into());
+    }
+    let mut branches = BTreeMap::new();
+    let mut ids = BTreeSet::new();
+    let mut names = BTreeSet::new();
+    let mut commits = Vec::new();
+    let mut local = BTreeMap::<String, usize>::new();
+    for line in lines {
+        let columns = line.split('\t').collect::<Vec<_>>();
+        match columns[0] {
+            "branch" if columns.len() == 12 => {
+                let role = columns[1];
+                if role.is_empty()
+                    || !role
+                        .bytes()
+                        .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit())
+                {
+                    return Err("topology unsafe role".into());
+                }
+                let branch = TopologyBranch {
+                    role: role.into(),
+                    id: BranchId::from_bytes(identity_bytes::<17>(columns[2])?)?,
+                    name: layerfs_history::HistoryName::new(columns[3])?
+                        .as_str()
+                        .into(),
+                    stack: LayerStackId::from_bytes(identity_bytes::<17>(columns[4])?)?,
+                    base: layerfs_history::LayerId::from_bytes(identity_bytes::<33>(columns[5])?)?,
+                    initial_parent: topology_optional(columns[6])?,
+                    initial_root: ObjectId::from_bytes(&identity_bytes::<32>(columns[7])?)?,
+                    head: topology_optional(columns[8])?,
+                    root: ObjectId::from_bytes(&identity_bytes::<32>(columns[9])?)?,
+                    source_role: columns[10].into(),
+                    source_local: topology_ordinal(columns[11])?,
+                };
+                if !ids.insert(branch.id)
+                    || !names.insert(branch.name.clone())
+                    || branches.insert(role.into(), branch).is_some()
+                {
+                    return Err("topology duplicate role/Branch/name".into());
+                }
+            }
+            "commit" if columns.len() == 10 => {
+                let role = columns[1];
+                let index = topology_ordinal(columns[2])?;
+                let previous = local.entry(role.into()).or_default();
+                if !branches.contains_key(role)
+                    || index != *previous + 1
+                    || columns[8].is_empty()
+                    || columns[9].is_empty()
+                {
+                    return Err("topology role-local order/scope differs".into());
+                }
+                *previous = index;
+                commits.push(TopologyCommit {
+                    role: role.into(),
+                    local: index,
+                    id: CommitId::from_bytes(identity_bytes::<33>(columns[3])?)?,
+                    stack: LayerStackId::from_bytes(identity_bytes::<17>(columns[4])?)?,
+                    root: ObjectId::from_bytes(&identity_bytes::<32>(columns[5])?)?,
+                    parent: topology_optional(columns[6])?,
+                    base: layerfs_history::LayerId::from_bytes(identity_bytes::<33>(columns[7])?)?,
+                    selected: columns[8].into(),
+                    modes: columns[9].into(),
+                });
+            }
+            _ => return Err("topology row grammar differs".into()),
+        }
+    }
+    if branches.is_empty() || commits.is_empty() {
+        return Err("topology full graph required".into());
+    }
+    Ok(TopologyTranscript {
+        case: first[1].into(),
+        branches,
+        commits,
+    })
+}
+
+fn topology_roles(case: &str) -> Result<Vec<&'static str>> {
+    if crate::edit_model::context_roles(case).is_ok() {
+        return Ok(crate::edit_model::context_roles(case)?);
+    }
+    if matches!(
+        case,
+        reference::dedup_branch_history::BOUNDARY_CYCLE_K100
+            | reference::dedup_branch_history::NAMESPACE_INODE_K100
+    ) {
+        return Ok(vec!["main"]);
+    }
+    Err("original batch-five producer required".into())
+}
+fn topology_limit(case: &str, role: &str) -> Result<usize> {
+    if role == "main" {
+        return history_limit(case);
+    }
+    Ok(crate::edit_model::context_limit(case, role)?)
+}
+fn topology_selected(
+    case: &str,
+    access: Option<reference::historical_access::AccessCase>,
+) -> Result<BTreeSet<(String, usize)>> {
+    if let Some(selected) = access {
+        return Ok(BTreeSet::from([(
+            match selected.branch {
+                reference::historical_access::ProducerBranch::Main => "main",
+                reference::historical_access::ProducerBranch::Trunk => "trunk",
+                reference::historical_access::ProducerBranch::B => "b",
+            }
+            .into(),
+            selected.ordinal,
+        )]));
+    }
+    let mut result = BTreeSet::new();
+    for role in topology_roles(case)? {
+        result.insert((role.into(), topology_limit(case, role)?));
+    }
+    if reference::v016_stages::compact_case(case)?.is_some() {
+        result.insert(("trunk".into(), 5));
+    }
+    Ok(result)
+}
+fn topology_source(case: &str, role: &str) -> Result<(String, usize, Option<String>)> {
+    if role == "main" {
+        return Ok(("-".into(), 0, None));
+    }
+    if let Some(compact) = reference::v016_stages::compact_case(case)? {
+        let selected = match role {
+            "trunk" => reference::v016_stages::CompactRole::Trunk,
+            "a" => reference::v016_stages::CompactRole::A,
+            "b" => reference::v016_stages::CompactRole::B,
+            "c" if compact.descendant => reference::v016_stages::CompactRole::C,
+            _ => return Err("original compact role differs".into()),
+        };
+        return Ok((
+            if role == "trunk" {
+                "-"
+            } else if role == "c" {
+                "a"
+            } else {
+                "trunk"
+            }
+            .into(),
+            if role == "trunk" { 0 } else { 5 },
+            Some(reference::v016_stages::compact_branch_name(case, selected)),
+        ));
+    }
+    let plan =
+        reference::v016_stages::mixed_case(case)?.ok_or("original contextual M1 required")?;
+    if plan.topology == reference::v016_stages::Topology::Branch {
+        return Ok((
+            if role == "trunk" { "-" } else { "trunk" }.into(),
+            if role == "trunk" { 0 } else { 5 },
+            Some(if role == "trunk" {
+                format!("v016-{case}-0")
+            } else {
+                format!("{case}-child-{}", if role == "a" { 1 } else { 2 })
+            }),
+        ));
+    }
+    Ok((
+        "-".into(),
+        0,
+        Some(format!("v016-{case}-{}", topology_ordinal(role)?)),
+    ))
+}
+/// Root wires the existing offline driver; no Fork, mount or Store write is issued here.
+pub fn verify_topology(args: &Args, events: &mut Events) -> Result<()> {
+    topology_proof(args, events, false)
+}
+pub fn verify_access(args: &Args, events: &mut Events) -> Result<()> {
+    topology_proof(args, events, true)
+}
+fn topology_proof(args: &Args, events: &mut Events, access_mode: bool) -> Result<()> {
+    if args.source.is_some() || args.history_step.is_some() {
+        return Err(
+            "topology selected scope is transcript-bound, not a sequential override".into(),
+        );
+    }
+    let case = args.case.as_deref().ok_or("--case required")?;
+    let access = if access_mode {
+        Some(
+            reference::historical_access::access_case(case)?
+                .ok_or("original six access case required")?,
+        )
+    } else {
+        None
+    };
+    let producer = access.map(|selected| selected.producer).unwrap_or(case);
+    let body = fs::read_to_string(
+        args.history_file
+            .as_ref()
+            .ok_or("--history-file required")?,
+    )?;
+    let graph = parse_topology(&body)?;
+    if graph.case != producer {
+        return Err("topology exact original producer/case differs".into());
+    }
+    let manifest = StoreManifest::decode(&fs::read(&args.manifest)?)?;
+    if manifest.profile != layerfs_bridge::provision::StoreProfile::Disposable {
+        return Err("topology explicit Disposable required".into());
+    }
+    let sealed = args.sealed.as_ref().ok_or("--sealed required")?;
+    let before = file_identity(sealed)?;
+    let begun = Instant::now();
+    let handles = Handles::open_writable(
+        PersistenceConfig::sqlite(sealed).with_sqlite_profile(SqlitePersistenceProfile::Disposable),
+        &manifest.binding,
+        manifest.cursor_key,
+    )?;
+    let catalog = handles.history.catalog_id();
+    if catalog != CatalogId::derive(&manifest.binding)?
+        || handles.profile().persistence != SqlitePersistenceProfile::Disposable
+        || handles.profile().journal_mode.to_ascii_lowercase() != "wal"
+        || handles.profile().synchronous != 0
+    {
+        return Err("topology public provider profile/catalog differs".into());
+    }
+    let incarnation = handles.history.incarnation();
+    let stack = LayerStackId::from_bytes(manifest.stack)?;
+    let manifest_branch = BranchId::from_bytes(manifest.branch)?;
+    let original = handles
+        .history
+        .branch_snapshot(manifest_branch)?
+        .ok_or("topology manifest Branch missing")?;
+    let initial = ObjectId::from_bytes(&manifest.root)?;
+    let layer = handles
+        .history
+        .layer(original.branch.base_layer)?
+        .ok_or("topology initial Layer missing")?;
+    let stack_record = handles
+        .history
+        .layer_stack(stack)?
+        .ok_or("topology stack missing")?;
+    if original.branch.stack != stack
+        || original.base_root != initial
+        || layer.stack != stack
+        || layer.root != initial
+        || layer.parent.is_some()
+        || layer.source_branch.is_some()
+        || layer.source_commit.is_some()
+        || stack_record.head_layer != layer.id
+        || stack_record.scope != original.scope
+        || stack_record.profile != original.profile
+    {
+        return Err("topology manifest stack/base/profile/scope differs".into());
+    }
+    let roles = topology_roles(producer)?;
+    let mut required = roles
+        .iter()
+        .map(|role| role.to_string())
+        .collect::<BTreeSet<_>>();
+    if !roles.contains(&"main") {
+        required.insert("initial".into());
+    }
+    if access_mode {
+        required.insert("access".into());
+    }
+    if graph.branches.keys().cloned().collect::<BTreeSet<_>>() != required {
+        return Err("topology complete original role/Branch set differs".into());
+    }
+    let selected = topology_selected(producer, access)?;
+    let mut by_role = BTreeMap::<String, Vec<&TopologyCommit>>::new();
+    let mut union = BTreeMap::<
+        CommitId,
+        (
+            LayerStackId,
+            ObjectId,
+            Option<CommitId>,
+            layerfs_history::LayerId,
+        ),
+    >::new();
+    for ack in &graph.commits {
+        if !roles.iter().any(|role| *role == ack.role) || ack.stack != stack || ack.base != layer.id
+        {
+            return Err("topology acknowledgement role/stack/base differs".into());
+        }
+        let tuple = (ack.stack, ack.root, ack.parent, ack.base);
+        if union.insert(ack.id, tuple).is_some_and(|old| old != tuple) {
+            return Err("topology conflicting duplicate full Commit tuple".into());
+        }
+        if CommitId::derive(ack.root, ack.parent, ack.base) != ack.id {
+            return Err("topology canonical Commit tuple identity differs".into());
+        }
+        let record = handles
+            .history
+            .commit(ack.id)?
+            .ok_or("topology acknowledged Commit missing")?;
+        if (record.stack, record.root, record.parent, record.base_layer) != tuple {
+            return Err("topology persisted five-field acknowledgement differs".into());
+        }
+        let chosen = selected.contains(&(ack.role.clone(), ack.local));
+        if chosen == (ack.selected == "-") || (!chosen && ack.modes != "-") {
+            return Err("topology frozen payload checkpoint/omission differs".into());
+        }
+        if chosen && (crate::edit_model::is_context_m1(producer) == (ack.modes == "-")) {
+            return Err("topology selected contextual modes binding differs".into());
+        }
+        by_role.entry(ack.role.clone()).or_default().push(ack);
+    }
+    let collapse = reference::v016_stages::compact_case(producer)?.is_some();
+    if !collapse && union.len() != graph.commits.len() {
+        return Err(
+            "original M1/single producer acknowledgements must have distinct Commit identities"
+                .into(),
+        );
+    }
+    let mut public_branches = BTreeSet::new();
+    let mut cursor = None;
+    loop {
+        let page = handles
+            .history
+            .branches(stack, &layerfs_history::Page { limit: 128, cursor })?;
+        for branch in page.records {
+            if !public_branches.insert(branch.id) {
+                return Err("topology duplicate public Branch page".into());
+            }
+        }
+        cursor = page.continuation;
+        if cursor.is_none() {
+            break;
+        }
+    }
+    if public_branches != graph.branches.values().map(|branch| branch.id).collect() {
+        return Err("topology unfiltered public Branch set differs".into());
+    }
+    let storage = Storage::new(handles.storage.clone())?;
+    let reader = storage.reader()?;
+    let mut verified_roots = 0_u64;
+    let mut paths = 0_u64;
+    let mut bytes = 0_u64;
+    let mut content_roots = BTreeMap::new();
+    let mut selected_root = initial;
+    for (role, branch) in &graph.branches {
+        let (source, source_local, name) = if role == "initial" {
+            ("-".into(), 0, None)
+        } else if role == "access" {
+            let selected = access.ok_or("unexpected access Branch")?;
+            (
+                match selected.branch {
+                    reference::historical_access::ProducerBranch::Main => "main",
+                    reference::historical_access::ProducerBranch::Trunk => "trunk",
+                    reference::historical_access::ProducerBranch::B => "b",
+                }
+                .into(),
+                selected.ordinal,
+                Some(format!("access-{}-{case}", selected.ordinal)),
+            )
+        } else {
+            topology_source(producer, role)?
+        };
+        if branch.source_role != source
+            || branch.source_local != source_local
+            || name.is_some_and(|name| name != branch.name)
+            || branch.stack != stack
+            || branch.base != layer.id
+        {
+            return Err("topology original fork/name/stack/base differs".into());
+        }
+        let (mut parent, mut root) = if source == "-" {
+            (None, initial)
+        } else {
+            let source_ack = by_role
+                .get(&source)
+                .and_then(|rows| rows.get(source_local - 1))
+                .ok_or("topology fork source ordinal missing")?;
+            (Some(source_ack.id), source_ack.root)
+        };
+        if branch.initial_parent != parent || branch.initial_root != root {
+            return Err("topology selected fork root/parent differs".into());
+        }
+        if (role == "initial" || role == "main") && branch.id != manifest_branch {
+            return Err("topology original manifest Branch substituted".into());
+        }
+        let expected_count = if role == "initial" || role == "access" {
+            0
+        } else {
+            topology_limit(producer, role)?
+        };
+        let acknowledgements = by_role.get(role).map(Vec::as_slice).unwrap_or(&[]);
+        if acknowledgements.len() != expected_count {
+            return Err("topology original role-local cardinality differs".into());
+        }
+        for ack in acknowledgements {
+            if ack.parent != parent {
+                return Err("topology exact local parent edge differs".into());
+            }
+            parent = Some(ack.id);
+            root = ack.root;
+            let tree = FilesystemRead::new(&reader, FilesystemRootId(root))?;
+            if tree.root().scope().object() != original.scope
+                || tree.root().profile() != original.profile
+            {
+                return Err("topology acknowledged root scope/profile differs".into());
+            }
+            if selected.contains(&(role.clone(), ack.local)) {
+                let expected = if role == "main" {
+                    reference::workspace_common::manifest(&crate::edit_model::entries(
+                        producer, ack.local,
+                    )?)?
+                } else {
+                    crate::edit_model::context_manifest(producer, role, ack.local)?
+                };
+                if fs::read_to_string(&ack.selected)? != expected {
+                    return Err(
+                        "topology selected scope differs from independent original recipe".into(),
+                    );
+                }
+                let proof = if let Some(access) = access {
+                    access_tree(&reader, root, access, events)?
+                } else if crate::edit_model::is_context_m1(producer) {
+                    let modes = crate::edit_model::parse_context_created_modes(
+                        producer,
+                        &fs::read_to_string(&ack.modes)?,
+                    )?;
+                    let state = crate::edit_model::context_m1_state(
+                        producer,
+                        role,
+                        ack.local,
+                        Some(&modes),
+                    )?;
+                    verify_tree(&reader, root, &state.entries, false, Some(&state), true)?
+                } else {
+                    verify_tree(
+                        &reader,
+                        root,
+                        &crate::edit_model::context_entries(producer, role, ack.local)?,
+                        false,
+                        None,
+                        true,
+                    )?
+                };
+                verified_roots += 1;
+                paths += proof.paths;
+                bytes += proof.bytes;
+                selected_root = root;
+                if let Some(file) = proof.files.get("medium/m0.dat") {
+                    content_roots.insert(role.clone(), file.content_root);
+                }
+                events.numeric_fields("topology_root_verified",None,"original selected semantic scope; complete current inode membership and typed mapping/profile; no all-state payload proof",
+                    &[("role",role.clone()),("root",crate::hex(root.as_bytes())),("commit_id",crate::hex(ack.id.as_slice()))],
+                    &[("local",ack.local as u64),("paths",proof.paths),("verified_bytes",proof.bytes)])?;
+            }
+        }
+        let snapshot = handles
+            .history
+            .branch_snapshot(branch.id)?
+            .ok_or("topology Branch missing")?;
+        if parent != branch.head
+            || root != branch.root
+            || snapshot.branch.name.as_str() != branch.name
+            || snapshot.branch.stack != stack
+            || snapshot.branch.base_layer != layer.id
+            || snapshot.branch.head_commit != parent
+            || snapshot.effective_root != root
+            || snapshot.scope != original.scope
+            || snapshot.profile != original.profile
+        {
+            return Err("topology final head/root/name/base differs".into());
+        }
+        let mut expected_history = parent;
+        let mut continuation = None;
+        loop {
+            let page = handles
+                .history
+                .commit_history(&layerfs_history::CommitHistoryRequest {
+                    branch: branch.id,
+                    start: parent,
+                    cursor: continuation,
+                    limit: 128,
+                })?;
+            for record in page.records {
+                if Some(record.id) != expected_history
+                    || union.get(&record.id)
+                        != Some(&(record.stack, record.root, record.parent, record.base_layer))
+                {
+                    return Err("topology exact public ancestry membership differs".into());
+                }
+                expected_history = record.parent;
+            }
+            continuation = page.continuation;
+            if continuation.is_none() {
+                break;
+            }
+        }
+        if expected_history.is_some() {
+            return Err("topology public ancestry did not reach EOF".into());
+        }
+        events.fields("topology_branch_verified",None,"exact original published Branch binding and anchored public History to EOF; access Fork creates no Commit",
+            &[("role",role.clone()),("branch_id",crate::hex(branch.id.as_slice())),("head",parent.map(|id|crate::hex(id.as_slice())).unwrap_or_else(||"-".into())),("root",crate::hex(root.as_bytes()))])?;
+    }
+    if !access_mode {
+        if let Some(compact) = reference::v016_stages::compact_case(producer)? {
+            let a = content_roots
+                .get("a")
+                .ok_or("compact selected A content identity missing")?;
+            let b = content_roots
+                .get("b")
+                .ok_or("compact selected B content identity missing")?;
+            if !compact.descendant && a != b
+                || compact.descendant
+                    && (a == b || content_roots.get("c").is_none_or(|c| c == a || c == b))
+            {
+                return Err(
+                    "original compact medium file-content identity relation differs".into(),
+                );
+            }
+        }
+    }
+    if verified_roots as usize != selected.len() {
+        return Err("topology selected root count differs".into());
+    }
+    drop(reader);
+    drop(storage);
+    handles.seal()?;
+    let after = file_identity(sealed)?;
+    events.numeric_fields("workspace_verified",Some(events.span(begun)),"batch-five original selected roots; all typed role-local/fork edges, public Branch/History EOF and provider binding; independent bytes and complete inode census; SQL global tuple census remains separate",
+        &[("status","PASS".into()),("case",case.into()),("topology_case",producer.into()),("root",crate::hex(selected_root.as_bytes())),
+          ("final_head_root",crate::hex(original.effective_root.as_bytes())),("final_head_commit_id",original.branch.head_commit.map(|id|crate::hex(id.as_slice())).unwrap_or_else(||"-".into())),
+          ("initial_root",crate::hex(initial.as_bytes())),("provider_validation","current-public-schema-source-binding-validated".into()),
+          ("catalog_id",crate::hex(catalog.as_slice())),("binding_sha256",reference::sdk_edit_common::sha256_hex(&manifest.binding)),
+          ("stack_id",crate::hex(stack.as_slice())),("branch_id",crate::hex(manifest_branch.as_slice())),("base_layer_id",crate::hex(layer.id.as_slice())),
+          ("acknowledged_transcript_sha256",reference::sdk_edit_common::sha256_hex(body.as_bytes())),("provider_store_sha256",before.0.clone()),("provider_store_after_sha256",after.0.clone())],
+        &[("roots",verified_roots),("paths",paths),("verified_bytes",bytes),("catalog_incarnation",incarnation),
+          ("topology_acknowledgements",graph.commits.len() as u64),("topology_distinct_commits",union.len() as u64),("topology_branches",graph.branches.len() as u64),
+          ("provider_store_size",before.1),("provider_store_after_size",after.1),("provider_store_unchanged",u64::from(before==after))])?;
+    Ok(())
+}
+fn access_tree(
+    reader: &dyn AuthenticatedObjects,
+    root: ObjectId,
+    access: reference::historical_access::AccessCase,
+    events: &mut Events,
+) -> Result<VerifiedTree> {
+    let entries = reference::historical_access::declared_state(access, 1)?;
+    // Membership does not add payload reads outside the original selected target.
+    // Original access checks no portable metadata beyond inode/link observations.
+    let scope = crate::edit_model::M1State {
+        entries: entries.clone(),
+        ranges: BTreeMap::new(),
+        file_modes: BTreeMap::new(),
+        file_mtimes: BTreeMap::new(),
+        directory_modes: BTreeMap::new(),
+        required_created_directory_modes: BTreeSet::new(),
+    };
+    let mut proof = verify_tree(reader, root, &entries, true, Some(&scope), false)?;
+    let mut tree = FilesystemRead::new(reader, FilesystemRootId(root))?;
+    let (targets, absent) = reference::historical_access::read_targets(access, 1)?;
+    for target in targets {
+        let inode = tree.resolve(&LogicalPath::new(&target.path)?)?;
+        Timing::disabled("independent.access.bytes", |timer| -> Result<()> {
+            let view = FileView::open(reader, inode.value.content_root, timer.child("open"))?;
+            if view.logical_len() != target.len {
+                return Err("access selected full-read length differs".into());
+            }
+            verify_mapping(reader, &view)?;
+            let mut observed = Vec::new();
+            view.read_range(reader, 0..target.len, &mut observed, timer)?;
+            if observed != target.content {
+                return Err("access independent full bytes differ".into());
+            }
+            Ok(())
+        })
+        .0?;
+        proof.bytes += target.len;
+        events.numeric_fields("access_expected_read",None,"independent frozen producer derivation, exact full bytes for comparison with both mounted original helper passes",
+            &[("path",target.path), ("sha256",reference::sdk_edit_common::sha256_hex(&target.content)),("payload_hex",crate::hex(&target.content))],&[("bytes",target.len)])?;
+    }
+    for path in absent {
+        match tree.resolve(&LogicalPath::new(&path)?) {
+            Err(layerfs_content::ContentError::PathNotFound) => {}
+            Ok(_) => return Err("access declared absent alias present".into()),
+            Err(error) => return Err(error.into()),
+        }
+        events.fields(
+            "access_expected_absent",
+            None,
+            "original alias ENOENT scope",
+            &[("path", path)],
+        )?;
+    }
+    Ok(proof)
+}
