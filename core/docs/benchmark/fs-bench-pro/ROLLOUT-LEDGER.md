@@ -107,7 +107,7 @@ comparison or release-admission claim. Durable is
 | H-8 | Prospective batch4, found before any attempt | Output-close or final publication failure could retain FAIL after deleting sample resources | Administrative container/volume removal occurred before finally close/verdict/publication and driver acknowledgement; partial removal also claimed blanket retained custody | `56a422544` | test_close_failure_after_all_proofs_keeps_container_and_volume fails against a921bedbd with both rm calls observed; missing outer ACK/failed return do no removal, partial lost-volume acknowledgement remains uncertain and immutable bound |
 | H-9 | Prospective two verification-only cases | Overall output-closeFAIL could disappear in CSV when performance wasN/A and semantic proof retainedPASS | Original proof-only mask omitted the independent full-outcome failure tag | Worker2fe8e9b2e / integration this commit | test_overall_close_failure_remains_visible_beside_passing_semantic_proof fails beforefix; final5reportchecks PASS0.048s |
 | H-10 | Prospective batch4 prepared SDK routes | Missing/partial prepared-step map could invoke native fallback and regenerate original payloads inside measuredwork; stale sealed helpers could disagree with reported current build | Controller trusted optional prepared records without mandatory originalstep/binary/descriptor/payload/script correspondence admission | Workera8c56d570 / integration this commit | test_helper_refusal_precedes_case_claim_and_any_clone_or_mount fails at686344e8f; exact-source temporary assets reject five old-admission bypasses and all15guard checks PASS |
-| H-11 | v016-boundary-small-control-v1 and dedup-history-distributed-1 first attempts | Native proof/acknowledged Commits/Gone/KnownStop pass, independent public history proof fails acknowledged Commit missing | Controller copies only exported main file into typed-store, dropping closed WAL; immutable main-only census would also miss WAL | PENDING shared harness correction | Real closed-WAL controller regression sees0 of100 acknowledged test rows on old main-only copy; red0.067s under120s mainlock |
+| H-11 | v016-boundary-small-control-v1 and dedup-history-distributed-1 first attempts | Native proof/acknowledged Commits/Gone/KnownStop pass, independent public history proof fails acknowledged Commit missing | Controller copies only exported main file into typed-store, dropping closed WAL; immutable main-only census would also miss WAL | Workerf2c143b37 / integration this commit | Real closed-WAL controller regression sees0 of100 acknowledged test rows on old main-only copy; red0.067s under120s mainlock |
 | H-12 | Mixed final failed preparation and prospective failed family parity | First missing/invalid preparation aborts parity without retaining earlier/later original case outcomes; CLI propagates only an exception | parity_workspace raises inside first failed case before writing parity.json | Worker47e5a5500 / integration this commit | Missing middle preparation red fails old behavior; all original membership/pin/bytes/native/seal guards retain FAIL reasons,22checksPASS; CLI old exception red retained,new5driverchecksPASS |
 
 H-1 and H-2 are harness faults, not product correctness or performance defects.
@@ -2947,7 +2947,7 @@ or aggregateFAIL promotion. Worker external missing-middle regressionFAIL on
 parent; final4new+3unchangedreview+15fixture checks22PASS0.485s/637,248,167ns
 supervisor<=2/120. A first candidate test-fixture macOSpathalias failure remains
 raw; resolving expectedpath didnot changeimplementation/guards. Raw private
-2026-10-10-batch-4-parity-failure-visibility and -fixed.
+2026-10-10-batch-4-parity-failure-visibility-red, -green and -fixed.
 
 Root CLI catches only that typedfailed-parity exception, prints retained
 family/statusFAIL/allcasecount/samples0/evidence, returns1; all-PASS returns0.
@@ -2960,4 +2960,56 @@ Mixed will retain allten rows, including finalpreparationFAIL/actualNOT_RUN;
 only individual unchangedparityPASS cases can be dispatched after H11 closes.
 
 | `47e5a5500` (worker) | Retain every failed parity outcome with original guard rejection API | 79366 | 79366 | +0 |
-| This commit | Integrate complete failed parity evidence and CLI nonzero summary | 79366 | 79366 | +0 |
+| `ea7148a19` | Integrate complete failed parity evidence and CLI nonzero summary | 79366 | 79366 | +0 |
+
+
+H11 corrected source integrates Cappedf2c143b37's prepare_closed_store and
+strict optionalnormalized census custody. Root controller preserves exact
+KnownStop raw export, creates freshcensus-store/store.sqlite through thehelper,
+then an independent writabletyped-store bytecopy. Allnormalization work is
+charged to originalproof_work_stop/proof_stop; no timer/limit/cache/workload
+changes. Both SQLcensus and publicprovider use the same initialstandalonebytes,
+while provider's offlineWritable changes cannot alter censussource or rawexport.
+OriginalDocker cp/mainfileSHA/size/manifest/transcript/runtimeStop/volume bindings
+remain raw, additionally bound to normalization.json/hash/fullrawfileSHA-set,
+helperSHA, exactoutputSHA/size/profile/singlebackup/closedconnections/deadline.
+Legacy nonnormalized closedreceipts and wrapperbehavior remainunchanged.
+
+Helper copies the full exact regular main/WAL/SHM set in64KiB windows, never
+opensrawexport as SQLite, opens isolatedsource mode=ro/query_only/OFF/WAL,
+backs up in128-page steps with zero sleep and immediateBUSY/LOCKED/error abort,
+target explicitlyWAL/OFF. It checkpoints onlyits own target, closes bothowned
+connections and requires sidecar-free output with WALheaderbytes18:20=[2,2].
+Everyrawfile remainsSHA/sizeunchanged. Missing/extraneous/journal/symlink inputs,
+sidecars on immutablecensusinput, invalidprofile/deadline/attempts, raw/receipt/
+output tamper and rehashed forgedcontract remainrefused. No fsync, busyretry,
+manualWAL/header editing, newdependency or productoperation is added.
+
+Worker9externalSQLite-WAL/normalization/strictsyntheticcensus checks PASS0.307s
+underprivate120s; legacy8census guardsPASS0.265s and finalnormalized-only guards
+leavelegacybranch unchanged. Worker pre-helper regressionERROR(absentAPI) is
+retained after demonstratingoldmain1/WAL3rows; Root's actualcontrollerred is
+stronger: oldmaincopy0/100. SyntheticStoreFixture IDs/provider/Dockerevents are
+explicitly labelledsynthetic; no fabricatedcanonical qualification. Actual
+publiccanonicalC3 regression and frozenlegacyoracle qualifications are unaffected
+and reused. FinaloracleSHA88393ba40bce9dd08da9e7afa8e8046588c2904fc6a1071faadc2ceb589cc4b4,
+newtestSHA c68991799be4c3da8b82ca564d5cedbae9f6fb2eafbc4080191b2cb7846c76a7
+matched importedsource exactly. Root final8controllerchecksPASS0.139s/120mainlock,
+including realclosedWAL100rows arrivingin typedproof/censuscopy withrawbytes
+unchanged; raw2026-10-10-h11-closed-wal-controller-fixed. No tests weakened.
+
+Tiny retainedsample diagnosis independently foundoriginalraw-awarecopyexactly
+twoacknowledgedfivefieldCommit tuples/finalhead, versusmain-onlyzero/headNULL.
+Original180,224Bmain/181,312BWAL/32,768BSHM hashes stayedunchanged. Its first
+analysisSQLitebackupDELETEheader was not a productStoreprofile qualification;
+oneapprovedpublicdiagnostic promptlyFAIL44,835,792ns because existingbackend
+profile.rs44–49 rejects journal!=wal, beforeprovider/roots. That failure remains
+raw, no unchangedsecondattempt, no productbug/receipt promotion. Currenthelper
+instead preservesrequiredWALheader. An exactcurrenthelper/newartifact public+
+censusdiagnostic maynowqualify recovery before changed-source cases; original
+sampleFAIL/custody/counts/CSVs remainimmutable. No mountedworkload/Commit replay
+is partof that diagnosis. Producttree/79,366 unchanged; allninecompiledassets
+stillmatch finalseal, so no redundantbuild is required. Batch4 remainsinprogress.
+
+| `f2c143b37` (worker) | Normalize complete closed WAL snapshots with strict unchanged raw/census custody | 79366 | 79366 | +0 |
+| This commit | Wire H11 complete WAL recovery before independent public/census proof | 79366 | 79366 | +0 |

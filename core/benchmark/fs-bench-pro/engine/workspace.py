@@ -956,16 +956,23 @@ def one_family_case(family, case, prepared_folder, build_folder, output):
         # never a host data-serving route or construction/materialization path.
         exported = receipts.command([*docker, "cp", runtime.container + ":/layerfs-store/global", str(output / "graph-store")], output, "closed-store-export", proof_seconds(15))
         exported_store = output / "graph-store/store.sqlite"
+        census_store = exported_store
         typed_store = exported_store
         if recipe_history:
             import shutil
-            # Public provider may write its offline Disposable copy. The
-            # unfiltered SQL census retains the untouched known-Stop export.
+            # A known-Stop WAL still contains acknowledged history. Preserve
+            # its raw export, and bind a standalone recovery snapshot before
+            # making the public provider's independently writable copy.
+            normalized = oracle.prepare_closed_store(output/"graph-store", output/"census-store/store.sqlite",
+                                                     proof_work_stop if proof_work_stop is not None else proof_stop)
+            row["closed_store_normalization"] = normalized
+            census_store = Path(normalized["path"])
+            proof_seconds(.001)
             (output/"typed-store").mkdir()
             typed_store = output/"typed-store/store.sqlite"
-            shutil.copy2(exported_store,typed_store)
-            if identity.sha256(typed_store)!=identity.sha256(exported_store):
-                raise ValueError("independent public provider copy differs from closed export")
+            shutil.copy2(census_store,typed_store)
+            if identity.sha256(typed_store)!=identity.sha256(census_store):
+                raise ValueError("independent public provider copy differs from normalized closed export")
             row["typed_store_input"]={"path":str(typed_store),"sha256":identity.sha256(typed_store),"bytes":typed_store.stat().st_size}
         graph_args = [build["binaries"]["runtime"]["path"], "verify-workspace", "--socket", build["socket"],
                       "--volume", row["clone"]["volume"], "--daemon", build["binaries"]["daemon"]["path"],
@@ -1042,7 +1049,8 @@ def one_family_case(family, case, prepared_folder, build_folder, output):
                 "transcript":str(transcript),"transcript_sha256":identity.sha256(transcript),
                 "export_completion":str(export_completion),"export_completion_sha256":identity.sha256(export_completion),
                 "runtime_events":str(runtime_events),"runtime_events_sha256":identity.sha256(runtime_events)}
-            census = oracle.commit_census(exported_store,tuples,fields,custody)
+            custody["normalization"] = {"receipt":normalized["receipt"], "receipt_sha256":normalized["receipt_sha256"]}
+            census = oracle.commit_census(census_store,tuples,fields,custody)
             proof_seconds(.001)
             receipts.write_new(output/"global-commit-census.json",census)
             row["history"]["global_commit_census"]=census

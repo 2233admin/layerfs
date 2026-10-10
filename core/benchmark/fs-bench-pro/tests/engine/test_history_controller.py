@@ -3,6 +3,8 @@ import copy
 from contextlib import ExitStack
 import json
 from pathlib import Path
+import shutil
+import sqlite3
 import sys
 import tempfile
 from types import SimpleNamespace
@@ -49,6 +51,12 @@ class HistoryController(unittest.TestCase):
             self.assertFalse((root/'benchmark-results/fs-bench-pro/claims').exists())
 
     def test_sparse_workflow_uses_prepared_steps_and_separate_census_copy_before_publication(self):
+        self.sparse_workflow()
+
+    def test_closed_wal_acknowledgements_reach_typed_proof_and_census_copy(self):
+        self.sparse_workflow(closed_wal=True)
+
+    def sparse_workflow(self, closed_wal=False):
         case=next(c for c in cases('dedup_branch_history') if c['id']=='dedup-history-distributed-100')
         selected=case['history_schedule']['verification_steps']
         with tempfile.TemporaryDirectory() as temporary:
@@ -88,7 +96,21 @@ class HistoryController(unittest.TestCase):
                 stdout=root/(label+'.stdout');stdout.write_text('false\n')
                 completion={'argv':argv,'status':'PASS','exit_code':0,'attempts':1}
                 if label=='closed-store-export':
-                    (output/'graph-store').mkdir();(output/'graph-store/store.sqlite').write_bytes(b'opaque isolated orchestration input')
+                    original=root/'source.sqlite'
+                    connection=sqlite3.connect(original,timeout=0,isolation_level=None)
+                    connection.execute('PRAGMA journal_mode=WAL')
+                    connection.execute('PRAGMA synchronous=OFF')
+                    connection.execute('PRAGMA wal_autocheckpoint=0')
+                    connection.execute('CREATE TABLE acknowledged(step INTEGER PRIMARY KEY)')
+                    connection.execute('PRAGMA wal_checkpoint(TRUNCATE)')
+                    connection.executemany('INSERT INTO acknowledged VALUES(?)',[(i,) for i in range(1,101)])
+                    if not closed_wal:connection.close()
+                    (output/'graph-store').mkdir()
+                    for suffix in ('','-wal','-shm'):
+                        source=Path(str(original)+suffix)
+                        if source.exists():shutil.copy2(source,output/('graph-store/store.sqlite'+suffix))
+                    if closed_wal:connection.close()
+                    raw_inputs.update({path.name:path.read_bytes() for path in (output/'graph-store').iterdir()})
                     (output/'closed-store-export.completion.json').write_text(json.dumps(completion))
                     (output/'runtime.events.jsonl').write_text('isolated runtime events\n')
                 if label=='independent-graph':
@@ -96,16 +118,22 @@ class HistoryController(unittest.TestCase):
                     events += [{'event':'workspace_verified','fields':{'root':f'{100:064x}'}},{'event':'finished'}]
                     (output/'graph.events.jsonl').write_text(''.join(json.dumps(row)+'\n' for row in events))
                     typed=Path(argv[argv.index('--sealed')+1]);self.assertEqual(typed,output/'typed-store/store.sqlite')
-                    self.assertEqual(typed.read_bytes(),(output/'graph-store/store.sqlite').read_bytes())
+                    with sqlite3.connect(typed.as_uri()+'?mode=ro&immutable=1',uri=True,timeout=0) as db:
+                        self.assertEqual(db.execute('SELECT count(*) FROM acknowledged').fetchone(),(100,))
+                    for name,data in raw_inputs.items():self.assertEqual((output/'graph-store'/name).read_bytes(),data)
                 return {**completion,'stdout':str(stdout)}
             def census(path,tuples,provider,custody):
-                observed.append(('census',tuples));self.assertEqual(path,output/'graph-store/store.sqlite')
+                observed.append(('census',tuples))
+                with sqlite3.connect(path.as_uri()+'?mode=ro&immutable=1',uri=True,timeout=0) as db:
+                    self.assertEqual(db.execute('SELECT count(*) FROM acknowledged').fetchone(),(100,))
+                self.assertEqual(Path(custody['local_source']),output/'graph-store/store.sqlite')
                 self.assertEqual(len(tuples),100);self.assertEqual(tuples[0]['parent_commit_id'],None)
                 self.assertEqual(tuples[-1]['commit_id'],'12'+f'{100:064x}')
                 transcript=Path(custody['transcript']).read_text().splitlines()
                 self.assertEqual(len(transcript),101);self.assertEqual(transcript[3].split('\t')[-1],'-')
                 self.assertEqual(custody['container'],runtime.container)
                 return {'status':'PASS','commit_count':100,'scope':'isolated census orchestration mock; not public/store qualification'}
+            raw_inputs={}
             def counts(runtime,row,*args):row['cache']['status']='INELIGIBLE'
             with ExitStack() as stack:
                 for module,name,options in (

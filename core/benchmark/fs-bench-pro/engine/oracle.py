@@ -7,6 +7,7 @@ import argparse
 from contextlib import closing
 import hashlib
 import json
+import math
 from pathlib import Path
 import sqlite3
 import subprocess
@@ -124,6 +125,194 @@ def _manifest_identity(path):
             "initial_root": _blob(root,32).hex(), "binding_sha256": hashlib.sha256(binding).hexdigest()}
 
 
+NORMALIZATION_SCHEMA = "fs-bench-pro-closed-store-normalization-v1"
+NORMALIZATION_SCOPE = "isolated full regular known-Stop SQLite set; read-only WAL source and bounded SQLite backup to separate WAL/OFF target; raw export bytes unchanged; own target checkpoint/close only; no retry or product operation"
+NORMALIZATION_RECEIPT_SCOPE = "normalization operation completion is observed before receipt emission; receipt write/hash guarded by the same absolute deadline"
+
+
+def _closed_store_deadline(absolute_stop):
+    if type(absolute_stop) not in (int, float) or not math.isfinite(absolute_stop):
+        raise ValueError("finite closed Store absolute deadline required")
+    if time.monotonic() >= absolute_stop:
+        raise TimeoutError("closed Store normalization absolute deadline reached")
+
+
+def _closed_store_file(path, absolute_stop=None):
+    path = Path(path)
+    if path.is_symlink() or not path.is_file():
+        raise ValueError("closed Store set requires exact regular files")
+    size, digest = path.stat().st_size, hashlib.sha256()
+    with path.open("rb") as stream:
+        while True:
+            if absolute_stop is not None:
+                _closed_store_deadline(absolute_stop)
+            chunk = stream.read(65536)
+            if not chunk:
+                break
+            digest.update(chunk)
+    if path.stat().st_size != size:
+        raise ValueError("closed Store file changed while hashing")
+    return {"size": size, "sha256": digest.hexdigest()}
+
+
+def _closed_store_files(raw_directory, absolute_stop=None):
+    raw = Path(raw_directory)
+    if raw.is_symlink() or not raw.is_dir():
+        raise ValueError("exact regular closed Store directory required")
+    names = sorted(item.name for item in raw.iterdir())
+    if "store.sqlite" not in names or any(name not in ("store.sqlite", "store.sqlite-wal", "store.sqlite-shm") for name in names):
+        raise ValueError("closed Store set contains missing or unexpected files/journal")
+    return {name: _closed_store_file(raw/name, absolute_stop) for name in names}
+
+
+def prepare_closed_store(raw_directory, normalized_path, absolute_stop):
+    """Normalize an isolated copy of all WAL bytes; never open the raw export."""
+    _closed_store_deadline(absolute_stop)
+    raw, target_path = Path(raw_directory).resolve(), Path(normalized_path).resolve()
+    if Path(raw_directory).is_symlink() or Path(normalized_path).is_symlink() or target_path.is_relative_to(raw):
+        raise ValueError("closed Store normalization must use a separate fresh path")
+    target_path.parent.mkdir(parents=True, exist_ok=False)
+    receipt = target_path.parent/"normalization.json"
+    scratch = target_path.parent/"scratch"
+    scratch.mkdir()
+    begun = time.monotonic()
+    record = {"schema": NORMALIZATION_SCHEMA, "scope": NORMALIZATION_SCOPE,
+              "raw_directory": str(raw), "path": str(target_path), "scratch": str(scratch),
+              "helper_sha256": _closed_store_file(Path(__file__), absolute_stop)["sha256"],
+              "profile": "Disposable/WAL/OFF", "source_uri_mode": "ro", "source_query_only": 1,
+              "source_synchronous": 0, "target_synchronous": 0, "source_journal_mode": "wal", "target_journal_mode": "wal",
+              "backup_pages_per_step": 128, "backup_sleep_seconds": 0, "backup_attempts": 0,
+              "absolute_stop_monotonic": absolute_stop, "started_monotonic": begun,
+              "receipt_scope": NORMALIZATION_RECEIPT_SCOPE}
+    source = target = None
+    progress = {"calls": 0, "remaining_pages": None, "total_pages": None, "last_status": None}
+    try:
+        record["raw_files"] = _closed_store_files(raw, absolute_stop)
+        for name in record["raw_files"]:
+            with (raw/name).open("rb") as incoming, (scratch/name).open("xb") as outgoing:
+                while True:
+                    _closed_store_deadline(absolute_stop)
+                    chunk = incoming.read(65536)
+                    if not chunk:
+                        break
+                    if outgoing.write(chunk) != len(chunk):
+                        raise OSError("closed Store copy short write; no resend")
+            _closed_store_deadline(absolute_stop)
+        record["copied_files"] = _closed_store_files(scratch, absolute_stop)
+        if record["copied_files"] != record["raw_files"]:
+            raise ValueError("isolated full closed Store copy differs")
+        source = sqlite3.connect((scratch/"store.sqlite").as_uri()+"?mode=ro", uri=True, isolation_level=None, timeout=0)
+        source.execute("PRAGMA query_only=ON"); source.execute("PRAGMA synchronous=OFF")
+        if (source.execute("PRAGMA journal_mode=WAL").fetchone() != ("wal",)
+                or source.execute("PRAGMA query_only").fetchone() != (1,)
+                or source.execute("PRAGMA synchronous").fetchone() != (0,)):
+            raise ValueError("closed Store source requires explicit read-only WAL/OFF")
+        _closed_store_deadline(absolute_stop)
+        target = sqlite3.connect(target_path, isolation_level=None, timeout=0)
+        page_size = source.execute("PRAGMA page_size").fetchone()[0]
+        if type(page_size) is not int or page_size < 512 or page_size > 65536 or page_size & (page_size-1):
+            raise ValueError("closed Store source SQLite page size differs")
+        target.execute(f"PRAGMA page_size={page_size}")
+        if target.execute("PRAGMA journal_mode=WAL").fetchone() != ("wal",):
+            raise ValueError("closed Store target requires explicit WAL")
+        target.execute("PRAGMA synchronous=OFF")
+        if target.execute("PRAGMA synchronous").fetchone() != (0,):
+            raise ValueError("closed Store target requires synchronous OFF")
+        def advance(status, remaining, total):
+            progress.update(calls=progress["calls"]+1, remaining_pages=remaining, total_pages=total, last_status=status)
+            _closed_store_deadline(absolute_stop)
+            if status not in (sqlite3.SQLITE_OK, sqlite3.SQLITE_DONE):
+                raise sqlite3.OperationalError("closed Store backup BUSY/LOCKED/error; no retry: " + str(status))
+        record["backup_attempts"] = 1
+        source.backup(target, pages=128, progress=advance, sleep=0)
+        _closed_store_deadline(absolute_stop)
+        if (target.execute("PRAGMA journal_mode").fetchone() != ("wal",)
+                or target.execute("PRAGMA synchronous").fetchone() != (0,)):
+            raise ValueError("closed Store target WAL/OFF changed during backup")
+        checkpoint = target.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
+        if not checkpoint or checkpoint[0] != 0:
+            raise sqlite3.OperationalError("closed Store target checkpoint BUSY; no retry")
+        target.close(); target = None
+        source.close(); source = None
+        _closed_store_deadline(absolute_stop)
+        if any(Path(str(target_path)+suffix).exists() or Path(str(target_path)+suffix).is_symlink()
+               for suffix in ("-wal", "-shm", "-journal")):
+            raise ValueError("closed Store normalized input retains a sidecar")
+        with target_path.open("rb") as stream:
+            header = stream.read(100)
+        if header[:16] != b"SQLite format 3\x00" or header[18:20] != bytes([2,2]):
+            raise ValueError("closed Store normalized header must retain WAL; no DELETE conversion")
+        record["normalized_identity"] = _closed_store_file(target_path, absolute_stop)
+        _closed_store_deadline(absolute_stop)
+        record["raw_files_after"] = _closed_store_files(raw, absolute_stop)
+        if record["raw_files_after"] != record["raw_files"] or _closed_store_file(Path(__file__), absolute_stop)["sha256"] != record["helper_sha256"]:
+            raise ValueError("closed Store raw export/helper changed during normalization")
+        record.update(status="PASS", backup_progress=progress, checkpoint=list(checkpoint), raw_unchanged=True,
+                      source_closed=True, target_closed=True, completed_monotonic=time.monotonic())
+        _closed_store_deadline(absolute_stop)
+        write_new(receipt, record)
+        receipt_sha = _closed_store_file(receipt, absolute_stop)["sha256"]
+        _closed_store_deadline(absolute_stop)
+        return {"path": str(target_path), "receipt": str(receipt), "receipt_sha256": receipt_sha,
+                "normalized_identity": record["normalized_identity"], "raw_directory": str(raw), "raw_files": record["raw_files"]}
+    except BaseException as error:
+        record.update(status="FAIL", failure_type=type(error).__name__, failure=str(error), backup_progress=progress)
+        write_new(target_path.parent/"normalization-failure.json", record)
+        raise
+    finally:
+        if target is not None:
+            target.close()
+        if source is not None:
+            source.close()
+
+
+def _normalization_binding(path, before, custody):
+    binding = custody.get("normalization")
+    if type(binding) is not dict or set(binding) != {"receipt", "receipt_sha256"}:
+        raise ValueError("census exact normalization receipt binding required")
+    if not set(CUSTODY_KEYS).issubset(custody):
+        raise ValueError("census normalization requires every original custody field")
+    receipt = Path(binding["receipt"])
+    if receipt.is_symlink() or file_sha(receipt) != binding["receipt_sha256"]:
+        raise ValueError("census normalization receipt hash binding differs")
+    record = json.loads(receipt.read_text())
+    if type(record) is not dict:
+        raise ValueError("census normalization receipt must be a structured record")
+    raw = Path(custody["local_source"]).parent.resolve()
+    if (record.get("schema") != NORMALIZATION_SCHEMA or record.get("status") != "PASS" or record.get("scope") != NORMALIZATION_SCOPE
+            or record.get("raw_directory") != str(raw) or record.get("path") != str(path.resolve())
+            or record.get("normalized_identity") != before or record.get("helper_sha256") != file_sha(Path(__file__))
+            or record.get("receipt_scope") != NORMALIZATION_RECEIPT_SCOPE
+            or record.get("profile") != "Disposable/WAL/OFF" or record.get("source_uri_mode") != "ro"
+            or record.get("source_query_only") != 1 or record.get("source_synchronous") != 0 or record.get("target_synchronous") != 0
+            or record.get("source_journal_mode") != "wal" or record.get("target_journal_mode") != "wal"
+            or record.get("backup_pages_per_step") != 128 or record.get("backup_sleep_seconds") != 0 or record.get("backup_attempts") != 1
+            or record.get("raw_unchanged") is not True or record.get("source_closed") is not True or record.get("target_closed") is not True
+            or record.get("checkpoint") != [0,0,0]):
+        raise ValueError("census normalization source/output/profile/custody differs")
+    if any(type(record.get(name)) is not int for name in ("source_query_only", "source_synchronous", "target_synchronous",
+           "backup_pages_per_step", "backup_sleep_seconds", "backup_attempts")):
+        raise ValueError("census normalization numeric profile/attempt fields differ")
+    progress = record.get("backup_progress", {})
+    if (type(progress.get("calls")) is not int or progress["calls"] < 1
+            or type(progress.get("remaining_pages")) is not int or progress["remaining_pages"] != 0
+            or type(progress.get("total_pages")) is not int or progress["total_pages"] < 1
+            or type(progress.get("last_status")) is not int or progress["last_status"] != sqlite3.SQLITE_DONE):
+        raise ValueError("census normalization single bounded backup completion differs")
+    with Path(path).open("rb") as stream:
+        header = stream.read(100)
+    if header[:16] != b"SQLite format 3\x00" or header[18:20] != bytes([2,2]):
+        raise ValueError("census normalized Store does not retain the WAL header")
+    clocks = [record.get(name) for name in ("started_monotonic", "completed_monotonic", "absolute_stop_monotonic")]
+    if any(type(value) not in (int,float) or not math.isfinite(value) for value in clocks) or not 0 <= clocks[0] <= clocks[1] < clocks[2]:
+        raise ValueError("census normalization completion/deadline differs")
+    actual = _closed_store_files(raw, clocks[2])
+    if (actual != record.get("raw_files") or actual != record.get("copied_files") or actual != record.get("raw_files_after")
+            or actual["store.sqlite"] != {"sha256":custody["source_sha256"], "size":custody["source_size"]}):
+        raise ValueError("census normalization exact raw SQLite set changed")
+    return raw/"store.sqlite"
+
+
 def commit_census(sealed_path, acknowledged_tuples, provider_fields, export_custody):
     """Unfiltered global membership, independently bound to public typed proof.
 
@@ -133,9 +322,12 @@ def commit_census(sealed_path, acknowledged_tuples, provider_fields, export_cust
     path = Path(sealed_path)
     before = _sealed_identity(path)
     custody, provider = dict(export_custody), dict(provider_fields)
+    normalized = "normalization" in custody
+    exported_path = _normalization_binding(path, before, custody) if normalized else path
+    exported_identity = _closed_store_file(exported_path) if normalized else before
     if (custody.get("custody") != "KNOWN_STOP" or custody.get("remote_source") != "/layerfs-store/global/store.sqlite"
-            or Path(custody.get("local_source", "")).resolve() != path.resolve()
-            or custody.get("source_sha256") != before["sha256"] or custody.get("source_size") != before["size"]
+            or Path(custody.get("local_source", "")).resolve() != exported_path.resolve()
+            or custody.get("source_sha256") != exported_identity["sha256"] or custody.get("source_size") != exported_identity["size"]
             or type(custody.get("container")) is not str or len(custody["container"]) != 64
             or any(char not in "0123456789abcdef" for char in custody["container"])
             or type(custody.get("volume")) is not str or not custody["volume"].startswith("layerfs-fsb-sample-")):
@@ -150,11 +342,11 @@ def commit_census(sealed_path, acknowledged_tuples, provider_fields, export_cust
         raise ValueError("census export/runtime custody receipt hashes differ")
     exported = json.loads(export.read_text())
     argv = exported.get("argv", [])
-    directory_copy = [custody["container"]+":/layerfs-store/global", str(path.parent.resolve())]
-    file_copy = [custody["container"]+":/layerfs-store/global/store.sqlite", str(path.resolve())]
+    directory_copy = [custody["container"]+":/layerfs-store/global", str(exported_path.parent.resolve())]
+    file_copy = [custody["container"]+":/layerfs-store/global/store.sqlite", str(exported_path.resolve())]
     if (exported.get("status") != "PASS" or exported.get("exit_code") != 0 or exported.get("attempts") != 1
             or len(argv) != 6 or argv[:2] != ["docker", "--host"] or not argv[2].startswith("unix://")
-            or argv[3] != "cp" or argv[4:] not in (directory_copy,file_copy)):
+            or argv[3] != "cp" or argv[4:] not in ((directory_copy,) if normalized else (directory_copy,file_copy))):
         raise ValueError("census exact acknowledged export command differs")
     events = [json.loads(line) for line in runtime_events.read_text().splitlines()]
     setup = [item for item in events if item.get("event") == "daemon_setup"]
@@ -167,6 +359,9 @@ def commit_census(sealed_path, acknowledged_tuples, provider_fields, export_cust
         raise ValueError("census known stopped runtime/container/volume custody differs")
     result = _commit_census_read_only(path, acknowledged_tuples, provider, manifest, transcript, before=before)
     result["custody"] = {key:custody[key] for key in CUSTODY_KEYS}
+    if normalized:
+        _normalization_binding(path, _sealed_identity(path), custody)
+        result["custody"]["normalization"] = custody["normalization"]
     return result
 
 
