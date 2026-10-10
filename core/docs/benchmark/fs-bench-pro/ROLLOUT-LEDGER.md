@@ -21,7 +21,7 @@ comparison or release-admission claim. Durable is
 | 1 Pilot | COMPLETE: 36 functional/proof/clean-close passes; 7 recorded scoped B PASS, 29 INELIGIBLE; full numeric qualification of the 7 is unverified | Init `c1d7dd0e8`/`39bbcbd6b`; payload `200f81493`/`c1d9b6c58`; parallel routing `b3c96ecb1`; tiny `36849bcc2`/`d6e0ef952`; namespace `98b14b233`/`be1f56a23`; H-2 fix `222526fa0`; closure `d4314ed62`; membership supplement `cca598d0b` | Batch 2, retaining original receipts plus exhaustive membership supplement |
 | 2 Edits | COMPLETE: all62 cases ported/parity/sampled once/recorded;39 strict proof and clean-close passes (numeric INELIGIBLE),20 strict retention failures and3 original capped-watchdog failures retained | Canonical `a34b5d44b`/`beeb7ad69`; preserving `b9ffa63be`; capped `4d8ccfc93`; changing `05ffbf971`; small-delta `c0c99a4a3`/`2e6a508b5`/`1c975ba30` | Begin batch3; no identified fixable product correctness defect remains in batch2 |
 | 3 Trees and tools | COMPLETE: all33 original cases ported/parity/sampled, full applicable proofs and clean closePASS; numeric33INELIGIBLE; first snapshotFAIL retained separately; localitydense500 and snapshot EXCEEDED | Shared3c697ae92; directory50c297c68/ad4f95503; locality2590a4536/26c037d90; snapshot0344bfdc6/fix03033abdc/results98d3be30a/70d568e94; Git acebd7cbd/guard031d427a7/results31fff4d49 | Begin batch4 after this committed closure, no identified fixable product correctness bug |
-| 4 History on one branch | IN_PROGRESS: all43 original cases authored in three worktrees; allunrun; shared persisted proof/census/preparation/controller being qualified | Routing65f0c1fbe; sharednative/model/P3 integration this commit; family/runtime/preparation integrations pending | Complete source/oracle qualification, then per-family parity and one attempt per case |
+| 4 History on one branch | IN_PROGRESS: all43 original cases authored in three worktrees; allunrun; shared persisted proof/census/preparation/controller being qualified | Routing65f0c1fbe; nativea921bedbd; portsfc9e71fae/6a5433e79/4762b720c; prepared364e1a87a; guarded5ebdac535/report65df42e91; controller this commit; finalpublicqualification pending | Complete source/oracle qualification, then per-family parity and one attempt per case |
 | 5 Branches and Workspaces | PENDING | — | Wait for batch 4; verify existing P-1 SDK methods |
 | 6 Dedup and storage | PENDING | — | Wait for batch 5 completion |
 | 7 Reliability | PENDING | — | Wait for batch 6 completion |
@@ -102,7 +102,7 @@ comparison or release-admission claim. Durable is
 | H-6 | local-snapshot-create-25000-onebyte-v1 | Original native witness exited0, then controller raised dictionary update #5 after measuredEnd | Frozen sample receipt has multiline path/range values and no verification_status; harness assumed full-tree key/value receipt | `03033abdc` | test_original_multiline_sample_with_successful_exit_is_preserved fails beforefix; altered paths/ranges/scope/exit are rejected afterfix |
 | H-7 | Prospective Git4, found before first sample | Late observation publication followed by failed failure-sidecar write or process death before final post-check could reload provisional PASS | Draft guard bound timestamp before the observation write and lacked mandatory completion/known outer return | `031d427a7` | slow observation/completion publication plus failed failure-sidecar and os._exit(91) regressions fail before correction; missing completion/outer acknowledgement remain failed |
 | H-8 | Prospective batch4, found before any attempt | Output-close or final publication failure could retain FAIL after deleting sample resources | Administrative container/volume removal occurred before finally close/verdict/publication and driver acknowledgement; partial removal also claimed blanket retained custody | `56a422544` | test_close_failure_after_all_proofs_keeps_container_and_volume fails against a921bedbd with both rm calls observed; missing outer ACK/failed return do no removal, partial lost-volume acknowledgement remains uncertain and immutable bound |
-| H-9 | Prospective two verification-only cases | Overall output-closeFAIL could disappear in CSV when performance wasN/A and semantic proof retainedPASS | Original proof-only mask omitted the independent full-outcome failure tag | Worker2fe8e9b2e / integration this commit | test_overall_failure_and_close_cause_stay_visible_when_semantic_proof_passed fails beforefix; final5reportchecks PASS0.048s |
+| H-9 | Prospective two verification-only cases | Overall output-closeFAIL could disappear in CSV when performance wasN/A and semantic proof retainedPASS | Original proof-only mask omitted the independent full-outcome failure tag | Worker2fe8e9b2e / integration this commit | test_overall_close_failure_remains_visible_beside_passing_semantic_proof fails beforefix; final5reportchecks PASS0.048s |
 
 H-1 and H-2 are harness faults, not product correctness or performance defects.
 The original file-identity checker remains intact; no product source changed.
@@ -2629,4 +2629,46 @@ Controller owner120s invocation ceiling remains separate from original120/
 
 | `6d47e3be3` (worker) | Verification-only performance N/A and explicit no-sample driver | 79366 | 79366 | +0 |
 | `2fe8e9b2e` (worker) | Keep overallFAIL/close cause visible beside semantic proofPASS | 79366 | 79366 | +0 |
-| This commit | Integrate verification-only reporting and H9 outcome visibility | 79366 | 79366 | +0 |
+| `65df42e91` | Integrate verification-only reporting and H9 outcome visibility | 79366 | 79366 | +0 |
+
+
+Batch4 controller authoring integrates exact current interfaces: every ordered
+acknowledgement, sparse original checkpoint manifests with '-' sentinels,
+prepared_step_runs dispatch, perstep original semantic counters, helper-only
+actualcreatedmode cumulativeprefix TSV/hash seals, finalK native proof, and
+separate typed-provider bytecopy/immutableexport. Public-provider fields and
+allactualCommit tuples/source/runtime/exportcustody feed the unfilteredcensus.
+Full mandatory public proof and actualcanonicalextraCommit qualification still
+wait Namespace/Capped; isolated controller mocks explicitly claim neither.
+
+Original25/35 or45/59 work/cleanup/publication budgets retain3/4s reserves and
+0.25s publication guard, including allfour ordinary agentepisode cases. The
+separate owner120s exhaustive invocation cap retains its3s cleanup reserve;
+original120/300definitions staydeclared and performance remainsN/A. Source
+admission/setup/allcalls/Commits/proof/cleanup/Stop/close are recorded as the
+exhaustive testinvocation wall, with zero performance samples. Ordinary source
+15s reporting limits remainsoft; existing hard operation budgets are unchanged.
+New ordered phase watchdog includes its measuredmount; old previouslyclosed
+Small/Local timer wiring is retained. Resourceobservers retain raw excluded
+wall and remain charged to applicable absolute stops, rather than each gaining
+a fresh full allowance. NativeM1 JSON is parsed as its exact selective receipt
+(case/seed/K/exit/scope/rangebytes/digests), never generic full coverage.
+
+Lead covering5componentchecks initiallyPASS, existing7Git controller and3H8
+retention checksPASS, then new full sparse100-ack orchestration test exposed
+an isolated test-fixture path alias (/var versus canonical/private/var), not
+an actual product/case failure. Failed6-test invocation remainsraw; testfixture
+nowresolvesitsroot, matching real controller canonicaloutput, and final6checks
+PASS0.061s underexplicit120s/mainlock. No weakened path/ownership guard. Raw
+2026-10-10-batch-4-controller-authoring-root plus-orchestration and
+-orchestration-canonical-path under benchmark-results/fs-bench-pro.
+No actualclone/mount/Store/benchmarkcase was executed by these isolated tests.
+
+Read-only worker review found a remaining mandatory preparation guard gap:
+missing prepared_step_runs could silently choose native SDK fallback and
+regenerateoriginalbytes inside measuredwork. Tiny owns a fail-closed helper/
+SDKstep seal guard; leadwillwire it before claim/clone. No batch4case mayrun
+untilthisguard, currentpublicoracle/canonicalcensus test andfull9-asset seal
+qualify. This is a source authoring checkpoint, not batch4completion.
+
+| This commit | Wire original history checkpoints/mode custody/census/deadlines and verification-only execution | 79366 | 79366 | +0 |

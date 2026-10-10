@@ -9,13 +9,16 @@ import sys
 import time
 import uuid
 
-from . import cache, fixtures, identity, receipts
+from . import cache, fixtures, identity, oracle, receipts
 
 sys.path.insert(0, str(identity.ROOT / "core/benchmark/cluster-two"))
 from cells import counts, runner as cell_runner, workloads
 
 BASELINE = identity.ROOT / "core/docs/issues/307/checks/timing-baseline-20261010/baseline.json"
 BASELINE_SHA256 = "a6ada570050f14bb6ff5bd61c74c0d0fda439f323f695fdea1212b26b590d3f8"
+BATCH4_HISTORY_SCHEMAS = frozenset(("original-v016-boundary-sequence-v1",
+    "original-dedup-history-sequence-v1", "original-m1-commit-sequence-v1"))
+BATCH4_FAMILIES = frozenset(("file_size_transition","dedup_branch_history","mixed_load_bearing"))
 
 
 def script(folder, name, body):
@@ -296,6 +299,27 @@ def operation_deadline(group_stop, seconds):
 
 def verify_native_receipt(case, verified):
     text = Path(verified["fields"]["stdout"]).read_text()
+    if case.get("m1_schedule"):
+        def unique(pairs):
+            result={}
+            for key,value in pairs:
+                if key in result:
+                    raise ValueError("duplicate native M1 receipt field")
+                result[key]=value
+            return result
+        proof=json.loads(text,object_pairs_hook=unique)
+        keys={"case","seed","step","verification_status","scope","scope_digest","created_modes_digest","entries","checked_range_bytes"}
+        if (not isinstance(proof,dict) or set(proof)!=keys or verified["fields"].get("exit_code")!="0"
+                or proof["case"]!=case["v016_case"] or type(proof["seed"]) is not int or proof["seed"]!=1
+                or type(proof["step"]) is not int or proof["step"]!=case["history_schedule"]["commits"]
+                or proof["verification_status"]!="pass" or proof["scope"]!="original-m1-selective-scope-v1"
+                or any(type(proof[name]) is not int or proof[name]<0 for name in ("entries","checked_range_bytes"))
+                or proof["entries"]==0
+                or any(not isinstance(proof[name],str) or len(proof[name])!=64
+                       or any(char not in "0123456789abcdef" for char in proof[name])
+                       for name in ("scope_digest","created_modes_digest"))):
+            raise ValueError("exact successful original selective M1 native receipt required")
+        return {**proof,"status":"PASS","original_stdout_sha256":hashlib.sha256(text.encode()).hexdigest()}
     if case["v016_case"] == "local-snapshot-create-25000-onebyte-v1":
         paths = [".", *[f"f{i:05}" for i in (0, 1, 97, 194, 12500, 24998, 24999)]]
         omissions = "unselected paths, bytes beyond selected ranges, exhaustive inode/object/reference census, alias and failure injection semantics"
@@ -569,8 +593,85 @@ def qualify_history_mechanism(proofs):
             "scope": "existence only; per-state/file observations may repeat content IDs; no count/percentage/storage/latency quota; retired schema10 counters N/A"}
 
 
+def family_proof_deadlines(case, charged_ns=0, owner_stop=None):
+    """Original work/reserve/publication limits, with separate owner test ceiling."""
+    if case.get("git_workflow"):
+        return git_proof_deadlines(case, charged_ns)
+    if (case.get("history_schedule", {}).get("schema") not in BATCH4_HISTORY_SCHEMAS
+            and case.get("registry",{}).get("family") not in BATCH4_FAMILIES):
+        return None
+    if type(charged_ns) is not int or charged_ns < 0:
+        raise ValueError("nonnegative original charged proof wall required")
+    budget = case["budget"]
+    work, hard = budget["verifier_ms"], budget["verification_hard_watchdog_ms"]
+    if case.get("proof_only"):
+        if work not in (120000, 300000) or hard != work + 10000 or case.get("owner_test_ceiling_ms") != 120000:
+            raise ValueError("original exhaustive declaration and owner120s ceiling required")
+        reserve = budget.get("verification_cleanup_reserve_ms", 3000)
+    else:
+        if (work, hard) not in ((25000,35000),(45000,59000)):
+            raise ValueError("original history verification limits required")
+        reserve = budget.get("cleanup_reserve_ms", budget.get("verification_cleanup_reserve_ms", 3000 if work==25000 else 4000))
+    if reserve != (4000 if work==45000 else 3000) or budget.get("publication_guard_ms",250) != 250:
+        raise ValueError("original history cleanup reserve and publication guard required")
+    now = time.monotonic()
+    result = {"work":now+(work-reserve)/1000-charged_ns/1e9,
+              "cleanup":now+work/1000-charged_ns/1e9,
+              "publication":now+hard/1000-charged_ns/1e9}
+    if owner_stop is not None:
+        result = {name:min(stop,owner_stop) for name,stop in result.items()}
+        result["work"]=min(result["work"],owner_stop-reserve/1000)
+    return result
+
+
+def history_transcript(case, prepared, history):
+    """Bind every acknowledgement, but only original selected payload manifests."""
+    count = case["history_schedule"]["commits"]
+    if len(history["commits"]) != count or [item["index"] for item in history["commits"]] != list(range(1,count+1)):
+        raise ValueError("all original ordered Commit acknowledgements required")
+    selected = (fixtures.history_verification_steps(case) if case["history_schedule"].get("schema") in BATCH4_HISTORY_SCHEMAS
+                else list(range(count+1)))
+    states = {item["index"]:item for item in prepared["history_states"]}
+    if len(states) != len(prepared["history_states"]) or sorted(states) != selected:
+        raise ValueError("exact original selected checkpoint manifests required")
+    manifest = lambda index: states[index]["manifest"] if index in states else "-"
+    rows = [f"0\t-\t-\t{history['initial_root']}\t{manifest(0)}"]
+    seen, previous = set(), "-"
+    for record in history["commits"]:
+        fields = record["commit"]["fields"]
+        commit_id = fields["commit_id"]
+        if commit_id in seen or fields["parent"] != previous:
+            raise ValueError("original Commit IDs must be unique with exact predecessor parents")
+        seen.add(commit_id);previous=commit_id
+        rows.append(f"{record['index']}\t{commit_id}\t{fields['parent']}\t{fields['root']}\t{manifest(record['index'])}")
+    return "\n".join(rows)+"\n", selected
+
+
+def m1_created_modes(command, prior):
+    """Use original measured helper observations, never setup/default modes."""
+    if command["fields"].get("exit_code") != "0":
+        raise ValueError("successful original M1 helper required for created modes")
+    lines = Path(command["fields"]["stdout"]).read_text().splitlines()
+    values = [line[len("m1_created_directory_modes="):] for line in lines if line.startswith("m1_created_directory_modes=")]
+    if len(values) != 1:
+        raise ValueError("one original M1 created-directory observation required")
+    result, seen = dict(prior), set()
+    for item in values[0].split(",") if values[0] else []:
+        columns = item.split(":")
+        if len(columns) != 2:
+            raise ValueError("original M1 mode observation geometry differs")
+        path, mode = columns
+        if (not path or path in seen or any(part in ("", ".", "..") for part in path.split("/"))
+                or any(char.isspace() for char in path) or not mode or any(char not in "01234567" for char in mode)
+                or int(mode,8) > 0o777):
+            raise ValueError("unsafe/duplicate original M1 created-directory mode")
+        seen.add(path);result[path]=int(mode,8)
+    return result
+
+
 def one_family_case(family, case, prepared_folder, build_folder, output):
     """Single ordinary call/Commit through the same SDK/Sandbox machinery."""
+    started_test_ns = time.monotonic_ns()
     current = identity.source_identity()
     build = identity.load_build(build_folder)
     prepared = fixtures.load(prepared_folder, case["fixture"]["recipe"])
@@ -578,8 +679,13 @@ def one_family_case(family, case, prepared_folder, build_folder, output):
     output.mkdir(parents=True, exist_ok=False)
     ordered = bool(case.get("history_schedule"))
     small_history = ordered and case["v016_case"] == "small-file-delta-10x30-v1"
+    recipe_history = case.get("history_schedule", {}).get("schema") in BATCH4_HISTORY_SCHEMAS
+    batch4 = family in BATCH4_FAMILIES
+    proof_only = case.get("proof_only") is True
+    owner_stop = started_test_ns/1_000_000_000+120 if proof_only else None
     body = None if case.get("control_only") else "/bin/bash /code/workload.sh apply " + shlex.quote(case["v016_case"])
-    bodies = ["/bin/bash /code/" + step["run"] for step in case["steps"]] if ordered else [body]
+    bodies = ["/bin/bash /code/" + prepared.get("prepared_step_runs",{}).get(str(index),step["run"])
+              for index,step in enumerate(case["steps"],1)] if ordered else [body]
     if ordered and (len(bodies) != case["history_schedule"]["commits"] or any(not step.get("commit") for step in case["steps"])):
         raise ValueError("original ordered history requires all declared saves and Commits")
     treatment = {"family": family, "case": case, "fixture": prepared["fixture"]["fixture_sha256"],
@@ -597,12 +703,16 @@ def one_family_case(family, case, prepared_folder, build_folder, output):
            "daemon_sha256": build["binaries"]["daemon"]["sha256"], "runtime_sha256": build["binaries"]["runtime"]["sha256"],
            "image": identity.IMAGE, "status": "NOT_RUN", "proof_status": "NOT_RUN", "counts": {}, "phases": {},
            "observations": {}, "cache_class": case.get("cache_class", "B"), "cache": {"class": case.get("cache_class", "B")}, "cleanup": "UNAVAILABLE",
-           "declared_limit_ns": case["budget"]["command_ms"] * 1_000_000,
+           "declared_limit_ns": case["budget"]["command_ms"] * 1_000_000 if case["budget"]["command_ms"] is not None else "N/A",
            "verifier_limit_ns": case["budget"]["verifier_ms"] * 1_000_000,
            "global_profile": "Disposable/WAL/OFF", "overlay_profile": "MEMORY/OFF/EXCLUSIVE", "construction_workers": 1,
            "durable": "NOT_RUN — disabled by owner until explicit reauthorization", "claim": key,
            "attempted_operation_count": 0, "completed_operation_count": 0, "sample_count": 0,
-           "interference": "single checkout lock; unrelated and own retained failed containers share Docker VM, unquantified"}
+           "verification_attempt_count":1 if proof_only else 0,
+           "interference": current.get("cross_worktree_interference","shared host/Docker VM/protected and own failed services, unquantified"),
+           "proof_only": proof_only, "performance_mode":"verification-only" if proof_only else "single original performance attempt",
+           "performance_declaration":case.get("performance_mode","single original performance attempt"),
+           "owner_test_ceiling_ns":120_000_000_000 if proof_only else None}
     receipts.write_new(output / "selection.json", row)
     runtime = None
     mounted = set()
@@ -612,6 +722,9 @@ def one_family_case(family, case, prepared_folder, build_folder, output):
     preproof_ns = 0
     publication_stop = None
     proof_cleanup_stop = None
+    proof_deadlines = None
+    created_modes = {}
+    final_modes = None
     try:
         row["clone"] = fixtures.clone(prepared, output / "clone", build)
         environment = output / "environment.txt"
@@ -682,7 +795,9 @@ def one_family_case(family, case, prepared_folder, build_folder, output):
                     declaration="prior original verification variant includes additional verifier reads and ends without Commit; measured performance variant unchanged; identical-body/cache qualification unavailable")
         selected = secrets.token_hex(32)
         clock.begin(time.monotonic_ns())
-        row.update(attempted_operation_count=1, sample_count=1)
+        phase_started = time.monotonic()
+        row.update(attempted_operation_count=1, sample_count=0 if proof_only else 1,
+                   verification_attempt_count=1 if proof_only else 0)
         mount = runtime.send("mount", selected, deadline=time.monotonic() + 15)
         mounted.add(selected)
         bindings["measured_mount_attach"] = endpoint(mount)
@@ -691,8 +806,10 @@ def one_family_case(family, case, prepared_folder, build_folder, output):
         group_stop = time.monotonic() + group_ms / 1000 if group_ms is not None else None
         row["edit_commit_end_group"] = {"watchdog_ms": group_ms,
                                        "scope": "ordinary edit, Commit and terminal unmount; excludes measured mount/setup/warmup/proof"}
-        operation_seconds = case["budget"].get("operation_watchdog_ms", 120000) / 1000
-        phase_stop = time.monotonic() + case["budget"].get("performance_hard_watchdog_ms", case["budget"]["command_ms"]) / 1000 if ordered else group_stop
+        operation_seconds = min(120,case["budget"].get("operation_watchdog_ms", 120000) / 1000)
+        phase_stop = (phase_started if recipe_history else time.monotonic()) + case["budget"].get("performance_hard_watchdog_ms", case["budget"]["command_ms"]) / 1000 if ordered else group_stop
+        if owner_stop is not None:
+            phase_stop = min(phase_stop,owner_stop)
         row["phases"].update(command_ns=0, commit_ns=0)
         for index, command_body in enumerate(bodies, 1):
             if small_history:
@@ -707,9 +824,21 @@ def one_family_case(family, case, prepared_folder, build_folder, output):
             if case.get("original_operation_counts"):
                 row["original_operation_counts"] = history_observer(clock, row, f"original-operation-counts-{index}",
                     lambda: original_operation_counts(command, case["original_operation_counts"]))
+            if ordered and case["steps"][index-1].get("original_operation_counts"):
+                checked = history_observer(clock,row,f"original-step-operation-counts-{index}",
+                    lambda:original_operation_counts(command,case["steps"][index-1]["original_operation_counts"]))
+                row.setdefault("original_step_operation_counts",[]).append({"index":index,"counts":checked})
+            if case.get("m1_schedule"):
+                def capture_modes():
+                    values = m1_created_modes(command,created_modes)
+                    path = script(output,f"m1-created-modes-{index}.tsv","".join(f"{path}\t{mode:o}\n" for path,mode in sorted(values.items())))
+                    return values,{"index":index,"path":str(path),"sha256":identity.sha256(path),
+                        "helper_stdout":command["fields"]["stdout"],"helper_stdout_sha256":identity.sha256(command["fields"]["stdout"])}
+                created_modes,final_modes = history_observer(clock,row,f"original-created-modes-{index}",capture_modes)
+                row.setdefault("created_mode_prefixes",[]).append(final_modes)
             if case.get("original_ordinary_guards"):
                 row["ordinary_resource_guards"]["steps"].append(history_observer(clock, row, f"ordinary-before-commit-{index}",
-                    lambda: ordinary_resource_guard(runtime, build, output, f"ordinary-resources-before-commit-{index}", row["ordinary_resource_guards"]["before"])))
+                    lambda: ordinary_resource_guard(runtime, build, output, f"ordinary-resources-before-commit-{index}", row["ordinary_resource_guards"]["before"],operation_deadline(phase_stop,15)-time.monotonic())))
             if case.get("git_workflow"):
                 custody_start = time.monotonic_ns()
                 try:
@@ -729,11 +858,12 @@ def one_family_case(family, case, prepared_folder, build_folder, output):
             committed = runtime.send("commit", selected, deadline=operation_deadline(step_stop, operation_seconds))
             row["phases"]["commit_ns"] += committed["span"]["duration_ns"]
             row["commit"] = committed
-            if committed["fields"]["commit_kind"] != case["expected_commit"]:
+            expected_kind = case["steps"][index-1].get("expected_commit",case["expected_commit"]) if ordered else case["expected_commit"]
+            if committed["fields"]["commit_kind"] != expected_kind:
                 raise ValueError("original known Commit outcome differs from frozen mutation/read-only case")
             if case.get("original_ordinary_guards"):
                 row["ordinary_resource_guards"]["steps"].append(history_observer(clock, row, f"ordinary-after-commit-{index}",
-                    lambda: ordinary_resource_guard(runtime, build, output, f"ordinary-resources-after-commit-{index}", row["ordinary_resource_guards"]["before"])))
+                    lambda: ordinary_resource_guard(runtime, build, output, f"ordinary-resources-after-commit-{index}", row["ordinary_resource_guards"]["before"],operation_deadline(phase_stop,15)-time.monotonic())))
             if ordered:
                 record = {"index": index, "command": command, "commit": committed,
                           "step_wall_ns": time.monotonic_ns() - step_started}
@@ -759,10 +889,14 @@ def one_family_case(family, case, prepared_folder, build_folder, output):
         proof_started = time.monotonic_ns()
         proof_stop = time.monotonic() + case["budget"]["verification_hard_watchdog_ms"] / 1000-preproof_ns/1e9
         git_deadlines = git_proof_deadlines(case, preproof_ns) if case.get("git_workflow") else None
-        proof_work_stop = git_deadlines["work"] if git_deadlines else None
-        proof_cleanup_stop = git_deadlines["cleanup"] if git_deadlines else None
-        if git_deadlines:
-            proof_stop = publication_stop = git_deadlines["publication"]
+        proof_deadlines = family_proof_deadlines(case,preproof_ns,owner_stop)
+        proof_work_stop = proof_deadlines["work"] if proof_deadlines else None
+        proof_cleanup_stop = proof_deadlines["cleanup"] if proof_deadlines else None
+        if proof_deadlines:
+            proof_stop = publication_stop = proof_deadlines["publication"]
+            row["proof_policy"] = {"work_cutoff_monotonic":proof_work_stop,"cleanup_cutoff_monotonic":proof_cleanup_stop,
+                "publication_cutoff_monotonic":publication_stop,"original_verifier_ms":case["budget"]["verifier_ms"],
+                "original_hard_watchdog_ms":case["budget"]["verification_hard_watchdog_ms"],"owner_test_ceiling_ms":120000 if proof_only else None}
         def proof_seconds(limit, cleanup=False):
             left = proof_stop - time.monotonic()
             if proof_work_stop is not None:
@@ -782,45 +916,68 @@ def one_family_case(family, case, prepared_folder, build_folder, output):
         if case.get("git_workflow"):
             row["git_custody"] = verify_git_custody(runtime, verify_mount, prepared, build, output,
                                                     row["git_precommit"], native_seconds(case["budget"]["verifier_ms"]/1000))
-        verify_body = "/bin/bash /code/workload.sh verify " + shlex.quote(case["v016_case"])
+        docker = ["docker", "--host", "unix://" + build["socket"]]
+        if case.get("m1_schedule"):
+            if final_modes is None:
+                raise ValueError("original measured created-mode observations unavailable")
+            receipts.command([*docker,"cp",final_modes["path"],runtime.container+":/code/history/observed-final-modes.tsv"],output,"native-created-modes-stage",proof_seconds(15))
+            verify_body = "/bin/bash /code/workload.sh verify-step " + shlex.quote(case["v016_case"])+f" {case['history_schedule']['commits']} /code/history/observed-final-modes.tsv"
+        else:
+            verify_body = "/bin/bash /code/workload.sh verify " + shlex.quote(case["v016_case"])
+            if recipe_history:
+                verify_body += " "+str(case["history_schedule"]["commits"])
         verified = runtime.send("verify", verify_mount, script(output, "verify.sh", verify_body),
                                 deadline=time.monotonic() + native_seconds(case["budget"]["verifier_ms"] / 1000))
         proof = verify_native_receipt(case, verified)
+        if case.get("m1_schedule") and proof["created_modes_digest"]!=final_modes["sha256"]:
+            raise ValueError("native selective proof did not bind exact measured mode observations")
         if case.get("git_workflow"):
             row["git_semantics"] = verify_git_semantic_fields(proof, prepared)
-        runtime.send("unmount", verify_mount, deadline=time.monotonic() + (proof_seconds(15, cleanup=True) if git_deadlines else native_seconds(15)))
+        runtime.send("unmount", verify_mount, deadline=time.monotonic() + (proof_seconds(15, cleanup=True) if proof_deadlines else native_seconds(15)))
         mounted.remove(verify_mount)
-        row["verification_cleanup"] = readiness(runtime, verify_mount, proof_seconds(5, cleanup=True) if git_deadlines else native_seconds(5))
+        row["verification_cleanup"] = readiness(runtime, verify_mount, proof_seconds(5, cleanup=True) if proof_deadlines else native_seconds(5))
         if case.get("original_ordinary_guards"):
             row["ordinary_resource_guards"]["after_native_proof"] = ordinary_resource_guard(runtime, build, output,
-                "ordinary-resources-after-native-proof", row["ordinary_resource_guards"]["before"], proof_seconds(15) if git_deadlines else 15)
+                "ordinary-resources-after-native-proof", row["ordinary_resource_guards"]["before"], proof_seconds(15))
         if small_history:
             row["resource_guards"]["after_native_proof"] = history_resource_guard(runtime, build, output,
                 "history-resources-after-native-proof", row["resource_guards"]["before"])
         runtime.send("observe", deadline=time.monotonic() + proof_seconds(15, cleanup=True))
         runtime.send("stop", deadline=time.monotonic() + proof_seconds(15, cleanup=True))
         runtime.event("finished", time.monotonic() + proof_seconds(15, cleanup=True))
-        if runtime.process.wait(timeout=proof_seconds(1, cleanup=True) if git_deadlines else 1) != 0:
+        if runtime.process.wait(timeout=proof_seconds(1, cleanup=True) if proof_deadlines else 1) != 0:
             raise ValueError("original runtime exit differs after known Stop")
         row["custody"] = "KNOWN_STOP"
         row["completed_operation_count"] = 1
         docker = ["docker", "--host", "unix://" + build["socket"]]
         # Closed sample input to the independent offline oracle, after Stop;
         # never a host data-serving route or construction/materialization path.
-        receipts.command([*docker, "cp", runtime.container + ":/layerfs-store/global", str(output / "graph-store")], output, "closed-store-export", proof_seconds(15))
+        exported = receipts.command([*docker, "cp", runtime.container + ":/layerfs-store/global", str(output / "graph-store")], output, "closed-store-export", proof_seconds(15))
+        exported_store = output / "graph-store/store.sqlite"
+        typed_store = exported_store
+        if recipe_history:
+            import shutil
+            # Public provider may write its offline Disposable copy. The
+            # unfiltered SQL census retains the untouched known-Stop export.
+            (output/"typed-store").mkdir()
+            typed_store = output/"typed-store/store.sqlite"
+            shutil.copy2(exported_store,typed_store)
+            if identity.sha256(typed_store)!=identity.sha256(exported_store):
+                raise ValueError("independent public provider copy differs from closed export")
+            row["typed_store_input"]={"path":str(typed_store),"sha256":identity.sha256(typed_store),"bytes":typed_store.stat().st_size}
         graph_args = [build["binaries"]["runtime"]["path"], "verify-workspace", "--socket", build["socket"],
                       "--volume", row["clone"]["volume"], "--daemon", build["binaries"]["daemon"]["path"],
-                      "--manifest", prepared["provision"]["manifest"], "--sealed", str(output / "graph-store/store.sqlite"),
+                      "--manifest", prepared["provision"]["manifest"], "--sealed", str(typed_store),
                       "--case", case["v016_case"], "--receipt", str(output / "graph.events.jsonl"),
                       "--uid", str(prepared["source_uid"]), "--gid", str(prepared["source_gid"])]
         if ordered:
-            history_rows = [f"0\t-\t-\t{row['history']['initial_root']}\t{prepared['history_states'][0]['manifest']}"]
-            for record in row["history"]["commits"]:
-                fields = record["commit"]["fields"]
-                history_rows.append(f"{record['index']}\t{fields['commit_id']}\t{fields['parent']}\t{fields['root']}\t{prepared['history_states'][record['index']]['manifest']}")
-            transcript = script(output, "acknowledged-history.tsv", "\n".join(history_rows) + "\n")
+            transcript_body,selected_steps = history_transcript(case,prepared,row["history"])
+            transcript = script(output, "acknowledged-history.tsv", transcript_body)
+            row["history"]["verification_steps"]=selected_steps
             graph_args[1] = "verify-history"
             graph_args.extend(["--history-file", str(transcript)])
+            if case.get("m1_schedule"):
+                graph_args.extend(["--source-copy",final_modes["path"]])
         if case.get("git_workflow"):
             graph_args.extend(["--source-copy", row["git_precommit"]["path"]])
         if small_history:
@@ -863,16 +1020,41 @@ def one_family_case(family, case, prepared_folder, build_folder, output):
             if ordered:
                 roots = [item for item in events if item["event"] == "history_root_verified"]
                 wanted = [row["history"]["initial_root"], *[item["commit"]["fields"]["root"] for item in row["history"]["commits"]]]
-                if len(roots) != len(wanted) or [item["fields"]["root"] for item in roots] != wanted:
-                    raise ValueError("complete original sequence proof differs from all acknowledged states")
+                if ([item["fields"]["step"] for item in roots]!=selected_steps
+                        or [item["fields"]["root"] for item in roots] != [wanted[index] for index in selected_steps]):
+                    raise ValueError("exact selected original sequence proof differs from acknowledged states")
                 row["history"]["verified_roots"] = roots
+        if recipe_history:
+            fields = proof_events[0]["fields"]
+            tuples=[{"commit_id":record["commit"]["fields"]["commit_id"],
+                     "layer_stack_id":record["commit"]["fields"]["stack"],
+                     "root_id":record["commit"]["fields"]["root"],
+                     "parent_commit_id":None if record["commit"]["fields"]["parent"]=="-" else record["commit"]["fields"]["parent"],
+                     "base_layer_id":record["commit"]["fields"]["base_layer"]} for record in row["history"]["commits"]]
+            export_completion=output/"closed-store-export.completion.json"
+            runtime_events=output/"runtime.events.jsonl"
+            custody={"custody":row["custody"],"container":runtime.container,"volume":row["clone"]["volume"],
+                "remote_source":"/layerfs-store/global/store.sqlite","local_source":str(exported_store),
+                "source_sha256":identity.sha256(exported_store),"source_size":exported_store.stat().st_size,
+                "prepared_manifest":prepared["provision"]["manifest"],"prepared_manifest_sha256":identity.sha256(prepared["provision"]["manifest"]),
+                "transcript":str(transcript),"transcript_sha256":identity.sha256(transcript),
+                "export_completion":str(export_completion),"export_completion_sha256":identity.sha256(export_completion),
+                "runtime_events":str(runtime_events),"runtime_events_sha256":identity.sha256(runtime_events)}
+            census = oracle.commit_census(exported_store,tuples,fields,custody)
+            proof_seconds(.001)
+            receipts.write_new(output/"global-commit-census.json",census)
+            row["history"]["global_commit_census"]=census
         row.update(proof_status="PASS", proof_wall_ns=time.monotonic_ns() - proof_started+preproof_ns,
                    verification={"scope": case["oracle"]["scope"], "omissions": case["oracle"]["omissions"],
                                  "native": proof, "persisted": proof_events[0]})
         collect_family_observations(runtime, row, build, output, bindings, proof_work_stop)
-        if git_deadlines:
+        if proof_deadlines:
             proof_seconds(.001)
-        row.update(status="PASS" if row["cache"]["status"] == "ELIGIBLE" else "INELIGIBLE", functional_status="PASS")
+        row.update(status="PASS" if proof_only or row["cache"]["status"] == "ELIGIBLE" else "INELIGIBLE", functional_status="PASS")
+        if proof_only:
+            row["verification_execution_wall_ns"]=row["complete_wall_ns"]
+            row["proof_wall_ns"]=time.monotonic_ns()-started_test_ns
+            row["performance_note"]="original exhaustive verification-only case; raw work/count observations diagnostic, performance N/A"
         if small_history:
             row["semantic_proof_status"] = "PASS"
             row["verification"]["mechanism"] = row["mechanism"]
@@ -885,7 +1067,7 @@ def one_family_case(family, case, prepared_folder, build_folder, output):
                           "class B source demands or own-write cold backing precondition unavailable; functional/native/persisted proofs and clean unmount pass")
             if case.get("git_workflow"):
                 row["tag"] += "; prior original verification reads and full paid cache inputs unqualified; numeric counts include excluded precommit custody verifier FUSE/SQL work"
-        state = receipts.command([*docker, "inspect", runtime.container, "--format", "{{.State.Running}}"], output, "container-state", proof_seconds(15, cleanup=True) if git_deadlines else 15)
+        state = receipts.command([*docker, "inspect", runtime.container, "--format", "{{.State.Running}}"], output, "container-state", proof_seconds(15, cleanup=True) if proof_deadlines else 15)
         if Path(state["stdout"]).read_text().strip() != "false":
             raise ValueError("original container Stop not confirmed")
         row["resource_removal_pending"] = True
@@ -919,15 +1101,22 @@ def one_family_case(family, case, prepared_folder, build_folder, output):
                         row.setdefault("independent_close_failures", []).append(str(closing))
                         row["status"] = "FAIL"
         row["timing_scope"] = "matrix controller from measured mount through command/Commit/terminal unmount; read-only resource-observer intervals excluded and separately retained; absolute phase stop includes those intervals; setup/warmup/cleanup/fresh native and persisted verification/Stop separate"
+        if proof_only:
+            row["proof_wall_ns"]=time.monotonic_ns()-started_test_ns
+            row["proof_wall_scope"]="verification-only complete invocation from source/build/prepared admission through setup, all original calls/Commits, native/public/census proof, required cleanup/Stop and prepublication close; owner120s ceiling separately enforced"
         row["evidence"] = str(output.relative_to(identity.ROOT.resolve()))
-        if case.get("git_workflow") and publication_stop is not None:
+        if (case.get("git_workflow") or batch4) and publication_stop is not None:
             if proof_started is not None:
-                row["proof_wall_ns"] = time.monotonic_ns()-proof_started+preproof_ns
-                row["proof_wall_scope"] = "cumulative prior qualification/precommit custody/final proof and known cleanup/observations through prepublication close; publication timing is separately bound in publication receipts"
+                if not proof_only:
+                    row["proof_wall_ns"] = time.monotonic_ns()-proof_started+preproof_ns
+                    row["proof_wall_scope"] = "cumulative prior qualification/precommit custody/final proof and known cleanup/observations through prepublication close; publication timing is separately bound in publication receipts"
             if proof_cleanup_stop is not None and time.monotonic() >= proof_cleanup_stop:
                 row.update(status="FAIL", proof_status="FAIL",
-                           tag="; ".join(filter(None, (row.get("tag"), "original cumulative45s verification cleanup deadline reached before publication"))))
-            row.update(receipts.finalize_guarded(output, row, publication_stop))
+                           tag="; ".join(filter(None, (row.get("tag"), "original cumulative verification cleanup deadline reached before publication"))))
+            if batch4:
+                row.update(receipts.finalize_guarded(output,row,publication_stop,scope=receipts.HISTORY_PUBLICATION_SCOPE))
+            else:
+                row.update(receipts.finalize_guarded(output, row, publication_stop))
         else:
             receipts.write_new(output / "receipt.json", row)
             receipts.manifest(output)
