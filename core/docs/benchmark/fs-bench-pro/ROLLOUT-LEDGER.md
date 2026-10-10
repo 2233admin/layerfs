@@ -5078,4 +5078,27 @@ original measured import/fixture/oracle obligations and frozen source are exact.
 Root final four definition checks PASS once at3,248,940,542ns under the120s lock; raw scoped-tests completion retained under2026-10-11-batch-6-main-authoring/cdc. No product or frozen source changed.
 
 | Worker6727d7793 | Author CDC registrations/wrapper/external tests | 79370 | 79370 | +0 |
-| This commit | Integrate CDC registration with original mounted oracle retained | 79370 | 79370 | +0 |
+| `77ebaa34e` | Integrate CDC registration with original mounted oracle retained | 79370 | 79370 | +0 |
+
+
+### Batch 6 cross-file registration, 2026-10-11
+
+All10 original anchor/unique/identical/mixed cases are ported as fresh public
+directory imports, seed1 and1MiB per file. Mixed10/100/500 retain7/75/375
+distinct bases. Exact independently scanned transcripts, anchor uniqueness,
+identical roots/ordered mappings and disjoint distinct-base payloads remain
+mandatory. Decision58 retains the original fresh mounted native verifier,
+plus the current authenticated public typed proof; the worker's proposed
+offline-only difference/test assertion is corrected before any execution.
+The external assertion now requires that expressible original topology.
+No frozen guard, definition, limit, workload or expected state is weakened.
+
+Worker9963494d0aa49def1fe743ef3d3422ee7026fb6b has counted/confirmed
+treeea11915f45df899fff1c92e65a40070510dc7d7e and unchanged product9ac.
+Six authoring checks passed once2,610,742,958ns under private120s lock.
+Sealed AUTHORING-HANDOFF.json SHA-256
+65a4a8f71f3fc8b2edf7ec5ab03603ae103d79ac5185e6a01714a22713e0b8ea.
+No native build, preparation, parity, Store or case ran. Root six final checks PASS once3,025,226,417ns under120s lock, raw2026-10-11-batch-6-main-authoring/cross; shared import support/fresh qualified build remain prerequisites.
+
+| Worker9963494d0 | Author cross-file registrations/wrapper/external tests | 79370 | 79370 | +0 |
+| This commit | Integrate cross-file registrations and complete mounted oracle | 79370 | 79370 | +0 |
