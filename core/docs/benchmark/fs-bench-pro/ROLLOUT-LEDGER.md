@@ -22,8 +22,8 @@ comparison or release-admission claim. Durable is
 | 2 Edits | COMPLETE: all62 cases ported/parity/sampled once/recorded;39 strict proof and clean-close passes (numeric INELIGIBLE),20 strict retention failures and3 original capped-watchdog failures retained | Canonical `a34b5d44b`/`beeb7ad69`; preserving `b9ffa63be`; capped `4d8ccfc93`; changing `05ffbf971`; small-delta `c0c99a4a3`/`2e6a508b5`/`1c975ba30` | Begin batch3; no identified fixable product correctness defect remains in batch2 |
 | 3 Trees and tools | COMPLETE: all33 original cases ported/parity/sampled, full applicable proofs and clean closePASS; numeric33INELIGIBLE; first snapshotFAIL retained separately; localitydense500 and snapshot EXCEEDED | Shared3c697ae92; directory50c297c68/ad4f95503; locality2590a4536/26c037d90; snapshot0344bfdc6/fix03033abdc/results98d3be30a/70d568e94; Git acebd7cbd/guard031d427a7/results31fff4d49 | Begin batch4 after this committed closure, no identified fixable product correctness bug |
 | 4 History on one branch | CLOSED WITH FAILURES: all 43 original cases ported and recorded; 31 functional/proof/clean-close passes, 11 retained actual failures, one failed preparation with actual NOT_RUN; mixed aggregate parity FAIL retained under section 9 exception; no identified fixable product correctness bug remains | H11 2b52bdf17; H12 ea7148a19; H13 8ae040cdd; H14 e09c61bbd; product H15 a05ed6027; H16 9dfb70ee4; fresh seal3c67e9249; affected Init8f24e39a4; boundary88a2bd27b; partial bd3016957; mixed1a21ebfc3; dedup closure27708c11d | Begin batch 5 after this committed failed closure; verify existing public SDK Fork and History |
-| 5 Branches and Workspaces | IN_PROGRESS: all17 definitions ported; shared build and actual public SDK proof PASS; branch/multi preparing and sampling, access completing producer reuse | P-2 19344b6a3; full seal9da25b495; H20 e60a1aa2c; SDK proof711593c5f | Close every original case and aggregate parity truthfully; preserve branch500/K100 failed preparation and actual NOT_RUN |
-| 6 Dedup and storage | PENDING | — | Wait for batch 5 completion |
+| 5 Branches and Workspaces | CLOSED WITH FAILURES: all17 original cases ported/recorded; eight functional/proof/clean-close passes, eight actual concurrent refusal failures, one failed-preparation actual NOT_RUN; branch aggregate parity FAIL retained under section9 | SDK proof711593c5f; H21/22 4a40fb690; setup exceptionc23ac0cfd; H23 68209bdb7; H24 669bc4853; H25 2f7160c92; H26 616947cb6; branch305bee680; multicb3a003ac; historicalb0b2cd386 | Begin batch6 under this truthful failed closure, preserving all original failures/limits/proofs/resources |
+| 6 Dedup and storage | READY, execution pending | — | Port the five original families at the committed batch5 closure |
 | 7 Reliability | PENDING | — | Wait for batch 6 completion |
 
 ## Decisions
@@ -4992,4 +4992,58 @@ never silently repaired. No product change or Durable execution occurred.
 | `434dc0a3c` (worker) | Retain four access passes, ordered-transcript failure and unrun case | 79370 | 79370 | +0 |
 | `5cea1710d` (worker) | Sync strict original-order access serializer/source admission | 79370 | 79370 | +0 |
 | `6d3eecb3c` (worker) | Retain two actual final access passes and four reused earlier proofs | 79370 | 79370 | +0 |
-| This commit | Import final historical access pairs and six-case authoritative closure | 79370 | 79370 | +0 |
+| `b0b2cd386` | Import final historical access pairs and six-case authoritative closure | 79370 | 79370 | +0 |
+
+
+### Batch 5 closure and batch 6 release, 2026-10-11
+
+Allthree ordered original families are now truthfully closed with their full
+result pairs in main. Of17 original cases, eight have complete functional,
+independent proof and clean terminal custody: two compact branches and six
+verification-only historical accesses. Eight actual concurrent branch/multi
+cases fail before proof with explicit source-selected contention refusals;
+one branch500/K100 case stays NOT_RUN after failed120s preparation, with
+aggregate branch parityFAIL. These remain failures, never passing done-when
+claims. The section9 bounded-preparation exception permits onward closure.
+No identified fixable product correctness defect remains in this batch.
+
+Every original family definition, complete applicable parity row, exact source/
+product/image/binary/helper/fixture binding, original attempt/case result,
+separate proof/cleanup/cache verdict and twoCSV per recorded source is retained.
+The public SDK Fork/History covering proof passed before sampling. Source
+H20–H26 harness defects were fixed with external red and scoped final checks;
+affected historical cases ran only at changed sources, while four unaffected
+passing receipts were reused. Count-only H26 qualification reuses original
+pre-proof telemetry without a measurement repeat or old-receipt edit.
+Product stayed79,370LOC throughout batch5 and no product feature was added.
+
+Allfive preparations/parity in multi pass, but allfive actual runs fail.
+Branch has five eligible parityPASS, three actual failures/two compact passes,
+and one explicit failed-setup/unrun row. Historical composite sixPASS retains
+two prior failed attempts and their exact old-source unrun selections. Six
+historical actual passes have zero performance samples, one authoritative
+proof attempt each, original two-reader/fresh-mount/zero-Commit behavior and
+complete typed producer history/global census. No complete batch5 limit was
+exceeded; bounded setup expiry remains failed rather than a timed speed result.
+
+Ten failed actual sample pairs remain retained across branch3, multi5 and
+historical2, plus prior H20 failed preparation container/master. Passing compact
+and historical sample pairs and passing setup producer/build containers were
+removed only after qualified source/receipt custody, clean End/Gone/fences/
+KnownStop and outer acknowledgements. Owned immutable setup masters remain
+under explicit rollout custody; failure/uncertainty and all protected owner
+resources are untouched. No cache, worker, workload, fixture, limit or watchdog
+was changed to make a miss pass. Global Store is always Disposable/WAL/OFF,
+overlayMEMORY/OFF/EXCLUSIVE, constructionworkers1, Initownprofile. Durable
+execution remains NOT_RUN — disabled by owner until explicit reauthorization.
+
+The latest closed original-family catalogue has19 ported families/191 cases;
+remaining five batch6 families and reliability total82 pending cases. All25
+original families/273 IDs remain, with no26th or P6 addition. Batch6 may now
+begin in the same three authorized separate worktrees, with scoped ownership,
+private locks/targets and shared host/VM/retained-service interference declared.
+No build/test/measurement overlaps within a checkout; no extra worktree or
+push/PR/tag/publication/GitHub change is selected. Only local main receives
+integrated purpose commits. Final all25 iteration completion is still pending.
+
+| This commit | Close batch5 with all original dispositions and release batch6 | 79370 | 79370 | +0 |

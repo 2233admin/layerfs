@@ -11,15 +11,16 @@ comparison or release gate is selected.
 Stage 0.1 has harvested all 461 released source rows into
 [the reference catalogue](baselines/v0.1.6/README.md). Stage 0.2 has moved the
 working SDK runtime here and separated cluster-one and cluster-two harnesses.
-Stage 0.3 catalogued all 273 cases as pending. All four Init cases are ported with parity PASS, one functional/proof PASS
-each and closed Store ownership. Their numeric rows remain INELIGIBLE for
-unverified host cold-cache preconditions. Eight payload cases now have ported definitions; their parity/samples are
-pending. The other 261 cases remain pending.
-`python3 -B core/benchmark/fs-bench-pro/bench.py list` lists every case and its
-released reference. The reproducible engine has build, prepare, twelve-cell run, retained verify and
-CSV report commands. Its twelve mounted cells completed functional proof and clean unmount; exact
-count reproduction failed for C10/C12 and remains explicitly failed in the
-ledger and generated CSVs. Workload ports follow that documented closure. Pending cases have no frozen steps, cache preconditions or budgets.
+The catalogue contains all 25 original families and 273 cases. Batches 1–5
+have 19 ported families and 191 cases with recorded results; batch 6 and
+reliability retain 82 pending cases. Batch 5 closes with eight complete
+functional/proof/clean-close passes, eight retained concurrent contention
+failures and one failed-preparation unrun case. Completed rows preserve their
+separate cache eligibility; historical access is verification only. The
+[rollout ledger](../../docs/benchmark/fs-bench-pro/ROLLOUT-LEDGER.md) names
+every source, failure, fix, retained resource, reuse decision and original CSV
+pair. These are function and diagnostic observations, with no speed,
+comparison or release gate.
 
 Use `bench.py build --out <fresh-results-path>`, then
 `bench.py prepare empty|big64m --build <seal> --out <fresh-results-path>`.
