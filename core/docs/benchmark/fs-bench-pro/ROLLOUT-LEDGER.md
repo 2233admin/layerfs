@@ -2023,4 +2023,29 @@ actual sealed-binary check. Native/preparation/runtime/source identities stay
 distinct; no evidence or original verdict is relabeled.
 
 | `3a7c3fd96` (worker) | Preserve first local snapshot FAIL/EXCEEDED and uncertain resources | 79366 | 79366 | +0 |
-| This commit | Fix exact original sampled-native receipt contract without weakening proof | 79366 | 79366 | +0 |
+| `03033abdc` | Fix exact original sampled-native receipt contract without weakening proof | 79366 | 79366 | +0 |
+
+Directory cohort integrated from worker f9d6e366e: all12 original cases sampled
+once at c66af2c19, full native/persisted inode/semantic count/resource proof
+PASS, Committed/UpToDate exact, measured/verifier Gone and KNOWN_STOP. All12
+numericINELIGIBLE underH5; noneFAILED/NA/EXCEEDED. Max product5,456,931,833ns,
+max proof22,433,335,875ns; unchanged15s/45s limits. Thirty-six original read-only
+count/resource intervals remain excluded and individually retained; no guessed
+syscall values. Both12-row CSVs have exact30/14column schemas and source/raw
+identities unchanged. Retained verification PASS withoutreplay; raw complete
+case/phases/counts/logical+allocated storage/limits/profile/custody inventory is
+namespace worker benchmark-results/fs-bench-pro/
+2026-10-10-batch-3-directory-c66af2c19/handoff.json. All44 removal receipts
+PASS (12samplecontainers/12samplevolumes/12copyhelpers/8provisionhelpers), no
+teardown repeated. No productbug or uncertain/failed resource in this cohort.
+Eight closed reusable masters retained:
+layerfs-fsb-master-directory-construction-traversal-4cfb97a81b1c4764,
+-50de5bba1d6449fd,-906afd940f3e4df7,-9f2e95078b7d45de,
+-a398b7f797434873,-c206c4580d884ef2,-c679ac16c49b4245,-cdf67089171d4f76
+(all suffixes share the full preceding prefix). Original/frozen/protected
+resources and earlierfailedreceipt rows untouched. Retired-format object
+census/RSS/spool diagnostics and full coldness remain explicitly unverified.
+Production79,366unchanged, referenceabsent, pinnedstagedmethod; CSV/docs only.
+
+| `f9d6e366e` (worker) | Record twelve complete directory outcomes | 79366 | 79366 | +0 |
+| This commit | Integrate directory CSVs and complete family custody | 79366 | 79366 | +0 |
