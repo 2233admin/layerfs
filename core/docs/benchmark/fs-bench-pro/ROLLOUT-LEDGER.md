@@ -4793,4 +4793,66 @@ prefixes, with complete genuine observer groups; counts are not invented.
 
 | `0754e1547` (worker) | Import reviewed incomplete context reporting only | 79370 | 79370 | +0 |
 | `222e0cd5d` (worker) | Commit exact six-case branch CSV pair | 79370 | 79370 | +0 |
-| This commit | Import final branch family result pair and exact retained custody | 79370 | 79370 | +0 |
+| `305bee680` | Import final branch family result pair and exact retained custody | 79370 | 79370 | +0 |
+
+
+### Batch 5 multi_workspace_development final family results, 2026-10-11
+
+Imported exact worker087191e1 twoCSV pair under
+baselines/core/2026-10-11-afbbd6c03. Allfive original cases are attempted once,
+FAIL, with proof NOT_RUN and incomplete whole-case/phase/count/storage totals
+UNAVAILABLE. Original error and partial-events diagnostic qualification remain
+in both tags. Pair SHA-256 performance
+4eb85ca05e66e8d7f2bc3248e0e967d966e6727a112065cd5e000d1e7b47d9c8,
+verification0de829c7d8c1e4821b707c5d9697604f3545434d8f0eb239e87fb4fc996822d2.
+Actual sourceafbbd6c03/product9ac88edb2cc44d44edd4a53f9ad89f4dee063a58
+remain; private report-onlya4756a0e6 imports reviewed669bc4853 without replay.
+Five original preparations and parity PASS, both immutable masters retained.
+
+| Original multi case | Outer invocation diagnostic ns | Actual partial ACKs by worker | Actual failure | Independent proof / terminal closure |
+| --- | ---: | --- | --- | --- |
+| v016-workspace-mixed-100mb-5000-k10-v1 | 7215536209 | 0:5/1:0 | worker1 initialStage1 EAGAIN | NOT_RUN / UNAVAILABLE |
+| v016-workspace-mixed-100mb-5000-k100-v1 | 13574872583 | 0:50/1:0 | Commit Begin typedBusy before effect | NOT_RUN / UNAVAILABLE |
+| v016-workspace-mixed-500mb-30000-k10-v1 | 21197207500 | 0:0/1:5 | Commit Begin typedBusy before effect | NOT_RUN / UNAVAILABLE |
+| v016-workspace-mixed-500mb-30000-k100-v1 | 30511851000 | 0:50/1:0 | worker1 initialStage1 EAGAIN | NOT_RUN / UNAVAILABLE |
+| v016-workspace-four-100mb-5000-k100-v1 | 21842672125 | 0:0/1:0/2:0/3:100 | workers0/2 initialStage1 EAGAIN; worker1 successful first command but no specific Commit outcome recorded | NOT_RUN / UNAVAILABLE |
+
+Allfive exit1 before their unchanged120 s outer ceiling; none expire. These
+outer clocks include setup/driver and cannot substitute for a completed
+original performance operation. There are210 actual partial Commit ACKs;
+zero native/public/global proof invocations. The intended witness, discard,
+same-Branch fresh reopen and full final graphs are not reached. Neither proof
+PASS nor strict M1 metadata failure is inferred. Current global serial/Save
+contention contracts require definite Busy refusal before effect, with no
+retry/writer gate; no source-backed correctness defect is established.
+Precise syscall/path and underlying lock origin for errno11 remain inferred
+or unknown. No limit/workload/barrier/worker/cache alteration was selected.
+
+Keep each failed own container/volume and exact measured mount keys:
+
+| Case | Retained container | Retained sample volume | Measured worker keys |
+| --- | --- | --- | --- |
+| v016-workspace-mixed-100mb-5000-k10-v1 | 3780b2054cfabfb86123dba2989c095d062386f4ec75fb47a1771958ae79ea3d | layerfs-fsb-sample-76010d7922af4d53 | 0:3699a8467622cfecb722b58a129c85d9015664296a261012817e4b1b59667216 / 1:933e2ea75e5e74e43027c1313dbfa9034c2ad98d46bba2bc25561c421c549a9f |
+| v016-workspace-mixed-100mb-5000-k100-v1 | 4dca45fee617db7473cea8b6998874abfcd061a27f6ff109ed657ab42e5425e1 | layerfs-fsb-sample-818d123eed3741d9 | 0:7d19f501ddd28b249ce765ebdeb3ee4ab99196521925920942c21c24ad354ac2 / 1:20aef8a527c59f44071b0cf85cf7452dfa20ec72c671d9bcce2248d521909b58 |
+| v016-workspace-mixed-500mb-30000-k10-v1 | 4297330f87ef77b6da40557741e9b652d60e63f9d895dc41b632a63a2c0aeb87 | layerfs-fsb-sample-f8c24053bd2e4c79 | 0:68a7b1929f91cdbf7200ee8128d8bf882d1ccb26d4689c55bb8963184e4aa350 / 1:8691b3f5ea76c5fe76d982794bf239a15df663088376e03fec16fc6f33a6cc9f |
+| v016-workspace-mixed-500mb-30000-k100-v1 | 8b5e66ae444e50a1410c2966999934abf15235ab49d1408a62f83d357c36a327 | layerfs-fsb-sample-f0f93c61e58c4fef | 0:57d3656f56899c5b34f028fe82d375bcbae5a4dba1cb71fd3173da8916c40605 / 1:aaacd2644a4c47ee972a804a921a5686c9ae648c68ee87ee5a7c674a094974d3 |
+| v016-workspace-four-100mb-5000-k100-v1 | e250f4d234ec54e276557be318f5a2341f660b946e8aff507d750cd6a1969cf4 | layerfs-fsb-sample-4a44f3d9692443cd | 0:cfc78cf99fafd28b811ef334c18ec17582dc726d115c9f67aa7e40a6111107f6 / 1:ab2a7271515b61fa4a8b3c338131943b8fa0b6187eeaeae8b8e920e3a890cdee / 2:2bf78c90ebfff702257d91084db41c5fffc81e462663ebc9e1899f561332ad0a / 3:bb8844497fd255f3a7a8587625fcf09091cd87694c9b9346c1b3cc303be3a68f |
+
+Allfive failed pairs and twelve measured mount keys remain retained.
+No End/Gone, channel fence, KnownStop or removal is established. Independent
+host-group fence PermissionError remains in raw custody and proves no remote
+stop or drain. Do not delete these pairs or any owner-protected resource.
+
+Final family closure SHA-256
+87b2eea184e412b6d845c2ee0ed6a90c63027837b3856e013f3043e1f1bfad7f;
+manifest50c37f8fdfb35910fde24c92ce35e8a2d272662626cc8d12a7ef4524d2ee3cd0
+in namespace worktree2026-10-11-batch-5-multi-reporting-669bc4853/family-closure
+binds case/source/image/build/prepared/parity, resources, diagnostic spans,
+all210 partialACKs, report and exactLOC records. All23 original receipt/prep/
+registration/parity hashes remained identical before/after report, which ran
+once in277,726,166 ns. No source/product/build/prep/sample operation followed
+these failed attempts. Every original case is present; no later batch began.
+
+| `a4756a0e6` (worker) | Import exact reviewed report reader only | 79370 | 79370 | +0 |
+| `087191e1` (worker) | Commit original-source five-case multi pair | 79370 | 79370 | +0 |
+| This commit | Import all multi-workspace failures and exact retained custody | 79370 | 79370 | +0 |
