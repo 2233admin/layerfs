@@ -2,7 +2,7 @@
 import hashlib
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import shlex
 import shutil
 import uuid
@@ -828,14 +828,37 @@ def clone(prepared, folder, build):
 def stage(container, prepared, folder, build):
     folder = Path(folder)
     folder.mkdir(parents=True, exist_ok=False)
+    remote_manifest = "/code/.fs-bench-pro-helpers.sha256"
+    lines = []
+    for path, digest in prepared["helpers"]["files"].items():
+        if (type(path) is not str or not path or path.startswith("/") or any(char in path for char in "\x00\r\n")
+                or PurePosixPath(path).as_posix() != path or any(part in (".", "..") for part in PurePosixPath(path).parts)
+                or not PurePosixPath(path).parts or PurePosixPath(path).parts[0] == remote_manifest.rsplit("/", 1)[1]
+                or type(digest) is not str or len(digest) != 64
+                or any(char not in "0123456789abcdef" for char in digest)):
+            raise ValueError("exact relative helper path and SHA-256 required for complete staging manifest")
+        lines.append(digest + "  /code/" + path)
+    if not lines:
+        raise ValueError("complete helper staging manifest cannot be empty")
+    manifest = folder / "helper-checksums.sha256"
+    with manifest.open("x") as stream:
+        stream.write("\n".join(lines) + "\n")
+    manifest_sha = identity.sha256(manifest)
     docker = ["docker", "--host", "unix://" + build["socket"]]
     receipts.command([*docker, "cp", "--archive", prepared["helpers"]["root"] + "/.", container + ":/code"],
                      folder, "stage-code", 15)
     for cell, record in prepared.get("oracles", {}).get("cases", {}).items():
         receipts.command([*docker, "cp", "--archive", record["path"], container + ":/code/expected-" + cell],
                          folder, "stage-oracle-" + cell, 15)
-    lines = [digest + "  /code/" + path for path, digest in prepared["helpers"]["files"].items()]
-    script = "printf '%s\\n' " + " ".join(shlex.quote(line) for line in lines) + " | sha256sum -c -"
+    receipts.command([*docker, "cp", str(manifest), container + ":" + remote_manifest],
+                     folder, "stage-code-checksum-manifest", 15)
+    # Authenticate the full file before GNU's unchanged complete-file checker.
+    # One digest/path line stays in argv regardless of the number of helpers.
+    script = ("printf '%s\\n' " + shlex.quote(manifest_sha + "  " + remote_manifest) +
+              " | sha256sum --check -\nsha256sum --check " + remote_manifest)
     checked = receipts.command([*docker, "exec", "--user", "0:0", container,
                                 "/bin/bash", "-euo", "pipefail", "-c", script], folder, "stage-code-check", 15)
-    return {"status": "PASS", "container": container, "actual_helper_byte_check": checked}
+    return {"status": "PASS", "container": container, "actual_helper_byte_check": checked,
+            "helper_checksum_manifest": {"path": str(manifest.resolve()), "sha256": manifest_sha,
+                                         "remote": remote_manifest, "files": len(lines),
+                                         "scope": "exact original ordered helper paths/hashes; remote full manifest authenticated before unchanged sha256sum --check semantics; setup only"}}

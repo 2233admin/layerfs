@@ -110,8 +110,8 @@ comparison or release-admission claim. Durable is
 | H-10 | Prospective batch4 prepared SDK routes | Missing/partial prepared-step map could invoke native fallback and regenerate original payloads inside measuredwork; stale sealed helpers could disagree with reported current build | Controller trusted optional prepared records without mandatory originalstep/binary/descriptor/payload/script correspondence admission | Workera8c56d570 / integration91cf97fab | test_helper_refusal_precedes_case_claim_and_any_clone_or_mount fails at686344e8f; exact-source temporary assets reject five old-admission bypasses and all15guard checks PASS |
 | H-11 | v016-boundary-small-control-v1 and dedup-history-distributed-1 first attempts | Native proof/acknowledged Commits/Gone/KnownStop pass, independent public history proof fails acknowledged Commit missing | Controller copies only exported main file into typed-store, dropping closed WAL; immutable main-only census would also miss WAL | Workerf2c143b37 / integration2b52bdf17 | Real closed-WAL controller regression sees0 of100 acknowledged test rows on old main-only copy; red0.067s under120s mainlock |
 | H-12 | Mixed final failed preparation and prospective failed family parity | First missing/invalid preparation aborts parity without retaining earlier/later original case outcomes; CLI propagates only an exception | parity_workspace raises inside first failed case before writing parity.json | Worker47e5a5500 / integrationea7148a19 | Missing middle preparation red fails old behavior; all original membership/pin/bytes/native/seal guards retain FAIL reasons,22checksPASS; CLI old exception red retained,new5driverchecksPASS |
-| H-13 | dedup-history-distributed-500 setup at7905 | stage-code-check exits255: exec /bin/bash argument list too long, before any mount/product operation | fixtures.stage embeds all500 prepared-step/helper SHA rows into one165,872B Bash -c argv | PENDING file-backed complete authenticated checksum manifest | Worker owns external500-step/complete-row/remote-manifest/payload tamper regression; original fullchecker retained |
-| H-14 | Offline closed-Store normalization before remaining batch4 cases | Fresh target enters WAL initialization while SQLite synchronous is still default FULL(2) | synchronous=OFF was applied only after journal_mode=WAL in prepare_closed_store | This commit, harness only; product analogue under investigation | Real sqlite3.Connection subclass observes FULL(2) before journal switch on old helper; final10 normalization checks PASS0.352s and8 controller checks PASS0.159s |
+| H-13 | dedup-history-distributed-500 setup at7905 | stage-code-check exits255: exec /bin/bash argument list too long, before any mount/product operation | fixtures.stage embeds all500 prepared-step/helper SHA rows into one165,872B Bash -c argv | Worker359b63686 / integration this commit | Worker owns external500-step/complete-row/remote-manifest/payload tamper regression; original fullchecker retained |
+| H-14 | Offline closed-Store normalization before remaining batch4 cases | Fresh target enters WAL initialization while SQLite synchronous is still default FULL(2) | synchronous=OFF was applied only after journal_mode=WAL in prepare_closed_store | `e09c61bbd`, harness only; product analogue under investigation | Real sqlite3.Connection subclass observes FULL(2) before journal switch on old helper; final10 normalization checks PASS0.352s and8 controller checks PASS0.159s |
 
 H-1 and H-2 are harness faults, not product correctness or performance defects.
 The original file-identity checker remains intact; no product source changed.
@@ -3239,4 +3239,56 @@ commit359b63686 is ready for integration; its proof and prior failed stage are
 retained. After the product investigation closes or fixes the defect with the
 required covering checks, dispatch will use exact reviewed final sources.
 
-| This commit | Select OFF before offline snapshot journal initialization and retain initial-profile limitation | 79366 | 79366 | +0 |
+| `e09c61bbd` | Select OFF before offline snapshot journal initialization and retain initial-profile limitation | 79366 | 79366 | +0 |
+
+
+H13 integrates worker359b63686083028daae2131eeff71105bff5e552,
+tree8f2ec6f5af4ca3a3768e09cede2c66675bcfe79c, without changing any original
+prepared helper or workload. fixtures.stage retains its interface. It writes
+the exact ordered digest+two-spaces+/code/path rows to a fresh local checksum
+file and stages that file at a reserved control path outside the measured
+Workspace. Its complete expected SHA is authenticated remotely first; only
+then does the original GNU sha256sum complete-file checker execute under
+bash -euo pipefail. A truncated or substituted manifest cannot omit a helper.
+The remote checker argument is191B, independent of helper count; the actual
+full manifest is160,676B. Each command retains its original15s child stop and
+one attempt. This fixes setup transport, not product speed or a case limit.
+
+The external regression rejects the old expanded500-step argument. Final
+pinned-image qualification checks1,501 OK rows: the authenticated manifest and
+all1,500 helper entries, including history/steps/step-500.sh. Three distinct
+negative checks each exit1/one attempt/15s: omitted final manifest row, changed
+remote manifest, and actual history/payloads/step-500/member-1.bin tamper with
+its exact FAILED line. Final affected pinned check PASS1/3.865s under<=5/120;
+malformed path checks PASS0.007s, prior unchanged shape/order unit guards
+remain qualified. Unsafe/noncanonical/absolute/traversal/newline/NUL paths,
+empty/dot paths, invalid digests and the reserved manifest path or descendants
+are refused before Docker. No checksum, payload, verifier or original check
+is weakened. No new dependency, module, retry, workload or cache change.
+
+Tiny independently reviewed final source and read the actual pinned receipts,
+without replaying any test. Review found the initial dot/reserved-descendant
+admission gaps and a script-only tamper fixture; those were corrected with
+negative tests and a true prepared member-1 payload check. Root imported only
+fixtures.py and test_staging_manifest.py and verified exact qualified SHA
+099e9bc251359300146e545bba978a959e054319fcc8242e1e7acc1da93ae8e7
+and2031b4dda7f9ef206bbe8c98e0d6b11adb56ae23fed0007aa895fc1dc3f2fee0.
+Owning scoped evidence is reused at identical bytes, not repeated. Raw private
+Capped benchmark-results/fs-bench-pro/2026-10-10-h13-staging-final-qualification
+retains every copy/check/tamper completion and removal receipt. The owned
+passing test container was stopped/removed; no volume, product Store, mount or
+benchmark sample was created. The original distributed500 setup failure and
+all earlier cases/CSV rows remain unchanged.
+
+H13 is qualified, but new samples remain stopped for the separate product
+startup xSync investigation. Public Disposable Store lifecycle observation
+must establish the actual behavior; final-profile assertions alone cannot do
+that. The existing first-party VFS observer patterns and rusqlite::ffi ABI
+permit same-SQLite-instance host/Linux coverage without changing third-party
+code. No product defect or fsync count is inferred merely from the configuration
+order. Durable execution stays disabled. After that investigation and any
+necessary exact-source checks, remaining case dispatch will include H13 and
+H14; earlier unaffected case records will not be relabelled or replayed.
+
+| `359b63686` (worker) | Authenticate complete file-backed helper checks without oversized argv | 79366 | 79366 | +0 |
+| This commit | Integrate H13 with complete pinned checksum and tamper qualification | 79366 | 79366 | +0 |
