@@ -1,6 +1,7 @@
 """The working SDK/Sandbox path with separate phases and exact raw counters."""
 import hashlib
 import json
+import os
 from pathlib import Path
 import secrets
 import shlex
@@ -54,9 +55,9 @@ def terminal_cache_observation(runtime, key, build, output):
     return cleaned, json.loads(Path(observed["stdout"]).read_text())
 
 
-def price(groups, events, bindings):
+def price(groups, events, bindings, measured_label="measured command"):
     correlated = counts.correlate(events, groups)
-    selectors = [{"label": "measured command", "before": "measured_mount_attach", "end": "command_end_status"},
+    selectors = [{"label": measured_label, "before": "measured_mount_attach", "end": "command_end_status"},
                  {"label": "measured mount after warm terminal", "before": "warmup_unmount", "end": "measured_mount_attach"}]
     resolved = counts.resolve_selectors(selectors, bindings, correlated)
     priced = []
@@ -257,6 +258,186 @@ def one_cell(cell, prepared_folder, build_folder, output):
                         row["status"] = "FAIL"
         row["external_driver_wall_ns"] = time.monotonic_ns() - started
         row["timing_scope"] = "matrix controller: measured mount through terminal unmount, independent verifier excluded; setup/cache residency/cleanup/Stop separate; original control observation overhead retained"
+        row["evidence"] = str(output.relative_to(identity.ROOT.resolve()))
+        receipts.write_new(output / "receipt.json", row)
+        receipts.manifest(output)
+    return row
+
+
+def one_family_case(family, case, prepared_folder, build_folder, output):
+    """Single ordinary call/Commit through the same SDK/Sandbox machinery."""
+    current = identity.source_identity()
+    build = identity.load_build(build_folder)
+    prepared = fixtures.load(prepared_folder, case["fixture"]["recipe"])
+    output = Path(output).resolve()
+    output.mkdir(parents=True, exist_ok=False)
+    body = "/bin/bash /code/workload.sh apply " + shlex.quote(case["v016_case"])
+    treatment = {"family": family, "case": case, "fixture": prepared["fixture"]["fixture_sha256"],
+                 "product": current["product_tree"], "body": body, "helpers": prepared["helpers"]["files"],
+                 "binaries": {name: row["sha256"] for name, row in build["binaries"].items()},
+                 "engine": identity.sha256(__file__), "image": identity.IMAGE}
+    key = hashlib.sha256(json.dumps(treatment, sort_keys=True).encode()).hexdigest()
+    claims = identity.ROOT / "benchmark-results/fs-bench-pro/claims"
+    claims.mkdir(parents=True, exist_ok=True)
+    with (claims / key).open("x") as stream:
+        stream.write(str(output) + "\n")
+    row = {"schema": "fs-bench-pro-workspace-family-v1", "family": family, "case": case["id"],
+           "source_commit": current["source_commit"], "product_tree": current["product_tree"], "identity": current,
+           "build": str(Path(build_folder).resolve()), "prepared": str(Path(prepared_folder).resolve()),
+           "daemon_sha256": build["binaries"]["daemon"]["sha256"], "runtime_sha256": build["binaries"]["runtime"]["sha256"],
+           "image": identity.IMAGE, "status": "NOT_RUN", "proof_status": "NOT_RUN", "counts": {}, "phases": {},
+           "observations": {}, "cache_class": "B", "cache": {"class": "B"}, "cleanup": "UNAVAILABLE",
+           "declared_limit_ns": case["budget"]["command_ms"] * 1_000_000,
+           "verifier_limit_ns": case["budget"]["verifier_ms"] * 1_000_000,
+           "global_profile": "Disposable/WAL/OFF", "overlay_profile": "MEMORY/OFF/EXCLUSIVE", "construction_workers": 1,
+           "durable": "NOT_RUN — disabled by owner until explicit reauthorization", "claim": key,
+           "attempted_operation_count": 0, "completed_operation_count": 0, "sample_count": 0,
+           "interference": "single checkout lock; unrelated and own retained failed containers share Docker VM, unquantified"}
+    receipts.write_new(output / "selection.json", row)
+    runtime = None
+    mounted = set()
+    bindings = {}
+    clock = cell_runner.PerformanceClock()
+    proof_started = None
+    try:
+        row["clone"] = fixtures.clone(prepared, output / "clone", build)
+        environment = output / "environment.txt"
+        environment.write_text("".join(name + "=" + value + "\n" for name, value in workloads.ENV.items()))
+        argv = [build["binaries"]["runtime"]["path"], "serve", "--socket", build["socket"],
+                "--volume", row["clone"]["volume"], "--daemon", build["binaries"]["daemon"]["path"],
+                "--manifest", prepared["provision"]["manifest"], "--receipt", str(output / "runtime.events.jsonl"),
+                "--uid", str(prepared["source_uid"]), "--gid", str(prepared["source_gid"]),
+                "--environment-file", str(environment), "--observation-scope", secrets.token_hex(32)]
+        runtime = cell_runner.EventProcess(argv, output, "runtime")
+        runtime.event("protocol_ready", time.monotonic() + 15)
+        row["container"] = runtime.container
+        if runtime.container is None:
+            raise ValueError("original container acknowledgement unavailable")
+        row["staging"] = fixtures.stage(runtime.container, prepared, output / "staging", build)
+        warm = secrets.token_hex(32)
+        runtime.send("mount", warm, deadline=time.monotonic() + 15)
+        mounted.add(warm)
+        runtime.send("command", warm, script(output, "warmup.sh", body), deadline=time.monotonic() + 120)
+        warm_end = runtime.send("unmount", warm, deadline=time.monotonic() + 15)
+        mounted.remove(warm)
+        bindings["warmup_unmount"] = endpoint(warm_end)
+        row["warmup_cleanup"] = readiness(runtime, warm)
+        row["cache"].update(fresh_mount=True, warmup_terminal_unmount=True, warmup_cleanup="Gone",
+                            declaration="same untimed ordinary workload on prior mount, then terminal cleanup; fresh measured connection; setup warmth declared; no cold claim")
+        selected = secrets.token_hex(32)
+        clock.begin(time.monotonic_ns())
+        row.update(attempted_operation_count=1, sample_count=1)
+        mount = runtime.send("mount", selected, deadline=time.monotonic() + 15)
+        mounted.add(selected)
+        bindings["measured_mount_attach"] = endpoint(mount)
+        row["phases"]["mount_ns"] = mount["span"]["duration_ns"]
+        command = runtime.send("command", selected, script(output, "command.sh", body), deadline=time.monotonic() + 120)
+        row["phases"]["command_ns"] = command["span"]["duration_ns"]
+        committed = runtime.send("commit", selected, deadline=time.monotonic() + 120)
+        row["phases"]["commit_ns"] = committed["span"]["duration_ns"]
+        row["commit"] = committed
+        if committed["fields"]["commit_kind"] != case["expected_commit"]:
+            raise ValueError("original known Commit outcome differs from frozen mutation/read-only case")
+        runtime.send("snapshot", selected, deadline=time.monotonic() + 15)
+        bindings["command_end_status"] = endpoint(next(event for event in reversed(runtime.rows) if event["event"] == "workspace_status"))
+        end = runtime.send("unmount", selected, deadline=time.monotonic() + 15)
+        mounted.remove(selected)
+        row["phases"]["unmount_ns"] = end["span"]["duration_ns"]
+        clock.finish(time.monotonic_ns())
+        row["complete_wall_ns"] = clock.observe(time.monotonic_ns())["performance_ns"]
+        row["performance_clock"] = clock.observe(time.monotonic_ns())
+        row["cleanup_observations"], row["cache"]["residency"] = terminal_cache_observation(runtime, selected, build, output)
+        row["cleanup"] = "Gone"
+        row["proof_status"] = "FAIL"
+        proof_started = time.monotonic_ns()
+        proof_stop = time.monotonic() + case["budget"]["verification_hard_watchdog_ms"] / 1000
+        def proof_seconds(limit):
+            left = proof_stop - time.monotonic()
+            if left <= 0:
+                raise TimeoutError("original frozen verification hard watchdog expired")
+            return min(limit, left)
+        verify_mount = secrets.token_hex(32)
+        runtime.send("mount", verify_mount, deadline=time.monotonic() + proof_seconds(15))
+        mounted.add(verify_mount)
+        verify_body = "/bin/bash /code/workload.sh verify " + shlex.quote(case["v016_case"])
+        verified = runtime.send("verify", verify_mount, script(output, "verify.sh", verify_body),
+                                deadline=time.monotonic() + proof_seconds(case["budget"]["verifier_ms"] / 1000))
+        text = Path(verified["fields"]["stdout"]).read_text()
+        proof = dict(line.split("=", 1) for line in text.splitlines())
+        if proof.get("verification_status") != "pass":
+            raise ValueError("original complete native verifier refused freshly remounted published root")
+        runtime.send("unmount", verify_mount, deadline=time.monotonic() + proof_seconds(15))
+        mounted.remove(verify_mount)
+        row["verification_cleanup"] = readiness(runtime, verify_mount, proof_seconds(5))
+        runtime.send("observe", deadline=time.monotonic() + proof_seconds(15))
+        runtime.send("stop", deadline=time.monotonic() + proof_seconds(15))
+        runtime.event("finished", time.monotonic() + proof_seconds(15))
+        if runtime.process.wait(timeout=1) != 0:
+            raise ValueError("original runtime exit differs after known Stop")
+        row["custody"] = "KNOWN_STOP"
+        row["completed_operation_count"] = 1
+        docker = ["docker", "--host", "unix://" + build["socket"]]
+        # Closed sample input to the independent offline oracle, after Stop;
+        # never a host data-serving route or construction/materialization path.
+        receipts.command([*docker, "cp", runtime.container + ":/layerfs-store/global", str(output / "graph-store")], output, "closed-store-export", proof_seconds(15))
+        graph_args = [build["binaries"]["runtime"]["path"], "verify-workspace", "--socket", build["socket"],
+                      "--volume", row["clone"]["volume"], "--daemon", build["binaries"]["daemon"]["path"],
+                      "--manifest", prepared["provision"]["manifest"], "--sealed", str(output / "graph-store/store.sqlite"),
+                      "--case", case["v016_case"], "--receipt", str(output / "graph.events.jsonl"),
+                      "--uid", str(prepared["source_uid"]), "--gid", str(prepared["source_gid"])]
+        graph = receipts.command(graph_args, output, "independent-graph", proof_seconds(case["budget"]["verifier_ms"] / 1000),
+                                 environment={**os.environ, "LAYERFS_CONSTRUCTION_WORKERS": "1"})
+        events = [json.loads(line) for line in (output / "graph.events.jsonl").read_text().splitlines()]
+        proof_events = [item for item in events if item["event"] == "workspace_verified"]
+        if len(proof_events) != 1 or events[-1]["event"] != "finished" or proof_events[0]["fields"]["root"] != committed["fields"]["root"]:
+            raise ValueError("original persisted root proof differs from exact acknowledged Commit root")
+        row.update(proof_status="PASS", proof_wall_ns=time.monotonic_ns() - proof_started,
+                   verification={"scope": case["oracle"]["scope"], "omissions": case["oracle"]["omissions"],
+                                 "native": proof, "persisted": proof_events[0]})
+        logs = receipts.command([*docker, "logs", "--timestamps=false", runtime.container], output, "daemon-logs", 15)
+        groups = {}
+        for path in (logs["stdout"], logs["stderr"]):
+            groups.update(cell_runner.telemetry(path))
+        words = lambda value: [int(value[index:index+16], 16) for index in range(0, 64, 16)]
+        for group in groups.values():
+            if group[0]["daemon"] != words(runtime.daemon_instance) or group[0]["scope"] != words(runtime.scope):
+                raise ValueError("original numeric daemon/scope differs from authenticated channel")
+        totals, priced, correlated = price(groups, runtime.rows, bindings, "measured command and Commit")
+        row.update(counts=totals, phase_counts=priced, control_correlation=correlated)
+        cell_runner.snapshot_observations(runtime, row["observations"])
+        cell_runner.ingest_observations(groups, row["observations"], row["cache"])
+        row["cache"]["status"] = cache.validate("B", row["cache"])
+        row.update(status="PASS" if row["cache"]["status"] == "ELIGIBLE" else "INELIGIBLE", functional_status="PASS")
+        if row["status"] == "INELIGIBLE":
+            row["tag"] = "class B source-demand precondition not met; functional/native/persisted proofs and clean unmount pass"
+        state = receipts.command([*docker, "inspect", runtime.container, "--format", "{{.State.Running}}"], output, "container-state", 15)
+        if Path(state["stdout"]).read_text().strip() != "false":
+            raise ValueError("original container Stop not confirmed")
+        receipts.command([*docker, "rm", runtime.container], output, "remove-passing-container", 15)
+        receipts.command([*docker, "volume", "rm", row["clone"]["volume"]], output, "remove-passing-volume", 15)
+        row["resource_disposition"] = "functionally passing sample container/volume removed after both proofs and known Stop; numeric eligibility remains separate"
+    except BaseException as error:
+        row.update(status="FAIL", original_failure_type=type(error).__name__, original_failure=str(error),
+                   retained_mount_keys=sorted(mounted), resource_disposition="original resources retained; no inferred unmount/Stop/removal")
+        if clock.started is not None:
+            row["complete_wall_ns"] = clock.observe(time.monotonic_ns())["performance_ns"]
+        if proof_started is not None:
+            row["proof_wall_ns"] = time.monotonic_ns() - proof_started
+        if runtime is None:
+            runtime = getattr(error, "event_process", None)
+        if runtime is not None:
+            row["retained_host_custody"] = runtime.retain(error)
+            row["container"] = runtime.container
+    finally:
+        if runtime is not None:
+            for value in (runtime.selector, runtime.raw, runtime.stderr, getattr(runtime.process, "stdin", None), getattr(runtime.process, "stdout", None)):
+                if value is not None:
+                    try:
+                        value.close()
+                    except BaseException as closing:
+                        row.setdefault("independent_close_failures", []).append(str(closing))
+                        row["status"] = "FAIL"
+        row["timing_scope"] = "matrix controller from measured mount through command/Commit/terminal unmount; setup/warmup/cleanup/fresh native and persisted verification/Stop separate"
         row["evidence"] = str(output.relative_to(identity.ROOT.resolve()))
         receipts.write_new(output / "receipt.json", row)
         receipts.manifest(output)

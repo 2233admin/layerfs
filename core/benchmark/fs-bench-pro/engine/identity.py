@@ -185,8 +185,10 @@ def build(folder, root=ROOT):
                              "core/benchmark/fs-bench-pro/runtime/Cargo.toml", "--locked", "--offline", "--release"],
                             folder, "host-release", 120, environment=environment)
     namespace_writer = root / "core/target/fs-bench-pro-namespace-writer"
+    workspace_writer = root / "core/target/fs-bench-pro-workspace-writer"
     workload_host = root / "core/target/fs-bench-pro-workload-host"
     for name, source, output in (("namespace-writer", root / "core/benchmark/fs-bench-pro/engine/recipes/namespace.rs", namespace_writer),
+                                 ("workspace-writer", root / "core/benchmark/fs-bench-pro/engine/recipes/workspace.rs", workspace_writer),
                                  ("workload-host", root / "benchmark/fs-bench-pro/workload/main.rs", workload_host)):
         receipts.command(["rustup", "run", "1.85.1", "rustc", "--edition=2021", "-O", *ARM64_FLAGS,
                           str(source), "-o", str(output)], folder, name, 120)
@@ -194,7 +196,8 @@ def build(folder, root=ROOT):
     checks.write_text("".join(digest + "  /work/" + path + "\n" for path, digest in before["files"].items()))
     container = "layerfs-fsb-build-" + uuid.uuid4().hex[:16]
     inside = "/work/" + str(checks.relative_to(root))
-    body = "set -eu; sha256sum -c " + shlex.quote(inside) + "; cargo build --manifest-path core/Cargo.toml --locked --offline --release -p layerfs-daemon --bin layerfs-daemon; sha256sum -c " + shlex.quote(inside)
+    workload_linux = root / "core/target/fs-bench-pro-workload-linux"
+    body = "set -eu; sha256sum -c " + shlex.quote(inside) + "; cargo build --manifest-path core/Cargo.toml --locked --offline --release -p layerfs-daemon --bin layerfs-daemon; rustc --version; rustc --edition=2021 -O " + shlex.join(ARM64_FLAGS) + " benchmark/fs-bench-pro/workload/main.rs -o /work/core/target/fs-bench-pro-workload-linux; sha256sum -c " + shlex.quote(inside)
     receipts.command([*docker, "create", "--name", container, "--network", "none",
                       "-v", str(root) + ":/work", "-w", "/work",
                       "-e", "CARGO_HOME=/work/core/target/cluster2-linux-cargo",
@@ -209,7 +212,8 @@ def build(folder, root=ROOT):
     binaries = {}
     for name, path in (("runtime", root / "core/target/r7-host-release/release/layerfs-r7-runtime"),
                        ("daemon", root / "core/target/r7-linux-release/release/layerfs-daemon"),
-                       ("namespace-writer", namespace_writer), ("workload-host", workload_host)):
+                       ("namespace-writer", namespace_writer), ("workspace-writer", workspace_writer),
+                       ("workload-host", workload_host), ("workload-linux", workload_linux)):
         digest = sha256(path)
         archive = root / "benchmark-results/fs-bench-pro/binary-archive" / digest / path.name
         archive.parent.mkdir(parents=True, exist_ok=True)
@@ -242,7 +246,7 @@ def load_build(folder):
     def compilation(files):
         return {name: digest for name, digest in files.items() if name.startswith(
             ("core/crates/", "core/vendor/", "core/benchmark/fs-bench-pro/runtime/", ".cargo/"))
-            or name == "core/benchmark/fs-bench-pro/engine/recipes/namespace.rs"
+            or name in ("core/benchmark/fs-bench-pro/engine/recipes/namespace.rs", "core/benchmark/fs-bench-pro/engine/recipes/workspace.rs")
             or (name.startswith(("benchmark/fs-bench-pro/workload/", "benchmark/fs-bench-pro/families/")) and name.endswith(".rs"))
             or name in ("core/Cargo.toml", "core/Cargo.lock")}
     if compilation(current["files"]) != compilation(result["identity"]["files"]):

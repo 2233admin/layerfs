@@ -5,6 +5,7 @@ mod fixture;
 mod project;
 mod runtime;
 mod session;
+mod workspace_oracle;
 
 use args::Args;
 use events::Events;
@@ -38,6 +39,7 @@ fn main() -> Result<()> {
         "serve" => session::serve(&args, &mut events),
         "init" => project::initialize(&args, &mut events),
         "verify-init" => project::verify(&args, &mut events),
+        "verify-workspace" => workspace_oracle::verify(&args, &mut events),
         _ => Err("mode must be provision or serve".into()),
     };
     match result {

@@ -62,10 +62,10 @@ def main(argv=None):
     if args.command == "run":
         from engine import fixtures, identity, project, receipts, workspace
         current = identity.source_identity()
-        if args.family not in ("cluster-two/cells", "init_namespace"):
+        if args.family not in ("cluster-two/cells", "init_namespace", "payload_create_read"):
             parser.error("family workload runner is not implemented yet; all workload cases remain visible in list")
         registered = ([{"id": cell, "cache_class": "B", "v016_case": ""} for cell in fixtures.CELL_RECIPES]
-            if args.family == "cluster-two/cells" else json.loads((HERE / "families/init_namespace/family.json").read_text())["cases"])
+            if args.family == "cluster-two/cells" else json.loads((HERE / "families" / args.family / "family.json").read_text())["cases"])
         if args.case and args.case not in {case["id"] for case in registered}:
             parser.error("case is not in this frozen selection")
         if any(case.get("status") == "pending" for case in registered):
@@ -93,8 +93,12 @@ def main(argv=None):
             case = next(item for item in registered if item["id"] == cell)
             recipe = fixtures.CELL_RECIPES[cell] if args.family == "cluster-two/cells" else case["fixture"]["recipe"]
             prepared = args.prepared if (args.prepared / "prepared.json").exists() else args.prepared / recipe
-            result = (workspace.one_cell(cell, prepared, args.build, output / cell) if args.family == "cluster-two/cells"
-                      else project.one_init(case, prepared, args.build, output / cell))
+            if args.family == "cluster-two/cells":
+                result = workspace.one_cell(cell, prepared, args.build, output / cell)
+            elif args.family == "init_namespace":
+                result = project.one_init(case, prepared, args.build, output / cell)
+            else:
+                result = workspace.one_family_case(args.family, case, prepared, args.build, output / cell)
             print(json.dumps({key: result.get(key) for key in ("case", "status", "counts", "cleanup", "container", "original_failure", "evidence")}))
             failed |= result["status"] != "PASS"
         return 1 if failed else 0
@@ -104,7 +108,7 @@ def main(argv=None):
         results = []
         for case in selection["cases"]:
             folder = args.run / case["id"]
-            if selection["family"] == "init_namespace" and case["id"] in recorded:
+            if selection["family"] in ("init_namespace", "payload_create_read") and case["id"] in recorded:
                 row = recorded[case["id"]]
                 result = {"case": case["id"], "status": row["proof_status"],
                           "scope": "sealed retained independent public-read proof and original evidence hashes", "proof": row.get("verification")}
@@ -123,10 +127,11 @@ def main(argv=None):
         return
     if args.command == "parity":
         from engine import project
-        if args.family != "init_namespace":
+        if args.family not in ("init_namespace", "payload_create_read"):
             parser.error("this family's parity transcription is not implemented yet")
-        family = json.loads((HERE / "families/init_namespace/family.json").read_text())
-        result = project.parity_namespace(family, args.prepared, args.out)
+        family = json.loads((HERE / "families" / args.family / "family.json").read_text())
+        result = (project.parity_namespace(family, args.prepared, args.out) if args.family == "init_namespace"
+                  else project.parity_workspace(family, args.prepared, args.out))
         print(json.dumps({"family": result["family"], "status": result["status"],
                           "cases": len(result["cases"]), "samples": 0}, indent=2))
         return

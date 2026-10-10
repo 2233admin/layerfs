@@ -155,3 +155,34 @@ def parity_namespace(family, prepared_parent, output):
     receipts.write_new(output / "parity.json", result)
     receipts.manifest(output)
     return result
+
+
+def parity_workspace(family, prepared_parent, output):
+    from . import fixtures
+    output = Path(output).resolve()
+    output.mkdir(parents=True, exist_ok=False)
+    registered = identity.reference_catalogue(identity.ROOT / "core/target/fs-bench-pro-catalogue")
+    membership = {(row["family"], row["case"]) for row in registered}
+    rows = []
+    for case in family["cases"]:
+        if (family["family"], case["v016_case"]) not in membership:
+            raise ValueError("frozen original case membership differs")
+        prepared = fixtures.load(Path(prepared_parent) / case["fixture"]["recipe"], case["fixture"]["recipe"])
+        if prepared["case"] != case["id"] or prepared["family"] != family["family"]:
+            raise ValueError("original fixture was prepared for another case")
+        review = case["port_review"]
+        if review["source_commit"] != identity.git(identity.ROOT, "rev-parse", "reference-v0.1.6-final"):
+            raise ValueError("reviewed operation pin differs")
+        for path, digest in review["files"].items():
+            if identity.sha256(identity.ROOT / path) != digest:
+                raise ValueError("reviewed original fixture/operation/oracle source changed")
+        if any(item["verification_status"] != "pass" for item in prepared["native_verification"].values()):
+            raise ValueError("original complete native fixture/oracle check not passed")
+        rows.append({"case": case["id"], "status": "PASS", "fixture": prepared["fixture"],
+                     "expectation": prepared["expectation"], "mechanical": prepared["native_verification"],
+                     "review": review, "oracle": case["oracle"], "differences": case["differences"]})
+    result = {"schema": "fs-bench-pro-parity-v1", "family": family["family"], "status": "PASS", "cases": rows,
+              "samples": 0, "scope": "original membership, full deterministic native fixture/final counts+bytes+content digest; reviewed unchanged ordinary calls and complete native/persisted verification"}
+    receipts.write_new(output / "parity.json", result)
+    receipts.manifest(output)
+    return result

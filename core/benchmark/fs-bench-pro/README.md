@@ -13,7 +13,8 @@ Stage 0.1 has harvested all 461 released source rows into
 working SDK runtime here and separated cluster-one and cluster-two harnesses.
 Stage 0.3 catalogued all 273 cases as pending. All four Init cases are ported with parity PASS, one functional/proof PASS
 each and closed Store ownership. Their numeric rows remain INELIGIBLE for
-unverified host cold-cache preconditions. The other 269 cases remain pending.
+unverified host cold-cache preconditions. Eight payload cases now have ported definitions; their parity/samples are
+pending. The other 261 cases remain pending.
 `python3 -B core/benchmark/fs-bench-pro/bench.py list` lists every case and its
 released reference. The reproducible engine has build, prepare, twelve-cell run, retained verify and
 CSV report commands. Its twelve mounted cells completed functional proof and clean unmount; exact
@@ -43,3 +44,13 @@ sampled reopen proof. Use `--case` to bound each invocation independently.
 This host route has no daemon/FUSE counts; those observations are UNAVAILABLE.
 The source is setup-warm and host cold metadata is unverified, so its raw
 observations remain INELIGIBLE even if functional verification passes.
+
+Payload preparation uses `prepare <payload-case>` to generate and fully verify
+original native fixture/expected states, then provision a sealed master through
+public Init/install. `parity payload_create_read --prepared <parent> --out
+<fresh-results-path>` checks all eight cases. Each `run payload_create_read
+--case <id>` clones its master, runs the original ordinary syscall program,
+commits through the SDK, terminally unmounts, verifies a fresh published-root
+mount and performs a separate offline current-format persisted proof. The
+runtime's `verify-workspace` mode is an independent harness oracle over a closed
+sample Store; the live daemon data path stays in-process in the shared volume.

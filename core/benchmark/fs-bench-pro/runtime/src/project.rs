@@ -23,7 +23,7 @@ use std::{
 
 #[allow(dead_code)]
 #[path = "../../engine/recipes/namespace.rs"]
-mod namespace;
+pub(crate) mod namespace;
 
 pub fn initialize(args: &Args, events: &mut Events) -> Result<()> {
     let source = args

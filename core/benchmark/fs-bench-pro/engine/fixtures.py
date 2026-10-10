@@ -15,6 +15,15 @@ CELL_RECIPES = {f"C{n:02}": "big64m" if n in (9, 10, 11) else "empty" for n in r
 NAMESPACE_RECIPES = ("namespace-100-compact-v3", "namespace-1000-compact-v3", "namespace-10000", "namespace-100000")
 
 
+def family_case(recipe):
+    for path in sorted((identity.ROOT / "core/benchmark/fs-bench-pro/families").glob("*/family.json")):
+        family = json.loads(path.read_text())
+        for case in family["cases"]:
+            if case["fixture"].get("recipe") == recipe and case["status"] == "ported":
+                return family, case
+    raise ValueError("no committed ported case defines fixture recipe " + recipe)
+
+
 def generate(recipe, root):
     root = Path(root)
     if recipe not in ("empty", "big64m"):
@@ -113,6 +122,8 @@ def native_oracles(recipe, source, helpers, folder, build):
 def prepare(recipe, folder, build_folder):
     if recipe in NAMESPACE_RECIPES:
         return prepare_namespace(recipe, folder, build_folder)
+    if recipe not in ("empty", "big64m"):
+        return prepare_workspace(recipe, folder, build_folder)
     build = identity.load_build(build_folder)
     current = identity.source_identity()
     folder = Path(folder).resolve()
@@ -170,6 +181,60 @@ def prepare_namespace(recipe, folder, build_folder):
     return result
 
 
+def prepare_workspace(recipe, folder, build_folder):
+    family, case = family_case(recipe)
+    if family["family"] != "payload_create_read":
+        raise ValueError("this family's workspace fixture port is not implemented yet")
+    build = identity.load_build(build_folder)
+    current = identity.source_identity()
+    folder = Path(folder).resolve()
+    folder.mkdir(parents=True, exist_ok=False)
+    source, expected = folder / "source", folder / "expected-native"
+    writer = build["binaries"]["workspace-writer"]["path"]
+    made = receipts.command([writer, "fixture", case["v016_case"], str(source)], folder, "native-fixture", 120)
+    fixture = json.loads(Path(made["stdout"]).read_text())
+    authored = receipts.command([writer, "expected", case["v016_case"], str(expected)], folder, "native-expected", 120)
+    expectation = json.loads(Path(authored["stdout"]).read_text())
+    def original_check(root, step, label):
+        proof = receipts.command([build["binaries"]["workload-host"]["path"], "workspace-verify-tree", case["v016_case"], "1", str(step)],
+                                 folder, label, 120, cwd=root)
+        return dict(line.split("=", 1) for line in Path(proof["stdout"]).read_text().splitlines())
+    native = {"fixture": original_check(source, 0, "original-fixture-check"),
+              "expected": original_check(expected, 1, "original-expected-check")}
+    if any(item.get("verification_status") != "pass" for item in native.values()):
+        raise ValueError("original native fixture/expectation check failed")
+    fixture.update(recipe=recipe, fixture_sha256=fixture["fixture_digest"])
+    helpers = assets(folder / "code")
+    copies = [(Path(build["binaries"]["workload-linux"]["path"]), "writers/workload"),
+              (identity.ROOT / "core/benchmark/fs-bench-pro/families" / family["family"] / "workload.sh", "workload.sh")]
+    for origin, relative in copies:
+        target = Path(helpers["root"]) / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(origin, target)
+        target.chmod(0o555)
+        helpers["files"][relative] = identity.sha256(target)
+    helpers["sha256"] = hashlib.sha256(json.dumps(helpers["files"], sort_keys=True).encode()).hexdigest()
+    volume = "layerfs-fsb-master-" + family["family"].replace("_", "-") + "-" + uuid.uuid4().hex[:16]
+    docker = ["docker", "--host", "unix://" + build["socket"]]
+    receipts.write_new(folder / "resource-claim.json", {"volume": volume, "created_by_this_run": True,
+                       "purpose": "new immutable SDK-provisioned workspace input; never sample directly"})
+    made_volume = receipts.command([*docker, "volume", "create", volume], folder, "master-volume", 15)
+    if Path(made_volume["stdout"]).read_text().strip() != volume:
+        raise ValueError("original master volume acknowledgement differs")
+    provisioned = project.provision(source, volume, folder / "project", build)
+    result = {"schema": "fs-bench-pro-prepared-workspace-v1", "status": "PASS", "recipe": recipe,
+              "family": family["family"], "case": case["id"], "identity": current, "fixture": fixture,
+              "expectation": expectation, "native_verification": native, "helpers": helpers,
+              "master_volume": volume, "provision": provisioned, "source_uid": source.stat().st_uid,
+              "source_gid": source.stat().st_gid, "global_profile": "Disposable/WAL/OFF",
+              "overlay_profile": "MEMORY/OFF/EXCLUSIVE", "construction_workers": 1,
+              "setup": "native fixture and independent algebraic final state fully verified; public Init/seal/install once; sample uses independent closed byte clone",
+              "cache": "explicit setup source/Store warmth; class B additionally requires warm terminal cleanup and actual zero source demands"}
+    receipts.write_new(folder / "prepared.json", result)
+    receipts.manifest(folder)
+    return result
+
+
 def load(folder, recipe=None):
     folder = Path(folder)
     receipts.verify_manifest(folder)
@@ -222,7 +287,7 @@ def stage(container, prepared, folder, build):
     docker = ["docker", "--host", "unix://" + build["socket"]]
     receipts.command([*docker, "cp", "--archive", prepared["helpers"]["root"] + "/.", container + ":/code"],
                      folder, "stage-code", 15)
-    for cell, record in prepared["oracles"]["cases"].items():
+    for cell, record in prepared.get("oracles", {}).get("cases", {}).items():
         receipts.command([*docker, "cp", "--archive", record["path"], container + ":/code/expected-" + cell],
                          folder, "stage-oracle-" + cell, 15)
     lines = [digest + "  /code/" + path for path, digest in prepared["helpers"]["files"].items()]

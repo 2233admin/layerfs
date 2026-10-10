@@ -12,6 +12,28 @@ from engine import cache, receipts, workspace
 
 
 class WorkspaceEvidence(unittest.TestCase):
+    def test_family_clone_failure_has_no_mount_or_completed_sample_credit(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            current = dict(source_commit="source", product_tree="product", files={})
+            build = dict(binaries={name: {"sha256": name} for name in ("runtime", "daemon")})
+            prepared = dict(fixture={"fixture_sha256": "fixture"}, helpers={"files": {}})
+            case = {"id": "payload", "v016_case": "payload", "fixture": {"recipe": "payload"},
+                    "budget": {"command_ms": 15000, "verifier_ms": 45000}}
+            with patch.object(workspace.identity, "ROOT", root), \
+                    patch.object(workspace.identity, "source_identity", return_value=current), \
+                    patch.object(workspace.identity, "load_build", return_value=build), \
+                    patch.object(workspace.fixtures, "load", return_value=prepared), \
+                    patch.object(workspace.fixtures, "clone", side_effect=ValueError("original clone mismatch")):
+                result = workspace.one_family_case("payload_create_read", case, "prepared", "build", root / "case")
+            self.assertEqual(result["status"], "FAIL")
+            self.assertEqual(result["original_failure"], "original clone mismatch")
+            self.assertEqual(result["sample_count"], 0)
+            self.assertEqual(result["completed_operation_count"], 0)
+            self.assertNotIn("complete_wall_ns", result)
+            self.assertEqual(result["retained_mount_keys"], [])
+            receipts.verify_manifest(root / "case")
+
     def test_backing_observer_waits_for_original_reclamation_to_finish(self):
         with tempfile.TemporaryDirectory() as directory:
             states = iter(("Queued", "Gone"))

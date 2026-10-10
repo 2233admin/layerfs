@@ -123,11 +123,19 @@ pub fn serve(args: &Args, events: &mut Events) -> Result<()> {
                     CommitStagedOutcome::Committed(_) => "Committed",
                     CommitStagedOutcome::UpToDate { .. } => "UpToDate",
                 };
+                let root = match &outcome {
+                    CommitStagedOutcome::Committed(record) => record.root,
+                    CommitStagedOutcome::UpToDate { root, .. } => *root,
+                };
                 events.numeric_fields(
                     "commit",
                     Some(elapsed),
                     &format!("key={key} original_outcome={outcome:?}"),
-                    &[("key", key.into()), ("commit_kind", commit_kind.into())],
+                    &[
+                        ("key", key.into()),
+                        ("commit_kind", commit_kind.into()),
+                        ("root", crate::hex(&root.to_bytes())),
+                    ],
                     &[
                         ("control_send_records_before", before),
                         ("control_send_records_after", after),
