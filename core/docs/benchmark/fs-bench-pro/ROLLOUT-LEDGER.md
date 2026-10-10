@@ -88,6 +88,8 @@ comparison or release-admission claim. Durable is
 | 41 | M1 uses independent shadow/range algebra and only original explicit attributes, helper-created directory modes and declared byte ranges; two exhaustive IDs are proof-only | Frozen generic expected() returns pristine fixture for M1; actual original exhaustive scope checks20 cycle-end roots plus all100 Commit IDs/parents, not all100 stage payloads | Using a wrong generic manifest, inventing timed performance or normalizing automatic mtimes to fit an oracle |
 | 42 | Preserve strict boundary-alias parent-directory mtime compatibility failure without restoring the parent in the workload | Frozen ordinary helper changes the parent during its final atomic save, while original executable verifier requires fixture mtime; changing the helper/checker is forbidden | Normalizing parent mtime, dropping metadata verification or making a product change for an incompatible original definition |
 | 43 | Retain owned sample resources through finalization and outer acknowledgement; remove only afterwards with separate bound administrative custody | Late output-close/publication failure must retain its diagnostic container/volume; partial Docker deletion must never claim both resources retained | Deleting before final verdict or overwriting the original receipt after deletion |
+| 44 | Recover failed agent service compaction in the same worktree with a fresh context and reuse exact completed qualifications | Two service stream failures left source and receipts intact; source-hash-matched final6tests had already passed | Replaying tests/exporter or discarding unfinished source |
+| 45 | Seal final stable native/Linux assets once, then rebuild only the changed host oracle with qualified eight-binary reuse | Pinned Linux/CPP scopes are final and unchanged by subsequent runtime-only proof work | Duplicating unchanged Linux/native builds or using an unqualified stale binary |
 
 ## Bugs
 
@@ -2701,4 +2703,52 @@ actualcanonicalextraCommit qualification remain the last source prerequisites
 before clean fullbuild/prepare/parity/oneattempts.
 
 | `a8c56d570` (worker) | Fail closed on original prepared SDK placement and current helper seals | 79366 | 79366 | +0 |
-| This commit | Wire H10 admission before claims/clones and qualify exact guard boundary | 79366 | 79366 | +0 |
+| `91cf97fab` | Wire H10 admission before claims/clones and qualify exact guard boundary | 79366 | 79366 | +0 |
+
+
+Batch4 public persisted proof source integrates recovered Namespace62246886d.
+It covers exact boundaryallstates/currentmapping/alias serial+root retention;
+frozen dedupselectedroot/metadata/A-B contentroot stability; original M1
+selectiveranges/explicitattrs and measuredmode domain; allactualK IDs/parents/
+root/scope/profile/stack/base/finalhead and provider catalog/binding/input+after
+SHA/size. Args history-step bounds derive from originalcase, while exact
+selection is additionally checked bypublicproof. LegacySmall30 rootdistinct/
+delta condition andLocal3 repeatedroot/fourfullstate guards remainstrict.
+
+Two agent service/remote-compaction failures (88524d1d-017d-46cb-8cff-
+461dbfe33f9c;6b0c659b-1cf9-49ff-96b7-ee6d6e2ab210) are coordination errors,
+not testcase failures. Fresh history_runtime_finish reused the same existing
+namespaceworktree and exact source. Retained finalboth-target no-runPASS10.06s,
+6owned batch4_ tests PASS5.45s (19frozeninline filtered), exact finalsrc hashes
+match; no repeat. Earlierunfiltered21PASS4FAIL103.95s<=106/120 remainedraw;
+fixtures had unsorted directory changes/missingemptyDirectoryUpdate/65536B
+mapping extent above32768 max. Source-valid fixtures repairedthese without
+changing any oracle/productguard. No wall ceiling expired. Scopedrustfmt1.85.1
+andwhitespacePASS. Recovery also found no prior exporter; it invoked the single
+exactexporter once,1PASS0.04s/1,574,447,000ns supervisorwall<=3/120, actualpublic
+canonicalC3retrieved/derivechecked/savedroot; Capped'srealimmutablecensus proof
+is integratedseparately. No mountedcase/Dockerresource/measurement here.
+
+Lead covering legacyoracle validation at exactintegrated runtime source:
+locked/offline release+1.85.1/ARMflags no-run firstPASS8,966,701,042ns;
+2Small/Local historytests PASS10.90s (externalwall11,063,823,250ns),
+2genericworkspace tests PASS0.56s (1,431,517,667ns),5Gitcustody tests PASS1.37s
+(2,227,285,250ns). Each mainlock<=120s; frozen19inline namespaces filtered
+perinvocation, no preparation-dependent unrelatedsuite run or case replay.
+Raw benchmark-results/fs-bench-pro/2026-10-10-batch-4-legacy-oracle-checks-root.
+
+During private publicoracle recovery, lead clean main91cf97fab built final
+nineassets once: raw2026-10-10-batch-4-nine-asset-build-91cf97fab, host+Linux
+PASS, completeouterwall<=51/240s build(not test); each actualcompilercommand
+<=120s. Pinnedimage and hostsourcechecks insideLinuxbefore+afterPASS,
+explicitDisposable/overlayMEMORYOFFEXCLUSIVE/workers1, exactOWNER3two-fuser
+refusals remainFAIL; noDurable executed. DaemonSHA remainsf44900cf..., new
+Linuxrecipe17aff632... andLinuxpreparedwriter846366af... sealed/archivebound.
+Passingownbuildcontainer removedwithacknowledgement; no volume or sample
+created. This first nineasset seal stillcontains pre-B4publicoracle runtime
+7c66ee0a... and claims compilation only; currentchanged runtime will be rebuilt
+with exact eightasset reuse before anyfamily preparation/measurement. No stale
+old handler is qualified as a B4execution path. Producttree/79366 unchanged.
+
+| `62246886d` (worker) | Currentpublic full/selected history proof and original step bounds | 79366 | 79366 | +0 |
+| This commit | Integrate public history proof, preserved failures and qualified unchanged assets | 79366 | 79366 | +0 |

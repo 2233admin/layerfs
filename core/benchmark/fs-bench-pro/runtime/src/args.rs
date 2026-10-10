@@ -58,8 +58,16 @@ impl Args {
             .remove("--history-step")
             .map(|value| value.parse())
             .transpose()?;
-        if history_step.is_some_and(|step| step > 30) {
-            return Err("original retained history step must be0..30".into());
+        if let Some(step) = history_step {
+            if mode != "verify-history"
+                || step
+                    > crate::workspace_oracle::history_limit(
+                        case.as_deref()
+                            .ok_or("original history case required for --history-step")?,
+                    )?
+            {
+                return Err("selected history state exceeds original case schedule".into());
+            }
         }
         let sealed = values.remove("--sealed").map(PathBuf::from);
         let init_seconds = values
