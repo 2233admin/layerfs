@@ -7,6 +7,7 @@ import secrets
 import shlex
 import sys
 import time
+import uuid
 
 from . import cache, fixtures, identity, receipts
 
@@ -275,7 +276,7 @@ def collect_family_observations(runtime, row, build, output, bindings):
     for group in groups.values():
         if group[0]["daemon"] != words(runtime.daemon_instance) or group[0]["scope"] != words(runtime.scope):
             raise ValueError("original numeric daemon/scope differs from authenticated channel")
-    totals, priced, correlated = price(groups, runtime.rows, bindings, "measured command and Commit",
+    totals, priced, correlated = price(groups, runtime.rows, bindings, row.get("counts_scope", "measured command and Commit"),
                                       with_warm_mount="warmup_unmount" in bindings)
     row.update(counts=totals, phase_counts=priced, control_correlation=correlated)
     cell_runner.snapshot_observations(runtime, row["observations"])
@@ -416,6 +417,115 @@ def original_operation_counts(command, wanted):
     return found
 
 
+def git_custody_values(body, fields):
+    """Validate the complete frozen repository seal, including raw index SHA."""
+    lines = body.decode("utf-8").splitlines()
+    if not lines or lines.pop(0) != "workspace-independent-manifest-v1":
+        raise ValueError("original Git custody manifest header differs")
+    paths, logical = [], 0
+    for row in lines:
+        columns = row.split("\t")
+        if len(columns) != 7:
+            raise ValueError("original Git custody requires seven columns")
+        path, kind, length, mode, seconds, nanos, digest = columns
+        if path != "." and (not (path == ".git" or path.startswith(".git/"))
+                or any(part in ("", ".", "..") for part in path.split("/"))):
+            raise ValueError("original Git custody path outside .git")
+        if (kind not in ("file", "directory") or not length.isascii() or not length.isdigit()
+                or not mode or any(value not in "01234567" for value in mode)
+                or not seconds.lstrip("-").isascii() or not seconds.lstrip("-").isdigit()
+                or not nanos.isascii() or not nanos.isdigit() or not 0 <= int(nanos) < 1_000_000_000):
+            raise ValueError("original Git custody kind/metadata differs")
+        if kind == "directory" and (length != "0" or digest != "-"):
+            raise ValueError("original Git custody directory content differs")
+        if kind == "file":
+            if len(digest) != 64 or any(value not in "0123456789abcdef" for value in digest):
+                raise ValueError("original Git custody requires complete SHA-256")
+            logical += int(length)
+        paths.append(path)
+    if (paths != sorted(set(paths)) or paths[:2] != [".", ".git"]
+            or ".git/index" not in paths or logical > 256 * 1024**2
+            or fields.get("repository_manifest_sha256") != hashlib.sha256(body).hexdigest()
+            or fields.get("repository_path_count") != str(len(paths) - 1)):
+        raise ValueError("original complete Git custody identity/count/bound differs")
+    return {"manifest_sha256": hashlib.sha256(body).hexdigest(), "repository_paths": len(paths)-1,
+            "repository_logical_bytes": logical, "index_stat_bytes": "complete raw index bytes covered by SHA-256, not tuple substitution"}
+
+
+def _capture_git_custody(runtime, selected, prepared, build, output, label, seconds):
+    if (prepared.get("family") != "git_tool_workflow" or not prepared.get("git_reference")
+            or prepared["git_reference"].get("case") != prepared.get("case")):
+        raise ValueError("explicit qualified frozen Git workflow preparation required")
+    if seconds <= 0 or seconds > 59:
+        raise ValueError("bounded original Git custody proof allowance required")
+    folder = Path(output) / label
+    folder.mkdir(parents=True, exist_ok=False)
+    stop = time.monotonic() + seconds
+    inside = "/tmp/layerfs-fsb-" + label + "-" + uuid.uuid4().hex + ".tsv"
+    body = "exec /code/writers/workload workspace-git-custody-out " + shlex.quote(inside)
+    event = runtime.send("verify", selected, script(folder, "capture.sh", body), deadline=stop)
+    fields = dict(line.split("=", 1) for line in Path(event["fields"]["stdout"]).read_text().splitlines())
+    left = stop - time.monotonic()
+    if left <= 0:
+        raise TimeoutError("original Git custody proof allowance expired")
+    path = folder / "repository.tsv"
+    receipts.command(["docker", "--host", "unix://" + build["socket"], "cp", runtime.container + ":" + inside, str(path)],
+                     folder, "export", min(15, left))
+    values = git_custody_values(path.read_bytes(), fields)
+    path.chmod(0o444)
+    witness = {"schema": "fs-bench-pro-original-git-custody-v1", "status": "PASS", "case": prepared["case"],
+               "mount_key": selected, "path": str(path), "values": values, "capture": event,
+               "reference": prepared["git_reference"],
+               "scope": "original complete .git names/kinds/modes/mtime/lengths/full SHA, index stat bytes included; read-only mounted observer, no Git command or mounted write"}
+    receipts.write_new(folder / "custody.json", witness)
+    receipts.manifest(folder)
+    return witness
+
+
+def before_git_commit(runtime, selected, prepared, build, output, seconds):
+    """One excluded mounted observer immediately before the one measured Commit."""
+    return _capture_git_custody(runtime, selected, prepared, build, output, "git-precommit", seconds)
+
+
+def verify_git_custody(runtime, verify_mount, prepared, build, output, prior, seconds):
+    """Fresh published-root parity BEFORE any semantic Git command can edit index."""
+    receipts.verify_manifest(Path(prior["path"]).parent)
+    if prior.get("case") != prepared.get("case") or identity.sha256(prior["path"]) != prior["values"]["manifest_sha256"]:
+        raise ValueError("precommit Git custody source identity differs")
+    fresh = _capture_git_custody(runtime, verify_mount, prepared, build, output, "git-reopened", seconds)
+    if Path(prior["path"]).read_bytes() != Path(fresh["path"]).read_bytes():
+        raise ValueError("original complete precommit/reopened Git custody mismatch")
+    return {"status": "PASS", "precommit": prior, "reopened": fresh,
+            "scope": "exact full manifest equality; all .git bytes/metadata including raw index stat-cache retained before semantic verification"}
+
+
+def verify_git_semantic_fields(proof, prepared):
+    """Require every frozen native Git proof field, independently prepared IDs."""
+    bundle = Path(prepared["helpers"]["root"]) / "git-reference"
+    for name in ("head", "tree", "parent"):
+        wanted = (bundle / ("expected-" + name)).read_text().strip()
+        if proof.get("git_" + name) != wanted:
+            raise ValueError("original independent Git semantic identity differs: " + name)
+    if (proof.get("verification_status") != "pass" or proof.get("git_semantic_verification_status") != "pass"
+            or proof.get("git_custody_status") != "requires_precommit_reopen_comparison"):
+        raise ValueError("original Git semantic/fsck/clean/two-commit proof missing")
+    return {"status": "PASS", "head": proof["git_head"], "tree": proof["git_tree"], "parent": proof["git_parent"],
+            "scope": "original verify_git performed exact HEAD/tree/parent, fsck--strict, clean status, exactly2Gitcommits and complete independent working source"}
+
+
+def verify_git_qualification(command, case):
+    """Original intermediate mounted guards run once outside performance time."""
+    if not case.get("git_workflow") or not case.get("git_qualification"):
+        raise ValueError("explicit original Git prior verification variant required")
+    wanted = {**case["original_operation_counts"], "benchmark_verifier_count": 1}
+    found = original_operation_counts(command, wanted)
+    lines = Path(command["fields"]["stdout"]).read_text().splitlines()
+    if lines.count("workload_status=pass") != 1 or lines.count("scenario_id="+case["v016_case"]) != 1 or lines.count("seed=1") != 1:
+        raise ValueError("original mounted Git verification-variant identity/status differs")
+    return {"status": "PASS", "counts": found,
+            "scope": "unchanged original verify variant: exact first-status paths/statuses, native reference tracked diff bytes/membership and alternating temporary-save readback/rename absence; prior mounted original genesis, discarded without Commit"}
+
+
 def history_observer(clock, row, label, action):
     """Retain raw observer wall and exclude it even when a resource guard fails."""
     started = time.monotonic_ns()
@@ -427,7 +537,7 @@ def history_observer(clock, row, label, action):
         clock.end_verifier(ended)
         row.setdefault("observer_intervals", []).append({"label": label, "start_monotonic_ns": started,
             "end_monotonic_ns": ended, "complete_wall_ns": ended-started,
-            "scope": "read-only original resource guard; excluded from product time, included in absolute phase watchdog"})
+            "scope": "read-only original observer/verifier; excluded from product time, included in the applicable original absolute watchdog"})
 
 
 def qualify_history_mechanism(proofs):
@@ -487,6 +597,7 @@ def one_family_case(family, case, prepared_folder, build_folder, output):
     bindings = {}
     clock = cell_runner.PerformanceClock()
     proof_started = None
+    preproof_ns = 0
     try:
         row["clone"] = fixtures.clone(prepared, output / "clone", build)
         environment = output / "environment.txt"
@@ -516,17 +627,37 @@ def one_family_case(family, case, prepared_folder, build_folder, output):
             row["history"] = {"initial_root": next(event for event in runtime.rows if event["event"] == "history_initial_root")["fields"]["root"], "commits": []}
         else:
             warm = secrets.token_hex(32)
-            runtime.send("mount", warm, deadline=time.monotonic() + 15)
-            mounted.add(warm)
-            if body is not None:
-                runtime.send("command", warm, script(output, "warmup.sh", body), deadline=time.monotonic() + 120)
-            warm_end = runtime.send("unmount", warm, deadline=time.monotonic() + 15)
-            mounted.remove(warm)
+            git_proof_start = time.monotonic_ns() if case.get("git_workflow") else None
+            git_proof_stop = time.monotonic() + min(case["budget"]["verifier_ms"], case["budget"]["verification_hard_watchdog_ms"])/1000 if git_proof_start is not None else None
+            try:
+                runtime.send("mount", warm, deadline=operation_deadline(git_proof_stop, 15))
+                mounted.add(warm)
+                if case.get("git_workflow"):
+                    qualification_body = "/bin/bash /code/" + case["git_qualification"]["run"]
+                    qualified = runtime.send("command", warm, script(output, "prior-qualification.sh", qualification_body),
+                                             deadline=operation_deadline(git_proof_stop, case["budget"]["verifier_ms"]/1000))
+                    row["git_prior_qualification"] = {"command": qualified, "proof": verify_git_qualification(qualified, case),
+                        "disposition": "original mounted verification variant; End without Commit discards changes before exact performance variant"}
+                elif body is not None:
+                    runtime.send("command", warm, script(output, "warmup.sh", body), deadline=time.monotonic() + 120)
+                warm_end = runtime.send("unmount", warm, deadline=operation_deadline(git_proof_stop, 15))
+                mounted.remove(warm)
+                cleanup_seconds = 5 if git_proof_stop is None else min(5, git_proof_stop-time.monotonic())
+                if cleanup_seconds <= 0:
+                    raise TimeoutError("original Git prior qualification watchdog expired before cleanup")
+                row["warmup_cleanup"] = readiness(runtime, warm, cleanup_seconds)
+            finally:
+                if git_proof_start is not None:
+                    preproof_ns += time.monotonic_ns()-git_proof_start
+                    row["prior_proof_wall_ns"] = preproof_ns
+                    row["proof_status"] = "FAIL"
             bindings["warmup_unmount"] = endpoint(warm_end)
-            row["warmup_cleanup"] = readiness(runtime, warm)
             row["cache"].update(fresh_mount=True, warmup_terminal_unmount=True, warmup_cleanup="Gone",
                                 declaration=("prior read-only mount ended without Exec; fresh measured connection; setup warmth declared; no cold claim" if body is None else
                                              "same untimed ordinary workload on prior mount, then terminal cleanup; fresh measured connection; setup warmth declared; no cold claim"))
+            if case.get("git_workflow"):
+                row["cache"].update(identical_warmup=False,
+                    declaration="prior original verification variant includes additional verifier reads and ends without Commit; measured performance variant unchanged; identical-body/cache qualification unavailable")
         selected = secrets.token_hex(32)
         clock.begin(time.monotonic_ns())
         row.update(attempted_operation_count=1, sample_count=1)
@@ -557,6 +688,16 @@ def one_family_case(family, case, prepared_folder, build_folder, output):
             if case.get("original_ordinary_guards"):
                 row["ordinary_resource_guards"]["steps"].append(history_observer(clock, row, f"ordinary-before-commit-{index}",
                     lambda: ordinary_resource_guard(runtime, build, output, f"ordinary-resources-before-commit-{index}", row["ordinary_resource_guards"]["before"])))
+            if case.get("git_workflow"):
+                custody_start = time.monotonic_ns()
+                try:
+                    seconds = min(case["budget"]["verifier_ms"], case["budget"]["verification_hard_watchdog_ms"])/1000-preproof_ns/1e9
+                    row["git_precommit"] = history_observer(clock, row, "git-precommit-custody-proof",
+                        lambda: before_git_commit(runtime, selected, prepared, build, output, seconds))
+                finally:
+                    preproof_ns += time.monotonic_ns()-custody_start
+                    row["prior_proof_wall_ns"] = preproof_ns
+                row["counts_scope"] = "measured Git command, excluded precommit custody verifier FUSE/SQL work and Commit; only original Status observer adjusted; no guessed verifier subtraction"
             row["cache"]["commit_started_monotonic_ns"] = time.monotonic_ns()
             committed = runtime.send("commit", selected, deadline=operation_deadline(step_stop, operation_seconds))
             row["phases"]["commit_ns"] += committed["span"]["duration_ns"]
@@ -589,9 +730,12 @@ def one_family_case(family, case, prepared_folder, build_folder, output):
         row["cleanup"] = "Gone"
         row["proof_status"] = "FAIL"
         proof_started = time.monotonic_ns()
-        proof_stop = time.monotonic() + case["budget"]["verification_hard_watchdog_ms"] / 1000
+        proof_stop = time.monotonic() + case["budget"]["verification_hard_watchdog_ms"] / 1000-preproof_ns/1e9
+        proof_work_stop = time.monotonic()+case["budget"]["verifier_ms"]/1000-preproof_ns/1e9 if case.get("git_workflow") else None
         def proof_seconds(limit):
             left = proof_stop - time.monotonic()
+            if proof_work_stop is not None:
+                left = min(left, proof_work_stop-time.monotonic())
             if left <= 0:
                 raise TimeoutError("original frozen verification hard watchdog expired")
             return min(limit, left)
@@ -604,10 +748,15 @@ def one_family_case(family, case, prepared_folder, build_folder, output):
         verify_mount = secrets.token_hex(32)
         runtime.send("mount", verify_mount, deadline=time.monotonic() + native_seconds(15))
         mounted.add(verify_mount)
+        if case.get("git_workflow"):
+            row["git_custody"] = verify_git_custody(runtime, verify_mount, prepared, build, output,
+                                                    row["git_precommit"], native_seconds(case["budget"]["verifier_ms"]/1000))
         verify_body = "/bin/bash /code/workload.sh verify " + shlex.quote(case["v016_case"])
         verified = runtime.send("verify", verify_mount, script(output, "verify.sh", verify_body),
                                 deadline=time.monotonic() + native_seconds(case["budget"]["verifier_ms"] / 1000))
         proof = verify_native_receipt(case, verified)
+        if case.get("git_workflow"):
+            row["git_semantics"] = verify_git_semantic_fields(proof, prepared)
         runtime.send("unmount", verify_mount, deadline=time.monotonic() + native_seconds(15))
         mounted.remove(verify_mount)
         row["verification_cleanup"] = readiness(runtime, verify_mount, native_seconds(5))
@@ -641,6 +790,8 @@ def one_family_case(family, case, prepared_folder, build_folder, output):
             transcript = script(output, "acknowledged-history.tsv", "\n".join(history_rows) + "\n")
             graph_args[1] = "verify-history"
             graph_args.extend(["--history-file", str(transcript)])
+        if case.get("git_workflow"):
+            graph_args.extend(["--source-copy", row["git_precommit"]["path"]])
         if small_history:
             graph_events, roots, physical = [], [], []
             wanted = [row["history"]["initial_root"], *[item["commit"]["fields"]["root"] for item in row["history"]["commits"]]]
@@ -684,7 +835,7 @@ def one_family_case(family, case, prepared_folder, build_folder, output):
                 if len(roots) != len(wanted) or [item["fields"]["root"] for item in roots] != wanted:
                     raise ValueError("complete original sequence proof differs from all acknowledged states")
                 row["history"]["verified_roots"] = roots
-        row.update(proof_status="PASS", proof_wall_ns=time.monotonic_ns() - proof_started,
+        row.update(proof_status="PASS", proof_wall_ns=time.monotonic_ns() - proof_started+preproof_ns,
                    verification={"scope": case["oracle"]["scope"], "omissions": case["oracle"]["omissions"],
                                  "native": proof, "persisted": proof_events[0]})
         collect_family_observations(runtime, row, build, output, bindings)
@@ -699,6 +850,8 @@ def one_family_case(family, case, prepared_folder, build_folder, output):
         if row["status"] == "INELIGIBLE":
             row["tag"] = ("same-mount history paid backing/metadata/SQLite, own-write coldness and initial/warm interval evidence unavailable; all declared retained-state proofs and clean unmount pass" if ordered else
                           "class B source demands or own-write cold backing precondition unavailable; functional/native/persisted proofs and clean unmount pass")
+            if case.get("git_workflow"):
+                row["tag"] += "; prior original verification reads and full paid cache inputs unqualified; numeric counts include excluded precommit custody verifier FUSE/SQL work"
         state = receipts.command([*docker, "inspect", runtime.container, "--format", "{{.State.Running}}"], output, "container-state", 15)
         if Path(state["stdout"]).read_text().strip() != "false":
             raise ValueError("original container Stop not confirmed")
@@ -711,7 +864,9 @@ def one_family_case(family, case, prepared_folder, build_folder, output):
         if clock.started is not None:
             row["complete_wall_ns"] = clock.observe(time.monotonic_ns())["performance_ns"]
         if proof_started is not None:
-            row["proof_wall_ns"] = time.monotonic_ns() - proof_started
+            row["proof_wall_ns"] = time.monotonic_ns() - proof_started+preproof_ns
+        elif preproof_ns:
+            row["proof_wall_ns"] = preproof_ns
         if runtime is not None and row.get("custody") == "KNOWN_STOP" and not (output / "daemon-logs.attempt.json").exists():
             try:
                 collect_family_observations(runtime, row, build, output, bindings)

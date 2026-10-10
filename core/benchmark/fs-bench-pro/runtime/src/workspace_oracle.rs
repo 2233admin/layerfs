@@ -18,12 +18,28 @@ use reference::workspace_common::{Content, Entry, EntryKind};
 use std::{
     collections::{BTreeMap, BTreeSet, VecDeque},
     fs,
+    path::Path,
     time::Instant,
 };
 
 pub fn verify(args: &Args, events: &mut Events) -> Result<()> {
     let case = args.case.as_deref().ok_or("--case required")?;
-    let entries = crate::edit_model::entries(case, 1)?;
+    let entries = match reference::workspace_registry::resolve(case) {
+        Ok(selected) if selected.kind == "git-tool" => git_hybrid_entries(
+            case,
+            args.source
+                .as_deref()
+                .ok_or("Git proof requires exact precommit --source-copy custody manifest")?,
+        )?,
+        _ => {
+            if args.source.is_some() {
+                return Err(
+                    "precommit custody is only accepted by frozen Git workflow proof".into(),
+                );
+            }
+            crate::edit_model::entries(case, 1)?
+        }
+    };
     let manifest = StoreManifest::decode(&fs::read(&args.manifest)?)?;
     let config = PersistenceConfig::sqlite(args.sealed.as_ref().ok_or("--sealed required")?)
         .with_sqlite_profile(SqlitePersistenceProfile::Disposable);
@@ -57,6 +73,65 @@ pub fn verify(args: &Args, events: &mut Events) -> Result<()> {
     handles.seal()?;
     events.numeric_fields("workspace_verified", Some(events.span(begun)), "independent current typed/authenticated reads; complete names/kinds/metadata/link classes and inode-table membership; membership-only mode reuses prior byte proof, full mode checks every payload byte and applicable original edit identity/retention; no retired format substituted", &[("status", "PASS".into()), ("root", root)], &[("paths", paths), ("verified_bytes", verified_bytes), ("membership_only", u64::from(args.mode == "verify-membership"))])?;
     Ok(())
+}
+
+fn git_hybrid_entries(case: &str, custody: &Path) -> Result<Vec<Entry>> {
+    let selected = reference::workspace_registry::resolve(case)?;
+    if selected.kind != "git-tool" || selected.family != "git_tool_workflow" {
+        return Err("frozen Git workflow case required for repository custody".into());
+    }
+    let body = fs::read_to_string(custody)?;
+    let repository = reference::workspace_common::decode_manifest(&body)?;
+    if reference::workspace_common::manifest(&repository)? != body {
+        return Err("Git precommit manifest must be canonical complete custody".into());
+    }
+    let mut entries = crate::edit_model::entries(case, 1)?;
+    let independent_root = entries
+        .iter()
+        .find(|entry| entry.path == ".")
+        .ok_or("independent Git root missing")?
+        .clone();
+    let mut has_repository = false;
+    let mut has_index = false;
+    let mut logical_bytes = reference::workspace_common::validate_entries(&entries)?;
+    for entry in repository {
+        if entry.path == "." {
+            if !matches!(entry.kind, EntryKind::Directory)
+                || entry.mode != independent_root.mode
+                || entry.mtime_seconds != independent_root.mtime_seconds
+                || entry.mtime_nanoseconds != independent_root.mtime_nanoseconds
+            {
+                return Err("Git custody root differs from independent source root".into());
+            }
+            continue;
+        }
+        if entry.path != ".git" && !entry.path.starts_with(".git/") {
+            return Err("Git custody may not replace independent working source".into());
+        }
+        match &entry.kind {
+            EntryKind::Directory => has_repository |= entry.path == ".git",
+            EntryKind::File(Content::Digest { len, sha256 }) => {
+                if sha256.len() != 64
+                    || !sha256
+                        .bytes()
+                        .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+                {
+                    return Err("Git custody requires complete SHA-256 bytes".into());
+                }
+                has_index |= entry.path == ".git/index";
+                logical_bytes = logical_bytes
+                    .checked_add(*len)
+                    .ok_or("Git complete byte overflow")?;
+            }
+            _ => return Err("Git custody requires original regular files/directories".into()),
+        }
+        entries.push(entry);
+    }
+    if !has_repository || !has_index || logical_bytes > 256 * 1024 * 1024 {
+        return Err("Git complete repository/index/cap differs".into());
+    }
+    reference::workspace_common::validate_entries(&entries)?;
+    Ok(entries)
 }
 
 fn verify_entries(

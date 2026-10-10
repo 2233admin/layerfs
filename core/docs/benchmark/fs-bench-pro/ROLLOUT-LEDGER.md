@@ -20,7 +20,7 @@ comparison or release-admission claim. Durable is
 | 0.4 Reproducible engine | CLOSED: functional proof complete; exact reproduction FAILED C10/C12 | Cell-route correction `bb8e07df8`; build support `c496025fc`; oracle support `7a27a4f26`; fixture support `516c2f009`; workspace/report support `358eca082`; cleanup-observer correction `a1f2c259c` | Begin batch 1 under failed-reproduction closure recorded below |
 | 1 Pilot | COMPLETE: 36 functional/proof/clean-close passes; 7 recorded scoped B PASS, 29 INELIGIBLE; full numeric qualification of the 7 is unverified | Init `c1d7dd0e8`/`39bbcbd6b`; payload `200f81493`/`c1d9b6c58`; parallel routing `b3c96ecb1`; tiny `36849bcc2`/`d6e0ef952`; namespace `98b14b233`/`be1f56a23`; H-2 fix `222526fa0`; closure `d4314ed62`; membership supplement `cca598d0b` | Batch 2, retaining original receipts plus exhaustive membership supplement |
 | 2 Edits | COMPLETE: all62 cases ported/parity/sampled once/recorded;39 strict proof and clean-close passes (numeric INELIGIBLE),20 strict retention failures and3 original capped-watchdog failures retained | Canonical `a34b5d44b`/`beeb7ad69`; preserving `b9ffa63be`; capped `4d8ccfc93`; changing `05ffbf971`; small-delta `c0c99a4a3`/`2e6a508b5`/this commit | Begin batch3; no identified fixable product correctness defect remains in batch2 |
-| 3 Trees and tools | IN_PROGRESS: directory12 and locality16 closed; snapshot firstFAIL/H6fix, corrected run active; Git4 controller pending | Shared3c697ae92; directory50c297c68/results; locality2590a4536/results; snapshot0344bfdc6/fix03033abdc | Finish corrected snapshot and Git4; no batch4 |
+| 3 Trees and tools | IN_PROGRESS: directory12, locality16 and corrected snapshot1 closed; original snapshotFAIL retained; Git4 authored, final controller guards/build/preparation/sample pending | Shared3c697ae92; directory50c297c68/ad4f95503; locality2590a4536/26c037d90; snapshot0344bfdc6/fix03033abdc/results98d3be30a/70d568e94; Git support this commit | Finish original Git publication/cleanup guards, seal compiled support, qualify/prepare/parity/sample Git4; no batch4 |
 | 4 History on one branch | PENDING | — | Wait for batch 3 completion |
 | 5 Branches and Workspaces | PENDING | — | Wait for batch 4; verify existing P-1 SDK methods |
 | 6 Dedup and storage | PENDING | — | Wait for batch 5 completion |
@@ -2095,7 +2095,7 @@ seal reused; correctedparity/newsource sample is pending. No setup/native/
 debugproof replay. No productfix/optimization or publicationclaim.
 
 | `b1f8150e` (worker) | Apply exact sampled-receipt fix at changed case identity | 79366 | 79366 | +0 |
-| This commit | Integrate original failed snapshot rows without relabeling | 79366 | 79366 | +0 |
+| `98d3be30a` | Integrate original failed snapshot rows without relabeling | 79366 | 79366 | +0 |
 
 Local snapshot corrected-source closure froma95ca5375: one sample atb1f8150e,
 originalthree25k/256/restoreoperations, threeCommitted replies, exact native
@@ -2120,4 +2120,45 @@ and correctedINELIGIBLErow remain separate at originalsources. Currentbatch
 referenceabsent, pinnedstagedcounter. Allsource/binaryreuse gaps remainexplicit.
 
 | `a95ca5375` (worker) | Record corrected snapshot proof/closure withEXCEEDED | 79366 | 79366 | +0 |
-| This commit | Integrate corrected snapshot while retaining failed history | 79366 | 79366 | +0 |
+| `70d568e94` | Integrate corrected snapshot while retaining failed history | 79366 | 79366 | +0 |
+
+Git workflow support integrated from worker d73fb8a0841fd58e09a2895ed78ea9ed2ac24e20:
+all four original IDs retain exact native Git preparation, genesis/configuration,
+six performance commands, intermediate verification variant, editor temporary
+saves and positional edits. Real .git is imported by Init; independent reference
+HEAD/tree/parent and full working-source expectations cannot be replaced by
+custody. Complete precommit and fresh-root .git manifests cover raw index stat
+bytes before any semantic Git command. The persisted hybrid oracle uses custody
+only for .git, retains the independent source oracle and complete inode census.
+Lead controller wires prior mounted qualification discarded without Commit,
+excluded precommit custody, fresh custody before semantic Git, acknowledged
+root graph binding and cumulative proof work. Counts explicitly include custody
+FUSE/SQL work; no guessed verifier subtraction or pure performance count claim.
+Prior additional reads and full paid cache inputs remain unqualified under H5.
+
+Root owning checks at this composed source: Git engine4PASS0.013s; family4PASS;
+Rust --no-runPASS5.36s then exact five external Git oracle tests PASS11.65s,
+nineteen frozen inline tests filtered. Worker had engine4/family4/shared16/
+fixture6 PASS and native recipe ARM64 compilation PASS. Retain its earlier
+unintentionally broad Rust invocation stopped by its owner at67s/exit101
+while frozen inline history tests ran; this was not a product hang or successful
+check. Remaining exact Git check subsequently passed1.81s at worker source.
+Two harmless test-runtime dead-code warnings concern edit_model helpers; no
+product source changed. These source-qualified checks are not mounted samples.
+
+Read-only review found final controller publication and cleanup deadline scopes
+needed completion before the first Git run. The frozen ordinary verifier has
+45s work including a4s cleanup reserve, 59s hard through receipt publication,
+and a0.25s publication guard. A worker is preparing an append-only late-failure
+receipt overlay; lead owns controller wiring and meaningful ordering/deadline
+checks. No Git sample is authorized by this intermediate support commit.
+Compiled support may build and native preparation/parity may proceed in its
+own worktree; samples wait for the reviewed final guard source. No batch4 work
+has started; read-only planning uses exact existing dedup_branch_history name.
+Raw support check/outcome provenance remains capped worker
+benchmark-results/fs-bench-pro/2026-10-10-batch-3-git-tool-support-d73fb8a08/.
+All previous failed/uncertain/protected resources and receipt identities remain.
+
+| `ce47e2b18` (worker) | Apply lead shared source without ledger duplication | 79366 | 79366 | +0 |
+| `d73fb8a08` (worker) | Original Git workload and complete custody support | 79366 | 79366 | +0 |
+| This commit | Integrate Git support before final guarded-run qualification | 79366 | 79366 | +0 |

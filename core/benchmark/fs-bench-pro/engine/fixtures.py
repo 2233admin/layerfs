@@ -352,6 +352,10 @@ def prepare_workspace(recipe, folder, build_folder):
                   "expected": original_check(expected, 1, "original-expected-check")}
     if any(item.get("verification_status") != "pass" for item in native.values()):
         raise ValueError("original native fixture/expectation check failed")
+    git_reference = None
+    if case.get("git_workflow"):
+        fixture, git_reference, git_native = prepare_git_fixture(case, folder, build)
+        native.update(git_native)
     fixture.update(recipe=recipe, fixture_sha256=fixture["fixture_digest"])
     helpers = assets(folder / "code")
     copies = [(Path(build["binaries"]["workload-linux"]["path"]), "writers/workload"),
@@ -369,6 +373,13 @@ def prepare_workspace(recipe, folder, build_folder):
         shutil.copytree(folder / "history-manifests", base / "manifests")
         for state in original_history["states"] if original_history is not None else ():
             shutil.copytree(state["input"], base / "checkpoints" / f"step-{state['index']}")
+        for path in sorted(base.rglob("*")):
+            if path.is_file():
+                path.chmod(0o444)
+                helpers["files"][str(path.relative_to(helpers["root"]))] = identity.sha256(path)
+    if git_reference is not None:
+        base = Path(helpers["root"]) / "git-reference"
+        shutil.copytree(folder / "git-reference", base)
         for path in sorted(base.rglob("*")):
             if path.is_file():
                 path.chmod(0o444)
@@ -392,6 +403,7 @@ def prepare_workspace(recipe, folder, build_folder):
               "family": family["family"], "case": case["id"], "identity": current, "fixture": fixture,
               "expectation": expectation, "native_verification": native, "helpers": helpers,
               "history_states": history,
+              "git_reference": git_reference,
               "master_volume": volume, "provision": provisioned, "source_uid": source.stat().st_uid,
               "master_reuse": reuse,
               "source_gid": source.stat().st_gid, "global_profile": "Disposable/WAL/OFF",
@@ -401,6 +413,89 @@ def prepare_workspace(recipe, folder, build_folder):
     receipts.write_new(folder / "prepared.json", result)
     receipts.manifest(folder)
     return result
+
+
+def prepare_git_fixture(case, folder, build):
+    """Original Linux Git setup/reference, full initial .git imported by Init."""
+    if not case.get("git_workflow") or not case["v016_case"].startswith("git-tool-"):
+        raise ValueError("explicit frozen Git workflow case required")
+    folder = Path(folder)
+    source, expected = folder / "source", folder / "expected-native"
+    token = uuid.uuid4().hex[:16]
+    container = "layerfs-fsb-git-native-" + token
+    inside = "/tmp/layerfs-fsb-git-native-" + token
+    docker = ["docker", "--host", "unix://" + build["socket"]]
+    writer = "/writer"
+    case_arg = shlex.quote(case["v016_case"])
+    body = ["set -eu", "printf '%s\\n' " + shlex.quote(build["binaries"]["workload-linux"]["sha256"] + "  /writer") + " | sha256sum -c -",
+            "mkdir -m 700 " + inside,
+            writer + " workspace-git-prepare /source 1 > " + inside + "/prepare.txt",
+            writer + " workspace-git-reference " + inside + "/reference-build " + case_arg + " 1 > " + inside + "/reference.txt",
+            "mkdir " + inside + "/reference " + inside + "/receipts",
+            "cp --preserve=mode,timestamps " + inside + "/reference-build/{identity,normalization.tsv,expected-first-status,expected-diff,expected-head,expected-tree,expected-parent} " + inside + "/reference/",
+            "cp -a " + inside + "/reference-build/repository/.git /expected-native/.git",
+            "touch -d @1700000000 /expected-native",
+            "cd /expected-native; " + writer + " workspace-git-verify " + case_arg + " 1 " + inside + "/reference > " + inside + "/receipts/qualification.txt",
+            "cp " + inside + "/prepare.txt " + inside + "/reference.txt " + inside + "/receipts/"]
+    receipts.write_new(folder / "git-native-resource-claim.json", {"container": container, "created_by_this_run": True,
+        "purpose": "untimed pinned Linux native Git preparation and independent reference; no Store or mount",
+        "failure_disposition": "retain exact container; no retry or inferred completion"})
+    receipts.command([*docker, "create", "--name", container, "--network", "none",
+                      "--cpus", "2", "--memory", "2g", "--memory-swap", "2g", "--pids-limit", "256",
+                      "--user", f"{source.stat().st_uid}:{source.stat().st_gid}",
+                      "-e", "LAYERFS_CONSTRUCTION_WORKERS=1", identity.IMAGE,
+                      "/bin/bash", "-euo", "pipefail", "-c", "\n".join(body)], folder, "git-native-create", 15)
+    inspected = receipts.command([*docker, "inspect", container, "--format", "{{json .HostConfig}}"],
+                                 folder, "git-native-profile", 15)
+    actual = json.loads(Path(inspected["stdout"]).read_text())
+    profile = {"NanoCpus": 2_000_000_000, "Memory": 2 * 1024**3, "MemorySwap": 2 * 1024**3, "PidsLimit": 256}
+    if any(actual.get(name) != value for name, value in profile.items()):
+        raise ValueError("original native Git 2CPU/2GiB/no-swap/256PID profile differs")
+    receipts.command([*docker, "cp", "--archive", build["binaries"]["workload-linux"]["path"], container + ":/writer"],
+                     folder, "git-native-code", 15)
+    for path, name in ((source, "source"), (expected, "expected-native")):
+        receipts.command([*docker, "cp", "--archive", str(path), container + ":/" + name],
+                         folder, "git-native-input-" + name, 15)
+    receipts.command([*docker, "start", "--attach", container], folder, "git-native-author", 120)
+    receipts.command([*docker, "cp", "--archive", container + ":/source/.git", str(source / ".git")],
+                     folder, "git-initial-repository-export", 30)
+    # Copying .git changes the existing host directory's mtime, as in the frozen driver.
+    source.chmod(0o750)
+    os.utime(source, ns=(MTIME_NS, MTIME_NS))
+    receipts.command([*docker, "cp", "--archive", container + ":" + inside + "/reference", str(folder / "git-reference")],
+                     folder, "git-reference-export", 30)
+    receipts.command([*docker, "cp", container + ":" + inside + "/receipts", str(folder / "git-native-receipts")],
+                     folder, "git-native-receipts-export", 15)
+    fields = lambda name: dict(line.split("=", 1) for line in (folder / "git-native-receipts" / name).read_text().splitlines())
+    preparation, reference, qualification = fields("prepare.txt"), fields("reference.txt"), fields("qualification.txt")
+    if qualification.get("verification_status") != "pass" or qualification.get("git_semantic_verification_status") != "pass":
+        raise ValueError("original independent native Git semantic/complete-source qualification failed")
+    bundle = folder / "git-reference"
+    identity_rows = (bundle / "identity").read_text().splitlines()
+    if (identity_rows != [case["v016_case"], "1", preparation["git_version"]]
+            or reference.get("reference_case") != case["v016_case"] or reference.get("reference_seed") != "1"
+            or reference["git_genesis_head"] != preparation["git_genesis_head"]
+            or (bundle / "expected-parent").read_text().strip() != preparation["git_genesis_head"]
+            or reference["git_effective_config"] != preparation["git_effective_config"]
+            or int(reference["git_repository_transient_bound_bytes"]) > 256 * 1024**2):
+        raise ValueError("independent Git reference identity/genesis/config/transient bound differs")
+    checked = receipts.command([build["binaries"]["workspace-writer"]["path"], "git-fixture-check", case["v016_case"], str(source)],
+                               folder, "git-complete-initial-fixture-check", 120)
+    fixture = json.loads(Path(checked["stdout"]).read_text())
+    if fixture.get("verification_status") != "pass":
+        raise ValueError("original complete source plus prepared Git fixture failed")
+    witness = {"schema": "fs-bench-pro-original-git-reference-v1", "status": "PASS", "case": case["v016_case"],
+               "seed": 1, "image": identity.IMAGE, "container": container, "git_version": preparation["git_version"],
+               "resource_profile": {name: actual[name] for name in profile},
+               "git_effective_config": preparation["git_effective_config"], "genesis_head": preparation["git_genesis_head"],
+               "transient_bound_bytes": int(reference["git_repository_transient_bound_bytes"]),
+               "files": {path.name: identity.sha256(path) for path in sorted(bundle.iterdir())},
+               "initial_manifest": str(source.with_suffix(".git.manifest.tsv")),
+               "scope": "native initial real .git and independent final-source-derived Git semantic identities; no measured editor replay; index stat bytes are measured custody only"}
+    receipts.command([*docker, "rm", container], folder, "git-native-remove-passing", 15)
+    receipts.write_new(folder / "git-reference.json", witness)
+    return fixture, witness, {"git_initial_complete": {"verification_status": "pass", "fixture_digest": fixture["fixture_digest"]},
+                              "git_independent_reference": qualification}
 
 
 def load(folder, recipe=None):
