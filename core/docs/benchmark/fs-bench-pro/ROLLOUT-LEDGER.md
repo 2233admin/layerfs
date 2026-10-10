@@ -17,7 +17,7 @@ comparison or release-admission claim. Durable is
 | 0.1 Released references | COMPLETE | `8e4a78fa0` | Stage 0.2 move-only organization |
 | 0.2 Move-only organization | COMPLETE, historical check failures retained | `13f9dec38`; routing follow-up in this commit | Update routing guide, then stage 0.3 catalogue |
 | 0.3 Case catalogue | COMPLETE | `f182e9a63`; prerequisite correction `30b798192` | Stage 0.4 reproducible engine |
-| 0.4 Reproducible engine | IN_PROGRESS | Cell-route correction `bb8e07df8`; build support `c496025fc`; oracle support in this commit | Implement fixture preparation, oracle, workspace execution and CSV reports; then twelve cells |
+| 0.4 Reproducible engine | IN_PROGRESS | Cell-route correction `bb8e07df8`; build support `c496025fc`; oracle support `7a27a4f26`; fixture support in this commit | Implement fixture preparation, oracle, workspace execution and CSV reports; then twelve cells |
 | 1 Pilot | PENDING | — | Wait for stage 0.4 completion |
 | 2 Edits | PENDING | — | Wait for batch 1 completion |
 | 3 Trees and tools | PENDING | — | Wait for batch 2 completion |
@@ -51,6 +51,8 @@ comparison or release-admission claim. Durable is
 | 13 | Preserve OWNER-3 checker failures as FAIL records and admit a build only when the exact two known passthrough refusals are the entire error set | Owner explicitly retains those refusals; daemon builds use the authorized product patch, while any new provenance error must stop | Weakening the checker or claiming its aggregate PASS |
 
 | 14 | Reuse the intact cell tree/index checkers and the recovered version-pinned Git policy; collect actual image Git/config witnesses anew | Preserves the original full-tree and index exclusions/checks; copied policy plus provenance removes its untracked data dependency | Guessing defaults, comparing raw native/FUSE index stat caches, or weakening tree checks |
+
+| 15 | Rebuild empty and full-written 64 MiB-zero masters through the existing SDK provision mode; retain prepared masters during the rollout and remove only passing sample resources | Same initial acquisition/install boundary as the working path; setup masters are needed for independent byte-copy reuse | Mounting a master for measurement or depending on old /tmp trees/master volumes |
 
 ## Bugs
 
@@ -198,7 +200,8 @@ and committed snapshots; active core only, reference absent as recorded above.
 | `f182e9a63` | Stage 0.3 case catalogue | 79366 | 79366 | +0 |
 | `bb8e07df8` | Define separate cell execution/report route | 79366 | 79366 | +0 |
 | `c496025fc` | Stage 0.4 build and receipt custody support | 79366 | 79366 | +0 |
-| This commit | Stage 0.4 independent tree/index oracle | 79366 | 79366 | +0 |
+| `7a27a4f26` | Stage 0.4 independent tree/index oracle | 79366 | 79366 | +0 |
+| This commit | Stage 0.4 fixture provisioning and clone support | 79366 | 79366 | +0 |
 
 Stage 0.4 entry-point clarification: docs-only; no sample or product change.
 Production LOC 79,366 -> 79,366 (delta +0), pinned absent-aware method.
@@ -236,3 +239,28 @@ namespace/hard-link mismatch and tampered evidence refusal. Raw checks are under
 No Store, mount, Docker resource or measured case was invoked. Fixture preparation
 and mounted execution remain next. Production LOC 79,366 -> 79,366 (delta +0),
 pinned absent-aware method.
+
+Stage 0.4 fixture support adds `bench.py prepare empty|big64m --build <seal>`.
+Committed generators write independent native roots with fixed modes/mtime and
+seed, then the existing release runtime calls public ProjectApi Init/seal/install
+once. No second encoder, Store API or data route is added. Native expected states
+are built once from original C-cell commands in separate pinned-image containers.
+Prepared data, helper hashes, native oracles, Store bytes and manifest are sealed
+under gitignored result paths. Nothing reads the old prepared /tmp trees or old
+master volumes at runtime. Source/provenance labels alone refer to history.
+
+Samples get fresh named volumes and full writable byte copies with reflinks and
+sparse-copy substitution disabled; compare/SHA-256 bind each clone to its closed
+master. Clone warmth is declared and is not cold eligibility. Resource claims
+precede creation; failed/unknown containers/volumes are retained. Passing copy,
+provision and native-author containers alone are removed. New master volumes
+remain immutable setup inputs until the rollout no longer needs them, when their
+explicit owned disposition is recorded.
+
+Four scoped fixture tests pass in 0.016 s (the recorded wall in the raw log),
+covering deterministic identity/exclusive outputs, exact cell membership,
+failed clone custody and all copied helper hashes. CLI help and whitespace pass.
+Raw checks: `benchmark-results/fs-bench-pro/2026-10-10-stage-0-4-fixture-tests/`.
+No actual build, Store, Docker resource, prepare or sample has run in this step.
+Workspace execution/cache enforcement and CSV reporting remain to implement.
+Production LOC 79,366 -> 79,366 (delta +0), pinned absent-aware method.

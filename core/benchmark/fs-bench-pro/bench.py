@@ -28,6 +28,10 @@ def main(argv=None):
     listing.add_argument("--json", action="store_true")
     building = commands.add_parser("build", help="locked release runtime and pinned-image daemon")
     building.add_argument("--out", type=Path)
+    preparing = commands.add_parser("prepare", help="build a sealed fixture master from a committed recipe")
+    preparing.add_argument("fixture", choices=("empty", "big64m"))
+    preparing.add_argument("--build", type=Path, required=True)
+    preparing.add_argument("--out", type=Path)
     args = parser.parse_args(argv)
     if args.command == "build":
         from engine import identity
@@ -39,6 +43,17 @@ def main(argv=None):
         result = identity.build(output)
         print(json.dumps({"build": str(output), "status": result["status"],
                           "binaries": result["binaries"]}, indent=2))
+        return
+    if args.command == "prepare":
+        from engine import fixtures, identity
+        results = identity.ROOT / "benchmark-results/fs-bench-pro"
+        output = args.out or results / ("prepared-" + args.fixture + "-" + uuid.uuid4().hex)
+        output = output.resolve()
+        if not output.is_relative_to(results.resolve()):
+            parser.error("fixture output must be a fresh directory under benchmark-results/fs-bench-pro")
+        result = fixtures.prepare(args.fixture, output, args.build)
+        print(json.dumps({"prepared": str(output), "status": result["status"],
+                          "master_volume": result["master_volume"], "fixture": result["fixture"]}, indent=2))
         return
     rows = catalogue()
     if args.json:
