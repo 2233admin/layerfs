@@ -14,7 +14,8 @@ BIG_BYTES = 64 * 1024 * 1024
 CELL_RECIPES = {f"C{n:02}": "big64m" if n in (9, 10, 11) else "empty" for n in range(1, 13)}
 NAMESPACE_RECIPES = ("namespace-100-compact-v3", "namespace-1000-compact-v3", "namespace-10000", "namespace-100000")
 WORKSPACE_FAMILIES = ("payload_create_read", "tiny_file_churn", "namespace_mutation",
-                      "edit_length_preserving", "edit_length_changing", "edit_length_changing_capped")
+                     "edit_length_preserving", "edit_length_changing", "edit_length_changing_capped",
+                     "edit_canonical_chunk_count")
 
 
 def family_case(recipe):

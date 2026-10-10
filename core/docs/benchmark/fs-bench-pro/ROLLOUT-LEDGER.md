@@ -1317,4 +1317,40 @@ reuse commit; workers must not take unrelated compiled-source changes.
 | `4f52124e4` (worker) | Bind capped root and full payload proof declaration | 79366 | 79366 | +0 |
 | `e1062c6d0` (worker) | Declare final preserving current graph/cache obligations | 79366 | 79366 | +0 |
 | `d5336c13b` (worker) | Bind changing current oracle and own-write eligibility scope | 79366 | 79366 | +0 |
-| This commit | Reuse compatible closed initial masters without reusing measurement | 79366 | 79366 | +0 |
+| `849b0aff1` | Reuse compatible closed initial masters without reusing measurement | 79366 | 79366 | +0 |
+
+
+Batch 2 canonical family: all 12 original fixed 64 KiB overwrite cases are
+ported under their original names. Exact frozen plans, fixture/payload seeds,
+SHA-256 values and original count/digest pins are transcribed from the original
+product-neutral registry, preserving the 147,456-byte offset and 65,536-byte
+replacement. The shared positional writer remains the P-3 ordinary surface;
+no product feature or optimization is added. Current typed file/map validation
+is complete; initial and final extent counts must match the exact frozen
+54/544/5,394/26,995 initial counts and original preserve/increase/decrease final
+counts. Native expected bytes additionally match the original frozen final
+SHA-256. Retired file/map/namespace ObjectIds remain explicit format provenance,
+not current identifiers. Inode scope/serial, table membership and untouched
+current payload-ID subset remain strict. Numeric own-write coldness remains
+unknown and INELIGIBLE; limits and workload sizes remain unchanged.
+
+Source metadata exporter initially used an incorrect scratch relative path;
+compiler refused before any fixture/Store/run. Corrected metadata compile PASS
+under 60 s lock and original self-check/export PASS under 10 s lock, with no
+retired product linked. One owning original-plan/count/digest transcription
+test PASS 2.483 s under 120 s lock. Runtime external oracle tests compiled with
+--no-run first (PASS 2.04 s), then six scoped tests PASS under 120 s lock, with
+19 frozen inline cases filtered; new guard rejects wrong initial or final
+counts for every original canonical scenario. Owned rustfmt check and whitespace
+PASS. The two known fixture-only unused helper warnings remain visible.
+No canonical case has been prepared or sampled; release build, native parity
+and 12 samples remain pending. Three worker edit cohorts proceed at independent
+worktree sources with the previously qualified compiled bytes; the new canonical
+count/digest code applies only to the canonical family and does not invalidate
+their unaffected earlier qualification. Production LOC 79,366 -> 79,366 (delta
++0), pinned staged absent-aware method; reference absent (retired R9c; last 65,417).
+
+| `7c4273669` (worker) | Integrate closed-master setup reuse for preserving cohort | 79366 | 79366 | +0 |
+| `6fee225f4` (worker) | Integrate closed-master setup reuse for changing cohort | 79366 | 79366 | +0 |
+| `1479e4d07` (worker) | Integrate closed-master setup reuse for capped cohort | 79366 | 79366 | +0 |
+| This commit | Port all twelve canonical chunk-count cases with strict original counts | 79366 | 79366 | +0 |

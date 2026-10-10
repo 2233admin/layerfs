@@ -140,6 +140,31 @@ fn scenario(
 }
 
 #[test]
+fn edit_oracle_canonical_counts_reject_wrong_initial_and_final_at_every_original_case() {
+    for scenario in reference::edit_canonical_chunk_count::registry() {
+        let wanted = reference::edit_canonical_chunk_count::expected(&scenario);
+        edit_oracle::require_canonical_counts(&scenario, wanted.initial_count, wanted.final_count)
+            .unwrap();
+        assert!(edit_oracle::require_canonical_counts(
+            &scenario,
+            wanted.initial_count + 1,
+            wanted.final_count
+        )
+        .unwrap_err()
+        .to_string()
+        .contains("canonical chunk counts differ"));
+        assert!(edit_oracle::require_canonical_counts(
+            &scenario,
+            wanted.initial_count,
+            wanted.final_count + 1
+        )
+        .unwrap_err()
+        .to_string()
+        .contains("canonical chunk counts differ"));
+    }
+}
+
+#[test]
 fn edit_oracle_complete_membership_accepts_exact_and_rejects_unreachable_or_missing_rows() {
     let mut objects = Objects::default();
     let unused = ObjectId::for_bytes(b"unused content");

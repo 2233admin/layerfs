@@ -87,6 +87,7 @@ pub fn verify_edit(
     }
     let base = slices(reader, before.value.content_root, scenario.fixture_bytes)?;
     let final_mapping = slices(reader, after.value.content_root, scenario.final_bytes)?;
+    require_canonical_counts(scenario, base.len() as u64, final_mapping.len() as u64)?;
     let required = base
         .iter()
         .filter(|slice| {
@@ -112,6 +113,21 @@ pub fn verify_edit(
                 .checked_add(scenario.replacement_len)
                 .ok_or("original edit suffix position overflow")?,
         )?;
+    }
+    Ok(())
+}
+
+/// The canonical family's frozen count property remains a strict check.
+pub fn require_canonical_counts(scenario: &Scenario, initial: u64, final_count: u64) -> Result<()> {
+    if scenario.family_id == crate::reference::edit_canonical_chunk_count::FAMILY_ID {
+        let wanted = crate::reference::edit_canonical_chunk_count::expected(scenario);
+        if initial != wanted.initial_count || final_count != wanted.final_count {
+            return Err(format!(
+                "canonical chunk counts differ: initial {initial}/{} final {final_count}/{}",
+                wanted.initial_count, wanted.final_count
+            )
+            .into());
+        }
     }
     Ok(())
 }
