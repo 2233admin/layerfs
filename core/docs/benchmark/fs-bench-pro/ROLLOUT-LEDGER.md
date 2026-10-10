@@ -89,6 +89,8 @@ comparison or release-admission claim. Durable is
 | 55 | Retain the actual concurrent Stage1 EAGAIN and Commit Begin Busy workload failures without a product contention fix | Current integration3.3 explicitly requires serial/save refusal before effect, zero busy_timeout and no retries or writer gate; unique EAGAIN mapping identifies a contended creating mutation | Adding a retry/gate/serialization feature or weakening the original unconditional-success workload |
 | 56 | Install historical backing as daemon-owned root0:0, directory0700 and file0600; keep Workspace UID/GID501:20 unchanged | Daemon private-directory/file guards require its own effective identity; source UID is filesystem fixture ownership, not backing authority | Weakening the guard, running daemon as fixture UID, or relabeling bad masters as repaired |
 
+| 57 | Serialize historical access topology in original declared role/ACK order and validate exact planned Branch membership | Generic JSON sealing sorts object keys, while the complete typed acknowledgement checker deliberately preserves original sequence | Weakening the checker to sets, dropping duplicate canonical tuples, or editing the failed transcript |
+
 ## Bugs
 
 | Bug | Case | Symptom | Cause | Fix commit | External test |
@@ -121,6 +123,8 @@ comparison or release-admission claim. Durable is
 | H-23 (harness) | First historical boundary-before at c6ec3e467 | Sandbox Listener EOF before readiness or mount; exact daemon stderr private directory ownership/mode/type | Historical installer conflated Workspace source UID501:20 with daemon backing UID0:0 and retained file0644 | `68209bdb7` | External installer regression fails at parent; final39 covering checks and wrong-owner/mode refusal variants PASS; old actual failure/resources retained |
 
 | H-24 (harness/reporting) | Failed concurrent branch and multi rounds | CSV reader copied initialized0 command/Commit/unmount totals despite observed partial work | Controller fails before accumulating a whole round; reporter treated all phase values as complete case metrics | `669bc4853` | Parent external report tests fail; final13 custody/report checks PASS; retained sealed actual rows read without changing receipts |
+
+| H-25 (harness) | Historical fork-point atc79eb607f | Native selected-root/all-Branch proof PASS, but Python full ordered ACK transcript check FAIL | JSON-sorted closed graph was serialized alphabetically a,b,initial,trunk rather than original initial,trunk,a,b | This commit | Sorted-JSON regression fails at parent for both compact producers; final42 scoped checks plus exact retained30ACK/15distinct/5Branch corrected-order check PASS; strict checker unchanged |
 
 H-1 and H-2 are harness faults, not product correctness or performance defects.
 The original file-identity checker remains intact; no product source changed.
@@ -4652,4 +4656,69 @@ is separate and still pending actual results. The failed pair is history,
 never overwritten or relabeled. No batch closure is claimed at this commit.
 
 | `54dee04c6` (worker) | Retain historical failed startup and five unrun selections | 79370 | 79370 | +0 |
-| This commit | Import exact historical pre-fix failed-cohort CSV pair | 79370 | 79370 | +0 |
+| `f810a54b7` | Import exact historical pre-fix failed-cohort CSV pair | 79370 | 79370 | +0 |
+
+
+### Batch 5 original historical topology serialization correction, 2026-10-11
+
+At clean privatec79eb607f, firstfour historical selections pass full original
+reader/verifier and typed retained-root/global graph checks, End/Gone/Stop,
+guarded outer publication and passing-pair removal. They remain unaffected
+proof evidence and are never resampled. Fork-point then fails after successful
+reads and known terminal custody: native public verify-access returns PASS
+for exactTrunk5 and allfive Branch bindings, but Python strict complete ACK
+transcript reports an order mismatch. Divergent-head is not attempted at that
+identity. The failed stopped container3be01f6f3ca00b08e5f73ffbabce3ad485d39139a1025b64ef6e06d48713d2d2
+and volumelayerfs-fsb-sample-31c5ae8a461041fc remain retained.
+
+Both wanted and actual contain30 full five-field ACK tuples,15 distinct IDs,
+with equal complete multiplicities. Wanted first is Trunk1 CID
+120a0dd3311b61c054f3d99b6bdf4da3fa14f99ad4c5391e9b451fa94e051b6d4a,
+parentNone, root9f41fbea522dadb9f4f59116344edbf90003763b218a95a0318ed8d4356b411f.
+Actual first was A1 CID128b9d29bbb3144bbf534d340e57a3403ad3ad07764877cab484cb7b6e56c7758d,
+parentTrunk5/rootfe20246a19fc69cc5dc3d011bcb0226146deaca50aa639c12bc34882ee07bf1b.
+JSON sorting changed Branch insertion order to a,b,initial,trunk,access;
+original producer execution/ACK order is initial,trunk,a,b followed by access.
+No tuple, root, parent, head or unusedinitial Branch error was found.
+
+Only the access proof serializer now reconstructs exact declared producer
+role order with accesslast, rejecting any missing/extra Branch before emitting
+the transcript. The generic transcript grammar and complete ordered tuple,
+ancestry, duplicate-ID, typed provider, manifest and unfiltered SQL checks
+remain unchanged. No set comparison, truncation, schema change, product fix,
+additional workload or budget change is introduced.
+
+Prepared dependency validation now reads its original/current committed Git
+source blobs and verifies both declared hashes, allowing a stored preparation
+to be checked after a later adapter fix without rewriting its identity.
+Producer scope remains exact. Explicitly reviewed non-producer exceptions are
+access_graph_proof and reportresult_rows plus the already recorded H21 mode
+label and access fixture/install adapters; all other producer controller and
+receipt functions must be AST-identical, with compiled/model/workload files
+byte-identical. This admits existing correct six H23 inputs without regenerating
+or relabeling them. A changed producer function or substituted source blob
+is refused. Actual case execution still records its fresh clean current source.
+
+Parent sorted-JSON controller regression fails for two compact producers.
+Final42 owning checks PASS in5,431,777,500 ns/120 s mainR4, including fifteen
+linear/compact/fork/head/selected-byte/extra-Branch variants and committed
+source snapshot admission checks. A read-only retained-evidence check confirms
+the original transcript fails and exact reordered30ACK/15distinct/fiveBranch
+transcript passes the unchanged strict oracle against the actual native
+provider. No Store, Docker, SDK, preparation or sample operation ran there.
+Qualification folder2026-10-11-historical-transcript-order-regression;
+SHA-2567614aed6b7b8b0dd25877cf1e004029ef0debb79d4335bd6dba758441d057a53. All nine compiled scopes are unchanged.
+
+Worker434dc0a3c retained its original six-row H23 cohort pair: fourPASS,
+oneFAIL and oneNOT_RUN. Original proof-attempt diagnostic walls in ns are
+4,501,832,209;5,011,988,667;5,067,557,042;5,093,394,291;5,171,643,000;
+lastUNAVAILABLE. No declared25s limit exceeded. Numeric fields remain N/A,
+raw cacheINELIGIBLE. Raw order-failure-handoff.json SHA-256
+0e48c32a64eb774d6eb0da791232e6c6f38292a4681385437f1cc9bf305c9f11
+binds the fixedinput cohort/source/masters and all outcomes. Keep that pair
+unchanged, rerun only the affected fork-point once at this changed source and
+attempt divergent-head once. Reuse the unaffected firstfour proof receipts.
+No batch6/7 starts yet; concurrent count-mapper omission is being tested in
+its owning separate worktree without a measurement replay.
+
+| This commit | Preserve original ordered historical ACKs through JSON-sealed graph reuse | 79370 | 79370 | +0 |

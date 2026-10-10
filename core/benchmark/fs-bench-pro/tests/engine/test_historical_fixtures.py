@@ -304,6 +304,29 @@ class HistoricalFixtures(unittest.TestCase):
         self.assertNotEqual(fixtures.historical_fixture_scope(source), fixtures.historical_fixture_scope(source.replace('"v016-access-boundary-before-v1"', '"changed-original-case"')))
         self.assertNotEqual(fixtures.historical_fixture_scope(source), fixtures.historical_fixture_scope(source.replace('master_measurement_mounts", 0) != 0', 'master_measurement_mounts", 0) != 1')))
 
+    def test_only_reviewed_non_producer_adapters_can_differ_between_source_snapshots(self):
+        for kind,adapter in (("workspace","access_graph_proof"),("receipts","result_rows")):
+            before="def producer():\n    return 7\n\ndef "+adapter+"():\n    return 0\n"
+            after=before.replace("return 0","return 1")
+            self.assertEqual(fixtures.historical_adapter_scope(before,kind),fixtures.historical_adapter_scope(after,kind))
+            self.assertNotEqual(fixtures.historical_adapter_scope(before,kind),fixtures.historical_adapter_scope(after.replace("return 7","return 8"),kind))
+
+    def test_stored_preparation_admission_reads_its_committed_snapshot_not_later_files(self):
+        path="core/benchmark/fs-bench-pro/engine/workspace.py"
+        before=b"def producer():\n    return 7\n\ndef access_graph_proof():\n    return 0\n"
+        after=before.replace(b"return 0",b"return 1")
+        original={"source_commit":"producer-source","source_tree":"producer-tree","product_tree":"product", "source_clean":True,
+                  "files":{path:hashlib.sha256(before).hexdigest()}}
+        current={**original,"source_commit":"prepared-source","source_tree":"prepared-tree","files":{path:hashlib.sha256(after).hexdigest()}}
+        closed={name:original[name] for name in ("source_commit","source_tree","product_tree")}
+        attempt={"identity":original,"source_commit":original["source_commit"]}
+        with patch.object(fixtures.subprocess,"check_output",side_effect=[before,after]) as snapshots:
+            admitted=fixtures.historical_source_admission(closed,attempt,current)
+        self.assertEqual(admitted["status"],"PASS")
+        self.assertEqual(snapshots.call_args_list[1].args[0][2],"prepared-source:"+path)
+        with patch.object(fixtures.subprocess,"check_output",side_effect=[before,b"substituted source"]),self.assertRaisesRegex(ValueError,"blob seal differs"):
+            fixtures.historical_source_admission(closed,attempt,current)
+
     def test_historical_install_keeps_private_daemon_backing_separate_from_workspace_uid(self):
         with tempfile.TemporaryDirectory() as temporary:
             _,_,_,genesis,calls,_=self.prepared(Path(temporary),declared())

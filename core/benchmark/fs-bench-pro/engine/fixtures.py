@@ -190,7 +190,7 @@ def history_ack(record, role):
 def historical_fixture_scope(source):
     """Exact producer code; exclude only the reviewed access reuse adapters."""
     module = ast.parse(source)
-    adapters = {"historical_fixture_scope", "historical_source_admission", "load_closed_history_producer",
+    adapters = {"historical_fixture_scope", "historical_adapter_scope", "historical_source_admission", "load_closed_history_producer",
                 "validate_closed_history_producer", "prepare_historical_workspace", "install_closed_history_store"}
     module.body = [node for node in module.body
                    if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) or node.name not in adapters]
@@ -201,6 +201,21 @@ def historical_fixture_scope(source):
         if isinstance(node, ast.FunctionDef) and node.name == "validate_historical_helpers":
             node.body = [item for item in node.body if ast.dump(item, include_attributes=False)
                          != ast.dump(added_guard, include_attributes=False)]
+    return ast.dump(module, include_attributes=False)
+
+
+def historical_adapter_scope(source, kind):
+    """Only reviewed access-proof/report functions differ; producer stays exact."""
+    if kind == "workspace":
+        source = source.replace("'performance_mode': 'N/A — original historical-access VERIFY-ONLY'",
+                                "'performance_mode': 'verification-only', 'performance_description': 'original historical-access VERIFY-ONLY'")
+        adapters = {"access_graph_proof"}
+    elif kind == "receipts":
+        adapters = {"result_rows"}
+    else:
+        raise ValueError("unknown historical non-producer adapter scope")
+    module = ast.parse(source)
+    module.body = [node for node in module.body if not isinstance(node, ast.FunctionDef) or node.name not in adapters]
     return ast.dump(module, include_attributes=False)
 
 
@@ -218,7 +233,7 @@ def historical_source_admission(closed, attempt, current):
     if not previous or set(previous) != set(active):
         raise ValueError("closed producer complete source membership changed")
     prefix = "core/benchmark/fs-bench-pro/"
-    adapters = {prefix + "bench.py", prefix + "engine/fixtures.py", prefix + "engine/workspace.py"}
+    adapters = {prefix + "bench.py", prefix + "engine/fixtures.py", prefix + "engine/workspace.py", prefix + "engine/receipts.py"}
     changed = [path for path in previous if previous[path] != active[path]]
     if any(path not in adapters for path in changed):
         raise ValueError("closed producer execution/model/workload source changed")
@@ -229,15 +244,15 @@ def historical_source_admission(closed, attempt, current):
                                       cwd=identity.ROOT, timeout=15)
         if hashlib.sha256(old).hexdigest() != previous[path]:
             raise ValueError("closed producer original source blob seal differs")
-        new = (identity.ROOT / path).read_bytes()
+        new = subprocess.check_output(["git", "show", current["source_commit"] + ":" + path],
+                                      cwd=identity.ROOT, timeout=15)
         if hashlib.sha256(new).hexdigest() != active[path]:
             raise ValueError("closed producer current source blob seal differs")
         if path.endswith("/fixtures.py"):
             equal = historical_fixture_scope(old.decode()) == historical_fixture_scope(new.decode())
         else:
-            before = b"'performance_mode': 'N/A \xe2\x80\x94 original historical-access VERIFY-ONLY'"
-            after = b"'performance_mode': 'verification-only', 'performance_description': 'original historical-access VERIFY-ONLY'"
-            equal = old.replace(before, after) == new
+            kind = "workspace" if path.endswith("/workspace.py") else "receipts"
+            equal = historical_adapter_scope(old.decode(), kind) == historical_adapter_scope(new.decode(), kind)
         if not equal:
             raise ValueError("closed producer reviewed adapter-only source scope differs")
     return {"status": "PASS", "original_source_commit": closed["source_commit"],

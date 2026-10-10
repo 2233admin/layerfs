@@ -193,13 +193,17 @@ class HistoricalController(unittest.TestCase):
         called.assert_not_called()
 
     def test_closed_access_proof_binds_producer_header_selected_root_both_passes_and_immutable_census(self):
-        for fault in (None,'head','selected','bytes'):
-            with self.subTest(fault=fault),tempfile.TemporaryDirectory() as temporary:
-                root=Path(temporary);case=declared(3);prepared=prepared_case(case,root);graph=copy.deepcopy(prepared['closed_producer']['graph'])
+        for index,fault in [(index,fault) for index in (3,4,5) for fault in (None,'head','selected','bytes','extra')]:
+            with self.subTest(index=index,fault=fault),tempfile.TemporaryDirectory() as temporary:
+                root=Path(temporary);case=declared(index);prepared=prepared_case(case,root);graph=json.loads(json.dumps(prepared['closed_producer']['graph'],sort_keys=True))
                 selected=prepared['historical_selection'];source=graph['branches'][selected['source_role']];ack=selected['acknowledged_commit']
                 graph['branches']['access']={'branch_id':typed('11','access'),'name':'access-'+str(selected['local'])+'-'+case['id'],
                     'stack':source['stack'],'base_layer':source['base_layer'],'initial_parent':ack['commit_id'],'initial_root':ack['root_id'],
                     'final_head':ack['commit_id'],'final_root':ack['root_id'],'source_role':selected['source_role'],'source_local':selected['local'],'commits':[]}
+                if fault=='extra':
+                    extra=graph['branches'][fixtures.historical_plan(case)['graph_roles'][0]]
+                    graph['branches']['unexpected']={**extra,'branch_id':typed('11','unexpected'),'name':'unexpected','commits':[],
+                                                       'final_head':extra['initial_parent'],'final_root':extra['initial_root']}
                 events=[];data=b'x'*case['historical_access']['reads'][0]['bytes'];payload=data.hex();sha=hashlib.sha256(data).hexdigest()
                 for target in case['historical_access']['reads']:
                     events.append({'event':'access_expected_read','fields':{'path':target['path'],'bytes':target['bytes'],'sha256':sha,'payload_hex':payload}})
@@ -238,16 +242,25 @@ class HistoricalController(unittest.TestCase):
                     out.parent.mkdir();out.write_bytes(b'mocked normalized standalone, no SQLite')
                     receipt=out.parent/'normalization.json';receipt.write_text('{}')
                     return {'path':str(out),'receipt':str(receipt),'receipt_sha256':workspace.identity.sha256(receipt)}
+                def typed_census(store,tuples,provider,custody):
+                    initial=graph['branches'][fixtures.historical_plan(case)['graph_roles'][0]]
+                    provider={**provider,'stack_id':source['stack'],'base_layer_id':source['base_layer'],
+                              'initial_root':initial['initial_root'],'branch_id':initial['branch_id'],
+                              'final_head_commit_id':initial['final_head'],'final_head_root':initial['final_root'],
+                              'topology_acknowledgements':len(tuples),'topology_distinct_commits':len({item['commit_id'] for item in tuples}),
+                              'topology_branches':len(graph['branches'])}
+                    oracle._topology_transcript(custody['transcript'],tuples,provider)
+                    return {'status':'PASS'}
                 with patch.object(workspace.receipts,'command',side_effect=command),patch.object(workspace.oracle,'prepare_closed_store',side_effect=normalize),\
-                     patch.object(workspace.oracle,'graph_commit_census',return_value={'status':'PASS'}) as census:
+                     patch.object(workspace.oracle,'graph_commit_census',side_effect=typed_census) as census:
                     if fault:
                         with self.assertRaises(ValueError):workspace.access_graph_proof(case,prepared,graph,runtime,row,build,root,commands,time.monotonic()+5)
                         census.assert_not_called()
                     else:
                         result=workspace.access_graph_proof(case,prepared,graph,runtime,row,build,root,commands,time.monotonic()+5)
-                        self.assertEqual(result['read_passes']['full_read_bytes'],8192);census.assert_called_once()
+                        self.assertEqual(result['read_passes']['full_read_bytes'],2*sum(item['bytes'] for item in case['historical_access']['reads']));census.assert_called_once()
                         args=census.call_args.args;self.assertEqual(len(args),4)
-                        self.assertEqual(len(args[1]),100);self.assertTrue(str(args[0]).endswith('/census-store/store.sqlite'))
+                        self.assertEqual(len(args[1]),fixtures.historical_plan(case)['acknowledgements']);self.assertTrue(str(args[0]).endswith('/census-store/store.sqlite'))
                         self.assertEqual(args[3]['custody'],'KNOWN_STOP')
                         self.assertNotEqual(str(args[0]),str(root/'typed-store/store.sqlite'))
 

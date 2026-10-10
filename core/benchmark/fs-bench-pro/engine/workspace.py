@@ -1281,7 +1281,11 @@ def access_graph_proof(case, prepared, graph, runtime, row, build, output, comma
     selected = prepared['historical_selection']
     producer = {'v016_case': prepared['closed_producer']['producer_case']}
     checkpoints = {'context_checkpoints': [{'role': selected['source_role'], 'index': selected['local'], 'manifest': selected['manifest']}]}
-    transcript = script(output, 'access-topology.tsv', context_transcript(producer, checkpoints, graph))
+    roles = [*fixtures.historical_plan(case)['graph_roles'], 'access']
+    if set(graph['branches']) != set(roles):
+        raise ValueError('access exact original producer and zero-ACK Branch membership required')
+    ordered = {'branches': {role: graph['branches'][role] for role in roles}}
+    transcript = script(output, 'access-topology.tsv', context_transcript(producer, checkpoints, ordered))
     argv = [build['binaries']['runtime']['path'], 'verify-access', '--socket', build['socket'], '--volume', row['clone']['volume'],
         '--daemon', build['binaries']['daemon']['path'], '--manifest', prepared['provision']['manifest'], '--sealed', str(typed),
         '--case', case['v016_case'], '--receipt', str(output / 'access.events.jsonl'), '--history-file', str(transcript),
