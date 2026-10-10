@@ -83,6 +83,7 @@ comparison or release-admission claim. Durable is
 
 | H-3 | Generic mounted pilot proofs and prospective SDK proofs | Reachable path walk omitted exhaustive inode-table membership from original canonical verifier | Runtime compared declared paths/bytes but never enumerated current inode table | `37ec6826b` | edit_oracle_complete_membership_accepts_exact_and_rejects_unreachable_or_missing_rows |
 | H-4 | Prospective B/C Commit eligibility | Zero source demands could credit own-written backing without independent pre-Commit coldness | Cache classifier checked source demand/lifetime but not own-written phase inputs | `98b6b7260` | test_zero_source_demands_cannot_credit_own_written_commit_input |
+| H-5 | Seven recorded pilot read-only B labels; future B/C rows | Scoped zero canonical-object demand was treated as full numerical cache qualification | Still-paid backing/metadata/SQLite pre-phase domains absent; terminal mincore and an object-demand interval ending before unmount cannot establish them | This commit (prospective only) | test_zero_object_demands_do_not_qualify_unobserved_paid_phase_inputs; test_each_phase_proof_rejects_late_unknown_wrong_identity_or_warm_inputs |
 | H-2 | 36 batch-1 reviewed registrations | source_commit was an annotated tag object; parity accepted it and rejected the actual peeled commit | git rev-parse on an annotated reference returns the tag object unless peeled | `222526fa0` | test_review_identity.py rejects the tag through both parity routes, admits the peeled commit and checks every ported review |
 
 H-1 and H-2 are harness faults, not product correctness or performance defects.
@@ -1645,4 +1646,45 @@ coldness and INELIGIBLE; its authoring continues independently. Production LOC
 79,366 -> 79,366 (delta +0), pinned absent-aware staged method; reference absent
 retired R9c, last counted 65,417. Documents only, no tests or measurement replay.
 
-| This commit | Clarify full phase-cache qualification and preserve old scoped predicates | 79366 | 79366 | +0 |
+| `c9aaddf02` | Clarify full phase-cache qualification and preserve old scoped predicates | 79366 | 79366 | +0 |
+
+
+H-5 prospective fail-closed guard: cache.regime_status retains the original
+selected B/C predicate, while cache.validate additionally requires complete
+identity-bound observations before mount, command, Commit and unmount for
+still-paid OS backing, metadata and SQLite/reader scopes. Exact measured
+phase bindings and starts must match observations, clocks must be monotonic,
+observations strictly precede starts, all scopes must be complete, present
+Store/overlay identities checked, backing pages zero and metadata/reader states
+verified cold. Missing, mismatched, warm, late, partial or unknown evidence is
+INELIGIBLE. The original own-write pre-Commit guard remains independently
+required; no observer or measurement is fabricated to satisfy either guard.
+Current runners supply no such full evidence, so future B/C numeric rows fail
+closed while independent functional proof status is unchanged. No eviction,
+cache policy/workload/worker/limit change or product optimization is introduced.
+
+External regression fails on the before source with ELIGIBLE instead of
+INELIGIBLE for zero object demand plus only a terminal observation. Raw failed
+output is benchmark-results/fs-bench-pro/2026-10-10-phase-cache-guard-checks/
+before.stdout and before.stderr. Thirteen final owning workspace evidence/cache
+checks PASS 0.061 s under the 120 s lock; raw after.stdout/after.stderr retain
+all results. Positive synthetic evidence tests include all required phase
+bindings, so existing terminal cleanup/demand/lifetime and own-write checks are
+still meaningfully tested rather than masked by missing new fields. Every
+phase rejects late observation, wrong identity, positive/bool residency,
+unknown metadata/reader scope or incomplete paid inputs. Whitespace PASS.
+Original seven labels/receipts/CSVs remain unchanged and their full numerical
+qualification remains unverified, as the separate spec supplement records.
+No case replay. No product source change, no Clippy/CI claim. Production LOC
+79,366 -> 79,366 (delta +0), pinned staged absent-aware method; reference absent
+retired R9c, last counted 65,417.
+
+Additional audit scope: StoreWork.object_batches scalar ends at measured Status
+before timed unmount, not the complete timed boundary. The seven original
+mount-after-warm intervals report 27 foreground SQLite executions (31 for tiny
+stat 500), 10/11 canonical cache hits and zero object batches. Those instrumented
+counts remain paid observations, not disk/cache-miss/coldness proof. History
+snapshot reads are not canonical-object batches. This guard avoids using that
+scoped scalar as an all-phase cache certificate.
+
+| This commit | Require complete pre-phase cache evidence beyond B/C scoped predicates | 79366 | 79366 | +0 |

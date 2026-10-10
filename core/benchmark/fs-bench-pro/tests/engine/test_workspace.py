@@ -11,6 +11,19 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from engine import cache, receipts, workspace
 
 
+def phase_proof():
+    files = {"store": {"device": 1, "inode": 2}, "overlay": {"device": 1, "inode": 3}}
+    return {
+        "phase_input_boundaries": {phase: {"files": files, "started_monotonic_ns": 100 + index * 100}
+                                   for index, phase in enumerate(cache.PHASES)},
+        "phase_cache_observations": {phase: {"files": files, "identity_checked": True,
+            "all_paid_input_scopes_complete": True, "clock_id": "monotonic",
+            "observed_monotonic_ns": 99 + index * 100, "status": "VERIFIED_COLD",
+            "resident_pages": 0, "metadata_state": "VERIFIED_COLD",
+            "sqlite_reader_cache_state": "VERIFIED_COLD"} for index, phase in enumerate(cache.PHASES)},
+    }
+
+
 class WorkspaceEvidence(unittest.TestCase):
     def test_family_clone_failure_has_no_mount_or_completed_sample_credit(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -57,7 +70,7 @@ class WorkspaceEvidence(unittest.TestCase):
 
     def test_b_requires_original_terminal_cleanup_and_actual_zero_demands(self):
         good = dict(fresh_mount=True, warmup_terminal_unmount=True, warmup_cleanup="Gone",
-                    object_demands=0, has_own_write_input=False)
+                    object_demands=0, has_own_write_input=False, **phase_proof())
         self.assertEqual(cache.validate("B", good), "ELIGIBLE")
         for name in good:
             self.assertEqual(cache.validate("B", {key: value for key, value in good.items() if key != name}), "INELIGIBLE")
@@ -69,13 +82,35 @@ class WorkspaceEvidence(unittest.TestCase):
         self.assertEqual(cache.validate("A", {"resident_pages": False, "metadata_state": "VERIFIED_COLD"}), "INELIGIBLE")
         self.assertEqual(cache.validate("C", {"same_mount": True, "warm_interval_ns": 60_000_000_000}), "INELIGIBLE")
         self.assertEqual(cache.validate("C", {"same_mount": True, "warm_interval_ns": 59_999_999_999,
-                                               "has_own_write_input": False}), "ELIGIBLE")
+                                               "has_own_write_input": False, **phase_proof()}), "ELIGIBLE")
 
     def test_zero_source_demands_cannot_credit_own_written_commit_input(self):
         good = dict(fresh_mount=True, warmup_terminal_unmount=True, warmup_cleanup="Gone",
-                    object_demands=0, has_own_write_input=True)
+                    object_demands=0, has_own_write_input=True, **phase_proof())
         self.assertEqual(cache.validate("B", good), "INELIGIBLE")
         self.assertEqual(cache.validate("B", {**good, "own_write_cache_state": "UNAVAILABLE"}), "INELIGIBLE")
+
+    def test_zero_object_demands_do_not_qualify_unobserved_paid_phase_inputs(self):
+        evidence = dict(fresh_mount=True, warmup_terminal_unmount=True, warmup_cleanup="Gone",
+                        object_demands=0, has_own_write_input=False,
+                        residency={"status": "ELIGIBLE", "scope": "after_terminal_unmount"})
+        self.assertEqual(cache.validate("B", evidence), "INELIGIBLE")
+        self.assertEqual(cache.validate("C", {**evidence, "same_mount": True, "warm_interval_ns": 1}), "INELIGIBLE")
+
+    def test_each_phase_proof_rejects_late_unknown_wrong_identity_or_warm_inputs(self):
+        import copy
+        good = dict(fresh_mount=True, warmup_terminal_unmount=True, warmup_cleanup="Gone",
+                    object_demands=0, has_own_write_input=False, **phase_proof())
+        self.assertEqual(cache.regime_status("B", good), "ELIGIBLE")
+        for phase in cache.PHASES:
+            for changed in ({"observed_monotonic_ns": good["phase_input_boundaries"][phase]["started_monotonic_ns"]},
+                            {"files": {"store": {"inode": 99}, "overlay": {"inode": 3}}},
+                            {"resident_pages": 1}, {"resident_pages": False},
+                            {"metadata_state": "UNAVAILABLE"}, {"sqlite_reader_cache_state": "UNAVAILABLE"},
+                            {"all_paid_input_scopes_complete": False}):
+                broken = copy.deepcopy(good)
+                broken["phase_cache_observations"][phase].update(changed)
+                self.assertEqual(cache.validate("B", broken), "INELIGIBLE")
 
     def test_original_group_deadline_is_shared_and_never_extended_per_call(self):
         with patch.object(workspace.time, "monotonic", return_value=10.0):
