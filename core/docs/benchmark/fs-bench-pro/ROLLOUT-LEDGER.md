@@ -5739,3 +5739,82 @@ limit, workload, metadata/cache declaration and worker count remains.
 | This commit | Close footprint final6 and preserve3 newly failed cohorts | 79370 | 79370 | +0 |
 Pinned absent-aware staged counter/exact tree confirmation; reference absent,
 retiredR9c, last65,417/tree498dd1917812.
+
+
+### Batch 6 Workspace reuse closed with three proof failures, 2026-10-11
+
+All14 original definitions/native inputs/parity PASS at149d40bac. Each case
+ran once:11 complete native/two-root typed/unfiltered census/closed-overlay
+proofs PASS with Gone/KnownStop, numeric11INELIGIBLE. Their11 owned passing
+sample runtime/volume pairs were removed only after bound outer publication.
+All14 have native full final proofs, exact Committed ACKs and End/Gone/
+KnownStop, but three500MiB cases retain overall proofFAIL. Original45s
+verification work reserves4s for cleanup, leaving41s; hard publication59s
+and complete15s soft limits stay unchanged.
+
+| Original case | Overall | Paid wall ns | Proof wall ns | Limit | Cleanup/custody |
+| --- | --- | ---: | ---: | --- | --- |
+| dedup-workspace-exact-1-compact-v2 | INELIGIBLE | 179043875 | 2319880000 | WITHIN | Gone/KNOWN_STOP |
+| dedup-workspace-exact-10-compact-v2 | INELIGIBLE | 270424791 | 4927691417 | WITHIN | Gone/KNOWN_STOP |
+| dedup-workspace-exact-100 | INELIGIBLE | 1470377709 | 23438047375 | WITHIN | Gone/KNOWN_STOP |
+| dedup-workspace-exact-500 | FAIL | 6224156291 | 41726486875 | WITHIN | Gone/KNOWN_STOP |
+| dedup-workspace-local-1-compact-v2 | INELIGIBLE | 197112749 | 2322207625 | WITHIN | Gone/KNOWN_STOP |
+| dedup-workspace-local-10-compact-v2 | INELIGIBLE | 293211041 | 3874080000 | WITHIN | Gone/KNOWN_STOP |
+| dedup-workspace-local-100 | INELIGIBLE | 1424302334 | 24173288375 | WITHIN | Gone/KNOWN_STOP |
+| dedup-workspace-local-500 | FAIL | 6425610250 | 41449185416 | WITHIN | Gone/KNOWN_STOP |
+| dedup-workspace-unique-1-compact-v2 | INELIGIBLE | 180455416 | 2295179459 | WITHIN | Gone/KNOWN_STOP |
+| dedup-workspace-unique-10-compact-v2 | INELIGIBLE | 279597500 | 4459694333 | WITHIN | Gone/KNOWN_STOP |
+| dedup-workspace-unique-100 | INELIGIBLE | 1520899792 | 27411561792 | WITHIN | Gone/KNOWN_STOP |
+| dedup-workspace-unique-500 | FAIL | 17485507501 | 41296518709 | EXCEEDED | Gone/KNOWN_STOP |
+| dedup-workspace-unique-1-base128-v3 | INELIGIBLE | 197034625 | 18920740292 | WITHIN | Gone/KNOWN_STOP |
+| dedup-workspace-unique-10-base128-v3 | INELIGIBLE | 292386875 | 19439316583 | WITHIN | Gone/KNOWN_STOP |
+
+Exact500 proof41,726,486,875ns: native/typed/censusPASS; closed overlay
+copy had2.647179625s remaining and timed out after2.6547s, partial
+437,518,336B of533,868,544B logical source (802,308,096B source allocation).
+Local-edit500 proof41,449,185,416ns: native/typed/censusPASS; copy2.98999s
+remaining expired with484,343,808B of the same533,868,544B logical source.
+These partial exports are not passing cleanup/accounting proofs. Unique500
+paid17,485,507,501ns EXCEEDED15s; proof41,296,518,709ns fails during the
+final typed proof after its remaining16.38467775s allowance. Only
+observation_scope/selection events exist; no typed workspace_verified/
+finished/census result is inferred. Native full631paths/628files/
+658,505,728B proof and actual Committed/Gone/KnownStop remain independently
+PASS. Native/typed oracle source loops are finite over selected paths and
+positive file lengths, with no live SDK/daemon calls in the offline scan;
+no byte mismatch/crash/deadlock was observed, continuous typed scan progress
+is unobserved. No product speed fix, retry or limit extension is made.
+
+Actual raw source remains in the namespace worktree:
+/Users/yifanxu/.codex/worktrees/fs-bench-pro-namespace-mutation/layerfs/benchmark-results/fs-bench-pro/2026-10-11-batch-6-dedup-workspace-reuse-149d40bac/run/. Main imports the generated CSV bytes unchanged under
+149d40bac/dedup_workspace_reuse, preserving their exact source/evidence
+paths and every14 row/reference. PerformanceSHA
+0827851ae214bd83258553bdd4ecbab0f81b48914309933d834108c7b52046af,
+verificationSHAb3cd8c4c39576efca172accaf1fe240d299efc2954f82a6239eb7a3a4aae4221.
+Sealed family-handoff/handoff.jsonSHA
+a73a359ad040f6205daf4017fbc2130c820bf35150a9eca53a61c2ae52a90c0e
+and manifestbc45397462279cd461e61dd496457c85dec38d54157a6f68bdc1b72f7fc49268
+bind parity, each actual receipt/outer ACK/removal and source/count/storage
+scopes. Source total triples7014/78769/410013 in500 cases include separately
+scoped verifier/cumulative counters; they are not invented paid-only totals.
+CSV counts retain their exact registered phase scopes. Legacy exclusive
+physical spool/live/superseded/peak axes remain UNAVAILABLE under Decision62;
+actual shared source allocation/exported copies/current logical accounting
+are kept distinct. Shared-host/Docker interference remains unquantified.
+
+Retained failed known-stopped runtime/volume pairs:
+- exact500:4b2f6b3d79ad637230130a69189b7cf5e60214e99a2ad24753c05c44ae429368 / layerfs-fsb-sample-3f2acc020c5a4eff.
+- local500:729c33f7f50678dc7dd3ad9731d462febb3c76f4df47ca6c4408e7d007386ec1 / layerfs-fsb-sample-2aadabb2c4d24538.
+- unique500:ae7aff3221424892f2d2320879ceb6fef0ec0f04363fc72db61523d5fc65ca98 / layerfs-fsb-sample-793bb37e660d4118.
+Three immutable prepared master volumes remain during the rollout, named
+layerfs-fsb-master-dedup-workspace-reuse-b10dfc77fd9e4ac7,
+layerfs-fsb-master-dedup-workspace-reuse-20865dd3058040dd and
+layerfs-fsb-master-dedup-workspace-reuse-11adfd9c15b442b6.
+No new fixed bug or product change. New H28/H30/H31/H32/H33 fresh/footprint
+paths do not affect this completed149 reuse evidence; it is reused unchanged.
+
+| Commit | Purpose | Production before | after | delta |
+| --- | --- | --- | --- | --- |
+| This commit | Record all14 reuse outcomes and retained3 proof failures | 79370 | 79370 | +0 |
+Pinned absent-aware staged counter/exact tree confirmation; reference absent,
+retiredR9c, last65,417/tree498dd1917812.
