@@ -14,7 +14,7 @@ comparison or release-admission claim. Durable is
 | Stage | Status | Commits | Next step |
 | --- | --- | --- | --- |
 | Handoff specification | COMPLETE | `3c32fbc97` | Harvest released references |
-| 0.1 Released references | PENDING | — | Copy all source rows with provenance |
+| 0.1 Released references | COMPLETE | This commit | Stage 0.2 move-only organization |
 | 0.2 Move-only organization | PENDING | — | Map existing files and their owning tests |
 | 0.3 Case catalogue | PENDING | — | Inventory the frozen root registry and older-commit binding |
 | 0.4 Reproducible engine | PENDING | — | Read retained working scripts and rebuild preparation |
@@ -66,3 +66,8 @@ untracked `PROMPT-R8-R9-NEXT-AGENT-20261010.md` remain untouched.
 Specification correction commit: docs-only; source rows counted directly and
 whitespace checked. Production LOC 79,366 -> 79,366 (delta +0), same pinned
 absent-aware method. Handoff spec/README tree preserved at `3c32fbc97`.
+
+Stage 0.1: harvested 461 rows, preserving original fields and source hashes.
+Scoped reference tests run under the checkout lock with a 120 s wall stop.
+No benchmark invocation; no container/volume created. Harness/docs-only
+production LOC 79,366 -> 79,366 (delta +0), pinned absent-aware method.
