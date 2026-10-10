@@ -19,6 +19,8 @@ WORKSPACE_FAMILIES = ("payload_create_read", "tiny_file_churn", "namespace_mutat
                      "directory_construction_traversal", "git_tool_workflow", "local_snapshot",
                      "workspace_change_locality", "file_size_transition",
                      "dedup_branch_history", "mixed_load_bearing")
+RECIPE_HISTORY_SCHEMAS = ("original-v016-boundary-sequence-v1", "original-dedup-history-sequence-v1",
+                          "original-m1-commit-sequence-v1")
 
 
 def family_case(recipe):
@@ -321,6 +323,157 @@ def prepare_snapshot_fixture(case, folder, build):
     return fixture, expectation, native, history, None
 
 
+def history_verification_steps(case):
+    """Select only declared proof checkpoints; transcript census is separate."""
+    schedule = case["history_schedule"]
+    steps, count = schedule.get("verification_steps"), schedule.get("commits")
+    if (schedule.get("schema") not in RECIPE_HISTORY_SCHEMAS
+            or type(count) is not int or count < 1
+            or not isinstance(steps, list) or not steps
+            or any(type(step) is not int or not 0 <= step <= count for step in steps)
+            or steps != sorted(set(steps)) or steps[-1] != count):
+        raise ValueError("original history verification checkpoint selection differs")
+    if schedule["schema"] == "original-v016-boundary-sequence-v1" and steps != list(range(count + 1)):
+        raise ValueError("original boundary requires every retained state")
+    if schedule["schema"] == "original-dedup-history-sequence-v1" and steps[0] != 0:
+        raise ValueError("original dedup requires its declared initial checkpoint")
+    if schedule["schema"] == "original-m1-commit-sequence-v1" and any(step == 0 or step % 5 for step in steps):
+        raise ValueError("original M1 proof selects only declared cycle-end roots")
+    return steps
+
+
+def prepare_recipe_history(case, folder, build):
+    """Independent original native recipes at selected states, never all K+1."""
+    steps = history_verification_steps(case)
+    writer = build["binaries"]["workspace-writer"]
+    source, final = folder / "source", folder / "expected-native"
+    made = receipts.command([writer["path"], "fixture", case["v016_case"], str(source)],
+                            folder, "native-fixture", 120)
+    fixture = json.loads(Path(made["stdout"]).read_text())
+    manifests = folder / "history-manifests"
+    manifests.mkdir()
+    native, history, expectation = {}, [], None
+    def check(root, step):
+        checked = receipts.command([writer["path"], "verify-step", case["v016_case"], str(step), str(root)],
+                                   folder, f"original-state-{step}-check", 120)
+        record = json.loads(Path(checked["stdout"]).read_text())
+        if record.get("verification_status") != "pass" or record.get("case") != case["v016_case"]:
+            raise ValueError("independent original native history verification failed")
+        native[f"state-{step}"] = record
+    # Initial-tree qualification is untimed setup, not an extra M1 selected
+    # retained-root payload proof. The actual transcript still binds genesis.
+    check(source, 0)
+    for step in steps:
+        if step == 0:
+            root, summary = source, fixture
+            argv = [writer["path"], "fixture", case["v016_case"], str(source)]
+        else:
+            root = final if step == case["history_schedule"]["commits"] else folder / "native-states" / f"state-{step}"
+            root.parent.mkdir(parents=True, exist_ok=True)
+            argv = [writer["path"], "expected-step", case["v016_case"], str(step), str(root)]
+            authored = receipts.command(argv, folder, f"native-state-{step}", 120)
+            summary = json.loads(Path(authored["stdout"]).read_text())
+            if summary.get("step") != step:
+                raise ValueError("original native expected-state index differs")
+            if not case.get("m1_schedule"):
+                check(root, step)
+        original = root.with_suffix(".manifest.tsv")
+        digest = identity.sha256(original)
+        if (summary.get("case") != case["v016_case"] or summary.get("seed") != 1
+                or summary.get("fixture_digest") != digest):
+            raise ValueError("independent original history manifest identity differs")
+        manifest = manifests / f"state-{step}.tsv"
+        scope_recipe = None
+        if case.get("m1_schedule"):
+            scope_writer = build["binaries"]["edit-host"]
+            scope_argv = [scope_writer["path"], "m1-scope", case["v016_case"], str(step)]
+            scoped = receipts.command(scope_argv, folder, f"native-scope-{step}", 120)
+            scope = Path(scoped["stdout"])
+            if scope.read_text().splitlines()[0] != "original-m1-selective-scope-v1":
+                raise ValueError("original M1 selective scope header differs")
+            shutil.copy2(scope, manifest)
+            scope_recipe = {"binary_sha256": scope_writer["sha256"], "argv": scope_argv,
+                            "observations": "None; actual created modes are measured helper evidence"}
+        else:
+            shutil.copy2(original, manifest)
+        manifest_digest = identity.sha256(manifest)
+        record = {"index": step, "manifest": str(manifest), "manifest_sha256": digest,
+                  "staged_manifest": f"/code/history/manifests/state-{step}.tsv",
+                  "native_root": str(root), "summary": summary,
+                  "native_manifest": str(original), "native_manifest_sha256": digest,
+                  "logical_bytes": summary["logical_bytes"], "native_recipe": {
+                      "binary_sha256": writer["sha256"], "argv": argv,
+                      "source": "original frozen definition plus product-neutral committed expected-state adapter"},
+                  "scope_recipe": scope_recipe,
+                  "verification_scope": "original-m1-selective-scope-v1" if case.get("m1_schedule") else "complete-original-native-state",
+                  "materialization_metadata": "None created-mode observations; actual proof requires measured helper modes" if case.get("m1_schedule") else "original declared metadata"}
+        record["manifest_sha256"] = manifest_digest
+        history.append(record)
+        if step == case["history_schedule"]["commits"]:
+            expectation = summary
+    if expectation is None:
+        raise ValueError("original selected final expected-state absent")
+    receipts.write_new(folder / "history-native-recipes.json", {
+        "schema": "fs-bench-pro-original-history-native-recipes-v1", "case": case["v016_case"],
+        "verification_steps": steps, "states": history, "initial_tree_verified": True,
+        "performance_samples": 0,
+        "scope": "only declared native checkpoints; M1 materialization is not actual created-mode or automatic-metadata proof; every acknowledgement is checked separately"})
+    return fixture, expectation, native, history, None
+
+
+def prepare_sdk_payloads(case, folder, build):
+    """Original generators run outside measurement; operators read sealed bytes."""
+    if not case.get("ordinary_sdk_edits") or case.get("history_schedule", {}).get("schema") not in RECIPE_HISTORY_SCHEMAS:
+        return []
+    count = case["history_schedule"]["commits"]
+    if len(case["steps"]) != count:
+        raise ValueError("original ordered SDK operation schedule differs")
+    selected = list(range(1, count + 1))
+    if case.get("m1_schedule") or case.get("registry", {}).get("kind") == "namespace-inode":
+        selected = [step for step in selected if step % 5 == 2]
+    writer = build["binaries"]["edit-host"]
+    base = folder / "sdk-payloads"
+    base.mkdir()
+    records = []
+    for step in selected:
+        output = base / f"step-{step}"
+        argv = [writer["path"], "prepare-sdk-step", case["v016_case"], str(step), str(output)]
+        made = receipts.command(argv, folder, f"original-sdk-payloads-{step}", 120)
+        summary = json.loads(Path(made["stdout"]).read_text())
+        descriptor = output / "descriptor.tsv"
+        digest = identity.sha256(descriptor)
+        if (summary.get("case") != case["v016_case"] or summary.get("step") != step
+                or summary.get("descriptor_sha256") != digest):
+            raise ValueError("untimed original SDK descriptor identity differs")
+        rows = descriptor.read_text().splitlines()
+        if (len(rows) < 4 or rows[:3] != ["original-sdk-step-payloads-v1", "case\t" + case["v016_case"], f"step\t{step}"]
+                or rows[3] != f"members\t{summary['members']}" or len(rows[4:]) != summary["members"]):
+            raise ValueError("untimed original SDK descriptor cardinality differs")
+        payloads = {}
+        for index, row in enumerate(rows[4:], 1):
+            fields = row.split("\t")
+            name = f"member-{index}.bin"
+            if len(fields) != 12 or fields[0] != str(index) or fields[11] != name:
+                raise ValueError("untimed original SDK member binding differs")
+            payload = output / name
+            if payload.stat().st_size != int(fields[6]) or identity.sha256(payload) != fields[7]:
+                raise ValueError("untimed original SDK payload length/hash differs")
+            payloads[name] = {"sha256": fields[7], "bytes": int(fields[6])}
+        staged = f"/code/history/payloads/step-{step}/descriptor.tsv"
+        prepared_argv = ["/code/writers/edit", "apply-sdk-step-prepared", case["v016_case"], str(step), staged, digest]
+        original_run = case["steps"][step - 1]["run"]
+        script = f"history/steps/step-{step}.sh"
+        records.append({"index": step, "generator": {"argv": argv, "binary_sha256": writer["sha256"]},
+                        "descriptor": str(descriptor), "descriptor_sha256": digest, "payloads": payloads,
+                        "staged_descriptor": staged, "operator": "apply-sdk-step-prepared", "argv": prepared_argv,
+                        "member_argv": [prepared_argv + [str(member)] for member in range(1, summary["members"] + 1)],
+                        "original_run": original_run, "prepared_run": script,
+                        "scope": "untimed original sdk_step generation; timed descriptor/payload read and SHA overhead declared; original member order retained"})
+    receipts.write_new(folder / "sdk-payloads.json", {"schema": "fs-bench-pro-original-sdk-payloads-v1",
+                       "case": case["v016_case"], "steps": records, "performance_samples": 0})
+    return records
+
+
 def prepare_workspace(recipe, folder, build_folder):
     family, case = family_case(recipe)
     if family["family"] not in WORKSPACE_FAMILIES:
@@ -333,6 +486,8 @@ def prepare_workspace(recipe, folder, build_folder):
     history = None
     if case.get("history_schedule", {}).get("schema") == "original-ordinary-commit-sequence-v1":
         fixture, expectation, native, history, original_history = prepare_snapshot_fixture(case, folder, build)
+    elif case.get("history_schedule", {}).get("schema") in RECIPE_HISTORY_SCHEMAS:
+        fixture, expectation, native, history, original_history = prepare_recipe_history(case, folder, build)
     elif case.get("history_schedule"):
         fixture, expectation, native, history, original_history = prepare_ordered_fixture(case, folder, build)
     else:
@@ -358,11 +513,14 @@ def prepare_workspace(recipe, folder, build_folder):
         fixture, git_reference, git_native = prepare_git_fixture(case, folder, build)
         native.update(git_native)
     fixture.update(recipe=recipe, fixture_sha256=fixture["fixture_digest"])
+    sdk_steps = prepare_sdk_payloads(case, folder, build)
     helpers = assets(folder / "code")
     copies = [(Path(build["binaries"]["workload-linux"]["path"]), "writers/workload"),
               (identity.ROOT / "core/benchmark/fs-bench-pro/families" / family["family"] / "workload.sh", "workload.sh")]
     if case.get("sdk_scenario") or case.get("ordinary_sdk_edits") or history is not None:
         copies.append((Path(build["binaries"]["edit-linux"]["path"]), "writers/edit"))
+    if case.get("m1_schedule"):
+        copies.append((Path(build["binaries"]["workspace-linux"]["path"]), "writers/recipe"))
     for origin, relative in copies:
         target = Path(helpers["root"]) / relative
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -372,6 +530,21 @@ def prepare_workspace(recipe, folder, build_folder):
     if history is not None:
         base = Path(helpers["root"]) / "history"
         shutil.copytree(folder / "history-manifests", base / "manifests")
+        if (folder / "history-native-recipes.json").exists():
+            shutil.copy2(folder / "history-native-recipes.json", base / "native-recipes.json")
+        if sdk_steps:
+            shutil.copytree(folder / "sdk-payloads", base / "payloads")
+            shutil.copy2(folder / "sdk-payloads.json", base / "payloads.json")
+            (base / "steps").mkdir()
+            for record in sdk_steps:
+                parts = shlex.split(record["original_run"])
+                if not parts or Path(parts[0]).is_absolute() or ".." in Path(parts[0]).parts:
+                    raise ValueError("original staged workload path differs")
+                body = "#!/bin/bash\nset -euo pipefail\n"
+                body += "export SDK_STEP_DESCRIPTOR=" + shlex.quote(record["staged_descriptor"]) + "\n"
+                body += "export SDK_STEP_DESCRIPTOR_SHA256=" + shlex.quote(record["descriptor_sha256"]) + "\n"
+                body += "exec /bin/bash " + shlex.join(["/code/" + parts[0], *parts[1:]]) + "\n"
+                (Path(helpers["root"]) / record["prepared_run"]).write_text(body)
         for state in original_history["states"] if original_history is not None else ():
             shutil.copytree(state["input"], base / "checkpoints" / f"step-{state['index']}")
         for path in sorted(base.rglob("*")):
@@ -404,12 +577,15 @@ def prepare_workspace(recipe, folder, build_folder):
               "family": family["family"], "case": case["id"], "identity": current, "fixture": fixture,
               "expectation": expectation, "native_verification": native, "helpers": helpers,
               "history_states": history,
+              "sdk_steps": sdk_steps,
+              "prepared_step_runs": {str(record["index"]): record["prepared_run"] for record in sdk_steps},
               "git_reference": git_reference,
               "master_volume": volume, "provision": provisioned, "source_uid": source.stat().st_uid,
               "master_reuse": reuse,
               "source_gid": source.stat().st_gid, "global_profile": "Disposable/WAL/OFF",
               "overlay_profile": "MEMORY/OFF/EXCLUSIVE", "construction_workers": 1,
-              "setup": "native fixture and independent algebraic final state fully verified; public Init/seal/install once; sample uses independent closed byte clone",
+              "setup": ("initial native fixture independently verified; selected M1 native expectations materialized with None mode observations; actual scoped proof binds measured helper observations; public Init/seal/install once; independent sample byte clone"
+                        if case.get("m1_schedule") else "native fixture and independent algebraic selected states fully verified; public Init/seal/install once; sample uses independent closed byte clone"),
               "cache": "explicit setup source/Store warmth; class B additionally requires warm terminal cleanup and actual zero source demands"}
     receipts.write_new(folder / "prepared.json", result)
     receipts.manifest(folder)

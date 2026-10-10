@@ -258,11 +258,19 @@ fn apply_workspace(id: &str) -> reference::Result<()> {
 }
 
 fn apply_sdk_step(id: &str, step: usize, member: Option<usize>) -> reference::Result<()> {
+    apply_sdk_members(id, step, member, edit_model::sdk_step(id, step)?)
+}
+
+fn apply_sdk_members(
+    id: &str,
+    step: usize,
+    member: Option<usize>,
+    edits: Vec<edit_model::SdkSplice>,
+) -> reference::Result<()> {
     use reference::workspace_common::{self as common, EntryKind};
     if step == 0 {
         return Err("original SDK step is one-based".into());
     }
-    let edits = edit_model::sdk_step(id, step)?;
     if edits.is_empty() || member.is_some_and(|value| value == 0 || value > edits.len()) {
         return Err("original SDK step/member has no declared edit".into());
     }
@@ -312,6 +320,197 @@ fn apply_sdk_step(id: &str, step: usize, member: Option<usize>) -> reference::Re
     Ok(())
 }
 
+fn safe_relative(path: &str) -> bool {
+    !path.is_empty()
+        && !path.contains(['\0', '\\', '\t', '\r', '\n'])
+        && path.split('/').all(|part| !matches!(part, "" | "." | ".."))
+}
+
+fn read_prepared(path: &Path) -> reference::Result<Vec<u8>> {
+    let file = File::open(path)?;
+    let read = (|| -> reference::Result<Vec<u8>> {
+        let mut bytes = vec![0; usize::try_from(file.metadata()?.len())?];
+        let mut work = Progress::default();
+        read_exact_at(&file, &mut bytes, 0, &mut work)?;
+        eprintln!(
+            "prepared_artifact_read_calls={} prepared_artifact_read_bytes={}",
+            work.read_calls, work.read_bytes
+        );
+        Ok(bytes)
+    })();
+    let closed = checked_close(file);
+    match read {
+        Err(error) => {
+            if let Err(close_error) = closed {
+                eprintln!("independent_prepared_close_failure={close_error}");
+            }
+            Err(error)
+        }
+        Ok(bytes) => {
+            closed?;
+            Ok(bytes)
+        }
+    }
+}
+
+fn prepare_sdk_step(id: &str, step: usize, folder: &Path) -> reference::Result<()> {
+    use std::fmt::Write;
+    let edits = edit_model::sdk_step(id, step)?;
+    if edits.is_empty() {
+        return Err("original SDK step has no declared edit".into());
+    }
+    std::fs::create_dir(folder)?;
+    let mut descriptor = format!(
+        "original-sdk-step-payloads-v1\ncase\t{id}\nstep\t{step}\nmembers\t{}\n",
+        edits.len()
+    );
+    for (index, selected) in edits.iter().enumerate() {
+        if !safe_relative(&selected.edit.path) || selected.metadata.path != selected.edit.path {
+            return Err("original prepared SDK target path differs".into());
+        }
+        let filename = format!("member-{}.bin", index + 1);
+        std::fs::write(folder.join(&filename), &selected.edit.replacement)?;
+        writeln!(
+            &mut descriptor,
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{:o}\t{}\t{}\t{}",
+            index + 1,
+            selected.edit.path,
+            selected.edit.start,
+            selected.edit.delete_len,
+            selected.before_len,
+            selected.after_len,
+            selected.edit.replacement.len(),
+            sdk_edit_common::sha256_hex(&selected.edit.replacement),
+            selected.metadata.mode,
+            selected.metadata.mtime_seconds,
+            selected.metadata.mtime_nanoseconds,
+            filename
+        )?;
+    }
+    std::fs::write(folder.join("descriptor.tsv"), &descriptor)?;
+    let digest = sdk_edit_common::sha256_hex(descriptor.as_bytes());
+    println!("{{\"case\":\"{id}\",\"step\":{step},\"members\":{},\"descriptor_sha256\":\"{digest}\",\"scope\":\"untimed original sdk_step payload and target geometry\"}}", edits.len());
+    Ok(())
+}
+
+fn apply_prepared_sdk_step(
+    id: &str,
+    step: usize,
+    descriptor: &Path,
+    wanted_digest: &str,
+    member: Option<usize>,
+) -> reference::Result<()> {
+    use reference::workspace_common::{Content, Entry, SdkEdit};
+    let case = reference::workspace_registry::resolve(id)?;
+    let eligible = if edit_model::is_m1(id) {
+        let plan = reference::v016_stages::mixed_case(id)?.ok_or("original M1 case missing")?;
+        step > 0 && step <= plan.k && step % 5 == 2
+    } else if case.family == "file_size_transition" {
+        let plan = reference::file_size_transition::plan(id)?;
+        !plan.alias && step > 0 && step <= plan.commits
+    } else if case.family == "dedup_branch_history" {
+        step > 0
+            && step <= reference::workspace_registry::steps(&case)
+            && (reference::dedup_workloads::is_sdk(&case)
+                || (reference::v016_hn::is_hn(id) && step % 5 == 2))
+    } else {
+        false
+    };
+    if !eligible {
+        return Err("original prepared SDK case/step is not declared".into());
+    }
+    // This seal is generated outside the timer from the exact original model
+    // and embedded in the helper-sealed command. No recipe is regenerated here.
+    let bytes = read_prepared(descriptor)?;
+    if wanted_digest.len() != 64
+        || !wanted_digest
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+        || sdk_edit_common::sha256_hex(&bytes) != wanted_digest
+    {
+        return Err("original prepared SDK descriptor seal differs".into());
+    }
+    let text = std::str::from_utf8(&bytes)?;
+    let mut lines = text.lines();
+    if step == 0
+        || lines.next() != Some("original-sdk-step-payloads-v1")
+        || lines.next() != Some(format!("case\t{id}").as_str())
+        || lines.next() != Some(format!("step\t{step}").as_str())
+    {
+        return Err("original prepared SDK case/step/header differs".into());
+    }
+    let count = lines
+        .next()
+        .and_then(|row| row.strip_prefix("members\t"))
+        .ok_or("original prepared SDK member count missing")?
+        .parse::<usize>()?;
+    if count == 0 || member.is_some_and(|value| value == 0 || value > count) {
+        return Err("original prepared SDK member outside schedule".into());
+    }
+    let mut edits = Vec::new();
+    for (index, line) in lines.enumerate() {
+        let fields: Vec<_> = line.split('\t').collect();
+        if fields.len() != 12
+            || fields[0].parse::<usize>()? != index + 1
+            || !safe_relative(fields[1])
+            || fields[11] != format!("member-{}.bin", index + 1)
+        {
+            return Err("original prepared SDK row/path/member differs".into());
+        }
+        let start = fields[2].parse::<u64>()?;
+        let delete_len = fields[3].parse::<u64>()?;
+        let before_len = fields[4].parse::<u64>()?;
+        let after_len = fields[5].parse::<u64>()?;
+        let replacement_len = fields[6].parse::<u64>()?;
+        let mode = u32::from_str_radix(fields[8], 8)?;
+        let seconds = fields[9].parse::<i64>()?;
+        let nanos = fields[10].parse::<u32>()?;
+        if mode & !0o7777 != 0
+            || nanos >= 1_000_000_000
+            || start
+                .checked_add(delete_len)
+                .is_none_or(|end| end > before_len)
+            || before_len
+                .checked_sub(delete_len)
+                .and_then(|len| len.checked_add(replacement_len))
+                != Some(after_len)
+        {
+            return Err("original prepared SDK geometry/metadata differs".into());
+        }
+        let replacement = read_prepared(
+            descriptor
+                .parent()
+                .ok_or("SDK descriptor parent absent")?
+                .join(fields[11])
+                .as_path(),
+        )?;
+        if replacement.len() as u64 != replacement_len
+            || sdk_edit_common::sha256_hex(&replacement) != fields[7]
+        {
+            return Err("original prepared SDK payload length/hash differs".into());
+        }
+        let mut metadata = Entry::file(fields[1], Content::Zero { len: before_len });
+        metadata.mode = mode;
+        metadata.mtime_seconds = seconds;
+        metadata.mtime_nanoseconds = nanos;
+        edits.push(edit_model::SdkSplice {
+            edit: SdkEdit {
+                path: fields[1].to_owned(),
+                start,
+                delete_len,
+                replacement,
+            },
+            before_len,
+            after_len,
+            metadata,
+        });
+    }
+    if edits.len() != count {
+        return Err("original prepared SDK member cardinality differs".into());
+    }
+    apply_sdk_members(id, step, member, edits)
+}
+
 fn main() -> reference::Result<()> {
     let args: Vec<String> = std::env::args().collect();
     match args.as_slice() {
@@ -320,6 +519,20 @@ fn main() -> reference::Result<()> {
         [_, mode, id, step] if mode == "apply-sdk-step" => apply_sdk_step(id, step.parse()?, None),
         [_, mode, id, step, member] if mode == "apply-sdk-step" => {
             apply_sdk_step(id, step.parse()?, Some(member.parse()?))
+        }
+        [_, mode, id, step, folder] if mode == "prepare-sdk-step" => {
+            prepare_sdk_step(id, step.parse()?, Path::new(folder))
+        }
+        [_, mode, id, step, descriptor, digest] if mode == "apply-sdk-step-prepared" => {
+            apply_prepared_sdk_step(id, step.parse()?, Path::new(descriptor), digest, None)
+        }
+        [_, mode, id, step, descriptor, digest, member] if mode == "apply-sdk-step-prepared" => {
+            apply_prepared_sdk_step(id, step.parse()?, Path::new(descriptor), digest, Some(member.parse()?))
+        }
+        [_, mode, id, step] if mode == "m1-scope" => {
+            let state = edit_model::m1_state(id, step.parse()?, None)?;
+            print!("{}", edit_model::m1_scope_tsv(&state)?);
+            Ok(())
         }
         [_, mode, manifest] if mode == "verify-manifest" => {
             let entries =
@@ -341,6 +554,6 @@ fn main() -> reference::Result<()> {
             }
             Ok(())
         }
-        _ => Err("apply CASE | apply-workspace CASE | apply-sdk-step CASE STEP [MEMBER] | verify CASE STEP | verify-manifest MANIFEST required".into()),
+        _ => Err("apply CASE | apply-workspace CASE | apply-sdk-step CASE STEP [MEMBER] | prepare-sdk-step CASE STEP FRESH_FOLDER | apply-sdk-step-prepared CASE STEP DESCRIPTOR SHA256 [MEMBER] | verify CASE STEP | verify-manifest MANIFEST required".into()),
     }
 }

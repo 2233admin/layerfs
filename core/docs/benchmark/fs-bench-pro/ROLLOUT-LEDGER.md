@@ -2523,4 +2523,40 @@ remainunrun untilcomposed support; no product source or resources changed.
 | `96d472294` (worker) | Register all10 original mixed cases and exact fixtures | 79366 | 79366 | +0 |
 | `319fad349` (worker) | Use approved original history checkpoints/census schema | 79366 | 79366 | +0 |
 | `13f413bee` (worker) | Preserve helper-first two-member prepared P3 order | 79366 | 79366 | +0 |
-| This commit | Integrate original mixed load-bearing family | 79366 | 79366 | +0 |
+| `4762b720c` | Integrate original mixed load-bearing family | 79366 | 79366 | +0 |
+
+
+Batch4 selective native preparation and original untimed P3 payload support
+integrates Tiny7f381e27c/f439855d7/5a7dac7a6/9a434a6f5/a05b850dd.
+Only declaredverification_steps have native expected trees/manifests; every
+actualCommit remains in the separate transcript. M1 selected manifest is the
+original8-column selective shadow scope, while full digest/None-created-mode
+materialization is explicitly setup-only native recipe evidence. No501copies
+or extra all-state payload claim. SDK generators run untimed; descriptor/member
+bytes and SHA seals are staged, and measured wrappers read/hash-check the
+originals without regenerating recipes. Each wrapper retains originalrun,
+operator/member order, descriptor/hash and helper stdout. Successful positional
+artifact reads advance by bytes; error/zero/checked-close failure stops, without
+convenience EINTR retry. Linux native recipe stages aswriters/recipe, matching
+original family fallback and exact sealedworkspace-linux asset.
+
+Authoring corrections: the initial staged asset namewriters/workspace did not
+match the family recipe fallback; affected worker test failed with missing
+writers/recipe before9a, thenPASS0.080s. The unexecuted M1 prepared test initially
+omitted the original14POSIX stage2 edits; source review corrected it ata05b to
+call unchanged nativehelper before both preparedmembers, retaining strict
+selective verifier. These are harness/test authoring corrections, no product
+bug or failed measuredcase. Native prepared writer compiled at composed final
+source first with1.85.1/ARM64;3newcovering tests PASS3.072s. Existing unaffected
+native writer evidence remains;12owning fixture checks PASS0.157s, allunder
+explicit120s/mainlock. Raw direct-source authoring binary/hash qualification
+benchmark-results/fs-bench-pro/2026-10-10-batch-4-prepared-support-root; no clean
+full-build seal, actualprepare/parity/sample/Store execution or Dockerresource
+claim. Final full sealed Linux/host build waits runtime/controller composition.
+
+| `7f381e27c` (worker) | Untimed sealed original payload generator and measured prepared operator | 79366 | 79366 | +0 |
+| `f439855d7` (worker) | Positional no-retry artifact read and checked close | 79366 | 79366 | +0 |
+| `5a7dac7a6` (worker) | Original selective checkpoint/payload preparation | 79366 | 79366 | +0 |
+| `9a434a6f5` (worker) | Correct native M1 staged recipe path | 79366 | 79366 | +0 |
+| `a05b850dd` (worker) | Include original14POSIX edits before test's two P3 members | 79366 | 79366 | +0 |
+| This commit | Integrate selective preparations and qualify original prepared splice support | 79366 | 79366 | +0 |
