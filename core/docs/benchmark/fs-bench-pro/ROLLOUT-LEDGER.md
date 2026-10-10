@@ -107,6 +107,8 @@ comparison or release-admission claim. Durable is
 | H-16 | Aggregate formatting during Disposable startup product verification | cargo fmt cannot resolve two daemon example/test digest modules | Stage0.2 missed the two old fs-bench-pro-storage-content import paths | `9dfb70ee4`, path-only example/test correction | Owning example/test no-run PASS16.27s; existingseven startup/digest receipt tests PASS0.10s; aggregatefmtPASS |
 | H-17 (frozen workload/oracle) | Mixed M1 100 MB K10 at fa70bbb01 | Fresh-mount verifier rejects d000/f00054 mtime after ten successful commands and Commit ACKs | Frozen atomic save sets stage4 mtime before writing the temporary; writing updates it, while the original shadow retains stage4 mtime | No product or frozen-source change; strict failure retained | Exact original source/scope seals plus retained stat and bounded native sequence confirm correct POSIX write/rename behavior |
 | H-18 (watchdog failure) | Dedup distributed500 at e308118a9 | Unchanged 120 s outer stop expires after 377 acknowledged Commits; no complete receipt/proof/End/Stop | The finite original 500-step schedule does not finish within the bounded attempt; ongoing progress observed, no source-backed deadlock or wrong result identified | No retry, optimization or timeout change; partial attempt stays FAIL with uncertain custody | Administrative external-supervisor closure binds original selection, invocation exit, runtime stream and clone; complete metrics remain unavailable |
+| H-19 (harness) | Batch5 explicit parity-build CLI authoring | Branch/multi CLI rejected before parity despite implemented context setup/controller | Their two original family names were omitted from the CLI workspace allowlist | `821624cb3` | External CLI wiring red retained; final legacy/no-build and branch/explicit-build check PASS; no actual case |
+| H-20 (harness) | Fresh empty preparation for P1 at9da25b495 | Copied native oracle crashes importing /code/engine/oracle.py, before Store Init or SDK test | Module-level repository-root parents4 resolution assumes deep host checkout | This commit | External shallow-copy import red; final copied CLI and pinned host census/legacy oracle scope PASS; failed prep/resources retained |
 
 H-1 and H-2 are harness faults, not product correctness or performance defects.
 The original file-identity checker remains intact; no product source changed.
@@ -4266,7 +4268,7 @@ benchmark-results/fs-bench-pro/2026-10-11-batch-5-historical-controller-authorin
 SHA-2561db22049ca16613b74b3702ba7428f7cbb30b7530ba2c14405913025a42d7334.
 
 | `d4a665f0e` (worker final) | Author verification-only historical access controller; exact final owning checks | 79370 | 79370 | +0 |
-| This commit | Integrate exact verification-only historical access controller | 79370 | 79370 | +0 |
+| `db0f6bbc0` | Integrate exact verification-only historical access controller | 79370 | 79370 | +0 |
 
 
 ### Batch 5 source-aware prepared batch-five parity, 2026-10-11
@@ -4294,4 +4296,45 @@ Root's prior821624cb3 CLI wiring supplies explicit --build and the two original
 context family names; all17 batch5 source definitions are now connected.
 
 | `4661ff5e8` (worker final) | Author source-aware prepared batch-five parity; exact final owning checks | 79370 | 79370 | +0 |
-| This commit | Integrate exact source-aware prepared batch-five parity | 79370 | 79370 | +0 |
+| `9da25b495` | Integrate exact source-aware prepared batch-five parity | 79370 | 79370 | +0 |
+
+
+### Batch 5 full nine-asset seal and copied native oracle fix, 2026-10-11
+
+Full nine-asset build at clean9da25b495 passed, raw folder
+benchmark-results/fs-bench-pro/2026-10-11-batch-5-nine-asset-build-9da25b495.
+Build metadata SHA-25678ce9959b9f2528e0bd570ceb2429336cdc9d86f664e5663de6800127bb9b6f5;
+product remains9ac88edb2cc44d44edd4a53f9ad89f4dee063a58. Host release
+9,556,211,958 ns and Linux27,805,955,042 ns; allcompiler commands had120 s
+stops, outer serialized build240 s. Pinned image sha256:378b799ef43343fc64008b6a5ef456dd6bf0cb8f6ea4cec72e7b42dfc17d2cd6 verified.
+Every one of1322 selected host source hashes matched inside the Linux build
+container before and after compilation; before/after clean identities match.
+The exact two unchanged OWNER3 passthrough refusals remain FAIL evidence; no
+aggregate checker PASS is claimed. Owned passing build container removed.
+Runtime89ea95a478632726bdc32a342f998f3a9e092e5109eb2061ecba628f8bdf5008;
+daemon unchangedaa9de24f0ba916c0ac483f8e559d9d6986dfe4296f4d26a829801a1cb7e4ffd4.
+All nine immutable archive hashes are in build.json. No product feature changed.
+
+Fresh empty input preparation failed at its copied native oracle import before
+Project Init or any P1 SDK attempt. Under /code/engine/oracle.py there are
+only three parent levels; eager parents4 raisedIndexError. The generic host
+SQL census's root resolver had unintentionally become a native CLI import
+dependency. Retain the whole failed preparation
+benchmark-results/fs-bench-pro/2026-10-11-batch-5-public-sdk-empty-9da25b495,
+failed stopped native container2529d3183a36b0bd2aa44c3d705738c91513d1fc7be0c5011884ed535957a050
+and created master volumelayerfs-fsb-master-empty-95af702904c04049. No master
+Store/provision success, actual SDK sample, native pending cell result or
+cleanup is inferred. P1 actual attempt remains0.
+
+External shallow-copy import regression fails at parent source; host schema
+pin check passes there. The minimal harness fix allows the native module to
+import without a host root. SQL census still requires authoritative repository
+sources and rejects their absence before opening SQLite; all schema/source
+pins/profile/provider/EOF checks remain. Final copied-import/current-schema/
+topology/legacy oracle scope passed under120 s. Raw red/green receipt tree:
+benchmark-results/fs-bench-pro/2026-10-11-oracle-container-import-regression.
+No product, workload, budget, fixture, checker or receipt was weakened. This
+Python-only source change preserves every compiled input of the qualified
+full build, so reuse that exact seal and prepare a new identity once.
+
+| This commit | Fix copied native oracle import; retain H20 failed setup and full build evidence | 79370 | 79370 | +0 |

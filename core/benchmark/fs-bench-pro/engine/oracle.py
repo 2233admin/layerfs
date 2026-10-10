@@ -14,7 +14,8 @@ import subprocess
 import sys
 import time
 
-ROOT = Path(__file__).resolve().parents[4]
+_SOURCE_PARENTS = Path(__file__).resolve().parents
+ROOT = _SOURCE_PARENTS[4] if len(_SOURCE_PARENTS) > 4 else None
 CENSUS_SQL = 'SELECT commit_id,layer_stack_id,root_id,parent_commit_id,base_layer_id FROM "commit" ORDER BY commit_id'
 DEFINITION_SQL = "SELECT type,name,sql FROM sqlite_schema WHERE substr(name,1,7)!='sqlite_' ORDER BY type,name"
 CENSUS_COLUMNS = ("commit_id", "layer_stack_id", "root_id", "parent_commit_id", "base_layer_id")
@@ -70,6 +71,8 @@ def _sealed_identity(path):
 def _schema_source(version):
     if type(version) is not int or version not in range(1, 7):
         raise ValueError("census unsupported current SQLite schema version")
+    if ROOT is None:
+        raise ValueError("census authoritative repository schema sources unavailable")
     scripts = {}
     for relative, digest in SCHEMA_PINS.items():
         path = ROOT / relative
