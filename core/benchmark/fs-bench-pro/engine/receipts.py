@@ -81,7 +81,8 @@ def write_new(path, value):
     path.chmod(0o600)
 
 
-def command(argv, folder, label, seconds, *, cwd=ROOT, environment=None, allow_failure=False):
+def command(argv, folder, label, seconds, *, cwd=ROOT, environment=None, allow_failure=False,
+            host_rss_limit_bytes=None, host_swap_guard=False):
     """One attempted child; retain streams and host-only timeout custody.
 
     A host fence proves no Docker cancellation, container stop or unmount.
@@ -97,14 +98,66 @@ def command(argv, folder, label, seconds, *, cwd=ROOT, environment=None, allow_f
     child = None
     original = None
     started = time.monotonic_ns()
+    if host_rss_limit_bytes is not None:
+        if type(host_rss_limit_bytes) is not int or host_rss_limit_bytes <= 0:
+            raise ValueError("explicit positive original host RSS guard required")
+        record["host_rss"] = {"limit_bytes": host_rss_limit_bytes, "samples": [],
+            "nominal_interval_ns": 10_000_000, "scope": "actual current child-process RSS; no descendant or lifetime-peak substitution"}
+    if host_swap_guard:
+        record["host_swaps"] = {"before": None, "after_known_wait": None,
+            "known_child_wait": False, "status": "UNAVAILABLE", "launch_status": "NOT_LAUNCHED",
+            "scope": "actual RUSAGE_CHILDREN of invoking host harness: all reaped children, including requested native command and observer/other waited harness children; not native-specific per-PID swaps",
+            "condition": "actual before ru_nswap=0 and after known child wait ru_nswap=0; no subtraction or inferred zero"}
     try:
+        if type(host_swap_guard) is not bool:
+            raise ValueError("explicit boolean host swap guard required")
+        if host_swap_guard:
+            before = _host_children_usage()
+            record["host_swaps"]["before"] = before
+            if type(before.get("ru_nswap")) is not int or before["ru_nswap"] < 0:
+                raise ValueError("actual host children swap baseline unavailable")
+            if before["ru_nswap"] != 0:
+                record["host_swaps"]["status"] = "FAIL"
+                raise RuntimeError("actual host children swap baseline is nonzero")
         with Path(record["stdout"]).open("xb") as stdout, Path(record["stderr"]).open("xb") as stderr:
             child = subprocess.Popen(record["argv"], cwd=cwd, env=environment,
                                      stdin=subprocess.DEVNULL, stdout=stdout, stderr=stderr,
                                      start_new_session=True)
+            if host_swap_guard:
+                record["host_swaps"]["launch_status"] = "LAUNCHED"
             write_new(folder / (label + ".host-custody.json"), {"host_pid": child.pid,
                       "host_group": child.pid, "remote_cancellation": "NOT_ESTABLISHED"})
-            record["exit_code"] = child.wait(timeout=seconds)
+            if host_rss_limit_bytes is None:
+                record["exit_code"] = child.wait(timeout=seconds)
+            else:
+                stop = started / 1e9 + seconds
+                while child.poll() is None:
+                    left = stop - time.monotonic()
+                    if left <= 0:
+                        raise subprocess.TimeoutExpired(record["argv"], seconds)
+                    observed = subprocess.run(["/bin/ps", "-o", "rss=", "-p", str(child.pid)],
+                        capture_output=True, text=True, timeout=min(.25, left), check=False)
+                    body = observed.stdout.strip()
+                    if body:
+                        if observed.returncode != 0 or not body.isdecimal():
+                            raise ValueError("original current host RSS observation unavailable")
+                        rss = int(body) * 1024
+                        record["host_rss"]["samples"].append({"elapsed_ns": time.monotonic_ns()-started, "rss_bytes": rss})
+                        if rss > host_rss_limit_bytes:
+                            raise RuntimeError("original host RSS exceeds2GiB guard")
+                    elif child.poll() is None:
+                        raise ValueError("original live host RSS observation missing")
+                    left = stop - time.monotonic()
+                    if left <= 0 and child.poll() is None:
+                        raise subprocess.TimeoutExpired(record["argv"], seconds)
+                    if child.poll() is None:
+                        try:
+                            child.wait(timeout=min(.01, left))
+                        except subprocess.TimeoutExpired:
+                            pass
+                record["exit_code"] = child.returncode
+                if not record["host_rss"]["samples"]:
+                    raise ValueError("original host RSS guard has no current samples")
         record["status"] = "PASS" if record["exit_code"] == 0 else "FAIL"
     except BaseException as error:
         original = error
@@ -118,6 +171,33 @@ def command(argv, folder, label, seconds, *, cwd=ROOT, environment=None, allow_f
         except BaseException as fencing:
             record["independent_host_fence_failure"] = str(fencing)
     finally:
+        if host_swap_guard:
+            swaps = record["host_swaps"]
+            if child is not None and child.returncode is not None:
+                swaps["known_child_wait"] = True
+                try:
+                    after = _host_children_usage()
+                    swaps["after_known_wait"] = after
+                    if type(after.get("ru_nswap")) is not int or after["ru_nswap"] < 0:
+                        raise ValueError("actual host children swap result unavailable")
+                    if swaps["before"] is None:
+                        raise ValueError("actual host children swap baseline unavailable")
+                    if swaps["before"]["ru_nswap"] != 0 or after["ru_nswap"] != 0:
+                        swaps["status"] = "FAIL"
+                        raise RuntimeError("actual host children before/after swaps zero condition failed")
+                    swaps["status"] = "PASS_ZERO_BEFORE_AFTER"
+                except BaseException as swapping:
+                    swaps.update(failure_type=type(swapping).__name__, failure=str(swapping))
+                    record["status"] = "FAIL"
+                    if original is None:
+                        original = swapping
+                        record.update(original_failure_type=type(swapping).__name__, original_failure=str(swapping))
+                    else:
+                        record["independent_host_swap_failure"] = str(swapping)
+            else:
+                swaps["known_child_wait"] = False
+                swaps["after_known_wait"] = None
+                swaps["after_availability"] = "UNAVAILABLE: requested native child not launched or actual wait unknown; no inferred zero"
         record["complete_wall_ns"] = time.monotonic_ns() - started
         try:
             write_new(folder / (label + ".completion.json"), record)
@@ -130,7 +210,6 @@ def command(argv, folder, label, seconds, *, cwd=ROOT, environment=None, allow_f
     if record["status"] != "PASS" and not allow_failure:
         raise RuntimeError(f"{label} failed with exit {record['exit_code']}; see {folder}")
     return record
-
 
 def manifest(folder):
     folder = Path(folder)
@@ -521,6 +600,51 @@ def load_run(folder):
     return selection, recorded
 
 
+def resource_removal_identity(original):
+    """Keep the legacy identity exact; authenticate explicitly declared extras."""
+    names = ("family", "case", "source_commit", "product_tree", "image", "container", "clone")
+    canonical = lambda value: isinstance(value, str) and len(value) == 64 and all(
+        char in "0123456789abcdef" for char in value)
+    container = original.get("container")
+    volume = original.get("clone", {}).get("volume")
+    if not canonical(container) or not isinstance(volume, str) or not volume.startswith("layerfs-fsb-sample-"):
+        raise ValueError("exact owned sample resource identity required for removal")
+    if "additional_containers" in original:
+        additional = original["additional_containers"]
+        if (not isinstance(additional, list) or any(not canonical(value) for value in additional)
+                or len(set(additional)) != len(additional) or container in additional):
+            raise ValueError("exact distinct canonical additional owned container identity required")
+        names += ("additional_containers",)
+    return {name: original.get(name) for name in names}
+
+def resource_removal_custody(record, original):
+    """Validate exact ordered partial removal; no guessed retained/deleted state."""
+    additional = original.get("additional_containers", [])
+    states = [(record.get("container_custody"), "KNOWN_STOP_RETAINED")]
+    if "additional_containers" in original:
+        supplied = record.get("additional_container_custody")
+        if (record.get("additional_containers") != additional or not isinstance(supplied, dict)
+                or set(supplied) != set(additional)):
+            raise ValueError("administrative additional resource custody binding differs")
+        ordered = {value: supplied[value] for value in additional}
+        states.extend((value, "KNOWN_STOP_RETAINED") for value in ordered.values())
+    elif "additional_containers" in record or "additional_container_custody" in record:
+        raise ValueError("administrative additional resource custody binding differs")
+    states.append((record.get("volume_custody"), "RETAINED"))
+    blocked = False
+    for state, retained in states:
+        if state not in (retained, "REMOVED", "REMOVAL_ATTEMPT_UNCERTAIN"):
+            raise ValueError("administrative resource custody value differs")
+        if blocked and state != retained:
+            raise ValueError("administrative resource custody removal order differs")
+        blocked = blocked or state != "REMOVED"
+    if record.get("status") != ("FAIL" if blocked else "PASS"):
+        raise ValueError("administrative resource custody status differs")
+    summary = "container=" + record["container_custody"]
+    if "additional_containers" in original:
+        summary += "; additional=" + repr(ordered)
+    return summary + "; volume=" + record["volume_custody"]
+
 def resource_disposition(folder, row):
     """Read separately bound administrative custody without changing a verdict."""
     folder = Path(folder)
@@ -535,16 +659,33 @@ def resource_disposition(folder, row):
     original = json.loads((folder / "receipt.json").read_text())
     digest = lambda path: hashlib.sha256(path.read_bytes()).hexdigest()
     acknowledgement = folder / "publication-outer-acknowledgement.json"
-    names = ("family", "case", "source_commit", "product_tree", "image", "container", "clone")
+    expected_identity = resource_removal_identity(original)
     if (record.get("schema") != "fs-bench-pro-resource-removal-v1"
             or record.get("receipt_sha256") != digest(folder / "receipt.json")
             or record.get("manifest_sha256") != digest(folder / "manifest.json")
             or record.get("outer_ack_sha256") != (digest(acknowledgement) if original.get("publication_guard") else None)
-            or record.get("identity") != {name: original.get(name) for name in names}
+            or record.get("identity") != expected_identity
             or record.get("known_outer_return") is not True
             or record.get("container") != original.get("container")
             or record.get("volume") != original.get("clone", {}).get("volume")):
         raise ValueError("administrative resource removal original receipt/manifest/return binding differs")
+    attempt = json.loads((output / "attempt.json").read_text())
+    for name in ("schema", "receipt_sha256", "manifest_sha256", "outer_ack_sha256",
+                 "identity", "known_outer_return", "container", "volume", "scope"):
+        if attempt.get(name) != record.get(name):
+            raise ValueError("administrative resource removal attempt/completion binding differs")
+    if (attempt.get("container_custody") != "KNOWN_STOP_RETAINED"
+            or attempt.get("volume_custody") != "RETAINED"
+            or ("additional_containers" in original and (
+                attempt.get("additional_containers") != original["additional_containers"]
+                or attempt.get("additional_container_custody") != {
+                    value: "KNOWN_STOP_RETAINED" for value in original["additional_containers"]}))
+            or ("additional_containers" not in original and (
+                "additional_containers" in attempt or "additional_container_custody" in attempt))):
+        raise ValueError("administrative original resource attempt custody differs")
+    summary = resource_removal_custody(record, original)
+    if record.get("resource_disposition") != summary:
+        raise ValueError("administrative resource custody summary differs")
     return {**row, "administrative_removal_status": record["status"],
             "resource_disposition": record["resource_disposition"]}
 
@@ -574,3 +715,194 @@ def report(folder, destination=None):
             str(proof["proof_wall_ns"]) + " / " + str(proof["declared_limit_ns"]),
             row["cache_class"] + " / " + row["cleanup"], row["reference_timer"] + " / " + str(row["reference_ns"]))) + " |")
     return {"destination": str(destination), "table": "\n".join(lines), "cases": len(performance)}
+
+
+def _host_children_usage():
+    """All already reaped children of this harness; never per-PID or a peak."""
+    import resource
+    observed = resource.getrusage(resource.RUSAGE_CHILDREN)
+    return {'ru_nswap': int(observed.ru_nswap),
+            'user_cpu_ns': int(observed.ru_utime * 1_000_000_000),
+            'system_cpu_ns': int(observed.ru_stime * 1_000_000_000),
+            'input_block_operations': int(observed.ru_inblock),
+            'output_block_operations': int(observed.ru_oublock)}
+
+
+class HostProcessObserver:
+    """Bounded read-only current-PID RSS and conservative child-aggregate swaps.
+
+    No runtime signal, retry, remote cancellation, child-tree sum or peak substitute.
+    None selects swap-only observation without imposing an RSS cap or launching ps.
+    The caller owns the runtime wait; poll may observe/reap its known exit.
+    """
+    def __init__(self, process, folder, label, limit_bytes, nominal_interval=.01):
+        import threading
+        if (type(process.pid) is not int or process.pid <= 0
+                or type(label) is not str or not label or Path(label).name != label or label in ('.', '..')
+                or limit_bytes is not None and (type(limit_bytes) is not int or limit_bytes <= 0)
+                or type(nominal_interval) not in (int, float) or not math.isfinite(nominal_interval)
+                or nominal_interval <= 0):
+            raise ValueError('host observer requires actual owned PID, fresh label and explicit valid limit/interval')
+        self.process, self.pid = process, process.pid
+        self.folder, self.label = Path(folder), label
+        self.limit_bytes, self.nominal_interval = limit_bytes, nominal_interval
+        self.folder.mkdir(parents=True, exist_ok=True)
+        self.path = self.folder / (label + '.host-process.samples.jsonl')
+        self.completion_path = self.folder / (label + '.host-process.completion.json')
+        self._lock, self._stop = threading.Lock(), threading.Event()
+        self._thread = None
+        self._errors, self._samples = [], 0
+        self._last_sample_ns, self._max_gap_ns, self._max_rss = None, 0, None
+        self._finished = None
+        self._started_ns = time.monotonic_ns()
+        with self.path.open('x', encoding='utf-8'):
+            pass
+        self.path.chmod(0o600)
+        self._append({'event': 'declared', 'pid': self.pid, 'limit_bytes': limit_bytes,
+                      'nominal_interval_ns': int(nominal_interval * 1_000_000_000), 'ps_timeout_ns': 250_000_000,
+                      'rss_scope': 'actual owned native runtime PID current /bin/ps RSS only; no descendants or lifetime peak',
+                      'children_scope': 'RUSAGE_CHILDREN of invoking host harness: all reaped children, including requested runtime, observer ps and any other waited harness command children; not native-specific swaps',
+                      'swap_while_child_alive': 'UNAVAILABLE: RUSAGE_CHILDREN excludes the living requested child',
+                      'remote_cancellation': 'NOT_ESTABLISHED; observer sends no runtime/remote signals',
+                      'native_parent_rss': 'UNAVAILABLE: invoking Python parent is a separate unobserved scope'})
+        self._before = None
+        try:
+            self._before = _host_children_usage()
+            self._append({'event': 'children_before', 'usage': self._before})
+            if self._before['ru_nswap'] != 0:
+                self._fail('children aggregate before ru_nswap is nonzero')
+        except BaseException as error:
+            self._fail('children aggregate before unavailable: ' + type(error).__name__ + ': ' + str(error))
+        if self.limit_bytes is not None and not self._errors:
+            self._sample()
+            if not self._stop.is_set():
+                self._thread = threading.Thread(target=self._run, name='fsb-host-observer-' + label, daemon=True)
+                try:
+                    self._thread.start()
+                except BaseException as error:
+                    self._fail('RSS sampler start unavailable: ' + type(error).__name__ + ': ' + str(error))
+
+    def _append(self, value):
+        with self._lock:
+            row = {'schema': 'fs-bench-pro-host-process-observer-v1', 'elapsed_ns': time.monotonic_ns() - self._started_ns, **value}
+            with self.path.open('a', encoding='utf-8') as stream:
+                stream.write(json.dumps(row, sort_keys=True) + '\n')
+
+    def _fail(self, reason):
+        self._errors.append(reason)
+        self._stop.set()
+        self._append({'event': 'observation_error', 'reason': reason,
+                      'runtime_custody': 'retained; no runtime signal, guessed wait or cleanup'})
+
+    def _sample(self):
+        try:
+            if self.process.pid != self.pid:
+                raise ValueError('owned native runtime PID changed')
+            known = self.process.poll()
+            if known is not None:
+                self._append({'event': 'known_child_wait', 'returncode': known, 'method': 'owned Popen.poll waitpid result'})
+                self._stop.set()
+                return
+            observed = subprocess.run(['/bin/ps', '-o', 'rss=', '-p', str(self.pid)],
+                                      capture_output=True, text=True, timeout=.25, check=False)
+            body = observed.stdout.strip()
+            self._append({'event': 'ps_observation', 'returncode': observed.returncode,
+                          'stdout': observed.stdout, 'stderr': observed.stderr, 'pid': self.pid,
+                          'argv': ['/bin/ps', '-o', 'rss=', '-p', str(self.pid)]})
+            if observed.returncode != 0 or not body or not body.isascii() or not body.isdecimal():
+                known = self.process.poll()
+                if not body and known is not None:
+                    self._append({'event': 'known_child_wait', 'returncode': known,
+                                  'method': 'owned Popen.poll waitpid after absent exited-PID ps row'})
+                    self._stop.set()
+                    return
+                raise ValueError('actual live PID current RSS observation unavailable')
+            current = int(body) * 1024
+            now = time.monotonic_ns()
+            gap = now - self._last_sample_ns if self._last_sample_ns is not None else now - self._started_ns
+            self._last_sample_ns = now
+            self._max_gap_ns = max(self._max_gap_ns, gap)
+            self._max_rss = current if self._max_rss is None else max(self._max_rss, current)
+            self._samples += 1
+            self._append({'event': 'rss_sample', 'rss_bytes': current, 'sample_gap_ns': gap,
+                          'limit_bytes': self.limit_bytes, 'limit_status': 'FAIL' if current > self.limit_bytes else 'PASS',
+                          'precision': 'current PID point observation; maximum observed is not a phase or continuous peak'})
+            if current > self.limit_bytes:
+                self._fail('owned native runtime current RSS exceeds declared limit')
+        except BaseException as error:
+            self._append({'event': 'ps_or_poll_error', 'type': type(error).__name__, 'reason': str(error),
+                          'stdout': repr(getattr(error, 'stdout', None)), 'stderr': repr(getattr(error, 'stderr', None)),
+                          'pid': self.pid, 'runtime_custody': 'retained; no runtime signal or cleanup'})
+            self._fail('RSS observation unavailable: ' + type(error).__name__ + ': ' + str(error))
+
+    def _run(self):
+        try:
+            while not self._stop.wait(self.nominal_interval):
+                self._sample()
+        except BaseException as error:
+            self._fail('RSS sampler unavailable: ' + type(error).__name__ + ': ' + str(error))
+
+    def check(self):
+        """Operation-boundary guard; living-child swap knowledge remains pending."""
+        if self._errors:
+            raise RuntimeError('host process observer failed: ' + '; '.join(self._errors))
+        if self.limit_bytes is not None and not self._samples:
+            raise RuntimeError('host process observer current RSS samples unavailable')
+        return {'pid': self.pid, 'rss_samples': self._samples, 'rss_limit_bytes': self.limit_bytes,
+                'rss_status': 'PASS_CURRENT_OBSERVATIONS' if self.limit_bytes is not None else 'NOT_APPLICABLE_NO_CAP',
+                'swap_status': self._finished['swap_status'] if self._finished else 'UNAVAILABLE_UNTIL_KNOWN_CHILD_WAIT',
+                'maximum_observed_rss_bytes': self._max_rss, 'maximum_sample_gap_ns': self._max_gap_ns}
+
+    def finish(self):
+        """Stop sampling and join <=1s; require known child wait for swap proof."""
+        if self._finished is not None:
+            if self._finished['status'] != 'PASS':
+                raise RuntimeError('host process observer failed; retained ' + str(self.completion_path))
+            return self._finished
+        self._stop.set()
+        sampler_closed = True
+        if self._thread is not None:
+            try:
+                self._thread.join(timeout=1)
+                if self._thread.is_alive():
+                    sampler_closed = False
+                    self._fail('RSS sampler join unavailable after explicit1s bound; sampler custody retained')
+            except BaseException as error:
+                sampler_closed = False
+                self._fail('RSS sampler join unavailable: ' + type(error).__name__ + ': ' + str(error))
+        after, delta = None, None
+        known = self.process.returncode
+        if known is not None and sampler_closed:
+            try:
+                after = _host_children_usage()
+                if self._before is None or any(after[key] < self._before[key] for key in after):
+                    raise ValueError('children aggregate baseline/delta unavailable')
+                delta = {key: after[key] - self._before[key] for key in after}
+                if self._before['ru_nswap'] != 0 or after['ru_nswap'] != 0:
+                    self._fail('children aggregate before/after ru_nswap zero condition failed')
+            except BaseException as error:
+                self._fail('children aggregate after unavailable: ' + type(error).__name__ + ': ' + str(error))
+        else:
+            self._fail('owned child wait or sampler join unknown; final swaps/CPU/IO unavailable while runtime or observer child custody remains')
+        if self.limit_bytes is not None and not self._samples:
+            self._fail('current RSS observations unavailable; no zero or peak substituted')
+        record = {'schema': 'fs-bench-pro-host-process-completion-v1', 'status': 'FAIL' if self._errors else 'PASS',
+                  'pid': self.pid, 'known_child_wait': known is not None, 'sampler_join_known': sampler_closed, 'returncode': known,
+                  'rss_limit_bytes': self.limit_bytes, 'rss_samples': self._samples,
+                  'rss_status': 'NOT_APPLICABLE_NO_CAP' if self.limit_bytes is None else 'FAIL' if self._errors else 'PASS_CURRENT_OBSERVATIONS',
+                  'maximum_observed_rss_bytes': self._max_rss, 'maximum_sample_gap_ns': self._max_gap_ns,
+                  'terminal_gap_ns': time.monotonic_ns() - (self._last_sample_ns or self._started_ns),
+                  'rss_precision': 'sampled current PID only; gaps retained, no exact phase peak or continuous cap claimed',
+                  'children_before': self._before, 'children_after_known_wait': after, 'children_aggregate_delta': delta,
+                  'children_scope': 'all reaped children of invoking host harness, including runtime/observer/other waited commands; cumulative snapshots and interval aggregate CPU/IO deltas, never native-specific',
+                  'swap_status': 'UNAVAILABLE' if after is None or self._before is None else 'PASS_AGGREGATE_ZERO_BEFORE_AFTER' if self._before['ru_nswap'] == after['ru_nswap'] == 0 else 'FAIL',
+                  'io_units': 'ru_inblock/ru_oublock block operations, not bytes',
+                  'failures': list(self._errors), 'samples_path': str(self.path),
+                  'remote_cancellation': 'NOT_ESTABLISHED; no runtime/remote signals or cleanup',
+                  'complete_wall_ns': time.monotonic_ns() - self._started_ns}
+        write_new(self.completion_path, record)
+        self._finished = record
+        self._append({'event': 'observer_finished', 'status': record['status'], 'known_child_wait': known is not None})
+        if record['status'] != 'PASS':
+            raise RuntimeError('host process observer failed; retained ' + str(self.completion_path))
+        return record

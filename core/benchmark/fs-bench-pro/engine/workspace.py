@@ -21,6 +21,107 @@ BATCH4_HISTORY_SCHEMAS = frozenset(("original-v016-boundary-sequence-v1",
 BATCH4_FAMILIES = frozenset(("file_size_transition","dedup_branch_history","mixed_load_bearing"))
 
 
+def import_proof_deadlines(case, charged_ns=0):
+    budget = case["budget"]
+    reserve = budget.get("cleanup_reserve_ms", case.get("original_resource_guards", {}).get("verification_cleanup_reserve_ms", 4000))
+    if (budget["verifier_ms"], budget["verification_hard_watchdog_ms"], reserve, budget.get("publication_guard_ms", 250)) != (45000,59000,4000,250):
+        raise ValueError("original import work/cleanup/publication limits required")
+    if type(charged_ns) is not int or charged_ns < 0:
+        raise ValueError("nonnegative original charged proof wall required")
+    now = time.monotonic()-charged_ns/1e9
+    return {"work": now+41, "cleanup": now+45, "publication": now+59}
+
+
+def verify_import_mount(case, prepared, build, output, row, deadlines):
+    """Original post-import Fork and complete fresh-mounted native verifier."""
+    import shutil
+    def stop(limit=15, cleanup=False):
+        deadline = deadlines["cleanup" if cleanup else "work"]
+        return operation_deadline(deadline, limit)
+    def seconds(limit=15, cleanup=False):
+        return stop(limit, cleanup)-time.monotonic()
+    store, manifest = output/"store.sqlite", output/"project.manifest"
+    closed = {"sealed_store": str(store), "store_sha256": identity.sha256(store),
+              "manifest": str(manifest), "manifest_sha256": identity.sha256(manifest)}
+    volume, provision = fixtures.install_closed_history_store(closed, prepared, output/"verification-install", build,
+                                                              deadline=deadlines["work"], sample=True)
+    row["clone"] = {"volume": volume, "store_sha256": closed["store_sha256"],
+                    "clone_method": "byte-identical sealed import copied only after measured Init; verification-only"}
+    row["verification"]["installation"] = provision
+    helpers = fixtures.assets(output/"verification-code")
+    binary = Path(helpers["root"])/"writers/workload"
+    binary.parent.mkdir()
+    shutil.copy2(build["binaries"]["workload-linux"]["path"], binary)
+    binary.chmod(0o555)
+    helpers["files"]["writers/workload"] = identity.sha256(binary)
+    staged = {"helpers": helpers}
+    runtime = None
+    key = secrets.token_hex(32)
+    mounted = False
+    try:
+        argv = [build["binaries"]["runtime"]["path"], "serve", "--socket", build["socket"],
+                "--volume", volume, "--daemon", build["binaries"]["daemon"]["path"],
+                "--manifest", provision["manifest"], "--receipt", str(output/"runtime.events.jsonl"),
+                "--uid", str(prepared["source_uid"]), "--gid", str(prepared["source_gid"]),
+                "--observation-scope", secrets.token_hex(32)]
+        runtime = cell_runner.EventProcess(argv, output, "runtime")
+        runtime.event("protocol_ready", stop())
+        row["container"] = runtime.container
+        docker = ["docker", "--host", "unix://"+build["socket"]]
+        receipts.command([*docker,"update","--cpus","2","--memory","2147483648","--memory-swap","2147483648","--pids-limit","256",runtime.container],
+                         output,"import-verifier-profile",seconds())
+        inspected = receipts.command([*docker,"inspect",runtime.container,"--format","{{json .HostConfig}}"],
+                                     output,"import-verifier-profile-readback",seconds())
+        wanted = {"NanoCpus":2_000_000_000,"Memory":2_147_483_648,"MemorySwap":2_147_483_648,"PidsLimit":256}
+        actual = json.loads(Path(inspected["stdout"]).read_text())
+        if any(actual.get(name)!=value for name,value in wanted.items()):
+            raise ValueError("original independent verifier resource profile differs")
+        row["verification"]["container_profile"] = wanted
+        fixtures.stage(runtime.container, staged, output/"verification-staging", build, deadline=deadlines["work"])
+        before = ordinary_resource_guard(runtime,build,output,"import-verifier-resources-before",seconds=seconds())
+        identifier = "11"+secrets.token_hex(16)
+        request = script(output,"import-verifier-fork.tsv",f"layer\t{identifier}\tverify-import\n")
+        fork = runtime.send("fork","verify-import",request,deadline=stop())
+        if (fork["fields"].get("branch_id")!=identifier or fork["fields"].get("root")!=row["init"]["fields"]["root"]
+                or fork["fields"].get("head")!="-" or fork["fields"].get("stack")!=row["init"]["fields"]["stack"]):
+            raise ValueError("original verifier Fork differs from exact imported Layer")
+        row["verification"]["fork"] = fork
+        runtime.send("mount-branch",key,"verify-import",deadline=stop())
+        mounted = True
+        body = "/code/writers/workload workspace-verify-tree "+shlex.quote(case["v016_case"])+" 1 0"
+        verified = runtime.send("verify",key,script(output,"import-native-proof.sh",body),deadline=stop(45))
+        row["verification"]["native"] = verify_native_receipt(case,verified)
+        runtime.send("unmount",key,deadline=stop(cleanup=True))
+        mounted = False
+        row["verification"]["cleanup"] = readiness(runtime,key,seconds(5,True))
+        row["cleanup"] = "Gone"
+        row["verification"]["resources_after"] = ordinary_resource_guard(runtime,build,output,
+            "import-verifier-resources-after",before,seconds=seconds(cleanup=True))
+        runtime.send("observe",deadline=stop(cleanup=True))
+        observed = {}
+        cell_runner.snapshot_observations(runtime,observed)
+        row["verification"]["observations"] = observed
+        runtime.send("stop",deadline=stop(cleanup=True))
+        runtime.event("finished",stop(cleanup=True))
+        if runtime.process.wait(timeout=seconds(1,True))!=0:
+            raise ValueError("known independent verifier Stop exit differs")
+        row.update(custody="KNOWN_STOP",resource_removal_pending=True,
+                   resource_disposition="known stopped verification-only sample pair retained pending outer publication acknowledgement")
+        logs = receipts.command([*docker,"logs","--timestamps=false",runtime.container],output,"import-verifier-daemon-logs",seconds(cleanup=True))
+        row["verification"]["numeric_telemetry"] = {"stdout":logs["stdout"],"stderr":logs["stderr"],
+            "scope":"verifier-only original raw telemetry; host Init has no daemon counts; no verifier work credited as performance"}
+    except BaseException as error:
+        if runtime is not None:
+            row.update(container=runtime.container, retained_host_custody=runtime.retain(error),
+                       retained_mount_keys=[key] if mounted else [], resource_disposition="failed independent verifier resources retained; no inferred End/Stop")
+        raise
+    finally:
+        if runtime is not None:
+            for value in (runtime.selector,runtime.raw,runtime.stderr,getattr(runtime.process,"stdin",None),getattr(runtime.process,"stdout",None)):
+                if value is not None:
+                    value.close()
+
+
 def script(folder, name, body):
     path = Path(folder) / name
     with path.open("x") as stream:
@@ -297,8 +398,82 @@ def operation_deadline(group_stop, seconds):
     return stop
 
 
-def verify_native_receipt(case, verified):
+def storage_source_observations(runtime, build, output, seconds):
+    """Actual source stat before known Stop; copies never stand in for source."""
+    docker = ["docker", "--host", "unix://" + build["socket"]]
+    result = {}
+    for kind in ("store", "overlay"):
+        label = "closed-" + kind + "-source-stat"
+        command = receipts.command([*docker, "exec", "--user", "0:0", runtime.container,
+            "python3", "-B", "-c", oracle.storage_source_stat_body(kind)], output, label, seconds(15))
+        completion = Path(output) / (label + ".completion.json")
+        result[kind] = {"completion": str(completion), "completion_sha256": identity.sha256(completion),
+                        "stdout": command["stdout"], "stdout_sha256": identity.sha256(command["stdout"])}
+    return result
+
+
+def observe_family_closed_storage(runtime, row, build, output, census_store, custody, source_stats, seconds):
+    """Namespace cleanup and shared allocation after actual known terminal Stop."""
+    output = Path(output)
+    store = oracle.observe_closed_storage(census_store, {**custody, "source_stat": source_stats["store"]}, kind="store")
+    docker = ["docker", "--host", "unix://" + build["socket"]]
+    overlay_path = output / "closed-overlay.sqlite"
+    label = "closed-overlay-export"
+    receipts.command([*docker, "cp", runtime.container + ":/layerfs-local/overlay/overlay.sqlite",
+                      str(overlay_path)], output, label, seconds(15))
+    completion = output / (label + ".completion.json")
+    events = output / "runtime.events.jsonl"
+    owners = [{"key": event["fields"]["key"], "namespace": event["fields"]["workspace_namespace"],
+               "incarnation": event["fields"]["workspace_incarnation"]}
+              for event in runtime.rows if event["event"] == "mount"]
+    overlay_custody = {"custody": row["custody"], "container": runtime.container, "volume": row["clone"]["volume"],
+        "remote_source": "/layerfs-local/overlay/overlay.sqlite", "local_source": str(overlay_path),
+        "source_sha256": identity.sha256(overlay_path), "source_size": overlay_path.stat().st_size,
+        "export_completion": str(completion), "export_completion_sha256": identity.sha256(completion),
+        "runtime_events": str(events), "runtime_events_sha256": identity.sha256(events),
+        "source_stat": source_stats["overlay"]}
+    overlay = oracle.observe_closed_storage(overlay_path, overlay_custody, kind="overlay", owners=owners)
+    record = {"store": store, "overlay": overlay,
+        "original_physical_resource_status": "UNAVAILABLE",
+        "reason": "shared SQLite has no per-Workspace allocated/live/superseded/peak spool or exclusive owned-file counter; no inferred zero"}
+    receipts.write_new(output / "closed-storage-observations.json", record)
+    row["closed_storage_observations"] = record
+    if store["source_main_store_4gib_status"] != "PASS" or overlay["namespace_cleanup_status"] != "PASS":
+        raise ValueError("original main Store boundary or exact namespace cleanup failed")
+    return record
+
+
+def footprint_boundary(prepared):
+    """Frozen clipped marker oracle from the immutable original native file."""
+    fixture=prepared["fixture"]
+    size=fixture["edit_size"];path=fixture["edit_path"]
+    marker=b"E000000001"
+    if type(size) is not int or size<=len(marker) or path.startswith("/") or any(part in ("",".","..") for part in path.split("/")):
+        raise ValueError("original footprint selected path/size required")
+    offset=2_654_435_761%(size-len(marker))
+    start,end=max(0,offset-65536),min(size,offset+len(marker)+65536)
+    with (Path(prepared["source"])/path).open("rb") as source:
+        if os.fstat(source.fileno()).st_size!=size:
+            raise ValueError("original immutable footprint selected file length changed")
+        source.seek(start);body=bytearray(source.read(end-start))
+    if len(body)!=end-start:
+        raise ValueError("original footprint clipped source read was short")
+    left,right=max(start,offset),min(end,offset+len(marker))
+    body[left-start:right-start]=marker[left-offset:right-offset]
+    return {"path":path,"file_size":size,"offset":offset,"start":start,"end":end,
+            "sha256":hashlib.sha256(body).hexdigest(),"verified_bytes":end-start}
+
+
+def verify_native_receipt(case, verified, boundary=None):
     text = Path(verified["fields"]["stdout"]).read_text()
+    if case.get("store_footprint_schedule"):
+        fields=text.strip().split("\t")
+        if (boundary is None or len(fields)!=3 or verified["fields"].get("exit_code")!="0"
+                or not fields[0].isdecimal() or int(fields[0])!=boundary["file_size"]
+                or fields[1]!=boundary["sha256"] or not fields[2].isdecimal() or int(fields[2])<=0):
+            raise ValueError("original freshly mounted footprint size/clipped bytes/inode receipt differs")
+        return {"verification_status":"pass","scope":"storage-accounting-reopen-and-edit-boundary-v1",
+            **boundary,"inode":int(fields[2]),"full_namespace_verified":False,"full_file_bytes_verified":False}
     if case.get("m1_schedule"):
         def unique(pairs):
             result={}
@@ -597,6 +772,11 @@ def family_proof_deadlines(case, charged_ns=0, owner_stop=None):
     """Original work/reserve/publication limits, with separate owner test ceiling."""
     if case.get("git_workflow"):
         return git_proof_deadlines(case, charged_ns)
+    if case.get("reuse_schedule") or case.get("store_footprint_schedule"):
+        expected = "original-dedup-workspace-reuse-v1" if case.get("reuse_schedule") else "original-store-footprint-init-edit-v1"
+        if (case.get("reuse_schedule") or case.get("store_footprint_schedule")).get("schema")!=expected:
+            raise ValueError("exact original storage schedule required")
+        return import_proof_deadlines(case, charged_ns)
     if (case.get("history_schedule", {}).get("schema") not in BATCH4_HISTORY_SCHEMAS
             and case.get("registry",{}).get("family") not in BATCH4_FAMILIES):
         return None
@@ -690,8 +870,18 @@ def one_family_case(family, case, prepared_folder, build_folder, output, *, prep
     recipe_history = case.get("history_schedule", {}).get("schema") in BATCH4_HISTORY_SCHEMAS
     batch4 = family in BATCH4_FAMILIES
     proof_only = case.get("proof_only") is True
+    reuse = case.get("reuse_schedule")
+    footprint = case.get("store_footprint_schedule")
+    if reuse and (family!="dedup_workspace_reuse" or reuse.get("schema")!="original-dedup-workspace-reuse-v1"
+                  or reuse.get("commits")!=1 or reuse.get("verification_states")!=[0,1]):
+        raise ValueError("exact original single-Commit reuse schedule required")
+    if footprint and (family!="store_footprint" or footprint.get("schema")!="original-store-footprint-init-edit-v1"
+                      or prepared["schema"]!="fs-bench-pro-prepared-native-footprint-v1"):
+        raise ValueError("exact original fresh Init/edit footprint preparation required")
     owner_stop = started_test_ns/1_000_000_000+120 if proof_only else None
     body = None if case.get("control_only") else "/bin/bash /code/workload.sh apply " + shlex.quote(case["v016_case"])
+    if footprint:
+        body += " "+shlex.quote(prepared["fixture"]["edit_path"])
     bodies = ["/bin/bash /code/" + prepared.get("prepared_step_runs",{}).get(str(index),step["run"])
               for index,step in enumerate(case["steps"],1)] if ordered else [body]
     if ordered and (len(bodies) != case["history_schedule"]["commits"] or any(not step.get("commit") for step in case["steps"])):
@@ -729,6 +919,7 @@ def one_family_case(family, case, prepared_folder, build_folder, output, *, prep
                    declared_limit_ns="N/A")
     receipts.write_new(output / "selection.json", row)
     runtime = None
+    host_observer = None
     mounted = set()
     bindings = {}
     clock = cell_runner.PerformanceClock()
@@ -740,7 +931,55 @@ def one_family_case(family, case, prepared_folder, build_folder, output, *, prep
     created_modes = {}
     final_modes = None
     try:
-        row["clone"] = fixtures.clone(prepared, output / "clone", build)
+        if footprint:
+            row.update(attempted_operation_count=1,sample_count=1)
+            clock.begin(time.monotonic_ns())
+            init_args = [build["binaries"]["runtime"]["path"],"init","--socket",build["socket"],
+                "--volume","unused-fresh-footprint-init","--daemon",build["binaries"]["daemon"]["path"],
+                "--manifest",str(output/"initial.manifest"),"--source-copy",prepared["source"],
+                "--sealed",str(output/"initial-store.sqlite"),"--case",case["v016_case"],
+                "--receipt",str(output/"initial.events.jsonl"),"--uid",str(prepared["source_uid"]),
+                "--gid",str(prepared["source_gid"]),"--init-seconds","120"]
+            init = receipts.command(init_args,output,"measured-fresh-init",120,host_swap_guard=True,
+                environment={**os.environ,"LAYERFS_CONSTRUCTION_WORKERS":"1"})
+            initial_events=[json.loads(line) for line in (output/"initial.events.jsonl").read_text().splitlines()]
+            acknowledged=[event for event in initial_events if event["event"]=="project_init"]
+            if len(acknowledged)!=1 or initial_events[-1]["event"]!="finished":
+                raise ValueError("original fresh footprint Init/seal acknowledgement missing")
+            if any(acknowledged[0]["fields"][name]>4*1024**3 for name in ("logical_bytes","allocated_bytes")):
+                raise RuntimeError("original initialized main Store exceeds4GiB")
+            row["initialization"]={"attempt":init,"ack":acknowledged[0],"scope":"measured original fresh public directory import plus current Store/main Branch/seal; never setup Init"}
+            row["phases"]["init_ns"]=acknowledged[0]["span"]["duration_ns"]
+            closed={"sealed_store":str(output/"initial-store.sqlite"),"store_sha256":identity.sha256(output/"initial-store.sqlite"),
+                "manifest":str(output/"initial.manifest"),"manifest_sha256":identity.sha256(output/"initial.manifest")}
+            volume,provision=fixtures.install_closed_history_store(closed,prepared,output/"initial-install",build,sample=True,
+                deadline=clock.started/1e9+120)
+            row["clone"]={"volume":volume,"store_sha256":closed["store_sha256"],"clone_method":"current sealed fresh measured Init installed once; no pre-existing Store or extra Init"}
+            prepared={**prepared,"provision":provision}
+            row["initialization"]["installation"]=provision
+        if reuse:
+            import shutil
+            initial_store = output/"pristine-store.sqlite"
+            shutil.copy2(prepared["provision"]["sealed_store"], initial_store)
+            if identity.sha256(initial_store)!=prepared["provision"]["store_sha256"]:
+                raise ValueError("pristine initial attribution copy differs from sealed master")
+            initial_events = output/"pristine.events.jsonl"
+            initial_args = [build["binaries"]["runtime"]["path"],"verify-reuse-initial","--socket",build["socket"],
+                "--volume","unused-pristine-observer","--daemon",build["binaries"]["daemon"]["path"],
+                "--manifest",prepared["provision"]["manifest"],"--sealed",str(initial_store),
+                "--case",case["v016_case"],"--receipt",str(initial_events),
+                "--uid",str(prepared["source_uid"]),"--gid",str(prepared["source_gid"])]
+            initial = receipts.command(initial_args,output,"pristine-payload-attribution",41,
+                environment={**os.environ,"LAYERFS_CONSTRUCTION_WORKERS":"1"})
+            initial_rows = [json.loads(line) for line in initial_events.read_text().splitlines()]
+            proved = [event for event in initial_rows if event["event"]=="reuse_initial_verified"]
+            if len(proved)!=1 or proved[0]["fields"].get("status")!="PASS" or initial_rows[-1]["event"]!="finished":
+                raise ValueError("complete original pristine public payload attribution required")
+            row["pristine_payload_attribution"] = {"attempt":initial,"proof":proved[0],
+                "scope":"separate exact sealed-master copy before original fresh measured mount; structural input reads outside paid product timer; charged independent proof, no cold claim"}
+            preproof_ns += initial["complete_wall_ns"]
+        if not footprint:
+            row["clone"] = fixtures.clone(prepared, output / "clone", build)
         environment = output / "environment.txt"
         environment.write_text("".join(name + "=" + value + "\n" for name, value in workloads.ENV.items()))
         argv = [build["binaries"]["runtime"]["path"], "serve", "--socket", build["socket"],
@@ -751,14 +990,17 @@ def one_family_case(family, case, prepared_folder, build_folder, output, *, prep
         if ordered:
             argv.extend(["--case", case["v016_case"]])
         runtime = cell_runner.EventProcess(argv, output, "runtime")
+        if footprint:
+            host_observer = receipts.HostProcessObserver(runtime.process, output, "footprint-host", None)
+            host_observer.check()
         runtime.event("protocol_ready", time.monotonic() + 15)
         row["container"] = runtime.container
         if runtime.container is None:
             raise ValueError("original container acknowledgement unavailable")
-        if ordered or case.get("original_ordinary_guards"):
+        if ordered or footprint or case.get("original_ordinary_guards"):
             row["container_profile"] = history_container_profile(runtime, build, output)
         row["staging"] = fixtures.stage(runtime.container, prepared, output / "staging", build)
-        if case.get("original_ordinary_guards"):
+        if footprint or case.get("original_ordinary_guards"):
             row["ordinary_resource_guards"] = {"before": ordinary_resource_guard(runtime, build, output, "ordinary-resources-before"), "steps": []}
         if ordered:
             if small_history:
@@ -766,6 +1008,9 @@ def one_family_case(family, case, prepared_folder, build_folder, output, *, prep
             row["cache"].update(same_mount=True, warm_interval_ns=None,
                 declaration="one original Workspace for all declared saves/Commits; setup and prior own-write cache uncontrolled; no warmup Commit or independent coldness proof")
             row["history"] = {"initial_root": next(event for event in runtime.rows if event["event"] == "history_initial_root")["fields"]["root"], "commits": []}
+        elif reuse or footprint:
+            row["cache"].update(fresh_mount=True, warmup_performed=False,
+                declaration="one original fresh measured mount; no warmup workload or Commit; prepared clone and pristine structural observer warmth remain INELIGIBLE")
         else:
             warm = secrets.token_hex(32)
             git_proof_start = time.monotonic_ns() if case.get("git_workflow") else None
@@ -808,12 +1053,19 @@ def one_family_case(family, case, prepared_folder, build_folder, output, *, prep
                 row["cache"].update(identical_warmup=False,
                     declaration="prior original verification variant includes additional verifier reads and ends without Commit; measured performance variant unchanged; identical-body/cache qualification unavailable")
         selected = secrets.token_hex(32)
-        clock.begin(time.monotonic_ns())
+        if not footprint:
+            clock.begin(time.monotonic_ns())
         phase_started = time.monotonic()
         row.update(attempted_operation_count=1, sample_count=0 if proof_only or preparation_only else 1,
                    verification_attempt_count=1 if proof_only else 0)
         mount = runtime.send("mount", selected, deadline=time.monotonic() + 15)
         mounted.add(selected)
+        if footprint:
+            initial=row["initialization"]["ack"]["fields"]
+            bound=oracle._manifest_identity(Path(prepared["provision"]["manifest"]))
+            if (mount["fields"].get("root")!=initial["root"] or mount["fields"].get("head")!="-"
+                    or mount["fields"].get("stack")!=initial["stack"] or mount["fields"].get("branch_id")!=bound["branch_id"]):
+                raise ValueError("fresh footprint mount differs from exact measured Init/root/first Branch")
         bindings["measured_mount_attach"] = endpoint(mount)
         row["phases"]["mount_ns"] = mount["span"]["duration_ns"]
         group_ms = case["budget"].get("edit_commit_end_watchdog_ms")
@@ -822,9 +1074,11 @@ def one_family_case(family, case, prepared_folder, build_folder, output, *, prep
                                        "scope": "ordinary edit, Commit and terminal unmount; excludes measured mount/setup/warmup/proof"}
         operation_seconds = min(120,case["budget"].get("operation_watchdog_ms", 120000) / 1000)
         phase_stop = (phase_started if recipe_history else time.monotonic()) + case["budget"].get("performance_hard_watchdog_ms", case["budget"]["command_ms"]) / 1000 if ordered else group_stop
+        if footprint:
+            phase_stop=clock.started/1e9+case["budget"]["performance_hard_watchdog_ms"]/1000
         if owner_stop is not None:
             phase_stop = min(phase_stop,owner_stop)
-        row["phases"].update(command_ns=0, commit_ns=0)
+        row["phases"].update(command_ns=row["phases"].get("init_ns",0), commit_ns=0)
         for index, command_body in enumerate(bodies, 1):
             if small_history:
                 history_observer(clock, row, f"free-space-before-state-{index}", lambda: history_free_space(output))
@@ -850,7 +1104,7 @@ def one_family_case(family, case, prepared_folder, build_folder, output, *, prep
                         "helper_stdout":command["fields"]["stdout"],"helper_stdout_sha256":identity.sha256(command["fields"]["stdout"])}
                 created_modes,final_modes = history_observer(clock,row,f"original-created-modes-{index}",capture_modes)
                 row.setdefault("created_mode_prefixes",[]).append(final_modes)
-            if case.get("original_ordinary_guards"):
+            if footprint or case.get("original_ordinary_guards"):
                 row["ordinary_resource_guards"]["steps"].append(history_observer(clock, row, f"ordinary-before-commit-{index}",
                     lambda: ordinary_resource_guard(runtime, build, output, f"ordinary-resources-before-commit-{index}", row["ordinary_resource_guards"]["before"],operation_deadline(phase_stop,15)-time.monotonic())))
             if case.get("git_workflow"):
@@ -875,7 +1129,7 @@ def one_family_case(family, case, prepared_folder, build_folder, output, *, prep
             expected_kind = case["steps"][index-1].get("expected_commit",case["expected_commit"]) if ordered else case["expected_commit"]
             if committed["fields"]["commit_kind"] != expected_kind:
                 raise ValueError("original known Commit outcome differs from frozen mutation/read-only case")
-            if case.get("original_ordinary_guards"):
+            if footprint or case.get("original_ordinary_guards"):
                 row["ordinary_resource_guards"]["steps"].append(history_observer(clock, row, f"ordinary-after-commit-{index}",
                     lambda: ordinary_resource_guard(runtime, build, output, f"ordinary-resources-after-commit-{index}", row["ordinary_resource_guards"]["before"],operation_deadline(phase_stop,15)-time.monotonic())))
             if ordered:
@@ -936,13 +1190,17 @@ def one_family_case(family, case, prepared_folder, build_folder, output, *, prep
                 raise ValueError("original measured created-mode observations unavailable")
             receipts.command([*docker,"cp",final_modes["path"],runtime.container+":/code/history/observed-final-modes.tsv"],output,"native-created-modes-stage",proof_seconds(15))
             verify_body = "/bin/bash /code/workload.sh verify-step " + shlex.quote(case["v016_case"])+f" {case['history_schedule']['commits']} /code/history/observed-final-modes.tsv"
+        elif footprint:
+            boundary=footprint_boundary(prepared)
+            row["footprint_boundary"]=boundary
+            verify_body="/bin/bash /code/workload.sh verify "+shlex.quote(case["v016_case"])+" "+shlex.quote(boundary["path"])+f" {boundary['start']} {boundary['end']}"
         else:
             verify_body = "/bin/bash /code/workload.sh verify " + shlex.quote(case["v016_case"])
             if recipe_history:
                 verify_body += " "+str(case["history_schedule"]["commits"])
         verified = runtime.send("verify", verify_mount, script(output, "verify.sh", verify_body),
                                 deadline=time.monotonic() + native_seconds(case["budget"]["verifier_ms"] / 1000))
-        proof = verify_native_receipt(case, verified)
+        proof = verify_native_receipt(case, verified, row.get("footprint_boundary"))
         if case.get("m1_schedule") and proof["created_modes_digest"]!=final_modes["sha256"]:
             raise ValueError("native selective proof did not bind exact measured mode observations")
         if case.get("git_workflow"):
@@ -950,18 +1208,24 @@ def one_family_case(family, case, prepared_folder, build_folder, output, *, prep
         runtime.send("unmount", verify_mount, deadline=time.monotonic() + (proof_seconds(15, cleanup=True) if proof_deadlines else native_seconds(15)))
         mounted.remove(verify_mount)
         row["verification_cleanup"] = readiness(runtime, verify_mount, proof_seconds(5, cleanup=True) if proof_deadlines else native_seconds(5))
-        if case.get("original_ordinary_guards"):
+        if footprint or case.get("original_ordinary_guards"):
             row["ordinary_resource_guards"]["after_native_proof"] = ordinary_resource_guard(runtime, build, output,
                 "ordinary-resources-after-native-proof", row["ordinary_resource_guards"]["before"], proof_seconds(15))
         if small_history:
             row["resource_guards"]["after_native_proof"] = history_resource_guard(runtime, build, output,
                 "history-resources-after-native-proof", row["resource_guards"]["before"])
         runtime.send("observe", deadline=time.monotonic() + proof_seconds(15, cleanup=True))
+        if reuse or footprint:
+            source_stats = storage_source_observations(runtime, build, output, proof_seconds)
         runtime.send("stop", deadline=time.monotonic() + proof_seconds(15, cleanup=True))
         runtime.event("finished", time.monotonic() + proof_seconds(15, cleanup=True))
         if runtime.process.wait(timeout=proof_seconds(1, cleanup=True) if proof_deadlines else 1) != 0:
             raise ValueError("original runtime exit differs after known Stop")
         row["custody"] = "KNOWN_STOP"
+        if host_observer is not None:
+            row["host_process_observations"] = host_observer.finish()
+            if row["host_process_observations"]["status"] != "PASS":
+                raise ValueError("original footprint zero expanded-child swaps guard failed")
         row["completed_operation_count"] = 1
         docker = ["docker", "--host", "unix://" + build["socket"]]
         # Closed sample input to the independent offline oracle, after Stop;
@@ -986,6 +1250,16 @@ def one_family_case(family, case, prepared_folder, build_folder, output, *, prep
             if identity.sha256(typed_store)!=identity.sha256(census_store):
                 raise ValueError("independent public provider copy differs from normalized closed export")
             row["typed_store_input"]={"path":str(typed_store),"sha256":identity.sha256(typed_store),"bytes":typed_store.stat().st_size}
+        elif reuse or footprint:
+            import shutil
+            normalized = oracle.prepare_closed_store(output/"graph-store",output/"census-store/store.sqlite",proof_work_stop)
+            row["closed_store_normalization"] = normalized
+            census_store = Path(normalized["path"])
+            (output/"typed-store").mkdir()
+            typed_store = output/"typed-store/store.sqlite"
+            shutil.copy2(census_store,typed_store)
+            if identity.sha256(typed_store)!=identity.sha256(census_store):
+                raise ValueError("reuse public provider copy differs from exact normalized closed Store")
         graph_args = [build["binaries"]["runtime"]["path"], "verify-workspace", "--socket", build["socket"],
                       "--volume", row["clone"]["volume"], "--daemon", build["binaries"]["daemon"]["path"],
                       "--manifest", prepared["provision"]["manifest"], "--sealed", str(typed_store),
@@ -1001,6 +1275,25 @@ def one_family_case(family, case, prepared_folder, build_folder, output, *, prep
                 graph_args.extend(["--source-copy",final_modes["path"]])
         if case.get("git_workflow"):
             graph_args.extend(["--source-copy", row["git_precommit"]["path"]])
+        if footprint:
+            bound=oracle._manifest_identity(Path(prepared["provision"]["manifest"]))
+            fields=committed["fields"]
+            initial=row["initialization"]["ack"]["fields"]
+            footprint_ack=script(output,"footprint-acknowledgements.tsv",
+                "fs-bench-pro-store-footprint-ack-v1\n"+case["v016_case"]+"\n"+
+                "init\t"+bound["branch_id"]+"\t"+initial["root"]+"\t"+mount["fields"]["base_layer"]+"\t"+initial["stack"]+"\n"+
+                "commit\t"+fields["commit_id"]+"\t"+fields["root"]+"\t"+fields["parent"]+"\t"+fields["base_layer"]+"\t"+fields["stack"]+"\n")
+            transcript=script(output,"footprint-census.tsv","0\t-\t-\t"+initial["root"]+"\toriginal-footprint-initial\n"+
+                "1\t"+fields["commit_id"]+"\t"+fields["parent"]+"\t"+fields["root"]+"\toriginal-footprint-final-boundary\n")
+            graph_args[1]="verify-footprint"
+            graph_args.extend(["--source-copy",prepared["source"],"--history-file",str(footprint_ack)])
+        if reuse:
+            initial_root = row["pristine_payload_attribution"]["proof"]["fields"]["root"]
+            transcript = script(output,"acknowledged-reuse.tsv",
+                "0\t-\t-\t"+initial_root+"\t"+str(Path(prepared_folder).resolve()/"source.manifest.tsv")+"\n"+
+                "1\t"+committed["fields"]["commit_id"]+"\t"+committed["fields"]["parent"]+"\t"+
+                committed["fields"]["root"]+"\t"+str(Path(prepared_folder).resolve()/"expected-native.manifest.tsv")+"\n")
+            graph_args.extend(["--history-file",str(transcript)])
         if small_history:
             graph_events, roots, physical = [], [], []
             wanted = [row["history"]["initial_root"], *[item["commit"]["fields"]["root"] for item in row["history"]["commits"]]]
@@ -1035,9 +1328,13 @@ def one_family_case(family, case, prepared_folder, build_folder, output, *, prep
             graph = receipts.command(graph_args, output, "independent-graph", proof_seconds(case["budget"]["verifier_ms"] / 1000),
                                      environment={**os.environ, "LAYERFS_CONSTRUCTION_WORKERS": "1"})
             events = [json.loads(line) for line in (output / "graph.events.jsonl").read_text().splitlines()]
-            proof_events = [item for item in events if item["event"] == "workspace_verified"]
-            if len(proof_events) != 1 or events[-1]["event"] != "finished" or proof_events[0]["fields"]["root"] != committed["fields"]["root"]:
+            proof_events = [item for item in events if item["event"] == ("store_footprint_verified" if footprint else "workspace_verified")]
+            if len(proof_events) != 1 or events[-1]["event"] != "finished" or proof_events[0]["fields"]["final_root" if footprint else "root"] != committed["fields"]["root"]:
                 raise ValueError("original persisted root proof differs from exact acknowledged Commit root")
+            if footprint:
+                fields=proof_events[0]["fields"]
+                if any(fields.get(key)!=boundary[expected] for key,expected in (("selected_path","path"),("boundary_start","start"),("boundary_end","end"),("file_size","file_size"),("boundary_sha256","sha256"))):
+                    raise ValueError("footprint independent native/public clipped boundary identity differs")
             if ordered:
                 roots = [item for item in events if item["event"] == "history_root_verified"]
                 wanted = [row["history"]["initial_root"], *[item["commit"]["fields"]["root"] for item in row["history"]["commits"]]]
@@ -1066,6 +1363,27 @@ def one_family_case(family, case, prepared_folder, build_folder, output, *, prep
             proof_seconds(.001)
             receipts.write_new(output/"global-commit-census.json",census)
             row["history"]["global_commit_census"]=census
+        elif reuse or footprint:
+            fields = proof_events[0]["fields"]
+            if (fields.get("initial_root")!=(row["initialization"]["ack"]["fields"]["root"] if footprint else row["pristine_payload_attribution"]["proof"]["fields"]["root"])
+                    or not footprint and fields.get("roots")!=2):
+                raise ValueError("reuse persisted initial/final roots differ from pristine/actual Commit acknowledgements")
+            tuples = [{"commit_id":committed["fields"]["commit_id"],"layer_stack_id":committed["fields"]["stack"],
+                "root_id":committed["fields"]["root"],"parent_commit_id":None if committed["fields"]["parent"]=="-" else committed["fields"]["parent"],
+                "base_layer_id":committed["fields"]["base_layer"]}]
+            export_completion, runtime_events = output/"closed-store-export.completion.json", output/"runtime.events.jsonl"
+            custody = {"custody":row["custody"],"container":runtime.container,"volume":row["clone"]["volume"],
+                "remote_source":"/layerfs-store/global/store.sqlite","local_source":str(exported_store),
+                "source_sha256":identity.sha256(exported_store),"source_size":exported_store.stat().st_size,
+                "prepared_manifest":prepared["provision"]["manifest"],"prepared_manifest_sha256":identity.sha256(prepared["provision"]["manifest"]),
+                "transcript":str(transcript),"transcript_sha256":identity.sha256(transcript),
+                "export_completion":str(export_completion),"export_completion_sha256":identity.sha256(export_completion),
+                "runtime_events":str(runtime_events),"runtime_events_sha256":identity.sha256(runtime_events),
+                "normalization":{"receipt":normalized["receipt"],"receipt_sha256":normalized["receipt_sha256"]}}
+            census = oracle.commit_census(census_store,tuples,fields,custody)
+            receipts.write_new(output/("global-footprint-commit-census.json" if footprint else "global-reuse-commit-census.json"),census)
+            row["footprint_global_commit_census" if footprint else "reuse_global_commit_census"] = census
+            observe_family_closed_storage(runtime, row, build, output, census_store, custody, source_stats, proof_seconds)
         row.update(proof_status="PASS", proof_wall_ns=time.monotonic_ns() - proof_started+preproof_ns,
                    verification={"scope": case["oracle"]["scope"], "omissions": case["oracle"]["omissions"],
                                  "native": proof, "persisted": proof_events[0]})
@@ -1114,6 +1432,13 @@ def one_family_case(family, case, prepared_folder, build_folder, output, *, prep
             row["retained_host_custody"] = runtime.retain(error)
             row["container"] = runtime.container
     finally:
+        if host_observer is not None:
+            try:
+                row["host_process_observations"] = host_observer.finish()
+            except BaseException as observing:
+                row.update(status="FAIL", host_observer_failure=str(observing))
+                if host_observer.completion_path.exists():
+                    row["host_process_observations"] = json.loads(host_observer.completion_path.read_text())
         if runtime is not None:
             for value in (runtime.selector, runtime.raw, runtime.stderr, getattr(runtime.process, "stdin", None), getattr(runtime.process, "stdout", None)):
                 if value is not None:
@@ -1123,11 +1448,13 @@ def one_family_case(family, case, prepared_folder, build_folder, output, *, prep
                         row.setdefault("independent_close_failures", []).append(str(closing))
                         row["status"] = "FAIL"
         row["timing_scope"] = "matrix controller from measured mount through command/Commit/terminal unmount; read-only resource-observer intervals excluded and separately retained; absolute phase stop includes those intervals; setup/warmup/cleanup/fresh native and persisted verification/Stop separate"
+        if footprint:
+            row["timing_scope"] = "controller from original fresh measured public Init through sealed byte installation, SDK runtime/setup, first fresh mount, ordinary clipped edit, Commit and terminal End; declared read-only resource-observer intervals excluded and retained; cleanup/fresh mounted and typed verification/Stop separate"
         if proof_only:
             row["proof_wall_ns"]=time.monotonic_ns()-started_test_ns
             row["proof_wall_scope"]="verification-only complete invocation from source/build/prepared admission through setup, all original calls/Commits, native/public/census proof, required cleanup/Stop and prepublication close; owner120s ceiling separately enforced"
         row["evidence"] = str(output.relative_to(identity.ROOT.resolve()))
-        if (case.get("git_workflow") or batch4) and publication_stop is not None:
+        if (case.get("git_workflow") or batch4 or reuse or footprint) and publication_stop is not None:
             if proof_started is not None:
                 if not proof_only:
                     row["proof_wall_ns"] = time.monotonic_ns()-proof_started+preproof_ns
@@ -1135,7 +1462,7 @@ def one_family_case(family, case, prepared_folder, build_folder, output, *, prep
             if proof_cleanup_stop is not None and time.monotonic() >= proof_cleanup_stop:
                 row.update(status="FAIL", proof_status="FAIL",
                            tag="; ".join(filter(None, (row.get("tag"), "original cumulative verification cleanup deadline reached before publication"))))
-            if batch4:
+            if batch4 or reuse or footprint:
                 row.update(receipts.finalize_guarded(output,row,publication_stop,scope=receipts.HISTORY_PUBLICATION_SCOPE))
             else:
                 row.update(receipts.finalize_guarded(output, row, publication_stop))
@@ -1158,8 +1485,10 @@ def dispose_family_resources(folder, returned_row):
     receipts.verify_manifest(folder)
     original = json.loads((folder / "receipt.json").read_text())
     effective = receipts._publication_overlay(folder, original, original)
-    names = ("family", "case", "source_commit", "product_tree", "image", "container", "clone")
-    if any(returned_row.get(name) != original.get(name) for name in names):
+    owned_identity = receipts.resource_removal_identity(original)
+    names = tuple(owned_identity)
+    if (any(returned_row.get(name) != original.get(name) for name in names)
+            or ("additional_containers" in returned_row) != ("additional_containers" in original)):
         raise ValueError("resource removal returned source/resource identity differs")
     if (returned_row.get("status") not in ("PASS", "INELIGIBLE")
             or effective.get("status") not in ("PASS", "INELIGIBLE")
@@ -1168,6 +1497,7 @@ def dispose_family_resources(folder, returned_row):
                    for row in (returned_row, effective))):
         return None
     container, volume = original["container"], original["clone"]["volume"]
+    additional=original.get("additional_containers",[])
     if (not isinstance(container, str) or len(container) != 64
             or any(char not in "0123456789abcdef" for char in container)
             or not isinstance(volume, str) or not volume.startswith("layerfs-fsb-sample-")):
@@ -1181,10 +1511,13 @@ def dispose_family_resources(folder, returned_row):
         "manifest_sha256": identity.sha256(folder / "manifest.json"),
         "outer_ack_sha256": identity.sha256(folder / "publication-outer-acknowledgement.json")
             if original.get("publication_guard") else None,
-        "identity": {name: original.get(name) for name in names},
+        "identity": owned_identity,
         "known_outer_return": True, "container": container, "volume": volume,
         "scope": "post-publication Docker administration; original mount cleanup/Stop proof and timing unchanged",
         "container_custody": "KNOWN_STOP_RETAINED", "volume_custody": "RETAINED"}
+    if "additional_containers" in original:
+        binding.update(additional_containers=additional,
+                       additional_container_custody={value: "KNOWN_STOP_RETAINED" for value in additional})
     receipts.write_new(output / "attempt.json", binding)
     record = dict(binding)
     try:
@@ -1194,12 +1527,19 @@ def dispose_family_resources(folder, returned_row):
         record["container_custody"] = "REMOVAL_ATTEMPT_UNCERTAIN"
         receipts.command([*docker, "rm", container], output, "container", 15)
         record["container_custody"] = "REMOVED"
+        for index,extra in enumerate(additional,1):
+            extra_state=receipts.command([*docker,"inspect",extra,"--format","{{.State.Running}}"],output,f"additional-{index}-state",15)
+            if Path(extra_state["stdout"]).read_text().strip()!="false":
+                raise ValueError("additional owned verifier runtime Stop readback differs")
+            record["additional_container_custody"][extra]="REMOVAL_ATTEMPT_UNCERTAIN"
+            receipts.command([*docker,"rm",extra],output,f"additional-{index}-container",15)
+            record["additional_container_custody"][extra]="REMOVED"
         record["volume_custody"] = "REMOVAL_ATTEMPT_UNCERTAIN"
         receipts.command([*docker, "volume", "rm", volume], output, "volume", 15)
         record.update(volume_custody="REMOVED", status="PASS")
     except BaseException as error:
         record.update(status="FAIL", failure_type=type(error).__name__, failure=str(error))
-    record["resource_disposition"] = "container=" + record["container_custody"] + "; volume=" + record["volume_custody"]
+    record["resource_disposition"] = receipts.resource_removal_custody(record, original)
     receipts.write_new(output / "completion.json", record)
     receipts.manifest(output)
     returned_row["resource_disposition"] = record["resource_disposition"]

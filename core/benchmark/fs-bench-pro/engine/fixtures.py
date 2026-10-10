@@ -15,13 +15,14 @@ MTIME_NS = 1_700_000_000_000_000_000
 BIG_BYTES = 64 * 1024 * 1024
 CELL_RECIPES = {f"C{n:02}": "big64m" if n in (9, 10, 11) else "empty" for n in range(1, 13)}
 NAMESPACE_RECIPES = ("namespace-100-compact-v3", "namespace-1000-compact-v3", "namespace-10000", "namespace-100000")
+IMPORT_FAMILIES = ("dedup_cdc_locality", "dedup_cross_file")
 WORKSPACE_FAMILIES = ("payload_create_read", "tiny_file_churn", "namespace_mutation",
                      "edit_length_preserving", "edit_length_changing", "edit_length_changing_capped",
                      "edit_canonical_chunk_count", "small_file_delta_smoke",
                      "directory_construction_traversal", "git_tool_workflow", "local_snapshot",
                      "workspace_change_locality", "file_size_transition",
                      "dedup_branch_history", "mixed_load_bearing", "branch_development",
-                     "multi_workspace_development", "historical_access")
+                     "multi_workspace_development", "historical_access", "dedup_workspace_reuse", "store_footprint", "repository_history")
 RECIPE_HISTORY_SCHEMAS = ("original-v016-boundary-sequence-v1", "original-dedup-history-sequence-v1",
                           "original-m1-commit-sequence-v1")
 CONTEXT_PREPARED_SCHEMA = "fs-bench-pro-prepared-context-workspace-v1"
@@ -467,19 +468,25 @@ def historical_native_selection(case, plan, folder, build, binding):
                                     "receipt": str(Path(checked["stdout"]).resolve()), "receipt_sha256": identity.sha256(checked["stdout"])}}
 
 
-def install_closed_history_store(closed, genesis, folder, build):
+def install_closed_history_store(closed, genesis, folder, build, *, deadline=None, sample=False):
     """Setup-only independent byte install of complete closed history; no Init."""
     folder.mkdir(); store = folder / "store.sqlite"; manifest = folder / "installed.manifest"
     shutil.copy2(closed["sealed_store"], store); shutil.copy2(closed["manifest"], manifest)
     if identity.sha256(store) != closed["store_sha256"] or identity.sha256(manifest) != closed["manifest_sha256"]:
         raise ValueError("closed historical producer host byte copy differs")
-    volume = "layerfs-fsb-history-master-" + uuid.uuid4().hex[:16]
+    volume = ("layerfs-fsb-sample-" if sample else "layerfs-fsb-history-master-") + uuid.uuid4().hex[:16]
     container = "layerfs-fsb-history-install-" + uuid.uuid4().hex[:16]
     receipts.write_new(folder / "resource-claim.json", {"volume": volume, "container": container, "created_by_this_run": True,
-                       "purpose": "new immutable full historical producer byte copy; never a measured/mutated sample",
+                       "purpose": "fresh measured Init byte installation into owned sample volume" if sample else "new immutable full historical producer byte copy; never a measured/mutated sample",
                        "failure_disposition": "retain failed/uncertain resources, no retry"})
     docker = ["docker", "--host", "unix://" + build["socket"]]
-    made = receipts.command([*docker, "volume", "create", volume], folder, "historical-master-volume", 15)
+    def call(argv, label):
+        import time
+        seconds = 15 if deadline is None else min(15, deadline-time.monotonic())
+        if seconds <= 0:
+            raise TimeoutError("independent sealed Store installation proof deadline expired")
+        return receipts.command(argv, folder, label, seconds)
+    made = call([*docker, "volume", "create", volume], "historical-master-volume")
     if Path(made["stdout"]).read_text().strip() != volume:
         raise ValueError("closed historical master volume acknowledgement differs")
     uid, gid = genesis["source_uid"], genesis["source_gid"]
@@ -490,21 +497,21 @@ def install_closed_history_store(closed, genesis, folder, build):
             "cmp /input.sqlite /dest/global/store.sqlite; chown 0:0 /dest/global /dest/global/store.sqlite; "
             "chmod 600 /dest/global/store.sqlite; stat -c 'backing_directory=%u:%g:%a' /dest/global; "
             "stat -c 'backing_store=%u:%g:%a' /dest/global/store.sqlite; sha256sum /dest/global/store.sqlite")
-    receipts.command([*docker, "create", "--name", container, "--user", "0:0", "--network", "none", "-v", volume + ":/dest",
-                      identity.IMAGE, "/bin/bash", "-euo", "pipefail", "-c", body], folder, "historical-master-create", 15)
-    receipts.command([*docker, "cp", "--archive", str(store), container + ":/input.sqlite"], folder, "historical-master-input", 15)
-    installed = receipts.command([*docker, "start", "--attach", container], folder, "historical-master-install", 15)
+    call([*docker, "create", "--name", container, "--user", "0:0", "--network", "none", "-v", volume + ":/dest",
+          identity.IMAGE, "/bin/bash", "-euo", "pipefail", "-c", body], "historical-master-create")
+    call([*docker, "cp", "--archive", str(store), container + ":/input.sqlite"], "historical-master-input")
+    installed = call([*docker, "start", "--attach", container], "historical-master-install")
     lines = Path(installed["stdout"]).read_text().splitlines()
     if (lines[-3:-1] != ["backing_directory=0:0:700", "backing_store=0:0:600"]
             or [line.split()[0] for line in lines[-1:]] != [closed["store_sha256"]]):
         raise ValueError("independent closed full historical Store installation differs")
-    receipts.command([*docker, "rm", container], folder, "historical-master-remove-passing", 15)
+    call([*docker, "rm", container], "historical-master-remove-passing")
     result = {"schema": "fs-bench-pro-installed-history-store-v1", "status": "PASS", "volume": volume,
               "sealed_store": str(store), "store_sha256": identity.sha256(store), "manifest": str(manifest),
               "manifest_sha256": identity.sha256(manifest), "global_profile": "Disposable/WAL/OFF",
               "construction_workers": 1, "attempt": installed, "source": closed["sealed_store"],
               "backing_owner": "0:0", "backing_directory_mode": "0700", "backing_store_mode": "0600",
-              "scope": "complete known-Stop normalized producer copied unchanged, full history preserved, no selected-root Init or pre-read"}
+              "scope": "complete freshly sealed measured Init copied unchanged into owned sample volume; no additional Init" if sample else "complete known-Stop normalized producer copied unchanged, full history preserved, no selected-root Init or pre-read"}
     receipts.write_new(folder / "installed-history.json", result)
     return volume, result
 
@@ -1125,6 +1132,13 @@ def prepare(recipe, folder, build_folder):
     if recipe in NAMESPACE_RECIPES:
         return prepare_namespace(recipe, folder, build_folder)
     if recipe not in ("empty", "big64m"):
+        family, case = family_case(recipe)
+        if family["family"] in IMPORT_FAMILIES:
+            return prepare_import(family, case, folder, build_folder)
+        if family["family"]=="repository_history":
+            return prepare_repository_history(family,case,folder,build_folder)
+        if family["family"]=="store_footprint":
+            return prepare_footprint(family,case,folder,build_folder)
         return prepare_workspace(recipe, folder, build_folder)
     build = identity.load_build(build_folder)
     current = identity.source_identity()
@@ -1151,6 +1165,207 @@ def prepare(recipe, folder, build_folder):
     receipts.write_new(folder / "prepared.json", result)
     receipts.manifest(folder)
     return result
+
+
+def prepare_repository_history(family,case,folder,build_folder):
+    """Authenticated immutable corpus transitions and an empty setup Store."""
+    import time
+    from .recipes import repository_history
+    if family["family"]!="repository_history" or case["id"] not in repository_history.SELECTIONS:
+        raise ValueError("one exact original repository-history selection required")
+    build,current = identity.load_build(build_folder),identity.source_identity()
+    folder = Path(folder).resolve(); folder.mkdir(parents=True,exist_ok=False)
+    inputs = repository_history.authenticate_and_prepare(Path(case["fixture"]["source_corpus"]),case["v016_case"],
+                                                        folder/"repository-inputs",time.monotonic()+120)
+    source = folder/"source"
+    empty_fixture = generate("empty",source)
+    helpers = assets(folder/"code")
+    for origin,relative in ((Path(build["binaries"]["workload-linux"]["path"]),"writers/workload"),
+        (identity.ROOT/"core/benchmark/fs-bench-pro/families/repository_history/workload.sh","workload.sh")):
+        target = Path(helpers["root"])/relative
+        target.parent.mkdir(parents=True,exist_ok=True); shutil.copy2(origin,target); target.chmod(0o555)
+        helpers["files"][relative] = identity.sha256(target)
+    for state in inputs["states"]:
+        index = state["index"]
+        relative = f"repository/checkpoints/{index}"
+        target = Path(helpers["root"])/relative
+        target.parent.mkdir(parents=True,exist_ok=True)
+        target.mkdir()
+        for name in state["input_seal"]["files"]:
+            if name=="oracle.json":
+                continue
+            copied=target/name;copied.parent.mkdir(parents=True,exist_ok=True)
+            shutil.copy2(Path(state["input"])/name,copied)
+        state["helper_input"],state["runtime_input"] = relative,f"/input/checkpoint-{index}"
+        for name,digest in state["input_seal"]["files"].items():
+            if name=="oracle.json":
+                continue
+            if identity.sha256(target/name)!=digest:
+                raise ValueError("exact repository transition helper copy differs")
+            helpers["files"][relative+"/"+name] = digest
+        oracle_relative = f"repository/oracles/{index}.json"
+        oracle = Path(helpers["root"])/oracle_relative
+        oracle.parent.mkdir(parents=True,exist_ok=True); shutil.copy2(state["oracle"],oracle)
+        if identity.sha256(oracle)!=state["oracle_sha256"]:
+            raise ValueError("original complete repository helper oracle copy differs")
+        helpers["files"][oracle_relative] = state["oracle_sha256"]
+        state["helper_oracle"] = oracle_relative
+    helpers["sha256"] = hashlib.sha256(json.dumps(helpers["files"],sort_keys=True).encode()).hexdigest()
+    volume = "layerfs-fsb-master-repository-history-"+uuid.uuid4().hex[:16]
+    docker = ["docker","--host","unix://"+build["socket"]]
+    receipts.write_new(folder/"resource-claim.json",{"volume":volume,"created_by_this_run":True,
+        "purpose":"untimed immutable empty original repository input Store; complete selected history remains measured",
+        "failure_disposition":"retain exact resources; no retry or existing volume mutation"})
+    created = receipts.command([*docker,"volume","create",volume],folder,"master-volume",15)
+    if Path(created["stdout"]).read_text().strip()!=volume:
+        raise ValueError("original repository empty master acknowledgement differs")
+    provision = project.provision(source,volume,folder/"project",build)
+    fixture = {"recipe":case["fixture"]["recipe"],"fixture_sha256":inputs["input_identity"],
+        "logical_bytes":0,"files":0,"repository_logical_bytes":sum(state["logical_bytes"] for state in inputs["states"]),
+        "path_states":sum(state["full_entries"] for state in inputs["states"]),"states":inputs["state_count"],
+        "initial_fixture":empty_fixture,"scope":"complete exact selected original repository transitions; empty initial Store has no imported historical state"}
+    result = {"schema":"fs-bench-pro-prepared-repository-history-v1","status":"PASS","family":family["family"],
+        "case":case["id"],"recipe":case["fixture"]["recipe"],"identity":current,"build":str(Path(build_folder).resolve()),
+        "repository_inputs":inputs,"source":str(source),"source_uid":source.stat().st_uid,"source_gid":source.stat().st_gid,
+        "fixture":fixture,"helpers":helpers,"master_volume":volume,"provision":provision,
+        "setup_method":"exact source-only native transitions; one independent empty public Disposable Init/seal/install setup; never pre-Commit selected history",
+        "global_profile":"Disposable/WAL/OFF","overlay_profile":"MEMORY/OFF/EXCLUSIVE","construction_workers":1,
+        "cache":"immutable input authentication and cloning are setup reuse; all paid backing/metadata/SQLite/own-write coldness unqualified",
+        "durable":"NOT_RUN — disabled by owner until explicit reauthorization"}
+    receipts.write_new(folder/"prepared.json",result); receipts.manifest(folder)
+    return result
+
+
+def prepare_footprint(family,case,folder,build_folder):
+    """Exact native control tree; the original Init remains a measured operation."""
+    if (family["family"]!="store_footprint" or case.get("store_footprint_schedule",{}).get("schema")!="original-store-footprint-init-edit-v1"
+            or case["fixture"].get("source_only_preparation") is not True):
+        raise ValueError("original fresh Store-footprint import/edit declaration required")
+    build,current = identity.load_build(build_folder),identity.source_identity()
+    folder = Path(folder).resolve(); folder.mkdir(parents=True,exist_ok=False)
+    source = folder/"source"
+    shell = identity.ROOT/"core/benchmark/fs-bench-pro/families/store_footprint/workload.sh"
+    env = {**os.environ,"WORKLOAD_WRITER":build["binaries"]["workload-host"]["path"]}
+    made = receipts.command(["/bin/bash",str(shell),"fixture",case["v016_case"],str(source)],folder,"native-fixture",120,environment=env)
+    fixture = json.loads(Path(made["stdout"]).read_text())
+    checked = receipts.command(["/bin/bash",str(shell),"verify-source",case["v016_case"],str(source)],
+                               folder,"original-native-source-digest",120,environment=env)
+    native = dict(line.split("=",1) for line in Path(checked["stdout"]).read_text().splitlines())
+    if (fixture.get("schema")!="fs-bench-pro-store-footprint-fixture-v1" or fixture.get("control_id")!=case["v016_case"]
+            or fixture.get("regular_files")!=case["fixture"]["regular_files"]
+            or fixture.get("logical_bytes")!=case["fixture"]["logical_bytes"]
+            or fixture.get("data_directories")+1!=case["fixture"]["directories_including_root"]
+            or int(native["regular_files"])!=fixture["regular_files"] or int(native["logical_bytes"])!=fixture["logical_bytes"]
+            or native["tree_digest"]!=fixture["fixture_digest"]):
+        raise ValueError("original complete Store-footprint fixture/digest differs")
+    fixture.update(recipe=case["fixture"]["recipe"],fixture_sha256=fixture["fixture_digest"])
+    helpers = assets(folder/"code")
+    for origin,relative in ((Path(build["binaries"]["workload-linux"]["path"]),"writers/workload"),(shell,"workload.sh")):
+        target=Path(helpers["root"])/relative;target.parent.mkdir(parents=True,exist_ok=True)
+        shutil.copy2(origin,target);target.chmod(0o555);helpers["files"][relative]=identity.sha256(target)
+    helpers["sha256"]=hashlib.sha256(json.dumps(helpers["files"],sort_keys=True).encode()).hexdigest()
+    result = {"schema":"fs-bench-pro-prepared-native-footprint-v1","status":"PASS","family":family["family"],"case":case["id"],
+        "recipe":case["fixture"]["recipe"],"identity":current,"build":str(Path(build_folder).resolve()),"source":str(source),
+        "source_uid":source.stat().st_uid,"source_gid":source.stat().st_gid,"fixture":fixture,"helpers":helpers,
+        "original_verification":native,"generator_sha256":build["binaries"]["workload-host"]["sha256"],
+        "master_volume":None,"setup_method":"fresh complete original native control, no Store/Init before measured operation",
+        "cache":"setup generated/wrote/read every original source byte; all paid source/backing/metadata coldness unavailable",
+        "global_profile":"Disposable/WAL/OFF selected by future measured Init; no setup Store", "construction_workers":1}
+    receipts.write_new(folder/"prepared.json",result);receipts.manifest(folder)
+    return result
+
+
+def import_plan(family, case):
+    """Only frozen fresh-directory imports may use native-only setup."""
+    if family["family"] not in IMPORT_FAMILIES or family["engine"] != "project":
+        raise ValueError("exact original directory-import family required")
+    plan = case.get("import_schedule") or case.get("init_import")
+    if not plan or plan.get("schema") not in ("original-dedup-directory-import-v1", "original-dedup-import-v1"):
+        raise ValueError("original directory-import schedule required")
+    if (case["status"] != "ported" or case["id"] != case["v016_case"]
+            or case["fixture"]["seed"] != 1 or case["fixture"]["recipe"] != case["id"]
+            or len(case["steps"]) != 1 or case["steps"][0].get("public_api") != "ProjectApi::init"
+            or case["steps"][0].get("fresh_store") is not True
+            or any(case["steps"][0].get(key) for key in ("commit", "mount", "run"))):
+        raise ValueError("one original fresh Init, exact fixture and no measured mutation required")
+    fixture = case["fixture"]
+    files = fixture["regular_files"]
+    directories = fixture.get("directories_including_root", fixture.get("directories"))
+    entries = fixture.get("entries", fixture.get("paths"))
+    if (any(type(n) is not int or n < 0 for n in (files, directories, entries, fixture["logical_bytes"]))
+            or directories < 1 or entries != files + directories):
+        raise ValueError("complete original import fixture census required")
+    return {"files": files, "directories": directories, "entries": entries,
+            "logical_bytes": fixture["logical_bytes"], "state": 0}
+
+
+def prepare_import(family, case, folder, build_folder):
+    """One original native source and independent qualification; no Store."""
+    plan = import_plan(family, case)
+    build, current = identity.load_build(build_folder), identity.source_identity()
+    folder = Path(folder).resolve()
+    folder.mkdir(parents=True, exist_ok=False)
+    source = folder / "source"
+    writer = build["binaries"]["workspace-writer"]["path"]
+    made = receipts.command([writer, "fixture", case["v016_case"], str(source)], folder,
+                            "native-fixture", 120)
+    fixture = json.loads(Path(made["stdout"]).read_text())
+    checked = receipts.command([writer, "verify-step", case["v016_case"], "0", str(source)],
+                               folder, "original-native-fixture-check", 120)
+    native = json.loads(Path(checked["stdout"]).read_text())
+    if any(fixture.get(key) != plan[key] for key in ("files", "logical_bytes")):
+        raise ValueError("original import fixture census differs")
+    if native.get("verification_status") != "pass":
+        raise ValueError("complete original native source verifier did not pass")
+    qualified = receipts.command([writer, "import-qualified", case["v016_case"], "0", str(source)],
+                                 folder, "independent-source-transcripts", 120)
+    qualification = json.loads(Path(qualified["stdout"]).read_text())
+    validate_import_qualification(case, plan, qualification)
+    fixture.update(recipe=case["fixture"]["recipe"], fixture_sha256=fixture["fixture_digest"])
+    result = {"schema": "fs-bench-pro-prepared-native-import-v1", "status": "PASS",
+              "family": family["family"], "case": case["id"], "recipe": case["fixture"]["recipe"],
+              "source": str(source), "source_uid": source.stat().st_uid, "source_gid": source.stat().st_gid,
+              "fixture": fixture, "identity": current, "build": str(Path(build_folder).resolve()),
+              "generator_sha256": build["binaries"]["workspace-writer"]["sha256"],
+              "original_verification": native, "source_qualification": qualification,
+              "master_volume": None, "setup_method": "fresh exact native input; no prior Store or Init",
+              "cache": "setup generated/wrote/read every original source byte; host coldness unavailable",
+              "global_profile": "Disposable/WAL/OFF selected by future Init; no Store during preparation",
+              "construction_workers": 1, "durable": "NOT_RUN — disabled by owner until explicit reauthorization"}
+    receipts.write_new(folder / "prepared.json", result)
+    receipts.manifest(folder)
+    return result
+
+
+def validate_import_qualification(case, plan, qualification):
+    if (qualification.get("schema") != "fs-bench-pro-independent-dedup-input-v1"
+            or qualification.get("status") != "PASS" or qualification.get("case") != case["v016_case"]
+            or qualification.get("step") != 0
+            or qualification.get("regular_files") != plan["files"]
+            or qualification.get("logical_bytes") != plan["logical_bytes"]
+            or len(qualification.get("transcript_sha256", "")) != 64
+            or len(qualification.get("transcripts", {})) != plan["files"]):
+        raise ValueError("complete independent frozen input qualification required")
+    digest = hashlib.sha256()
+    total = 0
+    for path, chunks in sorted(qualification["transcripts"].items()):
+        if (not path or path.startswith("/") or any(part in ("", ".", "..") for part in path.split("/"))
+                or any(char in path for char in "\x00\r\n") or not isinstance(chunks, list)):
+            raise ValueError("canonical complete independent transcript path required")
+        digest.update(path.encode()+b"\x00")
+        offset = 0
+        for chunk in chunks:
+            if (set(chunk)!={"logical_start","len","raw_sha256"} or type(chunk["logical_start"]) is not int
+                    or type(chunk["len"]) is not int or chunk["logical_start"]!=offset or not 0<chunk["len"]<=32768
+                    or not isinstance(chunk["raw_sha256"],str) or len(chunk["raw_sha256"])!=64
+                    or any(char not in "0123456789abcdef" for char in chunk["raw_sha256"])):
+                raise ValueError("exact contiguous frozen bounded chunk transcript required")
+            digest.update(offset.to_bytes(8,"little")); digest.update(chunk["len"].to_bytes(8,"little"))
+            digest.update(chunk["raw_sha256"].encode()); offset += chunk["len"]
+        total += offset
+    if total!=plan["logical_bytes"] or digest.hexdigest()!=qualification["transcript_sha256"]:
+        raise ValueError("original transcript bytes/digest binding differs")
+    return qualification
 
 
 def prepare_namespace(recipe, folder, build_folder):
@@ -1444,6 +1659,26 @@ def validate_runtime_helpers(case, prepared, build):
     """Fail before claims/clones if original P-3 placement or helper seals differ."""
     if case.get("branch_schedule") or case.get("topology_schedule"):
         return validate_context_helpers(case, prepared, build)
+    if case.get("reuse_schedule"):
+        if (case["reuse_schedule"].get("schema")!="original-dedup-workspace-reuse-v1"
+                or prepared.get("family")!="dedup_workspace_reuse" or prepared.get("case")!=case["id"]
+                or prepared.get("generator_sha256")!=build["binaries"]["workspace-writer"]["sha256"]
+                or prepared.get("sdk_steps") or prepared.get("history_states") is not None):
+            raise ValueError("exact original single ordinary reuse preparation required")
+        for step,key in ((0,"initial"),(1,"final")):
+            q = prepared.get("independent_dedup_inputs",{}).get(key,{})
+            if (q.get("schema")!="fs-bench-pro-independent-dedup-input-v1" or q.get("status")!="PASS"
+                    or q.get("case")!=case["v016_case"] or q.get("step")!=step
+                    or q.get("regular_files")!=(case["fixture"]["files"] if step==0 else case["reuse_schedule"]["final_files"])
+                    or q.get("logical_bytes")!=(case["fixture"]["logical_bytes"] if step==0 else case["reuse_schedule"]["final_logical_bytes"])
+                    or q.get("receipt",{}).get("dedup_transcript_status")!="pass"):
+                raise ValueError("complete independent pristine/final reuse source contracts required")
+        for path,wanted in (("writers/workload",build["binaries"]["workload-linux"]["sha256"]),
+                            ("workload.sh",identity.sha256(identity.ROOT/"core/benchmark/fs-bench-pro/families/dedup_workspace_reuse/workload.sh"))):
+            if (prepared["helpers"]["files"].get(path)!=wanted
+                    or identity.sha256(Path(prepared["helpers"]["root"])/path)!=wanted):
+                raise ValueError("original ordinary reuse runtime helper differs")
+        return {"status":"PASS","scope":"exact initial/final native CDC/reuse contracts; unchanged single original ordinary helper and case; no SDK edits or history checkpoints"}
     history = case.get("history_schedule", {}).get("schema") in RECIPE_HISTORY_SCHEMAS
     if not history and case.get("registry", {}).get("family") != "mixed_load_bearing":
         return {"status": "NOT_APPLICABLE", "scope": "existing non-batch4 helper admission unchanged"}
@@ -1623,6 +1858,13 @@ def prepare_workspace(recipe, folder, build_folder):
                   "expected": original_check(expected, 1, "original-expected-check")}
     if any(item.get("verification_status") != "pass" for item in native.values()):
         raise ValueError("original native fixture/expectation check failed")
+    dedup_inputs = None
+    if case.get("reuse_schedule"):
+        dedup_inputs = {}
+        for step,root,key in ((0,source,"initial"),(1,expected,"final")):
+            checked = receipts.command([build["binaries"]["workspace-writer"]["path"],"import-qualified",case["v016_case"],str(step),str(root)],
+                                       folder,"independent-reuse-"+key,120)
+            dedup_inputs[key] = json.loads(Path(checked["stdout"]).read_text())
     git_reference = None
     if case.get("git_workflow"):
         fixture, git_reference, git_native = prepare_git_fixture(case, folder, build)
@@ -1688,6 +1930,8 @@ def prepare_workspace(recipe, folder, build_folder):
               "sdk_steps": sdk_steps,
               "prepared_step_runs": {str(record["index"]): record["prepared_run"] for record in sdk_steps},
               "git_reference": git_reference,
+              "independent_dedup_inputs": dedup_inputs,
+              "generator_sha256": build["binaries"]["workspace-writer"]["sha256"],
               "master_volume": volume, "provision": provisioned, "source_uid": source.stat().st_uid,
               "master_reuse": reuse,
               "source_gid": source.stat().st_gid, "global_profile": "Disposable/WAL/OFF",
@@ -1789,7 +2033,10 @@ def load(folder, recipe=None):
     result = json.loads((folder / "prepared.json").read_text())
     if result["status"] != "PASS" or recipe is not None and result["recipe"] != recipe:
         raise ValueError("sealed fixture recipe/status differs")
-    if result["schema"] == "fs-bench-pro-prepared-native-init-v1":
+    if result["schema"] in ("fs-bench-pro-prepared-native-init-v1", "fs-bench-pro-prepared-native-import-v1", "fs-bench-pro-prepared-native-footprint-v1"):
+        for relative,wanted in result.get("helpers",{}).get("files",{}).items():
+            if identity.sha256(Path(result["helpers"]["root"])/relative)!=wanted:
+                raise ValueError("sealed native-input helper changed: "+relative)
         return result
     if identity.sha256(result["provision"]["sealed_store"]) != result["provision"]["store_sha256"]:
         raise ValueError("sealed host Store changed")
@@ -1829,7 +2076,7 @@ def clone(prepared, folder, build):
     return result
 
 
-def stage(container, prepared, folder, build):
+def stage(container, prepared, folder, build, *, deadline=None):
     folder = Path(folder)
     folder.mkdir(parents=True, exist_ok=False)
     remote_manifest = "/code/.fs-bench-pro-helpers.sha256"
@@ -1849,19 +2096,22 @@ def stage(container, prepared, folder, build):
         stream.write("\n".join(lines) + "\n")
     manifest_sha = identity.sha256(manifest)
     docker = ["docker", "--host", "unix://" + build["socket"]]
-    receipts.command([*docker, "cp", "--archive", prepared["helpers"]["root"] + "/.", container + ":/code"],
-                     folder, "stage-code", 15)
+    def call(argv, label):
+        import time
+        seconds = 15 if deadline is None else min(15, deadline-time.monotonic())
+        if seconds <= 0:
+            raise TimeoutError("original verifier helper-staging deadline expired")
+        return receipts.command(argv, folder, label, seconds)
+    call([*docker, "cp", "--archive", prepared["helpers"]["root"] + "/.", container + ":/code"], "stage-code")
     for cell, record in prepared.get("oracles", {}).get("cases", {}).items():
-        receipts.command([*docker, "cp", "--archive", record["path"], container + ":/code/expected-" + cell],
-                         folder, "stage-oracle-" + cell, 15)
-    receipts.command([*docker, "cp", str(manifest), container + ":" + remote_manifest],
-                     folder, "stage-code-checksum-manifest", 15)
+        call([*docker, "cp", "--archive", record["path"], container + ":/code/expected-" + cell], "stage-oracle-" + cell)
+    call([*docker, "cp", str(manifest), container + ":" + remote_manifest], "stage-code-checksum-manifest")
     # Authenticate the full file before GNU's unchanged complete-file checker.
     # One digest/path line stays in argv regardless of the number of helpers.
     script = ("printf '%s\\n' " + shlex.quote(manifest_sha + "  " + remote_manifest) +
               " | sha256sum --check -\nsha256sum --check " + remote_manifest)
-    checked = receipts.command([*docker, "exec", "--user", "0:0", container,
-                                "/bin/bash", "-euo", "pipefail", "-c", script], folder, "stage-code-check", 15)
+    checked = call([*docker, "exec", "--user", "0:0", container,
+                    "/bin/bash", "-euo", "pipefail", "-c", script], "stage-code-check")
     return {"status": "PASS", "container": container, "actual_helper_byte_check": checked,
             "helper_checksum_manifest": {"path": str(manifest.resolve()), "sha256": manifest_sha,
                                          "remote": remote_manifest, "files": len(lines),

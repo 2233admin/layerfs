@@ -759,3 +759,270 @@ def main(argv=None):
 
 if __name__ == "__main__":
     main()
+
+
+# Closed accounting observation is separate from the existing content/census routes.
+def _overlay_storage_source():
+    """Exact current schema, triggers and ownership/allocation interpretation."""
+    pins = {
+        'core/crates/layerfs-overlay/sql/schema.sql': '9d9e037b28619cfab0f78e8f29325e5c53b5d900aa521a6cc90cc796a0f37e84',
+        'core/crates/layerfs-overlay/sql/accounting.sql': '97042eedc77d1b1a7e6b00f57e82b320299965bd20326444e9568e5131338169',
+        'core/crates/layerfs-overlay/src/database/accounting.rs': '018074d5e8aef663488b2006e0b0cc27a0a7d875f161cfd69feea1c124bd38b4',
+        'core/crates/layerfs-overlay/src/database/allocation.rs': '579cf990c709b51a7cf36820fa21524d7c4ebc18dcf43df4d47d4b1973d8f3c4',
+        'core/crates/layerfs-overlay/src/lifetime/close.rs': '3fa9e4ee99097a9e08860ff07a33a81131dc219b87527f43b8e86d185df112ca',
+        'core/crates/layerfs-bridge/src/control_types.rs': 'd18ff0a0cc22ad7f8772b591c970806e889de49730362cd2e9a5200533e23c4b',
+    }
+    if ROOT is None or any(file_sha(ROOT / name) != digest for name, digest in pins.items()):
+        raise ValueError('closed overlay authoritative schema/accounting source pin changed')
+    source = ''.join((ROOT / name).read_text() for name in tuple(pins)[:2])
+    with closing(sqlite3.connect(':memory:', isolation_level=None, timeout=0)) as database:
+        database.execute('PRAGMA synchronous=OFF')
+        database.executescript(source)
+        definition = list(database.execute(DEFINITION_SQL))
+        tables = [row[0] for row in database.execute("SELECT name FROM sqlite_schema WHERE type='table' ORDER BY name")]
+    return source, definition, tables, pins
+
+
+def _storage_snapshot_identity(path):
+    """Allocation of this exported copy, never physical allocation of its source."""
+    path = Path(path)
+    identity = _sealed_identity(path)
+    stat = path.stat()
+    if stat.st_nlink != 1 or not hasattr(stat, 'st_blocks'):
+        raise ValueError('closed storage requires one regular copy with actual block observation')
+    return {**identity, 'device': stat.st_dev, 'inode': stat.st_ino,
+            'links': stat.st_nlink, 'export_allocated_bytes': stat.st_blocks * 512}
+
+
+def _storage_owner_identity(owner):
+    if (type(owner) is not dict or set(owner) != {'key', 'namespace', 'incarnation'}
+            or type(owner['key']) is not str or not owner['key']
+            or any(c in owner['key'] for c in '\x00\r\n\t')
+            or type(owner['namespace']) is not int or not 0 < owner['namespace'] <= 2**63-1):
+        raise ValueError('closed overlay exact Workspace namespace/owner required')
+    incarnation = _hex(owner['incarnation'], 32)
+    if not any(incarnation):
+        raise ValueError('closed overlay zero Workspace incarnation')
+    return incarnation
+
+
+def _storage_export_custody(path, kind, custody, before, owners):
+    remote = '/layerfs-local/overlay/overlay.sqlite' if kind == 'overlay' else '/layerfs-store/global/store.sqlite'
+    normalized = kind == 'store' and 'normalization' in custody
+    exported = _normalization_binding(path, {key: before[key] for key in ('sha256', 'size')}, custody) if normalized else path
+    identity = _closed_store_file(exported) if normalized else before
+    required = ('custody', 'container', 'volume', 'remote_source', 'local_source', 'source_sha256', 'source_size',
+                'export_completion', 'export_completion_sha256', 'runtime_events', 'runtime_events_sha256')
+    if not set(required).issubset(custody):
+        raise ValueError('closed storage complete export custody required')
+    container = custody['container']
+    if (custody['custody'] != 'KNOWN_STOP' or custody['remote_source'] != remote
+            or type(container) is not str or len(container) != 64
+            or any(c not in '0123456789abcdef' for c in container)
+            or type(custody['volume']) is not str or not custody['volume'].startswith('layerfs-fsb-sample-')
+            or Path(custody['local_source']).resolve() != exported.resolve()
+            or custody['source_sha256'] != identity['sha256'] or custody['source_size'] != identity['size']):
+        raise ValueError('closed storage exact known-Stop/source custody differs')
+    for name in ('export_completion', 'runtime_events'):
+        if file_sha(custody[name]) != custody[name + '_sha256']:
+            raise ValueError('closed storage export/runtime receipt hash differs')
+    completion = json.loads(Path(custody['export_completion']).read_text())
+    argv = completion.get('argv', [])
+    copies = [[container + ':' + remote, str(exported.resolve())],
+              [container + ':' + str(Path(remote).parent), str(exported.parent.resolve())]]
+    if normalized:
+        copies = copies[1:]
+    if (completion.get('status') != 'PASS' or completion.get('exit_code') != 0
+            or completion.get('attempts') != 1 or len(argv) != 6
+            or argv[:2] != ['docker', '--host'] or type(argv[2]) is not str
+            or not argv[2].startswith('unix://') or argv[3] != 'cp' or argv[4:] not in copies):
+        raise ValueError('closed storage exact acknowledged export command differs')
+    events = [json.loads(line) for line in Path(custody['runtime_events']).read_text().splitlines()]
+    if (not events or any(type(event.get('sequence')) is not int for event in events)
+            or any(a['sequence'] >= b['sequence'] for a, b in zip(events, events[1:]))):
+        raise ValueError('closed storage runtime event sequence differs')
+    setup = [e for e in events if e.get('event') == 'daemon_setup']
+    stopped = [e for e in events if e.get('event') == 'container_stopped']
+    created = [e for e in events if e.get('event') == 'sandbox_create_attempt']
+    if (len(setup) != 1 or setup[0].get('fields', {}).get('container') != container
+            or len(stopped) != 1 or stopped[0].get('value') != container
+            or len(created) != 1 or created[0].get('value', '').split(' ')[0] != 'volume=' + custody['volume']
+            or events[-1].get('event') != 'finished'
+            or not created[0]['sequence'] < setup[0]['sequence'] < stopped[0]['sequence'] < events[-1]['sequence']):
+        raise ValueError('closed storage known stopped runtime resource differs')
+    if kind == 'overlay' and {e.get('fields', {}).get('key') for e in events if e.get('event') == 'mount'} != {o.get('key') for o in owners}:
+        raise ValueError('closed overlay original mounted owner set differs')
+    for owner in owners:
+        _storage_owner_identity(owner)
+        matches = [e for e in events if e.get('event') == 'mount' and e.get('fields', {}).get('key') == owner['key']]
+        if (len(matches) != 1 or matches[0].get('fields', {}).get('workspace_incarnation') != owner['incarnation']
+                or type(matches[0].get('fields', {}).get('workspace_namespace')) is not int
+                or matches[0].get('fields', {}).get('workspace_namespace') != owner['namespace']
+                or not setup[0]['sequence'] < matches[0]['sequence'] < stopped[0]['sequence']):
+            raise ValueError('closed overlay owner lacks exact acknowledged mount token binding')
+    return {key: custody[key] for key in required}
+
+
+def _overlay_owner_accounting(database, owner, tables):
+    incarnation = _storage_owner_identity(owner)
+    ns = owner['namespace']
+    allocated = database.execute("SELECT seq FROM sqlite_sequence WHERE name='workspace'").fetchall()
+    if len(allocated) != 1 or type(allocated[0][0]) is not int or ns > allocated[0][0]:
+        raise ValueError('closed overlay owner is outside allocated namespace domain')
+    owned_tables = [name for name in tables if name != 'sqlite_sequence']
+    queries = {name: f'SELECT count(*) FROM "{name}" WHERE ns=?' for name in owned_tables}
+    counts = {name: database.execute(sql, (ns,)).fetchone()[0] for name, sql in queries.items()}
+    workspace = database.execute('SELECT incarnation,lifecycle FROM workspace WHERE ns=?', (ns,)).fetchall()
+    if workspace and (len(workspace) != 1 or _blob(workspace[0][0], 32) != incarnation):
+        raise ValueError('closed overlay existing namespace incarnation differs')
+    payload = database.execute('SELECT coalesce(sum(length(data)+coalesce(length(validity),0)),0) FROM payload WHERE ns=?', (ns,)).fetchone()[0]
+    records = sum(database.execute(f'SELECT coalesce(sum(length(value)),0) FROM "{name}" WHERE ns=?', (ns,)).fetchone()[0]
+                  for name in ('operation_record', 'owned_operation_record', 'indexed_operation_record'))
+    details = ('file_custody', 'file_handle', 'file_read', 'captured_reader', 'operation_owner', 'lookup_owner',
+               'native_mount', 'native_lookup', 'native_parent', 'native_directory', 'native_cookie')
+    expected = dict(wait_refs=counts['orphan_wait'], namespaces=counts['workspace'], inode_rows=counts['inode'],
+                    directory_entry_rows=counts['directory_entry'], payload_cells=counts['payload'], payload_bytes=payload,
+                    shrink_rows=counts['shrink'], operation_record_rows=sum(counts[name] for name in
+                    ('operation_record', 'owned_operation_record', 'indexed_operation_record')), operation_record_bytes=records,
+                    orphan_rows=counts['orphan'], owner_rows=counts['lease'], source_rows=counts['base_source'],
+                    owner_details=sum(counts[name] for name in details), retire_targets=counts['reclaim'],
+                    maintenance_targets=counts['maintenance'], ready_targets=database.execute(
+                    'SELECT coalesce(sum(ready),0) FROM maintenance WHERE ns=?', (ns,)).fetchone()[0])
+    names = list(expected)
+    actual = database.execute('SELECT ' + ','.join(names) + ' FROM accounting WHERE ns=?', (ns,)).fetchall()
+    if (workspace and (len(actual) != 1 or actual[0] != tuple(expected.values()))
+            or not workspace and (actual or any(expected.values()))):
+        raise ValueError('closed overlay maintained namespace accounting differs from actual owned rows')
+    queued = bool(database.execute('SELECT 1 FROM reclaim WHERE ns=? AND queue_key=?', (ns, 2**63-1)).fetchone())
+    state = 'GONE' if not workspace else 'LIVE' if workspace[0][1] == 0 else 'QUEUED' if queued else 'HELD'
+    return {**owner, 'state': state, 'row_counts': counts, 'queries': queries,
+            'stored_payload_and_validity_bytes': payload, 'stored_operation_record_bytes': records,
+            'maintained_accounting': expected, 'owned_namespace_rows': sum(counts.values()),
+            'namespace_cleanup_status': 'PASS' if not any(counts.values()) else 'FAIL',
+            'cleanup_scope': 'all current source-defined ns tables; Gone is absence within allocated domain, former owner is separately mount-bound; shared file may remain'}
+
+
+def _observe_closed_storage_read_only(sealed_path, kind, owners=()):
+    """Synthetic tests may use this; actual runs require observe_closed_storage custody."""
+    path = Path(sealed_path)
+    if kind not in ('overlay', 'store') or kind == 'store' and owners:
+        raise ValueError('closed storage exact overlay/store observation kind required')
+    before = _storage_snapshot_identity(path)
+    owners = list(owners)
+    for owner in owners:
+        _storage_owner_identity(owner)
+    if kind == 'overlay' and (not owners or len({o.get('namespace') for o in owners}) != len(owners)
+                              or len({o.get('key') for o in owners}) != len(owners)):
+        raise ValueError('closed overlay unique explicit owner set required')
+    with closing(sqlite3.connect(path.resolve().as_uri() + '?mode=ro&immutable=1', uri=True,
+                                 timeout=0, isolation_level=None)) as database:
+        database.execute('PRAGMA query_only=ON')
+        version = database.execute('PRAGMA user_version').fetchone()[0]
+        application = database.execute('PRAGMA application_id').fetchone()[0]
+        if kind == 'overlay':
+            _, definition, tables, pins = _overlay_storage_source()
+            if version != 32 or application != 1279676210:
+                raise ValueError('closed overlay current schema identity differs')
+        else:
+            _, text, tables = _schema_source(version)
+            definition = None
+            pins = dict(SCHEMA_PINS)
+            if application != 1279677264:
+                raise ValueError('closed Store current schema identity differs')
+        actual_definition = list(database.execute(DEFINITION_SQL))
+        if (kind == 'overlay' and actual_definition != definition or kind == 'store'
+                and ''.join(value + '\n' for row in actual_definition for value in row) != text
+                or [r[0] for r in database.execute("SELECT name FROM sqlite_schema WHERE type='table' ORDER BY name")] != tables):
+            raise ValueError('closed storage canonical SQL schema/membership differs')
+        if list(database.execute('PRAGMA foreign_key_check')):
+            raise ValueError('closed storage namespace/source foreign key violation')
+        page_size = database.execute('PRAGMA page_size').fetchone()[0]
+        pages = database.execute('PRAGMA page_count').fetchone()[0]
+        free = database.execute('PRAGMA freelist_count').fetchone()[0]
+        if kind == 'overlay' and (page_size != 4096 or database.execute('PRAGMA auto_vacuum').fetchone()[0] != 0):
+            raise ValueError('closed overlay stored page layout differs')
+        selected = [_overlay_owner_accounting(database, owner, tables) for owner in owners]
+        if kind == 'overlay':
+            aggregate = database.execute('SELECT orphan_rows FROM accounting WHERE ns=0').fetchall()
+            if aggregate != [(database.execute('SELECT count(*) FROM orphan').fetchone()[0],)]:
+                raise ValueError('closed overlay maintained aggregate orphan accounting differs')
+    after = _storage_snapshot_identity(path)
+    if before != after:
+        raise ValueError('closed storage exported copy changed during immutable observation')
+    unavailable = {
+        'workspace_physical_live_bytes': 'UNAVAILABLE: ns BLOB lengths are logical stored bytes, not allocated blocks',
+        'workspace_physical_superseded_bytes': 'UNAVAILABLE: no exclusive physical ownership/version classification counter',
+        'workspace_physical_allocated_bytes': 'UNAVAILABLE: one shared SQLite file, indexes/freelist/reservations cannot be assigned by ns',
+        'workspace_physical_peak_bytes': 'UNAVAILABLE: daemon-startup high-water is shared and includes reservation, not original owned-spool peak',
+        'workspace_owned_file_count': 'UNAVAILABLE: current Workspace has ns rows in permanent shared file, no original exclusive spool file topology',
+        'reply_tickets': 'UNAVAILABLE: held in engine memory, absent from closed SQL; no inferred zero',
+    }
+    return {'schema': 'fs-bench-pro-closed-storage-observation-v1', 'kind': kind, 'observation_status': 'PASS',
+            'schema_version': version, 'application_id': application, 'source_pins': pins,
+            'export_copy': {**before, 'scope': 'actual stat/hash of isolated immutable exported copy; copy allocation is not source allocation'},
+            'shared_sqlite': {'page_size_bytes': page_size, 'page_count': pages, 'freelist_count': free,
+                              'scope': 'shared permanent database/index/free pages; no per-Workspace attribution or peak'},
+            'owners': selected, 'namespace_cleanup_status': ('PASS' if all(o['namespace_cleanup_status'] == 'PASS' for o in selected) else 'FAIL') if selected else 'UNAVAILABLE',
+            'metric_availability': unavailable, 'legacy_physical_equation_status': 'UNAVAILABLE',
+            'legacy_physical_resource_status': 'UNAVAILABLE', 'source_main_store_4gib_status': 'UNAVAILABLE',
+            'owned_spool_2gib_status': 'UNAVAILABLE', 'owned_files_after_cleanup_status': 'UNAVAILABLE',
+            'original_limits_bytes': {'main_store': 4 * 1024**3, 'owned_spool': 2 * 1024**3},
+            'profile_availability': 'connection-local MEMORY/OFF/EXCLUSIVE settings are not attested by reopening a copy; require actual startup profile receipt'}
+
+
+def storage_source_stat_body(kind):
+    """Fixed metadata-only source observer; caller owns phase/command/custody."""
+    if kind not in ('overlay', 'store'):
+        raise ValueError('source stat exact storage kind required')
+    remote = '/layerfs-local/overlay/overlay.sqlite' if kind == 'overlay' else '/layerfs-store/global/store.sqlite'
+    return "import json,os,stat\np=" + repr(remote) + "\ns=os.lstat(p)\nassert stat.S_ISREG(s.st_mode) and s.st_nlink==1\nprint(json.dumps({'schema':'fs-bench-pro-source-storage-stat-v1','path':p,'logical_bytes':s.st_size,'allocated_bytes':s.st_blocks*512,'device':s.st_dev,'inode':s.st_ino,'links':s.st_nlink}))\n"
+
+
+def _storage_source_stat(custody, kind):
+    binding = custody.get('source_stat')
+    if binding is None:
+        return {'status': 'UNAVAILABLE', 'reason': 'no authenticated actual source stat boundary; exported copy blocks do not substitute'}
+    if type(binding) is not dict or set(binding) != {'completion', 'completion_sha256', 'stdout', 'stdout_sha256'}:
+        raise ValueError('source storage stat complete command/stdout hash binding required')
+    if any(file_sha(binding[name]) != binding[name + '_sha256'] for name in ('completion', 'stdout')):
+        raise ValueError('source storage stat receipt hash differs')
+    completion = json.loads(Path(binding['completion']).read_text())
+    argv = completion.get('argv', [])
+    if (completion.get('status') != 'PASS' or completion.get('exit_code') != 0 or completion.get('attempts') != 1
+            or Path(completion.get('stdout', '')).resolve() != Path(binding['stdout']).resolve()
+            or len(argv) != 11 or argv[:2] != ['docker', '--host'] or not argv[2].startswith('unix://')
+            or argv[3:9] != ['exec', '--user', '0:0', custody['container'], 'python3', '-B']
+            or argv[9:] != ['-c', storage_source_stat_body(kind)]):
+        raise ValueError('source storage stat exact acknowledged command differs')
+    result = json.loads(Path(binding['stdout']).read_text())
+    remote = '/layerfs-local/overlay/overlay.sqlite' if kind == 'overlay' else '/layerfs-store/global/store.sqlite'
+    if (set(result) != {'schema', 'path', 'logical_bytes', 'allocated_bytes', 'device', 'inode', 'links'}
+            or result['schema'] != 'fs-bench-pro-source-storage-stat-v1' or result['path'] != remote
+            or any(type(result[name]) is not int or result[name] < 0 for name in ('logical_bytes', 'allocated_bytes', 'device', 'inode', 'links'))
+            or result['links'] != 1 or result['allocated_bytes'] % 512):
+        raise ValueError('source storage stat actual native fields differ')
+    return {**result, 'status': 'PASS', 'binding': binding,
+            'scope': 'actual original source file stat at separately retained command boundary; no snapshot-time equality, phase peak or continuous bound inferred'}
+
+
+def observe_closed_storage(sealed_path, export_custody, *, kind, owners=()):
+    """Known-Stop immutable observation; never copies/opens a live EXCLUSIVE overlay.
+
+    PASS is observation admission, not an original resource gate or a case PASS.
+    Missing physical axes stay unavailable even if all namespace rows are gone.
+    """
+    path, custody, owners = Path(sealed_path), dict(export_custody), list(owners)
+    before = _storage_snapshot_identity(path)
+    admitted = _storage_export_custody(path, kind, custody, before, owners)
+    result = _observe_closed_storage_read_only(path, kind, owners)
+    result['custody'] = admitted
+    if 'normalization' in custody:
+        result['normalization'] = custody['normalization']
+    result['source_stat'] = _storage_source_stat(custody, kind)
+    if kind == 'store' and result['source_stat']['status'] == 'PASS':
+        result['source_main_store_4gib_status'] = 'PASS' if max(result['source_stat']['logical_bytes'], result['source_stat']['allocated_bytes']) <= 4 * 1024**3 else 'FAIL'
+        result['source_main_store_4gib_scope'] = 'original actual main-file logical/allocated boundary guard; WAL/sidecar bytes and continuous maxima are separate observations'
+    if _storage_snapshot_identity(path) != before:
+        raise ValueError('closed storage source/copy changed during custody observation')
+    _storage_export_custody(path, kind, custody, before, owners)
+    return result

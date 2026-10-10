@@ -95,6 +95,10 @@ comparison or release-admission claim. Durable is
 | 60 | Use separately hash-bound pristine Store copies for reuse attribution, no warmup workload, and cumulative original independent proof deadlines | Frozen reuse observes initial actual payload identities before one fresh mount; extra structural reads are setup/proof, never cold evidence | Generic ordinary warmup or inferred pristine payload identity |
 | 61 | Preserve repository all-selected ACKs and a separate Created-only census transcript, with actual Fork-bound branch-only manifest derivation | UpToDate repeats must not become invented Commits, and unfiltered global SQL census stays strict; current Init adds an unused default main Branch | Drop repeats, ancestry-filter global census or silently alter manifest authority |
 
+| 62 | Report unavailable legacy per-Workspace physical spool/live/superseded/peak and exclusive file axes explicitly; authenticate actual namespace cleanup separately | Current product exposes namespaced logical accounting in one permanent shared SQLite file; exported-copy allocation/startup high-water cannot prove the frozen physical equation | Guess physical zero from Gone, treat shared allocation as private spool, or add product observability features |
+| 63 | Preserve legacy seven-key administrative removal identities; authenticate declared extra containers and exact partial custody separately | Repository proof uses two owned runtimes on one sample volume; incomplete removal must not rewrite original case verdicts or imply both resources retained | Always append absent optional fields or delete volume after uncertain extra-container removal |
+| 64 | Observe actual owned host PID sampled RSS and expanded reaped-child swap/CPU/IO scope, with unavailable final values until known wait | Original import/repository RSS and zero-swap guards remain, macOS exposes child-aggregate usage rather than an exact native-specific counter | Use lifetime peaks, inferred zero, descendant-free claims or absent after values as PASS |
+
 ## Bugs
 
 | Bug | Case | Symptom | Cause | Fix commit | External test |
@@ -5256,7 +5260,77 @@ machinery, seal nine assets from clean source, prepare/parity and sample once.
 | Worker 44bbead83 | Exact dedup/reuse public proof | 79370 | 79370 | +0 |
 | Worker a39490f48 | Footprint actual typed provider/census binding | 79370 | 79370 | +0 |
 | Worker 8d06d11f9 | Repository all-selected native proof | 79370 | 79370 | +0 |
-| This commit | Integrate native batch6 fixtures and independent proof adapters | 79370 | 79370 | +0 |
+| 86baeb91c | Integrate native batch6 fixtures and independent proof adapters | 79370 | 79370 | +0 |
 
 Each comparison uses the pinned absent-aware staged counter and confirms the
 resulting commit tree. Reference absent, retired R9c; last65,417/tree498dd1917812.
+
+
+### Batch 6 shared controller integration, 2026-10-11
+
+This commit adds committed fresh native-only import/footprint preparation,
+independent source transcripts, original fresh Fork/FUSE verifier topology,
+no-warmup one-Commit reuse, and sustained repository-history control on the
+working ordinary SDK/Sandbox path. Footprint clocks include fresh public Init,
+sealed byte installation/current setup, original edit/Commit/End; no setup
+Store substitutes for paid Init. Root/source/full9 binary identities are bound.
+Known-Stop exports preserve WAL before separate normalization/typed copies.
+Unfiltered global census and actual SDK tuple/Branch authority stay strict.
+All54 actual cases are still NOT_RUN pending clean build, prepare and parity.
+
+The closed SQL observer admits source/schema/trigger pins, immutable export,
+known Stop, command/stream hashes, all actual mounted token owners and exact
+namespace cleanup. Actual source stat and isolated-copy allocation remain
+separate. Decision62 leaves original per-Workspace physical resource axes
+UNAVAILABLE; byte/proof/clean results cannot imply those resource checks PASS.
+Repository keeps every original selected ACK, including UpToDate, with a
+Created-only census; both runtimes receive original sampled8GiB RSS/zero
+expanded-child-swap guards. Import Init retains sampled2GiB RSS and zero swaps;
+footprint uses only zero swaps, adding no RSS cap. Sampler join is finite1s;
+unknown runtime wait stays failure without inferred Stop or zero.
+
+H-27 (harness): multi-runtime disposer emitted an optional None key even for
+legacy receipts while the reader required7keys, so the unchanged partial-loss
+regression failed after primary removal. Original Root FAIL and worker
+before-fix FAIL7,771,375ns retained. Worker19b7de1a4 fixes exact conditional
+identity and source/receipt/manifest/outer ACK/attempt/completion/custody order
+bindings; no deletion retry or verdict rewrite. Seven affected/new worker
+checks PASS98,781,334ns; all8 integrated retention checks PASS378,122,666ns,
+including the unchanged close-failure guard. All Docker actions were mocked.
+
+Integrated owning checks under main120s outer and100s child wall stops:
+repository controller six PASS377,417,625ns; closed storage controller two
+PASS260,793,750ns (negative subcases retained); workspace PASS313,040,500ns;
+parity failures PASS262,922,583ns; fixture machinery PASS435,731,000ns;
+closed storage10 PASS492,558,416ns; host observer10 PASS202,304,125ns;
+short host swaps8 PASS207,686,333ns; combined current RSS3 PASS140,305,500ns;
+import admission6 PASS322,896,833ns (native CLI check previously qualified
+separately at final source). Existing staging, receipt custody, parity build CLI
+and history publication checks reused at their unchanged owning source bodies.
+No expiry or actual case result is claimed by these authoring checks.
+
+Exact worker handoffs reused:
+- Native dedup oracle44bbead833: c1de1b3055db2778678429df3b0a27fd2b44b56134e6c44daeb90da46a2118f2.
+- Closed accounting4e1e99045: 66262de646d9c6918c01122de5f89ded00f3ce3bdb00c2e512317cacf35ac267.
+- Generic host observer58558e005: 7609d950968e262dbf2252d430a16da087e5d7d8975c938d540b395b917b16d2.
+- Repository hooksb4cebee1a: 2c5c890dacebd08f1ef341be4b2e885584eb43cee7272db8a8c2804680eb70e9.
+- Conditional cleanup19b7de1a4: d82b90ce63fd66b07e22bb6fdc451a2f93fbade185038536f8c228035f3cc7b4.
+- Short host guardf661cb4a5: af11c078745b03f2678234423a186655e234f9478f10b8aeefaab5ef30f2a8c2.
+Each handoff remains in its named worker authoring raw directory; integration
+imports only owned exact functions/suffixes, preserving unrelated main edits.
+The initial host test-file syntax error and native/test/format failures remain
+unchanged in raw receipts. No product change, new dependency or speed work.
+
+| Commit | Purpose | Production before | after | delta |
+| --- | --- | --- | --- | --- |
+| Worker4e1e99045 | Closed source-schema accounting observation | 79370 | 79370 | +0 |
+| Worker58558e005 | Finite host process observer | 79370 | 79370 | +0 |
+| Workerb4cebee1a | Repository actual runtime guard hooks | 79370 | 79370 | +0 |
+| Worker19b7de1a4 | Exact optional multi-runtime cleanup custody | 79370 | 79370 | +0 |
+| Workerf661cb4a5 | Optional short-command zero-swap guard | 79370 | 79370 | +0 |
+| This commit | Shared batch6 preparation/controller/receipt machinery | 79370 | 79370 | +0 |
+
+Pinned absent-aware staged counter, identical first-parent/final product scope;
+reference absent (retired R9c, last65,417/tree498dd1917812). Full9 clean source
+build and actual parity/sample/cleanup/results remain next, with shared host/
+Docker VM/protected and retained failed services interference unquantified.

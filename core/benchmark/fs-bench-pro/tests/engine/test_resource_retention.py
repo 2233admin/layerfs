@@ -76,7 +76,7 @@ class ResourceRetention(unittest.TestCase):
             self.assertFalse(any('rm' in argv for argv in calls),calls)
             self.assertIn('retained',row['resource_disposition'])
 
-    def receipt(self, root, *, guarded=False):
+    def receipt(self, root, *, guarded=False, additional=None):
         folder=root/'case';folder.mkdir(); build=root/'build';build.mkdir()
         (build/'build.json').write_text(json.dumps({'socket':'/socket'}))
         row={'family':'git_tool_workflow' if guarded else 'tiny_file_churn','case':'case',
@@ -84,6 +84,8 @@ class ResourceRetention(unittest.TestCase):
              'build':str(build),'container':'a'*64,'clone':{'volume':'layerfs-fsb-sample-'+'b'*16},
              'status':'INELIGIBLE','functional_status':'PASS','proof_status':'PASS',
              'custody':'KNOWN_STOP','cleanup':'Gone','resource_removal_pending':True}
+        if additional is not None:
+            row['additional_containers']=additional
         if guarded:
             with patch.object(receipts.time,'monotonic',return_value=1.):
                 row.update(receipts.finalize_guarded(folder,row,10.))
@@ -129,6 +131,107 @@ class ResourceRetention(unittest.TestCase):
             with patch.object(receipts,'verify_manifest'),patch.object(receipts.json,'loads',side_effect=[record,original_row]):
                 with self.assertRaisesRegex(ValueError,'binding differs'):
                     receipts.resource_disposition(folder,original_row)
+
+    def remove(self, folder, row, *, fail_label=None):
+        calls=[]
+        def command(argv, output, label, seconds):
+            self.assertLessEqual(seconds,15)
+            calls.append((argv,label))
+            if label==fail_label:
+                raise TimeoutError('selected removal acknowledgement lost')
+            stdout=output/(label+'.stdout');stdout.write_text('false\n')
+            return {'stdout':str(stdout),'status':'PASS'}
+        with patch.object(receipts,'command',side_effect=command):
+            record=workspace.dispose_family_resources(folder,row)
+        return record,calls
+
+    def test_additional_owned_ids_remove_once_and_keep_exact_original_binding(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            extras=['9'*64,'8'*64]
+            folder,row=self.receipt(Path(temporary),guarded=True,additional=extras)
+            with patch.object(receipts.time,'monotonic',return_value=2.):
+                receipts.acknowledge_guarded(folder,row)
+            original=(folder/'receipt.json').read_bytes();manifest=(folder/'manifest.json').read_bytes()
+            record,calls=self.remove(folder,row)
+            self.assertEqual(len(calls),7)
+            self.assertEqual([argv[-1] for argv,label in calls if 'container' in label],['a'*64,*extras])
+            self.assertEqual(record['identity']['additional_containers'],extras)
+            self.assertEqual(record['additional_container_custody'],{value:'REMOVED' for value in extras})
+            self.assertEqual(record['status'],'PASS')
+            self.assertEqual((folder/'receipt.json').read_bytes(),original)
+            self.assertEqual((folder/'manifest.json').read_bytes(),manifest)
+            loaded=receipts.resource_disposition(folder,json.loads(original))
+            self.assertEqual(loaded['status'],'INELIGIBLE')
+            self.assertEqual(loaded['administrative_removal_status'],'PASS')
+
+    def test_additional_partial_deletion_keeps_exact_remaining_custody_without_retry(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            extras=['9'*64,'8'*64,'7'*64]
+            folder,row=self.receipt(Path(temporary),additional=extras)
+            original=(folder/'receipt.json').read_bytes()
+            record,calls=self.remove(folder,row,fail_label='additional-2-container')
+            self.assertEqual(len(calls),6)
+            self.assertEqual(record['container_custody'],'REMOVED')
+            self.assertEqual(record['additional_container_custody'],{
+                extras[0]:'REMOVED',extras[1]:'REMOVAL_ATTEMPT_UNCERTAIN',extras[2]:'KNOWN_STOP_RETAINED'})
+            self.assertEqual(record['volume_custody'],'RETAINED')
+            self.assertFalse(any(label=='volume' or label.startswith('additional-3') for _,label in calls))
+            loaded=receipts.resource_disposition(folder,json.loads(original))
+            self.assertEqual(loaded['administrative_removal_status'],'FAIL')
+            self.assertEqual(loaded['status'],'INELIGIBLE')
+            self.assertEqual((folder/'receipt.json').read_bytes(),original)
+
+    def test_additional_malformed_or_unbound_ids_refuse_before_any_deletion(self):
+        invalids=[['a'*64],['9'*64,'9'*64],['F'*64],[False],[[]],{'9'*64:'owned'}]
+        for invalid in invalids:
+            with self.subTest(invalid=invalid),tempfile.TemporaryDirectory() as temporary:
+                folder,row=self.receipt(Path(temporary),additional=invalid)
+                with patch.object(receipts,'command',side_effect=AssertionError('no deletion')):
+                    with self.assertRaisesRegex(ValueError,'canonical additional'):
+                        workspace.dispose_family_resources(folder,row)
+                self.assertFalse((folder/'resource-removal').exists())
+        with tempfile.TemporaryDirectory() as temporary:
+            folder,row=self.receipt(Path(temporary),additional=['9'*64])
+            row['additional_containers']=['8'*64]
+            with patch.object(receipts,'command',side_effect=AssertionError('no deletion')):
+                with self.assertRaisesRegex(ValueError,'identity differs'):
+                    workspace.dispose_family_resources(folder,row)
+
+    def test_additional_forged_identity_custody_and_summary_are_rejected_even_when_resealed(self):
+        mutations=[
+            lambda record:record['identity'].update(additional_containers=['7'*64]),
+            lambda record:record.update(additional_containers=['7'*64]),
+            lambda record:record['additional_container_custody'].update({'7'*64:'REMOVED'}),
+            lambda record:record['additional_container_custody'].update({'8'*64:'REMOVED'}),
+            lambda record:record.update(status='PASS'),
+            lambda record:record.update(resource_disposition='all owned resources removed'),
+            lambda record:record.update(outer_ack_sha256='0'*64),
+            lambda record:record['identity'].update(source_commit='forged'),
+        ]
+        for index,mutate in enumerate(mutations):
+            with self.subTest(mutation=index),tempfile.TemporaryDirectory() as temporary:
+                folder,row=self.receipt(Path(temporary),guarded=True,additional=['9'*64,'8'*64])
+                with patch.object(receipts.time,'monotonic',return_value=2.):
+                    receipts.acknowledge_guarded(folder,row)
+                record,_=self.remove(folder,row,fail_label='additional-1-container')
+                original=json.loads((folder/'receipt.json').read_text())
+                mutate(record)
+                # Reseal only the independent forged administrative record.
+                output=folder/'resource-removal'
+                (output/'completion.json').write_text(json.dumps(record))
+                (output/'manifest.json').unlink();receipts.manifest(output)
+                with self.assertRaises(ValueError):
+                    receipts.resource_disposition(folder,original)
+
+    def test_additional_legacy_identity_and_summary_remain_byte_compatible(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            folder,row=self.receipt(Path(temporary))
+            record,_=self.remove(folder,row)
+            self.assertEqual(set(record['identity']),{'family','case','source_commit','product_tree','image','container','clone'})
+            self.assertNotIn('additional_containers',record)
+            self.assertNotIn('additional_container_custody',record)
+            self.assertEqual(record['resource_disposition'],'container=REMOVED; volume=REMOVED')
+            self.assertEqual(receipts.resource_disposition(folder,row)['administrative_removal_status'],'PASS')
 
 
 if __name__=='__main__':unittest.main()
