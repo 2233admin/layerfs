@@ -3,6 +3,10 @@
 > **Status:** The #235 first-pass runner is implemented; broader migration and
 > performance admission remain proposed. This page approves no numeric result.
 
+Current plan: the [implementation spec](implementation-spec.md) for one harness and the
+25 v0.1.6 workload families (proposal, 2026-10-10). The material below is the earlier
+first-pass migration and keeps its own status.
+
 Tracking: [v0.1.7 migration issue #230](https://github.com/Ephemeral-AI-Lab/layerfs/issues/230).
 The [shared substrate #235](https://github.com/Ephemeral-AI-Lab/layerfs/issues/235)
 precedes the [#231 first-pass spec](issue-231/SPEC.md): one run each for 100,
