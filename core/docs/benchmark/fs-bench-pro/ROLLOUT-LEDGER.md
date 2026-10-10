@@ -20,7 +20,7 @@ comparison or release-admission claim. Durable is
 | 0.4 Reproducible engine | CLOSED: functional proof complete; exact reproduction FAILED C10/C12 | Cell-route correction `bb8e07df8`; build support `c496025fc`; oracle support `7a27a4f26`; fixture support `516c2f009`; workspace/report support `358eca082`; cleanup-observer correction `a1f2c259c` | Begin batch 1 under failed-reproduction closure recorded below |
 | 1 Pilot | COMPLETE: 36 functional/proof/clean-close passes; 7 recorded scoped B PASS, 29 INELIGIBLE; full numeric qualification of the 7 is unverified | Init `c1d7dd0e8`/`39bbcbd6b`; payload `200f81493`/`c1d9b6c58`; parallel routing `b3c96ecb1`; tiny `36849bcc2`/`d6e0ef952`; namespace `98b14b233`/`be1f56a23`; H-2 fix `222526fa0`; closure `d4314ed62`; membership supplement `cca598d0b` | Batch 2, retaining original receipts plus exhaustive membership supplement |
 | 2 Edits | COMPLETE: all62 cases ported/parity/sampled once/recorded;39 strict proof and clean-close passes (numeric INELIGIBLE),20 strict retention failures and3 original capped-watchdog failures retained | Canonical `a34b5d44b`/`beeb7ad69`; preserving `b9ffa63be`; capped `4d8ccfc93`; changing `05ffbf971`; small-delta `c0c99a4a3`/`2e6a508b5`/`1c975ba30` | Begin batch3; no identified fixable product correctness defect remains in batch2 |
-| 3 Trees and tools | IN_PROGRESS: directory12, locality16 and corrected snapshot1 closed; original snapshotFAIL retained; Git4 authored, full build passed, final guards and preparation pending | Shared3c697ae92; directory50c297c68/ad4f95503; locality2590a4536/26c037d90; snapshot0344bfdc6/fix03033abdc/results98d3be30a/70d568e94; Git support acebd7cbd/guard this commit | Complete guarded source, native preparation/parity and single Git4 samples; no batch4 |
+| 3 Trees and tools | COMPLETE: all33 original cases ported/parity/sampled, full applicable proofs and clean closePASS; numeric33INELIGIBLE; first snapshotFAIL retained separately; localitydense500 and snapshot EXCEEDED | Shared3c697ae92; directory50c297c68/ad4f95503; locality2590a4536/26c037d90; snapshot0344bfdc6/fix03033abdc/results98d3be30a/70d568e94; Git acebd7cbd/guard031d427a7/results this commit | Begin batch4 after this committed closure, no identified fixable product correctness bug |
 | 4 History on one branch | PENDING | — | Wait for batch 3 completion |
 | 5 Branches and Workspaces | PENDING | — | Wait for batch 4; verify existing P-1 SDK methods |
 | 6 Dedup and storage | PENDING | — | Wait for batch 5 completion |
@@ -96,7 +96,7 @@ comparison or release-admission claim. Durable is
 | H-5 | Seven recorded pilot read-only B labels; future B/C rows | Scoped zero canonical-object demand was treated as full numerical cache qualification | Still-paid backing/metadata/SQLite pre-phase domains absent; terminal mincore and an object-demand interval ending before unmount cannot establish them | `25719de3b` (prospective only) | test_zero_object_demands_do_not_qualify_unobserved_paid_phase_inputs; test_each_phase_proof_rejects_late_unknown_wrong_identity_or_warm_inputs |
 | H-2 | 36 batch-1 reviewed registrations | source_commit was an annotated tag object; parity accepted it and rejected the actual peeled commit | git rev-parse on an annotated reference returns the tag object unless peeled | `222526fa0` | test_review_identity.py rejects the tag through both parity routes, admits the peeled commit and checks every ported review |
 | H-6 | local-snapshot-create-25000-onebyte-v1 | Original native witness exited0, then controller raised dictionary update #5 after measuredEnd | Frozen sample receipt has multiline path/range values and no verification_status; harness assumed full-tree key/value receipt | `03033abdc` | test_original_multiline_sample_with_successful_exit_is_preserved fails beforefix; altered paths/ranges/scope/exit are rejected afterfix |
-| H-7 | Prospective Git4, found before first sample | Late observation publication followed by failed failure-sidecar write could reload provisional PASS | Draft guard bound timestamp before the observation write and lacked mandatory final completion | This commit | slow observation/completion publication plus failed failure-sidecar regression fails before correction; missing completion remains failed |
+| H-7 | Prospective Git4, found before first sample | Late observation publication followed by failed failure-sidecar write or process death before final post-check could reload provisional PASS | Draft guard bound timestamp before the observation write and lacked mandatory completion/known outer return | `031d427a7` | slow observation/completion publication plus failed failure-sidecar and os._exit(91) regressions fail before correction; missing completion/outer acknowledgement remain failed |
 
 H-1 and H-2 are harness faults, not product correctness or performance defects.
 The original file-identity checker remains intact; no product source changed.
@@ -2261,4 +2261,51 @@ DockerVM; this unquantified interference remains declared, no numeric eligibilit
 | `524a8bded` (worker) | Mandatory completion, late-link revocation and partial-manifest failure rows | 79366 | 79366 | +0 |
 | `1ccdbeb65` (worker) | Freeze0.25 margin and validate monotonic numeric clocks | 79366 | 79366 | +0 |
 | `3d92ebb10` (worker) | Require known outer finalization acknowledgement after post-check | 79366 | 79366 | +0 |
-| This commit | Complete original Git deadlines and H7 guarded finalization before sampling | 79366 | 79366 | +0 |
+| `031d427a7` | Complete original Git deadlines and H7 guarded finalization before sampling | 79366 | 79366 | +0 |
+
+## Batch3 closure
+
+Git4 CSVs integrated unchanged from76545dd1bb3ae621d5877e864ce64338aba7daee,
+exact30/14columns, four rows each, measured source031d427a7. Allfour once-only
+cases PASS original mounted intermediate guards, six measured Git commands,
+complete precommit/fresh.git index-byte custody before semantic Git, independent
+HEAD/tree/parent/fsck/clean/twoGitcommits, current authenticated persisted hybrid
+and exhaustive inode census, Gone/KNOWN_STOP and valid guarded publication plus
+outer returned-finalization acknowledgement. Final parity and retained verify
+PASS, reportonce. NumericfourINELIGIBLE: prior additional verifier reads/full
+paid backing/metadata/SQLite/own-write coldness unqualified. Counters include
+excluded precommit custody FUSE/SQL work; pure-command intervals are not claimed.
+Raw family-handoff.json remains capped worker benchmark-results/fs-bench-pro/
+2026-10-10-batch-3-git-report-031d427a7/. No failed/NA/exceeded Gitcase, product
+bug, resample, optimization, changed limit/workload/fixture/cache/worker profile.
+
+| Case tier | Complete ns | Combined prepublication proof ns | Requests/jobs/statements | Store logical/allocated B | Overlay logical/allocated B |
+| --- | ---: | ---: | --- | --- | --- |
+| 1 | 569462750 | 4085816083 | 5895/7423/45762 | 1516464/1519616 | 299008/268734464 |
+| 10 | 882749792 | 4880959000 | 9394/12330/75496 | 4875688/4878336 | 401408/268836864 |
+| 100 | 4612947959 | 15050067417 | 51386/69392/416614 | 64759408/64761856 | 1490944/269926400 |
+| 500 | 10502533917 | 33127619000 | 118176/193539/1079116 | 80558592/80560128 | 4886528/273321984 |
+
+Allfour passing sample pairs removed with original acknowledgements after
+proof/Gone/KnownStop. Four closed Gitmasters listed above retained; earlier
+capped/snapshot/R7 failures and owner-protected resources untouched. Worker
+CSV-only countedtree2d93ae28ef468b07aa56686e0b51de3b1d3a3f7f confirmed/+0.
+Root integration changes only the twoCSV files and thisledger. Product79366
+unchanged, referenceabsent, pinnedstagedcounter/first-parent method.
+
+Allfour batch3 families meet done-when:33 original IDs ported; familyparity,
+single-source attempts, original applicable independent proof and cleanclose;
+alltwoCSV files committed. Initial snapshot H6FAIL remains at0344bfdc6 and the
+corrected sourceb1f8150e has its separate row. Two slow completions retain
+unchanged15s reporting limits: localitydense50015,251,166,166ns and corrected
+snapshot24,397,444,499ns. No speed/comparison/release verdict. Thirteen families
+and131distinctcases are now closed acrossbatches1–3;132attempt rows include
+the failed snapshot identity. Twenty-three original batch2failed cases remain,
+and all their known reasons/resources are retained; no identified fixable
+productcorrectnessbug remains. Later142cases/12families remain pending.
+Batch4 has not been authored or executed; only originalsource read-only plans
+were prepared concurrently. The next committed work activates its3families
+under the same separate-worktree/current-batch-only policy.
+
+| `76545dd1b` (worker) | Record four original Git outcomes without replay | 79366 | 79366 | +0 |
+| This commit | Integrate Git CSVs and close all33 batch3 cases | 79366 | 79366 | +0 |
