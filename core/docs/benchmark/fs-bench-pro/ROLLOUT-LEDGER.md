@@ -5654,3 +5654,88 @@ repository separate controller paths are unaffected and retain082 identities.
 | This commit | Retain unknown cache refusal and complete functional proof | 79370 | 79370 | +0 |
 Pinned absent-aware staged counter/exact tree confirmation; reference absent
 retiredR9c, last65,417/tree498dd1917812. Product9ac/runtime7766 unchanged.
+
+
+### Batch 6 Store footprint closed with two proof failures, 2026-10-11
+
+All six original cases have committed unchanged definitions, sealed native-only
+inputs and passing frozen parity; no Store/Init was prepared in advance. Final
+actual cohort atfe205b6a6 runs each case once with public retained Init/install,
+one unchanged ordinary ten-byte namespace edit, mandatory Committed ACK and
+End. Four complete native/public typed/census/closed-storage proofs PASS with
+Gone/KnownStop and guarded outer acknowledgement. Their eight owned runtimes
+and four sample volumes were removed by the bound passing disposer. Numeric
+fourINELIGIBLE: paid pre-phase input cache state is unqualified; terminal
+residency observations confer no cold credit.
+
+Two100000-file cases retain FAIL at the original cumulative41s proof-work
+cutoff (45s minus4s cleanup reserve), despite native clipped proofs, actual
+End/Gone/KnownStop and completed closed Store normalization. Unique100000
+public typed proof completed; its subsequent authenticated normalization
+validation/census deadline expired. Metadata100000 typed host verifier
+timeout28.55025791702792s used only its remaining original work allowance;
+its event transcript has observation_scope/selection only, no final typed
+proof. No partial proof is promoted. Normalization operation receipts PASS
+are preserved separately from overall deadline failure. Oracle source
+_closed_store_file/prepare_closed_store performs finite64KiB streaming hashes,
+128-page SQLite backup, separate target checkpoint/close and deadline-guarded
+receipt/hash validation. Typed initial census store_footprint.rs251-316
+walks the exact100000-file namespace and metadata/length/inode classes;
+no live daemon operation occurs in that offline phase. No wrong bytes, crash
+or identified fixable product correctness bug is shown. These are failed
+proofs, with unavailable progress inside the expired typed scan; no
+optimization, budget extension or unchanged replay is selected.
+
+| Original case | Final status | Paid wall ns /15s | Proof wall ns | Store logical/allocated B | Requests/jobs/statements | Cleanup/Stop |
+| --- | --- | ---: | ---: | ---: | --- | --- |
+| store-footprint-unique-100000 | FAIL | 15686684833 /EXCEEDED | 41261847334 | 516735848/516743168 | 12/102/464 | Gone/KNOWN_STOP |
+| store-footprint-metadata-cardinality-100000 | FAIL | 21637843626 /EXCEEDED | 41085351125 | 556090216/556097536 | 12/102/464 | Gone/KNOWN_STOP |
+| store-footprint-large-object-500m | INELIGIBLE | 9198431374 /WITHIN | 24609321417 | 506352584/506359808 | 12/287/1500 | Gone/KNOWN_STOP |
+| store-footprint-unique-100-low-v1 | INELIGIBLE | 2644407417 /WITHIN | 2327876333 | 5411592/5414912 | 12/102/464 | Gone/KNOWN_STOP |
+| store-footprint-metadata-cardinality-100-low-v1 | INELIGIBLE | 2984081458 /WITHIN | 2085784542 | 5452504/5455872 | 12/102/464 | Gone/KNOWN_STOP |
+| store-footprint-large-object-10m-low-v1 | INELIGIBLE | 2643697541 /WITHIN | 2407809125 | 10474344/10477568 | 12/152/771 | Gone/KNOWN_STOP |
+
+Store axes are actual closed main/sidecar logical and allocated bytes; source
+stat boundaries are bound separately from exported-copy allocation. Counts
+cover the registered measured command/control phase, excluding host Init
+and independent verifier; they are not a whole Init-plus-proof total.
+Legacy per-Workspace exclusive physical spool/live/superseded/peak and
+owned-file axes are UNAVAILABLE under Decision62, not zero or passed physical
+equations. Current namespaced logical rows/payload accounting/automatic
+Gone are separately checked; original physical observability is unverified.
+
+Prior cohorts remain unchanged:149 six H28FAIL (already committedc451c2b1);
+1cc oneH31FAIL+fiveNOT_RUN;082 oneH32FAIL+fiveNOT_RUN;0a8 oneH33FAIL+fiveNOT_RUN.
+This commit includes all four newly generated six-row CSV pairs, each beside
+its own original reference rows and exact source identity. H28/H30/H31/H32/H33
+changed executed controller bytes justify only their affected attempts;
+untouched cases ran once. A lead dispatch used an incorrect metadata case ID
+and was refusedexit2 before any registration/claim/product operation; its
+original stdout/stderr/input/exit files stay retained, then the correct
+original IDs were read directly from family.json. No case was replayed.
+
+Retained verify returned1 with fourPASS/twoFAIL in the final cohort; report
+generated all four new pairs once. Exact command/result walls:
+- verify benchmark-results/fs-bench-pro/2026-10-11-h33-store-footprint-run: exit1, wall7226269166ns, outer120s.
+- report benchmark-results/fs-bench-pro/2026-10-11-h28-store-footprint-run: exit0, wall514810750ns, outer120s.
+- report benchmark-results/fs-bench-pro/2026-10-11-h30-h31-store-footprint-run: exit0, wall513864084ns, outer120s.
+- report benchmark-results/fs-bench-pro/2026-10-11-h32-store-footprint-run: exit0, wall498793250ns, outer120s.
+- report benchmark-results/fs-bench-pro/2026-10-11-h33-store-footprint-run: exit0, wall6592524000ns, outer120s.
+
+| Source/case | Retained runtime | Retained installer | Retained volume |
+| --- | --- | --- | --- |
+| 1cc25d4de/store-footprint-unique-100000 | e3cfc379c233270e20e4c828315d2ebbad53977484a211edac09e544e692bfcd | 04dbe324a5085a4cfbb75f04b8c9e7e891e2951c684a62a9b015c8ca20ff9813 | layerfs-fsb-sample-db9744f8474c443a |
+| 08288e824/store-footprint-unique-100000 | 9d484e598c9f9599c4ec80bb2def6e6b9bb3e78486dd04e629dbbc9837283b76 | d23155a3a5ef18645580cae1f45a29f476ba9bbbcb998ceba91abf29ac021090 | layerfs-fsb-sample-a459275354b44434 |
+| 0a8d15f0e/store-footprint-unique-100000 | 647492bb2d4fb61380533d8c6a2cdb85ec421c2bbb89b5d78ab74db30476cd5a | 3e84dd3e3176dccee70f838a4f1bcd8518a86ad415e5cf373bb99ddd0d739627 | layerfs-fsb-sample-6017ae5a999c477b |
+| fe205b6a6/store-footprint-unique-100000 | 9fd3a1f7b58a3de4d67ef82ced70953286dbfabd41d7e152b3947fe477fca141 | 1ab2431bafdd279b63f40034a7fd824384eb529be5dffcc2f50ad040d0fb24bf | layerfs-fsb-sample-83122df33e1447b0 |
+| fe205b6a6/store-footprint-metadata-cardinality-100000 | 2e1dffdf90a780ce4fc5f0e52afd3fd6436264a68c7831ecf09f787399ec832b | ba971583062de2685c2b4cb0323421f792e3dbf5f83980e80588ea7311192a7f | layerfs-fsb-sample-51beb9ac88a84e65 |
+
+Shared host/Docker VM and retained failed services interference is unquantified.
+Product9ac/runtime7766/other eight sealed assets unchanged. Every original
+limit, workload, metadata/cache declaration and worker count remains.
+
+| Commit | Purpose | Production before | after | delta |
+| --- | --- | --- | --- | --- |
+| This commit | Close footprint final6 and preserve3 newly failed cohorts | 79370 | 79370 | +0 |
+Pinned absent-aware staged counter/exact tree confirmation; reference absent,
+retiredR9c, last65,417/tree498dd1917812.
