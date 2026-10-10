@@ -16,7 +16,14 @@ impl Drop for Temp {
     }
 }
 fn engine() -> (Temp, Overlay) {
-    let path = std::env::temp_dir().join(format!("layerfs-close-custody-{}", std::process::id()));
+    // The tests of this file run as threads of one process: each engine
+    // needs a directory of its own.
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let number = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let path = std::env::temp_dir().join(format!(
+        "layerfs-close-custody-{}-{number}",
+        std::process::id()
+    ));
     std::fs::create_dir(&path).unwrap();
     let db = Overlay::create(&path.join("overlay"), ProfileConfig::default()).unwrap();
     (Temp(path), db)

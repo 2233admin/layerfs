@@ -12,6 +12,19 @@ cursor's cell, the next seek starts at the row's end, and a window ends with
 the widest row that holds its first byte, so its length and mask are bounded
 by `RUN_BYTES` and `RUN_BYTES/8` instead of one cell.
 
+Issue 316 update, 2026-10-11 (source `8c1993f4a`): a cursor made with
+`shapes_only()` serves a caller that needs to know which bytes are local and
+not what they hold. When its first byte lies in a live dense row of the newest
+layer, the step is `Local { offset, length, next }`: that row and the live
+dense rows of the same layer that follow it without a gap, at most 64 physical
+rows in one unit. The newest layer decides those bytes whatever lower layers
+hold, so no payload is composed or returned. A masked row, a row that stops
+inside its cell, a lower layer and a stale row keep the composed `Window`. A
+payload cursor never receives `Local`, and the mode is part of the cursor
+identity that `metadata_advanced_from` checks. The external overlay test
+`captured_runs` requires the same changed/inherited classification of every
+byte from both modes.
+
 `CapturedRunCursor` retains the exact engine-minted CapturedReader, serial,
 checked caller-supplied logical size, current position and fixed per-layer
 metadata lookahead. It acquires/releases no reader or operation. When a local

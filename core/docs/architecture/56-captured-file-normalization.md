@@ -10,6 +10,19 @@ schema16. Earlier algorithm and proof pins retain their original scope; see
 > Namespace reduction, release resolution, complete root qualification and
 > integrated Commit remain open.
 
+Issue 316 update, 2026-10-11 (source `8c1993f4a`): preparation runs a
+[shapes-only cursor](55-captured-sparse-run-cursor.md), so it reads no payload
+for dense rows of the newest layer; the construction source still reads each
+replacement byte once. Preparation no longer visits bytes beyond the surviving
+base (the smaller of the base and final lengths): they are one trailing insert
+whatever they hold, and the construction source still refuses an inherited
+byte there. A new file therefore has zero normalization steps. A cached
+normalized edit is returned without reading the sealed context again; the
+context is checked before every read of the records, before the first run of a
+new-file stream and before its End. Where the text below says that source
+lookup rechecks the sealed context, that now applies to a lookup that reads a
+record.
+
 `CapturedFileEdits::prepare(workspace, provider, reader, serial, records_scope)`
 selects one regular file in an actual retained capture. It accepts no declared
 file root, base length or final length. The Workspace route must equal the exact

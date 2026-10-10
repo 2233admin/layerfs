@@ -10,6 +10,11 @@ the statement counts and page figures below describe one cell per row. The
 current rules and numbers are in
 [the daemon overlay note](19-daemon-overlay.md).
 
+Issue 316 update, 2026-10-11 (source `8c1993f4a`): the read job copies a dense
+row over bytes no higher layer decided as one slice, and marks a wholly
+inherited window with one fill. Workspace moves inherited bytes into a window
+one run at a time. The composed bytes and the inherited bitmap are unchanged.
+
 The selected [payload derivation](../issues/307/S5-PAYLOAD-CONTRACT.md) describes
 schema v8. Each live inode generation has a lower-view cutoff, shrink epoch and
 indexed shrink staircase. Cells store bytes only through their last valid byte;
