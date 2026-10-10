@@ -4,7 +4,8 @@
 
 Draft for owner review, 2026-10-11, for
 [#316](https://github.com/Ephemeral-AI-Lab/layerfs/issues/316). Source read at
-`79ffe99a0`. Nothing in this plan is implemented. It follows the
+`79ffe99a0`. Phase 1 is implemented at `707a7c675` (section 13 and the
+[ledger](PROGRESS.md)); phases 2 and 3 are not. It follows the
 [rules and guidelines](PIECE-STRUCTURE-GUIDELINES.md), the
 [cache inventory](CACHE-INVENTORY.md) and the
 [requirements note](LOCALIZED-EDIT-REQUIREMENTS.md).
@@ -724,3 +725,27 @@ Risks carried into the phases:
   needs one.
 - **Write ordering under credit pressure** is not first-in first-out. The
   cost is a missed match.
+
+## 13. Implementation record
+
+Added by the implementing agent. Sections 1 to 12 keep the text the owner
+reviewed; this section records where the source differs. Each item is decided
+by agent, pending owner review, and is described in the [ledger](PROGRESS.md).
+
+Phase 1, at `707a7c675`:
+
+| Section | Plan | Source |
+| --- | --- | --- |
+| 3.3 | A read returns reference ranges | The ranges, at most 33 a window, and one bit per byte that a piece supplies |
+| 3.4 | Truncate deletes pieces that start in the boundary cell | Truncate cuts the crossing piece to the new size; later pieces go stale through the shrink step and are deleted by maintenance kind 12 |
+| 3.2 | A per-file counter is the content sequence | The Workspace revision of the row's last publication |
+| 4.2 | A reference is retained when it starts at or after the base cursor | A span partly behind the cursor is split; the part at or after it is retained |
+| 4.2 | One script for every captured file | A file without pieces keeps its earlier two-edit form; sealed context version 2 says which |
+| 9 | `payload/pieces/captured.rs` conditional | Created: the piece-aware unit is a second decision order |
+| 9 | `payload/runs.rs` not listed | Touched: the row transfer it owns must not move cells over a live upper piece |
+| 9 | `mapping/predecessor.rs` reused | Refactored onto the walk it now shares with `extents.rs` |
+| 9 | `extents.rs` reports whether an extent is a whole chunk | It reports the offset inside the chunk; only equal identity proves a whole chunk |
+| 9 | `layerfs-fuse` `operations/read.rs` changes | No change needed: a window with reference ranges already takes the base like an inherited byte |
+| 9 | Not listed | Also touched, each by a few lines: overlay `database/connection.rs`; workspace `operations/namespace/create.rs`, `remove.rs` and `rename.rs` (the new inode fields) and three declaration files |
+| 9 | `diagnostics/metrics.rs` and `payload.rs` gain piece counters; daemon `native_job.rs` charges | Not touched: the row count is `accounting.reference_rows` and the plans are in `diagnostics/captured_runs.rs`; the charges are in `commands.rs` and the Workspace visit |
+| 8 | About 12 new statement texts | 15; 239 of 256 in use (static count) |

@@ -148,3 +148,184 @@ claims and the layered read; truncate and stale pieces; lifecycle; the
 captured `Reference` step; Content's extent cursor; the Workspace read path;
 the edit script and end-to-end tests. Then tier 2 under tag `p1`, whose counts
 must equal `c0`.
+
+## Phase 1 — checkpoint 2026-10-11, commit `707a7c675`
+
+### What changed
+
+Five counted commits. Only tests write a piece: no request path supplies a
+claim, so no ordinary program can create one yet.
+
+| Commit | Subject | Production LOC |
+| --- | --- | --- |
+| `27a0620ac` | Overlay schema 33: piece rows, claims on a write, pieces in a read | 79544 -> 80040 (delta +496) |
+| `aacb44746` | Pieces follow the layer lifecycles: retire, fold, orphan, reclaim | 80040 -> 80312 (delta +272) |
+| `72f014a7a` | Captured run cursor reports a piece as one Reference step | 80312 -> 80433 (delta +121) |
+| `31fbe96da` | Workspace reads reference ranges and commits pieces as an edit script | 80433 -> 80829 (delta +396) |
+| `707a7c675` | Content: extent cursor, chunk identity from bytes, cut-candidate scan | 80829 -> 80953 (delta +124) |
+
+Phase total: 79544 -> 80953 (delta +1409). Scope and method are in each
+commit message; the reference scope is absent (retired R9c; last counted
+65,417 at tree 498dd1917812).
+
+- **Table.** `payload_reference(ns, gen, serial, file_offset, length, epoch,
+  source, source_offset)`; `inode.referenced` and `inode.sequence`;
+  maintenance kind 12; `accounting.reference_rows`.
+- **Write.** A write can carry claims. A claim is trimmed inward to cells,
+  replaces the layer's cells in its range, and extends the neighbouring piece
+  or inserts one row. A claim over bytes of an earlier job is honoured only
+  while the content sequence is unchanged.
+- **Read.** A layer's cells are applied first, then its pieces. A read plan
+  names pieces as at most 33 disjoint ranges and one bit per byte; Workspace
+  copies each range from committed content at its source offset.
+- **Truncate and lifecycle.** A shrink cuts the crossing piece; stale pieces,
+  generation retirement, last-owner release, orphan migration, failed-capture
+  fold and terminal reclaim all handle pieces in bounded steps.
+- **Commit.** The captured cursor reports a piece as one `Reference` step. A
+  forward pass with constant state turns the spans of a file with pieces into
+  an edit script; a file without pieces seals the records it sealed before.
+- **Content.** Extent cursor over a committed file, chunk identity from bytes
+  without building the object, and the cut-candidate scan: the read-only entry
+  points phase 2 calls.
+
+Architecture documents 03, 19, 25, 31, 48, 55 and 56 changed with the source.
+
+### Checks at `707a7c675`
+
+Every test command ran under a 120 s stop, built with `--no-run` first. Host:
+cargo 1.85.1, locked. Linux: the pinned image.
+
+| Check | Where | Result |
+| --- | --- | --- |
+| `layerfs-content`, `layerfs-overlay`, `layerfs-workspace`, all test targets | host | pass |
+| `layerfs-daemon`, 16 selected test targets | host | pass |
+| Clippy `-D warnings`: content, overlay, workspace all targets; daemon and fuse libraries and the touched daemon tests | host | clean |
+| Formatting: content, overlay, workspace by package; touched daemon files one by one | host | clean |
+| Product boundary guard | host | PASS, 681 files |
+| `layerfs-content`, all test targets | Linux | 457 passed |
+| `layerfs-overlay`, all test targets | Linux | 151 passed |
+| `layerfs-workspace`, all test targets | Linux | 167 passed |
+| `layerfs-daemon`, non-mount selection | Linux | 17 passed; 2 failed in `native_mutation` because that run was started without the FUSE device ("native attach Device: No such file or directory"), a selection error of this run |
+| `layerfs-daemon` mount tests, default test threads | Linux, FUSE device | 3 of `mounted_store_read` failed at mount with "already mounted" |
+| `layerfs-daemon` mount tests, one test thread: `mounted_store_read`, `native_mutation` | Linux, FUSE device | 6 passed |
+| `layerfs-daemon` mount tests, one test thread: `mounted_commit`, `mounted_execute`, `native_coherence` | Linux, FUSE device | 14 passed |
+| `layerfs-daemon` package as a whole; `cargo fmt` of the daemon package | host | not usable: the example `e2_startup` and the test `e2_startup_receipts` include a harness file that is absent, as at the branch base |
+
+The three parallel failures are reported as observed. They were not diagnosed
+further: the same tests pass with one test thread, and the failing call is the
+mount of the test's own directory. The linker was killed once for lack of
+memory while building the daemon tests in the image; the build passed with two
+jobs.
+
+Evidence the plan asks of phase 1:
+
+- **Byte-exact read-back.** Overlay `pieces.rs` and `piece_lifetimes.rs`
+  compare every piece shape with a plain-write model, including randomized
+  rounds across resize, capture, install and fold. Workspace
+  `captured_piece_edits.rs` compares the live view, the sealed view and the
+  constructed root with the final bytes. Daemon `piece_commit.rs` uses a real
+  Disposable Store: pieces in two files, product Commit, the published root
+  read from a fresh bind, then a second Commit. "Remount" here is a fresh
+  bind of the Workspace on the published root, not a kernel mount; the kernel
+  route to a piece does not exist before phase 2.
+- **Commit counts at two sizes.** A middle insert over a 1 MiB and a 6 MiB
+  base: 4 normalization steps, 1 source step, 5 rows, 1 edit and 0 committed
+  bytes for both; object reads 4 and 7.
+- **Query plans and runtime profile.** `pieces.rs` asserts the plans of the
+  piece statements (no scan, temporary b-tree or automatic index) and the engine's runtime counters:
+  extending a piece of 1 and of 48 windows is 14 statements and 3 changed rows
+  each; a read inside either is 6 statements. The profile found one statement
+  that SQLite prepared again on each bind; its limit is now a literal.
+- **Prepared statements.** 239 literal job texts of a capacity of 256 (static
+  count), 15 more than schema 32. The stop condition (capacity not enough) is
+  not triggered. The plan's estimate was about 12.
+- **Moving a long piece between layers.** A step reads at most three rows and
+  changes at most three, whatever the piece's length. That stop condition is
+  not triggered.
+
+### Tier 2, tag `p1`
+
+Nine fixed cases, one sample each, at `707a7c675`. Control `c0` is above.
+
+| case | status | proof | exec ms | Commit ms | requests | writer jobs | statements | overlay MB | commit |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| append-tail-4k-on-500mib-result-capped-v2-ops-1 | INELIGIBLE | PASS | 42.5 | 14.4 | 11 | 173 | 880 | 0.3 | 707a7c675 |
+| delete-middle-4k-on-500mib-ops-1 | FAIL | FAIL | 2169.3 | 2350.4 | 6012 | 25449 | 223248 | 272.5 | 707a7c675 |
+| insert-middle-4k-on-10mib-ops-1 | FAIL | FAIL | 60.5 | 43.3 | 171 | 808 | 5018 | 5.7 | 707a7c675 |
+| insert-middle-4k-on-500mib-result-capped-v2-ops-1 | FAIL | FAIL | 2217.2 | 2282.9 | 8011 | 20649 | 133839 | 268.4 | 707a7c675 |
+| prepend-head-4k-on-500mib-result-capped-v2-ops-1 | FAIL | FAIL | 4729.1 | 4750.9 | 16011 | 37881 | 252687 | 536.6 | 707a7c675 |
+| overwrite-middle-4k-on-500mib-ops-1 | INELIGIBLE | PASS | 47.3 | 18.7 | 11 | 452 | 2375 | 0.3 | 707a7c675 |
+| payload-create-500m | INELIGIBLE | PASS | 1051.6 | 6644.7 | 4014 | 20137 | 156610 | 533.4 | 707a7c675 |
+| tiny-bulk-create-100-mixed-v3 | INELIGIBLE | PASS | 721.6 | 1246.9 | 8709 | 71650 | 341790 | 108.7 | 707a7c675 |
+| workspace-dense-rewrite-100-mixed-v4 | INELIGIBLE | PASS | 1171.0 | 2374.7 | 12545 | 84438 | 424874 | 109.8 | 707a7c675 |
+
+Rows as observed:
+
+- **Requests, writer jobs and statements equal `c0` in all nine cases**, to
+  the unit. This is the phase 1 expectation: nothing creates a piece.
+- **Overlay logical bytes are not equal.** Seven cases hold 4,096 bytes more
+  than `c0`, `tiny-bulk-create` 8,192 more and `workspace-dense-rewrite`
+  40,960 more (109,719,552 to 109,760,512, 0.04%). Not profiled. The reading:
+  one page is the root of the new, empty table; the rest follows the two
+  added inode columns, which make every inode row a few bytes wider, in the
+  two cases with thousands of inodes. Reported as a storage cost of schema 33.
+- **Four FAIL**, the four target cases, with the same original failure as in
+  `c0`: `independent-graph failed with exit 1`, the retention guard (O-6,
+  with the owner).
+- **Five INELIGIBLE**, the five regression cases: functional status PASS and
+  proof PASS in each receipt; ineligible for the declared interference.
+- Timings are single diagnostic samples and are not compared.
+
+### Decisions by agent, pending owner review
+
+Each is also in the commit message of the checkpoint that made it.
+
+1. **Truncate** cuts the crossing piece to end at the new size. The plan's
+   "deletes pieces that start in the boundary cell" would drop bytes below it.
+2. **Content sequence** is the Workspace revision of the row's last
+   publication, not a per-row counter, so a value cannot repeat.
+3. **Claims** are a boxed field beside the write in the overlay job and travel
+   in `WriteData` in Workspace: existing call sites are unchanged.
+4. **A literal `LIMIT`** in the window statement, found by the runtime
+   counters.
+5. **`explain_pieces()`** is a new diagnostic rather than more lines of
+   `explain_payload()`.
+6. **The retirement phase for pieces is the last one**, so the phase numbers
+   of an engine without pieces are unchanged.
+7. **A moved fragment is not merged** with a neighbouring row of the upper
+   layer. Fold and migration are rare; rows stay bounded by the rows that
+   existed.
+8. **Compact read plan**: ranges and a bit mask, not a byte map. The byte map
+   doubled the reservation of every read reply.
+9. **The edit script splits a span that lies partly behind the base cursor**
+   and retains the rest. The plan retains a reference only when it starts at
+   or after the cursor.
+10. **A file without pieces keeps its two-edit form**, so its records and
+    counts equal the control; its exact edit checks stay. Script edits have
+    the general checks. The sealed context is version 2.
+11. **The captured cursor keeps no piece state**; a resumed pass pays one
+    seek, and the wire form of the cursor is unchanged.
+12. **The extent cursor reports the offset inside the chunk**, not a "whole
+    chunk" flag: the mapping records no chunk length, so only bytes that hash
+    to the chunk's identity prove a whole chunk.
+13. **Placement, against plan section 9** (recorded in the plan, section 13):
+    `payload/pieces/captured.rs` was created; `payload/runs.rs` and
+    `mapping/predecessor.rs` were touched; `layerfs-fuse` `read.rs` needed no
+    change; the Workspace test harness moved to `tests/captured_support`.
+
+### What failed or was not done
+
+- The three parallel mount-test failures and the two device-less failures in
+  the table above.
+- The daemon package's own `e2_startup` targets do not compile; untouched.
+- No kernel-mounted proof creates a piece: that is the mounted proof of
+  phase 2.
+- Tier 3 and tier 4 do not belong to this phase.
+- Nothing was reverted in phase 1.
+
+### Next
+
+Phase 2: the recognizer without carry. One new request port; gate, continue
+and search in Workspace over the Content entry points; a fixed slot table in
+the daemon shared by all Workspaces; split of the daemon's overlay command
+file before any new variant. Tier 2 at each recognizer step.
