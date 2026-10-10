@@ -350,6 +350,51 @@ def history_container_profile(runtime, build, output):
     return wanted
 
 
+def ordinary_resource_values(row, before=None):
+    """Frozen ordinary main-file/cgroup guards; no substituted peak or pager claim."""
+    for name in ("store_main_logical_bytes", "store_main_allocated_bytes", "oom", "oom_kill", "swap_current"):
+        if type(row.get(name)) is not int or row[name] < 0:
+            raise ValueError("original ordinary resource observation unavailable: " + name)
+    if any(row[name] > 4 * 1024**3 for name in ("store_main_logical_bytes", "store_main_allocated_bytes")):
+        raise RuntimeError("sample Store exceeds frozen 4 GiB bound")
+    if row["swap_current"] or before and any(row[name] != before[name] for name in ("oom", "oom_kill")):
+        raise RuntimeError("original ordinary container OOM/swap")
+    return row
+
+
+def ordinary_resource_guard(runtime, build, output, label, before=None):
+    """Observe only the actual sample's backing stat/cgroup outside product time."""
+    body = """import json
+from pathlib import Path
+store=Path('/layerfs-store/global/store.sqlite').stat()
+events=dict(line.split() for line in Path('/sys/fs/cgroup/memory.events').read_text().splitlines())
+print(json.dumps({'store_main_logical_bytes':store.st_size,'store_main_allocated_bytes':store.st_blocks*512,
+ 'oom':int(events['oom']),'oom_kill':int(events['oom_kill']),
+ 'swap_current':int(Path('/sys/fs/cgroup/memory.swap.current').read_text())}))
+"""
+    docker = ["docker", "--host", "unix://" + build["socket"]]
+    attempted = receipts.command([*docker, "exec", "--user", "0:0", runtime.container,
+                                  "python3", "-B", "-c", body], output, label, 15)
+    row = json.loads(Path(attempted["stdout"]).read_text())
+    row["scope"] = "original 4GiB main Store apparent/allocated bound; actual own container OOM/swap; retired host Store RSS/physical-spool peak not asserted"
+    return ordinary_resource_values(row, before)
+
+
+def original_operation_counts(command, wanted):
+    """Check retained frozen semantic work counters without replaying any work."""
+    if command is None:
+        raise ValueError("original operation counters require the acknowledged workload")
+    lines = Path(command["fields"]["stdout"]).read_text().splitlines()
+    found = {}
+    for name, value in wanted.items():
+        matches = [line.partition("=")[2] for line in lines if line.partition("=")[0] == name]
+        if (type(value) is not int or value < 0 or len(matches) != 1
+                or not matches[0].isascii() or not matches[0].isdigit() or int(matches[0]) != value):
+            raise ValueError("original measured workload semantic count differs: " + name)
+        found[name] = value
+    return found
+
+
 def history_observer(clock, row, label, action):
     """Retain raw observer wall and exclude it even when a resource guard fails."""
     started = time.monotonic_ns()
@@ -389,7 +434,7 @@ def one_family_case(family, case, prepared_folder, build_folder, output):
     output = Path(output).resolve()
     output.mkdir(parents=True, exist_ok=False)
     ordered = bool(case.get("history_schedule"))
-    body = "/bin/bash /code/workload.sh apply " + shlex.quote(case["v016_case"])
+    body = None if case.get("control_only") else "/bin/bash /code/workload.sh apply " + shlex.quote(case["v016_case"])
     bodies = ["/bin/bash /code/" + step["run"] for step in case["steps"]] if ordered else [body]
     if ordered and (len(bodies) != 30 or any(not step.get("commit") for step in case["steps"])):
         raise ValueError("original ordered history requires thirty importer saves and Commits")
@@ -436,9 +481,11 @@ def one_family_case(family, case, prepared_folder, build_folder, output):
         row["container"] = runtime.container
         if runtime.container is None:
             raise ValueError("original container acknowledgement unavailable")
-        if ordered:
+        if ordered or case.get("original_ordinary_guards"):
             row["container_profile"] = history_container_profile(runtime, build, output)
         row["staging"] = fixtures.stage(runtime.container, prepared, output / "staging", build)
+        if case.get("original_ordinary_guards"):
+            row["ordinary_resource_guards"] = {"before": ordinary_resource_guard(runtime, build, output, "ordinary-resources-before"), "steps": []}
         if ordered:
             row["resource_guards"] = {"before": history_resource_guard(runtime, build, output, "history-resources-before"), "steps": []}
             row["cache"].update(same_mount=True, warm_interval_ns=None,
@@ -448,7 +495,8 @@ def one_family_case(family, case, prepared_folder, build_folder, output):
             warm = secrets.token_hex(32)
             runtime.send("mount", warm, deadline=time.monotonic() + 15)
             mounted.add(warm)
-            runtime.send("command", warm, script(output, "warmup.sh", body), deadline=time.monotonic() + 120)
+            if body is not None:
+                runtime.send("command", warm, script(output, "warmup.sh", body), deadline=time.monotonic() + 120)
             warm_end = runtime.send("unmount", warm, deadline=time.monotonic() + 15)
             mounted.remove(warm)
             bindings["warmup_unmount"] = endpoint(warm_end)
@@ -474,15 +522,26 @@ def one_family_case(family, case, prepared_folder, build_folder, output):
                 history_observer(clock, row, f"free-space-before-state-{index}", lambda: history_free_space(output))
             step_started = time.monotonic_ns()
             step_stop = operation_deadline(phase_stop, operation_seconds) if ordered else group_stop
-            command = runtime.send("command", selected, script(output, f"command-{index}.sh" if ordered else "command.sh", command_body),
-                                   deadline=operation_deadline(step_stop, operation_seconds))
-            row["phases"]["command_ns"] += command["span"]["duration_ns"]
+            command = None
+            if command_body is not None:
+                command = runtime.send("command", selected, script(output, f"command-{index}.sh" if ordered else "command.sh", command_body),
+                                       deadline=operation_deadline(step_stop, operation_seconds))
+                row["phases"]["command_ns"] += command["span"]["duration_ns"]
+            if case.get("original_operation_counts"):
+                row["original_operation_counts"] = history_observer(clock, row, f"original-operation-counts-{index}",
+                    lambda: original_operation_counts(command, case["original_operation_counts"]))
+            if case.get("original_ordinary_guards"):
+                row["ordinary_resource_guards"]["steps"].append(history_observer(clock, row, f"ordinary-before-commit-{index}",
+                    lambda: ordinary_resource_guard(runtime, build, output, f"ordinary-resources-before-commit-{index}", row["ordinary_resource_guards"]["before"])))
             row["cache"]["commit_started_monotonic_ns"] = time.monotonic_ns()
             committed = runtime.send("commit", selected, deadline=operation_deadline(step_stop, operation_seconds))
             row["phases"]["commit_ns"] += committed["span"]["duration_ns"]
             row["commit"] = committed
             if committed["fields"]["commit_kind"] != case["expected_commit"]:
                 raise ValueError("original known Commit outcome differs from frozen mutation/read-only case")
+            if case.get("original_ordinary_guards"):
+                row["ordinary_resource_guards"]["steps"].append(history_observer(clock, row, f"ordinary-after-commit-{index}",
+                    lambda: ordinary_resource_guard(runtime, build, output, f"ordinary-resources-after-commit-{index}", row["ordinary_resource_guards"]["before"])))
             if ordered:
                 record = {"index": index, "command": command, "commit": committed,
                           "step_wall_ns": time.monotonic_ns() - step_started}
@@ -530,6 +589,9 @@ def one_family_case(family, case, prepared_folder, build_folder, output):
         runtime.send("unmount", verify_mount, deadline=time.monotonic() + native_seconds(15))
         mounted.remove(verify_mount)
         row["verification_cleanup"] = readiness(runtime, verify_mount, native_seconds(5))
+        if case.get("original_ordinary_guards"):
+            row["ordinary_resource_guards"]["after_native_proof"] = ordinary_resource_guard(runtime, build, output,
+                "ordinary-resources-after-native-proof", row["ordinary_resource_guards"]["before"])
         if ordered:
             row["resource_guards"]["after_native_proof"] = history_resource_guard(runtime, build, output,
                 "history-resources-after-native-proof", row["resource_guards"]["before"])

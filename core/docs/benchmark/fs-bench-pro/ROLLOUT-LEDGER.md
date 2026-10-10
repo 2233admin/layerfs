@@ -20,7 +20,7 @@ comparison or release-admission claim. Durable is
 | 0.4 Reproducible engine | CLOSED: functional proof complete; exact reproduction FAILED C10/C12 | Cell-route correction `bb8e07df8`; build support `c496025fc`; oracle support `7a27a4f26`; fixture support `516c2f009`; workspace/report support `358eca082`; cleanup-observer correction `a1f2c259c` | Begin batch 1 under failed-reproduction closure recorded below |
 | 1 Pilot | COMPLETE: 36 functional/proof/clean-close passes; 7 recorded scoped B PASS, 29 INELIGIBLE; full numeric qualification of the 7 is unverified | Init `c1d7dd0e8`/`39bbcbd6b`; payload `200f81493`/`c1d9b6c58`; parallel routing `b3c96ecb1`; tiny `36849bcc2`/`d6e0ef952`; namespace `98b14b233`/`be1f56a23`; H-2 fix `222526fa0`; closure `d4314ed62`; membership supplement `cca598d0b` | Batch 2, retaining original receipts plus exhaustive membership supplement |
 | 2 Edits | COMPLETE: all62 cases ported/parity/sampled once/recorded;39 strict proof and clean-close passes (numeric INELIGIBLE),20 strict retention failures and3 original capped-watchdog failures retained | Canonical `a34b5d44b`/`beeb7ad69`; preserving `b9ffa63be`; capped `4d8ccfc93`; changing `05ffbf971`; small-delta `c0c99a4a3`/`2e6a508b5`/this commit | Begin batch3; no identified fixable product correctness defect remains in batch2 |
-| 3 Trees and tools | READY: batch2 closed; read-only original-source planning complete | — | Author/run four original families in parallel worktrees within this batch |
+| 3 Trees and tools | IN_PROGRESS: directory/Git/locality authors in separate worktrees; lead owns local snapshot and shared support | Shared controller this commit | Commit private registrations and qualified shared support before preparation/sample |
 | 4 History on one branch | PENDING | — | Wait for batch 3 completion |
 | 5 Branches and Workspaces | PENDING | — | Wait for batch 4; verify existing P-1 SDK methods |
 | 6 Dedup and storage | PENDING | — | Wait for batch 5 completion |
@@ -77,6 +77,8 @@ comparison or release-admission claim. Durable is
 | 30 | Prove all retained small-delta roots through public offline current-format history/filesystem reads; declare omitted historical kernel Fork/Mount topology | Direct mounting takes a Branch and the existing batch-5 Fork route has not yet been qualified; final native remount/cleanup remain required | Manufacturing a feature or claiming identical proof topology |
 | 31 | Preserve original payload DELTA existence and thirty-second per-state proof stops | The frozen selected contract requires actual DELTA reconstruction and bounds each state, independently of numeric storage/latency targets | Treating reported DELTA counts as optional or replacing per-state stops with only a phase stop |
 | 32 | Reuse exact unchanged compiled support with original source/provenance receipts when only host control/oracle support changes | Unaffected evidence may be reused when actual compiled inputs and binary hashes remain identical | Rebuilding unaffected binaries or reusing a measured sample |
+| 33 | Parallelize only the four current batch3 families after committed batch2 closure; lead owns shared controller and local snapshot, workers own directory/Git/locality | Owner explicitly authorized separate worktrees; previous batch done-when conditions are now closed | Starting later batches or editing one shared checkout concurrently |
+| 34 | Clean locality case skips warm-up and measured Exec; scan/construction proofs validate recorded original semantic operation counts | Frozen clean case is owner-only; final tree equality alone cannot prove a read-only traversal visited every required path | Running a no-op Exec or replaying the workload to reconstruct its counters |
 
 ## Bugs
 
@@ -1833,4 +1835,36 @@ cases across nine families and175 pending cases across sixteen families.
 Product79,366 unchanged; no speed, release or reference-comparison verdict.
 
 | `be5fc295e` (worker) | Record one small-delta sample with all31 root proofs | 79366 | 79366 | +0 |
-| This commit | Integrate small-delta CSVs and close all62 batch2 cases | 79366 | 79366 | +0 |
+| `1c975ba30` | Integrate small-delta CSVs and close all62 batch2 cases | 79366 | 79366 | +0 |
+
+Batch3 shared activation admits the four original families through the existing
+fixture/entry-point allowlist; pending registrations remain unsampleable. A
+control_only registration now skips both untimed warm-up Exec and measured
+Exec, retaining mount, Commit and terminal unmount and command_ns0. The explicit
+original_ordinary_guards declaration configures/read-backs only the own sample's
+original2CPU/2GiB/no-swap/256PID container profile before timing, then observes
+the exact frozen main-file Store apparent/allocated4GiB bound and actual
+cgroup OOM/swap before/after Commit and after native proof. Read-only observer
+walls remain individually recorded and excluded from product time. No page
+touch/eviction, retry, Disposable backing fsync or product configuration change
+is introduced. Full Store+sidecar/overlay metric scopes remain separate.
+
+Retired host Store RSS and physical-spool peak observers belonged to the retired
+host data plane. Current cgroup/stat checks do not assert equivalence or a PASS
+for those unavailable peak domains; registrations must state the exact gaps.
+The original_operation_counts declaration additionally requires each exact
+frozen semantic counter once in the original workload stdout (paths/files/
+directory entries/read bytes or constructed chains), rejecting absent,
+duplicated, unknown or wrong values without rerunning any operation. Counts
+remain source/receipt observations; no nominal syscall-count equality is added.
+
+Sixteen owning workspace/controller/cache tests PASS0.076s under120s lock,
+including clean no-Exec control flow with original refusal custody, exact main
+Store boundary, unknown/type/overflow/OOM/swap rejection, and missing/duplicate/
+wrong traversal-counter rejection. Fixture scoped checks and whitespace PASS.
+No batch3 sample has begun. Worker source review finds all33 batch3 cases
+expressible using existing product routes, subject to actual parity/proof.
+Production LOC79,366 ->79,366(delta+0), pinned staged absent-aware method;
+reference absent, retiredR9c,last65,417. Harness changes only.
+
+| This commit | Activate batch3 routing with clean control and original ordinary guards | 79366 | 79366 | +0 |

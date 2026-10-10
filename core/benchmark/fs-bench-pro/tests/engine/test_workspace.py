@@ -25,6 +25,83 @@ def phase_proof():
 
 
 class WorkspaceEvidence(unittest.TestCase):
+    def test_control_only_case_reaches_commit_without_warm_or_measured_exec(self):
+        class Runtime:
+            container = "original-container"
+            selector = raw = stderr = None
+            process = SimpleNamespace(stdin=None, stdout=None)
+            def __init__(self):
+                self.calls = []
+            def event(self, *args):
+                return None
+            def send(self, operation, key="", **options):
+                self.calls.append(operation)
+                if operation == "command":
+                    raise AssertionError("clean Commit must never launch an Exec")
+                if operation == "commit":
+                    raise ValueError("known original Commit refusal")
+                return {"sequence": len(self.calls), "event": operation,
+                        "span": {"duration_ns": 1}, "fields": {"state": "Gone"}}
+            def retain(self, error):
+                return {"cause": str(error), "remote_stop": "NOT_ESTABLISHED"}
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            runtime = Runtime()
+            current = dict(source_commit="source", product_tree="product", files={})
+            build = dict(socket="/socket", binaries={name: {"sha256": name, "path": "/"+name} for name in ("runtime", "daemon")})
+            prepared = dict(fixture={"fixture_sha256": "fixture"}, helpers={"files": {}},
+                            provision={"manifest": "/manifest"}, source_uid=1, source_gid=1)
+            case = {"id": "clean", "v016_case": "clean", "control_only": True, "steps": [],
+                    "fixture": {"recipe": "clean"}, "budget": {"command_ms": 15000, "verifier_ms": 45000}}
+            with patch.object(workspace.identity, "ROOT", root), \
+                    patch.object(workspace.identity, "source_identity", return_value=current), \
+                    patch.object(workspace.identity, "load_build", return_value=build), \
+                    patch.object(workspace.fixtures, "load", return_value=prepared), \
+                    patch.object(workspace.fixtures, "clone", return_value={"volume": "original-volume"}), \
+                    patch.object(workspace.fixtures, "stage", return_value={"status": "PASS"}), \
+                    patch.object(workspace.cell_runner, "EventProcess", return_value=runtime):
+                result = workspace.one_family_case("workspace_change_locality", case, "prepared", "build", root / "case")
+            self.assertEqual(runtime.calls, ["mount", "unmount", "cleanup", "mount", "commit"])
+            self.assertEqual(result["original_failure"], "known original Commit refusal")
+            self.assertEqual(result["phases"]["command_ns"], 0)
+            self.assertEqual(result["sample_count"], 1)
+            self.assertEqual(result["completed_operation_count"], 0)
+            self.assertEqual(result["status"], "FAIL")
+            receipts.verify_manifest(root / "case")
+
+    def test_original_ordinary_resource_guards_reject_missing_warm_oom_and_overflow(self):
+        good = dict(store_main_logical_bytes=100, store_main_allocated_bytes=4096,
+                    oom=0, oom_kill=0, swap_current=0)
+        self.assertEqual(workspace.ordinary_resource_values(good, good), good)
+        exact = {**good, "store_main_logical_bytes": 4*1024**3, "store_main_allocated_bytes": 4*1024**3}
+        self.assertEqual(workspace.ordinary_resource_values(exact, good), exact)
+        for key in good:
+            for value in (None, True, -1, "0"):
+                with self.subTest(key=key, value=value), self.assertRaises(ValueError):
+                    workspace.ordinary_resource_values({**good, key: value}, good)
+        for key in ("store_main_logical_bytes", "store_main_allocated_bytes"):
+            with self.assertRaisesRegex(RuntimeError, "4 GiB"):
+                workspace.ordinary_resource_values({**good, key: 4*1024**3+1}, good)
+        for key in ("oom", "oom_kill", "swap_current"):
+            with self.assertRaisesRegex(RuntimeError, "OOM/swap"):
+                workspace.ordinary_resource_values({**good, key: 1}, good)
+
+    def test_measured_traversal_counters_must_be_complete_exact_and_unambiguous(self):
+        wanted = {"visited_path_count": 184, "visited_file_count": 50, "directory_entry_count": 183}
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "original.stdout"
+            command = {"fields": {"stdout": str(output)}}
+            text = "\n".join(f"{key}={value}" for key, value in wanted.items())+"\n"
+            output.write_text(text)
+            self.assertEqual(workspace.original_operation_counts(command, wanted), wanted)
+            for damaged in (text.replace("184", "183"), text.replace("visited_file_count=50\n", ""),
+                            text+"visited_path_count=184\n", text.replace("183", "unknown")):
+                output.write_text(damaged)
+                with self.assertRaisesRegex(ValueError, "semantic count differs"):
+                    workspace.original_operation_counts(command, wanted)
+            with self.assertRaisesRegex(ValueError, "acknowledged workload"):
+                workspace.original_operation_counts(None, wanted)
+
     def test_family_clone_failure_has_no_mount_or_completed_sample_credit(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory).resolve()
