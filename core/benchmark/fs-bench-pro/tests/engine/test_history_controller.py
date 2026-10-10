@@ -28,6 +28,26 @@ def acknowledged(case):
 
 
 class HistoryController(unittest.TestCase):
+    def test_helper_refusal_precedes_case_claim_and_any_clone_or_mount(self):
+        case=cases('file_size_transition')[0]
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary).resolve();output=root/'case'
+            prepared={'fixture':{'fixture_sha256':'fixture'},'helpers':{'files':{}}}
+            build={'binaries':{name:{'path':'/'+name,'sha256':name} for name in ('runtime','daemon')}}
+            with patch.object(workspace.identity,'ROOT',root), \
+                    patch.object(workspace.identity,'source_identity',return_value={'source_commit':'a'*40,'product_tree':'b'*40}), \
+                    patch.object(workspace.identity,'load_build',return_value=build), \
+                    patch.object(workspace.fixtures,'load',return_value=prepared), \
+                    patch.object(workspace.fixtures,'validate_runtime_helpers',side_effect=ValueError('prepared SDK step/native fallback refused')) as admission, \
+                    patch.object(workspace.fixtures,'clone',side_effect=AssertionError('no clone permitted')) as clone, \
+                    patch.object(workspace.cell_runner,'EventProcess',side_effect=AssertionError('no process permitted')) as process:
+                with self.assertRaisesRegex(ValueError,'native fallback refused'):
+                    workspace.one_family_case('file_size_transition',case,'prepared','build',output)
+                self.assertEqual(admission.call_count,1)
+                clone.assert_not_called();process.assert_not_called()
+            self.assertFalse(output.exists())
+            self.assertFalse((root/'benchmark-results/fs-bench-pro/claims').exists())
+
     def test_sparse_workflow_uses_prepared_steps_and_separate_census_copy_before_publication(self):
         case=next(c for c in cases('dedup_branch_history') if c['id']=='dedup-history-distributed-100')
         selected=case['history_schedule']['verification_steps']
@@ -93,6 +113,9 @@ class HistoryController(unittest.TestCase):
                     (workspace.identity,'source_identity',{'return_value':{'source_commit':'d'*40,'product_tree':'e'*40}}),
                     (workspace.identity,'load_build',{'return_value':build}),
                     (workspace.fixtures,'load',{'return_value':prepared}),
+                    # Assets are deliberately opaque in this choreography
+                    # unit; real byte/seal admission is covered separately.
+                    (workspace.fixtures,'validate_runtime_helpers',{'return_value':{'scope':'isolated choreography mock'}}),
                     (workspace.fixtures,'clone',{'return_value':{'volume':'layerfs-fsb-sample-'+'f'*16}}),
                     (workspace.fixtures,'stage',{'return_value':{}}),
                     (workspace.cell_runner,'EventProcess',{'return_value':runtime}),

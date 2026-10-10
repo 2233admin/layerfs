@@ -675,6 +675,7 @@ def one_family_case(family, case, prepared_folder, build_folder, output):
     current = identity.source_identity()
     build = identity.load_build(build_folder)
     prepared = fixtures.load(prepared_folder, case["fixture"]["recipe"])
+    helper_admission = fixtures.validate_runtime_helpers(case,prepared,build)
     output = Path(output).resolve()
     output.mkdir(parents=True, exist_ok=False)
     ordered = bool(case.get("history_schedule"))
@@ -713,6 +714,7 @@ def one_family_case(family, case, prepared_folder, build_folder, output):
            "proof_only": proof_only, "performance_mode":"verification-only" if proof_only else "single original performance attempt",
            "performance_declaration":case.get("performance_mode","single original performance attempt"),
            "owner_test_ceiling_ns":120_000_000_000 if proof_only else None}
+    row["helper_admission"]=helper_admission
     receipts.write_new(output / "selection.json", row)
     runtime = None
     mounted = set()

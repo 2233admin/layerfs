@@ -103,6 +103,7 @@ comparison or release-admission claim. Durable is
 | H-7 | Prospective Git4, found before first sample | Late observation publication followed by failed failure-sidecar write or process death before final post-check could reload provisional PASS | Draft guard bound timestamp before the observation write and lacked mandatory completion/known outer return | `031d427a7` | slow observation/completion publication plus failed failure-sidecar and os._exit(91) regressions fail before correction; missing completion/outer acknowledgement remain failed |
 | H-8 | Prospective batch4, found before any attempt | Output-close or final publication failure could retain FAIL after deleting sample resources | Administrative container/volume removal occurred before finally close/verdict/publication and driver acknowledgement; partial removal also claimed blanket retained custody | `56a422544` | test_close_failure_after_all_proofs_keeps_container_and_volume fails against a921bedbd with both rm calls observed; missing outer ACK/failed return do no removal, partial lost-volume acknowledgement remains uncertain and immutable bound |
 | H-9 | Prospective two verification-only cases | Overall output-closeFAIL could disappear in CSV when performance wasN/A and semantic proof retainedPASS | Original proof-only mask omitted the independent full-outcome failure tag | Worker2fe8e9b2e / integration this commit | test_overall_close_failure_remains_visible_beside_passing_semantic_proof fails beforefix; final5reportchecks PASS0.048s |
+| H-10 | Prospective batch4 prepared SDK routes | Missing/partial prepared-step map could invoke native fallback and regenerate original payloads inside measuredwork; stale sealed helpers could disagree with reported current build | Controller trusted optional prepared records without mandatory originalstep/binary/descriptor/payload/script correspondence admission | Workera8c56d570 / integration this commit | test_helper_refusal_precedes_case_claim_and_any_clone_or_mount fails at686344e8f; exact-source temporary assets reject five old-admission bypasses and all15guard checks PASS |
 
 H-1 and H-2 are harness faults, not product correctness or performance defects.
 The original file-identity checker remains intact; no product source changed.
@@ -2671,4 +2672,33 @@ SDKstep seal guard; leadwillwire it before claim/clone. No batch4case mayrun
 untilthisguard, currentpublicoracle/canonicalcensus test andfull9-asset seal
 qualify. This is a source authoring checkpoint, not batch4completion.
 
-| This commit | Wire original history checkpoints/mode custody/census/deadlines and verification-only execution | 79366 | 79366 | +0 |
+| `686344e8f` | Wire original history checkpoints/mode custody/census/deadlines and verification-only execution | 79366 | 79366 | +0 |
+
+
+H10 integrates Tiny a8c56d570's read-only mandatory helper admission and wires
+it before output directory, caseclaim, clone or mount. Exactoriginal SDKstep
+indices derive from source case definitions (M1/HNstage2; otherSDK everydeclared
+step; originalnonSDK none), notoptionalpreparedrecords. Generator edit-host
+binary/sourceargv, current workload/edit/M1recipe runtime seals, source/staged
+descriptor/payload geometry/metadata/SHA, exactoperator/member/run/script text
+and helperasset set are bound. Missing, partial, swapped, stale or extra
+SDKrecords cannot invoke nativefallback/regeneration in measuredwork. Existing
+nonbatch4admission staysunchanged. Positive cases preserve original prepared
+member order and partial/nonSDK fallback onlywhereoriginaldeclaresnoSDKedit.
+
+Worker15owning byte/seal checks PASS0.273s and five explicit legacyadmission
+refusal regressions FAIL beforeguard in0.012s, no product/resources. Lead actual
+controller boundary regression against parent686344e8f failed because original
+code created a claim/attempted clone rather thanraising the guard refusal.
+Corrected7controller checks PASS0.082s;15fixture/admission checks PASS0.242s,
+all120s/mainlock. Full sparse control unit uses opaque assets and explicitly
+mocks admission/census onlyforchoreography; separate real temporary byte/seal
+checks cover admission. All failed/green raw evidence remains at
+benchmark-results/fs-bench-pro/2026-10-10-h10-prepared-helper-admission-root and
+Tiny's2026-10-10-batch-4-selective-preparation-authoring. No actualcase/clone/
+mount/Store was created; no product source changed. Currentpublicoracle and
+actualcanonicalextraCommit qualification remain the last source prerequisites
+before clean fullbuild/prepare/parity/oneattempts.
+
+| `a8c56d570` (worker) | Fail closed on original prepared SDK placement and current helper seals | 79366 | 79366 | +0 |
+| This commit | Wire H10 admission before claims/clones and qualify exact guard boundary | 79366 | 79366 | +0 |

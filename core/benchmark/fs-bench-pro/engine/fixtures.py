@@ -421,16 +421,127 @@ def prepare_recipe_history(case, folder, build):
     return fixture, expectation, native, history, None
 
 
-def prepare_sdk_payloads(case, folder, build):
-    """Original generators run outside measurement; operators read sealed bytes."""
+def sdk_step_indices(case):
+    """Original declared P-3 steps; never infer them from prepared records."""
     if not case.get("ordinary_sdk_edits") or case.get("history_schedule", {}).get("schema") not in RECIPE_HISTORY_SCHEMAS:
         return []
     count = case["history_schedule"]["commits"]
-    if len(case["steps"]) != count:
+    if type(count) is not int or count < 1 or len(case["steps"]) != count:
         raise ValueError("original ordered SDK operation schedule differs")
     selected = list(range(1, count + 1))
     if case.get("m1_schedule") or case.get("registry", {}).get("kind") == "namespace-inode":
         selected = [step for step in selected if step % 5 == 2]
+    return selected
+
+
+def sdk_step_script(record):
+    parts = shlex.split(record["original_run"])
+    if not parts or Path(parts[0]).is_absolute() or ".." in Path(parts[0]).parts:
+        raise ValueError("original staged workload path differs")
+    body = "#!/bin/bash\nset -euo pipefail\n"
+    body += "export SDK_STEP_DESCRIPTOR=" + shlex.quote(record["staged_descriptor"]) + "\n"
+    body += "export SDK_STEP_DESCRIPTOR_SHA256=" + shlex.quote(record["descriptor_sha256"]) + "\n"
+    return body + "exec /bin/bash " + shlex.join(["/code/" + parts[0], *parts[1:]]) + "\n"
+
+
+def validate_runtime_helpers(case, prepared, build):
+    """Fail before claims/clones if original P-3 placement or helper seals differ."""
+    history = case.get("history_schedule", {}).get("schema") in RECIPE_HISTORY_SCHEMAS
+    if not history and case.get("registry", {}).get("family") != "mixed_load_bearing":
+        return {"status": "NOT_APPLICABLE", "scope": "existing non-batch4 helper admission unchanged"}
+    root = Path(prepared["helpers"]["root"])
+    seals = prepared["helpers"]["files"]
+    def digest(value):
+        return isinstance(value, str) and len(value) == 64 and all(char in "0123456789abcdef" for char in value)
+    def helper(path, wanted):
+        if not digest(wanted) or seals.get(path) != wanted or identity.sha256(root / path) != wanted:
+            raise ValueError("current runtime helper seal differs: " + path)
+        return root / path
+    bindings = {"writers/workload": build["binaries"]["workload-linux"]["sha256"]}
+    if history:
+        bindings["writers/edit"] = build["binaries"]["edit-linux"]["sha256"]
+    if case.get("m1_schedule"):
+        bindings["writers/recipe"] = build["binaries"]["workspace-linux"]["sha256"]
+    for path, wanted in bindings.items():
+        helper(path, wanted)
+    indices = sdk_step_indices(case)
+    records, runs = prepared.get("sdk_steps", []), prepared.get("prepared_step_runs", {})
+    if (not isinstance(records, list) or not isinstance(runs, dict)
+            or any(not isinstance(record, dict) or type(record.get("index")) is not int for record in records)
+            or [record["index"] for record in records] != indices
+            or set(runs) != {str(index) for index in indices}):
+        raise ValueError("exact original prepared SDK step indices required; native fallback forbidden")
+    assets, scripts = set(), set()
+    for record in records:
+        index = record["index"]
+        relative = f"history/payloads/step-{index}/descriptor.tsv"
+        staged = "/code/" + relative
+        run = f"history/steps/step-{index}.sh"
+        wanted = record.get("descriptor_sha256")
+        original_run = case["steps"][index-1]["run"]
+        argv = ["/code/writers/edit", "apply-sdk-step-prepared", case["v016_case"], str(index), staged, wanted]
+        descriptor = Path(record.get("descriptor", ""))
+        generator = record.get("generator", {})
+        source_argv = generator.get("argv", [])
+        if (record.get("original_run") != original_run or record.get("prepared_run") != run
+                or runs[str(index)] != run or record.get("staged_descriptor") != staged
+                or record.get("operator") != "apply-sdk-step-prepared" or record.get("argv") != argv
+                or not descriptor.is_absolute() or descriptor.name != "descriptor.tsv"
+                or len(source_argv) != 5 or source_argv[1:] != ["prepare-sdk-step", case["v016_case"], str(index), str(descriptor.parent)]
+                or generator.get("binary_sha256") != build["binaries"]["edit-host"]["sha256"]
+                or identity.sha256(source_argv[0]) != generator.get("binary_sha256")):
+            raise ValueError("original prepared SDK operator/generator/run binding differs")
+        staged_file = helper(relative, wanted)
+        if identity.sha256(descriptor) != wanted:
+            raise ValueError("original prepared SDK descriptor source seal differs")
+        rows = staged_file.read_text().splitlines()
+        payloads = record.get("payloads", {})
+        if not isinstance(payloads, dict):
+            raise ValueError("original prepared SDK payload records required")
+        count = len(payloads)
+        if (not count or len(rows) != count+4
+                or rows[:4] != ["original-sdk-step-payloads-v1", "case\t"+case["v016_case"], f"step\t{index}", f"members\t{count}"]
+                or record.get("member_argv") != [argv+[str(member)] for member in range(1,count+1)]
+                or set(payloads) != {f"member-{member}.bin" for member in range(1,count+1)}):
+            raise ValueError("original prepared SDK descriptor/member cardinality differs")
+        assets.add(relative); scripts.add(run)
+        for member, row in enumerate(rows[4:], 1):
+            fields, name = row.split("\t"), f"member-{member}.bin"
+            if len(fields) != 12 or fields[0] != str(member) or fields[11] != name:
+                raise ValueError("original prepared SDK member path/order differs")
+            path = fields[1]
+            if (not path or any(part in ("", ".", "..") for part in path.split("/"))
+                    or any(char in path for char in "\0\\\t\r\n")):
+                raise ValueError("unsafe original prepared SDK target")
+            values = [int(value) for value in fields[2:7]]
+            start, deleted, before, after, size = values
+            mode, seconds, nanos = int(fields[8],8), int(fields[9]), int(fields[10])
+            payload = payloads[name]
+            relative_payload = f"history/payloads/step-{index}/{name}"
+            actual = helper(relative_payload, fields[7])
+            if (any(value < 0 or value > 2**64-1 for value in values)
+                    or start+deleted > before or before-deleted+size != after
+                    or mode < 0 or mode & ~0o7777 or not -(2**63) <= seconds < 2**63 or not 0 <= nanos < 1_000_000_000
+                    or payload != {"sha256":fields[7],"bytes":size} or actual.stat().st_size != size
+                    or identity.sha256(descriptor.parent / name) != fields[7]):
+                raise ValueError("original prepared SDK payload/geometry/metadata differs")
+            assets.add(relative_payload)
+        script_path = helper(run, hashlib.sha256(sdk_step_script(record).encode()).hexdigest())
+        if script_path.read_text() != sdk_step_script(record):
+            raise ValueError("original prepared SDK script correspondence differs")
+    if ({path for path in seals if path.startswith("history/payloads/")} != assets
+            or {path for path in seals if path.startswith("history/steps/")} != scripts):
+        raise ValueError("undeclared SDK payload or script helper asset")
+    return {"schema":"fs-bench-pro-runtime-helper-admission-v1", "status":"PASS",
+            "sdk_step_indices":indices, "helper_binary_seals":bindings,
+            "scope":"original untimed generator and prepared operator/member/source seals; native fallback only on original non-SDK steps; no mutation or regeneration"}
+
+
+def prepare_sdk_payloads(case, folder, build):
+    """Original generators run outside measurement; operators read sealed bytes."""
+    selected = sdk_step_indices(case)
+    if not selected:
+        return []
     writer = build["binaries"]["edit-host"]
     base = folder / "sdk-payloads"
     base.mkdir()
@@ -537,14 +648,7 @@ def prepare_workspace(recipe, folder, build_folder):
             shutil.copy2(folder / "sdk-payloads.json", base / "payloads.json")
             (base / "steps").mkdir()
             for record in sdk_steps:
-                parts = shlex.split(record["original_run"])
-                if not parts or Path(parts[0]).is_absolute() or ".." in Path(parts[0]).parts:
-                    raise ValueError("original staged workload path differs")
-                body = "#!/bin/bash\nset -euo pipefail\n"
-                body += "export SDK_STEP_DESCRIPTOR=" + shlex.quote(record["staged_descriptor"]) + "\n"
-                body += "export SDK_STEP_DESCRIPTOR_SHA256=" + shlex.quote(record["descriptor_sha256"]) + "\n"
-                body += "exec /bin/bash " + shlex.join(["/code/" + parts[0], *parts[1:]]) + "\n"
-                (Path(helpers["root"]) / record["prepared_run"]).write_text(body)
+                (Path(helpers["root"]) / record["prepared_run"]).write_text(sdk_step_script(record))
         for state in original_history["states"] if original_history is not None else ():
             shutil.copytree(state["input"], base / "checkpoints" / f"step-{state['index']}")
         for path in sorted(base.rglob("*")):

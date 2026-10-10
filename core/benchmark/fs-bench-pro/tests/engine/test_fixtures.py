@@ -1,6 +1,8 @@
 """Preparation is deterministic and cloning cannot reuse a mutated sample."""
 import hashlib
 import json
+import copy
+import shutil
 from pathlib import Path
 import sys
 import tempfile
@@ -291,3 +293,100 @@ class RecipeHistory(unittest.TestCase):
                     fixtures.prepare_sdk_payloads(case, folder, build)
             self.assertTrue((folder / "sdk-payloads/step-1/descriptor.tsv").exists())
             self.assertFalse((folder / "sdk-payloads.json").exists())
+
+
+class RuntimeHelperAdmission(unittest.TestCase):
+    case = RecipeHistory.case
+    native_commands = RecipeHistory.native_commands
+    build = RecipeHistory.build
+    def admission(self, folder, *, mixed=False, kind="boundary", sdk=True):
+        schema = "original-m1-commit-sequence-v1" if mixed else "original-v016-boundary-sequence-v1"
+        count = 10 if mixed else 2
+        case = self.case(schema, count, [count] if mixed else list(range(count+1)), mixed=mixed)
+        case["ordinary_sdk_edits"] = sdk
+        case["registry"] = {"family":"mixed_load_bearing" if mixed else "file_size_transition", "kind":kind}
+        case["steps"] = [{"run":f"workload.sh {'stage' if mixed else 'apply'} original-case {step}"} for step in range(1,count+1)]
+        build = self.build(folder)
+        with patch.object(fixtures.receipts, "command", side_effect=self.native_commands([])):
+            records = fixtures.prepare_sdk_payloads(case, folder, build)
+        root = folder / "code"
+        root.mkdir()
+        files = {}
+        def install(origin, relative):
+            target = root / relative
+            target.parent.mkdir(parents=True,exist_ok=True)
+            shutil.copy2(origin,target)
+            files[relative] = fixtures.identity.sha256(target)
+        for name, relative in (("workload-linux","writers/workload"),("edit-linux","writers/edit")):
+            install(build["binaries"][name]["path"],relative)
+        if mixed:
+            install(build["binaries"]["workspace-linux"]["path"],"writers/recipe")
+        for record in records:
+            base = f"history/payloads/step-{record['index']}"
+            install(record["descriptor"],base+"/descriptor.tsv")
+            for name in record["payloads"]:
+                install(Path(record["descriptor"]).parent/name,base+"/"+name)
+            script = root / record["prepared_run"]
+            script.parent.mkdir(parents=True,exist_ok=True)
+            script.write_text(fixtures.sdk_step_script(record))
+            files[record["prepared_run"]] = fixtures.identity.sha256(script)
+        prepared = {"helpers":{"root":str(root),"files":files},"sdk_steps":records,
+                    "prepared_step_runs":{str(record["index"]):record["prepared_run"] for record in records}}
+        return case,prepared,build
+
+    def test_missing_partial_or_fabricated_sdk_map_is_refused_before_native_fallback(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            case,prepared,build = self.admission(Path(temporary))
+            for variant in ("missing","partial","extra","record-missing","record-order"):
+                bad = copy.deepcopy(prepared)
+                if variant == "missing": bad.pop("prepared_step_runs")
+                elif variant == "partial": bad["prepared_step_runs"].pop("2")
+                elif variant == "extra": bad["prepared_step_runs"]["3"]="fabricated.sh"
+                elif variant == "record-missing": bad["sdk_steps"].pop()
+                else: bad["sdk_steps"].reverse()
+                with self.subTest(variant=variant), self.assertRaisesRegex(ValueError,"exact original prepared SDK step indices"):
+                    fixtures.validate_runtime_helpers(case,bad,build)
+
+    def test_stale_binary_source_script_and_payload_seals_are_refused(self):
+        for variant in ("workload","edit","recipe","generator","script","payload","argv"):
+            with self.subTest(variant=variant), tempfile.TemporaryDirectory() as temporary:
+                case,prepared,build = self.admission(Path(temporary),mixed=True)
+                root = Path(prepared["helpers"]["root"])
+                if variant in ("workload","edit","recipe"):
+                    relative="writers/"+variant
+                    (root/relative).write_text("validly sealed stale binary")
+                    prepared["helpers"]["files"][relative]=fixtures.identity.sha256(root/relative)
+                elif variant == "generator":
+                    prepared["sdk_steps"][0]["generator"]["binary_sha256"]="0"*64
+                elif variant == "script":
+                    record=prepared["sdk_steps"][0]
+                    (root/record["prepared_run"]).write_text("exec /code/writers/edit apply-sdk-step original-case 2\n")
+                    prepared["helpers"]["files"][record["prepared_run"]]=fixtures.identity.sha256(root/record["prepared_run"])
+                elif variant == "payload":
+                    relative="history/payloads/step-2/member-1.bin"
+                    (root/relative).write_bytes(b"bad!")
+                    prepared["helpers"]["files"][relative]=fixtures.identity.sha256(root/relative)
+                else:
+                    prepared["sdk_steps"][0]["argv"][-1]="0"*64
+                with patch.object(fixtures.receipts,"command") as mutation, self.assertRaises(ValueError):
+                    fixtures.validate_runtime_helpers(case,prepared,build)
+                mutation.assert_not_called()
+
+    def test_original_m1_hn_and_native_non_sdk_selection_is_preserved(self):
+        for mixed,kind,sdk,expected in ((True,"v016-m1-sequential",True,[2,7]),
+                                         (False,"namespace-inode",True,[2]),
+                                         (False,"metadata",False,[]),
+                                         (False,"unrelated",False,[]),
+                                         (False,"boundary",False,[])):
+            with self.subTest(kind=kind), tempfile.TemporaryDirectory() as temporary:
+                case,prepared,build = self.admission(Path(temporary),mixed=mixed,kind=kind,sdk=sdk)
+                before = {str(path):fixtures.identity.sha256(path) for path in Path(temporary).rglob("*") if path.is_file()}
+                with patch.object(fixtures.receipts,"command") as mutation:
+                    accepted = fixtures.validate_runtime_helpers(case,prepared,build)
+                mutation.assert_not_called()
+                self.assertEqual(accepted["sdk_step_indices"],expected)
+                self.assertEqual(before,{str(path):fixtures.identity.sha256(path) for path in Path(temporary).rglob("*") if path.is_file()})
+                if not sdk:
+                    bad=copy.deepcopy(prepared)
+                    bad["prepared_step_runs"]={"1":"fabricated-p3.sh"}
+                    with self.assertRaises(ValueError):fixtures.validate_runtime_helpers(case,bad,build)
