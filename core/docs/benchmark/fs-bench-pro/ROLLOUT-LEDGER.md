@@ -17,8 +17,8 @@ comparison or release-admission claim. Durable is
 | 0.1 Released references | COMPLETE | `8e4a78fa0` | Stage 0.2 move-only organization |
 | 0.2 Move-only organization | COMPLETE, historical check failures retained | `13f9dec38`; routing `9af29e01e` | Update routing guide, then stage 0.3 catalogue |
 | 0.3 Case catalogue | COMPLETE | `f182e9a63`; prerequisite correction `30b798192` | Stage 0.4 reproducible engine |
-| 0.4 Reproducible engine | IN_PROGRESS; exact reproduction fails C10/C12 | Cell-route correction `bb8e07df8`; build support `c496025fc`; oracle support `7a27a4f26`; fixture support `516c2f009`; workspace/report support `358eca082`; cleanup-observer correction `a1f2c259c` | Build, prepare independent masters, reproduce twelve cells |
-| 1 Pilot | PENDING | — | Wait for stage 0.4 completion |
+| 0.4 Reproducible engine | CLOSED: functional proof complete; exact reproduction FAILED C10/C12 | Cell-route correction `bb8e07df8`; build support `c496025fc`; oracle support `7a27a4f26`; fixture support `516c2f009`; workspace/report support `358eca082`; cleanup-observer correction `a1f2c259c` | Begin batch 1 under failed-reproduction closure recorded below |
+| 1 Pilot | NEXT | — | Port init_namespace first |
 | 2 Edits | PENDING | — | Wait for batch 1 completion |
 | 3 Trees and tools | PENDING | — | Wait for batch 2 completion |
 | 4 History on one branch | PENDING | — | Wait for batch 3 completion |
@@ -55,6 +55,8 @@ comparison or release-admission claim. Durable is
 | 15 | Rebuild empty and full-written 64 MiB-zero masters through the existing SDK provision mode; retain prepared masters during the rollout and remove only passing sample resources | Same initial acquisition/install boundary as the working path; setup masters are needed for independent byte-copy reuse | Mounting a master for measurement or depending on old /tmp trees/master volumes |
 
 | 16 | Freeze the twelve original B:L cells, enforce class B using actual demand counters and original terminal cleanup, generate all twelve result rows | Stage 0.4 requires exact count reproduction through bench.py; unavailable evidence stays unavailable and soft limits remain separate | Sampling pending workload families before the engine proof or filling absent measurements with zeros |
+
+| 17 | Close stage 0.4 exact reproduction as FAILED for C10/C12, preserve strict checker/results, amend only the stage closure in its own spec commit and continue | All twelve functional proofs/terminal unmounts pass at clean identities with identical daemon/product; kernel batching and conditional reclamation probes prevent a semantic equality claim; handoff explicitly permits source-backed spec correction | Resampling unchanged cases, injecting requests/probes, altering workloads or pretending exact equality passed |
 
 ## Bugs
 
@@ -388,8 +390,28 @@ their receipts; their exact IDs are included below. Passing C07–C09/C11 sample
 resources have been removed. H-1's original running container/volume remain.
 Production LOC 79,366 -> 79,366 (delta +0); docs/results only, same pinned method.
 
-| This commit | Preserve remaining twelve-cell outcomes and count diagnosis | 79366 | 79366 | +0 |
+| `23ba793ef` | Preserve remaining twelve-cell outcomes and count diagnosis | 79366 | 79366 | +0 |
 
 Retained C10: container `96dd83a9e8ea10ad2e7a50aa3e4e2dd8d970509a22435c146569f20a16b8d200`, volume `layerfs-fsb-sample-070f622942e64f72`, acknowledged `KNOWN_STOP`.
 
 Retained C12: container `6a122c4664d39141006eabc62c538060796dbb1da57579e4beeb8495a5f2b0f5`, volume `layerfs-fsb-sample-bc7e58da1e4b4068`, acknowledged `KNOWN_STOP`.
+
+Stage 0.4 closure correction: the original exact-count target did not work for
+C10/C12 and is truthfully closed FAILED, not satisfied or silently relaxed.
+The unchanged checker still records FAIL for both original comparisons. Spec
+section 9 now allows this explicit failed closure when functional proofs and
+terminal cleanup are established and no product correctness bug is identified.
+This follows the handoff's instruction to correct an unworkable spec in its
+own commit, decide without owner questions and continue. All twelve cells were
+attempted at clean source; the H-1 affected case alone received a changed-source
+sample. No arbitrary tolerance, acceptance threshold, product optimization or
+extra family was added. Numeric kernel partition/probe attribution remains
+limited to the source-backed aggregate inferences above. Stage 0.4 independent
+verification is complete for all twelve sampled workloads, with retained
+per-case proof receipts; no speed or repeatability claim is made.
+
+Scope of this commit: spec and ledger only. Whitespace/local links checked;
+no build/test/Store/mount invocation. Production LOC 79,366 -> 79,366 (delta +0)
+with the pinned absent-aware counter. Batch 1 is next, one family at a time.
+
+| This commit | Correct stage closure while preserving reproduction FAIL | 79366 | 79366 | +0 |

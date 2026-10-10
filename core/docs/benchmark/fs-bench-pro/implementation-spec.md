@@ -234,8 +234,11 @@ supported parallel profile), the pinned image by digest, one sample per case.
 Durable is `NOT_RUN — disabled by owner until explicit reauthorization`.
 
 Every result reports time and storage together, and the exact request,
-owner-job and statement counts the daemon already exposes. The counts are the
-stable part of a result; a time is one sample.
+owner-job and statement counts the daemon already exposes. Counts are exact
+observations of that execution; a time is one sample. Kernel READ batching and
+conditional probes during last-owner reclamation can change the totals of a
+correct ordinary-shell workload. Counts must not be edited, normalized or
+sampled repeatedly to manufacture equality.
 
 ### 6.1 Result format
 
@@ -360,7 +363,17 @@ step. Nothing below starts a sample before its registration is committed.
 | 0.1 | Harvest the released numbers into `baselines/v0.1.6/` | Every row of the three source files is present with its provenance; `missing.md` lists the rest |
 | 0.2 | Move-only reorganization into `fs-bench-pro`, `cluster-one`, `cluster-two` | Only the relocation path changes defined in section 4; applicable existing harness tests pass from their new locations, with historical source-gated checks retained explicitly |
 | 0.3 | Catalogue: every case of the 25 families as a `pending` entry in its `family.json` | `bench.py list` shows every v0.1.6 case; the total matches the root harness's own registry |
-| 0.4 | Engine built from the working cluster-two path, with `prepare` replacing the `/tmp` state, and `report` writing the tables of section 6.1 | The twelve cells of 2026-10-10 reproduce through `bench.py` from a clean checkout with identical request, owner-job and statement counts |
+| 0.4 | Engine built from the working cluster-two path, with `prepare` replacing the `/tmp` state, and `report` writing the tables of section 6.1 | All twelve cells run once through `bench.py` at clean source identities with independent functional verification and terminal cleanup; retain the unchanged exact comparison to the 2026-10-10 request, owner-job and statement counts. If equality fails with no identified product correctness bug, close exact reproduction as failed, record the original triples, source-backed diagnosis and remaining uncertainty, and continue the workload rollout |
+
+The original stage 0.4 target remains exact equality, and an unequal comparison
+remains `FAIL`. This closure rule does not change its checker or establish
+reproduction success. In the initial attempt C10 differed by one READ/job and
+two statements, and C12 by one conditional orphan-inode query, with the same
+daemon binary/product tree and passing independent functional proofs. The
+[rollout ledger](ROLLOUT-LEDGER.md) retains evidence and uncertainty. No
+workload, kernel profile, product path, verifier, limit or counter is changed
+to force the historical observation. Successful unaffected cells are retained
+without re-sampling under the repository's evidence-reuse rule.
 
 ### Stages 1 to 7: the families
 
