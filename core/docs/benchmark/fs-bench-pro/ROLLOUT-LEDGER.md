@@ -21,7 +21,7 @@ comparison or release-admission claim. Durable is
 | 1 Pilot | COMPLETE: 36 functional/proof/clean-close passes; 7 recorded scoped B PASS, 29 INELIGIBLE; full numeric qualification of the 7 is unverified | Init `c1d7dd0e8`/`39bbcbd6b`; payload `200f81493`/`c1d9b6c58`; parallel routing `b3c96ecb1`; tiny `36849bcc2`/`d6e0ef952`; namespace `98b14b233`/`be1f56a23`; H-2 fix `222526fa0`; closure `d4314ed62`; membership supplement `cca598d0b` | Batch 2, retaining original receipts plus exhaustive membership supplement |
 | 2 Edits | COMPLETE: all62 cases ported/parity/sampled once/recorded;39 strict proof and clean-close passes (numeric INELIGIBLE),20 strict retention failures and3 original capped-watchdog failures retained | Canonical `a34b5d44b`/`beeb7ad69`; preserving `b9ffa63be`; capped `4d8ccfc93`; changing `05ffbf971`; small-delta `c0c99a4a3`/`2e6a508b5`/`1c975ba30` | Begin batch3; no identified fixable product correctness defect remains in batch2 |
 | 3 Trees and tools | COMPLETE: all33 original cases ported/parity/sampled, full applicable proofs and clean closePASS; numeric33INELIGIBLE; first snapshotFAIL retained separately; localitydense500 and snapshot EXCEEDED | Shared3c697ae92; directory50c297c68/ad4f95503; locality2590a4536/26c037d90; snapshot0344bfdc6/fix03033abdc/results98d3be30a/70d568e94; Git acebd7cbd/guard031d427a7/results31fff4d49 | Begin batch4 after this committed closure, no identified fixable product correctness bug |
-| 4 History on one branch | IN_PROGRESS: all43 original cases authored in three worktrees; allunrun; shared persisted proof/census/preparation/controller being qualified | Routing65f0c1fbe; nativea921bedbd; portsfc9e71fae/6a5433e79/4762b720c; prepared364e1a87a; guarded5ebdac535/report65df42e91; controller this commit; finalpublicqualification pending | Complete source/oracle qualification, then per-family parity and one attempt per case |
+| 4 History on one branch | IN_PROGRESS: all43 original cases authored in three worktrees; allunrun; shared persisted proof/census/preparation/controller being qualified | Routing65f0c1fbe; nativea921bedbd; portsfc9e71fae/6a5433e79/4762b720c; prepared364e1a87a; guarded5ebdac535/report65df42e91; controller686344e8f/guard91cf97fab; public93f0d3dfe/census7d9380fe0; finalseal this commit | Complete source/oracle qualification, then per-family parity and one attempt per case |
 | 5 Branches and Workspaces | PENDING | — | Wait for batch 4; verify existing P-1 SDK methods |
 | 6 Dedup and storage | PENDING | — | Wait for batch 5 completion |
 | 7 Reliability | PENDING | — | Wait for batch 6 completion |
@@ -2781,4 +2781,30 @@ measurement/resourceoperations. Final source/binary handoff and familyparity/
 actual43oneattempts are next; batch4remainsIN_PROGRESS andall43UNRUN.
 
 | `0a6887af4` (worker) | Qualify actual canonical unreachableCommit and exact readonlycensus | 79366 | 79366 | +0 |
-| This commit | Integrate genuine publiccensus regression and close native qualification gap | 79366 | 79366 | +0 |
+| `7d9380fe0` | Integrate genuine publiccensus regression and close native qualification gap | 79366 | 79366 | +0 |
+
+
+Finalbatch4 hostruntime seal uses cleanmain7d9380fe0 and qualified fullnineasset
+build91cf97fab via bench.py build --reuse-unchanged. Hostlocked/offline release
++1.85.1 PASS, external120s mainlock<=3s; newruntimeSHA
+4f1a7d154ef588498116220e2c052d1d54a6000be10685fdb1bced1f03d59db6,
+4,654,608B. Exacteight nonruntime binary hashes/profile/ARMflags/image/product/
+compiledsource scopes and originalLinuxbefore-after sourcechecks are validated
+from immutable fullbuild receipts, notrecompiled or relabelled. Currentfinal
+build manifests allnineassets, sourcebefore/afterclean equality and unchanged
+producttree. NoDockerresourcecreated byruntime-onlybuild; firstfullbuild's
+passingcontainer alreadyremoved. Raw2026-10-10-batch-4-runtime-seal-final.
+Durable disabled; explicitDisposable/WAL/OFF, overlayMEMORY/OFF/EXCLUSIVE and
+workers1 remain. Fullsource/native/public/census/controller admission checks
+are nowqualified; no new productsource/dependency or optimizerwork.
+
+Workers receive currentmain source snapshot and thisseal, synchronize only
+reviewed harness changes in their existing three worktrees with own source /
+scopedexact counter commits, then preparetheir currentfamily, runbenchparity,
+and oneattempt per originalcase. Familyvariants/limits/cache/worker counts
+stayfixed, everyfailed/ineligible/unrun outcome retained and resourcecustody
+recorded; no laterbatch or unchangedresampling. Nativealias scope already
+qualified atfc9e71fae; only genuinelyaffected finalsource checks are permitted.
+All43actualcases stillUNRUN at this checkpoint, before dispatched preparation.
+
+| This commit | Record final hostruntime seal with qualified eight-binary reuse and dispatch current families | 79366 | 79366 | +0 |
