@@ -3456,4 +3456,61 @@ Shared host/Docker VM interference from concurrent worktrees and retained
 owner/failed services is declared and unquantified; numeric cold admission
 remains INELIGIBLE. Later batches remain pending until batch 4 closure.
 
-| This commit | Admit the current nine-asset build and dispatch affected checkpoints without reusing measurements | 79370 | 79370 | +0 |
+| `3c67e9249` | Admit the current nine-asset build and dispatch affected checkpoints without reusing measurements | 79370 | 79370 | +0 |
+
+
+H15's affected Init checkpoint is complete at clean source
+`3c67e9249d614c348afb273ec3d95769377a4dfa`, product tree
+`9ac88edb2cc44d44edd4a53f9ad89f4dee063a58`, using the authenticated nine-asset
+build above. Each of the four original Init cases ran once at this changed
+product source, from its original closed native preparation into a fresh Store.
+The original recipe, seed, fixture, native hashes, supported Init parallel
+profile, one construction worker, limits and public SDK route are unchanged.
+Original preparation/parity evidence is reused at exact unchanged recipe and
+workload bytes; no preparation or native verifier was replayed. Original Init
+receipts and CSVs at c1d7dd0e8 remain immutable, with their initial-profile
+limitation recorded under H15. These new checkpoints make no comparison.
+
+All four functional and independent public-read proofs PASS. Their imported
+entry/file counts, reopened root/first Branch and original selected metadata,
+lengths and prefix bytes pass. Consuming seal and separate-process verification
+exit cleanly, with no WAL/SHM/journal sidecars. Custody is
+KNOWN_HOST_EXIT_AND_SEAL; no mount, container or volume is created by this route.
+Closed sample Store files stay in ignored raw evidence. Every actual invocation
+has a 120 s external main lock stop; each public Init child has a 120 s stop and
+its separate verifier a 9.5 s stop. All product command walls are within the
+unchanged 15 s reported limit; all verifier walls are within 9.5 s. CLI exit 1
+preserves each numeric INELIGIBLE status, with successful functional outcomes.
+
+| Case | Functional / proof | Complete wall ns | Public Init/seal ns | Proof wall ns | Store logical = allocated B | Imported entries / files | Selected files / bytes |
+| --- | --- | ---: | ---: | ---: | ---: | --- | --- |
+| namespace-100-compact-v3 | PASS / PASS | 1907223250 | 58851125 | 24359541 | 5255168 | 102 / 100 | 6 / 148294 |
+| namespace-1000-compact-v3 | PASS / PASS | 185673875 | 163763250 | 22955458 | 20619264 | 1011 / 1000 | 10 / 141704 |
+| namespace-10000 | PASS / PASS | 2199006667 | 2137579375 | 42281708 | 305696768 | 10101 / 10000 | 10 / 161912 |
+| namespace-100000 | PASS / PASS | 8080275083 | 7931753125 | 183348209 | 516333568 | 101001 / 100000 | 10 / 132793 |
+
+All four numeric rows remain INELIGIBLE. Source data is warm from preparation
+and admission hashing, and host kernel metadata coldness is unverified. Shared
+host/Docker VM activity from parallel dedup/mixed worktrees and retained
+owner/failed services is declared and unquantified. Host SQLite 3.51.0 is
+witnessed. Request/owner-job/daemon-statement counts and overlay storage are
+UNAVAILABLE because host Init launches no daemon/FUSE/overlay; imported counts
+above come from the actual public Init receipt. The independent proof retains
+its original selected-prefix omissions; full unselected payload/namespace
+traversal, isolated timing and cold qualification are not claimed.
+
+Raw receipts are under
+`benchmark-results/fs-bench-pro/2026-10-10-init-product-fix-3c67e9249/`.
+`bench.py verify` authenticated retained evidence and reports four PASS without
+product replay. `bench.py report` wrote exactly four rows in each of
+`baselines/core/2026-10-10-3c67e9249/performance.csv` and `verification.csv`, with
+original release 0.1.5 reference clocks and topology differences preserved,
+without ratios or comparison verdicts. Both administrative commands used an
+explicit 120 s main lock stop and ran once. No new defect or failed resource
+surfaced; unaffected earlier families are not repeated. This result/document
+commit changes no product or harness source and reuses qualified scoped checks.
+Disposable/WAL/OFF remains explicit and Durable stays
+NOT_RUN — disabled by owner until explicit reauthorization. Remaining batch 4
+case execution continues before any later batch.
+
+| This commit | Record four changed-product Init checkpoints and both complete CSVs | 79370 | 79370 | +0 |
