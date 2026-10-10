@@ -31,7 +31,9 @@
       "oracle": {
         "scope": "complete declared namespace and exhaustive current canonical inode-table membership, exact kinds, modes and mtime, canonical inode continuity, logical length and every final byte from an independent splice model, plus current-format untouched payload-ID/source-offset retention transcript on a fresh published-root mount and through typed/authenticated public persisted-root readers",
         "roots": "acknowledged Commit root",
-        "omissions": "retired canonical encoding byte/root-ID identity is not compared with current format; unreferenced non-inode object census remains unavailable"
+        "omissions": "retired canonical encoding byte/root-ID identity is not compared with current format; unreferenced non-inode object census remains unavailable",
+        "acknowledged_root_binding": "Persisted current-format byte proof, exhaustive inode-table census, canonical inode continuity and strict untouched payload-ID/source-offset transcript must all bind to the exact root in the original public Committed acknowledgement. A native fresh-mount proof or matching final digest alone cannot substitute for any strict persisted guard.",
+        "independent_final_payload_sha256": "5a61a7ffedad3ccc18ecacffb38a35e330009d345c237c83881ce68b7db028b4"
       },
       "budget": {
         "command_ms": 15000,
@@ -78,7 +80,9 @@
           "benchmark/fs-bench-pro/shared/runner.py": "66c8d5b23a514da27f5ebb371f75a4c0e0406adb4d595e6b61a41d7da7686201"
         },
         "operations": "Reviewed capped registry ORIGINAL_OPERATIONS[0,2,3,4,7] inherited from edit_length_changing. Exactly one splice of payload.bin per original case; replacement bytes use the original operation payload_seed (from the length-changing family), original little-endian SplitMix64, and exact payload SHA-256, including 4096 logical zeros. Full fixture is the capped standard generator prefix with the original byte count and SHA-256. One ordinary writer invocation then one SDK Commit; unchanged suffix shifts are declared P-3 mechanism differences. Original capped inherited Workspace setup already fixes root/file modes and mtime, so no directory-time difference applies to these five cases.",
-        "oracle_coverage": "Original complete canonical namespace/mode/mtime/length/link-class/byte and native reopen coverage, independent unchanged payload-ID/source-offset splice transcript and exhaustive inode-table membership are retained within the current canonical format. Independent full-splice byte digests and canonical inode continuity supplement these checks. Retired format bytes/root IDs remain historical only. Original two-second group watchdog is actively enforced from measured ordinary command through Commit/terminal unmount; general report target 15 s/product watchdog 120 s and selected proof 45 s/hard 59 s copied unchanged."
+        "oracle_coverage": "Original complete canonical namespace/mode/mtime/length/link-class/byte and native reopen coverage, independent unchanged payload-ID/source-offset splice transcript and exhaustive inode-table membership are retained within the current canonical format. Independent full-splice byte digests and canonical inode continuity supplement these checks. Retired format bytes/root IDs remain historical only. Original two-second group watchdog is actively enforced from measured ordinary command through Commit/terminal unmount; general report target 15 s/product watchdog 120 s and selected proof 45 s/hard 59 s copied unchanged.",
+        "audited_support_commit": "cca598d0b1395767940f0103a788e6473c134738",
+        "independent_byte_model": "Original capped fixture/expected algebra at reference-v0.1.6-final; all five complete 524288000-byte final digests computed product-free before sampling, with the frozen registry self-check passing. This supports independent bytes; it is not a replacement for current retained-offset or canonical census checks."
       },
       "expected_commit": "Committed",
       "sdk_scenario": {
@@ -125,7 +129,9 @@
       "oracle": {
         "scope": "complete declared namespace and exhaustive current canonical inode-table membership, exact kinds, modes and mtime, canonical inode continuity, logical length and every final byte from an independent splice model, plus current-format untouched payload-ID/source-offset retention transcript on a fresh published-root mount and through typed/authenticated public persisted-root readers",
         "roots": "acknowledged Commit root",
-        "omissions": "retired canonical encoding byte/root-ID identity is not compared with current format; unreferenced non-inode object census remains unavailable"
+        "omissions": "retired canonical encoding byte/root-ID identity is not compared with current format; unreferenced non-inode object census remains unavailable",
+        "acknowledged_root_binding": "Persisted current-format byte proof, exhaustive inode-table census, canonical inode continuity and strict untouched payload-ID/source-offset transcript must all bind to the exact root in the original public Committed acknowledgement. A native fresh-mount proof or matching final digest alone cannot substitute for any strict persisted guard.",
+        "independent_final_payload_sha256": "11ef3f7e15634edf05564f13fbb23d50f6093a912adf23f08dcf8a52c4bb3c9e"
       },
       "budget": {
         "command_ms": 15000,
@@ -172,7 +178,9 @@
           "benchmark/fs-bench-pro/shared/runner.py": "66c8d5b23a514da27f5ebb371f75a4c0e0406adb4d595e6b61a41d7da7686201"
         },
         "operations": "Reviewed capped registry ORIGINAL_OPERATIONS[0,2,3,4,7] inherited from edit_length_changing. Exactly one splice of payload.bin per original case; replacement bytes use the original operation payload_seed (from the length-changing family), original little-endian SplitMix64, and exact payload SHA-256, including 4096 logical zeros. Full fixture is the capped standard generator prefix with the original byte count and SHA-256. One ordinary writer invocation then one SDK Commit; unchanged suffix shifts are declared P-3 mechanism differences. Original capped inherited Workspace setup already fixes root/file modes and mtime, so no directory-time difference applies to these five cases.",
-        "oracle_coverage": "Original complete canonical namespace/mode/mtime/length/link-class/byte and native reopen coverage, independent unchanged payload-ID/source-offset splice transcript and exhaustive inode-table membership are retained within the current canonical format. Independent full-splice byte digests and canonical inode continuity supplement these checks. Retired format bytes/root IDs remain historical only. Original two-second group watchdog is actively enforced from measured ordinary command through Commit/terminal unmount; general report target 15 s/product watchdog 120 s and selected proof 45 s/hard 59 s copied unchanged."
+        "oracle_coverage": "Original complete canonical namespace/mode/mtime/length/link-class/byte and native reopen coverage, independent unchanged payload-ID/source-offset splice transcript and exhaustive inode-table membership are retained within the current canonical format. Independent full-splice byte digests and canonical inode continuity supplement these checks. Retired format bytes/root IDs remain historical only. Original two-second group watchdog is actively enforced from measured ordinary command through Commit/terminal unmount; general report target 15 s/product watchdog 120 s and selected proof 45 s/hard 59 s copied unchanged.",
+        "audited_support_commit": "cca598d0b1395767940f0103a788e6473c134738",
+        "independent_byte_model": "Original capped fixture/expected algebra at reference-v0.1.6-final; all five complete 524288000-byte final digests computed product-free before sampling, with the frozen registry self-check passing. This supports independent bytes; it is not a replacement for current retained-offset or canonical census checks."
       },
       "expected_commit": "Committed",
       "sdk_scenario": {
@@ -219,7 +227,9 @@
       "oracle": {
         "scope": "complete declared namespace and exhaustive current canonical inode-table membership, exact kinds, modes and mtime, canonical inode continuity, logical length and every final byte from an independent splice model, plus current-format untouched payload-ID/source-offset retention transcript on a fresh published-root mount and through typed/authenticated public persisted-root readers",
         "roots": "acknowledged Commit root",
-        "omissions": "retired canonical encoding byte/root-ID identity is not compared with current format; unreferenced non-inode object census remains unavailable"
+        "omissions": "retired canonical encoding byte/root-ID identity is not compared with current format; unreferenced non-inode object census remains unavailable",
+        "acknowledged_root_binding": "Persisted current-format byte proof, exhaustive inode-table census, canonical inode continuity and strict untouched payload-ID/source-offset transcript must all bind to the exact root in the original public Committed acknowledgement. A native fresh-mount proof or matching final digest alone cannot substitute for any strict persisted guard.",
+        "independent_final_payload_sha256": "566b888ae15bc9ab4c3ab888e67acd2af5356e1220567e4d2da8e29afc926557"
       },
       "budget": {
         "command_ms": 15000,
@@ -266,7 +276,9 @@
           "benchmark/fs-bench-pro/shared/runner.py": "66c8d5b23a514da27f5ebb371f75a4c0e0406adb4d595e6b61a41d7da7686201"
         },
         "operations": "Reviewed capped registry ORIGINAL_OPERATIONS[0,2,3,4,7] inherited from edit_length_changing. Exactly one splice of payload.bin per original case; replacement bytes use the original operation payload_seed (from the length-changing family), original little-endian SplitMix64, and exact payload SHA-256, including 4096 logical zeros. Full fixture is the capped standard generator prefix with the original byte count and SHA-256. One ordinary writer invocation then one SDK Commit; unchanged suffix shifts are declared P-3 mechanism differences. Original capped inherited Workspace setup already fixes root/file modes and mtime, so no directory-time difference applies to these five cases.",
-        "oracle_coverage": "Original complete canonical namespace/mode/mtime/length/link-class/byte and native reopen coverage, independent unchanged payload-ID/source-offset splice transcript and exhaustive inode-table membership are retained within the current canonical format. Independent full-splice byte digests and canonical inode continuity supplement these checks. Retired format bytes/root IDs remain historical only. Original two-second group watchdog is actively enforced from measured ordinary command through Commit/terminal unmount; general report target 15 s/product watchdog 120 s and selected proof 45 s/hard 59 s copied unchanged."
+        "oracle_coverage": "Original complete canonical namespace/mode/mtime/length/link-class/byte and native reopen coverage, independent unchanged payload-ID/source-offset splice transcript and exhaustive inode-table membership are retained within the current canonical format. Independent full-splice byte digests and canonical inode continuity supplement these checks. Retired format bytes/root IDs remain historical only. Original two-second group watchdog is actively enforced from measured ordinary command through Commit/terminal unmount; general report target 15 s/product watchdog 120 s and selected proof 45 s/hard 59 s copied unchanged.",
+        "audited_support_commit": "cca598d0b1395767940f0103a788e6473c134738",
+        "independent_byte_model": "Original capped fixture/expected algebra at reference-v0.1.6-final; all five complete 524288000-byte final digests computed product-free before sampling, with the frozen registry self-check passing. This supports independent bytes; it is not a replacement for current retained-offset or canonical census checks."
       },
       "expected_commit": "Committed",
       "sdk_scenario": {
@@ -313,7 +325,9 @@
       "oracle": {
         "scope": "complete declared namespace and exhaustive current canonical inode-table membership, exact kinds, modes and mtime, canonical inode continuity, logical length and every final byte from an independent splice model, plus current-format untouched payload-ID/source-offset retention transcript on a fresh published-root mount and through typed/authenticated public persisted-root readers",
         "roots": "acknowledged Commit root",
-        "omissions": "retired canonical encoding byte/root-ID identity is not compared with current format; unreferenced non-inode object census remains unavailable"
+        "omissions": "retired canonical encoding byte/root-ID identity is not compared with current format; unreferenced non-inode object census remains unavailable",
+        "acknowledged_root_binding": "Persisted current-format byte proof, exhaustive inode-table census, canonical inode continuity and strict untouched payload-ID/source-offset transcript must all bind to the exact root in the original public Committed acknowledgement. A native fresh-mount proof or matching final digest alone cannot substitute for any strict persisted guard.",
+        "independent_final_payload_sha256": "1a195bac45cc98541ef6c90cedcb4e2f84956256cf68215af9498a992abe7639"
       },
       "budget": {
         "command_ms": 15000,
@@ -360,7 +374,9 @@
           "benchmark/fs-bench-pro/shared/runner.py": "66c8d5b23a514da27f5ebb371f75a4c0e0406adb4d595e6b61a41d7da7686201"
         },
         "operations": "Reviewed capped registry ORIGINAL_OPERATIONS[0,2,3,4,7] inherited from edit_length_changing. Exactly one splice of payload.bin per original case; replacement bytes use the original operation payload_seed (from the length-changing family), original little-endian SplitMix64, and exact payload SHA-256, including 4096 logical zeros. Full fixture is the capped standard generator prefix with the original byte count and SHA-256. One ordinary writer invocation then one SDK Commit; unchanged suffix shifts are declared P-3 mechanism differences. Original capped inherited Workspace setup already fixes root/file modes and mtime, so no directory-time difference applies to these five cases.",
-        "oracle_coverage": "Original complete canonical namespace/mode/mtime/length/link-class/byte and native reopen coverage, independent unchanged payload-ID/source-offset splice transcript and exhaustive inode-table membership are retained within the current canonical format. Independent full-splice byte digests and canonical inode continuity supplement these checks. Retired format bytes/root IDs remain historical only. Original two-second group watchdog is actively enforced from measured ordinary command through Commit/terminal unmount; general report target 15 s/product watchdog 120 s and selected proof 45 s/hard 59 s copied unchanged."
+        "oracle_coverage": "Original complete canonical namespace/mode/mtime/length/link-class/byte and native reopen coverage, independent unchanged payload-ID/source-offset splice transcript and exhaustive inode-table membership are retained within the current canonical format. Independent full-splice byte digests and canonical inode continuity supplement these checks. Retired format bytes/root IDs remain historical only. Original two-second group watchdog is actively enforced from measured ordinary command through Commit/terminal unmount; general report target 15 s/product watchdog 120 s and selected proof 45 s/hard 59 s copied unchanged.",
+        "audited_support_commit": "cca598d0b1395767940f0103a788e6473c134738",
+        "independent_byte_model": "Original capped fixture/expected algebra at reference-v0.1.6-final; all five complete 524288000-byte final digests computed product-free before sampling, with the frozen registry self-check passing. This supports independent bytes; it is not a replacement for current retained-offset or canonical census checks."
       },
       "expected_commit": "Committed",
       "sdk_scenario": {
@@ -407,7 +423,9 @@
       "oracle": {
         "scope": "complete declared namespace and exhaustive current canonical inode-table membership, exact kinds, modes and mtime, canonical inode continuity, logical length and every final byte from an independent splice model, plus current-format untouched payload-ID/source-offset retention transcript on a fresh published-root mount and through typed/authenticated public persisted-root readers",
         "roots": "acknowledged Commit root",
-        "omissions": "retired canonical encoding byte/root-ID identity is not compared with current format; unreferenced non-inode object census remains unavailable"
+        "omissions": "retired canonical encoding byte/root-ID identity is not compared with current format; unreferenced non-inode object census remains unavailable",
+        "acknowledged_root_binding": "Persisted current-format byte proof, exhaustive inode-table census, canonical inode continuity and strict untouched payload-ID/source-offset transcript must all bind to the exact root in the original public Committed acknowledgement. A native fresh-mount proof or matching final digest alone cannot substitute for any strict persisted guard.",
+        "independent_final_payload_sha256": "c9ba2dad49f2cc0eb9c65697b95b40849df1531ef8522dfbbc3540d6b5371d8c"
       },
       "budget": {
         "command_ms": 15000,
@@ -454,7 +472,9 @@
           "benchmark/fs-bench-pro/shared/runner.py": "66c8d5b23a514da27f5ebb371f75a4c0e0406adb4d595e6b61a41d7da7686201"
         },
         "operations": "Reviewed capped registry ORIGINAL_OPERATIONS[0,2,3,4,7] inherited from edit_length_changing. Exactly one splice of payload.bin per original case; replacement bytes use the original operation payload_seed (from the length-changing family), original little-endian SplitMix64, and exact payload SHA-256, including 4096 logical zeros. Full fixture is the capped standard generator prefix with the original byte count and SHA-256. One ordinary writer invocation then one SDK Commit; unchanged suffix shifts are declared P-3 mechanism differences. Original capped inherited Workspace setup already fixes root/file modes and mtime, so no directory-time difference applies to these five cases.",
-        "oracle_coverage": "Original complete canonical namespace/mode/mtime/length/link-class/byte and native reopen coverage, independent unchanged payload-ID/source-offset splice transcript and exhaustive inode-table membership are retained within the current canonical format. Independent full-splice byte digests and canonical inode continuity supplement these checks. Retired format bytes/root IDs remain historical only. Original two-second group watchdog is actively enforced from measured ordinary command through Commit/terminal unmount; general report target 15 s/product watchdog 120 s and selected proof 45 s/hard 59 s copied unchanged."
+        "oracle_coverage": "Original complete canonical namespace/mode/mtime/length/link-class/byte and native reopen coverage, independent unchanged payload-ID/source-offset splice transcript and exhaustive inode-table membership are retained within the current canonical format. Independent full-splice byte digests and canonical inode continuity supplement these checks. Retired format bytes/root IDs remain historical only. Original two-second group watchdog is actively enforced from measured ordinary command through Commit/terminal unmount; general report target 15 s/product watchdog 120 s and selected proof 45 s/hard 59 s copied unchanged.",
+        "audited_support_commit": "cca598d0b1395767940f0103a788e6473c134738",
+        "independent_byte_model": "Original capped fixture/expected algebra at reference-v0.1.6-final; all five complete 524288000-byte final digests computed product-free before sampling, with the frozen registry self-check passing. This supports independent bytes; it is not a replacement for current retained-offset or canonical census checks."
       },
       "expected_commit": "Committed",
       "sdk_scenario": {

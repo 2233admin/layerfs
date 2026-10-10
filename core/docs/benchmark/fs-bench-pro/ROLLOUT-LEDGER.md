@@ -19,7 +19,7 @@ comparison or release-admission claim. Durable is
 | 0.3 Case catalogue | COMPLETE | `f182e9a63`; prerequisite correction `30b798192` | Stage 0.4 reproducible engine |
 | 0.4 Reproducible engine | CLOSED: functional proof complete; exact reproduction FAILED C10/C12 | Cell-route correction `bb8e07df8`; build support `c496025fc`; oracle support `7a27a4f26`; fixture support `516c2f009`; workspace/report support `358eca082`; cleanup-observer correction `a1f2c259c` | Begin batch 1 under failed-reproduction closure recorded below |
 | 1 Pilot | COMPLETE: 36 functional/proof/clean-close passes; 7 numeric PASS, 29 INELIGIBLE | Init `c1d7dd0e8`/`39bbcbd6b`; payload `200f81493`/`c1d9b6c58`; parallel routing `b3c96ecb1`; tiny `36849bcc2`/`d6e0ef952`; namespace `98b14b233`/`be1f56a23`; H-2 fix `222526fa0`; closure `d4314ed62`; membership supplement `cca598d0b` | Batch 2, retaining original receipts plus exhaustive membership supplement |
-| 2 Edits | IN_PROGRESS: canonical 12 closed; preserving 12 and capped 5 workers closed, integration next; changing sampling; small-delta authoring | Model `e2840c270`; writer `8dd9d99a8`; graph `37ec6826b`; cache `98b6b7260`; routing `ac7beb4dd`; seal/audit `cca598d0b`; reuse `849b0aff1`; canonical `a34b5d44b` / this commit | Integrate the two completed workers, finish changing and small-delta; no batch 3 |
+| 2 Edits | IN_PROGRESS: canonical 12 and preserving 12 closed; capped 5 closed (2 functional passes, 3 watchdog failures); changing sampling; small-delta authoring | Model `e2840c270`; writer `8dd9d99a8`; graph `37ec6826b`; cache `98b6b7260`; routing `ac7beb4dd`; seal/audit `cca598d0b`; reuse `849b0aff1`; canonical `a34b5d44b` / this commit | Integrate the two completed workers, finish changing and small-delta; no batch 3 |
 | 3 Trees and tools | PENDING | — | Wait for batch 2 completion |
 | 4 History on one branch | PENDING | — | Wait for batch 3 completion |
 | 5 Branches and Workspaces | PENDING | — | Wait for batch 4; verify existing P-1 SDK methods |
@@ -1430,4 +1430,68 @@ replayed. No product source changed, no CI/product Clippy claim. Production LOC
 retired R9c, last counted 65,417.
 
 | `dcf4e75b9` (worker) | Record twelve preserving cases and all strict proof results | 79366 | 79366 | +0 |
-| This commit | Integrate preserving family closure and its two generated CSVs | 79366 | 79366 | +0 |
+| `b9ffa63be` | Integrate preserving family closure and its two generated CSVs | 79366 | 79366 | +0 |
+
+
+Capped family integration: prospective declaration `4f52124e4` and two-CSV
+result `0ba775db9` imported onto main; shared `1479e4d07` is the already-main
+setup patch, not applied twice. Actual sample source remains
+`1479e4d07d6f75956bab750ba1eaee4344d60ca9` in the retained worktree branch.
+All five original preparations and parity PASS before sampling; all five cases
+attempted once, no retry/unchanged repeat. Append and zero extension complete
+full 524,288,000-byte fresh native and strict persisted byte/inode/census/
+retention proofs, Gone and known Stop; their passing sample resources are
+removed. Both numeric rows are INELIGIBLE (seven measured source demands and
+independent pre-Commit own-write coldness unavailable). Each recorded counts
+11 requests / 179 owner jobs / 899 statements. Append wall 246,613,167 ns,
+proof 11,862,696,041 ns, Store logical/allocated 530,875,288 / 530,882,560 B,
+overlay logical/allocated 258,048 / 268,693,504 B. Zero extension wall
+193,117,625 ns, proof 12,481,382,208 ns, Store 530,887,648 / 530,894,848 B,
+overlay 258,048 / 268,693,504 B. Their unchanged 15 s product and 45 s proof
+limits are WITHIN; no storage or speed judgment.
+
+Three cases fail the original 2 s edit/Commit/End hard watchdog during command,
+not a newly invented acceptance limit. Frozen supervisor source
+benchmark/fs-bench-pro/src/main.rs:3883–3886 actually kills the original SDK
+worker when that group expires. P-3 ordinary suffix read/write shifting is
+incompatible with that unchanged watchdog for these cases. Later read-only
+original Exec inspections find exit 0, separately retained; they establish no
+bounded completion, Commit, byte proof, End, drain or Stop and cannot replace
+missing original boundaries. No current-contract deadlock or byte defect is
+established; a speed fix, workload change or SDK splice feature is forbidden.
+These remain closed FAIL with proof NOT_RUN. Recorded partial controller
+walls end at the original failure; command/Commit/unmount/count/storage values
+remain UNAVAILABLE. The 15 s reported product limit is still WITHIN, independent
+of the stricter group's failed execution. No limit is widened or reclassified.
+
+| Exact failed original case | Partial controller wall ns | Retained sample volume | Retained container |
+| --- | ---: | --- | --- |
+| insert-middle-4k-input-524283904b-result-500mib-ops-1-capped-v1 | 2006271042 | layerfs-fsb-sample-88dfec81df194c75 | 8639e0ac339cbaec54f3797358f254279c31f167f27cfb81cf76a98f93b1db4e |
+| prepend-head-4k-input-524283904b-result-500mib-ops-1-capped-v1 | 2009652334 | layerfs-fsb-sample-ca229edb569948cd | 8409dbd1acaaf98335da318be943bef3d6ad9ea2991d2fae11c0bc39857a9e1c |
+| replace-grow-middle-2k-to-4k-input-524285952b-result-500mib-ops-1-capped-v1 | 2012600042 | layerfs-fsb-sample-085683615ce24524 | 2e2b4f2e30fa915a83ed047d025297e544f0f8a84d189394448af34043f55af5 |
+
+Retained unknown mount keys, respectively:
+8e28e42f94f1be1f5d6c4fdde8bdcdbe2eeb4e2bb70d00038f5355784ab20fc5;
+6d50157b4c261c744631edbe9e27a02df34553f63c78dd434e1e15981f938d2b;
+34f9c916704f2e210ee685fc694bf1357871e9f6ca72bfab75b3134ff59c3f6a.
+Keep these containers/volumes/mount uncertainty intact. Closed prepared masters
+layerfs-fsb-master-edit-length-changing-capped-d2b25e60d4de4cdb (524,283,904 B)
+and layerfs-fsb-master-edit-length-changing-capped-7a73125237e64642
+(524,285,952 B) remain available; exact shared fixture reuse is sealed in each
+case-specific preparation. No old/other-owned resource is touched.
+
+All five performance and five verification rows are committed under
+baselines/core/2026-10-10-1479e4d07/. Retained verify preserves two PASS and
+three NOT_RUN with aggregate exit 1, no proof replay; report succeeds with all
+unknown failed metrics UNAVAILABLE. Raw worktree root:
+/Users/yifanxu/.codex/worktrees/fs-bench-pro-edit-capped/layerfs/
+benchmark-results/fs-bench-pro/2026-10-10-batch-2-capped-1479e4d07/.
+Sealed report sibling family-handoff.json lists full custody and six worker
+LOC comparisons. Root integration's four owning case-contract tests PASS
+0.019 s under 120 s lock; imported 30/14-column CSVs each contain five cases.
+No product source change, no optimization or CI/Clippy claim. Production LOC
+79,366 -> 79,366 (delta +0), pinned staged absent-aware method; reference absent
+(retired R9c; last counted 65,417).
+
+| `0ba775db9` (worker) | Record five capped outcomes, including three unchanged watchdog failures | 79366 | 79366 | +0 |
+| This commit | Integrate capped closure and preserve every failed resource/case | 79366 | 79366 | +0 |
