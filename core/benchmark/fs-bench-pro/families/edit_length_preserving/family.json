@@ -27,9 +27,17 @@
       ],
       "cache_class": "B",
       "oracle": {
-        "scope": "complete original SDK fixture/final namespace, kinds, modes, fixed mtime, lengths, every payload byte, stable persisted inode identity, current untouched payload-object retention and acknowledged published root through fresh mount and current authenticated typed public readers",
+        "scope": "complete original SDK fixture/final namespace, kinds, modes, fixed mtime, lengths and every payload byte; exhaustive authenticated current inode-table membership equals the reachable namespace; initial scope and payload inode serial preserved; typed current mapping profile, every parent/child and complete totals validated; strict current untouched payload-ID subset; acknowledged published root through fresh mount and closed-Store public reads",
         "roots": "acknowledged Commit root plus original committed input inode",
-        "omissions": "retired SDK-only route/resource assertions and retired format-qualified roots/maps/extents/payload ObjectIds are inapplicable to authorized POSIX surface/current format; no comparison or resource-bound qualification"
+        "omissions": "retired SDK-only route/resource assertions and retired format-qualified roots/maps/extents/payload ObjectIds are inapplicable to authorized POSIX surface/current format; no comparison or resource-bound qualification",
+        "coverage": {
+          "support_commit": "cca598d0b1395767940f0103a788e6473c134738",
+          "inode_table": "exhaustive ordered public inode-table census; no unreachable/missing/duplicate serial; exact reachable namespace membership",
+          "identity": "original manifest root scope and payload.bin inode serial equal acknowledged final root",
+          "mapping": "initial/final current chunked representation; exact profile ID, level and byte/extent totals at every mapping node and over the complete mapping",
+          "retention": "all initial payload IDs from extents wholly outside the overwritten4096-byte range must be present in the final mapping",
+          "bytes": "complete original independent native oracle plus current authenticated persisted read of every file byte"
+        }
       },
       "budget": {
         "command_ms": 15000,
@@ -51,7 +59,8 @@
         "The original selected-verification policy has a 45 s work ceiling and 59 s hard watchdog for the complete proof run. These are copied and declared for the separate combined native/persisted proof; its timer/topology differ.",
         "P-3 authorizes replacing one retired Client::edit_workspace_file_range SDK call with ordinary exact positional writes through the shared writer, plus ordinary fixed-mtime restoration. The POSIX/FUSE and current Commit surface/timer differ; no SDK-edit latency or retired SDK-only zero-FUSE/spool/resource PASS is claimed.",
         "The deterministic current input normalizes root mtime to1700000000; original sdk_edit_prepare pinned file mtime and root mode but did not set native root mtime. File bytes, file mode, file mtime and root mode are preserved.",
-        "Verification covers every file byte and stable current persisted inode identity, exceeding the original bounded adjacent-byte proof. Existing authenticated current-format validators replace retired format-qualified roots/maps/extents/payload ObjectId assertions; those archived checks remain unchanged and are not reported as passing."
+        "Verification covers every file byte and stable current persisted inode identity, exceeding the original bounded adjacent-byte proof. Existing authenticated current-format validators replace retired format-qualified roots/maps/extents/payload ObjectId assertions; those archived checks remain unchanged and are not reported as passing.",
+        "Measured Commit consumes own-written input from the ordinary overwrite. No independent identity-bound pre-Commit cold backing/metadata observation is available; the strict own-write cache guard therefore records numeric INELIGIBLE independently of functional proof, measured wall or source-demand count. No cache/workload/limit is changed to fit."
       ],
       "registry": {
         "family": "edit_length_preserving",
@@ -78,7 +87,7 @@
           "benchmark/fs-bench-pro/verify-selected.py": "4b77a64817f2c44a58f77459537bf886e83ff3e736a16c861f9079db7b2bc01e"
         },
         "operations": "Reviewed original edit_length_preserving::registry and sdk_edit_common::Scenario, byte-seeded replacement_bytes and sdk_file_edit::edit_commit_end. Preserve every original byte length, offset, replacement hash and plan hash. P-3 ports one retired SDK range edit to one ordinary in-place positional overwrite of payload.bin with the exact 4096 replacement bytes, preserving length and inode; restore fixed original file mtime through ordinary metadata calls, then existing public SDK Commit once. Current measured surface and timer are POSIX/FUSE plus public Commit, rather than historical SDK edit_commit_ns.",
-        "oracle_coverage": "Original sdk_edit_verify checked exact final length, independently derived replacement and adjacent boundary bytes, initial/final canonical inode identity, current visible Commit, retained untouched payload IDs and qualified retired canonical roots/maps/extent counts. Port verifies complete mounted and persisted semantic trees and every file byte through current authenticated typed public readers, with persisted inode identity compared to the original committed input. Retired format-qualified roots and the historical SDK-only no-FUSE/spool/resource assertions remain historical, explicitly inapplicable to this authorized ordinary syscall surface; no old checker is modified or reported as passing. Current-format untouched-payload retention uses initial extents wholly outside the replaced range and requires their current payload IDs to remain in the final mapping; no cross-format ObjectId comparison.",
+        "oracle_coverage": "Original sdk_edit_verify checked exact final length, independently derived replacement and adjacent boundary bytes, initial/final canonical inode identity, current visible Commit, retained untouched payload IDs and qualified retired canonical roots/maps/extent counts. Port verifies complete mounted and persisted semantic trees and every file byte through current authenticated typed public readers, with persisted inode identity compared to the original committed input. Retired format-qualified roots and the historical SDK-only no-FUSE/spool/resource assertions remain historical, explicitly inapplicable to this authorized ordinary syscall surface; no old checker is modified or reported as passing. Current-format untouched-payload retention uses initial extents wholly outside the replaced range and requires their current payload IDs to remain in the final mapping; no cross-format ObjectId comparison. Prospective final-source proof also exhausts the current inode table, proves its exact reachable membership, preserves root scope and inode serial, and validates complete initial/final mapping profile, parent-child byte/extent totals and strict untouched payload-ID subset. The sealed shared native writer qualification and32 unaffected pilot audits are reused only as their own proof scope, not as new case samples.",
         "original_registry_manifest_sha256": "daa3bcb8ba94da6dc28f7ca87dc2b27612c9988cf42fe5398cdddb3a5b386324",
         "retired_source_reads": {
           "crates/layerfs-workspace/src/lifecycle.rs": "2878347b79b0c1f7024267d90abab689c3d1dc3384c5116abdf5b3644f3aefb8",
@@ -99,7 +108,16 @@
         "final_bytes": 1048576,
         "plan_sha256": "1ae44c21604dee2537c2e7e68e4dfedb2242caed62a3d50a468c1328d758b2b9"
       },
-      "expected_commit": "Committed"
+      "expected_commit": "Committed",
+      "cache_contract": {
+        "class": "B",
+        "fresh_mount": true,
+        "warmup": "same ordinary logical overwrite on prior mount without Commit, then known terminal unmount and cleanup Gone",
+        "source_demands": "actual measured counters must be zero",
+        "has_own_write_input": true,
+        "own_write_precommit_coldness": "independent identity-bound zero-residency and verified-cold metadata before Commit are required; unavailable evidence is INELIGIBLE",
+        "observed_precommit_cold_evidence": "not supplied by this harness; no inferred coldness or own-write warmth credit"
+      }
     },
     {
       "id": "overwrite-head-4k-on-10mib-ops-1",
@@ -126,9 +144,17 @@
       ],
       "cache_class": "B",
       "oracle": {
-        "scope": "complete original SDK fixture/final namespace, kinds, modes, fixed mtime, lengths, every payload byte, stable persisted inode identity, current untouched payload-object retention and acknowledged published root through fresh mount and current authenticated typed public readers",
+        "scope": "complete original SDK fixture/final namespace, kinds, modes, fixed mtime, lengths and every payload byte; exhaustive authenticated current inode-table membership equals the reachable namespace; initial scope and payload inode serial preserved; typed current mapping profile, every parent/child and complete totals validated; strict current untouched payload-ID subset; acknowledged published root through fresh mount and closed-Store public reads",
         "roots": "acknowledged Commit root plus original committed input inode",
-        "omissions": "retired SDK-only route/resource assertions and retired format-qualified roots/maps/extents/payload ObjectIds are inapplicable to authorized POSIX surface/current format; no comparison or resource-bound qualification"
+        "omissions": "retired SDK-only route/resource assertions and retired format-qualified roots/maps/extents/payload ObjectIds are inapplicable to authorized POSIX surface/current format; no comparison or resource-bound qualification",
+        "coverage": {
+          "support_commit": "cca598d0b1395767940f0103a788e6473c134738",
+          "inode_table": "exhaustive ordered public inode-table census; no unreachable/missing/duplicate serial; exact reachable namespace membership",
+          "identity": "original manifest root scope and payload.bin inode serial equal acknowledged final root",
+          "mapping": "initial/final current chunked representation; exact profile ID, level and byte/extent totals at every mapping node and over the complete mapping",
+          "retention": "all initial payload IDs from extents wholly outside the overwritten4096-byte range must be present in the final mapping",
+          "bytes": "complete original independent native oracle plus current authenticated persisted read of every file byte"
+        }
       },
       "budget": {
         "command_ms": 15000,
@@ -150,7 +176,8 @@
         "The original selected-verification policy has a 45 s work ceiling and 59 s hard watchdog for the complete proof run. These are copied and declared for the separate combined native/persisted proof; its timer/topology differ.",
         "P-3 authorizes replacing one retired Client::edit_workspace_file_range SDK call with ordinary exact positional writes through the shared writer, plus ordinary fixed-mtime restoration. The POSIX/FUSE and current Commit surface/timer differ; no SDK-edit latency or retired SDK-only zero-FUSE/spool/resource PASS is claimed.",
         "The deterministic current input normalizes root mtime to1700000000; original sdk_edit_prepare pinned file mtime and root mode but did not set native root mtime. File bytes, file mode, file mtime and root mode are preserved.",
-        "Verification covers every file byte and stable current persisted inode identity, exceeding the original bounded adjacent-byte proof. Existing authenticated current-format validators replace retired format-qualified roots/maps/extents/payload ObjectId assertions; those archived checks remain unchanged and are not reported as passing."
+        "Verification covers every file byte and stable current persisted inode identity, exceeding the original bounded adjacent-byte proof. Existing authenticated current-format validators replace retired format-qualified roots/maps/extents/payload ObjectId assertions; those archived checks remain unchanged and are not reported as passing.",
+        "Measured Commit consumes own-written input from the ordinary overwrite. No independent identity-bound pre-Commit cold backing/metadata observation is available; the strict own-write cache guard therefore records numeric INELIGIBLE independently of functional proof, measured wall or source-demand count. No cache/workload/limit is changed to fit."
       ],
       "registry": {
         "family": "edit_length_preserving",
@@ -177,7 +204,7 @@
           "benchmark/fs-bench-pro/verify-selected.py": "4b77a64817f2c44a58f77459537bf886e83ff3e736a16c861f9079db7b2bc01e"
         },
         "operations": "Reviewed original edit_length_preserving::registry and sdk_edit_common::Scenario, byte-seeded replacement_bytes and sdk_file_edit::edit_commit_end. Preserve every original byte length, offset, replacement hash and plan hash. P-3 ports one retired SDK range edit to one ordinary in-place positional overwrite of payload.bin with the exact 4096 replacement bytes, preserving length and inode; restore fixed original file mtime through ordinary metadata calls, then existing public SDK Commit once. Current measured surface and timer are POSIX/FUSE plus public Commit, rather than historical SDK edit_commit_ns.",
-        "oracle_coverage": "Original sdk_edit_verify checked exact final length, independently derived replacement and adjacent boundary bytes, initial/final canonical inode identity, current visible Commit, retained untouched payload IDs and qualified retired canonical roots/maps/extent counts. Port verifies complete mounted and persisted semantic trees and every file byte through current authenticated typed public readers, with persisted inode identity compared to the original committed input. Retired format-qualified roots and the historical SDK-only no-FUSE/spool/resource assertions remain historical, explicitly inapplicable to this authorized ordinary syscall surface; no old checker is modified or reported as passing. Current-format untouched-payload retention uses initial extents wholly outside the replaced range and requires their current payload IDs to remain in the final mapping; no cross-format ObjectId comparison.",
+        "oracle_coverage": "Original sdk_edit_verify checked exact final length, independently derived replacement and adjacent boundary bytes, initial/final canonical inode identity, current visible Commit, retained untouched payload IDs and qualified retired canonical roots/maps/extent counts. Port verifies complete mounted and persisted semantic trees and every file byte through current authenticated typed public readers, with persisted inode identity compared to the original committed input. Retired format-qualified roots and the historical SDK-only no-FUSE/spool/resource assertions remain historical, explicitly inapplicable to this authorized ordinary syscall surface; no old checker is modified or reported as passing. Current-format untouched-payload retention uses initial extents wholly outside the replaced range and requires their current payload IDs to remain in the final mapping; no cross-format ObjectId comparison. Prospective final-source proof also exhausts the current inode table, proves its exact reachable membership, preserves root scope and inode serial, and validates complete initial/final mapping profile, parent-child byte/extent totals and strict untouched payload-ID subset. The sealed shared native writer qualification and32 unaffected pilot audits are reused only as their own proof scope, not as new case samples.",
         "original_registry_manifest_sha256": "daa3bcb8ba94da6dc28f7ca87dc2b27612c9988cf42fe5398cdddb3a5b386324",
         "retired_source_reads": {
           "crates/layerfs-workspace/src/lifecycle.rs": "2878347b79b0c1f7024267d90abab689c3d1dc3384c5116abdf5b3644f3aefb8",
@@ -198,7 +225,16 @@
         "final_bytes": 10485760,
         "plan_sha256": "c7ab1d59b39dc8d144a3ff6e2df76c630a8fabdcd52e15d532587df91e3a4ca3"
       },
-      "expected_commit": "Committed"
+      "expected_commit": "Committed",
+      "cache_contract": {
+        "class": "B",
+        "fresh_mount": true,
+        "warmup": "same ordinary logical overwrite on prior mount without Commit, then known terminal unmount and cleanup Gone",
+        "source_demands": "actual measured counters must be zero",
+        "has_own_write_input": true,
+        "own_write_precommit_coldness": "independent identity-bound zero-residency and verified-cold metadata before Commit are required; unavailable evidence is INELIGIBLE",
+        "observed_precommit_cold_evidence": "not supplied by this harness; no inferred coldness or own-write warmth credit"
+      }
     },
     {
       "id": "overwrite-head-4k-on-100mib-ops-1",
@@ -225,9 +261,17 @@
       ],
       "cache_class": "B",
       "oracle": {
-        "scope": "complete original SDK fixture/final namespace, kinds, modes, fixed mtime, lengths, every payload byte, stable persisted inode identity, current untouched payload-object retention and acknowledged published root through fresh mount and current authenticated typed public readers",
+        "scope": "complete original SDK fixture/final namespace, kinds, modes, fixed mtime, lengths and every payload byte; exhaustive authenticated current inode-table membership equals the reachable namespace; initial scope and payload inode serial preserved; typed current mapping profile, every parent/child and complete totals validated; strict current untouched payload-ID subset; acknowledged published root through fresh mount and closed-Store public reads",
         "roots": "acknowledged Commit root plus original committed input inode",
-        "omissions": "retired SDK-only route/resource assertions and retired format-qualified roots/maps/extents/payload ObjectIds are inapplicable to authorized POSIX surface/current format; no comparison or resource-bound qualification"
+        "omissions": "retired SDK-only route/resource assertions and retired format-qualified roots/maps/extents/payload ObjectIds are inapplicable to authorized POSIX surface/current format; no comparison or resource-bound qualification",
+        "coverage": {
+          "support_commit": "cca598d0b1395767940f0103a788e6473c134738",
+          "inode_table": "exhaustive ordered public inode-table census; no unreachable/missing/duplicate serial; exact reachable namespace membership",
+          "identity": "original manifest root scope and payload.bin inode serial equal acknowledged final root",
+          "mapping": "initial/final current chunked representation; exact profile ID, level and byte/extent totals at every mapping node and over the complete mapping",
+          "retention": "all initial payload IDs from extents wholly outside the overwritten4096-byte range must be present in the final mapping",
+          "bytes": "complete original independent native oracle plus current authenticated persisted read of every file byte"
+        }
       },
       "budget": {
         "command_ms": 15000,
@@ -249,7 +293,8 @@
         "The original selected-verification policy has a 45 s work ceiling and 59 s hard watchdog for the complete proof run. These are copied and declared for the separate combined native/persisted proof; its timer/topology differ.",
         "P-3 authorizes replacing one retired Client::edit_workspace_file_range SDK call with ordinary exact positional writes through the shared writer, plus ordinary fixed-mtime restoration. The POSIX/FUSE and current Commit surface/timer differ; no SDK-edit latency or retired SDK-only zero-FUSE/spool/resource PASS is claimed.",
         "The deterministic current input normalizes root mtime to1700000000; original sdk_edit_prepare pinned file mtime and root mode but did not set native root mtime. File bytes, file mode, file mtime and root mode are preserved.",
-        "Verification covers every file byte and stable current persisted inode identity, exceeding the original bounded adjacent-byte proof. Existing authenticated current-format validators replace retired format-qualified roots/maps/extents/payload ObjectId assertions; those archived checks remain unchanged and are not reported as passing."
+        "Verification covers every file byte and stable current persisted inode identity, exceeding the original bounded adjacent-byte proof. Existing authenticated current-format validators replace retired format-qualified roots/maps/extents/payload ObjectId assertions; those archived checks remain unchanged and are not reported as passing.",
+        "Measured Commit consumes own-written input from the ordinary overwrite. No independent identity-bound pre-Commit cold backing/metadata observation is available; the strict own-write cache guard therefore records numeric INELIGIBLE independently of functional proof, measured wall or source-demand count. No cache/workload/limit is changed to fit."
       ],
       "registry": {
         "family": "edit_length_preserving",
@@ -276,7 +321,7 @@
           "benchmark/fs-bench-pro/verify-selected.py": "4b77a64817f2c44a58f77459537bf886e83ff3e736a16c861f9079db7b2bc01e"
         },
         "operations": "Reviewed original edit_length_preserving::registry and sdk_edit_common::Scenario, byte-seeded replacement_bytes and sdk_file_edit::edit_commit_end. Preserve every original byte length, offset, replacement hash and plan hash. P-3 ports one retired SDK range edit to one ordinary in-place positional overwrite of payload.bin with the exact 4096 replacement bytes, preserving length and inode; restore fixed original file mtime through ordinary metadata calls, then existing public SDK Commit once. Current measured surface and timer are POSIX/FUSE plus public Commit, rather than historical SDK edit_commit_ns.",
-        "oracle_coverage": "Original sdk_edit_verify checked exact final length, independently derived replacement and adjacent boundary bytes, initial/final canonical inode identity, current visible Commit, retained untouched payload IDs and qualified retired canonical roots/maps/extent counts. Port verifies complete mounted and persisted semantic trees and every file byte through current authenticated typed public readers, with persisted inode identity compared to the original committed input. Retired format-qualified roots and the historical SDK-only no-FUSE/spool/resource assertions remain historical, explicitly inapplicable to this authorized ordinary syscall surface; no old checker is modified or reported as passing. Current-format untouched-payload retention uses initial extents wholly outside the replaced range and requires their current payload IDs to remain in the final mapping; no cross-format ObjectId comparison.",
+        "oracle_coverage": "Original sdk_edit_verify checked exact final length, independently derived replacement and adjacent boundary bytes, initial/final canonical inode identity, current visible Commit, retained untouched payload IDs and qualified retired canonical roots/maps/extent counts. Port verifies complete mounted and persisted semantic trees and every file byte through current authenticated typed public readers, with persisted inode identity compared to the original committed input. Retired format-qualified roots and the historical SDK-only no-FUSE/spool/resource assertions remain historical, explicitly inapplicable to this authorized ordinary syscall surface; no old checker is modified or reported as passing. Current-format untouched-payload retention uses initial extents wholly outside the replaced range and requires their current payload IDs to remain in the final mapping; no cross-format ObjectId comparison. Prospective final-source proof also exhausts the current inode table, proves its exact reachable membership, preserves root scope and inode serial, and validates complete initial/final mapping profile, parent-child byte/extent totals and strict untouched payload-ID subset. The sealed shared native writer qualification and32 unaffected pilot audits are reused only as their own proof scope, not as new case samples.",
         "original_registry_manifest_sha256": "daa3bcb8ba94da6dc28f7ca87dc2b27612c9988cf42fe5398cdddb3a5b386324",
         "retired_source_reads": {
           "crates/layerfs-workspace/src/lifecycle.rs": "2878347b79b0c1f7024267d90abab689c3d1dc3384c5116abdf5b3644f3aefb8",
@@ -297,7 +342,16 @@
         "final_bytes": 104857600,
         "plan_sha256": "8069027a6ceb4f6fce2357d24fe1ae21a0e6ed03ac4bd09d00a8be7b8ca5f85e"
       },
-      "expected_commit": "Committed"
+      "expected_commit": "Committed",
+      "cache_contract": {
+        "class": "B",
+        "fresh_mount": true,
+        "warmup": "same ordinary logical overwrite on prior mount without Commit, then known terminal unmount and cleanup Gone",
+        "source_demands": "actual measured counters must be zero",
+        "has_own_write_input": true,
+        "own_write_precommit_coldness": "independent identity-bound zero-residency and verified-cold metadata before Commit are required; unavailable evidence is INELIGIBLE",
+        "observed_precommit_cold_evidence": "not supplied by this harness; no inferred coldness or own-write warmth credit"
+      }
     },
     {
       "id": "overwrite-head-4k-on-500mib-ops-1",
@@ -324,9 +378,17 @@
       ],
       "cache_class": "B",
       "oracle": {
-        "scope": "complete original SDK fixture/final namespace, kinds, modes, fixed mtime, lengths, every payload byte, stable persisted inode identity, current untouched payload-object retention and acknowledged published root through fresh mount and current authenticated typed public readers",
+        "scope": "complete original SDK fixture/final namespace, kinds, modes, fixed mtime, lengths and every payload byte; exhaustive authenticated current inode-table membership equals the reachable namespace; initial scope and payload inode serial preserved; typed current mapping profile, every parent/child and complete totals validated; strict current untouched payload-ID subset; acknowledged published root through fresh mount and closed-Store public reads",
         "roots": "acknowledged Commit root plus original committed input inode",
-        "omissions": "retired SDK-only route/resource assertions and retired format-qualified roots/maps/extents/payload ObjectIds are inapplicable to authorized POSIX surface/current format; no comparison or resource-bound qualification"
+        "omissions": "retired SDK-only route/resource assertions and retired format-qualified roots/maps/extents/payload ObjectIds are inapplicable to authorized POSIX surface/current format; no comparison or resource-bound qualification",
+        "coverage": {
+          "support_commit": "cca598d0b1395767940f0103a788e6473c134738",
+          "inode_table": "exhaustive ordered public inode-table census; no unreachable/missing/duplicate serial; exact reachable namespace membership",
+          "identity": "original manifest root scope and payload.bin inode serial equal acknowledged final root",
+          "mapping": "initial/final current chunked representation; exact profile ID, level and byte/extent totals at every mapping node and over the complete mapping",
+          "retention": "all initial payload IDs from extents wholly outside the overwritten4096-byte range must be present in the final mapping",
+          "bytes": "complete original independent native oracle plus current authenticated persisted read of every file byte"
+        }
       },
       "budget": {
         "command_ms": 15000,
@@ -348,7 +410,8 @@
         "The original selected-verification policy has a 45 s work ceiling and 59 s hard watchdog for the complete proof run. These are copied and declared for the separate combined native/persisted proof; its timer/topology differ.",
         "P-3 authorizes replacing one retired Client::edit_workspace_file_range SDK call with ordinary exact positional writes through the shared writer, plus ordinary fixed-mtime restoration. The POSIX/FUSE and current Commit surface/timer differ; no SDK-edit latency or retired SDK-only zero-FUSE/spool/resource PASS is claimed.",
         "The deterministic current input normalizes root mtime to1700000000; original sdk_edit_prepare pinned file mtime and root mode but did not set native root mtime. File bytes, file mode, file mtime and root mode are preserved.",
-        "Verification covers every file byte and stable current persisted inode identity, exceeding the original bounded adjacent-byte proof. Existing authenticated current-format validators replace retired format-qualified roots/maps/extents/payload ObjectId assertions; those archived checks remain unchanged and are not reported as passing."
+        "Verification covers every file byte and stable current persisted inode identity, exceeding the original bounded adjacent-byte proof. Existing authenticated current-format validators replace retired format-qualified roots/maps/extents/payload ObjectId assertions; those archived checks remain unchanged and are not reported as passing.",
+        "Measured Commit consumes own-written input from the ordinary overwrite. No independent identity-bound pre-Commit cold backing/metadata observation is available; the strict own-write cache guard therefore records numeric INELIGIBLE independently of functional proof, measured wall or source-demand count. No cache/workload/limit is changed to fit."
       ],
       "registry": {
         "family": "edit_length_preserving",
@@ -375,7 +438,7 @@
           "benchmark/fs-bench-pro/verify-selected.py": "4b77a64817f2c44a58f77459537bf886e83ff3e736a16c861f9079db7b2bc01e"
         },
         "operations": "Reviewed original edit_length_preserving::registry and sdk_edit_common::Scenario, byte-seeded replacement_bytes and sdk_file_edit::edit_commit_end. Preserve every original byte length, offset, replacement hash and plan hash. P-3 ports one retired SDK range edit to one ordinary in-place positional overwrite of payload.bin with the exact 4096 replacement bytes, preserving length and inode; restore fixed original file mtime through ordinary metadata calls, then existing public SDK Commit once. Current measured surface and timer are POSIX/FUSE plus public Commit, rather than historical SDK edit_commit_ns.",
-        "oracle_coverage": "Original sdk_edit_verify checked exact final length, independently derived replacement and adjacent boundary bytes, initial/final canonical inode identity, current visible Commit, retained untouched payload IDs and qualified retired canonical roots/maps/extent counts. Port verifies complete mounted and persisted semantic trees and every file byte through current authenticated typed public readers, with persisted inode identity compared to the original committed input. Retired format-qualified roots and the historical SDK-only no-FUSE/spool/resource assertions remain historical, explicitly inapplicable to this authorized ordinary syscall surface; no old checker is modified or reported as passing. Current-format untouched-payload retention uses initial extents wholly outside the replaced range and requires their current payload IDs to remain in the final mapping; no cross-format ObjectId comparison.",
+        "oracle_coverage": "Original sdk_edit_verify checked exact final length, independently derived replacement and adjacent boundary bytes, initial/final canonical inode identity, current visible Commit, retained untouched payload IDs and qualified retired canonical roots/maps/extent counts. Port verifies complete mounted and persisted semantic trees and every file byte through current authenticated typed public readers, with persisted inode identity compared to the original committed input. Retired format-qualified roots and the historical SDK-only no-FUSE/spool/resource assertions remain historical, explicitly inapplicable to this authorized ordinary syscall surface; no old checker is modified or reported as passing. Current-format untouched-payload retention uses initial extents wholly outside the replaced range and requires their current payload IDs to remain in the final mapping; no cross-format ObjectId comparison. Prospective final-source proof also exhausts the current inode table, proves its exact reachable membership, preserves root scope and inode serial, and validates complete initial/final mapping profile, parent-child byte/extent totals and strict untouched payload-ID subset. The sealed shared native writer qualification and32 unaffected pilot audits are reused only as their own proof scope, not as new case samples.",
         "original_registry_manifest_sha256": "daa3bcb8ba94da6dc28f7ca87dc2b27612c9988cf42fe5398cdddb3a5b386324",
         "retired_source_reads": {
           "crates/layerfs-workspace/src/lifecycle.rs": "2878347b79b0c1f7024267d90abab689c3d1dc3384c5116abdf5b3644f3aefb8",
@@ -396,7 +459,16 @@
         "final_bytes": 524288000,
         "plan_sha256": "f56765f9865efb330a9be37f130f91900f5aa6aaf6e7975aaa31cdce4c5c260e"
       },
-      "expected_commit": "Committed"
+      "expected_commit": "Committed",
+      "cache_contract": {
+        "class": "B",
+        "fresh_mount": true,
+        "warmup": "same ordinary logical overwrite on prior mount without Commit, then known terminal unmount and cleanup Gone",
+        "source_demands": "actual measured counters must be zero",
+        "has_own_write_input": true,
+        "own_write_precommit_coldness": "independent identity-bound zero-residency and verified-cold metadata before Commit are required; unavailable evidence is INELIGIBLE",
+        "observed_precommit_cold_evidence": "not supplied by this harness; no inferred coldness or own-write warmth credit"
+      }
     },
     {
       "id": "overwrite-middle-4k-on-1mib-ops-1",
@@ -423,9 +495,17 @@
       ],
       "cache_class": "B",
       "oracle": {
-        "scope": "complete original SDK fixture/final namespace, kinds, modes, fixed mtime, lengths, every payload byte, stable persisted inode identity, current untouched payload-object retention and acknowledged published root through fresh mount and current authenticated typed public readers",
+        "scope": "complete original SDK fixture/final namespace, kinds, modes, fixed mtime, lengths and every payload byte; exhaustive authenticated current inode-table membership equals the reachable namespace; initial scope and payload inode serial preserved; typed current mapping profile, every parent/child and complete totals validated; strict current untouched payload-ID subset; acknowledged published root through fresh mount and closed-Store public reads",
         "roots": "acknowledged Commit root plus original committed input inode",
-        "omissions": "retired SDK-only route/resource assertions and retired format-qualified roots/maps/extents/payload ObjectIds are inapplicable to authorized POSIX surface/current format; no comparison or resource-bound qualification"
+        "omissions": "retired SDK-only route/resource assertions and retired format-qualified roots/maps/extents/payload ObjectIds are inapplicable to authorized POSIX surface/current format; no comparison or resource-bound qualification",
+        "coverage": {
+          "support_commit": "cca598d0b1395767940f0103a788e6473c134738",
+          "inode_table": "exhaustive ordered public inode-table census; no unreachable/missing/duplicate serial; exact reachable namespace membership",
+          "identity": "original manifest root scope and payload.bin inode serial equal acknowledged final root",
+          "mapping": "initial/final current chunked representation; exact profile ID, level and byte/extent totals at every mapping node and over the complete mapping",
+          "retention": "all initial payload IDs from extents wholly outside the overwritten4096-byte range must be present in the final mapping",
+          "bytes": "complete original independent native oracle plus current authenticated persisted read of every file byte"
+        }
       },
       "budget": {
         "command_ms": 15000,
@@ -447,7 +527,8 @@
         "The original selected-verification policy has a 45 s work ceiling and 59 s hard watchdog for the complete proof run. These are copied and declared for the separate combined native/persisted proof; its timer/topology differ.",
         "P-3 authorizes replacing one retired Client::edit_workspace_file_range SDK call with ordinary exact positional writes through the shared writer, plus ordinary fixed-mtime restoration. The POSIX/FUSE and current Commit surface/timer differ; no SDK-edit latency or retired SDK-only zero-FUSE/spool/resource PASS is claimed.",
         "The deterministic current input normalizes root mtime to1700000000; original sdk_edit_prepare pinned file mtime and root mode but did not set native root mtime. File bytes, file mode, file mtime and root mode are preserved.",
-        "Verification covers every file byte and stable current persisted inode identity, exceeding the original bounded adjacent-byte proof. Existing authenticated current-format validators replace retired format-qualified roots/maps/extents/payload ObjectId assertions; those archived checks remain unchanged and are not reported as passing."
+        "Verification covers every file byte and stable current persisted inode identity, exceeding the original bounded adjacent-byte proof. Existing authenticated current-format validators replace retired format-qualified roots/maps/extents/payload ObjectId assertions; those archived checks remain unchanged and are not reported as passing.",
+        "Measured Commit consumes own-written input from the ordinary overwrite. No independent identity-bound pre-Commit cold backing/metadata observation is available; the strict own-write cache guard therefore records numeric INELIGIBLE independently of functional proof, measured wall or source-demand count. No cache/workload/limit is changed to fit."
       ],
       "registry": {
         "family": "edit_length_preserving",
@@ -474,7 +555,7 @@
           "benchmark/fs-bench-pro/verify-selected.py": "4b77a64817f2c44a58f77459537bf886e83ff3e736a16c861f9079db7b2bc01e"
         },
         "operations": "Reviewed original edit_length_preserving::registry and sdk_edit_common::Scenario, byte-seeded replacement_bytes and sdk_file_edit::edit_commit_end. Preserve every original byte length, offset, replacement hash and plan hash. P-3 ports one retired SDK range edit to one ordinary in-place positional overwrite of payload.bin with the exact 4096 replacement bytes, preserving length and inode; restore fixed original file mtime through ordinary metadata calls, then existing public SDK Commit once. Current measured surface and timer are POSIX/FUSE plus public Commit, rather than historical SDK edit_commit_ns.",
-        "oracle_coverage": "Original sdk_edit_verify checked exact final length, independently derived replacement and adjacent boundary bytes, initial/final canonical inode identity, current visible Commit, retained untouched payload IDs and qualified retired canonical roots/maps/extent counts. Port verifies complete mounted and persisted semantic trees and every file byte through current authenticated typed public readers, with persisted inode identity compared to the original committed input. Retired format-qualified roots and the historical SDK-only no-FUSE/spool/resource assertions remain historical, explicitly inapplicable to this authorized ordinary syscall surface; no old checker is modified or reported as passing. Current-format untouched-payload retention uses initial extents wholly outside the replaced range and requires their current payload IDs to remain in the final mapping; no cross-format ObjectId comparison.",
+        "oracle_coverage": "Original sdk_edit_verify checked exact final length, independently derived replacement and adjacent boundary bytes, initial/final canonical inode identity, current visible Commit, retained untouched payload IDs and qualified retired canonical roots/maps/extent counts. Port verifies complete mounted and persisted semantic trees and every file byte through current authenticated typed public readers, with persisted inode identity compared to the original committed input. Retired format-qualified roots and the historical SDK-only no-FUSE/spool/resource assertions remain historical, explicitly inapplicable to this authorized ordinary syscall surface; no old checker is modified or reported as passing. Current-format untouched-payload retention uses initial extents wholly outside the replaced range and requires their current payload IDs to remain in the final mapping; no cross-format ObjectId comparison. Prospective final-source proof also exhausts the current inode table, proves its exact reachable membership, preserves root scope and inode serial, and validates complete initial/final mapping profile, parent-child byte/extent totals and strict untouched payload-ID subset. The sealed shared native writer qualification and32 unaffected pilot audits are reused only as their own proof scope, not as new case samples.",
         "original_registry_manifest_sha256": "daa3bcb8ba94da6dc28f7ca87dc2b27612c9988cf42fe5398cdddb3a5b386324",
         "retired_source_reads": {
           "crates/layerfs-workspace/src/lifecycle.rs": "2878347b79b0c1f7024267d90abab689c3d1dc3384c5116abdf5b3644f3aefb8",
@@ -495,7 +576,16 @@
         "final_bytes": 1048576,
         "plan_sha256": "06e787e400603f712dc89ad1e1cecabe651ad01364c13b168cea4a3cdc6d7f2f"
       },
-      "expected_commit": "Committed"
+      "expected_commit": "Committed",
+      "cache_contract": {
+        "class": "B",
+        "fresh_mount": true,
+        "warmup": "same ordinary logical overwrite on prior mount without Commit, then known terminal unmount and cleanup Gone",
+        "source_demands": "actual measured counters must be zero",
+        "has_own_write_input": true,
+        "own_write_precommit_coldness": "independent identity-bound zero-residency and verified-cold metadata before Commit are required; unavailable evidence is INELIGIBLE",
+        "observed_precommit_cold_evidence": "not supplied by this harness; no inferred coldness or own-write warmth credit"
+      }
     },
     {
       "id": "overwrite-middle-4k-on-10mib-ops-1",
@@ -522,9 +612,17 @@
       ],
       "cache_class": "B",
       "oracle": {
-        "scope": "complete original SDK fixture/final namespace, kinds, modes, fixed mtime, lengths, every payload byte, stable persisted inode identity, current untouched payload-object retention and acknowledged published root through fresh mount and current authenticated typed public readers",
+        "scope": "complete original SDK fixture/final namespace, kinds, modes, fixed mtime, lengths and every payload byte; exhaustive authenticated current inode-table membership equals the reachable namespace; initial scope and payload inode serial preserved; typed current mapping profile, every parent/child and complete totals validated; strict current untouched payload-ID subset; acknowledged published root through fresh mount and closed-Store public reads",
         "roots": "acknowledged Commit root plus original committed input inode",
-        "omissions": "retired SDK-only route/resource assertions and retired format-qualified roots/maps/extents/payload ObjectIds are inapplicable to authorized POSIX surface/current format; no comparison or resource-bound qualification"
+        "omissions": "retired SDK-only route/resource assertions and retired format-qualified roots/maps/extents/payload ObjectIds are inapplicable to authorized POSIX surface/current format; no comparison or resource-bound qualification",
+        "coverage": {
+          "support_commit": "cca598d0b1395767940f0103a788e6473c134738",
+          "inode_table": "exhaustive ordered public inode-table census; no unreachable/missing/duplicate serial; exact reachable namespace membership",
+          "identity": "original manifest root scope and payload.bin inode serial equal acknowledged final root",
+          "mapping": "initial/final current chunked representation; exact profile ID, level and byte/extent totals at every mapping node and over the complete mapping",
+          "retention": "all initial payload IDs from extents wholly outside the overwritten4096-byte range must be present in the final mapping",
+          "bytes": "complete original independent native oracle plus current authenticated persisted read of every file byte"
+        }
       },
       "budget": {
         "command_ms": 15000,
@@ -546,7 +644,8 @@
         "The original selected-verification policy has a 45 s work ceiling and 59 s hard watchdog for the complete proof run. These are copied and declared for the separate combined native/persisted proof; its timer/topology differ.",
         "P-3 authorizes replacing one retired Client::edit_workspace_file_range SDK call with ordinary exact positional writes through the shared writer, plus ordinary fixed-mtime restoration. The POSIX/FUSE and current Commit surface/timer differ; no SDK-edit latency or retired SDK-only zero-FUSE/spool/resource PASS is claimed.",
         "The deterministic current input normalizes root mtime to1700000000; original sdk_edit_prepare pinned file mtime and root mode but did not set native root mtime. File bytes, file mode, file mtime and root mode are preserved.",
-        "Verification covers every file byte and stable current persisted inode identity, exceeding the original bounded adjacent-byte proof. Existing authenticated current-format validators replace retired format-qualified roots/maps/extents/payload ObjectId assertions; those archived checks remain unchanged and are not reported as passing."
+        "Verification covers every file byte and stable current persisted inode identity, exceeding the original bounded adjacent-byte proof. Existing authenticated current-format validators replace retired format-qualified roots/maps/extents/payload ObjectId assertions; those archived checks remain unchanged and are not reported as passing.",
+        "Measured Commit consumes own-written input from the ordinary overwrite. No independent identity-bound pre-Commit cold backing/metadata observation is available; the strict own-write cache guard therefore records numeric INELIGIBLE independently of functional proof, measured wall or source-demand count. No cache/workload/limit is changed to fit."
       ],
       "registry": {
         "family": "edit_length_preserving",
@@ -573,7 +672,7 @@
           "benchmark/fs-bench-pro/verify-selected.py": "4b77a64817f2c44a58f77459537bf886e83ff3e736a16c861f9079db7b2bc01e"
         },
         "operations": "Reviewed original edit_length_preserving::registry and sdk_edit_common::Scenario, byte-seeded replacement_bytes and sdk_file_edit::edit_commit_end. Preserve every original byte length, offset, replacement hash and plan hash. P-3 ports one retired SDK range edit to one ordinary in-place positional overwrite of payload.bin with the exact 4096 replacement bytes, preserving length and inode; restore fixed original file mtime through ordinary metadata calls, then existing public SDK Commit once. Current measured surface and timer are POSIX/FUSE plus public Commit, rather than historical SDK edit_commit_ns.",
-        "oracle_coverage": "Original sdk_edit_verify checked exact final length, independently derived replacement and adjacent boundary bytes, initial/final canonical inode identity, current visible Commit, retained untouched payload IDs and qualified retired canonical roots/maps/extent counts. Port verifies complete mounted and persisted semantic trees and every file byte through current authenticated typed public readers, with persisted inode identity compared to the original committed input. Retired format-qualified roots and the historical SDK-only no-FUSE/spool/resource assertions remain historical, explicitly inapplicable to this authorized ordinary syscall surface; no old checker is modified or reported as passing. Current-format untouched-payload retention uses initial extents wholly outside the replaced range and requires their current payload IDs to remain in the final mapping; no cross-format ObjectId comparison.",
+        "oracle_coverage": "Original sdk_edit_verify checked exact final length, independently derived replacement and adjacent boundary bytes, initial/final canonical inode identity, current visible Commit, retained untouched payload IDs and qualified retired canonical roots/maps/extent counts. Port verifies complete mounted and persisted semantic trees and every file byte through current authenticated typed public readers, with persisted inode identity compared to the original committed input. Retired format-qualified roots and the historical SDK-only no-FUSE/spool/resource assertions remain historical, explicitly inapplicable to this authorized ordinary syscall surface; no old checker is modified or reported as passing. Current-format untouched-payload retention uses initial extents wholly outside the replaced range and requires their current payload IDs to remain in the final mapping; no cross-format ObjectId comparison. Prospective final-source proof also exhausts the current inode table, proves its exact reachable membership, preserves root scope and inode serial, and validates complete initial/final mapping profile, parent-child byte/extent totals and strict untouched payload-ID subset. The sealed shared native writer qualification and32 unaffected pilot audits are reused only as their own proof scope, not as new case samples.",
         "original_registry_manifest_sha256": "daa3bcb8ba94da6dc28f7ca87dc2b27612c9988cf42fe5398cdddb3a5b386324",
         "retired_source_reads": {
           "crates/layerfs-workspace/src/lifecycle.rs": "2878347b79b0c1f7024267d90abab689c3d1dc3384c5116abdf5b3644f3aefb8",
@@ -594,7 +693,16 @@
         "final_bytes": 10485760,
         "plan_sha256": "97f9f75a1c7829fe9dee027c72d7fea97feb428fc8e258d34993e696ce3201f5"
       },
-      "expected_commit": "Committed"
+      "expected_commit": "Committed",
+      "cache_contract": {
+        "class": "B",
+        "fresh_mount": true,
+        "warmup": "same ordinary logical overwrite on prior mount without Commit, then known terminal unmount and cleanup Gone",
+        "source_demands": "actual measured counters must be zero",
+        "has_own_write_input": true,
+        "own_write_precommit_coldness": "independent identity-bound zero-residency and verified-cold metadata before Commit are required; unavailable evidence is INELIGIBLE",
+        "observed_precommit_cold_evidence": "not supplied by this harness; no inferred coldness or own-write warmth credit"
+      }
     },
     {
       "id": "overwrite-middle-4k-on-100mib-ops-1",
@@ -621,9 +729,17 @@
       ],
       "cache_class": "B",
       "oracle": {
-        "scope": "complete original SDK fixture/final namespace, kinds, modes, fixed mtime, lengths, every payload byte, stable persisted inode identity, current untouched payload-object retention and acknowledged published root through fresh mount and current authenticated typed public readers",
+        "scope": "complete original SDK fixture/final namespace, kinds, modes, fixed mtime, lengths and every payload byte; exhaustive authenticated current inode-table membership equals the reachable namespace; initial scope and payload inode serial preserved; typed current mapping profile, every parent/child and complete totals validated; strict current untouched payload-ID subset; acknowledged published root through fresh mount and closed-Store public reads",
         "roots": "acknowledged Commit root plus original committed input inode",
-        "omissions": "retired SDK-only route/resource assertions and retired format-qualified roots/maps/extents/payload ObjectIds are inapplicable to authorized POSIX surface/current format; no comparison or resource-bound qualification"
+        "omissions": "retired SDK-only route/resource assertions and retired format-qualified roots/maps/extents/payload ObjectIds are inapplicable to authorized POSIX surface/current format; no comparison or resource-bound qualification",
+        "coverage": {
+          "support_commit": "cca598d0b1395767940f0103a788e6473c134738",
+          "inode_table": "exhaustive ordered public inode-table census; no unreachable/missing/duplicate serial; exact reachable namespace membership",
+          "identity": "original manifest root scope and payload.bin inode serial equal acknowledged final root",
+          "mapping": "initial/final current chunked representation; exact profile ID, level and byte/extent totals at every mapping node and over the complete mapping",
+          "retention": "all initial payload IDs from extents wholly outside the overwritten4096-byte range must be present in the final mapping",
+          "bytes": "complete original independent native oracle plus current authenticated persisted read of every file byte"
+        }
       },
       "budget": {
         "command_ms": 15000,
@@ -645,7 +761,8 @@
         "The original selected-verification policy has a 45 s work ceiling and 59 s hard watchdog for the complete proof run. These are copied and declared for the separate combined native/persisted proof; its timer/topology differ.",
         "P-3 authorizes replacing one retired Client::edit_workspace_file_range SDK call with ordinary exact positional writes through the shared writer, plus ordinary fixed-mtime restoration. The POSIX/FUSE and current Commit surface/timer differ; no SDK-edit latency or retired SDK-only zero-FUSE/spool/resource PASS is claimed.",
         "The deterministic current input normalizes root mtime to1700000000; original sdk_edit_prepare pinned file mtime and root mode but did not set native root mtime. File bytes, file mode, file mtime and root mode are preserved.",
-        "Verification covers every file byte and stable current persisted inode identity, exceeding the original bounded adjacent-byte proof. Existing authenticated current-format validators replace retired format-qualified roots/maps/extents/payload ObjectId assertions; those archived checks remain unchanged and are not reported as passing."
+        "Verification covers every file byte and stable current persisted inode identity, exceeding the original bounded adjacent-byte proof. Existing authenticated current-format validators replace retired format-qualified roots/maps/extents/payload ObjectId assertions; those archived checks remain unchanged and are not reported as passing.",
+        "Measured Commit consumes own-written input from the ordinary overwrite. No independent identity-bound pre-Commit cold backing/metadata observation is available; the strict own-write cache guard therefore records numeric INELIGIBLE independently of functional proof, measured wall or source-demand count. No cache/workload/limit is changed to fit."
       ],
       "registry": {
         "family": "edit_length_preserving",
@@ -672,7 +789,7 @@
           "benchmark/fs-bench-pro/verify-selected.py": "4b77a64817f2c44a58f77459537bf886e83ff3e736a16c861f9079db7b2bc01e"
         },
         "operations": "Reviewed original edit_length_preserving::registry and sdk_edit_common::Scenario, byte-seeded replacement_bytes and sdk_file_edit::edit_commit_end. Preserve every original byte length, offset, replacement hash and plan hash. P-3 ports one retired SDK range edit to one ordinary in-place positional overwrite of payload.bin with the exact 4096 replacement bytes, preserving length and inode; restore fixed original file mtime through ordinary metadata calls, then existing public SDK Commit once. Current measured surface and timer are POSIX/FUSE plus public Commit, rather than historical SDK edit_commit_ns.",
-        "oracle_coverage": "Original sdk_edit_verify checked exact final length, independently derived replacement and adjacent boundary bytes, initial/final canonical inode identity, current visible Commit, retained untouched payload IDs and qualified retired canonical roots/maps/extent counts. Port verifies complete mounted and persisted semantic trees and every file byte through current authenticated typed public readers, with persisted inode identity compared to the original committed input. Retired format-qualified roots and the historical SDK-only no-FUSE/spool/resource assertions remain historical, explicitly inapplicable to this authorized ordinary syscall surface; no old checker is modified or reported as passing. Current-format untouched-payload retention uses initial extents wholly outside the replaced range and requires their current payload IDs to remain in the final mapping; no cross-format ObjectId comparison.",
+        "oracle_coverage": "Original sdk_edit_verify checked exact final length, independently derived replacement and adjacent boundary bytes, initial/final canonical inode identity, current visible Commit, retained untouched payload IDs and qualified retired canonical roots/maps/extent counts. Port verifies complete mounted and persisted semantic trees and every file byte through current authenticated typed public readers, with persisted inode identity compared to the original committed input. Retired format-qualified roots and the historical SDK-only no-FUSE/spool/resource assertions remain historical, explicitly inapplicable to this authorized ordinary syscall surface; no old checker is modified or reported as passing. Current-format untouched-payload retention uses initial extents wholly outside the replaced range and requires their current payload IDs to remain in the final mapping; no cross-format ObjectId comparison. Prospective final-source proof also exhausts the current inode table, proves its exact reachable membership, preserves root scope and inode serial, and validates complete initial/final mapping profile, parent-child byte/extent totals and strict untouched payload-ID subset. The sealed shared native writer qualification and32 unaffected pilot audits are reused only as their own proof scope, not as new case samples.",
         "original_registry_manifest_sha256": "daa3bcb8ba94da6dc28f7ca87dc2b27612c9988cf42fe5398cdddb3a5b386324",
         "retired_source_reads": {
           "crates/layerfs-workspace/src/lifecycle.rs": "2878347b79b0c1f7024267d90abab689c3d1dc3384c5116abdf5b3644f3aefb8",
@@ -693,7 +810,16 @@
         "final_bytes": 104857600,
         "plan_sha256": "47d168d3398c97e90aca1b26aa1d0b1d52ff181a72cf7decf55b14384e4f73fe"
       },
-      "expected_commit": "Committed"
+      "expected_commit": "Committed",
+      "cache_contract": {
+        "class": "B",
+        "fresh_mount": true,
+        "warmup": "same ordinary logical overwrite on prior mount without Commit, then known terminal unmount and cleanup Gone",
+        "source_demands": "actual measured counters must be zero",
+        "has_own_write_input": true,
+        "own_write_precommit_coldness": "independent identity-bound zero-residency and verified-cold metadata before Commit are required; unavailable evidence is INELIGIBLE",
+        "observed_precommit_cold_evidence": "not supplied by this harness; no inferred coldness or own-write warmth credit"
+      }
     },
     {
       "id": "overwrite-middle-4k-on-500mib-ops-1",
@@ -720,9 +846,17 @@
       ],
       "cache_class": "B",
       "oracle": {
-        "scope": "complete original SDK fixture/final namespace, kinds, modes, fixed mtime, lengths, every payload byte, stable persisted inode identity, current untouched payload-object retention and acknowledged published root through fresh mount and current authenticated typed public readers",
+        "scope": "complete original SDK fixture/final namespace, kinds, modes, fixed mtime, lengths and every payload byte; exhaustive authenticated current inode-table membership equals the reachable namespace; initial scope and payload inode serial preserved; typed current mapping profile, every parent/child and complete totals validated; strict current untouched payload-ID subset; acknowledged published root through fresh mount and closed-Store public reads",
         "roots": "acknowledged Commit root plus original committed input inode",
-        "omissions": "retired SDK-only route/resource assertions and retired format-qualified roots/maps/extents/payload ObjectIds are inapplicable to authorized POSIX surface/current format; no comparison or resource-bound qualification"
+        "omissions": "retired SDK-only route/resource assertions and retired format-qualified roots/maps/extents/payload ObjectIds are inapplicable to authorized POSIX surface/current format; no comparison or resource-bound qualification",
+        "coverage": {
+          "support_commit": "cca598d0b1395767940f0103a788e6473c134738",
+          "inode_table": "exhaustive ordered public inode-table census; no unreachable/missing/duplicate serial; exact reachable namespace membership",
+          "identity": "original manifest root scope and payload.bin inode serial equal acknowledged final root",
+          "mapping": "initial/final current chunked representation; exact profile ID, level and byte/extent totals at every mapping node and over the complete mapping",
+          "retention": "all initial payload IDs from extents wholly outside the overwritten4096-byte range must be present in the final mapping",
+          "bytes": "complete original independent native oracle plus current authenticated persisted read of every file byte"
+        }
       },
       "budget": {
         "command_ms": 15000,
@@ -744,7 +878,8 @@
         "The original selected-verification policy has a 45 s work ceiling and 59 s hard watchdog for the complete proof run. These are copied and declared for the separate combined native/persisted proof; its timer/topology differ.",
         "P-3 authorizes replacing one retired Client::edit_workspace_file_range SDK call with ordinary exact positional writes through the shared writer, plus ordinary fixed-mtime restoration. The POSIX/FUSE and current Commit surface/timer differ; no SDK-edit latency or retired SDK-only zero-FUSE/spool/resource PASS is claimed.",
         "The deterministic current input normalizes root mtime to1700000000; original sdk_edit_prepare pinned file mtime and root mode but did not set native root mtime. File bytes, file mode, file mtime and root mode are preserved.",
-        "Verification covers every file byte and stable current persisted inode identity, exceeding the original bounded adjacent-byte proof. Existing authenticated current-format validators replace retired format-qualified roots/maps/extents/payload ObjectId assertions; those archived checks remain unchanged and are not reported as passing."
+        "Verification covers every file byte and stable current persisted inode identity, exceeding the original bounded adjacent-byte proof. Existing authenticated current-format validators replace retired format-qualified roots/maps/extents/payload ObjectId assertions; those archived checks remain unchanged and are not reported as passing.",
+        "Measured Commit consumes own-written input from the ordinary overwrite. No independent identity-bound pre-Commit cold backing/metadata observation is available; the strict own-write cache guard therefore records numeric INELIGIBLE independently of functional proof, measured wall or source-demand count. No cache/workload/limit is changed to fit."
       ],
       "registry": {
         "family": "edit_length_preserving",
@@ -771,7 +906,7 @@
           "benchmark/fs-bench-pro/verify-selected.py": "4b77a64817f2c44a58f77459537bf886e83ff3e736a16c861f9079db7b2bc01e"
         },
         "operations": "Reviewed original edit_length_preserving::registry and sdk_edit_common::Scenario, byte-seeded replacement_bytes and sdk_file_edit::edit_commit_end. Preserve every original byte length, offset, replacement hash and plan hash. P-3 ports one retired SDK range edit to one ordinary in-place positional overwrite of payload.bin with the exact 4096 replacement bytes, preserving length and inode; restore fixed original file mtime through ordinary metadata calls, then existing public SDK Commit once. Current measured surface and timer are POSIX/FUSE plus public Commit, rather than historical SDK edit_commit_ns.",
-        "oracle_coverage": "Original sdk_edit_verify checked exact final length, independently derived replacement and adjacent boundary bytes, initial/final canonical inode identity, current visible Commit, retained untouched payload IDs and qualified retired canonical roots/maps/extent counts. Port verifies complete mounted and persisted semantic trees and every file byte through current authenticated typed public readers, with persisted inode identity compared to the original committed input. Retired format-qualified roots and the historical SDK-only no-FUSE/spool/resource assertions remain historical, explicitly inapplicable to this authorized ordinary syscall surface; no old checker is modified or reported as passing. Current-format untouched-payload retention uses initial extents wholly outside the replaced range and requires their current payload IDs to remain in the final mapping; no cross-format ObjectId comparison.",
+        "oracle_coverage": "Original sdk_edit_verify checked exact final length, independently derived replacement and adjacent boundary bytes, initial/final canonical inode identity, current visible Commit, retained untouched payload IDs and qualified retired canonical roots/maps/extent counts. Port verifies complete mounted and persisted semantic trees and every file byte through current authenticated typed public readers, with persisted inode identity compared to the original committed input. Retired format-qualified roots and the historical SDK-only no-FUSE/spool/resource assertions remain historical, explicitly inapplicable to this authorized ordinary syscall surface; no old checker is modified or reported as passing. Current-format untouched-payload retention uses initial extents wholly outside the replaced range and requires their current payload IDs to remain in the final mapping; no cross-format ObjectId comparison. Prospective final-source proof also exhausts the current inode table, proves its exact reachable membership, preserves root scope and inode serial, and validates complete initial/final mapping profile, parent-child byte/extent totals and strict untouched payload-ID subset. The sealed shared native writer qualification and32 unaffected pilot audits are reused only as their own proof scope, not as new case samples.",
         "original_registry_manifest_sha256": "daa3bcb8ba94da6dc28f7ca87dc2b27612c9988cf42fe5398cdddb3a5b386324",
         "retired_source_reads": {
           "crates/layerfs-workspace/src/lifecycle.rs": "2878347b79b0c1f7024267d90abab689c3d1dc3384c5116abdf5b3644f3aefb8",
@@ -792,7 +927,16 @@
         "final_bytes": 524288000,
         "plan_sha256": "038255390de66e451da0c4beb7e4e2a42981ae6105749d878dc27e3a38258f03"
       },
-      "expected_commit": "Committed"
+      "expected_commit": "Committed",
+      "cache_contract": {
+        "class": "B",
+        "fresh_mount": true,
+        "warmup": "same ordinary logical overwrite on prior mount without Commit, then known terminal unmount and cleanup Gone",
+        "source_demands": "actual measured counters must be zero",
+        "has_own_write_input": true,
+        "own_write_precommit_coldness": "independent identity-bound zero-residency and verified-cold metadata before Commit are required; unavailable evidence is INELIGIBLE",
+        "observed_precommit_cold_evidence": "not supplied by this harness; no inferred coldness or own-write warmth credit"
+      }
     },
     {
       "id": "overwrite-tail-4k-on-1mib-ops-1",
@@ -819,9 +963,17 @@
       ],
       "cache_class": "B",
       "oracle": {
-        "scope": "complete original SDK fixture/final namespace, kinds, modes, fixed mtime, lengths, every payload byte, stable persisted inode identity, current untouched payload-object retention and acknowledged published root through fresh mount and current authenticated typed public readers",
+        "scope": "complete original SDK fixture/final namespace, kinds, modes, fixed mtime, lengths and every payload byte; exhaustive authenticated current inode-table membership equals the reachable namespace; initial scope and payload inode serial preserved; typed current mapping profile, every parent/child and complete totals validated; strict current untouched payload-ID subset; acknowledged published root through fresh mount and closed-Store public reads",
         "roots": "acknowledged Commit root plus original committed input inode",
-        "omissions": "retired SDK-only route/resource assertions and retired format-qualified roots/maps/extents/payload ObjectIds are inapplicable to authorized POSIX surface/current format; no comparison or resource-bound qualification"
+        "omissions": "retired SDK-only route/resource assertions and retired format-qualified roots/maps/extents/payload ObjectIds are inapplicable to authorized POSIX surface/current format; no comparison or resource-bound qualification",
+        "coverage": {
+          "support_commit": "cca598d0b1395767940f0103a788e6473c134738",
+          "inode_table": "exhaustive ordered public inode-table census; no unreachable/missing/duplicate serial; exact reachable namespace membership",
+          "identity": "original manifest root scope and payload.bin inode serial equal acknowledged final root",
+          "mapping": "initial/final current chunked representation; exact profile ID, level and byte/extent totals at every mapping node and over the complete mapping",
+          "retention": "all initial payload IDs from extents wholly outside the overwritten4096-byte range must be present in the final mapping",
+          "bytes": "complete original independent native oracle plus current authenticated persisted read of every file byte"
+        }
       },
       "budget": {
         "command_ms": 15000,
@@ -843,7 +995,8 @@
         "The original selected-verification policy has a 45 s work ceiling and 59 s hard watchdog for the complete proof run. These are copied and declared for the separate combined native/persisted proof; its timer/topology differ.",
         "P-3 authorizes replacing one retired Client::edit_workspace_file_range SDK call with ordinary exact positional writes through the shared writer, plus ordinary fixed-mtime restoration. The POSIX/FUSE and current Commit surface/timer differ; no SDK-edit latency or retired SDK-only zero-FUSE/spool/resource PASS is claimed.",
         "The deterministic current input normalizes root mtime to1700000000; original sdk_edit_prepare pinned file mtime and root mode but did not set native root mtime. File bytes, file mode, file mtime and root mode are preserved.",
-        "Verification covers every file byte and stable current persisted inode identity, exceeding the original bounded adjacent-byte proof. Existing authenticated current-format validators replace retired format-qualified roots/maps/extents/payload ObjectId assertions; those archived checks remain unchanged and are not reported as passing."
+        "Verification covers every file byte and stable current persisted inode identity, exceeding the original bounded adjacent-byte proof. Existing authenticated current-format validators replace retired format-qualified roots/maps/extents/payload ObjectId assertions; those archived checks remain unchanged and are not reported as passing.",
+        "Measured Commit consumes own-written input from the ordinary overwrite. No independent identity-bound pre-Commit cold backing/metadata observation is available; the strict own-write cache guard therefore records numeric INELIGIBLE independently of functional proof, measured wall or source-demand count. No cache/workload/limit is changed to fit."
       ],
       "registry": {
         "family": "edit_length_preserving",
@@ -870,7 +1023,7 @@
           "benchmark/fs-bench-pro/verify-selected.py": "4b77a64817f2c44a58f77459537bf886e83ff3e736a16c861f9079db7b2bc01e"
         },
         "operations": "Reviewed original edit_length_preserving::registry and sdk_edit_common::Scenario, byte-seeded replacement_bytes and sdk_file_edit::edit_commit_end. Preserve every original byte length, offset, replacement hash and plan hash. P-3 ports one retired SDK range edit to one ordinary in-place positional overwrite of payload.bin with the exact 4096 replacement bytes, preserving length and inode; restore fixed original file mtime through ordinary metadata calls, then existing public SDK Commit once. Current measured surface and timer are POSIX/FUSE plus public Commit, rather than historical SDK edit_commit_ns.",
-        "oracle_coverage": "Original sdk_edit_verify checked exact final length, independently derived replacement and adjacent boundary bytes, initial/final canonical inode identity, current visible Commit, retained untouched payload IDs and qualified retired canonical roots/maps/extent counts. Port verifies complete mounted and persisted semantic trees and every file byte through current authenticated typed public readers, with persisted inode identity compared to the original committed input. Retired format-qualified roots and the historical SDK-only no-FUSE/spool/resource assertions remain historical, explicitly inapplicable to this authorized ordinary syscall surface; no old checker is modified or reported as passing. Current-format untouched-payload retention uses initial extents wholly outside the replaced range and requires their current payload IDs to remain in the final mapping; no cross-format ObjectId comparison.",
+        "oracle_coverage": "Original sdk_edit_verify checked exact final length, independently derived replacement and adjacent boundary bytes, initial/final canonical inode identity, current visible Commit, retained untouched payload IDs and qualified retired canonical roots/maps/extent counts. Port verifies complete mounted and persisted semantic trees and every file byte through current authenticated typed public readers, with persisted inode identity compared to the original committed input. Retired format-qualified roots and the historical SDK-only no-FUSE/spool/resource assertions remain historical, explicitly inapplicable to this authorized ordinary syscall surface; no old checker is modified or reported as passing. Current-format untouched-payload retention uses initial extents wholly outside the replaced range and requires their current payload IDs to remain in the final mapping; no cross-format ObjectId comparison. Prospective final-source proof also exhausts the current inode table, proves its exact reachable membership, preserves root scope and inode serial, and validates complete initial/final mapping profile, parent-child byte/extent totals and strict untouched payload-ID subset. The sealed shared native writer qualification and32 unaffected pilot audits are reused only as their own proof scope, not as new case samples.",
         "original_registry_manifest_sha256": "daa3bcb8ba94da6dc28f7ca87dc2b27612c9988cf42fe5398cdddb3a5b386324",
         "retired_source_reads": {
           "crates/layerfs-workspace/src/lifecycle.rs": "2878347b79b0c1f7024267d90abab689c3d1dc3384c5116abdf5b3644f3aefb8",
@@ -891,7 +1044,16 @@
         "final_bytes": 1048576,
         "plan_sha256": "3b867023faee419cafbfff73549cdc90d2d1ae191db2f8ba30fe43c4236c8433"
       },
-      "expected_commit": "Committed"
+      "expected_commit": "Committed",
+      "cache_contract": {
+        "class": "B",
+        "fresh_mount": true,
+        "warmup": "same ordinary logical overwrite on prior mount without Commit, then known terminal unmount and cleanup Gone",
+        "source_demands": "actual measured counters must be zero",
+        "has_own_write_input": true,
+        "own_write_precommit_coldness": "independent identity-bound zero-residency and verified-cold metadata before Commit are required; unavailable evidence is INELIGIBLE",
+        "observed_precommit_cold_evidence": "not supplied by this harness; no inferred coldness or own-write warmth credit"
+      }
     },
     {
       "id": "overwrite-tail-4k-on-10mib-ops-1",
@@ -918,9 +1080,17 @@
       ],
       "cache_class": "B",
       "oracle": {
-        "scope": "complete original SDK fixture/final namespace, kinds, modes, fixed mtime, lengths, every payload byte, stable persisted inode identity, current untouched payload-object retention and acknowledged published root through fresh mount and current authenticated typed public readers",
+        "scope": "complete original SDK fixture/final namespace, kinds, modes, fixed mtime, lengths and every payload byte; exhaustive authenticated current inode-table membership equals the reachable namespace; initial scope and payload inode serial preserved; typed current mapping profile, every parent/child and complete totals validated; strict current untouched payload-ID subset; acknowledged published root through fresh mount and closed-Store public reads",
         "roots": "acknowledged Commit root plus original committed input inode",
-        "omissions": "retired SDK-only route/resource assertions and retired format-qualified roots/maps/extents/payload ObjectIds are inapplicable to authorized POSIX surface/current format; no comparison or resource-bound qualification"
+        "omissions": "retired SDK-only route/resource assertions and retired format-qualified roots/maps/extents/payload ObjectIds are inapplicable to authorized POSIX surface/current format; no comparison or resource-bound qualification",
+        "coverage": {
+          "support_commit": "cca598d0b1395767940f0103a788e6473c134738",
+          "inode_table": "exhaustive ordered public inode-table census; no unreachable/missing/duplicate serial; exact reachable namespace membership",
+          "identity": "original manifest root scope and payload.bin inode serial equal acknowledged final root",
+          "mapping": "initial/final current chunked representation; exact profile ID, level and byte/extent totals at every mapping node and over the complete mapping",
+          "retention": "all initial payload IDs from extents wholly outside the overwritten4096-byte range must be present in the final mapping",
+          "bytes": "complete original independent native oracle plus current authenticated persisted read of every file byte"
+        }
       },
       "budget": {
         "command_ms": 15000,
@@ -942,7 +1112,8 @@
         "The original selected-verification policy has a 45 s work ceiling and 59 s hard watchdog for the complete proof run. These are copied and declared for the separate combined native/persisted proof; its timer/topology differ.",
         "P-3 authorizes replacing one retired Client::edit_workspace_file_range SDK call with ordinary exact positional writes through the shared writer, plus ordinary fixed-mtime restoration. The POSIX/FUSE and current Commit surface/timer differ; no SDK-edit latency or retired SDK-only zero-FUSE/spool/resource PASS is claimed.",
         "The deterministic current input normalizes root mtime to1700000000; original sdk_edit_prepare pinned file mtime and root mode but did not set native root mtime. File bytes, file mode, file mtime and root mode are preserved.",
-        "Verification covers every file byte and stable current persisted inode identity, exceeding the original bounded adjacent-byte proof. Existing authenticated current-format validators replace retired format-qualified roots/maps/extents/payload ObjectId assertions; those archived checks remain unchanged and are not reported as passing."
+        "Verification covers every file byte and stable current persisted inode identity, exceeding the original bounded adjacent-byte proof. Existing authenticated current-format validators replace retired format-qualified roots/maps/extents/payload ObjectId assertions; those archived checks remain unchanged and are not reported as passing.",
+        "Measured Commit consumes own-written input from the ordinary overwrite. No independent identity-bound pre-Commit cold backing/metadata observation is available; the strict own-write cache guard therefore records numeric INELIGIBLE independently of functional proof, measured wall or source-demand count. No cache/workload/limit is changed to fit."
       ],
       "registry": {
         "family": "edit_length_preserving",
@@ -969,7 +1140,7 @@
           "benchmark/fs-bench-pro/verify-selected.py": "4b77a64817f2c44a58f77459537bf886e83ff3e736a16c861f9079db7b2bc01e"
         },
         "operations": "Reviewed original edit_length_preserving::registry and sdk_edit_common::Scenario, byte-seeded replacement_bytes and sdk_file_edit::edit_commit_end. Preserve every original byte length, offset, replacement hash and plan hash. P-3 ports one retired SDK range edit to one ordinary in-place positional overwrite of payload.bin with the exact 4096 replacement bytes, preserving length and inode; restore fixed original file mtime through ordinary metadata calls, then existing public SDK Commit once. Current measured surface and timer are POSIX/FUSE plus public Commit, rather than historical SDK edit_commit_ns.",
-        "oracle_coverage": "Original sdk_edit_verify checked exact final length, independently derived replacement and adjacent boundary bytes, initial/final canonical inode identity, current visible Commit, retained untouched payload IDs and qualified retired canonical roots/maps/extent counts. Port verifies complete mounted and persisted semantic trees and every file byte through current authenticated typed public readers, with persisted inode identity compared to the original committed input. Retired format-qualified roots and the historical SDK-only no-FUSE/spool/resource assertions remain historical, explicitly inapplicable to this authorized ordinary syscall surface; no old checker is modified or reported as passing. Current-format untouched-payload retention uses initial extents wholly outside the replaced range and requires their current payload IDs to remain in the final mapping; no cross-format ObjectId comparison.",
+        "oracle_coverage": "Original sdk_edit_verify checked exact final length, independently derived replacement and adjacent boundary bytes, initial/final canonical inode identity, current visible Commit, retained untouched payload IDs and qualified retired canonical roots/maps/extent counts. Port verifies complete mounted and persisted semantic trees and every file byte through current authenticated typed public readers, with persisted inode identity compared to the original committed input. Retired format-qualified roots and the historical SDK-only no-FUSE/spool/resource assertions remain historical, explicitly inapplicable to this authorized ordinary syscall surface; no old checker is modified or reported as passing. Current-format untouched-payload retention uses initial extents wholly outside the replaced range and requires their current payload IDs to remain in the final mapping; no cross-format ObjectId comparison. Prospective final-source proof also exhausts the current inode table, proves its exact reachable membership, preserves root scope and inode serial, and validates complete initial/final mapping profile, parent-child byte/extent totals and strict untouched payload-ID subset. The sealed shared native writer qualification and32 unaffected pilot audits are reused only as their own proof scope, not as new case samples.",
         "original_registry_manifest_sha256": "daa3bcb8ba94da6dc28f7ca87dc2b27612c9988cf42fe5398cdddb3a5b386324",
         "retired_source_reads": {
           "crates/layerfs-workspace/src/lifecycle.rs": "2878347b79b0c1f7024267d90abab689c3d1dc3384c5116abdf5b3644f3aefb8",
@@ -990,7 +1161,16 @@
         "final_bytes": 10485760,
         "plan_sha256": "cbb6a28675d3cfe0c91c6dcaa094ac817015da1f47bdfd22c4d6437b0a12e0b3"
       },
-      "expected_commit": "Committed"
+      "expected_commit": "Committed",
+      "cache_contract": {
+        "class": "B",
+        "fresh_mount": true,
+        "warmup": "same ordinary logical overwrite on prior mount without Commit, then known terminal unmount and cleanup Gone",
+        "source_demands": "actual measured counters must be zero",
+        "has_own_write_input": true,
+        "own_write_precommit_coldness": "independent identity-bound zero-residency and verified-cold metadata before Commit are required; unavailable evidence is INELIGIBLE",
+        "observed_precommit_cold_evidence": "not supplied by this harness; no inferred coldness or own-write warmth credit"
+      }
     },
     {
       "id": "overwrite-tail-4k-on-100mib-ops-1",
@@ -1017,9 +1197,17 @@
       ],
       "cache_class": "B",
       "oracle": {
-        "scope": "complete original SDK fixture/final namespace, kinds, modes, fixed mtime, lengths, every payload byte, stable persisted inode identity, current untouched payload-object retention and acknowledged published root through fresh mount and current authenticated typed public readers",
+        "scope": "complete original SDK fixture/final namespace, kinds, modes, fixed mtime, lengths and every payload byte; exhaustive authenticated current inode-table membership equals the reachable namespace; initial scope and payload inode serial preserved; typed current mapping profile, every parent/child and complete totals validated; strict current untouched payload-ID subset; acknowledged published root through fresh mount and closed-Store public reads",
         "roots": "acknowledged Commit root plus original committed input inode",
-        "omissions": "retired SDK-only route/resource assertions and retired format-qualified roots/maps/extents/payload ObjectIds are inapplicable to authorized POSIX surface/current format; no comparison or resource-bound qualification"
+        "omissions": "retired SDK-only route/resource assertions and retired format-qualified roots/maps/extents/payload ObjectIds are inapplicable to authorized POSIX surface/current format; no comparison or resource-bound qualification",
+        "coverage": {
+          "support_commit": "cca598d0b1395767940f0103a788e6473c134738",
+          "inode_table": "exhaustive ordered public inode-table census; no unreachable/missing/duplicate serial; exact reachable namespace membership",
+          "identity": "original manifest root scope and payload.bin inode serial equal acknowledged final root",
+          "mapping": "initial/final current chunked representation; exact profile ID, level and byte/extent totals at every mapping node and over the complete mapping",
+          "retention": "all initial payload IDs from extents wholly outside the overwritten4096-byte range must be present in the final mapping",
+          "bytes": "complete original independent native oracle plus current authenticated persisted read of every file byte"
+        }
       },
       "budget": {
         "command_ms": 15000,
@@ -1041,7 +1229,8 @@
         "The original selected-verification policy has a 45 s work ceiling and 59 s hard watchdog for the complete proof run. These are copied and declared for the separate combined native/persisted proof; its timer/topology differ.",
         "P-3 authorizes replacing one retired Client::edit_workspace_file_range SDK call with ordinary exact positional writes through the shared writer, plus ordinary fixed-mtime restoration. The POSIX/FUSE and current Commit surface/timer differ; no SDK-edit latency or retired SDK-only zero-FUSE/spool/resource PASS is claimed.",
         "The deterministic current input normalizes root mtime to1700000000; original sdk_edit_prepare pinned file mtime and root mode but did not set native root mtime. File bytes, file mode, file mtime and root mode are preserved.",
-        "Verification covers every file byte and stable current persisted inode identity, exceeding the original bounded adjacent-byte proof. Existing authenticated current-format validators replace retired format-qualified roots/maps/extents/payload ObjectId assertions; those archived checks remain unchanged and are not reported as passing."
+        "Verification covers every file byte and stable current persisted inode identity, exceeding the original bounded adjacent-byte proof. Existing authenticated current-format validators replace retired format-qualified roots/maps/extents/payload ObjectId assertions; those archived checks remain unchanged and are not reported as passing.",
+        "Measured Commit consumes own-written input from the ordinary overwrite. No independent identity-bound pre-Commit cold backing/metadata observation is available; the strict own-write cache guard therefore records numeric INELIGIBLE independently of functional proof, measured wall or source-demand count. No cache/workload/limit is changed to fit."
       ],
       "registry": {
         "family": "edit_length_preserving",
@@ -1068,7 +1257,7 @@
           "benchmark/fs-bench-pro/verify-selected.py": "4b77a64817f2c44a58f77459537bf886e83ff3e736a16c861f9079db7b2bc01e"
         },
         "operations": "Reviewed original edit_length_preserving::registry and sdk_edit_common::Scenario, byte-seeded replacement_bytes and sdk_file_edit::edit_commit_end. Preserve every original byte length, offset, replacement hash and plan hash. P-3 ports one retired SDK range edit to one ordinary in-place positional overwrite of payload.bin with the exact 4096 replacement bytes, preserving length and inode; restore fixed original file mtime through ordinary metadata calls, then existing public SDK Commit once. Current measured surface and timer are POSIX/FUSE plus public Commit, rather than historical SDK edit_commit_ns.",
-        "oracle_coverage": "Original sdk_edit_verify checked exact final length, independently derived replacement and adjacent boundary bytes, initial/final canonical inode identity, current visible Commit, retained untouched payload IDs and qualified retired canonical roots/maps/extent counts. Port verifies complete mounted and persisted semantic trees and every file byte through current authenticated typed public readers, with persisted inode identity compared to the original committed input. Retired format-qualified roots and the historical SDK-only no-FUSE/spool/resource assertions remain historical, explicitly inapplicable to this authorized ordinary syscall surface; no old checker is modified or reported as passing. Current-format untouched-payload retention uses initial extents wholly outside the replaced range and requires their current payload IDs to remain in the final mapping; no cross-format ObjectId comparison.",
+        "oracle_coverage": "Original sdk_edit_verify checked exact final length, independently derived replacement and adjacent boundary bytes, initial/final canonical inode identity, current visible Commit, retained untouched payload IDs and qualified retired canonical roots/maps/extent counts. Port verifies complete mounted and persisted semantic trees and every file byte through current authenticated typed public readers, with persisted inode identity compared to the original committed input. Retired format-qualified roots and the historical SDK-only no-FUSE/spool/resource assertions remain historical, explicitly inapplicable to this authorized ordinary syscall surface; no old checker is modified or reported as passing. Current-format untouched-payload retention uses initial extents wholly outside the replaced range and requires their current payload IDs to remain in the final mapping; no cross-format ObjectId comparison. Prospective final-source proof also exhausts the current inode table, proves its exact reachable membership, preserves root scope and inode serial, and validates complete initial/final mapping profile, parent-child byte/extent totals and strict untouched payload-ID subset. The sealed shared native writer qualification and32 unaffected pilot audits are reused only as their own proof scope, not as new case samples.",
         "original_registry_manifest_sha256": "daa3bcb8ba94da6dc28f7ca87dc2b27612c9988cf42fe5398cdddb3a5b386324",
         "retired_source_reads": {
           "crates/layerfs-workspace/src/lifecycle.rs": "2878347b79b0c1f7024267d90abab689c3d1dc3384c5116abdf5b3644f3aefb8",
@@ -1089,7 +1278,16 @@
         "final_bytes": 104857600,
         "plan_sha256": "b2e329f1a0f302946cc66989a6dd37693c6e61e14135c18d2c71567e187fdf58"
       },
-      "expected_commit": "Committed"
+      "expected_commit": "Committed",
+      "cache_contract": {
+        "class": "B",
+        "fresh_mount": true,
+        "warmup": "same ordinary logical overwrite on prior mount without Commit, then known terminal unmount and cleanup Gone",
+        "source_demands": "actual measured counters must be zero",
+        "has_own_write_input": true,
+        "own_write_precommit_coldness": "independent identity-bound zero-residency and verified-cold metadata before Commit are required; unavailable evidence is INELIGIBLE",
+        "observed_precommit_cold_evidence": "not supplied by this harness; no inferred coldness or own-write warmth credit"
+      }
     },
     {
       "id": "overwrite-tail-4k-on-500mib-ops-1",
@@ -1116,9 +1314,17 @@
       ],
       "cache_class": "B",
       "oracle": {
-        "scope": "complete original SDK fixture/final namespace, kinds, modes, fixed mtime, lengths, every payload byte, stable persisted inode identity, current untouched payload-object retention and acknowledged published root through fresh mount and current authenticated typed public readers",
+        "scope": "complete original SDK fixture/final namespace, kinds, modes, fixed mtime, lengths and every payload byte; exhaustive authenticated current inode-table membership equals the reachable namespace; initial scope and payload inode serial preserved; typed current mapping profile, every parent/child and complete totals validated; strict current untouched payload-ID subset; acknowledged published root through fresh mount and closed-Store public reads",
         "roots": "acknowledged Commit root plus original committed input inode",
-        "omissions": "retired SDK-only route/resource assertions and retired format-qualified roots/maps/extents/payload ObjectIds are inapplicable to authorized POSIX surface/current format; no comparison or resource-bound qualification"
+        "omissions": "retired SDK-only route/resource assertions and retired format-qualified roots/maps/extents/payload ObjectIds are inapplicable to authorized POSIX surface/current format; no comparison or resource-bound qualification",
+        "coverage": {
+          "support_commit": "cca598d0b1395767940f0103a788e6473c134738",
+          "inode_table": "exhaustive ordered public inode-table census; no unreachable/missing/duplicate serial; exact reachable namespace membership",
+          "identity": "original manifest root scope and payload.bin inode serial equal acknowledged final root",
+          "mapping": "initial/final current chunked representation; exact profile ID, level and byte/extent totals at every mapping node and over the complete mapping",
+          "retention": "all initial payload IDs from extents wholly outside the overwritten4096-byte range must be present in the final mapping",
+          "bytes": "complete original independent native oracle plus current authenticated persisted read of every file byte"
+        }
       },
       "budget": {
         "command_ms": 15000,
@@ -1140,7 +1346,8 @@
         "The original selected-verification policy has a 45 s work ceiling and 59 s hard watchdog for the complete proof run. These are copied and declared for the separate combined native/persisted proof; its timer/topology differ.",
         "P-3 authorizes replacing one retired Client::edit_workspace_file_range SDK call with ordinary exact positional writes through the shared writer, plus ordinary fixed-mtime restoration. The POSIX/FUSE and current Commit surface/timer differ; no SDK-edit latency or retired SDK-only zero-FUSE/spool/resource PASS is claimed.",
         "The deterministic current input normalizes root mtime to1700000000; original sdk_edit_prepare pinned file mtime and root mode but did not set native root mtime. File bytes, file mode, file mtime and root mode are preserved.",
-        "Verification covers every file byte and stable current persisted inode identity, exceeding the original bounded adjacent-byte proof. Existing authenticated current-format validators replace retired format-qualified roots/maps/extents/payload ObjectId assertions; those archived checks remain unchanged and are not reported as passing."
+        "Verification covers every file byte and stable current persisted inode identity, exceeding the original bounded adjacent-byte proof. Existing authenticated current-format validators replace retired format-qualified roots/maps/extents/payload ObjectId assertions; those archived checks remain unchanged and are not reported as passing.",
+        "Measured Commit consumes own-written input from the ordinary overwrite. No independent identity-bound pre-Commit cold backing/metadata observation is available; the strict own-write cache guard therefore records numeric INELIGIBLE independently of functional proof, measured wall or source-demand count. No cache/workload/limit is changed to fit."
       ],
       "registry": {
         "family": "edit_length_preserving",
@@ -1167,7 +1374,7 @@
           "benchmark/fs-bench-pro/verify-selected.py": "4b77a64817f2c44a58f77459537bf886e83ff3e736a16c861f9079db7b2bc01e"
         },
         "operations": "Reviewed original edit_length_preserving::registry and sdk_edit_common::Scenario, byte-seeded replacement_bytes and sdk_file_edit::edit_commit_end. Preserve every original byte length, offset, replacement hash and plan hash. P-3 ports one retired SDK range edit to one ordinary in-place positional overwrite of payload.bin with the exact 4096 replacement bytes, preserving length and inode; restore fixed original file mtime through ordinary metadata calls, then existing public SDK Commit once. Current measured surface and timer are POSIX/FUSE plus public Commit, rather than historical SDK edit_commit_ns.",
-        "oracle_coverage": "Original sdk_edit_verify checked exact final length, independently derived replacement and adjacent boundary bytes, initial/final canonical inode identity, current visible Commit, retained untouched payload IDs and qualified retired canonical roots/maps/extent counts. Port verifies complete mounted and persisted semantic trees and every file byte through current authenticated typed public readers, with persisted inode identity compared to the original committed input. Retired format-qualified roots and the historical SDK-only no-FUSE/spool/resource assertions remain historical, explicitly inapplicable to this authorized ordinary syscall surface; no old checker is modified or reported as passing. Current-format untouched-payload retention uses initial extents wholly outside the replaced range and requires their current payload IDs to remain in the final mapping; no cross-format ObjectId comparison.",
+        "oracle_coverage": "Original sdk_edit_verify checked exact final length, independently derived replacement and adjacent boundary bytes, initial/final canonical inode identity, current visible Commit, retained untouched payload IDs and qualified retired canonical roots/maps/extent counts. Port verifies complete mounted and persisted semantic trees and every file byte through current authenticated typed public readers, with persisted inode identity compared to the original committed input. Retired format-qualified roots and the historical SDK-only no-FUSE/spool/resource assertions remain historical, explicitly inapplicable to this authorized ordinary syscall surface; no old checker is modified or reported as passing. Current-format untouched-payload retention uses initial extents wholly outside the replaced range and requires their current payload IDs to remain in the final mapping; no cross-format ObjectId comparison. Prospective final-source proof also exhausts the current inode table, proves its exact reachable membership, preserves root scope and inode serial, and validates complete initial/final mapping profile, parent-child byte/extent totals and strict untouched payload-ID subset. The sealed shared native writer qualification and32 unaffected pilot audits are reused only as their own proof scope, not as new case samples.",
         "original_registry_manifest_sha256": "daa3bcb8ba94da6dc28f7ca87dc2b27612c9988cf42fe5398cdddb3a5b386324",
         "retired_source_reads": {
           "crates/layerfs-workspace/src/lifecycle.rs": "2878347b79b0c1f7024267d90abab689c3d1dc3384c5116abdf5b3644f3aefb8",
@@ -1188,7 +1395,24 @@
         "final_bytes": 524288000,
         "plan_sha256": "889134ddc3f2b24241555fdbe51584bd9e7826ff7e8f005d228228634b8999ef"
       },
-      "expected_commit": "Committed"
+      "expected_commit": "Committed",
+      "cache_contract": {
+        "class": "B",
+        "fresh_mount": true,
+        "warmup": "same ordinary logical overwrite on prior mount without Commit, then known terminal unmount and cleanup Gone",
+        "source_demands": "actual measured counters must be zero",
+        "has_own_write_input": true,
+        "own_write_precommit_coldness": "independent identity-bound zero-residency and verified-cold metadata before Commit are required; unavailable evidence is INELIGIBLE",
+        "observed_precommit_cold_evidence": "not supplied by this harness; no inferred coldness or own-write warmth credit"
+      }
     }
-  ]
+  ],
+  "run_contract": {
+    "iteration": "first run-and-fix pass; one sample per original preserving case",
+    "public_surface": "ordinary Unix in-place4096-byte positional overwrite and fixed metadata restoration through shared writer; one public Workspace Commit",
+    "support_commit": "cca598d0b1395767940f0103a788e6473c134738",
+    "build_reuse": "immutable shared build after exact compiled-input and binary verification; no shared writable targets",
+    "proof_reuse": "lead-qualified unchanged native writer/model and retained pilot membership audits; each new case still gets fresh mounted and persisted proof",
+    "interference": "owner-authorized concurrent worktrees share host and Docker VM; unrelated protected services and retained failed resources remain; no isolated timing claim"
+  }
 }

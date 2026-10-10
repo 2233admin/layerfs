@@ -1396,4 +1396,38 @@ Linux source hashes verified before/after; known OWNER-3 refusals remain FAIL.
 No additional product tests/Clippy/CI claim. Production LOC 79,366 -> 79,366
 (delta +0), pinned absent-aware staged method; reference absent retired R9c.
 
-| This commit | Record twelve canonical cases, full strict proofs and numeric ineligibility | 79366 | 79366 | +0 |
+| `beeb7ad69` | Record twelve canonical cases, full strict proofs and numeric ineligibility | 79366 | 79366 | +0 |
+
+
+Preserving family integration: prospective declaration `e1062c6d0` and result
+`dcf4e75b9` are imported locally onto main, without duplicating shared setup
+patch `7c4273669` (equivalent to main `849b0aff1`). Actual sampled source stays
+`7c4273669dfb8a434c1ab58ce5433062b873575b` in the retained worker branch. All
+12 cases have one attempt/sample/completion, full native/persisted byte/tree/
+metadata/inode/mapping/retention proof PASS, Gone and known Stop. All 12 numeric
+rows are INELIGIBLE from nonzero source demands and unavailable independent
+pre-Commit own-write coldness. Exact demand vectors by 1/10/100/500 MiB: head
+5/7/7/9, middle 5/8/8/10, tail 5/7/7/9. The worker corrected an earlier unverified
+middle/tail summary; retained receipts and committed CSVs were always unchanged
+and authoritative. No failure, hang, leaked mount, bug or exceeded limit.
+Maximum measured wall 193,938,333 ns and proof 13,487,312,500 ns, against the
+unchanged 15 s and 45 s bounds. Per-case storage and exact count triples remain
+in both generated CSVs under baselines/core/2026-10-10-7c4273669/.
+
+All 12 preparations and parity PASS before sampling, with exactly four closed
+initial masters and independent per-case expectations/helpers; every measured
+sample is an independent byte clone. All 24 passing sample container/volume
+removal completions PASS. Retained masters are the four preserving volumes
+named in the canonical reuse supplement above. Raw worktree root:
+/Users/yifanxu/.codex/worktrees/fs-bench-pro-tiny-file-churn/layerfs/
+benchmark-results/fs-bench-pro/2026-10-10-batch-2-preserving-7c4273669/.
+Prepared and parity siblings stay intact; no archive/removal of ignored evidence.
+Root integration's owning original scenario/payload/fixture/source test PASS;
+imported 30/14-column CSVs have exactly 12 rows each, all proof PASS and Gone.
+Unchanged writer/engine owning proof is reused, no native suite or measured case
+replayed. No product source changed, no CI/product Clippy claim. Production LOC
+79,366 -> 79,366 (delta +0), pinned staged absent-aware counter; reference absent
+retired R9c, last counted 65,417.
+
+| `dcf4e75b9` (worker) | Record twelve preserving cases and all strict proof results | 79366 | 79366 | +0 |
+| This commit | Integrate preserving family closure and its two generated CSVs | 79366 | 79366 | +0 |
