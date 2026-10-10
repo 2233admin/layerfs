@@ -4115,7 +4115,7 @@ SHA-25662905ee78d1c02d32e0ccc3e8b1da1a9dc81c07b768e842666091a2af2b4e94b.
 Runtime composition, Linux seal, realP1, preparation/parity/cases remain pending.
 
 | `24be90ced` (worker) | Author independent topology and access oracle and owning qualification | 79370 | 79370 | +0 |
-| This commit | Integrate exact independent topology and access oracle | 79370 | 79370 | +0 |
+| `3145bad86` | Integrate exact independent topology and access oracle | 79370 | 79370 | +0 |
 
 
 ### Batch 5 closed historical producer fixture admission, 2026-10-11
@@ -4141,7 +4141,7 @@ Source-only namespace worker now owns workspace.py/access controller while
 Root owns integration/ledger/parity/build and live execution.
 
 | `615c3df22` (worker) | Author closed historical producer fixture admission and owning qualification | 79370 | 79370 | +0 |
-| This commit | Integrate exact closed historical producer fixture admission | 79370 | 79370 | +0 |
+| `103f82a9a` | Integrate exact closed historical producer fixture admission | 79370 | 79370 | +0 |
 
 
 ### Batch 5 public SDK Fork and History covering test, 2026-10-11
@@ -4167,4 +4167,33 @@ benchmark-results/fs-bench-pro/2026-10-11-batch-5-oracle-authoring/p1-handoff.js
 SHA-256b81ebc84083890be9dd7a6c0135f814e43f48131f112f76d45bcf67c5657363b.
 
 | `e7bd36c3f` (worker) | Author public SDK Fork and History covering test and owning qualification | 79370 | 79370 | +0 |
-| This commit | Integrate exact public SDK Fork and History covering test | 79370 | 79370 | +0 |
+| `181e70f40` | Integrate exact public SDK Fork and History covering test | 79370 | 79370 | +0 |
+
+
+### Batch 5 authenticated concurrent SDK runtime, 2026-10-11
+
+Imported only the worker's six owned runtime/protocol-test files. Existing
+public ProjectApi Fork and History methods are reused; there is no product
+addition or direct Fork/History wire substitute. Selected named or explicit
+@taggedBranchID sources remain typed and SDK membership-validated. Original
+concurrent rounds admit every body/key/channel before one segment barrier,
+then distinct authenticated channels run command/Commit loops within the
+existing four-connection ceiling. Each channel has its own nonzero public
+observation scope. Output streams directly to files; individual spans and
+role/local/channel/scope plus send/receive boundaries are retained. History
+uses the actual32 window and authenticated private continuation artifacts.
+All mounts must End/Gone, then every channel EndSession/fence, before Stop.
+Legacy commands retain their route and acknowledgement shape.
+
+Final host release --no-run passed in11,033,263,250 ns; five exact scoped
+protocol/barrier/concurrent-receipt tests passed in829,689,417 ns with nineteen
+frozen inline tests filtered. Private120 s locks, Rust1.85.1 locked/offline,
+repositoryARM64 and construction workers1 were used. Scoped fmt/diff checks
+passed. Failed earlier compiler outputs remain visible. Owning handoff
+benchmark-results/fs-bench-pro/2026-10-11-context-runtime-protocol-tests/handoff.json
+SHA-256b1391316daa2e019bce36562a8ef30040eb2c12cf49aa4646241bb37a5276e07.
+Actual SDK/concurrency/Linux/sharedbuild/preparation/parity/cases remain
+unverified; no Store/container/volume was created by these source checks.
+
+| `5e6dbd260` (worker) | Author authenticated concurrent SDK runtime and owning qualification | 79370 | 79370 | +0 |
+| This commit | Integrate exact authenticated concurrent SDK runtime | 79370 | 79370 | +0 |

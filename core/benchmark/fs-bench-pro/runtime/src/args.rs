@@ -54,6 +54,11 @@ impl Args {
         let source = values.remove("--source-copy").map(PathBuf::from);
         let case = values.remove("--case");
         let history_file = values.remove("--history-file").map(PathBuf::from);
+        if matches!(mode.as_str(), "verify-topology" | "verify-access")
+            && (case.is_none() || history_file.is_none())
+        {
+            return Err("original topology/access case and sealed transcript required".into());
+        }
         let history_step = values
             .remove("--history-step")
             .map(|value| value.parse())

@@ -5,15 +5,22 @@ use std::{
     io::{self, Write},
     os::unix::fs::OpenOptionsExt,
     path::{Path, PathBuf},
+    sync::{Arc, Mutex},
     time::Instant,
 };
 
 /// Append-only newline JSON. Debug records are opaque diagnostics, never parsed as outcomes.
 pub struct Events {
-    file: File,
+    shared: Arc<Mutex<Records>>,
     pub origin: Instant,
     pub directory: PathBuf,
+    context: Vec<(&'static str, String)>,
+    numeric_context: Vec<(&'static str, u64)>,
+}
+struct Records {
+    file: File,
     sequence: u64,
+    outputs: u64,
 }
 #[derive(Clone, Copy)]
 pub struct Span {
@@ -48,11 +55,33 @@ impl Events {
             .mode(0o600)
             .open(path)?;
         Ok(Self {
-            file,
+            shared: Arc::new(Mutex::new(Records {
+                file,
+                sequence: 0,
+                outputs: 0,
+            })),
             origin: Instant::now(),
             directory,
-            sequence: 0,
+            context: Vec::new(),
+            numeric_context: Vec::new(),
         })
+    }
+    /// Workers share only atomic receipt publication, never an operation lock.
+    pub fn contextual(&self, fields: &[(&'static str, String)]) -> Self {
+        let mut context = self.context.clone();
+        context.extend_from_slice(fields);
+        Self {
+            shared: self.shared.clone(),
+            origin: self.origin,
+            directory: self.directory.clone(),
+            context,
+            numeric_context: self.numeric_context.clone(),
+        }
+    }
+    pub fn contextual_numbers(&self, numbers: &[(&'static str, u64)]) -> Self {
+        let mut copy = self.contextual(&[]);
+        copy.numeric_context.extend_from_slice(numbers);
+        copy
     }
     pub fn value(&mut self, event: &str, value: &str) -> Result<()> {
         self.phase(event, None, value)
@@ -85,31 +114,60 @@ impl Events {
         fields: &[(&str, String)],
         numbers: &[(&str, u64)],
     ) -> Result<()> {
-        self.sequence += 1;
-        let span = elapsed.map(|span|format!("{{\"clock_id\":\"monotonic\",\"start_ns\":{},\"end_ns\":{},\"duration_ns\":{}}}", span.start_ns,span.end_ns,span.duration_ns)).unwrap_or_else(||"null".into());
-        let mut fields = fields
+        let mut records = self
+            .shared
+            .lock()
+            .map_err(|_| "event publication lock poisoned")?;
+        records.sequence += 1;
+        let numbers = self
+            .numeric_context
             .iter()
+            .chain(numbers.iter())
+            .copied()
+            .collect::<Vec<_>>();
+        let span = elapsed.map(|span|format!("{{\"clock_id\":\"monotonic\",\"start_ns\":{},\"end_ns\":{},\"duration_ns\":{}}}", span.start_ns,span.end_ns,span.duration_ns)).unwrap_or_else(||"null".into());
+        for (key, value) in &self.context {
+            if fields
+                .iter()
+                .any(|(name, actual)| name == key && actual != value)
+                || numbers.iter().any(|(name, _)| name == key)
+            {
+                return Err("event context differs from original typed field".into());
+            }
+        }
+        let mut fields = self
+            .context
+            .iter()
+            .filter(|(key, _)| !fields.iter().any(|(name, _)| name == key))
+            .chain(fields.iter())
             .map(|(key, value)| format!("{}:{}", quoted(key), quoted(value)))
             .collect::<Vec<_>>()
             .join(",");
-        for (key, value) in numbers {
+        for (key, value) in &numbers {
             if !fields.is_empty() {
                 fields.push(',');
             }
             write!(&mut fields, "{}:{value}", quoted(key))?;
         }
-        let record = format!("{{\"schema\":\"r7-runtime-events-v1\",\"sequence\":{},\"at_ns\":{},\"event\":{},\"elapsed_ns\":{},\"span\":{},\"value\":{},\"fields\":{{{fields}}}}}\n", self.sequence, self.origin.elapsed().as_nanos(), quoted(event), elapsed.map(|v|v.duration_ns.to_string()).unwrap_or_else(||"null".into()), span, quoted(value));
-        self.file.write_all(record.as_bytes())?;
-        self.file.flush()?;
+        let record = format!("{{\"schema\":\"r7-runtime-events-v1\",\"sequence\":{},\"at_ns\":{},\"event\":{},\"elapsed_ns\":{},\"span\":{},\"value\":{},\"fields\":{{{fields}}}}}\n", records.sequence, self.origin.elapsed().as_nanos(), quoted(event), elapsed.map(|v|v.duration_ns.to_string()).unwrap_or_else(||"null".into()), span, quoted(value));
+        records.file.write_all(record.as_bytes())?;
+        records.file.flush()?;
         let mut stdout = io::stdout().lock();
         stdout.write_all(record.as_bytes())?;
         stdout.flush()?;
         Ok(())
     }
     pub fn output(&mut self, label: &str, stream: &str) -> Result<(PathBuf, File)> {
-        let path = self
-            .directory
-            .join(format!("{:06}-{label}.{stream}", self.sequence + 1));
+        let mut records = self
+            .shared
+            .lock()
+            .map_err(|_| "event output lock poisoned")?;
+        records.outputs += 1;
+        let path = self.directory.join(format!(
+            "{:06}-{:06}-{label}.{stream}",
+            records.sequence + 1,
+            records.outputs
+        ));
         let file = OpenOptions::new()
             .write(true)
             .create_new(true)

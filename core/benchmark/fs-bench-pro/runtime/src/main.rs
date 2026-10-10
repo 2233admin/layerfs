@@ -45,6 +45,8 @@ fn main() -> Result<()> {
         "verify-init" => project::verify(&args, &mut events),
         "verify-workspace" | "verify-membership" => workspace_oracle::verify(&args, &mut events),
         "verify-history" => workspace_oracle::verify_history(&args, &mut events),
+        "verify-topology" => workspace_oracle::verify_topology(&args, &mut events),
+        "verify-access" => workspace_oracle::verify_access(&args, &mut events),
         _ => Err("mode must be provision or serve".into()),
     };
     match result {
