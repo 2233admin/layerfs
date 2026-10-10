@@ -90,6 +90,7 @@ comparison or release-admission claim. Durable is
 | 43 | Retain owned sample resources through finalization and outer acknowledgement; remove only afterwards with separate bound administrative custody | Late output-close/publication failure must retain its diagnostic container/volume; partial Docker deletion must never claim both resources retained | Deleting before final verdict or overwriting the original receipt after deletion |
 | 44 | Recover failed agent service compaction in the same worktree with a fresh context and reuse exact completed qualifications | Two service stream failures left source and receipts intact; source-hash-matched final6tests had already passed | Replaying tests/exporter or discarding unfinished source |
 | 45 | Seal final stable native/Linux assets once, then rebuild only the changed host oracle with qualified eight-binary reuse | Pinned Linux/CPP scopes are final and unchanged by subsequent runtime-only proof work | Duplicating unchanged Linux/native builds or using an unqualified stale binary |
+| 46 | Close original500MB exhaustive preparation as FAIL and its caseNOT_RUN; preserve failed parity/batch closure while permitting other originalcases and laterbatches | One unchanged120s preparation expired after15of20 native expectations; a sealed fixture cannot be invented, another attempt/limit increase/scope reduction is forbidden, and no product correctness defect was identified | Retrying setup, shrinking original proof scope, pretending whole-family parityPASS or indefinitely blocking runnable originalcases |
 
 ## Bugs
 
@@ -2913,4 +2914,20 @@ No speed fix, workload/limit change or productfeature is selected.
 
 | `882f50cb8` (worker) | Preserve first boundary FAIL plus six original NOT_RUN rows | 79366 | 79366 | +0 |
 | `a38242d7b` (worker) | Preserve first dedup FAIL plus25 original NOT_RUN rows | 79366 | 79366 | +0 |
-| This commit | Integrate both failed run CSV pairs, H11 diagnosis and mixed failed preparation | 79366 | 79366 | +0 |
+| `57648f448` | Integrate both failed run CSV pairs, H11 diagnosis and mixed failed preparation | 79366 | 79366 | +0 |
+
+
+Section9's passing done-when list cannot be fulfilled for the retained original
+500MB exhaustive preparation: no sealed input exists after its one120s attempt.
+This own-purpose spec correction records explicit failed closure, notPASS:
+preparationFAIL/caseNOT_RUN/parityFAIL, everyoriginal row retained in the two
+CSVs; othercases require their own unchanged parityPASS. No nativecheckpoint,
+workload, limit, cache, samplecount, verifier or productfeature changes. Family
+aggregate parity/batch closure stayfailed for this case, and that truthful
+closure permits the nextbatch after all remaining applicablecase work. Source
+and bounded receipts show aggregateoriginal setup cost rather than an isolated
+state error or identified product correctness bug. No preparation replay is
+selected. Root owns guarded report/CLI visibility; worker will preserve original
+per-case parity assertions and make failed selections visible without promotion.
+
+| This commit | Specify truthful failed closure for the original unprepared exhaustive case | 79366 | 79366 | +0 |

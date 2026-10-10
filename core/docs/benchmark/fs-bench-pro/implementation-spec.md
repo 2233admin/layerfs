@@ -409,6 +409,19 @@ A batch is done when, for each of its families:
    with every case of the batch present, and the batch report shows each case
    beside its reference row.
 
+An original case whose one attempted preparation reaches its unchanged
+external test ceiling cannot supply a sealed input for a sample. Retain the
+preparation as `FAIL`, its actual case as `NOT_RUN` with that reason, and its
+parity row as `FAIL`; do not retry, extend the stop, remove checkpoints or
+claim that preparation passed. Other cases may proceed only after their own
+unchanged parity checks pass. The aggregate family parity and batch closure
+remain explicitly failed for the unprepared case, with both CSVs retaining
+every original selection. That truthful failed closure permits the next
+batch; it is not a passing done-when result. This exception applies to the
+retained batch-4 `v016-mixed-exhaustive-500mb-30000-k100-v1` preparation,
+which reached 120 seconds after fifteen of twenty selected native states;
+no individual state error or product correctness bug was identified.
+
 ## 10. Prerequisites and open decisions
 
 | ID | Question | Blocks | Recommendation |
