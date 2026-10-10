@@ -2,7 +2,8 @@
 //! exactly like the same plain write in every piece shape; a claim replaces
 //! cells and an ordinary write never touches a piece; a shrink cuts the
 //! crossing piece; bytes of an earlier request join a piece only while the
-//! content sequence holds; and every piece statement is an indexed seek.
+//! content sequence holds; the captured run steps report a piece as one
+//! `Reference`; and every piece statement is an indexed seek.
 mod payload_support;
 use layerfs_overlay::*;
 use payload_support::*;
@@ -348,6 +349,17 @@ fn claimed_and_plain_writes_match_a_reference_model_across_resizes_capture_and_i
             );
             offset += got.len();
         }
+        // The run steps of the sealed file give the same bytes, and a
+        // shapes-only pass the same classes without reading a local byte.
+        let reader = db
+            .acquire_captured_reader(capture, 500 + round as u64)
+            .unwrap();
+        let cursor = CapturedRunCursor::new(reader, 2, 0, sealed.0.len() as u64).unwrap();
+        let (bytes, classes, _) = walk(&db, &file, &sealed.1, cursor);
+        assert!(bytes == sealed.0, "sealed run steps");
+        let (_, shapes, _) = walk(&db, &file, &sealed.1, cursor.shapes_only());
+        assert!(shapes == classes, "sealed shapes");
+        db.release_captured_reader(reader).unwrap();
         // Known install: the next base is exactly the sealed view. Pieces of
         // the layer above keep naming their own source.
         db.release_base_source(source).unwrap();
@@ -433,4 +445,237 @@ fn piece_statements_are_indexed_and_their_work_does_not_grow_with_the_piece() {
         "{read_short:?} {read_long:?}"
     );
     file.check();
+}
+
+/// Steps of one pass over a captured file.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+struct Steps {
+    units: usize,
+    rows: u64,
+    gaps: usize,
+    windows: usize,
+    references: usize,
+    locals: usize,
+}
+/// One pass of the captured run cursor: every byte of the file, its class
+/// (`I` inherited at its own offset, `R` supplied by a reference, `C` local
+/// or zero) and the steps taken. A `Local` step carries no bytes: its bytes
+/// are left zero here.
+fn walk(
+    db: &Overlay,
+    file: &File,
+    base: &[u8],
+    mut cursor: CapturedRunCursor,
+) -> (Vec<u8>, Vec<u8>, Steps) {
+    let (mut bytes, mut classes, mut steps) = (Vec::new(), Vec::new(), Steps::default());
+    for _ in 0..200_000 {
+        let reply = db.captured_run_step(cursor).unwrap();
+        steps.units += 1;
+        steps.rows += reply.work.metadata_rows;
+        assert!(reply.work.metadata_rows <= 12);
+        let at = cursor.offset();
+        match reply.step {
+            CapturedRunStep::End => return (bytes, classes, steps),
+            CapturedRunStep::Continue(next) => {
+                assert!(next.metadata_advanced_from(cursor));
+                cursor = next;
+            }
+            CapturedRunStep::Gap {
+                kind,
+                offset,
+                length,
+                next,
+            } => {
+                assert_eq!((offset, next.offset()), (at, at + length));
+                steps.gaps += 1;
+                let (from, to) = (at as usize, (at + length) as usize);
+                let end = bytes.len() + length as usize;
+                if kind == CapturedGap::Zero {
+                    classes.resize(end, b'C');
+                } else {
+                    // Beyond the base's own end an inherited byte is zero.
+                    bytes.extend_from_slice(&base[from.min(base.len())..to.min(base.len())]);
+                    classes.resize(end, b'I');
+                }
+                bytes.resize(end, 0);
+                cursor = next;
+            }
+            CapturedRunStep::Local {
+                offset,
+                length,
+                next,
+            } => {
+                assert!(cursor.is_shapes_only());
+                assert_eq!((offset, next.offset()), (at, at + length));
+                steps.locals += 1;
+                bytes.resize(bytes.len() + length as usize, 0);
+                classes.resize(classes.len() + length as usize, b'C');
+                cursor = next;
+            }
+            CapturedRunStep::Reference {
+                offset,
+                length,
+                root,
+                source_offset,
+                next,
+            } => {
+                assert_eq!((offset, next.offset()), (at, at + length));
+                assert_ne!(length, 0);
+                steps.references += 1;
+                let source = file.sources.iter().find(|(known, _)| *known == root);
+                bytes.extend_from_slice(part(&source.unwrap().1, source_offset, length));
+                classes.resize(classes.len() + length as usize, b'R');
+                cursor = next;
+            }
+            CapturedRunStep::Window { read, next } => {
+                assert_eq!(read.offset, at);
+                assert_eq!(next.offset(), at + read.data.len() as u64);
+                assert!(read.data.len() <= RUN_BYTES);
+                steps.windows += 1;
+                for index in 0..read.data.len() {
+                    let inherited = read
+                        .inherited
+                        .get(index / 8)
+                        .is_some_and(|bits| bits & (1 << (index % 8)) != 0);
+                    let referenced = read.reference_map.get(index).is_some_and(|tag| *tag != 0);
+                    classes.push(match (inherited, referenced) {
+                        (true, _) => b'I',
+                        (_, true) => b'R',
+                        _ => b'C',
+                    });
+                }
+                bytes.extend(file.compose(&read, base));
+                cursor = next;
+            }
+        }
+    }
+    panic!("cursor did not finish");
+}
+
+#[test]
+fn captured_steps_report_a_piece_as_one_reference_and_equal_the_sealed_view() {
+    let temp = Temp::new();
+    let db = temp.db();
+    let route = db.open_workspace([13; 32], [14; 32]).unwrap();
+    let source = db.acquire_base_source(route, 1).unwrap();
+    let content = noise(4 << 20, 29);
+    let mut file = committed(&db, source, &content);
+    // A long piece with a masked cell and a dense row above it, a short
+    // piece, plain cells, and a shrink with a regrow beyond the base bytes.
+    for window in 0..2 {
+        let at = window * WINDOW;
+        file.write_claimed(
+            at,
+            part(&content, 100 * CELL + at, WINDOW),
+            claims(None, &[(at, WINDOW, 100 * CELL + at)]),
+        );
+    }
+    file.write(3 * CELL + 9, b"a masked cell above the piece");
+    file.write(10 * CELL, &noise(2 * CELL_BYTES, 3));
+    file.write_claimed(
+        70 * CELL,
+        part(&content, 500 * CELL, 4 * CELL),
+        claims(None, &[(70 * CELL, 4 * CELL, 500 * CELL)]),
+    );
+    file.write(80 * CELL, &noise(2 * CELL_BYTES, 4));
+    file.resize(300 * CELL);
+    file.resize(310 * CELL + 17);
+    file.check();
+    db.release_base_source(source).unwrap();
+    let capture = db.capture(route).unwrap();
+    let reader = db.acquire_captured_reader(capture, 1).unwrap();
+    let size = file.expect.len() as u64;
+    let cursor = CapturedRunCursor::new(reader, 7, 0, size).unwrap();
+
+    let (bytes, classes, steps) = walk(&db, &file, &file.base, cursor);
+    assert!(bytes == file.expect);
+    println!("PIECE_STEPS {steps:?}");
+    // Reference to the masked cell, its window, reference to the dense row,
+    // its window, reference to the end of the long piece, inherited, the
+    // short piece, inherited, the plain row, inherited, zero.
+    assert_eq!((steps.gaps, steps.windows, steps.references), (4, 3, 4));
+    let class = |at: u64| classes[at as usize];
+    for (at, expected) in [
+        (0, b'R'),
+        (3 * CELL, b'R'),
+        (3 * CELL + 9, b'C'),
+        (4 * CELL, b'R'),
+        (10 * CELL, b'C'),
+        (12 * CELL, b'R'),
+        (64 * CELL - 1, b'R'),
+        (64 * CELL, b'I'),
+        (70 * CELL, b'R'),
+        (74 * CELL, b'I'),
+        (80 * CELL, b'C'),
+        (299 * CELL, b'I'),
+        (300 * CELL, b'C'),
+        (size - 1, b'C'),
+    ] {
+        assert_eq!(class(at), expected, "byte {at}");
+    }
+    // A shapes-only pass: the same classes, the two dense rows without
+    // their payload, the masked cell still as its composed window.
+    let (_, shapes, shaped) = walk(&db, &file, &file.base, cursor.shapes_only());
+    assert!(shapes == classes);
+    assert_eq!(
+        (
+            shaped.gaps,
+            shaped.windows,
+            shaped.references,
+            shaped.locals
+        ),
+        (4, 1, 4, 2)
+    );
+    // A pass that starts inside a piece seeks it by key.
+    let inside = CapturedRunCursor::new(reader, 7, 40 * CELL + 5, size).unwrap();
+    let (tail, _, from_inside) = walk(&db, &file, &file.base, inside);
+    assert!(tail == file.expect[(40 * CELL + 5) as usize..]);
+    assert_eq!(from_inside.references, 2);
+}
+
+#[test]
+fn captured_steps_do_not_grow_with_the_length_of_a_piece() {
+    let temp = Temp::new();
+    let db = temp.db();
+    let content = noise(8 << 20, 33);
+    // A file whose first `windows` windows are one piece with one written
+    // cell in its second window; the rest is inherited.
+    let pass = |tag: u8, windows: u64| {
+        let route = db.open_workspace([tag; 32], [16; 32]).unwrap();
+        let source = db.acquire_base_source(route, 1).unwrap();
+        let mut file = committed(&db, source, &content);
+        for window in 0..windows {
+            let at = window * WINDOW;
+            file.write_claimed(
+                at,
+                part(&content, CELL + at, WINDOW),
+                claims(None, &[(at, WINDOW, CELL + at)]),
+            );
+        }
+        file.write(WINDOW, &noise(CELL_BYTES, 8));
+        assert_eq!(rows(&db, route), (1, 1));
+        db.release_base_source(source).unwrap();
+        let capture = db.capture(route).unwrap();
+        let reader = db.acquire_captured_reader(capture, 1).unwrap();
+        let cursor = CapturedRunCursor::new(reader, 7, 0, file.expect.len() as u64).unwrap();
+        let mut steps = Steps::default();
+        let cost = work(&db, || {
+            let (bytes, _, taken) = walk(&db, &file, &file.base, cursor);
+            assert!(bytes == file.expect);
+            steps = taken;
+        });
+        (steps, cost)
+    };
+    let (short, short_cost) = pass(15, 2);
+    let (long, long_cost) = pass(17, 48);
+    println!("PIECE_STEP_COST short={short:?} {short_cost:?} long={long:?} {long_cost:?}");
+    // Reference, the cell's window, reference, inherited: the same steps,
+    // rows and statements for a piece of 256 KiB and of 6 MiB.
+    assert_eq!(short, long);
+    assert_eq!((short.gaps, short.windows, short.references), (1, 1, 2));
+    assert_eq!((short_cost.0, short_cost.2), (long_cost.0, long_cost.2));
+    assert!(
+        long_cost.1 <= short_cost.1 + 32,
+        "{short_cost:?} {long_cost:?}"
+    );
 }

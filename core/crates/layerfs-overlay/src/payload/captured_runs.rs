@@ -57,31 +57,14 @@ impl Overlay {
                 work,
             });
         }
+        if layers.iter().any(|layer| layer.referenced) {
+            // A layer holds pieces: the layers decide in order.
+            return self.captured_piece_step((ns, serial), layers, cursor, work);
+        }
         let (needed, mut end, zero) = gap_bounds(&layers, cursor.at, cursor.size);
         for (slot, layer) in layers.iter().take(needed).enumerate() {
             let probe = &mut cursor.probes[slot];
-            if probe.ready || probe.after >= layer.size {
-                probe.ready = true;
-                continue;
-            }
-            let floor = cursor.at - cursor.at % CELL;
-            match self.next_cell(ns, serial, layer, probe.after, floor)? {
-                None => probe.ready = true,
-                Some((cell, epoch)) => {
-                    work.metadata_rows += 1;
-                    // The next exclusive seek never revisits this physical row.
-                    probe.after = cell
-                        .offset
-                        .checked_add(cell.length.div_ceil(CELL) * CELL)
-                        .ok_or(OverlayError::Invalid("captured cell boundary"))?;
-                    if self.stale(ns, serial, layer, integer(cell.offset)?, epoch)? {
-                        work.stale_rows += 1;
-                    } else if cell.offset + cell.length > cursor.at {
-                        probe.ready = true;
-                        probe.cell = Some(cell);
-                    }
-                }
-            }
+            self.probe_cell(ns, serial, layer, probe, cursor.at, &mut work)?;
         }
         if cursor.probes[..needed].iter().any(|probe| !probe.ready) {
             return Ok(CapturedRunReply {
@@ -138,6 +121,42 @@ impl Overlay {
 }
 
 impl Overlay {
+    /// Makes one layer's probe ready for byte `at`, or consumes one stale
+    /// row on the way: at most one metadata row. A ready probe holds the
+    /// first live row of the layer that ends beyond the byte, or none.
+    pub(crate) fn probe_cell(
+        &self,
+        ns: i64,
+        serial: i64,
+        layer: &Layer,
+        probe: &mut super::captured_types::Probe,
+        at: u64,
+        work: &mut CapturedRunWork,
+    ) -> OverlayResult<()> {
+        if probe.ready || probe.after >= layer.size {
+            probe.ready = true;
+            return Ok(());
+        }
+        let floor = at - at % CELL;
+        match self.next_cell(ns, serial, layer, probe.after, floor)? {
+            None => probe.ready = true,
+            Some((cell, epoch)) => {
+                work.metadata_rows += 1;
+                // The next exclusive seek never revisits this physical row.
+                probe.after = cell
+                    .offset
+                    .checked_add(cell.length.div_ceil(CELL) * CELL)
+                    .ok_or(OverlayError::Invalid("captured cell boundary"))?;
+                if self.stale(ns, serial, layer, integer(cell.offset)?, epoch)? {
+                    work.stale_rows += 1;
+                } else if cell.offset + cell.length > at {
+                    probe.ready = true;
+                    probe.cell = Some(cell);
+                }
+            }
+        }
+        Ok(())
+    }
     /// The first physical row of one layer at or after `after` that ends
     /// beyond `floor`, with its epoch. One indexed statement.
     fn next_cell(
@@ -196,7 +215,7 @@ impl Overlay {
     /// that follow it without a gap, at most `SHAPE_ROWS` physical rows. The
     /// newest layer decides those bytes whatever lower layers hold, so no
     /// payload is composed. None leaves the cursor to the ordinary window.
-    fn local_shape(
+    pub(crate) fn local_shape(
         &self,
         ns: i64,
         serial: i64,
@@ -247,7 +266,12 @@ impl Overlay {
     }
 }
 
-fn gap_bounds(layers: &[Layer], at: u64, size: u64) -> (usize, u64, bool) {
+pub(crate) fn reply(step: CapturedRunStep, work: CapturedRunWork) -> CapturedRunReply {
+    CapturedRunReply { step, work }
+}
+/// The layers that can decide byte `at`, the end of the gap that starts
+/// there when none does, and whether that gap is zero.
+pub(crate) fn gap_bounds(layers: &[Layer], at: u64, size: u64) -> (usize, u64, bool) {
     let mut end = size;
     for (depth, layer) in layers.iter().enumerate() {
         if depth != 0 {

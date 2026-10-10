@@ -162,6 +162,17 @@ pub enum CapturedRunStep {
         length: u64,
         next: CapturedRunCursor,
     },
+    /// Every byte of the interval is supplied by one reference piece: the
+    /// committed bytes of content root `root` from `source_offset`. The
+    /// newest layer that decides the interval does so by that piece, and no
+    /// newer layer holds a cell or a piece over it.
+    Reference {
+        offset: u64,
+        length: u64,
+        root: [u8; 32],
+        source_offset: u64,
+        next: CapturedRunCursor,
+    },
     End,
 }
 /// Exact metadata row visits for this unit. SQL VM/value/BLOB work and byte

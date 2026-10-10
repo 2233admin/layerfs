@@ -11,6 +11,7 @@ fn collect(db: &Overlay, mut cursor: CapturedRunCursor, base: &[u8]) -> (Vec<u8>
         work.metadata_rows += reply.work.metadata_rows;
         work.stale_rows += reply.work.stale_rows;
         match reply.step {
+            CapturedRunStep::Reference { .. } => panic!("no file of these proofs holds a piece"),
             CapturedRunStep::End => return (bytes, work),
             CapturedRunStep::Local { .. } => panic!("shape step on a payload cursor"),
             CapturedRunStep::Continue(next) => {
@@ -286,6 +287,9 @@ fn a_row_of_several_cells_is_one_metadata_row_and_one_window() {
             let reply = db.captured_run_step(cursor).unwrap();
             rows += reply.work.metadata_rows;
             match reply.step {
+                CapturedRunStep::Reference { .. } => {
+                    panic!("no file of these proofs holds a piece")
+                }
                 CapturedRunStep::End => return (seen, rows),
                 CapturedRunStep::Continue(next) => cursor = next,
                 CapturedRunStep::Gap { .. } => panic!("no gap in a dense file"),
@@ -335,6 +339,7 @@ fn classes(db: &Overlay, mut cursor: CapturedRunCursor) -> (Vec<u8>, usize) {
     for _ in 0..4096 {
         let reply = db.captured_run_step(cursor).unwrap();
         match reply.step {
+            CapturedRunStep::Reference { .. } => panic!("no file of these proofs holds a piece"),
             CapturedRunStep::End => return (classes, locals),
             CapturedRunStep::Continue(next) => cursor = next,
             CapturedRunStep::Gap {

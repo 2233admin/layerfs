@@ -783,6 +783,7 @@ impl OverlayCapturedRuns for InheritedPort<'_> {
                     layerfs_overlay::CapturedRunStep::Window { next, .. }
                     | layerfs_overlay::CapturedRunStep::Gap { next, .. }
                     | layerfs_overlay::CapturedRunStep::Local { next, .. }
+                    | layerfs_overlay::CapturedRunStep::Reference { next, .. }
                     | layerfs_overlay::CapturedRunStep::Continue(next) => *next,
                     layerfs_overlay::CapturedRunStep::End => panic!("nonempty original input"),
                 };
