@@ -16,7 +16,7 @@ comparison or release-admission claim. Durable is
 | Handoff specification | COMPLETE | `3c32fbc97` | Harvest released references |
 | 0.1 Released references | COMPLETE | `8e4a78fa0` | Stage 0.2 move-only organization |
 | 0.2 Move-only organization | COMPLETE, historical check failures retained | `13f9dec38`; routing follow-up in this commit | Update routing guide, then stage 0.3 catalogue |
-| 0.3 Case catalogue | COMPLETE | This commit; prerequisite correction `30b798192` | Stage 0.4 reproducible engine |
+| 0.3 Case catalogue | COMPLETE | `f182e9a63`; prerequisite correction `30b798192` | Stage 0.4 reproducible engine |
 | 0.4 Reproducible engine | PENDING | — | Read retained working scripts and rebuild preparation |
 | 1 Pilot | PENDING | — | Wait for stage 0.4 completion |
 | 2 Edits | PENDING | — | Wait for batch 1 completion |
@@ -44,6 +44,8 @@ comparison or release-admission claim. Durable is
 
 | 9 | Catalogue all 273 original IDs as pending; leave execution fields explicitly unset until each family is ported | The root contains 269 Rust registrations plus three repository-history profiles and one small-file-delta case; release rows are not the complete registry | Dropping unreleased/proof/extended cases or inventing runnable definitions |
 | 10 | Resolve the original Rust registry using a std-only metadata exporter; read both Python wrapper registries separately | Root SDK cannot build after retirement, while its product-neutral workload definitions compile without product dependencies | Restoring retired crates or guessing formatted IDs from text |
+
+| 11 | Route stage 0.4 through `bench.py run cluster-two/cells` and put its generated CSVs in cluster-two baselines | The spec requires the twelve existing cells through bench.py but only named family execution; separate subjects must remain separate | Treating cells as a 26th workload family or adding a second entry point |
 
 ## Bugs
 
@@ -188,4 +190,7 @@ and committed snapshots; active core only, reference absent as recorded above.
 | `13f9dec38` | Stage 0.2 move-only reorganization | 79366 | 79366 | +0 |
 | `9af29e01e` | Current routing guide | 79366 | 79366 | +0 |
 | `30b798192` | Correct existing SDK History methods | 79366 | 79366 | +0 |
-| This commit | Stage 0.3 case catalogue | 79366 | 79366 | +0 |
+| `f182e9a63` | Stage 0.3 case catalogue | 79366 | 79366 | +0 |
+
+Stage 0.4 entry-point clarification: docs-only; no sample or product change.
+Production LOC 79,366 -> 79,366 (delta +0), pinned absent-aware method.

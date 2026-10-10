@@ -211,6 +211,7 @@ Field rules:
 | `prepare <fixture>` | Builds a master volume from a recipe, seals it, records its identity |
 | `build` | Locked release builds of the runtime and the daemon; records the build seal |
 | `run <family> [--case <id>]` | One sample of each selected case; writes a receipt |
+| `run cluster-two/cells [--case <id>]` | Stage 0.4 only: the twelve existing C cells, outside the 25-family catalogue; same phase/count contracts |
 | `verify <run>` | Independent verification of a recorded run |
 | `report <run>` | The report-template table and a compact result file |
 | `parity <family>` | The check of section 7 |
@@ -243,6 +244,11 @@ stable part of a result; a time is one sample.
 never filled by hand. The columns extend the v0.1.6 release tables
 (`release-notes/0.1.6/derive_tables.py`) with the phase split, the counts and
 the reference columns of the v0.1.5 table. Times are raw nanoseconds.
+
+The stage 0.4 `cluster-two/cells` selection uses the same two CSV schemas
+under `cluster-two/baselines/<date>-<commit>/`, so cluster-two proofs remain
+separate from the 25 workload families. This is an explicit route to the
+existing cells, not a 26th family.
 
 `performance.csv`, one row per case, every case of the family present:
 
