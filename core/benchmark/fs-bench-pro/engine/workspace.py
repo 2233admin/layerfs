@@ -669,8 +669,11 @@ def m1_created_modes(command, prior):
     return result
 
 
-def one_family_case(family, case, prepared_folder, build_folder, output):
+def one_family_case(family, case, prepared_folder, build_folder, output, *, preparation_only=False):
     """Single ordinary call/Commit through the same SDK/Sandbox machinery."""
+    if case.get("branch_schedule") or case.get("topology_schedule"):
+        return one_context_case(family, case, prepared_folder, build_folder, output,
+                                preparation_only=preparation_only)
     started_test_ns = time.monotonic_ns()
     current = identity.source_identity()
     build = identity.load_build(build_folder)
@@ -696,8 +699,9 @@ def one_family_case(family, case, prepared_folder, build_folder, output):
     key = hashlib.sha256(json.dumps(treatment, sort_keys=True).encode()).hexdigest()
     claims = identity.ROOT / "benchmark-results/fs-bench-pro/claims"
     claims.mkdir(parents=True, exist_ok=True)
-    with (claims / key).open("x") as stream:
-        stream.write(str(output) + "\n")
+    if not preparation_only:
+        with (claims / key).open("x") as stream:
+            stream.write(str(output) + "\n")
     row = {"schema": "fs-bench-pro-workspace-family-v1", "family": family, "case": case["id"],
            "source_commit": current["source_commit"], "product_tree": current["product_tree"], "identity": current,
            "build": str(Path(build_folder).resolve()), "prepared": str(Path(prepared_folder).resolve()),
@@ -715,6 +719,10 @@ def one_family_case(family, case, prepared_folder, build_folder, output):
            "performance_declaration":case.get("performance_mode","single original performance attempt"),
            "owner_test_ceiling_ns":120_000_000_000 if proof_only else None}
     row["helper_admission"]=helper_admission
+    if preparation_only:
+        row.update(schema="fs-bench-pro-prepared-producer-attempt-v1", setup_only=True,
+                   sample_count=0, performance_mode="setup-only; no performance sample",
+                   declared_limit_ns="N/A")
     receipts.write_new(output / "selection.json", row)
     runtime = None
     mounted = set()
@@ -798,7 +806,7 @@ def one_family_case(family, case, prepared_folder, build_folder, output):
         selected = secrets.token_hex(32)
         clock.begin(time.monotonic_ns())
         phase_started = time.monotonic()
-        row.update(attempted_operation_count=1, sample_count=0 if proof_only else 1,
+        row.update(attempted_operation_count=1, sample_count=0 if proof_only or preparation_only else 1,
                    verification_attempt_count=1 if proof_only else 0)
         mount = runtime.send("mount", selected, deadline=time.monotonic() + 15)
         mounted.add(selected)
@@ -1192,3 +1200,762 @@ def dispose_family_resources(folder, returned_row):
     receipts.manifest(output)
     returned_row["resource_disposition"] = record["resource_disposition"]
     return record
+
+
+# Batch 5 uses the same SDK/runtime owner, with explicit role-local histories.
+CONTEXT_FAMILIES = frozenset(('branch_development', 'multi_workspace_development'))
+
+
+def context_send(runtime, operation, key='', path=None, *, deadline):
+    """One original write, followed by its declared acknowledgement; no replay."""
+    if time.monotonic() >= deadline:
+        raise TimeoutError('context operation not sent after wall stop: ' + operation)
+    columns = [operation]
+    if key or path is not None:
+        columns.append(key)
+    if path is not None:
+        columns.append(str(path))
+    if any('\n' in column or '\r' in column or '\t' in column for column in columns):
+        raise ValueError('unsafe context protocol field')
+    raw = ('\t'.join(columns) + '\n').encode()
+    if runtime.process.stdin.write(raw) != len(raw):
+        raise cell_runner.OriginalFailure('short original context write; outcome uncertain; no resend')
+    expected = {'mount-branch': 'mount', 'round': 'round_finished',
+                'history': 'history_finished'}.get(operation, operation)
+    return runtime.event(expected, deadline)
+
+
+def context_layout(case):
+    if case.get('branch_schedule', {}).get('schema') == 'original-branch-development-v1':
+        schedule = case['branch_schedule']
+        branches = []
+        for branch in schedule['branches']:
+            source = branch['fork_source']
+            branches.append({'role': branch['role'], 'name': branch['name'],
+                'count': branch['local_commits'],
+                'source_role': source.get('source_role'), 'source_local': source.get('local_commit', 0)})
+        groups = schedule['execution_groups']
+        total = schedule['created_commit_acknowledgements']
+        references = schedule['retained_root_references']
+        segments = None
+    elif case.get('topology_schedule', {}).get('schema') == 'original-v016-m1-topology-v1':
+        schedule = case['topology_schedule']
+        branches = [{'role': str(worker['index']), 'name': f"v016-{case['v016_case']}-{worker['index']}",
+            'count': schedule['per_worker_commits'], 'source_role': None, 'source_local': 0}
+            for worker in schedule['workers']]
+        groups = [[branch['role'] for branch in branches]]
+        segments = schedule['segment_ranges']
+        total, references = schedule['total_commits'], schedule['graph_root_boundaries']
+    else:
+        raise ValueError('original committed context topology required')
+    roles = [branch['role'] for branch in branches]
+    if (not roles or len(set(roles)) != len(roles) or len(roles) > 4
+            or sum(branch['count'] for branch in branches) != total
+            or references != total + 1 or [role for group in groups for role in group] != roles
+            or any(not group or len(group) > 4 for group in groups)):
+        raise ValueError('original topology role/count/group geometry differs')
+    if segments is not None:
+        declared = [step for first, last in segments for step in range(first, last + 1)]
+        if declared != list(range(1, branches[0]['count'] + 1)):
+            raise ValueError('original concurrent segments must cover every local step exactly once')
+    return {'branches': branches, 'groups': groups, 'segments': segments,
+            'total': total, 'references': references, 'roles': roles}
+
+
+def context_bodies(case, prepared):
+    plan = fixtures.context_plan(case)
+    if plan['roles'] != context_layout(case)['roles']:
+        raise ValueError('prepared/context original roles differ')
+    result = {}
+    for role in plan['roles']:
+        declared = plan['original_context_runs'][role]
+        sdk = prepared['prepared_context_runs'].get(role, {})
+        wanted = {str(step) for step in range(1, plan['local_commits'][role] + 1)}
+        if set(declared) != wanted or not set(sdk).issubset(wanted):
+            raise ValueError('every original role-local command and only declared SDK replacements required')
+        result[role] = {step: '/bin/bash /code/' + sdk.get(step, body)
+                        for step, body in declared.items()}
+    return result
+
+
+def context_modes_text(maps, roles):
+    if set(maps) != set(roles):
+        raise ValueError('actual context mode observations require each original role')
+    rows = ['original-context-created-modes-v1', 'role\tpath\tmode']
+    for role in roles:
+        for path, mode in sorted(maps[role].items()):
+            if (not path or any(part in ('', '.', '..') for part in path.split('/'))
+                    or any(char.isspace() for char in path) or type(mode) is not int
+                    or mode < 0 or mode > 0o777):
+                raise ValueError('unsafe actual context directory-mode observation')
+            rows.append(f'{role}\t{path}\t{mode:o}')
+    return '\n'.join(rows) + '\n'
+
+
+def context_step(case, role, local):
+    if case.get('branch_schedule'):
+        matches = [step for step in case['steps'] if step['role'] == role and step['local_index'] == local]
+    else:
+        matches = [step for step in case['steps'] if step['index'] == local]
+    if len(matches) != 1:
+        raise ValueError('one exact original role-local step required')
+    return matches[0]
+
+
+def context_overlap(commits):
+    """The frozen maximum pair overlap and left-interval coverage count."""
+    maximum, covered = 0, 0
+    intervals = []
+    for record in commits:
+        span = record['commit']['span']
+        if (span['clock_id'] != 'monotonic' or any(type(span[name]) is not int
+                for name in ('start_ns', 'end_ns', 'duration_ns'))
+                or span['end_ns'] < span['start_ns']
+                or span['duration_ns'] != span['end_ns'] - span['start_ns']):
+            raise ValueError('original complete Commit monotonic span required')
+        intervals.append((record['role'], span['start_ns'], span['end_ns']))
+    for index, (role, start, end) in enumerate(intervals):
+        values = [max(0, min(end, other_end) - max(start, other_start))
+                  for other_role, other_start, other_end in intervals[index + 1:] if other_role != role]
+        maximum = max([maximum, *values])
+        covered += int(any(values))
+    return {'observed_overlap_ns': maximum, 'overlap_rounds': covered,
+            'scope': 'original maximum different-worker public Commit overlap and left-interval coverage; common monotonic origin; no added threshold'}
+
+
+def context_round(runtime, case, graph, keys, roles, first, last, bodies, modes, output, label, deadline):
+    rows = [f"context-round-v1\t{case['v016_case']}"]
+    admitted = {}
+    for role in roles:
+        for local in range(first, last + 1):
+            body = bodies[role][str(local)]
+            path = script(output, f'{label}-{role}-{local}.sh', body)
+            rows.append(f'{role}\t{keys[role]}\t{local}\t{path}')
+            admitted[(role, local)] = identity.sha256(path)
+    descriptor = script(output, label + '.tsv', '\n'.join(rows) + '\n')
+    before = len(runtime.rows)
+    finished = context_send(runtime, 'round', label, descriptor, deadline=deadline)
+    commands, commits = {}, {}
+    for event in runtime.rows[before:]:
+        fields = event.get('fields', {})
+        if event['event'] not in ('command', 'commit') or fields.get('round') != label:
+            continue
+        role = fields.get('role')
+        local = int(fields.get('local_step', -1))
+        pair = (role, local)
+        target = commands if event['event'] == 'command' else commits
+        if pair not in admitted or pair in target or fields.get('key') != keys[role]:
+            raise ValueError('duplicate, undeclared or substituted original concurrent event')
+        target[pair] = event
+    if set(commands) != set(admitted) or set(commits) != set(admitted):
+        raise ValueError('complete original command and Created Commit acknowledgements required')
+    records = []
+    for role in roles:
+        branch = graph['branches'][role]
+        for local in range(first, last + 1):
+            pair = (role, local)
+            command, commit = commands[pair], commits[pair]
+            fields = command['fields']
+            if (fields.get('exit_code') != '0' or fields.get('registered_execs') != '0'
+                    or fields.get('command_sha256') != admitted[pair]):
+                raise ValueError('original external worker body/known zero exit/custody differs')
+            declared = context_step(case, role, local)
+            if declared.get('original_operation_counts'):
+                checked = original_operation_counts(command, declared['original_operation_counts'])
+            else:
+                checked = None
+            if case.get('m1_schedule'):
+                modes[role] = m1_created_modes(command, modes[role])
+            fields = commit['fields']
+            previous = branch['commits'][-1]['commit']['fields']['commit_id'] if branch['commits'] else branch['initial_parent']
+            if (fields.get('commit_kind') != 'Committed' or fields.get('parent') != previous
+                    or fields.get('base_layer') != branch['base_layer'] or fields.get('stack') != branch['stack']):
+                raise ValueError('original Created acknowledgement/parent/base/stack differs')
+            for name, width in (('commit_id', 66), ('parent', 66), ('root', 64)):
+                value = fields[name]
+                if name == 'parent' and value == '-':
+                    continue
+                if not isinstance(value, str) or len(value) != width or any(c not in '0123456789abcdef' for c in value):
+                    raise ValueError('exact typed original Commit identity required')
+            record = {'role': role, 'index': local, 'command': command, 'commit': commit, 'operation_counts': checked}
+            if local != len(branch['commits']) + 1:
+                raise ValueError('original role-local order differs')
+            branch['commits'].append(record)
+            branch.update(final_head=fields['commit_id'], final_root=fields['root'])
+            records.append(record)
+    return {'label': label, 'descriptor': str(descriptor), 'descriptor_sha256': identity.sha256(descriptor),
+            'finished': finished, 'records': records, 'barrier_scope': 'one common original segment-start barrier; no per-stage barrier'}
+
+
+def context_transcript(case, prepared, graph, modes_file=None):
+    selected = {(item['role'], item['index']): item['manifest'] for item in prepared['context_checkpoints']}
+    if len(selected) != len(prepared['context_checkpoints']):
+        raise ValueError('unique original selected context checkpoints required')
+    rows = [f"topology-v1\t{case['v016_case']}"]
+    for role, branch in graph['branches'].items():
+        columns = ['branch', role, branch['branch_id'], branch['name'], branch['stack'], branch['base_layer'],
+            branch['initial_parent'], branch['initial_root'], branch['final_head'], branch['final_root'],
+            branch.get('source_role') or '-', str(branch.get('source_local', 0))]
+        rows.append('\t'.join(columns))
+        for record in branch['commits']:
+            fields = record['commit']['fields']
+            columns = ['commit', role, str(record['index']), fields['commit_id'], fields['stack'], fields['root'],
+                fields['parent'], fields['base_layer'], selected.get((role, record['index']), '-'),
+                str(modes_file) if modes_file is not None else '-']
+            rows.append('\t'.join(columns))
+    return '\n'.join(rows) + '\n'
+
+
+def context_native_receipt(case, role, index, command, checkpoint, modes_file=None):
+    if command['fields'].get('exit_code') != '0':
+        raise ValueError('known successful native context verifier required')
+    text = Path(command['fields']['stdout']).read_text()
+    values = [json.loads(line) for line in text.splitlines()]
+    expected = 2 if case.get('m1_schedule') else 1
+    if len(values) != expected:
+        raise ValueError('exact native contextual proof receipt rows required')
+    proof = values[-1]
+    if (set(proof) != {'case', 'role', 'step', 'verification_status', 'context_manifest_sha256'}
+            or proof['case'] != case['v016_case'] or proof['role'] != role
+            or type(proof['step']) is not int or proof['step'] != index
+            or proof['verification_status'] != 'pass'
+            or proof['context_manifest_sha256'] != checkpoint['manifest_sha256']):
+        raise ValueError('native context proof case/role/state/manifest differs')
+    if expected == 2:
+        selective = values[0]
+        if (selective.get('case') != case['v016_case'] or selective.get('step') != index
+                or selective.get('seed') != 1 or selective.get('verification_status') != 'pass'
+                or selective.get('scope') != 'original-m1-selective-scope-v1'
+                or selective.get('created_modes_digest') != identity.sha256(modes_file)):
+            raise ValueError('original selective proof must bind exact measured role-mode maps')
+    return {'status': 'PASS', 'scope': case['oracle']['scope'], 'rows': values,
+            'stdout_sha256': hashlib.sha256(text.encode()).hexdigest()}
+
+
+def context_deadlines(case, started, *, phase='verification'):
+    budget = case['budget']
+    if phase == 'performance':
+        hard = budget['performance_hard_watchdog_ms']
+        reserve = budget.get('performance_cleanup_reserve_ms', 3000)
+        if hard != 60000 or reserve != 3000:
+            raise ValueError('unchanged original60s execution and3s cleanup reserve required')
+        return {'work': started + (hard - reserve) / 1000, 'cleanup': started + hard / 1000}
+    work, hard = budget['verifier_ms'], budget['verification_hard_watchdog_ms']
+    reserve = budget.get('verification_cleanup_reserve_ms', 3000)
+    if (work, hard) not in ((25000, 35000), (30000, 40000), (60000, 70000)) or reserve != 3000:
+        raise ValueError('exact original batch5 verification work/hard/reserve required')
+    return {'work': started + (work - reserve) / 1000, 'cleanup': started + work / 1000,
+            'publication': started + hard / 1000}
+
+
+def context_end(runtime, key, row, deadline):
+    unmount = runtime.send('unmount', key, deadline=deadline)
+    cleanup = readiness(runtime, key, min(5, max(0, deadline - time.monotonic())))
+    row.setdefault('terminal_mounts', []).append({'key': key, 'unmount': unmount, 'cleanup': cleanup})
+    return unmount
+
+
+def context_history(runtime, role, branch, graph, output, deadline):
+    """One explicit SDK page per request, anchored to the actual acknowledged head."""
+    expected = []
+    current = branch
+    while True:
+        expected.extend(record['commit']['fields'] for record in reversed(current['commits']))
+        source_role = current.get('source_role')
+        if source_role is None:
+            break
+        # Only the inherited prefix, excluding the source Branch later head.
+        parent = graph['branches'][source_role]
+        current = {**parent, 'commits': parent['commits'][:current['source_local']]}
+    records, pages, seen_cursors, cursor = [], [], set(), '-'
+    while True:
+        request = script(output, f'history-{role}-page-{len(pages) + 1}.tsv',
+                         f"{branch['final_head']}\t{cursor}\t32\n")
+        before = len(runtime.rows)
+        final = context_send(runtime, 'history', role, request, deadline=deadline)
+        page = [event['fields'] for event in runtime.rows[before:] if event['event'] == 'history_record']
+        if len(page) > 32 or final['fields'].get('records') != len(page):
+            raise ValueError('public native bridge exact32-record page count differs')
+        records.extend(page)
+        pages.append(final)
+        if len(records) > len(expected):
+            raise ValueError('public History returned undeclared ancestor records')
+        path = final['fields'].get('cursor_path')
+        if path in (None, '-', ''):
+            break
+        if not page or len(records) >= len(expected):
+            raise ValueError('unexpected or non-progressing History continuation')
+        encoded = Path(path).read_bytes()
+        if (not encoded or final['fields'].get('cursor_bytes') != len(encoded)
+                or final['fields'].get('cursor_sha256') != hashlib.sha256(encoded).hexdigest()
+                or encoded in seen_cursors):
+            raise ValueError('public opaque History continuation artifact differs or repeats')
+        seen_cursors.add(encoded)
+        cursor = encoded.hex()
+    keys = ('commit_id', 'stack', 'root', 'parent', 'base_layer')
+    if len(records) != len(expected) or any(any(left.get(key) != right[key] for key in keys)
+                                           for left, right in zip(records, expected)):
+        raise ValueError('public SDK History differs from exact role ancestry and acknowledged tuples')
+    return {'finished': final, 'pages': pages, 'records': records, 'anchor': branch['final_head'],
+            'page_limit': 32, 'page_scope': 'existing native bridge HISTORY_WINDOW32; each continuation is a new anchored SDK page, not a retry'}
+
+
+def context_fork(runtime, case, specification, graph, output, deadline):
+    role = specification['role']
+    identifier = '11' + secrets.token_hex(16)
+    source = specification['source_role']
+    if source is None:
+        body = f"layer\t{identifier}\t{specification['name']}\n"
+        parent = '-'
+        root = graph['branches']['initial']['initial_root']
+    else:
+        previous = graph['branches'][source]['commits'][specification['source_local'] - 1]['commit']['fields']
+        body = f"commit\t{identifier}\t{specification['name']}\t{source}\t{previous['commit_id']}\n"
+        parent, root = previous['commit_id'], previous['root']
+    request = script(output, f'fork-{role}.tsv', body)
+    fork = context_send(runtime, 'fork', role, request, deadline=deadline)
+    fields = fork['fields']
+    initial = graph['branches']['initial']
+    if (fields.get('branch_id') != identifier or fields.get('name') != specification['name']
+            or fields.get('head') != parent or fields.get('root') != root
+            or fields.get('stack') != initial['stack'] or fields.get('base_layer') != initial['base_layer']):
+        raise ValueError('existing public SDK Fork acknowledgement differs from exact selected source')
+    graph['branches'][role] = {'branch_id': identifier, 'name': specification['name'],
+        'stack': fields['stack'], 'base_layer': fields['base_layer'], 'initial_parent': parent,
+        'initial_root': root, 'final_head': parent, 'final_root': root, 'source_role': source,
+        'source_local': specification['source_local'], 'commits': [], 'fork': fork}
+    return fork
+
+
+def context_graph_proof(case, prepared, graph, runtime, row, build, output, modes_file, deadline):
+    import shutil
+    docker = ['docker', '--host', 'unix://' + build['socket']]
+    receipts.command([*docker, 'cp', runtime.container + ':/layerfs-store/global', str(output / 'graph-store')],
+                     output, 'closed-store-export', operation_deadline(deadline, 15) - time.monotonic())
+    raw = output / 'graph-store/store.sqlite'
+    normalized = oracle.prepare_closed_store(output / 'graph-store', output / 'census-store/store.sqlite', deadline)
+    row['closed_store_normalization'] = normalized
+    census_store = Path(normalized['path'])
+    (output / 'typed-store').mkdir()
+    typed_store = output / 'typed-store/store.sqlite'
+    shutil.copy2(census_store, typed_store)
+    if identity.sha256(typed_store) != identity.sha256(census_store):
+        raise ValueError('public typed proof copy differs from known-Stop normalized export')
+    transcript = script(output, 'acknowledged-topology.tsv', context_transcript(case, prepared, graph, modes_file))
+    argv = [build['binaries']['runtime']['path'], 'verify-topology', '--socket', build['socket'],
+        '--volume', row['clone']['volume'], '--daemon', build['binaries']['daemon']['path'],
+        '--manifest', prepared['provision']['manifest'], '--sealed', str(typed_store),
+        '--case', case['v016_case'], '--receipt', str(output / 'graph.events.jsonl'),
+        '--history-file', str(transcript), '--uid', str(prepared['source_uid']), '--gid', str(prepared['source_gid'])]
+    observed = receipts.command(argv, output, 'public-topology-proof', operation_deadline(deadline, 120) - time.monotonic())
+    events = [json.loads(line) for line in Path(observed['stdout']).read_text().splitlines()]
+    completed = [event for event in events if event['event'] == 'workspace_verified']
+    if len(completed) != 1 or events[-1]['event'] != 'finished' or completed[0]['fields'].get('status') != 'PASS':
+        raise ValueError('complete independent public topology proof and known exit required')
+    fields = completed[0]['fields']
+    selected = {(item['role'], item['index']) for item in prepared['context_checkpoints'] if item['index'] > 0}
+    roots = [event for event in events if event['event'] == 'topology_root_verified']
+    if {(event['fields']['role'], int(event['fields']['local'])) for event in roots} != selected:
+        raise ValueError('exact original selected payload checkpoint proof required')
+    tuples = [{'commit_id': record['commit']['fields']['commit_id'],
+               'layer_stack_id': record['commit']['fields']['stack'], 'root_id': record['commit']['fields']['root'],
+               'parent_commit_id': None if record['commit']['fields']['parent'] == '-' else record['commit']['fields']['parent'],
+               'base_layer_id': record['commit']['fields']['base_layer']}
+              for branch in graph['branches'].values() for record in branch['commits']]
+    completion, runtime_events = output / 'closed-store-export.completion.json', output / 'runtime.events.jsonl'
+    custody = {'custody': row['custody'], 'container': runtime.container, 'volume': row['clone']['volume'],
+        'remote_source': '/layerfs-store/global/store.sqlite', 'local_source': str(raw),
+        'source_sha256': identity.sha256(raw), 'source_size': raw.stat().st_size,
+        'prepared_manifest': prepared['provision']['manifest'],
+        'prepared_manifest_sha256': identity.sha256(prepared['provision']['manifest']),
+        'transcript': str(transcript), 'transcript_sha256': identity.sha256(transcript),
+        'export_completion': str(completion), 'export_completion_sha256': identity.sha256(completion),
+        'runtime_events': str(runtime_events), 'runtime_events_sha256': identity.sha256(runtime_events),
+        'normalization': {'receipt': normalized['receipt'], 'receipt_sha256': normalized['receipt_sha256']}}
+    census = oracle.graph_commit_census(census_store, tuples, fields, custody)
+    if time.monotonic() >= deadline:
+        raise TimeoutError('original topology proof deadline reached during global census')
+    receipts.write_new(output / 'global-topology-census.json', census)
+    row['topology'].update(public_proof=events, global_census=census, transcript=str(transcript),
+                           transcript_sha256=identity.sha256(transcript))
+    return {'status': 'PASS', 'scope': case['oracle']['scope'], 'selected_roots': roots, 'global_census': census}
+
+
+def context_observations(runtime, row, build, output, deadline):
+    docker = ['docker', '--host', 'unix://' + build['socket']]
+    logs = receipts.command([*docker, 'logs', '--timestamps=false', runtime.container], output, 'daemon-logs',
+                            operation_deadline(deadline, 15) - time.monotonic())
+    groups = {}
+    for path in (logs['stdout'], logs['stderr']):
+        groups.update(cell_runner.telemetry(path))
+    words = lambda value: [int(value[index:index + 16], 16) for index in range(0, 64, 16)]
+    scopes = {tuple(words(event['fields']['scope'])) for event in runtime.rows
+              if event['event'] == 'control_origin' and event['fields'].get('scope')}
+    scopes.add(tuple(words(runtime.scope)))
+    if any(tuple(group[0]['daemon']) != tuple(words(runtime.daemon_instance)) or tuple(group[0]['scope']) not in scopes
+           for group in groups.values()):
+        raise ValueError('context numeric daemon/public channel scope differs from authentication')
+    row['numeric_groups'] = list(groups.values())
+    row['counts'] = {'requests': 'UNAVAILABLE', 'owner_jobs': 'UNAVAILABLE', 'statements': 'UNAVAILABLE'}
+    row['counts_scope'] = 'actual raw numeric groups retained; independent concurrent channel cumulative attribution is not guessed or summed twice'
+    try:
+        priced = context_numeric_counts(groups, runtime.rows)
+        row.update(counts=priced['totals'], phase_counts=priced, counts_scope=priced['scope'])
+    except (KeyError, TypeError, ValueError) as error:
+        row['numeric_attribution'] = {'status': 'UNAVAILABLE', 'reason': str(error),
+            'scope': 'complete raw framing retained; no fabricated zero, interval, duplicated daemon delta or partial-call inference'}
+    cell_runner.snapshot_observations(runtime, row['observations'])
+    cell_runner.ingest_observations(groups, row['observations'], row['cache'])
+
+
+def one_context_case(family, case, prepared_folder, build_folder, output, *, preparation_only=False):
+    """One exact original graph with real concurrent role-local SDK worker loops."""
+    started_ns = time.monotonic_ns()
+    current, build = identity.source_identity(), identity.load_build(build_folder)
+    layout = context_layout(case)
+    prepared = fixtures.load(prepared_folder, case['fixture']['recipe'])
+    helper_admission = fixtures.validate_runtime_helpers(case, prepared, build)
+    bodies = context_bodies(case, prepared)
+    output = Path(output).resolve()
+    output.mkdir(parents=True, exist_ok=False)
+    treatment = {'family': family, 'case': case, 'fixture': prepared['fixture']['fixture_sha256'],
+        'product': current['product_tree'], 'bodies': bodies, 'helpers': prepared['helpers']['files'],
+        'binaries': {name: value['sha256'] for name, value in build['binaries'].items()},
+        'engine': identity.sha256(__file__), 'image': identity.IMAGE}
+    claim = hashlib.sha256(json.dumps(treatment, sort_keys=True).encode()).hexdigest()
+    claims = identity.ROOT / 'benchmark-results/fs-bench-pro/claims'
+    claims.mkdir(parents=True, exist_ok=True)
+    if not preparation_only:
+        with (claims / claim).open('x') as stream:
+            stream.write(str(output) + '\n')
+    row = {'schema': 'fs-bench-pro-workspace-family-v1', 'family': family, 'case': case['id'],
+        'source_commit': current['source_commit'], 'product_tree': current['product_tree'], 'identity': current,
+        'build': str(Path(build_folder).resolve()), 'prepared': str(Path(prepared_folder).resolve()),
+        'daemon_sha256': build['binaries']['daemon']['sha256'], 'runtime_sha256': build['binaries']['runtime']['sha256'],
+        'image': identity.IMAGE, 'status': 'NOT_RUN', 'functional_status': 'NOT_RUN', 'proof_status': 'NOT_RUN',
+        'counts': {}, 'phases': {'mount_ns': 0, 'command_ns': 0, 'commit_ns': 0, 'unmount_ns': 0}, 'observations': {},
+        'cache_class': case['cache_class'], 'cache': {'class': case['cache_class'], 'status': 'INELIGIBLE',
+            'declaration': 'original branch/worker graph on fresh independent writable clone; setup and own-write coldness unverified; no warmup or cold claim'},
+        'declared_limit_ns': 'N/A' if preparation_only else case['budget']['command_ms'] * 1_000_000,
+        'verifier_limit_ns': case['budget']['verifier_ms'] * 1_000_000,
+        'global_profile': 'Disposable/WAL/OFF', 'overlay_profile': 'MEMORY/OFF/EXCLUSIVE', 'construction_workers': 1,
+        'durable': 'NOT_RUN — disabled by owner until explicit reauthorization', 'claim': claim,
+        'attempted_operation_count': 0, 'completed_operation_count': 0, 'sample_count': 0,
+        'cleanup': 'UNAVAILABLE', 'proof_only': False, 'performance_mode': 'single original performance attempt',
+        'interference': current.get('cross_worktree_interference'), 'helper_admission': helper_admission,
+        'topology': {'branches': {}, 'rounds': []}, 'original_graph': layout}
+    if preparation_only:
+        row.update(schema='fs-bench-pro-prepared-producer-attempt-v1', setup_only=True,
+                   performance_mode='setup-only; no performance sample', sample_count=0)
+    receipts.write_new(output / 'selection.json', row)
+    runtime = None
+    active = {}
+    modes = {role: {} for role in layout['roles']}
+    graph = row['topology']
+    proof_start, deadlines = None, None
+    try:
+        row['clone'] = fixtures.clone(prepared, output / 'clone', build)
+        environment = script(output, 'environment.txt', ''.join(name + '=' + value + '\n' for name, value in workloads.ENV.items()))
+        argv = [build['binaries']['runtime']['path'], 'serve', '--socket', build['socket'],
+            '--volume', row['clone']['volume'], '--daemon', build['binaries']['daemon']['path'],
+            '--manifest', prepared['provision']['manifest'], '--receipt', str(output / 'runtime.events.jsonl'),
+            '--uid', str(prepared['source_uid']), '--gid', str(prepared['source_gid']),
+            '--environment-file', str(environment), '--observation-scope', secrets.token_hex(32), '--case', case['v016_case']]
+        runtime = cell_runner.EventProcess(argv, output, 'runtime')
+        runtime.event('protocol_ready', time.monotonic() + 15)
+        row['container'] = runtime.container
+        if runtime.container is None:
+            raise ValueError('original context container acknowledgement unavailable')
+        row['container_profile'] = history_container_profile(runtime, build, output)
+        row['staging'] = fixtures.stage(runtime.container, prepared, output / 'staging', build)
+        row['ordinary_resource_guards'] = {'before': ordinary_resource_guard(runtime, build, output, 'ordinary-before'), 'steps': []}
+        initial = next(event['fields'] for event in runtime.rows if event['event'] == 'history_initial_root')
+        graph['branches']['initial'] = {'branch_id': initial['branch_id'], 'name': initial['name'],
+            'stack': initial['stack'], 'base_layer': initial['base_layer'], 'initial_parent': '-',
+            'initial_root': initial['root'], 'final_head': '-', 'final_root': initial['root'],
+            'source_role': None, 'source_local': 0, 'commits': []}
+        row['setup_ns'] = time.monotonic_ns() - started_ns
+        performance_start = time.monotonic()
+        performance = context_deadlines(case, performance_start, phase='performance')
+        row.update(attempted_operation_count=1, sample_count=0 if preparation_only else 1)
+        for group_number, roles in enumerate(layout['groups'], 1):
+            for role in roles:
+                specification = next(branch for branch in layout['branches'] if branch['role'] == role)
+                context_fork(runtime, case, specification, graph, output, performance['work'])
+                key = secrets.token_hex(32)
+                mounted = context_send(runtime, 'mount-branch', key, role, deadline=performance['work'])
+                active[role] = key
+                row['phases']['mount_ns'] += mounted['span']['duration_ns']
+            segments = layout['segments'] or [[1, next(branch['count'] for branch in layout['branches'] if branch['role'] == roles[0])]]
+            for segment_number, (first, last) in enumerate(segments, 1):
+                round_ = context_round(runtime, case, graph, active, roles, first, last, bodies, modes, output,
+                                       f'group-{group_number}-segment-{segment_number}', performance['work'])
+                graph['rounds'].append(round_)
+                for record in round_['records']:
+                    row['phases']['command_ns'] += record['command']['span']['duration_ns']
+                    row['phases']['commit_ns'] += record['commit']['span']['duration_ns']
+                row['ordinary_resource_guards']['steps'].append(ordinary_resource_guard(runtime, build, output,
+                    f'ordinary-group-{group_number}-segment-{segment_number}', row['ordinary_resource_guards']['before'],
+                    operation_deadline(performance['work'], 15) - time.monotonic()))
+                if layout['segments'] and segment_number == 1 and case['topology_schedule'].get('discard_reopen'):
+                    witness = prepared['original_discard_witness']
+                    if witness is None or witness['role'] != '0':
+                        raise ValueError('authenticated original two-worker discard witness required')
+                    body = '/bin/bash /code/workload.sh witness ' + shlex.join([case['v016_case'], '0', witness['path'], witness['hex']])
+                    event = runtime.send('command', active['0'], script(output, 'discard-witness.sh', body), deadline=performance['work'])
+                    old = active.pop('0')
+                    ended = context_end(runtime, old, row, performance['cleanup'])
+                    row['phases']['unmount_ns'] += ended['span']['duration_ns']
+                    new = secrets.token_hex(32)
+                    mounted = context_send(runtime, 'mount-branch', new, '0', deadline=performance['work'])
+                    active['0'] = new
+                    row['phases']['mount_ns'] += mounted['span']['duration_ns']
+                    graph['discard'] = {'witness': event, 'old_key': old, 'new_key': new,
+                        'branch_id': graph['branches']['0']['branch_id'], 'at_local': last,
+                        'peer_state': 'already committed; no dirty-stage6 hold', 'created_commits': 0}
+            for role in roles:
+                snapshot = runtime.send('snapshot', active[role], deadline=performance['work'])
+                graph['branches'][role]['runtime_snapshot'] = snapshot
+                ended = context_end(runtime, active.pop(role), row, performance['cleanup'])
+                row['phases']['unmount_ns'] += ended['span']['duration_ns']
+        all_commits = [record for branch in graph['branches'].values() for record in branch['commits']]
+        if len(all_commits) != layout['total']:
+            raise ValueError('every original Created acknowledgement required')
+        row['complete_wall_ns'] = row['phases']['command_ns'] + row['phases']['commit_ns']
+        row['performance_external_wall_ns'] = int((time.monotonic() - performance_start) * 1e9)
+        row['timing_scope'] = 'summed complete current ordinary helper/range-edit commands and public Commits; overlaps counted in the sum as the original pure_call_sum; setup/Fork/mount/observers/teardown excluded; external whole-graph wall separately retained'
+        graph['overlap'] = context_overlap(all_commits)
+        if case.get('topology_schedule', {}).get('actual_commit_overlap_required') and not graph['overlap']['overlap_rounds']:
+            raise ValueError('original concurrent topology has no observed public Commit overlap')
+        row['cleanup'] = 'Gone'
+        context_observations(runtime, row, build, output, performance['cleanup'])
+        proof_start = time.monotonic_ns()
+        deadlines = context_deadlines(case, time.monotonic())
+        modes_file = script(output, 'observed-context-modes.tsv', context_modes_text(modes, layout['roles'])) if case.get('m1_schedule') else None
+        if modes_file:
+            receipts.command(['docker', '--host', 'unix://' + build['socket'], 'cp', str(modes_file),
+                runtime.container + ':/code/context/observed-modes.tsv'], output, 'created-modes-stage',
+                operation_deadline(deadlines['work'], 15) - time.monotonic())
+        graph['native_proofs'] = []
+        for role in layout['roles']:
+            branch = graph['branches'][role]
+            graph.setdefault('sdk_history', {})[role] = context_history(runtime, role, branch, graph, output, deadlines['work'])
+            index = len(branch['commits'])
+            checkpoint = next(item for item in prepared['context_checkpoints'] if item['role'] == role and item['index'] == index)
+            key = secrets.token_hex(32)
+            context_send(runtime, 'mount-branch', key, role, deadline=deadlines['work'])
+            active[role] = key
+            body = shlex.join(['/code/writers/recipe', 'verify-context', case['v016_case'], role, str(index), '.',
+                              '/code/context/observed-modes.tsv' if modes_file else '-'])
+            command = runtime.send('verify', key, script(output, f'native-proof-{role}.sh', body), deadline=deadlines['work'])
+            proof = context_native_receipt(case, role, index, command, checkpoint, modes_file)
+            graph['native_proofs'].append({'role': role, 'index': index, 'proof': proof})
+            context_end(runtime, active.pop(role), row, deadlines['cleanup'])
+        row['ordinary_resource_guards']['after_native_proof'] = ordinary_resource_guard(runtime, build, output,
+            'ordinary-after-native-proof', row['ordinary_resource_guards']['before'],
+            operation_deadline(deadlines['work'], 15) - time.monotonic())
+        runtime.send('observe', deadline=deadlines['cleanup'])
+        runtime.send('stop', deadline=deadlines['cleanup'])
+        runtime.event('finished', deadlines['cleanup'])
+        if runtime.process.wait(timeout=operation_deadline(deadlines['cleanup'], 1) - time.monotonic()) != 0:
+            raise ValueError('original runtime exit differs after acknowledged Stop')
+        row['custody'] = 'KNOWN_STOP'
+        row['verification'] = context_graph_proof(case, prepared, graph, runtime, row, build, output, modes_file, deadlines['work'])
+        row.update(status='INELIGIBLE', functional_status='PASS', proof_status='PASS', completed_operation_count=1,
+                   resource_removal_pending=True, tag='complete original graph, native/public/global census proof and clean close; paid cold inputs and cross-worktree isolation unverified')
+    except BaseException as error:
+        row.update(status='FAIL', functional_status='FAIL', proof_status='FAIL' if proof_start else 'NOT_RUN',
+                   original_failure=str(error), failure_type=type(error).__name__, leaked_mount_keys=dict(active))
+        if runtime is None:
+            runtime = getattr(error, 'event_process', None)
+        if runtime is not None:
+            row['retained_host_custody'] = runtime.retain(error)
+            row['container'] = runtime.container
+    finally:
+        if runtime is not None:
+            for handle in (runtime.selector, runtime.raw, runtime.stderr, getattr(runtime.process, 'stdin', None), getattr(runtime.process, 'stdout', None)):
+                if handle is not None:
+                    try:
+                        handle.close()
+                    except BaseException as error:
+                        row.setdefault('independent_close_failures', []).append(str(error))
+                        row['status'] = 'FAIL'
+        if proof_start is not None:
+            row['proof_wall_ns'] = time.monotonic_ns() - proof_start
+        row['evidence'] = str(output.relative_to(identity.ROOT.resolve()))
+        if deadlines is not None:
+            if time.monotonic() >= deadlines['cleanup']:
+                row.update(status='FAIL', proof_status='FAIL', tag='original complete proof/cleanup deadline reached before publication')
+            row.update(receipts.finalize_guarded(output, row, deadlines['publication'], scope=receipts.HISTORY_PUBLICATION_SCOPE))
+        else:
+            receipts.write_new(output / 'receipt.json', row)
+            receipts.manifest(output)
+    return row
+
+
+def prepare_history_producer(producer_family, producer_case, genesis_prepared_folder, build_folder, fresh_output):
+    """New original producer setup; it never consumes an earlier measured sample."""
+    output = Path(fresh_output).resolve()
+    output.mkdir(parents=True, exist_ok=False)
+    if producer_case.get('branch_schedule'):
+        if producer_case['branch_schedule']['kind'] not in ('compact-convergent', 'compact-descendant'):
+            raise ValueError('access original compact producer required')
+    elif producer_case['id'] not in ('v016-history-boundary-cycle-k100-v1', 'v016-history-namespace-inode-k100-v1'):
+        raise ValueError('original access producer is outside the four frozen dependencies')
+    row = one_family_case(producer_family, producer_case, genesis_prepared_folder, build_folder,
+                          output / 'attempt', preparation_only=True)
+    if row.get('publication_guard'):
+        receipts.acknowledge_guarded(output / 'attempt', row)
+    receipts.verify_manifest(output / 'attempt')
+    original = json.loads((output / 'attempt/receipt.json').read_text())
+    effective = receipts._publication_overlay(output / 'attempt', original, original)
+    if (effective.get('status') == 'FAIL' or effective.get('functional_status') != 'PASS'
+            or effective.get('proof_status') != 'PASS' or effective.get('custody') != 'KNOWN_STOP'
+            or effective.get('cleanup') != 'Gone' or effective.get('setup_only') is not True
+            or effective.get('sample_count') != 0):
+        raise RuntimeError('fresh original producer setup failed; exact resources and attempt receipt retained')
+    initial_prepared = Path(genesis_prepared_folder).resolve()
+    prepared = fixtures.load(initial_prepared, producer_case['fixture']['recipe'])
+    if producer_case.get('branch_schedule'):
+        graph = row['topology']
+        checkpoints = prepared['context_checkpoints']
+    else:
+        initial = next(json.loads(line)['fields'] for line in (output / 'attempt/runtime.events.jsonl').read_text().splitlines()
+                       if json.loads(line)['event'] == 'history_initial_root')
+        records = row['history']['commits']
+        last = records[-1]['commit']['fields']
+        graph = {'branches': {'main': {'branch_id': initial['branch_id'], 'name': initial['name'],
+            'stack': initial['stack'], 'base_layer': initial['base_layer'], 'initial_parent': '-',
+            'initial_root': initial['root'], 'final_head': last['commit_id'], 'final_root': last['root'],
+            'source_role': None, 'source_local': 0, 'commits': records}}}
+        checkpoints = [{**state, 'role': 'main'} for state in prepared['history_states']]
+    transcript = script(output, 'producer-topology.tsv', context_transcript(producer_case,
+        {'context_checkpoints': checkpoints}, graph))
+    normalized = row['closed_store_normalization']
+    sealed = Path(normalized['path'])
+    if any(Path(str(sealed) + suffix).exists() for suffix in ('-wal', '-shm', '-journal')):
+        raise ValueError('closed producer dependency must be a standalone WAL Store')
+    acknowledgements = [{'role': role, 'local': record['index'],
+        'commit_id': record['commit']['fields']['commit_id'], 'layer_stack_id': record['commit']['fields']['stack'],
+        'root_id': record['commit']['fields']['root'],
+        'parent_commit_id': None if record['commit']['fields']['parent'] == '-' else record['commit']['fields']['parent'],
+        'base_layer_id': record['commit']['fields']['base_layer']}
+        for role, branch in graph['branches'].items() for record in branch['commits']]
+    current = row['identity']
+    runtime_events, exported = output / 'attempt/runtime.events.jsonl', output / 'attempt/closed-store-export.completion.json'
+    record = {'schema': 'fs-bench-pro-closed-history-producer-v1', 'status': 'PASS', 'producer_case': producer_case['id'],
+        'producer_family': producer_family, 'source_commit': current['source_commit'], 'source_tree': current['source_tree'],
+        'product_tree': current['product_tree'], 'seed': 1, 'setup_only': True, 'sample_count': 0,
+        'initial_prepared': str(initial_prepared), 'manifest': prepared['provision']['manifest'],
+        'manifest_sha256': identity.sha256(prepared['provision']['manifest']), 'sealed_store': str(sealed),
+        'store_sha256': identity.sha256(sealed), 'transcript': str(transcript), 'transcript_sha256': identity.sha256(transcript),
+        'graph': graph, 'acknowledgements': acknowledgements,
+        'custody': {'state': 'KNOWN_STOP', 'all_workspaces_gone': True, 'active_executions': 0,
+            'active_execution_scope': 'explicit stopped container; no live runtime process; ordinary commands were unregistered',
+            'container': row['container'], 'volume': row['clone']['volume'],
+            'runtime_events': str(runtime_events), 'runtime_events_sha256': identity.sha256(runtime_events),
+            'export_completion': str(exported), 'export_completion_sha256': identity.sha256(exported)},
+        'raw_export': str(output / 'attempt/graph-store'), 'normalization': normalized, 'helpers': prepared['helpers'],
+        'attempt_receipt': str(output / 'attempt/receipt.json'), 'attempt_receipt_sha256': identity.sha256(output / 'attempt/receipt.json'),
+        'attempt_manifest': str(output / 'attempt/manifest.json'), 'attempt_manifest_sha256': identity.sha256(output / 'attempt/manifest.json')}
+    # Known return and authenticated attempt publication precede administration.
+    # Seal the parent dependency after this separate receipt subtree is complete.
+    removal = dispose_family_resources(output / 'attempt', row)
+    record['resource_removal'] = removal
+    record['resource_disposition'] = row.get('resource_disposition', 'UNAVAILABLE')
+    summary = output / 'producer-summary.json'
+    receipts.write_new(summary, record)
+    receipts.manifest(output)
+    record.update(receipt=str(summary), receipt_sha256=identity.sha256(summary))
+    return record
+
+
+def context_numeric_counts(groups, events):
+    """One daemon interval; exact Resources costs across authenticated channels."""
+    decoded = {counts.identity(group): counts.decode(group) for group in groups.values()}
+    if len(decoded) != len(groups):
+        raise ValueError('duplicate original concurrent numeric identity')
+    word_tuple = lambda value: tuple(int(value[index:index + 16], 16) for index in range(0, 64, 16))
+    origins = [event for event in events if event['event'] == 'control_origin']
+    previous, scopes = {}, {}
+    for event in origins:
+        fields = event['fields']
+        channel, scope = str(fields.get('channel', 0)), fields.get('scope')
+        if channel in scopes or scope is None or fields['control_send_records'] != 1:
+            raise ValueError('one explicit Hello origin per authenticated context channel required')
+        scopes[channel], previous[channel] = word_tuple(scope), 1
+    if not scopes or len(set(scopes.values())) != len(scopes):
+        raise ValueError('independent concurrent public observation scopes required')
+    mapped, correlation = set(), []
+    for event in events:
+        fields = event.get('fields', {})
+        if 'control_send_records_before' not in fields:
+            continue
+        before, after = fields['control_send_records_before'], fields['control_send_records_after']
+        channel = str(fields.get('channel', 0))
+        if (channel not in previous or type(before) is not int or type(after) is not int
+                or before != previous[channel] or fields.get('scope') is not None
+                and word_tuple(fields['scope']) != scopes[channel]):
+            raise ValueError('exact per-channel original completed send ranges differ')
+        codes = counts.OPERATIONS.get(event['event'])
+        if codes is None:
+            if event['event'] not in ('fork', 'history_finished') or after != before + 1:
+                raise ValueError('unclassified original context control range')
+            previous[channel] = after
+            continue
+        if after - before != len(codes):
+            raise ValueError('exact successful facade call geometry differs')
+        identities = []
+        for call, code in zip(range(before + 1, after + 1), codes):
+            matches = [key for key, value in decoded.items() if key[1] == scopes[channel]
+                       and key[2] == call and value['operation_tag'] == code]
+            if len(matches) != 1 or matches[0] in mapped:
+                raise ValueError('original context observed call missing, duplicated or substituted')
+            identities.append(matches[0]); mapped.add(matches[0])
+        correlation.append({'event_sequence': event['sequence'], 'event': event['event'],
+                            'key': fields.get('key'), 'channel': channel, 'identities': identities})
+        previous[channel] = after
+    if mapped != set(decoded):
+        raise ValueError('original concurrent numeric groups are not fully acknowledged')
+    mounts = [item for item in correlation if item['event'] == 'mount']
+    ends = [item for item in correlation if item['event'] == 'workspace_status']
+    if not mounts or not ends:
+        raise ValueError('prospective whole-graph mount/status counter endpoints unavailable')
+    begin, end = mounts[0], ends[-1]
+    first, last = decoded[begin['identities'][-1]], decoded[end['identities'][-1]]
+    if first['identity'][0] != last['identity'][0] or begin['event_sequence'] >= end['event_sequence']:
+        raise ValueError('exact whole-graph daemon/counter endpoint order differs')
+    interval = [decoded[key] for item in correlation if begin['event_sequence'] < item['event_sequence'] <= end['event_sequence']
+                for key in item['identities']]
+    if not interval or any(not row.get('observer', {}).get('completion_available') for row in interval):
+        raise ValueError('exact completed Resources cost of every concurrent observer required')
+    raw_owner = counts.difference(first['owner'], last['owner'], ('admitted',))['admitted']
+    sql = [counts.difference(left, right, ('executions',))['executions']
+           for left, right in zip(first['sql_foreground'], last['sql_foreground'])]
+    observer_sql = sum(row['observer']['sql']['executions'] for row in interval)
+    if raw_owner < len(interval) or sql[0] < observer_sql:
+        raise ValueError('exact observer costs exceed original whole-daemon cumulative delta')
+    # Kernel counters belong to individual mount connections, not the daemon.
+    # Each last acknowledged Unmount snapshot retains that connection's totals.
+    kernel = []
+    owners = set()
+    for item in correlation:
+        if item['event'] != 'unmount':
+            continue
+        value = decoded[item['identities'][-1]]
+        native, opcodes = value.get('native'), value.get('opcodes')
+        if native is None or opcodes is None or native['owner_id'] in owners:
+            raise ValueError('distinct terminal mount opcode snapshots unavailable')
+        rows = opcodes['by_opcode']
+        if any(type(number) is not int or number == 2**64 - 1 for number in rows):
+            raise ValueError('original mount opcode counter saturated/unavailable')
+        owners.add(native['owner_id']); kernel.append({'key': item['key'], 'native_owner_id': native['owner_id'], 'requests': sum(rows)})
+    if len(kernel) != len(mounts):
+        raise ValueError('every measured connection terminal request census required')
+    totals = {'requests': sum(row['requests'] for row in kernel), 'owner_jobs': raw_owner - len(interval),
+              'statements': sum(sql) - observer_sql}
+    return {'totals': totals, 'scope': 'one daemon cumulative first-ready to last measured Status interval; every acknowledged channel Resources cost subtracted exactly once; per-connection terminal opcode totals include original witness/reopen',
+            'raw': {'owner_jobs': raw_owner, 'statement_executions_by_family': sql},
+            'observer': {'jobs': len(interval), 'statement_executions': observer_sql},
+            'kernel_connections': kernel, 'correlation': correlation,
+            'endpoints': {'before': begin, 'end': end}, 'source': counts.SCHEMA_SOURCE}

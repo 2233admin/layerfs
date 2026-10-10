@@ -81,6 +81,8 @@ comparison or release-admission claim. Durable is
 | 50 | Bind an external watchdog failure in a separate administrative closure when the original driver cannot publish a complete product receipt | The outer 120 s stop interrupted the attempt after actual Commits; no terminal, complete timing, final count/storage or publication witness can be manufactured | Inventing a complete receipt, calling the attempted case NOT_RUN, or retrying the unchanged schedule |
 
 | 51 | Correct P-2: the original historical-access driver already forks a separate selected-Commit Branch before mounting | Frozen v016_access.rs344–350/396–403 directly show that route; current ForkSource::Commit preserves the same topology and zero-copy ancestry | Calling the existing access Branch an extra new operation or adding a direct Commit-bind feature |
+| 52 | Build historical access from new setup-only full original producers; reuse immutable genesis inputs, never measured samples | Original access consumes a complete closed producer; sample0 and explicit setup custody keep phases distinct | Reusing a mutated measured Store or initializing only the selected ancestor |
+| 53 | Use explicit anchored32-record public SDK History pages and authenticated continuation artifacts | Existing native bridge HISTORY_WINDOW is32, while provider Page allows128; pagination expresses every original ancestry without a product feature or refusal/retry | Sending128, raising a product cap, truncating ancestry or classifying an expressible case not-applicable |
 
 ## Bugs
 
@@ -3987,4 +3989,93 @@ retain their disjoint ownership. P1/public SDK/Linux/actual cases remain pending
 Durable stays NOT_RUN — disabled by owner until explicit reauthorization.
 
 | `19a6dbf79` (worker) | Add exact contextual fixture/prepared-member and discard admission;25 final tests pass | 79370 | 79370 | +0 |
-| This commit | Integrate qualified contextual fixture admission | 79370 | 79370 | +0 |
+| `4f7760944` | Integrate qualified contextual fixture admission | 79370 | 79370 | +0 |
+
+
+### Batch 5 controller and native Discard authoring, 2026-10-11
+
+Root added role-local context choreography to the existing workspace engine and
+a native prepared Discard-witness CLI to the existing recipe. The controller
+uses exactly one original SDK write/acknowledgement per request. It preserves
+original names, all role-local command/Commit order, historical Fork ancestry,
+actual one-start-barrier concurrent rounds, explicit A witness/Discard/reopen
+with B already published, cumulative actual role-separated directory modes,
+selected native checkpoints, public SDK History records and full topology TSV.
+Individual public spans retain the original summed-call clock; actual external
+whole-graph wall and different-worker Commit overlap coverage remain separate.
+No stage6 hold, skip body, per-step barrier or invented overlap threshold is
+added. Unknown paid cache inputs keep numeric observations INELIGIBLE.
+
+Original batch5 performance and verification work/reserve/hard limits are
+validated without enlargement. The native witness derives the frozen original
+refresh-cohort member and256-byte content during setup, seals descriptor/payload
+hashes, and refuses branch/four-worker or non-fresh outputs. Explicit
+preparation_only controller mode creates no measurement claim and reports
+sample0/setup-only; a fresh full producer's exact ACK graph, End/Gone/KnownStop,
+closed export/normalization and proof become an immutable access dependency.
+It never consumes an earlier measured sample or creates a selected-root-only
+Store. Callback and runtime composition remain source-level work; no actual
+producer or case has run. Concurrent exact counter attribution is currently
+UNAVAILABLE with actual raw numeric groups retained, rather than duplicated
+daemon cumulative deltas. This gap remains open before actual collection.
+
+Native recipe compiled first in4,958,997,625 ns. Six new controller checks
+passed once in the initial seven-test invocation, which FAILED the new witness
+test in2.688 s, complete3,008,966,583 ns. The new test incorrectly assumed
+`data/`; frozen v016_common.rs136–153,298–357 uses dNNN/fNNNNN and pool-base
+ceil((files-1120)/100). The corrected test requires exactd039/f00064 and
+d289/f00064, preserving all schema/byte/hash/freshness/refusal assertions.
+Only that changed failed test reran and passed in0.128 s, complete401,164,583 ns;
+all six unchanged checks were reused. Thirty-three owning legacy controller/
+driver/workspace/native-receipt checks passed once in0.362 s, complete
+674,988,167 ns. All build/test commands had explicit120 s stops and serialized
+main locks; scoped rustfmt used skip_children. No product or frozen source
+changed. The native recipe bytes were unchanged by the test correction.
+
+Raw receipts remain under
+`benchmark-results/fs-bench-pro/2026-10-11-context-controller-native-qualification`;
+qualification SHA-256ad0fa2314d22b70b313ef01a03a94aa4772998911672fec28046d707999849bc.
+The retained failure is authoring evidence, not a benchmark or product result.
+Shared runtime/oracle integration, final sealed Linux build, real P1/P2 SDK
+covering proof, historical preparation/admission, parity and all17 cases remain
+pending. No source-level test is represented as mounted or Linux qualification.
+
+| This commit | Add scoped context controller, fresh producer callback and original prepared witness CLI | 79370 | 79370 | +0 |
+
+
+Source review before any P1 call found that the current provider supports
+Page1..128 but the existing native bridge's HISTORY_WINDOW is32. The prospective
+controller128 request was corrected to explicit anchored32-record SDK pages,
+with exact page counts, original head/tuple order toEOF, opaque continuation
+file hash/byte checks and no repeated or non-progressing cursor. This changes
+transport page geometry, not the original workload or ancestry coverage. No
+128-record live request, refusal, retry or product cap change occurred. One
+new owning page/negative-tamper test passed once in295,632,917 ns under120 s.
+It supplements the unchanged earlier controller qualifications; no passing
+check replayed. Its separate authoring qualification is
+`benchmark-results/fs-bench-pro/2026-10-11-context-history-pagination-qualification`,
+SHA-256c5cf8e4759ad7abbb89bfedae731d11bca35c0086ffdf7c8081092c0a65ed8e2.
+The four newly written test artifacts were relocated unchanged from the earlier
+authoring folder before sealing this addition; raw invocation path strings
+retain their original locations. The earlier sealed authoring manifest remains
+byte-identical and verifies; the new manifest binds the relocated exact bytes.
+
+The producer callback seals its parent dependency after the separate owned
+passing-resource administration subtree is complete, keeping all evidence
+hashes stable. Uncertainty still retains resources. Public runtime composition
+and every real producer/case operation remain NOT_RUN.
+
+
+Concurrent counter pricing is now authored with a separate narrow qualification.
+It uses one shared daemon cumulative first-ready/last-measured-Status delta,
+correlates every actual observed SDK range by authenticated channel scope/call,
+accounts for unobserved original Fork/History sends, subtracts every completed
+Resources observer cost exactly once, and retains distinct terminal mount
+opcode totals. It never sums a shared daemon delta per worker. Missing,
+ambiguous, saturated or non-terminal evidence still yields UNAVAILABLE with
+raw groups/reason retained; actual native snapshot availability remains
+unverified until the case receipts exist. Three owning arithmetic/rejection
+tests passed once under120 s, including missing-group/shared-scope, duplicate
+terminal-owner and missing-observer failures. Qualification is
+`benchmark-results/fs-bench-pro/2026-10-11-context-concurrent-count-qualification`;
+no real daemon counter or case qualification is claimed.

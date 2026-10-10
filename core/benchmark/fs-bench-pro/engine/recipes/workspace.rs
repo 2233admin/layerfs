@@ -245,8 +245,56 @@ fn materialize_context(id: &str, role: &str, step: usize, root: &Path) -> refere
     Ok(())
 }
 
+fn prepare_context_discard(id: &str, folder: &Path) -> reference::Result<()> {
+    use reference::{dedup_workloads, v016_common as v016, v016_stages as stages};
+    let case = stages::mixed_case(id)?.ok_or("original two-worker case required")?;
+    if case.topology != stages::Topology::Concurrent || folder.exists() {
+        return Err("fresh original two-worker discard witness required".into());
+    }
+    let tier = if case.tier == "L100" {
+        &v016::L100
+    } else {
+        &v016::L500
+    };
+    let fixture = v016::load_fixture(tier, 1)?;
+    let path = fixture
+        .roles
+        .refresh_pool
+        .get(v016::REFRESH_FILES_PER_COHORT)
+        .ok_or("original refresh-cohort discard witness missing")?;
+    let content = dedup_workloads::content(
+        v016::FAMILY_MIXED,
+        "v016-discard",
+        1,
+        0,
+        "discarded-mutation",
+        256,
+    )?;
+    let mut bytes = Vec::new();
+    content.write_to(&mut bytes)?;
+    if bytes.len() != 256 {
+        return Err("original discard witness length differs".into());
+    }
+    let hex = bytes
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    let body = format!("original-context-discard-witness-v1\n{id}\t0\t{path}\t{hex}\n");
+    fs::create_dir(folder)?;
+    fs::write(folder.join("witness.tsv"), &body)?;
+    let payload_digest = reference::sdk_edit_common::sha256_hex(&bytes);
+    let descriptor_digest = reference::sdk_edit_common::sha256_hex(body.as_bytes());
+    println!("{{\"case\":\"{id}\",\"role\":\"0\",\"path\":\"{path}\",\"bytes\":256,\"payload_sha256\":\"{payload_digest}\",\"descriptor_sha256\":\"{descriptor_digest}\"}}");
+    Ok(())
+}
+
 fn main() -> reference::Result<()> {
     let args: Vec<_> = std::env::args().collect();
+    if let [_, mode, id, folder] = args.as_slice() {
+        if mode == "prepare-context-discard" {
+            return prepare_context_discard(id, Path::new(folder));
+        }
+    }
     if let [_, mode, id, role, step, root] = args.as_slice() {
         if mode == "materialize-context" {
             return materialize_context(id, role, step.parse()?, Path::new(root));
