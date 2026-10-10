@@ -24,7 +24,7 @@ comparison or release-admission claim. Durable is
 | 4 History on one branch | CLOSED WITH FAILURES: all 43 original cases ported and recorded; 31 functional/proof/clean-close passes, 11 retained actual failures, one failed preparation with actual NOT_RUN; mixed aggregate parity FAIL retained under section 9 exception; no identified fixable product correctness bug remains | H11 2b52bdf17; H12 ea7148a19; H13 8ae040cdd; H14 e09c61bbd; product H15 a05ed6027; H16 9dfb70ee4; fresh seal3c67e9249; affected Init8f24e39a4; boundary88a2bd27b; partial bd3016957; mixed1a21ebfc3; dedup closure27708c11d | Begin batch 5 after this committed failed closure; verify existing public SDK Fork and History |
 | 5 Branches and Workspaces | CLOSED WITH FAILURES: all17 original cases ported/recorded; eight functional/proof/clean-close passes, eight actual concurrent refusal failures, one failed-preparation actual NOT_RUN; branch aggregate parity FAIL retained under section9 | SDK proof711593c5f; H21/22 4a40fb690; setup exceptionc23ac0cfd; H23 68209bdb7; H24 669bc4853; H25 2f7160c92; H26 616947cb6; branch305bee680; multicb3a003ac; historicalb0b2cd386 | Begin batch6 under this truthful failed closure, preserving all original failures/limits/proofs/resources |
 | 6 Dedup and storage | CLOSED WITH FAILURES: all54 original cases ported/recorded;45 functional/proof/clean-close passes (44 numericINELIGIBLE, one verification-onlyPASS),8 failed outcomes, one failed-preparation actualNOT_RUN; repository aggregateparityFAIL undersection9; no identified fixable product correctness cause remains | definitions77eb/63ff/a442/5505/55a3; support86ba/149d; H28 1cc; H30/31 082; H32 0a8; H33 fe205; footprint8b684a3b1; reuse4d725864f; crossad21161eb; CDC79ad08b2a; H34 08e1; H35 fad966f7e; repositoryoldf8752231d / this closure | Begin batch7 at this committed truthful failure closure; preserve all limits, failed/ineligible/unrun rows and exact resources |
-| 7 Reliability | PENDING | — | Wait for batch 6 completion |
+| 7 Reliability | IN_PROGRESS: all28 original definitions reviewed;26 source-backed not-applicable, two early descendant-integrity proofs ported for faithful controller qualification | Metadata this commit; batch6 closure359c3c7d0 | Qualify exact initial fixture/fault/provider/native/cleanup proofs; run each expressible integrity case once |
 
 ## Decisions
 | Number | What | Why | Alternative |
@@ -106,6 +106,9 @@ comparison or release-admission claim. Durable is
 | 69 | Retain original repository staging15s setup ceiling and failed-copy custody, then run the distinct smaller profile unchanged | Staging is separate harness setup before measured state operations; changing its timeout after the miss would fit a failure. Original300s per-state operation declaration and owner120s whole-test stop remain distinct | Enlarge setup timeout, remove checkpoint assets, replay stride3 or infer completion from partial copy |
 | 70 | Extend the existing failed-preparation closure to repository deepseek-full in a spec-only commit | The unchanged120s preparation expired before sealed input existed; no honest actual sample can run. General closure already applies the same rule to retained batch4/5 failures | Retry/widen preparation, sample partial fixture or claim passing done-when |
 | 71 | Report the authenticated failed-preparation administrative record as actual caseNOT_RUN, preserving original preparationFAIL | No actual case or proof operation occurred; section6.1 status must describe the case rather than its preparation. Strict zeroattempt/source/schema/metrics guards prevent masking attempted failures | Treat preparation as an actual sampleFAIL or discard its failed receipt |
+| 72 | Classify26 complete reliability cases not-applicable while retaining their original schedules and guards; port only the two original early integrity paths | Originalrun:413/live:175 unconditionally requires current and mutation-event peak physical per-Workspace allocation Some/errors0/both≤2GiB; current shared-overlay public accounting lacks these axes. Integrity paths360–385 bypass that call in the original source | Add observability features, substitute logical/shared/sampled counters, or claim partial primitive proof as full-casePASS |
+| 73 | Reuse no whole reliability-case proof; source-review all28 and independently qualify the two expressible current-format cases | Exact closed receipt review found0 scope-identical whole current-case proofs; earlier150round receipts are not500Exec/600s and do not cover the frozen complete fixture/physical guards | Widen closedR8 receipts or relabel released v0.1.5 proof as current-source evidence |
+| 74 | Preserve actual owned named-file and runtime-file zero guards, exact namespace-row release and≤2GiB backing boundaries separately for the early integrity paths | Current overlay is shared per daemon; shared file persists beyond Workspace release. Source-backed exhaustive named ownership and actual observations are required; missing coverage fails full proof, never guessed zero. Per-Workspace physical peak remainsUNAVAILABLE | Equate Gone or zero SQL rows with zero shared-file size, omit cleanup, or replace canonical corruption with compressed-frame damage |
 
 ## Bugs
 
@@ -6227,3 +6230,51 @@ batch7 under the unchanged iteration rules; it is not passing release evidence.
 | This commit | Record repaired repository attempt and close all54 batch6 selections | 79370 | 79370 | +0 |
 Pinned absent-aware staged counter/exact tree confirmation; reference absent,
 retiredR9c, last65,417/tree498dd1917812.
+
+
+### Batch7 original reliability metadata admission, 2026-10-11
+
+This commit ports all28 original IDs/order/registrations/reference rows.26
+complete cases are source-backednot-applicable, with a precise reason, needs,
+original action/state/ordinal/checkpoint/fault schedule and unchanged physical
+guards. Their initial live proof unconditionally callsphysical_state; the
+current product cannot express exact per-Workspace physical current and
+mutation-event aggregate peak. No new product feature is selected. Other
+per-case retired API gaps remain recorded rather than masked by a shared reason.
+The two descendant-integrity paths bypass that guard in the original driver,
+so their exact initial/fault/detection/cleanup schedules remain ported and await
+controller/build/parity/native qualification. They makezeroCommits. The native
+fixture contains23entries includingroot,22non-root,9directories includingroot,
+9regularfiles,1hardlinkname,4symlinks and1MiB original nominal logicalbytes.
+
+The thin shell executes the unchanged original native initial verifier or
+read-corrupt helper only from the controller-authenticated absolute mount
+root. All26not-applicable routes refuse before helper execution. No SQL,
+workload alteration, additional family, product/dependency change or actual
+proof attempt is in this metadata commit. Every case isverification-only,
+sample0; each expressible proof getsoneattempt. Original45swork/4scleanup
+reserve/59spublication/.25sguard/owner120sceiling and2CPU/2GiB/no-swap/256PID
+plusnamed-spool2GiB/zero-final-ownedfiles guards stay explicit.
+
+Imported owned metadata handoffSHA446b76e2f5d7ccd530e6b661b7011c43b176ecfaff42eaaebdc89f4324e18679
+from the tiny private worktree, patchSHAe7ebb46514b1ef347b60f6e5d2efa0c5d86574450eb29751699170cbd6bc5482.
+family.jsonSHAcd2caba87ef9f68fbde94d4ec29730c0dad76a0c683eda03eb1939ee55c33589;
+workload.shSHA7f71ee98b102aebf0c9baa0f10d912f8ba1975f2df15625f3a332923a4ff2060;
+owning externaltestsSHA c8b74428d20a65462a4f53a6adbd8a4fe182ba1bf91e6c5b2b797dabf9e38f5b.
+Private pending/missing-shell expectedRED162,500,084ns is retained, finalsyntax
+PASS18,275,958ns and5checksPASS1,481,015,375ns. Root final imported5owning
+metadata/shellchecksPASS1,418,374,583ns underR4explicit120s. Raw exact command,
+exit andstreams:benchmark-results/fs-bench-pro/2026-10-11-b7-main-metadata-checks/check.json.
+These are metadata/fake-helper checks, not native/product proof.
+
+Independent whole-case reuse reviewSHA0e107fbc472ab655611b285396800206e9f4f37e11169e4d73b600905e321db6
+finds0exact whole current-case reuse; frozen release has27PASS plus sustained
+600sNOT_RUN_OPTIONAL, which remain reference observations only. Original27/28
+receipt paths absent locally cannot authorize a current proof. R8 completion
+records/registrations/receipts remain untouched.
+
+| Commit | Purpose | Production before | after | delta |
+| --- | --- | --- | --- | --- |
+| This commit | Port original reliability schedules and source-backed applicability | 79370 | 79370 | +0 |
+Pinned absent-aware staged counter/exact tree confirmation; reference absent,
+retiredR9c,last65,417/tree498dd1917812.
