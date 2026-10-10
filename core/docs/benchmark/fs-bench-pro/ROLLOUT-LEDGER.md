@@ -99,6 +99,9 @@ comparison or release-admission claim. Durable is
 | 63 | Preserve legacy seven-key administrative removal identities; authenticate declared extra containers and exact partial custody separately | Repository proof uses two owned runtimes on one sample volume; incomplete removal must not rewrite original case verdicts or imply both resources retained | Always append absent optional fields or delete volume after uncertain extra-container removal |
 | 64 | Observe actual owned host PID sampled RSS and expanded reaped-child swap/CPU/IO scope, with unavailable final values until known wait | Original import/repository RSS and zero-swap guards remain, macOS exposes child-aggregate usage rather than an exact native-specific counter | Use lifetime peaks, inferred zero, descendant-free claims or absent after values as PASS |
 
+| 65 | Keep the actual sealed public Init result alive across an interactive installation boundary, using the existing public install API | A host Init manifest intentionally lacks daemon_sqlite; byte copying cannot qualify installation. Init ACK ends its paid phase before original verification-only installation | Fabricate daemon metadata, reopen Init or weaken startup installation guard |
+| 66 | Add original family subdirectory for newly recorded parallel runs sharing one source commit | Explicit owner parallel authorization allows several independently registered families at the same clean source; section6.1 fixed filenames otherwise collide | Overwrite reports, invent a source identity, or alter closed run paths |
+
 ## Bugs
 
 | Bug | Case | Symptom | Cause | Fix commit | External test |
@@ -5328,9 +5331,53 @@ unchanged in raw receipts. No product change, new dependency or speed work.
 | Workerb4cebee1a | Repository actual runtime guard hooks | 79370 | 79370 | +0 |
 | Worker19b7de1a4 | Exact optional multi-runtime cleanup custody | 79370 | 79370 | +0 |
 | Workerf661cb4a5 | Optional short-command zero-swap guard | 79370 | 79370 | +0 |
-| This commit | Shared batch6 preparation/controller/receipt machinery | 79370 | 79370 | +0 |
+| 149d40bac | Shared batch6 preparation/controller/receipt machinery | 79370 | 79370 | +0 |
 
 Pinned absent-aware staged counter, identical first-parent/final product scope;
 reference absent (retired R9c, last65,417/tree498dd1917812). Full9 clean source
 build and actual parity/sample/cleanup/results remain next, with shared host/
 Docker VM/protected and retained failed services interference unquantified.
+
+
+### Parallel report path correction, 2026-10-11
+
+Owner explicitly authorized simultaneous family execution in separate worktrees.
+Section6.1 previously put every run at date/commit only, so independently
+registered families at149d40bac would collide. Decision66 amends only the new
+run path to baselines/core/<date>-<commit>/<original-family>/; the two CSV
+names and schemas stay exact, and all historical run directories are unchanged.
+This is its own specification/documentation commit before new CSV integration.
+Production79370->79370(+0), active core9ac unchanged, reference absent/retiredR9c
+last65,417/tree498dd1917812, pinned absent-aware staged counter/tree confirmation.
+
+Native nine-asset build at clean149d40bac passed; build.json SHA-256
+0dde333de6c3b8703473d43abc670d52d4df2baabddd232080b22f052baeb431.
+All1335 compiled source pins checked inside the pinned Linux image before and
+after build. Host release143,799,584ns (final no-run cache reused), Linux
+25,898,355,750ns; compiler stops120s, serialized build-only outer240s.
+Runtime9b03fcdc39bfe1c921131df247d7d77cf254bd8de03ed716b5fdd3fc38c30dd3;
+daemon unchangedaa9de24f0ba916c0ac483f8e559d9d6986dfe4296f4d26a829801a1cb7e4ffd4.
+Passing build container removed; OWNER-3 exact two passthrough checker refusals
+remain FAIL, no provenance PASS is claimed. Durable execution remains disabled.
+
+H-28 (harness, fix IN_PROGRESS): first cross anchor and all6 original footprint
+attempts at149d40bac fail before daemon readiness, exact43-byte stderr
+"daemon I/O: existing installation metadata". Host Init correctly produces
+manifest.daemon_sqlite=None; the new fresh source-only installation route byte
+copied it without public install qualification. Installer SHA/root0:0/0700/0600
+readbacks passed, so this is not a permission/product bug. No startup guard,
+profile, workload, timeout or test is weakened. Decision65 uses the exact actual
+SealedProject with existing public ProjectApi install, preserving the paid Init
+ACK boundary. Capped owns native mode and Tiny import controller; Root footprint.
+
+Cross has1FAIL+9NOT_RUN, all10 native preparations and parity PASS. CDC has18
+native preparations PASS, remaining3/preparation and all21 actual cases NOT_RUN.
+Reuse initial4 preparation PASS and installed metadata are source-backed
+unaffected; its hold is released, while future fresh import sampling stays held.
+The Root footprint orchestration already continued through its6 distinct cases
+before receiving the shared diagnosis; all6 single-attempt failed receipts are
+retained, with no unchanged rerun. No product fix or passing case is claimed.
+Failed resources remain retained; exact all7 container/volume pairs and both
+original CSV pairs are recorded in the following result integration commit.
+
+| This commit | Correct parallel result directory in specification | 79370 | 79370 | +0 |

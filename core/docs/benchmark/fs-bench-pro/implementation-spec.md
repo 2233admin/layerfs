@@ -253,8 +253,11 @@ sampled repeatedly to manufacture equality.
 ### 6.1 Result format
 
 `bench.py report` writes two CSV files per recorded run into
-`baselines/core/<date>-<commit>/`. They are generated from the receipts and
-never filled by hand. The columns extend the v0.1.6 release tables
+`baselines/core/<date>-<commit>/<family>/` for new parallel-family runs.
+The original family name separates recorded runs that share one clean source
+commit; otherwise two independent reports would collide on the same filenames.
+Already recorded run directories retain their original paths and contents.
+They are generated from the receipts and never filled by hand. The columns extend the v0.1.6 release tables
 (`release-notes/0.1.6/derive_tables.py`) with the phase split, the counts and
 the reference columns of the v0.1.5 table. Times are raw nanoseconds.
 
