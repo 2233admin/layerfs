@@ -120,7 +120,7 @@ comparison or release-admission claim. Durable is
 
 | H-23 (harness) | First historical boundary-before at c6ec3e467 | Sandbox Listener EOF before readiness or mount; exact daemon stderr private directory ownership/mode/type | Historical installer conflated Workspace source UID501:20 with daemon backing UID0:0 and retained file0644 | `68209bdb7` | External installer regression fails at parent; final39 covering checks and wrong-owner/mode refusal variants PASS; old actual failure/resources retained |
 
-| H-24 (harness/reporting) | Failed concurrent branch and multi rounds | CSV reader copied initialized0 command/Commit/unmount totals despite observed partial work | Controller fails before accumulating a whole round; reporter treated all phase values as complete case metrics | This commit | Parent external report tests fail; final13 custody/report checks PASS; retained sealed actual rows read without changing receipts |
+| H-24 (harness/reporting) | Failed concurrent branch and multi rounds | CSV reader copied initialized0 command/Commit/unmount totals despite observed partial work | Controller fails before accumulating a whole round; reporter treated all phase values as complete case metrics | `669bc4853` | Parent external report tests fail; final13 custody/report checks PASS; retained sealed actual rows read without changing receipts |
 
 H-1 and H-2 are harness faults, not product correctness or performance defects.
 The original file-identity checker remains intact; no product source changed.
@@ -4619,4 +4619,37 @@ Full final family pairs and exact case/resource metrics remain to integrate.
 Historical H23 fresh preparations are in progress atc79eb607f; actual new
 accesses await allsix unchanged parity checks. Batch6/7 stay pending.
 
-| This commit | Withhold uncompleted context phase totals without altering retained outcomes | 79370 | 79370 | +0 |
+| `669bc4853` | Withhold uncompleted context phase totals without altering retained outcomes | 79370 | 79370 | +0 |
+
+
+### Batch 5 historical pre-fix failed cohort retained, 2026-10-11
+
+Imported exactly the worker54dee04c6 two CSV files at
+baselines/core/2026-10-11-c6ec3e467. Each has allsix original access IDs.
+Performance fields are N/A by the frozen verification-only contract.
+Verification contains original boundary-before FAIL, diagnostic complete
+proof-attempt wall2,896,690,000 ns, sample0/proofattempt1, and the otherfive
+NOT_RUN because the new installer cause was diagnosed before invoking them.
+No mount, reader, Commit, native proof, cleanup or KnownStop is credited.
+Original overall FAIL and full exact listener error remain in both tags.
+
+Pair SHA-256: performance2dd2de54e58afdd10aa2e64ff8f5f40f94e0220d23e3cf892a96226d8fe3bb19;
+verification74e3002b6f8770c3b769f6185436dee71350806a2b6822e75b1de44e87f298f4.
+Owning initial-failure-handoff.json SHA-256
+4cd214d6ccb2951240bca4a0fc8f9bbf14ffb68373ae2a37391e17235e38427b
+in the tiny-file worktree2026-10-11-historical-access-af7dbdd3c folder binds
+every preparation, four complete original producer graphs, source/build,
+failed runtime startup, separate read-only diagnosis and exact retained
+container4891bb1c3fa69f0103c187219108c4ff2dab86c48fa972c925d5f0787bb66a37
+and volumelayerfs-fsb-sample-1dc1bc4c39e947b6. Older prepared inputs/masters
+remain unchanged and are not promoted by H23.
+
+Worker preparation/actual execution source atc6ec3e467 is preserved;
+reporting commit54dee04c6 and this import add no source/product behavior.
+H23 correction68209bdb7 is synced to privatec79eb607f; six new independent
+private-backed masters are prepared via exact closed setup reuse. New cohort
+is separate and still pending actual results. The failed pair is history,
+never overwritten or relabeled. No batch closure is claimed at this commit.
+
+| `54dee04c6` (worker) | Retain historical failed startup and five unrun selections | 79370 | 79370 | +0 |
+| This commit | Import exact historical pre-fix failed-cohort CSV pair | 79370 | 79370 | +0 |
