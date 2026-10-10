@@ -19,7 +19,7 @@ comparison or release-admission claim. Durable is
 | 0.3 Case catalogue | COMPLETE | `f182e9a63`; prerequisite correction `30b798192` | Stage 0.4 reproducible engine |
 | 0.4 Reproducible engine | CLOSED: functional proof complete; exact reproduction FAILED C10/C12 | Cell-route correction `bb8e07df8`; build support `c496025fc`; oracle support `7a27a4f26`; fixture support `516c2f009`; workspace/report support `358eca082`; cleanup-observer correction `a1f2c259c` | Begin batch 1 under failed-reproduction closure recorded below |
 | 1 Pilot | COMPLETE: 36 functional/proof/clean-close passes; 7 numeric PASS, 29 INELIGIBLE | Init `c1d7dd0e8`/`39bbcbd6b`; payload `200f81493`/`c1d9b6c58`; parallel routing `b3c96ecb1`; tiny `36849bcc2`/`d6e0ef952`; namespace `98b14b233`/`be1f56a23`; H-2 fix `222526fa0`; closure `d4314ed62`; membership supplement `cca598d0b` | Batch 2, retaining original receipts plus exhaustive membership supplement |
-| 2 Edits | IN_PROGRESS: canonical 12 and preserving 12 closed; capped 5 closed (2 functional passes, 3 watchdog failures); changing sampling; small-delta authoring | Model `e2840c270`; writer `8dd9d99a8`; graph `37ec6826b`; cache `98b6b7260`; routing `ac7beb4dd`; seal/audit `cca598d0b`; reuse `849b0aff1`; canonical `a34b5d44b` / this commit | Integrate the two completed workers, finish changing and small-delta; no batch 3 |
+| 2 Edits | IN_PROGRESS: canonical 12 and preserving 12 closed; capped 5 closed (2 functional passes, 3 watchdog failures); changing 32 closed (12 strict passes, 20 retention failures); small-delta authoring | Model `e2840c270`; writer `8dd9d99a8`; graph `37ec6826b`; cache `98b6b7260`; routing `ac7beb4dd`; seal/audit `cca598d0b`; reuse `849b0aff1`; canonical `a34b5d44b` / this commit | Integrate the two completed workers, finish changing and small-delta; no batch 3 |
 | 3 Trees and tools | PENDING | — | Wait for batch 2 completion |
 | 4 History on one branch | PENDING | — | Wait for batch 3 completion |
 | 5 Branches and Workspaces | PENDING | — | Wait for batch 4; verify existing P-1 SDK methods |
@@ -1494,4 +1494,108 @@ No product source change, no optimization or CI/Clippy claim. Production LOC
 (retired R9c; last counted 65,417).
 
 | `0ba775db9` (worker) | Record five capped outcomes, including three unchanged watchdog failures | 79366 | 79366 | +0 |
-| This commit | Integrate capped closure and preserve every failed resource/case | 79366 | 79366 | +0 |
+| `4d8ccfc93` | Integrate capped closure and preserve every failed resource/case | 79366 | 79366 | +0 |
+
+
+Changing family integration: prospective declaration `d5336c13b` and result
+`b4ef6e208` imported onto main; local shared reuse `6fee225f4` is equivalent to
+main's already integrated patch, not applied twice. Actual sample source stays
+`6fee225f419ab019245592668300d693df88015a` in the retained worktree. All 32
+original cases have sample/attempt/completed count exactly one, mounted full
+native byte proof PASS, all mounts Gone and known runtime Stop. Twelve strict
+persisted proofs PASS: append, truncate-tail and zero-extension at all four
+sizes. Their passing sample resources are removed. Twenty strict proofs FAIL:
+insert-middle, delete-middle, prepend, grow replacement and shrink replacement
+at all four original sizes. All retain the unchanged payload-ID subset guard;
+no checker is relaxed, operation replayed or product changed. Actual CSV status
+is 12 INELIGIBLE plus 20 FAIL; all 32 cache predicates independently remain
+INELIGIBLE for unavailable pre-Commit own-write cold evidence.
+
+The maximum complete wall 12,772,310,459 ns and proof 11,821,126,209 ns remain
+WITHIN unchanged 15,000,000,000 / 45,000,000,000 ns limits. Every case's exact
+phase wall/count/storage observations are generated in the two 32-row CSVs
+under baselines/core/2026-10-10-6fee225f4/. Failures keep completed measured
+counts/storage collected once after known Stop, without replacing or replaying
+the failed graph proof. No speed, storage or reference comparison verdict.
+
+All twenty failures have independent copied-export public authenticated mapping
+audits. Every acknowledged root matches, every complete mapping total is valid,
+and every missing required old ID lies in the region actually overwritten by
+the ordinary suffix-shifting writer; none is wholly before the actual write
+start. Old SDK insertion/deletion was a semantic reference splice, whereas P-3
+ordinary writes normalize into final-offset overwrite plus a tail adjustment.
+Rechunking of actually modified capture therefore can replace old payload IDs
+while exact logical bytes remain correct. This is an unsupported old SDK
+physical-retention property on the authorized ordinary surface; no current
+byte/refusal/publication/crash/hang defect is established. Restoring a splice
+feature or changing construction for storage/speed is outside this iteration.
+The strict original failures stay visible and closed, without a product fix.
+
+First 1 MiB insertion example: inode serial 2 preserved, exact final length
+1,052,672; mapping 54 -> 56 extents; three old IDs absent at
+[532242,551701), [551701,567642), [1039075,1048576). Actual ordinary write
+range [524288,1052672) becomes overwrite [524288,1048576) and tail insert
+[1048576,1052672). Final root equals the exact acknowledged Commit. All native
+and current persisted bytes/table membership were checked before the strict
+retention guard rejected it. Original receipt/export hashes remain unchanged.
+
+Raw root, containing handoff.json, retention-scope-analysis.json and current
+resource observations:
+/Users/yifanxu/.codex/worktrees/fs-bench-pro-namespace-mutation/layerfs/
+benchmark-results/fs-bench-pro/2026-10-10-batch-2-changing-6fee225f4/.
+One offline diagnostic assumed a case-local installed.manifest despite reuse
+and failed FileNotFound before Store reads. Failed diagnostic is retained; a
+new copied-export audit used the original graph command's exact manifest path.
+No measured case or original export was replayed/mutated. Root's initial
+handoff inspection treated an integer retained-resource count as an array and
+failed TypeError; reading the documented resources list corrected inspection,
+without changing results or resources.
+
+All 32 preparations/parity PASS before the first sample: six exact immutable
+initial masters, 26 validated reuse records, independent sample byte clones.
+All 32 copy helpers and six provisioning helpers removed with original receipts;
+12 passing sample pairs removed. Twenty failed sample pairs retained, known
+Stop plus independent read-only Docker observation of stopped state. No mounts
+remain in these failed cases; their actual Gone boundaries are preserved.
+
+| Exact failed original case (retention property unsupported) | Retained sample volume | Retained stopped container |
+| --- | --- | --- |
+| insert-middle-4k-on-1mib-ops-1 | layerfs-fsb-sample-948436f3f23c4906 | 2f3211741fe6571ec6b2a56b377881b02ed7f3dec3443dca3f171f86474e8742 |
+| insert-middle-4k-on-10mib-ops-1 | layerfs-fsb-sample-5beb04a85c12451f | 436946c2b114f502fa0a0e764ca51217db84182dee68bd04475c999ab118670e |
+| insert-middle-4k-on-100mib-ops-1 | layerfs-fsb-sample-faf93ba5a2a9415a | c97f4c389a40e4c2b9205161eec3129859e5ce362b2b633a2297ff47bc40917c |
+| insert-middle-4k-on-500mib-result-capped-v2-ops-1 | layerfs-fsb-sample-722e993fa9a3493f | 57ab521d22f1990c5b9d04471a851e8c497c6ed265448b23765d7c4f7bbad924 |
+| delete-middle-4k-on-1mib-ops-1 | layerfs-fsb-sample-42f4e454986c4610 | ef2fe1d8eaf2f7385730ad0f152d2e5b8d7f76ee023af1a991d8bbef01b6af2a |
+| delete-middle-4k-on-10mib-ops-1 | layerfs-fsb-sample-b3ca99691e13414e | 029d95fcba2babb48e6457e0a3edded730389969936d74ba00df5764cd3ed569 |
+| delete-middle-4k-on-100mib-ops-1 | layerfs-fsb-sample-5dfd9b92757a48d5 | c4a9096010dc1e81edd0dd73cc66f19a4ad4f8c24fceaac0d2bab2fec3f6f589 |
+| delete-middle-4k-on-500mib-ops-1 | layerfs-fsb-sample-bbff2bdcac9a4549 | 6deb7ee42d76e68492999cef2718d467104aa147fa062c68399ced8cb30b1ce9 |
+| prepend-head-4k-on-1mib-ops-1 | layerfs-fsb-sample-db30059350ac4178 | 7722cd9c332d8eb338b50a571246c98701c8d0a0409da2b540c7ce24c8da4b60 |
+| prepend-head-4k-on-10mib-ops-1 | layerfs-fsb-sample-c33751b3b7cf4db5 | cc0e8dfd30eef3462a27491b820e4d1713367d3933cda38ec9ddea0d8c3c1579 |
+| prepend-head-4k-on-100mib-ops-1 | layerfs-fsb-sample-961158709b444be1 | e215d5335233ada1599026c17dc3ab6aa579e39051f84d5f4c62248be762e9d0 |
+| prepend-head-4k-on-500mib-result-capped-v2-ops-1 | layerfs-fsb-sample-28fdc3ccb85d44df | 7aadcc99dfce485fe36c3a89b66e0721357bc6628e64d30aaa87b51f2a97d33f |
+| replace-grow-middle-2k-to-4k-on-1mib-ops-1 | layerfs-fsb-sample-11b57e9ab2c341a8 | aed5089da6a14f86ce7b707f4c8b74d8e3d728f4b6c0bd4a0d650280a68b4763 |
+| replace-grow-middle-2k-to-4k-on-10mib-ops-1 | layerfs-fsb-sample-652b7f0606eb411b | 9467fb87e8971e24255feca9e6a23f35cf14a2b68540d8d9914ff1a7f160d311 |
+| replace-grow-middle-2k-to-4k-on-100mib-ops-1 | layerfs-fsb-sample-d4ec0d5eec1549ec | 744bfaad410b2abf0a8ecce4b113f68ec00967ae1f34d0d573db0c72ee6b2e1d |
+| replace-grow-middle-2k-to-4k-on-500mib-result-capped-v2-ops-1 | layerfs-fsb-sample-24556ffe6bf04529 | 8501df1719413d8c6ed530f88d4878312808bf4e1d4284af6b507fda7e0ec059 |
+| replace-shrink-middle-4k-to-2k-on-1mib-ops-1 | layerfs-fsb-sample-65d255aadca341d7 | 2529b115192553f13d5154ca50411fee2d6e873427852bea5a211a7cee080e11 |
+| replace-shrink-middle-4k-to-2k-on-10mib-ops-1 | layerfs-fsb-sample-1a343f218bb84d47 | d1ae0966f11f9972407a9dd3c85f32dce85a182615541719c7f4cf26d5769290 |
+| replace-shrink-middle-4k-to-2k-on-100mib-ops-1 | layerfs-fsb-sample-0dd8ae3cc2ca4145 | bfacaef8520c9aabe9026ec3f12d4041d1486dc436ca170930c69850c9d64bad |
+| replace-shrink-middle-4k-to-2k-on-500mib-ops-1 | layerfs-fsb-sample-87253580856148db | fb5f3b0552d51f533e47a168be33af089cd50c2dd3dbd38d5fa2db9f320dcb79 |
+
+Six retained immutable master volumes:
+
+- layerfs-fsb-master-edit-length-changing-131fa3579df147c5
+- layerfs-fsb-master-edit-length-changing-1569ecbe61d64fe0
+- layerfs-fsb-master-edit-length-changing-29c45685f6bf487b
+- layerfs-fsb-master-edit-length-changing-67a2cd17955540f8
+- layerfs-fsb-master-edit-length-changing-87a51e24fc0946df
+- layerfs-fsb-master-edit-length-changing-99b212255e814bab
+
+Root integration's two original-plan/payload/metadata tests PASS 0.040 s under
+120 s lock; imported schemas/rows/failed statuses/Gone/limits match all original
+receipts. Retained verify appropriately returns exit 1 for 20 FAIL / 12 PASS,
+with all original manifests valid; no sample replay. No product change, no
+optimization, no Clippy/CI claim. Production LOC 79,366 -> 79,366 (delta +0),
+pinned staged absent-aware method; reference absent (retired R9c; last 65,417).
+
+| `b4ef6e208` (worker) | Record all 32 changing cases and preserve twenty strict failures | 79366 | 79366 | +0 |
+| This commit | Integrate changing closure and exact retained failed resources | 79366 | 79366 | +0 |

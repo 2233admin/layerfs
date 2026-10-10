@@ -94,7 +94,18 @@
         "final_bytes": 1052672,
         "plan_sha256": "4d1f4685b6d3615cd8f78817811e4f28f280c3d910063878ea157d601538e446"
       },
-      "expected_commit": "Committed"
+      "expected_commit": "Committed",
+      "iteration_1_declaration": {
+        "cache_scope": "Class B fresh measured mount after the same untimed ordinary body and terminal cleanup; clone/setup warmth declared. Measured Commit consumes own-written input.",
+        "pre_commit_own_write_cold_proof": "UNAVAILABLE: no independent identity-bound pre-Commit backing-page and metadata cold observation is implemented. Numeric cache eligibility is INELIGIBLE; a functional proof does not credit own-write warmth.",
+        "functional_obligations": "one measured ordinary transformation, expected Committed, exact acknowledged persisted root, complete names/kinds/portable metadata/every byte, exhaustive reachable inode-table membership, unchanged inode scope/serial, complete current mapping totals/profile and untouched current payload-ID subset, terminal Gone and known Stop",
+        "oracle_source_sha256": {
+          "core/benchmark/fs-bench-pro/runtime/src/edit_oracle.rs": "0ba45e65ef130f8bf6ff59a9ce9d37b5b318198b8551ab749a356a5a43dcf0f5",
+          "core/benchmark/fs-bench-pro/runtime/src/workspace_oracle.rs": "f7efe10b0b2a1539c7bd5fe5e5458f844db033a244d851b350d53d7908446c7b",
+          "core/benchmark/fs-bench-pro/engine/recipes/edit_model.rs": "b76812076def4b4aac3b9ebfd32249eb6e054e570e712a5f47ce8e9917999d64"
+        },
+        "scope": "first iteration function/count/storage observations only; no speed or reference-comparison claim and no relaxed reference-splice guard"
+      }
     },
     {
       "id": "insert-middle-4k-on-10mib-ops-1",
@@ -188,7 +199,18 @@
         "final_bytes": 10489856,
         "plan_sha256": "e7fbae2d74b745e07794aef2ab22e6808e384484344db8b1b50c1101be606c04"
       },
-      "expected_commit": "Committed"
+      "expected_commit": "Committed",
+      "iteration_1_declaration": {
+        "cache_scope": "Class B fresh measured mount after the same untimed ordinary body and terminal cleanup; clone/setup warmth declared. Measured Commit consumes own-written input.",
+        "pre_commit_own_write_cold_proof": "UNAVAILABLE: no independent identity-bound pre-Commit backing-page and metadata cold observation is implemented. Numeric cache eligibility is INELIGIBLE; a functional proof does not credit own-write warmth.",
+        "functional_obligations": "one measured ordinary transformation, expected Committed, exact acknowledged persisted root, complete names/kinds/portable metadata/every byte, exhaustive reachable inode-table membership, unchanged inode scope/serial, complete current mapping totals/profile and untouched current payload-ID subset, terminal Gone and known Stop",
+        "oracle_source_sha256": {
+          "core/benchmark/fs-bench-pro/runtime/src/edit_oracle.rs": "0ba45e65ef130f8bf6ff59a9ce9d37b5b318198b8551ab749a356a5a43dcf0f5",
+          "core/benchmark/fs-bench-pro/runtime/src/workspace_oracle.rs": "f7efe10b0b2a1539c7bd5fe5e5458f844db033a244d851b350d53d7908446c7b",
+          "core/benchmark/fs-bench-pro/engine/recipes/edit_model.rs": "b76812076def4b4aac3b9ebfd32249eb6e054e570e712a5f47ce8e9917999d64"
+        },
+        "scope": "first iteration function/count/storage observations only; no speed or reference-comparison claim and no relaxed reference-splice guard"
+      }
     },
     {
       "id": "insert-middle-4k-on-100mib-ops-1",
@@ -282,7 +304,18 @@
         "final_bytes": 104861696,
         "plan_sha256": "41212dd096d8228213d787d8073a0455862c97fa8ca08ea98a1c990483409512"
       },
-      "expected_commit": "Committed"
+      "expected_commit": "Committed",
+      "iteration_1_declaration": {
+        "cache_scope": "Class B fresh measured mount after the same untimed ordinary body and terminal cleanup; clone/setup warmth declared. Measured Commit consumes own-written input.",
+        "pre_commit_own_write_cold_proof": "UNAVAILABLE: no independent identity-bound pre-Commit backing-page and metadata cold observation is implemented. Numeric cache eligibility is INELIGIBLE; a functional proof does not credit own-write warmth.",
+        "functional_obligations": "one measured ordinary transformation, expected Committed, exact acknowledged persisted root, complete names/kinds/portable metadata/every byte, exhaustive reachable inode-table membership, unchanged inode scope/serial, complete current mapping totals/profile and untouched current payload-ID subset, terminal Gone and known Stop",
+        "oracle_source_sha256": {
+          "core/benchmark/fs-bench-pro/runtime/src/edit_oracle.rs": "0ba45e65ef130f8bf6ff59a9ce9d37b5b318198b8551ab749a356a5a43dcf0f5",
+          "core/benchmark/fs-bench-pro/runtime/src/workspace_oracle.rs": "f7efe10b0b2a1539c7bd5fe5e5458f844db033a244d851b350d53d7908446c7b",
+          "core/benchmark/fs-bench-pro/engine/recipes/edit_model.rs": "b76812076def4b4aac3b9ebfd32249eb6e054e570e712a5f47ce8e9917999d64"
+        },
+        "scope": "first iteration function/count/storage observations only; no speed or reference-comparison claim and no relaxed reference-splice guard"
+      }
     },
     {
       "id": "insert-middle-4k-on-500mib-result-capped-v2-ops-1",
@@ -376,7 +409,18 @@
         "final_bytes": 524288000,
         "plan_sha256": "1d5ef5f72190579953067a4d3e66913c25ca3f65887275f2f7647fda7292fbf2"
       },
-      "expected_commit": "Committed"
+      "expected_commit": "Committed",
+      "iteration_1_declaration": {
+        "cache_scope": "Class B fresh measured mount after the same untimed ordinary body and terminal cleanup; clone/setup warmth declared. Measured Commit consumes own-written input.",
+        "pre_commit_own_write_cold_proof": "UNAVAILABLE: no independent identity-bound pre-Commit backing-page and metadata cold observation is implemented. Numeric cache eligibility is INELIGIBLE; a functional proof does not credit own-write warmth.",
+        "functional_obligations": "one measured ordinary transformation, expected Committed, exact acknowledged persisted root, complete names/kinds/portable metadata/every byte, exhaustive reachable inode-table membership, unchanged inode scope/serial, complete current mapping totals/profile and untouched current payload-ID subset, terminal Gone and known Stop",
+        "oracle_source_sha256": {
+          "core/benchmark/fs-bench-pro/runtime/src/edit_oracle.rs": "0ba45e65ef130f8bf6ff59a9ce9d37b5b318198b8551ab749a356a5a43dcf0f5",
+          "core/benchmark/fs-bench-pro/runtime/src/workspace_oracle.rs": "f7efe10b0b2a1539c7bd5fe5e5458f844db033a244d851b350d53d7908446c7b",
+          "core/benchmark/fs-bench-pro/engine/recipes/edit_model.rs": "b76812076def4b4aac3b9ebfd32249eb6e054e570e712a5f47ce8e9917999d64"
+        },
+        "scope": "first iteration function/count/storage observations only; no speed or reference-comparison claim and no relaxed reference-splice guard"
+      }
     },
     {
       "id": "delete-middle-4k-on-1mib-ops-1",
@@ -470,7 +514,18 @@
         "final_bytes": 1044480,
         "plan_sha256": "9a0f69f90ed9272d350f27ac4601b9abbdde2e7dec18992eb66d43dada20e2ef"
       },
-      "expected_commit": "Committed"
+      "expected_commit": "Committed",
+      "iteration_1_declaration": {
+        "cache_scope": "Class B fresh measured mount after the same untimed ordinary body and terminal cleanup; clone/setup warmth declared. Measured Commit consumes own-written input.",
+        "pre_commit_own_write_cold_proof": "UNAVAILABLE: no independent identity-bound pre-Commit backing-page and metadata cold observation is implemented. Numeric cache eligibility is INELIGIBLE; a functional proof does not credit own-write warmth.",
+        "functional_obligations": "one measured ordinary transformation, expected Committed, exact acknowledged persisted root, complete names/kinds/portable metadata/every byte, exhaustive reachable inode-table membership, unchanged inode scope/serial, complete current mapping totals/profile and untouched current payload-ID subset, terminal Gone and known Stop",
+        "oracle_source_sha256": {
+          "core/benchmark/fs-bench-pro/runtime/src/edit_oracle.rs": "0ba45e65ef130f8bf6ff59a9ce9d37b5b318198b8551ab749a356a5a43dcf0f5",
+          "core/benchmark/fs-bench-pro/runtime/src/workspace_oracle.rs": "f7efe10b0b2a1539c7bd5fe5e5458f844db033a244d851b350d53d7908446c7b",
+          "core/benchmark/fs-bench-pro/engine/recipes/edit_model.rs": "b76812076def4b4aac3b9ebfd32249eb6e054e570e712a5f47ce8e9917999d64"
+        },
+        "scope": "first iteration function/count/storage observations only; no speed or reference-comparison claim and no relaxed reference-splice guard"
+      }
     },
     {
       "id": "delete-middle-4k-on-10mib-ops-1",
@@ -564,7 +619,18 @@
         "final_bytes": 10481664,
         "plan_sha256": "766db466c79d45e711fe40c24f04cf9dda81e57dccdcb5d821f029a9fd75ca90"
       },
-      "expected_commit": "Committed"
+      "expected_commit": "Committed",
+      "iteration_1_declaration": {
+        "cache_scope": "Class B fresh measured mount after the same untimed ordinary body and terminal cleanup; clone/setup warmth declared. Measured Commit consumes own-written input.",
+        "pre_commit_own_write_cold_proof": "UNAVAILABLE: no independent identity-bound pre-Commit backing-page and metadata cold observation is implemented. Numeric cache eligibility is INELIGIBLE; a functional proof does not credit own-write warmth.",
+        "functional_obligations": "one measured ordinary transformation, expected Committed, exact acknowledged persisted root, complete names/kinds/portable metadata/every byte, exhaustive reachable inode-table membership, unchanged inode scope/serial, complete current mapping totals/profile and untouched current payload-ID subset, terminal Gone and known Stop",
+        "oracle_source_sha256": {
+          "core/benchmark/fs-bench-pro/runtime/src/edit_oracle.rs": "0ba45e65ef130f8bf6ff59a9ce9d37b5b318198b8551ab749a356a5a43dcf0f5",
+          "core/benchmark/fs-bench-pro/runtime/src/workspace_oracle.rs": "f7efe10b0b2a1539c7bd5fe5e5458f844db033a244d851b350d53d7908446c7b",
+          "core/benchmark/fs-bench-pro/engine/recipes/edit_model.rs": "b76812076def4b4aac3b9ebfd32249eb6e054e570e712a5f47ce8e9917999d64"
+        },
+        "scope": "first iteration function/count/storage observations only; no speed or reference-comparison claim and no relaxed reference-splice guard"
+      }
     },
     {
       "id": "delete-middle-4k-on-100mib-ops-1",
@@ -658,7 +724,18 @@
         "final_bytes": 104853504,
         "plan_sha256": "12356c4388602caddca46d03b9163edaf9da9142560a68f26310f3408ea67d4e"
       },
-      "expected_commit": "Committed"
+      "expected_commit": "Committed",
+      "iteration_1_declaration": {
+        "cache_scope": "Class B fresh measured mount after the same untimed ordinary body and terminal cleanup; clone/setup warmth declared. Measured Commit consumes own-written input.",
+        "pre_commit_own_write_cold_proof": "UNAVAILABLE: no independent identity-bound pre-Commit backing-page and metadata cold observation is implemented. Numeric cache eligibility is INELIGIBLE; a functional proof does not credit own-write warmth.",
+        "functional_obligations": "one measured ordinary transformation, expected Committed, exact acknowledged persisted root, complete names/kinds/portable metadata/every byte, exhaustive reachable inode-table membership, unchanged inode scope/serial, complete current mapping totals/profile and untouched current payload-ID subset, terminal Gone and known Stop",
+        "oracle_source_sha256": {
+          "core/benchmark/fs-bench-pro/runtime/src/edit_oracle.rs": "0ba45e65ef130f8bf6ff59a9ce9d37b5b318198b8551ab749a356a5a43dcf0f5",
+          "core/benchmark/fs-bench-pro/runtime/src/workspace_oracle.rs": "f7efe10b0b2a1539c7bd5fe5e5458f844db033a244d851b350d53d7908446c7b",
+          "core/benchmark/fs-bench-pro/engine/recipes/edit_model.rs": "b76812076def4b4aac3b9ebfd32249eb6e054e570e712a5f47ce8e9917999d64"
+        },
+        "scope": "first iteration function/count/storage observations only; no speed or reference-comparison claim and no relaxed reference-splice guard"
+      }
     },
     {
       "id": "delete-middle-4k-on-500mib-ops-1",
@@ -752,7 +829,18 @@
         "final_bytes": 524283904,
         "plan_sha256": "f54b9214f232c65c7750a6a97a64631d2a05aa194801d33416bd9e35302088e2"
       },
-      "expected_commit": "Committed"
+      "expected_commit": "Committed",
+      "iteration_1_declaration": {
+        "cache_scope": "Class B fresh measured mount after the same untimed ordinary body and terminal cleanup; clone/setup warmth declared. Measured Commit consumes own-written input.",
+        "pre_commit_own_write_cold_proof": "UNAVAILABLE: no independent identity-bound pre-Commit backing-page and metadata cold observation is implemented. Numeric cache eligibility is INELIGIBLE; a functional proof does not credit own-write warmth.",
+        "functional_obligations": "one measured ordinary transformation, expected Committed, exact acknowledged persisted root, complete names/kinds/portable metadata/every byte, exhaustive reachable inode-table membership, unchanged inode scope/serial, complete current mapping totals/profile and untouched current payload-ID subset, terminal Gone and known Stop",
+        "oracle_source_sha256": {
+          "core/benchmark/fs-bench-pro/runtime/src/edit_oracle.rs": "0ba45e65ef130f8bf6ff59a9ce9d37b5b318198b8551ab749a356a5a43dcf0f5",
+          "core/benchmark/fs-bench-pro/runtime/src/workspace_oracle.rs": "f7efe10b0b2a1539c7bd5fe5e5458f844db033a244d851b350d53d7908446c7b",
+          "core/benchmark/fs-bench-pro/engine/recipes/edit_model.rs": "b76812076def4b4aac3b9ebfd32249eb6e054e570e712a5f47ce8e9917999d64"
+        },
+        "scope": "first iteration function/count/storage observations only; no speed or reference-comparison claim and no relaxed reference-splice guard"
+      }
     },
     {
       "id": "append-tail-4k-on-1mib-ops-1",
@@ -846,7 +934,18 @@
         "final_bytes": 1052672,
         "plan_sha256": "f88ca5a8564cd2bbcfba51e452e5506b2eb1d2fad7b799262ab048edceda2370"
       },
-      "expected_commit": "Committed"
+      "expected_commit": "Committed",
+      "iteration_1_declaration": {
+        "cache_scope": "Class B fresh measured mount after the same untimed ordinary body and terminal cleanup; clone/setup warmth declared. Measured Commit consumes own-written input.",
+        "pre_commit_own_write_cold_proof": "UNAVAILABLE: no independent identity-bound pre-Commit backing-page and metadata cold observation is implemented. Numeric cache eligibility is INELIGIBLE; a functional proof does not credit own-write warmth.",
+        "functional_obligations": "one measured ordinary transformation, expected Committed, exact acknowledged persisted root, complete names/kinds/portable metadata/every byte, exhaustive reachable inode-table membership, unchanged inode scope/serial, complete current mapping totals/profile and untouched current payload-ID subset, terminal Gone and known Stop",
+        "oracle_source_sha256": {
+          "core/benchmark/fs-bench-pro/runtime/src/edit_oracle.rs": "0ba45e65ef130f8bf6ff59a9ce9d37b5b318198b8551ab749a356a5a43dcf0f5",
+          "core/benchmark/fs-bench-pro/runtime/src/workspace_oracle.rs": "f7efe10b0b2a1539c7bd5fe5e5458f844db033a244d851b350d53d7908446c7b",
+          "core/benchmark/fs-bench-pro/engine/recipes/edit_model.rs": "b76812076def4b4aac3b9ebfd32249eb6e054e570e712a5f47ce8e9917999d64"
+        },
+        "scope": "first iteration function/count/storage observations only; no speed or reference-comparison claim and no relaxed reference-splice guard"
+      }
     },
     {
       "id": "append-tail-4k-on-10mib-ops-1",
@@ -940,7 +1039,18 @@
         "final_bytes": 10489856,
         "plan_sha256": "e026413fa8204ad0b16f2e156fab1503be86ded2a103759838f6543d4c48391e"
       },
-      "expected_commit": "Committed"
+      "expected_commit": "Committed",
+      "iteration_1_declaration": {
+        "cache_scope": "Class B fresh measured mount after the same untimed ordinary body and terminal cleanup; clone/setup warmth declared. Measured Commit consumes own-written input.",
+        "pre_commit_own_write_cold_proof": "UNAVAILABLE: no independent identity-bound pre-Commit backing-page and metadata cold observation is implemented. Numeric cache eligibility is INELIGIBLE; a functional proof does not credit own-write warmth.",
+        "functional_obligations": "one measured ordinary transformation, expected Committed, exact acknowledged persisted root, complete names/kinds/portable metadata/every byte, exhaustive reachable inode-table membership, unchanged inode scope/serial, complete current mapping totals/profile and untouched current payload-ID subset, terminal Gone and known Stop",
+        "oracle_source_sha256": {
+          "core/benchmark/fs-bench-pro/runtime/src/edit_oracle.rs": "0ba45e65ef130f8bf6ff59a9ce9d37b5b318198b8551ab749a356a5a43dcf0f5",
+          "core/benchmark/fs-bench-pro/runtime/src/workspace_oracle.rs": "f7efe10b0b2a1539c7bd5fe5e5458f844db033a244d851b350d53d7908446c7b",
+          "core/benchmark/fs-bench-pro/engine/recipes/edit_model.rs": "b76812076def4b4aac3b9ebfd32249eb6e054e570e712a5f47ce8e9917999d64"
+        },
+        "scope": "first iteration function/count/storage observations only; no speed or reference-comparison claim and no relaxed reference-splice guard"
+      }
     },
     {
       "id": "append-tail-4k-on-100mib-ops-1",
@@ -1034,7 +1144,18 @@
         "final_bytes": 104861696,
         "plan_sha256": "a8341da71bf3278208774acbf302c31eb26ad2c28a619f480b3cbe01b41f4506"
       },
-      "expected_commit": "Committed"
+      "expected_commit": "Committed",
+      "iteration_1_declaration": {
+        "cache_scope": "Class B fresh measured mount after the same untimed ordinary body and terminal cleanup; clone/setup warmth declared. Measured Commit consumes own-written input.",
+        "pre_commit_own_write_cold_proof": "UNAVAILABLE: no independent identity-bound pre-Commit backing-page and metadata cold observation is implemented. Numeric cache eligibility is INELIGIBLE; a functional proof does not credit own-write warmth.",
+        "functional_obligations": "one measured ordinary transformation, expected Committed, exact acknowledged persisted root, complete names/kinds/portable metadata/every byte, exhaustive reachable inode-table membership, unchanged inode scope/serial, complete current mapping totals/profile and untouched current payload-ID subset, terminal Gone and known Stop",
+        "oracle_source_sha256": {
+          "core/benchmark/fs-bench-pro/runtime/src/edit_oracle.rs": "0ba45e65ef130f8bf6ff59a9ce9d37b5b318198b8551ab749a356a5a43dcf0f5",
+          "core/benchmark/fs-bench-pro/runtime/src/workspace_oracle.rs": "f7efe10b0b2a1539c7bd5fe5e5458f844db033a244d851b350d53d7908446c7b",
+          "core/benchmark/fs-bench-pro/engine/recipes/edit_model.rs": "b76812076def4b4aac3b9ebfd32249eb6e054e570e712a5f47ce8e9917999d64"
+        },
+        "scope": "first iteration function/count/storage observations only; no speed or reference-comparison claim and no relaxed reference-splice guard"
+      }
     },
     {
       "id": "append-tail-4k-on-500mib-result-capped-v2-ops-1",
@@ -1128,7 +1249,18 @@
         "final_bytes": 524288000,
         "plan_sha256": "5cad44dc59099d7f92e1a207d16a00e825be2d13aa3160ed75ca73198b0da4e2"
       },
-      "expected_commit": "Committed"
+      "expected_commit": "Committed",
+      "iteration_1_declaration": {
+        "cache_scope": "Class B fresh measured mount after the same untimed ordinary body and terminal cleanup; clone/setup warmth declared. Measured Commit consumes own-written input.",
+        "pre_commit_own_write_cold_proof": "UNAVAILABLE: no independent identity-bound pre-Commit backing-page and metadata cold observation is implemented. Numeric cache eligibility is INELIGIBLE; a functional proof does not credit own-write warmth.",
+        "functional_obligations": "one measured ordinary transformation, expected Committed, exact acknowledged persisted root, complete names/kinds/portable metadata/every byte, exhaustive reachable inode-table membership, unchanged inode scope/serial, complete current mapping totals/profile and untouched current payload-ID subset, terminal Gone and known Stop",
+        "oracle_source_sha256": {
+          "core/benchmark/fs-bench-pro/runtime/src/edit_oracle.rs": "0ba45e65ef130f8bf6ff59a9ce9d37b5b318198b8551ab749a356a5a43dcf0f5",
+          "core/benchmark/fs-bench-pro/runtime/src/workspace_oracle.rs": "f7efe10b0b2a1539c7bd5fe5e5458f844db033a244d851b350d53d7908446c7b",
+          "core/benchmark/fs-bench-pro/engine/recipes/edit_model.rs": "b76812076def4b4aac3b9ebfd32249eb6e054e570e712a5f47ce8e9917999d64"
+        },
+        "scope": "first iteration function/count/storage observations only; no speed or reference-comparison claim and no relaxed reference-splice guard"
+      }
     },
     {
       "id": "prepend-head-4k-on-1mib-ops-1",
@@ -1222,7 +1354,18 @@
         "final_bytes": 1052672,
         "plan_sha256": "8b5956348dfa9df6843fc8ffbbd05c7303e5fb15375f30f02c3a731b4721a35c"
       },
-      "expected_commit": "Committed"
+      "expected_commit": "Committed",
+      "iteration_1_declaration": {
+        "cache_scope": "Class B fresh measured mount after the same untimed ordinary body and terminal cleanup; clone/setup warmth declared. Measured Commit consumes own-written input.",
+        "pre_commit_own_write_cold_proof": "UNAVAILABLE: no independent identity-bound pre-Commit backing-page and metadata cold observation is implemented. Numeric cache eligibility is INELIGIBLE; a functional proof does not credit own-write warmth.",
+        "functional_obligations": "one measured ordinary transformation, expected Committed, exact acknowledged persisted root, complete names/kinds/portable metadata/every byte, exhaustive reachable inode-table membership, unchanged inode scope/serial, complete current mapping totals/profile and untouched current payload-ID subset, terminal Gone and known Stop",
+        "oracle_source_sha256": {
+          "core/benchmark/fs-bench-pro/runtime/src/edit_oracle.rs": "0ba45e65ef130f8bf6ff59a9ce9d37b5b318198b8551ab749a356a5a43dcf0f5",
+          "core/benchmark/fs-bench-pro/runtime/src/workspace_oracle.rs": "f7efe10b0b2a1539c7bd5fe5e5458f844db033a244d851b350d53d7908446c7b",
+          "core/benchmark/fs-bench-pro/engine/recipes/edit_model.rs": "b76812076def4b4aac3b9ebfd32249eb6e054e570e712a5f47ce8e9917999d64"
+        },
+        "scope": "first iteration function/count/storage observations only; no speed or reference-comparison claim and no relaxed reference-splice guard"
+      }
     },
     {
       "id": "prepend-head-4k-on-10mib-ops-1",
@@ -1316,7 +1459,18 @@
         "final_bytes": 10489856,
         "plan_sha256": "b00783775e376e11723deef02fdd280c108877a1cae0aa6b71ca3205f771a714"
       },
-      "expected_commit": "Committed"
+      "expected_commit": "Committed",
+      "iteration_1_declaration": {
+        "cache_scope": "Class B fresh measured mount after the same untimed ordinary body and terminal cleanup; clone/setup warmth declared. Measured Commit consumes own-written input.",
+        "pre_commit_own_write_cold_proof": "UNAVAILABLE: no independent identity-bound pre-Commit backing-page and metadata cold observation is implemented. Numeric cache eligibility is INELIGIBLE; a functional proof does not credit own-write warmth.",
+        "functional_obligations": "one measured ordinary transformation, expected Committed, exact acknowledged persisted root, complete names/kinds/portable metadata/every byte, exhaustive reachable inode-table membership, unchanged inode scope/serial, complete current mapping totals/profile and untouched current payload-ID subset, terminal Gone and known Stop",
+        "oracle_source_sha256": {
+          "core/benchmark/fs-bench-pro/runtime/src/edit_oracle.rs": "0ba45e65ef130f8bf6ff59a9ce9d37b5b318198b8551ab749a356a5a43dcf0f5",
+          "core/benchmark/fs-bench-pro/runtime/src/workspace_oracle.rs": "f7efe10b0b2a1539c7bd5fe5e5458f844db033a244d851b350d53d7908446c7b",
+          "core/benchmark/fs-bench-pro/engine/recipes/edit_model.rs": "b76812076def4b4aac3b9ebfd32249eb6e054e570e712a5f47ce8e9917999d64"
+        },
+        "scope": "first iteration function/count/storage observations only; no speed or reference-comparison claim and no relaxed reference-splice guard"
+      }
     },
     {
       "id": "prepend-head-4k-on-100mib-ops-1",
@@ -1410,7 +1564,18 @@
         "final_bytes": 104861696,
         "plan_sha256": "be86a4f108bf8936ba38c93e0c73ae27c80e22fffc76b00538c8b2724f86e678"
       },
-      "expected_commit": "Committed"
+      "expected_commit": "Committed",
+      "iteration_1_declaration": {
+        "cache_scope": "Class B fresh measured mount after the same untimed ordinary body and terminal cleanup; clone/setup warmth declared. Measured Commit consumes own-written input.",
+        "pre_commit_own_write_cold_proof": "UNAVAILABLE: no independent identity-bound pre-Commit backing-page and metadata cold observation is implemented. Numeric cache eligibility is INELIGIBLE; a functional proof does not credit own-write warmth.",
+        "functional_obligations": "one measured ordinary transformation, expected Committed, exact acknowledged persisted root, complete names/kinds/portable metadata/every byte, exhaustive reachable inode-table membership, unchanged inode scope/serial, complete current mapping totals/profile and untouched current payload-ID subset, terminal Gone and known Stop",
+        "oracle_source_sha256": {
+          "core/benchmark/fs-bench-pro/runtime/src/edit_oracle.rs": "0ba45e65ef130f8bf6ff59a9ce9d37b5b318198b8551ab749a356a5a43dcf0f5",
+          "core/benchmark/fs-bench-pro/runtime/src/workspace_oracle.rs": "f7efe10b0b2a1539c7bd5fe5e5458f844db033a244d851b350d53d7908446c7b",
+          "core/benchmark/fs-bench-pro/engine/recipes/edit_model.rs": "b76812076def4b4aac3b9ebfd32249eb6e054e570e712a5f47ce8e9917999d64"
+        },
+        "scope": "first iteration function/count/storage observations only; no speed or reference-comparison claim and no relaxed reference-splice guard"
+      }
     },
     {
       "id": "prepend-head-4k-on-500mib-result-capped-v2-ops-1",
@@ -1504,7 +1669,18 @@
         "final_bytes": 524288000,
         "plan_sha256": "f656128b09d386b64264fe56fdaeeba5f11f0ad2088378d9dcb9d7ee0ddeadd9"
       },
-      "expected_commit": "Committed"
+      "expected_commit": "Committed",
+      "iteration_1_declaration": {
+        "cache_scope": "Class B fresh measured mount after the same untimed ordinary body and terminal cleanup; clone/setup warmth declared. Measured Commit consumes own-written input.",
+        "pre_commit_own_write_cold_proof": "UNAVAILABLE: no independent identity-bound pre-Commit backing-page and metadata cold observation is implemented. Numeric cache eligibility is INELIGIBLE; a functional proof does not credit own-write warmth.",
+        "functional_obligations": "one measured ordinary transformation, expected Committed, exact acknowledged persisted root, complete names/kinds/portable metadata/every byte, exhaustive reachable inode-table membership, unchanged inode scope/serial, complete current mapping totals/profile and untouched current payload-ID subset, terminal Gone and known Stop",
+        "oracle_source_sha256": {
+          "core/benchmark/fs-bench-pro/runtime/src/edit_oracle.rs": "0ba45e65ef130f8bf6ff59a9ce9d37b5b318198b8551ab749a356a5a43dcf0f5",
+          "core/benchmark/fs-bench-pro/runtime/src/workspace_oracle.rs": "f7efe10b0b2a1539c7bd5fe5e5458f844db033a244d851b350d53d7908446c7b",
+          "core/benchmark/fs-bench-pro/engine/recipes/edit_model.rs": "b76812076def4b4aac3b9ebfd32249eb6e054e570e712a5f47ce8e9917999d64"
+        },
+        "scope": "first iteration function/count/storage observations only; no speed or reference-comparison claim and no relaxed reference-splice guard"
+      }
     },
     {
       "id": "replace-grow-middle-2k-to-4k-on-1mib-ops-1",
@@ -1598,7 +1774,18 @@
         "final_bytes": 1050624,
         "plan_sha256": "28003219e5393cfc4f0a7f29d75dca44acabc93c23887076a09edb500f05ccb3"
       },
-      "expected_commit": "Committed"
+      "expected_commit": "Committed",
+      "iteration_1_declaration": {
+        "cache_scope": "Class B fresh measured mount after the same untimed ordinary body and terminal cleanup; clone/setup warmth declared. Measured Commit consumes own-written input.",
+        "pre_commit_own_write_cold_proof": "UNAVAILABLE: no independent identity-bound pre-Commit backing-page and metadata cold observation is implemented. Numeric cache eligibility is INELIGIBLE; a functional proof does not credit own-write warmth.",
+        "functional_obligations": "one measured ordinary transformation, expected Committed, exact acknowledged persisted root, complete names/kinds/portable metadata/every byte, exhaustive reachable inode-table membership, unchanged inode scope/serial, complete current mapping totals/profile and untouched current payload-ID subset, terminal Gone and known Stop",
+        "oracle_source_sha256": {
+          "core/benchmark/fs-bench-pro/runtime/src/edit_oracle.rs": "0ba45e65ef130f8bf6ff59a9ce9d37b5b318198b8551ab749a356a5a43dcf0f5",
+          "core/benchmark/fs-bench-pro/runtime/src/workspace_oracle.rs": "f7efe10b0b2a1539c7bd5fe5e5458f844db033a244d851b350d53d7908446c7b",
+          "core/benchmark/fs-bench-pro/engine/recipes/edit_model.rs": "b76812076def4b4aac3b9ebfd32249eb6e054e570e712a5f47ce8e9917999d64"
+        },
+        "scope": "first iteration function/count/storage observations only; no speed or reference-comparison claim and no relaxed reference-splice guard"
+      }
     },
     {
       "id": "replace-grow-middle-2k-to-4k-on-10mib-ops-1",
@@ -1692,7 +1879,18 @@
         "final_bytes": 10487808,
         "plan_sha256": "f5b73251e56092488a218709a1600c838321e65c7b8312f85908320b4c06ab6b"
       },
-      "expected_commit": "Committed"
+      "expected_commit": "Committed",
+      "iteration_1_declaration": {
+        "cache_scope": "Class B fresh measured mount after the same untimed ordinary body and terminal cleanup; clone/setup warmth declared. Measured Commit consumes own-written input.",
+        "pre_commit_own_write_cold_proof": "UNAVAILABLE: no independent identity-bound pre-Commit backing-page and metadata cold observation is implemented. Numeric cache eligibility is INELIGIBLE; a functional proof does not credit own-write warmth.",
+        "functional_obligations": "one measured ordinary transformation, expected Committed, exact acknowledged persisted root, complete names/kinds/portable metadata/every byte, exhaustive reachable inode-table membership, unchanged inode scope/serial, complete current mapping totals/profile and untouched current payload-ID subset, terminal Gone and known Stop",
+        "oracle_source_sha256": {
+          "core/benchmark/fs-bench-pro/runtime/src/edit_oracle.rs": "0ba45e65ef130f8bf6ff59a9ce9d37b5b318198b8551ab749a356a5a43dcf0f5",
+          "core/benchmark/fs-bench-pro/runtime/src/workspace_oracle.rs": "f7efe10b0b2a1539c7bd5fe5e5458f844db033a244d851b350d53d7908446c7b",
+          "core/benchmark/fs-bench-pro/engine/recipes/edit_model.rs": "b76812076def4b4aac3b9ebfd32249eb6e054e570e712a5f47ce8e9917999d64"
+        },
+        "scope": "first iteration function/count/storage observations only; no speed or reference-comparison claim and no relaxed reference-splice guard"
+      }
     },
     {
       "id": "replace-grow-middle-2k-to-4k-on-100mib-ops-1",
@@ -1786,7 +1984,18 @@
         "final_bytes": 104859648,
         "plan_sha256": "b10ef384560a02c44b96de287e50b753cce239d53f806d5affd1f8235282b527"
       },
-      "expected_commit": "Committed"
+      "expected_commit": "Committed",
+      "iteration_1_declaration": {
+        "cache_scope": "Class B fresh measured mount after the same untimed ordinary body and terminal cleanup; clone/setup warmth declared. Measured Commit consumes own-written input.",
+        "pre_commit_own_write_cold_proof": "UNAVAILABLE: no independent identity-bound pre-Commit backing-page and metadata cold observation is implemented. Numeric cache eligibility is INELIGIBLE; a functional proof does not credit own-write warmth.",
+        "functional_obligations": "one measured ordinary transformation, expected Committed, exact acknowledged persisted root, complete names/kinds/portable metadata/every byte, exhaustive reachable inode-table membership, unchanged inode scope/serial, complete current mapping totals/profile and untouched current payload-ID subset, terminal Gone and known Stop",
+        "oracle_source_sha256": {
+          "core/benchmark/fs-bench-pro/runtime/src/edit_oracle.rs": "0ba45e65ef130f8bf6ff59a9ce9d37b5b318198b8551ab749a356a5a43dcf0f5",
+          "core/benchmark/fs-bench-pro/runtime/src/workspace_oracle.rs": "f7efe10b0b2a1539c7bd5fe5e5458f844db033a244d851b350d53d7908446c7b",
+          "core/benchmark/fs-bench-pro/engine/recipes/edit_model.rs": "b76812076def4b4aac3b9ebfd32249eb6e054e570e712a5f47ce8e9917999d64"
+        },
+        "scope": "first iteration function/count/storage observations only; no speed or reference-comparison claim and no relaxed reference-splice guard"
+      }
     },
     {
       "id": "replace-grow-middle-2k-to-4k-on-500mib-result-capped-v2-ops-1",
@@ -1880,7 +2089,18 @@
         "final_bytes": 524288000,
         "plan_sha256": "d1b5e612f8f73aff1fce7ac6e9d0ea9268d64274ad913335b8745b2eb36b1352"
       },
-      "expected_commit": "Committed"
+      "expected_commit": "Committed",
+      "iteration_1_declaration": {
+        "cache_scope": "Class B fresh measured mount after the same untimed ordinary body and terminal cleanup; clone/setup warmth declared. Measured Commit consumes own-written input.",
+        "pre_commit_own_write_cold_proof": "UNAVAILABLE: no independent identity-bound pre-Commit backing-page and metadata cold observation is implemented. Numeric cache eligibility is INELIGIBLE; a functional proof does not credit own-write warmth.",
+        "functional_obligations": "one measured ordinary transformation, expected Committed, exact acknowledged persisted root, complete names/kinds/portable metadata/every byte, exhaustive reachable inode-table membership, unchanged inode scope/serial, complete current mapping totals/profile and untouched current payload-ID subset, terminal Gone and known Stop",
+        "oracle_source_sha256": {
+          "core/benchmark/fs-bench-pro/runtime/src/edit_oracle.rs": "0ba45e65ef130f8bf6ff59a9ce9d37b5b318198b8551ab749a356a5a43dcf0f5",
+          "core/benchmark/fs-bench-pro/runtime/src/workspace_oracle.rs": "f7efe10b0b2a1539c7bd5fe5e5458f844db033a244d851b350d53d7908446c7b",
+          "core/benchmark/fs-bench-pro/engine/recipes/edit_model.rs": "b76812076def4b4aac3b9ebfd32249eb6e054e570e712a5f47ce8e9917999d64"
+        },
+        "scope": "first iteration function/count/storage observations only; no speed or reference-comparison claim and no relaxed reference-splice guard"
+      }
     },
     {
       "id": "replace-shrink-middle-4k-to-2k-on-1mib-ops-1",
@@ -1974,7 +2194,18 @@
         "final_bytes": 1046528,
         "plan_sha256": "0906b83e2ab9d5c573d8490840fa7b2cf1474df39a9494419b11e726ebb17087"
       },
-      "expected_commit": "Committed"
+      "expected_commit": "Committed",
+      "iteration_1_declaration": {
+        "cache_scope": "Class B fresh measured mount after the same untimed ordinary body and terminal cleanup; clone/setup warmth declared. Measured Commit consumes own-written input.",
+        "pre_commit_own_write_cold_proof": "UNAVAILABLE: no independent identity-bound pre-Commit backing-page and metadata cold observation is implemented. Numeric cache eligibility is INELIGIBLE; a functional proof does not credit own-write warmth.",
+        "functional_obligations": "one measured ordinary transformation, expected Committed, exact acknowledged persisted root, complete names/kinds/portable metadata/every byte, exhaustive reachable inode-table membership, unchanged inode scope/serial, complete current mapping totals/profile and untouched current payload-ID subset, terminal Gone and known Stop",
+        "oracle_source_sha256": {
+          "core/benchmark/fs-bench-pro/runtime/src/edit_oracle.rs": "0ba45e65ef130f8bf6ff59a9ce9d37b5b318198b8551ab749a356a5a43dcf0f5",
+          "core/benchmark/fs-bench-pro/runtime/src/workspace_oracle.rs": "f7efe10b0b2a1539c7bd5fe5e5458f844db033a244d851b350d53d7908446c7b",
+          "core/benchmark/fs-bench-pro/engine/recipes/edit_model.rs": "b76812076def4b4aac3b9ebfd32249eb6e054e570e712a5f47ce8e9917999d64"
+        },
+        "scope": "first iteration function/count/storage observations only; no speed or reference-comparison claim and no relaxed reference-splice guard"
+      }
     },
     {
       "id": "replace-shrink-middle-4k-to-2k-on-10mib-ops-1",
@@ -2068,7 +2299,18 @@
         "final_bytes": 10483712,
         "plan_sha256": "aefbf6c81552a5f0d207ddaa6b3bcbc18033c870424bf81ef9cee15db6800449"
       },
-      "expected_commit": "Committed"
+      "expected_commit": "Committed",
+      "iteration_1_declaration": {
+        "cache_scope": "Class B fresh measured mount after the same untimed ordinary body and terminal cleanup; clone/setup warmth declared. Measured Commit consumes own-written input.",
+        "pre_commit_own_write_cold_proof": "UNAVAILABLE: no independent identity-bound pre-Commit backing-page and metadata cold observation is implemented. Numeric cache eligibility is INELIGIBLE; a functional proof does not credit own-write warmth.",
+        "functional_obligations": "one measured ordinary transformation, expected Committed, exact acknowledged persisted root, complete names/kinds/portable metadata/every byte, exhaustive reachable inode-table membership, unchanged inode scope/serial, complete current mapping totals/profile and untouched current payload-ID subset, terminal Gone and known Stop",
+        "oracle_source_sha256": {
+          "core/benchmark/fs-bench-pro/runtime/src/edit_oracle.rs": "0ba45e65ef130f8bf6ff59a9ce9d37b5b318198b8551ab749a356a5a43dcf0f5",
+          "core/benchmark/fs-bench-pro/runtime/src/workspace_oracle.rs": "f7efe10b0b2a1539c7bd5fe5e5458f844db033a244d851b350d53d7908446c7b",
+          "core/benchmark/fs-bench-pro/engine/recipes/edit_model.rs": "b76812076def4b4aac3b9ebfd32249eb6e054e570e712a5f47ce8e9917999d64"
+        },
+        "scope": "first iteration function/count/storage observations only; no speed or reference-comparison claim and no relaxed reference-splice guard"
+      }
     },
     {
       "id": "replace-shrink-middle-4k-to-2k-on-100mib-ops-1",
@@ -2162,7 +2404,18 @@
         "final_bytes": 104855552,
         "plan_sha256": "1f9ecfc3b9abfa7e3b2feb237ceac9e5c1a9d1eaf99cbd6a7c0f9193ceed8189"
       },
-      "expected_commit": "Committed"
+      "expected_commit": "Committed",
+      "iteration_1_declaration": {
+        "cache_scope": "Class B fresh measured mount after the same untimed ordinary body and terminal cleanup; clone/setup warmth declared. Measured Commit consumes own-written input.",
+        "pre_commit_own_write_cold_proof": "UNAVAILABLE: no independent identity-bound pre-Commit backing-page and metadata cold observation is implemented. Numeric cache eligibility is INELIGIBLE; a functional proof does not credit own-write warmth.",
+        "functional_obligations": "one measured ordinary transformation, expected Committed, exact acknowledged persisted root, complete names/kinds/portable metadata/every byte, exhaustive reachable inode-table membership, unchanged inode scope/serial, complete current mapping totals/profile and untouched current payload-ID subset, terminal Gone and known Stop",
+        "oracle_source_sha256": {
+          "core/benchmark/fs-bench-pro/runtime/src/edit_oracle.rs": "0ba45e65ef130f8bf6ff59a9ce9d37b5b318198b8551ab749a356a5a43dcf0f5",
+          "core/benchmark/fs-bench-pro/runtime/src/workspace_oracle.rs": "f7efe10b0b2a1539c7bd5fe5e5458f844db033a244d851b350d53d7908446c7b",
+          "core/benchmark/fs-bench-pro/engine/recipes/edit_model.rs": "b76812076def4b4aac3b9ebfd32249eb6e054e570e712a5f47ce8e9917999d64"
+        },
+        "scope": "first iteration function/count/storage observations only; no speed or reference-comparison claim and no relaxed reference-splice guard"
+      }
     },
     {
       "id": "replace-shrink-middle-4k-to-2k-on-500mib-ops-1",
@@ -2256,7 +2509,18 @@
         "final_bytes": 524285952,
         "plan_sha256": "9acceebd5a7f0fb147583b0cc3aab93a9dbb47299c3781b936019f242798f225"
       },
-      "expected_commit": "Committed"
+      "expected_commit": "Committed",
+      "iteration_1_declaration": {
+        "cache_scope": "Class B fresh measured mount after the same untimed ordinary body and terminal cleanup; clone/setup warmth declared. Measured Commit consumes own-written input.",
+        "pre_commit_own_write_cold_proof": "UNAVAILABLE: no independent identity-bound pre-Commit backing-page and metadata cold observation is implemented. Numeric cache eligibility is INELIGIBLE; a functional proof does not credit own-write warmth.",
+        "functional_obligations": "one measured ordinary transformation, expected Committed, exact acknowledged persisted root, complete names/kinds/portable metadata/every byte, exhaustive reachable inode-table membership, unchanged inode scope/serial, complete current mapping totals/profile and untouched current payload-ID subset, terminal Gone and known Stop",
+        "oracle_source_sha256": {
+          "core/benchmark/fs-bench-pro/runtime/src/edit_oracle.rs": "0ba45e65ef130f8bf6ff59a9ce9d37b5b318198b8551ab749a356a5a43dcf0f5",
+          "core/benchmark/fs-bench-pro/runtime/src/workspace_oracle.rs": "f7efe10b0b2a1539c7bd5fe5e5458f844db033a244d851b350d53d7908446c7b",
+          "core/benchmark/fs-bench-pro/engine/recipes/edit_model.rs": "b76812076def4b4aac3b9ebfd32249eb6e054e570e712a5f47ce8e9917999d64"
+        },
+        "scope": "first iteration function/count/storage observations only; no speed or reference-comparison claim and no relaxed reference-splice guard"
+      }
     },
     {
       "id": "truncate-tail-4k-on-1mib-ops-1",
@@ -2350,7 +2614,18 @@
         "final_bytes": 1044480,
         "plan_sha256": "66bcec70ead13e06cf48923dde1e0feaf7c93ea51778a4d3e7c76b2c8ea714c3"
       },
-      "expected_commit": "Committed"
+      "expected_commit": "Committed",
+      "iteration_1_declaration": {
+        "cache_scope": "Class B fresh measured mount after the same untimed ordinary body and terminal cleanup; clone/setup warmth declared. Measured Commit consumes own-written input.",
+        "pre_commit_own_write_cold_proof": "UNAVAILABLE: no independent identity-bound pre-Commit backing-page and metadata cold observation is implemented. Numeric cache eligibility is INELIGIBLE; a functional proof does not credit own-write warmth.",
+        "functional_obligations": "one measured ordinary transformation, expected Committed, exact acknowledged persisted root, complete names/kinds/portable metadata/every byte, exhaustive reachable inode-table membership, unchanged inode scope/serial, complete current mapping totals/profile and untouched current payload-ID subset, terminal Gone and known Stop",
+        "oracle_source_sha256": {
+          "core/benchmark/fs-bench-pro/runtime/src/edit_oracle.rs": "0ba45e65ef130f8bf6ff59a9ce9d37b5b318198b8551ab749a356a5a43dcf0f5",
+          "core/benchmark/fs-bench-pro/runtime/src/workspace_oracle.rs": "f7efe10b0b2a1539c7bd5fe5e5458f844db033a244d851b350d53d7908446c7b",
+          "core/benchmark/fs-bench-pro/engine/recipes/edit_model.rs": "b76812076def4b4aac3b9ebfd32249eb6e054e570e712a5f47ce8e9917999d64"
+        },
+        "scope": "first iteration function/count/storage observations only; no speed or reference-comparison claim and no relaxed reference-splice guard"
+      }
     },
     {
       "id": "truncate-tail-4k-on-10mib-ops-1",
@@ -2444,7 +2719,18 @@
         "final_bytes": 10481664,
         "plan_sha256": "ad5414593ddf7a4bd9875359c9555d00426e996f405e370140a7b77293591f74"
       },
-      "expected_commit": "Committed"
+      "expected_commit": "Committed",
+      "iteration_1_declaration": {
+        "cache_scope": "Class B fresh measured mount after the same untimed ordinary body and terminal cleanup; clone/setup warmth declared. Measured Commit consumes own-written input.",
+        "pre_commit_own_write_cold_proof": "UNAVAILABLE: no independent identity-bound pre-Commit backing-page and metadata cold observation is implemented. Numeric cache eligibility is INELIGIBLE; a functional proof does not credit own-write warmth.",
+        "functional_obligations": "one measured ordinary transformation, expected Committed, exact acknowledged persisted root, complete names/kinds/portable metadata/every byte, exhaustive reachable inode-table membership, unchanged inode scope/serial, complete current mapping totals/profile and untouched current payload-ID subset, terminal Gone and known Stop",
+        "oracle_source_sha256": {
+          "core/benchmark/fs-bench-pro/runtime/src/edit_oracle.rs": "0ba45e65ef130f8bf6ff59a9ce9d37b5b318198b8551ab749a356a5a43dcf0f5",
+          "core/benchmark/fs-bench-pro/runtime/src/workspace_oracle.rs": "f7efe10b0b2a1539c7bd5fe5e5458f844db033a244d851b350d53d7908446c7b",
+          "core/benchmark/fs-bench-pro/engine/recipes/edit_model.rs": "b76812076def4b4aac3b9ebfd32249eb6e054e570e712a5f47ce8e9917999d64"
+        },
+        "scope": "first iteration function/count/storage observations only; no speed or reference-comparison claim and no relaxed reference-splice guard"
+      }
     },
     {
       "id": "truncate-tail-4k-on-100mib-ops-1",
@@ -2538,7 +2824,18 @@
         "final_bytes": 104853504,
         "plan_sha256": "2fb8069806299128d8e5f57b3245968c3d4c5fbd7bfcfa834d3f34e5f716a668"
       },
-      "expected_commit": "Committed"
+      "expected_commit": "Committed",
+      "iteration_1_declaration": {
+        "cache_scope": "Class B fresh measured mount after the same untimed ordinary body and terminal cleanup; clone/setup warmth declared. Measured Commit consumes own-written input.",
+        "pre_commit_own_write_cold_proof": "UNAVAILABLE: no independent identity-bound pre-Commit backing-page and metadata cold observation is implemented. Numeric cache eligibility is INELIGIBLE; a functional proof does not credit own-write warmth.",
+        "functional_obligations": "one measured ordinary transformation, expected Committed, exact acknowledged persisted root, complete names/kinds/portable metadata/every byte, exhaustive reachable inode-table membership, unchanged inode scope/serial, complete current mapping totals/profile and untouched current payload-ID subset, terminal Gone and known Stop",
+        "oracle_source_sha256": {
+          "core/benchmark/fs-bench-pro/runtime/src/edit_oracle.rs": "0ba45e65ef130f8bf6ff59a9ce9d37b5b318198b8551ab749a356a5a43dcf0f5",
+          "core/benchmark/fs-bench-pro/runtime/src/workspace_oracle.rs": "f7efe10b0b2a1539c7bd5fe5e5458f844db033a244d851b350d53d7908446c7b",
+          "core/benchmark/fs-bench-pro/engine/recipes/edit_model.rs": "b76812076def4b4aac3b9ebfd32249eb6e054e570e712a5f47ce8e9917999d64"
+        },
+        "scope": "first iteration function/count/storage observations only; no speed or reference-comparison claim and no relaxed reference-splice guard"
+      }
     },
     {
       "id": "truncate-tail-4k-on-500mib-ops-1",
@@ -2632,7 +2929,18 @@
         "final_bytes": 524283904,
         "plan_sha256": "1fde73eb9fd88b6875be64b95ea3f25f868a458acaec424060dd98a4a8376a24"
       },
-      "expected_commit": "Committed"
+      "expected_commit": "Committed",
+      "iteration_1_declaration": {
+        "cache_scope": "Class B fresh measured mount after the same untimed ordinary body and terminal cleanup; clone/setup warmth declared. Measured Commit consumes own-written input.",
+        "pre_commit_own_write_cold_proof": "UNAVAILABLE: no independent identity-bound pre-Commit backing-page and metadata cold observation is implemented. Numeric cache eligibility is INELIGIBLE; a functional proof does not credit own-write warmth.",
+        "functional_obligations": "one measured ordinary transformation, expected Committed, exact acknowledged persisted root, complete names/kinds/portable metadata/every byte, exhaustive reachable inode-table membership, unchanged inode scope/serial, complete current mapping totals/profile and untouched current payload-ID subset, terminal Gone and known Stop",
+        "oracle_source_sha256": {
+          "core/benchmark/fs-bench-pro/runtime/src/edit_oracle.rs": "0ba45e65ef130f8bf6ff59a9ce9d37b5b318198b8551ab749a356a5a43dcf0f5",
+          "core/benchmark/fs-bench-pro/runtime/src/workspace_oracle.rs": "f7efe10b0b2a1539c7bd5fe5e5458f844db033a244d851b350d53d7908446c7b",
+          "core/benchmark/fs-bench-pro/engine/recipes/edit_model.rs": "b76812076def4b4aac3b9ebfd32249eb6e054e570e712a5f47ce8e9917999d64"
+        },
+        "scope": "first iteration function/count/storage observations only; no speed or reference-comparison claim and no relaxed reference-splice guard"
+      }
     },
     {
       "id": "zero-extend-tail-4k-on-1mib-ops-1",
@@ -2726,7 +3034,18 @@
         "final_bytes": 1052672,
         "plan_sha256": "4fa181699d8fe105ca19cb7e1047f64e5b4134b4b285aad9de91fec40d3ebbc3"
       },
-      "expected_commit": "Committed"
+      "expected_commit": "Committed",
+      "iteration_1_declaration": {
+        "cache_scope": "Class B fresh measured mount after the same untimed ordinary body and terminal cleanup; clone/setup warmth declared. Measured Commit consumes own-written input.",
+        "pre_commit_own_write_cold_proof": "UNAVAILABLE: no independent identity-bound pre-Commit backing-page and metadata cold observation is implemented. Numeric cache eligibility is INELIGIBLE; a functional proof does not credit own-write warmth.",
+        "functional_obligations": "one measured ordinary transformation, expected Committed, exact acknowledged persisted root, complete names/kinds/portable metadata/every byte, exhaustive reachable inode-table membership, unchanged inode scope/serial, complete current mapping totals/profile and untouched current payload-ID subset, terminal Gone and known Stop",
+        "oracle_source_sha256": {
+          "core/benchmark/fs-bench-pro/runtime/src/edit_oracle.rs": "0ba45e65ef130f8bf6ff59a9ce9d37b5b318198b8551ab749a356a5a43dcf0f5",
+          "core/benchmark/fs-bench-pro/runtime/src/workspace_oracle.rs": "f7efe10b0b2a1539c7bd5fe5e5458f844db033a244d851b350d53d7908446c7b",
+          "core/benchmark/fs-bench-pro/engine/recipes/edit_model.rs": "b76812076def4b4aac3b9ebfd32249eb6e054e570e712a5f47ce8e9917999d64"
+        },
+        "scope": "first iteration function/count/storage observations only; no speed or reference-comparison claim and no relaxed reference-splice guard"
+      }
     },
     {
       "id": "zero-extend-tail-4k-on-10mib-ops-1",
@@ -2820,7 +3139,18 @@
         "final_bytes": 10489856,
         "plan_sha256": "6067ee9400298e1aff5a9642205c5bbfd8113a3bfe211291ea9e1e03ea3aec31"
       },
-      "expected_commit": "Committed"
+      "expected_commit": "Committed",
+      "iteration_1_declaration": {
+        "cache_scope": "Class B fresh measured mount after the same untimed ordinary body and terminal cleanup; clone/setup warmth declared. Measured Commit consumes own-written input.",
+        "pre_commit_own_write_cold_proof": "UNAVAILABLE: no independent identity-bound pre-Commit backing-page and metadata cold observation is implemented. Numeric cache eligibility is INELIGIBLE; a functional proof does not credit own-write warmth.",
+        "functional_obligations": "one measured ordinary transformation, expected Committed, exact acknowledged persisted root, complete names/kinds/portable metadata/every byte, exhaustive reachable inode-table membership, unchanged inode scope/serial, complete current mapping totals/profile and untouched current payload-ID subset, terminal Gone and known Stop",
+        "oracle_source_sha256": {
+          "core/benchmark/fs-bench-pro/runtime/src/edit_oracle.rs": "0ba45e65ef130f8bf6ff59a9ce9d37b5b318198b8551ab749a356a5a43dcf0f5",
+          "core/benchmark/fs-bench-pro/runtime/src/workspace_oracle.rs": "f7efe10b0b2a1539c7bd5fe5e5458f844db033a244d851b350d53d7908446c7b",
+          "core/benchmark/fs-bench-pro/engine/recipes/edit_model.rs": "b76812076def4b4aac3b9ebfd32249eb6e054e570e712a5f47ce8e9917999d64"
+        },
+        "scope": "first iteration function/count/storage observations only; no speed or reference-comparison claim and no relaxed reference-splice guard"
+      }
     },
     {
       "id": "zero-extend-tail-4k-on-100mib-ops-1",
@@ -2914,7 +3244,18 @@
         "final_bytes": 104861696,
         "plan_sha256": "e9a9a25ff508b54a733ab86eb67df83a648dfe48b369c7600545608b40613cdc"
       },
-      "expected_commit": "Committed"
+      "expected_commit": "Committed",
+      "iteration_1_declaration": {
+        "cache_scope": "Class B fresh measured mount after the same untimed ordinary body and terminal cleanup; clone/setup warmth declared. Measured Commit consumes own-written input.",
+        "pre_commit_own_write_cold_proof": "UNAVAILABLE: no independent identity-bound pre-Commit backing-page and metadata cold observation is implemented. Numeric cache eligibility is INELIGIBLE; a functional proof does not credit own-write warmth.",
+        "functional_obligations": "one measured ordinary transformation, expected Committed, exact acknowledged persisted root, complete names/kinds/portable metadata/every byte, exhaustive reachable inode-table membership, unchanged inode scope/serial, complete current mapping totals/profile and untouched current payload-ID subset, terminal Gone and known Stop",
+        "oracle_source_sha256": {
+          "core/benchmark/fs-bench-pro/runtime/src/edit_oracle.rs": "0ba45e65ef130f8bf6ff59a9ce9d37b5b318198b8551ab749a356a5a43dcf0f5",
+          "core/benchmark/fs-bench-pro/runtime/src/workspace_oracle.rs": "f7efe10b0b2a1539c7bd5fe5e5458f844db033a244d851b350d53d7908446c7b",
+          "core/benchmark/fs-bench-pro/engine/recipes/edit_model.rs": "b76812076def4b4aac3b9ebfd32249eb6e054e570e712a5f47ce8e9917999d64"
+        },
+        "scope": "first iteration function/count/storage observations only; no speed or reference-comparison claim and no relaxed reference-splice guard"
+      }
     },
     {
       "id": "zero-extend-tail-4k-on-500mib-result-capped-v2-ops-1",
@@ -3008,7 +3349,18 @@
         "final_bytes": 524288000,
         "plan_sha256": "0c546b749abdff5620c008f7f6a75f95b89c03aef415d88b8d605d75d717806c"
       },
-      "expected_commit": "Committed"
+      "expected_commit": "Committed",
+      "iteration_1_declaration": {
+        "cache_scope": "Class B fresh measured mount after the same untimed ordinary body and terminal cleanup; clone/setup warmth declared. Measured Commit consumes own-written input.",
+        "pre_commit_own_write_cold_proof": "UNAVAILABLE: no independent identity-bound pre-Commit backing-page and metadata cold observation is implemented. Numeric cache eligibility is INELIGIBLE; a functional proof does not credit own-write warmth.",
+        "functional_obligations": "one measured ordinary transformation, expected Committed, exact acknowledged persisted root, complete names/kinds/portable metadata/every byte, exhaustive reachable inode-table membership, unchanged inode scope/serial, complete current mapping totals/profile and untouched current payload-ID subset, terminal Gone and known Stop",
+        "oracle_source_sha256": {
+          "core/benchmark/fs-bench-pro/runtime/src/edit_oracle.rs": "0ba45e65ef130f8bf6ff59a9ce9d37b5b318198b8551ab749a356a5a43dcf0f5",
+          "core/benchmark/fs-bench-pro/runtime/src/workspace_oracle.rs": "f7efe10b0b2a1539c7bd5fe5e5458f844db033a244d851b350d53d7908446c7b",
+          "core/benchmark/fs-bench-pro/engine/recipes/edit_model.rs": "b76812076def4b4aac3b9ebfd32249eb6e054e570e712a5f47ce8e9917999d64"
+        },
+        "scope": "first iteration function/count/storage observations only; no speed or reference-comparison claim and no relaxed reference-splice guard"
+      }
     }
   ],
   "original_registry_sha256": "f59a1a68a19b95e1dcc8e6e5e273c7279c69fca373adca9980a9a9ffbd9fa517"
