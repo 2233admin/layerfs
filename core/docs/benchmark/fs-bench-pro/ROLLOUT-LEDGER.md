@@ -113,7 +113,7 @@ comparison or release-admission claim. Durable is
 | H-12 | Mixed final failed preparation and prospective failed family parity | First missing/invalid preparation aborts parity without retaining earlier/later original case outcomes; CLI propagates only an exception | parity_workspace raises inside first failed case before writing parity.json | Worker47e5a5500 / integrationea7148a19 | Missing middle preparation red fails old behavior; all original membership/pin/bytes/native/seal guards retain FAIL reasons,22checksPASS; CLI old exception red retained,new5driverchecksPASS |
 | H-13 | dedup-history-distributed-500 setup at7905 | stage-code-check exits255: exec /bin/bash argument list too long, before any mount/product operation | fixtures.stage embeds all500 prepared-step/helper SHA rows into one165,872B Bash -c argv | Worker359b63686 / integration8ae040cdd | Worker owns external500-step/complete-row/remote-manifest/payload tamper regression; original fullchecker retained |
 | H-14 | Offline closed-Store normalization before remaining batch4 cases | Fresh target enters WAL initialization while SQLite synchronous is still default FULL(2) | synchronous=OFF was applied only after journal_mode=WAL in prepare_closed_store | `e09c61bbd`, harness only; product analogue under investigation | Real sqlite3.Connection subclass observes FULL(2) before journal switch on old helper; final10 normalization checks PASS0.352s and8 controller checks PASS0.159s |
-| H-15 (product) | Public Disposable Store create across three layouts and two acquisition schemas | Actual VFS observer records24 forbidden xSync calls during creation; later Save/seal/reopen issue0 | Selected synchronous/fullfsync applied only after acquisition and WAL initialization had written main/journal | Workera9d8b0453 / integration this commit | External public-API disposable_startup_sync.rs observes24 on old source; finalhost14/Linux6 covering checks PASS with Store sync0 and positive control1 |
+| H-15 (product) | Public Disposable Store create across three layouts and two acquisition schemas | Actual VFS observer records24 forbidden xSync calls during creation; later Save/seal/reopen issue0 | Selected synchronous/fullfsync applied only after acquisition and WAL initialization had written main/journal | Workera9d8b0453 / integration `a05ed6027` | External public-API disposable_startup_sync.rs observes24 on old source; finalhost14/Linux6 covering checks PASS with Store sync0 and positive control1 |
 | H-16 | Aggregate formatting during Disposable startup product verification | cargo fmt cannot resolve two daemon example/test digest modules | Stage0.2 missed the two old fs-bench-pro-storage-content import paths | `9dfb70ee4`, path-only example/test correction | Owning example/test no-run PASS16.27s; existingseven startup/digest receipt tests PASS0.10s; aggregatefmtPASS |
 
 H-1 and H-2 are harness faults, not product correctness or performance defects.
@@ -3412,4 +3412,48 @@ remain pending. No speed, release gate, VM/kernel crash or full unrelated suite
 qualification is claimed.
 
 | `a9d8b0453` (worker) | Enforce selected Disposable synchronization before SQLite creation writes | 79366 | 79370 | +4 |
-| This commit | Integrate H15 public VFS regression, minimal product fix and exact required checks | 79366 | 79370 | +4 |
+| `a05ed6027` | Integrate H15 public VFS regression, minimal product fix and exact required checks | 79366 | 79370 | +4 |
+
+
+The fresh full nine-asset build at clean main `a05ed6027` is admitted for the
+remaining batch 4 cases and the four affected Init checkpoints. Raw receipts
+are in `benchmark-results/fs-bench-pro/2026-10-10-batch-4-product-fix-nine-asset-build-a05ed6027/`.
+The build seal SHA-256 is
+`fd51062c80f9c4d1520cf90c998511c9093ee1bc3cc6cf6a5fa503042e449886`;
+product tree is `9ac88edb2cc44d44edd4a53f9ad89f4dee063a58`.
+Root authenticated all nine archived binary hashes and sizes, source identity,
+identical before/after source manifests, pinned image and both complete Linux
+source-check sets before and after compilation. Each compiler invocation had
+one attempt and an explicit 120 s stop. Host runtime build took 8,716,620,834 ns;
+Linux daemon and helper build took 32,026,333,875 ns. Native writer, verifier and
+SDK payload/helper binary hashes match the closed preparations exactly. Runtime
+is now `7f6a4eec7313837219c59d11cca3926c9bf9a13c17bd879eb208dd67c73a8418`;
+daemon is `aa9de24f0ba916c0ac483f8e559d9d6986dfe4296f4d26a829801a1cb7e4ffd4`.
+The checker still reports exactly OWNER-3's two passthrough refusals as FAIL.
+Its aggregate PASS is not claimed. The owned passing build container
+`layerfs-fsb-build-19bb02c9229a44f9` was removed with its successful removal
+receipt; no build volume or owner resource was removed.
+
+Capped's read-only compatibility audit authenticated all 26 closed dedup
+preparations, 192 selected checkpoint manifests and 6,905 helper files; all
+five immutable initial Store copies retain their exact roots and hashes with
+no sidecars. Mixed's read-only lookup authenticated all four original native
+Init inputs (100, 1,000, 10,000 and 100,000 files), their original digests and
+recipe sources. These reads establish compatible inputs, not coldness or a
+replayed verifier. All preparations retain their original source identities
+and initial-profile limitations. No input was regenerated or relabelled.
+
+The existing Capped and Mixed worktrees now receive the exact reviewed main
+source plus this sealed build. They own only the remaining 23 dedup and five
+prepared M1 cases respectively, one attempt per new execution identity. The
+previous three dedup and four mixed episode results stay at their original
+sources and appear as NOT_RUN in new source selections, with evidence retained
+separately under decision 47. Mixed's incomplete final 500 MB preparation stays
+FAIL with actual execution NOT_RUN and zero attempts. Root owns the four
+changed-source Init attempts, each creating a fresh Store from compatible
+native inputs. All cache, operation, proof and watchdog limits remain intact.
+Shared host/Docker VM interference from concurrent worktrees and retained
+owner/failed services is declared and unquantified; numeric cold admission
+remains INELIGIBLE. Later batches remain pending until batch 4 closure.
+
+| This commit | Admit the current nine-asset build and dispatch affected checkpoints without reusing measurements | 79370 | 79370 | +0 |
