@@ -15,7 +15,7 @@ comparison or release-admission claim. Durable is
 | --- | --- | --- | --- |
 | Handoff specification | COMPLETE | `3c32fbc97` | Harvest released references |
 | 0.1 Released references | COMPLETE | `8e4a78fa0` | Stage 0.2 move-only organization |
-| 0.2 Move-only organization | COMPLETE, historical check failures retained | This commit | Update routing guide, then stage 0.3 catalogue |
+| 0.2 Move-only organization | COMPLETE, historical check failures retained | `13f9dec38`; routing follow-up in this commit | Update routing guide, then stage 0.3 catalogue |
 | 0.3 Case catalogue | PENDING | — | Inventory the frozen root registry and older-commit binding |
 | 0.4 Reproducible engine | PENDING | — | Read retained working scripts and rebuild preparation |
 | 1 Pilot | PENDING | — | Wait for stage 0.4 completion |
@@ -126,3 +126,8 @@ visible and do not authorize a retired route.
 Stage 0.2 Production LOC: 79,366 -> 79,366 (delta +0), active core only;
 reference absent (retired R9c; last counted 65,417 at `498dd1917812`). Method:
 pinned absent-aware parent/staged archive counter. No speed claim.
+
+Routing follow-up: update the current harness guide and add its README to
+point to moved subjects and this rollout. Local links and whitespace checked.
+Documentation-only; Production LOC 79,366 -> 79,366 (delta +0), pinned
+absent-aware method. No runtime check or workload sample repeated.
