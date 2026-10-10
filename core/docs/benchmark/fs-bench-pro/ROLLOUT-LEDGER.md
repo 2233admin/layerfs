@@ -108,7 +108,7 @@ comparison or release-admission claim. Durable is
 | H-17 (frozen workload/oracle) | Mixed M1 100 MB K10 at fa70bbb01 | Fresh-mount verifier rejects d000/f00054 mtime after ten successful commands and Commit ACKs | Frozen atomic save sets stage4 mtime before writing the temporary; writing updates it, while the original shadow retains stage4 mtime | No product or frozen-source change; strict failure retained | Exact original source/scope seals plus retained stat and bounded native sequence confirm correct POSIX write/rename behavior |
 | H-18 (watchdog failure) | Dedup distributed500 at e308118a9 | Unchanged 120 s outer stop expires after 377 acknowledged Commits; no complete receipt/proof/End/Stop | The finite original 500-step schedule does not finish within the bounded attempt; ongoing progress observed, no source-backed deadlock or wrong result identified | No retry, optimization or timeout change; partial attempt stays FAIL with uncertain custody | Administrative external-supervisor closure binds original selection, invocation exit, runtime stream and clone; complete metrics remain unavailable |
 | H-19 (harness) | Batch5 explicit parity-build CLI authoring | Branch/multi CLI rejected before parity despite implemented context setup/controller | Their two original family names were omitted from the CLI workspace allowlist | `821624cb3` | External CLI wiring red retained; final legacy/no-build and branch/explicit-build check PASS; no actual case |
-| H-20 (harness) | Fresh empty preparation for P1 at9da25b495 | Copied native oracle crashes importing /code/engine/oracle.py, before Store Init or SDK test | Module-level repository-root parents4 resolution assumes deep host checkout | This commit | External shallow-copy import red; final copied CLI and pinned host census/legacy oracle scope PASS; failed prep/resources retained |
+| H-20 (harness) | Fresh empty preparation for P1 at9da25b495 | Copied native oracle crashes importing /code/engine/oracle.py, before Store Init or SDK test | Module-level repository-root parents4 resolution assumes deep host checkout | `e60a1aa2c` | External shallow-copy import red; final copied CLI and pinned host census/legacy oracle scope PASS; failed prep/resources retained |
 
 H-1 and H-2 are harness faults, not product correctness or performance defects.
 The original file-identity checker remains intact; no product source changed.
@@ -4337,4 +4337,49 @@ No product, workload, budget, fixture, checker or receipt was weakened. This
 Python-only source change preserves every compiled input of the qualified
 full build, so reuse that exact seal and prepare a new identity once.
 
-| This commit | Fix copied native oracle import; retain H20 failed setup and full build evidence | 79370 | 79370 | +0 |
+| `e60a1aa2c` | Fix copied native oracle import; retain H20 failed setup and full build evidence | 79370 | 79370 | +0 |
+
+
+### Batch 5 existing public SDK P1/P2 qualification, 2026-10-11
+
+After committed H20 fixe60a1aa2c, new empty preparation passed once:
+benchmark-results/fs-bench-pro/2026-10-11-batch-5-public-sdk-empty-import-fix.
+Its owned immutable master islayerfs-fsb-master-empty-4e709a73985e48b2;
+complete native empty input, explicit Disposable Init/seal/install and closed
+provision are bound by prepared.json/manifest. The failed pre-fix master and
+native container remain unchanged. Reused full9asset build is admitted by
+exact unchanged compilation scopes; only Python oracle/helper source changed.
+
+The actual independent public SDK covering test passed once at cleane60a1aa2c,
+complete3,744,106,250 ns, under main120 s outer and60 s inner proof stops.
+Raw benchmark-results/fs-bench-pro/2026-10-11-batch-5-public-sdk-proof-e60a1aa2c;
+proof SHA-256ce22728330ecee7f3a9a88680ad892e39984aed4394735538ae622c9cf96f0c7.
+It proves the public Fork-from-Layer, explicit historical Commit Fork, inherited
+ancestor Fork through an advanced child, independently read one/two/child
+bytes, all exact typed public History records/EOF, unchanged source heads,
+three successful fresh mounts and explicit End/Gone, three independently
+authenticated control channels with EndSession/native fences, successful
+runtime return and KnownStop. Unfiltered normalized closed SQL census sees
+exactlythree typed Commits andfour Branches, including unused initial and
+zero-ACK ancestor; full EOF and independent manifest/schema/profile bindings
+pass. Normalized Store208,896 B; root-source export/WAL/SHM and normalization
+receipts remain immutable. This is a covering test with samples0 and only
+diagnostic clocks, not a workload, numeric cache qualification or comparison.
+The existing route expresses P1/P2; no SDK/product feature was added.
+
+After sealed proof verification and known outer return, separate stopped-state
+readback/removal deleted only own passing containera2a329492182b602a45202d1ba706e16ab814c1b5f838f1c23605a1b9caf7ed1
+and sample volumelayerfs-fsb-sample-7669fd58f5004da2. Administration folder
+benchmark-results/fs-bench-pro/2026-10-11-batch-5-public-sdk-proof-disposal-e60a1aa2c,
+completion SHA-256d9504e19f6a447ac39d0f564b4cd576e73119c92a1c5c417f38cde54a6efa245.
+Original proof manifest verifies unchanged. Preparation master remains for
+rollout setup reuse; failed/uncertain and protected resources remain untouched.
+
+Batch5 preparation and parity may now begin from the final integrated shared
+source/build in the three existing worktrees. True mounted worker concurrency
+and exact original17-case results are still unverified; every case gets one
+original attempt, strict M1 assertions remain and counts missing exact evidence
+remain UNAVAILABLE. No batch6/7 work begins until batch5 is truthfully closed.
+Durable remains NOT_RUN — disabled by owner until explicit reauthorization.
+
+| This commit | Record one actual SDK Fork/History covering proof and owned passing-resource disposal | 79370 | 79370 | +0 |
