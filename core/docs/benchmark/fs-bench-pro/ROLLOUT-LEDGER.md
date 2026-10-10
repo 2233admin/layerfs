@@ -23,7 +23,7 @@ comparison or release-admission claim. Durable is
 | 3 Trees and tools | COMPLETE: all33 original cases ported/parity/sampled, full applicable proofs and clean closePASS; numeric33INELIGIBLE; first snapshotFAIL retained separately; localitydense500 and snapshot EXCEEDED | Shared3c697ae92; directory50c297c68/ad4f95503; locality2590a4536/26c037d90; snapshot0344bfdc6/fix03033abdc/results98d3be30a/70d568e94; Git acebd7cbd/guard031d427a7/results31fff4d49 | Begin batch4 after this committed closure, no identified fixable product correctness bug |
 | 4 History on one branch | CLOSED WITH FAILURES: all 43 original cases ported and recorded; 31 functional/proof/clean-close passes, 11 retained actual failures, one failed preparation with actual NOT_RUN; mixed aggregate parity FAIL retained under section 9 exception; no identified fixable product correctness bug remains | H11 2b52bdf17; H12 ea7148a19; H13 8ae040cdd; H14 e09c61bbd; product H15 a05ed6027; H16 9dfb70ee4; fresh seal3c67e9249; affected Init8f24e39a4; boundary88a2bd27b; partial bd3016957; mixed1a21ebfc3; dedup closure27708c11d | Begin batch 5 after this committed failed closure; verify existing public SDK Fork and History |
 | 5 Branches and Workspaces | CLOSED WITH FAILURES: all17 original cases ported/recorded; eight functional/proof/clean-close passes, eight actual concurrent refusal failures, one failed-preparation actual NOT_RUN; branch aggregate parity FAIL retained under section9 | SDK proof711593c5f; H21/22 4a40fb690; setup exceptionc23ac0cfd; H23 68209bdb7; H24 669bc4853; H25 2f7160c92; H26 616947cb6; branch305bee680; multicb3a003ac; historicalb0b2cd386 | Begin batch6 under this truthful failed closure, preserving all original failures/limits/proofs/resources |
-| 6 Dedup and storage | READY, execution pending | — | Port the five original families at the committed batch5 closure |
+| 6 Dedup and storage | IN_PROGRESS: all54 original definitions ported; shared support/prepare/parity/actual execution pending | CDC77ebaa34e; cross63fffa85e; reusea442c8879; footprint5505bff73; repository in this commit | Qualify shared/native support, seal build, then prepare/parity/one actual case per identity |
 | 7 Reliability | PENDING | — | Wait for batch 6 completion |
 
 ## Decisions
@@ -90,6 +90,10 @@ comparison or release-admission claim. Durable is
 | 56 | Install historical backing as daemon-owned root0:0, directory0700 and file0600; keep Workspace UID/GID501:20 unchanged | Daemon private-directory/file guards require its own effective identity; source UID is filesystem fixture ownership, not backing authority | Weakening the guard, running daemon as fixture UID, or relabeling bad masters as repaired |
 
 | 57 | Serialize historical access topology in original declared role/ACK order and validate exact planned Branch membership | Generic JSON sealing sorts object keys, while the complete typed acknowledgement checker deliberately preserves original sequence | Weakening the checker to sets, dropping duplicate canonical tuples, or editing the failed transcript |
+| 58 | Retain expressible original fresh import verifier Fork/FUSE/full native bytes/End/Gone/Stop alongside typed current storage proof | Frozen oracle topology is expressible and must not be weakened; worker offline-only proposal corrected before sampling | Offline-only replacement |
+| 59 | Prepare fresh native inputs without any Store for the directory-import and Store-footprint cases | Their Init is measured original work; a prepared Store would remove it | Use workspace master provisioning before the timed Init |
+| 60 | Use separately hash-bound pristine Store copies for reuse attribution, no warmup workload, and cumulative original independent proof deadlines | Frozen reuse observes initial actual payload identities before one fresh mount; extra structural reads are setup/proof, never cold evidence | Generic ordinary warmup or inferred pristine payload identity |
+| 61 | Preserve repository all-selected ACKs and a separate Created-only census transcript, with actual Fork-bound branch-only manifest derivation | UpToDate repeats must not become invented Commits, and unfiltered global SQL census stays strict; current Init adds an unused default main Branch | Drop repeats, ancestry-filter global census or silently alter manifest authority |
 
 ## Bugs
 
@@ -5151,4 +5155,46 @@ once713,244,834ns under main120s lock, raw2026-10-11-batch-6-main-authoring/
 footprint. Native preparation, initial+final SDK/FUSE run and storage accounting
 qualification remain NOT_RUN pending shared/native support.
 
-| This commit | Port six original fresh Init/edit Store-footprint controls | 79370 | 79370 | +0 |
+| `5505bff73` | Port six original fresh Init/edit Store-footprint controls | 79370 | 79370 | +0 |
+
+
+### Batch 6 repository-history registration and corpus recipe, 2026-10-11
+
+Allthree original selections remain exact: full157 states/4,936,693,030 selected
+logical bytes; stride3 53/1,676,767,835; stride10 17/561,010,345 including157.
+The existing frozen ordinary mounted importer/observer is callable. There is
+no source-backed not-applicable capability condition; no product feature or
+retired crate is restored. The active component history lane is not substituted
+for the original SDK/FUSE/Commit/history/full-byte oracle and none of its
+storage targets is adopted. Corpus manifest/tip/all157 metadata authenticate
+read-only; real transition preparation, Git batch/blob execution and cases
+remain NOT_RUN. Native observed output stays outside Disposable backing; its
+frozen sync_all applies only to that separate output artifact.
+
+The stdlib source-only recipe authenticates exact Git/tree/blob/oracle identity
+and prepares selected-to-selected transitions. Strides do not reuse adjacent
+checkpoint previous.tsv; the external fixture catches a change in a skipped
+state. Full157 also authenticates complete cached-input receipts/membership.
+Original14400s phase/300s state limits stay recorded, with owner actual120s
+external/per-invocation ceiling enforced; no selection/time/cache reduction or
+component threshold is selected. Decisions58–61 bind current topology, native
+source setup and independent global membership.
+
+Worker dd6fa4b7796f274eaed579cbc23b369c7242c4ae has counted/confirmed
+tree434495727268c426eb0fe6f1e8fef3c9ba525db1, unchanged product9ac.
+Five authoring checks PASS once1,905,532,375ns/private120s. Worker sealed
+family-authoring-handoff.json SHA-256
+8c9126e965d344e1e4224ec5fbbb30eb9864f0ec956f36c70aef11d5bc1e01aa.
+Root five exact-source checks PASS once2,380,493,166ns/main120s, raw
+2026-10-11-batch-6-main-authoring/repository. These tests mock Git batch I/O;
+they are authoring checks, never real corpus or runtime qualification.
+
+All24 batch1–6 families/245 original IDs are registered as ported; reliability
+retains28 pending IDs. Total25families/273 IDs unchanged. All54 batch6 actual
+cases remain NOT_RUN awaiting final shared support, clean source admission,
+pinned nine-asset build, own preparation and exact family parity. Parallel
+worktrees own separate native/import/footprint/repository components; source
+and compiler/test failures remain retained and no speed work is selected.
+
+| Worker dd6fa4b77 | Author repository selections/wrapper/native corpus recipe/tests | 79370 | 79370 | +0 |
+| This commit | Integrate exact repository-history definitions and independent corpus recipe | 79370 | 79370 | +0 |
