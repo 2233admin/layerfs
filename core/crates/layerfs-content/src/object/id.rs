@@ -28,6 +28,17 @@ impl ObjectId {
         Self(*hasher.finalize().as_bytes())
     }
 
+    /// Identity of the canonical bytes that `parts` form in order, without
+    /// joining them: the identity `for_bytes` gives their concatenation.
+    pub fn for_parts(parts: &[&[u8]]) -> Self {
+        let mut hasher = blake3::Hasher::new();
+        hasher.update(OBJECT_DOMAIN);
+        for part in parts {
+            hasher.update(part);
+        }
+        Self(*hasher.finalize().as_bytes())
+    }
+
     /// Rebuilds an identity from its fixed-width representation.
     pub fn from_bytes(bytes: &[u8]) -> ContentResult<Self> {
         let digest: [u8; DIGEST_BYTES] =

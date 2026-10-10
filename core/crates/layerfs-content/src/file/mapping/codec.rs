@@ -86,6 +86,26 @@ pub fn encode_chunk_object(bytes: &[u8]) -> ContentResult<Vec<u8>> {
     Ok(canonical)
 }
 
+/// Identity of the canonical chunk object whose payload is exactly `bytes`,
+/// without building that object: the identity of what `encode_chunk_object`
+/// returns for the same bytes. Hashes the frozen framing, then the payload.
+pub fn chunk_id(bytes: &[u8]) -> ContentResult<ObjectId> {
+    if bytes.len() > cdc::MAXIMUM_CHUNK_BYTES {
+        return Err(ContentError::ObjectLimitExceeded {
+            limit: cdc::MAXIMUM_CHUNK_BYTES,
+            actual: bytes.len(),
+        });
+    }
+    let value_len = (CHUNK_MAGIC.len() + bytes.len()) as u32;
+    let mut framing = [0_u8; HEADER_LEN + codec::VALUE_LEN_BYTES + CHUNK_MAGIC.len()];
+    framing[..4].copy_from_slice(&OBJECT_MAGIC);
+    framing[4] = codec::BYTES_KIND;
+    framing[5..9].copy_from_slice(&(value_len + codec::VALUE_LEN_BYTES as u32).to_be_bytes());
+    framing[9..13].copy_from_slice(&value_len.to_be_bytes());
+    framing[13..].copy_from_slice(CHUNK_MAGIC);
+    Ok(ObjectId::for_parts(&[&framing, bytes]))
+}
+
 /// Borrows the payload of a chunk object value.
 pub fn decode_chunk_payload(value: &[u8]) -> ContentResult<&[u8]> {
     let bytes = value

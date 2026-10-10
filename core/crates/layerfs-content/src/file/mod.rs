@@ -24,7 +24,7 @@ pub use edit::{
     EditSequence, EditSource, IndexedEditBacking, IndexedEditRequest, IndexedEditSource,
     EDIT_DEFERRED_LIMIT,
 };
-pub use mapping::{ExtentBuilder, PredecessorBase, ReadCounters};
+pub use mapping::{Extent, ExtentBuilder, ExtentCursor, PredecessorBase, ReadCounters};
 pub use read::{read_all, read_all_bounded, read_range};
 pub use runs::{construct_runs, FileRun, FileRuns, RunConstruction};
 pub use view::FileView;

@@ -95,6 +95,35 @@ impl FastCdc {
     }
 }
 
+/// Reports every position of `bytes` at which the frozen scanner could end a
+/// chunk, for a chunk that began an even number of bytes before `bytes[0]`.
+///
+/// A position `end` means the chunk would end with `bytes[end - 1]`; the
+/// scanner decides it with `bytes[end]`, so the last position reported is
+/// `bytes.len() - 1`. The rolling hash is taken over `bytes` alone and never
+/// restarts. It forgets a byte after 64 more, so a real boundary is reported
+/// when at least 64 bytes of the chunk precede it both in `bytes` and after
+/// the chunk's unscanned first 8 KiB; a boundary forced by the maximum chunk
+/// size is never one. A candidate is a hint to verify by identity: it proves
+/// nothing. The other pair alignment is `&bytes[1..]`.
+pub fn cut_candidates(bytes: &[u8], on_candidate: &mut dyn FnMut(usize)) {
+    let mut hash = PROFILE_SEED;
+    for (pair, bytes) in bytes.chunks_exact(2).enumerate() {
+        hash = hash
+            .wrapping_shl(NORMALIZATION_SHIFT)
+            .wrapping_add(GEAR[usize::from(bytes[0])].wrapping_shl(1));
+        // The large masks are subsets of the small ones: every boundary the
+        // scanner takes under either satisfies the large one.
+        if hash & SHIFTED_LARGE_MASK == 0 {
+            on_candidate(2 * pair);
+        }
+        hash = hash.wrapping_add(GEAR[usize::from(bytes[1])]);
+        if hash & LARGE_MASK == 0 {
+            on_candidate(2 * pair + 1);
+        }
+    }
+}
+
 pub(crate) struct Scanner {
     chunk: Vec<u8>,
     pending: Option<u8>,

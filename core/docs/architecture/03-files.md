@@ -243,6 +243,32 @@ parallel case in the inode leaf, where the same class of mistake is recorded exp
 
 ## 4. Localized edits and reads (C1)
 
+Issue 316 update, 2026-10-11 (implemented): three read-only entry points for
+a caller that compares incoming bytes with a committed file. None changes a
+canonical format, a partition or an identity.
+
+| Entry point | What it gives | Cost |
+| --- | --- | --- |
+| `FileView::extents`, [`ExtentCursor`](../../crates/layerfs-content/src/file/mapping/extents.rs) | The extents of a chunked file in logical order: offset, length, chunk identity and the offset inside that chunk. `seek` repositions at the extent that holds an offset | One mapping page a level after a seek, then one a leaf; no payload byte. None for a whole-file base |
+| `mapping::chunk_id` | The identity of the chunk object whose payload is the given bytes, without building the object | One hash of the framing and the bytes |
+| `cdc::cut_candidates` | Every position of a byte window at which the frozen scanner could end a chunk, for one pair alignment | One gear pass |
+
+- The cursor and the existing predecessor cursor share one forward walk, so
+  the predecessor's page reads are unchanged.
+- An extent does not say whether it is its whole chunk: the mapping records no
+  chunk length. Bytes that hash to the extent's chunk identity are the only
+  proof, so a slice left by an earlier incremental edit never matches.
+- A cut candidate is a hint. The scanner decides a boundary with the byte
+  after it and forgets a byte after 64 more; a boundary forced by the maximum
+  chunk size is never a candidate.
+
+The external test `extent_cursor` checks, on trees a real construction
+emitted: contiguous extents whose bytes hash to the recorded identity (165
+extents of a 3 MiB file from 3 pages, 2 pages after a seek); all 111 real
+boundaries of a 2 MiB file among 561 candidates, from windows that start at
+the chunk, 4 KiB and 64 bytes before the boundary; and 2 slices beside 58
+whole chunks after a 10-byte insert.
+
 ### 4.1 The edit dispatch — dispatch on the result, never the route
 
 `core/crates/layerfs-content/src/file/edit/apply.rs`

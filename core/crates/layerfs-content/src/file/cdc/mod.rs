@@ -8,6 +8,6 @@ mod zeros;
 pub(crate) use gear::Scanner;
 
 pub use gear::{
-    profile_id, CdcCounters, FastCdc, MAXIMUM_CHUNK_BYTES, MINIMUM_CHUNK_BYTES,
+    cut_candidates, profile_id, CdcCounters, FastCdc, MAXIMUM_CHUNK_BYTES, MINIMUM_CHUNK_BYTES,
     NORMALIZATION_SHIFT, PROFILE_SEED, TARGET_CHUNK_BYTES,
 };
