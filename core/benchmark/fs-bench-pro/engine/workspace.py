@@ -671,6 +671,10 @@ def m1_created_modes(command, prior):
 
 def one_family_case(family, case, prepared_folder, build_folder, output, *, preparation_only=False):
     """Single ordinary call/Commit through the same SDK/Sandbox machinery."""
+    if case.get('historical_access'):
+        if preparation_only:
+            raise ValueError('historical reader cannot substitute for a producer setup')
+        return one_access_case(family, case, prepared_folder, build_folder, output)
     if case.get("branch_schedule") or case.get("topology_schedule"):
         return one_context_case(family, case, prepared_folder, build_folder, output,
                                 preparation_only=preparation_only)
@@ -1204,6 +1208,226 @@ def dispose_family_resources(folder, returned_row):
 
 # Batch 5 uses the same SDK/runtime owner, with explicit role-local histories.
 CONTEXT_FAMILIES = frozenset(('branch_development', 'multi_workspace_development'))
+
+
+def access_deadlines(case, started, owner_stop):
+    guard = case['original_v016_guards']
+    wanted = {'verification_complete_work_ms': 25000, 'verification_worker_work_ms': 22000,
+              'cleanup_reserve_ms': 3000, 'verification_hard_ms': 35000,
+              'publication_guard_seconds': 0.25, 'owner_test_invocation_ceiling_ms': 120000}
+    if any(guard.get(key) != value for key, value in wanted.items()):
+        raise ValueError('original access25/22/3/35/.25/120 limits required')
+    return {'work': min(owner_stop, started + 22), 'cleanup': min(owner_stop, started + 25),
+            'publication': min(owner_stop, started + 35), 'owner': owner_stop}
+
+
+def access_selected_history(runtime, prepared, graph, output, deadline):
+    selected = prepared['historical_selection']; role = selected['source_role']; branch = graph['branches'][role]
+    history = context_history(runtime, '@' + branch['branch_id'], branch, graph, output, deadline)
+    offset = len(branch['commits']) - selected['local']
+    actual = history['records'][offset]
+    expected = branch['commits'][selected['local'] - 1]['commit']['fields']
+    if any(actual.get(key) != expected[key] for key in ('commit_id', 'stack', 'root', 'parent', 'base_layer')):
+        raise ValueError('access local ordinal differs from exact anchored public History record')
+    ack = selected['acknowledged_commit']
+    if (ack['commit_id'] != actual['commit_id'] or ack['root_id'] != actual['root']
+            or ack['local'] != selected['local'] or ack['role'] != role):
+        raise ValueError('access selection differs from authenticated producer acknowledgement')
+    return {'source_role': role, 'original_source_role': selected['original_source_role'], 'local': selected['local'],
+            'source_branch_id': branch['branch_id'], 'source_head': branch['final_head'], 'history': history, 'selected': actual}
+
+
+def access_fork(runtime, case, selected, graph, output, deadline):
+    identifier = '11' + secrets.token_hex(16)
+    name = f"access-{selected['local']}-{case['v016_case']}"
+    ack = selected['selected']
+    body = f"commit\t{identifier}\t{name}\t@{selected['source_branch_id']}\t{ack['commit_id']}\n"
+    request = script(output, 'access-fork.tsv', body)
+    fork = context_send(runtime, 'fork', 'access', request, deadline=deadline)
+    fields = fork['fields']
+    wanted = {'branch_id': identifier, 'name': name, 'head': ack['commit_id'], 'root': ack['root'],
+              'stack': ack['stack'], 'base_layer': ack['base_layer']}
+    if any(fields.get(key) != value for key, value in wanted.items()):
+        raise ValueError('access public Fork differs from actual selected source Branch/Commit')
+    graph['branches']['access'] = {'branch_id': identifier, 'name': name, 'stack': ack['stack'], 'base_layer': ack['base_layer'],
+        'initial_parent': ack['commit_id'], 'initial_root': ack['root'], 'final_head': ack['commit_id'], 'final_root': ack['root'],
+        'source_role': selected['source_role'], 'source_local': selected['local'], 'commits': [], 'fork': fork}
+    return fork
+
+
+def access_command(runtime, case, key, phase, output, deadline):
+    body = '/bin/bash /code/workload.sh ' + shlex.join([phase, case['v016_case']])
+    path = script(output, 'access-' + phase + '.sh', body)
+    event = runtime.send('command' if phase == 'reader' else 'verify', key, path, deadline=deadline)
+    fields = event['fields']
+    if (fields.get('exit_code') != '0' or fields.get('registered_execs') != '0'
+            or fields.get('command_sha256') != identity.sha256(path) or fields.get('key') != key):
+        raise ValueError('access original helper known zero/body/ordinary command custody differs')
+    return event
+
+
+def access_graph_proof(case, prepared, graph, runtime, row, build, output, commands, deadline):
+    import shutil
+    docker = ['docker', '--host', 'unix://' + build['socket']]
+    receipts.command([*docker, 'cp', runtime.container + ':/layerfs-store/global', str(output / 'graph-store')],
+                     output, 'closed-store-export', operation_deadline(deadline, 15) - time.monotonic())
+    raw = output / 'graph-store/store.sqlite'
+    normalized = oracle.prepare_closed_store(output / 'graph-store', output / 'census-store/store.sqlite', deadline)
+    row['closed_store_normalization'] = normalized
+    census_store = Path(normalized['path']); (output / 'typed-store').mkdir()
+    typed = output / 'typed-store/store.sqlite'; shutil.copy2(census_store, typed)
+    if identity.sha256(typed) != identity.sha256(census_store):
+        raise ValueError('access typed copy differs from immutable normalized census input')
+    selected = prepared['historical_selection']
+    producer = {'v016_case': prepared['closed_producer']['producer_case']}
+    checkpoints = {'context_checkpoints': [{'role': selected['source_role'], 'index': selected['local'], 'manifest': selected['manifest']}]}
+    transcript = script(output, 'access-topology.tsv', context_transcript(producer, checkpoints, graph))
+    argv = [build['binaries']['runtime']['path'], 'verify-access', '--socket', build['socket'], '--volume', row['clone']['volume'],
+        '--daemon', build['binaries']['daemon']['path'], '--manifest', prepared['provision']['manifest'], '--sealed', str(typed),
+        '--case', case['v016_case'], '--receipt', str(output / 'access.events.jsonl'), '--history-file', str(transcript),
+        '--uid', str(prepared['source_uid']), '--gid', str(prepared['source_gid'])]
+    observed = receipts.command(argv, output, 'public-access-proof', operation_deadline(deadline, 120) - time.monotonic())
+    events = [json.loads(line) for line in Path(observed['stdout']).read_text().splitlines()]
+    completed = [event for event in events if event['event'] == 'workspace_verified']
+    if (len(completed) != 1 or not events or events[-1]['event'] != 'finished'
+            or completed[0]['fields'].get('status') != 'PASS' or completed[0]['fields'].get('case') != case['v016_case']
+            or completed[0]['fields'].get('topology_case') != producer['v016_case']
+            or completed[0]['fields'].get('root') != selected['acknowledged_commit']['root_id']):
+        raise ValueError('access complete independent public typed selected-root proof required')
+    branches = [event['fields'] for event in events if event['event'] == 'topology_branch_verified']
+    if (len(branches) != len(graph['branches']) or {item['role'] for item in branches} != set(graph['branches'])
+            or any(any(item.get(key) != graph['branches'][item['role']][field] for key, field in
+                       (('branch_id', 'branch_id'), ('head', 'final_head'), ('root', 'final_root'))) for item in branches)):
+        raise ValueError('access producer heads or new zero-ACK Branch changed')
+    roots = [event['fields'] for event in events if event['event'] == 'topology_root_verified']
+    if len(roots) != 1 or any(roots[0].get(key) != value for key, value in
+            {'role': selected['source_role'], 'local': selected['local'], 'commit_id': selected['acknowledged_commit']['commit_id'],
+             'root': selected['acknowledged_commit']['root_id']}.items()):
+        raise ValueError('access exact retained selected root/Commit/local scope differs')
+    passes = oracle.verify_access_passes(case, Path(commands['reader']['fields']['stdout']).read_text(),
+                                       Path(commands['verifier']['fields']['stdout']).read_text(), events)
+    tuples = [{key: ack[key] for key in ('commit_id', 'layer_stack_id', 'root_id', 'parent_commit_id', 'base_layer_id')}
+              for ack in prepared['closed_producer']['acknowledgements']]
+    completion, runtime_events = output / 'closed-store-export.completion.json', output / 'runtime.events.jsonl'
+    custody = {'custody': row['custody'], 'container': runtime.container, 'volume': row['clone']['volume'],
+        'remote_source': '/layerfs-store/global/store.sqlite', 'local_source': str(raw), 'source_sha256': identity.sha256(raw),
+        'source_size': raw.stat().st_size, 'prepared_manifest': prepared['provision']['manifest'],
+        'prepared_manifest_sha256': identity.sha256(prepared['provision']['manifest']), 'transcript': str(transcript),
+        'transcript_sha256': identity.sha256(transcript), 'export_completion': str(completion),
+        'export_completion_sha256': identity.sha256(completion), 'runtime_events': str(runtime_events),
+        'runtime_events_sha256': identity.sha256(runtime_events),
+        'normalization': {'receipt': normalized['receipt'], 'receipt_sha256': normalized['receipt_sha256']}}
+    census = oracle.graph_commit_census(census_store, tuples, completed[0]['fields'], custody)
+    if passes.get('status') != 'PASS' or census.get('status') != 'PASS' or time.monotonic() >= deadline:
+        raise ValueError('access original two-pass/global census proof failed or exhausted deadline')
+    receipts.write_new(output / 'global-access-census.json', census)
+    row['topology'].update(public_proof=events, transcript=str(transcript), transcript_sha256=identity.sha256(transcript), global_census=census)
+    return {'status': 'PASS', 'scope': case['oracle']['scope'], 'read_passes': passes, 'global_census': census}
+
+
+def one_access_case(family, case, prepared_folder, build_folder, output):
+    started_ns = time.monotonic_ns(); owner_stop = time.monotonic() + 120
+    current, build = identity.source_identity(), identity.load_build(build_folder)
+    prepared = fixtures.load(prepared_folder, case['fixture']['recipe'])
+    admission = fixtures.validate_runtime_helpers(case, prepared, build)
+    output = Path(output).resolve(); output.mkdir(parents=True, exist_ok=False)
+    treatment = {'family': family, 'case': case, 'product': current['product_tree'], 'engine': identity.sha256(__file__),
+                 'helpers': prepared['helpers']['files'], 'producer_store': prepared['closed_producer']['store_sha256'],
+                 'producer_transcript': prepared['closed_producer']['transcript_sha256'],
+                 'binaries': {name: value['sha256'] for name, value in build['binaries'].items()}, 'image': identity.IMAGE}
+    claim = hashlib.sha256(json.dumps(treatment, sort_keys=True).encode()).hexdigest()
+    claims = identity.ROOT / 'benchmark-results/fs-bench-pro/claims'; claims.mkdir(parents=True, exist_ok=True)
+    with (claims / claim).open('x') as stream:
+        stream.write(str(output) + '\n')
+    row = {'schema': 'fs-bench-pro-workspace-family-v1', 'family': family, 'case': case['id'], 'source_commit': current['source_commit'],
+        'product_tree': current['product_tree'], 'identity': current, 'build': str(Path(build_folder).resolve()), 'prepared': str(Path(prepared_folder).resolve()),
+        'image': identity.IMAGE, 'runtime_sha256': build['binaries']['runtime']['sha256'], 'daemon_sha256': build['binaries']['daemon']['sha256'],
+        'status': 'NOT_RUN', 'functional_status': 'NOT_RUN', 'proof_status': 'NOT_RUN', 'proof_only': True,
+        'sample_count': 0, 'verification_attempt_count': 1, 'attempted_operation_count': 1, 'completed_operation_count': 0,
+        'performance_mode': 'N/A — original historical-access VERIFY-ONLY', 'declared_limit_ns': 'N/A',
+        'verifier_limit_ns': 25_000_000_000, 'owner_test_ceiling_ns': 120_000_000_000, 'phases': {}, 'counts': {}, 'observations': {},
+        'cache_class': 'B', 'cache': {'class': 'B', 'status': 'INELIGIBLE', 'declaration': case['cache_contract']},
+        'global_profile': 'Disposable/WAL/OFF', 'overlay_profile': 'MEMORY/OFF/EXCLUSIVE', 'construction_workers': 1,
+        'durable': 'NOT_RUN — disabled by owner until explicit reauthorization', 'interference': current.get('cross_worktree_interference'),
+        'claim': claim, 'helper_admission': admission, 'cleanup': 'UNAVAILABLE', 'custody': 'UNAVAILABLE',
+        'topology': {'branches': json.loads(json.dumps(prepared['closed_producer']['graph']['branches']))},
+        'producer_dependency': prepared['producer_dependency']}
+    receipts.write_new(output / 'selection.json', row)
+    runtime, active, deadlines = None, {}, None
+    try:
+        row['clone'] = fixtures.clone(prepared, output / 'clone', build)
+        environment = script(output, 'environment.txt', ''.join(name + '=' + value + '\n' for name, value in workloads.ENV.items()))
+        argv = [build['binaries']['runtime']['path'], 'serve', '--socket', build['socket'], '--volume', row['clone']['volume'],
+                '--daemon', build['binaries']['daemon']['path'], '--manifest', prepared['provision']['manifest'], '--receipt', str(output / 'runtime.events.jsonl'),
+                '--uid', str(prepared['source_uid']), '--gid', str(prepared['source_gid']), '--environment-file', str(environment),
+                '--observation-scope', secrets.token_hex(32), '--case', case['v016_case']]
+        runtime = cell_runner.EventProcess(argv, output, 'runtime'); runtime.event('protocol_ready', min(owner_stop, time.monotonic() + 15))
+        row['container'] = runtime.container
+        if runtime.container is None:
+            raise ValueError('access original container acknowledgement missing')
+        row['container_profile'] = history_container_profile(runtime, build, output)
+        row['staging'] = fixtures.stage(runtime.container, prepared, output / 'staging', build)
+        row['current_supplemental_resources'] = {'scope': 'current supplemental4GiB main Store bound; original access profile2CPU/2GiB/noSwap/256PID and OOM delta retained',
+            'before': ordinary_resource_guard(runtime, build, output, 'access-resources-before')}
+        row['current_supplemental_resources']['before']['scope'] = row['current_supplemental_resources']['scope']
+        row['setup_ns'] = time.monotonic_ns() - started_ns
+        deadlines = access_deadlines(case, time.monotonic(), owner_stop); row['absolute_deadlines'] = deadlines
+        graph = row['topology']
+        selected = access_selected_history(runtime, prepared, graph, output, deadlines['work']); row['access_selection'] = selected
+        access_fork(runtime, case, selected, graph, output, deadlines['work'])
+        key = secrets.token_hex(32)
+        active['access'] = key
+        mounted = context_send(runtime, 'mount-branch', key, 'access', deadline=deadlines['work'])
+        if mounted['fields'].get('key') != key:
+            raise ValueError('access exact fresh mount key acknowledgement differs')
+        row['phases']['mount_ns'] = mounted['span']['duration_ns']
+        commands = {phase: access_command(runtime, case, key, phase, output, deadlines['work']) for phase in ('reader', 'verifier')}
+        row['access_commands'] = commands; row['phases']['command_ns'] = sum(event['span']['duration_ns'] for event in commands.values())
+        if any(event['event'] == 'commit' for event in runtime.rows):
+            raise ValueError('original access reader must create zero Commits')
+        row['phases']['commit_ns'] = 0
+        row['current_instrumented_status'] = runtime.send('snapshot', key, deadline=deadlines['work'])
+        ended = context_end(runtime, key, row, deadlines['cleanup']); active.pop('access')
+        row['phases']['unmount_ns'] = ended['span']['duration_ns']; row['cleanup'] = 'Gone'
+        row['current_supplemental_resources']['after'] = ordinary_resource_guard(runtime, build, output, 'access-resources-after',
+            row['current_supplemental_resources']['before'], operation_deadline(deadlines['cleanup'], 15) - time.monotonic())
+        row['current_supplemental_resources']['after']['scope'] = row['current_supplemental_resources']['scope']
+        context_observations(runtime, row, build, output, deadlines['cleanup'])
+        row['counts_scope'] = 'current instrumented diagnostic counts only; no performance attribution or numeric speed claim'
+        runtime.send('observe', deadline=deadlines['cleanup']); runtime.send('stop', deadline=deadlines['cleanup'])
+        runtime.event('finished', deadlines['cleanup'])
+        if runtime.process.wait(timeout=operation_deadline(deadlines['cleanup'], 1) - time.monotonic()) != 0:
+            raise ValueError('access runtime exit differs after acknowledged Stop')
+        row['custody'] = 'KNOWN_STOP'
+        row['verification'] = access_graph_proof(case, prepared, graph, runtime, row, build, output, commands, deadlines['work'])
+        row.update(status='PASS', functional_status='PASS', proof_status='PASS', completed_operation_count=1,
+                   resource_removal_pending=True, resource_disposition='known stopped sample pair retained pending publication and outer ACK',
+                   tag='original two full reads, exact selected history/Fork, unchanged producer heads/Commit union and clean close; performance N/A')
+    except BaseException as error:
+        row.update(status='FAIL', functional_status='FAIL', proof_status='FAIL', original_failure=str(error), original_failure_type=type(error).__name__,
+                   retained_mount_keys=dict(active), resource_disposition='failed/uncertain access resources retained; no inferred Stop or retry')
+        if runtime is None:
+            runtime = getattr(error, 'event_process', None)
+        if runtime is not None:
+            row['retained_host_custody'] = runtime.retain(error); row['container'] = runtime.container
+    finally:
+        if runtime is not None:
+            for handle in (runtime.selector, runtime.raw, runtime.stderr, getattr(runtime.process, 'stdin', None), getattr(runtime.process, 'stdout', None)):
+                if handle is not None:
+                    try:
+                        handle.close()
+                    except BaseException as error:
+                        row.setdefault('independent_close_failures', []).append(str(error)); row.update(status='FAIL', proof_status='FAIL')
+        row['proof_wall_ns'] = time.monotonic_ns() - started_ns
+        row['proof_wall_scope'] = 'verification-only complete invocation including setup; original25s worker/cleanup and35s publication scopes separately bound; owner120 ceiling'
+        row['evidence'] = str(output.relative_to(identity.ROOT.resolve()))
+        if deadlines is not None:
+            if time.monotonic() >= deadlines['cleanup']:
+                row.update(status='FAIL', proof_status='FAIL', tag='original access25s completion/cleanup deadline exhausted')
+            row.update(receipts.finalize_guarded(output, row, deadlines['publication'], scope=receipts.HISTORY_PUBLICATION_SCOPE))
+        else:
+            receipts.write_new(output / 'receipt.json', row); receipts.manifest(output)
+    return row
 
 
 def context_send(runtime, operation, key='', path=None, *, deadline):

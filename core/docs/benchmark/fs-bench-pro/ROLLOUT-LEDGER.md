@@ -4236,4 +4236,34 @@ This routing change does not claim current Linux/P1/mounted concurrency.
 Root is preparing the final nine-asset build from the clean integrated runtime;
 access controller and source-aware parity remain in their private worktrees.
 
-| This commit | Expose original context families and explicit sealed parity build in CLI | 79370 | 79370 | +0 |
+| `821624cb3` | Expose original context families and explicit sealed parity build in CLI | 79370 | 79370 | +0 |
+
+
+### Batch 5 verification-only historical access controller, 2026-10-11
+
+Imported the final two exact owned files, including the follow-up provenance
+correction. Access consumes its sealed fresh complete producer dependency,
+resolves the exact role/local ancestor with anchored public SDK History32
+pages, Forks the actual Branch/Commit pair and mounts the returned access
+Branch. The unchanged reader then verifier run once on the same fresh key,
+with exact body SHA/knownzero exit, no warmup and no Commit. End/Gone,
+EndSession/fences and KnownStop precede raw export, separate typed-copy proof
+and immutable full Branch/Commit census. Header retains the producer ID, with
+only the original extra zero-ACK access Branch appended. Independent original
+bytes/SHA, aliases/absence/stable inode and unchanged producer heads/tuple
+union remain mandatory. Original22/25/35 s proof boundaries,3 s reserve,
+.25 guard and owner120 ceiling remain; current4GiB main-file resource guards
+are labelled supplemental to original2CPU/2GiB/noSwap/256PID/OOM checks.
+Sample0/proofattempt1/performanceN/A stay explicit. Failed/uncertain mount
+keys are retained before an original send. Old producer public-proof/census
+fields cannot appear as current access qualification after an early failure.
+
+Final32 scoped checks passed in0.342 s under private2/120 stop: six new,
+seventeen workspace, three resource-retention and six pure history guards.
+Parent absence regression is retained. No native/SQL/live/SDK/preparation/
+build/parity/case/Docker action occurred. Exact owning handoff
+benchmark-results/fs-bench-pro/2026-10-11-batch-5-historical-controller-authoring/handoff/handoff.json
+SHA-2561db22049ca16613b74b3702ba7428f7cbb30b7530ba2c14405913025a42d7334.
+
+| `d4a665f0e` (worker final) | Author verification-only historical access controller; exact final owning checks | 79370 | 79370 | +0 |
+| This commit | Integrate exact verification-only historical access controller | 79370 | 79370 | +0 |
