@@ -241,6 +241,10 @@ impl Overlay {
                     let bytes = self.transfer_row(ns, serial, &lower, &upper, cell)?;
                     return Ok(step(1, bytes, Next::From(lower.gen, cell)));
                 }
+                // Its cells have moved: its pieces follow, one step each.
+                if lower.referenced && self.transfer_piece(ns, serial, &lower, &upper)? {
+                    return Ok(step(1, 0, Next::Ready));
+                }
                 self.execute(StatementKind::Inode,"UPDATE inode SET inherited_cutoff=min(inherited_cutoff,?3) WHERE ns=?1 AND serial=?2 AND gen=-1",
                     &[&ns,&serial,&integer(lower.cutoff)?],24)?;
                 self.release_orphan_layer(
@@ -311,6 +315,12 @@ impl Overlay {
                 bytes += size;
             }
             return Ok(dropped(page, fit, bytes));
+        }
+        if self.pieces_seen.get() {
+            let pieces = self.drop_pieces(ns, serial, DOMAIN, page.rows)?;
+            if pieces != 0 {
+                return Ok(step(pieces, 0, Next::Ready));
+            }
         }
         let mut steps = self.query(
             StatementKind::Reclaim,
@@ -392,6 +402,12 @@ impl Overlay {
                 bytes += size;
             }
             return Ok(dropped(page, fit, bytes));
+        }
+        if self.pieces_seen.get() {
+            let pieces = self.drop_pieces(ns, serial, gen, page.rows)?;
+            if pieces != 0 {
+                return Ok(step(pieces, 0, Next::Ready));
+            }
         }
         let mut steps = self.query(
             StatementKind::Reclaim,

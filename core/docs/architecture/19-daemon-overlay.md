@@ -19,8 +19,10 @@ issues no piece statement) and `sequence` (the Workspace revision that last
 wrote the row). `maintenance.kind` admits 12, and `accounting` gains
 `reference_rows` with an insert and a delete trigger: 57 accounting triggers.
 `PRAGMA user_version` and its startup readback are 33. The rules of the rows
-are in [payload layers](31-payload-streams.md). In this phase only tests write
-a piece: no request path sends a claim.
+are in [payload layers](31-payload-streams.md), with the paths that retire,
+move and reclaim pieces. Maintenance kind 12 is the paged deletion of one
+layer's stale pieces after a shrink. In this phase only tests write a piece:
+no request path sends a claim.
 
 R7 update, 2026-10-09 (overlay schema 32): `native_directory` gains
 `floor INTEGER NOT NULL DEFAULT 0`, the first cookie that is still an offset

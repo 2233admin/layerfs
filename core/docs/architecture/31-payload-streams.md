@@ -56,8 +56,31 @@ the layer rows carry the flag. The caller reads each range from committed
 content at its source offset. The statements are a cover seek (the last row
 at or before a byte), a window seek with a literal limit, an insert, a length
 update, a range delete that returns its rows, and the shrink cut; each is one
-seek of the primary key. Retirement, orphan migration, fold and terminal
-reclaim of pieces are the next checkpoint; until then only tests write one.
+seek of the primary key.
+
+Pieces follow the existing lifecycles of their layer; none is new.
+
+| Path | What happens to pieces | Bound of one step |
+| --- | --- | --- |
+| Shrink | The crossing piece is cut in the shrink's own job. Maintenance kind 12, queued by a shrink of a layer that holds pieces, deletes the stale ones beyond the boundary | 64 rows read, each stale one deleted |
+| Generation retirement after install | A fifth phase deletes the generation's pieces in key order, skipping a layer an orphan still reads | 64 rows |
+| Last unlink with no owner; a layer an orphan released | After the layer's cells, its pieces are dropped lowest first | one statement, at most 64 rows |
+| Orphan with no owner left | The same for the orphan's own layer | one statement, at most 64 rows |
+| Failed capture (fold); orphan migration | After the lower layer's cells have moved, its pieces move into the layer above, [one fragment a step](../../crates/layerfs-overlay/src/payload/pieces/moves.rs) | at most three rows read and three changed |
+| Terminal reclaim | [A twelfth table](25-terminal-reclaim.md) | 64 rows, one delete |
+
+A moved fragment is the leading part of the lowest lower piece that the
+composed view still reads from it: below both the lower size and the upper
+cutoff, and up to the next piece the upper layer holds itself. Bytes an upper
+piece already decides, and bytes beyond that limit, are dropped from the lower
+piece, never copied. The step's work does not depend on the length of a piece.
+A lower payload row is no longer moved or merged over cells that a live upper
+piece holds: the upper layer decides those bytes first.
+
+One engine-wide flag records whether a piece row was ever written; it is set
+before the only insert and restored when a job fails. While it is false the
+retirement, orphan and terminal paths issue no piece statement, so an engine
+without pieces runs the statements it ran at schema 32.
 
 The selected [payload derivation](../issues/307/S5-PAYLOAD-CONTRACT.md) describes
 schema v8. Each live inode generation has a lower-view cutoff, shrink epoch and

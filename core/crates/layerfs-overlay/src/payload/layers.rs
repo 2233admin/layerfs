@@ -206,7 +206,8 @@ impl Overlay {
             48,
         )?;
         layer.cutoff = layer.cutoff.min(to);
-        self.schedule_shrink(ns, serial, layer.gen, boundary, layer.height)?;
+        let cleaned = (layer.gen, layer.referenced);
+        self.schedule_shrink(ns, serial, cleaned, boundary, layer.height)?;
         Ok(())
     }
 }

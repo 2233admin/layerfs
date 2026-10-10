@@ -38,7 +38,7 @@ const fn table(page: &'static str, through: &'static str, keys: usize, take: Tak
 // The page of earlier queue rows names the close key as a literal.
 const _: () = assert!(CLOSE_KEY == i64::MAX);
 /// The terminal tables in the order of the namespace's reclaim cursor.
-const PHASES: [Terminal; 11] = [
+const PHASES: [Terminal; 12] = [
     table(
         "SELECT serial,gen,cell_offset,length(data)+ifnull(length(validity),0) FROM payload WHERE ns=?1 ORDER BY serial,gen,cell_offset LIMIT 14",
         "DELETE FROM payload WHERE ns=?1 AND (serial,gen,cell_offset)<=(?2,?3,?4)",
@@ -105,9 +105,18 @@ const PHASES: [Terminal; 11] = [
         2,
         Take::Rows,
     ),
+    table(
+        "SELECT gen,serial,file_offset,0 FROM payload_reference WHERE ns=?1 ORDER BY gen,serial,file_offset LIMIT 64",
+        "DELETE FROM payload_reference WHERE ns=?1 AND (gen,serial,file_offset)<=(?2,?3,?4)",
+        3,
+        Take::Rows,
+    ),
 ];
 /// The cursor of the orphan table, whose deletion updates the engine's hint.
 const ORPHANS: i64 = 7;
+/// The cursor of the piece table, passed without a statement by an engine
+/// that never wrote a piece.
+const PIECES: usize = 11;
 
 /// One short physical cleanup step. Bytes count payload, names and raw operation_record
 /// values, not structured identity keys or pages. SQL work records delivered
@@ -155,6 +164,7 @@ impl Overlay {
             let mut at = phase;
             let (count, bytes) = loop {
                 let deleted = match usize::try_from(at).ok() {
+                    Some(PIECES) if !self.pieces_seen.get() => (0, 0),
                     Some(table) if table < PHASES.len() => self.delete_page(ns, &PHASES[table])?,
                     Some(table) if table == PHASES.len() => {
                         self.delete_indexed_operation_record(ns, None)?

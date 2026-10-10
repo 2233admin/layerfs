@@ -8,39 +8,8 @@ use layerfs_overlay::*;
 use payload_support::*;
 use std::sync::Arc;
 
-const ROOT: [u8; 32] = [77; 32];
 const CELL: u64 = CELL_BYTES as u64;
 const WINDOW: u64 = WRITE_WINDOW as u64;
-
-fn claims(after: Option<i64>, ranges: &[(u64, u64, u64)]) -> WriteClaims {
-    WriteClaims {
-        source: ROOT,
-        after,
-        ranges: ranges
-            .iter()
-            .map(|&(offset, length, source_offset)| ClaimedRange {
-                offset,
-                length,
-                source_offset,
-            })
-            .collect(),
-    }
-}
-/// Reference rows and payload rows of one Workspace.
-fn rows(db: &Overlay, route: Route) -> (u64, u64) {
-    let counts = db.resources(Some(route)).unwrap().counts;
-    (counts.reference_rows, counts.payload_cells)
-}
-/// A file whose committed content is `content`, which is also what a piece
-/// of it may name.
-fn committed<'a>(db: &'a Overlay, source: BaseSource, content: &[u8]) -> File<'a> {
-    let mut file = File::new(db, source, 7, content.to_vec());
-    file.sources.push((ROOT, content.to_vec()));
-    file
-}
-fn part(content: &[u8], from: u64, length: u64) -> &[u8] {
-    &content[from as usize..(from + length) as usize]
-}
 
 #[test]
 fn claimed_ranges_become_pieces_and_read_like_the_plain_write() {
@@ -315,75 +284,6 @@ fn malformed_claims_are_refused_before_any_row_changes() {
     assert!(matches!(result, Err(OverlayError::Invalid("write claims"))));
     assert_eq!(db.resources(Some(route)).unwrap().counts, before);
     file.check();
-}
-
-/// One window of committed content at any alignment with up to three claimed
-/// ranges; every byte outside them differs from the content.
-fn scattered(file: &mut File, content: &[u8], random: &mut Random) {
-    let size = file.expect.len() as u64;
-    let length = 1 + random.next(WINDOW) as usize;
-    let from = random.next((content.len() - length) as u64 + 1) as usize;
-    let mut offset = random.next(size + 20_000);
-    if random.next(2) == 0 {
-        offset -= offset % CELL;
-    }
-    let mut cuts: Vec<usize> = (0..6)
-        .map(|_| random.next(length as u64 + 1) as usize)
-        .collect();
-    cuts.sort_unstable();
-    if random.next(3) == 0 {
-        cuts = vec![0, length];
-    }
-    let mut data = content[from..from + length].to_vec();
-    let mut kept = vec![false; length];
-    let mut ranges = Vec::new();
-    for cut in cuts.chunks(2).filter(|cut| cut[0] < cut[1]) {
-        kept[cut[0]..cut[1]].fill(true);
-        let length = (cut[1] - cut[0]) as u64;
-        ranges.push((offset + cut[0] as u64, length, (from + cut[0]) as u64));
-    }
-    for (byte, kept) in data.iter_mut().zip(kept) {
-        if !kept {
-            *byte ^= 0x5a;
-        }
-    }
-    if ranges.is_empty() {
-        file.write(offset, &data);
-    } else {
-        file.write_claimed(offset, &data, claims(None, &ranges));
-    }
-}
-/// Three sequential requests of one run of committed content. Each claim
-/// ends inside its window and the next one starts in those bytes, as a
-/// recognizer that carries a partial chunk claims them. Sometimes another
-/// publication lands between two requests.
-fn run(file: &mut File, content: &[u8], random: &mut Random) {
-    let mut offset = random.next(file.expect.len() as u64 + 1);
-    if random.next(3) != 0 {
-        offset -= offset % CELL;
-    }
-    let mut from = random.next(content.len() as u64 / 2);
-    let (mut tail, mut after) = (0, None);
-    for _ in 0..3 {
-        let length = 20_000 + random.next(60_000);
-        if from + length > content.len() as u64 {
-            break;
-        }
-        let left = random.next(9_000);
-        let claimed = (offset - tail, length + tail - left, from - tail);
-        file.write_claimed(
-            offset,
-            part(content, from, length),
-            claims(after, &[claimed]),
-        );
-        after = Some(file.revision);
-        (offset, from, tail) = (offset + length, from + length, left);
-        match random.next(4) {
-            0 if tail != 0 => file.write(offset - 1 - random.next(tail), &[0xa5]),
-            1 => file.write(random.next(offset), &[0x5a]),
-            _ => {}
-        }
-    }
 }
 
 #[test]

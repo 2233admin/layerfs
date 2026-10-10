@@ -1,7 +1,7 @@
 //! Bounded live garbage and generation-selective retirement, metadata first.
 use crate::{
     db::unsigned,
-    maintenance::{Item, OPERATION_RECORD, PAGE, STALE, STEPS},
+    maintenance::{Item, OPERATION_RECORD, PAGE, STALE, STALE_PIECES, STEPS},
     sql, Overlay, OverlayResult, StatementKind,
 };
 
@@ -102,6 +102,8 @@ impl Overlay {
                 }
                 rows.len()
             }
+            // An engine that never wrote a piece has none to retire.
+            4 if self.pieces_seen.get() => self.retire_pieces(item, 4)?,
             _ => {
                 self.execute(
                     StatementKind::Reclaim,
@@ -225,15 +227,21 @@ impl Overlay {
         }
         Ok((count, bytes, count == 0))
     }
+    /// Queues the cleanup of what one shrink hid: cells, superseded steps
+    /// and, for a layer that holds pieces, its pieces beyond the boundary.
     pub(crate) fn schedule_shrink(
         &self,
         ns: i64,
         serial: i64,
-        gen: i64,
+        (gen, referenced): (i64, bool),
         boundary: i64,
         height: i64,
     ) -> OverlayResult<()> {
-        for (kind, cursor) in [(STALE, boundary - 1), (STEPS, height)] {
+        let pieces = referenced.then_some((STALE_PIECES, boundary - 1));
+        for (kind, cursor) in [(STALE, boundary - 1), (STEPS, height)]
+            .into_iter()
+            .chain(pieces)
+        {
             self.execute(StatementKind::Reclaim,"INSERT INTO maintenance(ns,kind,resource,target,cursor) VALUES(?1,?2,?3,?4,?5)
                 ON CONFLICT(ns,kind,resource,target) DO UPDATE SET cursor=min(cursor,excluded.cursor),ready=1",
                 &[&ns,&kind,&serial,&gen,&cursor],40)?;

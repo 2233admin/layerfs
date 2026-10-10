@@ -2,7 +2,7 @@
 use crate::{
     db::integer,
     inode,
-    maintenance::{Item, FOLD, RETIRE},
+    maintenance::{Item, FOLD, PAGE, RETIRE},
     sql, Capture, Generation, Overlay, OverlayError, OverlayResult, Route, StatementKind,
 };
 
@@ -225,6 +225,18 @@ impl Overlay {
             };
             self.advance_item(item, 1, serial, cell, &[])?;
             return Ok((1, bytes, false));
+        }
+        // Its cells have left the folded layer: its pieces follow, one step
+        // each, or go with a file the active generation has unlinked.
+        if bottom.referenced {
+            let moved = if top.nlink == 0 {
+                self.drop_pieces(item.ns, serial, item.target, PAGE.rows)? != 0
+            } else {
+                self.transfer_piece(item.ns, serial, bottom, &top)?
+            };
+            if moved {
+                return Ok((1, 0, false));
+            }
         }
         self.execute(
             StatementKind::Inode,

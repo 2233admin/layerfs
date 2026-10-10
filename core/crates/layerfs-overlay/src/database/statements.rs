@@ -70,6 +70,29 @@ pub(crate) const PIECE_CUT: &str = "UPDATE payload_reference SET length=?4-file_
     WHERE ns=?1 AND gen=?2 AND serial=?3 AND file_offset=(SELECT max(file_offset)
     FROM payload_reference WHERE ns=?1 AND gen=?2 AND serial=?3 AND file_offset<?4)
     AND file_offset+length>?4";
+/// The first piece of one layer that starts at or after byte ?4.
+pub(crate) const PIECE_NEXT: &str =
+    "SELECT file_offset,length,epoch,source,source_offset FROM payload_reference
+    WHERE ns=?1 AND gen=?2 AND serial=?3 AND file_offset>=?4 ORDER BY file_offset LIMIT 1";
+/// Moves the start of one piece forward: its new first byte, length and
+/// source offset.
+pub(crate) const PIECE_START: &str =
+    "UPDATE payload_reference SET file_offset=?5,length=?6,source_offset=?7
+    WHERE ns=?1 AND gen=?2 AND serial=?3 AND file_offset=?4";
+pub(crate) const PIECE_DROP: &str = "DELETE FROM payload_reference
+    WHERE ns=?1 AND gen=?2 AND serial=?3 AND file_offset=?4";
+/// The lowest `?4 + 1` pieces of one layer, found by one seek and that many
+/// index steps.
+pub(crate) const PIECES_DROP: &str = "DELETE FROM payload_reference
+    WHERE ns=?1 AND gen=?2 AND serial=?3 AND file_offset<=ifnull((SELECT file_offset
+    FROM payload_reference WHERE ns=?1 AND gen=?2 AND serial=?3
+    ORDER BY file_offset LIMIT 1 OFFSET ?4),9223372036854775807)";
+/// One page of the pieces of one layer after byte ?4, with their stamps.
+pub(crate) const PIECE_PAGE: &str = "SELECT file_offset,epoch FROM payload_reference
+    WHERE ns=?1 AND gen=?2 AND serial=?3 AND file_offset>?4 ORDER BY file_offset LIMIT 64";
+/// One page of the pieces of one generation, in key order.
+pub(crate) const PIECE_GENERATION_PAGE: &str = "SELECT serial,file_offset FROM payload_reference
+    WHERE ns=?1 AND gen=?2 AND (serial,file_offset)>(?3,?4) ORDER BY serial,file_offset LIMIT 64";
 pub(crate) const LAYER_REFERENCED: &str =
     "UPDATE inode SET referenced=1 WHERE ns=?1 AND serial=?2 AND gen=?3";
 pub(crate) const STEP_GET: &str =

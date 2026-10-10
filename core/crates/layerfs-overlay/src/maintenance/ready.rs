@@ -12,6 +12,8 @@ pub(crate) const STEPS: i64 = 5;
 pub(crate) const OPERATION_RECORD: i64 = 6;
 pub(crate) const NATIVE: i64 = 10;
 pub(crate) const NATIVE_DIRECTORY: i64 = 11;
+/// Stale reference pieces of one layer after a shrink.
+pub(crate) const STALE_PIECES: i64 = 12;
 const READY: &str = "SELECT ns,kind,resource,target,phase,cursor,aux,name FROM maintenance
     INDEXED BY maintenance_ready WHERE ready=1 AND (ns,kind,resource,target)>(?1,?2,?3,?4)
     ORDER BY ns,kind,resource,target LIMIT 1";
@@ -227,6 +229,7 @@ impl Overlay {
                     NATIVE_DIRECTORY => self.retire_native_directory(&item)?,
                     SERIAL_RETIRE => self.retire_serial(&item, PAGE)?,
                     STALE | STEPS | OPERATION_RECORD => self.clean_live_item(&item)?,
+                    STALE_PIECES => self.clean_pieces(&item)?,
                     _ => return Err(OverlayError::Invalid("maintenance kind")),
                 }
             };

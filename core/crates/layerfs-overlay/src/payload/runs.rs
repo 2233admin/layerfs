@@ -235,7 +235,13 @@ impl Overlay {
         for shape in &above {
             live = live || !self.stale(ns, serial, upper, shape.offset, shape.epoch)?;
         }
-        if !live && old.offset + old.length <= limit {
+        // An upper piece decides its cells before any lower byte: a lower
+        // row neither moves over one nor is merged into its cells.
+        let pieces = match upper.referenced {
+            true => self.live_pieces(ns, serial, upper, old.offset, old.end())?,
+            false => Vec::new(),
+        };
+        if !live && pieces.is_empty() && old.offset + old.length <= limit {
             for shape in &above {
                 self.drop_row(shape.row)?;
             }
@@ -258,6 +264,9 @@ impl Overlay {
         let mut copied = 0;
         for (index, data) in stored.data.chunks(CELL_BYTES).enumerate() {
             let at = old.offset + index as i64 * CELL;
+            if pieces.iter().any(|own| own.offset <= at && at < own.end()) {
+                continue;
+            }
             let end = (limit - at).clamp(0, data.len() as i64) as usize;
             copied += self.merge_below(ns, serial, upper, at, &stored, index * CELL_BYTES, end)?;
         }
