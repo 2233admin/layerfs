@@ -18,7 +18,7 @@ comparison or release-admission claim. Durable is
 | 0.2 Move-only organization | COMPLETE, historical check failures retained | `13f9dec38`; routing `9af29e01e` | Update routing guide, then stage 0.3 catalogue |
 | 0.3 Case catalogue | COMPLETE | `f182e9a63`; prerequisite correction `30b798192` | Stage 0.4 reproducible engine |
 | 0.4 Reproducible engine | CLOSED: functional proof complete; exact reproduction FAILED C10/C12 | Cell-route correction `bb8e07df8`; build support `c496025fc`; oracle support `7a27a4f26`; fixture support `516c2f009`; workspace/report support `358eca082`; cleanup-observer correction `a1f2c259c` | Begin batch 1 under failed-reproduction closure recorded below |
-| 1 Pilot | IN_PROGRESS | Init port/runtime `c1d7dd0e8`; Init results `39bbcbd6b`; payload port `200f81493`; parallel batch-1 routing `b3c96ecb1` | Payload results in this commit; isolated tiny-file and namespace workers prepare/port/run their families |
+| 1 Pilot | IN_PROGRESS | Init port/runtime `c1d7dd0e8`; Init results `39bbcbd6b`; payload port `200f81493`; parallel batch-1 routing `b3c96ecb1` | Payload results `c1d9b6c58`; isolated tiny-file and namespace workers prepare/port/run their families |
 | 2 Edits | PENDING | — | Wait for batch 1 completion |
 | 3 Trees and tools | PENDING | — | Wait for batch 2 completion |
 | 4 History on one branch | PENDING | — | Wait for batch 3 completion |
@@ -670,4 +670,37 @@ sample resources were created. H-1/C10/C12 and all protected resources remain
 untouched. Production LOC 79,366 -> 79,366 (delta +0), pinned absent-aware
 method; reference absent (retired R9c; last counted 65,417).
 
-| This commit | Record eight payload samples and generated CSVs | 79366 | 79366 | +0 |
+| `c1d9b6c58` | Record eight payload samples and generated CSVs | 79366 | 79366 | +0 |
+
+Batch 1 / tiny_file_churn registration integrated locally onto main from
+worker commit c4c137c13. All twenty original cases retain their exact compact,
+mixed-v3 and mixed-v4 IDs/tiers, seed1, original dense ordinary syscall body,
+normalization and filesystem requests. Each has one public Commit after the
+ordinary call; tiny-stat expects UpToDate. The port explicitly declares that
+the complete original native semantic tree plus persisted current-format public
+reader proof is stronger than the historical selected tiny/mixed path/range
+coverage. The original reported/work/hard/operation limits are unchanged.
+No product source or shared engine change accompanies this integration.
+
+Worker source reviews match frozen file hashes against reference-v0.1.6-final.
+Its catalogue three tests PASS in 4.105 s under its own 120 s lock; bash syntax
+and whitespace checks PASS. Exact staged/committed production tree comparison
+was verified for c4c137c13. All twenty original native inputs/final states and
+public Init/seal/install masters prepared PASS, and parity PASS twenty cases
+in at most 17 s with zero samples. Fixed preparation/sample source remains
+c4c137c13; main integration does not relabel or rerun those receipts.
+
+Worker raw evidence and owned resources remain under
+/Users/yifanxu/.codex/worktrees/fs-bench-pro-tiny-file-churn/layerfs/benchmark-results/fs-bench-pro/.
+Prepared and parity roots are 2026-10-10-batch-1-tiny-prepared/ and
+2026-10-10-batch-1-tiny-parity/. Every master volume name/digest is in its
+prepared.json and resource-claim.json; only the worker's passing sample
+resources are removed. It declares shared host/VM interference in every
+source receipt and reuses immutable sealed binaries with matched compilation
+inputs. Samples/results are in progress, so the family is not yet complete.
+This integration preserves the worker's exact definition/workload bytes and
+reuses its qualifying scoped evidence; no unchanged sample is repeated.
+Production LOC 79,366 -> 79,366 (delta +0), same pinned absent-aware method.
+
+| `c4c137c13` (worker) | Port twenty tiny-file cases at isolated worktree source | 79366 | 79366 | +0 |
+| This commit | Integrate tiny-file registration with master ledger | 79366 | 79366 | +0 |
