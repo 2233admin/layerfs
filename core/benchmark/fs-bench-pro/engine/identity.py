@@ -134,6 +134,8 @@ def source_identity(root=ROOT):
             "source_tree": git(root, "rev-parse", "HEAD^{tree}"),
             "product_tree": git(root, "rev-parse", "HEAD:core/crates"), "files": hashes,
             "source_clean": True,
+            "cross_worktree_interference": os.environ.get("LAYERFS_BENCH_INTERFERENCE",
+                "UNDECLARED; shared Docker VM and retained protected services are not isolated"),
             "excluded_untracked": [{"path": path, "sha256": sha256(root / path),
                                     "reason": "owner-protected handoff document; not a build/workload input"}
                                    for path in untracked]}

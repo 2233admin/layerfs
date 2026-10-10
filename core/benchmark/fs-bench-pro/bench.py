@@ -62,7 +62,7 @@ def main(argv=None):
     if args.command == "run":
         from engine import fixtures, identity, project, receipts, workspace
         current = identity.source_identity()
-        if args.family not in ("cluster-two/cells", "init_namespace", "payload_create_read"):
+        if args.family not in ("cluster-two/cells", "init_namespace", *fixtures.WORKSPACE_FAMILIES):
             parser.error("family workload runner is not implemented yet; all workload cases remain visible in list")
         registered = ([{"id": cell, "cache_class": "B", "v016_case": ""} for cell in fixtures.CELL_RECIPES]
             if args.family == "cluster-two/cells" else json.loads((HERE / "families" / args.family / "family.json").read_text())["cases"])
@@ -103,12 +103,12 @@ def main(argv=None):
             failed |= result["status"] != "PASS"
         return 1 if failed else 0
     if args.command == "verify":
-        from engine import oracle, receipts
+        from engine import fixtures, oracle, receipts
         selection, recorded = receipts.load_run(args.run)
         results = []
         for case in selection["cases"]:
             folder = args.run / case["id"]
-            if selection["family"] in ("init_namespace", "payload_create_read") and case["id"] in recorded:
+            if selection["family"] in ("init_namespace", *fixtures.WORKSPACE_FAMILIES) and case["id"] in recorded:
                 row = recorded[case["id"]]
                 result = {"case": case["id"], "status": row["proof_status"],
                           "scope": "sealed retained independent public-read proof and original evidence hashes", "proof": row.get("verification")}
@@ -126,8 +126,8 @@ def main(argv=None):
         print("CSV destination: " + result["destination"])
         return
     if args.command == "parity":
-        from engine import project
-        if args.family not in ("init_namespace", "payload_create_read"):
+        from engine import fixtures, project
+        if args.family not in ("init_namespace", *fixtures.WORKSPACE_FAMILIES):
             parser.error("this family's parity transcription is not implemented yet")
         family = json.loads((HERE / "families" / args.family / "family.json").read_text())
         result = (project.parity_namespace(family, args.prepared, args.out) if args.family == "init_namespace"
