@@ -81,6 +81,47 @@ class NativeSpliceWriter(unittest.TestCase):
         self.assertNotEqual(refused.returncode, 0)
         self.assertIn("native content mismatch: payload.bin", refused.stderr)
 
+    def test_named_boundary_sdk_steps_preserve_complete_bytes_metadata_and_inodes(self):
+        schedules = {"small-control": [4096]*3, "below": [131071]*3,
+                     "exact": [131072]*3, "above": [131073]*3,
+                     "large-control": [1048576]*3,
+                     "roundtrip": [131071,131072,131073,131072,131071]}
+        for name, lengths in schedules.items():
+            case = "v016-boundary-" + name + "-v1"
+            with self.subTest(case=case):
+                root = self.fixture_root(case, "named-"+name)
+                target = root / "data/target.bin"
+                witness = root / "data/witness.bin"
+                initial_inode, witness_bytes = target.stat().st_ino, witness.read_bytes()
+                for step, length in enumerate(lengths[1:], 1):
+                    changed = self.command(root, "apply-sdk-step", case, str(step))
+                    self.assertEqual(changed.returncode, 0, changed.stderr)
+                    self.assertEqual(target.stat().st_size, length)
+                    self.assertEqual(target.stat().st_ino, initial_inode)
+                    self.assertEqual(witness.read_bytes(), witness_bytes)
+                    self.assertEqual(target.stat().st_mode & 0o7777, 0o640)
+                    self.assertEqual(target.stat().st_mtime_ns, 1700000000000000000)
+                    verified = self.command(root, "verify", case, str(step))
+                    self.assertEqual(verified.returncode, 0, verified.stderr)
+                    self.assertIn("verification_status=pass", verified.stdout)
+
+    def test_named_sdk_selection_and_wrong_length_refuse_before_mutation(self):
+        case = "v016-boundary-small-control-v1"
+        root = self.fixture_root(case, "named-refusal")
+        target = root / "data/target.bin"
+        before = target.read_bytes()
+        for args in (("0",), ("1", "0"), ("1", "2")):
+            refused = self.command(root, "apply-sdk-step", case, *args)
+            self.assertNotEqual(refused.returncode, 0)
+            self.assertEqual(target.read_bytes(), before)
+        with target.open("r+b") as file:
+            file.truncate(4095)
+        before = target.read_bytes()
+        refused = self.command(root, "apply-sdk-step", case, "1", "1")
+        self.assertNotEqual(refused.returncode, 0)
+        self.assertIn("fixture length differs", refused.stderr)
+        self.assertEqual(target.read_bytes(), before)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -20,8 +20,8 @@ comparison or release-admission claim. Durable is
 | 0.4 Reproducible engine | CLOSED: functional proof complete; exact reproduction FAILED C10/C12 | Cell-route correction `bb8e07df8`; build support `c496025fc`; oracle support `7a27a4f26`; fixture support `516c2f009`; workspace/report support `358eca082`; cleanup-observer correction `a1f2c259c` | Begin batch 1 under failed-reproduction closure recorded below |
 | 1 Pilot | COMPLETE: 36 functional/proof/clean-close passes; 7 recorded scoped B PASS, 29 INELIGIBLE; full numeric qualification of the 7 is unverified | Init `c1d7dd0e8`/`39bbcbd6b`; payload `200f81493`/`c1d9b6c58`; parallel routing `b3c96ecb1`; tiny `36849bcc2`/`d6e0ef952`; namespace `98b14b233`/`be1f56a23`; H-2 fix `222526fa0`; closure `d4314ed62`; membership supplement `cca598d0b` | Batch 2, retaining original receipts plus exhaustive membership supplement |
 | 2 Edits | COMPLETE: all62 cases ported/parity/sampled once/recorded;39 strict proof and clean-close passes (numeric INELIGIBLE),20 strict retention failures and3 original capped-watchdog failures retained | Canonical `a34b5d44b`/`beeb7ad69`; preserving `b9ffa63be`; capped `4d8ccfc93`; changing `05ffbf971`; small-delta `c0c99a4a3`/`2e6a508b5`/`1c975ba30` | Begin batch3; no identified fixable product correctness defect remains in batch2 |
-| 3 Trees and tools | COMPLETE: all33 original cases ported/parity/sampled, full applicable proofs and clean closePASS; numeric33INELIGIBLE; first snapshotFAIL retained separately; localitydense500 and snapshot EXCEEDED | Shared3c697ae92; directory50c297c68/ad4f95503; locality2590a4536/26c037d90; snapshot0344bfdc6/fix03033abdc/results98d3be30a/70d568e94; Git acebd7cbd/guard031d427a7/results this commit | Begin batch4 after this committed closure, no identified fixable product correctness bug |
-| 4 History on one branch | IN_PROGRESS: three worktree authors active; all43 cases unrun, shared native models/oracles and guards being composed | Routing this commit; worker native/P3/model/family commits pending integration | Complete source/oracle qualification, then per-family parity and one attempt per case |
+| 3 Trees and tools | COMPLETE: all33 original cases ported/parity/sampled, full applicable proofs and clean closePASS; numeric33INELIGIBLE; first snapshotFAIL retained separately; localitydense500 and snapshot EXCEEDED | Shared3c697ae92; directory50c297c68/ad4f95503; locality2590a4536/26c037d90; snapshot0344bfdc6/fix03033abdc/results98d3be30a/70d568e94; Git acebd7cbd/guard031d427a7/results31fff4d49 | Begin batch4 after this committed closure, no identified fixable product correctness bug |
+| 4 History on one branch | IN_PROGRESS: three worktree authors active; all43 cases unrun, shared native models/oracles and guards being composed | Routing65f0c1fbe; sharednative/model/P3 integration this commit; family/runtime/preparation integrations pending | Complete source/oracle qualification, then per-family parity and one attempt per case |
 | 5 Branches and Workspaces | PENDING | — | Wait for batch 4; verify existing P-1 SDK methods |
 | 6 Dedup and storage | PENDING | — | Wait for batch 5 completion |
 | 7 Reliability | PENDING | — | Wait for batch 6 completion |
@@ -2311,7 +2311,7 @@ were prepared concurrently. The next committed work activates its3families
 under the same separate-worktree/current-batch-only policy.
 
 | `76545dd1b` (worker) | Record four original Git outcomes without replay | 79366 | 79366 | +0 |
-| This commit | Integrate Git CSVs and close all33 batch3 cases | 79366 | 79366 | +0 |
+| `31fff4d49` | Integrate Git CSVs and close all33 batch3 cases | 79366 | 79366 | +0 |
 
 Batch4 begins only after31fff4d49476219b9a172e010abe37f4e4056ee0 committed
 batch3 closure. Three existing managed worktrees take exact original families
@@ -2357,4 +2357,51 @@ helper does not restoredata/ parent after temporary-name changes. The native
 compatibility refusal stays strict and visible, not a benchmarkPASS or a new
 workload call. Final caseclosure waits actual qualified source/evidence.
 
-| This commit | Activate only current three history-family routes while pending remains refused | 79366 | 79366 | +0 |
+| `65f0c1fbe` | Activate only current three history-family routes while pending remains refused | 79366 | 79366 | +0 |
+
+
+Batch4 shared native authoring integration reuses exact worktree changes:
+Namespace10bafc75d/d81a8af86/f97230027 (BA hardlink model, independent M1
+shadow/range/explicit-attribute algebra and exact decimal constants),
+Cappedf938d7faa/f5280d654 (selected native checkpoint and M1 selective CLI),
+Tinye5e8216f3 (ordered ordinary P3 splice members). Original frozen source and
+all product sources remain unchanged. Private native recipe failures, including
+Capped's frozen-private validate_path compiler refusal before its owned-parser
+correction, remain raw authoring history; no product failure or sample is
+inferred. M1 native selective verification accepts only original cumulative
+17-name created-directory mode domain and required subset, rejects unsafe,
+duplicate/missing modes and declared-range corruption, and deliberately does
+not invent automatic mtime or exact128KiB byte coverage omitted by the original.
+
+Lead exact composed qualification: external Rust tests compiled --test first
+with Rust1.85.1/repository ARM64 flags; BA3PASS0.02s, M1 model5PASS2.27s, frozen
+inline reference tests filtered from this focused invocation. Fresh native
+recipe compiled from composed source;7Python native CLI checks PASS4.470s.
+Fresh native writer compiled from same model;5covering native checks
+PASS1.305s. Writer tests substitute only load_build with these exact fresh host
+binary paths for uncommitted direct-source authoring qualification; no clean
+full-build seal, mounted operation, preparation, parity or measurement is
+claimed. Raw source/binary hashes and all build/test attempts are under
+benchmark-results/fs-bench-pro/2026-10-10-batch-4-native-composition-root,
+-root-writer and-root-writer-launcher-fix. Initial writer launcher had a
+SyntaxError because token replacement also touched its environment-variable
+name; it failed before loading/running tests. Its exact failed receipt remains;
+corrected launcher passes using unchanged compiled binaries. Every invocation
+has an explicit120s wallstop under the main checkout lock. No Docker resource
+or sample is created by these authoring checks. Full sealed Linux/host support
+qualification waits the actual final composed batch4 source.
+
+Ownership for remaining shared authoring is explicit: Tiny owns selective
+preparation and untimed sealed SDK payload descriptors; Namespace owns persisted
+public proof and the resolved history-step argument guard; Capped owns the
+independent unfiltered closed SQLite census; lead owns Python controller/build
+assets/finalization and thisledger. Workers are forbidden to revert sibling
+changes or sample until the reviewed source/seal handoff.
+
+| `10bafc75d` (worker) | Original boundary alias class model | 79366 | 79366 | +0 |
+| `d81a8af86` (worker) | Original M1 independent shadow and ordered P3 model | 79366 | 79366 | +0 |
+| `f97230027` (worker) | Exact decimal authoring constants | 79366 | 79366 | +0 |
+| `f938d7faa` (worker) | Native selected checkpoint recipe | 79366 | 79366 | +0 |
+| `f5280d654` (worker) | Native original selective M1 proof | 79366 | 79366 | +0 |
+| `e5e8216f3` (worker) | Generic ordered ordinary SDK splice writer | 79366 | 79366 | +0 |
+| This commit | Integrate and qualify batch4 native model/recipe/writer | 79366 | 79366 | +0 |

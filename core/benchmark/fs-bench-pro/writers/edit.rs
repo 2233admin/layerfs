@@ -27,6 +27,26 @@ struct Progress {
     truncate_calls: u64,
 }
 
+struct Splice {
+    start: u64,
+    delete_len: u64,
+    replacement_len: u64,
+    fixture_bytes: u64,
+    final_bytes: u64,
+}
+
+impl From<&Scenario> for Splice {
+    fn from(case: &Scenario) -> Self {
+        Self {
+            start: case.start,
+            delete_len: case.delete_len,
+            replacement_len: case.replacement_len,
+            fixture_bytes: case.fixture_bytes,
+            final_bytes: case.final_bytes,
+        }
+    }
+}
+
 fn read_exact_at(
     file: &File,
     mut output: &mut [u8],
@@ -84,7 +104,7 @@ fn checked_close(file: File) -> io::Result<()> {
 
 fn splice(
     file: &File,
-    case: &Scenario,
+    case: &Splice,
     replacement: &[u8],
     work: &mut Progress,
 ) -> reference::Result<()> {
@@ -157,7 +177,7 @@ fn apply(id: &str) -> reference::Result<()> {
         .open("payload.bin")?;
     let mut work = Progress::default();
     let original = (|| -> reference::Result<()> {
-        splice(&file, &case, &replacement, &mut work)?;
+        splice(&file, &Splice::from(&case), &replacement, &mut work)?;
         for name in ["payload.bin", "."] {
             let entry = entries
                 .iter()
@@ -237,11 +257,70 @@ fn apply_workspace(id: &str) -> reference::Result<()> {
     Ok(())
 }
 
+fn apply_sdk_step(id: &str, step: usize, member: Option<usize>) -> reference::Result<()> {
+    use reference::workspace_common::{self as common, EntryKind};
+    if step == 0 {
+        return Err("original SDK step is one-based".into());
+    }
+    let edits = edit_model::sdk_step(id, step)?;
+    if edits.is_empty() || member.is_some_and(|value| value == 0 || value > edits.len()) {
+        return Err("original SDK step/member has no declared edit".into());
+    }
+    let mut work = Progress::default();
+    let mut completed = 0;
+    let mut replacement_bytes = 0;
+    for (index, selected) in edits.iter().enumerate() {
+        if member.is_some_and(|value| value != index + 1) {
+            continue;
+        }
+        let edit = &selected.edit;
+        if selected.metadata.path != edit.path
+            || !matches!(selected.metadata.kind, EntryKind::File(_))
+        {
+            return Err("original SDK target metadata descriptor differs".into());
+        }
+        let plan = Splice {
+            start: edit.start,
+            delete_len: edit.delete_len,
+            replacement_len: edit.replacement.len() as u64,
+            fixture_bytes: selected.before_len,
+            final_bytes: selected.after_len,
+        };
+        let file = OpenOptions::new().read(true).write(true).open(&edit.path)?;
+        let changed = (|| -> reference::Result<()> {
+            splice(&file, &plan, &edit.replacement, &mut work)?;
+            common::set_metadata(Path::new(&edit.path), &selected.metadata)?;
+            Ok(())
+        })();
+        let closed = checked_close(file);
+        if let Err(error) = changed {
+            if let Err(close_error) = closed {
+                eprintln!("independent_close_failure={close_error}");
+            }
+            return Err(error);
+        }
+        closed?;
+        completed += 1;
+        replacement_bytes += edit.replacement.len() as u64;
+        println!("sdk_member={}\npath={}\nstart={}\ndelete_len={}\nreplacement_len={}\ninitial_bytes={}\nfinal_bytes={}",
+            index + 1, edit.path, plan.start, plan.delete_len, plan.replacement_len,
+            plan.fixture_bytes, plan.final_bytes);
+    }
+    eprintln!("ordinary_edit_reads={} ordinary_edit_read_bytes={} ordinary_edit_writes={} ordinary_edit_write_bytes={} ordinary_edit_truncates={} scratch_window_bytes={SCRATCH_BYTES}",
+        work.read_calls, work.read_bytes, work.write_calls, work.write_bytes, work.truncate_calls);
+    println!("mutation_status=pass\ncase={id}\nstep={step}\noriginal_sdk_edit_members={completed}\nreplacement_bytes={replacement_bytes}");
+    Ok(())
+}
+
 fn main() -> reference::Result<()> {
     let args: Vec<String> = std::env::args().collect();
     match args.as_slice() {
         [_, mode, id] if mode == "apply" => apply(id),
         [_, mode, id] if mode == "apply-workspace" => apply_workspace(id),
+        [_, mode, id, step] if mode == "apply-sdk-step" => apply_sdk_step(id, step.parse()?, None),
+        [_, mode, id, step, member] if mode == "apply-sdk-step" => {
+            apply_sdk_step(id, step.parse()?, Some(member.parse()?))
+        }
         [_, mode, manifest] if mode == "verify-manifest" => {
             let entries =
                 reference::workspace_common::decode_manifest(&std::fs::read_to_string(manifest)?)?;
@@ -262,6 +341,6 @@ fn main() -> reference::Result<()> {
             }
             Ok(())
         }
-        _ => Err("apply CASE | apply-workspace CASE | verify CASE STEP | verify-manifest MANIFEST required".into()),
+        _ => Err("apply CASE | apply-workspace CASE | apply-sdk-step CASE STEP [MEMBER] | verify CASE STEP | verify-manifest MANIFEST required".into()),
     }
 }
