@@ -1867,4 +1867,24 @@ expressible using existing product routes, subject to actual parity/proof.
 Production LOC79,366 ->79,366(delta+0), pinned staged absent-aware method;
 reference absent, retiredR9c,last65,417. Harness changes only.
 
-| This commit | Activate batch3 routing with clean control and original ordinary guards | 79366 | 79366 | +0 |
+| `3c697ae92` | Activate batch3 routing with clean control and original ordinary guards | 79366 | 79366 | +0 |
+
+Directory-construction/traversal registration integrated from `5773c34fb`:
+twelve original IDs, seed1, four exact tiers, original ranked chain/depth
+algebra and untouched ordinary workload. Construction expects Committed;
+metadata/content scans expect UpToDate. Mechanical source/provenance/algebra
+checks PASS under120s lock, and original total-path/file/directory-entry/read
+byte or constructed-chain counters are declared for retained stdout checking.
+Unknown ClassB paid backing/metadata/SQLite and own-write cache evidence remains
+INELIGIBLE. Current complete native/persisted names/kinds/modes/mtime/bytes and
+inode census are stronger than the original mixed-tier sampled reopen proof;
+retired-format ObjectId equivalence/unreferenced-object census and retired
+host Store RSS/physical-spool peak diagnostics are explicitly omitted.
+All15s report/120s operation/45s proof/59s hard bounds, original container and
+4GiB main Store guards remain. No preparation or sample outcome is claimed.
+Eight distinct initial masters suffice after exact checks: four construction
+trees and four scan trees shared by the two scan modes; samples stay independent.
+Product79,366 unchanged, reference absent, exact pinned staged counting method.
+
+| `5773c34fb` (worker) | Register twelve original directory cases | 79366 | 79366 | +0 |
+| This commit | Integrate directory registration and its scoped contracts | 79366 | 79366 | +0 |
