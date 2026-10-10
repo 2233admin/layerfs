@@ -18,7 +18,7 @@ WORKSPACE_FAMILIES = ("payload_create_read", "tiny_file_churn", "namespace_mutat
                      "edit_canonical_chunk_count", "small_file_delta_smoke",
                      "directory_construction_traversal", "git_tool_workflow", "local_snapshot",
                      "workspace_change_locality", "file_size_transition",
-                     "dedup_branch_history", "mixed_load_bearing")
+                     "dedup_branch_history", "mixed_load_bearing", "historical_access")
 RECIPE_HISTORY_SCHEMAS = ("original-v016-boundary-sequence-v1", "original-dedup-history-sequence-v1",
                           "original-m1-commit-sequence-v1")
 CONTEXT_PREPARED_SCHEMA = "fs-bench-pro-prepared-context-workspace-v1"
@@ -126,6 +126,409 @@ def historical_producer_dependency(case):
             "required_custody": "new closed preparation with original producer acknowledgements and full history",
             "allowed_reuse": "initial immutable masters, exact recipes and qualified proof identities",
             "forbidden_reuse": "mutated measured batch4 sample or relabelled measurement receipt"}
+
+
+HISTORICAL_PREPARED_SCHEMA = "fs-bench-pro-prepared-historical-access-v1"
+HISTORICAL_SELECTIONS = {
+    "v016-access-boundary-before-v1": ("v016-history-boundary-cycle-k100-v1", "main", 48),
+    "v016-access-boundary-after-v1": ("v016-history-boundary-cycle-k100-v1", "main", 49),
+    "v016-access-inode-before-v1": ("v016-history-namespace-inode-k100-v1", "main", 94),
+    "v016-access-inode-after-v1": ("v016-history-namespace-inode-k100-v1", "main", 95),
+    "v016-access-fork-point-v1": ("v016-branch-convergent-content-v1", "trunk", 5),
+    "v016-access-divergent-head-v1": ("v016-branch-fork-descendant-v1", "B", 10),
+}
+
+
+def historical_plan(case):
+    access, fixture = case["historical_access"], case["fixture"]
+    expected = HISTORICAL_SELECTIONS.get(case["id"])
+    if (access.get("schema") != "original-v016-historical-access-v1" or expected is None
+            or (access.get("producer"), access.get("producer_branch_role"), access.get("selected_ordinal")) != expected
+            or fixture.get("producer") != expected[0] or case.get("v016_case") != case["id"]
+            or type(fixture.get("seed")) is not int or fixture["seed"] != 1
+            or type(access.get("selected_ordinal")) is not int
+            or access.get("commits") != 0 or access.get("pre_read") is not False
+            or access.get("warmup_execs") != 0 or case.get("proof_only") is not True):
+        raise ValueError("exact original historical producer/source role/local ordinal required")
+    family, producer = family_case(expected[0])
+    if (family["family"] != fixture["producer_family"] or producer["v016_case"] != expected[0]
+            or producer["fixture"]["seed"] != 1):
+        raise ValueError("original historical producer definition/seed differs")
+    if producer.get("branch_schedule"):
+        rows = producer["branch_schedule"]["branches"]
+        roles = [row["role"] for row in rows]; limits = {row["role"]: row["local_commits"] for row in rows}
+        sources = {row["role"]: {"role": row["fork_source"].get("source_role"), "local": row["fork_source"].get("local_commit", 0)} for row in rows}
+        total = producer["branch_schedule"]["created_commit_acknowledgements"]
+        graph_roles = ["initial", *roles]
+    else:
+        roles = ["main"]; limits = {"main": producer["history_schedule"]["commits"]}
+        sources = {"main": {"role": None, "local": 0}}; total = limits["main"]; graph_roles = roles
+    role = expected[1].lower() if expected[1] == "B" else expected[1]
+    schedule = access["producer_schedule"]
+    if (role not in limits or not 1 <= expected[2] <= limits[role] or access["producer_local_commits"] != limits[role]
+            or schedule["created_commit_acknowledgements"] != total
+            or schedule["retained_root_references"] != total + 1 or access["declared_root_references"] != total + 1
+            or [(row["role"], row["commits"]) for row in schedule["execution_order"]] != [(r, limits[r]) for r in roles]):
+        raise ValueError("complete original historical producer schedule required")
+    return {"producer_family": family["family"], "producer_case": producer["v016_case"], "seed": 1,
+            "roles": roles, "graph_roles": graph_roles, "local_commits": limits, "fork_sources": sources,
+            "acknowledgements": total, "original_source_role": expected[1], "source_role": role,
+            "selected_local": expected[2], "producer_definition_sha256": hashlib.sha256(json.dumps(producer, sort_keys=True).encode()).hexdigest(),
+            "access_definition_sha256": hashlib.sha256(json.dumps(case, sort_keys=True).encode()).hexdigest()}
+
+
+def history_ack(record, role):
+    fields = record["commit"]["fields"]
+    return {"role": role, "local": record["index"], "commit_id": fields["commit_id"],
+            "layer_stack_id": fields["stack"], "root_id": fields["root"],
+            "parent_commit_id": None if fields["parent"] == "-" else fields["parent"], "base_layer_id": fields["base_layer"]}
+
+
+def validate_closed_history_producer(case, closed, genesis, current):
+    """Read authenticated setup custody/graph only; never open or repair its Store."""
+    plan = historical_plan(case)
+    if (closed.get("schema") != "fs-bench-pro-closed-history-producer-v1" or closed.get("status") != "PASS"
+            or closed.get("producer_case") != plan["producer_case"] or closed.get("producer_family") != plan["producer_family"]
+            or closed.get("source_commit") != current["source_commit"] or closed.get("source_tree") != current["source_tree"]
+            or closed.get("product_tree") != current["product_tree"] or type(closed.get("seed")) is not int or closed["seed"] != 1
+            or closed.get("setup_only") is not True or type(closed.get("sample_count")) is not int or closed["sample_count"] != 0
+            or closed.get("helpers") != genesis["helpers"] or Path(closed["initial_prepared"]).resolve() != Path(genesis["prepared_folder"]).resolve()):
+        raise ValueError("new closed setup-only historical producer binding required")
+    for path, digest in (("manifest", "manifest_sha256"), ("sealed_store", "store_sha256"),
+                         ("transcript", "transcript_sha256"), ("receipt", "receipt_sha256")):
+        if not Path(closed[path]).is_absolute() or identity.sha256(closed[path]) != closed[digest]:
+            raise ValueError("closed historical producer file seal differs: " + path)
+    if closed["manifest_sha256"] != genesis["provision"]["manifest_sha256"]:
+        raise ValueError("closed historical producer pristine manifest changed")
+    summary = json.loads(Path(closed["receipt"]).read_text())
+    if summary != {key: value for key, value in closed.items() if key not in ("receipt", "receipt_sha256")}:
+        raise ValueError("closed historical producer summary correspondence differs")
+    custody = closed["custody"]
+    if (custody.get("state") != "KNOWN_STOP" or custody.get("all_workspaces_gone") is not True
+            or type(custody.get("active_executions")) is not int or custody["active_executions"] != 0):
+        raise ValueError("closed historical producer requires exact End/Gone/KnownStop custody")
+    for path, digest in (("runtime_events", "runtime_events_sha256"), ("export_completion", "export_completion_sha256")):
+        if identity.sha256(custody[path]) != custody[digest]:
+            raise ValueError("closed historical producer custody evidence changed")
+    events = [json.loads(line) for line in Path(custody["runtime_events"]).read_text().splitlines()]
+    export = json.loads(Path(custody["export_completion"]).read_text())
+    if (not events or events[-1].get("event") != "finished" or export.get("status") != "PASS"
+            or export.get("exit_code") != 0 or closed.get("raw_export") is None):
+        raise ValueError("closed historical producer runtime/export completion missing")
+    normalization = closed.get("normalization", {})
+    if (identity.sha256(normalization["receipt"]) != normalization["receipt_sha256"]
+            or normalization.get("path") != closed["sealed_store"] or normalization.get("raw_directory") != closed["raw_export"]):
+        raise ValueError("closed historical producer exact normalization binding required")
+    normalized = json.loads(Path(normalization["receipt"]).read_text())
+    if (normalized.get("schema") != "fs-bench-pro-closed-store-normalization-v1" or normalized.get("status") != "PASS"
+            or normalized.get("profile") != "Disposable/WAL/OFF" or normalized.get("raw_unchanged") is not True
+            or normalized.get("source_closed") is not True or normalized.get("target_closed") is not True
+            or normalized.get("path") != closed["sealed_store"] or normalized.get("raw_directory") != closed["raw_export"]
+            or normalized.get("raw_files") != normalization.get("raw_files")
+            or normalized.get("raw_files_after") != normalization.get("raw_files")
+            or normalized.get("copied_files") != normalization.get("raw_files")
+            or normalized.get("normalized_identity") != normalization.get("normalized_identity")
+            or normalization["normalized_identity"]["sha256"] != closed["store_sha256"]):
+        raise ValueError("closed historical producer normalization source/output/profile/closure differs")
+    profile = {"source_uri_mode": "ro", "source_query_only": 1, "source_synchronous": 0, "target_synchronous": 0,
+               "source_journal_mode": "wal", "target_journal_mode": "wal", "backup_pages_per_step": 128,
+               "backup_sleep_seconds": 0, "backup_attempts": 1, "checkpoint": [0, 0, 0]}
+    progress = normalized.get("backup_progress", {})
+    if (any(normalized.get(key) != value for key, value in profile.items())
+            or any(type(normalized.get(key)) is not int for key in ("source_query_only", "source_synchronous", "target_synchronous", "backup_pages_per_step", "backup_sleep_seconds", "backup_attempts"))
+            or type(progress.get("calls")) is not int or progress["calls"] < 1
+            or progress.get("remaining_pages") != 0 or progress.get("last_status") != 101
+            or type(progress.get("total_pages")) is not int or progress["total_pages"] < 1
+            or normalized.get("helper_sha256") != identity.sha256(identity.ROOT / "core/benchmark/fs-bench-pro/engine/oracle.py")):
+        raise ValueError("closed historical producer original normalization profile/backup/helper differs")
+    raw = Path(closed["raw_export"]); raw_files = normalization["raw_files"]
+    if (not raw.is_absolute() or "store.sqlite" not in raw_files
+            or {path.name for path in raw.iterdir() if path.is_file()} != set(raw_files)
+            or any(name not in ("store.sqlite", "store.sqlite-wal", "store.sqlite-shm", "store.sqlite-journal")
+                   or identity.sha256(raw / name) != seal["sha256"] or (raw / name).stat().st_size != seal["size"]
+                   for name, seal in raw_files.items())
+            or Path(closed["sealed_store"]).stat().st_size != normalization["normalized_identity"]["size"]
+            or any(Path(closed["sealed_store"] + suffix).exists() for suffix in ("-wal", "-shm", "-journal"))):
+        raise ValueError("closed historical producer unchanged raw export/standalone normalized bytes required")
+    with Path(closed["sealed_store"]).open("rb") as stream:
+        header = stream.read(100)
+    if header[:16] != b"SQLite format 3\0" or header[18:20] != bytes([2, 2]):
+        raise ValueError("closed historical producer normalized WAL header required")
+    for path, digest in (("attempt_receipt", "attempt_receipt_sha256"), ("attempt_manifest", "attempt_manifest_sha256")):
+        if identity.sha256(closed[path]) != closed[digest]:
+            raise ValueError("closed historical producer attempt receipt/manifest changed")
+    receipts.verify_manifest(Path(closed["attempt_manifest"]).parent)
+    attempt = json.loads(Path(closed["attempt_receipt"]).read_text())
+    if (attempt.get("setup_only") is not True or type(attempt.get("sample_count")) is not int or attempt["sample_count"] != 0 or attempt.get("status") == "FAIL"
+            or attempt.get("functional_status") != "PASS" or attempt.get("proof_status") != "PASS"
+            or attempt.get("cleanup") != "Gone" or attempt.get("custody") != "KNOWN_STOP"
+            or attempt.get("case") != plan["producer_case"] or attempt.get("source_commit") != current["source_commit"]
+            or attempt.get("product_tree") != current["product_tree"]):
+        raise ValueError("original historical producer complete setup attempt and closure required")
+    branches = closed["graph"]["branches"]
+    if set(branches) != set(plan["graph_roles"]):
+        raise ValueError("complete original historical producer branch membership differs")
+    expected_acks, by_role, tuples = [], {}, {}
+    transcript = ["topology-v1\t" + plan["producer_case"]]
+    anchor = branches[plan["graph_roles"][0]]
+    for role in plan["graph_roles"]:
+        branch = branches[role]
+        if branch["stack"] != anchor["stack"] or branch["base_layer"] != anchor["base_layer"]:
+            raise ValueError("historical producer branches must retain original shared stack/base")
+        count = plan["local_commits"].get(role, 0)
+        rows = branch["commits"]
+        if [row["index"] for row in rows] != list(range(1, count + 1)) or any(type(row["index"]) is not int for row in rows):
+            raise ValueError("every original role-local historical Commit acknowledgement required")
+        source = plan["fork_sources"].get(role, {"role": None, "local": 0})
+        if branch.get("source_role") != source["role"] or branch.get("source_local", 0) != source["local"]:
+            raise ValueError("historical producer original fork point differs")
+        parent, root = branch["initial_parent"], branch["initial_root"]
+        if source["role"]:
+            fork = by_role[source["role"]][source["local"]]
+            if parent != fork["commit_id"] or root != fork["root_id"]:
+                raise ValueError("historical producer inherited Commit/root differs")
+        elif parent != "-":
+            raise ValueError("historical producer genesis parent must be absent")
+        elif branch["initial_root"] != anchor["initial_root"]:
+            raise ValueError("historical producer Layer fork must retain pristine initial root")
+        columns = ["branch", role, branch["branch_id"], branch["name"], branch["stack"], branch["base_layer"], parent, root,
+                   branch["final_head"], branch["final_root"], source["role"] or "-", str(source["local"])]
+        transcript.append(columns); by_role[role] = {}
+        for row in rows:
+            ack = history_ack(row, role)
+            if (ack["parent_commit_id"] != (None if parent == "-" else parent)
+                    or ack["layer_stack_id"] != branch["stack"] or ack["base_layer_id"] != branch["base_layer"]):
+                raise ValueError("historical producer acknowledged parent/stack/base differs")
+            canonical = {key: value for key, value in ack.items() if key not in ("role", "local")}
+            if ack["commit_id"] in tuples and tuples[ack["commit_id"]] != canonical:
+                raise ValueError("historical producer conflicting canonical Commit tuple")
+            tuples[ack["commit_id"]] = canonical; expected_acks.append(ack); by_role[role][row["index"]] = ack
+            transcript.append(["commit", role, str(row["index"]), ack["commit_id"], ack["layer_stack_id"], ack["root_id"],
+                               ack["parent_commit_id"] or "-", ack["base_layer_id"]])
+            parent, root = ack["commit_id"], ack["root_id"]
+        if branch["final_head"] != parent or branch["final_root"] != root:
+            raise ValueError("historical producer final head/root differs from last ACK")
+    if closed.get("acknowledgements") != expected_acks or len(expected_acks) != plan["acknowledgements"]:
+        raise ValueError("complete exact historical producer acknowledgement list required")
+    actual = Path(closed["transcript"]).read_text().splitlines()
+    if len(actual) != len(transcript) or actual[0] != transcript[0]:
+        raise ValueError("historical producer transcript membership differs")
+    for wanted, line in zip(transcript[1:], actual[1:]):
+        fields = line.split("\t")
+        if fields[:len(wanted)] != wanted or len(fields) != (12 if wanted[0] == "branch" else 10):
+            raise ValueError("historical producer transcript tuple differs")
+    return {"plan": plan, "selected": by_role[plan["source_role"]][plan["selected_local"]],
+            "distinct_commit_tuples": len(tuples), "scope": "all original role-local ACKs/forks/parents/heads and known closed setup custody; equal canonical tuples retained"}
+
+
+def historical_genesis(plan, folder, build_folder, build, current, supplied=None):
+    if supplied is None:
+        supplied = folder / "genesis"
+        prepare(plan["producer_case"], supplied, build_folder)
+    prepared = load(supplied, plan["producer_case"])
+    _, producer = family_case(plan["producer_case"])
+    if (prepared.get("schema") not in ("fs-bench-pro-prepared-workspace-v1", CONTEXT_PREPARED_SCHEMA)
+            or prepared.get("family") != plan["producer_family"] or prepared.get("case") != plan["producer_case"]
+            or prepared["identity"]["product_tree"] != current["product_tree"]
+            or prepared.get("global_profile") != "Disposable/WAL/OFF"
+            or prepared.get("master_measurement_mounts", 0) != 0
+            or not prepared.get("native_verification")
+            or any(row.get("verification_status") != "pass" for row in prepared["native_verification"].values())):
+        raise ValueError("authenticated immutable original producer genesis preparation required")
+    validate_runtime_helpers(producer, prepared, build)
+    return {**prepared, "prepared_folder": str(Path(supplied).resolve())}
+
+
+def historical_native_selection(case, plan, folder, build, binding):
+    root = folder / "selected-native"; writer = build["binaries"]["workspace-writer"]
+    compact = plan["producer_family"] == "branch_development"
+    prefix = [plan["producer_case"], plan["source_role"], str(plan["selected_local"])] if compact else [plan["producer_case"], str(plan["selected_local"])]
+    argv = [writer["path"], "materialize-context" if compact else "expected-step", *prefix, str(root)]
+    made = receipts.command(argv, folder, "historical-selected-native", 120)
+    summary = json.loads(Path(made["stdout"]).read_text()); manifest = root.with_suffix(".manifest.tsv")
+    digest = identity.sha256(manifest)
+    if (summary.get("case") != plan["producer_case"] or type(summary.get("step")) is not int
+            or summary["step"] != plan["selected_local"] or type(summary.get("seed")) is not int or summary["seed"] != 1
+            or summary.get("manifest_sha256" if compact else "fixture_digest") != digest
+            or compact and summary.get("role") != plan["source_role"]
+            or manifest.read_text().splitlines()[0] != "workspace-independent-manifest-v1"):
+        raise ValueError("independent historical selected native producer/role/local ordinal differs")
+    proof_argv = [writer["path"], "verify-context" if compact else "verify-step", *prefix, str(root)] + (["-"] if compact else [])
+    checked = receipts.command(proof_argv, folder, "historical-selected-native-check", 120)
+    proof = json.loads(Path(checked["stdout"]).read_text())
+    if (proof.get("verification_status") != "pass" or proof.get("case") != plan["producer_case"]
+            or proof.get("step") != plan["selected_local"] or compact and proof.get("role") != plan["source_role"]):
+        raise ValueError("original independent historical selected native verifier failed")
+    reads = []
+    for target in case["historical_access"]["reads"]:
+        path = root / target["path"]; data = path.read_bytes()
+        if len(data) != target["bytes"]:
+            raise ValueError("original historical declared full read length differs")
+        reads.append({"path": target["path"], "bytes": len(data), "sha256": hashlib.sha256(data).hexdigest(), "hex": data.hex()})
+    absent = case["historical_access"]["absent"]
+    if any((root / target).exists() or (root / target).is_symlink() for target in absent):
+        raise ValueError("original historical selected alias absence differs")
+    return {"original_source_role": plan["original_source_role"], "source_role": plan["source_role"], "local": plan["selected_local"],
+            "manifest": str(manifest), "manifest_sha256": digest, "staged_manifest": "/code/access/selected-manifest.tsv",
+            "native_root": str(root), "native_summary": summary, "read_targets": reads, "absent": absent,
+            "generator": {"argv": argv, "binary_sha256": writer["sha256"], "source_binding": binding,
+                          "receipt": str(Path(made["stdout"]).resolve()), "receipt_sha256": identity.sha256(made["stdout"])},
+            "native_verification": {"argv": proof_argv, "verification_status": "pass", "result": proof,
+                                    "receipt": str(Path(checked["stdout"]).resolve()), "receipt_sha256": identity.sha256(checked["stdout"])}}
+
+
+def install_closed_history_store(closed, genesis, folder, build):
+    """Setup-only independent byte install of complete closed history; no Init."""
+    folder.mkdir(); store = folder / "store.sqlite"; manifest = folder / "installed.manifest"
+    shutil.copy2(closed["sealed_store"], store); shutil.copy2(closed["manifest"], manifest)
+    if identity.sha256(store) != closed["store_sha256"] or identity.sha256(manifest) != closed["manifest_sha256"]:
+        raise ValueError("closed historical producer host byte copy differs")
+    volume = "layerfs-fsb-history-master-" + uuid.uuid4().hex[:16]
+    container = "layerfs-fsb-history-install-" + uuid.uuid4().hex[:16]
+    receipts.write_new(folder / "resource-claim.json", {"volume": volume, "container": container, "created_by_this_run": True,
+                       "purpose": "new immutable full historical producer byte copy; never a measured/mutated sample",
+                       "failure_disposition": "retain failed/uncertain resources, no retry"})
+    docker = ["docker", "--host", "unix://" + build["socket"]]
+    made = receipts.command([*docker, "volume", "create", volume], folder, "historical-master-volume", 15)
+    if Path(made["stdout"]).read_text().strip() != volume:
+        raise ValueError("closed historical master volume acknowledgement differs")
+    uid, gid = genesis["source_uid"], genesis["source_gid"]
+    if type(uid) is not int or type(gid) is not int or uid < 0 or gid < 0:
+        raise ValueError("original producer genesis ownership required")
+    body = ("set -eu; test ! -e /dest/global; printf '%s\\n' " + shlex.quote(closed["store_sha256"] + "  /input.sqlite") +
+            " | sha256sum --check -; mkdir -m 700 /dest/global; cp --reflink=never --sparse=never --preserve=mode,timestamps /input.sqlite /dest/global/store.sqlite; "
+            "cmp /input.sqlite /dest/global/store.sqlite; chown " + str(uid) + ":" + str(gid) +
+            " /dest/global /dest/global/store.sqlite; sha256sum /dest/global/store.sqlite")
+    receipts.command([*docker, "create", "--name", container, "--network", "none", "-v", volume + ":/dest",
+                      identity.IMAGE, "/bin/bash", "-euo", "pipefail", "-c", body], folder, "historical-master-create", 15)
+    receipts.command([*docker, "cp", "--archive", str(store), container + ":/input.sqlite"], folder, "historical-master-input", 15)
+    installed = receipts.command([*docker, "start", "--attach", container], folder, "historical-master-install", 15)
+    if [line.split()[0] for line in Path(installed["stdout"]).read_text().splitlines()[-1:]] != [closed["store_sha256"]]:
+        raise ValueError("independent closed full historical Store installation differs")
+    receipts.command([*docker, "rm", container], folder, "historical-master-remove-passing", 15)
+    result = {"schema": "fs-bench-pro-installed-history-store-v1", "status": "PASS", "volume": volume,
+              "sealed_store": str(store), "store_sha256": identity.sha256(store), "manifest": str(manifest),
+              "manifest_sha256": identity.sha256(manifest), "global_profile": "Disposable/WAL/OFF",
+              "construction_workers": 1, "attempt": installed, "source": closed["sealed_store"],
+              "scope": "complete known-Stop normalized producer copied unchanged, full history preserved, no selected-root Init or pre-read"}
+    receipts.write_new(folder / "installed-history.json", result)
+    return volume, result
+
+
+def prepare_historical_workspace(family, case, folder, build_folder, genesis_prepared_folder=None):
+    from . import workspace
+    plan = historical_plan(case)
+    build, current = identity.load_build(build_folder), identity.source_identity()
+    folder = Path(folder).resolve(); folder.mkdir(parents=True, exist_ok=False)
+    genesis = historical_genesis(plan, folder, build_folder, build, current, genesis_prepared_folder)
+    _, producer = family_case(plan["producer_case"])
+    closed = workspace.prepare_history_producer(plan["producer_family"], producer, genesis["prepared_folder"], build_folder, folder / "producer")
+    admitted = validate_closed_history_producer(case, closed, genesis, current)
+    binding = {"source_commit": current["source_commit"], "source_tree": current["source_tree"],
+               "producer_definition_sha256": plan["producer_definition_sha256"], "access_definition_sha256": plan["access_definition_sha256"],
+               "model_files": {path: current["files"][path] for path in CONTEXT_SOURCE_FILES}}
+    selected = historical_native_selection(case, plan, folder, build, binding)
+    selected["acknowledged_commit"] = admitted["selected"]
+    dependency = {**historical_producer_dependency(case), "status": "PASS", "plan": plan,
+                  "initial_prepared": genesis["prepared_folder"], "initial_prepared_manifest_sha256": identity.sha256(Path(genesis["prepared_folder"]) / "manifest.json"),
+                  "source_binding": binding, "closed_producer_receipt_sha256": closed["receipt_sha256"]}
+    code = folder / "code"; code.mkdir(); (code / "writers").mkdir(); (code / "access").mkdir()
+    copies = [(build["binaries"]["workload-linux"]["path"], "writers/workload"),
+              (identity.ROOT / "core/benchmark/fs-bench-pro/families/historical_access/workload.sh", "workload.sh"),
+              (selected["manifest"], "access/selected-manifest.tsv")]
+    for origin, relative in copies:
+        shutil.copy2(origin, code / relative); (code / relative).chmod(0o555 if relative in ("workload.sh", "writers/workload") else 0o444)
+    metadata = {"producer_dependency": dependency, "historical_selection": selected}
+    receipts.write_new(code / "access/dependency.json", metadata); (code / "access/dependency.json").chmod(0o444)
+    helpers = {"root": str(code), "files": {str(path.relative_to(code)): identity.sha256(path) for path in sorted(code.rglob("*")) if path.is_file()}}
+    helpers["sha256"] = hashlib.sha256(json.dumps(helpers["files"], sort_keys=True).encode()).hexdigest()
+    result = {"schema": HISTORICAL_PREPARED_SCHEMA, "status": "PASS", "family": family["family"], "case": case["id"],
+              "recipe": case["fixture"]["recipe"], "identity": current, "fixture": {**genesis["fixture"], "recipe": case["fixture"]["recipe"]},
+              "expectation": selected["native_summary"], "native_verification": {"historical_selected": selected["native_verification"]},
+              "helpers": helpers, "closed_producer": closed, "producer_dependency": dependency, "historical_selection": selected,
+              "initial_prepared": genesis["prepared_folder"], "source_uid": genesis["source_uid"], "source_gid": genesis["source_gid"],
+              "master_measurement_mounts": 0, "global_profile": "Disposable/WAL/OFF", "overlay_profile": "MEMORY/OFF/EXCLUSIVE",
+              "construction_workers": 1, "setup": "new full closed producer; setup-only original complete history; independent immutable byte copy; no pre-read or warmup",
+              "cache": "uncontrolled OS cache; original two-pass reader/verifier on same mount; verification only, no performance or cold claim"}
+    validate_historical_helpers(case, result, build, genesis=genesis)
+    result["master_volume"], result["provision"] = install_closed_history_store(closed, genesis, folder / "project", build)
+    receipts.write_new(folder / "prepared.json", result); receipts.manifest(folder)
+    return result
+
+
+def validate_historical_helpers(case, prepared, build, genesis=None):
+    plan = historical_plan(case); dependency = prepared["producer_dependency"]
+    if (prepared.get("schema") != HISTORICAL_PREPARED_SCHEMA or prepared.get("case") != case["id"]
+            or prepared.get("family") != "historical_access" or dependency.get("status") != "PASS"
+            or dependency.get("plan") != plan or dependency.get("initial_prepared") != prepared["initial_prepared"]
+            or identity.sha256(Path(prepared["initial_prepared"]) / "manifest.json") != dependency["initial_prepared_manifest_sha256"]):
+        raise ValueError("exact historical access/producer preparation dependency required")
+    if genesis is None:
+        genesis = {**load(prepared["initial_prepared"], plan["producer_case"]), "prepared_folder": prepared["initial_prepared"]}
+    admitted = validate_closed_history_producer(case, prepared["closed_producer"], genesis, prepared["identity"])
+    binding = dependency["source_binding"]
+    if (binding.get("producer_definition_sha256") != plan["producer_definition_sha256"]
+            or binding.get("access_definition_sha256") != plan["access_definition_sha256"]
+            or any(binding.get("model_files", {}).get(path) != identity.sha256(identity.ROOT / path) for path in CONTEXT_SOURCE_FILES)
+            or dependency.get("closed_producer_receipt_sha256") != prepared["closed_producer"]["receipt_sha256"]):
+        raise ValueError("historical producer/native model source binding changed")
+    selected = prepared["historical_selection"]
+    compact = plan["producer_family"] == "branch_development"
+    prefix = [plan["producer_case"], plan["source_role"], str(plan["selected_local"])] if compact else [plan["producer_case"], str(plan["selected_local"])]
+    generator, proof = selected["generator"], selected["native_verification"]
+    argv = generator["argv"]; root = Path(selected["native_root"])
+    if (selected.get("acknowledged_commit") != admitted["selected"] or selected.get("source_role") != plan["source_role"]
+            or selected.get("original_source_role") != plan["original_source_role"] or selected.get("local") != plan["selected_local"]
+            or argv[1:] != ["materialize-context" if compact else "expected-step", *prefix, str(root)]
+            or generator.get("source_binding") != binding or generator.get("binary_sha256") != build["binaries"]["workspace-writer"]["sha256"]
+            or identity.sha256(argv[0]) != generator["binary_sha256"]
+            or identity.sha256(generator["receipt"]) != generator["receipt_sha256"]
+            or json.loads(Path(generator["receipt"]).read_text()) != selected["native_summary"]
+            or Path(selected["manifest"]) != root.with_suffix(".manifest.tsv")
+            or identity.sha256(selected["manifest"]) != selected["manifest_sha256"]
+            or selected["native_summary"].get("manifest_sha256" if compact else "fixture_digest") != selected["manifest_sha256"]
+            or selected["native_summary"].get("case") != plan["producer_case"]
+            or selected["native_summary"].get("step") != plan["selected_local"]
+            or compact and selected["native_summary"].get("role") != plan["source_role"]
+            or proof["argv"] != [argv[0], "verify-context" if compact else "verify-step", *prefix, str(root)] + (["-"] if compact else [])
+            or proof.get("verification_status") != "pass" or proof["result"].get("verification_status") != "pass"
+            or proof["result"].get("case") != plan["producer_case"] or proof["result"].get("step") != plan["selected_local"]
+            or compact and proof["result"].get("role") != plan["source_role"]
+            or identity.sha256(proof["receipt"]) != proof["receipt_sha256"] or json.loads(Path(proof["receipt"]).read_text()) != proof["result"]):
+        raise ValueError("historical selected Commit/native state/receipt binding differs")
+    if prepared.get("native_verification") != {"historical_selected": proof} or prepared.get("expectation") != selected["native_summary"]:
+        raise ValueError("historical native fixture/parity correspondence differs")
+    lines = Path(selected["manifest"]).read_text().splitlines()
+    if lines[0] != "workspace-independent-manifest-v1":
+        raise ValueError("original complete historical native manifest required")
+    rows = [line.split("\t") for line in lines[1:]]
+    if any(len(row) != 7 for row in rows) or len({row[0] for row in rows}) != len(rows):
+        raise ValueError("historical native manifest membership malformed")
+    entries = {row[0]: row for row in rows}
+    targets = selected["read_targets"]
+    if ([(row.get("path"), row.get("bytes")) for row in targets] != [(row["path"], row["bytes"]) for row in case["historical_access"]["reads"]]
+            or selected.get("absent") != case["historical_access"]["absent"] or any(path in entries for path in selected["absent"])):
+        raise ValueError("original historical read/absent target membership differs")
+    for target in targets:
+        entry = entries[target["path"]]
+        if entry[1] == "hardlink":
+            entry = entries[bytes.fromhex(entry[6]).decode("utf-8")]
+        data = bytes.fromhex(target["hex"])
+        if (entry[1] != "file" or int(entry[2]) != target["bytes"] or len(data) != target["bytes"]
+                or hashlib.sha256(data).hexdigest() != target["sha256"] or entry[6] != target["sha256"]):
+            raise ValueError("original historical full payload bytes/SHA differs from independent native algebra")
+    root = Path(prepared["helpers"]["root"]); seals = prepared["helpers"]["files"]
+    wanted = {"writers/workload": build["binaries"]["workload-linux"]["sha256"],
+              "workload.sh": identity.sha256(identity.ROOT / "core/benchmark/fs-bench-pro/families/historical_access/workload.sh"),
+              "access/selected-manifest.tsv": selected["manifest_sha256"],
+              "access/dependency.json": seals.get("access/dependency.json")}
+    if (set(seals) != set(wanted) or {str(path.relative_to(root)) for path in root.rglob("*") if path.is_file()} != set(wanted)
+            or selected.get("staged_manifest") != "/code/access/selected-manifest.tsv"
+            or any(seals[path] != digest or identity.sha256(root / path) != digest for path, digest in wanted.items())
+            or json.loads((root / "access/dependency.json").read_text()) != {"producer_dependency": dependency, "historical_selection": selected}):
+        raise ValueError("exact original historical reader/scoped oracle staged helper seal required")
+    return {"schema": "fs-bench-pro-historical-helper-admission-v1", "status": "PASS", "selected_commit": admitted["selected"],
+            "scope": "fresh closed original producer dependency; exact local selected Commit, independent full read targets and unchanged reader; no Store open, mutation, regeneration or pre-read"}
 
 
 def prepare_context_native(case, folder, build, binding):
@@ -932,6 +1335,8 @@ def sdk_step_script(record):
 
 
 def validate_runtime_helpers(case, prepared, build):
+    if case.get("historical_access"):
+        return validate_historical_helpers(case, prepared, build)
     """Fail before claims/clones if original P-3 placement or helper seals differ."""
     if case.get("branch_schedule") or case.get("topology_schedule"):
         return validate_context_helpers(case, prepared, build)
@@ -1079,8 +1484,9 @@ def prepare_workspace(recipe, folder, build_folder):
     if case.get("branch_schedule") or case.get("topology_schedule"):
         return prepare_context_workspace(family, case, folder, build_folder)
     if family["family"] == "historical_access":
-        dependency = historical_producer_dependency(case)
-        raise NotImplementedError("historical producer execution pending Root; new closed preparation required: " + str(dependency["producer"]))
+        if not case.get("historical_access"):
+            raise NotImplementedError("original historical access declaration required before producer execution")
+        return prepare_historical_workspace(family, case, folder, build_folder)
     if family["family"] not in WORKSPACE_FAMILIES:
         raise ValueError("this family's workspace fixture port is not implemented yet")
     build = identity.load_build(build_folder)

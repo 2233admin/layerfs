@@ -4116,3 +4116,29 @@ Runtime composition, Linux seal, realP1, preparation/parity/cases remain pending
 
 | `24be90ced` (worker) | Author independent topology and access oracle and owning qualification | 79370 | 79370 | +0 |
 | This commit | Integrate exact independent topology and access oracle | 79370 | 79370 | +0 |
+
+
+### Batch 5 closed historical producer fixture admission, 2026-10-11
+
+Imported only the exact fixture module and new historical fixture tests. Six
+access cases bind four complete original producer plans: main48/49 and94/95
+of100, trunk5 of the30-ACK convergent graph, and originalB/controllerb-local10
+of the40-ACK descendant graph. Source/local ordinal excludes inherited prefix.
+A new setup-only complete producer's ACK graph, parents/Forks/heads, known
+End/Gone/Stop, normalized standalone WAL Store and immutable raw main/WAL/SHM
+export are mandatory. Every attempt/normalization/manifest/receipt hash is
+authenticated. A fresh byte-copy master retains full history; there is no Init
+of a selected-root Store, measured-sample reuse, access reader or warmup during
+preparation. Matching immutable genesis inputs may be reused explicitly.
+
+Thirty-two final mocked fixture tests passed once in4.437 s under private
+6/120 s stop: seven historical, ten context and fifteen legacy checks. Parent
+regression failed as expected and remains visible. No native generation,
+Store/Docker activity, build, actual producer, parity or case ran. Handoff
+benchmark-results/fs-bench-pro/2026-10-11-batch-5-historical-fixture-authoring/handoff/handoff.json
+SHA-256864ea5ef5827f9188db6f9d520f9b0a9533a8f959975e50fe045a5f803fe5912.
+Source-only namespace worker now owns workspace.py/access controller while
+Root owns integration/ledger/parity/build and live execution.
+
+| `615c3df22` (worker) | Author closed historical producer fixture admission and owning qualification | 79370 | 79370 | +0 |
+| This commit | Integrate exact closed historical producer fixture admission | 79370 | 79370 | +0 |
