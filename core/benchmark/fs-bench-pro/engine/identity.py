@@ -3,8 +3,11 @@ import csv
 import hashlib
 import io
 import json
+import os
 from pathlib import Path
+import shlex
 import subprocess
+import uuid
 
 ROOT = Path(__file__).resolve().parents[4]
 IMAGE = "sha256:378b799ef43343fc64008b6a5ef456dd6bf0cb8f6ea4cec72e7b42dfc17d2cd6"
@@ -105,3 +108,136 @@ def reference_catalogue(output, root=ROOT):
     if len(rows) != 273 or len({(row["family"], row["case"]) for row in rows}) != len(rows):
         raise ValueError("frozen registry must resolve exactly 273 unique cases")
     return rows
+
+
+def source_identity(root=ROOT):
+    """Tracked source must be clean; the owner-protected untracked prompt is recorded.
+
+    Generated builds/receipts stay gitignored. Other untracked source is refused,
+    rather than silently supplying a different compilation or workload.
+    """
+    if git(root, "diff", "--name-only", "HEAD"):
+        raise ValueError("commit the tracked source before a build, preparation or sample")
+    untracked = git(root, "ls-files", "--others", "--exclude-standard").splitlines()
+    protected = "core/docs/issues/307/PROMPT-R8-R9-NEXT-AGENT-20261010.md"
+    if any(path != protected for path in untracked):
+        raise ValueError("untracked source is not a sealed input: " + repr(untracked))
+    tracked = git(root, "ls-files").splitlines()
+    selected = [path for path in tracked if path.startswith(("core/crates/", "core/vendor/",
+                 "core/benchmark/fs-bench-pro/runtime/", "core/benchmark/fs-bench-pro/engine/",
+                 "core/benchmark/fs-bench-pro/families/", "core/benchmark/fs-bench-pro/writers/",
+                 "core/benchmark/cluster-two/cells/", "core/benchmark/cluster-two/cache/", ".cargo/"))
+                or path in ("core/Cargo.toml", "core/Cargo.lock", "core/benchmark/fs-bench-pro/bench.py")]
+    hashes = {path: sha256(root / path) for path in selected}
+    return {"source_commit": git(root, "rev-parse", "HEAD"),
+            "source_tree": git(root, "rev-parse", "HEAD^{tree}"),
+            "product_tree": git(root, "rev-parse", "HEAD:core/crates"), "files": hashes,
+            "source_clean": True,
+            "excluded_untracked": [{"path": path, "sha256": sha256(root / path),
+                                    "reason": "owner-protected handoff document; not a build/workload input"}
+                                   for path in untracked]}
+
+
+def docker_socket():
+    supplied = os.environ.get("DOCKER_HOST")
+    if supplied is not None:
+        if not supplied.startswith("unix://"):
+            raise ValueError("the authentic local Unix Docker engine is required")
+        return supplied[len("unix://"):]
+    value = subprocess.check_output(["docker", "context", "inspect", "--format",
+                                     "{{.Endpoints.docker.Host}}"], text=True).strip()
+    if not value.startswith("unix://"):
+        raise ValueError("the authentic local Unix Docker engine is required")
+    return value[len("unix://"):]
+
+
+def build(folder, root=ROOT):
+    """Locked host/runtime and pinned-image daemon builds with source byte checks."""
+    from . import receipts
+    folder = Path(folder).resolve()
+    before = source_identity(root)
+    folder.mkdir(parents=True, exist_ok=False)
+    receipts.write_new(folder / "source-before.json", before)
+    socket = docker_socket()
+    docker = ["docker", "--host", "unix://" + socket]
+    image = receipts.command([*docker, "image", "inspect", IMAGE, "--format", "{{.Id}}"],
+                             folder, "image", 15)
+    if Path(image["stdout"]).read_text().strip() != IMAGE:
+        raise ValueError("actual Docker image differs from the pinned digest")
+    provenance = receipts.command(["python3", "-B", "core/tools/check_fuser_integrity.py"],
+                                  folder, "fuser-integrity", 15, allow_failure=True)
+    if provenance["exit_code"]:
+        checked = json.loads(Path(provenance["stdout"]).read_text())
+        known = {
+            "core/benchmark/cluster-two/passthrough/Cargo.lock: locked fuser has a local/replacement source",
+            "core/benchmark/cluster-two/passthrough/Cargo.toml: patch override of fuser is not the authorized timestamp patch",
+        }
+        if set(checked.get("errors", [])) != known or provenance["exit_code"] != 1:
+            raise ValueError("fuser integrity has a new refusal; build not attempted")
+    environment = {**os.environ, "CARGO_TARGET_DIR": str(root / "core/target/r7-host-release"),
+                   "LAYERFS_CONSTRUCTION_WORKERS": "1"}
+    flags = environment.get("RUSTFLAGS")
+    if flags is not None and any(flag not in flags for flag in
+                                 ("aes_armv8", "polyval_armv8", "chacha20_force_neon", "+aes,+sha2")):
+        raise ValueError("explicit RUSTFLAGS must repeat the repository ARM64 profile")
+    host = receipts.command(["cargo", "+1.85.1", "build", "--manifest-path",
+                             "core/benchmark/fs-bench-pro/runtime/Cargo.toml", "--locked", "--offline", "--release"],
+                            folder, "host-release", 120, environment=environment)
+    checks = folder / "container-source.sha256"
+    checks.write_text("".join(digest + "  /work/" + path + "\n" for path, digest in before["files"].items()))
+    container = "layerfs-fsb-build-" + uuid.uuid4().hex[:16]
+    inside = "/work/" + str(checks.relative_to(root))
+    body = "set -eu; sha256sum -c " + shlex.quote(inside) + "; cargo build --manifest-path core/Cargo.toml --locked --offline --release -p layerfs-daemon --bin layerfs-daemon; sha256sum -c " + shlex.quote(inside)
+    receipts.command([*docker, "create", "--name", container, "--network", "none",
+                      "-v", str(root) + ":/work", "-w", "/work",
+                      "-e", "CARGO_HOME=/work/core/target/cluster2-linux-cargo",
+                      "-e", "CARGO_TARGET_DIR=/work/core/target/r7-linux-release",
+                      "-e", "LAYERFS_CONSTRUCTION_WORKERS=1", IMAGE, "/bin/bash", "-c", body],
+                     folder, "linux-create", 15)
+    linux = receipts.command([*docker, "start", "--attach", container], folder, "linux-release", 120)
+    after = source_identity(root)
+    if before != after:
+        raise ValueError("source changed during the locked builds; container retained: " + container)
+    receipts.write_new(folder / "source-after.json", after)
+    binaries = {}
+    for name, path in (("runtime", root / "core/target/r7-host-release/release/layerfs-r7-runtime"),
+                       ("daemon", root / "core/target/r7-linux-release/release/layerfs-daemon")):
+        digest = sha256(path)
+        archive = root / "benchmark-results/fs-bench-pro/binary-archive" / digest / path.name
+        archive.parent.mkdir(parents=True, exist_ok=True)
+        if not archive.exists():
+            import shutil
+            shutil.copy2(path, archive)
+        if sha256(archive) != digest:
+            raise ValueError("immutable binary archive differs")
+        binaries[name] = {"path": str(archive), "sha256": digest, "bytes": path.stat().st_size}
+    result = {"schema": "fs-bench-pro-build-v1", "status": "PASS", "identity": before,
+              "binaries": binaries, "image": IMAGE, "socket": socket,
+              "builds": [host, linux], "flags": ".cargo/config.toml ARM64 profile; explicit override recorded",
+              "explicit_rustflags": flags, "incremental_reuse": "existing worktree-local r7 Cargo caches; both locked builds attempted",
+              "global_profile": "Disposable/WAL/OFF", "overlay_profile": "MEMORY/OFF/EXCLUSIVE",
+              "construction_workers": 1, "fuser_check": provenance,
+              "fuser_disposition": "OWNER-3's two passthrough refusals retained; no checker PASS claimed",
+              "durable": "NOT_RUN — disabled by owner until explicit reauthorization"}
+    receipts.write_new(folder / "build.json", result)
+    receipts.command([*docker, "rm", container], folder, "linux-remove-passing", 15)
+    receipts.manifest(folder)
+    return result
+
+
+def load_build(folder):
+    from . import receipts
+    folder = Path(folder)
+    receipts.verify_manifest(folder)
+    result = json.loads((folder / "build.json").read_text())
+    current = source_identity()
+    def compilation(files):
+        return {name: digest for name, digest in files.items() if name.startswith(
+            ("core/crates/", "core/vendor/", "core/benchmark/fs-bench-pro/runtime/", ".cargo/"))
+            or name in ("core/Cargo.toml", "core/Cargo.lock")}
+    if compilation(current["files"]) != compilation(result["identity"]["files"]):
+        raise ValueError("build inputs differ from the sealed release build")
+    for binary in result["binaries"].values():
+        if sha256(binary["path"]) != binary["sha256"]:
+            raise ValueError("sealed executable bytes changed")
+    return result

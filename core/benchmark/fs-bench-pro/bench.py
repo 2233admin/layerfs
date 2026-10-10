@@ -3,6 +3,7 @@
 import argparse
 import json
 from pathlib import Path
+import uuid
 
 HERE = Path(__file__).resolve().parent
 
@@ -25,7 +26,20 @@ def main(argv=None):
     commands = parser.add_subparsers(dest="command", required=True)
     listing = commands.add_parser("list", help="every frozen family and case")
     listing.add_argument("--json", action="store_true")
+    building = commands.add_parser("build", help="locked release runtime and pinned-image daemon")
+    building.add_argument("--out", type=Path)
     args = parser.parse_args(argv)
+    if args.command == "build":
+        from engine import identity
+        results = identity.ROOT / "benchmark-results/fs-bench-pro"
+        output = args.out or results / ("build-" + uuid.uuid4().hex)
+        output = output.resolve()
+        if not output.is_relative_to(results.resolve()):
+            parser.error("build output must be a fresh directory under benchmark-results/fs-bench-pro")
+        result = identity.build(output)
+        print(json.dumps({"build": str(output), "status": result["status"],
+                          "binaries": result["binaries"]}, indent=2))
+        return
     rows = catalogue()
     if args.json:
         print(json.dumps(rows, indent=2))

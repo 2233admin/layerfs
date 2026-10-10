@@ -17,7 +17,7 @@ comparison or release-admission claim. Durable is
 | 0.1 Released references | COMPLETE | `8e4a78fa0` | Stage 0.2 move-only organization |
 | 0.2 Move-only organization | COMPLETE, historical check failures retained | `13f9dec38`; routing follow-up in this commit | Update routing guide, then stage 0.3 catalogue |
 | 0.3 Case catalogue | COMPLETE | `f182e9a63`; prerequisite correction `30b798192` | Stage 0.4 reproducible engine |
-| 0.4 Reproducible engine | PENDING | — | Read retained working scripts and rebuild preparation |
+| 0.4 Reproducible engine | IN_PROGRESS | Cell-route correction `bb8e07df8`; build support in this commit | Implement fixture preparation, oracle, workspace execution and CSV reports; then twelve cells |
 | 1 Pilot | PENDING | — | Wait for stage 0.4 completion |
 | 2 Edits | PENDING | — | Wait for batch 1 completion |
 | 3 Trees and tools | PENDING | — | Wait for batch 2 completion |
@@ -46,6 +46,9 @@ comparison or release-admission claim. Durable is
 | 10 | Resolve the original Rust registry using a std-only metadata exporter; read both Python wrapper registries separately | Root SDK cannot build after retirement, while its product-neutral workload definitions compile without product dependencies | Restoring retired crates or guessing formatted IDs from text |
 
 | 11 | Route stage 0.4 through `bench.py run cluster-two/cells` and put its generated CSVs in cluster-two baselines | The spec requires the twelve existing cells through bench.py but only named family execution; separate subjects must remain separate | Treating cells as a 26th workload family or adding a second entry point |
+
+| 12 | A source identity reports the protected untracked handoff but excludes it from compilation; refuse all other untracked source and tracked dirt | The owner requires that prompt remain untracked; it supplies no product, harness or workload bytes | Staging it or pretending an arbitrary untracked executable is clean |
+| 13 | Preserve OWNER-3 checker failures as FAIL records and admit a build only when the exact two known passthrough refusals are the entire error set | Owner explicitly retains those refusals; daemon builds use the authorized product patch, while any new provenance error must stop | Weakening the checker or claiming its aggregate PASS |
 
 ## Bugs
 
@@ -191,6 +194,21 @@ and committed snapshots; active core only, reference absent as recorded above.
 | `9af29e01e` | Current routing guide | 79366 | 79366 | +0 |
 | `30b798192` | Correct existing SDK History methods | 79366 | 79366 | +0 |
 | `f182e9a63` | Stage 0.3 case catalogue | 79366 | 79366 | +0 |
+| `bb8e07df8` | Define separate cell execution/report route | 79366 | 79366 | +0 |
+| This commit | Stage 0.4 build and receipt custody support | 79366 | 79366 | +0 |
 
 Stage 0.4 entry-point clarification: docs-only; no sample or product change.
+Production LOC 79,366 -> 79,366 (delta +0), pinned absent-aware method.
+
+Stage 0.4 build support: `bench.py build` now drives one locked/offline host
+release build and one daemon release build in the pinned image. It checks host
+source hashes inside the Linux container before and after Cargo; checks host
+source equality; retains exact binary hashes in immutable archives; and records
+worktree-local incremental cache reuse. A failed/unknown build container is
+retained. Passing build containers alone are removed. Source admission and
+receipts have seven passing scoped tests (three identity, four custody) under
+120 s checkout-locked invocations. The CLI help and whitespace pass.
+Raw tests: `benchmark-results/fs-bench-pro/2026-10-10-stage-0-4-build-tests/`.
+No new release build, preparation, container, volume or measurement has been
+attempted by this step; execution waits for the committed engine inputs.
 Production LOC 79,366 -> 79,366 (delta +0), pinned absent-aware method.

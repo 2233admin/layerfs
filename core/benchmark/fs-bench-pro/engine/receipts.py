@@ -3,7 +3,11 @@ import csv
 from decimal import Decimal
 import hashlib
 import json
+import os
 from pathlib import Path
+import signal
+import subprocess
+import time
 
 ROOT = Path(__file__).resolve().parents[4]
 REFERENCE_SOURCES = (
@@ -65,3 +69,92 @@ def write_references(destination, root=ROOT):
         writer = csv.DictWriter(stream, fieldnames=REFERENCE_COLUMNS, lineterminator="\n")
         writer.writeheader()
         writer.writerows(released_references(root))
+
+
+def write_new(path, value):
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("x") as stream:
+        json.dump(value, stream, sort_keys=True, indent=2)
+        stream.write("\n")
+    path.chmod(0o600)
+
+
+def command(argv, folder, label, seconds, *, cwd=ROOT, environment=None, allow_failure=False):
+    """One attempted child; retain streams and host-only timeout custody.
+
+    A host fence proves no Docker cancellation, container stop or unmount.
+    No retry, output overwrite or removal follows an unknown result.
+    """
+    folder = Path(folder)
+    folder.mkdir(parents=True, exist_ok=True)
+    record = {"argv": list(map(str, argv)), "cwd": str(cwd), "attempts": 1,
+              "wall_stop_seconds": seconds, "status": "ATTEMPT_DECLARED",
+              "stdout": str(folder / (label + ".stdout")),
+              "stderr": str(folder / (label + ".stderr"))}
+    write_new(folder / (label + ".attempt.json"), record)
+    child = None
+    original = None
+    started = time.monotonic_ns()
+    try:
+        with Path(record["stdout"]).open("xb") as stdout, Path(record["stderr"]).open("xb") as stderr:
+            child = subprocess.Popen(record["argv"], cwd=cwd, env=environment,
+                                     stdin=subprocess.DEVNULL, stdout=stdout, stderr=stderr,
+                                     start_new_session=True)
+            write_new(folder / (label + ".host-custody.json"), {"host_pid": child.pid,
+                      "host_group": child.pid, "remote_cancellation": "NOT_ESTABLISHED"})
+            record["exit_code"] = child.wait(timeout=seconds)
+        record["status"] = "PASS" if record["exit_code"] == 0 else "FAIL"
+    except BaseException as error:
+        original = error
+        record.update(status="FAIL", original_failure_type=type(error).__name__,
+                      original_failure=str(error), timeout=isinstance(error, subprocess.TimeoutExpired),
+                      remote_cancellation="NOT_ESTABLISHED; retain exact Docker resources")
+        try:
+            if child is not None and child.poll() is None:
+                os.killpg(child.pid, signal.SIGKILL)
+                child.wait(timeout=1)
+        except BaseException as fencing:
+            record["independent_host_fence_failure"] = str(fencing)
+    finally:
+        record["complete_wall_ns"] = time.monotonic_ns() - started
+        try:
+            write_new(folder / (label + ".completion.json"), record)
+        except BaseException as writing:
+            if original is None:
+                raise
+            original.independent_receipt_failure = writing
+    if original is not None:
+        raise original
+    if record["status"] != "PASS" and not allow_failure:
+        raise RuntimeError(f"{label} failed with exit {record['exit_code']}; see {folder}")
+    return record
+
+
+def manifest(folder):
+    folder = Path(folder)
+    hashes = {}
+    for path in sorted(folder.rglob("*")):
+        if path.is_file() and path.name != "manifest.json":
+            value = hashlib.sha256()
+            with path.open("rb") as stream:
+                for chunk in iter(lambda: stream.read(65536), b""):
+                    value.update(chunk)
+            hashes[str(path.relative_to(folder))] = value.hexdigest()
+    write_new(folder / "manifest.json", {"schema": "fs-bench-pro-evidence-v1", "files": hashes})
+
+
+def verify_manifest(folder):
+    folder = Path(folder)
+    record = json.loads((folder / "manifest.json").read_text())
+    for relative, wanted in record["files"].items():
+        path = Path(relative)
+        if path.is_absolute() or ".." in path.parts:
+            raise ValueError("evidence path escapes its recorded run")
+        value = hashlib.sha256()
+        with (folder / path).open("rb") as stream:
+            for chunk in iter(lambda: stream.read(65536), b""):
+                value.update(chunk)
+        if value.hexdigest() != wanted:
+            raise ValueError("retained evidence changed: " + relative)
+    return record
