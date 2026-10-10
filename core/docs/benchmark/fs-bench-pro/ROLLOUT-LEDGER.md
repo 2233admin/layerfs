@@ -21,7 +21,7 @@ comparison or release-admission claim. Durable is
 | 1 Pilot | COMPLETE: 36 functional/proof/clean-close passes; 7 recorded scoped B PASS, 29 INELIGIBLE; full numeric qualification of the 7 is unverified | Init `c1d7dd0e8`/`39bbcbd6b`; payload `200f81493`/`c1d9b6c58`; parallel routing `b3c96ecb1`; tiny `36849bcc2`/`d6e0ef952`; namespace `98b14b233`/`be1f56a23`; H-2 fix `222526fa0`; closure `d4314ed62`; membership supplement `cca598d0b` | Batch 2, retaining original receipts plus exhaustive membership supplement |
 | 2 Edits | COMPLETE: all62 cases ported/parity/sampled once/recorded;39 strict proof and clean-close passes (numeric INELIGIBLE),20 strict retention failures and3 original capped-watchdog failures retained | Canonical `a34b5d44b`/`beeb7ad69`; preserving `b9ffa63be`; capped `4d8ccfc93`; changing `05ffbf971`; small-delta `c0c99a4a3`/`2e6a508b5`/`1c975ba30` | Begin batch3; no identified fixable product correctness defect remains in batch2 |
 | 3 Trees and tools | COMPLETE: all33 original cases ported/parity/sampled, full applicable proofs and clean closePASS; numeric33INELIGIBLE; first snapshotFAIL retained separately; localitydense500 and snapshot EXCEEDED | Shared3c697ae92; directory50c297c68/ad4f95503; locality2590a4536/26c037d90; snapshot0344bfdc6/fix03033abdc/results98d3be30a/70d568e94; Git acebd7cbd/guard031d427a7/results31fff4d49 | Begin batch4 after this committed closure, no identified fixable product correctness bug |
-| 4 History on one branch | IN_PROGRESS: three worktree authors active; all43 cases unrun, shared native models/oracles and guards being composed | Routing65f0c1fbe; sharednative/model/P3 integration this commit; family/runtime/preparation integrations pending | Complete source/oracle qualification, then per-family parity and one attempt per case |
+| 4 History on one branch | IN_PROGRESS: all43 original cases authored in three worktrees; allunrun; shared persisted proof/census/preparation/controller being qualified | Routing65f0c1fbe; sharednative/model/P3 integration this commit; family/runtime/preparation integrations pending | Complete source/oracle qualification, then per-family parity and one attempt per case |
 | 5 Branches and Workspaces | PENDING | — | Wait for batch 4; verify existing P-1 SDK methods |
 | 6 Dedup and storage | PENDING | — | Wait for batch 5 completion |
 | 7 Reliability | PENDING | — | Wait for batch 6 completion |
@@ -2497,4 +2497,30 @@ No product source or resources changed by this port.
 | `2789b9dac` (worker) | Register all26 original branch-history cases | 79366 | 79366 | +0 |
 | `44f2048c4` (worker) | Label original mixed-v2 final sample versus added routine full proofs | 79366 | 79366 | +0 |
 | `26e414cb0` (worker) | Bound prepared SDK descriptors with native fallback | 79366 | 79366 | +0 |
-| This commit | Integrate original dedup branch history family | 79366 | 79366 | +0 |
+| `6a5433e79` | Integrate original dedup branch history family | 79366 | 79366 | +0 |
+
+
+Batch4 mixed_load_bearing authoring integrates Namespace96d472294,
+319fad349 and13f413bee:10original IDs,4ordinary single-call agentepisodes,
+4regular sequential M1 cases,2original exhaustive verification-only IDs.
+M1declares every ordered helper/Commit and two separate stage2 ordinaryP3
+members, selected original checkpoint roots (finalregular /20exhaustive cycle
+ends), allactualCommitIDs/parents/head/globalcensus, selective original ranges
+and explicit metadata with actualcreatedmode custody. Exhaustive performance
+isN/A, original120/300s declarations retained beside owner120s testceiling;
+no performancezero, fabricated coldness or automatic metadata normalization.
+Original decimal fixture/caps and common guard arithmetic are recorded above.
+
+Exact final changed scopes reuse owning private120s evidence: original/schema
+3checks PASS2.024s after319f; finalprepared-script3checks PASS3.600s after13f,
+including missingdescriptor seal refused before mutation and unchanged native
+helper/member1/member2 order. Sourcefile hashes and counted worker trees pin
+this reuse; no repeat of an unchanged benchmark. Raw owning summaries:
+2026-10-10-batch-4-mixed-registration, -mixed-history-schema and prepared-hook
+in Namespaceworktree under benchmark-results/fs-bench-pro. All10actualcases
+remainunrun untilcomposed support; no product source or resources changed.
+
+| `96d472294` (worker) | Register all10 original mixed cases and exact fixtures | 79366 | 79366 | +0 |
+| `319fad349` (worker) | Use approved original history checkpoints/census schema | 79366 | 79366 | +0 |
+| `13f413bee` (worker) | Preserve helper-first two-member prepared P3 order | 79366 | 79366 | +0 |
+| This commit | Integrate original mixed load-bearing family | 79366 | 79366 | +0 |
