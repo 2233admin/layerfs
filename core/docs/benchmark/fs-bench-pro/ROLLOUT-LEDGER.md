@@ -21,7 +21,7 @@ comparison or release-admission claim. Durable is
 | 1 Pilot | COMPLETE: 36 functional/proof/clean-close passes; 7 recorded scoped B PASS, 29 INELIGIBLE; full numeric qualification of the 7 is unverified | Init `c1d7dd0e8`/`39bbcbd6b`; payload `200f81493`/`c1d9b6c58`; parallel routing `b3c96ecb1`; tiny `36849bcc2`/`d6e0ef952`; namespace `98b14b233`/`be1f56a23`; H-2 fix `222526fa0`; closure `d4314ed62`; membership supplement `cca598d0b` | Batch 2, retaining original receipts plus exhaustive membership supplement |
 | 2 Edits | COMPLETE: all62 cases ported/parity/sampled once/recorded;39 strict proof and clean-close passes (numeric INELIGIBLE),20 strict retention failures and3 original capped-watchdog failures retained | Canonical `a34b5d44b`/`beeb7ad69`; preserving `b9ffa63be`; capped `4d8ccfc93`; changing `05ffbf971`; small-delta `c0c99a4a3`/`2e6a508b5`/`1c975ba30` | Begin batch3; no identified fixable product correctness defect remains in batch2 |
 | 3 Trees and tools | COMPLETE: all33 original cases ported/parity/sampled, full applicable proofs and clean closePASS; numeric33INELIGIBLE; first snapshotFAIL retained separately; localitydense500 and snapshot EXCEEDED | Shared3c697ae92; directory50c297c68/ad4f95503; locality2590a4536/26c037d90; snapshot0344bfdc6/fix03033abdc/results98d3be30a/70d568e94; Git acebd7cbd/guard031d427a7/results31fff4d49 | Begin batch4 after this committed closure, no identified fixable product correctness bug |
-| 4 History on one branch | IN_PROGRESS: all43 original cases ported; shared source/oracles/seal qualified; boundary7 and dedup26 preparation/parity PASS; mixed preparation underway; original one-attempt execution dispatched | Routing65f0c1fbe; nativea921bedbd; portsfc9e71fae/6a5433e79/4762b720c; prepared364e1a87a; guarded5ebdac535/report65df42e91; controller686344e8f/guard91cf97fab; public93f0d3dfe/census7d9380fe0; finalseal a70f3197b; preparation dispatch this commit | Complete each family's original one-attempt cases and commit its two CSVs with retained failures/custody |
+| 4 History on one branch | IN_PROGRESS: all43 original cases ported; shared source/oracles/seal qualified; boundary7 and dedup26 preparation/parity PASS; mixed preparation underway; first boundary/dedup attempts FAIL H11; further attempts stopped; mixed9prepared and lastprepFAIL | Routing65f0c1fbe; nativea921bedbd; portsfc9e71fae/6a5433e79/4762b720c; prepared364e1a87a; guarded5ebdac535/report65df42e91; controller686344e8f/guard91cf97fab; public93f0d3dfe/census7d9380fe0; finalseal a70f3197b; preparation dispatch87857f5bd; first failed CSVs this commit | Correct H11 closed-WAL export with external red regression, then complete each family's original one-attempt cases and commit its two CSVs with retained failures/custody |
 | 5 Branches and Workspaces | PENDING | — | Wait for batch 4; verify existing P-1 SDK methods |
 | 6 Dedup and storage | PENDING | — | Wait for batch 5 completion |
 | 7 Reliability | PENDING | — | Wait for batch 6 completion |
@@ -106,6 +106,7 @@ comparison or release-admission claim. Durable is
 | H-8 | Prospective batch4, found before any attempt | Output-close or final publication failure could retain FAIL after deleting sample resources | Administrative container/volume removal occurred before finally close/verdict/publication and driver acknowledgement; partial removal also claimed blanket retained custody | `56a422544` | test_close_failure_after_all_proofs_keeps_container_and_volume fails against a921bedbd with both rm calls observed; missing outer ACK/failed return do no removal, partial lost-volume acknowledgement remains uncertain and immutable bound |
 | H-9 | Prospective two verification-only cases | Overall output-closeFAIL could disappear in CSV when performance wasN/A and semantic proof retainedPASS | Original proof-only mask omitted the independent full-outcome failure tag | Worker2fe8e9b2e / integration this commit | test_overall_close_failure_remains_visible_beside_passing_semantic_proof fails beforefix; final5reportchecks PASS0.048s |
 | H-10 | Prospective batch4 prepared SDK routes | Missing/partial prepared-step map could invoke native fallback and regenerate original payloads inside measuredwork; stale sealed helpers could disagree with reported current build | Controller trusted optional prepared records without mandatory originalstep/binary/descriptor/payload/script correspondence admission | Workera8c56d570 / integration this commit | test_helper_refusal_precedes_case_claim_and_any_clone_or_mount fails at686344e8f; exact-source temporary assets reject five old-admission bypasses and all15guard checks PASS |
+| H-11 | v016-boundary-small-control-v1 and dedup-history-distributed-1 first attempts | Native proof/acknowledged Commits/Gone/KnownStop pass, independent public history proof fails acknowledged Commit missing | Controller copies only exported main file into typed-store, dropping closed WAL; immutable main-only census would also miss WAL | PENDING shared harness correction | Real closed-WAL controller regression sees0 of100 acknowledged test rows on old main-only copy; red0.067s under120s mainlock |
 
 H-1 and H-2 are harness faults, not product correctness or performance defects.
 The original file-identity checker remains intact; no product source changed.
@@ -2850,4 +2851,66 @@ change. Raw roots are the workers'2026-10-10-batch-4-file-size-transition-d57450
 2026-10-10-batch-4-dedup-7e594f615 and mixed current run under their private
 benchmark-results/fs-bench-pro directories. No later batch has begun.
 
-| This commit | Record qualified parallel preparation/parity and fixed invocation ceiling | 79366 | 79366 | +0 |
+| `87857f5bd` | Record qualified parallel preparation/parity and fixed invocation ceiling | 79366 | 79366 | +0 |
+
+
+Batch4 first actual attempts expose H11 in the controller, not an identified
+product history defect. Boundary small-control at privated57450ed3 acknowledged
+both Commits, native verificationPASS, both mounted viewsGone and runtime
+KNOWN_STOP. Its191,549,251ns product wall and1,570,163,833ns failedproof wall
+are retained; exact14requests/192ownerjobs/857statements. Failed container
+57aaa6346ac4cdeed0ce952ffd44d35d3d48cfd28b55b7a6e06835143b236813 and
+volume layerfs-fsb-sample-f09bfe9cc54f40f4 remain retained. Raw closed main
+180,224B/SHA7f6613a45069123e8b226782402c2202885c56a29aa752a2c585a6772a9d1dfc
+matches initial clone; exported WAL181,312B/SHA
+5d0a87a2b6faea60ba812aa8feb2d003b47d38fc447ebaa66a501a6a420e49f3
+and SHM32,768B remain present. The separate typed copy omitted them and
+therefore exposed only the initial state. Six other boundary cases remain
+NOT_RUN at this source. Two CSVs preserve allseven rows, worker882f50cb8.
+
+Dedup distributed1 at private7e594f615 likewise acknowledged actualCommit
+1216470861ade6aff4c3e208f2879316b2ff9ed5aed3aa1095c970428a2df284b3,
+nativeproofPASS, mountsGone/KnownStop;158,878,375ns product wall,
+2,268,414,542ns failedproof wall;10requests/102jobs/466statements.
+Storelogical1,434,304B/allocated1,437,696B; overlaylogical245,760B/
+allocated268,681,216B. Failed container
+e06cd7ce378329d80fba7f223d5e563bb6b310f235cac8af556ea95709ed4b24 and
+volume layerfs-fsb-sample-e18eab20c1ee4f61 remain retained. MainSHA
+d708e027865b52341e0adcab3e7ba4303597b18af4aed180b916513c37e24440
+matches originalclone; WAL115,392B/SHA
+cb05890a334878460c49b18ef741666113d38ca87f2bf3e60bee9c995d82ac83
+and SHM32,768B were omitted by typed copy. Twentyfive othercases NOT_RUN.
+Both26-row CSVs preserved, workera38242d7b. No limit miss in either sample,
+no failedresource deletion, no replay; all furtheractual B4cases stopped.
+
+Root read exact failed graph stderr/completions/receipts and traced the copy
+at workspace.py to the mandatory unfiltered census's sidecar-free contract.
+A real SQLite/WAL external controller regression keeps100 acknowledged test
+rows in copied WAL; immutable main-only typed copy sees0, producingFAIL.
+Red invocation0.067s/120mainlock remains at
+benchmark-results/fs-bench-pro/2026-10-10-h11-closed-wal-controller-red.
+This isolated orchestration fixture has synthetic rows, explicitly not a
+canonical product/measurement proof. Prospective correction preserves raw
+KnownStop export and binds a separate WAL-aware standalone snapshot to every
+raw file hash, then uses independent typed/census copies. Sidecar refusal,
+all original globaltuple/provider/schema/custody/deadline guards remain.
+No product source/fix/performance claim follows from this retained failure.
+
+Mixed has no actualcase/claim/sample resource. Nine preparations PASS; the
+last v016-mixed-exhaustive-500mb-30000-k100-v1 preparation reaches external
+120s ceiling: exit124,wall120,033,743,083ns, no prepared.json. Fifteen selected
+cycle-end native states5..75 completed; step80 hasstdout297B/stderr0 but no
+completion acknowledgement beforekill and remainsUNKNOWN, notPASS. Those
+15completed writers total101,214,199,501ns, each6.389..7.299s and499,934,464B
+logical paths; no individual state hang/native error/unsupported recipe was
+observed. Source creates original full native fixture/manifest for each of
+20selected states; this setup scope remains fixed. Partial preparation is
+retained, never retried, shortened, split or promoted. Case is presently
+UNRUN because original preparation failed; full-family parity is NOT_RUN.
+Raw private namespaceworktree2026-10-10-batch-4-mixed-dispatch/preparation and
+2026-10-10-batch-4-mixed-prepared/v016-mixed-exhaustive-500mb-30000-k100-v1.
+No speed fix, workload/limit change or productfeature is selected.
+
+| `882f50cb8` (worker) | Preserve first boundary FAIL plus six original NOT_RUN rows | 79366 | 79366 | +0 |
+| `a38242d7b` (worker) | Preserve first dedup FAIL plus25 original NOT_RUN rows | 79366 | 79366 | +0 |
+| This commit | Integrate both failed run CSV pairs, H11 diagnosis and mixed failed preparation | 79366 | 79366 | +0 |
