@@ -1035,4 +1035,38 @@ No product or budget change. Production LOC79,366->79,366(delta+0), pinned
 absent-aware method; reference absent retiredR9c.
 
 | `681413760` (worker) | Port32 original length-changing scenarios and plan checks | 79366 | 79366 | +0 |
-| This commit | Integrate length-changing registration and master ledger | 79366 | 79366 | +0 |
+| `cbdff2006` | Integrate length-changing registration and master ledger | 79366 | 79366 | +0 |
+
+Batch 2 / edit_length_changing_capped registration integrated from worker
+d03f8435b and prospective coverage/watchdog follow-up90029a1fe. Five original
+capped-v1 cases retain exact existing input prefixes (524,283,904 bytes, or
+524,285,952 for replace-grow), all final lengths524,288,000, original seeds/
+payloads/plans/fixture hashes and fixed0750/0640/1700000000 metadata. No
+fixture, workload, limit or verifier is shrunk. The two-second group watchdog
+for edit+Commit+End remains an active exact group budget, distinct from15s
+reported full wall and45/59s independent proof limits. A refused operation or
+expiry retains its original receipt/resources, without enlarging a deadline.
+
+Current proof obligations include stable scope/inode serial, all bytes,
+untouched current payload IDs and shifted source-offset transcript, current
+format grammar and complete canonical inode-table membership. Retired
+encoding/root IDs and unreferenced non-inode object census are explicitly
+not compared. Capped original inherited fixture already fixed rootmtime, so
+no artificial root-time difference is introduced. Frozen full digest model
+self_check passes independently; computed original final fileSHA values are
+retained in the worker's native-model diagnostic as derivations, not product
+samples. Four final prospective contract checks PASS0.020s under own30s
+lock, whitespace PASS; earlier raw contract checks retained. Exact worker
+parent/staged/committed LOC comparisons are79,366->79,366+0.
+
+Raw checks/model diagnostic:
+/Users/yifanxu/.codex/worktrees/fs-bench-pro-edit-capped/layerfs/benchmark-results/fs-bench-pro/2026-10-10-batch-2-capped-registration/ and
+2026-10-10-batch-2-capped-native-model-diagnostic/. No new container, volume,
+Store, mount, preparation or product sample was created. Shared integration/
+final qualification, five inputs/parity/samples/CSVs remain pending. This
+integration reuses byte-identical qualification; no product change.
+Production LOC79,366->79,366(delta+0), pinned absent-aware method.
+
+| `d03f8435b` (worker) | Port five original capped-v1 edit scenarios | 79366 | 79366 | +0 |
+| `90029a1fe` (worker) | Freeze active original2s group/current oracle obligations | 79366 | 79366 | +0 |
+| This commit | Integrate capped registration and exact prospective constraints | 79366 | 79366 | +0 |
