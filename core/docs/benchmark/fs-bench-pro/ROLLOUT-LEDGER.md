@@ -15,7 +15,7 @@ comparison or release-admission claim. Durable is
 | --- | --- | --- | --- |
 | Handoff specification | COMPLETE | `3c32fbc97` | Harvest released references |
 | 0.1 Released references | COMPLETE | `8e4a78fa0` | Stage 0.2 move-only organization |
-| 0.2 Move-only organization | PENDING | — | Map existing files and their owning tests |
+| 0.2 Move-only organization | COMPLETE, historical check failures retained | This commit | Update routing guide, then stage 0.3 catalogue |
 | 0.3 Case catalogue | PENDING | — | Inventory the frozen root registry and older-commit binding |
 | 0.4 Reproducible engine | PENDING | — | Read retained working scripts and rebuild preparation |
 | 1 Pilot | PENDING | — | Wait for stage 0.4 completion |
@@ -77,3 +77,52 @@ production LOC 79,366 -> 79,366 (delta +0), pinned absent-aware method.
 Stage 0.2 specification clarification is docs-only. It does not permit an
 expectation change or weakening a checker. Production LOC 79,366 -> 79,366
 (delta +0); pinned absent-aware method.
+
+Stage 0.2 relocated 316 tracked files into the specified subjects. Supporting
+paths follow decision 7. All 14 moved JSON registrations and Cargo lockfiles
+are byte-identical to their first-parent versions; active product and frozen
+root definitions are unchanged. `git diff --check` and Python syntax pass.
+Raw check outputs, including every failed intermediate path check, are retained
+under `benchmark-results/fs-bench-pro/2026-10-10-stage-0-2-checks/`, with a hash
+manifest and the complete move map. No workload sample or Docker resource was
+created. No assertion, verifier, threshold or registration was weakened.
+
+The final affected checks are: cell suite 300 passing tests plus the three
+Git-index helper tests after their import correction; 65 proof tests; cache
+suite 10 passing and two existing Linux-only skips; 44 evidence registration
+tests; five retired writer registry tests; 19 isolation tests; 14 fuser guard
+self-tests; two storage-content Rust registry tests. Both runtime and
+storage-content `cargo +1.85.1 test --locked --all-targets --no-run` builds pass
+using the repository ARM64 flags, `core/target`, construction workers 1 and
+120 s locked wall stops. Other affected shell/mutation checks are in the raw
+outputs. No command reached its wall stop; the slowest Python check was the
+retired Workspace collection (87.719 s).
+
+Historical failures retained, with their assertions unchanged:
+
+- `test_phase7` expects the old `Handles::create` timer seam in the current
+  Project example; that seam is absent in unchanged product source.
+- `test_phase7_history_vehicle` expects two old textual reference seams and an
+  old verifier failure order/profile. All three checks fail on current source;
+  its first assertion stops before its later Durable argument can execute.
+  Do not run this historical MEMORY/Durable selection again.
+- `test_substrate` expects the retired host-mediated runner to dispatch/build;
+  the actual retirement guard refuses it before resources are acquired.
+  Four errors remain in its final selected check; no restored Server route.
+- Storage-content's two source-scan assertions reject `sync_all` in native
+  global Store installation and the FUSE `fsync` callback name in unchanged
+  product source. Their frozen scanner is retained. This is not an observation
+  of an fsync on Disposable Workspace backing.
+- Fuser integrity keeps OWNER-3's two passthrough refusals at its relocated
+  manifest/lock. The checker only changes the approved platform manifest path;
+  no third-party bytes or allowlist policy change.
+
+The old cold-native test needed its declared `target/phase7-agent` scratch
+parent, which was prepared without editing the test or running a Store. Its
+six selected tests then passed. These historical checks are not new workload
+verdicts. Applicable relocation checks pass; unavailable/stale contracts remain
+visible and do not authorize a retired route.
+
+Stage 0.2 Production LOC: 79,366 -> 79,366 (delta +0), active core only;
+reference absent (retired R9c; last counted 65,417 at `498dd1917812`). Method:
+pinned absent-aware parent/staged archive counter. No speed claim.

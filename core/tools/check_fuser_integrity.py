@@ -30,9 +30,9 @@ LIFECYCLE_PATCH_CHECKSUM = "926f4d134babce182421f7dc82c12617acee821b9e78cf499f0f
 LIFECYCLE_FILES = {"CHANGELOG.md", "src/lib.rs", "src/session.rs", "src/session/lifecycle.rs"}
 PATCH_MANIFESTS = {
     "core/Cargo.toml": "vendor/fuser-0.18.0",
-    "core/benchmark/cluster2-platform/Cargo.toml": "../../vendor/fuser-0.18.0",
+    "core/benchmark/cluster-two/platform/Cargo.toml": "../../../vendor/fuser-0.18.0",
 }
-PATCH_LOCKS = {"core/Cargo.lock", "core/benchmark/cluster2-platform/Cargo.lock",
+PATCH_LOCKS = {"core/Cargo.lock", "core/benchmark/cluster-two/platform/Cargo.lock",
                "core/vendor/fuser-0.18.0/Cargo.lock"}
 
 
