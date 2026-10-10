@@ -112,6 +112,7 @@ comparison or release-admission claim. Durable is
 | 75 | Remove89 exact owned passing closed setup masters after fresh identity/connection and custody admission; retain19 uncertain/failed/future candidates | Passing setup SDKKnownStop/container removal and source witness hashes establish custody; different frozen reliability fixture prevents reuse. No failed/uncertain sample resource, historical master or owner resource is selected | Keep unnecessary passing volumes or remove candidates by prefix/guess/force |
 | 76 | Generate exact supported RAWsingleton through existing public encoders and mutate only a same-length canonical target byte; delete only selected locator/advisory closure for missing fault | Current32768BWholeFile differs from retired firstChunk; sharedpack framing must remain valid and unrelated records unchanged. Existing public APIs and stdlibsqlite3 avoid newdependencies/features. Current wholepackSHA refusal is supplemental only; ordinary originalFUSE EIO0 remains mandatory | Corruptcompressed frame/CRC, handwriteproductencoding, disableFK/triggers, or acceptbroadIO/startup errors asfullproof |
 | 77 | Classify the two early integrity complete cases not-applicable before setup/sample; preserve every native/fault/EIO/cleanup/resource obligation | Public SandboxApi has private atomicCreate→Upload→Start with no CPU/memory/swap/PIDprofile, callback or adoption. Stopped backend create exists, but completing its owner would recreate SDK wire authentication/Hello. Post-Start limits cannot preserve frozen from-creation2CPU/2GiB/no-swap/256PID profile | Add forbidden productfeature/newwireowner/proxy, apply limits afterStart, or claim partial native diagnostics ascompletecasePASS |
+| 78 | Ship only exact source admission/parity and pre-side-effect refusal for all28 reliabilityNA cases; retain rich prospective controller ignored/unqualified | No complete frozen case can execute under current capabilities; an unused runtime implementation would not qualify missing guards. Current-source NA skipping checks actual product/source; retained historical verification preserves original policy rather than masking recorded failures | Run incomplete cases, treat source parity as native proof, fabricate zero-cost samples, or drop failed/NA rows |
 
 ## Bugs
 
@@ -6495,5 +6496,49 @@ before resources. No test, verifier or product guard is weakened.
 | Commit | Purpose | Production before | after | delta |
 | --- | --- | --- | --- | --- |
 | This commit | Preserve original resource guards and classify two SDK-inexpressible cases | 79370 | 79370 | +0 |
+Pinned absent-aware staged counter/exact tree confirmation; reference absent,
+retiredR9c,last65,417/tree498dd1917812.
+
+
+### Batch7 source-only applicability controller and CLI, 2026-10-11
+
+129-line shippedengine/reliability.py pins exact reviewed dictionaries for
+all28 original cases, currentproduct9ac cleanstatus and every original/
+currentpublic sourcebyte. Sourceparity records everycase statusNOT_APPLICABLE
+andseparateapplicabilityPASS, withruntime_parityNOT_RUN/sample_count0/
+verification_attempt_count0; changedsource/product/dirtytree/unknowncase/
+changedreason/profile/fault/limit preserves completeaggregateFAIL evidence.
+prepare/one_case refuseeveryIDbeforefolder/build/resource/native work.
+Runtimeprototype794lines andexternaldraft287lines arepreservedignored
+byte-identicaldff4d3.../b446dbaa..., unqualified; no lifecycle/SQL/fullcase
+proofis claimed. ExacthandoffSHAe915a36a351ac9b4efb2b7bbb1326e7aa5401734ac01d8e588162149bb5ac3e8;
+manifest4f5e23e47be286251c0e79d3f27309198fd831a3ebd865e5fc83a69b5ec1d38b.
+ModuleSHAa55381dc4f2680d99fcde5d0a9ffe81b7ab5a810d95ad1af9766a40445dedad2;
+owningtestSHA68b118fe4ec5830ae4c2db97e3e3e2014befa2bcda96e649b832b0fe5701fde7.
+
+CLIrunsourceNA skip callsactualadmit_sources before recordingzeroattempts;
+verifymissingNA receipts checks exact reviewedpolicy and printsreason; any
+actualrecordedFAIL isprocessednormally, notmasked. Parity/prepareroute
+ordinaryentrypoint unchanged. Root H36 wrongreasonkey RED againstactual
+metadata retained; correctnot_applicable_reason nowused. Genericprospective
+ported-route doubles pin originalb1cc metadata explicitly and are notcurrent
+case capability/evidence; actualengine refutesall28 execution.
+
+PrivateD77 RED145,477,792ns retained/final6PASS2,543,428,250ns. Root6source
+guardsPASS2,697,263,666ns; CLI5PASS327,696,708ns; existing2parityCLI checks
+PASS176,452,166ns. AllR4explicit120s/readreporttemplate. PriorrootCLI
+checkpoint4PASS/1ERROR281,222,292ns used wrongtestmockname load_results;
+actual load_run corrected in testonly, affected verificationguard1PASS
+257,820,750ns. Finalall28 verificationguard checks precise reason,51→55
+policyadmissions and unexpectedactualfailurevisibility. Priorprivate/root
+REDs/failedchecks remain, no workload/limit/oracle/product change. Raw:
+benchmark-results/fs-bench-pro/2026-10-11-b7-minimal-controller-checks/,
+2026-10-11-b7-cli-real-metadata-red/,2026-10-11-b7-cli-final-checks/.
+No actualpreparation/SDK/Docker/nativeverification or benchmarksample.
+Formalclean source-only parity/registration/report follows thiscommit.
+
+| Commit | Purpose | Production before | after | delta |
+| --- | --- | --- | --- | --- |
+| This commit | Admit source-only reliability dispositions through bench.py | 79370 | 79370 | +0 |
 Pinned absent-aware staged counter/exact tree confirmation; reference absent,
 retiredR9c,last65,417/tree498dd1917812.
