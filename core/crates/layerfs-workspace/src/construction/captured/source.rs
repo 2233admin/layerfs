@@ -117,7 +117,7 @@ impl<'s, 'a, P: OverlayCapturedRuns + OverlayOperationRecords + ?Sized> Input<'s
         let result = self
             .scan
             .borrow_mut()
-            .read(self.provider, self.shared, at, length, output)
+            .read(self.provider, self.shared, at, length, output, false)
             .and_then(|supply| match supply {
                 Supply::Run(run) => Ok(run),
                 Supply::Committed {

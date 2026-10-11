@@ -63,6 +63,46 @@ not consumed.
   replacement within the final length and a nonempty change; the edits of a
   file without pieces keep their exact checks. Edit records are unchanged.
 
+Issue 319 update, 2026-10-11: ordinary shifted writes can prove whole chunks
+while leaving copied chunk fragments and ragged cell edges literal. For a file
+with pieces and a larger final size, preparation authenticates bounded edges
+of provisional edits that change length or follow a length change. It compares at most two maximum chunks
+(64 KiB) at each end against the corresponding immutable base range, retains
+exactly equal prefix/suffix bytes, and seals the shortened edit. Comparison
+stops at a mismatching byte. The original provisional length deltas translate
+final offsets to base offsets; trimming preserves those deltas. Pure inserts,
+pure deletes, final-size shrink or no-growth, in-place scripts without a shift
+and files without pieces keep
+their existing path.
+
+The [edge adapter](../../crates/layerfs-workspace/src/construction/captured/edges.rs)
+uses the retained base FileView and independent bounded captured cursors before
+the construction source exists. It holds two fixed 64 KiB byte buffers, never a
+complete replacement. Longer edits remain valid and stream through Content;
+this limit bounds comparison work, not supported edit or file size. Authenticated
+base/payload reads and cursor jobs are real preparation work. This is an explicit
+exception to the earlier shapes-only payload rule for shifted file edges.
+Nothing creates or changes reference pieces during construction, and unchanged
+bytes keep their payload identity and source offset through Content's existing
+mapping slice/split algorithm. CDC, edit-record encoding and context version
+remain unchanged. A read failure ends the same original attempt and retains its
+custody; no equality guess, alternate provider or retry is introduced.
+
+`CapturedFileWork::edge_windows` counts successful comparison windows,
+`edge_read_bytes` counts logical bytes acquired from both sources, and
+`edge_retained_bytes` counts bytes preserved by trimming. These do not claim
+physical IO, cache misses, or total operation residency. Successful namespace
+construction accumulates those three observations as `file_edge_windows`,
+`file_edge_read_bytes` and `file_edge_retained_bytes`; failures retain the file's
+own counters and original cause. Captured byte-window calls made here count as
+normalization steps, while ordinary construction source calls keep their own
+counter. The external daemon `captured_edge_retention` target exercises only
+ordinary truncation and recognized writes, compares full live/fresh-root bytes,
+and observes exact persisted payload/source mappings including partial chunks.
+Its test scope includes unaligned middle insertion, prepend, replace-grow,
+changed copied edge bytes and a larger input. Verification outcomes are recorded
+in the owning issue ledger rather than inferred from this source description.
+
 The external test `captured_piece_edits` writes pieces through the ordinary
 Workspace write with claims, compares the live and the sealed view with the
 final bytes, and checks the sealed records, the committed bytes and the

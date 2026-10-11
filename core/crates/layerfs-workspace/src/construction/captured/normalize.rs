@@ -1,13 +1,17 @@
 //! Coalesced final changes, never chronological mutation replay or an edit Vec.
 use super::{
     context,
+    edges::Edges,
     owner::Facts,
     scan::Scan,
     script::Script,
     state::{change, encode, key, Shared, CONTEXT, EDITS},
 };
-use crate::{OverlayCapturedRuns, OverlayOperationRecords};
-use layerfs_content::{ContentError, ContentResult, Edit, EditRecordChange, EditRecordExpected};
+use crate::{BaseView, OverlayCapturedRuns, OverlayOperationRecords};
+use layerfs_content::{
+    ContentError, ContentResult, Edit, EditRecordChange, EditRecordExpected, FileView,
+};
+use std::cell::Cell;
 
 const BATCH: usize = 64;
 struct Writer {
@@ -42,10 +46,12 @@ impl Writer {
         Ok(())
     }
 }
-pub(super) fn prepare<P: OverlayCapturedRuns + OverlayOperationRecords + ?Sized>(
-    provider: &P,
-    shared: &Shared<'_, P>,
+pub(super) fn prepare<'a, P: OverlayCapturedRuns + OverlayOperationRecords + ?Sized>(
+    provider: &'a P,
+    shared: &Shared<'a, P>,
     facts: Facts,
+    base: Option<&BaseView>,
+    file: Option<&FileView>,
 ) -> ContentResult<(usize, Vec<u8>)> {
     let initial = context::encode(facts, 0, None)?;
     shared
@@ -62,7 +68,12 @@ pub(super) fn prepare<P: OverlayCapturedRuns + OverlayOperationRecords + ?Sized>
         count: 0,
     };
     let mut script = Script::new(facts.file_root.map(|root| root.to_bytes()), facts.base_size);
-    let mut emit = |edit| writer.push(shared, edit);
+    let scripted = Cell::new(false);
+    let mut edges = Edges::new(provider, shared, facts, base, file);
+    let mut emit = |edit| match edges.trim(edit, scripted.get())? {
+        Some(edit) => writer.push(shared, edit),
+        None => Ok(()),
+    };
     let mut at = 0;
     let surviving = facts.base_size.min(facts.final_size);
     // In a file without pieces, bytes beyond the surviving base are one
@@ -74,6 +85,7 @@ pub(super) fn prepare<P: OverlayCapturedRuns + OverlayOperationRecords + ?Sized>
     while at < limit {
         let span = scan.span(provider, shared, at, true)?;
         if scan.referenced() {
+            scripted.set(true);
             limit = facts.final_size;
         }
         let end = span.end.min(limit);

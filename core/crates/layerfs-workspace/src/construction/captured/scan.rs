@@ -384,8 +384,9 @@ impl Scan {
         at: u64,
         limit: u64,
         output: &mut [u8],
+        normalization: bool,
     ) -> ContentResult<Supply> {
-        let span = self.span(provider, shared, at, false)?;
+        let span = self.span(provider, shared, at, normalization)?;
         let length = (span.end - at).min(limit);
         match span.origin {
             Origin::Local => {}

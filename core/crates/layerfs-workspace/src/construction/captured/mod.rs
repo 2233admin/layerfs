@@ -1,5 +1,6 @@
 //! Exact captured final-state file normalization and one consuming construction.
 mod context;
+mod edges;
 mod normalize;
 mod owner;
 mod scan;
