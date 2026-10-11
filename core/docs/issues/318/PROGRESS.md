@@ -683,3 +683,35 @@ were registered and taken at `3e238d364`, not `a9dcfe107`; the latter is the
 ledger commit of `small_file_delta_smoke`, made between the last sample and
 this entry. Product and harness source are the same at both. Later headings
 take the commit from the family's run registration.
+
+## Phase C — batch 3, `directory_construction_traversal`, tag `b1`, sampled at `6ede5b271`
+
+Iteration 1's value is left of each arrow, this run's right; one value means
+equal. Times are single diagnostic samples.
+
+| case | status | functional | proof | requests | writer jobs | statements | overlay logical B | Store logical B | exec ms | Commit ms |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| directory-construct-1-compact-v2 | INELIGIBLE | PASS | PASS | 16 | 171 | 761 | 229376 -> 233472 | 1405656 -> 1401560 | 42.1 -> 44.1 | 16.0 -> 12.3 |
+| directory-construct-10-compact-v2 | INELIGIBLE | PASS | PASS | 448 | 3683 | 17261 | 286720 -> 290816 | 11047880 -> 11043760 | 68.7 -> 73.9 | 29.6 -> 29.7 |
+| directory-construct-100-mixed-v4 | INELIGIBLE | PASS | PASS | 4408 | 49675 | 210008 | 831488 -> 839680 | 106744264 -> 106760624 | 247.5 -> 309.1 | 286.9 -> 262.4 |
+| directory-construct-500-mixed-v4 | INELIGIBLE | PASS | PASS | 22008 | 248100 | 1048680 | 3153920 -> 3170304 | 536080384 -> 536039424 | 1224.5 -> 1439.7 | 1513.1 -> 1287.0 |
+| directory-metadata-scan-1-compact-v2 | INELIGIBLE | PASS | PASS | 720 | 900 | 7397 | 229376 -> 233472 | 1347976 | 100.1 -> 91.5 | 8.7 -> 12.2 |
+| directory-metadata-scan-10-compact-v2 | INELIGIBLE | PASS | PASS | 1219 | 1412 | 13736 | 262144 -> 266240 | 10957216 -> 10961312 | 176.2 -> 165.3 | 10.9 -> 11.5 |
+| directory-metadata-scan-100-mixed-v4 | INELIGIBLE | PASS | PASS | 2744 | 2962 | 33526 | 372736 -> 376832 | 106410400 -> 106389920 | 431.1 -> 361.1 | 10.9 -> 9.7 |
+| directory-metadata-scan-500-mixed-v4 | INELIGIBLE | PASS | PASS | 5864 | 6142 | 73786 | 589824 -> 593920 | 532005256 -> 531743136 | 828.8 -> 775.1 | 11.0 -> 12.4 |
+| directory-content-scan-1-compact-v2 | INELIGIBLE | PASS | PASS | 871 | 1050 | 8247 | 229376 -> 233472 | 1347976 | 107.2 -> 106.9 | 8.1 -> 8.8 |
+| directory-content-scan-10-compact-v2 | INELIGIBLE | PASS | PASS | 2720 | 3552 | 23516 | 262144 -> 266240 | 10957216 -> 10961312 | 414.1 -> 368.9 | 7.4 -> 11.9 |
+| directory-content-scan-100-mixed-v4 | INELIGIBLE | PASS | PASS | 9144 | 11503 | 72608 | 372736 -> 376832 | 106410400 -> 106389920 | 1292.3 -> 1361.3 | 11.7 -> 10.6 |
+| directory-content-scan-500-mixed-v4 | INELIGIBLE | PASS | PASS | 24063 | 29497 | 175496 | 589824 -> 610304 | 532005256 -> 531743136 | 5308.4 -> 5032.9 | 16.3 -> 15.3 |
+
+- 12 of 12: functional PASS, proof PASS, mount Gone with KnownStop, as in
+  iteration 1. Status INELIGIBLE, as in iteration 1.
+- **Requests, writer jobs and statements are equal in all 12 cases.**
+- Overlay logical bytes are 4,096 to 20,480 higher (schema 33). Store logical
+  bytes differ by small amounts in some cases (table).
+
+- Storage after the family: 8 Docker volumes more than before the run
+  (8 of them masters of current originals, 0 unexplained),
+  0 containers more; originals 5024 MB, result folder
+  419 MB; host 220 GiB free; `docker system df`: Images=21.51GB, Containers=12.85GB, Local Volumes=70.37GB, Build Cache=4.843GB.
+- CSVs: `core/benchmark/fs-bench-pro/baselines/core/2026-10-11-6ede5b271/directory_construction_traversal/`.
