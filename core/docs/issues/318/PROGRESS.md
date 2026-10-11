@@ -768,3 +768,7 @@ equal. Times are single diagnostic samples.
   0 containers more; originals 834 MB, result folder
   436 MB; host 225 GiB free; `docker system df`: Images=21.51GB, Containers=12.85GB, Local Volumes=69.21GB, Build Cache=4.843GB.
 - CSVs: `core/benchmark/fs-bench-pro/baselines/core/2026-10-11-082fa6202/local_snapshot/`.
+
+**Addition to the `local_snapshot` entry above:** this run's complete wall is
+19,523 ms against the declared 15,000 ms, `EXCEEDED`, as in iteration 1.
+Recorded, not judged.
