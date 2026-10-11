@@ -615,3 +615,24 @@ Failure texts, as recorded:
   0 containers more; originals 6056 MB, result folder
   366 MB; host 219 GiB free; `docker system df`: Images=21.51GB, Containers=12.85GB, Local Volumes=70.13GB, Build Cache=4.843GB.
 - CSVs: `core/benchmark/fs-bench-pro/baselines/core/2026-10-11-716ab3743/edit_length_changing_capped/`.
+
+## Phase C — batch 2, `small_file_delta_smoke`, tag `b1`, sampled at `3e238d364`
+
+Iteration 1's value is left of each arrow, this run's right; one value means
+equal. Times are single diagnostic samples.
+
+| case | status | functional | proof | requests | writer jobs | statements | overlay logical B | Store logical B | exec ms | Commit ms |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| small-file-delta-10x30-v1 | INELIGIBLE | PASS | PASS | 402 | 3142 -> 2919 | 14764 -> 14049 | 286720 -> 290816 | 2412624 -> 2474448 | 1289.5 -> 1419.7 | 236.5 -> 226.7 |
+
+- 1 of 1: functional PASS, proof PASS, mount Gone with KnownStop, as in
+  iteration 1. Status INELIGIBLE, as in iteration 1.
+- Requests are equal (402). Writer jobs 3142 -> 2919 and statements 14764 ->
+  14049 (branch-side Commit changes, as in the other edit families); overlay
+  logical bytes 4,096 higher.
+
+- Storage after the family: 5 Docker volumes more than before the run
+  (5 of them masters of current originals, 0 unexplained),
+  0 containers more; originals 4438 MB, result folder
+  393 MB; host 221 GiB free; `docker system df`: Images=21.51GB, Containers=12.85GB, Local Volumes=69.71GB, Build Cache=4.843GB.
+- CSVs: `core/benchmark/fs-bench-pro/baselines/core/2026-10-11-3e238d364/small_file_delta_smoke/`.
