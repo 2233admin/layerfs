@@ -141,6 +141,72 @@ indexed point reads of rows recorded at LOOKUP, MKDIR and directory moves,
 bounded by the canonical depth. A missing step is `Stale`, never an assumed
 root. The non-native path still requires the caller's destination path.
 
+## Recognition before the first visit
+
+Added 2026-10-11 for [#316](https://github.com/Ephemeral-AI-Lab/layerfs/issues/316),
+phase 2. A WRITE without the page-cache flag passes one request port,
+`recognize`, before its first owner visit. The port returns the same bytes,
+with [claims](31-payload-streams.md) where whole committed chunks of the
+file's own committed content were recognized in them; the publishing job then
+stores those ranges as reference pieces and every other byte as cells. The
+kernel request, its reply and the operation are unchanged, and nothing but the
+bytes of ordinary WRITE requests creates a claim.
+
+The [recognizer](../../crates/layerfs-workspace/src/operations/file/recognize.rs)
+reads the write's bytes and mapping pages of the committed file. It reads no
+overlay row, holds no SQL writer and fetches no committed chunk.
+
+- **Gate.** Nothing is done for a write below one minimum chunk (8 KiB), for
+  a file with no committed content, or for committed content that is not in
+  chunks. A committed length below the smallest whole-file threshold decides
+  that without reading the content root. The answer is remembered for the
+  base it was given for.
+- **Follow.** Once a shift (file offset less source offset) is known, the
+  committed extents that fall wholly inside the request under that shift are
+  compared one by one: the bytes are hashed with Content's chunk identity and
+  the identity is compared with the extent's. Equal identity is the only
+  proof; an extent that is a slice of a chunk never matches. Two consecutive
+  differing chunks end the run.
+- **Search.** With no shift, or when the known one matched nothing in the
+  request, the first 64 KiB are scanned once for cut candidates in both pair
+  alignments. A committed extent is tried only where its length fits between
+  two candidates; extents are taken from after the last claim, or from
+  512 KiB before the written offset, 64 at a time. A chunk cut at the maximum
+  size has no candidate at its end and is left to a followed run. At most
+  eight identities are computed in one search and one search runs a request.
+- **Forward sources.** A new shift is accepted only when it keeps the source
+  moving forward after the last claim. Other bytes are stored.
+- **Budget.** After 1 MiB of consecutive requests that claimed nothing, a
+  file's writes are no longer examined while its state is remembered.
+- **No carry.** A chunk that crosses two requests is not claimed; each
+  request claims the chunks that lie wholly inside it. The claims of one
+  request are at most 18 ranges and adjacent chunks share a range.
+
+A pass first runs over the Store's memory-only client. When a page or the
+file's length is not in memory it records nothing and is repeated once over an
+admitted reader, in demand custody of its own: a failed read there is a
+missed claim and never the request's failure. Hashing and page reads run
+after the request has left the receive loop. A miss of any kind, a stopped
+budget and an evicted state all store the write exactly as before; only a
+stopped fence ends the request, as it would at the visit.
+
+Per-file state is fixed in size and holds no bytes: the base it belongs to,
+the gate's answer, the shift, the end of the last claim and the unmatched
+count. The daemon keeps it in
+[64 slots shared by every Workspace](61-direct-store-adapter.md), least
+recently used first out.
+
+Checked by
+[the Workspace test](../../crates/layerfs-workspace/tests/recognize.rs), by
+[the daemon test](../../crates/layerfs-daemon/tests/recognizer.rs) through the
+request port, the product Commit and a fresh bind, and by
+[the mounted proof](../../crates/layerfs-daemon/tests/mounted_recognizer.rs),
+in which a process launched outside the daemon shifts two tails with `dd`.
+Without carry a Commit of such writes still stores the bytes between two
+pieces as new chunks, and cuts the committed chunks at their ends into
+slices; this is measured, not hidden, in the
+[progress ledger](../issues/316/PROGRESS.md).
+
 ## Coherence without notifications
 
 No notification or invalidation is sent, and kernel writeback caching is not

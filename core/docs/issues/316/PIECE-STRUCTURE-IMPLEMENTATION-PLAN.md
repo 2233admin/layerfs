@@ -749,3 +749,19 @@ Phase 1, at `707a7c675`:
 | 9 | Not listed | Also touched, each by a few lines: overlay `database/connection.rs`; workspace `operations/namespace/create.rs`, `remove.rs` and `rename.rs` (the new inode fields) and three declaration files |
 | 9 | `diagnostics/metrics.rs` and `payload.rs` gain piece counters; daemon `native_job.rs` charges | Not touched: the row count is `accounting.reference_rows` and the plans are in `diagnostics/captured_runs.rs`; the charges are in `commands.rs` and the Workspace visit |
 | 8 | About 12 new statement texts | 15; 239 of 256 in use (static count) |
+
+Phase 2, first recognizer step (gate, follow and search, no carry):
+
+| Section | Plan | Source |
+| --- | --- | --- |
+| 3.1 | One new request port | `recognize(serial, offset, bytes)` returns the bytes, with claims; one call in `mutation.rs` before the visit loop |
+| 3.1 | Gate: a write of one minimum chunk "or continues an active run" | Without carry a shorter write holds no whole chunk and is never examined. A committed length below the smallest whole-file threshold decides the gate without reading the content root |
+| 3.1 | Continue: the next extent after the claim | The committed extents that fall inside the request under the known shift, wherever the request lies; two consecutive differing chunks end the run |
+| 3.1 | Search: "the next few committed extents whose length fits between candidates" | 64 extents from after the last claim, or from 512 KiB before the written offset; the first 64 KiB of the request; a chunk cut at the maximum size is not searched for; at most 8 identities; one search a request, and none once the known shift matched in it |
+| 3.1 | Stops after a fixed number of unmatched bytes per file | 1 MiB of consecutive requests without a claim, for as long as the file's slot lives |
+| 3.1 | Not stated | A new shift must keep the source moving forward after the last claim (rule C-11); a Store-backed pass uses demand custody of its own, so its failure is a miss |
+| 9 | `diagnostics/resources.rs` gains recognizer counts | Not touched: `Store::recognizer_work` reports them; the diagnostic record format the harness reads is unchanged |
+| 9 | `bootstrap.rs`, `application/owner.rs`: slot count if configured | Not touched: the count is the constant 64 |
+| 9 | `overlay/commands.rs` split before a new variant; `native_job.rs` charges | Not touched: the port submits no owner job, so no variant was added |
+| 9 | `store/ports.rs`: one operation reaches the slots | Also `StorePorts::fresh`, the separate failure scope of a pass |
+| 9 | `layerfs-fuse` `operations/read.rs` | Unchanged, as in phase 1 |

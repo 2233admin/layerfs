@@ -110,3 +110,20 @@ returns Busy. The quarantine case is not a disk-I/O fault campaign. Native
 per-demand orchestration, status wire fields, mounted fairness, aggregate drain
 and full R2 acceptance remain separate required integration. No new SQLite query,
 canonical format, speed/storage or cold/RSS claim accompanies this scheduler.
+
+## Write-recognizer slots
+
+Added 2026-10-11 for [#316](https://github.com/Ephemeral-AI-Lab/layerfs/issues/316),
+phase 2. The Store owns the
+[fixed table](../../crates/layerfs-daemon/src/store/recognizer.rs) of the
+write recognizer: 64 slots, shared by every Workspace of the daemon, keyed by
+Workspace route and inode serial. A slot is the fixed-size state of one
+file's writes and holds no byte of a write or of committed content. The table
+is allocated once (about 17 KiB) and is the recognizer's whole allowance; no
+cache bound changed. A request takes its file's state out of the table for
+the length of a pass and puts it back, so the table's lock is never held
+while bytes are hashed or a page is read. A full table drops the least
+recently used file, and a file without state starts over: the cost is a
+missed claim. `StorePorts::fresh` gives a pass its own failure scope.
+`Store::recognizer_work` reports occupancy, evictions and cumulative pass
+work; the diagnostic record format is unchanged.

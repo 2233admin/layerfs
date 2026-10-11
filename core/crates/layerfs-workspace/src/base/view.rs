@@ -227,6 +227,10 @@ impl BaseContent {
     pub fn length(&self) -> u64 {
         self.file.logical_len()
     }
+    /// The mapping root of content in chunks; none for a whole-file payload.
+    pub(crate) fn state(&self) -> ContentResult<Option<layerfs_content::file::mapping::FileState>> {
+        self.file.file_state()
+    }
     /// Appends exactly `length` committed bytes from `offset`. A range that
     /// passes the end of the content is an error, never zeros.
     pub fn read(&self, offset: u64, length: u64, sink: &mut dyn Write) -> ContentResult<()> {

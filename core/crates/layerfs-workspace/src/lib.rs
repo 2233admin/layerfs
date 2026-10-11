@@ -50,6 +50,9 @@ pub use job::{JobOutcome, NamespaceJob};
 pub use list::ViewListing;
 pub use mutation::plan::{MutationInputFailure, MutationPlan, MutationStage};
 pub use operation::{Operation, Outcome, Position, Refusal, Time, WriteData};
+pub use operations::file::recognize::{
+    Recognition, RecognizeWork, WriteRun, RECOGNIZE_BYTES, UNMATCHED_BYTES,
+};
 pub use operations::native_data::{NativeDataVisit, NativeWindow};
 pub use operations::native_directory::{
     NativeDirectoryBatch, NativeDirectoryEntry, NativeDirectoryListing, NativeDirectoryVisit,

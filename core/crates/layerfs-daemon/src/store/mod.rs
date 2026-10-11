@@ -10,6 +10,7 @@ mod read_handle;
 mod read_scope;
 mod read_service;
 mod read_state;
+mod recognizer;
 mod settle;
 mod types;
 pub(crate) use bind::checked_base;
@@ -22,6 +23,7 @@ pub use operation::{BoundWorkspace, StoreOperation};
 pub use ports::{PortError, StorePorts};
 pub use read_handle::{ReadLease, StoreReader};
 pub use read_service::{ReadAdmissionError, ReadLimits, ReadServiceWork, ReadTicket};
+pub use recognizer::{Recognizer, RecognizerWork, RECOGNIZER_SLOTS};
 pub use types::{BindError, BindPhase, BindRefusal, BindRequest, BindSuccess};
 
 pub(crate) use commit_types::owner_uncertain;

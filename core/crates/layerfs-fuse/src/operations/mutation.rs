@@ -220,6 +220,19 @@ impl Custody {
             }
             _ => None,
         };
+        // What a write's own bytes say about committed content is settled
+        // once, before the first owner visit, and is part of every visit.
+        if let MutationInput::Write {
+            offset,
+            data,
+            cached: false,
+        } = &mut self.request.input
+        {
+            *data = self
+                .services
+                .recognize(protected, *offset, data.clone())
+                .await?;
+        }
         let mut facts = Arc::new(VisitFacts::default());
         loop {
             let visit = NativeVisitRequest {

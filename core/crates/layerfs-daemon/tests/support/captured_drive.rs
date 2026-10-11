@@ -170,6 +170,10 @@ pub enum Do<'a> {
     /// the given root from the given offset: the same bytes to the model.
     #[allow(dead_code)]
     Claimed(&'a str, u64, &'a [u8], [u8; 32], u64),
+    /// A write whose bytes first pass the request port's recognizer, as a
+    /// kernel WRITE's do: whatever it claims, the model gets the same bytes.
+    #[allow(dead_code)]
+    Recognized(&'a str, u64, &'a [u8]),
     Truncate(&'a str, u64),
     Chmod(&'a str, u32),
     Utimens(&'a str, Stamp),
@@ -302,6 +306,14 @@ impl<'a> Session<'a> {
                         },
                     ),
                 },
+                Do::Recognized(path, offset, data) => {
+                    let serial = resolve(operation, view, path).serial;
+                    Operation::Write {
+                        serial,
+                        position: Position::At(offset),
+                        data: recognized(self.workspace, serial, offset, data),
+                    }
+                }
                 Do::Truncate(path, size) => Operation::SetAttributes {
                     serial: resolve(operation, view, path).serial,
                     mode: None,
@@ -350,7 +362,9 @@ impl<'a> Session<'a> {
             Do::Link(existing, path) => self.model.link(existing, path, stamp),
             Do::Remove(path) => self.model.remove(path, stamp),
             Do::Rename(from, to) => self.model.rename(from, to, stamp),
-            Do::Write(path, offset, data) | Do::Claimed(path, offset, data, ..) => {
+            Do::Write(path, offset, data)
+            | Do::Claimed(path, offset, data, ..)
+            | Do::Recognized(path, offset, data) => {
                 self.model.write(path, offset as usize, data, stamp)
             }
             Do::Truncate(path, size) => self.model.truncate(path, size as usize, stamp),
@@ -362,6 +376,42 @@ impl<'a> Session<'a> {
             before != self.model.flat(),
             "{step:?}: Workspace and model disagree on whether anything changed"
         );
+    }
+}
+
+/// The bytes of one write after the request port's recognition pass, driven
+/// to its end under a bounded wait: a fresh request's services, as a kernel
+/// WRITE has them.
+#[allow(dead_code)]
+pub fn recognized(
+    workspace: &BoundWorkspace,
+    serial: u64,
+    offset: u64,
+    data: &[u8],
+) -> layerfs_workspace::WriteData {
+    use layerfs_fuse::ports::{Fence, MountServices};
+    use std::{
+        sync::mpsc,
+        task::{Context, Poll, Wake, Waker},
+    };
+    struct Event(mpsc::SyncSender<()>);
+    impl Wake for Event {
+        fn wake(self: Arc<Self>) {
+            let _ = self.0.try_send(());
+        }
+    }
+    let services = workspace.request(&Fence::default()).unwrap();
+    let mut pass = services.recognize(serial, offset, data.into());
+    let (send, woken) = mpsc::sync_channel(1);
+    let waker = Waker::from(Arc::new(Event(send)));
+    let until = Instant::now() + Duration::from_secs(5);
+    loop {
+        match pass.as_mut().poll(&mut Context::from_waker(&waker)) {
+            Poll::Ready(bytes) => return bytes.unwrap_or_else(|e| panic!("{e:?}")),
+            Poll::Pending => woken
+                .recv_timeout(until.saturating_duration_since(Instant::now()))
+                .expect("bounded recognition pass"),
+        }
     }
 }
 

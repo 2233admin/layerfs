@@ -11,8 +11,9 @@ use layerfs_fuse::ports::{
 use layerfs_history::HistoryError;
 use layerfs_overlay::{NativeCookieOffer, NativeMount, Publication};
 use layerfs_workspace::{
-    BaseView, NativeDirectoryWindow, NativeMutationOutcome, NativeReadOperation, NativeReadOutcome,
-    NativeVisitRequest, NativeWindow, VisitFacts, WorkspaceError,
+    BaseView, CanonicalClient, NativeDirectoryWindow, NativeMutationOutcome, NativeReadOperation,
+    NativeReadOutcome, NativeVisitRequest, NativeWindow, Recognition, RecognizeWork, VisitFacts,
+    WorkspaceError, WriteData, RECOGNIZE_BYTES,
 };
 use std::{
     future::{poll_fn, Future},
@@ -112,7 +113,7 @@ impl FilesystemPort {
     /// One admitted Store reader as this request's canonical client. A reader
     /// that cannot be had is a failed base demand of this request: nothing
     /// was read and nothing is asked again.
-    async fn admitted(&self) -> Result<Arc<layerfs_workspace::CanonicalClient>, ServiceError> {
+    async fn admitted(&self) -> Result<Arc<CanonicalClient>, ServiceError> {
         self.fenced(true)?;
         let lease = {
             let mut ticket = self
@@ -134,6 +135,21 @@ impl FilesystemPort {
         self.0
             .admitted_client(lease)
             .map_err(|cause| -> ServiceError { Box::new(cause) })
+    }
+    /// One admitted reader for a recognition pass, in demand custody of its
+    /// own: nothing it fails at becomes this request's failure. No reader
+    /// is no claim. Only a stopped fence is an error.
+    async fn recognizer_client(&self) -> Result<Option<Arc<CanonicalClient>>, ServiceError> {
+        let ports = self.0.ports().fresh();
+        let Ok(mut ticket) = ports.read_ticket() else {
+            return Ok(None);
+        };
+        let lease = poll_fn(|cx| match self.fenced(true) {
+            Ok(()) => Pin::new(&mut ticket).poll(cx).map(Ok),
+            Err(fenced) => Poll::Ready(Err(fenced)),
+        })
+        .await?;
+        Ok(lease.ok().and_then(|lease| ports.client_on(lease).ok()))
     }
     /// A call that acquires: refused by a stopped fence before its attempt.
     fn acquire<T: Send + 'static>(
@@ -344,6 +360,48 @@ impl RequestServices for FilesystemPort {
             ),
             Err(error) => Box::pin(async move { Err(Box::new(error) as ServiceError) }),
         }
+    }
+    /// No SQL and no owner turn: the write's bytes, mapping pages of the
+    /// file's committed content and one slot of the Store's fixed table.
+    fn recognize(&self, serial: u64, offset: u64, data: WriteData) -> ServiceFuture<'_, WriteData> {
+        Box::pin(async move {
+            if data.len() < RECOGNIZE_BYTES {
+                return Ok(data);
+            }
+            self.fenced(true)?;
+            let Ok(base) = self.0.workspace().base() else {
+                return Ok(data);
+            };
+            let (slots, route) = (self.0.ports().recognizer(), self.0.workspace().route());
+            let (mut run, mut work) = (slots.take(route, serial), RecognizeWork::default());
+            if !run.wants(&base, data.len()) {
+                slots.put(route, serial, run, &work);
+                return Ok(data);
+            }
+            // Hashing and page reads never run on the loop that received
+            // the request.
+            layerfs_fuse::LeaveReceiver::default().await;
+            let resident = base.with_client(self.0.resident());
+            let mut outcome = run.recognize(&resident, serial, offset, &data, &mut work);
+            if outcome == Recognition::NeedsBase {
+                outcome = match self.recognizer_client().await {
+                    Ok(Some(client)) => {
+                        let admitted = base.with_client(client);
+                        run.recognize(&admitted, serial, offset, &data, &mut work)
+                    }
+                    Ok(None) => Recognition::Decided(None),
+                    Err(fenced) => {
+                        slots.put(route, serial, run, &work);
+                        return Err(fenced);
+                    }
+                };
+            }
+            slots.put(route, serial, run, &work);
+            Ok(match outcome {
+                Recognition::Decided(Some(claims)) => data.claimed(claims),
+                _ => data,
+            })
+        })
     }
     fn forget(
         &self,

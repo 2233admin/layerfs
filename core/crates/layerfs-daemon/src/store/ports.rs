@@ -85,6 +85,15 @@ impl StorePorts {
     pub fn resident(&self) -> Arc<CanonicalClient> {
         self.store.resident.clone()
     }
+    /// The daemon's write-recognizer slots.
+    pub fn recognizer(&self) -> &super::Recognizer {
+        &self.store.recognizer
+    }
+    /// Fresh demand custody over the same scope and Workspace. A failure in
+    /// it stays there and never becomes this operation's.
+    pub fn fresh(&self) -> Arc<Self> {
+        self.store.ports_in(self.scope, self.workspace)
+    }
     pub fn client(self: &Arc<Self>) -> Arc<CanonicalClient> {
         Arc::new(CanonicalClient::with_cache(
             self.clone(),
