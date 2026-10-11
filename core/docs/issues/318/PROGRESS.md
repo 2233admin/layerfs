@@ -1444,3 +1444,166 @@ Twenty-eight rows; none was produced. Iteration 1: 28 NOT_APPLICABLE with zero a
   0 containers more; originals 0 MB, result folder
   1155 MB; host 226 GiB free; `docker system df`: Images=21.51GB, Containers=12.85GB, Local Volumes=69.06GB, Build Cache=4.843GB.
 - CSVs: `core/benchmark/fs-bench-pro/baselines/core/2026-10-11-9cce58eed/workspace_reliability/`.
+
+## Phase C — exit: the baseline at `d4d29ceb4`, tag `b1`, 2026-10-11
+
+All 25 families (273 cases) and the twelve cells were sampled once at the
+merged source. Production source is the same from the first family to the
+last (81,718 LOC, daemon binary `0215455c9d57…`); the commits between
+families hold only this ledger, the driver copy and generated CSVs. No
+product or harness source was changed during the phase.
+
+"Completed, checks PASS" below means the receipt has functional PASS and
+proof PASS. 177 of those 184 rows have status `INELIGIBLE` because the
+interference was declared; 7 verification-only rows have status `PASS`.
+
+| family | cases | this run | iteration 1 | rows whose outcome differs |
+| --- | --- | --- | --- | --- |
+| init_namespace | 4 | 4 completed, checks PASS | 4 completed, checks PASS | none |
+| payload_create_read | 8 | 8 completed, checks PASS | 8 completed, checks PASS | none |
+| tiny_file_churn | 20 | 20 completed, checks PASS | 20 completed, checks PASS | none |
+| namespace_mutation | 4 | 4 completed, checks PASS | 4 completed, checks PASS | none |
+| edit_length_preserving | 12 | 12 completed, checks PASS | 12 completed, checks PASS | none |
+| edit_length_changing | 32 | 12 FAIL, 20 completed, checks PASS | 20 FAIL, 12 completed, checks PASS | 8 |
+| edit_length_changing_capped | 5 | 3 FAIL, 2 completed, checks PASS | 3 FAIL, 2 completed, checks PASS | none |
+| small_file_delta_smoke | 1 | 1 completed, checks PASS | 1 completed, checks PASS | none |
+| edit_canonical_chunk_count | 12 | 12 completed, checks PASS | 12 completed, checks PASS | none |
+| directory_construction_traversal | 12 | 12 completed, checks PASS | 12 completed, checks PASS | none |
+| git_tool_workflow | 4 | 4 completed, checks PASS | 4 completed, checks PASS | none |
+| local_snapshot | 1 | 1 completed, checks PASS | 1 completed, checks PASS | none |
+| workspace_change_locality | 16 | 1 FAIL, 15 completed, checks PASS | 16 completed, checks PASS | `workspace-dense-rewrite-500-mixed-v4` completed, checks PASS -> FAIL |
+| file_size_transition | 7 | 1 FAIL, 6 completed, checks PASS | 1 FAIL, 6 completed, checks PASS | none |
+| dedup_branch_history | 26 | 5 FAIL, 21 completed, checks PASS | 5 FAIL, 21 completed, checks PASS | none |
+| mixed_load_bearing | 10 | 6 FAIL, 4 completed, checks PASS | 5 FAIL, 1 NOT_RUN, 4 completed, checks PASS | `v016-mixed-exhaustive-500mb-30000-k100-v1` NOT_RUN -> FAIL |
+| branch_development | 6 | 4 FAIL, 2 completed, checks PASS | 3 FAIL, 1 NOT_RUN, 2 completed, checks PASS | `v016-branch-mixed-500mb-30000-k100-v1` NOT_RUN -> FAIL |
+| multi_workspace_development | 5 | 5 FAIL | 5 FAIL | none |
+| historical_access | 6 | 6 completed, checks PASS | 6 completed, checks PASS | none |
+| dedup_cdc_locality | 21 | 1 FAIL, 20 completed, checks PASS | 1 FAIL, 20 completed, checks PASS | none |
+| dedup_cross_file | 10 | 10 completed, checks PASS | 10 completed, checks PASS | none |
+| dedup_workspace_reuse | 14 | 14 FAIL | 3 FAIL, 11 completed, checks PASS | 11 |
+| store_footprint | 6 | 6 FAIL | 2 FAIL, 4 completed, checks PASS | 4 |
+| repository_history | 3 | 2 no receipt, 1 no row | 2 FAIL, 1 NOT_RUN | `deepseek-full` NOT_RUN -> no row; `deepseek-stride3` FAIL -> no receipt; `deepseek-stride10` FAIL -> no receipt |
+| workspace_reliability | 28 | 28 no row | 28 NOT_APPLICABLE | 28 |
+| **all** | 273 | 58 FAIL, 184 completed, checks PASS, 2 no receipt, 29 no row | 50 FAIL, 28 NOT_APPLICABLE, 3 NOT_RUN, 192 completed, checks PASS | |
+
+### Rows whose outcome differs from iteration 1
+
+- **8 rows FAIL -> completed, checks PASS:** `edit_length_changing`, the four
+  delete and four replace-shrink cases.
+- **1 row completed -> FAIL:** `workspace_change_locality` /
+  `workspace-dense-rewrite-500-mixed-v4`. Its Commit took 16,235 ms
+  (11,499 ms in iteration 1); the 588 cleanup observations inside the
+  frozen 5 s readiness allowance were all `Queued`, never `Gone`.
+- **15 rows completed -> FAIL on one harness check:** 11 of
+  `dedup_workspace_reuse` and 4 of `store_footprint` end with `closed overlay
+  authoritative schema/accounting source pin changed`. The closed-overlay
+  accounting check carries digests of six product files taken at iteration
+  1's source; the merged source has the reference-piece schema.
+- **2 rows NOT_RUN -> FAIL:** `v016-mixed-exhaustive-500mb-30000-k100-v1` and
+  `v016-branch-mixed-500mb-30000-k100-v1`. Their preparations, which reached
+  120 s in iteration 1, were given one call with the 300 s extreme-case stop
+  (265.7 s and 118.8 s). The first sample then met the harness's own 120 s
+  ceiling before its proof; the second failed like its k10 sibling.
+- **3 rows without a receipt:** `repository_history`. The family's declared
+  120 s wall stop ended both stride samples (15 of 17 and 22 of 53 Commits
+  acknowledged) and the `deepseek-full` preparation.
+- **28 rows without a row:** `workspace_reliability`. The harness refuses to
+  repeat iteration 1's NOT_APPLICABLE classification because it is bound to
+  the product tree of `main`.
+- The other 216 rows have iteration 1's outcome. Among them the same 35
+  failures: 12 payload-retention (`edit_length_changing` insert, prepend,
+  replace-grow), 3 capped edits at the 2 s limit, 1 alias round trip, 5
+  500-step histories at their 120 s watchdog, 5 frozen M1 metadata checks,
+  3 + 5 concurrent refusals (EAGAIN or `Commit Begin` Busy), 1 + 3 + 2 checks
+  that ran out of the 41 s allowance (`dedup-cdc-scattered-500`, the three
+  500 MiB reuse cases, the two 100,000-file footprints).
+
+### Differences in counts and sizes (details in each family's section)
+
+- **Requests** equal iteration 1 in every compared row except
+  `git-tool-500` (118,176 -> 118,171).
+- **Writer jobs and statements are lower** wherever cells are written: one
+  job and four statements fewer for each 16 KiB cell in
+  `payload_create_read`, `dedup_workspace_reuse` and the `agent-episodes`
+  cases; a factor of about four fewer jobs for 100 and 500 MiB shift edits.
+  **Three rows are higher:** `replace-grow` at 1 MiB (241 -> 244 jobs,
+  1,241 -> 1,433 statements) and 10 MiB (1,296 -> 1,376; 6,974 -> 8,252),
+  and `insert` at 1 MiB in statements (1,194 -> 1,227).
+- **Overlay logical bytes** are 4,096 B higher in most rows (8,192 B in the
+  500 MiB reuse cases), the new schema's table. For the 20 shift edits they
+  are 258,048 to 479,232 B at every size, against up to 536,563,712 B.
+- **Store logical bytes** differ by a few pages in both directions in many
+  rows, including Init-only families that the piece work does not touch
+  (at most 0.3%); `dedup-history-unrelated-100-mixed-v2` is 1.0% larger
+  (+1,069,056 B). Cause not examined in this phase.
+- **Cells:** 11 of 12 equal the original triples; C10 fails its exact count
+  as in iteration 1; C12 equals the original where iteration 1 was one
+  statement lower.
+- Times are single diagnostic samples under declared interference and
+  support no claim. Two are listed for phase D only: the delete's Commit
+  still follows file size (12.0, 13.9, 29.6, 92.1 ms), and per-Commit time
+  in `deepseek-stride10` grows from 165 ms to 4,374 ms over 15 Commits.
+
+### The 60 rows that did not complete with both checks PASS, by recorded text
+
+| rows | recorded failure text | where |
+| --- | --- | --- |
+| 15 | `closed overlay authoritative schema/accounting source pin changed` | `dedup_workspace_reuse` 11, `store_footprint` 4 |
+| 12 | `independent-graph failed with exit 1` (`persisted edit lost an original untouched payload object`) | `edit_length_changing` |
+| 7 | `original concurrent round failure original external command exit … exit_code: Some(1)` | `multi_workspace_development` 5, `branch_development` 2 |
+| 6 | `original command exit is not known zero: 1` | `mixed_load_bearing` 5, `file_size_transition` 1 |
+| 5 | `original event wall stop: command` | `edit_length_changing_capped` 3, `dedup_branch_history` 2 |
+| 2 | `original edit/Commit/End group watchdog expired` | `dedup_branch_history` |
+| 2 | a harness readback command timed out at the sample's ceiling | `dedup_branch_history` 1, `mixed_load_bearing` 1 |
+| 2 | `original concurrent round failure SDK operation: Remote(ControlRefusal { code: Busy, phase: "Commit Begin" … })` | `branch_development` |
+| 2 | the closed overlay export timed out | `dedup_workspace_reuse` |
+| 2 | no receipt (120 s wall stop) | `repository_history` |
+| 1 | `original operation not sent after expired wall stop: cleanup` | `workspace_change_locality` |
+| 1 | `original event wall stop: verify` | `dedup_cdc_locality` |
+| 1 | the final check command timed out | `dedup_workspace_reuse` |
+| 1 | the typed check command timed out | `store_footprint` |
+| 1 | `original frozen verification hard watchdog expired` | `store_footprint` |
+
+Plus `deepseek-full` (not prepared) and the 28 `workspace_reliability` rows
+(not produced).
+
+### Storage
+
+- Free disk and Docker disk were read before the run and after every family;
+  each family section ends with the reading. At the end: no Docker volume
+  and no container beyond the list taken before the run, no original left,
+  result folder 1,155 MB, host 226 GiB free, `docker system df` volumes
+  69.06 GB (69.07 GB before the run).
+- At most one original and one test copy of a payload existed at a time.
+  Largest original 10.7 GB (`v016-mixed-exhaustive-500mb`), removed when
+  its family finished.
+- The 413 volumes and 38 containers that existed before the run were not
+  touched.
+
+### Decided by agent in phase C, pending owner review
+
+1. A preparation whose iteration 1 attempt reached 120 s got one call with
+   the 300 s stop (two cases). `repository_history` did not, because the
+   family itself declares a 120 s stop for every invocation.
+2. The driver removes, with a sample's volume and container, the whole
+   SQLite copies a sample keeps beside its receipt (exported Stores,
+   `pristine-store.sqlite`, `closed-overlay.sqlite`, `footprint-typed.sqlite`),
+   after checking the sealed manifest, and records each with its digest.
+3. The driver treats an original without `manifest.json` as incomplete,
+   starts a preparation only with 60 s of its call left, and unlinks a
+   large original in pieces a call can stop between.
+4. `workspace_reliability` and the 15 source-pin rows are recorded as the
+   harness left them. No pin or review record was edited to get a row.
+
+### What failed or was not done in phase C
+
+- 60 rows did not complete with both checks PASS; 29 more have no row (above).
+- Two cleanup mistakes of the driver, both corrected and recorded in their
+  family sections: one cleanup call ran about five minutes unlinking a
+  10.7 GB original (it was not stopped at 120 s), and one cleanup left 12
+  volumes of this run that were then removed by name.
+- Two note errors are corrected in later sections (`init_namespace` Store
+  sizes, `dedup_cdc_locality` count of equal Store sizes).
+- The issue's box "Batch 7: `workspace_reliability` recorded as iteration 1
+  classified it" is left open: the family could not be recorded that way.
+- Nothing is pushed; the branch is local.
