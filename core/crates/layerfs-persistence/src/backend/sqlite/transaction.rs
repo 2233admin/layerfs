@@ -7,7 +7,6 @@ use crate::backend::records::{BackendError, OutcomeError, Param, Record};
 use rusqlite::Connection;
 use std::{
     cell::{Cell, RefCell},
-    sync::TryLockError,
     time::Instant,
 };
 pub(crate) struct Transaction<'a> {
@@ -133,11 +132,14 @@ impl Session {
         decode: impl FnMut(&rusqlite::Row<'_>) -> Result<Option<T>, E>,
     ) -> Result<Vec<T>, E> {
         let start = Instant::now();
-        let mut state = match self.state.try_lock() {
-            Ok(state) => state,
-            Err(TryLockError::WouldBlock) => return Err(BackendError::Busy.into()),
-            Err(TryLockError::Poisoned(_)) => return Err(BackendError::Unknown.into()),
-        };
+        let _turn = self
+            .admission
+            .enter(start + super::admission::WINDOW)
+            .map_err(E::from)?;
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|_| E::from(BackendError::Unknown))?;
         if state.quarantined {
             return Err(BackendError::Unknown.into());
         }
@@ -180,13 +182,20 @@ impl Session {
             return Err(BackendError::ReadOnly.into());
         }
         let start = Instant::now();
-        let mut s = match self.state.try_lock() {
-            Ok(s) => s,
-            Err(TryLockError::WouldBlock) => return Err(BackendError::Busy.into()),
-            Err(TryLockError::Poisoned(_)) => return Err(BackendError::Unknown.into()),
-        };
+        let deadline = start + super::admission::WINDOW;
+        let _turn = self.admission.enter(deadline).map_err(E::from)?;
+        let mut s = self
+            .state
+            .lock()
+            .map_err(|_| E::from(BackendError::Unknown))?;
         if s.quarantined {
             return Err(BackendError::Unknown.into());
+        }
+        if writable {
+            // State owns this before BEGIN, including across a poisoned unwind.
+            s.writer_hold = Some(
+                super::writer_admission::Writer::acquire(&self.path, deadline).map_err(E::from)?,
+            );
         }
         let tx = Transaction {
             connection: &s.connection,
@@ -198,6 +207,7 @@ impl Session {
             if e == BackendError::Unknown {
                 s.quarantined = true;
             }
+            s.finish_writer().map_err(E::from)?;
             s.work.borrow_mut().transaction_ns += start.elapsed().as_nanos() as u64;
             return Err(e.into());
         }
@@ -210,6 +220,7 @@ impl Session {
             tx.uncertain.get() || result.as_ref().err().is_some_and(OutcomeError::uncertain);
         if uncertain {
             s.quarantined = true;
+            s.finish_writer().map_err(E::from)?;
             s.work.borrow_mut().transaction_ns += start.elapsed().as_nanos() as u64;
             return Err(BackendError::Unknown.into());
         }
@@ -257,6 +268,7 @@ impl Session {
                 }
             }
         };
+        s.finish_writer().map_err(E::from)?;
         s.work.borrow_mut().transaction_ns += start.elapsed().as_nanos() as u64;
         result
     }

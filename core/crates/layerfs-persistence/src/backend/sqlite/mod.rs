@@ -1,5 +1,6 @@
 //! SQLite-only connection, transaction, query, schema and physical mechanics.
 pub(crate) mod acquisition;
+mod admission;
 pub(crate) mod connection;
 #[cfg(target_os = "macos")]
 #[allow(unsafe_code)]
@@ -27,3 +28,4 @@ pub(crate) mod unit_io;
 pub(crate) mod unit_layout;
 mod units_publish;
 mod units_read;
+mod writer_admission;

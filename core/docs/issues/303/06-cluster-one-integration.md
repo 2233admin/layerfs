@@ -57,8 +57,10 @@ remains R2–R5; optional admin is deferred and R1 is verified.
   service. One short write transaction runs at a time across all daemons, and
   history transitions validate exact ownership/context. Branch Commit overwrites
   the head while retaining captured ancestry (K34).
-- **No retry.** A write that meets another writer returns `Busy` before any
-  effect. Nothing waits, polls or re-issues.
+- **One SQL attempt.** The issue #319 owner supersession below admits cooperative
+  Linux writers before BEGIN. An expired admission or an uncooperative SQLite
+  writer returns exact before-effect Busy. A failed SQL operation is never
+  re-issued.
 
 A mounted SQLite file is the first provider of this shape. Storage and History
 already reach the database through `PackPersistence` and `HistoryCatalog`;
@@ -130,19 +132,22 @@ daemon.
 
 | Caller | Transaction | Contended outcome |
 | --- | --- | --- |
-| Reader | WAL snapshot; unframed or deferred `BEGIN` | Not blocked by a writer |
-| Writer | One `BEGIN IMMEDIATE` | `Busy` at `BEGIN`: nothing ran, nothing to undo, session healthy |
+| Reader | FIFO local session turn, then WAL snapshot; unframed or deferred `BEGIN` | Independent reader sessions keep WAL progress |
+| Writer | FIFO local turn, Linux cooperative kernel admission, then one `BEGIN IMMEDIATE` | Admission timeout or exact SQLite `Busy`: no body ran, no rollback, session healthy |
 
 - The write lock is taken once, at `BEGIN IMMEDIATE`. A WAL commit takes no new
   lock, so `Busy` cannot appear later in the transaction.
 - No transaction reads and then upgrades to a write, so a stale-snapshot refusal
   cannot appear mid-transaction.
-- `busy_timeout` stays zero and stays checked. No busy handler, sleep, loop or
-  writer gate exists in Persistence, Storage or the daemon.
+- `busy_timeout` stays zero and stays checked. No SQLite busy handler or failed
+  operation replay exists. Provider admission happens before BEGIN; no lock
+  spans Content construction, a Save or a whole Commit.
 - `Busy` reaches the caller as `PersistenceError::Busy` and
   `HistoryError::Busy`, never as a formatted string.
 - An unknown outcome (I/O error, failed rollback) still quarantines that
-  daemon's session. Other daemons are unaffected.
+  session. Linux retains its cooperative writer owner until SQLite teardown.
+  Other sessions retain their own authority; a contended writer may expire
+  before effect while that uncertain owner remains.
 
 What a caller sees:
 
@@ -159,7 +164,38 @@ remains a read-only snapshot; the deployed 256 low-water and 1,024 refill size
 are unchanged. If initial reservation is Busy, Attach returns the original
 History Busy before mounting. A previously prepared unused range is retained
 and consumed; no failed reservation is retried. Later exhausted-range and early
-refill behavior retain their existing one-attempt contracts. 
+refill behavior retain their existing one-attempt contracts. This ordering,
+selected for issue #319 phase 7, precedes the later owner supersession below.
+The initial-range reservation now uses the same before-effect transaction
+admission as other writes. No failed reservation or whole Commit is replayed.
+
+Owner supersession 2026-10-12: each Workspace keeps at most one in-flight
+Commit, while separate Workspaces and daemons may construct and Commit
+concurrently. Persistence admits one short SQL transaction at a time rather
+than refusing its own writer merely because another cooperative writer is
+active. Session FIFO admission covers reads and writes. Linux additionally
+polls a nonblocking exclusive flock on a separately opened description of the
+same main-file inode, before its one BEGIN. One two-second deadline covers
+both admission steps; 1,024 pending tickets bound local admission metadata.
+Timeout/Capacity are exact before-effect refusals, not automatic retries.
+The deadline and queue choice are decided by agent, pending owner review;
+observed inclusive transaction upper bounds do not establish a physical lock
+maximum or a qualified timing result.
+
+This changes the former immediate-Busy policy for cooperative Linux clients
+prospectively. SQLite's busy handler remains zero, failed SQL is never replayed,
+and uncooperative writers can still cause exact Busy at BEGIN. No Content,
+pack, History or overlay format changes. Within-session turns are FIFO;
+cross-session/process flock polling is bounded but has no FIFO guarantee.
+Unknown outcomes retain both SQLite and advisory ownership until connection
+teardown. Linux host seal holds advisory ownership through checkpoint/checked
+close; the daemon never seals per Commit. macOS supplies only the local FIFO:
+its separate-session/process Busy behavior and sole-owner host seal lifecycle
+remain unchanged because its flock interacts with SQLite file locks. No lock
+sidecar, global in-process Store registry, host server or coordinator is added.
+See [implemented provider boundaries](../../architecture/60-shared-store-foundation.md).
+Original parallel workloads keep their actual Commit-overlap proofs; the
+withdrawn harness serialization proposal supplies no product qualification.
 
 ### 3.4 State under other writers
 

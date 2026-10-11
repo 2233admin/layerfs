@@ -18,7 +18,7 @@ open reads and verifies it without conversion. Existing memory-journal Stores
 are refused. Profile selection across processes is a provisioning fact rather
 than a persisted cross-profile lock. Page size4096, foreign keys1, checkpoint
 interval1000, journal limit4194304, cache−2048, mmap0, temporary storage2,
-DEFENSIVE and checked busy timeout0 are retained.
+DEFENSIVE and checked busy timeout 0 are retained.
 
 The connection applies the selected `synchronous` and `fullfsync` settings
 before page/acquisition setup, WAL selection or schema creation. Selecting WAL
@@ -31,14 +31,50 @@ and without acquisition tables. Its separate non-Store control proves the
 observer forwards and counts `xSync`. This is a persistence profile correction,
 with no new performance qualification or change to existing receipt verdicts.
 
-Every mutation makes one `BEGIN IMMEDIATE` attempt. Busy/Locked/Protocol lock
-codes retain a typed `Busy` through Persistence, Storage and History. A busy
-begin executes no body, starts no transaction, performs no rollback and leaves
-the session healthy. Definite body failures retain rollback handling; unknown
-outcomes retain quarantine. There is no writer gate, sleep or application retry.
-Separate read connections use WAL snapshots while a writer is active. Each
-session still permits only one caller at a time; daemon read-set composition
-belongs to the later Store-adapter checkpoint.
+Owner supersession 2026-10-12 for issue #319 requires concurrent Workspaces to
+keep independent Commit state while sharing short atomic Store transactions.
+Every mutation still makes one `BEGIN IMMEDIATE` attempt with busy timeout 0.
+Busy/Locked/Protocol lock codes retain typed `Busy` through Persistence, Storage
+and History: no body, transaction or rollback follows a refused begin.
+
+Before SQL, each session admits one caller through a FIFO connection turn.
+Read, write and diagnostic access share a two-second admission deadline; at
+most 1,024 pending u64 tickets hold 8,192 bytes of ticket data plus container
+metadata. Full admission returns Capacity before SQL. An expired waiter removes
+its ticket and returns Busy; later callers remain runnable. This is a bounded
+concurrent-admission resource, independent of total files, bytes, Saves or
+Workspace lifetime. SQL counters are unchanged by admission itself.
+
+On Linux, a writable transaction also acquires an exclusive advisory flock of
+an independently opened main-file description, within that same deadline.
+Nonblocking lock polling is readiness before the single BEGIN, not transaction
+replay. Separate handles and daemons on the same local named VM volume share
+this kernel admission. The lock covers one atomic transaction through its
+known COMMIT or definite ROLLBACK, never a Save, construction or whole Commit.
+FIFO is provided within a session; cross-session/process polling has no FIFO or
+starvation guarantee and may expire before effect. An uncooperative SQLite
+writer still produces the original exact Busy at BEGIN.
+
+macOS has the local session FIFO only. Its flock interacts with SQLite's
+open-file locking, so no main-file flock, extra sidecar or cross-session/process
+coordination is introduced there; a separate macOS writer retains exact SQLite
+Busy. Host Init remains sole-owner. The Linux admission scope requires a local
+filesystem with independent flock/fcntl semantics, as does the existing shared
+Store placement contract; host shares and network filesystems are unsupported.
+
+The two-second deadline is an agent decision pending owner review, using the
+retained 46,750 ns serial transaction upper observation and 9,558,915 ns
+three-transaction Commit upper observation, with room for peers, large
+publications and VM interference. These inclusive observations are not exclusive lock maxima or
+performance qualification. Historical refusals remain failed.
+
+Definite failures retain existing rollback handling. Unknown outcomes and
+poisoned unwinds retain the advisory owner with the quarantined session until
+SQLite connection teardown, which precedes advisory release. Known release is
+checked explicitly; a release failure retains ownership and returns uncertainty.
+Linux sole-owner seal also owns admission during checkpoint and checked close;
+macOS seal is unchanged. Separate reader sessions take WAL snapshots without
+global writer admission. No caller retries a failed SQL operation.
 
 The old macOS allocation/extent-release owner, associated counters/result
 fields and public checkpoint API are removed. Host `Handles::seal` consumes

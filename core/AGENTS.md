@@ -390,7 +390,13 @@ fixtures, examples and tools do not contribute to production LOC.
 - Target (owner direction 2026-10-07): the same Store opened directly by every
   Linux daemon from a shared volume, several writer processes, no host in the
   data path, using only Disposable/WAL/OFF. A contended
-  write is one exact before-effect refusal, never a wait or retry. Follow the
+  write still has one SQL attempt and exact failure/unknown custody. Owner
+  clarification2026-10-12 requires one ongoing Commit per Workspace and allows
+  concurrent Commits on different Workspaces. Bounded before-effect admission
+  now queues SQL work within a Session and coordinates short Linux writer jobs
+  on the local Store inode; it does not gate whole Saves or Commits or replay
+  a failed SQL attempt. macOS has Session admission only; separate macOS writers
+  and uncoordinated raw SQLite writers retain exact Busy refusal. Follow the
   [integration contract](docs/issues/303/06-cluster-one-integration.md) and its
   [deepest-file plan](docs/issues/307/SERVERLESS-STORE-PLAN-20261007.md); do not
   extend the host-mediated SDK runtime, Bridge data codec or daemon upstream.

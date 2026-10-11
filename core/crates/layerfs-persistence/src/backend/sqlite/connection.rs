@@ -134,8 +134,10 @@ pub(crate) struct State {
     pub(crate) connection: Connection,
     pub(crate) quarantined: bool,
     pub(crate) work: RefCell<SqlWork>,
+    pub(crate) writer_hold: Option<super::writer_admission::Writer>,
 }
 pub(crate) struct Session {
+    pub(crate) admission: super::admission::Admission,
     pub(crate) state: Mutex<State>,
     pub(crate) writable: bool,
     pub(crate) profile: ConnectionProfile,
@@ -239,11 +241,13 @@ impl Session {
         };
         profile::check(&profile)?;
         Ok(Self {
+            admission: super::admission::Admission::default(),
             path: path.to_path_buf(),
             state: Mutex::new(State {
                 connection,
                 quarantined: false,
                 work,
+                writer_hold: None,
             }),
             writable,
             profile,
@@ -256,7 +260,10 @@ impl Session {
         self.layout.version() + self.acquisition.version_offset()
     }
     pub(crate) fn diagnostics(&self) -> Result<SqlWork, BackendError> {
-        let s = self.state.try_lock().map_err(|_| BackendError::Busy)?;
+        let _turn = self
+            .admission
+            .enter(std::time::Instant::now() + super::admission::WINDOW)?;
+        let s = self.state.lock().map_err(|_| BackendError::Unknown)?;
         let w = *s.work.borrow();
         Ok(w)
     }

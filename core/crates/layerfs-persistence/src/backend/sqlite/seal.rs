@@ -15,6 +15,15 @@ impl Session {
         if state.quarantined || !state.connection.is_autocommit() {
             return Err(PersistenceError::Uncertain);
         }
+        #[cfg(target_os = "linux")]
+        let state = {
+            let mut state = state;
+            state.writer_hold = Some(super::writer_admission::Writer::acquire(
+                &self.path,
+                std::time::Instant::now() + super::admission::WINDOW,
+            )?);
+            state
+        };
         #[cfg(target_os = "macos")]
         let identity = super::seal_allocation::Identity::capture(&self.path)?;
         #[cfg(target_os = "macos")]
@@ -33,6 +42,11 @@ impl Session {
             .connection
             .close()
             .map_err(|(_, error)| rows::error(error))?;
+        // SQLite has checked-closed before advisory ownership is released.
+        // Earlier error exits drop State.connection before its retained owner.
+        if let Some(writer) = state.writer_hold {
+            writer.release().map_err(|_| PersistenceError::Uncertain)?;
+        }
         for suffix in ["-wal", "-shm", "-journal"] {
             let mut sidecar = self.path.as_os_str().to_os_string();
             sidecar.push(suffix);
