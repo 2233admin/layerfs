@@ -1188,3 +1188,43 @@ unlinks anything. The check after that shows no volume or container of this run.
   0 containers more; originals 3129 MB, result folder
   1006 MB; host 223 GiB free; `docker system df`: Images=21.51GB, Containers=12.85GB, Local Volumes=69.06GB, Build Cache=4.843GB.
 - CSVs: `core/benchmark/fs-bench-pro/baselines/core/2026-10-11-eab848c1c/dedup_cdc_locality/`.
+
+## Phase C — batch 6, `dedup_cross_file`, tag `b1`, sampled at `67494a503`
+
+Iteration 1's value is left of each arrow, this run's right; one value means
+equal. Times are single diagnostic samples.
+
+| case | status | functional | proof | requests | writer jobs | statements | overlay logical B | Store logical B | exec ms | Commit ms |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| dedup-cross-file-anchor-1 | INELIGIBLE | PASS | PASS | - | - | - | - | 1232896 | 20.6 -> 21.3 | - -> - |
+| dedup-cross-file-unique-10 | INELIGIBLE | PASS | PASS | - | - | - | - | 10797056 -> 10788864 | 73.7 -> 92.4 | - -> - |
+| dedup-cross-file-unique-100 | INELIGIBLE | PASS | PASS | - | - | - | - | 106270720 -> 106299392 | 593.0 -> 658.1 | - -> - |
+| dedup-cross-file-unique-500 | INELIGIBLE | PASS | PASS | - | - | - | - | 530804736 -> 530841600 | 2690.4 -> 2928.7 | - -> - |
+| dedup-cross-file-identical-10 | INELIGIBLE | PASS | PASS | - | - | - | - | 1232896 | 44.1 -> 29.9 | - -> - |
+| dedup-cross-file-identical-100 | INELIGIBLE | PASS | PASS | - | - | - | - | 1236992 | 79.8 -> 87.2 | - -> - |
+| dedup-cross-file-identical-500 | INELIGIBLE | PASS | PASS | - | - | - | - | 1236992 | 314.4 -> 333.7 | - -> - |
+| dedup-cross-file-mixed-10 | INELIGIBLE | PASS | PASS | - | - | - | - | 7614464 -> 7606272 | 57.0 -> 75.7 | - -> - |
+| dedup-cross-file-mixed-100 | INELIGIBLE | PASS | PASS | - | - | - | - | 79769600 -> 79806464 | 742.1 -> 522.9 | - -> - |
+| dedup-cross-file-mixed-500 | INELIGIBLE | PASS | PASS | - | - | - | - | 398168064 -> 398204928 | 2411.4 -> 2230.2 | - -> - |
+
+Ten cases; all completed with functional PASS and proof PASS, as in iteration 1. Every row is INELIGIBLE
+(interference declared).
+
+- This family runs Project Init on native trees; requests, writer jobs, statements and overlay sizes do not
+  apply and there is no Commit.
+- Store logical bytes: equal to the control in the anchor case and the three `identical` cases; the three
+  `unique` and three `mixed` cases differ by −8,192 B (both 10 MiB cases), +28,672 B (`unique-100`) and
+  +36,864 B (`unique-500`, `mixed-100`, `mixed-500`), at most 0.11% of the case's Store. The cause was not
+  examined in phase C; it goes to phase D's list with the same small differences in `init_namespace` and
+  `dedup_cdc_locality`.
+- exec is the Init command, diagnostic only.
+
+Correction to the `dedup_cdc_locality` section above: its Store sizes are equal to the control in 10 cases
+and differ in 10 (−49,152 to +32,768 B); the eleventh entry the comparison counted is
+`dedup-cdc-boundaries-proof`, which has no control value. The section's "equal in 9, 11 differ" is wrong.
+
+- Storage after the family: 0 Docker volumes more than before the run
+  (0 of them masters of current originals, 0 unexplained),
+  0 containers more; originals 1861 MB, result folder
+  1080 MB; host 224 GiB free; `docker system df`: Images=21.51GB, Containers=12.85GB, Local Volumes=69.06GB, Build Cache=4.843GB.
+- CSVs: `core/benchmark/fs-bench-pro/baselines/core/2026-10-11-67494a503/dedup_cross_file/`.
