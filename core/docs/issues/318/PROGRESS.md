@@ -1095,3 +1095,35 @@ Five cases, all FAIL (functional FAIL, proof NOT_RUN), as in iteration 1.
   0 containers more; originals 4713 MB, result folder
   828 MB; host 221 GiB free; `docker system df`: Images=21.51GB, Containers=12.85GB, Local Volumes=69.68GB, Build Cache=4.843GB.
 - CSVs: `core/benchmark/fs-bench-pro/baselines/core/2026-10-11-fb3c4d3f8/multi_workspace_development/`.
+
+## Phase C — batch 5, `historical_access`, tag `b1`, sampled at `a8a3ff2de`
+
+Iteration 1's value is left of each arrow, this run's right; one value means
+equal. Times are single diagnostic samples.
+
+| case | status | functional | proof | requests | writer jobs | statements | overlay logical B | Store logical B | exec ms | Commit ms |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| v016-access-boundary-before-v1 | PASS | PASS | PASS | - | - | - | - -> 233472 | - -> 3084392 | - -> 116.5 | - -> 0.0 |
+| v016-access-boundary-after-v1 | PASS | PASS | PASS | - | - | - | - -> 233472 | - -> 3084392 | - -> 110.6 | - -> 0.0 |
+| v016-access-inode-before-v1 | PASS | PASS | PASS | - | - | - | - -> 233472 | - -> 3543144 | - -> 87.0 | - -> 0.0 |
+| v016-access-inode-after-v1 | PASS | PASS | PASS | - | - | - | - -> 233472 | - -> 3543144 | - -> 95.1 | - -> 0.0 |
+| v016-access-fork-point-v1 | PASS | PASS | PASS | - | - | - | - -> 233472 | - -> 3137640 | - -> 87.3 | - -> 0.0 |
+| v016-access-divergent-head-v1 | PASS | PASS | PASS | - | - | - | - -> 233472 | - -> 3465320 | - -> 92.5 | - -> 0.0 |
+
+Six cases; every receipt has status PASS, functional PASS and proof PASS, as in iteration 1.
+
+- These are verification-only cases (no timed performance sample, no Commit), so the harness records PASS
+  rather than the INELIGIBLE it gives a timed sample with interference declared. Requests, writer jobs and
+  statements are UNAVAILABLE in the receipts and absent from the control CSV.
+- Overlay logical bytes are 233,472 B in all six and Store logical bytes 3,084,392 to 3,543,144 B. The
+  control CSV has no sizes for these rows, so the 30 entries the comparison lists as differences are values
+  with nothing to compare against, not changes.
+- The exec column is the read command of the check, 87 to 117 ms; diagnostic only.
+- Each preparation took 15 to 59 s; four of the six needed a call of their own under the driver's rule that
+  a preparation starts only with 60 s left.
+
+- Storage after the family: 12 Docker volumes more than before the run
+  (12 of them masters of current originals, 0 unexplained),
+  0 containers more; originals 489 MB, result folder
+  845 MB; host 225 GiB free; `docker system df`: Images=21.51GB, Containers=12.85GB, Local Volumes=69.1GB, Build Cache=4.843GB.
+- CSVs: `core/benchmark/fs-bench-pro/baselines/core/2026-10-11-a8a3ff2de/historical_access/`.
