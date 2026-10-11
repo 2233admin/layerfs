@@ -1181,3 +1181,33 @@ by owner until explicit reauthorization. Phase13 starts from these retained fail
 | mixed_load_bearing / `v016-mixed-exhaustive-500mb-30000-k100-v1` | FAIL | UNAVAILABLE | FAIL | 26119 / 204162 / 1100028 | 2678784 / 271118336 | 522121216 / 522125312 | 12809.1 / 6575.0 | Gone / KNOWN_STOP |
 
 Production LOC:82335 ->82335 (delta+0), exact parent/staged snapshots via the pinned counter; reference absent (retired R9c; last counted65,417 at tree498dd1917812). Documentation/receipt publication changes no product or runtime code.
+
+## Phase13 — isolated repairs, 2026-10-12
+
+### Topology checkpoint-mode binding (harness)
+
+Cause, before editing: public topology verification rejected five completed
+samples because the transcript emitter attached mode bindings to all860
+acknowledged Commit rows, producing846 nonempty mode fields on omitted
+checkpoints; the frozen schedules require bindings only on14 selected rows.
+Counts by sample are18/20,198/200,396/400,27/30,207/210 malformed/total.
+Exact selected schedules and every retained transcript are reproduced by the
+existing emitter; mixed branch trunk5 is correctly omitted. The four500MB
+rows stopped before this proof, so this cause is not claimed for their failures.
+
+Predicted counter:846 ->0 malformed omitted mode fields, retaining all860
+acknowledgements and14 selected payload/mode bindings. A new external controller
+test fails in all nine current M1 topology definitions at the unmodified emitter:
+omitted rows have `['-', 'declared-modes']` rather than `['-', '-']`.
+Compact/no-modes cases and complete role-local row order are covered too.
+No oracle, typed Commit comparison, complete public census, overlap requirement,
+Storage readback or namespace proof changes. These are current contract cases;
+none is retired. Only the emitter is selected for this cause commit.
+
+The [count tier](checks/topology-mode-binding.json) observes846 ->0 malformed
+rows on the exact retained transcripts, with all860 tuples and14 selected
+bindings unchanged. All34 controller/fixture/count/incomplete-report/topology-
+census tests PASS. Source fix is one emitter expression; no Rust crate changed,
+so a new crate Clippy run is inapplicable. Formatting/boundary/whitespace and
+exact production LOC are checked before commit. Fresh stage samples follow
+the clean seal; this count tier is not a benchmark PASS.

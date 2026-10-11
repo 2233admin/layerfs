@@ -2087,7 +2087,7 @@ def context_transcript(case, prepared, graph, modes_file=None):
             fields = record['commit']['fields']
             columns = ['commit', role, str(record['index']), fields['commit_id'], fields['stack'], fields['root'],
                 fields['parent'], fields['base_layer'], selected.get((role, record['index']), '-'),
-                str(modes_file) if modes_file is not None else '-']
+                str(modes_file) if modes_file is not None and (role, record['index']) in selected else '-']
             rows.append('\t'.join(columns))
     return '\n'.join(rows) + '\n'
 

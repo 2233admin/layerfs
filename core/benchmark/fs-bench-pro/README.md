@@ -64,6 +64,13 @@ mount and performs a separate offline current-format persisted proof. The
 runtime's `verify-workspace` mode is an independent harness oracle over a closed
 sample Store; the live daemon data path stays in-process in the shared volume.
 
+Topology transcripts retain every acknowledged Commit in role-local order.
+Only the frozen selected payload checkpoints carry a manifest and, for M1,
+the created-mode binding. Omitted checkpoints carry `-` in both scope columns;
+their Commit tuples still participate in complete public Branch/History and
+physical-object census checks. The independent runtime oracle enforces this
+binding before selected-root Storage readback.
+
 Historical access setup first creates a new complete closed original producer.
 For a paired selection of that same producer, use `bench.py prepare <access-case>
 --build <seal> --reuse-producer <first-access-prepared-folder> --out <fresh-path>`.
