@@ -71,6 +71,13 @@ their Commit tuples still participate in complete public Branch/History and
 physical-object census checks. The independent runtime oracle enforces this
 binding before selected-root Storage readback.
 
+The native M1 verifier visits each namespace path once, using that visit's
+`symlink_metadata` directly for the existing type, length, mode, timestamp,
+inode-class and declared-range checks. It traverses directories without
+following symlinks and verifies the complete sorted path set. It keeps the
+existing path list and class maps, plus two fixed scratch buffers; it does
+not retain a second whole-tree metadata snapshot.
+
 Historical access setup first creates a new complete closed original producer.
 For a paired selection of that same producer, use `bench.py prepare <access-case>
 --build <seal> --reuse-producer <first-access-prepared-folder> --out <fresh-path>`.

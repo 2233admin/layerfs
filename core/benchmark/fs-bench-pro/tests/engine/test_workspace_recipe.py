@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import stat
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -97,6 +98,34 @@ class NativeM1SelectiveRecipe(unittest.TestCase):
         self.assertEqual(result.returncode == 0, success, result.stderr)
         return json.loads(result.stdout) if success else result
 
+    @unittest.skipUnless(sys.platform == 'darwin', 'Darwin lstat interposer count tier')
+    def test_each_namespace_path_pays_for_one_metadata_call(self):
+        counter = Path(os.environ['FSBP_LSTAT_COUNTER']).resolve(strict=True)
+        with tempfile.TemporaryDirectory(prefix='fsb-native-m1-count-') as temporary:
+            home = Path(temporary).resolve()
+            root = home / 'initial'
+            modes = home / 'created.tsv'
+            modes.write_bytes(b'')
+            fixture = self.call('expected-step', self.CASE, 0, root)
+            manifest = (home / 'initial.manifest.tsv').read_bytes()
+            result = subprocess.run([str(self.writer), 'verify-m1-step', self.CASE,
+                '0', str(root), str(modes)], capture_output=True, text=True, timeout=30,
+                env={**os.environ, 'DYLD_INSERT_LIBRARIES': str(counter), 'FSBP_LSTAT_ROOT': str(root)})
+            self.assertEqual(result.returncode, 0, result.stderr)
+            proof = json.loads(result.stdout)
+            self.assertEqual(proof['verification_status'], 'pass')
+            self.assertEqual(proof['entries'], fixture['entries'])
+            self.assertEqual((home / 'initial.manifest.tsv').read_bytes(), manifest)
+            lines = result.stderr.splitlines()
+            self.assertEqual(lines.count('FSBP_LSTAT_COUNTER_ACTIVE=1'), 1, result.stderr)
+            counts = [int(line.split('=', 1)[1]) for line in lines
+                      if line.startswith('FSBP_LSTAT_COUNTER_COUNT=')]
+            self.assertEqual(len(counts), 1, result.stderr)
+            self.assertGreater(counts[0], 0)
+            self.assertEqual(counts[0], fixture['entries'])
+            print(json.dumps({'case': self.CASE, 'step': 0, 'entries': fixture['entries'],
+                              'metadata_calls': counts[0], 'counter_active': True}))
+
     def test_original_selective_ranges_and_unconstrained_automatic_metadata(self):
         with tempfile.TemporaryDirectory(prefix="fsb-native-m1-scope-test-") as temporary:
             home = Path(temporary); root = home/"step2"; modes = home/"created.tsv"; modes.write_bytes(b"")
@@ -125,6 +154,48 @@ class NativeM1SelectiveRecipe(unittest.TestCase):
                 byte = output.read(1); output.seek(0); output.write(bytes([byte[0]^1]))
             failed = self.call("verify-m1-step", self.CASE, 2, root, modes, success=False)
             self.assertIn("declared byte range differs", failed.stderr)
+
+    def test_streamed_membership_kind_symlink_and_alias_checks_refuse_corruption(self):
+        with tempfile.TemporaryDirectory(prefix='fsb-native-m1-membership-') as temporary:
+            home = Path(temporary)
+            root = home / 'initial'
+            modes = home / 'created.tsv'
+            modes.write_bytes(b'')
+            self.call('expected-step', self.CASE, 4, root)
+            rows = [line.split('\t') for line in
+                    (home / 'initial.manifest.tsv').read_text().splitlines()[1:]]
+            created = [row[0] for row in rows if row[1] == 'directory' and row[0].endswith('x')]
+            self.assertEqual(len(created), 8)
+            modes.write_text(''.join(f'{path}\t{stat.S_IMODE((root / path).stat().st_mode):o}\n'
+                                     for path in created))
+            self.call('verify-m1-step', self.CASE, 4, root, modes)
+            extra = root / 'unlisted'
+            extra.touch()
+            refused = self.call('verify-m1-step', self.CASE, 4, root, modes, success=False)
+            self.assertIn('namespace differs', refused.stderr)
+            extra.unlink()
+            regular = root / next(row[0] for row in rows if row[1] == 'file' and int(row[2]) == 0)
+            regular.unlink()
+            regular.mkdir()
+            refused = self.call('verify-m1-step', self.CASE, 4, root, modes, success=False)
+            self.assertIn('kind differs', refused.stderr)
+            regular.rmdir()
+            regular.touch()
+            symlink = root / next(row[0] for row in rows if row[1] == 'symlink')
+            target = os.readlink(symlink)
+            symlink.unlink()
+            symlink.symlink_to('wrong-target')
+            refused = self.call('verify-m1-step', self.CASE, 4, root, modes, success=False)
+            self.assertIn('symlink target/length differs', refused.stderr)
+            symlink.unlink()
+            symlink.symlink_to(target)
+            alias = root / next(row[0] for row in rows if row[1] == 'hardlink')
+            contents = alias.read_bytes()
+            alias.unlink()
+            alias.write_bytes(contents)
+            refused = self.call('verify-m1-step', self.CASE, 4, root, modes, success=False)
+            self.assertTrue('link count differs' in refused.stderr or
+                            'inode classes differ' in refused.stderr, refused.stderr)
 
     def test_missing_or_undeclared_helper_observations_fail_before_native_access(self):
         with tempfile.TemporaryDirectory(prefix="fsb-native-m1-scope-test-") as temporary:

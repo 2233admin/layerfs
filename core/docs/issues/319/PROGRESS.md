@@ -1211,3 +1211,54 @@ census tests PASS. Source fix is one emitter expression; no Rust crate changed,
 so a new crate Clippy run is inapplicable. Formatting/boundary/whitespace and
 exact production LOC are checked before commit. Fresh stage samples follow
 the clean seal; this count tier is not a benchmark PASS.
+
+Stage `49f38c973` / `p319n13t`: all five previously failing100MB topology
+samples have functional PASS and proof PASS, overall INELIGIBLE. Compact
+branch convergent-content guard also has both checks PASS/INELIGIBLE; its
+requests/jobs/statements162/2664/12058 exactly equal the prior guard receipt.
+Multi-Workspace100MB K10 serves as the low-cycle guard in its family; count
+totals are UNAVAILABLE in both old/new receipts. Four-Workspace requests stay
+104312, jobs813347 ->813125, statements4410865 ->4409295; overlay/Store bytes
+fall. Branch K100 requests54851 unchanged, jobs428182 ->428121, statements
+2314315 ->2314183. Branch K10 requests8093 unchanged, jobs60917 ->60920,
+statements330436 ->330542; these affected-row variations are retained, not
+attributed to a Python binding expression. Store bytes also vary between fresh
+samples; no speed/storage optimization claim is made. All six cleanup Gone /
+KNOWN_STOP, all removal manifests PASS. No tracked edit during sealing/sampling.
+
+### Native M1 duplicate metadata pass (harness)
+
+Cause before editing: each500MB native M1 proof enumerates30297 non-root paths
+with lstat, then lstats all30298 entries again, paying60595 metadata calls per
+role (121190 for two roles); retained successful single-role checks take21.64s
+of the unchanged approximately22s work portion, leaving later proof work no room.
+This is source-counted metadata amplification, not a qualified SQLite claim.
+
+Predicted metadata calls60595 ->30298 per500MB role;121190 ->60596 for two.
+The independent test-only Darwin lstat observer is built before the external
+test and confirms its activation/symbol/counter. On the existing100MB step0
+fixture, the unchanged helper's oracle passes but the count assertion fails:
+10095 calls for5048 paths. Predicted guard5048 calls. The observer returns the
+original syscall result and changes no helper JSON, Store or product surface.
+
+The chosen repair streams each required path's metadata directly into the
+existing full metadata/alias/range verifier; it retains the old path-membership
+list, required class maps and two fixed1MiB buffers. No additional whole-tree
+metadata mirror, raised cache/window, reduced readback or frozen-source edit is
+selected. Extra names, kinds, lengths, declared modes/mtimes, links, symlinks and
+all declared byte ranges still fail their unchanged checks.
+
+[Native count receipt](checks/native-metadata-count.json): observed10095 ->5048
+calls, exactly predicted. Native recipe8 PASS, and the new stage4 extra-name /
+kind / symlink-target / hardlink refusal test PASS. Its first two setups wrongly
+selected pre-link stages0/1 and failed in test setup; those logs remain, then
+only the corrected stage4 test ran. A final count-only invocation emits the
+actual5048 count with active observer evidence. No benchmark was repeated.
+
+Host helper builds PASS with the five inherited SDK dead-code warnings. Its
+warning-denying standalone Clippy check retains12 pre-existing unused SDK,
+frozen-helper and unchanged discard-witness lints; no new changed-verifier
+diagnostic or suppression. Product crates are unchanged. Formatting/boundary/
+whitespace and exact parent/staged LOC follow before commit. Fresh stage seal
+and affected-case samples remain pending. The prior topology stage's six exact
+sample hashes and four portable CSVs are in [its result receipt](checks/topology-mode-stage.json).
