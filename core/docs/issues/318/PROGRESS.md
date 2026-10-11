@@ -772,3 +772,62 @@ equal. Times are single diagnostic samples.
 **Addition to the `local_snapshot` entry above:** this run's complete wall is
 19,523 ms against the declared 15,000 ms, `EXCEEDED`, as in iteration 1.
 Recorded, not judged.
+
+## Phase C — batch 3, `workspace_change_locality`, tag `b1`, sampled at `7fb3b06a7`
+
+Iteration 1's value is left of each arrow, this run's right; one value means
+equal. Times are single diagnostic samples.
+
+| case | status | functional | proof | requests | writer jobs | statements | overlay logical B | Store logical B | exec ms | Commit ms |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| workspace-clean-commit-1-compact-v2 | INELIGIBLE | PASS | PASS | 0 | 47 | 204 | 229376 -> 233472 | 1343880 -> 1347976 | 0.0 -> 0.0 | 7.9 -> 9.4 |
+| workspace-clean-commit-10-compact-v2 | INELIGIBLE | PASS | PASS | 0 | 47 | 204 | 262144 -> 266240 | 10953120 -> 10957216 | 0.0 -> 0.0 | 9.6 -> 11.9 |
+| workspace-clean-commit-100-mixed-v4 | INELIGIBLE | PASS | PASS | 0 | 47 | 204 | 344064 -> 348160 | 106430880 -> 106406304 | 0.0 -> 0.0 | 11.5 -> 9.8 |
+| workspace-clean-commit-500-mixed-v4 | INELIGIBLE | PASS | PASS | 0 | 47 | 204 | 540672 -> 544768 | 532062600 -> 531763616 | 0.0 -> 0.0 | 11.1 -> 13.4 |
+| workspace-fixed-move-1-compact-v2 | INELIGIBLE | PASS | PASS | 16 | 151 | 700 | 229376 -> 233472 | 1393320 -> 1397416 | 42.9 -> 45.9 | 9.9 -> 11.6 |
+| workspace-fixed-move-10-compact-v2 | INELIGIBLE | PASS | PASS | 16 | 151 | 700 | 262144 -> 266240 | 11014920 -> 11031376 | 38.7 -> 46.5 | 11.0 -> 13.1 |
+| workspace-fixed-move-100-mixed-v4 | INELIGIBLE | PASS | PASS | 16 | 151 | 700 | 344064 -> 348160 | 106488560 -> 106476344 | 40.0 -> 36.3 | 14.4 -> 15.5 |
+| workspace-fixed-move-500-mixed-v4 | INELIGIBLE | PASS | PASS | 16 | 151 | 700 | 540672 -> 544768 | 532136760 -> 531833656 | 40.1 -> 42.0 | 20.7 -> 27.7 |
+| workspace-distributed-sdk-edit-1-compact-v2 | INELIGIBLE | PASS | PASS | 12 | 99 -> 94 | 460 -> 444 | 233472 -> 237568 | 1401560 -> 1405656 | 47.2 -> 42.8 | 9.5 -> 11.5 |
+| workspace-distributed-sdk-edit-10-compact-v2 | INELIGIBLE | PASS | PASS | 75 | 468 -> 418 | 2359 -> 2199 | 286720 -> 290816 | 11089080 -> 11076696 | 41.4 -> 46.1 | 17.9 -> 15.7 |
+| workspace-distributed-sdk-edit-100-mixed-v4 | INELIGIBLE | PASS | PASS | 745 | 4613 -> 4113 | 23126 -> 21526 | 786432 -> 790528 | 107312560 -> 107292104 | 110.4 -> 100.5 | 92.8 -> 77.8 |
+| workspace-distributed-sdk-edit-500-mixed-v4 | INELIGIBLE | PASS | PASS | 3160 | 22874 -> 20374 | 108197 -> 100197 | 3039232 -> 3043328 | 537787920 -> 537800704 | 283.5 -> 184.7 | 355.8 -> 326.3 |
+| workspace-dense-rewrite-1-compact-v2 | INELIGIBLE | PASS | PASS | 437 | 2347 -> 1950 | 12794 -> 11504 | 1351680 -> 1359872 | 2505720 -> 2509816 | 83.5 -> 82.9 | 47.1 -> 44.6 |
+| workspace-dense-rewrite-10-compact-v2 | INELIGIBLE | PASS | PASS | 3146 | 24721 -> 20751 | 116903 -> 104003 | 11501568 -> 11509760 | 25624576 | 283.9 -> 297.5 | 396.1 -> 333.7 |
+| workspace-dense-rewrite-100-mixed-v4 | INELIGIBLE | PASS | PASS | 12545 | 102001 -> 84438 | 482758 -> 424874 | 109719552 -> 109760512 | 213618688 -> 213622784 | 1185.4 -> 1096.1 | 2540.7 -> 2236.7 |
+| workspace-dense-rewrite-500-mixed-v4 | FAIL | PASS -> - | PASS -> NOT_RUN | 33359 -> - | 282059 -> - | 1353145 -> - | 541495296 -> - | 1066713088 -> - | 3630.1 -> 3321.7 | 11498.8 -> 16234.7 |
+
+Failure texts, as recorded:
+
+- `workspace-dense-rewrite-500-mixed-v4`: original operation not sent after expired wall stop: cleanup
+
+- **15 of 16 are functional PASS and proof PASS, mount Gone with KnownStop
+  (iteration 1: 16). `workspace-dense-rewrite-500-mixed-v4` is FAIL with
+  proof NOT_RUN; it passed in iteration 1. This is a new failure.**
+  - Receipt text: `original operation not sent after expired wall stop:
+    cleanup`.
+  - From the sample's own events: the command ended after 3,322 ms, the
+    Commit after 16,235 ms (iteration 1: 3,630 and 11,499 ms), the unmount
+    took 13 ms. Then 588 read-only cleanup observations over the harness's
+    5 s allowance all report the measured Workspace's state as `Queued`; it
+    never reached `Gone`, so the harness stopped before its proof. No count
+    or storage observation was collected.
+  - Not sampled again. Classified in phase D: the question is why the
+    automatic reclamation of 541 MB of overlay payload did not start within
+    5 s of the unmount here when it finished inside that time in iteration 1.
+    The two 500 MiB create cases of batch 1 (533 and 541 MB of overlay)
+    reached `Gone` inside the same allowance at this source.
+  - The driver removed the sample's volume and its still-running container.
+- **Requests are equal in all 15 completed cases.** Writer jobs and
+  statements are equal in the 8 clean-commit and fixed-move cases and lower
+  in the 7 completed sdk-edit and dense-rewrite cases (5 to 17,563 jobs;
+  branch-side Commit changes). Overlay logical bytes 4,096 to 40,960 higher.
+- Commit of `dense-rewrite-100` is 2,541 -> 2,237 ms.
+- This closes batch 3: 33 cases, 32 functional and proof PASS (iteration 1:
+  33), 1 new FAIL.
+
+- Storage after the family: 4 Docker volumes more than before the run
+  (4 of them masters of current originals, 0 unexplained),
+  0 containers more; originals 5672 MB, result folder
+  469 MB; host 220 GiB free; `docker system df`: Images=21.51GB, Containers=12.85GB, Local Volumes=69.72GB, Build Cache=4.843GB.
+- CSVs: `core/benchmark/fs-bench-pro/baselines/core/2026-10-11-7fb3b06a7/workspace_change_locality/`.
