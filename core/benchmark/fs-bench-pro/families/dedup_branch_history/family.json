@@ -4066,7 +4066,7 @@
       },
       "budget": {
         "command_ms": 15000,
-        "performance_hard_watchdog_ms": 120000,
+        "performance_hard_watchdog_ms": 210000,
         "operation_watchdog_ms": 120000,
         "verifier_ms": 45000,
         "verification_hard_watchdog_ms": 59000,
@@ -4088,7 +4088,8 @@
         "Current typed/authenticated offline proof checks complete bytes and metadata at the original selected checkpoints, exhaustive canonical inode-table membership, every acknowledged CommitID/parent, final stack head and an unfiltered closed-copy global Commit census. Unselected states carry an explicit no-manifest marker rather than a claim of byte verification.",
         "Complete selected-checkpoint byte proof strengthens the original bounded fast-check scope at the same checkpoints. The original unrelated-mixed-v2 final mounted sample retains its declared selected paths/ranges; no full byte proof of every unselected state or501-state payload replay is claimed.",
         "Retired object encodings, extent grammar and unreferenced-object census are not current-format assertions. Metadata content-root stability and recurring A/B file-root equality remain semantic obligations; original optional exhaustive HistoryAccounting one-MiB envelope is not applied to the selected fixture-S profiles.",
-        "Original15s reporting limit is independent of the cumulative execution watchdog. Inherited120s execution/45s proof/59s hard with4s cleanup reserve and sixv01660s execution/25s proof/35s hard with3s reserve remain exact, including0.25s publication admission margin; expired work is retained as failed."
+        "Original15s reporting limit is independent of the cumulative execution watchdog. Original inherited120s execution is superseded for this exact500-step row by the prospective210s cumulative allowance below; individual120s operation,45s proof/59s hard with4s cleanup reserve remain exact, including0.25s publication admission margin; expired work is retained as failed.",
+        "Owner authorization2026-10-11 after phase6: this exact500-step case prospectively raises only cumulative execution watchdog120000->210000ms, separately from D-5 driver300s. Individual operation120000ms, reporting target15000ms and original45000/59000ms proof with4000ms cleanup reserve and250ms publication margin remain unchanged. Historical failures remain failed; no timing qualification follows from this allowance."
       ],
       "registry": {
         "family": "dedup_branch_history",
@@ -8218,7 +8219,7 @@
       },
       "budget": {
         "command_ms": 15000,
-        "performance_hard_watchdog_ms": 120000,
+        "performance_hard_watchdog_ms": 210000,
         "operation_watchdog_ms": 120000,
         "verifier_ms": 45000,
         "verification_hard_watchdog_ms": 59000,
@@ -8240,7 +8241,8 @@
         "Current typed/authenticated offline proof checks complete bytes and metadata at the original selected checkpoints, exhaustive canonical inode-table membership, every acknowledged CommitID/parent, final stack head and an unfiltered closed-copy global Commit census. Unselected states carry an explicit no-manifest marker rather than a claim of byte verification.",
         "Complete selected-checkpoint byte proof strengthens the original bounded fast-check scope at the same checkpoints. The original unrelated-mixed-v2 final mounted sample retains its declared selected paths/ranges; no full byte proof of every unselected state or501-state payload replay is claimed.",
         "Retired object encodings, extent grammar and unreferenced-object census are not current-format assertions. Metadata content-root stability and recurring A/B file-root equality remain semantic obligations; original optional exhaustive HistoryAccounting one-MiB envelope is not applied to the selected fixture-S profiles.",
-        "Original15s reporting limit is independent of the cumulative execution watchdog. Inherited120s execution/45s proof/59s hard with4s cleanup reserve and sixv01660s execution/25s proof/35s hard with3s reserve remain exact, including0.25s publication admission margin; expired work is retained as failed."
+        "Original15s reporting limit is independent of the cumulative execution watchdog. Original inherited120s execution is superseded for this exact500-step row by the prospective210s cumulative allowance below; individual120s operation,45s proof/59s hard with4s cleanup reserve remain exact, including0.25s publication admission margin; expired work is retained as failed.",
+        "Owner authorization2026-10-11 after phase6: this exact500-step case prospectively raises only cumulative execution watchdog120000->210000ms, separately from D-5 driver300s. Individual operation120000ms, reporting target15000ms and original45000/59000ms proof with4000ms cleanup reserve and250ms publication margin remain unchanged. Historical failures remain failed; no timing qualification follows from this allowance."
       ],
       "registry": {
         "family": "dedup_branch_history",
@@ -12364,7 +12366,7 @@
       },
       "budget": {
         "command_ms": 15000,
-        "performance_hard_watchdog_ms": 120000,
+        "performance_hard_watchdog_ms": 210000,
         "operation_watchdog_ms": 120000,
         "verifier_ms": 45000,
         "verification_hard_watchdog_ms": 59000,
@@ -12386,7 +12388,8 @@
         "Current typed/authenticated offline proof checks complete bytes and metadata at the original selected checkpoints, exhaustive canonical inode-table membership, every acknowledged CommitID/parent, final stack head and an unfiltered closed-copy global Commit census. Unselected states carry an explicit no-manifest marker rather than a claim of byte verification.",
         "Complete selected-checkpoint byte proof strengthens the original bounded fast-check scope at the same checkpoints. The original unrelated-mixed-v2 final mounted sample retains its declared selected paths/ranges; no full byte proof of every unselected state or501-state payload replay is claimed.",
         "Retired object encodings, extent grammar and unreferenced-object census are not current-format assertions. Metadata content-root stability and recurring A/B file-root equality remain semantic obligations; original optional exhaustive HistoryAccounting one-MiB envelope is not applied to the selected fixture-S profiles.",
-        "Original15s reporting limit is independent of the cumulative execution watchdog. Inherited120s execution/45s proof/59s hard with4s cleanup reserve and sixv01660s execution/25s proof/35s hard with3s reserve remain exact, including0.25s publication admission margin; expired work is retained as failed."
+        "Original15s reporting limit is independent of the cumulative execution watchdog. Original inherited120s execution is superseded for this exact500-step row by the prospective210s cumulative allowance below; individual120s operation,45s proof/59s hard with4s cleanup reserve remain exact, including0.25s publication admission margin; expired work is retained as failed.",
+        "Owner authorization2026-10-11 after phase6: this exact500-step case prospectively raises only cumulative execution watchdog120000->210000ms, separately from D-5 driver300s. Individual operation120000ms, reporting target15000ms and original45000/59000ms proof with4000ms cleanup reserve and250ms publication margin remain unchanged. Historical failures remain failed; no timing qualification follows from this allowance."
       ],
       "registry": {
         "family": "dedup_branch_history",
@@ -16508,7 +16511,7 @@
       },
       "budget": {
         "command_ms": 15000,
-        "performance_hard_watchdog_ms": 120000,
+        "performance_hard_watchdog_ms": 210000,
         "operation_watchdog_ms": 120000,
         "verifier_ms": 45000,
         "verification_hard_watchdog_ms": 59000,
@@ -16529,7 +16532,8 @@
         "Current typed/authenticated offline proof checks complete bytes and metadata at the original selected checkpoints, exhaustive canonical inode-table membership, every acknowledged CommitID/parent, final stack head and an unfiltered closed-copy global Commit census. Unselected states carry an explicit no-manifest marker rather than a claim of byte verification.",
         "Complete selected-checkpoint byte proof strengthens the original bounded fast-check scope at the same checkpoints. The original unrelated-mixed-v2 final mounted sample retains its declared selected paths/ranges; no full byte proof of every unselected state or501-state payload replay is claimed.",
         "Retired object encodings, extent grammar and unreferenced-object census are not current-format assertions. Metadata content-root stability and recurring A/B file-root equality remain semantic obligations; original optional exhaustive HistoryAccounting one-MiB envelope is not applied to the selected fixture-S profiles.",
-        "Original15s reporting limit is independent of the cumulative execution watchdog. Inherited120s execution/45s proof/59s hard with4s cleanup reserve and sixv01660s execution/25s proof/35s hard with3s reserve remain exact, including0.25s publication admission margin; expired work is retained as failed."
+        "Original15s reporting limit is independent of the cumulative execution watchdog. Original inherited120s execution is superseded for this exact500-step row by the prospective210s cumulative allowance below; individual120s operation,45s proof/59s hard with4s cleanup reserve remain exact, including0.25s publication admission margin; expired work is retained as failed.",
+        "Owner authorization2026-10-11 after phase6: this exact500-step case prospectively raises only cumulative execution watchdog120000->210000ms, separately from D-5 driver300s. Individual operation120000ms, reporting target15000ms and original45000/59000ms proof with4000ms cleanup reserve and250ms publication margin remain unchanged. Historical failures remain failed; no timing qualification follows from this allowance."
       ],
       "registry": {
         "family": "dedup_branch_history",
@@ -20689,7 +20693,7 @@
       },
       "budget": {
         "command_ms": 15000,
-        "performance_hard_watchdog_ms": 120000,
+        "performance_hard_watchdog_ms": 210000,
         "operation_watchdog_ms": 120000,
         "verifier_ms": 45000,
         "verification_hard_watchdog_ms": 59000,
@@ -20710,8 +20714,9 @@
         "Current typed/authenticated offline proof checks complete bytes and metadata at the original selected checkpoints, exhaustive canonical inode-table membership, every acknowledged CommitID/parent, final stack head and an unfiltered closed-copy global Commit census. Unselected states carry an explicit no-manifest marker rather than a claim of byte verification.",
         "Complete selected-checkpoint byte proof strengthens the original bounded fast-check scope at the same checkpoints. The original unrelated-mixed-v2 final mounted sample retains its declared selected paths/ranges; no full byte proof of every unselected state or501-state payload replay is claimed.",
         "Retired object encodings, extent grammar and unreferenced-object census are not current-format assertions. Metadata content-root stability and recurring A/B file-root equality remain semantic obligations; original optional exhaustive HistoryAccounting one-MiB envelope is not applied to the selected fixture-S profiles.",
-        "Original15s reporting limit is independent of the cumulative execution watchdog. Inherited120s execution/45s proof/59s hard with4s cleanup reserve and sixv01660s execution/25s proof/35s hard with3s reserve remain exact, including0.25s publication admission margin; expired work is retained as failed.",
-        "For unrelated mixed-v2 only, complete offline proofs at the registered routine verification_steps are additional stronger coverage: the frozen selected driver checked final sampled payload and every parent, rather than mounting those intermediate roots. This adds no workload step or unselected-state byte claim."
+        "Original15s reporting limit is independent of the cumulative execution watchdog. Original inherited120s execution is superseded for this exact500-step row by the prospective210s cumulative allowance below; individual120s operation,45s proof/59s hard with4s cleanup reserve remain exact, including0.25s publication admission margin; expired work is retained as failed.",
+        "For unrelated mixed-v2 only, complete offline proofs at the registered routine verification_steps are additional stronger coverage: the frozen selected driver checked final sampled payload and every parent, rather than mounting those intermediate roots. This adds no workload step or unselected-state byte claim.",
+        "Owner authorization2026-10-11 after phase6: this exact500-step case prospectively raises only cumulative execution watchdog120000->210000ms, separately from D-5 driver300s. Individual operation120000ms, reporting target15000ms and original45000/59000ms proof with4000ms cleanup reserve and250ms publication margin remain unchanged. Historical failures remain failed; no timing qualification follows from this allowance."
       ],
       "registry": {
         "family": "dedup_branch_history",

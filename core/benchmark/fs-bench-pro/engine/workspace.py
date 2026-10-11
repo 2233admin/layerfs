@@ -834,6 +834,18 @@ def qualify_history_mechanism(proofs):
             "scope": "existence only; per-state/file observations may repeat content IDs; no count/percentage/storage/latency quota; retired schema10 counters N/A"}
 
 
+def exhaustive_owner_ceiling(case):
+    """Only the named large verification invocation gets the expanded ceiling."""
+    large = case.get("v016_case") == "v016-mixed-exhaustive-500mb-30000-k100-v1"
+    expected = 275000 if large else 120000
+    if case.get("owner_test_ceiling_ms") != expected:
+        raise ValueError("exact exhaustive owner ceiling required")
+    if large and (case.get("historical_owner_test_ceiling_ms") != 120000
+            or (case["budget"]["verifier_ms"],case["budget"]["verification_hard_watchdog_ms"]) != (300000,310000)):
+        raise ValueError("large exhaustive exception retains its original proof declaration")
+    return expected
+
+
 def family_proof_deadlines(case, charged_ns=0, owner_stop=None):
     """Original work/reserve/publication limits, with separate owner test ceiling."""
     if case.get("git_workflow"):
@@ -851,8 +863,9 @@ def family_proof_deadlines(case, charged_ns=0, owner_stop=None):
     budget = case["budget"]
     work, hard = budget["verifier_ms"], budget["verification_hard_watchdog_ms"]
     if case.get("proof_only"):
-        if work not in (120000, 300000) or hard != work + 10000 or case.get("owner_test_ceiling_ms") != 120000:
-            raise ValueError("original exhaustive declaration and owner120s ceiling required")
+        if work not in (120000, 300000) or hard != work + 10000:
+            raise ValueError("original exhaustive declaration required")
+        exhaustive_owner_ceiling(case)
         reserve = budget.get("verification_cleanup_reserve_ms", 3000)
     else:
         if (work, hard) not in ((25000,35000),(45000,59000)):
@@ -975,7 +988,8 @@ def one_family_case(family, case, prepared_folder, build_folder, output, *, prep
         raise ValueError("exact original fresh Init/edit footprint preparation required")
     if footprint:
         operation_commit_expectation(case, 1)
-    owner_stop = started_test_ns/1_000_000_000+120 if proof_only else None
+    owner_ceiling_ms = exhaustive_owner_ceiling(case) if proof_only else None
+    owner_stop = started_test_ns/1_000_000_000+owner_ceiling_ms/1000 if proof_only else None
     body = None if case.get("control_only") else "/bin/bash /code/workload.sh apply " + shlex.quote(case["v016_case"])
     if footprint:
         body += " "+shlex.quote(prepared["fixture"]["edit_path"])
@@ -1008,7 +1022,7 @@ def one_family_case(family, case, prepared_folder, build_folder, output, *, prep
            "interference": current.get("cross_worktree_interference","shared host/Docker VM/protected and own failed services, unquantified"),
            "proof_only": proof_only, "performance_mode":"verification-only" if proof_only else "single original performance attempt",
            "performance_declaration":case.get("performance_mode","single original performance attempt"),
-           "owner_test_ceiling_ns":120_000_000_000 if proof_only else None}
+           "owner_test_ceiling_ns":owner_ceiling_ms*1_000_000 if proof_only else None}
     row["helper_admission"]=helper_admission
     if preparation_only:
         row.update(schema="fs-bench-pro-prepared-producer-attempt-v1", setup_only=True,
@@ -1253,7 +1267,7 @@ def one_family_case(family, case, prepared_folder, build_folder, output, *, prep
             proof_stop = publication_stop = proof_deadlines["publication"]
             row["proof_policy"] = {"work_cutoff_monotonic":proof_work_stop,"cleanup_cutoff_monotonic":proof_cleanup_stop,
                 "publication_cutoff_monotonic":publication_stop,"original_verifier_ms":case["budget"]["verifier_ms"],
-                "original_hard_watchdog_ms":case["budget"]["verification_hard_watchdog_ms"],"owner_test_ceiling_ms":120000 if proof_only else None}
+                "original_hard_watchdog_ms":case["budget"]["verification_hard_watchdog_ms"],"owner_test_ceiling_ms":owner_ceiling_ms if proof_only else None}
         def proof_seconds(limit, cleanup=False):
             left = proof_stop - time.monotonic()
             if proof_work_stop is not None:
@@ -1556,7 +1570,7 @@ def one_family_case(family, case, prepared_folder, build_folder, output, *, prep
             row["timing_scope"] = "controller from original fresh measured public Init through actual-project public SDK installation, SDK runtime/setup, first fresh mount, ordinary clipped edit, Commit and terminal End; declared read-only resource-observer intervals excluded and retained; cleanup/fresh mounted and typed verification/Stop separate"
         if proof_only:
             row["proof_wall_ns"]=time.monotonic_ns()-started_test_ns
-            row["proof_wall_scope"]="verification-only complete invocation from source/build/prepared admission through setup, all original calls/Commits, native/public/census proof, required cleanup/Stop and prepublication close; owner120s ceiling separately enforced"
+            row["proof_wall_scope"]="verification-only complete invocation from source/build/prepared admission through setup, all original calls/Commits, native/public/census proof, required cleanup/Stop and prepublication close; declared owner invocation ceiling separately enforced"
         row["evidence"] = str(output.relative_to(identity.ROOT.resolve()))
         if (case.get("git_workflow") or batch4 or reuse or footprint) and publication_stop is not None:
             if proof_started is not None:

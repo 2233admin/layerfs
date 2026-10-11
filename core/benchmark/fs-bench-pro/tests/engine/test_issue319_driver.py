@@ -1,4 +1,4 @@
-"""Only D-5's exact seven selections may exceed the ordinary call ceiling."""
+"""D-5's exact seven selections; owner E-1 separately names one large proof."""
 import importlib.util
 from pathlib import Path
 import unittest
@@ -25,7 +25,7 @@ class DriverPolicy(unittest.TestCase):
         for kind,item in driver.EXTENDED:
             for altered in ((('prepare' if kind=='run' else 'run'),item),
                             (kind,item+'-extra'),(kind,item.replace('500','100'))):
-                if altered in driver.EXTENDED:
+                if altered in driver.EXTENDED or altered in driver.EXTREME:
                     continue
                 self.assertEqual(driver.call_policy(*altered)['outer_seconds'],118)
         for kind in ('clean','report','rows'):

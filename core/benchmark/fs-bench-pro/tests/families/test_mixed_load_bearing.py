@@ -123,7 +123,7 @@ class MixedLoadBearing(unittest.TestCase):
                 self.assertTrue(row["proof_only"])
                 self.assertIsNone(row["budget"]["command_ms"])
                 self.assertEqual(row["budget"]["verifier_ms"], original)
-                self.assertEqual(row["owner_test_ceiling_ms"], 120000)
+                self.assertEqual(row["owner_test_ceiling_ms"], 275000 if row["id"] == "v016-mixed-exhaustive-500mb-30000-k100-v1" else 120000)
                 self.assertIn("VERIFY-ONLY", row["performance_mode"])
             else:
                 self.assertEqual(row["budget"]["command_ms"], 15000)

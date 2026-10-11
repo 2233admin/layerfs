@@ -76,7 +76,7 @@ class DedupBranchHistory(unittest.TestCase):
     def test_original_distinct_budgets_resource_profile_and_unknown_cache(self):
         for row in self.rows:
             v016 = row["id"].startswith("v016-")
-            self.assertEqual(row["budget"], {"command_ms": 15000, "performance_hard_watchdog_ms": 60000 if v016 else 120000,
+            self.assertEqual(row["budget"], {"command_ms": 15000, "performance_hard_watchdog_ms": 210000 if row["id"] in {"dedup-history-distributed-500", "dedup-history-hotset-500", "dedup-history-recurring-500", "dedup-history-metadata-500", "dedup-history-unrelated-500-mixed-v2"} else 60000 if v016 else 120000,
                 "operation_watchdog_ms": 60000 if v016 else 120000, "verifier_ms": 25000 if v016 else 45000,
                 "verification_hard_watchdog_ms": 35000 if v016 else 59000, "cleanup_reserve_ms": 3000 if v016 else 4000,
                 "publication_guard_ms": 250})

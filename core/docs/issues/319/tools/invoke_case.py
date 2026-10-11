@@ -1,4 +1,4 @@
-"""One append-only driver call; D-5 extends exactly five runs/two preparations."""
+"""One bounded driver call; D-5 seven selections plus owner E-1's named proof."""
 import argparse
 import hashlib
 import json
@@ -18,8 +18,16 @@ EXTENDED = frozenset(
     + [('prepare', 'mixed_load_bearing:v016-mixed-exhaustive-500mb-30000-k100-v1'),
        ('prepare', 'branch_development:v016-branch-mixed-500mb-30000-k100-v1')])
 
+EXTREME = frozenset([('run','mixed_load_bearing:v016-mixed-exhaustive-500mb-30000-k100-v1')])
+
 
 def call_policy(kind, item):
+    if (kind, item) in EXTREME:
+        return {'outer_seconds':300,'driver_seconds':288,
+                'reason':'expanded owner E-1: exact500MiB exhaustive verification-only run; original300s proof and ordinary individual calls unchanged; complete invocation ceiling120->275s with13s driver return margin'}
+    if (kind, item) in EXTENDED and kind == 'run':
+        return {'outer_seconds':300,'driver_seconds':288,
+                'reason':'owner D-5 outer allowance; expanded owner E-1 five500-step cumulative execution120->210s; individual<=120s/proof/reporting target unchanged'}
     if (kind, item) in EXTENDED:
         return {'outer_seconds':300, 'driver_seconds':288,
                 'reason':'owner D-5: exact five500-step runs/two large preparations; inner case watchdog unchanged'}
