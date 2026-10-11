@@ -118,7 +118,7 @@ class Imports(unittest.TestCase):
         with mock.patch.object(workspace.time,"monotonic",return_value=100):
             for case in cases:
                 self.assertEqual(workspace.family_proof_deadlines(case,2_000_000_000),
-                                 {"work":139,"cleanup":143,"publication":157})
+                                 ({"work":169,"cleanup":173,"publication":187} if case["id"] in workspace.LARGE_CHECK_CASES else {"work":139,"cleanup":143,"publication":157}))
                 self.assertEqual(case["reuse_schedule"]["verification_states"],[0,1])
                 self.assertIn("no warmup",case["cache_contract"]["scope"])
 

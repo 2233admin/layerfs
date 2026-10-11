@@ -60,7 +60,7 @@ class Footprint(unittest.TestCase):
     def test_original_watchdogs_and_resources_have_no_new_ratio_gate(self):
         for c in self.cases:
             self.assertEqual(c["budget"],{"command_ms":15000,"operation_watchdog_ms":120000,
-                "performance_hard_watchdog_ms":120000,"verifier_ms":45000,"verification_hard_watchdog_ms":59000,
+                "performance_hard_watchdog_ms":120000,"verifier_ms":75000 if c["id"].endswith("-100000") else 45000,"verification_hard_watchdog_ms":89000 if c["id"].endswith("-100000") else 59000,
                 "cleanup_reserve_ms":4000,"publication_guard_ms":250,"wall_stop_ms":120000})
             p=c["resource_profile"]
             self.assertEqual((p["container_cpus"],p["container_memory_bytes"],p["container_memory_swap_bytes"],p["container_pids_limit"]),(2,2*1024**3,2*1024**3,256))

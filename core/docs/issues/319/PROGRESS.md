@@ -620,3 +620,26 @@ local links checked before commit. No Rust product/runtime changed; Clippy and
 new mounted proofs are inapplicable. Production LOC: 81727 -> 81727 (delta +0),
 active core and pinned exact snapshots; reference absent (retired R9c; last
 counted 65,417 at tree 498dd1917812). No push/PR or issue closure.
+
+
+### Phase 6 D-3 check allowance
+
+Only the six named retained check failures advance: scattered CDC 500; reuse
+exact/local/unique 500; unique and metadata-cardinality footprint 100000.
+[Old/new declarations](checks/phase6-check-allowance.json) preserve each entire
+budget. Verification work 45000 -> 75000 ms; hard publication 59000 -> 89000 ms;
+work before cleanup 41000 -> 71000 ms. Cleanup reserve 4000 ms, publication
+guard 250 ms, measured-operation watchdogs, resources and all content checks
+stay unchanged. The engine validates the new tuple for exactly these six IDs
+and requires the old tuple everywhere else. No larger allowance is generalized
+to other 500 MiB cases. Actual separate check wall follows in phase 6 receipts;
+no timing comparison is made.
+
+New admission regression: six old validator refusals retained before fixing;
+2 focused tests PASS after. Import engine 6 PASS / 1 compiler-only native skip;
+16 owning family tests PASS. Formatting, boundary and whitespace PASS before
+commit; no product Rust change, so Clippy inapplicable. Decided by agent,
+pending owner review: choose the 75000/89000 ms tuple, preserving the existing
+14-second work-to-publication gap. Every test has a 118 s wall stop.
+Production LOC: 81727 -> 81727 (delta +0), pinned exact active-core snapshots;
+reference absent (retired R9c; last counted 65,417 at tree 498dd1917812).

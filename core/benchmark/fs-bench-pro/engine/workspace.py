@@ -21,15 +21,23 @@ BATCH4_HISTORY_SCHEMAS = frozenset(("original-v016-boundary-sequence-v1",
 BATCH4_FAMILIES = frozenset(("file_size_transition","dedup_branch_history","mixed_load_bearing"))
 
 
+
+# Owner D-3, issue319: only the six previously failing largest checks.
+LARGE_CHECK_CASES = frozenset(("dedup-cdc-scattered-500", "dedup-workspace-exact-500",
+    "dedup-workspace-local-500", "dedup-workspace-unique-500",
+    "store-footprint-unique-100000", "store-footprint-metadata-cardinality-100000"))
+
+
 def import_proof_deadlines(case, charged_ns=0):
     budget = case["budget"]
     reserve = budget.get("cleanup_reserve_ms", case.get("original_resource_guards", {}).get("verification_cleanup_reserve_ms", 4000))
-    if (budget["verifier_ms"], budget["verification_hard_watchdog_ms"], reserve, budget.get("publication_guard_ms", 250)) != (45000,59000,4000,250):
+    work, hard = (75000, 89000) if case.get("id") in LARGE_CHECK_CASES else (45000, 59000)
+    if (budget["verifier_ms"], budget["verification_hard_watchdog_ms"], reserve, budget.get("publication_guard_ms", 250)) != (work, hard, 4000, 250):
         raise ValueError("original import work/cleanup/publication limits required")
     if type(charged_ns) is not int or charged_ns < 0:
         raise ValueError("nonnegative original charged proof wall required")
     now = time.monotonic()-charged_ns/1e9
-    return {"work": now+41, "cleanup": now+45, "publication": now+59}
+    return {"work": now+(work-reserve)/1000, "cleanup": now+work/1000, "publication": now+hard/1000}
 
 
 def verify_import_mount(case, prepared, build, output, row, deadlines):

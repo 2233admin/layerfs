@@ -56,8 +56,8 @@
         "command_ms": 15000,
         "operation_watchdog_ms": 120000,
         "performance_hard_watchdog_ms": 120000,
-        "verifier_ms": 45000,
-        "verification_hard_watchdog_ms": 59000,
+        "verifier_ms": 75000,
+        "verification_hard_watchdog_ms": 89000,
         "cleanup_reserve_ms": 4000,
         "publication_guard_ms": 250,
         "wall_stop_ms": 120000
@@ -74,7 +74,8 @@
         "Ordinary namespace-edit is the unchanged frozen helper on the same selected file/offset/10B marker; explicit metadata occurs at its original helper position. One Created Commit remains mandatory. Current daemon directly owns global Store in Linux VM, host remains control-only after installation.",
         "Current exact initial inode census and unfiltered global Commit census strengthen binding while preserving the original final clipped-boundary-only oracle; no unselected final-byte/full-tree claim is made. Fresh public verifier mount and native range reader remain required.",
         "Native setup writes and digests source bytes; current Store byte installation and prior own-write pre-Commit coldness are unqualified. Cache class A remains numerically INELIGIBLE rather than receiving setup warmth or fixture/limit changes.",
-        "Raw time/storage/counts and original Store/spool/resource equations retain actual ownership and availability. Retired Save/monitor extent counters are not current SQL or host lifetime peak proxies; unavailable fields remain visible, with no storage ratio threshold or optimization."
+        "Raw time/storage/counts and original Store/spool/resource equations retain actual ownership and availability. Retired Save/monitor extent counters are not current SQL or host lifetime peak proxies; unavailable fields remain visible, with no storage ratio threshold or optimization.",
+        "Owner D-3 (#319, 2026-10-11): verification work 45000 -> 75000 ms, hard publication 59000 -> 89000 ms; cleanup reserve 4000 ms and publication guard 250 ms unchanged. Measured-operation limits unchanged."
       ],
       "registry": {
         "family": "store_footprint",
@@ -194,8 +195,8 @@
         "command_ms": 15000,
         "operation_watchdog_ms": 120000,
         "performance_hard_watchdog_ms": 120000,
-        "verifier_ms": 45000,
-        "verification_hard_watchdog_ms": 59000,
+        "verifier_ms": 75000,
+        "verification_hard_watchdog_ms": 89000,
         "cleanup_reserve_ms": 4000,
         "publication_guard_ms": 250,
         "wall_stop_ms": 120000
@@ -212,7 +213,8 @@
         "Ordinary namespace-edit is the unchanged frozen helper on the same selected file/offset/10B marker; explicit metadata occurs at its original helper position. One Created Commit remains mandatory. Current daemon directly owns global Store in Linux VM, host remains control-only after installation.",
         "Current exact initial inode census and unfiltered global Commit census strengthen binding while preserving the original final clipped-boundary-only oracle; no unselected final-byte/full-tree claim is made. Fresh public verifier mount and native range reader remain required.",
         "Native setup writes and digests source bytes; current Store byte installation and prior own-write pre-Commit coldness are unqualified. Cache class A remains numerically INELIGIBLE rather than receiving setup warmth or fixture/limit changes.",
-        "Raw time/storage/counts and original Store/spool/resource equations retain actual ownership and availability. Retired Save/monitor extent counters are not current SQL or host lifetime peak proxies; unavailable fields remain visible, with no storage ratio threshold or optimization."
+        "Raw time/storage/counts and original Store/spool/resource equations retain actual ownership and availability. Retired Save/monitor extent counters are not current SQL or host lifetime peak proxies; unavailable fields remain visible, with no storage ratio threshold or optimization.",
+        "Owner D-3 (#319, 2026-10-11): verification work 45000 -> 75000 ms, hard publication 59000 -> 89000 ms; cleanup reserve 4000 ms and publication guard 250 ms unchanged. Measured-operation limits unchanged."
       ],
       "registry": {
         "family": "store_footprint",

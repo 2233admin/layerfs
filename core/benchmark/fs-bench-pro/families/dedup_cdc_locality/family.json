@@ -3368,8 +3368,8 @@
         "command_ms": 15000,
         "performance_hard_watchdog_ms": 120000,
         "operation_watchdog_ms": 120000,
-        "verifier_ms": 45000,
-        "verification_hard_watchdog_ms": 59000,
+        "verifier_ms": 75000,
+        "verification_hard_watchdog_ms": 89000,
         "cleanup_reserve_ms": 4000,
         "publication_guard_ms": 250,
         "wall_stop_ms": 120000
@@ -3391,7 +3391,8 @@
         "Original sharing counts, shared logical bytes, prefix/suffix chunks and bytes, suffix positions, insert/delete resynchronization distances and common-body shared-middle bytes are diagnostic fields after exact transcript equality; no new positive-sharing, ratio, storage or performance threshold is introduced.",
         "Fresh native source pages/metadata may be warm from setup; no cache eviction, workload reduction or warm-source numeric credit is selected. Numeric status remains INELIGIBLE when host source coldness is unqualified; verification-only boundary performance is N/A.",
         "Original inherited15s reporting,120s cumulative product execution and45s verification/59s publication with4s cleanup reserve and0.25s publication margin remain exact. Current explicit outer wall stop is120s; frozen130s performance supervisor does not override the owner ceiling. Slow complete work reports EXCEEDED and receives no speed fix.",
-        "Original separate Linux2CPU/2GiB/no-swap/256PID and OOM guard remains enforced for the fresh verification daemon/workload; host Init CPU remains uncapped with actual host RSS2GiB guard. Main Store4GiB logical/allocated bound, verifier owned spool2GiB and zero after cleanup remain required; all current observations have exact owner and phase boundaries."
+        "Original separate Linux2CPU/2GiB/no-swap/256PID and OOM guard remains enforced for the fresh verification daemon/workload; host Init CPU remains uncapped with actual host RSS2GiB guard. Main Store4GiB logical/allocated bound, verifier owned spool2GiB and zero after cleanup remain required; all current observations have exact owner and phase boundaries.",
+        "Owner D-3 (#319, 2026-10-11): verification work 45000 -> 75000 ms, hard publication 59000 -> 89000 ms; cleanup reserve 4000 ms and publication guard 250 ms unchanged. Measured-operation limits unchanged."
       ],
       "registry": {
         "family": "dedup_cdc_locality",

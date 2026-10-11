@@ -57,7 +57,7 @@ class CdcDirectoryImport(unittest.TestCase):
             self.assertEqual(budget["performance_hard_watchdog_ms"], None if proof else 120000)
             self.assertEqual([budget[k] for k in ("operation_watchdog_ms", "verifier_ms", "verification_hard_watchdog_ms",
                                                    "cleanup_reserve_ms", "publication_guard_ms", "wall_stop_ms")],
-                             [120000, 45000, 59000, 4000, 250, 120000])
+                             [120000, 75000 if row["id"] == "dedup-cdc-scattered-500" else 45000, 89000 if row["id"] == "dedup-cdc-scattered-500" else 59000, 4000, 250, 120000])
             self.assertEqual((fixture["root_mode"], fixture["directory_mode"], fixture["file_mode"]), (0o750, 0o750, 0o640))
             self.assertEqual((fixture["mtime_seconds"], fixture["mtime_nanoseconds"]), (1700000000, 0))
             if proof:

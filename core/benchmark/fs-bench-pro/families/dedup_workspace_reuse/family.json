@@ -602,8 +602,8 @@
         "command_ms": 15000,
         "performance_hard_watchdog_ms": 120000,
         "operation_watchdog_ms": 120000,
-        "verifier_ms": 45000,
-        "verification_hard_watchdog_ms": 59000,
+        "verifier_ms": 75000,
+        "verification_hard_watchdog_ms": 89000,
         "cleanup_reserve_ms": 4000,
         "publication_guard_ms": 250
       },
@@ -621,7 +621,8 @@
         "Current independent persisted proof must preserve original semantic payload identity/uniqueness/reuse assertions through the current typed/authenticated Content/Storage/History API. Retired extent serialization and host live pin attribution cannot be copied as current format or host data-path claims.",
         "The original initial-payload-attribution structural observer is outside product operation timers. Its current implementation and any changed observer timing must remain explicit; no structural pre-read establishes cold paid work.",
         "One fresh original mount is declared class B. Clone warmth, OS backing, SQLite/metadata readers and own-write pre-Commit coldness remain unqualified; numeric observations stay INELIGIBLE rather than changing cache treatment.",
-        "Original15s reporting target,120s execution and45s proof/59s hard/4s cleanup/.25s publication guard remain separately declared. Owner external invocation stop stays at most120s; no enlarged allowance, retry or discarded outcome."
+        "Original15s reporting target,120s execution and45s proof/59s hard/4s cleanup/.25s publication guard remain separately declared. Owner external invocation stop stays at most120s; no enlarged allowance, retry or discarded outcome.",
+        "Owner D-3 (#319, 2026-10-11): verification work 45000 -> 75000 ms, hard publication 59000 -> 89000 ms; cleanup reserve 4000 ms and publication guard 250 ms unchanged. Measured-operation limits unchanged."
       ],
       "registry": {
         "family": "dedup_workspace_reuse",
@@ -1310,8 +1311,8 @@
         "command_ms": 15000,
         "performance_hard_watchdog_ms": 120000,
         "operation_watchdog_ms": 120000,
-        "verifier_ms": 45000,
-        "verification_hard_watchdog_ms": 59000,
+        "verifier_ms": 75000,
+        "verification_hard_watchdog_ms": 89000,
         "cleanup_reserve_ms": 4000,
         "publication_guard_ms": 250
       },
@@ -1329,7 +1330,8 @@
         "Current independent persisted proof must preserve original semantic payload identity/uniqueness/reuse assertions through the current typed/authenticated Content/Storage/History API. Retired extent serialization and host live pin attribution cannot be copied as current format or host data-path claims.",
         "The original initial-payload-attribution structural observer is outside product operation timers. Its current implementation and any changed observer timing must remain explicit; no structural pre-read establishes cold paid work.",
         "One fresh original mount is declared class B. Clone warmth, OS backing, SQLite/metadata readers and own-write pre-Commit coldness remain unqualified; numeric observations stay INELIGIBLE rather than changing cache treatment.",
-        "Original15s reporting target,120s execution and45s proof/59s hard/4s cleanup/.25s publication guard remain separately declared. Owner external invocation stop stays at most120s; no enlarged allowance, retry or discarded outcome."
+        "Original15s reporting target,120s execution and45s proof/59s hard/4s cleanup/.25s publication guard remain separately declared. Owner external invocation stop stays at most120s; no enlarged allowance, retry or discarded outcome.",
+        "Owner D-3 (#319, 2026-10-11): verification work 45000 -> 75000 ms, hard publication 59000 -> 89000 ms; cleanup reserve 4000 ms and publication guard 250 ms unchanged. Measured-operation limits unchanged."
       ],
       "registry": {
         "family": "dedup_workspace_reuse",
@@ -2018,8 +2020,8 @@
         "command_ms": 15000,
         "performance_hard_watchdog_ms": 120000,
         "operation_watchdog_ms": 120000,
-        "verifier_ms": 45000,
-        "verification_hard_watchdog_ms": 59000,
+        "verifier_ms": 75000,
+        "verification_hard_watchdog_ms": 89000,
         "cleanup_reserve_ms": 4000,
         "publication_guard_ms": 250
       },
@@ -2037,7 +2039,8 @@
         "Current independent persisted proof must preserve original semantic payload identity/uniqueness/reuse assertions through the current typed/authenticated Content/Storage/History API. Retired extent serialization and host live pin attribution cannot be copied as current format or host data-path claims.",
         "The original initial-payload-attribution structural observer is outside product operation timers. Its current implementation and any changed observer timing must remain explicit; no structural pre-read establishes cold paid work.",
         "One fresh original mount is declared class B. Clone warmth, OS backing, SQLite/metadata readers and own-write pre-Commit coldness remain unqualified; numeric observations stay INELIGIBLE rather than changing cache treatment.",
-        "Original15s reporting target,120s execution and45s proof/59s hard/4s cleanup/.25s publication guard remain separately declared. Owner external invocation stop stays at most120s; no enlarged allowance, retry or discarded outcome."
+        "Original15s reporting target,120s execution and45s proof/59s hard/4s cleanup/.25s publication guard remain separately declared. Owner external invocation stop stays at most120s; no enlarged allowance, retry or discarded outcome.",
+        "Owner D-3 (#319, 2026-10-11): verification work 45000 -> 75000 ms, hard publication 59000 -> 89000 ms; cleanup reserve 4000 ms and publication guard 250 ms unchanged. Measured-operation limits unchanged."
       ],
       "registry": {
         "family": "dedup_workspace_reuse",

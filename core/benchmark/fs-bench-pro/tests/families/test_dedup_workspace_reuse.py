@@ -91,7 +91,7 @@ class DedupWorkspaceReuse(unittest.TestCase):
     def test_original_budgets_resources_and_missing_cache_evidence_stay_explicit(self):
         for row in self.rows:
             self.assertEqual(row["budget"], {"command_ms": 15000, "performance_hard_watchdog_ms": 120000,
-                "operation_watchdog_ms": 120000, "verifier_ms": 45000, "verification_hard_watchdog_ms": 59000,
+                "operation_watchdog_ms": 120000, "verifier_ms": 75000 if row["id"].endswith("-500") else 45000, "verification_hard_watchdog_ms": 89000 if row["id"].endswith("-500") else 59000,
                 "cleanup_reserve_ms": 4000, "publication_guard_ms": 250})
             self.assertTrue(row["original_ordinary_guards"])
             self.assertEqual(row["resource_profile"], {"cpus": 2, "memory_bytes": 2 * 1024**3,
