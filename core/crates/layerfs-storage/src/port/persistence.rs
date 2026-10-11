@@ -18,6 +18,15 @@ pub enum ValueGroupQuery<'a> {
         /// Maximum rows, at most READ_OBJECT_LIMIT.
         limit: usize,
     },
+    /// A chronological page strictly below this Save's reserved ordinal block.
+    BeforePage {
+        /// First ordinal to visit, inclusive.
+        from: u32,
+        /// Exclusive upper ordinal, fixed before construction begins.
+        before: u32,
+        /// Maximum rows, at most READ_OBJECT_LIMIT.
+        limit: usize,
+    },
 }
 
 /// One catalogue page or set, with the retained candidate window.

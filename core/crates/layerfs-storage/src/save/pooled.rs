@@ -22,12 +22,14 @@ impl State<'_> {
         }
         self.storage.source.refresh_window();
         let capacities = self.storage.capacities();
-        self.pool_index.sync(
+        self.pool_index.sync_before(
             &self.storage.source,
             &capacities,
             i64::MAX,
             &mut self.pool,
             &mut self.decode,
+            u32::try_from(self.next_ordinal)
+                .map_err(|_| StorageError::Integrity("metadata ordinal"))?,
         )?;
         self.pool_synced = true;
         Ok(())

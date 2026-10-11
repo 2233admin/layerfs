@@ -104,21 +104,63 @@ impl PoolIndex {
         reader: &mut PoolReader,
         workspace: &mut DecompressionWorkspace,
     ) -> StorageResult<()> {
+        self.sync_range(connection, capacities, ceiling, reader, workspace, None)
+    }
+
+    /// A Save must not consume catalogue groups from a later reservation: doing
+    /// so would advance its cursor beyond its own still valid exclusive block.
+    pub(crate) fn sync_before(
+        &mut self,
+        connection: &dyn Source,
+        capacities: &StorageCapacities,
+        ceiling: i64,
+        reader: &mut PoolReader,
+        workspace: &mut DecompressionWorkspace,
+        before: u32,
+    ) -> StorageResult<()> {
+        self.sync_range(
+            connection,
+            capacities,
+            ceiling,
+            reader,
+            workspace,
+            Some(before),
+        )
+    }
+
+    fn sync_range(
+        &mut self,
+        connection: &dyn Source,
+        capacities: &StorageCapacities,
+        ceiling: i64,
+        reader: &mut PoolReader,
+        workspace: &mut DecompressionWorkspace,
+        before: Option<u32>,
+    ) -> StorageResult<()> {
         let start = connection.window_start()?;
-        self.advance_window(start);
+        // Only this disposable producer index is clamped. The published global
+        // window and ordinary canonical ordinal reads retain their own authority.
+        self.advance_window(before.map_or(start, |bound| start.min(bound)));
         let Ok(from) = u32::try_from(self.next) else {
             return Ok(());
         };
-        connection.value_groups(Some(from), &mut |row| {
+        let mut visit = |row: crate::location::ValueGroupRow| {
             if u64::from(row.first_ordinal) < self.next
                 || row.count == 0
                 || row.count > VALUES_PER_GROUP
+                || before.is_some_and(|bound| {
+                    u64::from(row.first_ordinal) + row.count as u64 > u64::from(bound)
+                })
             {
                 return Err(StorageError::Integrity("metadata catalogue overlap/range"));
             }
             let values = reader.group_values(connection, capacities, ceiling, workspace, &row)?;
             self.note_group(row.first_ordinal, &values)
-        })?;
+        };
+        match before {
+            Some(bound) => connection.value_groups_before(from, bound, &mut visit)?,
+            None => connection.value_groups(Some(from), &mut visit)?,
+        }
         Ok(())
     }
 

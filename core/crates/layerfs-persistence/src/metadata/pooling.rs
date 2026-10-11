@@ -19,6 +19,21 @@ pub(crate) fn read(
             }
             rows
         }
+        ValueGroupQuery::BeforePage {
+            from,
+            before,
+            limit,
+        } => {
+            if from == 0 || before == 0 || limit > policy::READ_OBJECT_LIMIT {
+                return Err(PersistenceError::Malformed);
+            }
+            let mut rows =
+                metadata_pooling::before_page(tx, from, before, limit + usize::from(limit > 0))?;
+            if rows.len() > limit {
+                next = rows.pop().map(|r| r.first_ordinal);
+            }
+            rows
+        }
         ValueGroupQuery::Ordinals(ids) => {
             if ids.len() > policy::READ_OBJECT_LIMIT || ids.contains(&0) {
                 return Err(PersistenceError::Malformed);
@@ -43,6 +58,9 @@ pub(crate) fn read(
         }
         end = u64::from(row.first_ordinal) + row.count as u64;
         if end > u64::from(u32::MAX) + 1 {
+            return Err(PersistenceError::Malformed);
+        }
+        if matches!(query, ValueGroupQuery::BeforePage { before, .. } if end > u64::from(before)) {
             return Err(PersistenceError::Malformed);
         }
     }

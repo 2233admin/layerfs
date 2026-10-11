@@ -227,6 +227,51 @@ impl Fetch {
         }
         Ok(())
     }
+    fn visit_catalogue(
+        &self,
+        mut from: u32,
+        before: Option<u32>,
+        visit: &mut dyn FnMut(ValueGroupRow) -> StorageResult<()>,
+    ) -> StorageResult<()> {
+        loop {
+            let query = match before {
+                Some(before) => ValueGroupQuery::BeforePage {
+                    from,
+                    before,
+                    limit: READ_OBJECT_LIMIT,
+                },
+                None => ValueGroupQuery::Page {
+                    from,
+                    limit: READ_OBJECT_LIMIT,
+                },
+            };
+            // Even an empty reserved range pays for its actual catalogue query.
+            let page = self.catalogue(query)?;
+            if page
+                .rows
+                .first()
+                .is_some_and(|row| row.first_ordinal < from)
+                || page.rows.iter().any(|row| {
+                    before.is_some_and(|bound| {
+                        u64::from(row.first_ordinal) + row.count as u64 > u64::from(bound)
+                    })
+                })
+            {
+                return Err(StorageError::Integrity("catalogue chronology"));
+            }
+            let last = page.rows.last().map_or(from, |row| row.first_ordinal);
+            for row in page.rows {
+                visit(row)?;
+            }
+            match page.next {
+                Some(next) if next > last && before.is_none_or(|bound| next < bound) => {
+                    from = next;
+                }
+                Some(_) => return Err(StorageError::Integrity("catalogue page progress")),
+                None => return Ok(()),
+            }
+        }
+    }
     fn covering(&self, ordinal: u32) -> Option<ValueGroupRow> {
         self.groups
             .borrow()
@@ -398,33 +443,15 @@ impl Source for Fetch {
         from: Option<u32>,
         visit: &mut dyn FnMut(ValueGroupRow) -> StorageResult<()>,
     ) -> StorageResult<()> {
-        let mut from = from.unwrap_or(1);
-        loop {
-            let page = self.catalogue(ValueGroupQuery::Page {
-                from,
-                limit: READ_OBJECT_LIMIT,
-            })?;
-            if page
-                .rows
-                .first()
-                .is_some_and(|row| row.first_ordinal < from)
-            {
-                return Err(StorageError::Integrity("catalogue chronology"));
-            }
-            let last = page
-                .rows
-                .last()
-                .map(|row| row.first_ordinal)
-                .unwrap_or(from);
-            for row in page.rows {
-                visit(row)?;
-            }
-            match page.next {
-                Some(next) if next > last => from = next,
-                Some(_) => return Err(StorageError::Integrity("catalogue page progress")),
-                None => return Ok(()),
-            }
-        }
+        self.visit_catalogue(from.unwrap_or(1), None, visit)
+    }
+    fn value_groups_before(
+        &self,
+        from: u32,
+        before: u32,
+        visit: &mut dyn FnMut(ValueGroupRow) -> StorageResult<()>,
+    ) -> StorageResult<()> {
+        self.visit_catalogue(from, Some(before), visit)
     }
     fn window_start(&self) -> StorageResult<u32> {
         if let Some(start) = self.window.get() {

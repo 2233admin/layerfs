@@ -999,3 +999,75 @@ rebuilt. All historical receipts/CSVs remain at their original identity.
 `repository_history` remains selected in the catalogue but is NOT_RUN — set
 aside by owner. Durable: NOT_RUN — disabled by owner until explicit
 reauthorization. Phase11 will retire exactly28 reliability cases.
+
+
+### Concurrent Workspace Store metadata reservation/publication repair
+
+The real mounted parallel Commit test exposed a Store bug after the Clean End
+change: a later Save could publish its higher reserved range before an earlier
+Save synchronized its pooled candidates. The earlier Save then rejected its own
+still-valid range as metadata index chronology. A deterministic two-Save real
+Disposable SQLite test failed before implementation. Its fix limits each first
+catalogue synchronization to complete groups strictly below that Save's initial
+reserved range, using actual indexed BeforePage queries and only a local index
+floor clamp. No global allocator rewind, new reservation, busy replay or whole
+Commit serialization is introduced. Decided by agent, pending owner review.
+
+A second public real SQLite regression found an independent global-window bug:
+late publication rewound the floor131075→1 and exposed262145 eligible values;
+a late inside-floor publication exposed131073 against131072. Both failures are
+retained. The existing per-group update now ignores below-floor candidates and,
+on overflow, uses an indexed latest published group and its count. Serial order
+still retains the incoming group. It preserves the authoritative floor and
+canonical reads of evicted groups. Actual extra SQL instructions are paid; no
+frozen statement/count limit, oracle, schema or format is changed. An explicit
+monotonic batch floor advance may conservatively overcharge, never undercharge,
+the candidate counter.
+
+[Combined exact source/log evidence](checks/concurrent-pool-repair.json) and the
+[window regression detail](checks/concurrent-pool-window.json) record14 passing
+Storage/Persistence tests plus the real mounted parallel test: two Workspaces
+have overlapping original Commits, duplicate admission is refused, both
+acknowledge once and distinct captures produce distinct correct roots. Each
+producer has one initial reservation, zero refill and one publication. The
+bounded empty query and legacy empty query both pay4 statements. Linux owning
+all-target Clippy passes; host checks/final sealed full-case qualification remain
+pending. Source/hash capture limitations for the original untracked window test
+are explicit, not presented as a sealed benchmark identity.
+
+
+### Phase10 pooled-metadata pick
+
+Production source of `4b0d5bf05` applies unchanged; only the ledger and old
+batch-LOC receipt conflict. The ledger retains just this selected fix entry
+with its historical identity, and the LOC artifact is regenerated from this
+branch's exact parent/staged product trees. No dropped feature source is added.
+
+### Phase10 exit — source settled, 2026-10-12
+
+Both selected fixes are retained. ENOSPC is committed at `1906cf24d`; the
+pooled fix production bytes equal `4b0d5bf05` exactly. The ENOSPC test-only
+adaptation and its original missing-feature compiler failure are recorded above.
+[New source checks](checks/phase10-checks.json) retain14 pooled tests PASS on
+host and Linux, Linux native parallel1PASS, native ENOSPC2PASS and host/Linux
+error-identity1PASS. All Rust tests were built with `--no-run` first.
+
+Host and pinned Linux builds of Overlay,Workspace,Fuse,daemon (plus changed
+Storage/Persistence) PASS. All six packages' all-target Clippy with warnings
+denied PASS on both. Formatting and boundary guard checked below before commit.
+Full fuser checker retains its two historical passthrough findings; actual core
+manifest, lock and complete timestamp/lifecycle package inventory PASS via the
+checker's unchanged functions. Initial native builds preceded that provenance
+command: this ordering gap is retained; it is not a pre-build check PASS.
+One overlapping provenance invocation was refused by the local lock without
+execution. Future native builds follow the completed provenance check.
+
+The regenerated [batch LOC receipt](checks/batch-production-loc.json) compares
+this branch's exact first-parent/staged product snapshots, not the dropped
+feature branch. Production LOC:82227 ->82335 (delta+108). Together with the
+first pick:82213 +14 +108 =82335. No reference/source retirement or relocation
+is credited as an algorithmic simplification. Scope active core; reference
+absent (retired R9c; last counted65,417 at tree498dd1917812). Committed-tree
+confirmation follows each commit. Existing38 containers/413 volumes remain
+untouched; this branch's named check containers were removed after each run.
+Phase10 complete; no benchmark has been sampled on this branch yet.

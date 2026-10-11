@@ -171,6 +171,36 @@ impl PackPersistence for MemoryMetadata {
                 };
                 (rows, next)
             }
+            ValueGroupQuery::BeforePage {
+                from,
+                before,
+                limit,
+            } => {
+                assert!(limit <= READ_OBJECT_LIMIT);
+                if from >= before {
+                    return Ok(ValueGroups {
+                        rows: vec![],
+                        next: None,
+                        window_start: state.window,
+                    });
+                }
+                let rows = state
+                    .groups
+                    .range(from..before)
+                    .take(limit)
+                    .map(|(_, row)| *row)
+                    .collect();
+                let next = if limit == 0 {
+                    None
+                } else {
+                    state
+                        .groups
+                        .range(from..before)
+                        .nth(limit)
+                        .map(|(first, _)| *first)
+                };
+                (rows, next)
+            }
         };
         Ok(ValueGroups {
             rows,

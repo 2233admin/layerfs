@@ -1492,3 +1492,43 @@ maintenance. This reduces repeated SQLite statement expiration/repreparation;
 its source and runtime counters determine the actual effect. The v1 campaign
 is retained, including all gate failures. The prospective final source uses
 space-scaling-v2 cases with identical inputs, cold state,30/19s caps and gates.
+
+
+### Concurrent Save reservation and catalogue boundary
+
+The direct Store admits independent Save producers with disjoint acknowledged
+initial ordinal blocks. Reservation order and publication order are independent:
+a higher block may publish while an earlier Save has not constructed its first
+pooled group. On first pooled demand, the Save now synchronizes catalogue
+candidates strictly below the first ordinal of its own initial reservation.
+The concrete Store reader uses indexed bounded BeforePage queries, including
+an actual paid query for an empty range. It validates page progress, chronological
+nonoverlap and complete group ends against that exclusive boundary. Ordinary
+canonical ordinal lookup keeps its full authenticated catalogue authority.
+
+A persisted global window may have advanced beyond that earlier producer.
+Only its disposable local candidate index clamps that floor to its own reserved
+boundary; it does not rewind the global window, reallocate ordinals, retry an
+operation, or serialize a whole Save/Commit. Later foreign values may be missed
+as reuse candidates and stored again, which preserves canonical content and
+valid ordinal ownership. A fresh subsequent Save sees both published ranges.
+The existing public unbounded-range PoolIndex sync remains available for its
+standalone callers; custom Source adapters stream/filter rows, while the direct
+Store pushes the bound into each database page.
+
+Qualification is the issue319 component evidence at its exact source identity.
+It is correctness evidence, not performance eligibility, and does not change
+frozen count limits or make the skipped clean environment run eligible.
+
+
+The SQLite publisher also preserves the global candidate bound under reversed
+publication. A late group below the current floor remains readable but neither
+rewinds that floor nor charges the active window. When an eligible group would
+overflow131072 values, the existing update chooses the highest published group's
+first ordinal and count through an indexed latest-row lookup. Its retained suffix
+then consists of that one complete group. Serial publication still chooses the
+incoming group, as before. No full catalogue count/scan or extra statement is
+added; the actual extra SQL instructions remain paid. An explicit monotonic batch
+floor advance may conservatively overcharge the retained counter; it cannot
+undercount or widen the active suffix. Format, allocator/tail rules and canonical
+point reads are unchanged.

@@ -33,6 +33,14 @@ pub(crate) fn page(
 ) -> Result<Vec<ValueGroupRow>, PersistenceError> {
     tx.query("SELECT first_ordinal,count,pack_id,group_number,digest FROM metadata_value_group WHERE first_ordinal>=?1 ORDER BY first_ordinal LIMIT ?2",vec![Param::I64(i64::from(from)),Param::I64(limit as i64)])?.iter().map(group).collect::<Result<Vec<_>,_>>().map_err(Into::into)
 }
+pub(crate) fn before_page(
+    tx: &Transaction<'_>,
+    from: u32,
+    before: u32,
+    limit: usize,
+) -> Result<Vec<ValueGroupRow>, PersistenceError> {
+    tx.query("SELECT first_ordinal,count,pack_id,group_number,digest FROM metadata_value_group WHERE first_ordinal>=?1 AND first_ordinal<?2 ORDER BY first_ordinal LIMIT ?3",vec![Param::I64(i64::from(from)),Param::I64(i64::from(before)),Param::I64(limit as i64)])?.iter().map(group).collect::<Result<Vec<_>,_>>().map_err(Into::into)
+}
 pub(crate) fn covering(
     tx: &Transaction<'_>,
     ids: &[u32],

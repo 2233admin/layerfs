@@ -47,6 +47,22 @@ pub trait Source {
         from: Option<u32>,
         visit: &mut dyn FnMut(ValueGroupRow) -> StorageResult<()>,
     ) -> StorageResult<()>;
+    /// Catalogue candidates below a producer's already reserved ordinal block.
+    /// Custom sources retain their streaming implementation; Store sources push
+    /// the exclusive bound into each indexed database page.
+    fn value_groups_before(
+        &self,
+        from: u32,
+        before: u32,
+        visit: &mut dyn FnMut(ValueGroupRow) -> StorageResult<()>,
+    ) -> StorageResult<()> {
+        self.value_groups(Some(from), &mut |row| {
+            if row.first_ordinal < before {
+                visit(row)?;
+            }
+            Ok(())
+        })
+    }
     /// First ordinal in the retained candidate window.
     fn window_start(&self) -> StorageResult<u32>;
     /// At most 8,192 persisted signatures, in insertion order.
