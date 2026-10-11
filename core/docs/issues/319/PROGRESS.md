@@ -301,3 +301,30 @@ Docs-only checks: local links/claims and whitespace, Rust formatting, boundary
 guard PASS. No Rust crate touched, so new Clippy or runtime tests are
 inapplicable; latest changed-scope checks remain above.
 Production LOC: 81727 -> 81727 (delta +0).
+
+## Phase 4 exit — blocked by owner decision, 2026-10-11
+
+Phase 3 record committed at `3f12669c1`, exact production total confirmed.
+Reviewed current issue comments and the owner's handoff: no recorded decision
+allows a wait at serial reservation or Commit Begin. The current
+[integration contract](../303/06-cluster-one-integration.md#33-one-attempt-exact-outcome)
+requires one `BEGIN IMMEDIATE`, checked zero busy timeout, and exact before-effect
+Busy refusal with no wait/retry. The active root/core instructions independently
+retain the same policy. The handoff explicitly blocks phase 4 without a new
+recorded owner decision; no agent recommendation supplies that authorization.
+
+No two-Workspace success regression, wait implementation or integration-contract
+change was started. The phase 4 test, Linux `mounted_concurrency` and two named
+100 MB K10 samples are NOT_RUN for this phase. Baseline nine Busy/EAGAIN rows
+retain their failed receipts. Phase 5's whole catalogue will still exercise its
+original concurrency rows once under the unchanged policy; a result cannot
+retroactively authorize a wait or change the baseline.
+
+Decided by agent, pending owner review: close phase 4's batch checklist items
+with this explicit blocked reason and continue the independent final phase.
+The owner decision remains pending, not resolved as "keep never wait" by the
+agent. No automatic retry, reprepare or failed-operation replay added.
+
+Docs-only local link/claim/whitespace review, Rust formatting and boundary
+guard PASS; no touched Rust crate, new Clippy or runtime test is applicable.
+Production LOC: 81727 -> 81727 (delta +0).
