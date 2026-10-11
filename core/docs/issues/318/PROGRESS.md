@@ -1300,3 +1300,54 @@ check in the harness, not a result of the product.
   0 containers more; originals 4255 MB, result folder
   1110 MB; host 221 GiB free; `docker system df`: Images=21.51GB, Containers=12.85GB, Local Volumes=69.21GB, Build Cache=4.843GB.
 - CSVs: `core/benchmark/fs-bench-pro/baselines/core/2026-10-11-a142e9478/dedup_workspace_reuse/`.
+
+## Phase C — batch 6, `store_footprint`, tag `b1`, sampled at `7230d1133`
+
+Iteration 1's value is left of each arrow, this run's right; one value means
+equal. Times are single diagnostic samples.
+
+| case | status | functional | proof | requests | writer jobs | statements | overlay logical B | Store logical B | exec ms | Commit ms |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| store-footprint-unique-100000 | FAIL | FAIL -> - | FAIL | 12 | 102 -> 95 | 464 -> 443 | 229376 -> 233472 | 516735848 -> 516653928 | 7540.0 -> 7136.1 | 97.6 -> 124.3 |
+| store-footprint-metadata-cardinality-100000 | FAIL | FAIL -> - | FAIL | 12 | 102 -> 95 | 464 -> 443 | 229376 -> 233472 | 556090216 -> 556188520 | 14022.9 -> 15191.1 | 176.1 -> 136.4 |
+| store-footprint-large-object-500m | FAIL | PASS -> - | PASS -> FAIL | 12 | 287 -> 281 | 1500 -> 1482 | 258048 -> 262144 | 506352584 -> 506344320 | 2438.3 -> 2832.9 | 16.5 -> 16.1 |
+| store-footprint-unique-100-low-v1 | FAIL | PASS -> - | PASS -> FAIL | 12 | 102 -> 95 | 464 -> 443 | 229376 -> 233472 | 5411592 -> 5415688 | 87.8 -> 103.1 | 11.3 -> 14.3 |
+| store-footprint-metadata-cardinality-100-low-v1 | FAIL | PASS -> - | PASS -> FAIL | 12 | 102 -> 95 | 464 -> 443 | 229376 -> 233472 | 5452504 -> 5452480 | 90.2 -> 103.6 | 9.2 -> 17.8 |
+| store-footprint-large-object-10m-low-v1 | FAIL | PASS -> - | PASS -> FAIL | 12 | 152 -> 146 | 771 -> 753 | 237568 -> 241664 | 10474344 -> 10470224 | 104.9 -> 126.0 | 10.7 -> 13.2 |
+
+Failure texts, as recorded:
+
+- `store-footprint-unique-100000`: original frozen verification hard watchdog expired
+- `store-footprint-metadata-cardinality-100000`: Command '['/Users/yifanxu/Ephemeral-AI-Lab/layerfs-issue316/benchmark-results/fs-bench-pro/binary-archive/ba6cf187f8bb3ca168c44e6bcd02462e315ed71575613208af6a3c49eef54400/layerfs-r7-runtime', 'verify-footprint', '--socket', '/Users/yifanxu/.docker/run/docker.sock', '--volume', 'layerfs-fsb-sample-32
+- `store-footprint-large-object-500m`: closed overlay authoritative schema/accounting source pin changed
+- `store-footprint-unique-100-low-v1`: closed overlay authoritative schema/accounting source pin changed
+- `store-footprint-metadata-cardinality-100-low-v1`: closed overlay authoritative schema/accounting source pin changed
+- `store-footprint-large-object-10m-low-v1`: closed overlay authoritative schema/accounting source pin changed
+
+Six cases, all FAIL. Iteration 1: 4 PASS, 2 FAIL. Four rows are new failures with the cause recorded for
+`dedup_workspace_reuse`: a harness check pinned to iteration 1's overlay schema files.
+
+- `store-footprint-large-object-500m` and the three `-low-v1` cases end with `closed overlay authoritative
+  schema/accounting source pin changed`. Mount, command, Commit, cleanup (Gone) and custody (KNOWN_STOP)
+  completed and their counts and sizes are recorded.
+- `store-footprint-unique-100000`: `original frozen verification hard watchdog expired`; the check's work
+  took 41,282 ms. Complete wall 14,050 ms against the declared 15,000 ms (15,687 ms in the control, which
+  exceeded it).
+- `store-footprint-metadata-cardinality-100000`: the typed check command timed out with 30.4 s of the 41 s
+  allowance left to it (28.6 s in the control). Complete wall 22,655 ms against the declared 15,000 ms
+  (21,638 ms in the control). Both are the control's failures.
+- Requests are 12 in all six, as in the control. Writer jobs are lower by 6 or 7 and statements by 18 or
+  21. Overlay logical bytes +4,096 B in all six.
+- Store logical bytes differ in all six by −81,920 to +98,304 B (largest: `metadata-cardinality-100000`
+  556,090,216 -> 556,188,520 B, +0.018%; `unique-100000` 516,735,848 -> 516,653,928 B, −0.016%).
+- exec is the import command, diagnostic only (interference declared).
+- Storage, decided by agent: a sample of this family keeps `footprint-typed.sqlite` (506 MB for the 500 MiB
+  case) among its retained command output. It is a whole copy of the payload, so the driver now removes
+  it with the other Store copies and records it in the cleanup record with its manifest digest; the four
+  samples taken before the change were cleaned the same way.
+
+- Storage after the family: 0 Docker volumes more than before the run
+  (0 of them masters of current originals, 0 unexplained),
+  0 containers more; originals 2205 MB, result folder
+  1120 MB; host 223 GiB free; `docker system df`: Images=21.51GB, Containers=12.85GB, Local Volumes=69.06GB, Build Cache=4.843GB.
+- CSVs: `core/benchmark/fs-bench-pro/baselines/core/2026-10-11-7230d1133/store_footprint/`.

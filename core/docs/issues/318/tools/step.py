@@ -56,7 +56,7 @@ SAMPLE_VOLUME = re.compile(r"layerfs-fsb-sample-[0-9a-f]{16}")
 PAYLOAD_FOLDERS = ("graph-store", "census-store")
 # Whole SQLite copies a sample keeps beside its receipt: the Store it built or exported, the pristine
 # Store and the closed overlay of the reuse families.
-PAYLOAD_FILES = ("store.sqlite", "pristine-store.sqlite", "closed-overlay.sqlite")
+PAYLOAD_FILES = ("store.sqlite", "pristine-store.sqlite", "closed-overlay.sqlite", "footprint-typed.sqlite")
 CELLS = "cluster-two/cells"
 # A sample starts only with this much of the budget left. 75 s unless the caller names a lower floor
 # for cases whose control sample is known to end well inside it.
