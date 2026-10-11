@@ -324,7 +324,20 @@ LOGS.mkdir(parents=True, exist_ok=True)
 if kind == "clean":
     drop_test_copies()
     if items == ["originals"]:
+        # A large original takes minutes to unlink, so its files go first, in pieces a call can stop
+        # between; the volumes are removed by the call that removes the last of the folder.
+        begun = time.time()
         for folder in folders(ROOT / ORIGINALS):
+            for inner, _, names in os.walk(folder, topdown=False):
+                if time.time() - begun > budget - 15:
+                    say(clean_stopped_at=folder.name, why="budget; call again")
+                    sys.exit(0)
+                if Path(inner) == folder:
+                    continue
+                os.chmod(inner, 0o700)
+                for name in names:
+                    os.unlink(Path(inner) / name)
+                os.rmdir(inner)
             drop_original(folder, "clean originals")
     sys.exit(0)
 if kind == "rows":

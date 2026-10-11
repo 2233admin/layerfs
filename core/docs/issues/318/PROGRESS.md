@@ -1006,3 +1006,52 @@ Ten cases: 4 completed with functional PASS and proof PASS, 6 FAIL. Iteration 1:
   0 containers more; originals 16086 MB, result folder
   790 MB; host 209 GiB free; `docker system df`: Images=21.51GB, Containers=12.85GB, Local Volumes=69.77GB, Build Cache=4.843GB.
 - CSVs: `core/benchmark/fs-bench-pro/baselines/core/2026-10-11-fd2da7385/mixed_load_bearing/`.
+
+## Phase C — batch 5, `branch_development`, tag `b1`, sampled at `325ed0053`
+
+Iteration 1's value is left of each arrow, this run's right; one value means
+equal. Times are single diagnostic samples.
+
+| case | status | functional | proof | requests | writer jobs | statements | overlay logical B | Store logical B | exec ms | Commit ms |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| v016-branch-mixed-100mb-5000-k10-v1 | FAIL | FAIL | NOT_RUN | - | - | - | - | - | - -> 787.9 | - -> 328.1 |
+| v016-branch-mixed-100mb-5000-k100-v1 | FAIL | FAIL | NOT_RUN | - | - | - | - | - | - -> 788.5 | - -> 322.1 |
+| v016-branch-mixed-500mb-30000-k10-v1 | FAIL | FAIL | NOT_RUN | - | - | - | - | - | - -> 1290.8 | - -> 627.5 |
+| v016-branch-mixed-500mb-30000-k100-v1 | FAIL | NOT_RUN -> FAIL | NOT_RUN | - | - | - | - | - | - -> 1340.2 | - -> 663.0 |
+| v016-branch-convergent-content-v1 | INELIGIBLE | PASS | PASS | - -> 162 | - -> 2664 | - -> 12058 | 229376 -> 233472 | 4655120 -> 4659240 | 1178.9 -> 1274.3 | 212.9 -> 200.2 |
+| v016-branch-fork-descendant-v1 | INELIGIBLE | PASS | PASS | - -> 216 | - -> 3566 | - -> 16113 | 229376 -> 233472 | 6138320 -> 6142440 | 1586.8 -> 1675.4 | 292.1 -> 290.6 |
+
+Failure texts, as recorded:
+
+- `v016-branch-mixed-100mb-5000-k10-v1`: original runtime failure: original_failure=original concurrent round failure original external command exit: ExecInspection { container: ContainerId("bb13ec24a6be9271216499ab8fe599f83db469f71620d9a031c1a575e7274520"), exec: ExecId("e4729e512f5fbf9e20ca6ee82d673852ff4fdbb6af270a06616a603bc0a6f07c"), 
+- `v016-branch-mixed-100mb-5000-k100-v1`: original runtime failure: original_failure=original concurrent round failure original external command exit: ExecInspection { container: ContainerId("fe1b4d17946caeb48c1b752066a0bf6aa60e8e650ef33ff89dcfa6079cdb4119"), exec: ExecId("89ec5a5dbf7fc1971a5754dfb1d8243fcfc1673c5913193312ff909861832ea9"), 
+- `v016-branch-mixed-500mb-30000-k10-v1`: original runtime failure: original_failure=original concurrent round failure SDK operation: Remote(ControlRefusal { code: Busy, phase: "Commit Begin", moved: None, published: None, detail: "Store busy before effect" }); no replay or automatic teardown
+- `v016-branch-mixed-500mb-30000-k100-v1`: original runtime failure: original_failure=original concurrent round failure SDK operation: Remote(ControlRefusal { code: Busy, phase: "Commit Begin", moved: None, published: None, detail: "Store busy before effect" }); no replay or automatic teardown
+
+Six cases: 2 completed with functional PASS and proof PASS, 4 FAIL. Iteration 1: 2 PASS, 3 FAIL, 1 NOT_RUN.
+
+- `v016-branch-convergent-content-v1` and `v016-branch-fork-descendant-v1`: requests 162 and 216, writer
+  jobs 2,664 and 3,566, statements 12,058 and 16,113. The control CSV has no counts for these two rows, so
+  they are not compared. Overlay logical bytes +4,096 B and Store logical bytes +4,120 B on both.
+- `v016-branch-mixed-100mb-5000-k10-v1` and `-k100-v1`: `original concurrent round failure original external
+  command exit … exit_code: Some(1)`. Iteration 1 records these two as a child's first creating write
+  returning EAGAIN under concurrent access.
+- `v016-branch-mixed-500mb-30000-k10-v1`: `original concurrent round failure SDK operation:
+  Remote(ControlRefusal { code: Busy, phase: "Commit Begin", … detail: "Store busy before effect" })`, the
+  control's failure text for this case.
+- `v016-branch-mixed-500mb-30000-k100-v1`: iteration 1 has NOT_RUN because its preparation reached 120 s.
+  Here the preparation ran in one call with the 300 s extreme-case stop and took 118.8 s. The sample then
+  failed with the same `Commit Begin` Busy refusal as the k10 case. This is a new sampled outcome, not a
+  new kind of failure.
+- All four failures end before the proof (proof NOT_RUN, cleanup UNAVAILABLE); the driver removed each
+  sample's volume and container afterwards. Which child was refused and how many Commits were acknowledged
+  before it was not compared with the control. Iteration 1's decision 55 classifies both refusals as the
+  current contract's refusal before effect met by a workload that requires every concurrent operation to
+  succeed. Nothing was changed.
+- exec and Commit times are diagnostic only (interference declared).
+
+- Storage after the family: 3 Docker volumes more than before the run
+  (3 of them masters of current originals, 0 unexplained),
+  0 containers more; originals 5458 MB, result folder
+  817 MB; host 220 GiB free; `docker system df`: Images=21.51GB, Containers=12.85GB, Local Volumes=69.68GB, Build Cache=4.843GB.
+- CSVs: `core/benchmark/fs-bench-pro/baselines/core/2026-10-11-325ed0053/branch_development/`.
