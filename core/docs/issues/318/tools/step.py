@@ -22,9 +22,9 @@ Storage (owner, 2026-10-11): at most two copies of a case's payload.
 - The original is the prepared folder of a case and its master volume, under
   `issue318-originals/`. It is never changed and is removed with `clean originals`.
 - The test copy is what a sample makes from it: every `layerfs-fsb-sample-*`
-  volume named in the sample's own records, the containers on those volumes, and
-  the exported and normalized Stores (`graph-store`, `census-store`) beside the
-  receipt. `run` first checks the sample's sealed manifest in full, then removes
+  volume named in the sample's own records, the containers on those volumes, the
+  exported and normalized Stores (`graph-store`, `census-store`) and any
+  `store.sqlite*` file the sample built beside its receipt. `run` first checks the sample's sealed manifest in full, then removes
   the test copy whatever the sample's status and records each removed manifest
   entry with its sealed hash in `payload-cleanup.json`.
 - `report` calls the engine's own report code. The engine verifies every sealed
@@ -53,6 +53,7 @@ LOGS = ROOT / "core/target/issue318/logs"
 RULE = "owner 2026-10-11: one original and one test copy of a payload; the test copy is removed after its sample"
 SAMPLE_VOLUME = re.compile(r"layerfs-fsb-sample-[0-9a-f]{16}")
 PAYLOAD_FOLDERS = ("graph-store", "census-store")
+PAYLOAD_FILES = ("store.sqlite",)
 CELLS = "cluster-two/cells"
 
 
@@ -153,6 +154,15 @@ def drop_test_copy(sample):
                     removed["removed_manifest_entries"][entry] = wanted
             removed["bytes"][relative] = remove_tree(exported)
             names.remove(name)
+    # The Store a sample itself built or exported (Init families keep it beside the receipt).
+    for entry in sorted(sample.rglob("*")):
+        if entry.is_file() and not entry.is_symlink() and entry.name.startswith(PAYLOAD_FILES):
+            relative = str(entry.relative_to(sample))
+            if relative in sealed:
+                removed["removed_manifest_entries"][relative] = sealed[relative]
+            removed["bytes"][relative] = entry.stat().st_size
+            os.chmod(entry.parent, 0o700)
+            entry.unlink()
     if failures:
         say(cleanup=sample.name, failed=failures)
         return None

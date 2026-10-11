@@ -59,7 +59,7 @@ def main():
     old = control(family)
     cases = json.loads((ROOT / "core/benchmark/fs-bench-pro/families" / family / "family.json").read_text())["cases"]
     head = ["case", "status", "functional", "proof", "requests", "writer jobs", "statements", "overlay logical B",
-            "exec ms", "Commit ms"]
+            "Store logical B", "exec ms", "Commit ms"]
     print("| " + " | ".join(head) + " |")
     print("|" + " --- |" * len(head))
     notes, differences = [], []
@@ -74,16 +74,18 @@ def main():
             now = json.loads(receipt.read_text())
         phases, counts, seen = now.get("phases") or {}, now.get("counts") or {}, now.get("observations") or {}
         overlay = (seen.get("overlay_logical_bytes") or {}).get("value")
+        store = (seen.get("store_logical_bytes") or {}).get("value")
         change = lambda a, b: a if a == b else f"{a} -> {b}"
         line = [name, str(now.get("status")),
                 change(was.get("functional", "?"), str(now.get("functional_status", "-"))),
                 change(was.get("proof", "?"), str(now.get("proof_status", "-"))),
                 pair(was.get("requests"), counts.get("requests")), pair(was.get("owner_jobs"), counts.get("owner_jobs")),
                 pair(was.get("statements"), counts.get("statements")), pair(was.get("overlay_logical_bytes"), overlay),
+                pair(was.get("store_logical_bytes"), store),
                 ms(was.get("command_ns")) + " -> " + ms(phases.get("command_ns")),
                 ms(was.get("commit_ns")) + " -> " + ms(phases.get("commit_ns"))]
         print("| " + " | ".join(line) + " |")
-        failure = now.get("original_failure") or now.get("tag")
+        failure = now.get("original_failure")
         if failure:
             notes.append("- `" + name + "`: " + re.sub(r"; see /\S+", "", str(failure))[:300])
         for label, a, b in (("functional", was.get("functional"), now.get("functional_status")),
@@ -91,7 +93,8 @@ def main():
                             ("requests", number(was.get("requests")), counts.get("requests")),
                             ("writer jobs", number(was.get("owner_jobs")), counts.get("owner_jobs")),
                             ("statements", number(was.get("statements")), counts.get("statements")),
-                            ("overlay logical B", number(was.get("overlay_logical_bytes")), overlay)):
+                            ("overlay logical B", number(was.get("overlay_logical_bytes")), overlay),
+                            ("Store logical B", number(was.get("store_logical_bytes")), store)):
             if a != b:
                 differences.append((name, label, a, b))
     if notes:

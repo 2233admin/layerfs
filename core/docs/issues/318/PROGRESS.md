@@ -283,3 +283,33 @@ receipt's own fields.
   21.51 GB, containers 12.85 GB, volumes 69.07 GB, build cache 4.84 GB.
 - CSVs: `core/benchmark/cluster-two/baselines/2026-10-11-d4d29ceb4/`, beside
   iteration 1's two cell folders.
+
+## Phase C — batch 1, `init_namespace`, tag `b1`, sampled at `1fbd41266`
+
+Iteration 1's value is left of each arrow, this run's right; one value means
+equal. Times are single diagnostic samples.
+
+| case | status | functional | proof | requests | writer jobs | statements | overlay logical B | Store logical B | exec ms | Commit ms |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| namespace-100-compact-v3 | INELIGIBLE | PASS | PASS | - | - | - | - | 5255168 -> 5263360 | 58.9 -> 55.2 | - -> - |
+| namespace-1000-compact-v3 | INELIGIBLE | PASS | PASS | - | - | - | - | 20619264 -> 20611072 | 163.8 -> 193.8 | - -> - |
+| namespace-10000 | INELIGIBLE | PASS | PASS | - | - | - | - | 305696768 -> 305750016 | 2137.6 -> 2197.0 | - -> - |
+| namespace-100000 | INELIGIBLE | PASS | PASS | - | - | - | - | 516333568 -> 516562944 | 7931.8 -> 8035.9 | - -> - |
+
+- 4 of 4: functional PASS, proof PASS, sealed and closed, as in iteration 1.
+  No daemon, mount or overlay is involved (host Init), so there are no
+  request counts; the Store sizes are equal to iteration 1's.
+- Status is INELIGIBLE for the family's own reason (`setup generated/wrote/read
+  all native bytes; source warmth retained; no cold admission claimed`), as in
+  iteration 1.
+- First sample measured for leftovers: no Docker volume or container; the
+  sample keeps the Store it built (`store.sqlite`) beside its receipt. The
+  driver was extended to remove that file as the test copy (20.6, 305.8 and
+  516.6 MB removed for the three larger cases; the 5.6 MB of the first case
+  was sampled before the extension and is left in place).
+
+- Storage after the family: 0 Docker volumes more than before the run
+  (0 of them masters of current originals, 0 unexplained),
+  0 containers more; originals 1182 MB, result folder
+  198 MB; host 225 GiB free; `docker system df`: Images=21.51GB, Containers=12.85GB, Local Volumes=69.06GB, Build Cache=4.843GB.
+- CSVs: `core/benchmark/fs-bench-pro/baselines/core/2026-10-11-1fbd41266/init_namespace/`.
