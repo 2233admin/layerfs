@@ -1607,3 +1607,13 @@ Plus `deepseek-full` (not prepared) and the 28 `workspace_reliability` rows
 - The issue's box "Batch 7: `workspace_reliability` recorded as iteration 1
   classified it" is left open: the family could not be recorded that way.
 - Nothing is pushed; the branch is local.
+
+### Corrections to the phase C exit entry above
+
+- "Among them the same 35 failures" is wrong: **40** of the 216 rows with
+  iteration 1's outcome are failures (12 + 3 + 1 + 5 + 5 + 8 + 6), and 176
+  completed with both checks PASS.
+- Docker volumes before the run were recorded as 69.1 GB (phase A), not
+  69.07 GB. Host free space was 238 GiB before the run and is 226 GiB now;
+  the difference is build output of this worktree (host and Linux test
+  targets, the sealed harness build) and 1.2 GB of result folders.
