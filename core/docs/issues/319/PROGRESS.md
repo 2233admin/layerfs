@@ -1262,3 +1262,50 @@ diagnostic or suppression. Product crates are unchanged. Formatting/boundary/
 whitespace and exact parent/staged LOC follow before commit. Fresh stage seal
 and affected-case samples remain pending. The prior topology stage's six exact
 sample hashes and four portable CSVs are in [its result receipt](checks/topology-mode-stage.json).
+
+Native stage `3856edb82` / `p319n13n` completed nine samples once: the six500MB
+development/concurrency rows remain FAIL; the100MB development,100MB
+multi-Workspace and compact branch guards have functional PASS/proof PASS and
+overall INELIGIBLE. Compact guard remains162/2664/12058 requests/jobs/statements,
+exactly unchanged. The two development failures now complete native proof and
+time out at Store export; concurrency still stops during native verification.
+No duplicate sample or changed ceiling. All removal manifests PASS; originals
+removed case-by-case. Missing native-proof request/job/statement intervals remain
+UNAVAILABLE; saved numeric groups cover the earlier product graph only.
+
+Retained mixed500MB K10 native duration17.650415667s vs21.644549125s previously
+is diagnostic only. Both native receipts retain30298 entries,464192768 checked
+bytes and the exact same scope digest. Export starts19.513976875s into its22s
+work window, leaving2.486023125s; it stops after2.499498542s. Actual partial
+export392527872B is not a verified complete Store. Last pre-Stop snapshot
+513077248 logical /513081344 allocated B is not an authenticated finalclosed
+inventory; shutdown may alter WAL. Normalization/typed/census proof never begins
+in that row. These failures remain active; no supported readback case is retired.
+
+### Base stat repeated inode descent (product)
+
+Cause before editing: each immutable base stat walks the same inode-table path
+twice because portable metadata lookup resolves a serial whose exact InodeValue
+the caller already holds; the eight-inode fixture makes10 canonical lookups
+rather than9 per repeated stat. A new external public BaseView/CanonicalClient
+test builds first, then fails10 !=9 before implementation. It keeps identical
+metadata/length, zero new upstream demand, unchanged miss/batch totals and zero
+remembered file lengths with the explicit owning length port.
+
+Predicted count10 ->9 in that diagnostic; the portable-metadata part's
+inode-table descents2H ->H for path heightH (symlink target reading retains its
+separate existing descent). LOOKUP can supply two such stats; GETATTR/OPEN
+one. No fewer FUSE request, writer-job, statement or SQL-runtime claim is made.
+The existing public typed attribute reader accepts the already resolved inode's
+metadata root/kind and preserves the same bounded portable metadata validation.
+No public API, cache, profile, dependency, retry or observation surface is added.
+
+[Count/check operands](checks/base-stat-inode-reuse.json) confirm10 ->9;
+host and Linux each pass base8 and native-visit6 after `--no-run` builds.
+Owning Workspace all-target Clippy `-D warnings` PASS on both. Actual core
+fuser manifest/lock/authorized package inventory PASS before Linux build;
+whole-checker's two inherited passthrough refusals remain. Formatting/boundary
+686 PASS and boundary selftests50 PASS. No source field or metadata validation
+is removed. New-identity sampling follows the commit; no benchmark speed or
+SQLite causal claim is made. The [native-stage result](checks/native-metadata-stage.json)
+retains all nine exact receipt identities and six owning-engine CSV publications.

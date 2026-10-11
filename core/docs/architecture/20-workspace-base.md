@@ -97,3 +97,16 @@ owning SDK stat lengths. See [effective base view](29-effective-base-view.md) an
 [S3 exit audit](../issues/307/S3-EXIT-AUDIT.md). Earlier limitations/evidence above
 retain their source scope; native/logical runtime transport, mutable byte semantics
 and aggregate resource acceptance remain unfinished.
+
+## Immutable stat inode reuse (#319)
+
+`BaseView::stat_with_lengths` resolves the inode-table path once, then passes
+that exact immutable inode value's metadata root and kind to the existing
+public typed attribute reader. It retains all portable mode/mtime validation
+and the explicit owning file-length port; symlink and directory handling stay
+on the same current Content interfaces. It does not re-resolve the serial solely
+to read metadata, retain a metadata mirror, or raise cache admission bounds.
+The external eight-inode count diagnostic observes nine canonical lookups per
+resident regular-file stat rather than ten, with unchanged metadata, length,
+misses, upstream demands and remembered-length count. This is an operation-work
+count, not a cold-latency or SQLite performance claim.

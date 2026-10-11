@@ -1,6 +1,6 @@
 //! Demand reads through current public content APIs, without a base-tree mirror.
 use crate::{CanonicalClient, WorkspaceResult};
-use layerfs_content::filesystem::attributes::PortableMetadata;
+use layerfs_content::filesystem::attributes::{read_portable, AttributeReadWork, PortableMetadata};
 use layerfs_content::filesystem::{
     DirectoryListing, FilesystemRead, FilesystemRoot, FilesystemRootId, InodeScope, PathName,
     Resolved, SymlinkTarget,
@@ -143,7 +143,12 @@ impl BaseView {
     ) -> WorkspaceResult<BaseStat> {
         let mut read = self.reader()?;
         let value = read.resolve_inode(serial)?.value;
-        let metadata = read.read_portable_inode(serial)?;
+        let metadata = read_portable(
+            self.client.as_ref(),
+            value.metadata_root,
+            value.kind,
+            &mut AttributeReadWork::default(),
+        )?;
         let logical_len = match value.kind {
             InodeKind::RegularFile => lengths.file_length(value.content_root)?,
             InodeKind::Symlink => read.readlink_inode(serial)?.as_bytes().len() as u64,

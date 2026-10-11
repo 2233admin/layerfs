@@ -12,6 +12,32 @@ use layerfs_workspace::{BaseView, CanonicalClient, Workspace};
 use std::sync::{atomic::Ordering, Arc, Mutex};
 
 #[test]
+fn base_stat_reads_each_inode_table_path_once() {
+    let f = fixture();
+    let client = Arc::new(CanonicalClient::with_lengths(
+        Arc::new(f.store.clone()),
+        Arc::new(f.store.clone()),
+        1024 * 1024,
+    ));
+    let base = BaseView::open(client.clone(), f.root, f.scope).unwrap();
+    let expected = base.stat_with_lengths(2, &f.store).unwrap();
+    let before = client.diagnostics().unwrap();
+    let demand = f.store.demand.load(Ordering::Relaxed);
+    let observed = base.stat_with_lengths(2, &f.store).unwrap();
+    let after = client.diagnostics().unwrap();
+    assert_eq!(observed, expected);
+    assert_eq!(f.store.demand.load(Ordering::Relaxed), demand);
+    assert_eq!(after.file_lengths, 0);
+    assert_eq!(after.cache_misses, before.cache_misses);
+    assert_eq!(after.upstream_batches, before.upstream_batches);
+    assert_eq!(
+        after.cache_hits - before.cache_hits,
+        9,
+        "root1 + inode1 + attribute1 + mode3 + mtime3 canonical reads"
+    );
+}
+
+#[test]
 fn full_root_binding_aliases_metadata_symlinks_and_eof_use_content_apis() {
     let f = fixture();
     let client = Arc::new(CanonicalClient::with_lengths(
