@@ -1617,3 +1617,169 @@ Plus `deepseek-full` (not prepared) and the 28 `workspace_reliability` rows
   69.07 GB. Host free space was 238 GiB before the run and is 226 GiB now;
   the difference is build output of this worktree (host and Linux test
   targets, the sealed harness build) and 1.2 GB of result folders.
+
+## Phase D — classification and shallow analysis only, 2026-10-11
+
+Owner instruction of 2026-10-11, given when phase D began: "do not need to
+fix the issue, just to summarize and have a shallow analysis". Phase D is
+therefore reduced to a classification of every row that did not complete
+with both checks PASS and a short analysis from the receipts, the retained
+output and a reading of source. **No product or harness source was changed,
+no test was added and nothing was sampled again.** Every cause below marked
+"not confirmed" is a reading, not a measurement.
+
+Phase C's comment on the issue: `issuecomment-6108219966`.
+
+### Classification of the 89 rows
+
+| rows | where | class | shallow analysis |
+| --- | --- | --- | --- |
+| 12 | `edit_length_changing` insert, prepend, replace-grow | open owner decision (O-6), with a possible product gap | See "Payload retention" below |
+| 15 | `dedup_workspace_reuse` 11, `store_footprint` 4 | harness limit, new with the merge | The closed-overlay accounting check pins six product files by digest. Three differ at the merged source, all from the reference-piece work: `schema.sql` (+23 −2 lines), `accounting.sql` (+9 −1) and overlay `database/accounting.rs` (+8 −2). The other three are unchanged. The check has to be reviewed against schema 33 (the `payload_reference` table and its `reference_rows` count) before its pins can move; moving the pins alone would skip that review |
+| 28 | `workspace_reliability` | harness limit, new with the merge | The NOT_APPLICABLE review of each case is bound to the Git tree of `core/crates` at `main`. Any product or test change under that folder ends it. The reasons recorded for the 28 cases (no per-Workspace physical spool figures, no public range-edit call, and others) are not about piece code, so a new review is likely to reach the same classification; it was not done |
+| 3 | `edit_length_changing_capped` | open owner decision (O-9) | The command phase moves a 500 MiB tail and takes 2.0 to 2.4 s against the 2 s limit. The piece work does not shorten exec (guideline non-goal) |
+| 1 | `file_size_transition` alias round trip | harness limit, as iteration 1 | The frozen helper's atomic save changes the parent directory's mtime; the frozen check wants the initial one |
+| 5 | `mixed_load_bearing` M1 cases | harness limit, as iteration 1 (H-17) | The frozen workload sets a file's mtime before writing it; the check then rejects `d000/f00054` or `d003/f00004` |
+| 9 | `multi_workspace_development` 5, `branch_development` 4 | open owner decision, as iteration 1 (its decision 55) | Two Workspaces act at once; one gets EAGAIN on a creating write or Busy at `Commit Begin`. The current contract refuses before effect with no retry; the workload requires every operation to succeed. Which refusal a sample meets depends on timing: two cases changed from Busy to EAGAIN between the runs |
+| 5 | `dedup_branch_history` 500-step cases | harness limit meeting product speed, as iteration 1 | 358 to 392 of 500 Commits were done when the case's own 120 s watchdog ended it. About 0.3 s a step; no wrong result seen |
+| 1 | `v016-mixed-exhaustive-500mb-30000-k100-v1` | harness limit | First time prepared. 100 commands (13.6 s) and 99 after-Commit records were done when the case's 120 s ceiling ended it before the proof |
+| 6 | `dedup-cdc-scattered-500`, three 500 MiB reuse cases, two 100,000-file footprints | harness limit, as iteration 1 | The measured operation completed; the check's 41 s work allowance ended in a fresh-mount comparison, a closed overlay export or a typed scan. Check time, in a 4 GB VM shared with other containers |
+| 1 | `workspace-dense-rewrite-500-mixed-v4` | not classified: product or interference | See "New cleanup failure" below |
+| 3 | `repository_history` | harness limit, as iteration 1 | The family's 120 s wall stop. See "Repository history" below |
+
+Also recorded, not failures of a row's checks: cell C10 (one READ fewer
+than the original triple, as iteration 1; exact-count gate) and the
+`unique-500` and two 100,000-file rows whose complete wall exceeds the
+declared 15 s.
+
+### Payload retention (12 rows)
+
+- **What the check requires.** `edit_oracle.rs` walks the committed file's
+  mapping before and after the edit. Every original chunk object that the
+  edit did not delete must still be named by the new mapping. For an insert
+  or prepend nothing is deleted, so every original chunk is required; for
+  replace-grow every chunk outside the replaced 2 KiB.
+- **What the edit engine does with an exact edit.** The existing Content
+  test `edit_shift_scaling.rs` applies one `Edit::insert` and asserts that no
+  base chunk is read and at most one chunk is created; the chunk the insert
+  falls in is kept as two slices of the same object. With an exact script
+  the check would be satisfied.
+- **So the loss is in the script Commit builds, not in the engine** (not
+  confirmed by a count). Any moved byte the recognizer did not claim is
+  stored as cells, reaches Commit as new bytes, and is chunked again; the
+  original chunk it belonged to is then no longer named. Candidates, from the
+  plan's own limits: the rest of the chunk the insert splits (claims are
+  whole chunks trimmed to 4 KiB cells; the edge compare by bytes is described
+  as optional), the first and last request of the moved tail, and a chunk
+  that spans three requests.
+- **Why delete and replace-shrink pass.** The chunk that overlaps the
+  deleted range is exempt from the check, and it is the one at the edit's
+  edge. An insert has no exempt chunk.
+- **What would settle it:** one external test that commits the benchmark's
+  insert and lists the lost objects by offset. A loss only at the edit's
+  edge is the plan's stated limit and stays with O-6; a loss elsewhere in the
+  tail would be a recognizer miss worth a fix.
+
+### The delete's Commit follows file size
+
+Commit of the delete: 12.0, 13.9, 29.6, 92.1 ms at 1, 10, 100, 500 MiB;
+the other shift edits stay at 12 to 28 ms. Issue 316's ledger has the same
+figures and a reading that was not reproduced there: the large delete leaves
+a few stored 4 KiB cells between pieces (two more at 100 MiB, eight more at
+500 MiB), and each is one more edit at Commit, several hundred record jobs
+at that tree height. This run adds only that the pattern is unchanged at the
+merged source. Class: product, open, cause not confirmed.
+
+### Counts that are higher than iteration 1
+
+`replace-grow` at 1 MiB (+3 jobs, +192 statements) and 10 MiB (+80, +1,278)
+and `insert` at 1 MiB (+33 statements). At these sizes the piece work's own
+statements (lookups and row updates a request) are not yet outweighed by the
+cells it avoids; at 100 and 500 MiB the same edits are lower by a factor of
+about four. Not confirmed by a statement profile.
+
+### New cleanup failure: `workspace-dense-rewrite-500-mixed-v4`
+
+Command 3,322 ms, Commit 16,235 ms, then 588 cleanup observations in the
+frozen 5 s readiness allowance, all `Queued`. Iteration 1's sample had a
+Commit of 11,499 ms and reached `Gone`. Two readings, neither confirmed:
+reclamation of a 500 MiB dense rewrite did not finish inside 5 s on a host
+that was slower for this sample (the Commit itself was 41% slower), or the
+merged source reclaims this shape more slowly. The 100 MiB sibling of the
+same family reached `Gone`. One count sample of reclamation jobs for this
+case at both sources would tell them apart.
+
+### Repository history
+
+The two stride samples were stopped by the wall stop while still making
+progress. In `deepseek-stride10` each Commit is slower than the one before:
+165 ms for the first, 4,374 ms for the fifteenth, with the commands growing
+the same way (272 ms to 5,661 ms). Later checkpoints of the repository are
+larger, so some growth is expected; whether Commit also grows with history
+already published was not separated.
+
+### Store sizes that differ by a few pages
+
+Many rows differ from iteration 1 by ±4 KiB to ±150 KiB in Store logical
+bytes, including Init-only families the piece work does not touch. Init
+keeps a parallel construction profile, so page placement can differ between
+runs; iteration 1's own repeated sources show the same scale. One row is
+larger by more: `dedup-history-unrelated-100-mixed-v2`, +1,069,056 B (+1.0%).
+Not examined.
+
+## Phase E — hand-back, 2026-10-11
+
+- **No second run.** Phase D changed no source, so the final source's
+  product is the baseline's: production LOC 81,718, daemon binary
+  `0215455c9d57…`, sampled at `d4d29ceb4` under tag `b1`. Sampling it again
+  would repeat an unchanged treatment. **The `b1` run recorded in phase C is
+  the baseline this rollout hands back.**
+- **CSVs** are committed beside iteration 1's: one folder a family under
+  `core/benchmark/fs-bench-pro/baselines/core/2026-10-11-<commit>/`, and the
+  cells under `core/benchmark/cluster-two/baselines/2026-10-11-d4d29ceb4/`.
+- **Originals removed**; no Docker volume or container of this run remains;
+  the result folders (1.2 GB, ignored by Git) stay in the worktree.
+- **Branch:** `issue318-benchmark-baseline`, local, not pushed, no pull
+  request. `main` and the other worktrees were not written to.
+
+### Baseline in one table
+
+| | this run (`b1`) | iteration 1 |
+| --- | --- | --- |
+| completed, functional PASS and proof PASS | 184 | 192 |
+| FAIL | 58 | 50 |
+| no receipt (wall stop) | 2 | 0 |
+| no row | 29 | 0 |
+| NOT_RUN | 0 | 3 |
+| NOT_APPLICABLE | 0 | 28 |
+| cells equal to the original triple | 11 of 12 | 10 of 12 |
+
+Of the 58 + 2 + 29 rows: 43 are new with the merge and come from two
+harness checks bound to iteration 1's product source (15 + 28); 1 is new and
+not classified (`dense-rewrite-500`); 2 are first samples of cases iteration 1
+could not prepare; 12 are the retention check (O-6); 3 the 2 s limit (O-9);
+the other 28 are iteration 1's failures with the same recorded cause.
+8 rows that failed in iteration 1 now complete with both checks PASS.
+
+### Not done, and why
+
+- No fix of any kind (owner instruction above).
+- The retention loss and the delete's Commit growth are analysed from
+  source and earlier records only; neither has a confirming count.
+- `workspace_reliability` has no status at this source and `deepseek-full`
+  was not prepared inside its 120 s stop.
+- No timing in this ledger supports a performance claim: every timed row
+  was sampled with interference declared.
+- Durable: `NOT_RUN — disabled by owner until explicit reauthorization`.
+
+### For the owner
+
+1. O-6: how the retention check is judged for shift edits.
+2. O-9: whether the 2 s limit of the capped family stays.
+3. Whether the two source-bound harness checks (closed-overlay pins, the
+   reliability review) should be reviewed at the merged source; until then
+   43 rows cannot report.
+4. Whether concurrent Workspaces should keep refusing before effect
+   (9 rows) or the workload should change.
+5. The decisions by agent listed in phases A and C.
+6. Benchmark volumes that earlier runs left in Docker, untouched here.
