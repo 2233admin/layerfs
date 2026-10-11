@@ -636,3 +636,44 @@ equal. Times are single diagnostic samples.
   0 containers more; originals 4438 MB, result folder
   393 MB; host 221 GiB free; `docker system df`: Images=21.51GB, Containers=12.85GB, Local Volumes=69.71GB, Build Cache=4.843GB.
 - CSVs: `core/benchmark/fs-bench-pro/baselines/core/2026-10-11-3e238d364/small_file_delta_smoke/`.
+
+## Phase C — batch 2, `edit_canonical_chunk_count`, tag `b1`, sampled at `a9dcfe107`
+
+Iteration 1's value is left of each arrow, this run's right; one value means
+equal. Times are single diagnostic samples.
+
+| case | status | functional | proof | requests | writer jobs | statements | overlay logical B | Store logical B | exec ms | Commit ms |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| overwrite-fixed-64k-chunk-count-preserve-on-1mib-ops-1 | INELIGIBLE | PASS | PASS | 10 | 154 -> 144 | 771 -> 738 | 299008 -> 303104 | 1442856 | 43.5 -> 32.7 | 11.5 -> 11.5 |
+| overwrite-fixed-64k-chunk-count-preserve-on-10mib-ops-1 | INELIGIBLE | PASS | PASS | 10 | 357 -> 347 | 1854 -> 1821 | 327680 -> 331776 | 11048264 | 91.9 -> 41.2 | 16.2 -> 14.0 |
+| overwrite-fixed-64k-chunk-count-preserve-on-100mib-ops-1 | INELIGIBLE | PASS | PASS | 10 | 357 -> 347 | 1854 -> 1821 | 335872 -> 339968 | 106538384 -> 106542504 | 556.7 -> 41.8 | 16.5 -> 14.1 |
+| overwrite-fixed-64k-chunk-count-preserve-on-500mib-ops-1 | INELIGIBLE | PASS | PASS | 10 | 504 -> 494 | 2613 -> 2580 | 372736 -> 376832 | 530974144 | 2801.0 -> 39.5 | 61.2 -> 23.4 |
+| overwrite-fixed-64k-chunk-count-increase-on-1mib-ops-1 | INELIGIBLE | PASS | PASS | 10 | 154 -> 144 | 771 -> 738 | 299008 -> 303104 | 1442856 | 42.6 -> 47.5 | 12.4 -> 12.7 |
+| overwrite-fixed-64k-chunk-count-increase-on-10mib-ops-1 | INELIGIBLE | PASS | PASS | 10 | 357 -> 347 | 1854 -> 1821 | 327680 -> 331776 | 11031784 -> 11035904 | 102.8 -> 54.7 | 14.8 -> 17.5 |
+| overwrite-fixed-64k-chunk-count-increase-on-100mib-ops-1 | INELIGIBLE | PASS | PASS | 10 | 357 -> 347 | 1854 -> 1821 | 335872 -> 339968 | 106538384 | 555.3 -> 38.4 | 17.5 -> 14.3 |
+| overwrite-fixed-64k-chunk-count-increase-on-500mib-ops-1 | INELIGIBLE | PASS | PASS | 10 | 504 -> 494 | 2613 -> 2580 | 372736 -> 376832 | 530978264 | 2620.6 -> 47.4 | 18.5 -> 22.4 |
+| overwrite-fixed-64k-chunk-count-decrease-on-1mib-ops-1 | INELIGIBLE | PASS | PASS | 10 | 154 -> 144 | 771 -> 738 | 299008 -> 303104 | 1376936 | 53.7 -> 32.7 | 13.2 -> 11.7 |
+| overwrite-fixed-64k-chunk-count-decrease-on-10mib-ops-1 | INELIGIBLE | PASS | PASS | 10 | 357 -> 347 | 1854 -> 1821 | 327680 -> 331776 | 10957624 -> 10961744 | 94.7 -> 43.0 | 13.5 -> 17.0 |
+| overwrite-fixed-64k-chunk-count-decrease-on-100mib-ops-1 | INELIGIBLE | PASS | PASS | 10 | 357 -> 347 | 1854 -> 1821 | 335872 -> 339968 | 106451864 | 562.1 -> 43.5 | 14.1 -> 13.9 |
+| overwrite-fixed-64k-chunk-count-decrease-on-500mib-ops-1 | INELIGIBLE | PASS | PASS | 10 | 504 -> 494 | 2613 -> 2580 | 372736 -> 376832 | 530912344 | 2675.4 -> 49.4 | 16.5 -> 20.8 |
+
+- 12 of 12: functional PASS, proof PASS, mount Gone with KnownStop, as in
+  iteration 1. Status INELIGIBLE (class B precondition), as in iteration 1.
+- **Requests are equal in all 12 cases** (10). Writer jobs are lower by 10
+  and statements by 33 in every case; overlay logical bytes are 4,096 higher.
+- **Exec is 33 to 55 ms at every size, against 43 ms to 2,801 ms in iteration
+  1. This is the harness difference recorded in phase A, not the product:**
+  iteration 1's timed writer generated and hashed the whole expected file
+  for this family's final-digest check; here that check runs in preparation,
+  the writer's verify mode and the oracle only. The daemon served the same 10
+  requests in both. The exec column of this family must not be compared
+  with the control.
+- Commit is 11.5 to 23.4 ms at every size (iteration 1: 11.5 to 61.2 ms).
+- This closes batch 2: 62 cases, 47 functional and proof PASS (iteration 1:
+  39), 12 retention failures (20), 3 capped-limit failures (3).
+
+- Storage after the family: 5 Docker volumes more than before the run
+  (5 of them masters of current originals, 0 unexplained),
+  0 containers more; originals 4438 MB, result folder
+  393 MB; host 221 GiB free; `docker system df`: Images=21.51GB, Containers=12.85GB, Local Volumes=69.71GB, Build Cache=4.843GB.
+- CSVs: `core/benchmark/fs-bench-pro/baselines/core/2026-10-11-3e238d364/edit_canonical_chunk_count/`.
