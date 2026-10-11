@@ -227,3 +227,48 @@ scope adds no Rust crate requiring Clippy. Latest daemon/Workspace Clippy is
 PASS at the sampled source; formatting, whitespace and boundary guard checked
 for this evidence commit. Production LOC: 81727 -> 81727 (delta +0).
 Phase 1 complete. Decided by agent, pending owner review: retain the harness fix.
+
+## Phase 2 exit — selected cases and guards, tag `p319-12`, 2026-10-11
+
+Fix commit `0d1eeb560` is confirmed by exact committed-tree LOC:
+81718 -> 81727 (delta +9). All five preparations and samples use that commit
+and the sealed build identified in phase 1. One original at a time for these
+edit cases, one sample clone, all copies removed after their own receipts.
+Counts below compare b1, with no timing comparison.
+
+| Case | Status | Functional / proof | Requests b1 → current | Jobs b1 → current | Statements b1 → current | Overlay bytes b1 → current |
+| --- | --- | --- | ---: | ---: | ---: | ---: |
+| insert-middle-4k-on-1mib-ops-1 | INELIGIBLE | PASS / PASS | 27 → 27 | 212 → 160 | 1227 → 929 | 286720 → 262144 |
+| insert-middle-4k-on-100mib-ops-1 | INELIGIBLE | PASS / PASS | 1611 → 1611 | 2362 → 2007 | 23775 → 22112 | 323584 → 299008 |
+| replace-grow-middle-2k-to-4k-on-10mib-ops-1 | INELIGIBLE | PASS / PASS | 172 → 172 | 1376 → 1055 | 8252 → 6740 | 331776 → 311296 |
+| delete-middle-4k-on-100mib-ops-1 | INELIGIBLE | PASS / PASS | 1212 → 1212 | 2661 → 2661 | 26166 → 26166 | 339968 → 339968 |
+| overwrite-middle-4k-on-1mib-ops-1 | INELIGIBLE | PASS / PASS | 11 → 11 | 145 → 145 | 740 → 740 | 245760 → 245760 |
+
+All five actual receipts: functional PASS, proof PASS, Gone and KNOWN_STOP;
+overall INELIGIBLE under unchanged cache declarations and shared-VM interference.
+Both guards have **exactly equal requests/jobs/statements/overlay bytes**.
+The target rows save 52, 355 and 321 writer jobs; 298, 1,663 and 1,512
+statements; 24,576, 24,576 and 20,480 overlay logical bytes respectively.
+Arithmetic is b1 minus current. No byte, retention or readback oracle changed.
+
+Decided by agent, pending owner review: keep the fix. Revert condition is not
+triggered. The architecture update and external failing-before-fix assertion
+are in the fix commit. Only the phase's requested tests and samples ran.
+O-6 is not decided by this result; the full final cohort remains to be sampled.
+
+Exact commands: `go.py p319-12 110 prepare|run <family>:<case>` for the five
+IDs in the table, then `clean originals` and engine `report`. Every call has an
+external 118-second stop. Raw evidence remains under the tag's run directories;
+partial-selection engine CSVs are committed under
+`core/benchmark/fs-bench-pro/baselines/core/2026-10-11-0d1eeb560/` in
+`edit_length_changing` and `edit_length_preserving`. Unsampled rows remain
+NOT_RUN. This entry does not claim complete-family results.
+
+Storage after the whole selected batch: zero new volumes, containers or
+original masters; zero originals; no deletion from the protected pre-run lists.
+The ignored result folder is 1,177 MB, host free disk 221 GiB. Existing protected
+containers and 69.06 GB of VM volumes remain. Latest required touched-crate
+Clippy, formatting, boundary guard and self-tests passed at the fix source;
+this evidence commit checks formatting/whitespace/guard with no Rust changes.
+Production LOC: 81727 -> 81727 (delta +0).
+Phase 2 complete; phase 1 evidence exit committed at `8f1bd9db4`.
