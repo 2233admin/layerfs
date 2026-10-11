@@ -787,3 +787,99 @@ the delete: not met at 500 MiB as observed; left open.**
 - Byte-compared edges: not done, decision 3.
 - Tier 4: not sampled at this entry.
 - Nothing was reverted.
+
+## Tier 4 interrupted; storage rule — 2026-10-11, commit `bd46378f1`
+
+Not a phase checkpoint. Product source is unchanged since `5239bfaa1`.
+
+### What happened
+
+- **This run filled the disk.** Every tag prepared its own set of inputs
+  (source tree, expected tree, sealed Store and master volume a case), and
+  every sample kept an exported closed Store beside its receipt; a sample
+  that was FAIL also kept its clone volume and its stopped container. The six
+  tags of this run (`c0`, `p1`, `p2a`, `p3a`, `p3d`, `p4`) held about 81 GB
+  under the ignored result folder, where the five tags of 2026-10-10 held
+  about 39 GB more, and the worktree's own build caches 23 GB. The volume
+  reached 3.6 GiB free and a tier 4 preparation step failed with
+  `StorageFull`.
+- **The worktree's files were then removed from outside this session**, at
+  13:04 local time, while a tier 4 sample was running. The branch, its
+  commits and the worktree's registration were not touched; the tracked
+  files were restored from the branch.
+- **Lost with the ignored folders:** every receipt of this run, so the
+  tables in this ledger and in the comments on issue 317 are now the only
+  record of tags `c0` to `p3d` and cannot be derived again; the draft of the
+  byte-compared edges; the Linux test wrapper and the case lists; the lock
+  wrapper and the build caches (recreated from the main checkout, read only).
+- **Tier 4, tag `p4`:** 33 of 42 cases had been sampled (23 small, 9 at size
+  100, `payload-random-read-500`). `tiny-create-500` failed before its sample
+  on a record truncated when the disk was full; `tiny-stat-500` was running
+  when the files went. No `p4` row had been read into a table. **No `p4`
+  result is reported.**
+
+### Storage rule (owner, 2026-10-11) and the driver
+
+"keep at most two copies of them (one original copy (never change). one for
+test copy which is initially clone from original copy)".
+
+| Commit | Subject | Production LOC |
+| --- | --- | --- |
+| `bd46378f1` | Benchmark driver: one original and one test copy of a payload | 81714 -> 81714 (delta +0) |
+
+- **Original:** the prepared folder of a case and its master volume, once,
+  under `issue316-originals/`, shared by every tag. Replaced, never
+  duplicated, when the product or harness source it was prepared from
+  differs from the current one or its preparation did not finish.
+- **Test copy:** the sample's clone volume, every container on that volume
+  and the exported closed Store. Removed as soon as the sample has ended,
+  whatever its status; `payload-cleanup.json` beside the receipt records it.
+  Receipts, logs and counts stay. A later offline census of the sample is not
+  possible, and the harness's own receipt still says "retained" for what the
+  driver removes afterwards.
+- `tier.py` only prints a tier's cases now; its whole-tier route is removed.
+- The harness engine is unchanged.
+
+### Checks at `bd46378f1`
+
+- `check_cleanup.py`: a made-up sample with a claimed volume, a running and
+  a never-started container on it, an exported Store and an unclaimed
+  volume. All seven checks true.
+- Two real samples through the new route, tag `s1`:
+
+| case | status | proof | exec ms | Commit ms | requests | writer jobs | statements | overlay MB |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| delete-middle-4k-on-10mib-ops-1 | INELIGIBLE | PASS | 66.7 | 13.5 | 132 | 508 | 3897 | 0.3 |
+| insert-middle-4k-on-10mib-ops-1 | FAIL | FAIL | 68.7 | 18.0 | 171 | 867 | 5522 | 0.3 |
+
+  The insert is `independent-graph failed with exit 1`, the retention guard
+  (O-6, with the owner); its requests, writer jobs and statements equal the
+  `p3d` row. The second case reused the first one's master volume. After the
+  samples the result folder held 3.8 MB and the two originals 73 MB; the
+  failed sample's volume and container were gone. `clean originals` then
+  removed both originals and the master volume with the second of them.
+
+### Mistakes of this run, as they happened
+
+- **Storage was never measured.** Nothing in this run looked at free space
+  or at the size of its own output until a step failed.
+- A piped command hid the first failure: the preparation call that hit the
+  full disk printed nothing and one of its records was truncated.
+
+### Left as found
+
+- **Docker still holds what earlier tags kept:** the clone volume and the
+  stopped container of each FAIL sample, and one master volume for each
+  distinct input of each tag. With the receipts gone these can no longer be
+  told apart from another agent's by evidence, so none was removed.
+  Removing them is the owner's decision.
+- One daemon container of this run, matched to its receipt by volume, was
+  stopped and removed with its volume.
+
+### What failed or was not done
+
+- Tier 4 samples: none reportable; to be sampled again through the new route
+  under a new tag.
+- Tier 4 checks (full package tests, Clippy on all targets, guard and
+  self-tests, mounted proofs): not run at this entry.
+- Nothing was reverted.
