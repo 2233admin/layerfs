@@ -574,3 +574,44 @@ Failure texts, as recorded:
   0 containers more; originals 11754 MB, result folder
   361 MB; host 213 GiB free; `docker system df`: Images=21.51GB, Containers=12.85GB, Local Volumes=70.78GB, Build Cache=4.843GB.
 - CSVs: `core/benchmark/fs-bench-pro/baselines/core/2026-10-11-c7f283e6e/edit_length_changing/`.
+
+## Phase C — batch 2, `edit_length_changing_capped`, tag `b1`, sampled at `716ab3743`
+
+Iteration 1's value is left of each arrow, this run's right; one value means
+equal. Times are single diagnostic samples.
+
+| case | status | functional | proof | requests | writer jobs | statements | overlay logical B | Store logical B | exec ms | Commit ms |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| insert-middle-4k-input-524283904b-result-500mib-ops-1-capped-v1 | FAIL | FAIL -> - | NOT_RUN | - | - | - | - | - | - -> 0.0 | - -> 0.0 |
+| append-tail-4k-input-524283904b-result-500mib-ops-1-capped-v1 | INELIGIBLE | PASS | PASS | 11 | 179 -> 173 | 899 -> 880 | 258048 -> 262144 | 530875288 | 37.2 -> 43.0 | 13.1 -> 16.1 |
+| prepend-head-4k-input-524283904b-result-500mib-ops-1-capped-v1 | FAIL | FAIL -> - | NOT_RUN | - | - | - | - | - | - -> 0.0 | - -> 0.0 |
+| replace-grow-middle-2k-to-4k-input-524285952b-result-500mib-ops-1-capped-v1 | FAIL | FAIL -> - | NOT_RUN | - | - | - | - | - | - -> 0.0 | - -> 0.0 |
+| zero-extend-tail-4k-input-524283904b-result-500mib-ops-1-capped-v1 | INELIGIBLE | PASS | PASS | 11 | 179 -> 173 | 899 -> 880 | 258048 -> 262144 | 530887648 | 41.4 -> 36.5 | 30.4 -> 13.3 |
+
+Failure texts, as recorded:
+
+- `insert-middle-4k-input-524283904b-result-500mib-ops-1-capped-v1`: original event wall stop: command
+- `prepend-head-4k-input-524283904b-result-500mib-ops-1-capped-v1`: original event wall stop: command
+- `replace-grow-middle-2k-to-4k-input-524285952b-result-500mib-ops-1-capped-v1`: original event wall stop: command
+
+- **2 of 5 are functional PASS and proof PASS, 3 are FAIL with proof NOT_RUN,
+  exactly as in iteration 1.** The three FAIL rows are the insert, prepend
+  and replace-grow of a 500 MiB result; receipt text of each: `original event
+  wall stop: command`. The family's 2 s limit for the edit command expired
+  while the writer was moving the tail; no Commit, proof, End or KnownStop
+  followed, so the rows have no counts, storage or phase times. The limit is
+  with the owner (O-9); nothing was changed.
+- For scale, the same three edits without the 2 s limit, in
+  `edit_length_changing` above, took 2,185, 4,920 and 2,407 ms of exec.
+- The two passing cases (append and zero-extend) equal iteration 1 in
+  requests; writer jobs and statements are lower by 5 and 16, overlay logical
+  bytes 4,096 higher, as in the other edit families.
+- A sample ended by the limit leaves its daemon container running on the
+  sample's volume. The driver stopped and removed the three containers and
+  their volumes, each matched by the volume name in the sample's own records.
+
+- Storage after the family: 2 Docker volumes more than before the run
+  (2 of them masters of current originals, 0 unexplained),
+  0 containers more; originals 6056 MB, result folder
+  366 MB; host 219 GiB free; `docker system df`: Images=21.51GB, Containers=12.85GB, Local Volumes=70.13GB, Build Cache=4.843GB.
+- CSVs: `core/benchmark/fs-bench-pro/baselines/core/2026-10-11-716ab3743/edit_length_changing_capped/`.
