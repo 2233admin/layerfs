@@ -883,3 +883,27 @@ test copy which is initially clone from original copy)".
 - Tier 4 checks (full package tests, Clippy on all targets, guard and
   self-tests, mounted proofs): not run at this entry.
 - Nothing was reverted.
+
+### Stop: Docker's own disk is full (same day, after `8024cc318`)
+
+Tier 4 was started again through the new route under tag `p5`. 37 of 42
+originals were prepared; five (`workspace-clean-commit`, `-fixed-move` at
+sizes 100 and 500, `-distributed-sdk-edit` at 100) failed in Store install
+with `ConnectionReset`, and a plain `docker run` then answered
+`no space left on device` from the engine's snapshot folder. The host had
+214 GiB free at that moment: the limit is Docker's virtual disk.
+
+- **No `p5` case was sampled.** All 37 originals and their master volumes
+  were removed again with `clean originals`, so this run holds nothing in
+  Docker that it can identify.
+- **What fills it, as counted:** 302 stopped containers of the benchmark
+  image, 113 sample volumes and 77 master volumes, 87 of those volumes used
+  by no container, and 36 daemon containers running for 7 to 21 hours.
+  `docker system df` reports 125 GB of containers and 69 GB of volumes.
+  Part of it is from this run's earlier tags; none of it can be attributed
+  by evidence now.
+- **Blocked until the owner frees it:** every benchmark sample and the
+  Linux mounted proofs. Host tests, Clippy and the guard are not blocked.
+- Driver fix in the same commit: removing an original also removes the
+  setup container a failed preparation leaves on its master volume, and a
+  master volume that was never created is not reported as a failure.

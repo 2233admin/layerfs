@@ -115,7 +115,11 @@ def drop_original(folder, why):
     size = remove_tree(folder)
     kept = [other for other in folders(ROOT / ORIGINALS) if master(other) == volume]
     code, error = 0, ""
-    if volume and not kept:
+    if volume and not kept and volume in docker("volume", "ls", "--quiet", "--filter", "name=" + volume)[1].split():
+        # A preparation that failed leaves its setup container on the master volume.
+        for container in docker("ps", "--all", "--quiet", "--filter", "volume=" + volume)[1].split():
+            docker("stop", "--time", "2", container)
+            docker("rm", container)
         code, _, error = docker("volume", "rm", volume)
     print(json.dumps({"original_removed": folder.name, "why": why, "bytes": size,
                       "master_volume": "shared with another original" if kept else volume,
