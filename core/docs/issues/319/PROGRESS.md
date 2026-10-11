@@ -130,3 +130,60 @@ comment/checklist is deferred until those receipts exist. They will use a fresh
 tag and compare counts with b1, not iteration 1 or timings.
 
 Production LOC: 81718 -> 81718 (delta +0). Harness/test/docs-only change.
+
+## Phase 2 — failing regression and product fix, 2026-10-11
+
+Phase 1 harness implementation committed at `b97857b7f`, production unchanged.
+Converted phase 0's retention test into an assertion that no original chunk
+wholly outside the edit is lost. It fails before the fix after completing its
+byte checks and releasing the rig: chunk at offset 964,716 is missing. Raw red
+output is retained, with [derived red/green counts](checks/phase2-retention-counts.txt).
+
+Cause, source-confirmed and reproduced: on the first backward tail write,
+`WriteRun::pass` searches for a whole match, then calls `Pass::follow` from that
+match. `follow` sought the match's source offset and never visited the preceding
+extent that holds the request's first byte. Its `leading` stayed empty, so
+`back()` could not retain that partial chunk's tail. The next adjacent request
+could not complete the chunk, leaving a stored stretch far from the edit.
+
+Fix in Workspace `operations/file/recognize.rs`: a followed run with no earlier
+claim visits from the request's first source byte, records only an extent
+crossing that beginning, and still begins claims at the searched whole match.
+An unclaimed old leading extent is cleared before another shift is followed.
+The existing adjacent-request hash completion and earlier-publication revision
+check remain the only proof for a backward claim. No committed payload read,
+extra retained chunk, changed budget, new API, SQL change or alternate encoder.
+The traversal added is bounded by the request prefix before the match and one
+leading extent/path, not file size. Updated the owning architecture note
+[77](../../architecture/77-native-mutation-coherence.md).
+
+| Retention diagnostic, 1 MiB | Before | After |
+| --- | ---: | ---: |
+| Lost original chunks | 1 | 0 |
+| Piece rows | 2 | 1 |
+| Stored cells / bytes | 5 / 36,864 | 2 / 12,288 |
+| Producer record jobs | 42 | 42 |
+| Record-class jobs | 165 | 118 |
+| Owner jobs | 185 | 133 |
+| Statements | 968 | 673 |
+| Final extents | 56 | 55 |
+
+After counts agree on host and pinned Linux. This is diagnostic evidence;
+the listed timed cases and guard decision are still NOT_RUN at this entry.
+
+Scoped checks (each invocation 118-second stop, build `--no-run -j 3` first):
+retention regression 1/1, daemon `recognizer` 5/5, unchanged
+`recognizer_patterns` 9/9, `piece_commit` 1/1, on both host and pinned Linux.
+No mounted or unrelated package suite selected. Host Clippy all targets on
+Workspace and daemon with `-D warnings`: PASS. Formatting, whitespace,
+boundary guard (683 files) and its 50 self-tests: PASS. All owned Linux test
+containers removed. Full dependency checker retains the phase 0 tooling gap;
+actual core package provenance unchanged.
+
+Production LOC: 81718 -> 81727 (delta +9). Growth supplies the missing bounded
+leading-extent traversal and exact crossing checks. No retirement/relocation.
+
+Decided by agent, pending owner review: retain provisionally until the listed
+samples show no worse count in either guard; revert on a guard count regression.
+A fresh sealed build and fresh originals follow at this committed identity,
+shared by phase 1 and phase 2's selected sampling.

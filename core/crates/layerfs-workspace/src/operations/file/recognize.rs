@@ -350,7 +350,7 @@ struct Pass<'a, 's> {
     data: &'a [u8],
     ranges: Vec<ClaimedRange>,
     /// The committed chunk that holds the request's first byte and begins
-    /// before it, when a followed run started there.
+    /// before it, including the first run established by a search.
     leading: Option<Extent>,
     work: &'a mut RecognizeWork,
 }
@@ -505,14 +505,26 @@ impl Pass<'_, '_> {
         from: usize,
     ) -> ContentResult<(usize, Option<(usize, Extent)>)> {
         let first = i128::from(self.offset) + from as i128;
-        let source = u64::try_from((first - i128::from(delta)).max(0)).unwrap_or(u64::MAX);
+        // A search starts at its first whole match. Also visit the chunk
+        // holding the request's first byte so a backward writer can carry
+        // its tail into the next request. No earlier bytes are claimed here.
+        let scan = if self.ranges.is_empty() {
+            self.leading = None;
+            i128::from(self.offset)
+        } else {
+            first
+        };
+        let source = u64::try_from((scan - i128::from(delta)).max(0)).unwrap_or(u64::MAX);
         self.cursor.seek(source);
         let (mut misses, mut resume, mut crossing) = (0, None, None);
         while let Some(extent) = self.next()? {
             let file = i128::from(extent.offset) + i128::from(delta);
             // The extent that holds the first byte may begin before it.
             if file < first {
-                if from == 0 && extent.chunk_offset == 0 {
+                if file < i128::from(self.offset)
+                    && file + i128::from(extent.length) > i128::from(self.offset)
+                    && extent.chunk_offset == 0
+                {
                     self.leading = Some(extent);
                 }
                 continue;

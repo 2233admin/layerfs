@@ -326,3 +326,24 @@ Every mutating opcode is counted by opcode and disposal like the read path.
 length the kernel has sent on the connection (2026-10-10, owner decision C-2):
 the observed request maxima beside the negotiated 131072. The counts are
 reported in the connection's drain receipt.
+
+Issue 319 update, 2026-10-11 (after harness checkpoint `b97857b7f`): the first
+follow established by a search now visits the committed extent holding the
+request's first byte, before the whole match where following begins. It retains
+that leading extent only when it crosses the request's beginning; it makes no
+claim for it. This supplies the existing backward carry with the earlier
+request's own tail bytes. The next adjacent request still has to complete the
+whole chunk identity, and Overlay still checks the earlier publication revision
+before accepting a claim beyond the request. A changed shift clears a previous
+unclaimed leading extent. No committed payload is fetched, and the slot, search,
+hash and claim budgets are unchanged.
+
+The added traversal covers only the prefix of this bounded request before the
+search's first match, at most the request window, plus its leading extent and
+mapping path. It does not scan the file prefix or retain another chunk. Initial
+search previously skipped that leading extent, leaving an unclaimed chunk at
+the first backward request boundary far from the actual edit. The external
+[retention regression](../../crates/layerfs-daemon/tests/recognizer_diagnostics.rs)
+uses the exact benchmark fixture and request pattern, verifies every committed
+byte and asserts that original chunks away from the edit remain named. This
+source description is separate from the [issue 319 measurements](../issues/319/PROGRESS.md).

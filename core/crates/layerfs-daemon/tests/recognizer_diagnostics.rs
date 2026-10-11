@@ -152,9 +152,13 @@ fn benchmark_insert_lists_original_chunks_no_longer_named() {
     );
     let named: BTreeSet<_> = new.iter().map(|extent| extent.chunk).collect();
     let mut lost = 0;
+    let mut lost_away_from_edit = Vec::new();
     for extent in &old {
         if !named.contains(&extent.chunk) {
             lost += 1;
+            if extent.offset >= p as u64 || extent.offset + u64::from(extent.length) <= p as u64 {
+                lost_away_from_edit.push((extent.offset, extent.chunk));
+            }
             evidence(format_args!("DIAGNOSTIC_LOST offset={} end={} length={} chunk_offset={} chunk={:?} distance_from_edit={}", extent.offset, extent.offset + u64::from(extent.length), extent.length, extent.chunk_offset, extent.chunk, extent.offset.abs_diff(p as u64)));
         }
     }
@@ -164,6 +168,10 @@ fn benchmark_insert_lists_original_chunks_no_longer_named() {
         new.len()
     ));
     finish(rig, workspace);
+    assert!(
+        lost_away_from_edit.is_empty(),
+        "original chunks lost away from the edit: {lost_away_from_edit:?}"
+    );
 }
 
 #[test]
