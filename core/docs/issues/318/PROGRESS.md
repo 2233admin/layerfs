@@ -677,3 +677,9 @@ equal. Times are single diagnostic samples.
   0 containers more; originals 4438 MB, result folder
   393 MB; host 221 GiB free; `docker system df`: Images=21.51GB, Containers=12.85GB, Local Volumes=69.71GB, Build Cache=4.843GB.
 - CSVs: `core/benchmark/fs-bench-pro/baselines/core/2026-10-11-3e238d364/edit_canonical_chunk_count/`.
+
+**Correction to the `edit_canonical_chunk_count` heading above:** its samples
+were registered and taken at `3e238d364`, not `a9dcfe107`; the latter is the
+ledger commit of `small_file_delta_smoke`, made between the last sample and
+this entry. Product and harness source are the same at both. Later headings
+take the commit from the family's run registration.
