@@ -97,7 +97,7 @@
       "verification_attempts_if_applicable": 0,
       "cache_contract": {
         "class": "B",
-        "numeric_result": "N/A — verification-only; all diagnostic numeric results INELIGIBLE without independent paid-input coldness proof",
+        "numeric_result": "N/A \u2014 verification-only; all diagnostic numeric results INELIGIBLE without independent paid-input coldness proof",
         "starting_state": "independent closed pristine sample; no measured performance phase or warmup",
         "setup_and_positive_control_warmth": "declared proof work only; never numerical cold credit",
         "all_paid_backing_metadata_sqlite_phase_evidence": "UNAVAILABLE"
@@ -197,8 +197,8 @@
       "applicability": {
         "schema": "original-reliability-applicability-v1",
         "classification": "not-applicable",
-        "reviewed_source_commit": "359c3c7d0cf84f4072a4af1ec8bd37497a75b722",
-        "reviewed_product_tree": "9ac88edb2cc44d44edd4a53f9ad89f4dee063a58",
+        "reviewed_source_commit": "2f77ddeff2cb3a2403f2203041834b52eff5ecd0",
+        "reviewed_product_tree": "b99f79e3dd972ebd6bbd1db2fc2626d08a289e19",
         "source_commit": "d296981ace76fe751bebf00dee52818fe18a3eef",
         "source_tag_object": "ae3310fada4a1fe35cb99ab02270b7538a0d03f7",
         "original_driver_sha256": "cd6df93628527629f1f012755e2816f45df066ae8b7e291b7d8d45babfc3df27",
@@ -315,7 +315,7 @@
       "verification_attempts_if_applicable": 0,
       "cache_contract": {
         "class": "B",
-        "numeric_result": "N/A — verification-only; all diagnostic numeric results INELIGIBLE without independent paid-input coldness proof",
+        "numeric_result": "N/A \u2014 verification-only; all diagnostic numeric results INELIGIBLE without independent paid-input coldness proof",
         "starting_state": "independent closed pristine sample; no measured performance phase or warmup",
         "setup_and_positive_control_warmth": "declared proof work only; never numerical cold credit",
         "all_paid_backing_metadata_sqlite_phase_evidence": "UNAVAILABLE"
@@ -414,8 +414,8 @@
       "applicability": {
         "schema": "original-reliability-applicability-v1",
         "classification": "not-applicable",
-        "reviewed_source_commit": "359c3c7d0cf84f4072a4af1ec8bd37497a75b722",
-        "reviewed_product_tree": "9ac88edb2cc44d44edd4a53f9ad89f4dee063a58",
+        "reviewed_source_commit": "2f77ddeff2cb3a2403f2203041834b52eff5ecd0",
+        "reviewed_product_tree": "b99f79e3dd972ebd6bbd1db2fc2626d08a289e19",
         "source_commit": "d296981ace76fe751bebf00dee52818fe18a3eef",
         "source_tag_object": "ae3310fada4a1fe35cb99ab02270b7538a0d03f7",
         "original_driver_sha256": "cd6df93628527629f1f012755e2816f45df066ae8b7e291b7d8d45babfc3df27",
@@ -532,7 +532,7 @@
       "verification_attempts_if_applicable": 0,
       "cache_contract": {
         "class": "B",
-        "numeric_result": "N/A — verification-only; all diagnostic numeric results INELIGIBLE without independent paid-input coldness proof",
+        "numeric_result": "N/A \u2014 verification-only; all diagnostic numeric results INELIGIBLE without independent paid-input coldness proof",
         "starting_state": "independent closed pristine sample; no measured performance phase or warmup",
         "setup_and_positive_control_warmth": "declared proof work only; never numerical cold credit",
         "all_paid_backing_metadata_sqlite_phase_evidence": "UNAVAILABLE"
@@ -628,8 +628,8 @@
       "applicability": {
         "schema": "original-reliability-applicability-v1",
         "classification": "not-applicable",
-        "reviewed_source_commit": "359c3c7d0cf84f4072a4af1ec8bd37497a75b722",
-        "reviewed_product_tree": "9ac88edb2cc44d44edd4a53f9ad89f4dee063a58",
+        "reviewed_source_commit": "2f77ddeff2cb3a2403f2203041834b52eff5ecd0",
+        "reviewed_product_tree": "b99f79e3dd972ebd6bbd1db2fc2626d08a289e19",
         "source_commit": "d296981ace76fe751bebf00dee52818fe18a3eef",
         "source_tag_object": "ae3310fada4a1fe35cb99ab02270b7538a0d03f7",
         "original_driver_sha256": "cd6df93628527629f1f012755e2816f45df066ae8b7e291b7d8d45babfc3df27",
@@ -746,7 +746,7 @@
       "verification_attempts_if_applicable": 0,
       "cache_contract": {
         "class": "B",
-        "numeric_result": "N/A — verification-only; all diagnostic numeric results INELIGIBLE without independent paid-input coldness proof",
+        "numeric_result": "N/A \u2014 verification-only; all diagnostic numeric results INELIGIBLE without independent paid-input coldness proof",
         "starting_state": "independent closed pristine sample; no measured performance phase or warmup",
         "setup_and_positive_control_warmth": "declared proof work only; never numerical cold credit",
         "all_paid_backing_metadata_sqlite_phase_evidence": "UNAVAILABLE"
@@ -843,8 +843,8 @@
       "applicability": {
         "schema": "original-reliability-applicability-v1",
         "classification": "not-applicable",
-        "reviewed_source_commit": "359c3c7d0cf84f4072a4af1ec8bd37497a75b722",
-        "reviewed_product_tree": "9ac88edb2cc44d44edd4a53f9ad89f4dee063a58",
+        "reviewed_source_commit": "2f77ddeff2cb3a2403f2203041834b52eff5ecd0",
+        "reviewed_product_tree": "b99f79e3dd972ebd6bbd1db2fc2626d08a289e19",
         "source_commit": "d296981ace76fe751bebf00dee52818fe18a3eef",
         "source_tag_object": "ae3310fada4a1fe35cb99ab02270b7538a0d03f7",
         "original_driver_sha256": "cd6df93628527629f1f012755e2816f45df066ae8b7e291b7d8d45babfc3df27",
@@ -961,7 +961,7 @@
       "verification_attempts_if_applicable": 0,
       "cache_contract": {
         "class": "B",
-        "numeric_result": "N/A — verification-only; all diagnostic numeric results INELIGIBLE without independent paid-input coldness proof",
+        "numeric_result": "N/A \u2014 verification-only; all diagnostic numeric results INELIGIBLE without independent paid-input coldness proof",
         "starting_state": "independent closed pristine sample; no measured performance phase or warmup",
         "setup_and_positive_control_warmth": "declared proof work only; never numerical cold credit",
         "all_paid_backing_metadata_sqlite_phase_evidence": "UNAVAILABLE"
@@ -1058,8 +1058,8 @@
       "applicability": {
         "schema": "original-reliability-applicability-v1",
         "classification": "not-applicable",
-        "reviewed_source_commit": "359c3c7d0cf84f4072a4af1ec8bd37497a75b722",
-        "reviewed_product_tree": "9ac88edb2cc44d44edd4a53f9ad89f4dee063a58",
+        "reviewed_source_commit": "2f77ddeff2cb3a2403f2203041834b52eff5ecd0",
+        "reviewed_product_tree": "b99f79e3dd972ebd6bbd1db2fc2626d08a289e19",
         "source_commit": "d296981ace76fe751bebf00dee52818fe18a3eef",
         "source_tag_object": "ae3310fada4a1fe35cb99ab02270b7538a0d03f7",
         "original_driver_sha256": "cd6df93628527629f1f012755e2816f45df066ae8b7e291b7d8d45babfc3df27",
@@ -1176,7 +1176,7 @@
       "verification_attempts_if_applicable": 0,
       "cache_contract": {
         "class": "B",
-        "numeric_result": "N/A — verification-only; all diagnostic numeric results INELIGIBLE without independent paid-input coldness proof",
+        "numeric_result": "N/A \u2014 verification-only; all diagnostic numeric results INELIGIBLE without independent paid-input coldness proof",
         "starting_state": "independent closed pristine sample; no measured performance phase or warmup",
         "setup_and_positive_control_warmth": "declared proof work only; never numerical cold credit",
         "all_paid_backing_metadata_sqlite_phase_evidence": "UNAVAILABLE"
@@ -1275,8 +1275,8 @@
       "applicability": {
         "schema": "original-reliability-applicability-v1",
         "classification": "not-applicable",
-        "reviewed_source_commit": "359c3c7d0cf84f4072a4af1ec8bd37497a75b722",
-        "reviewed_product_tree": "9ac88edb2cc44d44edd4a53f9ad89f4dee063a58",
+        "reviewed_source_commit": "2f77ddeff2cb3a2403f2203041834b52eff5ecd0",
+        "reviewed_product_tree": "b99f79e3dd972ebd6bbd1db2fc2626d08a289e19",
         "source_commit": "d296981ace76fe751bebf00dee52818fe18a3eef",
         "source_tag_object": "ae3310fada4a1fe35cb99ab02270b7538a0d03f7",
         "original_driver_sha256": "cd6df93628527629f1f012755e2816f45df066ae8b7e291b7d8d45babfc3df27",
@@ -1323,7 +1323,7 @@
       "steps": [],
       "cache_class": "B",
       "oracle": {
-        "scope": "Exact original reliability complete-case conditions: Write17 files:15×1MiB plus2×65536 bytes on exact alternating paths. Inject LaterAdmissionBatch at branch, exact injected qualified Workspace transaction failure; hit_count1 and committed_early_transactions>0 required. Head/base/count and initial snapshot unchanged despite prior admission waves; explicit new Commit succeeds and UpToDate.",
+        "scope": "Exact original reliability complete-case conditions: Write17 files:15\u00d71MiB plus2\u00d765536 bytes on exact alternating paths. Inject LaterAdmissionBatch at branch, exact injected qualified Workspace transaction failure; hit_count1 and committed_early_transactions>0 required. Head/base/count and initial snapshot unchanged despite prior admission waves; explicit new Commit succeeds and UpToDate.",
         "roots": "same original initial Branch/root and acknowledged Commit conditions; integrity cases make zero Commits and preserve namespace/history during isolated target fault",
         "original_complete_scope": "benchmark/fs-bench-pro/src/workspace_reliability.rs and unchanged native reliability_workloads.rs; all original checkpoints, errno/byte/inode and cleanup/resource conditions preserved",
         "current_additional_scope": "public authenticated typed root/mapping and complete inode-table membership; actual SDK tokens/readiness and immutable fault/reference/source custody",
@@ -1393,7 +1393,7 @@
       "verification_attempts_if_applicable": 0,
       "cache_contract": {
         "class": "B",
-        "numeric_result": "N/A — verification-only; all diagnostic numeric results INELIGIBLE without independent paid-input coldness proof",
+        "numeric_result": "N/A \u2014 verification-only; all diagnostic numeric results INELIGIBLE without independent paid-input coldness proof",
         "starting_state": "independent closed pristine sample; no measured performance phase or warmup",
         "setup_and_positive_control_warmth": "declared proof work only; never numerical cold credit",
         "all_paid_backing_metadata_sqlite_phase_evidence": "UNAVAILABLE"
@@ -1425,7 +1425,7 @@
         "schema": "original-workspace-reliability-proof-v1",
         "kind": "admission-batch-failure-retry",
         "original_ordered_obligations": [
-          "Write17 files:15×1MiB plus2×65536 bytes on exact alternating paths.",
+          "Write17 files:15\u00d71MiB plus2\u00d765536 bytes on exact alternating paths.",
           "Inject LaterAdmissionBatch at branch, exact injected qualified Workspace transaction failure; hit_count1 and committed_early_transactions>0 required.",
           "Head/base/count and initial snapshot unchanged despite prior admission waves; explicit new Commit succeeds and UpToDate."
         ],
@@ -1492,8 +1492,8 @@
       "applicability": {
         "schema": "original-reliability-applicability-v1",
         "classification": "not-applicable",
-        "reviewed_source_commit": "359c3c7d0cf84f4072a4af1ec8bd37497a75b722",
-        "reviewed_product_tree": "9ac88edb2cc44d44edd4a53f9ad89f4dee063a58",
+        "reviewed_source_commit": "2f77ddeff2cb3a2403f2203041834b52eff5ecd0",
+        "reviewed_product_tree": "b99f79e3dd972ebd6bbd1db2fc2626d08a289e19",
         "source_commit": "d296981ace76fe751bebf00dee52818fe18a3eef",
         "source_tag_object": "ae3310fada4a1fe35cb99ab02270b7538a0d03f7",
         "original_driver_sha256": "cd6df93628527629f1f012755e2816f45df066ae8b7e291b7d8d45babfc3df27",
@@ -1610,7 +1610,7 @@
       "verification_attempts_if_applicable": 0,
       "cache_contract": {
         "class": "B",
-        "numeric_result": "N/A — verification-only; all diagnostic numeric results INELIGIBLE without independent paid-input coldness proof",
+        "numeric_result": "N/A \u2014 verification-only; all diagnostic numeric results INELIGIBLE without independent paid-input coldness proof",
         "starting_state": "independent closed pristine sample; no measured performance phase or warmup",
         "setup_and_positive_control_warmth": "declared proof work only; never numerical cold credit",
         "all_paid_backing_metadata_sqlite_phase_evidence": "UNAVAILABLE"
@@ -1709,8 +1709,8 @@
       "applicability": {
         "schema": "original-reliability-applicability-v1",
         "classification": "not-applicable",
-        "reviewed_source_commit": "359c3c7d0cf84f4072a4af1ec8bd37497a75b722",
-        "reviewed_product_tree": "9ac88edb2cc44d44edd4a53f9ad89f4dee063a58",
+        "reviewed_source_commit": "2f77ddeff2cb3a2403f2203041834b52eff5ecd0",
+        "reviewed_product_tree": "b99f79e3dd972ebd6bbd1db2fc2626d08a289e19",
         "source_commit": "d296981ace76fe751bebf00dee52818fe18a3eef",
         "source_tag_object": "ae3310fada4a1fe35cb99ab02270b7538a0d03f7",
         "original_driver_sha256": "cd6df93628527629f1f012755e2816f45df066ae8b7e291b7d8d45babfc3df27",
@@ -1827,7 +1827,7 @@
       "verification_attempts_if_applicable": 0,
       "cache_contract": {
         "class": "B",
-        "numeric_result": "N/A — verification-only; all diagnostic numeric results INELIGIBLE without independent paid-input coldness proof",
+        "numeric_result": "N/A \u2014 verification-only; all diagnostic numeric results INELIGIBLE without independent paid-input coldness proof",
         "starting_state": "independent closed pristine sample; no measured performance phase or warmup",
         "setup_and_positive_control_warmth": "declared proof work only; never numerical cold credit",
         "all_paid_backing_metadata_sqlite_phase_evidence": "UNAVAILABLE"
@@ -1926,8 +1926,8 @@
       "applicability": {
         "schema": "original-reliability-applicability-v1",
         "classification": "not-applicable",
-        "reviewed_source_commit": "359c3c7d0cf84f4072a4af1ec8bd37497a75b722",
-        "reviewed_product_tree": "9ac88edb2cc44d44edd4a53f9ad89f4dee063a58",
+        "reviewed_source_commit": "2f77ddeff2cb3a2403f2203041834b52eff5ecd0",
+        "reviewed_product_tree": "b99f79e3dd972ebd6bbd1db2fc2626d08a289e19",
         "source_commit": "d296981ace76fe751bebf00dee52818fe18a3eef",
         "source_tag_object": "ae3310fada4a1fe35cb99ab02270b7538a0d03f7",
         "original_driver_sha256": "cd6df93628527629f1f012755e2816f45df066ae8b7e291b7d8d45babfc3df27",
@@ -2044,7 +2044,7 @@
       "verification_attempts_if_applicable": 0,
       "cache_contract": {
         "class": "B",
-        "numeric_result": "N/A — verification-only; all diagnostic numeric results INELIGIBLE without independent paid-input coldness proof",
+        "numeric_result": "N/A \u2014 verification-only; all diagnostic numeric results INELIGIBLE without independent paid-input coldness proof",
         "starting_state": "independent closed pristine sample; no measured performance phase or warmup",
         "setup_and_positive_control_warmth": "declared proof work only; never numerical cold credit",
         "all_paid_backing_metadata_sqlite_phase_evidence": "UNAVAILABLE"
@@ -2145,8 +2145,8 @@
       "applicability": {
         "schema": "original-reliability-applicability-v1",
         "classification": "not-applicable",
-        "reviewed_source_commit": "359c3c7d0cf84f4072a4af1ec8bd37497a75b722",
-        "reviewed_product_tree": "9ac88edb2cc44d44edd4a53f9ad89f4dee063a58",
+        "reviewed_source_commit": "2f77ddeff2cb3a2403f2203041834b52eff5ecd0",
+        "reviewed_product_tree": "b99f79e3dd972ebd6bbd1db2fc2626d08a289e19",
         "source_commit": "d296981ace76fe751bebf00dee52818fe18a3eef",
         "source_tag_object": "ae3310fada4a1fe35cb99ab02270b7538a0d03f7",
         "original_driver_sha256": "cd6df93628527629f1f012755e2816f45df066ae8b7e291b7d8d45babfc3df27",
@@ -2263,7 +2263,7 @@
       "verification_attempts_if_applicable": 0,
       "cache_contract": {
         "class": "B",
-        "numeric_result": "N/A — verification-only; all diagnostic numeric results INELIGIBLE without independent paid-input coldness proof",
+        "numeric_result": "N/A \u2014 verification-only; all diagnostic numeric results INELIGIBLE without independent paid-input coldness proof",
         "starting_state": "independent closed pristine sample; no measured performance phase or warmup",
         "setup_and_positive_control_warmth": "declared proof work only; never numerical cold credit",
         "all_paid_backing_metadata_sqlite_phase_evidence": "UNAVAILABLE"
@@ -2364,8 +2364,8 @@
       "applicability": {
         "schema": "original-reliability-applicability-v1",
         "classification": "not-applicable",
-        "reviewed_source_commit": "359c3c7d0cf84f4072a4af1ec8bd37497a75b722",
-        "reviewed_product_tree": "9ac88edb2cc44d44edd4a53f9ad89f4dee063a58",
+        "reviewed_source_commit": "2f77ddeff2cb3a2403f2203041834b52eff5ecd0",
+        "reviewed_product_tree": "b99f79e3dd972ebd6bbd1db2fc2626d08a289e19",
         "source_commit": "d296981ace76fe751bebf00dee52818fe18a3eef",
         "source_tag_object": "ae3310fada4a1fe35cb99ab02270b7538a0d03f7",
         "original_driver_sha256": "cd6df93628527629f1f012755e2816f45df066ae8b7e291b7d8d45babfc3df27",
@@ -2482,7 +2482,7 @@
       "verification_attempts_if_applicable": 0,
       "cache_contract": {
         "class": "B",
-        "numeric_result": "N/A — verification-only; all diagnostic numeric results INELIGIBLE without independent paid-input coldness proof",
+        "numeric_result": "N/A \u2014 verification-only; all diagnostic numeric results INELIGIBLE without independent paid-input coldness proof",
         "starting_state": "independent closed pristine sample; no measured performance phase or warmup",
         "setup_and_positive_control_warmth": "declared proof work only; never numerical cold credit",
         "all_paid_backing_metadata_sqlite_phase_evidence": "UNAVAILABLE"
@@ -2583,8 +2583,8 @@
       "applicability": {
         "schema": "original-reliability-applicability-v1",
         "classification": "not-applicable",
-        "reviewed_source_commit": "359c3c7d0cf84f4072a4af1ec8bd37497a75b722",
-        "reviewed_product_tree": "9ac88edb2cc44d44edd4a53f9ad89f4dee063a58",
+        "reviewed_source_commit": "2f77ddeff2cb3a2403f2203041834b52eff5ecd0",
+        "reviewed_product_tree": "b99f79e3dd972ebd6bbd1db2fc2626d08a289e19",
         "source_commit": "d296981ace76fe751bebf00dee52818fe18a3eef",
         "source_tag_object": "ae3310fada4a1fe35cb99ab02270b7538a0d03f7",
         "original_driver_sha256": "cd6df93628527629f1f012755e2816f45df066ae8b7e291b7d8d45babfc3df27",
@@ -2701,7 +2701,7 @@
       "verification_attempts_if_applicable": 0,
       "cache_contract": {
         "class": "B",
-        "numeric_result": "N/A — verification-only; all diagnostic numeric results INELIGIBLE without independent paid-input coldness proof",
+        "numeric_result": "N/A \u2014 verification-only; all diagnostic numeric results INELIGIBLE without independent paid-input coldness proof",
         "starting_state": "independent closed pristine sample; no measured performance phase or warmup",
         "setup_and_positive_control_warmth": "declared proof work only; never numerical cold credit",
         "all_paid_backing_metadata_sqlite_phase_evidence": "UNAVAILABLE"
@@ -2801,8 +2801,8 @@
       "applicability": {
         "schema": "original-reliability-applicability-v1",
         "classification": "not-applicable",
-        "reviewed_source_commit": "359c3c7d0cf84f4072a4af1ec8bd37497a75b722",
-        "reviewed_product_tree": "9ac88edb2cc44d44edd4a53f9ad89f4dee063a58",
+        "reviewed_source_commit": "2f77ddeff2cb3a2403f2203041834b52eff5ecd0",
+        "reviewed_product_tree": "b99f79e3dd972ebd6bbd1db2fc2626d08a289e19",
         "source_commit": "d296981ace76fe751bebf00dee52818fe18a3eef",
         "source_tag_object": "ae3310fada4a1fe35cb99ab02270b7538a0d03f7",
         "original_driver_sha256": "cd6df93628527629f1f012755e2816f45df066ae8b7e291b7d8d45babfc3df27",
@@ -2919,7 +2919,7 @@
       "verification_attempts_if_applicable": 0,
       "cache_contract": {
         "class": "B",
-        "numeric_result": "N/A — verification-only; all diagnostic numeric results INELIGIBLE without independent paid-input coldness proof",
+        "numeric_result": "N/A \u2014 verification-only; all diagnostic numeric results INELIGIBLE without independent paid-input coldness proof",
         "starting_state": "independent closed pristine sample; no measured performance phase or warmup",
         "setup_and_positive_control_warmth": "declared proof work only; never numerical cold credit",
         "all_paid_backing_metadata_sqlite_phase_evidence": "UNAVAILABLE"
@@ -3018,8 +3018,8 @@
       "applicability": {
         "schema": "original-reliability-applicability-v1",
         "classification": "not-applicable",
-        "reviewed_source_commit": "359c3c7d0cf84f4072a4af1ec8bd37497a75b722",
-        "reviewed_product_tree": "9ac88edb2cc44d44edd4a53f9ad89f4dee063a58",
+        "reviewed_source_commit": "2f77ddeff2cb3a2403f2203041834b52eff5ecd0",
+        "reviewed_product_tree": "b99f79e3dd972ebd6bbd1db2fc2626d08a289e19",
         "source_commit": "d296981ace76fe751bebf00dee52818fe18a3eef",
         "source_tag_object": "ae3310fada4a1fe35cb99ab02270b7538a0d03f7",
         "original_driver_sha256": "cd6df93628527629f1f012755e2816f45df066ae8b7e291b7d8d45babfc3df27",
@@ -3136,7 +3136,7 @@
       "verification_attempts_if_applicable": 0,
       "cache_contract": {
         "class": "B",
-        "numeric_result": "N/A — verification-only; all diagnostic numeric results INELIGIBLE without independent paid-input coldness proof",
+        "numeric_result": "N/A \u2014 verification-only; all diagnostic numeric results INELIGIBLE without independent paid-input coldness proof",
         "starting_state": "independent closed pristine sample; no measured performance phase or warmup",
         "setup_and_positive_control_warmth": "declared proof work only; never numerical cold credit",
         "all_paid_backing_metadata_sqlite_phase_evidence": "UNAVAILABLE"
@@ -3235,8 +3235,8 @@
       "applicability": {
         "schema": "original-reliability-applicability-v1",
         "classification": "not-applicable",
-        "reviewed_source_commit": "359c3c7d0cf84f4072a4af1ec8bd37497a75b722",
-        "reviewed_product_tree": "9ac88edb2cc44d44edd4a53f9ad89f4dee063a58",
+        "reviewed_source_commit": "2f77ddeff2cb3a2403f2203041834b52eff5ecd0",
+        "reviewed_product_tree": "b99f79e3dd972ebd6bbd1db2fc2626d08a289e19",
         "source_commit": "d296981ace76fe751bebf00dee52818fe18a3eef",
         "source_tag_object": "ae3310fada4a1fe35cb99ab02270b7538a0d03f7",
         "original_driver_sha256": "cd6df93628527629f1f012755e2816f45df066ae8b7e291b7d8d45babfc3df27",
@@ -3314,7 +3314,7 @@
       ],
       "cache_class": "B",
       "oracle": {
-        "scope": "Exact original reliability complete-case conditions: Exact initial full canonical tree proof, select first payload extent for sentinels/f0003.dat; capture exact canonical target bytes. Close Store; in independent writable sample only, isolate selected target in valid supported RAW singleton and prove unchanged canonical bytes as positive control. Flip only one canonical payload byte at unchanged length, preserving namespace/history and supported format; avoid shared framing/unrelated-record faults. Accept exact authenticated integrity error at Store open/create, or mounted read returns EIO5 with zero bytes. Actual unmounted check, no new owned runtime files, final named-spool≤2GiB/zero files and start/end resource+cgroup observations.",
+        "scope": "Exact original reliability complete-case conditions: Exact initial full canonical tree proof, select first payload extent for sentinels/f0003.dat; capture exact canonical target bytes. Close Store; in independent writable sample only, isolate selected target in valid supported RAW singleton and prove unchanged canonical bytes as positive control. Flip only one canonical payload byte at unchanged length, preserving namespace/history and supported format; avoid shared framing/unrelated-record faults. Accept exact authenticated integrity error at Store open/create, or mounted read returns EIO5 with zero bytes. Actual unmounted check, no new owned runtime files, final named-spool\u22642GiB/zero files and start/end resource+cgroup observations.",
         "roots": "same original initial Branch/root and acknowledged Commit conditions; integrity cases make zero Commits and preserve namespace/history during isolated target fault",
         "original_complete_scope": "benchmark/fs-bench-pro/src/workspace_reliability.rs and unchanged native reliability_workloads.rs; all original checkpoints, errno/byte/inode and cleanup/resource conditions preserved",
         "current_additional_scope": "public authenticated typed root/mapping and complete inode-table membership; actual SDK tokens/readiness and immutable fault/reference/source custody",
@@ -3389,7 +3389,7 @@
       "verification_attempts_if_applicable": 1,
       "cache_contract": {
         "class": "B",
-        "numeric_result": "N/A — verification-only; all diagnostic numeric results INELIGIBLE without independent paid-input coldness proof",
+        "numeric_result": "N/A \u2014 verification-only; all diagnostic numeric results INELIGIBLE without independent paid-input coldness proof",
         "starting_state": "independent closed pristine sample; no measured performance phase or warmup",
         "setup_and_positive_control_warmth": "declared proof work only; never numerical cold credit",
         "all_paid_backing_metadata_sqlite_phase_evidence": "UNAVAILABLE"
@@ -3425,7 +3425,7 @@
           "Close Store; in independent writable sample only, isolate selected target in valid supported RAW singleton and prove unchanged canonical bytes as positive control.",
           "Flip only one canonical payload byte at unchanged length, preserving namespace/history and supported format; avoid shared framing/unrelated-record faults.",
           "Accept exact authenticated integrity error at Store open/create, or mounted read returns EIO5 with zero bytes.",
-          "Actual unmounted check, no new owned runtime files, final named-spool≤2GiB/zero files and start/end resource+cgroup observations."
+          "Actual unmounted check, no new owned runtime files, final named-spool\u22642GiB/zero files and start/end resource+cgroup observations."
         ],
         "original_actions": [
           "read-corrupt"
@@ -3488,8 +3488,8 @@
       "applicability": {
         "schema": "original-reliability-applicability-v1",
         "classification": "not-applicable",
-        "reviewed_source_commit": "359c3c7d0cf84f4072a4af1ec8bd37497a75b722",
-        "reviewed_product_tree": "9ac88edb2cc44d44edd4a53f9ad89f4dee063a58",
+        "reviewed_source_commit": "2f77ddeff2cb3a2403f2203041834b52eff5ecd0",
+        "reviewed_product_tree": "b99f79e3dd972ebd6bbd1db2fc2626d08a289e19",
         "source_commit": "d296981ace76fe751bebf00dee52818fe18a3eef",
         "source_tag_object": "ae3310fada4a1fe35cb99ab02270b7538a0d03f7",
         "original_driver_sha256": "cd6df93628527629f1f012755e2816f45df066ae8b7e291b7d8d45babfc3df27",
@@ -3722,7 +3722,7 @@
       ],
       "cache_class": "B",
       "oracle": {
-        "scope": "Exact original reliability complete-case conditions: Exact initial full canonical tree proof, select first payload extent for sentinels/f0003.dat. Close Store; delete precisely selected target locator in independent writable sample, without changing root/history/namespace or unrelated payloads. Accept exact authenticated missing-object/integrity error at Store open/create, or mounted read EIO5 with zero returned bytes. Actual unmounted check, no new runtime files, final named-spool≤2GiB/zero files and start/end resource+cgroup observations.",
+        "scope": "Exact original reliability complete-case conditions: Exact initial full canonical tree proof, select first payload extent for sentinels/f0003.dat. Close Store; delete precisely selected target locator in independent writable sample, without changing root/history/namespace or unrelated payloads. Accept exact authenticated missing-object/integrity error at Store open/create, or mounted read EIO5 with zero returned bytes. Actual unmounted check, no new runtime files, final named-spool\u22642GiB/zero files and start/end resource+cgroup observations.",
         "roots": "same original initial Branch/root and acknowledged Commit conditions; integrity cases make zero Commits and preserve namespace/history during isolated target fault",
         "original_complete_scope": "benchmark/fs-bench-pro/src/workspace_reliability.rs and unchanged native reliability_workloads.rs; all original checkpoints, errno/byte/inode and cleanup/resource conditions preserved",
         "current_additional_scope": "public authenticated typed root/mapping and complete inode-table membership; actual SDK tokens/readiness and immutable fault/reference/source custody",
@@ -3797,7 +3797,7 @@
       "verification_attempts_if_applicable": 1,
       "cache_contract": {
         "class": "B",
-        "numeric_result": "N/A — verification-only; all diagnostic numeric results INELIGIBLE without independent paid-input coldness proof",
+        "numeric_result": "N/A \u2014 verification-only; all diagnostic numeric results INELIGIBLE without independent paid-input coldness proof",
         "starting_state": "independent closed pristine sample; no measured performance phase or warmup",
         "setup_and_positive_control_warmth": "declared proof work only; never numerical cold credit",
         "all_paid_backing_metadata_sqlite_phase_evidence": "UNAVAILABLE"
@@ -3832,7 +3832,7 @@
           "Exact initial full canonical tree proof, select first payload extent for sentinels/f0003.dat.",
           "Close Store; delete precisely selected target locator in independent writable sample, without changing root/history/namespace or unrelated payloads.",
           "Accept exact authenticated missing-object/integrity error at Store open/create, or mounted read EIO5 with zero returned bytes.",
-          "Actual unmounted check, no new runtime files, final named-spool≤2GiB/zero files and start/end resource+cgroup observations."
+          "Actual unmounted check, no new runtime files, final named-spool\u22642GiB/zero files and start/end resource+cgroup observations."
         ],
         "original_actions": [
           "read-corrupt"
@@ -3895,8 +3895,8 @@
       "applicability": {
         "schema": "original-reliability-applicability-v1",
         "classification": "not-applicable",
-        "reviewed_source_commit": "359c3c7d0cf84f4072a4af1ec8bd37497a75b722",
-        "reviewed_product_tree": "9ac88edb2cc44d44edd4a53f9ad89f4dee063a58",
+        "reviewed_source_commit": "2f77ddeff2cb3a2403f2203041834b52eff5ecd0",
+        "reviewed_product_tree": "b99f79e3dd972ebd6bbd1db2fc2626d08a289e19",
         "source_commit": "d296981ace76fe751bebf00dee52818fe18a3eef",
         "source_tag_object": "ae3310fada4a1fe35cb99ab02270b7538a0d03f7",
         "original_driver_sha256": "cd6df93628527629f1f012755e2816f45df066ae8b7e291b7d8d45babfc3df27",
@@ -4166,7 +4166,7 @@
       "verification_attempts_if_applicable": 0,
       "cache_contract": {
         "class": "B",
-        "numeric_result": "N/A — verification-only; all diagnostic numeric results INELIGIBLE without independent paid-input coldness proof",
+        "numeric_result": "N/A \u2014 verification-only; all diagnostic numeric results INELIGIBLE without independent paid-input coldness proof",
         "starting_state": "independent closed pristine sample; no measured performance phase or warmup",
         "setup_and_positive_control_warmth": "declared proof work only; never numerical cold credit",
         "all_paid_backing_metadata_sqlite_phase_evidence": "UNAVAILABLE"
@@ -4263,8 +4263,8 @@
       "applicability": {
         "schema": "original-reliability-applicability-v1",
         "classification": "not-applicable",
-        "reviewed_source_commit": "359c3c7d0cf84f4072a4af1ec8bd37497a75b722",
-        "reviewed_product_tree": "9ac88edb2cc44d44edd4a53f9ad89f4dee063a58",
+        "reviewed_source_commit": "2f77ddeff2cb3a2403f2203041834b52eff5ecd0",
+        "reviewed_product_tree": "b99f79e3dd972ebd6bbd1db2fc2626d08a289e19",
         "source_commit": "d296981ace76fe751bebf00dee52818fe18a3eef",
         "source_tag_object": "ae3310fada4a1fe35cb99ab02270b7538a0d03f7",
         "original_driver_sha256": "cd6df93628527629f1f012755e2816f45df066ae8b7e291b7d8d45babfc3df27",
@@ -4381,7 +4381,7 @@
       "verification_attempts_if_applicable": 0,
       "cache_contract": {
         "class": "B",
-        "numeric_result": "N/A — verification-only; all diagnostic numeric results INELIGIBLE without independent paid-input coldness proof",
+        "numeric_result": "N/A \u2014 verification-only; all diagnostic numeric results INELIGIBLE without independent paid-input coldness proof",
         "starting_state": "independent closed pristine sample; no measured performance phase or warmup",
         "setup_and_positive_control_warmth": "declared proof work only; never numerical cold credit",
         "all_paid_backing_metadata_sqlite_phase_evidence": "UNAVAILABLE"
@@ -4478,8 +4478,8 @@
       "applicability": {
         "schema": "original-reliability-applicability-v1",
         "classification": "not-applicable",
-        "reviewed_source_commit": "359c3c7d0cf84f4072a4af1ec8bd37497a75b722",
-        "reviewed_product_tree": "9ac88edb2cc44d44edd4a53f9ad89f4dee063a58",
+        "reviewed_source_commit": "2f77ddeff2cb3a2403f2203041834b52eff5ecd0",
+        "reviewed_product_tree": "b99f79e3dd972ebd6bbd1db2fc2626d08a289e19",
         "source_commit": "d296981ace76fe751bebf00dee52818fe18a3eef",
         "source_tag_object": "ae3310fada4a1fe35cb99ab02270b7538a0d03f7",
         "original_driver_sha256": "cd6df93628527629f1f012755e2816f45df066ae8b7e291b7d8d45babfc3df27",
@@ -4596,7 +4596,7 @@
       "verification_attempts_if_applicable": 0,
       "cache_contract": {
         "class": "B",
-        "numeric_result": "N/A — verification-only; all diagnostic numeric results INELIGIBLE without independent paid-input coldness proof",
+        "numeric_result": "N/A \u2014 verification-only; all diagnostic numeric results INELIGIBLE without independent paid-input coldness proof",
         "starting_state": "independent closed pristine sample; no measured performance phase or warmup",
         "setup_and_positive_control_warmth": "declared proof work only; never numerical cold credit",
         "all_paid_backing_metadata_sqlite_phase_evidence": "UNAVAILABLE"
@@ -4697,8 +4697,8 @@
       "applicability": {
         "schema": "original-reliability-applicability-v1",
         "classification": "not-applicable",
-        "reviewed_source_commit": "359c3c7d0cf84f4072a4af1ec8bd37497a75b722",
-        "reviewed_product_tree": "9ac88edb2cc44d44edd4a53f9ad89f4dee063a58",
+        "reviewed_source_commit": "2f77ddeff2cb3a2403f2203041834b52eff5ecd0",
+        "reviewed_product_tree": "b99f79e3dd972ebd6bbd1db2fc2626d08a289e19",
         "source_commit": "d296981ace76fe751bebf00dee52818fe18a3eef",
         "source_tag_object": "ae3310fada4a1fe35cb99ab02270b7538a0d03f7",
         "original_driver_sha256": "cd6df93628527629f1f012755e2816f45df066ae8b7e291b7d8d45babfc3df27",
@@ -4815,7 +4815,7 @@
       "verification_attempts_if_applicable": 0,
       "cache_contract": {
         "class": "B",
-        "numeric_result": "N/A — verification-only; all diagnostic numeric results INELIGIBLE without independent paid-input coldness proof",
+        "numeric_result": "N/A \u2014 verification-only; all diagnostic numeric results INELIGIBLE without independent paid-input coldness proof",
         "starting_state": "independent closed pristine sample; no measured performance phase or warmup",
         "setup_and_positive_control_warmth": "declared proof work only; never numerical cold credit",
         "all_paid_backing_metadata_sqlite_phase_evidence": "UNAVAILABLE"
@@ -4913,8 +4913,8 @@
       "applicability": {
         "schema": "original-reliability-applicability-v1",
         "classification": "not-applicable",
-        "reviewed_source_commit": "359c3c7d0cf84f4072a4af1ec8bd37497a75b722",
-        "reviewed_product_tree": "9ac88edb2cc44d44edd4a53f9ad89f4dee063a58",
+        "reviewed_source_commit": "2f77ddeff2cb3a2403f2203041834b52eff5ecd0",
+        "reviewed_product_tree": "b99f79e3dd972ebd6bbd1db2fc2626d08a289e19",
         "source_commit": "d296981ace76fe751bebf00dee52818fe18a3eef",
         "source_tag_object": "ae3310fada4a1fe35cb99ab02270b7538a0d03f7",
         "original_driver_sha256": "cd6df93628527629f1f012755e2816f45df066ae8b7e291b7d8d45babfc3df27",
@@ -5031,7 +5031,7 @@
       "verification_attempts_if_applicable": 0,
       "cache_contract": {
         "class": "B",
-        "numeric_result": "N/A — verification-only; all diagnostic numeric results INELIGIBLE without independent paid-input coldness proof",
+        "numeric_result": "N/A \u2014 verification-only; all diagnostic numeric results INELIGIBLE without independent paid-input coldness proof",
         "starting_state": "independent closed pristine sample; no measured performance phase or warmup",
         "setup_and_positive_control_warmth": "declared proof work only; never numerical cold credit",
         "all_paid_backing_metadata_sqlite_phase_evidence": "UNAVAILABLE"
@@ -5129,8 +5129,8 @@
       "applicability": {
         "schema": "original-reliability-applicability-v1",
         "classification": "not-applicable",
-        "reviewed_source_commit": "359c3c7d0cf84f4072a4af1ec8bd37497a75b722",
-        "reviewed_product_tree": "9ac88edb2cc44d44edd4a53f9ad89f4dee063a58",
+        "reviewed_source_commit": "2f77ddeff2cb3a2403f2203041834b52eff5ecd0",
+        "reviewed_product_tree": "b99f79e3dd972ebd6bbd1db2fc2626d08a289e19",
         "source_commit": "d296981ace76fe751bebf00dee52818fe18a3eef",
         "source_tag_object": "ae3310fada4a1fe35cb99ab02270b7538a0d03f7",
         "original_driver_sha256": "cd6df93628527629f1f012755e2816f45df066ae8b7e291b7d8d45babfc3df27",
@@ -5247,7 +5247,7 @@
       "verification_attempts_if_applicable": 0,
       "cache_contract": {
         "class": "B",
-        "numeric_result": "N/A — verification-only; all diagnostic numeric results INELIGIBLE without independent paid-input coldness proof",
+        "numeric_result": "N/A \u2014 verification-only; all diagnostic numeric results INELIGIBLE without independent paid-input coldness proof",
         "starting_state": "independent closed pristine sample; no measured performance phase or warmup",
         "setup_and_positive_control_warmth": "declared proof work only; never numerical cold credit",
         "all_paid_backing_metadata_sqlite_phase_evidence": "UNAVAILABLE"
@@ -5344,8 +5344,8 @@
       "applicability": {
         "schema": "original-reliability-applicability-v1",
         "classification": "not-applicable",
-        "reviewed_source_commit": "359c3c7d0cf84f4072a4af1ec8bd37497a75b722",
-        "reviewed_product_tree": "9ac88edb2cc44d44edd4a53f9ad89f4dee063a58",
+        "reviewed_source_commit": "2f77ddeff2cb3a2403f2203041834b52eff5ecd0",
+        "reviewed_product_tree": "b99f79e3dd972ebd6bbd1db2fc2626d08a289e19",
         "source_commit": "d296981ace76fe751bebf00dee52818fe18a3eef",
         "source_tag_object": "ae3310fada4a1fe35cb99ab02270b7538a0d03f7",
         "original_driver_sha256": "cd6df93628527629f1f012755e2816f45df066ae8b7e291b7d8d45babfc3df27",
@@ -5462,7 +5462,7 @@
       "verification_attempts_if_applicable": 0,
       "cache_contract": {
         "class": "B",
-        "numeric_result": "N/A — verification-only; all diagnostic numeric results INELIGIBLE without independent paid-input coldness proof",
+        "numeric_result": "N/A \u2014 verification-only; all diagnostic numeric results INELIGIBLE without independent paid-input coldness proof",
         "starting_state": "independent closed pristine sample; no measured performance phase or warmup",
         "setup_and_positive_control_warmth": "declared proof work only; never numerical cold credit",
         "all_paid_backing_metadata_sqlite_phase_evidence": "UNAVAILABLE"
@@ -5558,8 +5558,8 @@
       "applicability": {
         "schema": "original-reliability-applicability-v1",
         "classification": "not-applicable",
-        "reviewed_source_commit": "359c3c7d0cf84f4072a4af1ec8bd37497a75b722",
-        "reviewed_product_tree": "9ac88edb2cc44d44edd4a53f9ad89f4dee063a58",
+        "reviewed_source_commit": "2f77ddeff2cb3a2403f2203041834b52eff5ecd0",
+        "reviewed_product_tree": "b99f79e3dd972ebd6bbd1db2fc2626d08a289e19",
         "source_commit": "d296981ace76fe751bebf00dee52818fe18a3eef",
         "source_tag_object": "ae3310fada4a1fe35cb99ab02270b7538a0d03f7",
         "original_driver_sha256": "cd6df93628527629f1f012755e2816f45df066ae8b7e291b7d8d45babfc3df27",
@@ -5676,7 +5676,7 @@
       "verification_attempts_if_applicable": 0,
       "cache_contract": {
         "class": "B",
-        "numeric_result": "N/A — verification-only; all diagnostic numeric results INELIGIBLE without independent paid-input coldness proof",
+        "numeric_result": "N/A \u2014 verification-only; all diagnostic numeric results INELIGIBLE without independent paid-input coldness proof",
         "starting_state": "independent closed pristine sample; no measured performance phase or warmup",
         "setup_and_positive_control_warmth": "declared proof work only; never numerical cold credit",
         "all_paid_backing_metadata_sqlite_phase_evidence": "UNAVAILABLE"
@@ -5771,8 +5771,8 @@
       "applicability": {
         "schema": "original-reliability-applicability-v1",
         "classification": "not-applicable",
-        "reviewed_source_commit": "359c3c7d0cf84f4072a4af1ec8bd37497a75b722",
-        "reviewed_product_tree": "9ac88edb2cc44d44edd4a53f9ad89f4dee063a58",
+        "reviewed_source_commit": "2f77ddeff2cb3a2403f2203041834b52eff5ecd0",
+        "reviewed_product_tree": "b99f79e3dd972ebd6bbd1db2fc2626d08a289e19",
         "source_commit": "d296981ace76fe751bebf00dee52818fe18a3eef",
         "source_tag_object": "ae3310fada4a1fe35cb99ab02270b7538a0d03f7",
         "original_driver_sha256": "cd6df93628527629f1f012755e2816f45df066ae8b7e291b7d8d45babfc3df27",
@@ -5889,7 +5889,7 @@
       "verification_attempts_if_applicable": 0,
       "cache_contract": {
         "class": "B",
-        "numeric_result": "N/A — verification-only; all diagnostic numeric results INELIGIBLE without independent paid-input coldness proof",
+        "numeric_result": "N/A \u2014 verification-only; all diagnostic numeric results INELIGIBLE without independent paid-input coldness proof",
         "starting_state": "independent closed pristine sample; no measured performance phase or warmup",
         "setup_and_positive_control_warmth": "declared proof work only; never numerical cold credit",
         "all_paid_backing_metadata_sqlite_phase_evidence": "UNAVAILABLE"
@@ -5986,8 +5986,8 @@
       "applicability": {
         "schema": "original-reliability-applicability-v1",
         "classification": "not-applicable",
-        "reviewed_source_commit": "359c3c7d0cf84f4072a4af1ec8bd37497a75b722",
-        "reviewed_product_tree": "9ac88edb2cc44d44edd4a53f9ad89f4dee063a58",
+        "reviewed_source_commit": "2f77ddeff2cb3a2403f2203041834b52eff5ecd0",
+        "reviewed_product_tree": "b99f79e3dd972ebd6bbd1db2fc2626d08a289e19",
         "source_commit": "d296981ace76fe751bebf00dee52818fe18a3eef",
         "source_tag_object": "ae3310fada4a1fe35cb99ab02270b7538a0d03f7",
         "original_driver_sha256": "cd6df93628527629f1f012755e2816f45df066ae8b7e291b7d8d45babfc3df27",
@@ -6104,7 +6104,7 @@
       "verification_attempts_if_applicable": 0,
       "cache_contract": {
         "class": "B",
-        "numeric_result": "N/A — verification-only; all diagnostic numeric results INELIGIBLE without independent paid-input coldness proof",
+        "numeric_result": "N/A \u2014 verification-only; all diagnostic numeric results INELIGIBLE without independent paid-input coldness proof",
         "starting_state": "independent closed pristine sample; no measured performance phase or warmup",
         "setup_and_positive_control_warmth": "declared proof work only; never numerical cold credit",
         "all_paid_backing_metadata_sqlite_phase_evidence": "UNAVAILABLE"
@@ -6201,8 +6201,8 @@
       "applicability": {
         "schema": "original-reliability-applicability-v1",
         "classification": "not-applicable",
-        "reviewed_source_commit": "359c3c7d0cf84f4072a4af1ec8bd37497a75b722",
-        "reviewed_product_tree": "9ac88edb2cc44d44edd4a53f9ad89f4dee063a58",
+        "reviewed_source_commit": "2f77ddeff2cb3a2403f2203041834b52eff5ecd0",
+        "reviewed_product_tree": "b99f79e3dd972ebd6bbd1db2fc2626d08a289e19",
         "source_commit": "d296981ace76fe751bebf00dee52818fe18a3eef",
         "source_tag_object": "ae3310fada4a1fe35cb99ab02270b7538a0d03f7",
         "original_driver_sha256": "cd6df93628527629f1f012755e2816f45df066ae8b7e291b7d8d45babfc3df27",
@@ -6249,7 +6249,7 @@
       "steps": [],
       "cache_class": "B",
       "oracle": {
-        "scope": "Exact original reliability complete-case conditions: Exactly two original workers; active work at least600s, no sleeping substitute or reduced duration. Per cycle: immutable read, own4096-byte atomic temp/rename, peer full-byte check with bounded channel handoffs,64-byte scratch create/unlink, cycle-result64 bytes. Each cycle completes within30s, peers have equal positive cycle counts and receipt active_elapsed_ns≥600000000000. One Created, exact final ordinal-derived state; full final/reopen with original internal900s active and600s final watchdogs.",
+        "scope": "Exact original reliability complete-case conditions: Exactly two original workers; active work at least600s, no sleeping substitute or reduced duration. Per cycle: immutable read, own4096-byte atomic temp/rename, peer full-byte check with bounded channel handoffs,64-byte scratch create/unlink, cycle-result64 bytes. Each cycle completes within30s, peers have equal positive cycle counts and receipt active_elapsed_ns\u2265600000000000. One Created, exact final ordinal-derived state; full final/reopen with original internal900s active and600s final watchdogs.",
         "roots": "same original initial Branch/root and acknowledged Commit conditions; integrity cases make zero Commits and preserve namespace/history during isolated target fault",
         "original_complete_scope": "benchmark/fs-bench-pro/src/workspace_reliability.rs and unchanged native reliability_workloads.rs; all original checkpoints, errno/byte/inode and cleanup/resource conditions preserved",
         "current_additional_scope": "public authenticated typed root/mapping and complete inode-table membership; actual SDK tokens/readiness and immutable fault/reference/source custody",
@@ -6319,7 +6319,7 @@
       "verification_attempts_if_applicable": 0,
       "cache_contract": {
         "class": "B",
-        "numeric_result": "N/A — verification-only; all diagnostic numeric results INELIGIBLE without independent paid-input coldness proof",
+        "numeric_result": "N/A \u2014 verification-only; all diagnostic numeric results INELIGIBLE without independent paid-input coldness proof",
         "starting_state": "independent closed pristine sample; no measured performance phase or warmup",
         "setup_and_positive_control_warmth": "declared proof work only; never numerical cold credit",
         "all_paid_backing_metadata_sqlite_phase_evidence": "UNAVAILABLE"
@@ -6353,7 +6353,7 @@
         "original_ordered_obligations": [
           "Exactly two original workers; active work at least600s, no sleeping substitute or reduced duration.",
           "Per cycle: immutable read, own4096-byte atomic temp/rename, peer full-byte check with bounded channel handoffs,64-byte scratch create/unlink, cycle-result64 bytes.",
-          "Each cycle completes within30s, peers have equal positive cycle counts and receipt active_elapsed_ns≥600000000000.",
+          "Each cycle completes within30s, peers have equal positive cycle counts and receipt active_elapsed_ns\u2265600000000000.",
           "One Created, exact final ordinal-derived state; full final/reopen with original internal900s active and600s final watchdogs."
         ],
         "original_actions": [
@@ -6428,8 +6428,8 @@
       "applicability": {
         "schema": "original-reliability-applicability-v1",
         "classification": "not-applicable",
-        "reviewed_source_commit": "359c3c7d0cf84f4072a4af1ec8bd37497a75b722",
-        "reviewed_product_tree": "9ac88edb2cc44d44edd4a53f9ad89f4dee063a58",
+        "reviewed_source_commit": "2f77ddeff2cb3a2403f2203041834b52eff5ecd0",
+        "reviewed_product_tree": "b99f79e3dd972ebd6bbd1db2fc2626d08a289e19",
         "source_commit": "d296981ace76fe751bebf00dee52818fe18a3eef",
         "source_tag_object": "ae3310fada4a1fe35cb99ab02270b7538a0d03f7",
         "original_driver_sha256": "cd6df93628527629f1f012755e2816f45df066ae8b7e291b7d8d45babfc3df27",

@@ -328,3 +328,57 @@ agent. No automatic retry, reprepare or failed-operation replay added.
 Docs-only local link/claim/whitespace review, Rust formatting and boundary
 guard PASS; no touched Rust crate, new Clippy or runtime test is applicable.
 Production LOC: 81727 -> 81727 (delta +0).
+
+## Phase 5 — final source applicability review and registration, 2026-10-11
+
+Earlier phase exits are committed; phase 4 exit is `2f77ddeff`. No product or
+test edit follows this review. The review is bound to **the whole core/crates
+tree, including tests**, `b99f79e3dd972ebd6bbd1db2fc2626d08a289e19`, at source
+`2f77ddeff2cb3a2403f2203041834b52eff5ecd0`.
+[Review artifact](checks/reliability-review.json) records the exact prior tree,
+all 97 changed-file identities (27 external-test files), all 1,104 tree files
+in scope, 12 unchanged reviewed public-source hashes and four additional
+reviewed observability/Create sources. It is source applicability, not native
+or full-case reliability proof.
+
+Rechecked original `physical_state`: mandatory non-null exact per-Workspace
+physical allocated/current and mutation-event peak, observation errors zero,
+both within 2 GiB. Shared schema 33 resources expose logical cells, pieces,
+bytes and shared database pages/debt, not those exclusive physical axes. Added
+piece tests and capture/recognition ports are not a replacement full-case
+physical proof. The 26 classifications and every additional case-specific gap
+remain unchanged. The two original early integrity paths genuinely bypass
+that physical check, but the unchanged public SandboxCreate/SandboxRequest
+and Docker HostConfig still have no original creation-time CPU/memory/zero-swap/
+PID profile or pre-Start adoption interface. Post-Start update remains invalid.
+
+Only `reviewed_source_commit` and `reviewed_product_tree` changed in the 28
+case records. A structural equality check after restoring those two fields
+confirms that original scopes, guards, limits, operations, reason/needs and
+classification are unchanged. Recomputed the exact policy digests binding
+those complete records. No full-case runtime proof is claimed; old failures and
+old reviews stay immutable. Decided by agent, pending owner review: all 28
+remain NOT_APPLICABLE with their original reasons at this final core tree.
+
+[Final accounting pin check](checks/final-accounting-pins.json): PASS on all
+six source digests and exact schema definitions. Phases 2–4 touched none of
+schema/accounting SQL or Rust accounting, so no second pin move is needed.
+
+Next selections, fixed before execution: new tag `p319-final`; all twelve
+exact-count cells once; `workspace_reliability` one call; complete 25-family
+catalogue once, with the handed-over `repository_history` cases explicitly
+NOT_RUN (out of scope) and no reliability case executed as a fabricated proof.
+Every other ported case receives one preparation/sample selection; failures,
+expired preparations and unrun selections stay recorded. Original 2 s/120 s
+limits, frozen mtime helper/check and 41 s allowance are unchanged. Watch
+`workspace-dense-rewrite-500-mixed-v4`; diagnose only if cleanup fails again.
+Fresh source-bound originals and independent writable sample copies, at most
+one original and one test copy per payload; copies are removed after a receipt.
+Each shell invocation has a maximum 118-second wall stop. Frozen inner limits
+are unchanged; this external ceiling is not a new performance allowance.
+
+The final source review is a harness/metadata/docs change, production LOC
+81727 -> 81727 (delta +0). Rust formatting, whitespace and boundary guard are
+checked; no touched Rust crate needing new Clippy. Latest source-scope checks
+remain valid. Applicability parity, cases, cells and whole final-run outcomes
+will be appended after their actual receipts. This is not phase 5 completion.
