@@ -1105,3 +1105,79 @@ Production LOC:82335 ->82335 (delta+0), exact parent/staged snapshots via the
 pinned counter; reference absent (retired R9c; last counted65,417 at tree498dd1917812).
 This single harness commit contains the complete family retirement. Phase11's
 engine exit and public comment follow the eight pending sealed-build tests.
+
+### Phase11 exit — sealed native checks, 2026-10-12
+
+Retirement commit `920cd9006` is confirmed at82335 ->82335 (delta+0).
+The pending native splice8 tests all PASS against the clean nine-binary seal,
+before any measurement. Unit-engine corrected scope stays as recorded; the
+public census/actual staging prerequisites remain explicit skips. Registry245
+unique cases/24 families, repository_history3 selectable, active set242.
+Formatting/boundary PASS; inherited runtime Clippy FAIL remains unchanged.
+Phase11 complete. The phase12 seal and actual samples are separately recorded.
+
+## Phase12 — sealed open-case cohort, 2026-10-12
+
+All27 selections were prepared and sampled exactly once under `p319n12` at
+`920cd9006` (product tree `ee8970d026ae7794ab04dd849fa360b5402e0b28`).
+The clean nine-binary build rebuilt every arm with host Rust1.85.1 locked and
+the pinned Linux image; immutable archived binaries and source-before/after
+equality are retained in [the cohort operands](checks/phase12-cohort.json).
+No tracked edit occurred between sealing and the last sample. No dropped
+feature/harness build was reused.38 pre-existing containers and shared4GB
+Docker VM interference were declared; no clean timing eligibility is claimed.
+The two exhaustive selections are verification-only: their receipt performance
+sample_count is0 and verification_attempt_count1; no performance sample is claimed.
+
+Actual outcomes:1 PASS,14 INELIGIBLE,12 FAIL;15 have both functional PASS and
+proof PASS. All five500-step histories, all three capped edits, the four
+reuse/footprint cases, alias, and the100MB development/exhaustive checks pass
+their functional/proof fields. Nine concurrency cases and the three remaining
+500MB mixed checks fail; missing functional/count/custody fields stay unavailable.
+No Busy/EAGAIN failure occurred in these concurrency samples. The five100MB
+topology failures reach public proof; the four500MB rows stop earlier during
+verification. Detailed failure text and source hashes are in the operands.
+
+The exhaustive500MB run explicitly kept the owner-authorized275-second ceiling
+and300-second outer allowance. Its preparation succeeded259.8s; its sample
+failed `verify-history` at the invocation stop (functional unavailable/proof FAIL).
+No ceiling, cache, buffer or proof was changed to rescue any sample.
+Every sample manifest was checked in full before owned test-copy removal;
+each original was removed before the next case. Historical receipts/baselines
+stay unchanged. The owning engine generated16 new CSVs beside earlier baselines,
+with only location-text substitutions for public portability; their original
+and published digests are recorded. Unsampled family rows remain NOT_RUN.
+Repository_history: NOT_RUN — set aside by owner. Durable: NOT_RUN — disabled
+by owner until explicit reauthorization. Phase13 starts from these retained failures.
+
+| family / case | status | functional | proof | requests / jobs / statements | overlay logical / allocated B | Store logical / allocated B | command / Commit ms | cleanup / custody |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| edit_length_changing_capped / `insert-middle-4k-input-524283904b-result-500mib-ops-1-capped-v1` | INELIGIBLE | PASS | PASS | 8011 / 8376 / 101891 | 311296 / 268750848 | 530920608 / 530927616 | 2277.9 / 18.2 | Gone / KNOWN_STOP |
+| edit_length_changing_capped / `prepend-head-4k-input-524283904b-result-500mib-ops-1-capped-v1` | INELIGIBLE | PASS | PASS | 16011 / 16212 / 200970 | 294912 / 268705792 | 530895888 / 530903040 | 4861.2 / 14.3 | Gone / KNOWN_STOP |
+| edit_length_changing_capped / `replace-grow-middle-2k-to-4k-input-524285952b-result-500mib-ops-1-capped-v1` | INELIGIBLE | PASS | PASS | 8012 / 8460 / 102355 | 323584 / 268763136 | 530928824 / 530935808 | 2234.6 / 20.8 | Gone / KNOWN_STOP |
+| multi_workspace_development / `v016-workspace-mixed-100mb-5000-k10-v1` | FAIL | FAIL | FAIL | UNAVAILABLE / UNAVAILABLE / UNAVAILABLE | 1040384 / 269475840 | 108080704 / 108081152 | 1740.0 / 1064.2 | Gone / KNOWN_STOP |
+| multi_workspace_development / `v016-workspace-mixed-100mb-5000-k100-v1` | FAIL | FAIL | FAIL | UNAVAILABLE / UNAVAILABLE / UNAVAILABLE | 1388544 / 269828096 | 124006400 / 124006400 | 16766.3 / 13932.5 | Gone / KNOWN_STOP |
+| multi_workspace_development / `v016-workspace-mixed-500mb-30000-k10-v1` | FAIL | FAIL | FAIL | UNAVAILABLE / UNAVAILABLE / UNAVAILABLE | 1028096 / 269467648 | 514506752 / 514510848 | 2684.1 / 1729.5 | Gone / UNAVAILABLE |
+| multi_workspace_development / `v016-workspace-mixed-500mb-30000-k100-v1` | FAIL | FAIL | FAIL | UNAVAILABLE / UNAVAILABLE / UNAVAILABLE | 1343488 / 269778944 | 531537920 / 531542016 | 26382.9 / 20688.0 | Gone / UNAVAILABLE |
+| multi_workspace_development / `v016-workspace-four-100mb-5000-k100-v1` | FAIL | FAIL | FAIL | 104312 / 813347 / 4410865 | 2228224 / 270663680 | 135245824 / 135245824 | 38402.4 / 60570.7 | Gone / KNOWN_STOP |
+| branch_development / `v016-branch-mixed-100mb-5000-k10-v1` | FAIL | FAIL | FAIL | 8093 / 60917 / 330436 | 1048576 / 269484032 | 108314624 / 108314624 | 2447.5 / 1437.6 | Gone / KNOWN_STOP |
+| branch_development / `v016-branch-mixed-100mb-5000-k100-v1` | FAIL | FAIL | FAIL | 54851 / 428182 / 2314315 | 1396736 / 269832192 | 123895808 / 123895808 | 17254.3 / 14772.5 | Gone / KNOWN_STOP |
+| branch_development / `v016-branch-mixed-500mb-30000-k10-v1` | FAIL | FAIL | FAIL | 8108 / 61046 / 331407 | 1044480 / 269479936 | 514490368 / 514494464 | 3934.6 / 2476.3 | Gone / UNAVAILABLE |
+| branch_development / `v016-branch-mixed-500mb-30000-k100-v1` | FAIL | FAIL | FAIL | 54938 / 428416 / 2316403 | 1355776 / 269795328 | 531570688 / 531574784 | 27278.6 / 21481.2 | Gone / UNAVAILABLE |
+| dedup_branch_history / `dedup-history-distributed-500` | INELIGIBLE | PASS | PASS | 3443 / 45111 / 209694 | 249856 / 268685312 | 8462080 / 8462336 | 22190.8 / 5962.0 | Gone / KNOWN_STOP |
+| dedup_branch_history / `dedup-history-hotset-500` | INELIGIBLE | PASS | PASS | 3421 / 46815 / 215406 | 249856 / 268689408 | 8474416 / 8474624 | 22039.2 / 5546.2 | Gone / KNOWN_STOP |
+| dedup_branch_history / `dedup-history-recurring-500` | INELIGIBLE | PASS | PASS | 2513 / 43518 / 199624 | 282624 / 268722176 | 5631528 / 5632000 | 21772.5 / 3084.0 | Gone / KNOWN_STOP |
+| dedup_branch_history / `dedup-history-metadata-500` | INELIGIBLE | PASS | PASS | 1511 / 39514 / 176585 | 249856 / 268685312 | 5603096 / 5603328 | 21436.1 / 2931.6 | Gone / KNOWN_STOP |
+| dedup_branch_history / `dedup-history-unrelated-500-mixed-v2` | INELIGIBLE | PASS | PASS | 31535 / 223535 / 1148852 | 1310720 / 269746176 | 537104384 / 537108480 | 25170.8 / 12773.1 | Gone / KNOWN_STOP |
+| mixed_load_bearing / `v016-mixed-development-100mb-5000-k100-v1` | INELIGIBLE | PASS | PASS | 26078 / 203933 / 1098657 | 815104 / 269254656 | 114925568 / 114929664 | 8091.5 / 3646.4 | Gone / KNOWN_STOP |
+| mixed_load_bearing / `v016-mixed-development-500mb-30000-k10-v1` | FAIL | UNAVAILABLE | FAIL | 2704 / 20380 / 110273 | 2560000 / 270999552 | 513101824 / 513105920 | 1277.5 / 616.0 | Gone / KNOWN_STOP |
+| mixed_load_bearing / `v016-mixed-development-500mb-30000-k100-v1` | FAIL | UNAVAILABLE | FAIL | UNAVAILABLE / UNAVAILABLE / UNAVAILABLE | UNAVAILABLE / UNAVAILABLE | UNAVAILABLE / UNAVAILABLE | 13032.1 / 6536.9 | Gone / UNAVAILABLE |
+| mixed_load_bearing / `v016-mixed-exhaustive-100mb-5000-k100-v1` | PASS | PASS | PASS | 26078 / 203933 / 1098658 | 815104 / 269254656 | 115064832 / 115068928 | 8039.4 / 3641.1 | Gone / KNOWN_STOP |
+| dedup_workspace_reuse / `dedup-workspace-local-500` | INELIGIBLE | PASS | PASS | 7014 / 46769 / 282013 | 533876736 / 802316288 | 151035904 / 151035904 | 1242.0 / 3566.4 | Gone / KNOWN_STOP |
+| dedup_workspace_reuse / `dedup-workspace-unique-500` | INELIGIBLE | PASS | PASS | 7014 / 46769 / 282013 | 533876736 / 802316288 | 670633984 / 670638080 | 1243.7 / 15620.6 | Gone / KNOWN_STOP |
+| store_footprint / `store-footprint-unique-100000` | INELIGIBLE | PASS | PASS | 12 / 95 / 443 | 233472 / 268673024 | 516699104 / 516706304 | 6466.1 / 91.0 | Gone / KNOWN_STOP |
+| store_footprint / `store-footprint-metadata-cardinality-100000` | INELIGIBLE | PASS | PASS | 12 / 95 / 443 | 233472 / 268673024 | 556028896 / 556036096 | 13674.9 / 95.7 | Gone / KNOWN_STOP |
+| file_size_transition / `v016-boundary-alias-roundtrip-v1` | INELIGIBLE | PASS | PASS | 108 / 624 / 3234 | 364544 / 268800000 | 937400 / 937984 | 237.3 / 41.2 | Gone / KNOWN_STOP |
+| mixed_load_bearing / `v016-mixed-exhaustive-500mb-30000-k100-v1` | FAIL | UNAVAILABLE | FAIL | 26119 / 204162 / 1100028 | 2678784 / 271118336 | 522121216 / 522125312 | 12809.1 / 6575.0 | Gone / KNOWN_STOP |
+
+Production LOC:82335 ->82335 (delta+0), exact parent/staged snapshots via the pinned counter; reference absent (retired R9c; last counted65,417 at tree498dd1917812). Documentation/receipt publication changes no product or runtime code.
