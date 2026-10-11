@@ -1351,3 +1351,42 @@ Six cases, all FAIL. Iteration 1: 4 PASS, 2 FAIL. Four rows are new failures wit
   0 containers more; originals 2205 MB, result folder
   1120 MB; host 223 GiB free; `docker system df`: Images=21.51GB, Containers=12.85GB, Local Volumes=69.06GB, Build Cache=4.843GB.
 - CSVs: `core/benchmark/fs-bench-pro/baselines/core/2026-10-11-7230d1133/store_footprint/`.
+
+## Phase C — batch 6, `repository_history`, tag `b1`, sampled at `46a0e620c`
+
+Iteration 1's value is left of each arrow, this run's right; one value means
+equal. Times are single diagnostic samples.
+
+| case | status | functional | proof | requests | writer jobs | statements | overlay logical B | Store logical B | exec ms | Commit ms |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| deepseek-full | not sampled | NOT_RUN -> - | NOT_RUN -> - | - | - | - | - | - | - -> - | - -> - |
+| deepseek-stride3 | FAIL (no receipt) | FAIL -> - | NOT_RUN -> - | - | - | - | - | - | - -> - | - -> - |
+| deepseek-stride10 | FAIL (no receipt) | FAIL -> - | NOT_RUN -> - | - | - | - | - | - | - -> - | - -> - |
+
+Three cases; none produced a receipt. Iteration 1: `deepseek-full` NOT_RUN, the two stride cases FAIL with
+proof NOT_RUN.
+
+- Decided by agent: this family declares that a 120 s external wall stop governs every invocation, with no
+  timeout increase. The 300 s extreme-case allowance was therefore not used here; each preparation and each
+  sample had one call with a 118–119 s stop.
+- `deepseek-stride10` (17 checkpoints): prepared in 48.1 s. The sample reached the stop with 16 commands
+  and 15 Commits acknowledged (commands 42.8 s, Commits 28.2 s in total; the rest of the wall is the copy
+  of each checkpoint into the container and the clone of the 891 MB original before the first command).
+  Iteration 1 records all 17 Commits acknowledged before its stop and no final receipt.
+- `deepseek-stride3` (53 checkpoints): prepared in 107.9 s. The sample reached the stop with 22 commands
+  and 22 Commits acknowledged. Iteration 1's sample failed earlier, in the 15 s copy before any command.
+- `deepseek-full` (157 checkpoints): the preparation reached the stop at 119 s with 2,169 MB written and
+  no sealed original, as in iteration 1. Not sampled; the partial folder was removed with the others.
+- The harness wrote no receipt, status or count for any of the three, so the table has only labels. The
+  event record of each stride sample ends with a `failed` line (`Channel(CloseFailed … UnexpectedEof …)` for
+  stride10, `Broken pipe` for stride3) written three seconds after the stop: the wall stop ended the harness
+  but not its runtime child, and the driver then removed the sample's container under it. That line is an
+  effect of the stop and the cleanup, not a result of the product. No leftover process was found.
+- Per-Commit time in stride10 grows through the run, 165 ms for the first to 4,374 ms for the fifteenth;
+  diagnostic only (interference declared), listed for phase D.
+
+- Storage after the family: 2 Docker volumes more than before the run
+  (2 of them masters of current originals, 0 unexplained),
+  0 containers more; originals 5611 MB, result folder
+  1155 MB; host 220 GiB free; `docker system df`: Images=21.51GB, Containers=12.85GB, Local Volumes=69.07GB, Build Cache=4.843GB.
+- CSVs: `core/benchmark/fs-bench-pro/baselines/core/2026-10-11-46a0e620c/repository_history/`.
