@@ -687,3 +687,31 @@ Correction to the preceding D-4 entry: its Workspace engine suite ran **17**
 tests, not14; all17 passed. The original invocation log is unchanged.
 Production LOC: 81727 -> 81727 (delta +0), pinned exact active-core snapshots;
 reference absent (retired R9c; last counted 65,417 at tree498dd1917812).
+
+### Phase 6 verification registration
+
+All five decisions have separate local implementation/disposition commits:
+`ab7152db0` M1; `d419dc44d` alias blocked; `eea65f87a` six check allowances;
+`b435074d9` Commit-only cap; `015aabec4` seven driver exceptions. Each has
+Production LOC81727 ->81727 (+0); reference absent as above. Committed-tree
+confirmation uses the same pinned counter before final handoff.
+
+Selected once at this registration identity, tag `p319b6`: mixed-development
+100MB K10, scattered CDC500, exact reuse500, capped insert500, hotset history500,
+and branch-mixed500MB K100 preparation only. Alias sample is closed/unrun for
+the recorded native timestamp blocker. Smaller ordinary calls stay below120 s;
+only the exact hotset run and branch preparation use D-5's300 s call allowance,
+with the reason recorded per call. All original case watchdogs remain unchanged.
+Prepare and sample each case at this same commit. No full catalogue resampling.
+
+The two M1 helpers are rebuilt at clean committed source in separate bounded
+host/Linux build steps. `tools/build_m1.py` checks the previous final build and
+its original full-build source/image/provenance evidence, admits exactly the
+new core M1 helper as the changed compiled input, reuses seven exact unchanged
+binaries, verifies source before/after Linux compilation and seals the result.
+Generated workload source is hashed as an explicit input. This avoids combining
+several compilers into one command exceeding120 s. These are harness tooling;
+no new product path, dependency or proof relaxation. Syntax, formatting, guard
+and whitespace checked. Decided by agent, pending owner review: use this
+narrow compilation reuse; failures are retained, never converted into a seal.
+Production LOC:81727 ->81727 (delta +0), exact pinned active-core snapshots.
