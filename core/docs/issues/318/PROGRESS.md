@@ -715,3 +715,32 @@ equal. Times are single diagnostic samples.
   0 containers more; originals 5024 MB, result folder
   419 MB; host 220 GiB free; `docker system df`: Images=21.51GB, Containers=12.85GB, Local Volumes=70.37GB, Build Cache=4.843GB.
 - CSVs: `core/benchmark/fs-bench-pro/baselines/core/2026-10-11-6ede5b271/directory_construction_traversal/`.
+
+## Phase C — batch 3, `git_tool_workflow`, tag `b1`, sampled at `082fa6202`
+
+Iteration 1's value is left of each arrow, this run's right; one value means
+equal. Times are single diagnostic samples.
+
+| case | status | functional | proof | requests | writer jobs | statements | overlay logical B | Store logical B | exec ms | Commit ms |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| git-tool-1-compact-v2 | INELIGIBLE | PASS | PASS | 5895 | 7423 -> 7400 | 45762 -> 45673 | 299008 -> 303104 | 1516464 -> 1512344 | 410.8 -> 374.6 | 17.7 -> 16.1 |
+| git-tool-10-compact-v2 | INELIGIBLE | PASS | PASS | 9394 | 12330 -> 12271 | 75496 -> 75281 | 401408 -> 405504 | 4875688 -> 4888000 | 731.6 -> 682.3 | 28.0 -> 24.5 |
+| git-tool-100-mixed-v4 | INELIGIBLE | PASS | PASS | 51386 | 69392 -> 68977 | 416614 -> 415104 | 1490944 -> 1495040 | 64759408 -> 64562848 | 4353.6 -> 3672.8 | 112.0 -> 100.5 |
+| git-tool-500-mixed-v4 | INELIGIBLE | PASS | PASS | 118176 -> 118171 | 193539 -> 191583 | 1079116 -> 1071969 | 4886528 -> 4894720 | 80558592 -> 80583480 | 9939.8 -> 9721.3 | 414.4 -> 382.7 |
+
+- 4 of 4: functional PASS, proof PASS, mount Gone with KnownStop, as in
+  iteration 1. Status INELIGIBLE, as in iteration 1.
+- **Requests are equal in 3 cases and 5 lower of 118,176 in
+  `git-tool-500-mixed-v4`.** The workload is Git itself, 118 thousand kernel
+  requests; iteration 1 records that kernel batching can change the totals of
+  a correct ordinary workload. No per-request trace was taken; not explained
+  further and not sampled again.
+- Writer jobs are lower by 23 to 1,956 and statements by 89 to 7,147
+  (branch-side Commit changes: files of more than one cell are read once a
+  run). Overlay logical bytes 4,096 or 8,192 higher.
+
+- Storage after the family: 5 Docker volumes more than before the run
+  (5 of them masters of current originals, 0 unexplained),
+  0 containers more; originals 834 MB, result folder
+  436 MB; host 225 GiB free; `docker system df`: Images=21.51GB, Containers=12.85GB, Local Volumes=69.21GB, Build Cache=4.843GB.
+- CSVs: `core/benchmark/fs-bench-pro/baselines/core/2026-10-11-082fa6202/git_tool_workflow/`.
