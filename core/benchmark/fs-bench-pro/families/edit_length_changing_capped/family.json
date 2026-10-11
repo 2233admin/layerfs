@@ -41,7 +41,7 @@
         "operation_watchdog_ms": 120000,
         "verification_hard_watchdog_ms": 59000,
         "historical_edit_commit_end_watchdog_ms": 2000,
-        "edit_commit_end_watchdog_ms": 2000
+        "commit_watchdog_ms": 2000
       },
       "reference": {},
       "differences": [
@@ -51,7 +51,8 @@
         "One sample with campaign seed1 replaces the historical five-repetition rotation for this iteration; deterministic fixture and replacement byte seeds, single edit, ordering and final size remain unchanged.",
         "Class B uses an untimed prior mount executing the identical ordinary syscall body without Commit, then terminal unmount/automatic cleanup and a fresh measured mount. Actual measured source-demand counters must be zero or the number is INELIGIBLE. Zero immutable source demands alone are insufficient for a Committed row: independent pre-Commit own-write backing coldness must also be verified. An unavailable own-write cache observation leaves the numeric row INELIGIBLE; functional completion, verification and cleanup are separate.",
         "The complete separate proof retains the original selected-verification policy of 45 s work and 59 s hard watchdog. Current public typed/authenticated readers validate a closed exported Store in an independent offline proof, outside all product timers.",
-        "The original two-second edit/Commit/End group watchdog is retained and actively enforced as edit_commit_end_watchdog_ms=2000, beginning immediately before the measured ordinary command through Commit and terminal unmount. It excludes setup, prior warm-up, measured mount and independent proof. Every group operation uses the remaining group time; expiry retains a failed receipt and uncertain resources rather than falling back to the general 120 s watchdog."
+        "The original two-second edit/Commit/End group watchdog is retained and actively enforced as edit_commit_end_watchdog_ms=2000, beginning immediately before the measured ordinary command through Commit and terminal unmount. It excludes setup, prior warm-up, measured mount and independent proof. Every group operation uses the remaining group time; expiry retains a failed receipt and uncertain resources rather than falling back to the general 120 s watchdog.",
+        "Owner O-9 / D-4 (#319, 2026-10-11): the 2000 ms watchdog surrounds Commit only; command and terminal unmount use the ordinary uncapped operation watchdog. Historical edit/Commit/End declaration retained as provenance."
       ],
       "registry": {
         "family": "edit_length_changing_capped",
@@ -139,7 +140,7 @@
         "operation_watchdog_ms": 120000,
         "verification_hard_watchdog_ms": 59000,
         "historical_edit_commit_end_watchdog_ms": 2000,
-        "edit_commit_end_watchdog_ms": 2000
+        "commit_watchdog_ms": 2000
       },
       "reference": {},
       "differences": [
@@ -149,7 +150,8 @@
         "One sample with campaign seed1 replaces the historical five-repetition rotation for this iteration; deterministic fixture and replacement byte seeds, single edit, ordering and final size remain unchanged.",
         "Class B uses an untimed prior mount executing the identical ordinary syscall body without Commit, then terminal unmount/automatic cleanup and a fresh measured mount. Actual measured source-demand counters must be zero or the number is INELIGIBLE. Zero immutable source demands alone are insufficient for a Committed row: independent pre-Commit own-write backing coldness must also be verified. An unavailable own-write cache observation leaves the numeric row INELIGIBLE; functional completion, verification and cleanup are separate.",
         "The complete separate proof retains the original selected-verification policy of 45 s work and 59 s hard watchdog. Current public typed/authenticated readers validate a closed exported Store in an independent offline proof, outside all product timers.",
-        "The original two-second edit/Commit/End group watchdog is retained and actively enforced as edit_commit_end_watchdog_ms=2000, beginning immediately before the measured ordinary command through Commit and terminal unmount. It excludes setup, prior warm-up, measured mount and independent proof. Every group operation uses the remaining group time; expiry retains a failed receipt and uncertain resources rather than falling back to the general 120 s watchdog."
+        "The original two-second edit/Commit/End group watchdog is retained and actively enforced as edit_commit_end_watchdog_ms=2000, beginning immediately before the measured ordinary command through Commit and terminal unmount. It excludes setup, prior warm-up, measured mount and independent proof. Every group operation uses the remaining group time; expiry retains a failed receipt and uncertain resources rather than falling back to the general 120 s watchdog.",
+        "Owner O-9 / D-4 (#319, 2026-10-11): the 2000 ms watchdog surrounds Commit only; command and terminal unmount use the ordinary uncapped operation watchdog. Historical edit/Commit/End declaration retained as provenance."
       ],
       "registry": {
         "family": "edit_length_changing_capped",
@@ -237,7 +239,7 @@
         "operation_watchdog_ms": 120000,
         "verification_hard_watchdog_ms": 59000,
         "historical_edit_commit_end_watchdog_ms": 2000,
-        "edit_commit_end_watchdog_ms": 2000
+        "commit_watchdog_ms": 2000
       },
       "reference": {},
       "differences": [
@@ -247,7 +249,8 @@
         "One sample with campaign seed1 replaces the historical five-repetition rotation for this iteration; deterministic fixture and replacement byte seeds, single edit, ordering and final size remain unchanged.",
         "Class B uses an untimed prior mount executing the identical ordinary syscall body without Commit, then terminal unmount/automatic cleanup and a fresh measured mount. Actual measured source-demand counters must be zero or the number is INELIGIBLE. Zero immutable source demands alone are insufficient for a Committed row: independent pre-Commit own-write backing coldness must also be verified. An unavailable own-write cache observation leaves the numeric row INELIGIBLE; functional completion, verification and cleanup are separate.",
         "The complete separate proof retains the original selected-verification policy of 45 s work and 59 s hard watchdog. Current public typed/authenticated readers validate a closed exported Store in an independent offline proof, outside all product timers.",
-        "The original two-second edit/Commit/End group watchdog is retained and actively enforced as edit_commit_end_watchdog_ms=2000, beginning immediately before the measured ordinary command through Commit and terminal unmount. It excludes setup, prior warm-up, measured mount and independent proof. Every group operation uses the remaining group time; expiry retains a failed receipt and uncertain resources rather than falling back to the general 120 s watchdog."
+        "The original two-second edit/Commit/End group watchdog is retained and actively enforced as edit_commit_end_watchdog_ms=2000, beginning immediately before the measured ordinary command through Commit and terminal unmount. It excludes setup, prior warm-up, measured mount and independent proof. Every group operation uses the remaining group time; expiry retains a failed receipt and uncertain resources rather than falling back to the general 120 s watchdog.",
+        "Owner O-9 / D-4 (#319, 2026-10-11): the 2000 ms watchdog surrounds Commit only; command and terminal unmount use the ordinary uncapped operation watchdog. Historical edit/Commit/End declaration retained as provenance."
       ],
       "registry": {
         "family": "edit_length_changing_capped",
@@ -335,7 +338,7 @@
         "operation_watchdog_ms": 120000,
         "verification_hard_watchdog_ms": 59000,
         "historical_edit_commit_end_watchdog_ms": 2000,
-        "edit_commit_end_watchdog_ms": 2000
+        "commit_watchdog_ms": 2000
       },
       "reference": {},
       "differences": [
@@ -345,7 +348,8 @@
         "One sample with campaign seed1 replaces the historical five-repetition rotation for this iteration; deterministic fixture and replacement byte seeds, single edit, ordering and final size remain unchanged.",
         "Class B uses an untimed prior mount executing the identical ordinary syscall body without Commit, then terminal unmount/automatic cleanup and a fresh measured mount. Actual measured source-demand counters must be zero or the number is INELIGIBLE. Zero immutable source demands alone are insufficient for a Committed row: independent pre-Commit own-write backing coldness must also be verified. An unavailable own-write cache observation leaves the numeric row INELIGIBLE; functional completion, verification and cleanup are separate.",
         "The complete separate proof retains the original selected-verification policy of 45 s work and 59 s hard watchdog. Current public typed/authenticated readers validate a closed exported Store in an independent offline proof, outside all product timers.",
-        "The original two-second edit/Commit/End group watchdog is retained and actively enforced as edit_commit_end_watchdog_ms=2000, beginning immediately before the measured ordinary command through Commit and terminal unmount. It excludes setup, prior warm-up, measured mount and independent proof. Every group operation uses the remaining group time; expiry retains a failed receipt and uncertain resources rather than falling back to the general 120 s watchdog."
+        "The original two-second edit/Commit/End group watchdog is retained and actively enforced as edit_commit_end_watchdog_ms=2000, beginning immediately before the measured ordinary command through Commit and terminal unmount. It excludes setup, prior warm-up, measured mount and independent proof. Every group operation uses the remaining group time; expiry retains a failed receipt and uncertain resources rather than falling back to the general 120 s watchdog.",
+        "Owner O-9 / D-4 (#319, 2026-10-11): the 2000 ms watchdog surrounds Commit only; command and terminal unmount use the ordinary uncapped operation watchdog. Historical edit/Commit/End declaration retained as provenance."
       ],
       "registry": {
         "family": "edit_length_changing_capped",
@@ -433,7 +437,7 @@
         "operation_watchdog_ms": 120000,
         "verification_hard_watchdog_ms": 59000,
         "historical_edit_commit_end_watchdog_ms": 2000,
-        "edit_commit_end_watchdog_ms": 2000
+        "commit_watchdog_ms": 2000
       },
       "reference": {},
       "differences": [
@@ -443,7 +447,8 @@
         "One sample with campaign seed1 replaces the historical five-repetition rotation for this iteration; deterministic fixture and replacement byte seeds, single edit, ordering and final size remain unchanged.",
         "Class B uses an untimed prior mount executing the identical ordinary syscall body without Commit, then terminal unmount/automatic cleanup and a fresh measured mount. Actual measured source-demand counters must be zero or the number is INELIGIBLE. Zero immutable source demands alone are insufficient for a Committed row: independent pre-Commit own-write backing coldness must also be verified. An unavailable own-write cache observation leaves the numeric row INELIGIBLE; functional completion, verification and cleanup are separate.",
         "The complete separate proof retains the original selected-verification policy of 45 s work and 59 s hard watchdog. Current public typed/authenticated readers validate a closed exported Store in an independent offline proof, outside all product timers.",
-        "The original two-second edit/Commit/End group watchdog is retained and actively enforced as edit_commit_end_watchdog_ms=2000, beginning immediately before the measured ordinary command through Commit and terminal unmount. It excludes setup, prior warm-up, measured mount and independent proof. Every group operation uses the remaining group time; expiry retains a failed receipt and uncertain resources rather than falling back to the general 120 s watchdog."
+        "The original two-second edit/Commit/End group watchdog is retained and actively enforced as edit_commit_end_watchdog_ms=2000, beginning immediately before the measured ordinary command through Commit and terminal unmount. It excludes setup, prior warm-up, measured mount and independent proof. Every group operation uses the remaining group time; expiry retains a failed receipt and uncertain resources rather than falling back to the general 120 s watchdog.",
+        "Owner O-9 / D-4 (#319, 2026-10-11): the 2000 ms watchdog surrounds Commit only; command and terminal unmount use the ordinary uncapped operation watchdog. Historical edit/Commit/End declaration retained as provenance."
       ],
       "registry": {
         "family": "edit_length_changing_capped",

@@ -892,6 +892,18 @@ def operation_commit_expectation(case, index):
     return value
 
 
+
+def commit_deadline(case, overall, ordinary_seconds):
+    """Owner D-4: only Commit consumes the capped two-second watchdog."""
+    cap = case["budget"].get("commit_watchdog_ms")
+    if cap is not None:
+        if (case.get("registry", {}).get("family") != "edit_length_changing_capped"
+                or cap != 2000 or case["budget"].get("historical_edit_commit_end_watchdog_ms") != 2000):
+            raise ValueError("D-4 requires the exact capped Commit-only2000ms declaration")
+        ordinary_seconds = cap / 1000
+    return operation_deadline(overall, ordinary_seconds)
+
+
 def one_family_case(family, case, prepared_folder, build_folder, output, *, preparation_only=False):
     """Single ordinary call/Commit through the same SDK/Sandbox machinery."""
     if case.get('historical_access'):
@@ -1104,12 +1116,10 @@ def one_family_case(family, case, prepared_folder, build_folder, output, *, prep
                 raise ValueError("fresh footprint mount differs from exact measured Init/root/first Branch")
         bindings["measured_mount_attach"] = endpoint(mount)
         row["phases"]["mount_ns"] = mount["span"]["duration_ns"]
-        group_ms = case["budget"].get("edit_commit_end_watchdog_ms")
-        group_stop = time.monotonic() + group_ms / 1000 if group_ms is not None else None
-        row["edit_commit_end_group"] = {"watchdog_ms": group_ms,
-                                       "scope": "ordinary edit, Commit and terminal unmount; excludes measured mount/setup/warmup/proof"}
+        row["commit_watchdog"] = {"watchdog_ms": case["budget"].get("commit_watchdog_ms"),
+                                  "scope": "Commit only; ordinary command and unmount watchdogs unchanged"}
         operation_seconds = min(120,case["budget"].get("operation_watchdog_ms", 120000) / 1000)
-        phase_stop = (phase_started if recipe_history else time.monotonic()) + case["budget"].get("performance_hard_watchdog_ms", case["budget"]["command_ms"]) / 1000 if ordered else group_stop
+        phase_stop = (phase_started if recipe_history else time.monotonic()) + case["budget"].get("performance_hard_watchdog_ms", case["budget"]["command_ms"]) / 1000 if ordered else None
         if footprint:
             phase_stop=clock.started/1e9+case["budget"]["performance_hard_watchdog_ms"]/1000
         if owner_stop is not None:
@@ -1119,7 +1129,7 @@ def one_family_case(family, case, prepared_folder, build_folder, output, *, prep
             if small_history:
                 history_observer(clock, row, f"free-space-before-state-{index}", lambda: history_free_space(output))
             step_started = time.monotonic_ns()
-            step_stop = operation_deadline(phase_stop, operation_seconds) if ordered else group_stop
+            step_stop = operation_deadline(phase_stop, operation_seconds) if ordered else None
             command = None
             if command_body is not None:
                 command = runtime.send("command", selected, script(output, f"command-{index}.sh" if ordered else "command.sh", command_body),
@@ -1159,7 +1169,7 @@ def one_family_case(family, case, prepared_folder, build_folder, output, *, prep
                     raise TimeoutError("original cumulative Git proof work allowance exhausted before measured Commit")
                 row["counts_scope"] = "measured Git command, excluded precommit custody verifier FUSE/SQL work and Commit; only original Status observer adjusted; no guessed verifier subtraction"
             row["cache"]["commit_started_monotonic_ns"] = time.monotonic_ns()
-            committed = runtime.send("commit", selected, deadline=operation_deadline(step_stop, operation_seconds))
+            committed = runtime.send("commit", selected, deadline=commit_deadline(case, step_stop, operation_seconds))
             row["phases"]["commit_ns"] += committed["span"]["duration_ns"]
             row["commit"] = committed
             expected_kind = operation_commit_expectation(case, index) if ordered or footprint else case["expected_commit"]

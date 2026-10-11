@@ -643,3 +643,26 @@ pending owner review: choose the 75000/89000 ms tuple, preserving the existing
 14-second work-to-publication gap. Every test has a 118 s wall stop.
 Production LOC: 81727 -> 81727 (delta +0), pinned exact active-core snapshots;
 reference absent (retired R9c; last counted 65,417 at tree 498dd1917812).
+
+
+### Phase 6 D-4 / O-9 capped Commit
+
+[Old/new declarations and regression](checks/phase6-capped.json): the five
+capped rows retain historical edit/Commit/End 2000 ms provenance, replace the
+operative group key with Commit-only 2000 ms, and record the authorized route
+difference. Command and unmount now use the uncapped ordinary per-operation
+120000 ms watchdog. The 15000 ms reported complete-command target, payload,
+readback, resource and verifier limits remain unchanged.
+
+The controller regression supplies a three-second ordinary command: before
+fixing, the measured command deadline was the shared two-second stop and
+Commit was never reached. After fixing, command deadlines are ordinary, and
+Commit receives a fresh two seconds from its own start. Red retained, focused
+regression PASS; 14 Workspace engine tests and 4 owning capped-family tests
+PASS. Formatting, boundary guard and whitespace PASS. No product crate changed;
+Clippy is inapplicable. Selected capped sample follows at the phase6 seal.
+All test invocations have explicit 118 s stops. Decided by agent, pending owner
+review: retain the Commit-only watchdog implementation.
+
+Production LOC: 81727 -> 81727 (delta +0), pinned exact active-core snapshots;
+reference absent (retired R9c; last counted 65,417 at tree 498dd1917812).
