@@ -272,3 +272,32 @@ Clippy, formatting, boundary guard and self-tests passed at the fix source;
 this evidence commit checks formatting/whitespace/guard with no Rust changes.
 Production LOC: 81727 -> 81727 (delta +0).
 Phase 2 complete; phase 1 evidence exit committed at `8f1bd9db4`.
+
+## Phase 3 exit — conditional fix not selected, 2026-10-11
+
+Phase 2 evidence exit commit `a9fe3ce5a`; production still 81,727 LOC.
+Phase 0's two-size delete diagnostic did **not** reproduce stored cells between
+pieces: both 1 MiB and 10 MiB held one reference row, one stored cell and 4,096
+bytes. Producer record jobs stayed 42. Record-class jobs 118 -> 361, owner jobs
+131 -> 374, statements 667 -> 1,942 still show growth. This remains an **open
+scaling finding**, with no cause confirmed by these counts alone.
+
+The condition for phase 3's assertion/fix is false at the diagnostic scope.
+No failing cell-between-pieces assertion was invented and no product change
+was made. The phase 3 delete/recognizer/overlay-pieces test selection and its
+100/500 MiB delete and 100 MiB replace-shrink samples are NOT_RUN for this
+phase. The 100 MiB delete ran once as phase 2's guard, with functional/proof
+PASS and exactly equal b1 counts: 1,212 requests, 2,661 jobs, 26,166 statements,
+339,968 overlay logical bytes. That receipt is reused as evidence of the guard,
+not relabeled as phase 3's proof or a scaling fix.
+
+Decided by agent, pending owner review: close the conditional work in this
+batch without a fix; preserve the growth finding open. No claim that delete
+jobs scale like replace-shrink, no timing comparison, SQL attribution or
+100/500 MiB diagnostic extrapolation. The full phase 5 run retains those
+original cases without weakening their checks.
+
+Docs-only checks: local links/claims and whitespace, Rust formatting, boundary
+guard PASS. No Rust crate touched, so new Clippy or runtime tests are
+inapplicable; latest changed-scope checks remain above.
+Production LOC: 81727 -> 81727 (delta +0).
