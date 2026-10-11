@@ -483,3 +483,94 @@ equal. Times are single diagnostic samples.
   0 containers more; originals 4418 MB, result folder
   305 MB; host 221 GiB free; `docker system df`: Images=21.51GB, Containers=12.85GB, Local Volumes=69.71GB, Build Cache=4.843GB.
 - CSVs: `core/benchmark/fs-bench-pro/baselines/core/2026-10-11-7928b05fd/edit_length_preserving/`.
+
+## Phase C — batch 2, `edit_length_changing`, tag `b1`, sampled at `c7f283e6e`
+
+Iteration 1's value is left of each arrow, this run's right; one value means
+equal. Times are single diagnostic samples.
+
+| case | status | functional | proof | requests | writer jobs | statements | overlay logical B | Store logical B | exec ms | Commit ms |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| insert-middle-4k-on-1mib-ops-1 | FAIL | FAIL -> - | FAIL | 27 | 237 -> 212 | 1194 -> 1227 | 782336 -> 286720 | 1426376 -> 1405776 | 53.7 -> 42.7 | 18.8 -> 12.6 |
+| insert-middle-4k-on-10mib-ops-1 | FAIL | FAIL -> - | FAIL | 171 | 1292 -> 867 | 6711 -> 5522 | 5656576 -> 307200 | 11044144 -> 11002944 | 82.5 -> 73.8 | 54.9 -> 15.6 |
+| insert-middle-4k-on-100mib-ops-1 | FAIL | FAIL -> - | FAIL | 1611 | 9853 -> 2362 | 51568 -> 23775 | 54333440 -> 323584 | 106748504 -> 106513664 | 669.8 -> 472.1 | 476.2 -> 18.2 |
+| insert-middle-4k-on-500mib-result-capped-v2-ops-1 | FAIL | FAIL -> - | FAIL | 8011 | 36533 -> 8938 | 189492 -> 104641 | 268427264 -> 405504 | 531958848 -> 530978288 | 3183.5 -> 2184.5 | 2794.7 -> 25.1 |
+| delete-middle-4k-on-1mib-ops-1 | INELIGIBLE | FAIL -> PASS | FAIL -> PASS | 24 | 246 -> 157 | 1393 -> 934 | 778240 -> 258048 | 1418136 -> 1376936 | 41.6 -> 40.4 | 14.4 -> 12.0 |
+| delete-middle-4k-on-10mib-ops-1 | INELIGIBLE | FAIL -> PASS | FAIL -> PASS | 132 | 1465 -> 508 | 8854 -> 3897 | 5701632 -> 278528 | 11015304 -> 10969984 | 71.9 -> 61.8 | 58.8 -> 13.9 |
+| delete-middle-4k-on-100mib-ops-1 | INELIGIBLE | FAIL -> PASS | FAIL -> PASS | 1212 | 10029 -> 2661 | 64898 -> 26166 | 54697984 -> 339968 | 106645504 -> 106517784 | 629.9 -> 406.4 | 444.4 -> 29.6 |
+| delete-middle-4k-on-500mib-ops-1 | INELIGIBLE | FAIL -> PASS | FAIL -> PASS | 6012 | 49266 -> 13247 | 318697 -> 127502 | 272486400 -> 479232 | 532008264 -> 531143064 | 3266.8 -> 2043.7 | 3114.7 -> 92.1 |
+| append-tail-4k-on-1mib-ops-1 | INELIGIBLE | PASS | PASS | 11 | 116 -> 110 | 554 -> 535 | 237568 -> 241664 | 1381056 | 34.9 -> 40.3 | 9.6 -> 11.3 |
+| append-tail-4k-on-10mib-ops-1 | INELIGIBLE | PASS | PASS | 11 | 139 -> 133 | 677 -> 658 | 237568 -> 241664 | 10965864 | 33.7 -> 38.6 | 9.7 -> 12.8 |
+| append-tail-4k-on-100mib-ops-1 | INELIGIBLE | PASS | PASS | 11 | 139 -> 133 | 677 -> 658 | 245760 -> 249856 | 106439504 -> 106435384 | 45.3 -> 49.9 | 11.1 -> 12.7 |
+| append-tail-4k-on-500mib-result-capped-v2-ops-1 | INELIGIBLE | PASS | PASS | 11 | 179 -> 173 | 899 -> 880 | 258048 -> 262144 | 530875288 | 37.4 -> 48.2 | 12.1 -> 21.3 |
+| prepend-head-4k-on-1mib-ops-1 | FAIL | FAIL -> - | FAIL | 43 | 305 -> 196 | 1544 -> 1233 | 1314816 -> 299008 | 1418136 -> 1405776 | 60.6 -> 59.1 | 18.8 -> 14.4 |
+| prepend-head-4k-on-10mib-ops-1 | FAIL | FAIL -> - | FAIL | 331 | 2039 -> 757 | 10620 -> 6152 | 11051008 -> 303104 | 10986464 -> 10998824 | 156.3 -> 130.5 | 93.7 -> 13.8 |
+| prepend-head-4k-on-100mib-ops-1 | FAIL | FAIL -> - | FAIL | 3211 | 18905 -> 3637 | 99042 -> 42130 | 108425216 -> 311296 | 106497184 | 1284.9 -> 865.7 | 983.8 -> 14.2 |
+| prepend-head-4k-on-500mib-result-capped-v2-ops-1 | FAIL | FAIL -> - | FAIL | 16011 | 69638 -> 16582 | 363959 -> 202834 | 536563712 -> 344064 | 530945328 -> 530970048 | 7247.9 -> 4920.4 | 5373.4 -> 20.0 |
+| replace-grow-middle-2k-to-4k-on-1mib-ops-1 | FAIL | FAIL -> - | FAIL | 28 | 241 -> 244 | 1241 -> 1433 | 782336 -> 294912 | 1426376 -> 1409896 | 45.8 -> 48.2 | 14.1 -> 14.0 |
+| replace-grow-middle-2k-to-4k-on-10mib-ops-1 | FAIL | FAIL -> - | FAIL | 172 | 1296 -> 1376 | 6974 -> 8252 | 5656576 -> 331776 | 11040024 -> 11015304 | 94.0 -> 74.6 | 63.7 -> 21.1 |
+| replace-grow-middle-2k-to-4k-on-100mib-ops-1 | FAIL | FAIL -> - | FAIL | 1612 | 9857 -> 2624 | 53991 -> 27897 | 54333440 -> 335872 | 106748504 -> 106526024 | 666.2 -> 490.0 | 455.0 -> 22.0 |
+| replace-grow-middle-2k-to-4k-on-500mib-result-capped-v2-ops-1 | FAIL | FAIL -> - | FAIL | 8012 | 36534 -> 8939 | 189499 -> 104658 | 268423168 -> 409600 | 531967064 -> 530986504 | 3399.6 -> 2406.6 | 2807.8 -> 27.6 |
+| replace-shrink-middle-4k-to-2k-on-1mib-ops-1 | INELIGIBLE | FAIL -> PASS | FAIL -> PASS | 24 | 228 -> 188 | 1252 -> 1090 | 774144 -> 258048 | 1414016 -> 1381056 | 50.6 -> 43.8 | 15.5 -> 11.5 |
+| replace-shrink-middle-4k-to-2k-on-10mib-ops-1 | INELIGIBLE | FAIL -> PASS | FAIL -> PASS | 132 | 1231 -> 737 | 7057 -> 4717 | 5623808 -> 282624 | 11031784 -> 10978224 | 79.9 -> 55.0 | 53.1 -> 16.8 |
+| replace-shrink-middle-4k-to-2k-on-100mib-ops-1 | INELIGIBLE | FAIL -> PASS | FAIL -> PASS | 1212 | 7635 -> 1860 | 46541 -> 19312 | 53862400 -> 299008 | 106633144 -> 106484824 | 673.0 -> 436.6 | 443.1 -> 19.1 |
+| replace-shrink-middle-4k-to-2k-on-500mib-ops-1 | INELIGIBLE | FAIL -> PASS | FAIL -> PASS | 6012 | 37272 -> 6790 | 226740 -> 83980 | 268226560 -> 344064 | 532000024 -> 530932944 | 2852.1 -> 1977.1 | 2744.1 -> 24.0 |
+| truncate-tail-4k-on-1mib-ops-1 | INELIGIBLE | PASS | PASS | 10 | 110 -> 106 | 533 -> 521 | 233472 -> 237568 | 1376936 | 37.5 -> 40.8 | 9.9 -> 10.2 |
+| truncate-tail-4k-on-10mib-ops-1 | INELIGIBLE | PASS | PASS | 10 | 174 -> 170 | 893 -> 881 | 237568 -> 241664 | 10941144 | 46.8 -> 40.8 | 12.2 -> 12.1 |
+| truncate-tail-4k-on-100mib-ops-1 | INELIGIBLE | PASS | PASS | 10 | 174 -> 170 | 893 -> 881 | 245760 -> 249856 | 106439504 -> 106447744 | 45.4 -> 49.4 | 12.0 -> 12.0 |
+| truncate-tail-4k-on-500mib-ops-1 | INELIGIBLE | PASS | PASS | 10 | 220 -> 216 | 1145 -> 1133 | 253952 -> 258048 | 530879384 | 47.1 -> 58.6 | 17.6 -> 16.7 |
+| zero-extend-tail-4k-on-1mib-ops-1 | INELIGIBLE | PASS | PASS | 11 | 116 -> 110 | 554 -> 535 | 237568 -> 241664 | 1376936 | 44.1 -> 45.3 | 11.4 -> 12.4 |
+| zero-extend-tail-4k-on-10mib-ops-1 | INELIGIBLE | PASS | PASS | 11 | 139 -> 133 | 677 -> 658 | 237568 -> 241664 | 10965864 -> 10969984 | 46.8 -> 50.5 | 12.6 -> 12.7 |
+| zero-extend-tail-4k-on-100mib-ops-1 | INELIGIBLE | PASS | PASS | 11 | 139 -> 133 | 677 -> 658 | 245760 -> 249856 | 106443624 | 42.0 -> 42.7 | 12.2 -> 11.9 |
+| zero-extend-tail-4k-on-500mib-result-capped-v2-ops-1 | INELIGIBLE | PASS | PASS | 11 | 179 -> 173 | 899 -> 880 | 258048 -> 262144 | 530887648 | 43.4 -> 38.6 | 12.4 -> 13.9 |
+
+Failure texts, as recorded:
+
+- `insert-middle-4k-on-1mib-ops-1`: independent-graph failed with exit 1
+- `insert-middle-4k-on-10mib-ops-1`: independent-graph failed with exit 1
+- `insert-middle-4k-on-100mib-ops-1`: independent-graph failed with exit 1
+- `insert-middle-4k-on-500mib-result-capped-v2-ops-1`: independent-graph failed with exit 1
+- `prepend-head-4k-on-1mib-ops-1`: independent-graph failed with exit 1
+- `prepend-head-4k-on-10mib-ops-1`: independent-graph failed with exit 1
+- `prepend-head-4k-on-100mib-ops-1`: independent-graph failed with exit 1
+- `prepend-head-4k-on-500mib-result-capped-v2-ops-1`: independent-graph failed with exit 1
+- `replace-grow-middle-2k-to-4k-on-1mib-ops-1`: independent-graph failed with exit 1
+- `replace-grow-middle-2k-to-4k-on-10mib-ops-1`: independent-graph failed with exit 1
+- `replace-grow-middle-2k-to-4k-on-100mib-ops-1`: independent-graph failed with exit 1
+- `replace-grow-middle-2k-to-4k-on-500mib-result-capped-v2-ops-1`: independent-graph failed with exit 1
+
+- **20 of 32 are functional PASS and proof PASS (iteration 1: 12); 12 are
+  FAIL (iteration 1: 20).** This is the expected difference: the 8 delete and
+  replace-shrink cases, FAIL in iteration 1 on the payload-retention check,
+  now pass every check, and their mounts end Gone with KnownStop. The 12
+  append, truncate and zero-extend cases pass as before.
+- **The 12 FAIL rows are the insert, prepend and replace-grow cases at all
+  four sizes.** Receipt text of each: `independent-graph failed with exit 1`;
+  the check's own output: `persisted edit lost an original untouched payload
+  object`. Their mounts ended Gone with KnownStop, and the full byte, inode,
+  root and mapping checks before the retention check passed. How this check
+  is judged for a shifted file is with the owner (O-6); nothing was changed.
+- **Requests are equal in all 32 cases.**
+- **Overlay logical bytes of the 20 shift cases are 258,048 to 479,232 at
+  every size** (iteration 1: 774,144 at 1 MiB up to 536,563,712 for the
+  500 MiB prepend). The moved tail is no longer stored.
+- **Writer jobs and statements are lower in 29 cases.** Three are higher:
+  `replace-grow` at 1 MiB (241 -> 244 jobs, 1241 -> 1433 statements) and at
+  10 MiB (1296 -> 1376, 6974 -> 8252), and `insert` at 1 MiB in statements
+  only (1194 -> 1227). At 100 and 500 MiB the same edits are lower by a
+  factor of about four in jobs.
+- **Commit, diagnostic:** 12 to 28 ms for insert, prepend, replace-grow and
+  replace-shrink at every size (iteration 1: up to 5,373 ms). **The delete's
+  Commit still follows the file size: 12.0, 13.9, 29.6, 92.1 ms** (open item
+  of issue 316, phase D).
+- **Exec, diagnostic:** still follows the file size (the writer moves the
+  whole tail): 2.0 to 4.9 s at 500 MiB, against 2.9 to 7.2 s in iteration 1.
+- The test copy of every FAIL sample (clone volume and stopped container,
+  which the harness keeps) was removed by the driver: 12 volumes, 12
+  containers, each matched to its sample by the volume name in its records.
+
+- Storage after the family: 6 Docker volumes more than before the run
+  (6 of them masters of current originals, 0 unexplained),
+  0 containers more; originals 11754 MB, result folder
+  361 MB; host 213 GiB free; `docker system df`: Images=21.51GB, Containers=12.85GB, Local Volumes=70.78GB, Build Cache=4.843GB.
+- CSVs: `core/benchmark/fs-bench-pro/baselines/core/2026-10-11-c7f283e6e/edit_length_changing/`.
