@@ -158,14 +158,21 @@ def _closed_store_file(path, absolute_stop=None):
     return {"size": size, "sha256": digest.hexdigest()}
 
 
-def _closed_store_files(raw_directory, absolute_stop=None):
+def _closed_store_names(raw_directory):
     raw = Path(raw_directory)
     if raw.is_symlink() or not raw.is_dir():
         raise ValueError("exact regular closed Store directory required")
     names = sorted(item.name for item in raw.iterdir())
     if "store.sqlite" not in names or any(name not in ("store.sqlite", "store.sqlite-wal", "store.sqlite-shm") for name in names):
         raise ValueError("closed Store set contains missing or unexpected files/journal")
-    return {name: _closed_store_file(raw/name, absolute_stop) for name in names}
+    if any((raw/name).is_symlink() or not (raw/name).is_file() for name in names):
+        raise ValueError("closed Store set requires exact regular files")
+    return names
+
+
+def _closed_store_files(raw_directory, absolute_stop=None):
+    raw = Path(raw_directory)
+    return {name: _closed_store_file(raw/name, absolute_stop) for name in _closed_store_names(raw)}
 
 
 def prepare_closed_store(raw_directory, normalized_path, absolute_stop):
@@ -190,8 +197,10 @@ def prepare_closed_store(raw_directory, normalized_path, absolute_stop):
     source = target = None
     progress = {"calls": 0, "remaining_pages": None, "total_pages": None, "last_status": None}
     try:
-        record["raw_files"] = _closed_store_files(raw, absolute_stop)
-        for name in record["raw_files"]:
+        names = _closed_store_names(raw)
+        record["raw_files"] = {}
+        for name in names:
+            size, digest = (raw/name).stat().st_size, hashlib.sha256()
             with (raw/name).open("rb") as incoming, (scratch/name).open("xb") as outgoing:
                 while True:
                     _closed_store_deadline(absolute_stop)
@@ -200,6 +209,10 @@ def prepare_closed_store(raw_directory, normalized_path, absolute_stop):
                         break
                     if outgoing.write(chunk) != len(chunk):
                         raise OSError("closed Store copy short write; no resend")
+                    digest.update(chunk)
+            if (raw/name).stat().st_size != size:
+                raise ValueError("closed Store file changed while copying")
+            record["raw_files"][name] = {"size": size, "sha256": digest.hexdigest()}
             _closed_store_deadline(absolute_stop)
         record["copied_files"] = _closed_store_files(scratch, absolute_stop)
         if record["copied_files"] != record["raw_files"]:

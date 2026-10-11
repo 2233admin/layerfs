@@ -78,6 +78,14 @@ following symlinks and verifies the complete sorted path set. It keeps the
 existing path list and class maps, plus two fixed scratch buffers; it does
 not retain a second whole-tree metadata snapshot.
 
+Closed Store normalization computes the initial raw file digests during the
+existing bounded scratch copy. Scratch remains an independent byte copy of
+every allowed regular main/WAL/SHM file; the verifier hashes those copies
+independently before SQLite opens them. It also retains the complete raw-after
+hash, bounded read-only WAL backup into a separate WAL/OFF target, unchanged
+absolute deadline and strict typed Storage/census readback. This removes one
+raw stream read without reducing the source/copy/output identity checks.
+
 Historical access setup first creates a new complete closed original producer.
 For a paired selection of that same producer, use `bench.py prepare <access-case>
 --build <seal> --reuse-producer <first-access-prepared-folder> --out <fresh-path>`.

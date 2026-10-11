@@ -1309,3 +1309,48 @@ whole-checker's two inherited passthrough refusals remain. Formatting/boundary
 is removed. New-identity sampling follows the commit; no benchmark speed or
 SQLite causal claim is made. The [native-stage result](checks/native-metadata-stage.json)
 retains all nine exact receipt identities and six owning-engine CSV publications.
+
+Base-stat stage `c20a2c72e` / `p319n13b` completed all29 planned selections once:
+23 family guards have functional PASS and proof PASS (one overall PASS,22
+INELIGIBLE); all six500MB affected rows remain FAIL. No tracked source edit
+occurred during the clean nine-binary build or sampling. Every payload-removal
+manifest is PASS; each original was removed before the next case. Missing
+native-proof counters and failed functional/custody fields remain unavailable.
+
+Mixed500MB K10 native proof completed16.804990292s; closed Store export PASS
+3.203089542s, with3.409904666s of the unchanged work budget available. The full
+raw set is513130496B (main508903424 + WAL4194304 + SHM32768). Normalization
+then fails its absolute deadline; no normalized/typed/census PASS is claimed.
+
+### Closed Store duplicate raw read (harness)
+
+Cause before editing: normalization hashes the raw Store set, then reads it
+again to copy into independent scratch, later hashing scratch and raw-after.
+For the exact513130496B export, a completed operation therefore streams
+2052521984B through the Python raw/scratch loops. Predict one raw pass removed:
+raw3S ->2S, scratchS unchanged, total4S ->3S =1539391488B; save513130496B.
+Raw stream read calls including EOF23502 ->15668 at the existing64KiB window.
+The failed sample does not establish that every modeled pass ran to completion.
+SQLite backup reads are separate and unprofiled; this is a Python stream count,
+not a SQLite or physical I/O speed claim. Hash input3S, independently copied
+bytesS, full raw-after tamper detection, helper/schema/receipt bindings, WAL/OFF
+backup, absolute deadlines and typed Storage readback all remain required.
+
+The new external real-WAL count test expects raw2S and independently read
+scratchS, identical three-file receipts/raw bytes, distinct scratch inode,
+unchanged normalized identity and strict three-Commit census. Run it against
+the unmodified helper before selecting the fused copy/digest repair.
+
+[External count receipt](checks/normalization-stream-count.json) confirms the
+188568B real-WAL fixture's raw read565704 ->377136B (3S ->2S), with independent
+scratch188568B unchanged. All38 owning normalization, overlay-storage, history
+fixture and closed-storage controller tests PASS, including source/receipt/
+output tamper, unexpected-file/symlink refusal, exact profile, deadline and
+no-retry checks. The initial command omitted Python module paths and failed to
+import; its log is retained separately. The corrected red invocation reached
+the expected count assertion before the helper edit. Formatting, boundary686
+and boundary selftests50 PASS; no Rust crate changed, so fresh crate Clippy is
+inapplicable. [Base-stat stage operands](checks/base-stat-stage.json) retain
+all29 receipts and46 owning-engine CSVs. Historical access is proof-only
+(sample_count0, one verification attempt); other stage cases sample_count1.
+No SQLite speed claim or benchmark PASS follows from this Python count tier.
