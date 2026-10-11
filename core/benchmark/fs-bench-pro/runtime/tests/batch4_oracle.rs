@@ -23,6 +23,8 @@ pub(crate) mod edit_oracle;
 #[allow(dead_code)]
 #[path = "../src/events.rs"]
 pub(crate) mod events;
+#[path = "support/one_mib_alloc.rs"]
+mod one_mib_alloc;
 #[allow(dead_code)]
 #[path = "../src/workspace_oracle.rs"]
 pub(crate) mod workspace_oracle;
@@ -235,6 +237,116 @@ fn selective() -> edit_model::M1State {
         directory_modes: BTreeMap::from([("dir".into(), 0o750)]),
         required_created_directory_modes: BTreeSet::new(),
     }
+}
+
+fn tiny_scratch_fixture() -> (ObjectId, Bag, Vec<Entry>) {
+    let entries = vec![
+        Entry::directory("."),
+        Entry::directory("dir"),
+        Entry::file("dir/a", Content::Literal(vec![0x11; 32])),
+        Entry::file("dir/b", Content::Literal(vec![0x22; 32])),
+        Entry::file("dir/c", Content::Literal(vec![0x33; 32])),
+        Entry::file("dir/d", Content::Literal(vec![0x44; 32])),
+    ];
+    let (root, bag) = constructed(
+        layerfs_content::filesystem::root::scope_for_seed([91; 32]),
+        &entries,
+    );
+    assert!(bag
+        .bytes
+        .values()
+        .all(|bytes| bytes.len() < one_mib_alloc::ONE_MIB));
+    (root, bag, entries)
+}
+
+#[test]
+fn persisted_proof_uses_one_scratch_pair_for_the_root() {
+    let (root, bag, entries) = tiny_scratch_fixture();
+    let guard = one_mib_alloc::Guard::start();
+    let result = workspace_oracle::verify_tree(&bag, root, &entries, false, None, true);
+    let allocations = guard.finish();
+    let proof = result.expect("complete persisted proof");
+    assert_eq!(proof.paths, 6);
+    assert_eq!(proof.bytes, 128);
+    assert_eq!(proof.files.len(), 4);
+    println!("ROOT_SCRATCH_ALLOCATIONS {allocations:?}");
+    assert_eq!(allocations.realloc, 0);
+    assert_eq!(allocations.requests(), 2, "one scratch pair per root");
+}
+
+#[test]
+fn scratch_count_controls_exclude_namespace_and_file_views() {
+    let (root, bag, entries) = tiny_scratch_fixture();
+    let guard = one_mib_alloc::Guard::start();
+    let result = workspace_oracle::verify_tree(&bag, root, &entries, true, None, true);
+    let allocations = guard.finish();
+    let proof = result.expect("complete membership-only proof");
+    assert_eq!(proof.paths, 6);
+    assert_eq!(proof.bytes, 0);
+    assert_eq!(allocations.requests(), 0);
+    assert_eq!(allocations.realloc, 0);
+    let mut tree = layerfs_content::filesystem::read::FilesystemRead::new(
+        &bag,
+        layerfs_content::filesystem::root::FilesystemRootId(root),
+    )
+    .unwrap();
+    let roots = entries[2..]
+        .iter()
+        .map(|entry| {
+            tree.resolve(&layerfs_content::LogicalPath::new(&entry.path).unwrap())
+                .unwrap()
+                .value
+                .content_root
+        })
+        .collect::<Vec<_>>();
+    let guard = one_mib_alloc::Guard::start();
+    let result = Timing::disabled("external.scratch.control", |timer| -> Result<usize> {
+        let mut bytes = 0;
+        for root in roots {
+            let view = FileView::open(&bag, root, timer.child("open"))?;
+            workspace_oracle::verify_mapping(&bag, &view)?;
+            let mut sink = Vec::with_capacity(32);
+            view.read_range(&bag, 0..32, &mut sink, timer)?;
+            bytes += sink.len();
+        }
+        Ok(bytes)
+    })
+    .0;
+    let allocations = guard.finish();
+    assert_eq!(result.unwrap(), 128);
+    assert_eq!(allocations.requests(), 0);
+    assert_eq!(allocations.realloc, 0);
+    println!("SCRATCH_NEGATIVE_CONTROLS namespace=0 file_views=0");
+}
+
+#[test]
+fn scratch_reuse_checks_the_last_file_and_final_short_window() {
+    let entries = vec![
+        Entry::directory("."),
+        Entry::directory("dir"),
+        Entry::file("dir/a-small", Content::Literal(vec![0x11; 32])),
+        Entry::file(
+            "dir/z-last",
+            Content::Literal(vec![0x55; 2 * one_mib_alloc::ONE_MIB + 31]),
+        ),
+    ];
+    let scope = layerfs_content::filesystem::root::scope_for_seed([92; 32]);
+    let (root, bag) = constructed(scope, &entries);
+    let proof = workspace_oracle::verify_tree(&bag, root, &entries, false, None, true).unwrap();
+    assert_eq!(proof.paths, 4);
+    assert_eq!(proof.bytes, (32 + 2 * one_mib_alloc::ONE_MIB + 31) as u64);
+    let mut actual = entries.clone();
+    let EntryKind::File(Content::Literal(bytes)) = &mut actual[3].kind else {
+        unreachable!()
+    };
+    *bytes.last_mut().unwrap() ^= 1;
+    let (root, bag) = constructed(scope, &actual);
+    let error = workspace_oracle::verify_tree(&bag, root, &entries, false, None, true)
+        .err()
+        .expect("final-byte corruption must fail");
+    assert!(error
+        .to_string()
+        .contains("persisted exact bytes differ: dir/z-last at 2097152"));
 }
 fn selective_proof(expected: &edit_model::M1State, actual: &[Entry]) -> bool {
     let (root, bag) = constructed(

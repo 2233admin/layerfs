@@ -86,6 +86,13 @@ hash, bounded read-only WAL backup into a separate WAL/OFF target, unchanged
 absolute deadline and strict typed Storage/census readback. This removes one
 raw stream read without reducing the source/copy/output identity checks.
 
+The independent typed tree proof lazily allocates its existing two 1 MiB
+payload windows once per verified root and reuses them for that root's files.
+Every read still clears the observed window and compares the exact requested
+byte count, including a final partial window. A membership-only proof allocates
+neither payload buffer. All metadata, alias, mapping and complete inode-census
+checks remain in the same verifier; no scope or cache bound changes.
+
 Historical access setup first creates a new complete closed original producer.
 For a paired selection of that same producer, use `bench.py prepare <access-case>
 --build <seal> --reuse-producer <first-access-prepared-folder> --out <fresh-path>`.

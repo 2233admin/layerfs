@@ -1354,3 +1354,64 @@ inapplicable. [Base-stat stage operands](checks/base-stat-stage.json) retain
 all29 receipts and46 owning-engine CSVs. Historical access is proof-only
 (sample_count0, one verification attempt); other stage cases sample_count1.
 No SQLite speed claim or benchmark PASS follows from this Python count tier.
+
+Normalization stage `a3c324017` / `p319n13c`: all eight actual normalization
+family guards have functional PASS/proof PASS (seven INELIGIBLE, historical
+access overall PASS). Two500MB development samples still FAIL at raw Store
+export before the changed helper; no normalization benefit is attributed to
+those samples. Compact branch162/2664/12058, history10/95/445, reuse28/186/981,
+size-transition14/181/823 and footprint12/95/443 counts exactly match preceding
+guards. Mixed100MB2699/20344/109985 retains a +2 statement variation; multi
+aggregate counts remain UNAVAILABLE. Historical access is proof-only.
+
+All10 selections ran once after a clean nine-binary seal; every removal
+manifest PASS and originals removed case-by-case. [Stage operands](checks/normalization-stream-stage.json)
+retain original receipt hashes and16 portable owning CSVs. Actual call-path
+review limits this repair to eight active families/76 cases;166 active cases
+do not normalize and reuse their earlier unaffected receipts. The four agent-
+episodes mixed cases and twelve direct-export families never call this helper.
+Repository_history remains unsampled. Production LOC for this harness cause:
+82340 ->82340 (delta+0), exact snapshots with the pinned counter; reference
+absent (retired R9c; last counted65,417 at tree498dd1917812).
+
+### Typed proof repeated scratch allocation (harness)
+
+Cause before editing: verify_tree allocates two1MiB scratch buffers for each
+regular file, although every file uses the same bounded windows sequentially.
+The500MB selected-stage fixture has29984 regular paths;20 exhaustive roots
+therefore request1199360 such allocations. Predict40 after one lazy pair per
+root; no buffer/window grows. Nominal requested zero initialization falls
+628810055680 ->20971520B, not a physical-write/residency claim. The retained
+exhaustive500MB proof stops after13/20 typed roots with6032670976B checked;
+all20 still require605960 paths and9281233920 checked bytes. No scope is reduced.
+
+A four-file,32-byte-per-file external public-object test predicts8 ->2 exact
+1MiB allocation requests. Test-only thread-local System allocation observation
+starts after fixture construction, stops before assertions, and has independent
+membership-only and tiny FileView negative controls. A final-file tail beyond
+two1MiB windows must still fail on corruption. Run the count assertion red
+before selecting scratch reuse; this source count is not a benchmark PASS.
+
+[Allocation count/check receipt](checks/typed-scratch-count.json): host and Linux
+observe8 ->2 exact1MiB allocation requests, zero reallocations. Membership-only
+and tiny public FileView controls independently observe0; the last-file final
+short-window corruption is refused at offset2097152. Same6 paths/128 checked
+bytes in the count fixture and4 paths/2097215 bytes in the multi-window fixture.
+Host full runtime oracle28 PASS in107.74s under118s after --no-run; Linux builds
+first, then3 scratch and4 owning oracle tests PASS. No passing test is looped.
+
+Host/Linux all-target runtime Clippy-D warnings retain inherited frozen-fixture
+and untouched harness lints; no diagnostic in the changed buffer block or new
+allocation observer, and no suppression. A first Clippy command was refused
+by the active measurement lock (exit75, never ran); only after tests completed
+did the original Clippy execute. Initial count-test build's private LogicalPath
+import E0603 is retained and corrected to the existing public reexport. Core
+and touched runtime fmt, boundary686 and selftests50 PASS. No product source
+changes. README documents the exact retained proof/window behavior.
+
+Call-path review identifies20 active families/226 cases reaching this buffer
+region. Historical_access runs membership-only and is unchanged; Init namespace
+and footprint use other verifiers, and all12 cells use the mounted Python
+oracle. Their unaffected earlier evidence remains separate; phase15 coverage
+is still required. New-source seal, exhaustive500MB/100MB samples and one
+guard per affected family follow the cause commit, without a raised ceiling.

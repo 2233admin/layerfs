@@ -791,6 +791,7 @@ pub fn verify_tree(
     let mut verified_bytes = 0;
     let mut file_roots = BTreeSet::new();
     let mut files = BTreeMap::new();
+    let mut scratch = None;
     while let Some(path) = pending.pop_front() {
         if !seen.insert(path.clone()) {
             return Err("duplicate persisted namespace path".into());
@@ -916,8 +917,11 @@ pub fn verify_tree(
                         if mapping_profile {
                             verify_mapping(reader, &view)?;
                         }
-                        let mut wanted = vec![0; 1024 * 1024];
-                        let mut observed = Vec::with_capacity(wanted.len());
+                        let (wanted, observed) = scratch.get_or_insert_with(|| {
+                            let wanted = vec![0; 1024 * 1024];
+                            let observed = Vec::with_capacity(wanted.len());
+                            (wanted, observed)
+                        });
                         let mut hash = reference::Sha256::new();
                         let mut bytes = 0_u64;
                         for (start, length) in &ranges {
@@ -934,17 +938,17 @@ pub fn verify_tree(
                                 view.read_range(
                                     reader,
                                     offset..offset + count as u64,
-                                    &mut observed,
+                                    &mut *observed,
                                     timer,
                                 )?;
                                 if observed.len() != count {
                                     return Err("persisted read byte count differs".into());
                                 }
                                 match content {
-                                    Content::Digest { .. } => hash.update(&observed),
+                                    Content::Digest { .. } => hash.update(observed),
                                     _ => {
                                         if content.read_at(offset, &mut wanted[..count])? != count
-                                            || observed != wanted[..count]
+                                            || observed.as_slice() != &wanted[..count]
                                         {
                                             return Err(format!(
                                                 "persisted exact bytes differ: {path} at {offset}"
