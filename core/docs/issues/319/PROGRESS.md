@@ -832,3 +832,16 @@ and control operations, reporting targets, and smaller case limits are unchanged
 No sample used the initially proposed300000ms owner ceiling; it was revised
 before collection. Prior hotset failure remains failed. Native final sampling
 waits for clean committed source, final reliability review and nine-binary seal.
+
+### Phase 8 exit — clean environment remains owner-gated
+
+The issue owner environment action is still unticked when checked2026-10-12.
+Phase8 did not start. Environment qualification, the clean full-family/twelve-cell
+run and its CSVs are NOT_RUN. Every phase8 box stays unticked with CLOSED and this
+reason; no interference-free eligibility or timing comparison is claimed.
+The expanded correctness verification is separately scoped, with interference
+retained in its receipts. No protected container/volume was stopped or removed,
+no VM setting changed, no push/PR/issue close. Decided by agent, pending owner
+review: follow the issue gate and proceed to the independent count profiles.
+Production LOC:82179 ->82179 (delta +0), exact pinned active-core snapshots;
+reference absent (retired R9c; last counted65,417 at tree498dd1917812).
