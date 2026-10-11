@@ -1055,3 +1055,43 @@ Six cases: 2 completed with functional PASS and proof PASS, 4 FAIL. Iteration 1:
   0 containers more; originals 5458 MB, result folder
   817 MB; host 220 GiB free; `docker system df`: Images=21.51GB, Containers=12.85GB, Local Volumes=69.68GB, Build Cache=4.843GB.
 - CSVs: `core/benchmark/fs-bench-pro/baselines/core/2026-10-11-325ed0053/branch_development/`.
+
+## Phase C — batch 5, `multi_workspace_development`, tag `b1`, sampled at `fb3c4d3f8`
+
+Iteration 1's value is left of each arrow, this run's right; one value means
+equal. Times are single diagnostic samples.
+
+| case | status | functional | proof | requests | writer jobs | statements | overlay logical B | Store logical B | exec ms | Commit ms |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| v016-workspace-mixed-100mb-5000-k10-v1 | FAIL | FAIL | NOT_RUN | - | - | - | - | - | - -> 0.0 | - -> 0.0 |
+| v016-workspace-mixed-100mb-5000-k100-v1 | FAIL | FAIL | NOT_RUN | - | - | - | - | - | - -> 0.0 | - -> 0.0 |
+| v016-workspace-mixed-500mb-30000-k10-v1 | FAIL | FAIL | NOT_RUN | - | - | - | - | - | - -> 0.0 | - -> 0.0 |
+| v016-workspace-mixed-500mb-30000-k100-v1 | FAIL | FAIL | NOT_RUN | - | - | - | - | - | - -> 0.0 | - -> 0.0 |
+| v016-workspace-four-100mb-5000-k100-v1 | FAIL | FAIL | NOT_RUN | - | - | - | - | - | - -> 0.0 | - -> 0.0 |
+
+Failure texts, as recorded:
+
+- `v016-workspace-mixed-100mb-5000-k10-v1`: original runtime failure: original_failure=original concurrent round failure original external command exit: ExecInspection { container: ContainerId("c0897cfabf4bbd8db9ded35bd2c7c38a0c509dde37b5c13a208029495eb953e0"), exec: ExecId("4279fdd49b667a4026ada9833a0f929c3b7eeb0ad4f4da90321068f743f3557f"), 
+- `v016-workspace-mixed-100mb-5000-k100-v1`: original runtime failure: original_failure=original concurrent round failure original external command exit: ExecInspection { container: ContainerId("ca2ea9d8cb5e1f32f04d932c2ae18049594d4287e01773c883ec89c53e773146"), exec: ExecId("db96f10dd3fca012bf14bc48034b60d736a30819b06bdd21e48ae5d1e73fd156"), 
+- `v016-workspace-mixed-500mb-30000-k10-v1`: original runtime failure: original_failure=original concurrent round failure original external command exit: ExecInspection { container: ContainerId("dc258b304a8e90412733c46970e23ac3afa9aa869f973b441107aa4895a2a0cb"), exec: ExecId("c39fd2778bf5c0f072d88a5da5047d865a20c77fa981c65c1c1b8af908031c72"), 
+- `v016-workspace-mixed-500mb-30000-k100-v1`: original runtime failure: original_failure=original concurrent round failure original external command exit: ExecInspection { container: ContainerId("2d3703a871cbf321bbd4368b761d1371fbb792ace5d70db880a583972b2670f7"), exec: ExecId("e093fb31cf66f8dda7c85f4a06965a3f10c0598fab6422d51baec2e4d0018e71"), 
+- `v016-workspace-four-100mb-5000-k100-v1`: original runtime failure: original_failure=original concurrent round failure original external command exit: ExecInspection { container: ContainerId("3e4958eed551819b7cc2017502203d32260c95ca1a880df638f1413711200c14"), exec: ExecId("3ccb888207a9941086e00a89d436f13ea3669ae19646c19267006237a24d739c"),
+
+Five cases, all FAIL (functional FAIL, proof NOT_RUN), as in iteration 1.
+
+- Every sample ended in its first concurrent round: one worker's command exited 1, and its retained
+  standard error is `fs-benchmark-workload: stage 1 cycle 1: Resource temporarily unavailable (os error 11)`.
+  The receipt text is `original concurrent round failure original external command exit … exit_code: Some(1)`.
+- Iteration 1 records the same EAGAIN on a stage 1 creating write for three of the five cases and a
+  `Commit Begin` Busy refusal for the other two (`v016-workspace-mixed-100mb-5000-k100-v1`,
+  `v016-workspace-mixed-500mb-30000-k10-v1`). Here those two also ended on the EAGAIN. Both are the
+  refusal before effect that iteration 1's decision 55 describes; which one a sample meets first depends on
+  timing between the workers. How many Commits each worker had acknowledged was not compared.
+- No counts, sizes or exec and Commit times are recorded for a sample that ends this way; cleanup is
+  UNAVAILABLE. The driver removed each sample's volume and container afterwards. Nothing was changed.
+
+- Storage after the family: 2 Docker volumes more than before the run
+  (2 of them masters of current originals, 0 unexplained),
+  0 containers more; originals 4713 MB, result folder
+  828 MB; host 221 GiB free; `docker system df`: Images=21.51GB, Containers=12.85GB, Local Volumes=69.68GB, Build Cache=4.843GB.
+- CSVs: `core/benchmark/fs-bench-pro/baselines/core/2026-10-11-fb3c4d3f8/multi_workspace_development/`.
