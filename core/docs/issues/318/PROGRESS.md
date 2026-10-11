@@ -445,3 +445,41 @@ equal. Times are single diagnostic samples.
   0 containers more; originals 1870 MB, result folder
   284 MB; host 224 GiB free; `docker system df`: Images=21.51GB, Containers=12.85GB, Local Volumes=69.71GB, Build Cache=4.843GB.
 - CSVs: `core/benchmark/fs-bench-pro/baselines/core/2026-10-11-d971225f6/namespace_mutation/`.
+
+## Phase C — batch 2, `edit_length_preserving`, tag `b1`, sampled at `7928b05fd`
+
+Iteration 1's value is left of each arrow, this run's right; one value means
+equal. Times are single diagnostic samples.
+
+| case | status | functional | proof | requests | writer jobs | statements | overlay logical B | Store logical B | exec ms | Commit ms |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| overwrite-head-4k-on-1mib-ops-1 | INELIGIBLE | PASS | PASS | 10 | 127 -> 122 | 622 -> 606 | 237568 -> 241664 | 1381056 | 41.0 -> 41.8 | 11.8 -> 10.4 |
+| overwrite-head-4k-on-10mib-ops-1 | INELIGIBLE | PASS | PASS | 10 | 258 -> 253 | 1327 -> 1311 | 258048 -> 262144 | 10965864 | 39.4 -> 43.7 | 13.2 -> 12.1 |
+| overwrite-head-4k-on-100mib-ops-1 | INELIGIBLE | PASS | PASS | 10 | 258 -> 253 | 1327 -> 1311 | 274432 -> 278528 | 106460104 | 38.3 -> 42.0 | 12.4 -> 13.3 |
+| overwrite-head-4k-on-500mib-ops-1 | INELIGIBLE | PASS | PASS | 10 | 357 -> 352 | 1840 -> 1824 | 290816 -> 294912 | 530895864 | 53.1 -> 48.2 | 18.5 -> 22.4 |
+| overwrite-middle-4k-on-1mib-ops-1 | INELIGIBLE | PASS | PASS | 11 | 152 -> 145 | 762 -> 740 | 241664 -> 245760 | 1381056 | 36.3 -> 35.8 | 9.6 -> 12.4 |
+| overwrite-middle-4k-on-10mib-ops-1 | INELIGIBLE | PASS | PASS | 11 | 395 -> 388 | 2037 -> 2015 | 270336 -> 274432 | 10974104 -> 10978224 | 34.0 -> 37.8 | 13.6 -> 14.6 |
+| overwrite-middle-4k-on-100mib-ops-1 | INELIGIBLE | PASS | PASS | 11 | 413 -> 406 | 2145 -> 2123 | 286720 -> 290816 | 106468344 | 41.7 -> 42.7 | 15.1 -> 15.7 |
+| overwrite-middle-4k-on-500mib-ops-1 | INELIGIBLE | PASS | PASS | 11 | 459 -> 452 | 2397 -> 2375 | 299008 -> 303104 | 530899984 | 34.1 -> 39.7 | 27.1 -> 24.3 |
+| overwrite-tail-4k-on-1mib-ops-1 | INELIGIBLE | PASS | PASS | 10 | 129 -> 123 | 627 -> 608 | 237568 -> 241664 | 1381056 | 49.2 -> 33.5 | 9.4 -> 10.9 |
+| overwrite-tail-4k-on-10mib-ops-1 | INELIGIBLE | PASS | PASS | 10 | 230 -> 224 | 1158 -> 1139 | 245760 -> 249856 | 10978224 -> 10965864 | 31.5 -> 42.8 | 11.4 -> 13.0 |
+| overwrite-tail-4k-on-100mib-ops-1 | INELIGIBLE | PASS | PASS | 10 | 230 -> 224 | 1158 -> 1139 | 253952 -> 258048 | 106435384 -> 106447744 | 44.6 -> 35.5 | 12.6 -> 10.9 |
+| overwrite-tail-4k-on-500mib-ops-1 | INELIGIBLE | PASS | PASS | 10 | 324 -> 318 | 1650 -> 1631 | 286720 -> 290816 | 530912344 -> 530924704 | 34.5 -> 44.2 | 16.9 -> 25.4 |
+
+- 12 of 12: functional PASS, proof PASS, mount Gone with KnownStop, as in
+  iteration 1. Status INELIGIBLE (class B precondition), as in iteration 1.
+- **Requests are equal in all 12 cases** (10 or 11).
+- **Writer jobs are lower by 5 to 7 and statements by 16 to 22 in every
+  case**, the same amount at every file size. Both branch-side changes act
+  at Commit here (`8c1993f4a`, and the piece work's edit script); no control
+  sample separates them. An in-place 4 KiB overwrite makes no piece.
+- Overlay logical bytes are 4,096 higher in all 12 (schema 33). Store logical
+  bytes differ in 4 cases by about 12 KB or less.
+- Exec stays between 33 and 48 ms and Commit between 10 and 25 ms at every
+  size, as in iteration 1.
+
+- Storage after the family: 4 Docker volumes more than before the run
+  (4 of them masters of current originals, 0 unexplained),
+  0 containers more; originals 4418 MB, result folder
+  305 MB; host 221 GiB free; `docker system df`: Images=21.51GB, Containers=12.85GB, Local Volumes=69.71GB, Build Cache=4.843GB.
+- CSVs: `core/benchmark/fs-bench-pro/baselines/core/2026-10-11-7928b05fd/edit_length_preserving/`.
