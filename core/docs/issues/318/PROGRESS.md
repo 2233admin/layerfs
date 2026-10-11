@@ -168,3 +168,72 @@ bytes checked inside the container before each build:
 - Linux test targets other than the eight listed.
 - The checklist item "driver drives every family" is shown family by family
   in phase C, at each family's first sample.
+
+## Phase B — tests before the benchmark, 2026-10-11
+
+Product source is unchanged (the merge's). Two test targets were added to
+`core/crates/layerfs-daemon/tests/`:
+
+- `recognizer_patterns.rs`, 9 tests, host and Linux: writes through the
+  request port over a real Disposable Store and the real local owner, no
+  mount. Each pattern is compared with an independent model three times
+  (live view, published root from a fresh bind, live view after install).
+- `mounted_patterns.rs`, 1 test, Linux with the FUSE device: a process started
+  outside the daemon shifts a tail, then writes of 1 to 8,191 bytes and
+  stores through a shared mapping go over the file's pieces; compared with a
+  native replay, daemon READs, the published root and a fresh mount.
+
+**Every test passes: no wrong byte, no refused request, no stale piece in a
+read.** Host: 9 passed in 4.0 s. Linux: 9 passed in 16.8 s and the mounted
+test in 0.4 s (run before a formatting-only change of the two files).
+Formatting and Clippy `-D warnings` on all daemon targets are clean.
+
+Whether a pattern is recognized, as observed (one run, host; `claimed` is what
+the recognizer claimed of the bytes written, `rows` the piece rows and
+`stored` the payload bytes the overlay then held):
+
+| Pattern | Written | Claimed | Rows | Stored | Recognized |
+| --- | ---: | ---: | ---: | ---: | --- |
+| Truncate to zero, whole file written again, same content (3 MiB) | 3,145,728 | 3,195,304 | 1 | 0 | yes |
+| Truncate to zero, whole file written again with a 4 KiB insert | 3,149,824 | 3,154,815 | 2 | 45,056 | yes |
+| New file written and renamed over a file with unpublished pieces | 3,145,728 | 0 | 0 | 3,145,728 | no (new file) |
+| New file written and renamed over a file with committed pieces | 2,097,152 | 0 | 0 | 2,097,152 | no (new file) |
+| Blocks of the unchanged file in a scattered order, some edited | 3,145,728 | 2,178,568 | 48 | 1,159,168 | partly |
+| Shifted tail whose blocks arrive in a scattered order | 2,100,927 | 381,226 | 23 | 1,835,520 | mostly not |
+| 200 KiB file: shifted tail | 188,305 | 167,591 | 1 | 29,184 | yes |
+| The same file cut to 96 KiB with its pieces, committed, grown back | 110,592 | 0 | 0 | 110,592 | no (base under the threshold) |
+| Delete after the regrowth was committed | 180,113 | 185,132 | 1 | 4,608 | yes |
+| 100 KiB file grown to 300 KiB, committed, then shifted | 301,049 | 303,083 | 1 | 8,704 | yes |
+| Insert of 64 KiB, written forward (16 MiB file) | 15,793,399 | 15,916,669 | 1 | 135,680 | yes |
+| Delete of 64 KiB | 14,675,743 | 14,890,220 | 1 | 4,608 | yes |
+| Insert of 64 KiB, grown in place from the end backward | 13,696,925 | 14,047,768 | 2 | 107,008 | yes |
+| Insert of 1 MiB, forward | 16,776,439 | 0 | 0 | 16,777,728 | **no** |
+| Delete of 1 MiB | 14,675,743 | 0 | 0 | 14,676,480 | **no** |
+| Insert of 1 MiB, backward | 14,679,965 | 0 | 0 | 14,680,576 | **no** |
+| Insert of 10 MiB, forward | 26,213,623 | 0 | 0 | 26,214,912 | **no** |
+| Delete of 10 MiB | 14,675,743 | 0 | 0 | 14,676,480 | **no** |
+| Insert of 10 MiB, backward | 24,117,149 | 0 | 0 | 24,117,760 | **no** |
+| Nine writes of 1 to 8,191 bytes over a file with pieces | 0 claimed, by design | 0 | 1 | 56,709 | not examined |
+| A delete over committed pieces (later Commit, same Workspace) | 2,359,197 | 2,354,466 | 4 | 82,432 | yes |
+| A second shift over the unpublished pieces of the first | 2,764,795 | 0 | 4 | 2,765,312 | **no** |
+| A second Workspace: backward shift over the committed result | 2,113,535 | 2,128,756 | 2 | 57,856 | yes |
+| Mounted: 4 KiB insert by `dd`, tail moved 64 KiB a request | 1,576,183 | 1,595,928 | 1 | 25,088 | yes |
+| Mounted: six writes under 8 KiB over the pieces | — | 0 | 1 | 46,513 | not examined |
+| Mounted: stores through a shared mapping, written back by `msync`, including 256 KiB of the tail stored again unchanged | — | 0 | 1 | 333,233 | **no** |
+
+(`claimed` can exceed `written` by the few bytes a claim reaches back.)
+
+Recorded results, not failures:
+
+- **A shift of 1 MiB or 10 MiB is not recognized in any direction**; 64 KiB
+  is. The moved tail is stored in full. No benchmark case has such a shift.
+- **A second shift over a file whose first shift is not yet committed is not
+  recognized**: the second tail is stored in full. After a Commit it is.
+- **Bytes the kernel writes back from its page cache are not claimed**, also
+  when they equal what the file already has.
+- **A new file renamed over an old one is never recognized**; the issue lists
+  that as outside this rollout.
+- A scattered order loses most claims of a shifted tail and about a third of
+  an in-place rewrite.
+
+No product bug was found before the baseline.
