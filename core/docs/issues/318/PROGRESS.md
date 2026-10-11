@@ -417,3 +417,31 @@ equal. Times are single diagnostic samples.
   0 containers more; originals 6955 MB, result folder
   276 MB; host 218 GiB free; `docker system df`: Images=21.51GB, Containers=12.85GB, Local Volumes=71.02GB, Build Cache=4.843GB.
 - CSVs: `core/benchmark/fs-bench-pro/baselines/core/2026-10-11-22250a5eb/tiny_file_churn/`.
+
+## Phase C — batch 1, `namespace_mutation`, tag `b1`, sampled at `d971225f6`
+
+Iteration 1's value is left of each arrow, this run's right; one value means
+equal. Times are single diagnostic samples.
+
+| case | status | functional | proof | requests | writer jobs | statements | overlay logical B | Store logical B | exec ms | Commit ms |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| namespace-subtree-relocate-delete-1-compact-v2 | INELIGIBLE | PASS | PASS | 129 | 890 | 5287 -> 5286 | 245760 -> 249856 | 938736 | 48.6 -> 47.9 | 14.8 -> 16.9 |
+| namespace-subtree-relocate-delete-10-compact-v2 | INELIGIBLE | PASS | PASS | 1092 | 7581 | 45196 | 380928 -> 385024 | 1483504 -> 1495840 | 130.3 -> 132.7 | 51.4 -> 52.8 |
+| namespace-subtree-relocate-delete-100-mixed-v4 | INELIGIBLE | PASS | PASS | 832 | 5738 | 34262 -> 34260 | 360448 -> 364544 | 106984296 -> 106959648 | 91.4 -> 104.5 | 45.5 -> 47.2 |
+| namespace-subtree-relocate-delete-500-mixed-v4 | INELIGIBLE | PASS | PASS | 4072 | 27726 | 166750 | 802816 -> 811008 | 534258584 -> 534336336 | 387.2 -> 383.6 | 173.0 -> 171.4 |
+
+- 4 of 4: functional PASS, proof PASS, mount Gone with KnownStop, as in
+  iteration 1. Status INELIGIBLE (class B precondition), as in iteration 1.
+- **Requests and writer jobs are equal in all 4 cases.** Statements are equal
+  in 2 and lower by 1 and 2 in the other two (reclamation probes after the
+  deletes, as in the bulk-delete cases of `tiny_file_churn`).
+- Overlay logical bytes are 4,096 or 8,192 higher (schema 33); Store logical
+  bytes differ in 3 cases by at most 0.08 MB.
+- This closes batch 1: 36 of 36 cases functional PASS and proof PASS, as in
+  iteration 1; no request count changed.
+
+- Storage after the family: 4 Docker volumes more than before the run
+  (4 of them masters of current originals, 0 unexplained),
+  0 containers more; originals 1870 MB, result folder
+  284 MB; host 224 GiB free; `docker system df`: Images=21.51GB, Containers=12.85GB, Local Volumes=69.71GB, Build Cache=4.843GB.
+- CSVs: `core/benchmark/fs-bench-pro/baselines/core/2026-10-11-d971225f6/namespace_mutation/`.
