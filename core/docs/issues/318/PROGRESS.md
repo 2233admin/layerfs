@@ -363,3 +363,57 @@ equal. Times are single diagnostic samples.
   0 containers more; originals 3197 MB, result folder
   227 MB; host 223 GiB free; `docker system df`: Images=21.51GB, Containers=12.85GB, Local Volumes=69.61GB, Build Cache=4.843GB.
 - CSVs: `core/benchmark/fs-bench-pro/baselines/core/2026-10-11-7bd91e498/payload_create_read/`.
+
+## Phase C — batch 1, `tiny_file_churn`, tag `b1`, sampled at `22250a5eb`
+
+Iteration 1's value is left of each arrow, this run's right; one value means
+equal. Times are single diagnostic samples.
+
+| case | status | functional | proof | requests | writer jobs | statements | overlay logical B | Store logical B | exec ms | Commit ms |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| tiny-create-1-compact-v2 | INELIGIBLE | PASS | PASS | 16 | 140 | 645 | 229376 -> 233472 | 1405656 | 46.8 -> 49.2 | 10.6 -> 11.2 |
+| tiny-create-10-compact-v2 | INELIGIBLE | PASS | PASS | 115 | 956 -> 938 | 4452 -> 4380 | 266240 -> 270336 | 11084912 -> 11072552 | 45.9 -> 49.7 | 18.0 -> 17.9 |
+| tiny-create-100-mixed-v4 | INELIGIBLE | PASS | PASS | 736 | 5745 -> 5565 | 27408 -> 26688 | 548864 -> 552960 | 106945928 -> 106908968 | 91.5 -> 91.6 | 51.0 -> 49.4 |
+| tiny-create-500-mixed-v4 | INELIGIBLE | PASS | PASS | 3496 | 28841 -> 27941 | 134888 -> 131288 | 1847296 | 534873568 -> 535027064 | 246.7 -> 263.7 | 202.2 -> 194.1 |
+| tiny-stat-1-compact-v2 | INELIGIBLE | PASS | PASS | 4 | 51 | 249 | 229376 -> 233472 | 1347976 | 39.6 -> 43.8 | 11.4 -> 10.4 |
+| tiny-stat-10-compact-v2 | INELIGIBLE | PASS | PASS | 22 | 69 | 501 | 262144 -> 266240 | 10985888 -> 10981792 | 54.5 -> 44.5 | 10.6 -> 10.4 |
+| tiny-stat-100-mixed-v4 | INELIGIBLE | PASS | PASS | 112 | 159 | 1671 | 389120 -> 393216 | 107327904 -> 107344288 | 53.8 -> 62.6 | 11.4 -> 11.3 |
+| tiny-stat-500-mixed-v4 | INELIGIBLE | PASS | PASS | 512 | 559 | 6871 | 598016 -> 602112 | 532681120 -> 532672928 | 116.1 -> 109.4 | 14.5 -> 11.6 |
+| tiny-unlink-1-compact-v2 | INELIGIBLE | PASS | PASS | 12 | 122 | 594 | 229376 -> 233472 | 1372696 -> 1376816 | 52.4 -> 42.0 | 14.0 -> 12.0 |
+| tiny-unlink-10-compact-v2 | INELIGIBLE | PASS | PASS | 75 | 608 | 3301 | 262144 -> 266240 | 11018848 -> 11010632 | 42.5 -> 51.4 | 17.2 -> 15.7 |
+| tiny-unlink-100-mixed-v4 | INELIGIBLE | PASS | PASS | 435 | 3035 | 17991 | 389120 -> 393216 | 107435168 -> 107496728 | 73.6 -> 88.8 | 33.8 -> 33.4 |
+| tiny-unlink-500-mixed-v4 | INELIGIBLE | PASS | PASS | 2035 | 13939 | 83655 | 565248 -> 569344 | 532792048 -> 532718248 | 203.3 -> 181.8 | 95.6 -> 98.0 |
+| tiny-bulk-create-1-compact-v2 | INELIGIBLE | PASS | PASS | 1429 | 15063 -> 14865 | 65179 -> 64387 | 1495040 -> 1499136 | 1426280 -> 1430376 | 134.6 -> 133.6 | 99.3 -> 92.5 |
+| tiny-bulk-create-10-compact-v2 | INELIGIBLE | PASS | PASS | 4651 | 43140 -> 41160 | 196321 -> 188401 | 11735040 -> 11743232 | 13705216 | 346.9 -> 364.8 | 357.9 -> 323.5 |
+| tiny-bulk-create-100-mixed-v3 | INELIGIBLE | PASS | PASS | 8709 | 80032 -> 71650 | 375318 -> 341790 | 108724224 -> 108732416 | 111820800 -> 111812608 | 365.2 -> 719.0 | 1432.5 -> 1213.1 |
+| tiny-bulk-create-500-mixed-v3 | INELIGIBLE | PASS | PASS | 39665 | 351248 -> 310090 | 1669693 -> 1505061 | 541491200 -> 541523968 | 536412160 -> 536420352 | 3177.4 -> 3147.8 | 10195.0 -> 13536.6 |
+| tiny-bulk-delete-1-compact-v2 | INELIGIBLE | PASS | PASS | 1145 | 9966 | 53086 -> 53092 | 348160 -> 352256 | 1422088 -> 1426184 | 133.2 -> 115.5 | 67.7 -> 63.7 |
+| tiny-bulk-delete-10-compact-v2 | INELIGIBLE | PASS | PASS | 3012 | 22772 | 129867 -> 129868 | 634880 -> 643072 | 11039520 -> 11043640 | 268.9 -> 286.1 | 126.1 -> 133.8 |
+| tiny-bulk-delete-100-mixed-v3 | INELIGIBLE | PASS | PASS | 4987 | 36093 | 210354 -> 210352 | 913408 -> 925696 | 107774848 -> 107778944 | 444.3 -> 439.7 | 203.1 -> 199.3 |
+| tiny-bulk-delete-500-mixed-v3 | INELIGIBLE | PASS | PASS | 21187 | 146056 | 872798 -> 872801 | 3248128 -> 3276800 | 533111632 -> 532849488 | 1756.7 -> 1761.9 | 782.4 -> 780.4 |
+
+- 20 of 20: functional PASS, proof PASS, mount Gone with KnownStop, as in
+  iteration 1. Status INELIGIBLE (class B precondition), as in iteration 1.
+- **Requests are equal in all 20 cases.**
+- **Writer jobs are equal in 13 cases and lower in the 7 create cases** (by 18
+  to 41,158), with four statements fewer a job: the Commit of branch commit
+  `8c1993f4a` reads a file's captured cells once a run instead of once a
+  cell. The same cause as in `payload_create_read`; not the piece work.
+- **Statements differ by −2 to +6 in the four bulk-delete cases with equal
+  jobs.** Unlinks trigger last-owner reclamation, whose conditional probes
+  depend on interleaving (iteration 1's ledger, cell C12). Not explained
+  beyond that.
+- **Overlay logical bytes are 4,096 to 32,768 higher in 19 cases** (schema 33
+  adds the piece table and its index pages), equal in one.
+- Store logical bytes differ in 17 cases by at most 0.15 MB of up to 535 MB.
+- `tiny-bulk-create-500-mixed-v3`, which the issue 316 driver had stopped at
+  its own budget, completed here in a call of its own: 46 s for the whole
+  sample, exec 3,148 ms, Commit 13,537 ms (iteration 1: 3,187 and 9,862 ms).
+- A sample floor of 45 s instead of 75 s was used for the small cases of this
+  family, whose control samples ended within 35 s; no sample was stopped.
+
+- Storage after the family: 14 Docker volumes more than before the run
+  (14 of them masters of current originals, 0 unexplained),
+  0 containers more; originals 6955 MB, result folder
+  276 MB; host 218 GiB free; `docker system df`: Images=21.51GB, Containers=12.85GB, Local Volumes=71.02GB, Build Cache=4.843GB.
+- CSVs: `core/benchmark/fs-bench-pro/baselines/core/2026-10-11-22250a5eb/tiny_file_churn/`.

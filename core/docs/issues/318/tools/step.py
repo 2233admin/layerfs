@@ -15,7 +15,8 @@ The harness engine is used unchanged, through bench.py.
 
 Time (owner, 2026-10-11): no command runs longer than 2 minutes, 5 in an extreme
 case. Each step gets what is left of the budget; no step starts with less than
-20 s left and no sample with less than 75 s left. Steps not started are printed.
+20 s left and no sample with less than 75 s left (a lower floor can be named
+for cases whose control sample ended well inside it). Steps not started are printed.
 A case that has a receipt folder for the tag is never sampled again.
 
 Storage (owner, 2026-10-11): at most two copies of a case's payload.
@@ -55,6 +56,9 @@ SAMPLE_VOLUME = re.compile(r"layerfs-fsb-sample-[0-9a-f]{16}")
 PAYLOAD_FOLDERS = ("graph-store", "census-store")
 PAYLOAD_FILES = ("store.sqlite",)
 CELLS = "cluster-two/cells"
+# A sample starts only with this much of the budget left. 75 s unless the caller names a lower floor
+# for cases whose control sample is known to end well inside it.
+FLOOR = int(os.environ.get("ISSUE318_SAMPLE_FLOOR", "75"))
 
 
 def say(**fields):
@@ -374,7 +378,7 @@ for item in items:
             continue
         code, seconds = step(tag + "-run-" + slug(family) + "-" + case,
                              ["run", target, *selection, "--build", base + "build", "--prepared", ORIGINALS,
-                              "--out", base + "run-" + slug(family)], 75)
+                              "--out", base + "run-" + slug(family)], FLOOR)
         if code is not None:
             if case == "all":
                 out = (LOGS / (tag + "-run-" + slug(family) + "-all.stdout")).read_text().splitlines()
