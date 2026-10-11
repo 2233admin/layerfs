@@ -50,6 +50,13 @@ impl From<io::Error> for OverlayError {
 }
 
 impl OverlayError {
+    /// Identifies a direct SQLite capacity error, without asserting rollback.
+    /// Outcome knowledge belongs to the caller. An uncertain wrapper is never
+    /// classified from its nested cause, even when that cause is SQLite Full.
+    pub fn is_sqlite_full(&self) -> bool {
+        matches!(self, Self::Sql(rusqlite::Error::SqliteFailure(error, _))
+            if error.code == rusqlite::ErrorCode::DiskFull)
+    }
     pub(crate) fn unsafe_database_state(&self) -> bool {
         matches!(self, Self::Sql(rusqlite::Error::SqliteFailure(error, _))
             if matches!(error.code, rusqlite::ErrorCode::SystemIoFailure

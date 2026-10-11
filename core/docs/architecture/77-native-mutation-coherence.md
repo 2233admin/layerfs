@@ -75,6 +75,21 @@ publishing Overlay owner job:
    request keeps both. A mutation that published nothing releases its source
    alone.
 
+**Known capacity exhaustion (issue 319, 2026-10-12).** A physical reservation
+refusal before BEGIN and a direct SQLite Full returned by the atomic native
+visit after confirmed rollback both answer `ENOSPC`, with no published
+filesystem mutation or ticket. The latter still pays attempted SQL work and
+actual transient allocation observations; rollback cannot erase the event
+peak. The original completion remains owned through the single error reply,
+then normal reply disposal releases it. The mount continues serving, and both
+normal and forced terminal drain remain available. The Overlay error predicate
+identifies direct SQLite Full only; it does not establish rollback knowledge.
+The atomic visit supplies that knowledge. An uncertain COMMIT/rollback result,
+a provider ambiguity or an existing publication is never reclassified from a
+nested capacity cause: it retains the original failed request and `EIO` outcome.
+This is current SQL-format capacity behavior, not qualification of the retired
+remote ShortAppend or one-shot NoSpace instrumentation cases.
+
 **Early serial refill (R8b, 2026-10-10; owner ruling P-1).**
 `DaemonLimits.serial_low_water` is an explicit value of the private
 configuration record; startup refuses one at or above the 1,024-serial refill

@@ -28,11 +28,15 @@ pub struct MutationRequest {
     /// Assigned at processing; the engine owns every stored time.
     pub now: Time,
 }
-/// A definite answer with no effect: nothing was published, no ticket exists.
+/// A definite answer without filesystem publication or a ticket. Attempted
+/// SQL and transient allocation observations remain counted.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Declined {
     Refused(Refusal),
-    /// The engine's physical reservation refused the transaction before it.
+    /// Physical admission refused before BEGIN, or the atomic native job
+    /// returned direct SQLite Full after known rollback and allocation
+    /// observation. SQL/transient allocation work is paid; no filesystem
+    /// mutation or publication ticket exists. Unknown outcomes stay retained.
     NoSpace,
     /// The serial allocator's writer was contended; nothing was reserved.
     Contended,
@@ -269,6 +273,20 @@ impl Custody {
                 // The engine's reservation refuses before any statement of
                 // the transaction: a definite answer with no effect.
                 Err(WorkspaceError::Overlay(OverlayError::Reservation { .. })) => {
+                    return Ok(Err(Declined::NoSpace))
+                }
+                // Only the atomic visit's direct, known rollback qualifies.
+                // Keep its original completion until the one ENOSPC reply and
+                // normal release. Uncertain wrappers/provider ambiguity remain
+                // attempted failures with their original custody.
+                Err(WorkspaceError::Overlay(error))
+                    if error.is_sqlite_full()
+                        && self.publication.is_none()
+                        && self
+                            .services
+                            .provider_failure()
+                            .is_ok_and(|failure| failure.is_none()) =>
+                {
                     return Ok(Err(Declined::NoSpace))
                 }
                 _ => return Err(Box::new(Attempted(original))),

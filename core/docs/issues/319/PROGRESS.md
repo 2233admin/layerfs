@@ -935,3 +935,67 @@ unchanged holder/expectations; cooperativewriter3, nativeparallel1, seals2PASS.
 Persistence+daemon all-target Clippy, scopedfmt,687-file boundary guardPASS.
 Earlier main-inode qualification is explicitly superseded; its receipts remain.
 Decided by agent, pending owner review: use this safe directory coordination.
+
+
+### Known SQLite Full preserves native ENOSPC and terminal cleanup
+
+A separate real mounted regression filled the configured Overlay pager during
+one ordinary128KiB write. Before repair, confirmed atomic rollback still returned
+EIO5, retained131072 request bytes and made the mount terminal. The exact direct
+SQLite DiskFull identity is now mapped to NoSpace only after known rollback with
+no filesystem publication or provider ambiguity. The original completion owns
+one ENOSPC28 reply and then releases normally. Wrapped uncertainty still retains
+custody and EIO; no error text parsing or attempted-operation replay was added.
+Decided by agent, pending owner review.
+
+[Retained failures, final source pins and scope-qualified checks](checks/known-sqlite-full.json)
+record two final mounted passing tests, actual Full1 per test, zero mutation ACK,
+unchanged prior file, empty target, actual current0/peak65536 allocation observation,
+zero retained request and both normal/forced drain and owner cleanup. One real
+SQLite identity test and scoped source lint/format also pass. This is a genuine
+current SQL-format errno repair, not qualification of the five old injected
+fault cases or any full original reliability case. Their exact original fault
+boundaries and message/hit assertions remain pending; final product review and
+sealed original cases are NOT_RUN.
+
+
+### Phase 10 entry — isolated source line, 2026-10-12
+
+New local branch `issue319-terminal-pass` starts at `25c744e1b`. The previous
+branch and worktree are read-only; main is untouched. The ENOSPC production
+patch applies cleanly. The ledger conflict is resolved by retaining the base
+ledger and only the selected fix entry; intervening feature entries are not
+claims about this branch. Historical fix evidence retains its original identity.
+New validation and exact LOC comparison follow before the local commit.
+
+Original picked Linux regression build failed with E0412: `StateObservation`
+is absent; that type and its two allocation-field assertions belong to dropped
+`4cb79e26b`. The production patch has no dropped dependency. Minimal test-only
+adaptation uses the existing `WorkspaceState` and `Resources` ports to assert
+exact unchanged state, payload bytes and cells after rollback. Native errno28,
+actual Full1, zero acknowledgement, unchanged files/history, zero retained
+requests and both drains remain mandatory. Transient allocation peak is
+UNAVAILABLE on this source line; no observation feature is restored.
+
+Selected ENOSPC fix validation on the settled line: host `error_identity`1/1;
+Linux `mounted_sqlite_full`2/2 and `error_identity`1/1, built with `--no-run`
+first; host all-target Clippy Overlay/Fuse/daemon with `-D warnings` PASS.
+Original Linux compiler failure is retained, not relabeled. Every invocation
+has an explicit118s stop. Containers are uniquely named and removed. New
+source comparison uses `tools/count_snapshot.py staged`, materializing exact
+Git blobs and using the same pinned production counter including nested SDK
+source and runtime SQL. Production LOC:82213 ->82227 (delta+14).
+Reference absent (retired R9c; last counted65,417 at tree498dd1917812).
+This commit carries the ENOSPC cause only; phase10 is not complete until the
+second kept fix and host/Linux build gates finish.
+
+Dropped from this branch, by the later owner direction: `7bf28e318` Sandbox
+resource limits; `4cb79e26b` backed allocation observations; `991ef79cf` explicit
+Clean/Discard End; `1aceab409` Sandbox external execution/control-loss cleanup;
+`034478c7b` SQL failure/publication observations. Each introduced a feature
+for the reliability campaign. Harness routes `664f09dbf`, `254469777`, and
+`626d9dd22` and every old uncommitted file are excluded with them. None is
+rebuilt. All historical receipts/CSVs remain at their original identity.
+`repository_history` remains selected in the catalogue but is NOT_RUN — set
+aside by owner. Durable: NOT_RUN — disabled by owner until explicit
+reauthorization. Phase11 will retire exactly28 reliability cases.
