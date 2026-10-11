@@ -979,3 +979,146 @@ after the last sample. The result folder holds 136 MB for the 41 samples.
   `mixed_load_bearing`. Not ported.
 - The 33 samples of tag `p4` remain lost and unreported.
 - Timings are single diagnostic samples.
+
+## Phase 3 hand-back — 2026-10-11, product source `5239bfaa1`
+
+This entry closes the run. The branch is local and unpushed.
+
+### Commits of the run
+
+| Commit | Subject | Production LOC |
+| --- | --- | --- |
+| `0dff203c2` | Phase 0: record the shapes-only pass in the architecture set; separate test directories | 79544 -> 79544 (delta +0) |
+| `05413a820` | Phase 0: open the reference-piece ledger with the control sample | 79544 -> 79544 (delta +0) |
+| `27a0620ac` | Overlay schema 33: reference pieces as rows, claims on a write, pieces in a read | 79544 -> 80040 (delta +496) |
+| `aacb44746` | Reference pieces follow the layer lifecycles: retire, fold, orphan, reclaim | 80040 -> 80312 (delta +272) |
+| `72f014a7a` | Captured run cursor reports a reference piece as one Reference step | 80312 -> 80433 (delta +121) |
+| `31fbe96da` | Workspace reads reference ranges and commits pieces as an edit script | 80433 -> 80829 (delta +396) |
+| `707a7c675` | Content: extent cursor, chunk identity from bytes, cut-candidate scan | 80829 -> 80953 (delta +124) |
+| `aad5c6632` | Phase 1 checkpoint: ledger entry with the tier 2 sample, plan record | 80953 -> 80953 (delta +0) |
+| `677a7f8d6` | Write recognizer without carry: gate, follow and search behind one request port | 80953 -> 81457 (delta +504) |
+| `16541bcd8` | Step p2a checkpoint: ledger entry with the tier 2 sample, two count tests | 81457 -> 81457 (delta +0) |
+| `779324ee8` | Carry: the chunk that crosses a request's end is completed by the next request | 81457 -> 81617 (delta +160) |
+| `e1f7c2814` | Step p3a checkpoint: ledger entry with the tier 2 sample | 81617 -> 81617 (delta +0) |
+| `5239bfaa1` | Carry in falling offsets: a tail moved from the end backward is one run | 81617 -> 81714 (delta +97) |
+| `c51e5e656` | Step p3d checkpoint: ledger entry with tier 2 and tier 3, four count tests | 81714 -> 81714 (delta +0) |
+| `98d8ecc5b` | Bounded benchmark steps: tier_step.py runs one step at a time in a budget | 81714 -> 81714 (delta +0) |
+| `bd46378f1` | Benchmark driver: one original and one test copy of a payload | 81714 -> 81714 (delta +0) |
+| `8024cc318` | Ledger: tier 4 interrupted, receipts lost, storage rule and its checks | 81714 -> 81714 (delta +0) |
+| `061eceeee` | Driver: release a failed preparation's container; ledger: Docker disk full | 81714 -> 81714 (delta +0) |
+| `506358e0d` | Tier 4 samples under tag p5; a sample starts only with 75 s of budget left | 81714 -> 81714 (delta +0) |
+
+Scope of every line: active core; reference absent (retired R9c; last
+counted 65,417 at tree 498dd1917812). Method: `count_absent_aware.py staged`,
+pinned `tools/production_loc.py` SHA-256
+`c0fe7f36a0d4144bbd2b61c272c7579cc0d56ffe23f9588287ea30e793624adb`.
+Production source of the run: 79544 -> 81714 (delta +2170). Nothing was
+reverted.
+
+### Against the goal
+
+Overlay storage and Commit work of the target cases, control `c0` against
+`p3d` (one sample each, receipts since lost; rows as recorded above):
+
+| case | overlay bytes `c0` | overlay bytes `p3d` | Commit ms `c0` | Commit ms `p3d` | writer jobs `c0` | writer jobs `p3d` |
+| --- | --- | --- | --- | --- | --- | --- |
+| insert-middle-4k-on-10mib | 5,656,576 | 307,200 | 47.1 | 17.4 | 808 | 867 |
+| insert-middle-4k-on-500mib | 268,427,264 | 405,504 | 2,413.9 | 26.3 | 20,649 | 8,938 |
+| prepend-head-4k-on-500mib | 536,563,712 | 344,064 | 5,391.7 | 19.6 | 37,881 | 16,582 |
+| delete-middle-4k-on-500mib | 272,486,400 | 479,232 | 2,446.0 | 90.0 | 25,449 | 13,247 |
+
+- Requests are unchanged in every tier 2 case. Exec is not claimed to be
+  independent of the file size and is not: the writer still moves the tail.
+- **No benchmark row of this run is PASS.** Rows are INELIGIBLE (declared
+  interference) with proof PASS, or FAIL as listed below.
+- Tier tables: tier 2 and tier 3 in the `p3d` entry, tier 4 in the `p5`
+  entry.
+
+### Checks at the final source (tier 4)
+
+Host, `cargo +1.85.1 --locked`, built with `--no-run` first, each command
+under a 118 s wall stop:
+
+| Package | Targets | Passed | Failed | Ignored |
+| --- | --- | --- | --- | --- |
+| layerfs-content | 57 | 458 | 0 | 2 |
+| layerfs-overlay | 35 | 152 | 0 | 0 |
+| layerfs-workspace | 32 | 177 | 0 | 0 |
+| layerfs-fuse | 5 | 24 | 0 | 0 |
+| layerfs-daemon | 78 | 150 | 3 | 2 |
+
+- **Daemon, 3 failed, as observed:**
+  - `complete_installed_roots::huge_native_namespace_is_complete_after_install`:
+    `explicit closed preparation for clone setup`; it needs the input named
+    by `LAYERFS_Q1_PREPARED`, which this run did not make. Unrun proof.
+  - `host_handoff::macos_init_handoff_to_linux_daemon_has_no_host_data_path`:
+    `explicit build-listed Linux binary: NotPresent`. Unrun proof.
+  - `r4_9_driver_causes::r4_9_an_unknown_failure_of_each_provider_call_is_uncertain_at_the_driver`:
+    `AlreadyExists` on the fixture folder. Both tests of that target make a
+    fixture named `r4-9-count` in one process, so they collide when they run
+    side by side. Run again on one thread after that diagnosis: 2 passed.
+    The test file is not of this run.
+  - None of the three files was changed by this run.
+- **Daemon target not built:** `e2_startup_receipts`, and the example
+  `e2_startup`: they include a benchmark source file that is absent at this
+  base. The daemon was therefore tested by naming its other 78 targets.
+- **Clippy `-D warnings`:** all targets of content, overlay, Workspace and
+  FUSE; the daemon's library, binaries, four examples and 78 test targets.
+  Clean.
+- **Formatting:** the four packages by `cargo fmt --check`; the daemon's
+  source and its tests touched by this run by `rustfmt --check`. Clean.
+  `cargo fmt --all` stops at the same absent file.
+- **Guard:** `check_product_boundary.py` PASS over 683 production files; its
+  self-tests, 50, pass.
+- **Mounted proofs: not repeated.** They ran at this product source before
+  the build cache was lost: 25 daemon mount tests in 7 targets at
+  `5239bfaa1`, and `mounted_recognizer` (2 tests, one growing a file in place
+  from a process started outside the Exec API) at `c51e5e656`. See the `p3d`
+  entry.
+- **Durable:** `NOT_RUN — disabled by owner until explicit reauthorization`.
+
+### Left to the owner, as observed
+
+- **O-6, the retention guard:** every insert, prepend and replace-grow case
+  that completed is FAIL with proof FAIL, `independent-graph failed with
+  exit 1` (12 in tier 3; the insert again under `s1`).
+- **O-9, the 2 s limit of the capped family:** its insert, prepend and
+  replace-grow are FAIL with proof NOT_RUN,
+  `original event wall stop: command`.
+
+### Decisions by agent, pending owner review
+
+1. `677a7f8d6` (recognizer without carry) stays although its tier 2 Commit
+   was worse than the control; the two carry steps removed that.
+2. A recognizer slot keeps a hash state in rising offsets and at most 32 KiB
+   of written bytes in falling offsets; the fixed allowance is about 2.2 MiB
+   for the daemon.
+3. A carried chunk serves exactly the next adjacent request; a write under
+   8 KiB is never examined; the top request of a backward tail keeps nothing
+   before its first found chunk.
+4. Byte-compared edges are not implemented; their draft was lost with the
+   worktree's ignored files.
+5. Phase 3's "nearly equal" is reported as numbers, not judged.
+6. Tier 3 was sampled once, at `p3d`, and the `p3d` samples of tiers 2 and 3
+   stand for the final source, which is the same product source.
+7. The placement deviations recorded in plan section 13.
+8. A test copy is removed after its sample even when the sample failed,
+   following the owner's storage rule; the harness receipt still says
+   "retained".
+
+### Not done, open or lost
+
+- **Open:** the delete keeps a few stored cells at 100 and 500 MiB and its
+  Commit follows the file size (10.3, 15.4, 31.6, 90.0 ms). Not explained;
+  rule D-5 is not met for the delete at 500 MiB as observed.
+- **Open:** the Content edit engine's cost of one edit grows with the edits
+  already applied (243 record jobs an edit at 8 edits, 3,911 at 4,096). Not
+  changed.
+- **Not done:** byte-compared edges; a control sample of tiers 3 and 4; the
+  four families registered `pending`.
+- **No result:** `tiny-bulk-create-500-mixed-v3` (stopped by the driver's
+  budget); the 33 samples of tag `p4`.
+- **Lost:** the receipts of tags `c0` to `p3d` and `p4`. This ledger and the
+  comments on issue 317 are the record.
+- **Left as found:** 113 sample volumes and 77 master volumes in Docker that
+  cannot be attributed. The owner removed the stopped containers.
