@@ -382,3 +382,185 @@ The final source review is a harness/metadata/docs change, production LOC
 checked; no touched Rust crate needing new Clippy. Latest source-scope checks
 remain valid. Applicability parity, cases, cells and whole final-run outcomes
 will be appended after their actual receipts. This is not phase 5 completion.
+
+## Phase 5 exit — full catalogue retained, 2026-10-11
+
+Final review commit `5ff40d53c43da9a57b7fa963b54de40fb7d5db33`; tag
+`p319-final`; whole `core/crates` tree (tests included)
+`b99f79e3dd972ebd6bbd1db2fc2626d08a289e19` unchanged through completion.
+[Campaign identities, binaries, command limits and append-only journal](checks/final-campaign.json)
+record all selections and log digests. No later product/test edit, new wait,
+profile change or oracle/readback/limit relaxation occurred.
+
+The owning final build seal is PASS. It reuses the exact compiled scopes and
+native binaries of the full `p319-12` seal through the owning
+`identity.build_runtime` runtime-only path, with source-before/after, repository
+ARM inputs, pinned image and binary checks; the final host runtime is rebuilt.
+The product tree is identical, and daemon SHA-256 remains
+`401eeb8eda506e61a33f719d8b8e149bf396dd97da1c74780c690cb52b269015`.
+The unrelated reliability metadata/Python changes do not require a new native
+product build. The original full build used Linux `-j 3`. The full fuser checker
+still has the two pre-existing relocated passthrough manifest/lock failures;
+actual core manifest/lock and all patched package bytes were verified with the
+unchanged checker functions. Neither that checker nor its verdict was weakened.
+
+The catalogue contains all **25 families / 273 cases**. The 242 ordinary
+selections each have one preparation selection, at most one sample invocation,
+and completed owned-payload cleanup. The separately selected reliability call
+covers 28 source-dispositioned cases; the three `repository_history` cases are
+explicitly NOT_RUN under the owner's out-of-scope handoff. Registration is not
+execution. [Per-family and per-case b1 comparison](FINAL-COUNTS.md),
+[exact metrics and signed deltas CSV](FINAL-COUNTS.csv), and
+[receipt identities/digests and arithmetic](checks/final-counts.json) use b1,
+not iteration 1 or timing ratios. Unknown counts/bytes remain unavailable.
+Both Store logical/allocated and overlay logical/allocated bytes are retained.
+
+| Final selection disposition | Cases | Evidence |
+| --- | ---: | --- |
+| Fresh completed final-tag receipts | 228 | 205 have functional and proof PASS; other outcomes remain failed |
+| Identical treatment refused before execution | 7 | Owning final CSV FAIL / proof NOT_RUN; seven earlier matching receipts are separate |
+| Sample invocation expired without a completed receipt | 5 | Partial original output retained; owning report FAIL / proof NOT_RUN |
+| Preparation expired; sample not run | 2 | Original failure retained; no retry/reprepare; report treatment follows original proof-only scope |
+| Reliability source review only | 28 | NOT_APPLICABLE proof, performance N/A; zero runtime samples |
+| Repository history excluded by owner | 3 | NOT_RUN, no fabricated receipt |
+| Total | 273 | Every original row has a disposition |
+
+Final owning performance CSV classifications are **198 INELIGIBLE, 34 FAIL,
+37 N/A, 4 NOT_RUN**. N/A includes 28 reliability rows and nine original
+proof-only performance rows; it does not imply a passing or unattempted proof.
+The corresponding proof CSV classifications are **205 PASS, 12 FAIL,
+28 NOT_RUN, 28 NOT_APPLICABLE**. The two expired preparations include one
+proof-only mixed-exhaustive row (performance N/A, proof NOT_RUN) and one branch
+row (performance/proof NOT_RUN). The other three performance NOT_RUN rows are
+the owner-excluded repository histories. These distinctions are preserved in
+the owning CSVs, not flattened into an overall PASS.
+
+**One-treatment guard:** the final tag encountered seven existing immutable
+claims from `p319-12`: overwrite-middle 1 MiB; insert-middle 1/100 MiB;
+delete-middle 100 MiB; replace-grow 10 MiB; exact reuse 1; unique footprint
+100-low. Each refusal's key binds the full case, fixture, whole product tree,
+command bodies, helper hashes, all binary hashes, engine and image to its
+original successful receipt. The claim and receipt were not deleted, replayed,
+retagged or promoted into a fresh final sample. The count comparison links them
+as **separate prior matching evidence** at source `0d1eeb560` and records their
+exact keys/digests. Decided by agent, pending owner review: retain this evidence
+instead of bypassing the one-treatment rule. There are 205 fresh both-PASS
+rows plus seven separate both-PASS prior observations; b1 had 184. The arithmetic
+212 − 184 = 28 is evidence coverage across distinct cases, not 212 fresh final
+samples, performance qualification, or a timing claim.
+
+**Failures retained, without a retry:**
+
+- The capped insert, prepend and replace-grow still fail their original 2 s
+  command stop. Append and zero-extend pass both checks.
+- File alias roundtrip and five mixed-development/exhaustive command rows
+  retain the frozen mtime/helper disagreement (including the proof-only
+  exhaustive 100 MB row). Original checks and metadata are unchanged.
+- The five 500-step distributed, hotset, recurring, metadata and unrelated
+  histories expire at the driver wall stop before a completed receipt. Inner
+  110 s budget leaves about 109 s to the retained driver step; the original
+  120 s case watchdog was not increased or resampled. Partial outputs and
+  failed invocation logs are retained; owned resources removed.
+- Mixed-exhaustive 500 MB K100 preparation expires without a qualifying
+  prepared manifest. Its original outer HOLD remains in the journal; a later
+  evidence-based FAILED_PREPARATION closure does not rewrite it. After checking
+  that no owned custody process survived, 146 non-payload command/proof/custody
+  records and a retained manifest were saved before removing owned payload.
+  Branch-mixed 500 MB K100 preparation separately expires; its driver log and
+  failure are retained, but the driver's cleanup had removed its underlying
+  top-level preparation logs before retention. No full raw-log retention is
+  claimed for that case. Neither preparation is retried; neither case sampled.
+- Concurrent branch 100 MB K10/K100 and 500 MB K10, and all five multi-Workspace
+  cases, retain EAGAIN/Store Busy refusals under one attempt / no wait. The
+  remaining branch 500 MB K100 is unrun after its failed preparation. Phase 4
+  authorization is still absent.
+- CDC scattered-500 retains its original verifier wall-stop failure. The
+  frozen 41 s allowance stays unchanged.
+- Reuse exact/local 500 fail with TimeoutExpired during closed-overlay export;
+  reuse unique 500 fails the verify-workspace deadline. These completed
+  invocations have failed receipts; they are not passing reuse observations.
+  Unique footprint 100000 fails the normalization absolute deadline, and
+  metadata-cardinality 100000 fails verify-footprint with TimeoutExpired.
+  All five retain proof FAIL and Gone / KNOWN_STOP cleanup. The smaller selected
+  accounting cases still pass both checks at their original `p319-12` identity.
+
+The watched `workspace-dense-rewrite-500-mixed-v4` has functional/proof PASS,
+Gone / KNOWN_STOP, requests 33,359, writer jobs 222,679, statements 1,154,213,
+overlay logical bytes 541,523,968. Its old cleanup failure did not reproduce;
+no cleanup fix or unsupported diagnosis was made. The old failed receipt stays
+unchanged. All 32 length-changing cases have both-PASS evidence: 28 fresh and
+four separately matched prior observations. The two selected phase 2 guards
+retain exact b1 counts; no guard-count worsening triggered a revert.
+
+[Final exact-cell comparison](checks/final-cells.json): all twelve request/job/
+statement triples equal b1. Eleven match the original frozen triples. C10
+retains FAIL against that original oracle: actual **1547 / 1546 / 14406**,
+expected **1548 / 1547 / 14408**, in request/job/statement order. All twelve have
+proof PASS and Gone / KNOWN_STOP. C12 remains **3436 / 3439 / 24146**. The oracle
+was not retargeted to b1, and no cell was resampled.
+
+Reliability source-only parity: PASS, 28 reviewed cases, zero samples; runtime
+parity NOT_RUN. The `workspace_reliability` family was invoked exactly once,
+all 28 NOT_APPLICABLE with original reasons. Required exclusive physical
+current/peak/error observations remain unavailable; the two early integrity
+paths still lack the original creation-time container profile. Original guards,
+limits, classifications and missing prerequisites are unchanged. Accounting
+pins required no second move: final six-pin/schema check PASS, because phases
+2–4 touched none of the three accounting files. Phase 3's delete scaling stays
+open; phase 4 remains blocked, with no owner wait decision inferred.
+
+Owning CSVs were generated once: [25-family directory](../../../benchmark/fs-bench-pro/baselines/core/2026-10-11-5ff40d53c/)
+and [twelve cells](../../../benchmark/cluster-two/baselines/2026-10-11-5ff40d53c/).
+For public portability, four of the 52 CSV files substitute only local location
+text with `[worktree]` / `[home]`; every other field, status, identity, metric,
+reason and limit is identical. Exact original owning CSVs are retained ignored;
+[publication digests and field-preservation check](checks/final-csv-publication.json)
+record both versions. Receipts, oracle and checks are untouched. Reproducible
+count/cell/publication derivation tools are in `tools/`; they read the retained
+ignored inputs from the repository root and are not product implementation.
+
+[Resource audit](checks/final-resource-audit.json): zero new volumes, containers,
+originals or unexplained resources; zero protected pre-run volumes/containers
+removed. Retained results total 2,106 MiB; host free space 225 GiB. Shared Docker
+images, containers and volumes are preserved, including unrelated pre-existing
+resources. At most one original and one writable sample copy of a payload;
+owned sample copies and originals removed after each selection. No cancellation
+or deletion of another owner's work. Timings remain diagnostic: setup warmth and
+own-write preconditions are declared; no cold-state/performance eligibility
+claim. Sequential worktree lock/targets and shared host/4 GB Docker interference
+are recorded. Construction workers 1; Disposable/WAL/OFF only; Durable NOT_RUN.
+
+Final command selections: `invoke.py p319-final run cells:C01` through `C12`,
+one `workspace_reliability:all` invocation, then one bounded `full_step.py`
+phase per ordinary case; each delegates `go.py p319-final 110
+prepare|run|clean`. Final report call selects all 25 registered families plus
+cells once. Retained headers bind exact argv, source and report-template digest;
+the journal records exit/expiration, classification and log SHA-256. Each shell
+phase stops by 115 s; general invoke ceiling 118 s, all below the 120 s owner
+ceiling. Successful samples are never reused as new measurement and failed
+samples/preparations are never retried. No new runtime test was selected beyond
+phase 5's cases/cells; earlier passed tests and Clippy remain valid at this
+unchanged core tree. Final documentation/format/boundary checks are recorded
+below after execution.
+
+Production LOC: 81727 -> 81727 (delta +0), active core; reference absent
+(retired R9c; last counted 65,417 at tree 498dd1917812). Pinned counter and exact
+first-parent/staged comparison as specified above; generated CSVs, diagnostics,
+tests, docs and derivation tools contribute no product LOC. Decided by agent,
+pending owner review: phase 5 exits with the above explicit failures, exclusions,
+matching-evidence refusals and blocked/open prerequisites. No issue closure,
+push or PR is part of this batch.
+
+
+Phase 5 final exit checks: documentation local links/anchors (18), one status
+banner, claim/classification accuracy, public portability, all 273 receipt
+identities/digests, derivation tool syntax and unchanged complete core tree:
+PASS. The initial portability scan rejected a generic path-prefix literal in
+its published checker; replaced with the dynamically obtained home prefix,
+then the documentation check passes. No receipt/source/measurement changed.
+Rust formatting: PASS under explicit 118 s wall stop. Boundary guard: PASS,
+683 production files. No new Rust/runtime source changed in this exit, so new
+Clippy/runtime tests are inapplicable; phase 2 warning-denying changed-crate
+Clippy and scope tests and the 50 guard self-tests remain the valid source
+checks. Whitespace and staged-tree/production comparison are checked before
+commit; the resulting committed tree is confirmed afterwards.
