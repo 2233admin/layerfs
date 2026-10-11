@@ -68,15 +68,22 @@ pub(crate) fn check_claims(changes: &Changes) -> OverlayResult<()> {
     if claims.ranges.is_empty() || claims.ranges.len() > WRITE_CLAIMS {
         return invalid;
     }
-    // Bytes an earlier job stored are at most one chunk before the window.
+    // Bytes an earlier job stored are at most one chunk before the window
+    // for the first range, and at most one chunk after it for the last.
     let mut at = write.offset.saturating_sub(RUN_BYTES as u64);
+    let last = claims.ranges.len() - 1;
     for (index, range) in claims.ranges.iter().enumerate() {
         let to = range.offset.checked_add(range.length);
         let source = range.source_offset.checked_add(range.length).map(integer);
+        let limit = match index == last {
+            true => end.saturating_add(RUN_BYTES as u64),
+            false => end,
+        };
         if range.length == 0
             || range.offset < at
+            || range.offset >= end
             || (index != 0 && range.offset < write.offset)
-            || to.is_none_or(|to| to > end || to <= write.offset)
+            || to.is_none_or(|to| to > limit || to <= write.offset)
             || !matches!(source, Some(Ok(_)))
         {
             return invalid;
@@ -104,8 +111,9 @@ impl Overlay {
         let bytes = |from: u64, to: u64| {
             &write.data[(from - write.offset) as usize..(to - write.offset) as usize]
         };
-        // Bytes before the window are an earlier job's: they are still the
-        // claimed bytes only if no publication wrote this row since.
+        // Bytes before and after the window are an earlier job's: they are
+        // still the claimed bytes only if no publication wrote this row
+        // since.
         let carried = claims
             .after
             .is_some_and(|after| after >= 0 && after == layer.sequence);
@@ -113,24 +121,28 @@ impl Overlay {
         // The next written byte that is neither stored nor claimed yet.
         let mut at = write.offset;
         for range in &claims.ranges {
-            let (mut from, to) = (range.offset, range.offset + range.length);
+            let (mut from, mut to) = (range.offset, range.offset + range.length);
             let mut source = range.source_offset;
             if from < write.offset && !carried {
                 source += write.offset - from;
                 from = write.offset;
+            }
+            if to > end && !(carried && to <= layer.size) {
+                to = end;
             }
             // A piece is whole cells; the ragged edges stay literal bytes.
             let (first, last) = (from.div_ceil(CELL) * CELL, to / CELL * CELL);
             if first >= last {
                 continue;
             }
-            if at < first {
-                self.write_cells(ns, serial, layer, at, bytes(at, first))?;
+            // Only the window's own bytes are written by this job.
+            if at < first.min(end) {
+                self.write_cells(ns, serial, layer, at, bytes(at, first.min(end)))?;
             }
             let named = (claims.source, integer(source + (first - from))?);
             let cells = (integer(first)?, integer(last)?);
             self.claim(ns, serial, layer, &mut referenced, cells, named)?;
-            at = at.max(last);
+            at = at.max(last.min(end));
         }
         if at < end {
             self.write_cells(ns, serial, layer, at, bytes(at, end))?;
@@ -164,7 +176,7 @@ impl Overlay {
             return self.put_piece(key, piece);
         }
         // The row that takes the range, and what an older piece names past it.
-        let (mut extended, mut tail) = (false, None);
+        let (mut extended, mut tail) = (None, None);
         let before = match from {
             0 => None,
             _ => self.piece_cover(ns, layer.gen, serial, from - 1)?,
@@ -173,7 +185,7 @@ impl Overlay {
             let live = !self.stale(ns, serial, layer, old.offset, old.epoch)?;
             if live && old.names(from, &source, source_offset) {
                 // The same content continues: one row names all of it.
-                extended = true;
+                extended = Some(old.offset);
                 if old.end() < to {
                     self.piece_length(key, old.offset, to - old.offset)?;
                 }
@@ -194,9 +206,34 @@ impl Overlay {
                 tail = Some(last);
             }
         }
-        if !extended {
-            let piece = (from, to - from, layer.epoch, source, source_offset);
-            self.put_piece(key, piece)?;
+        // The same content may go on in the piece that begins where this
+        // range ends: then one row names all of it.
+        let mut end = to;
+        let next = match tail {
+            None => self.piece_cover(ns, layer.gen, serial, to)?,
+            Some(_) => None,
+        };
+        if let Some(next) = next.filter(|next| next.offset == to) {
+            if next.names(to, &source, source_offset + (to - from))
+                && !self.stale(ns, serial, layer, next.offset, next.epoch)?
+            {
+                self.query(
+                    StatementKind::Payload,
+                    sql::PIECES_TAKE,
+                    &[&ns, &layer.gen, &serial, &to, &(to + 1)],
+                    40,
+                    Piece::decode,
+                )?;
+                end = next.end();
+            }
+        }
+        match extended {
+            Some(first) if end > to => self.piece_length(key, first, end - first)?,
+            Some(_) => {}
+            None => {
+                let piece = (from, end - from, layer.epoch, source, source_offset);
+                self.put_piece(key, piece)?;
+            }
         }
         if let Some(old) = tail {
             let origin = old.source_offset + (to - old.offset);

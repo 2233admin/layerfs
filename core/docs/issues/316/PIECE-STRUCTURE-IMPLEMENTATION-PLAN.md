@@ -776,3 +776,12 @@ Phase 3, carry step:
 | 3.1 | Gate: "or continues an active run" | Unchanged from the first step: a write below 8 KiB is never examined, also when it would complete a carried chunk. Examining it would give every small write a slot and evict the files that match |
 | 6.3 | Recognizer memory: fixed slots | 64 slots plus one carried chunk a slot: about 144 KiB for the daemon, reported as `capacity_bytes` |
 | 9 | `layerfs-content` `object/id.rs` not listed | `ObjectId::stream` replaces `for_parts`, which had one caller |
+
+Phase 3, carry in falling offsets (added after tier 2 of the carry step):
+
+| Section | Plan | Source |
+| --- | --- | --- |
+| 3.1 | Carry: "the next sequential request completes the chunk" | Also the request below: the benchmark's writer, like any program that grows a file in place, moves the tail from the end backward. The earlier request keeps the last bytes of the chunk that begins before it, at most one chunk, which is the slot of 6.3; the request that ends where it began completes the identity and its claim ends after its own window |
+| 3.2 | A claim over bytes an earlier request stored | The last range of a job may end up to 32 KiB after its window, under the same content-sequence rule and only while the file still holds those bytes. Checks of a claim changed; schema 33 did not |
+| 3.2 | "the writer job then extends the piece" | A claim also takes in the piece that begins where it ends when that piece names the bytes after it: one more indexed lookup a claim, existing statements |
+| 6.3 | Recognizer memory | 64 slots with one hash state and at most one chunk of written bytes each: about 2.2 MiB for the daemon |

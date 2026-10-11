@@ -118,10 +118,11 @@ phase 2. The Store owns the
 [fixed table](../../crates/layerfs-daemon/src/store/recognizer.rs) of the
 write recognizer: 64 slots, shared by every Workspace of the daemon, keyed by
 Workspace route and inode serial. A slot is the fixed-size state of one
-file's writes and holds no byte of a write or of committed content; it may
-hold one carried chunk, a fixed-size hash state of about 2 KiB that is
-allocated only while a chunk is carried. The allowance is the table plus one
-carried chunk a slot, about 144 KiB for the daemon, reported as
+file's writes and holds no committed byte. It may hold one carried chunk in
+each direction, allocated only while a chunk is carried: a hash state of
+about 2 KiB, and for a writer in falling offsets the last bytes of one
+chunk, at most 32 KiB of the earlier write. The allowance is the table plus
+both for every slot, about 2.2 MiB for the daemon, reported as
 `capacity_bytes`; no cache bound changed. `Recognizer::published` records
 the revision of an applied write for the chunk that write carried. A request takes its file's state out of the table for
 the length of a pass and puts it back, so the table's lock is never held

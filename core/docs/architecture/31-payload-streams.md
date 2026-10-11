@@ -61,10 +61,16 @@ rules:
   staircase step as later cells. This is the one case of a piece that does
   not end on a cell boundary.
 - **Earlier bytes.** Only the first range of a job may start before its
-  window, by at most 32 KiB: those bytes were stored by an earlier job. That
-  part is honoured only when the claim names the row's content sequence, the
-  revision of that earlier job's publication, and the row has not been
-  written since. Otherwise the claim starts at the window.
+  window, and only the last may end after it, each by at most 32 KiB: those
+  bytes were stored by an earlier job. That part is honoured only when the
+  claim names the row's content sequence, the revision of that earlier job's
+  publication, the row has not been written since and the file still holds
+  the bytes. Otherwise the claim starts and ends with the window. The reach
+  after the window was added for writers that move a tail in falling
+  offsets; it changed the checks of a claim, not the schema.
+- **One row a run.** A claim extends the piece that names the bytes before
+  it, and takes in the piece that begins where it ends when that piece names
+  the bytes after it, so a run written in either direction is one row.
 
 A read plan reports pieces as `LocalRead::references` and `referenced`. A
 range is a run of a piece's cells, clipped to the window, in which the piece

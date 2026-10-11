@@ -242,6 +242,84 @@ fn a_shifted_tail_is_claimed_in_whole_chunks_by_one_search_and_then_followed() {
     }
 }
 
+/// A program that grows a file moves its tail from the end backward: the
+/// requests arrive in falling offsets, as the benchmark's writer and
+/// `memmove` send them.
+#[test]
+fn a_tail_moved_from_the_end_backward_is_claimed_across_requests() {
+    let committed = noise(3 * MIB, 7);
+    let base = base(committed.clone());
+    let middle = MIB + 12_345;
+    let mut content = committed.clone();
+    content.splice(middle..middle, noise(4096, 9));
+    let from = middle + 4096;
+    for (request, published) in [(64 * KIB, true), (128 * KIB, true), (64 * KIB, false)] {
+        let (mut run, mut work) = (WriteRun::default(), RecognizeWork::default());
+        let mut covered = vec![false; content.len()];
+        let (mut end, mut revision, mut reached) = (content.len(), 100_i64, 0);
+        while end > from {
+            let start = from.max(end.saturating_sub(request));
+            let data = &content[start..end];
+            assert!(run.wants(&base.view, data.len()));
+            let Recognition::Decided(claims) =
+                run.recognize(&base.view, FILE, start as u64, data, &mut work)
+            else {
+                panic!("a client with a provider needs no base");
+            };
+            if let Some(claims) = claims {
+                assert!(claims.ranges.len() <= WRITE_CLAIMS);
+                let last = claims.ranges.last().unwrap();
+                // Only a claim under the revision of the request above ends
+                // after this request, and at most one chunk after it.
+                let to = (last.offset + last.length) as usize;
+                if to > end {
+                    assert!(published && to <= end + RUN_BYTES, "{last:?}");
+                    assert_eq!(claims.after, Some(revision));
+                    reached += 1;
+                }
+                for range in &claims.ranges {
+                    assert!(
+                        range.offset as usize >= start && range.length > 0,
+                        "{range:?}"
+                    );
+                    let (file, source) = (range.offset as usize, range.source_offset as usize);
+                    let length = range.length as usize;
+                    assert_eq!(
+                        content[file..file + length],
+                        committed[source..source + length]
+                    );
+                    assert_eq!(file - source, 4096, "{range:?}");
+                    covered[file..file + length].fill(true);
+                }
+            }
+            revision += 1;
+            if published {
+                run.published(start as u64, end as u64, revision);
+            }
+            end = start;
+        }
+        let written = content.len() - from;
+        let bytes = covered.iter().filter(|byte| **byte).count();
+        println!(
+            "RECOGNIZE backward request={request} published={published} written={written} \
+             claimed={bytes} reached={reached} {work:?}"
+        );
+        if published {
+            // Every boundary but the first is joined: what stays unclaimed
+            // is the top request before its first found chunk and the chunk
+            // the edit cut.
+            assert!(written - bytes <= 2 * 64 * KIB, "{bytes} of {written}");
+            assert!(reached >= written / request - 2, "{reached}");
+        } else {
+            assert!(reached == 0 && bytes * 2 > written && bytes * 10 < written * 9);
+        }
+        assert!(
+            work.hashed_bytes < (written + 2 * 64 * KIB) as u64,
+            "{work:?}"
+        );
+    }
+}
+
 #[test]
 fn a_whole_rewrite_follows_the_unchanged_part_and_finds_the_shift_after_an_edit() {
     let committed = noise(2 * MIB, 13);

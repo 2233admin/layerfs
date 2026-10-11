@@ -33,10 +33,26 @@ const SECOND: usize = 2 << 20;
 /// Where the script edits `big` and `second`; neither is a cell boundary.
 const P: usize = 1_573_641;
 const Q: usize = 536_870;
+/// Where the script grows `third` in place.
+const R: usize = 700_001;
 /// An insert into `big` and a delete from `second`, each of 4 KiB, by
-/// rewriting everything after the edit 64 KiB at a time.
+/// rewriting everything after the edit 64 KiB at a time; and an insert into
+/// `third` the way a program grows a file in place: the file is extended and
+/// its tail moved from the end backward, one 64 KiB block a request.
 const SHIFT: &str = r#"
 set -eu
+end=$(stat -c %s third)
+truncate -s $((end + 4096)) third
+while [ "$end" -gt 700001 ]; do
+    take=65536
+    [ $((end - 700001)) -lt "$take" ] && take=$((end - 700001))
+    from=$((end - take))
+    dd if=third of=third bs="$take" count=1 iflag=skip_bytes,fullblock \
+       oflag=seek_bytes skip="$from" seek=$((from + 4096)) conv=notrunc status=none
+    end=$from
+done
+head -c 4096 /dev/zero | tr '\0' 'j' |
+    dd of=third bs=4k oflag=seek_bytes seek=700001 conv=notrunc status=none
 dd if=second of=second bs=64k iflag=skip_bytes oflag=seek_bytes \
    skip=$((536870 + 4096)) seek=536870 conv=notrunc status=none
 truncate -s $(($(stat -c %s second) - 4096)) second
@@ -63,6 +79,7 @@ fn noise(len: usize, seed: u64) -> Vec<u8> {
 fn tree(source: &Path) {
     fs::write(source.join("big"), noise(BIG, 3)).unwrap();
     fs::write(source.join("second"), noise(SECOND, 5)).unwrap();
+    fs::write(source.join("third"), noise(SECOND, 7)).unwrap();
     fs::write(source.join("small"), b"a small file\n").unwrap();
     stamp_tree(source);
 }
@@ -104,7 +121,7 @@ fn an_outside_process_shifts_two_tails_and_its_writes_become_pieces() {
         &clock_masked(&expected, rig.started),
         "the mount against the native replay",
     );
-    for name in ["big", "second"] {
+    for name in ["big", "second", "third"] {
         let bytes = fs::read(replay.join(name)).unwrap();
         assert!(direct(&mount.join(name)) == bytes, "{name} by daemon READs");
     }
@@ -113,13 +130,14 @@ fn an_outside_process_shifts_two_tails_and_its_writes_become_pieces() {
         BIG + 4096
     );
 
-    // Both rewritten tails were recognized. The chunk that crosses a
-    // request's end is completed by the next request, so each tail is one
-    // run of pieces: a row or two a file, and stored bytes only at the edit
-    // and at the first and last chunk of a tail.
-    let written = (BIG - P + SECOND - Q - 4096) as u64;
+    // The three rewritten tails were recognized, in rising and in falling
+    // offsets. The chunk that crosses two requests is completed by the
+    // later one, so each tail is one run of pieces: a row or two a file,
+    // and stored bytes only at the edit and at the first and last chunk of
+    // a tail.
+    let written = (BIG - P + SECOND - Q - 4096 + SECOND - R) as u64;
     assert!(work.passes.claimed_bytes * 10 > written * 9, "{work:?}");
-    assert!((1..=4).contains(&counts.reference_rows), "{counts:?}");
+    assert!((1..=6).contains(&counts.reference_rows), "{counts:?}");
     assert!(counts.payload_bytes * 8 < written, "{counts:?}");
     assert_eq!(work.passes.failed, 0);
 

@@ -195,6 +195,16 @@ overlay row, holds no SQL writer and fetches no committed chunk.
   shorter one than the rest of the chunk, an unpublished or failed write and
   any other publication to the file all drop it, at the cost of one chunk
   stored. A write below 8 KiB is still never examined.
+- **Carry in falling offsets.** A program that grows a file in place moves
+  its tail from the end backward, so its requests arrive in falling offsets
+  and the chunk between two requests is cut the other way round: its end is
+  written first. A request whose followed run begins right after such a
+  chunk keeps the chunk's last bytes, its own first bytes, at most one chunk
+  (32 KiB). The request that ends exactly where that one began holds the
+  chunk's beginning; the identity of both parts is the proof, and the claim
+  then ends after the request, in the bytes the earlier request stored,
+  under the same revision rule. A request completes a chunk at its beginning
+  or at its end, not both, because a claim names one earlier publication.
 - The claims of one request are at most 18 ranges and adjacent chunks share
   a range.
 
@@ -208,8 +218,11 @@ stopped fence ends the request, as it would at the visit.
 
 Per-file state is fixed in size and holds no bytes: the base it belongs to,
 the gate's answer, the shift, the last claim's range and the unmatched
-count, and at most one carried chunk (its extent, the hash state and the
-revision). The daemon keeps it in
+count, and at most one carried chunk in each direction: for rising offsets
+its extent, the hash state and the revision, and for falling offsets the
+chunk's last bytes as the earlier request wrote them, at most 32 KiB. These
+are bytes of a write in flight between two requests, not a cache of
+committed content. The daemon keeps it in
 [64 slots shared by every Workspace](61-direct-store-adapter.md), least
 recently used first out.
 

@@ -233,6 +233,60 @@ fn bytes_of_an_earlier_request_join_the_piece_only_while_the_sequence_holds() {
 }
 
 #[test]
+fn bytes_of_an_earlier_request_after_the_window_join_the_piece_while_the_sequence_holds() {
+    let temp = Temp::new();
+    let db = temp.db();
+    let route = db.open_workspace([5; 32], [9; 32]).unwrap();
+    let source = db.acquire_base_source(route, 1).unwrap();
+    let content = noise(1 << 20, 13);
+    let mut file = committed(&db, source, &content);
+    // The file is rewritten in place from its end toward its start, as a
+    // program that grows a file moves the tail. Request 1 begins inside a
+    // chunk that ends at 98304: the bytes before that boundary are cells.
+    file.write_claimed(
+        90_000,
+        part(&content, 90_000, 41_072),
+        claims(None, &[(98_304, 32_768, 98_304)]),
+    );
+    file.check();
+    assert_eq!(rows(&db, route).0, 1);
+    // Request 2 lies below it and holds the beginning of that chunk. Its
+    // claim ends in the bytes request 1 stored and nothing was published
+    // since: they join, and the two pieces are one row.
+    let after = file.revision;
+    file.write_claimed(
+        50_000,
+        part(&content, 50_000, 40_000),
+        claims(Some(after), &[(65_536, 32_768, 65_536)]),
+    );
+    file.check();
+    assert_eq!(rows(&db, route).0, 1);
+
+    // Another publication changes a byte request 2 stored below its piece.
+    // Request 3 still names the earlier sequence: its claim ends with its
+    // own window and the changed byte stays.
+    let after = file.revision;
+    file.write(60_000, &[content[60_000] ^ 0xff]);
+    file.write_claimed(
+        20_000,
+        part(&content, 20_000, 30_000),
+        claims(Some(after), &[(32_768, 32_768, 32_768)]),
+    );
+    file.check();
+    assert_eq!(file.read(60_000, 1), [content[60_000] ^ 0xff]);
+    assert_eq!(rows(&db, route).0, 2);
+
+    // A claim that names no sequence never takes later bytes.
+    file.write_claimed(
+        0,
+        part(&content, 0, 20_000),
+        claims(None, &[(0, 32_768, 0)]),
+    );
+    file.check();
+    assert_eq!(rows(&db, route).0, 3);
+}
+
+#[test]
 fn malformed_claims_are_refused_before_any_row_changes() {
     let temp = Temp::new();
     let db = temp.db();
@@ -256,15 +310,22 @@ fn malformed_claims_are_refused_before_any_row_changes() {
     let many: Vec<(u64, u64, u64)> = (0..WRITE_CLAIMS as u64 + 1)
         .map(|index| (at + index * 8, 4, 0))
         .collect();
-    let refused: [&[(u64, u64, u64)]; 10] = [
+    let far = RUN_BYTES as u64 + CELL + 1;
+    let refused: [&[(u64, u64, u64)]; 12] = [
         // Nothing claimed, and an empty range.
         &[],
         &[(at, 0, 0)],
         // Overlapping, and out of order.
         &[(at, 2 * CELL, 0), (at + CELL, CELL, 0)],
         &[(at + 2 * CELL, CELL, 0), (at, CELL, 0)],
-        // Beyond the window, and wholly before it.
-        &[(at + 7 * CELL, 2 * CELL, 0)],
+        // More than one chunk beyond the window, wholly after it, a range
+        // beyond it that is not the last, and wholly before it.
+        &[(at + 7 * CELL, far, 0)],
+        &[(at + 8 * CELL, CELL, 0)],
+        &[
+            (at + 6 * CELL, 3 * CELL, 0),
+            (at + 9 * CELL, CELL, 4 * CELL),
+        ],
         &[(at - CELL, CELL, 0)],
         // More than one chunk before the window.
         &[(at - RUN_BYTES as u64 - 1, RUN_BYTES as u64 + 2, 0)],

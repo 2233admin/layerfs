@@ -12,6 +12,14 @@
 //! where that one ended completes it. Its claim then reaches back over the
 //! bytes the earlier request stored, and the engine honours that part only
 //! while nothing else was published to the file in between.
+//!
+//! A program that grows a file moves its tail from the end backward, so its
+//! requests arrive in falling offsets and the chunk is cut the other way
+//! round: its end was written first. A request therefore also keeps the
+//! bytes of the chunk whose beginning lies before it, at most one chunk. The
+//! request that ends where that one began holds the beginning; the identity
+//! of both parts is then the proof, and the claim reaches past the request's
+//! end under the same rule.
 use crate::{BaseView, FileLengths};
 use layerfs_content::file::cdc::{cut_candidates, MAXIMUM_CHUNK_BYTES, MINIMUM_CHUNK_BYTES};
 use layerfs_content::file::mapping::{chunk_id, ChunkIdentity, Extent, ExtentCursor, FileState};
@@ -21,6 +29,7 @@ use layerfs_content::{
 };
 use layerfs_overlay::{ClaimedRange, WriteClaims, CELL_BYTES, RUN_BYTES, WRITE_CLAIMS};
 use layerfs_telemetry::timer::{Active, Timing, TimingScope};
+use std::sync::Arc;
 
 /// A write shorter than one minimum chunk holds no whole chunk.
 pub const RECOGNIZE_BYTES: usize = MINIMUM_CHUNK_BYTES;
@@ -68,6 +77,21 @@ pub struct WriteRun {
     source_end: u64,
     unmatched: u64,
     carry: Option<Box<Carry>>,
+    back: Option<Box<Back>>,
+}
+/// The end of a committed chunk whose beginning lies before the request
+/// that wrote it. Only the request that ends where that one began can
+/// complete it.
+#[derive(Clone, Debug)]
+struct Back {
+    /// The request that stored the bytes: where it began and ended.
+    stored: (u64, u64),
+    extent: Extent,
+    /// The chunk's last bytes: the first bytes of that request.
+    bytes: Arc<[u8]>,
+    /// Where that request's claim right after the chunk ends in the file.
+    reach: u64,
+    sequence: Option<i64>,
 }
 /// A committed chunk whose first bytes ended one request. Only the request
 /// that begins where that one ended can complete it.
@@ -127,8 +151,10 @@ impl WriteRun {
             && (self.base != base.identity().0.to_bytes()
                 || (self.gate != Gate::Never && self.unmatched < UNMATCHED_BYTES))
     }
-    /// Bytes one carried chunk adds to a run, for the fixed allowance.
-    pub const CARRY_BYTES: usize = std::mem::size_of::<Carry>();
+    /// Bytes the carried chunks add to a run at most, for the fixed
+    /// allowance: one identity, and the end of one chunk.
+    pub const CARRY_BYTES: usize =
+        std::mem::size_of::<Carry>() + std::mem::size_of::<Back>() + MAXIMUM_CHUNK_BYTES;
     /// Records the publication of the write of `[offset, end)` that this run
     /// examined last: the bytes a carried chunk left in that write are the
     /// stored ones from `revision`. Any other write records nothing.
@@ -136,6 +162,11 @@ impl WriteRun {
         if let Some(carry) = &mut self.carry {
             if carry.stored == (offset, end) && carry.sequence.is_none() {
                 carry.sequence = Some(revision);
+            }
+        }
+        if let Some(back) = &mut self.back {
+            if back.stored == (offset, end) && back.sequence.is_none() {
+                back.sequence = Some(revision);
             }
         }
     }
@@ -191,7 +222,7 @@ impl WriteRun {
                     };
                 }
                 self.unmatched = self.unmatched.saturating_add(data.len() as u64);
-                self.carry = None;
+                (self.carry, self.back) = (None, None);
                 work.failed += 1;
                 Recognition::Decided(None)
             }
@@ -207,7 +238,7 @@ impl WriteRun {
         scope: &TimingScope<'_, Active>,
     ) -> ContentResult<(Vec<ClaimedRange>, Option<i64>)> {
         // A carried chunk serves the request that follows its own, or none.
-        let carry = self.carry.take();
+        let (carry, back) = (self.carry.take(), self.back.take());
         if self.gate == Gate::Unknown {
             self.gate = gate(base, serial)?;
         }
@@ -222,10 +253,11 @@ impl WriteRun {
             offset,
             data,
             ranges: Vec::new(),
+            leading: None,
             work,
         };
         let (mut at, mut searched, mut crossing) = (0, false, None);
-        let after = match carry {
+        let mut after = match carry {
             Some(carry) => pass.complete(self, *carry)?,
             None => None,
         };
@@ -252,9 +284,18 @@ impl WriteRun {
             }
         }
         pass.work.pages += pass.cursor.pages();
+        // One claim names one earlier publication: a request completes a
+        // chunk at its beginning or at its end, not both.
+        if let (None, Some((start, extent)), Some(back)) = (after, crossing, back) {
+            after = pass.join(start, &extent, &back);
+            if after.is_some() {
+                crossing = None;
+            }
+        }
         if let Some((start, extent)) = crossing {
             self.carry = pass.carry(start, extent);
         }
+        self.back = pass.back();
         match pass.ranges.last() {
             Some(last) => {
                 self.file_start = last.offset;
@@ -308,6 +349,9 @@ struct Pass<'a, 's> {
     offset: u64,
     data: &'a [u8],
     ranges: Vec<ClaimedRange>,
+    /// The committed chunk that holds the request's first byte and begins
+    /// before it, when a followed run started there.
+    leading: Option<Extent>,
     work: &'a mut RecognizeWork,
 }
 impl Pass<'_, '_> {
@@ -388,6 +432,54 @@ impl Pass<'_, '_> {
         });
         Ok(Some(sequence))
     }
+    /// Completes the chunk of `extent`, which begins at `start` and continues
+    /// past this request, with the bytes the request above it stored. When
+    /// the identity of both parts is the committed chunk's, the claim ends
+    /// in those stored bytes: with the chunk, and after it with the beginning
+    /// of that request's claim that was not whole cells. Returns the revision
+    /// those stored bytes belong to.
+    fn join(&mut self, start: usize, extent: &Extent, back: &Back) -> Option<i64> {
+        let end = self.offset + self.data.len() as u64;
+        let head = self.data.len() - start;
+        let whole = (back.extent == *extent
+            && back.stored.0 == end
+            && head + back.bytes.len() == extent.length as usize)
+            .then_some(back.sequence)??;
+        let mut identity = ChunkIdentity::new(extent.length as usize).ok()?;
+        identity.update(&self.data[start..]).ok()?;
+        identity.update(&back.bytes).ok()?;
+        self.work.hashed_bytes += u64::from(extent.length);
+        if identity.finish().ok()? != extent.chunk || !self.claim(start, extent) {
+            return None;
+        }
+        // The cell the chunk ends in is whole only with the bytes after it,
+        // which that request claimed: never past its claim or past what the
+        // engine accepts.
+        let last = self.ranges.last_mut()?;
+        let to = last.offset + last.length;
+        let cell = to.div_ceil(CELL_BYTES as u64) * CELL_BYTES as u64;
+        if cell <= back.reach && cell <= end + RUN_BYTES as u64 {
+            last.length += cell - to;
+        }
+        Some(whole)
+    }
+    /// The first bytes of this request when they are the end of a committed
+    /// chunk that begins before it and the claim begins right after them.
+    fn back(&mut self) -> Option<Box<Back>> {
+        let (extent, first) = (self.leading?, self.ranges.first()?);
+        let tail = usize::try_from(first.offset.checked_sub(self.offset)?).ok()?;
+        let chunk = extent.offset + u64::from(extent.length);
+        if tail == 0 || tail >= extent.length as usize || first.source_offset != chunk {
+            return None;
+        }
+        Some(Box::new(Back {
+            stored: (self.offset, self.offset + self.data.len() as u64),
+            extent,
+            bytes: Arc::from(&self.data[..tail]),
+            reach: first.offset + first.length,
+            sequence: None,
+        }))
+    }
     /// The identity so far of the chunk of `extent`, whose bytes begin at
     /// `start` and continue past this request.
     fn carry(&mut self, start: usize, extent: Extent) -> Option<Box<Carry>> {
@@ -420,6 +512,9 @@ impl Pass<'_, '_> {
             let file = i128::from(extent.offset) + i128::from(delta);
             // The extent that holds the first byte may begin before it.
             if file < first {
+                if from == 0 && extent.chunk_offset == 0 {
+                    self.leading = Some(extent);
+                }
                 continue;
             }
             let start = (file - i128::from(self.offset)) as usize;

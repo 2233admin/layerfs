@@ -170,9 +170,10 @@ pub struct ClaimedRange {
 /// claim and stores no byte of a claimed range; whole cells of it become one
 /// reference piece and its ragged edges are stored from the written bytes.
 /// Ranges are in file order and do not overlap. Only the first may start
-/// before the written window, by at most `RUN_BYTES`: those bytes were stored
-/// by an earlier job, and that part is honoured only while the file's content
-/// sequence is still `after`, the revision of that job's publication.
+/// before the written window and only the last may end after it, each by at
+/// most `RUN_BYTES`: those bytes were stored by an earlier job, and that
+/// part is honoured only while the file's content sequence is still `after`,
+/// the revision of that job's publication.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct WriteClaims {
     pub source: [u8; 32],

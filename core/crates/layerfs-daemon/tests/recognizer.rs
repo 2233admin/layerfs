@@ -121,9 +121,10 @@ fn plain_writes_of_a_shifted_tail_become_pieces_and_commit() {
     let before = rig.store.recognizer_work();
     evidence(format_args!("RECOGNIZER first round {before:?}"));
     assert!(before.passes.claimed_bytes > after_insert.passes.claimed_bytes + SECOND as u64 / 2);
-    // The whole allowance: 64 slots, each with room for one carried chunk's
-    // identity. It does not depend on the files or on what was written.
-    assert!(before.capacity_bytes < 160 * KIB, "{before:?}");
+    // The whole allowance: 64 slots, each with room for one carried
+    // identity and the end of one chunk (32 KiB). It does not depend on the
+    // files or on what was written.
+    assert!(before.capacity_bytes < 2400 * KIB, "{before:?}");
 
     let expected = session.model.flat();
     model::assert_same(&expected, &live(&first), "live view before Commit");
@@ -166,6 +167,53 @@ fn plain_writes_of_a_shifted_tail_become_pieces_and_commit() {
         "live view after the second install",
     );
     assert_eq!(rig.store.recognizer_work().passes.failed, 0);
+
+    settled(&rig.owner.client(), 0);
+    rig.close(&first);
+    drop(first);
+    rig.finish();
+}
+
+/// A program that grows a file in place: it extends the file, moves the tail
+/// from the end backward in 64 KiB blocks and writes the new bytes last. Its
+/// requests arrive in falling offsets.
+#[test]
+fn a_tail_moved_from_the_end_backward_becomes_pieces_and_commits() {
+    let rig = Rig::new("recognizer-backward", tree);
+    let first = rig.bind(1);
+    let big = noise(BIG, 3);
+    let mut session = Session::new(&first, rig.base.clone());
+    let (p, grow, block) = (BIG / 2 + 777, 4 * KIB, 64 * KIB);
+    let mut inserted = big.clone();
+    inserted.splice(p..p, noise(grow, 11));
+
+    session.apply(Do::Truncate("data/big", inserted.len() as u64));
+    let mut end = inserted.len();
+    while end > p + grow {
+        let start = (p + grow).max(end.saturating_sub(block));
+        session.apply(Do::Recognized(
+            "data/big",
+            start as u64,
+            &inserted[start..end],
+        ));
+        end = start;
+    }
+    session.apply(Do::Write("data/big", p as u64, &inserted[p..p + grow]));
+    let work = rig.store.recognizer_work();
+    evidence(format_args!("RECOGNIZER backward {work:?}"));
+    let tail = (BIG - p) as u64;
+    assert!(work.passes.claimed_bytes * 10 > tail * 9, "{work:?}");
+    assert_eq!(work.passes.failed, 0);
+
+    let expected = session.model.flat();
+    model::assert_same(&expected, &live(&first), "live view before Commit");
+    let success = first
+        .commit_captured()
+        .unwrap_or_else(|failure| panic!("{failure:?}"));
+    let root = published(&success);
+    drop(success);
+    model::assert_same(&expected, &rebound(&rig, 2, root), "fresh bind");
+    model::assert_same(&expected, &live(&first), "live view after install");
 
     settled(&rig.owner.client(), 0);
     rig.close(&first);
