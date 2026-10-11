@@ -4,8 +4,9 @@ usage: tier_step.py <tag> <budget-seconds> <build | prepare | run | clean> [<fam
 
 Time (owner, 2026-10-11): no command runs longer than 2 minutes, 5 in an
 extreme case. This driver starts the named steps in order and gives each the
-time that is left of the budget; it starts no step with less than 20 s left
-and prints the steps it did not start, so the next call continues there. It
+time that is left of the budget; it starts no step with less than 20 s left,
+no sample with less than 75 s left, and prints the steps it did not start, so
+the next call continues there. Give a case that needs longer a call of its own. It
 samples nothing twice: a case that has a receipt for the tag is skipped.
 
 Storage (owner, 2026-10-11): at most two copies of a case's payload exist.
@@ -141,7 +142,8 @@ def stale(folder, files):
 
 def step(name, arguments):
     left = int(budget - (time.time() - started))
-    if left < 20:
+    # A sample that the budget ends is lost, so one starts only with most of a budget left.
+    if left < (75 if kind == "run" else 20):
         return None
     done = subprocess.run(["perl", LOCK, str(left), "python3", "-B", BENCH, *arguments], cwd=ROOT,
                           env=environment, capture_output=True, text=True)

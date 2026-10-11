@@ -907,3 +907,75 @@ with `ConnectionReset`, and a plain `docker run` then answered
 - Driver fix in the same commit: removing an original also removes the
   setup container a failed preparation leaves on its master volume, and a
   master volume that was never created is not reported as a failure.
+
+## Tier 4 samples, tag `p5` — 2026-10-11, sampled at `061eceeee`
+
+Product source is `5239bfaa1`'s. The owner removed Docker's stopped
+containers (112.2 GB reclaimed), after which the engine accepted work again.
+Sampled through the storage rule's route: 42 originals prepared once, each
+sample's test copy removed when the sample ended, the originals removed
+after the last sample. The result folder holds 136 MB for the 41 samples.
+
+| case | status | proof | exec ms | Commit ms | requests | writer jobs | statements | overlay MB | commit |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| payload-create-100m | INELIGIBLE | PASS | 226.4 | 783.2 | 814 | 4137 | 31810 | 106.9 | 061eceeee |
+| payload-create-10m-compact-v2 | INELIGIBLE | PASS | 61.7 | 82.4 | 94 | 537 | 3730 | 10.9 | 061eceeee |
+| payload-create-1m-compact-v2 | INELIGIBLE | PASS | 35.4 | 18.0 | 22 | 177 | 922 | 1.3 | 061eceeee |
+| payload-random-read-1-compact-v2 | INELIGIBLE | PASS | 34.6 | 9.7 | 6 | 52 | 236 | 0.2 | 061eceeee |
+| payload-random-read-10-compact-v2 | INELIGIBLE | PASS | 42.4 | 7.7 | 15 | 61 | 254 | 0.2 | 061eceeee |
+| payload-random-read-100 | INELIGIBLE | PASS | 50.7 | 9.6 | 105 | 151 | 434 | 0.2 | 061eceeee |
+| payload-random-read-500 | INELIGIBLE | PASS | 150.6 | 11.2 | 503 | 550 | 1232 | 0.2 | 061eceeee |
+| small-file-delta-10x30-v1 | INELIGIBLE | PASS | 1334.5 | 236.0 | 402 | 2919 | 14049 | 0.3 | 061eceeee |
+| tiny-bulk-create-1-compact-v2 | INELIGIBLE | PASS | 144.7 | 99.8 | 1429 | 14865 | 64387 | 1.5 | 061eceeee |
+| tiny-bulk-create-10-compact-v2 | INELIGIBLE | PASS | 374.1 | 328.3 | 4651 | 41160 | 188401 | 11.7 | 061eceeee |
+| tiny-bulk-delete-1-compact-v2 | INELIGIBLE | PASS | 124.0 | 62.3 | 1145 | 9966 | 53091 | 0.4 | 061eceeee |
+| tiny-bulk-delete-10-compact-v2 | INELIGIBLE | PASS | 329.0 | 133.6 | 3012 | 22772 | 129856 | 0.6 | 061eceeee |
+| tiny-bulk-delete-100-mixed-v3 | INELIGIBLE | PASS | 437.3 | 202.1 | 4987 | 36093 | 210351 | 0.9 | 061eceeee |
+| tiny-bulk-delete-500-mixed-v3 | INELIGIBLE | PASS | 2028.1 | 858.6 | 21187 | 146056 | 872771 | 3.3 | 061eceeee |
+| tiny-create-1-compact-v2 | INELIGIBLE | PASS | 44.6 | 12.2 | 16 | 140 | 645 | 0.2 | 061eceeee |
+| tiny-create-10-compact-v2 | INELIGIBLE | PASS | 54.5 | 18.6 | 115 | 938 | 4380 | 0.3 | 061eceeee |
+| tiny-create-100-mixed-v4 | INELIGIBLE | PASS | 92.5 | 48.1 | 736 | 5565 | 26688 | 0.6 | 061eceeee |
+| tiny-create-500-mixed-v4 | INELIGIBLE | PASS | 258.0 | 195.1 | 3496 | 27941 | 131288 | 1.8 | 061eceeee |
+| tiny-stat-1-compact-v2 | INELIGIBLE | PASS | 50.5 | 10.5 | 4 | 51 | 249 | 0.2 | 061eceeee |
+| tiny-stat-10-compact-v2 | INELIGIBLE | PASS | 42.0 | 10.8 | 22 | 69 | 501 | 0.3 | 061eceeee |
+| tiny-stat-100-mixed-v4 | INELIGIBLE | PASS | 52.4 | 9.8 | 112 | 159 | 1671 | 0.4 | 061eceeee |
+| tiny-stat-500-mixed-v4 | INELIGIBLE | PASS | 96.8 | 15.3 | 512 | 559 | 6871 | 0.6 | 061eceeee |
+| tiny-unlink-1-compact-v2 | INELIGIBLE | PASS | 47.1 | 12.6 | 12 | 122 | 594 | 0.2 | 061eceeee |
+| tiny-unlink-10-compact-v2 | INELIGIBLE | PASS | 53.5 | 16.5 | 75 | 608 | 3301 | 0.3 | 061eceeee |
+| tiny-unlink-100-mixed-v4 | INELIGIBLE | PASS | 73.6 | 32.9 | 435 | 3035 | 17989 | 0.4 | 061eceeee |
+| tiny-unlink-500-mixed-v4 | INELIGIBLE | PASS | 222.5 | 99.8 | 2035 | 13939 | 83656 | 0.6 | 061eceeee |
+| workspace-clean-commit-1-compact-v2 | INELIGIBLE | PASS | 0.0 | 9.7 | 0 | 47 | 204 | 0.2 | 061eceeee |
+| workspace-clean-commit-10-compact-v2 | INELIGIBLE | PASS | 0.0 | 9.6 | 0 | 47 | 204 | 0.3 | 061eceeee |
+| workspace-clean-commit-100-mixed-v4 | INELIGIBLE | PASS | 0.0 | 11.9 | 0 | 47 | 204 | 0.3 | 061eceeee |
+| workspace-clean-commit-500-mixed-v4 | INELIGIBLE | PASS | 0.0 | 12.6 | 0 | 47 | 204 | 0.5 | 061eceeee |
+| workspace-dense-rewrite-1-compact-v2 | INELIGIBLE | PASS | 79.1 | 42.0 | 437 | 1950 | 11504 | 1.4 | 061eceeee |
+| workspace-dense-rewrite-10-compact-v2 | INELIGIBLE | PASS | 307.1 | 327.6 | 3146 | 20751 | 104003 | 11.5 | 061eceeee |
+| workspace-dense-rewrite-500-mixed-v4 | INELIGIBLE | PASS | 3352.3 | 13298.9 | 33361 | 222681 | 1154238 | 541.5 | 061eceeee |
+| workspace-distributed-sdk-edit-1-compact-v2 | INELIGIBLE | PASS | 41.6 | 10.6 | 12 | 94 | 444 | 0.2 | 061eceeee |
+| workspace-distributed-sdk-edit-10-compact-v2 | INELIGIBLE | PASS | 46.7 | 15.9 | 75 | 418 | 2199 | 0.3 | 061eceeee |
+| workspace-distributed-sdk-edit-100-mixed-v4 | INELIGIBLE | PASS | 114.7 | 84.5 | 745 | 4113 | 21526 | 0.8 | 061eceeee |
+| workspace-distributed-sdk-edit-500-mixed-v4 | INELIGIBLE | PASS | 281.5 | 352.3 | 3160 | 20374 | 100197 | 3.0 | 061eceeee |
+| workspace-fixed-move-1-compact-v2 | INELIGIBLE | PASS | 50.0 | 12.6 | 16 | 151 | 700 | 0.2 | 061eceeee |
+| workspace-fixed-move-10-compact-v2 | INELIGIBLE | PASS | 50.0 | 10.7 | 16 | 151 | 700 | 0.3 | 061eceeee |
+| workspace-fixed-move-100-mixed-v4 | INELIGIBLE | PASS | 44.7 | 17.9 | 16 | 151 | 700 | 0.3 | 061eceeee |
+| workspace-fixed-move-500-mixed-v4 | INELIGIBLE | PASS | 36.2 | 29.2 | 16 | 151 | 700 | 0.5 | 061eceeee |
+
+- **41 rows: all INELIGIBLE with proof PASS.** Each receipt has functional
+  PASS; ineligible for the declared interference. No row is PASS.
+- **1 case has no result: `tiny-bulk-create-500-mixed-v3`.** The driver
+  started it with 43 s of its own budget left and stopped it at that limit.
+  That is a stop by this run's tooling, not a product result, and the case
+  is not sampled again at this source. The driver now starts a sample only
+  with 75 s left (same commit as this entry).
+- **The three cases of these families sampled at `p3d`** (`payload-create-500m`,
+  `workspace-dense-rewrite-100-mixed-v4`, `tiny-bulk-create-100-mixed-v3`)
+  were not sampled again; their rows are in the `p3d` entry and equalled the
+  control in requests, writer jobs and statements.
+- **No control sample of the other 41 exists in this run**, so their counts
+  are recorded and not compared. Rule V-4 for them is therefore not shown by
+  this run beyond the three rows above.
+- **Not runnable at this base, as registered `pending`:**
+  `file_size_transition`, `git_tool_workflow`, `dedup_branch_history`,
+  `mixed_load_bearing`. Not ported.
+- The 33 samples of tag `p4` remain lost and unreported.
+- Timings are single diagnostic samples.
