@@ -40,6 +40,18 @@ definite `Invalid` refusal.
 
 ## Attach
 
+Issue319 phase7 prepares the Workspace's initial authoritative serial window
+before the engine mount job and before native serving. The single History
+reservation is made outside Workspace locks, consumes no individual serial,
+and preserves an existing unconsumed window. Initial reservation refusal leaves
+no engine or kernel mount effect; exact History Busy remains a definite refusal,
+while an unknown provider result retains uncertain Attach custody. Bind remains
+read-only. The 1,024 serial refill window and subsequent low-water handling are
+unchanged; Workspace adds no reservation retry or serial-specific wait. The
+owner's subsequent2026-10-12 Store admission rule can wait before one SQL attempt
+for cooperating writers, as scoped by the integration contract; no failed
+Commit Begin is replayed.
+
 [`NativeSession::attach`](../../crates/layerfs-fuse/src/session/startup.rs) is one
 attempt with no retry. In order it builds the callback adapter, creates the mount
 directory (an existing path is refused), opens the device, calls `mount(2)`,

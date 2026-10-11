@@ -111,6 +111,22 @@ impl Service {
                 Stop::Unattached(failure)
             }
         };
+        // Prepare the initial authoritative range before any kernel request
+        // can create an inode. Bind stays a read-only snapshot operation.
+        let operation = workspace
+            .operation()
+            .map_err(|error| Stop::Unattached(Failure::Workspace(error)))?;
+        if let Err(error) = operation.workspace().prepare_serials(operation.ports()) {
+            let failure = match operation.ports().failure() {
+                Ok(Some(cause)) => match cause.as_ref() {
+                    crate::store::PortError::History(error) => Failure::History(error.clone()),
+                    _ => Failure::Workspace(error),
+                },
+                Ok(None) | Err(_) => Failure::Workspace(error),
+            };
+            return Err(unknown(failure));
+        }
+        drop(operation);
         let created = self
             .job(
                 workspace.route(),

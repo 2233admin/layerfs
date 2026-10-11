@@ -152,6 +152,15 @@ What a caller sees:
 | Save publication wave | The Commit fails with "Store busy". Waves already published stay as unreferenced immutable objects. The Workspace keeps every change; a later explicit Commit is a new operation |
 | Stage and publish | Exact refusal with no stage row; local custody of the capture is retained as the [Commit contract](workspace-api/commit.md) already requires |
 
+Before native Attach creates an engine or kernel mount owner, it prepares one
+initial authoritative 1,024-serial range through one History reservation. Ready
+therefore exposes a Workspace whose first creates consume local serials. Bind
+remains a read-only snapshot; the deployed 256 low-water and 1,024 refill size
+are unchanged. If initial reservation is Busy, Attach returns the original
+History Busy before mounting. A previously prepared unused range is retained
+and consumed; no failed reservation is retried. Later exhausted-range and early
+refill behavior retain their existing one-attempt contracts. 
+
 ### 3.4 State under other writers
 
 Every value a writer depends on is either fixed when the Store is created or

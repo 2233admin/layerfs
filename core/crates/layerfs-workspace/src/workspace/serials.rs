@@ -21,6 +21,23 @@ pub(crate) struct Serials {
     ranges: Vec<(u64, u64)>,
 }
 impl Workspace {
+    /// Prepare one initial range before exposing a newly attached native
+    /// Workspace. Existing unconsumed ranges are kept. The allocator is called
+    /// once, outside every Workspace lock; refusal has no local effect and is
+    /// returned unchanged. This does not consume a serial or change refill size.
+    pub fn prepare_serials(&self, allocator: &dyn InodeSerials) -> WorkspaceResult<()> {
+        if !self
+            .serials
+            .lock()
+            .map_err(|_| WorkspaceError::BindingPoisoned)?
+            .ranges
+            .is_empty()
+        {
+            return Ok(());
+        }
+        let (start, end) = reserve(allocator)?;
+        self.keep(start, end, true)
+    }
     /// One unused serial. Allocation is local while a reserved range lasts;
     /// a refill is one allocator call made outside every Workspace lock.
     pub fn next_serial(&self, allocator: &dyn InodeSerials) -> WorkspaceResult<u64> {
