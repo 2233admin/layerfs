@@ -666,3 +666,24 @@ review: retain the Commit-only watchdog implementation.
 
 Production LOC: 81727 -> 81727 (delta +0), pinned exact active-core snapshots;
 reference absent (retired R9c; last counted 65,417 at tree 498dd1917812).
+
+
+### Phase 6 D-5 driver
+
+[Policy](checks/phase6-driver.json): committed `tools/invoke_case.py` admits
+300 s only for the exact five500-step history runs and two large preparations.
+Its retained inner driver gets 288 s; ordinary calls retain 118 s outer /110 s
+inner. It reads and hashes the report template before every invocation, records
+exact source/argv/reason/limits in an append-only journal, and stops the process
+group before its outer ceiling. Case watchdogs are unchanged; a failed operation
+is not replayed. Nearby IDs and the wrong operation phase cannot inherit D-5.
+No command or test loop was added. The seven policy failures are retained;
+focused eligibility tests 2/2 PASS. Formatting, boundary and whitespace PASS;
+Clippy inapplicable to this tools/Python-only change. Scoped calls follow once
+at the final phase6 source. Decided by agent, pending owner review: retain the
+288-second inner allocation with room for final driver custody/cleanup.
+
+Correction to the preceding D-4 entry: its Workspace engine suite ran **17**
+tests, not14; all17 passed. The original invocation log is unchanged.
+Production LOC: 81727 -> 81727 (delta +0), pinned exact active-core snapshots;
+reference absent (retired R9c; last counted 65,417 at tree498dd1917812).
