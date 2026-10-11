@@ -161,14 +161,27 @@ Tools, in [tools/](tools/):
 ```sh
 python3 -B core/docs/issues/316/tools/cargo_step.py 600 build-overlay test -p layerfs-overlay --locked --no-run --manifest-path core/Cargo.toml
 python3 -B core/docs/issues/316/tools/cargo_step.py 120 test-overlay test -p layerfs-overlay --locked --manifest-path core/Cargo.toml --test captured_runs
-python3 -B core/docs/issues/316/tools/tier.py <tag> t2
+python3 -B core/docs/issues/316/tools/tier_step.py <tag> 120 build
+python3 -B core/docs/issues/316/tools/tier_step.py <tag> 115 prepare $(python3 -B core/docs/issues/316/tools/tier.py t2)
+python3 -B core/docs/issues/316/tools/tier_step.py <tag> 115 run $(python3 -B core/docs/issues/316/tools/tier.py t2)
 python3 -B core/docs/issues/316/tools/tier_table.py --md c0 <tag>
 ```
 
-- `tier.py` refuses a dirty tree, builds once per tag, prepares and samples
-  each case once, and never samples a case twice for one tag. Use a new tag
-  for every commit sampled (`c0`, `p1`, `p2a`, ...). It sets the construction
-  worker count and the interference declaration.
+- `tier.py <t2|t3|t4>` prints the cases of a tier. `tier_step.py` refuses a
+  dirty tree, builds once per tag and never samples a case twice for one tag.
+  Use a new tag for every commit sampled (`c0`, `p1`, `p2a`, ...). It sets the
+  construction worker count and the interference declaration.
+- Time (owner, 2026-10-11): no command runs longer than 2 minutes, 5 in an
+  extreme case. `tier_step.py` runs the steps it is given inside the stated
+  budget and prints the ones it did not start; call it again to continue.
+- Storage (owner, 2026-10-11): at most two copies of a case's payload. The
+  original (prepared folder and master volume) is shared by every tag under
+  `issue316-originals/`, never changed, and replaced only when the product or
+  harness source changes. The test copy (the sample's clone volume, its
+  containers and the exported closed Store) is removed as soon as its sample
+  ends, whatever its status; receipts, logs and counts stay.
+  `tier_step.py <tag> 60 clean` removes any test copy left behind and
+  `clean originals` also removes the originals.
 - `bench.py run` exits 1 for every row that is not PASS, INELIGIBLE included.
   That is a result to record, not a failed step. Do not run `bench.py report`.
 - Families `file_size_transition`, `git_tool_workflow`, `dedup_branch_history`
