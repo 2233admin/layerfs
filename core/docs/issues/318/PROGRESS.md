@@ -744,3 +744,27 @@ equal. Times are single diagnostic samples.
   0 containers more; originals 834 MB, result folder
   436 MB; host 225 GiB free; `docker system df`: Images=21.51GB, Containers=12.85GB, Local Volumes=69.21GB, Build Cache=4.843GB.
 - CSVs: `core/benchmark/fs-bench-pro/baselines/core/2026-10-11-082fa6202/git_tool_workflow/`.
+
+## Phase C — batch 3, `local_snapshot`, tag `b1`, sampled at `082fa6202`
+
+Iteration 1's value is left of each arrow, this run's right; one value means
+equal. Times are single diagnostic samples.
+
+| case | status | functional | proof | requests | writer jobs | statements | overlay logical B | Store logical B | exec ms | Commit ms |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| local-snapshot-create-25000-onebyte-v1 | INELIGIBLE | PASS | PASS | 177581 | 1456520 -> 1403960 | 6956183 -> 6747991 | 28672000 -> 28934144 | 921712 -> 917592 | 15246.5 -> 11224.0 | 9002.0 -> 8130.1 |
+
+- 1 of 1: functional PASS, proof PASS, mount Gone with KnownStop, as in
+  iteration 1's authoritative sample. Status INELIGIBLE, as there.
+- Requests are equal (177,581). Writer jobs 1,456,520 -> 1,403,960 and
+  statements 6,956,183 -> 6,747,991; overlay logical bytes 28,672,000 ->
+  28,934,144.
+- Exec 15,246 -> 11,224 ms and Commit 9,002 -> 8,130 ms, single samples. The
+  case's declared limit was recorded as exceeded in iteration 1; see the
+  committed CSV for this run's limit status.
+
+- Storage after the family: 5 Docker volumes more than before the run
+  (5 of them masters of current originals, 0 unexplained),
+  0 containers more; originals 834 MB, result folder
+  436 MB; host 225 GiB free; `docker system df`: Images=21.51GB, Containers=12.85GB, Local Volumes=69.21GB, Build Cache=4.843GB.
+- CSVs: `core/benchmark/fs-bench-pro/baselines/core/2026-10-11-082fa6202/local_snapshot/`.
