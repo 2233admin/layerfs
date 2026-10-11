@@ -595,3 +595,28 @@ Production LOC: 81727 -> 81727 (delta +0), active core; pinned counter, exact
 first-parent/staged comparison and committed-tree confirmation. Reference absent
 (retired R9c; last counted 65,417 at tree 498dd1917812). Disposable/WAL/OFF only;
 Durable NOT_RUN — disabled by owner until explicit reauthorization.
+
+### Phase 6 D-2 alias disposition
+
+CLOSED FOR THIS BATCH — the native replay does not provide a reproducible exact
+parent-directory mtime for a separate mounted execution. [Two native count-free
+semantic diagnostics](checks/phase6-alias.json), using the original sealed
+binaries, have identical payload hashes and initial parent mtime but different
+final parent timestamps. Both fail the unchanged strict check at `data`.
+No Store, mount, product timing sample or modified helper participated.
+
+D-2 selects the expected parent field but supplies no comparison rule for this
+automatic timestamp. An exact native-replay value would still fail the later
+mounted execution; changing equality to an interval or deriving expected data
+from mounted readback would introduce an additional oracle rule. Decided by
+agent, pending owner review: retain the strict failure rather than invent that
+rule. No expectation, check, workload, readback or pin changed. The named mounted
+alias case is NOT_RUN in phase 6 because its authorized expectation is blocked.
+This is a blocked disposition, not completion of D-2's requested correction.
+
+Native invocations bounded at 118 s overall / 15 s per child; diagnostics finish
+in under 2 s. Formatting, boundary guard, whitespace, evidence identity and
+local links checked before commit. No Rust product/runtime changed; Clippy and
+new mounted proofs are inapplicable. Production LOC: 81727 -> 81727 (delta +0),
+active core and pinned exact snapshots; reference absent (retired R9c; last
+counted 65,417 at tree 498dd1917812). No push/PR or issue closure.
