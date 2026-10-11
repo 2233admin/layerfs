@@ -202,7 +202,8 @@ def build(folder, root=ROOT):
     inside = "/work/" + str(checks.relative_to(root))
     workload_linux = root / "core/target/fs-bench-pro-workload-linux"
     edit_linux = root / "core/target/fs-bench-pro-edit-linux"
-    body = "set -eu; sha256sum -c " + shlex.quote(inside) + "; cargo build --manifest-path core/Cargo.toml --locked --offline --release -p layerfs-daemon --bin layerfs-daemon; rustc --version; rustc --edition=2021 -O " + shlex.join(ARM64_FLAGS) + " benchmark/fs-bench-pro/workload/main.rs -o /work/core/target/fs-bench-pro-workload-linux; rustc --edition=2021 -O " + shlex.join(ARM64_FLAGS) + " core/benchmark/fs-bench-pro/writers/edit.rs -o /work/core/target/fs-bench-pro-edit-linux; sha256sum -c " + shlex.quote(inside)
+    workspace_linux = root / "core/target/fs-bench-pro-workspace-linux"
+    body = "set -eu; sha256sum -c " + shlex.quote(inside) + "; cargo build --manifest-path core/Cargo.toml --locked --offline --release -p layerfs-daemon --bin layerfs-daemon; rustc --version; rustc --edition=2021 -O " + shlex.join(ARM64_FLAGS) + " benchmark/fs-bench-pro/workload/main.rs -o /work/core/target/fs-bench-pro-workload-linux; rustc --edition=2021 -O " + shlex.join(ARM64_FLAGS) + " core/benchmark/fs-bench-pro/writers/edit.rs -o /work/core/target/fs-bench-pro-edit-linux; rustc --edition=2021 -O " + shlex.join(ARM64_FLAGS) + " core/benchmark/fs-bench-pro/engine/recipes/workspace.rs -o /work/core/target/fs-bench-pro-workspace-linux; sha256sum -c " + shlex.quote(inside)
     receipts.command([*docker, "create", "--name", container, "--network", "none",
                       "-v", str(root) + ":/work", "-w", "/work",
                       "-e", "CARGO_HOME=/work/core/target/cluster2-linux-cargo",
@@ -219,7 +220,8 @@ def build(folder, root=ROOT):
                        ("daemon", root / "core/target/r7-linux-release/release/layerfs-daemon"),
                        ("namespace-writer", namespace_writer), ("workspace-writer", workspace_writer),
                        ("workload-host", workload_host), ("workload-linux", workload_linux),
-                       ("edit-host", edit_host), ("edit-linux", edit_linux)):
+                       ("edit-host", edit_host), ("edit-linux", edit_linux),
+                       ("workspace-linux", workspace_linux)):
         digest = sha256(path)
         archive = root / "benchmark-results/fs-bench-pro/binary-archive" / digest / path.name
         archive.parent.mkdir(parents=True, exist_ok=True)
@@ -267,7 +269,7 @@ def load_build(folder):
 
 
 BINARY_KEYS = frozenset(("runtime", "daemon", "namespace-writer", "workspace-writer",
-                         "workload-host", "workload-linux", "edit-host", "edit-linux"))
+                         "workload-host", "workload-linux", "edit-host", "edit-linux", "workspace-linux"))
 RUNTIME_SCOPE = "core/benchmark/fs-bench-pro/runtime/"
 FUSER_REFUSALS = {
     "core/benchmark/cluster-two/passthrough/Cargo.lock: locked fuser has a local/replacement source",
@@ -287,7 +289,7 @@ def reuse_runtime_inputs(before, previous, flags):
     if any(previous.get(key) != value for key, value in expected.items()):
         raise ValueError("reused build profile, image, flags or disposition differs")
     if set(previous.get("binaries", {})) != BINARY_KEYS:
-        raise ValueError("reused build must contain exactly the eight sealed binary keys")
+        raise ValueError("reused build must contain exactly the nine sealed binary keys")
     left, right = compilation_files(previous["identity"]["files"]), compilation_files(before["files"])
     changed = sorted(name for name in left.keys() | right.keys() if left.get(name) != right.get(name))
     if any(not name.startswith(RUNTIME_SCOPE) for name in changed):
@@ -361,7 +363,7 @@ def build_runtime(folder, original, root=ROOT):
         "unchanged_nonruntime_compiled_files": {name: digest for name, digest in compilation_files(before["files"]).items()
                                                if not name.startswith(RUNTIME_SCOPE)},
         "reused_binaries": {name: value for name, value in previous["binaries"].items() if name != "runtime"},
-        "reuse": "seven exact immutable binaries; original pinned-image before/after source checks and native qualifications retained"})
+        "reuse": "eight exact immutable binaries; original pinned-image before/after source checks and native qualifications retained"})
     environment = {**os.environ, "CARGO_TARGET_DIR": str(root / "core/target/r7-host-release"),
                    "LAYERFS_CONSTRUCTION_WORKERS": "1"}
     host = receipts.command(["cargo", "+1.85.1", "build", "--manifest-path",
@@ -381,7 +383,7 @@ def build_runtime(folder, original, root=ROOT):
     binaries = {**previous["binaries"], "runtime": {"path": str(archive), "sha256": digest, "bytes": path.stat().st_size}}
     result = {**previous, "identity": before, "binaries": binaries, "builds": [host],
               "reused_build": str(original), "reused_build_manifest_sha256": sha256(original / "manifest.json"),
-              "incremental_reuse": "host runtime rebuilt; seven unchanged compiled scopes/binary hashes reused with original Linux/flags/profile provenance"}
+              "incremental_reuse": "host runtime rebuilt; eight unchanged compiled scopes/binary hashes reused with original Linux/flags/profile provenance"}
     receipts.write_new(folder / "source-after.json", after)
     receipts.write_new(folder / "build.json", result)
     receipts.manifest(folder)

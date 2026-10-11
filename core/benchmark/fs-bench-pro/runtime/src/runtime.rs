@@ -11,6 +11,7 @@ use layerfs_sandbox::{
 use layerfs_sdk::{ManagedSandbox, SandboxApi, SandboxCreate};
 use std::{
     fs,
+    net::{SocketAddr, TcpStream},
     path::Path,
     process::{Command, Stdio},
     time::{Duration, Instant},
@@ -21,6 +22,21 @@ pub fn start(
     manifest: Option<StoreManifest>,
     events: &mut Events,
 ) -> Result<ManagedSandbox> {
+    Ok(start_with_keys(args, manifest, events)?.0)
+}
+
+/// Private authentication material retained only for original extra channels.
+pub struct RuntimeKeys {
+    controller_private: [u8; 32],
+    daemon_peer: [u8; 32],
+    endpoint: Option<SocketAddr>,
+}
+
+pub fn start_with_keys(
+    args: &Args,
+    manifest: Option<StoreManifest>,
+    events: &mut Events,
+) -> Result<(ManagedSandbox, RuntimeKeys)> {
     let controller = native::generate_keypair()?;
     let daemon = native::generate_keypair()?;
     let setup = DaemonSetup {
@@ -64,7 +80,7 @@ pub fn start(
             daemon_peer: daemon.public,
             startup_wait: Duration::from_secs(3),
         })
-        .map_err(|error| format!("sandbox original failure {error:?}"))?;
+        .map_err(|error| format!("sandbox original failure phase={:?} cause={:?} acknowledged_container={}; private request omitted",error.phase,error.cause,error.sandbox.as_ref().map(|runtime|runtime.identity().to_string()).unwrap_or_else(||"UNAVAILABLE".into())))?;
     let elapsed = events.span(begun);
     let instance = crate::hex(&owner.startup.instance);
     events.fields(
@@ -79,7 +95,48 @@ pub fn start(
             ("daemon_instance", instance),
         ],
     )?;
-    Ok(owner)
+    Ok((
+        owner,
+        RuntimeKeys {
+            controller_private: controller.private,
+            daemon_peer: daemon.public,
+            endpoint: None,
+        },
+    ))
+}
+
+/// Authenticate once with the existing authority and acknowledge Hello through
+/// the public ManagedSandbox facade. No connection replacement or retry.
+pub fn extra_control(
+    owner: &mut ManagedSandbox,
+    keys: &mut RuntimeKeys,
+) -> Result<layerfs_sdk::control::Control> {
+    let endpoint = match keys.endpoint {
+        Some(value) => value,
+        None => {
+            let value = owner
+                .runtime
+                .endpoint()
+                .map_err(|error| format!("extra channel endpoint {error:?}"))?;
+            keys.endpoint = Some(value);
+            value
+        }
+    };
+    let wait = Duration::from_secs(3);
+    let stream = TcpStream::connect_timeout(&endpoint, wait)?;
+    stream.set_read_timeout(Some(wait))?;
+    stream.set_write_timeout(Some(wait))?;
+    let connection = native::initiate(stream, &keys.controller_private, keys.daemon_peer)?;
+    connection.clear_io_waits()?;
+    let mut control = layerfs_sdk::control::Control::new(connection);
+    std::mem::swap(&mut owner.control, &mut control);
+    let hello = owner.status(true);
+    std::mem::swap(&mut owner.control, &mut control);
+    let status = hello.map_err(|failure| format!("extra channel original Hello {failure:?}"))?;
+    if status.instance != owner.startup.instance || status.phase != owner.startup.phase {
+        return Err("extra channel same daemon incarnation/phase required".into());
+    }
+    Ok(control)
 }
 
 /// An external ordinary runtime Bash: no WorkspaceApi.exec and no registration.
@@ -93,6 +150,78 @@ pub fn command(
     environment: &[String],
     events: &mut Events,
 ) -> Result<()> {
+    command_created(
+        &owner.runtime.identity().to_string(),
+        body,
+        directory,
+        label,
+        observer,
+        environment,
+        |arguments| {
+            if observer {
+                owner.runtime.create_exec(ExecRequest {
+                    identity: CommandIdentity { uid: 0, gid: 0 },
+                    arguments,
+                    environment: vec![],
+                    directory: directory.into(),
+                    stdin: false,
+                })
+            } else {
+                owner.exec(arguments, environment.to_vec(), directory.into(), false)
+            }
+            .map_err(|error| format!("external exec create {error:?}").into())
+        },
+        None,
+        events,
+    )
+}
+
+pub fn concurrent_command(
+    sandbox: &layerfs_sandbox::backend::docker::Sandbox,
+    identity: CommandIdentity,
+    body: &str,
+    directory: &str,
+    environment: &[String],
+    work: (u64, u64),
+    events: &mut Events,
+) -> Result<()> {
+    if identity.uid == 0 {
+        return Err("parallel ordinary command identity must be nonroot".into());
+    }
+    command_created(
+        &sandbox.identity().to_string(),
+        body,
+        directory,
+        "command",
+        false,
+        environment,
+        |arguments| {
+            sandbox
+                .create_exec(ExecRequest {
+                    identity,
+                    arguments,
+                    environment: environment.to_vec(),
+                    directory: directory.into(),
+                    stdin: false,
+                })
+                .map_err(|error| format!("external parallel exec create {error:?}").into())
+        },
+        Some(work),
+        events,
+    )
+}
+
+fn command_created(
+    container_identity: &str,
+    body: &str,
+    directory: &str,
+    label: &str,
+    observer: bool,
+    environment: &[String],
+    create: impl FnOnce(Vec<String>) -> Result<layerfs_sandbox::backend::docker::ExecCreated>,
+    work: Option<(u64, u64)>,
+    events: &mut Events,
+) -> Result<()> {
     let (stdout_path, mut stdout) = events.output(label, "stdout")?;
     let (stderr_path, mut stderr) = events.output(label, "stderr")?;
     let arguments = vec![
@@ -103,20 +232,9 @@ pub fn command(
         body.into(),
     ];
     let hash = crate::hex(layerfs_storage::port::ObjectKey::for_bytes(body.as_bytes()).as_bytes());
-    events.value("command_admission", &format!("container={} directory={directory} label={label} command_sha256={hash} observer={observer} environment={environment:?}",owner.runtime.identity()))?;
+    events.value("command_admission", &format!("container={container_identity} directory={directory} label={label} command_sha256={hash} observer={observer} environment={environment:?}"))?;
     let begun = Instant::now();
-    let created = if observer {
-        owner.runtime.create_exec(ExecRequest {
-            identity: CommandIdentity { uid: 0, gid: 0 },
-            arguments,
-            environment: vec![],
-            directory: directory.into(),
-            stdin: false,
-        })
-    } else {
-        owner.exec(arguments, environment.to_vec(), directory.into(), false)
-    }
-    .map_err(|error| format!("external exec create {error:?}"))?;
+    let created = create(arguments)?;
     let create_span = events.span(begun);
     let (container, exec) = created.identity();
     events.fields(
@@ -158,7 +276,17 @@ pub fn command(
     let inspect_span = events.span(inspect_begun);
     let elapsed = events.span(begun);
     events.phase("exec_status", Some(inspect_span), &format!("container={container} exec={exec} inspection={inspected:?}; actual_exit_time=UNAVAILABLE"))?;
-    events.fields(label, Some(elapsed), &format!("actual_exit_time=UNAVAILABLE inspection={inspected:?}; complete runtime span includes acknowledged-id custody publication; inner operation spans exclude formatting"), &[("container",container.to_string()),("exec",exec.to_string()),("command_sha256",hash),("stdout",stdout_path.display().to_string()),("stderr",stderr_path.display().to_string()),("exit_code",inspected.known_root_exit().map(|value|value.to_string()).unwrap_or_else(||"UNAVAILABLE".into())),("registered_execs","0".into())])?;
+    let counts = work
+        .map(|(send, receive)| {
+            vec![
+                ("control_send_records_before", send),
+                ("control_send_records_after", send),
+                ("control_receive_records_before", receive),
+                ("control_receive_records_after", receive),
+            ]
+        })
+        .unwrap_or_default();
+    events.numeric_fields(label, Some(elapsed), &format!("actual_exit_time=UNAVAILABLE inspection={inspected:?}; complete runtime span includes acknowledged-id custody publication; inner operation spans exclude formatting"), &[("container",container.to_string()),("exec",exec.to_string()),("command_sha256",hash),("stdout",stdout_path.display().to_string()),("stderr",stderr_path.display().to_string()),("exit_code",inspected.known_root_exit().map(|value|value.to_string()).unwrap_or_else(||"UNAVAILABLE".into())),("registered_execs","0".into())], &counts)?;
     if inspected.known_root_exit() != Some(0) {
         return Err(format!("original external command exit: {inspected:?}").into());
     }

@@ -1,5 +1,5 @@
 //! One diagnostic E01 startup attempt; no performance admission or new runner.
-#[path = "../../../benchmark/fs-bench-pro-storage-content/src/workload/digest.rs"]
+#[path = "../../../benchmark/cluster-one/storage-content/src/workload/digest.rs"]
 #[allow(dead_code, clippy::needless_range_loop)]
 mod digest;
 #[path = "e2_startup/driver.rs"]

@@ -33,6 +33,14 @@ pub(crate) fn apply(
     acquisition: crate::SqliteAcquisitionSchema,
     w: &RefCell<SqlWork>,
 ) -> Result<(), BackendError> {
+    // WAL selection and acquisition setup can write before schema creation.
+    // Apply the selected synchronization policy before any such operation.
+    for (name, value) in [
+        ("synchronous", selected.synchronous()),
+        ("fullfsync", selected.fullfsync()),
+    ] {
+        query::run(c, &format!("PRAGMA {name}={value}"), vec![], w)?;
+    }
     if create {
         query::run(c, "PRAGMA page_size=4096", vec![], w)?;
         if acquisition == crate::SqliteAcquisitionSchema::Tables {
@@ -64,9 +72,7 @@ pub(crate) fn apply(
         }
     }
     for (name, value) in [
-        ("synchronous", selected.synchronous()),
         ("foreign_keys", 1),
-        ("fullfsync", selected.fullfsync()),
         ("checkpoint_fullfsync", 1),
         ("wal_autocheckpoint", 1000),
         ("journal_size_limit", 4194304),

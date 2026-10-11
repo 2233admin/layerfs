@@ -1,5 +1,8 @@
 """Missing evidence and custody never become a successful mounted sample."""
 import json
+import importlib.util
+import io
+from contextlib import redirect_stderr
 from pathlib import Path
 import sys
 import tempfile
@@ -25,6 +28,28 @@ def phase_proof():
 
 
 class WorkspaceEvidence(unittest.TestCase):
+    def test_current_history_batch_routes_remain_unsampleable_until_ported(self):
+        spec = importlib.util.spec_from_file_location("fsb_pending_driver", Path(__file__).resolve().parents[2] / "bench.py")
+        bench = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(bench)
+        for family in ("file_size_transition", "dedup_branch_history", "mixed_load_bearing"):
+            self.assertIn(family, workspace.fixtures.WORKSPACE_FAMILIES)
+            with self.subTest(family=family), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                output = root / "benchmark-results/fs-bench-pro/run"
+                definition = root / "families" / family / "family.json"
+                definition.parent.mkdir(parents=True)
+                definition.write_text(json.dumps({"family": family, "cases": [{"id": "pending-original-case", "status": "pending"}]}))
+                with patch.object(bench, "HERE", root), \
+                        patch.object(workspace.identity, "source_identity", return_value={}), \
+                        patch.object(workspace, "one_family_case") as attempted, redirect_stderr(io.StringIO()) as error:
+                    with self.assertRaises(SystemExit) as rejected:
+                        bench.main(["run", family, "--build", str(root / "build"), "--prepared", str(root / "prepared"), "--out", str(output)])
+                self.assertEqual(rejected.exception.code, 2)
+                self.assertIn("pending cases cannot be sampled", error.getvalue())
+                attempted.assert_not_called()
+                self.assertFalse(output.exists())
+
     def test_control_only_case_reaches_commit_without_warm_or_measured_exec(self):
         class Runtime:
             container = "original-container"
@@ -134,12 +159,12 @@ class WorkspaceEvidence(unittest.TestCase):
                 observed.append(state)
                 return {"fields": {"state": state}}
             runtime = SimpleNamespace(container="original-container", send=send)
-            def command(argv, folder, label, seconds):
+            def command(argv, folder, label, seconds, *, allow_failure=False):
                 self.assertEqual(observed, ["Queued", "Gone"])
                 self.assertNotIn("--evict", argv)
                 path = Path(folder) / "observer.stdout"
                 path.write_text('{"resident_pages": 1}')
-                return {"stdout": str(path)}
+                return {"exit_code": 0, "stdout": str(path)}
             with patch.object(workspace.receipts, "command", side_effect=command):
                 cleaned, residency = workspace.terminal_cache_observation(runtime, "original-key", {"socket": "/socket"}, directory)
             self.assertEqual([row["fields"]["state"] for row in cleaned], ["Queued", "Gone"])

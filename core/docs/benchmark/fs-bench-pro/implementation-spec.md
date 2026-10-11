@@ -98,6 +98,7 @@ core/benchmark/
       oracle.py                     —    new   (independent verification)
       project.py                    —    new   (Init and history cases, no mount)
       receipts.py                   —    new
+      reliability.py                —    new   (complete-case source applicability and refusal)
       workspace.py                  —    new   (mount, run, commit, unmount)
       recipes/                      —    new   (fixture generators)
     runtime/                             (moved from r7-runtime)
@@ -227,6 +228,7 @@ What each module owns:
 | `cache` | Classes A (fresh mount, cold), B (fresh mount, warm daemon) and C (same mount, warm), each with its enforced precondition. A sample whose precondition is not met is `INELIGIBLE` |
 | `identity` | Source commit and tree, product tree, build seal, binary hashes, image digest, harness tree, workload and fixture hashes. A run refuses a dirty tree |
 | `receipts` | Append-only output under `benchmark-results/fs-bench-pro/<run>/`; a second sample of the same identity is refused |
+| `reliability` | Exact source applicability of complete frozen failure cases; retain original obligations and refuse unavailable cases before setup or runtime work. Source-only parity never qualifies a native or mounted proof |
 
 Fixed for every run: global Store Disposable/WAL/OFF selected explicitly,
 overlay MEMORY/OFF/EXCLUSIVE, `LAYERFS_CONSTRUCTION_WORKERS=1` (Init keeps its
@@ -253,8 +255,11 @@ sampled repeatedly to manufacture equality.
 ### 6.1 Result format
 
 `bench.py report` writes two CSV files per recorded run into
-`baselines/core/<date>-<commit>/`. They are generated from the receipts and
-never filled by hand. The columns extend the v0.1.6 release tables
+`baselines/core/<date>-<commit>/<family>/` for new parallel-family runs.
+The original family name separates recorded runs that share one clean source
+commit; otherwise two independent reports would collide on the same filenames.
+Already recorded run directories retain their original paths and contents.
+They are generated from the receipts and never filled by hand. The columns extend the v0.1.6 release tables
 (`release-notes/0.1.6/derive_tables.py`) with the phase split, the counts and
 the reference columns of the v0.1.5 table. Times are raw nanoseconds.
 
@@ -286,11 +291,21 @@ source_commit, product_tree, image, evidence, tag
 
 | Column | Values and meaning |
 | --- | --- |
-| `status` | `PASS` (ran to the end, verifier passed, mount ended cleanly), `FAIL`, `INELIGIBLE` (cache precondition not met), `NOT_RUN`, `NOT_APPLICABLE`. A non-passing row keeps its reason in `tag` |
+| `status` | `PASS` (ran to the end, verifier passed, mount ended cleanly), `FAIL`, `INELIGIBLE` (cache precondition not met), `NOT_RUN`, `NOT_APPLICABLE`. Verification-only performance rows use `N/A`; their actual proof or applicability disposition remains in `verification.csv`. A non-passing row keeps its reason in `tag` |
 | `limit_status` | `WITHIN` or `EXCEEDED` against `declared_limit_ns`. In the first iteration this is recorded and not judged; an `EXCEEDED` row can still be `PASS` |
 | `reference_*` | Copied from `baselines/v0.1.6/reference.csv`: the release, the timer it used, its value and its profile. Empty when no released number exists |
 | `evidence` | Path of the receipt directory under `benchmark-results/` |
 | a value a receipt does not supply | `UNAVAILABLE`, never 0 |
+
+Verification-only selections have no performance sample: performance phase,
+time, count, storage, cache, limit and status cells are `N/A`. This does not
+hide a failed outcome or case inapplicability: `verification.csv` retains the
+actual proof status, original proof limit and reason; absent proof timing is
+`UNAVAILABLE`. An unattempted source-inapplicable selection is
+`NOT_APPLICABLE`, with zero actual workload and verification attempts. Native
+adapter diagnostics remain separately scoped raw evidence. They are not a
+whole-case proof or a numerical performance result. Existing CSV receipts and
+verdicts are unchanged by this schema clarification.
 
 There is no ratio column. The reference was measured on another version,
 topology and timer, and a printed ratio would read as a verdict the data
@@ -317,6 +332,20 @@ workloads are Rust code calling an SDK that no longer builds. Anything that
 cannot match goes in `differences` with its reason. Expected examples: v0.1.6
 kept the Store on the host and core keeps it in the VM; a v0.1.6 case that
 called an SDK edit method must become ordinary file writes.
+
+For a `not-applicable` case, parity verifies its exact original ID, reviewed
+fixture/ordered operation/oracle declarations, complete original guards and
+limits, the current clean product/source identities and the specific missing
+capability with its reason and needs. It records source applicability
+separately from native fixture or runtime parity. A source-applicability check
+may pass while `runtime_parity` remains `NOT_RUN`; it never establishes that
+the complete case verifier ran or passed. Every unavailable case remains in
+both result CSVs, with zero actual attempts. All original obligations remain
+required before any future ported classification; a sampled/shared/logical
+counter, post-Start resource limit, partial primitive proof or reused proof
+with narrower scope cannot replace them. This is the explicit applicability
+route for batch 7's 26 physical-accounting and two from-creation resource-profile
+gaps; it introduces no product capability or relaxed case oracle.
 
 ## 8. Reference numbers
 
@@ -409,12 +438,39 @@ A batch is done when, for each of its families:
    with every case of the batch present, and the batch report shows each case
    beside its reference row.
 
+An original case whose one attempted preparation reaches its unchanged
+external test ceiling cannot supply a sealed input for a sample. Retain the
+preparation as `FAIL`, its actual case as `NOT_RUN` with that reason, and its
+parity row as `FAIL`; do not retry, extend the stop, remove checkpoints or
+claim that preparation passed. Other cases may proceed only after their own
+unchanged parity checks pass. The aggregate family parity and batch closure
+remain explicitly failed for the unprepared case, with both CSVs retaining
+every original selection. That truthful failed closure permits the next
+batch; it is not a passing done-when result. This exception applies to the
+retained batch-4 `v016-mixed-exhaustive-500mb-30000-k100-v1` preparation,
+which reached 120 seconds after fifteen of twenty selected native states,
+and batch-5 `v016-branch-mixed-500mb-30000-k100-v1`, whose external
+120-second preparation supervisor expired before known return. Its inner
+process later reported a complete sealed input, but late output does not
+promote the failed authorized invocation. Both failed preparations and every
+late artifact stay unchanged; no individual native state error or product
+correctness bug was identified, and neither case is sampled from that input.
+The same failed-preparation closure also applies to batch-6 `repository_history`
+`deepseek-full`: its one unchanged 120-second native-input preparation expired
+after the 157 selected checkpoint directories and partial `fixture.json` were
+written, before the sealed `prepared.json` and resource claim existed. Those
+partial native outputs do not establish passing preparation or authorize an
+actual history sample. Retain preparation `FAIL`, actual case `NOT_RUN` and
+aggregate parity `FAIL`; independently prepared and parity-passing cases may
+continue once. No preparation retry, deadline extension or late-output
+promotion is permitted.
+
 ## 10. Prerequisites and open decisions
 
 | ID | Question | Blocks | Recommendation |
 | --- | --- | --- | --- |
 | P-1 | Source correction: `ProjectApi::fork` and `ProjectApi::history` already exist in `core/crates/layerfs-api/sdk/src/project/history.rs`, exported by `project/mod.rs` at the handed-over product tree | Batch 5 | Reuse and verify these existing thin SDK methods when batch 5 is reached; do not duplicate them or drive the control protocol from the harness. No product addition is needed for P-1 |
-| P-2 | Source check: direct bind takes a Branch only; existing `ForkSource::Commit` selects an ancestor and returns a Branch snapshot at its root | `historical_access` | Stage 0.3 records the existing public Fork-then-mount route and its extra Branch as a difference; verify it in batch 5 before sampling. If that route cannot express the case, retain it as `not-applicable` rather than adding a feature |
+| P-2 | Source correction: direct bind takes a Branch; both the original v0.1.6 access driver and current `ForkSource::Commit` select an ancestor by Fork-then-mount | `historical_access` | Verify the existing public Fork/History route in batch 5 before sampling. The original access lane already creates a separate access Branch, so do not label that Branch as an added topology difference. Preserve source-Branch ancestry membership, selected roots and producer heads; if the existing route cannot express a case, retain it as `not-applicable` rather than adding a feature |
 | P-3 | Workloads that used v0.1.6 SDK edit calls have no shell equivalent yet | Batch 2 | Express them as ordinary writes through `writers/` and record the difference |
 | P-4 | Old registrations pin harness files by path and hash; after the move they can only be re-checked at their own commit | Stage 0.2 | Accept; they are closed |
 | P-5 | The largest v0.1.6 fixtures are 500 MB and 30,000 files with 100 Commits; some cases exceeded 15 s on v0.1.6 itself | Batches 4 and 5 | Keep the v0.1.6 case's own declared limit; a case that cannot fit is recorded with its measured wall, not shrunk |

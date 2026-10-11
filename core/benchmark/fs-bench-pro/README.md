@@ -1,6 +1,6 @@
 # fs-bench-pro workload benchmark
 
-> **Status:** Current planning checklist; no release candidate exists.
+> **Status:** First iteration closed with failures and not-applicable cases; no release admission is established.
 
 The [implementation spec](../../docs/benchmark/fs-bench-pro/implementation-spec.md)
 and [rollout ledger](../../docs/benchmark/fs-bench-pro/ROLLOUT-LEDGER.md) define
@@ -11,15 +11,15 @@ comparison or release gate is selected.
 Stage 0.1 has harvested all 461 released source rows into
 [the reference catalogue](baselines/v0.1.6/README.md). Stage 0.2 has moved the
 working SDK runtime here and separated cluster-one and cluster-two harnesses.
-Stage 0.3 catalogued all 273 cases as pending. All four Init cases are ported with parity PASS, one functional/proof PASS
-each and closed Store ownership. Their numeric rows remain INELIGIBLE for
-unverified host cold-cache preconditions. Eight payload cases now have ported definitions; their parity/samples are
-pending. The other 261 cases remain pending.
-`python3 -B core/benchmark/fs-bench-pro/bench.py list` lists every case and its
-released reference. The reproducible engine has build, prepare, twelve-cell run, retained verify and
-CSV report commands. Its twelve mounted cells completed functional proof and clean unmount; exact
-count reproduction failed for C10/C12 and remains explicitly failed in the
-ledger and generated CSVs. Workload ports follow that documented closure. Pending cases have no frozen steps, cache preconditions or budgets.
+The catalogue contains all 25 original families and 273 cases. All seven batches
+are truthfully closed: 192 functional/verifier/clean-close passes, 50 failed
+outcomes, three actual cases unrun after failed preparation, and 28 complete
+reliability cases not applicable. Source-only reliability parity preserves the
+missing physical accounting and creation-profile requirements; it is not a
+native or mounted proof. The [iteration completion](../../docs/benchmark/fs-bench-pro/ITERATION-1-COMPLETION.md)
+records every case, failed or unavailable scope, limit miss, fix, decision,
+source pair and production LOC. Raw receipts and claims remain append-only;
+closed results are not authorization to repeat an unchanged sample.
 
 Use `bench.py build --out <fresh-results-path>`, then
 `bench.py prepare empty|big64m --build <seal> --out <fresh-results-path>`.
@@ -54,3 +54,11 @@ commits through the SDK, terminally unmounts, verifies a fresh published-root
 mount and performs a separate offline current-format persisted proof. The
 runtime's `verify-workspace` mode is an independent harness oracle over a closed
 sample Store; the live daemon data path stays in-process in the shared volume.
+
+Historical access setup first creates a new complete closed original producer.
+For a paired selection of that same producer, use `bench.py prepare <access-case>
+--build <seal> --reuse-producer <first-access-prepared-folder> --out <fresh-path>`.
+The adapter admits original source/helper/graph/custody seals, preserves the
+original producer identity and installs a new independent complete Store byte
+copy. This reuses setup only; each original access gets its own fresh mount,
+reader and verifier, with zero performance samples and one proof attempt.
