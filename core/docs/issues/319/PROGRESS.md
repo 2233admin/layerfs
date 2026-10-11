@@ -564,3 +564,34 @@ Clippy/runtime tests are inapplicable; phase 2 warning-denying changed-crate
 Clippy and scope tests and the 50 guard self-tests remain the valid source
 checks. Whitespace and staged-tree/production comparison are checked before
 commit; the resulting committed tree is confirmed afterwards.
+
+
+## Second batch entry / phase 6 D-2 M1, 2026-10-11
+
+Issue #319 read before edits; D-1–D-7 are recorded owner decisions. Both
+owner action boxes remain unticked. Work stays on the handed-over local branch;
+no push, PR, cleanup of protected resources or phase 8 execution is authorized.
+The phase 5 exit and FINAL-COUNTS remain immutable comparison inputs.
+
+The native failing external regression identified stage 5 atomic saves setting
+mtime before the payload write. The preserved value 1700000010.123456789 became
+the native write timestamp. The corrected helper writes first, then sets the
+same mtime; syscall cardinality, bytes, inode checks and the M1 proof are unchanged.
+A core harness copy differs from the frozen reference by exactly that order.
+The build generates ordinary workload source with authenticated original module
+paths and only the corrected M1 include. Root frozen sources and their recovery
+pins remain unchanged. This is harness duplication, outside production LOC.
+
+[Checks](checks/phase6-m1.json): red FAIL retained; green native and exact-copy
+routing tests 2/2; build-identity tests 8/8; actual host helper compilation,
+core formatting, boundary guard and whitespace PASS. Every invocation used
+an explicit 118 s wall stop and one construction worker. One green invocation
+was refused by the still-held build lock before execution; it is not a sample.
+No product crate changed, so changed-crate Clippy is inapplicable. The selected
+mounted case follows once after all five harness commits. Decided by agent,
+pending owner review: retain the minimal core helper copy and generated routing.
+
+Production LOC: 81727 -> 81727 (delta +0), active core; pinned counter, exact
+first-parent/staged comparison and committed-tree confirmation. Reference absent
+(retired R9c; last counted 65,417 at tree 498dd1917812). Disposable/WAL/OFF only;
+Durable NOT_RUN — disabled by owner until explicit reauthorization.
