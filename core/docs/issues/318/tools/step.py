@@ -199,6 +199,8 @@ def master(folder):
 def original_volumes(folder):
     """Volumes an original names: its master and any history master of a producer."""
     found = set()
+    if (folder / "issue318-volumes.json").exists():
+        found |= set(json.loads((folder / "issue318-volumes.json").read_text()))
     for claim in folder.rglob("resource-claim.json"):
         try:
             value = json.loads(claim.read_text()).get("volume")
@@ -328,6 +330,11 @@ if kind == "clean":
         # between; the volumes are removed by the call that removes the last of the folder.
         begun = time.time()
         for folder in folders(ROOT / ORIGINALS):
+            # The claims that name an original's volumes sit in the files removed below, so the names are
+            # kept beside the folder's own claim until the folder itself goes.
+            kept_names = folder / "issue318-volumes.json"
+            if not kept_names.exists():
+                kept_names.write_text(json.dumps(sorted(original_volumes(folder))))
             for inner, _, names in os.walk(folder, topdown=False):
                 if time.time() - begun > budget - 15:
                     say(clean_stopped_at=folder.name, why="budget; call again")

@@ -1127,3 +1127,64 @@ Six cases; every receipt has status PASS, functional PASS and proof PASS, as in 
   0 containers more; originals 489 MB, result folder
   845 MB; host 225 GiB free; `docker system df`: Images=21.51GB, Containers=12.85GB, Local Volumes=69.1GB, Build Cache=4.843GB.
 - CSVs: `core/benchmark/fs-bench-pro/baselines/core/2026-10-11-a8a3ff2de/historical_access/`.
+
+## Phase C — batch 6, `dedup_cdc_locality`, tag `b1`, sampled at `eab848c1c`
+
+Iteration 1's value is left of each arrow, this run's right; one value means
+equal. Times are single diagnostic samples.
+
+| case | status | functional | proof | requests | writer jobs | statements | overlay logical B | Store logical B | exec ms | Commit ms |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| dedup-cdc-overwrite-1 | INELIGIBLE | PASS | PASS | - | - | - | - | 1253376 | 18.9 -> 25.3 | - -> - |
+| dedup-cdc-overwrite-10 | INELIGIBLE | PASS | PASS | - | - | - | - | 1445888 | 25.7 -> 32.2 | - -> - |
+| dedup-cdc-overwrite-100 | INELIGIBLE | PASS | PASS | - | - | - | - | 3493888 -> 3489792 | 164.8 -> 114.5 | - -> - |
+| dedup-cdc-overwrite-500 | INELIGIBLE | PASS | PASS | - | - | - | - | 12107776 -> 12095488 | 384.0 -> 418.0 | - -> - |
+| dedup-cdc-insert-1 | INELIGIBLE | PASS | PASS | - | - | - | - | 1265664 | 18.3 -> 25.3 | - -> - |
+| dedup-cdc-insert-10 | INELIGIBLE | PASS | PASS | - | - | - | - | 1720320 | 26.2 -> 35.7 | - -> - |
+| dedup-cdc-insert-100 | INELIGIBLE | PASS | PASS | - | - | - | - | 4952064 -> 4947968 | 105.4 -> 128.7 | - -> - |
+| dedup-cdc-insert-500 | INELIGIBLE | PASS | PASS | - | - | - | - | 15482880 -> 15495168 | 459.6 -> 455.4 | - -> - |
+| dedup-cdc-delete-1 | INELIGIBLE | PASS | PASS | - | - | - | - | 1347584 | 18.5 -> 23.1 | - -> - |
+| dedup-cdc-delete-10 | INELIGIBLE | PASS | PASS | - | - | - | - | 1773568 | 29.2 -> 38.2 | - -> - |
+| dedup-cdc-delete-100 | INELIGIBLE | PASS | PASS | - | - | - | - | 4403200 -> 4395008 | 117.0 -> 120.6 | - -> - |
+| dedup-cdc-delete-500 | INELIGIBLE | PASS | PASS | - | - | - | - | 13295616 -> 13279232 | 520.4 -> 454.6 | - -> - |
+| dedup-cdc-common-body-1 | INELIGIBLE | PASS | PASS | - | - | - | - | 1519616 | 20.7 -> 26.4 | - -> - |
+| dedup-cdc-common-body-10 | INELIGIBLE | PASS | PASS | - | - | - | - | 4251648 | 41.5 -> 48.4 | - -> - |
+| dedup-cdc-common-body-100 | INELIGIBLE | PASS | PASS | - | - | - | - | 30687232 -> 30695424 | 214.1 -> 282.3 | - -> - |
+| dedup-cdc-common-body-500 | INELIGIBLE | PASS | PASS | - | - | - | - | 148209664 -> 148242432 | 1155.3 -> 1092.9 | - -> - |
+| dedup-cdc-scattered-1 | INELIGIBLE | PASS | PASS | - | - | - | - | 2301952 | 23.8 -> 28.7 | - -> - |
+| dedup-cdc-scattered-10 | INELIGIBLE | PASS | PASS | - | - | - | - | 11853824 -> 11849728 | 68.3 -> 89.6 | - -> - |
+| dedup-cdc-scattered-100 | INELIGIBLE | PASS | PASS | - | - | - | - | 107364352 | 608.9 -> 665.0 | - -> - |
+| dedup-cdc-scattered-500 | FAIL | FAIL -> - | FAIL | - | - | - | - | 531984384 -> 531935232 | 3063.7 -> 3009.4 | - -> - |
+| dedup-cdc-boundaries-proof | PASS | PASS | PASS | - | - | - | - | - -> 479232 | - -> 22.9 | - -> - |
+
+Failure texts, as recorded:
+
+- `dedup-cdc-scattered-500`: original event wall stop: verify
+
+Twenty-one cases: 20 completed with functional PASS and proof PASS, 1 FAIL, as in iteration 1.
+
+- This family runs Project Init on native trees and measures Store size; requests, writer jobs, statements
+  and overlay sizes do not apply and there is no Commit. `dedup-cdc-boundaries-proof` is verification-only
+  and its receipt has status PASS; the other 19 completed rows are INELIGIBLE (interference declared).
+- Store logical bytes: equal to the control in 9 cases; 11 differ by −49,152 to +32,768 B, each under 0.3%
+  of the case's Store (largest: `dedup-cdc-scattered-500` −49,152 B of 531,984,384 B; `dedup-cdc-common-body-500`
+  +32,768 B of 148,209,664 B). `dedup-cdc-boundaries-proof` records 479,232 B; the control CSV has no size
+  for it.
+- `dedup-cdc-scattered-500`: `original event wall stop: verify`. The measured Init completed (3,009 ms); the
+  check's cumulative 41 s work allowance ended during the fresh mounted native comparison (41,009.7 ms
+  recorded), the control's failure for this case (41,005.1 ms there). Proof FAIL, cleanup UNAVAILABLE; the
+  driver removed the sample's volume and two containers afterwards.
+- exec is the Init command, diagnostic only (interference declared).
+
+Storage, decided by agent: the cleanup change made after batch 4 (unlink an original's files in pieces a
+call can stop between) removed the nested claim files that name an original's volumes before reading
+them. After `historical_access` this left 12 volumes of this run (six history masters and the six
+producer masters its preparations made, all created during those preparations, none in the pre-run list,
+none used by a container). They were removed by name and the driver now keeps the volume names before it
+unlinks anything. The check after that shows no volume or container of this run.
+
+- Storage after the family: 0 Docker volumes more than before the run
+  (0 of them masters of current originals, 0 unexplained),
+  0 containers more; originals 3129 MB, result folder
+  1006 MB; host 223 GiB free; `docker system df`: Images=21.51GB, Containers=12.85GB, Local Volumes=69.06GB, Build Cache=4.843GB.
+- CSVs: `core/benchmark/fs-bench-pro/baselines/core/2026-10-11-eab848c1c/dedup_cdc_locality/`.
