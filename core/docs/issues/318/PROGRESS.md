@@ -1797,3 +1797,12 @@ the other 28 are iteration 1's failures with the same recorded cause.
   25 are; the other 3 are the `repository_history` rows, which have no
   receipt here and were FAIL, FAIL and NOT_RUN in iteration 1 (stride3
   failed there earlier, in the copy before any command).
+
+### Closing record, 2026-10-11
+
+- Final comment on the issue: `issuecomment-6108256977`. The issue is left
+  open.
+- Boxes ticked at hand-back: every failed row classified; all families
+  sampled at the final source (the baseline source, unchanged since);
+  CSVs committed; ledger hand-back and final comment. Left open: batch 7,
+  the two diagnosis boxes and the product-fix box.
