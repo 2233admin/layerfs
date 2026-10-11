@@ -11,9 +11,10 @@ use layerfs_fuse::ports::{
 use layerfs_history::HistoryError;
 use layerfs_overlay::{NativeCookieOffer, NativeMount, Publication};
 use layerfs_workspace::{
-    BaseView, CanonicalClient, NativeDirectoryWindow, NativeMutationOutcome, NativeReadOperation,
-    NativeReadOutcome, NativeVisitRequest, NativeWindow, Recognition, RecognizeWork, VisitFacts,
-    WorkspaceError, WriteData, RECOGNIZE_BYTES,
+    BaseView, CanonicalClient, JobOutcome, NativeDirectoryWindow, NativeInput,
+    NativeMutationOutcome, NativeReadOperation, NativeReadOutcome, NativeVisitRequest,
+    NativeWindow, Recognition, RecognizeWork, VisitFacts, WorkspaceError, WriteData,
+    RECOGNIZE_BYTES,
 };
 use std::{
     future::{poll_fn, Future},
@@ -346,11 +347,22 @@ impl RequestServices for FilesystemPort {
         if let Err(fenced) = self.fenced(true) {
             return Box::pin(async move { Err(fenced) });
         }
+        // The bytes of an examined write, for the chunk it may have carried.
+        let written = match &request.input {
+            NativeInput::Write {
+                offset,
+                data,
+                cached: false,
+            } if data.len() >= RECOGNIZE_BYTES => {
+                Some((request.serial, (*offset, offset + data.len() as u64)))
+            }
+            _ => None,
+        };
         let visit = self
             .0
             .workspace()
             .native_mutation_visit(self.0.resident(), request);
-        match visit {
+        let job = match visit {
             Ok(visit) => self.acquire(
                 Command::Native(NativeJob::MutateVisit(Box::new(visit))),
                 |response| match response {
@@ -358,8 +370,20 @@ impl RequestServices for FilesystemPort {
                     _ => None,
                 },
             ),
-            Err(error) => Box::pin(async move { Err(Box::new(error) as ServiceError) }),
-        }
+            Err(error) => return Box::pin(async move { Err(Box::new(error) as ServiceError) }),
+        };
+        let Some((serial, range)) = written else {
+            return job;
+        };
+        Box::pin(async move {
+            let reply = job.await?;
+            if let Ok(JobOutcome::Applied { publication, .. }) = &reply.get().result {
+                let route = self.0.workspace().route();
+                let slots = self.0.ports().recognizer();
+                slots.published(route, serial, range, publication.revision());
+            }
+            Ok(reply)
+        })
     }
     /// No SQL and no owner turn: the write's bytes, mapping pages of the
     /// file's committed content and one slot of the Store's fixed table.

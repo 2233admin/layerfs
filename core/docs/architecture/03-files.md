@@ -251,6 +251,7 @@ canonical format, a partition or an identity.
 | --- | --- | --- |
 | `FileView::extents`, [`ExtentCursor`](../../crates/layerfs-content/src/file/mapping/extents.rs) | The extents of a chunked file in logical order: offset, length, chunk identity and the offset inside that chunk. `seek` repositions at the extent that holds an offset | One mapping page a level after a seek, then one a leaf; no payload byte. None for a whole-file base |
 | `mapping::chunk_id` | The identity of the chunk object whose payload is the given bytes, without building the object | One hash of the framing and the bytes |
+| `mapping::ChunkIdentity` | The same identity for a payload of known length whose bytes arrive in order, part by part; fixed in size, keeps no payload byte. `ObjectId::stream` is the object-level form | One hash of the framing and the bytes |
 | `cdc::cut_candidates` | Every position of a byte window at which the frozen scanner could end a chunk, for one pair alignment | One gear pass |
 
 - The cursor and the existing predecessor cursor share one forward walk, so

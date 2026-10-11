@@ -22,6 +22,7 @@ use layerfs_history::CommitStagedOutcome;
 use std::{fs, path::Path};
 
 const KIB: usize = 1024;
+const MIB: usize = 1024 * KIB;
 const BIG: usize = 3 << 20;
 const SECOND: usize = 2 << 20;
 const SMALL_FILES: usize = 70;
@@ -120,7 +121,9 @@ fn plain_writes_of_a_shifted_tail_become_pieces_and_commit() {
     let before = rig.store.recognizer_work();
     evidence(format_args!("RECOGNIZER first round {before:?}"));
     assert!(before.passes.claimed_bytes > after_insert.passes.claimed_bytes + SECOND as u64 / 2);
-    assert!(before.capacity_bytes < 32 * KIB, "{before:?}");
+    // The whole allowance: 64 slots, each with room for one carried chunk's
+    // identity. It does not depend on the files or on what was written.
+    assert!(before.capacity_bytes < 160 * KIB, "{before:?}");
 
     let expected = session.model.flat();
     model::assert_same(&expected, &live(&first), "live view before Commit");
@@ -132,17 +135,16 @@ fn plain_writes_of_a_shifted_tail_become_pieces_and_commit() {
     model::assert_same(&expected, &rebound(&rig, 2, root), "fresh bind");
     model::assert_same(&expected, &live(&first), "live view after install");
 
-    // The base advanced. Without carry every request left stored bytes
-    // between its pieces, and each such stretch cut the committed chunks at
-    // its two ends: the new mapping holds a slice wherever a piece was
-    // trimmed to cells. A whole rewrite of the unchanged file claims the
-    // chunks that are still whole and stores every slice, and so does one
-    // with an edit in it.
+    // The base advanced. The chunk that crossed a request's end was
+    // completed by the next request, so the pieces of the tail were one run
+    // and the Commit cut committed chunks only at the edit. A whole rewrite
+    // of the unchanged file claims nearly all of it, and so does one with an
+    // edit in it. (The count repeats the few bytes a claim reaches back.)
     rewrite(&mut session, "data/big", &inserted, 0, 128 * KIB);
     let whole = rig.store.recognizer_work();
     evidence(format_args!("RECOGNIZER whole rewrite {whole:?}"));
     let claimed = whole.passes.claimed_bytes - before.passes.claimed_bytes;
-    assert!(claimed * 3 > inserted.len() as u64, "{claimed}");
+    assert!(claimed * 10 > inserted.len() as u64 * 9, "{claimed}");
     let mut edited = deleted.clone();
     edited[SECOND / 2..SECOND / 2 + 50].fill(0x5a);
     rewrite(&mut session, "data/second", &edited, 0, 64 * KIB);
@@ -164,6 +166,87 @@ fn plain_writes_of_a_shifted_tail_become_pieces_and_commit() {
         "live view after the second install",
     );
     assert_eq!(rig.store.recognizer_work().passes.failed, 0);
+
+    settled(&rig.owner.client(), 0);
+    rig.close(&first);
+    drop(first);
+    rig.finish();
+}
+
+/// Writers that do not write one tail in order: a second writer between two
+/// requests, requests in reverse order, a request repeated with other bytes
+/// and an appending writer. A claim may only ever name bytes that are the
+/// file's, so every view equals the model.
+#[test]
+fn interleaved_and_unordered_writes_never_claim_another_writers_bytes() {
+    let rig = Rig::new("recognizer-interleaved", tree);
+    let first = rig.bind(1);
+    let (big, second) = (noise(BIG, 3), noise(SECOND, 5));
+    let mut session = Session::new(&first, rig.base.clone());
+    let request = 64 * KIB;
+
+    // The unchanged file in place, and after each request another writer
+    // changes a few bytes just below the request's end: the bytes a carried
+    // chunk left there are no longer the committed ones.
+    for (index, start) in (0..MIB).step_by(request).enumerate() {
+        session.apply(Do::Recognized(
+            "data/big",
+            start as u64,
+            &big[start..start + request],
+        ));
+        if index % 2 == 0 {
+            let at = (start + request - 700) as u64;
+            session.apply(Do::Write("data/big", at, &[0xa5; 300]));
+        }
+    }
+    let mixed = rig.store.recognizer_work();
+    evidence(format_args!("RECOGNIZER interleaved {mixed:?}"));
+    assert!(mixed.passes.claimed_bytes > MIB as u64 / 2, "{mixed:?}");
+    model::assert_same(&session.model.flat(), &live(&first), "interleaved writers");
+
+    // The same request again with other bytes, then the next one in order.
+    let other = noise(request, 31);
+    session.apply(Do::Recognized(
+        "data/big",
+        MIB as u64,
+        &big[MIB..MIB + request],
+    ));
+    session.apply(Do::Recognized("data/big", MIB as u64, &other));
+    let next = MIB + request;
+    session.apply(Do::Recognized(
+        "data/big",
+        next as u64,
+        &big[next..next + request],
+    ));
+    // Requests in reverse order over the second file.
+    for start in (0..MIB).step_by(request).rev() {
+        session.apply(Do::Recognized(
+            "data/second",
+            start as u64,
+            &second[start..start + request],
+        ));
+    }
+    // An appending writer: committed bytes of the file's start, at its end.
+    for start in (0..256 * KIB).step_by(request) {
+        let at = (SECOND + start) as u64;
+        session.apply(Do::Recognized(
+            "data/second",
+            at,
+            &second[start..start + request],
+        ));
+    }
+    let expected = session.model.flat();
+    model::assert_same(&expected, &live(&first), "live view before Commit");
+    let success = first
+        .commit_captured()
+        .unwrap_or_else(|failure| panic!("{failure:?}"));
+    let root = published(&success);
+    drop(success);
+    model::assert_same(&expected, &rebound(&rig, 2, root), "fresh bind");
+    model::assert_same(&expected, &live(&first), "live view after install");
+    let end = rig.store.recognizer_work();
+    evidence(format_args!("RECOGNIZER unordered {end:?}"));
+    assert_eq!(end.passes.failed, 0);
 
     settled(&rig.owner.client(), 0);
     rig.close(&first);

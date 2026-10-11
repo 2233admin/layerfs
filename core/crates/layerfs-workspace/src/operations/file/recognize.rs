@@ -6,14 +6,20 @@
 //! chunk of the write whose identity equals the committed chunk's is claimed;
 //! every other byte is stored as before. A pass that finds nothing, cannot
 //! read a page or is not made at all changes nothing about the write.
+//!
+//! A chunk that crosses the end of one request is carried: the identity of
+//! its first bytes is kept, never the bytes, and the next request that begins
+//! where that one ended completes it. Its claim then reaches back over the
+//! bytes the earlier request stored, and the engine honours that part only
+//! while nothing else was published to the file in between.
 use crate::{BaseView, FileLengths};
 use layerfs_content::file::cdc::{cut_candidates, MAXIMUM_CHUNK_BYTES, MINIMUM_CHUNK_BYTES};
-use layerfs_content::file::mapping::{chunk_id, Extent, ExtentCursor, FileState};
+use layerfs_content::file::mapping::{chunk_id, ChunkIdentity, Extent, ExtentCursor, FileState};
 use layerfs_content::object::inode_leaf::InodeKind;
 use layerfs_content::{
     AuthenticatedObjects, ContentError, ContentResult, MINIMUM_SMALL_FILE_THRESHOLD_BYTES,
 };
-use layerfs_overlay::{ClaimedRange, WriteClaims, WRITE_CLAIMS};
+use layerfs_overlay::{ClaimedRange, WriteClaims, CELL_BYTES, RUN_BYTES, WRITE_CLAIMS};
 use layerfs_telemetry::timer::{Active, Timing, TimingScope};
 
 /// A write shorter than one minimum chunk holds no whole chunk.
@@ -49,16 +55,33 @@ enum Gate {
 }
 /// What the writes of one file have established: fixed size, no bytes. The
 /// default knows nothing. It belongs to one base; another base starts over.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Debug, Default)]
 pub struct WriteRun {
     base: [u8; 32],
     gate: Gate,
     /// File offset less source offset of the last claimed chunk.
     delta: Option<i64>,
-    /// End of the last claim in the file and in its source.
+    /// Where the last range of the last claim begins and ends in the file,
+    /// and where it ends in its source.
+    file_start: u64,
     file_end: u64,
     source_end: u64,
     unmatched: u64,
+    carry: Option<Box<Carry>>,
+}
+/// A committed chunk whose first bytes ended one request. Only the request
+/// that begins where that one ended can complete it.
+#[derive(Clone, Debug)]
+struct Carry {
+    /// The request that stored the first bytes: where it began and ended.
+    stored: (u64, u64),
+    /// Where the chunk begins in the file.
+    file: u64,
+    extent: Extent,
+    /// The chunk's identity so far: its bytes up to the end of that request.
+    identity: ChunkIdentity,
+    /// The revision of the publication that stored them, once it is known.
+    sequence: Option<i64>,
 }
 /// The result of one pass.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -104,6 +127,18 @@ impl WriteRun {
             && (self.base != base.identity().0.to_bytes()
                 || (self.gate != Gate::Never && self.unmatched < UNMATCHED_BYTES))
     }
+    /// Bytes one carried chunk adds to a run, for the fixed allowance.
+    pub const CARRY_BYTES: usize = std::mem::size_of::<Carry>();
+    /// Records the publication of the write of `[offset, end)` that this run
+    /// examined last: the bytes a carried chunk left in that write are the
+    /// stored ones from `revision`. Any other write records nothing.
+    pub fn published(&mut self, offset: u64, end: u64, revision: i64) {
+        if let Some(carry) = &mut self.carry {
+            if carry.stored == (offset, end) && carry.sequence.is_none() {
+                carry.sequence = Some(revision);
+            }
+        }
+    }
     /// One pass over the bytes of a write at `offset` of file `serial`,
     /// through the client of `base`. A memory-only client that lacks a page
     /// answers [`Recognition::NeedsBase`] and records nothing.
@@ -116,7 +151,7 @@ impl WriteRun {
         work: &mut RecognizeWork,
     ) -> Recognition {
         let identity = base.identity().0.to_bytes();
-        let mut next = *self;
+        let mut next = self.clone();
         if next.base != identity {
             next = Self {
                 base: identity,
@@ -128,16 +163,17 @@ impl WriteRun {
             next.pass(base, serial, offset, data, work, scope)
         });
         match pass.0 {
-            Ok(ranges) => {
+            Ok((ranges, after)) => {
+                let gate = next.gate;
                 *self = next;
-                let Gate::Chunked { root, .. } = next.gate else {
+                let Gate::Chunked { root, .. } = gate else {
                     return Recognition::Decided(None);
                 };
                 work.claims += ranges.len() as u64;
                 work.claimed_bytes += ranges.iter().map(|range| range.length).sum::<u64>();
                 Recognition::Decided((!ranges.is_empty()).then_some(WriteClaims {
                     source: root,
-                    after: None,
+                    after,
                     ranges,
                 }))
             }
@@ -155,6 +191,7 @@ impl WriteRun {
                     };
                 }
                 self.unmatched = self.unmatched.saturating_add(data.len() as u64);
+                self.carry = None;
                 work.failed += 1;
                 Recognition::Decided(None)
             }
@@ -168,12 +205,14 @@ impl WriteRun {
         data: &[u8],
         work: &mut RecognizeWork,
         scope: &TimingScope<'_, Active>,
-    ) -> ContentResult<Vec<ClaimedRange>> {
+    ) -> ContentResult<(Vec<ClaimedRange>, Option<i64>)> {
+        // A carried chunk serves the request that follows its own, or none.
+        let carry = self.carry.take();
         if self.gate == Gate::Unknown {
             self.gate = gate(base, serial)?;
         }
         let Gate::Chunked { state, .. } = self.gate else {
-            return Ok(Vec::new());
+            return Ok((Vec::new(), None));
         };
         let client = base.client();
         let mut pass = Pass {
@@ -185,10 +224,20 @@ impl WriteRun {
             ranges: Vec::new(),
             work,
         };
-        let (mut at, mut searched) = (0, false);
+        let (mut at, mut searched, mut crossing) = (0, false, None);
+        let after = match carry {
+            Some(carry) => pass.complete(self, *carry)?,
+            None => None,
+        };
+        if after.is_some() {
+            at = pass
+                .ranges
+                .last()
+                .map_or(0, |range| (range.offset + range.length - offset) as usize);
+        }
         loop {
             if let Some(delta) = self.delta {
-                at = pass.follow(delta, at)?;
+                (at, crossing) = pass.follow(delta, at)?;
             }
             // One search a request, and none once the known shift has
             // matched in it: a second shift in the same bytes is found by
@@ -203,15 +252,19 @@ impl WriteRun {
             }
         }
         pass.work.pages += pass.cursor.pages();
+        if let Some((start, extent)) = crossing {
+            self.carry = pass.carry(start, extent);
+        }
         match pass.ranges.last() {
             Some(last) => {
+                self.file_start = last.offset;
                 self.file_end = last.offset + last.length;
                 self.source_end = last.source_offset + last.length;
                 self.unmatched = 0;
             }
             None => self.unmatched = self.unmatched.saturating_add(data.len() as u64),
         }
-        Ok(pass.ranges)
+        Ok((pass.ranges, after))
     }
     /// Whether a chunk found at `file` that names `source` keeps the source
     /// moving forward through the file after the last claim.
@@ -294,14 +347,75 @@ impl Pass<'_, '_> {
         }
         true
     }
+    /// Completes a carried chunk with the first bytes of this request. When
+    /// its identity is the committed chunk's, the claim begins with the
+    /// bytes the earlier request stored: the chunk's own, and before them the
+    /// end of that request's claim that was not whole cells. Returns the
+    /// revision those stored bytes belong to.
+    fn complete(&mut self, run: &WriteRun, carry: Carry) -> ContentResult<Option<i64>> {
+        let rest = carry.identity.remaining();
+        let shift = i128::from(carry.file) - i128::from(carry.extent.offset);
+        let (Some(sequence), true) = (
+            carry.sequence,
+            carry.stored.1 == self.offset
+                && rest <= self.data.len()
+                && run.delta.map(i128::from) == Some(shift),
+        ) else {
+            return Ok(None);
+        };
+        let mut identity = carry.identity;
+        identity.update(&self.data[..rest])?;
+        self.work.hashed_bytes += rest as u64;
+        if identity.finish()? != carry.extent.chunk {
+            return Ok(None);
+        }
+        let mut from = carry.file;
+        if run.file_end == carry.file && run.source_end == carry.extent.offset {
+            from = (from - from % CELL_BYTES as u64).max(run.file_start);
+        }
+        // Never before the request that stored the bytes, nor further back
+        // than the engine accepts.
+        let from = from
+            .max(carry.stored.0)
+            .max(self.offset.saturating_sub(RUN_BYTES as u64));
+        let Ok(source_offset) = u64::try_from(i128::from(from) - shift) else {
+            return Ok(None);
+        };
+        self.ranges.push(ClaimedRange {
+            offset: from,
+            length: self.offset + rest as u64 - from,
+            source_offset,
+        });
+        Ok(Some(sequence))
+    }
+    /// The identity so far of the chunk of `extent`, whose bytes begin at
+    /// `start` and continue past this request.
+    fn carry(&mut self, start: usize, extent: Extent) -> Option<Box<Carry>> {
+        let mut identity = ChunkIdentity::new(extent.length as usize).ok()?;
+        identity.update(&self.data[start..]).ok()?;
+        self.work.hashed_bytes += (self.data.len() - start) as u64;
+        Some(Box::new(Carry {
+            stored: (self.offset, self.offset + self.data.len() as u64),
+            file: self.offset + start as u64,
+            extent,
+            identity,
+            sequence: None,
+        }))
+    }
     /// Compares the committed chunks that lie, shifted by `delta`, wholly
     /// inside the bytes from `from`. Returns where the first chunk of the
-    /// final run of differing chunks begins, or the length of the bytes.
-    fn follow(&mut self, delta: i64, from: usize) -> ContentResult<usize> {
+    /// final run of differing chunks begins, or the length of the bytes; and
+    /// the whole chunk that begins in the bytes and continues past them,
+    /// when the run reached it.
+    fn follow(
+        &mut self,
+        delta: i64,
+        from: usize,
+    ) -> ContentResult<(usize, Option<(usize, Extent)>)> {
         let first = i128::from(self.offset) + from as i128;
         let source = u64::try_from((first - i128::from(delta)).max(0)).unwrap_or(u64::MAX);
         self.cursor.seek(source);
-        let (mut misses, mut resume) = (0, None);
+        let (mut misses, mut resume, mut crossing) = (0, None, None);
         while let Some(extent) = self.next()? {
             let file = i128::from(extent.offset) + i128::from(delta);
             // The extent that holds the first byte may begin before it.
@@ -311,6 +425,9 @@ impl Pass<'_, '_> {
             let start = (file - i128::from(self.offset)) as usize;
             let end = start.saturating_add(extent.length as usize);
             if end > self.data.len() {
+                if start < self.data.len() && misses == 0 && extent.chunk_offset == 0 {
+                    crossing = Some((start, extent));
+                }
                 break;
             }
             if self.equal(&extent, start, end) {
@@ -326,7 +443,7 @@ impl Pass<'_, '_> {
                 }
             }
         }
-        Ok(resume.unwrap_or(self.data.len()))
+        Ok((resume.unwrap_or(self.data.len()), crossing))
     }
     /// Looks for one committed chunk in the bytes from `from`: a chunk that
     /// begins and ends where the frozen scanner could have cut, has the

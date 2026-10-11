@@ -765,3 +765,14 @@ Phase 2, first recognizer step (gate, follow and search, no carry):
 | 9 | `overlay/commands.rs` split before a new variant; `native_job.rs` charges | Not touched: the port submits no owner job, so no variant was added |
 | 9 | `store/ports.rs`: one operation reaches the slots | Also `StorePorts::fresh`, the separate failure scope of a pass |
 | 9 | `layerfs-fuse` `operations/read.rs` | Unchanged, as in phase 1 |
+
+Phase 3, carry step:
+
+| Section | Plan | Source |
+| --- | --- | --- |
+| 3.1 | The bytes of the chunk a request ends in are "kept in the recognizer slot" (6.3: at most one chunk, 32 KiB, a slot) | No byte is kept. The slot holds the chunk's identity so far, a streaming hash state of about 2 KiB (`mapping::ChunkIdentity`, new in Content; the frozen framing states the length first, so the payload can be hashed in parts). The identity can only be finished, not compared by bytes; that is all the carry needs |
+| 3.1 | "The next sequential request completes the chunk" | Exactly the next request of that file, beginning where the earlier one ended and holding the rest of the chunk. A chunk that would span three requests is not carried, so a writer whose requests are shorter than a chunk gets no claim |
+| 3.1, 3.2 | The writer job extends the piece over the stored cells when the content sequence is unchanged | The claim's first range begins before the request, at most one chunk back and never before the earlier request; it also covers the end of that request's claim that was not whole cells, so the two pieces are contiguous and extend one row. The expected sequence is the revision of the earlier write's publication, which the port records in `mutate_visit` when that job is applied, matched on the exact byte range of the write |
+| 3.1 | Gate: "or continues an active run" | Unchanged from the first step: a write below 8 KiB is never examined, also when it would complete a carried chunk. Examining it would give every small write a slot and evict the files that match |
+| 6.3 | Recognizer memory: fixed slots | 64 slots plus one carried chunk a slot: about 144 KiB for the daemon, reported as `capacity_bytes` |
+| 9 | `layerfs-content` `object/id.rs` not listed | `ObjectId::stream` replaces `for_parts`, which had one caller |

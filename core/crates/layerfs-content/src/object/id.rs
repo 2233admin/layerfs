@@ -28,15 +28,11 @@ impl ObjectId {
         Self(*hasher.finalize().as_bytes())
     }
 
-    /// Identity of the canonical bytes that `parts` form in order, without
-    /// joining them: the identity `for_bytes` gives their concatenation.
-    pub fn for_parts(parts: &[&[u8]]) -> Self {
+    /// Starts the identity of canonical bytes that arrive in parts over time.
+    pub fn stream() -> IdentityStream {
         let mut hasher = blake3::Hasher::new();
         hasher.update(OBJECT_DOMAIN);
-        for part in parts {
-            hasher.update(part);
-        }
-        Self(*hasher.finalize().as_bytes())
+        IdentityStream(hasher)
     }
 
     /// Rebuilds an identity from its fixed-width representation.
@@ -59,6 +55,24 @@ impl ObjectId {
     /// Copies the fixed-width representation.
     pub const fn to_bytes(self) -> [u8; DIGEST_BYTES] {
         self.0
+    }
+}
+
+/// The identity of canonical bytes supplied in order, part by part: what
+/// `ObjectId::for_bytes` gives their concatenation. Fixed in size; it keeps
+/// no byte it was given.
+#[derive(Clone, Debug)]
+pub struct IdentityStream(blake3::Hasher);
+
+impl IdentityStream {
+    /// Adds the next canonical bytes.
+    pub fn update(&mut self, part: &[u8]) {
+        self.0.update(part);
+    }
+
+    /// Identity of every byte added so far.
+    pub fn finish(&self) -> ObjectId {
+        ObjectId(*self.0.finalize().as_bytes())
     }
 }
 

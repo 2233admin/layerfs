@@ -4,7 +4,7 @@
 mod support;
 
 use layerfs_content::file::cdc::{cut_candidates, MAXIMUM_CHUNK_BYTES, MINIMUM_CHUNK_BYTES};
-use layerfs_content::file::mapping::{chunk_id, encode_chunk_object, Extent};
+use layerfs_content::file::mapping::{chunk_id, encode_chunk_object, ChunkIdentity, Extent};
 use layerfs_content::{apply_edits, Edit, EditRequest, FileView, ObjectId};
 use support::{
     build_file, disabled_scope, edits::Edits, edits::Parts, noise, read_back, MemoryStore,
@@ -51,11 +51,24 @@ fn the_cursor_visits_every_extent_in_order_and_identity_equals_the_tree() {
             ObjectId::for_bytes(&encode_chunk_object(payload).unwrap())
         );
         assert_eq!(id, extent.chunk);
+        // The same identity from the bytes in two parts, cut anywhere.
+        let cut = (at as usize * 7 + 3) % (payload.len() + 1);
+        let mut parts = ChunkIdentity::new(payload.len()).unwrap();
+        parts.update(&payload[..cut]).unwrap();
+        assert_eq!(parts.remaining(), payload.len() - cut);
+        assert_eq!(parts.finish().is_err(), cut < payload.len());
+        let mut later = parts.clone();
+        later.update(&payload[cut..]).unwrap();
+        assert_eq!(later.finish().unwrap(), id);
+        // More bytes than the declared length are refused and add nothing.
+        assert!(later.update(&[0]).is_err());
+        assert_eq!(later.finish().unwrap(), id);
         at += u64::from(extent.length);
     }
     assert_eq!(at, bytes.len() as u64);
     assert!(found.len() > 100, "{}", found.len());
     assert!(chunk_id(&bytes[..MAXIMUM_CHUNK_BYTES + 1]).is_err());
+    assert!(ChunkIdentity::new(MAXIMUM_CHUNK_BYTES + 1).is_err());
     println!("EXTENTS full extents={} pages={pages}", found.len());
 
     // A seek returns the extent that holds the offset and reads one page a

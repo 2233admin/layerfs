@@ -342,6 +342,16 @@ impl<'a> Session<'a> {
                 .unwrap_or_else(|e| panic!("{step:?}: {e:?}"));
             match outcome {
                 Outcome::Applied { publication, .. } => {
+                    // What the request port records after a write it examined.
+                    if let Do::Recognized(path, offset, data) = step {
+                        let serial = resolve(operation, view, path).serial;
+                        operation.ports().recognizer().published(
+                            self.workspace.route(),
+                            serial,
+                            (offset, offset + data.len() as u64),
+                            publication.revision(),
+                        );
+                    }
                     assert!(job(
                         operation.overlay(),
                         self.workspace.route(),

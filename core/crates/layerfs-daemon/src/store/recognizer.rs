@@ -2,10 +2,12 @@
 //! one daemon.
 //!
 //! A slot is the fixed-size state of one file's writes: no byte of a write
-//! and no committed byte. The table is the recognizer's whole allowance. It
-//! is allocated once and never grows; the least recently used file makes
-//! room, and a file without a slot starts over, which only costs a missed
-//! claim.
+//! and no committed byte. A slot may hold one carried chunk, the identity so
+//! far of the committed chunk that crossed the end of the file's last write;
+//! it is fixed in size and counted in the allowance. The table is the
+//! recognizer's whole allowance and never grows; the least recently used
+//! file makes room, and a file without a slot starts over, which only costs
+//! a missed claim.
 use layerfs_overlay::Route;
 use layerfs_workspace::{RecognizeWork, WriteRun};
 use std::sync::{Mutex, MutexGuard};
@@ -93,11 +95,22 @@ impl Recognizer {
             None => table.slots.push(slot),
         }
     }
+    /// Records that the write of `[offset, end)` of one file was published
+    /// as `revision`. A file whose run a request holds, or that has no slot,
+    /// records nothing: its carried chunk is then not completed.
+    pub fn published(&self, route: Route, serial: u64, (offset, end): (u64, u64), revision: i64) {
+        let mut table = self.table();
+        let mut slots = table.slots.iter_mut();
+        if let Some(slot) = slots.find(|slot| slot.serial == serial && slot.route == route) {
+            slot.run.published(offset, end, revision);
+        }
+    }
     pub fn work(&self) -> RecognizerWork {
         let table = self.table();
         RecognizerWork {
             slots: table.slots.len(),
-            capacity_bytes: RECOGNIZER_SLOTS * std::mem::size_of::<Slot>(),
+            capacity_bytes: RECOGNIZER_SLOTS
+                * (std::mem::size_of::<Slot>() + WriteRun::CARRY_BYTES),
             evictions: table.evictions,
             passes: table.work,
         }

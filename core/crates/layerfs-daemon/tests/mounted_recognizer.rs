@@ -113,11 +113,14 @@ fn an_outside_process_shifts_two_tails_and_its_writes_become_pieces() {
         BIG + 4096
     );
 
-    // More than half of both rewritten tails was recognized: whole chunks
-    // inside one request, with no state carried between requests.
+    // Both rewritten tails were recognized. The chunk that crosses a
+    // request's end is completed by the next request, so each tail is one
+    // run of pieces: a row or two a file, and stored bytes only at the edit
+    // and at the first and last chunk of a tail.
     let written = (BIG - P + SECOND - Q - 4096) as u64;
-    assert!(work.passes.claimed_bytes * 2 > written, "{work:?}");
-    assert!(counts.reference_rows > 0, "{counts:?}");
+    assert!(work.passes.claimed_bytes * 10 > written * 9, "{work:?}");
+    assert!((1..=4).contains(&counts.reference_rows), "{counts:?}");
+    assert!(counts.payload_bytes * 8 < written, "{counts:?}");
     assert_eq!(work.passes.failed, 0);
 
     let record = rig.committed(first.token, "mounted recognizer");

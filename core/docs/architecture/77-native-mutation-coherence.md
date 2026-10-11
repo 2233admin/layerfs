@@ -178,9 +178,25 @@ overlay row, holds no SQL writer and fetches no committed chunk.
   moving forward after the last claim. Other bytes are stored.
 - **Budget.** After 1 MiB of consecutive requests that claimed nothing, a
   file's writes are no longer examined while its state is remembered.
-- **No carry.** A chunk that crosses two requests is not claimed; each
-  request claims the chunks that lie wholly inside it. The claims of one
-  request are at most 18 ranges and adjacent chunks share a range.
+- **Carry.** Added in phase 3. When a followed run reaches a committed chunk
+  that begins in the request and continues past its end, the identity of the
+  chunk's first bytes is kept in the file's state: a streaming hash, never
+  the bytes. The request that begins exactly where that one ended supplies
+  the rest; if the finished identity is the committed chunk's, its claim
+  begins before its own bytes, over the part the earlier request stored (and
+  over the end of that request's claim that was not whole cells), at most
+  one chunk (32 KiB) back and never before that request. The claim names the
+  revision of the publication that stored those bytes, which the port
+  records when the earlier write's job is applied; the engine honours the
+  part before the request only while the file's content sequence is still
+  that revision, and otherwise stores it as it was. So the pieces of an
+  unbroken tail are contiguous in file and source and extend one row. A
+  carried chunk serves the next request or none: a request elsewhere, a
+  shorter one than the rest of the chunk, an unpublished or failed write and
+  any other publication to the file all drop it, at the cost of one chunk
+  stored. A write below 8 KiB is still never examined.
+- The claims of one request are at most 18 ranges and adjacent chunks share
+  a range.
 
 A pass first runs over the Store's memory-only client. When a page or the
 file's length is not in memory it records nothing and is repeated once over an
@@ -191,8 +207,9 @@ budget and an evicted state all store the write exactly as before; only a
 stopped fence ends the request, as it would at the visit.
 
 Per-file state is fixed in size and holds no bytes: the base it belongs to,
-the gate's answer, the shift, the end of the last claim and the unmatched
-count. The daemon keeps it in
+the gate's answer, the shift, the last claim's range and the unmatched
+count, and at most one carried chunk (its extent, the hash state and the
+revision). The daemon keeps it in
 [64 slots shared by every Workspace](61-direct-store-adapter.md), least
 recently used first out.
 
@@ -201,10 +218,10 @@ Checked by
 [the daemon test](../../crates/layerfs-daemon/tests/recognizer.rs) through the
 request port, the product Commit and a fresh bind, and by
 [the mounted proof](../../crates/layerfs-daemon/tests/mounted_recognizer.rs),
-in which a process launched outside the daemon shifts two tails with `dd`.
-Without carry a Commit of such writes still stores the bytes between two
-pieces as new chunks, and cuts the committed chunks at their ends into
-slices; this is measured, not hidden, in the
+in which a process launched outside the daemon shifts two tails with `dd`:
+with the carry each tail is one or two piece rows. Before the carry every
+request left one stored stretch between two pieces, and the Commit paid one
+edit for each; both states are measured in the
 [progress ledger](../issues/316/PROGRESS.md).
 
 ## Coherence without notifications

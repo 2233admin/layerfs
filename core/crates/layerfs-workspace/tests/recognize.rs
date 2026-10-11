@@ -3,7 +3,7 @@
 mod common;
 
 use common::{fixture_with, Fixture};
-use layerfs_overlay::{WriteClaims, WRITE_CLAIMS};
+use layerfs_overlay::{WriteClaims, RUN_BYTES, WRITE_CLAIMS};
 use layerfs_workspace::{
     BaseView, CanonicalCache, CanonicalClient, Recognition, RecognizeWork, WriteRun,
     RECOGNIZE_BYTES, UNMATCHED_BYTES,
@@ -55,6 +55,7 @@ impl Base {
 }
 /// Writes `content[from..]` at its own offsets in requests of `request`
 /// bytes and returns the claims of each, checked against the committed bytes.
+/// Every request is published under the next revision.
 fn rewrite(
     base: &Base,
     run: &mut WriteRun,
@@ -63,10 +64,24 @@ fn rewrite(
     from: usize,
     request: usize,
 ) -> Vec<(u64, WriteClaims)> {
+    rewrite_published(base, run, work, content, from, request, true)
+}
+/// The same; `published` says whether the run learns of each publication.
+fn rewrite_published(
+    base: &Base,
+    run: &mut WriteRun,
+    work: &mut RecognizeWork,
+    content: &[u8],
+    from: usize,
+    request: usize,
+    published: bool,
+) -> Vec<(u64, WriteClaims)> {
     let committed = &base.fixture.bytes;
     let mut claimed = Vec::new();
-    for start in (from..content.len()).step_by(request) {
+    for (index, start) in (from..content.len()).step_by(request).enumerate() {
         let data = &content[start..content.len().min(start + request)];
+        // The revision of the request before this one, and of this one.
+        let (earlier, revision) = (100 + index as i64, 101 + index as i64);
         if !run.wants(&base.view, data.len()) {
             continue;
         }
@@ -75,12 +90,21 @@ fn rewrite(
         else {
             panic!("a client with a provider needs no base");
         };
+        if published {
+            run.published(start as u64, (start + data.len()) as u64, revision);
+        }
         let Some(claims) = claims else {
             continue;
         };
         assert!(!claims.ranges.is_empty() && claims.ranges.len() <= WRITE_CLAIMS);
-        assert_eq!(claims.after, None);
+        // Only a claim under the earlier request's revision begins before
+        // this request, and never before that request or one chunk back.
         let mut at = start as u64;
+        if claims.ranges[0].offset < at {
+            assert!(published && index > 0);
+            assert_eq!(claims.after, Some(earlier));
+            at = (start - request.min(RUN_BYTES)) as u64;
+        }
         for range in &claims.ranges {
             assert!(range.length > 0 && range.offset >= at, "{range:?}");
             at = range.offset + range.length;
@@ -97,12 +121,16 @@ fn rewrite(
     }
     claimed
 }
+/// File bytes the claims cover. A claim that reaches back over an earlier
+/// request repeats bytes that request already claimed; they count once.
 fn total(claimed: &[(u64, WriteClaims)]) -> u64 {
-    claimed
-        .iter()
-        .flat_map(|(_, claims)| &claims.ranges)
-        .map(|range| range.length)
-        .sum()
+    let (mut bytes, mut covered) = (0, 0);
+    for range in claimed.iter().flat_map(|(_, claims)| &claims.ranges) {
+        let end = range.offset + range.length;
+        bytes += end.saturating_sub(range.offset.max(covered));
+        covered = covered.max(end);
+    }
+    bytes
 }
 
 #[test]
@@ -179,16 +207,36 @@ fn a_shifted_tail_is_claimed_in_whole_chunks_by_one_search_and_then_followed() {
                  requests={} {work:?}",
                 claimed.len()
             );
-            // Without carry a request keeps the chunks that lie wholly in it.
-            assert!(bytes * 2 > written, "{label}: {bytes} of {written}");
+            // The chunk that crosses a request's end is completed by the
+            // next one: what stays unclaimed is the edit and the chunks cut
+            // by it and by the first request.
+            assert!(
+                written - bytes <= 2 * 64 * KIB as u64,
+                "{label}: {bytes} of {written}"
+            );
+            // Without a known publication a request keeps only the chunks
+            // that lie wholly in it.
+            let (mut alone, mut idle) = (WriteRun::default(), RecognizeWork::default());
+            let whole =
+                rewrite_published(&base, &mut alone, &mut idle, &content, from, request, false);
+            assert!(whole.iter().all(|(_, claims)| claims.after.is_none()));
+            assert!(
+                total(&whole) * 2 > written && total(&whole) < bytes,
+                "{label}"
+            );
             // One search finds the shift; every later request follows it.
             assert!(work.scanned_bytes <= 4 * 64 * KIB as u64, "{work:?}");
             assert!(work.hashed_bytes < written + 64 * KIB as u64, "{work:?}");
-            // Sources move forward through the file.
-            let mut source = 0;
+            // Sources move forward through the file. A claim that reaches
+            // back repeats the end of the one before it and goes on from it.
+            let (mut start, mut source) = (0, 0);
             for range in claimed.iter().flat_map(|(_, claims)| &claims.ranges) {
-                assert!(range.source_offset >= source, "{label}: {range:?}");
-                source = range.source_offset + range.length;
+                let end = range.source_offset + range.length;
+                assert!(
+                    range.source_offset >= start && end > source,
+                    "{label}: {range:?}"
+                );
+                (start, source) = (range.source_offset, end);
             }
         }
     }
@@ -276,7 +324,8 @@ fn a_memory_only_pass_asks_for_the_base_and_records_nothing() {
         run.recognize(&resident, FILE, 100 * KIB as u64, data, &mut work),
         Recognition::NeedsBase
     );
-    assert_eq!((run, demand()), (WriteRun::default(), before));
+    assert_eq!(format!("{run:?}"), format!("{:?}", WriteRun::default()));
+    assert_eq!(demand(), before);
     // The pass over the provider reads mapping pages and no chunk.
     let served = || {
         base.fixture
