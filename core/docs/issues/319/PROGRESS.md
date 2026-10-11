@@ -845,3 +845,29 @@ no VM setting changed, no push/PR/issue close. Decided by agent, pending owner
 review: follow the issue gate and proceed to the independent count profiles.
 Production LOC:82179 ->82179 (delta +0), exact pinned active-core snapshots;
 reference absent (retired R9c; last counted65,417 at tree498dd1917812).
+
+### Phase 9 exit — three retained count profiles, no optimization
+
+[Count profiles](PHASE9-PROFILES.md), [machine operands and source hashes](checks/phase9-profiles.json)
+and tools/profile_counts.py retain the three D7 investigations without a product
+change. Exact/unique500MiB have identical7014requests/46768owner jobs/282012SQL
+statements at exact pre-mount->Commit endpoints (the following Status is
+excluded); logical Overlay reads524288000B each, exact observer costs zero at
+those endpoints. Pack read/write counters differ and remain separately named.
+Per-file chunking/hash bytes are UNAVAILABLE, not inferred from namespace work.
+
+Delete100MiB has1426OperationRecord jobs vs shrink629; at1/10/500MiB delete
+118/361/7200 vs shrink147/588/759. Namespace producer records remain42 for every
+single-file row. There is no retained SQL query plan/runtime profile, so no SQL
+cause or optimization is selected. Hotset500 retains377 commandACKs and377
+CommitACKs,380 control round trips including Hello/two mounts; step378 has no
+ACK,123declared steps unacknowledged. Its absent daemon counters stay UNAVAILABLE.
+
+All original row verdicts are unchanged; no timings compared. Profile verifier
+PASS. Three profile boxes are completed. Fix-specific test and twelve-cell
+phase9 boxes remain unchecked with CLOSED: no optimization was selected because
+phase8 has not run. Expanded owner correctness repairs are separate, with their
+own red-first tests and final source receipts. Decided by agent, pending owner
+review: retain diagnostic scope and wait for the clean-run gate before speed work.
+Production LOC:82179 ->82179 (delta +0), pinned active-core snapshots;
+reference absent (retired R9c; last counted65,417 at tree498dd1917812).
