@@ -763,11 +763,15 @@ if __name__ == "__main__":
 
 # Closed accounting observation is separate from the existing content/census routes.
 def _overlay_storage_source():
-    """Exact current schema, triggers and ownership/allocation interpretation."""
+    """Schema 33: pieces add reference_rows, never payload/validity bytes.
+
+    Table membership, trigger definitions and every maintained count are checked
+    independently; source pins bind the reviewed physical accounting model.
+    """
     pins = {
-        'core/crates/layerfs-overlay/sql/schema.sql': '9d9e037b28619cfab0f78e8f29325e5c53b5d900aa521a6cc90cc796a0f37e84',
-        'core/crates/layerfs-overlay/sql/accounting.sql': '97042eedc77d1b1a7e6b00f57e82b320299965bd20326444e9568e5131338169',
-        'core/crates/layerfs-overlay/src/database/accounting.rs': '018074d5e8aef663488b2006e0b0cc27a0a7d875f161cfd69feea1c124bd38b4',
+        'core/crates/layerfs-overlay/sql/schema.sql': 'f8a9af297716d51d481e8ae1ba554bdbaa09ac72e209877722f3bcaf988532b0',
+        'core/crates/layerfs-overlay/sql/accounting.sql': '6fb0a344b7baf56ca1f6ece2f30253fcd83ac59100bda3ce70629f47e0e7693e',
+        'core/crates/layerfs-overlay/src/database/accounting.rs': '65a3b01fdedcbe065101d02dcc41cd7520def1d2de4fc29f3cc0f89f0d2bd4c4',
         'core/crates/layerfs-overlay/src/database/allocation.rs': '579cf990c709b51a7cf36820fa21524d7c4ebc18dcf43df4d47d4b1973d8f3c4',
         'core/crates/layerfs-overlay/src/lifetime/close.rs': '3fa9e4ee99097a9e08860ff07a33a81131dc219b87527f43b8e86d185df112ca',
         'core/crates/layerfs-bridge/src/control_types.rs': 'd18ff0a0cc22ad7f8772b591c970806e889de49730362cd2e9a5200533e23c4b',
@@ -882,7 +886,7 @@ def _overlay_owner_accounting(database, owner, tables):
                'native_mount', 'native_lookup', 'native_parent', 'native_directory', 'native_cookie')
     expected = dict(wait_refs=counts['orphan_wait'], namespaces=counts['workspace'], inode_rows=counts['inode'],
                     directory_entry_rows=counts['directory_entry'], payload_cells=counts['payload'], payload_bytes=payload,
-                    shrink_rows=counts['shrink'], operation_record_rows=sum(counts[name] for name in
+                    shrink_rows=counts['shrink'], reference_rows=counts['payload_reference'], operation_record_rows=sum(counts[name] for name in
                     ('operation_record', 'owned_operation_record', 'indexed_operation_record')), operation_record_bytes=records,
                     orphan_rows=counts['orphan'], owner_rows=counts['lease'], source_rows=counts['base_source'],
                     owner_details=sum(counts[name] for name in details), retire_targets=counts['reclaim'],
@@ -921,7 +925,7 @@ def _observe_closed_storage_read_only(sealed_path, kind, owners=()):
         application = database.execute('PRAGMA application_id').fetchone()[0]
         if kind == 'overlay':
             _, definition, tables, pins = _overlay_storage_source()
-            if version != 32 or application != 1279676210:
+            if version != 33 or application != 1279676210:
                 raise ValueError('closed overlay current schema identity differs')
         else:
             _, text, tables = _schema_source(version)

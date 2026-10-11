@@ -89,3 +89,44 @@ on a recorded owner decision. Reliability applicability review is reserved for
 phase 5 after every earlier product/test change.
 
 Production LOC: 81718 -> 81718 (delta +0). Test/docs-only phase.
+
+## Phase 1 — accounting review and implementation, 2026-10-11
+
+Phase 0 commit: `abdf8387b`, LOC confirmed from its committed first-parent pair.
+Issue comment: [phase 0](https://github.com/Ephemeral-AI-Lab/layerfs/issues/319#issuecomment-6108513558).
+
+Reviewed `schema.sql` schema 33, `accounting.sql` reference insert/delete
+triggers and `database/accounting.rs` exact namespace/aggregate counts and debt
+metadata. `payload_reference` is Workspace-owned and byte-free; each row adds
+one `reference_rows`, never payload/validity bytes or operation-record bytes.
+The independent oracle already enumerates every namespace table (including
+pieces) for Gone and validates exact SQL definitions, membership, foreign keys,
+incarnation, custody and immutable-copy identity. It omitted the new maintained
+count and still required version 32. Pin movement alone would not fix that.
+
+Added a synthetic closed-overlay external regression containing a piece:
+checks schema 33, exact piece/maintained counts, unchanged byte accounting,
+reference-count drift rejection and complete Gone with another Workspace
+retained. The test failed before the fix at the stale source-pin refusal;
+raw failing output is preserved. No synthetic fixture is product runtime proof.
+
+Only after this review: updated the three stale digests (schema, accounting
+SQL, Rust accounting), required exact version 33, and added independent
+`reference_rows` comparison against actual `payload_reference` membership.
+The other three pins, canonical schema/trigger checks and every physical metric
+UNAVAILABLE status stay enforced. No product change or weaker oracle.
+
+Required owning tests, one bounded invocation:
+`PYTHONPATH=core/benchmark/fs-bench-pro/tests/engine perl core/target/r4-locked.pl
+118 python3 -B -m unittest test_overlay_storage test_closed_storage_controller
+test_closed_store`: 23/23 PASS. Rust formatting and boundary guard remain
+required before this commit; Rust Clippy has no touched crate in this Python
+harness change (phase 0 daemon Clippy is unaffected).
+
+Decided by agent, pending owner review: batch this harness fix with applicable
+phase 2 before sealing/sample preparation, as the handoff permits for two
+applicable phases. Phase 1's two cases are still NOT_RUN here and its phase exit
+comment/checklist is deferred until those receipts exist. They will use a fresh
+tag and compare counts with b1, not iteration 1 or timings.
+
+Production LOC: 81718 -> 81718 (delta +0). Harness/test/docs-only change.

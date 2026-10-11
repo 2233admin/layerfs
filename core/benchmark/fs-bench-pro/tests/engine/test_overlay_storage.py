@@ -113,6 +113,31 @@ class ClosedOverlayStorage(unittest.TestCase):
             self.assertNotIn('workspace_physical_allocated_bytes', owner)
             self.assertEqual(result['original_limits_bytes'], {'main_store': 4 * 1024**3, 'owned_spool': 2 * 1024**3})
 
+    def test_piece_row_is_byte_free_counted_and_cannot_hide_accounting_drift(self):
+        with tempfile.TemporaryDirectory(prefix='fsb-overlay-piece-test-') as temp:
+            fixture = OverlayFixture(Path(temp))
+            fixture.mutate('INSERT INTO payload_reference VALUES(1,1,7,4096,4096,0,?,8192)',
+                           (bytes(32),))
+            result = fixture.run()
+            owner = result['owners'][0]
+            self.assertEqual(result['schema_version'], 33)
+            self.assertEqual(owner['row_counts']['payload_reference'], 1)
+            self.assertEqual(owner['maintained_accounting']['reference_rows'], 1)
+            self.assertEqual(owner['stored_payload_and_validity_bytes'], 9)
+            self.assertEqual(owner['stored_operation_record_bytes'], 3)
+            fixture.mutate('UPDATE accounting SET reference_rows=0 WHERE ns=1')
+            with self.assertRaisesRegex(ValueError, 'maintained namespace accounting'):
+                fixture.run()
+        with tempfile.TemporaryDirectory(prefix='fsb-overlay-piece-gone-test-') as temp:
+            fixture = OverlayFixture(Path(temp))
+            fixture.mutate('INSERT INTO payload_reference VALUES(1,1,7,4096,4096,0,?,8192)',
+                           (bytes(32),))
+            fixture.gone()
+            owner = fixture.run()['owners'][0]
+            self.assertEqual(owner['row_counts']['payload_reference'], 0)
+            self.assertEqual(owner['maintained_accounting']['reference_rows'], 0)
+            self.assertEqual(owner['state'], 'GONE')
+
     def test_gone_all_owned_rows_zero_with_other_workspace_and_shared_file_retained(self):
         with tempfile.TemporaryDirectory(prefix='fsb-overlay-test-') as temp:
             fixture = OverlayFixture(Path(temp)); fixture.gone()
