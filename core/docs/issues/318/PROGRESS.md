@@ -945,3 +945,64 @@ Failure texts, as recorded:
   0 containers more; originals 810 MB, result folder
   748 MB; host 225 GiB free; `docker system df`: Images=21.51GB, Containers=12.85GB, Local Volumes=69.08GB, Build Cache=4.843GB.
 - CSVs: `core/benchmark/fs-bench-pro/baselines/core/2026-10-11-de6e61269/dedup_branch_history/`.
+
+## Phase C — batch 4, `mixed_load_bearing`, tag `b1`, sampled at `fd2da7385`
+
+Iteration 1's value is left of each arrow, this run's right; one value means
+equal. Times are single diagnostic samples.
+
+| case | status | functional | proof | requests | writer jobs | statements | overlay logical B | Store logical B | exec ms | Commit ms |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| agent-episodes-1-compact-v2 | INELIGIBLE | PASS | PASS | 95 | 461 -> 450 | 2367 -> 2328 | 258048 -> 262144 | 1467312 | 42.8 -> 47.6 | 13.1 -> 12.6 |
+| agent-episodes-10-compact-v2 | INELIGIBLE | PASS | PASS | 833 | 3349 -> 3239 | 18118 -> 17728 | 528384 -> 532480 | 11491352 -> 11495448 | 99.1 -> 106.8 | 30.4 -> 32.2 |
+| agent-episodes-100 | INELIGIBLE | PASS | PASS | 8213 | 37158 -> 36058 | 190372 -> 186472 | 3268608 -> 3280896 | 86206552 -> 86144872 | 662.9 -> 617.6 | 275.6 -> 266.3 |
+| agent-episodes-500 | INELIGIBLE | PASS | PASS | 41013 | 186571 -> 181071 | 952225 -> 932697 | 15392768 -> 15437824 | 95055872 -> 95047680 | 3084.9 -> 3704.4 | 1298.8 -> 1079.4 |
+| v016-mixed-development-100mb-5000-k10-v1 | FAIL | FAIL -> - | FAIL | - | - | - | - | - | 822.1 -> 781.6 | 351.1 -> 341.5 |
+| v016-mixed-development-100mb-5000-k100-v1 | FAIL | FAIL -> - | FAIL | - | - | - | - | - | 7500.9 -> 8342.2 | 4083.4 -> 3925.6 |
+| v016-mixed-development-500mb-30000-k10-v1 | FAIL | FAIL -> - | FAIL | - | - | - | - | - | 1266.3 -> 1338.3 | 695.0 -> 689.6 |
+| v016-mixed-development-500mb-30000-k100-v1 | FAIL | FAIL -> - | FAIL | - | - | - | - | - | 13393.7 -> 13581.2 | 7302.7 -> 7333.5 |
+| v016-mixed-exhaustive-100mb-5000-k100-v1 | FAIL | FAIL -> - | FAIL | - | - | - | - | - | - -> 8647.6 | - -> 4082.7 |
+| v016-mixed-exhaustive-500mb-30000-k100-v1 | FAIL | NOT_RUN -> - | NOT_RUN | - | - | - | - | - | - -> 13566.3 | - -> 7155.0 |
+
+Failure texts, as recorded:
+
+- `v016-mixed-development-100mb-5000-k10-v1`: original command exit is not known zero: 1
+- `v016-mixed-development-100mb-5000-k100-v1`: original command exit is not known zero: 1
+- `v016-mixed-development-500mb-30000-k10-v1`: original command exit is not known zero: 1
+- `v016-mixed-development-500mb-30000-k100-v1`: original command exit is not known zero: 1
+- `v016-mixed-exhaustive-100mb-5000-k100-v1`: original command exit is not known zero: 1
+- `v016-mixed-exhaustive-500mb-30000-k100-v1`: Command '['docker', '--host', 'unix:///Users/yifanxu/.docker/run/docker.sock', 'exec', '--user', '0:0', '166cc6dbc8f6d7da60f1753e0225fd04f787698908fbfb8ff30d67c7c0f2abdf', 'python3', '-B', '-c', "import json\nfrom pathlib import Path\nstore=Path('/layerfs-store/global/store.sqlite').stat()\nevents=d
+
+Ten cases: 4 completed with functional PASS and proof PASS, 6 FAIL. Iteration 1: 4 PASS, 5 FAIL, 1 NOT_RUN.
+
+- The four `agent-episodes` cases: requests equal the control (95; 833; 8,213; 41,013). Writer jobs are lower
+  by 11, 110, 1,100 and 5,500 and statements by 39, 390, 3,900 and 19,528. Overlay logical bytes are higher by
+  4,096 to 45,056 B. Store logical bytes: equal for 1 episode, +4,096 B for 10, −61,680 B for 100, −8,192 B
+  for 500.
+- The five failures `v016-mixed-development-*` (four) and `v016-mixed-exhaustive-100mb-5000-k100-v1` are the
+  control's failures: every command and Commit was acknowledged, then the fresh-mount check ended with
+  `original M1 declared file metadata differs: d000/f00054` (100 MB) or `d003/f00004` (500 MB). Iteration 1
+  records these two paths and classifies the row as H-17, a frozen workload and check that set a file's
+  mtime before writing it. The receipt's failure text is `original command exit is not known zero: 1`, so
+  counts and sizes are not recorded for them. Nothing was changed.
+- `v016-mixed-exhaustive-500mb-30000-k100-v1`: iteration 1 has NOT_RUN because its preparation reached 120 s.
+  Here the preparation ran in one call with the 300 s extreme-case stop (reason: the control's 120 s stop;
+  it took 265.7 s and made a 10.7 GB original). The sample ran in one 300 s call. It is a verification-only
+  case: the 100 commands took 13,566 ms and 99 of 100 after-Commit records are complete (Commit 7,155 ms)
+  when the harness's own 120 s ceiling for this case (`owner_test_ceiling_ms`) was reached at a Store size
+  readback, 121.2 s into the call. Status FAIL, proof NOT_RUN, cleanup UNAVAILABLE. The driver then removed
+  the sample's volume and container. Not rerun.
+- Decided by agent: the first preparation of `v016-mixed-exhaustive-100mb-5000-k100-v1` was cut by what was
+  left of a shared 118 s call (63 s), after `prepared.json` and before the harness sealed the folder with
+  `manifest.json`. The harness refuses such a folder, so the driver now treats a missing `manifest.json` as
+  incomplete, removed the folder (2,138.7 MB) and prepared it again in a call of its own (70.8 s). The
+  driver also starts a preparation only with 60 s of its call left. No sample was taken from the partial
+  folder.
+- exec and Commit times are diagnostic only (interference declared); they are within about 20% of the
+  control in both directions.
+
+- Storage after the family: 5 Docker volumes more than before the run
+  (5 of them masters of current originals, 0 unexplained),
+  0 containers more; originals 16086 MB, result folder
+  790 MB; host 209 GiB free; `docker system df`: Images=21.51GB, Containers=12.85GB, Local Volumes=69.77GB, Build Cache=4.843GB.
+- CSVs: `core/benchmark/fs-bench-pro/baselines/core/2026-10-11-fd2da7385/mixed_load_bearing/`.

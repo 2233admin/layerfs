@@ -59,6 +59,8 @@ CELLS = "cluster-two/cells"
 # A sample starts only with this much of the budget left. 75 s unless the caller names a lower floor
 # for cases whose control sample is known to end well inside it.
 FLOOR = int(os.environ.get("ISSUE318_SAMPLE_FLOOR", "75"))
+# A preparation starts only with this much left: one the budget ends leaves a partial original to redo.
+PREPARE_FLOOR = int(os.environ.get("ISSUE318_PREPARE_FLOOR", "60"))
 
 
 def say(**fields):
@@ -236,7 +238,9 @@ def current_files():
 
 def stale(folder, files):
     record = folder / "prepared.json"
-    if not record.exists():
+    # The harness seals an original with manifest.json after prepared.json; a stop between the two
+    # leaves a folder the harness refuses to load.
+    if not record.exists() or not (folder / "manifest.json").exists():
         return "incomplete"
     return None if json.loads(record.read_text())["identity"]["files"] == files else "prepared from other source"
 
@@ -359,7 +363,7 @@ for item in items:
         if original.exists():
             continue
         code, seconds = step(tag + "-prepare-" + case,
-                             ["prepare", case, "--build", base + "build", "--out", ORIGINALS + "/" + case], 20)
+                             ["prepare", case, "--build", base + "build", "--out", ORIGINALS + "/" + case], PREPARE_FLOOR)
         if code is not None:
             tail = (LOGS / (tag + "-prepare-" + case + ".stderr")).read_text()[-160:] if code else ""
             say(prepare=case, exit=code, seconds=seconds, mb=round(tree_bytes(original) / 1e6, 1) if original.exists() else 0,
