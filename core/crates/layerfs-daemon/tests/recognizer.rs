@@ -221,6 +221,47 @@ fn a_tail_moved_from_the_end_backward_becomes_pieces_and_commits() {
     rig.finish();
 }
 
+/// A delete at an offset that is a multiple of the request size, as the
+/// benchmark's writer sends it: the tail moves down by one cell, in rising
+/// offsets, then the file is cut.
+#[test]
+fn an_aligned_delete_is_one_run_and_one_edit() {
+    let mut record_jobs = Vec::new();
+    for (label, p) in [("aligned", BIG / 2), ("unaligned", BIG / 2 + 777)] {
+        let rig = Rig::new("recognizer-aligned-delete", tree);
+        let first = rig.bind(1);
+        let big = noise(BIG, 3);
+        let mut session = Session::new(&first, rig.base.clone());
+        let mut deleted = big.clone();
+        deleted.drain(p..p + 4 * KIB);
+        rewrite(&mut session, "data/big", &deleted, p, 64 * KIB);
+        session.apply(Do::Truncate("data/big", deleted.len() as u64));
+        let work = rig.store.recognizer_work();
+        evidence(format_args!("RECOGNIZER {label} delete {work:?}"));
+        let expected = session.model.flat();
+        let success = first
+            .commit_captured()
+            .unwrap_or_else(|failure| panic!("{failure:?}"));
+        let jobs = success
+            .namespace
+            .as_ref()
+            .unwrap()
+            .work
+            .unwrap()
+            .record_jobs;
+        evidence(format_args!("RECOGNIZER {label} delete record_jobs={jobs}"));
+        record_jobs.push(jobs);
+        let root = published(&success);
+        drop(success);
+        model::assert_same(&expected, &rebound(&rig, 2, root), "fresh bind");
+        settled(&rig.owner.client(), 0);
+        rig.close(&first);
+        drop(first);
+        rig.finish();
+    }
+    assert_eq!(record_jobs[0], record_jobs[1]);
+}
+
 /// Writers that do not write one tail in order: a second writer between two
 /// requests, requests in reverse order, a request repeated with other bytes
 /// and an appending writer. A claim may only ever name bytes that are the

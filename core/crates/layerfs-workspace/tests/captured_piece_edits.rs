@@ -367,6 +367,32 @@ fn commit_work_of_an_insert_does_not_grow_with_the_file() {
 }
 
 #[test]
+fn commit_work_of_a_delete_does_not_grow_with_the_file() {
+    let delete = |size: u64| {
+        let p = size / 2;
+        let mut run = Run::new(size);
+        run.piece(p, p + C, size - p - C);
+        run.size(size - C);
+        run.commit_counted("sized delete", &[Edit::delete(p, p + C)])
+    };
+    let (small, small_reads, small_records) = delete(1 << 20);
+    let (large, large_reads, large_records) = delete(6 << 20);
+    println!(
+        "PIECE_COMMIT_DELETE small={small:?} reads={small_reads} records={small_records} \
+         large={large:?} reads={large_reads} records={large_records}"
+    );
+    // The same steps and rows for a tail of 512 KiB and of 3 MiB. The record
+    // calls of the edit follow the height of the mapping tree, as they do
+    // for an insert, not the length of the tail.
+    assert_eq!(small, large);
+    assert_eq!(small.committed_bytes, 0);
+    assert!(
+        large_records <= small_records * 5,
+        "{small_records} {large_records}"
+    );
+}
+
+#[test]
 fn commit_record_calls_grow_with_the_edits_and_no_faster() {
     // Pieces of 32 KiB in place, each followed by 16 KiB of stored bytes
     // that equal the base: one equal-length edit for each stretch.

@@ -155,3 +155,41 @@ fn an_outside_process_shifts_two_tails_and_its_writes_become_pieces() {
     rig.unmount(&fresh);
     rig.finish();
 }
+
+/// A delete of one cell at an offset that is a multiple of the request size
+/// from a larger file, as the benchmark's writer sends it: the tail moves
+/// down in rising offsets, read and written 64 KiB at a time.
+const ALIGNED: &str = r#"
+set -eu
+dd if=huge of=huge bs=64k iflag=skip_bytes oflag=seek_bytes \
+   skip=$((16777216 + 4096)) seek=16777216 conv=notrunc status=none
+truncate -s $(($(stat -c %s huge) - 4096)) huge
+"#;
+fn huge_tree(source: &Path) {
+    fs::write(source.join("huge"), noise(64 << 20, 9)).unwrap();
+    stamp_tree(source);
+}
+
+#[test]
+fn an_aligned_delete_of_a_larger_file_is_one_run() {
+    let rig = Rig::built("mounted-recognizer-aligned", huge_tree);
+    let first = rig.mount(1);
+    let mount = root(&first);
+    passed(&bash_in(COMMAND, mount, ALIGNED), "script on the mount");
+    let work = rig.store.recognizer_work();
+    let counts = rig.harness.engine(first.token);
+    println!(
+        "MOUNTED_ALIGNED {work:?} reference_rows={} payload_cells={} payload_bytes={}",
+        counts.reference_rows, counts.payload_cells, counts.payload_bytes
+    );
+    let mut expected = noise(64 << 20, 9);
+    expected.drain(16_777_216..16_777_216 + 4096);
+    assert!(
+        direct(&mount.join("huge")) == expected,
+        "huge by daemon READs"
+    );
+    assert!(counts.reference_rows <= 2, "{counts:?}");
+    assert!(counts.payload_bytes <= 64 * 1024, "{counts:?}");
+    rig.unmount(&first);
+    rig.finish();
+}

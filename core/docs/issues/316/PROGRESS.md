@@ -564,3 +564,226 @@ mounted proof wrote forward and did not show this.
 
 - Two Commit wall stops and the unchanged 10 MiB insert, above.
 - Tier 3: not sampled. Nothing was reverted.
+
+## Phase 3, step `p3d` — checkpoint 2026-10-11, commit `5239bfaa1`
+
+The carry in falling offsets. Every target Commit completes; overlay bytes
+and Commit work of the insert no longer follow the file size.
+
+### What changed
+
+| Commit | Change | Production LOC |
+| --- | --- | --- |
+| `e1f7c2814` | Ledger entry of step `p3a` | 81617 -> 81617 (delta +0) |
+| `5239bfaa1` | Carry in falling offsets: the earlier request keeps the last bytes of the chunk that begins before it (at most 32 KiB); the request below completes the identity and its claim ends after its window; the engine accepts that reach under the content sequence and takes in the piece that follows a claim | 81617 -> 81714 (delta +97) |
+
+### Checks at `5239bfaa1`
+
+| Check | Result |
+| --- | --- |
+| `layerfs-overlay`, all targets, host | pass, 152 tests |
+| `layerfs-workspace`, all targets, host | pass, 175 tests; a 2 MiB tail moved backward is claimed but for 25 to 29 KiB |
+| `layerfs-fuse`, all targets, host | pass, 24 tests |
+| `layerfs-daemon`, 18 selected targets, host | pass, 74 tests |
+| Linux, pinned image, FUSE device, one test thread: 7 daemon targets | pass, 25 tests |
+| Linux `mounted_recognizer`: an outside process shifts two tails forward and grows a third file in place from its end backward | pass: 4 piece rows and 71,168 stored bytes for three files |
+| Clippy `-D warnings` (overlay, workspace, fuse, all targets), formatting, boundary guard | clean; clean; PASS, 683 files |
+| `layerfs-content` | not rerun: unchanged since `779324ee8` |
+| Durable | `NOT_RUN — disabled by owner until explicit reauthorization` |
+
+### Mistakes of this run, as they happened
+
+- **Tag `p3c` holds no sample.** While that tier's build was starting I
+  dry-ran the draft of a later step against a tracked source file, written
+  and restored within one command. The tier was stopped before any sample
+  and its build container, which this run had started, was stopped. The
+  container had in fact started after the restore. `p3d` is the sample of
+  `5239bfaa1`.
+- **Leftover daemon containers.** A sample that ends with the harness's wall
+  stop leaves its daemon container running. Five were found: three from
+  `p2a` and two from `p3a`, each matched to a receipt of this worktree by its
+  sample volume, and stopped. The three from `p2a` were still running their
+  Commits during the `p3a` tier, so the timings of `p3a` carry that load;
+  its counts do not. Older containers that match no receipt of this worktree
+  were not touched.
+
+### Tier 2, tag `p3d`
+
+Nine fixed cases, one sample each, at `5239bfaa1`.
+
+| case | status | proof | exec ms | Commit ms | requests | writer jobs | statements | overlay MB | commit |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| append-tail-4k-on-500mib-result-capped-v2-ops-1 | INELIGIBLE | PASS | 44.4 | 13.7 | 11 | 173 | 880 | 0.3 | 5239bfaa1 |
+| delete-middle-4k-on-500mib-ops-1 | INELIGIBLE | PASS | 2021.4 | 90.0 | 6012 | 13247 | 127502 | 0.5 | 5239bfaa1 |
+| insert-middle-4k-on-10mib-ops-1 | FAIL | FAIL | 72.2 | 17.4 | 171 | 867 | 5522 | 0.3 | 5239bfaa1 |
+| insert-middle-4k-on-500mib-result-capped-v2-ops-1 | FAIL | FAIL | 2364.9 | 26.3 | 8011 | 8938 | 104641 | 0.4 | 5239bfaa1 |
+| prepend-head-4k-on-500mib-result-capped-v2-ops-1 | FAIL | FAIL | 5173.9 | 19.6 | 16011 | 16582 | 202834 | 0.3 | 5239bfaa1 |
+| overwrite-middle-4k-on-500mib-ops-1 | INELIGIBLE | PASS | 43.8 | 15.5 | 11 | 452 | 2375 | 0.3 | 5239bfaa1 |
+| payload-create-500m | INELIGIBLE | PASS | 1136.4 | 5730.1 | 4014 | 20137 | 156610 | 533.4 | 5239bfaa1 |
+| tiny-bulk-create-100-mixed-v3 | INELIGIBLE | PASS | 714.6 | 1146.2 | 8709 | 71650 | 341790 | 108.7 | 5239bfaa1 |
+| workspace-dense-rewrite-100-mixed-v4 | INELIGIBLE | PASS | 1121.9 | 2082.1 | 12545 | 84438 | 424874 | 109.8 | 5239bfaa1 |
+
+Against the control `c0`, in the order of comparison:
+
+| case | overlay bytes `c0` | overlay bytes `p3d` | Commit ms `c0` | Commit ms `p3d` | writer jobs `c0` | writer jobs `p3d` |
+| --- | --- | --- | --- | --- | --- | --- |
+| insert-middle-4k-on-10mib | 5,656,576 | 307,200 | 47.1 | 17.4 | 808 | 867 |
+| insert-middle-4k-on-500mib | 268,427,264 | 405,504 | 2,413.9 | 26.3 | 20,649 | 8,938 |
+| prepend-head-4k-on-500mib | 536,563,712 | 344,064 | 5,391.7 | 19.6 | 37,881 | 16,582 |
+| delete-middle-4k-on-500mib | 272,486,400 | 479,232 | 2,446.0 | 90.0 | 25,449 | 13,247 |
+
+- **Requests equal `c0` in all nine cases.** The five regression cases equal
+  `c0` in requests, writer jobs and statements, to the unit.
+- **Every target Commit completes.** The 10 MiB and the 500 MiB insert hold
+  307,200 and 405,504 overlay bytes, of which 32,768 and 61,952 are stored
+  payload by the receipts' stored counts. Their Commits make 676 and 904
+  operation-record jobs (4,496 for the 500 MiB insert in `c0`); the other
+  writer jobs are the command's own reads and writes.
+- **Statements of the delete rose from 123,503 at `p3a` to 127,502**, which
+  is consistent with the one more indexed lookup a claim now makes for the
+  piece that follows; not profiled.
+- **3 FAIL, proof FAIL**: the two inserts and the prepend,
+  `independent-graph failed with exit 1`, the oracle's retention guard (O-6,
+  with the owner). The delete has proof PASS.
+- **6 INELIGIBLE**: functional PASS and proof PASS in each receipt;
+  ineligible for the declared interference. No row is PASS.
+- Timings are single diagnostic samples.
+
+### Tier 3, tag `p3d`
+
+The four edit families, 61 cases, at `5239bfaa1`; six of them are the tier 2
+rows above and were not sampled again. This is the tier 3 sample the handoff
+places at the end of phase 2; it was held back until the target Commits
+completed.
+
+| case | status | proof | exec ms | Commit ms | requests | writer jobs | statements | overlay MB | commit |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| overwrite-fixed-64k-chunk-count-decrease-on-100mib-ops-1 | INELIGIBLE | PASS | 41.8 | 14.4 | 10 | 347 | 1821 | 0.3 | 5239bfaa1 |
+| overwrite-fixed-64k-chunk-count-decrease-on-10mib-ops-1 | INELIGIBLE | PASS | 34.1 | 12.3 | 10 | 347 | 1821 | 0.3 | 5239bfaa1 |
+| overwrite-fixed-64k-chunk-count-decrease-on-1mib-ops-1 | INELIGIBLE | PASS | 43.1 | 11.1 | 10 | 144 | 738 | 0.3 | 5239bfaa1 |
+| overwrite-fixed-64k-chunk-count-decrease-on-500mib-ops-1 | INELIGIBLE | PASS | 43.8 | 20.6 | 10 | 494 | 2580 | 0.4 | 5239bfaa1 |
+| overwrite-fixed-64k-chunk-count-increase-on-100mib-ops-1 | INELIGIBLE | PASS | 48.1 | 16.5 | 10 | 347 | 1821 | 0.3 | 5239bfaa1 |
+| overwrite-fixed-64k-chunk-count-increase-on-10mib-ops-1 | INELIGIBLE | PASS | 47.3 | 13.1 | 10 | 347 | 1821 | 0.3 | 5239bfaa1 |
+| overwrite-fixed-64k-chunk-count-increase-on-1mib-ops-1 | INELIGIBLE | PASS | 50.1 | 11.4 | 10 | 144 | 738 | 0.3 | 5239bfaa1 |
+| overwrite-fixed-64k-chunk-count-increase-on-500mib-ops-1 | INELIGIBLE | PASS | 51.2 | 20.8 | 10 | 494 | 2580 | 0.4 | 5239bfaa1 |
+| overwrite-fixed-64k-chunk-count-preserve-on-100mib-ops-1 | INELIGIBLE | PASS | 44.8 | 15.9 | 10 | 347 | 1821 | 0.3 | 5239bfaa1 |
+| overwrite-fixed-64k-chunk-count-preserve-on-10mib-ops-1 | INELIGIBLE | PASS | 46.9 | 15.5 | 10 | 347 | 1821 | 0.3 | 5239bfaa1 |
+| overwrite-fixed-64k-chunk-count-preserve-on-1mib-ops-1 | INELIGIBLE | PASS | 45.8 | 12.2 | 10 | 144 | 738 | 0.3 | 5239bfaa1 |
+| overwrite-fixed-64k-chunk-count-preserve-on-500mib-ops-1 | INELIGIBLE | PASS | 44.4 | 20.6 | 10 | 494 | 2580 | 0.4 | 5239bfaa1 |
+| append-tail-4k-on-100mib-ops-1 | INELIGIBLE | PASS | 47.5 | 10.6 | 11 | 133 | 658 | 0.2 | 5239bfaa1 |
+| append-tail-4k-on-10mib-ops-1 | INELIGIBLE | PASS | 43.3 | 10.5 | 11 | 133 | 658 | 0.2 | 5239bfaa1 |
+| append-tail-4k-on-1mib-ops-1 | INELIGIBLE | PASS | 34.2 | 11.1 | 11 | 110 | 535 | 0.2 | 5239bfaa1 |
+| append-tail-4k-on-500mib-result-capped-v2-ops-1 | INELIGIBLE | PASS | 44.4 | 13.7 | 11 | 173 | 880 | 0.3 | 5239bfaa1 |
+| delete-middle-4k-on-100mib-ops-1 | INELIGIBLE | PASS | 436.1 | 31.6 | 1212 | 2661 | 26166 | 0.3 | 5239bfaa1 |
+| delete-middle-4k-on-10mib-ops-1 | INELIGIBLE | PASS | 72.6 | 15.4 | 132 | 508 | 3897 | 0.3 | 5239bfaa1 |
+| delete-middle-4k-on-1mib-ops-1 | INELIGIBLE | PASS | 38.9 | 10.3 | 24 | 157 | 934 | 0.3 | 5239bfaa1 |
+| delete-middle-4k-on-500mib-ops-1 | INELIGIBLE | PASS | 2021.4 | 90.0 | 6012 | 13247 | 127502 | 0.5 | 5239bfaa1 |
+| insert-middle-4k-on-100mib-ops-1 | FAIL | FAIL | 462.6 | 19.3 | 1611 | 2362 | 23775 | 0.3 | 5239bfaa1 |
+| insert-middle-4k-on-10mib-ops-1 | FAIL | FAIL | 72.2 | 17.4 | 171 | 867 | 5522 | 0.3 | 5239bfaa1 |
+| insert-middle-4k-on-1mib-ops-1 | FAIL | FAIL | 43.4 | 10.9 | 27 | 212 | 1227 | 0.3 | 5239bfaa1 |
+| insert-middle-4k-on-500mib-result-capped-v2-ops-1 | FAIL | FAIL | 2364.9 | 26.3 | 8011 | 8938 | 104641 | 0.4 | 5239bfaa1 |
+| prepend-head-4k-on-100mib-ops-1 | FAIL | FAIL | 930.1 | 15.7 | 3211 | 3637 | 42130 | 0.3 | 5239bfaa1 |
+| prepend-head-4k-on-10mib-ops-1 | FAIL | FAIL | 137.3 | 16.7 | 331 | 757 | 6152 | 0.3 | 5239bfaa1 |
+| prepend-head-4k-on-1mib-ops-1 | FAIL | FAIL | 48.6 | 12.0 | 43 | 196 | 1233 | 0.3 | 5239bfaa1 |
+| prepend-head-4k-on-500mib-result-capped-v2-ops-1 | FAIL | FAIL | 5173.9 | 19.6 | 16011 | 16582 | 202834 | 0.3 | 5239bfaa1 |
+| replace-grow-middle-2k-to-4k-on-100mib-ops-1 | FAIL | FAIL | 476.9 | 21.4 | 1612 | 2624 | 27897 | 0.3 | 5239bfaa1 |
+| replace-grow-middle-2k-to-4k-on-10mib-ops-1 | FAIL | FAIL | 69.6 | 20.8 | 172 | 1376 | 8252 | 0.3 | 5239bfaa1 |
+| replace-grow-middle-2k-to-4k-on-1mib-ops-1 | FAIL | FAIL | 44.3 | 11.9 | 28 | 244 | 1433 | 0.3 | 5239bfaa1 |
+| replace-grow-middle-2k-to-4k-on-500mib-result-capped-v2-ops-1 | FAIL | FAIL | 2667.1 | 25.8 | 8012 | 8939 | 104658 | 0.4 | 5239bfaa1 |
+| replace-shrink-middle-4k-to-2k-on-100mib-ops-1 | INELIGIBLE | PASS | 478.4 | 20.1 | 1212 | 1860 | 19312 | 0.3 | 5239bfaa1 |
+| replace-shrink-middle-4k-to-2k-on-10mib-ops-1 | INELIGIBLE | PASS | 69.6 | 17.3 | 132 | 737 | 4717 | 0.3 | 5239bfaa1 |
+| replace-shrink-middle-4k-to-2k-on-1mib-ops-1 | INELIGIBLE | PASS | 73.5 | 13.5 | 24 | 188 | 1090 | 0.3 | 5239bfaa1 |
+| replace-shrink-middle-4k-to-2k-on-500mib-ops-1 | INELIGIBLE | PASS | 1817.7 | 22.0 | 6012 | 6790 | 83980 | 0.3 | 5239bfaa1 |
+| truncate-tail-4k-on-100mib-ops-1 | INELIGIBLE | PASS | 37.9 | 12.6 | 10 | 170 | 881 | 0.2 | 5239bfaa1 |
+| truncate-tail-4k-on-10mib-ops-1 | INELIGIBLE | PASS | 43.3 | 10.5 | 10 | 170 | 881 | 0.2 | 5239bfaa1 |
+| truncate-tail-4k-on-1mib-ops-1 | INELIGIBLE | PASS | 45.6 | 10.2 | 10 | 106 | 521 | 0.2 | 5239bfaa1 |
+| truncate-tail-4k-on-500mib-ops-1 | INELIGIBLE | PASS | 42.6 | 16.4 | 10 | 216 | 1133 | 0.3 | 5239bfaa1 |
+| zero-extend-tail-4k-on-100mib-ops-1 | INELIGIBLE | PASS | 30.4 | 10.4 | 11 | 133 | 658 | 0.2 | 5239bfaa1 |
+| zero-extend-tail-4k-on-10mib-ops-1 | INELIGIBLE | PASS | 38.1 | 9.5 | 11 | 133 | 658 | 0.2 | 5239bfaa1 |
+| zero-extend-tail-4k-on-1mib-ops-1 | INELIGIBLE | PASS | 42.0 | 9.7 | 11 | 110 | 535 | 0.2 | 5239bfaa1 |
+| zero-extend-tail-4k-on-500mib-result-capped-v2-ops-1 | INELIGIBLE | PASS | 56.1 | 16.7 | 11 | 173 | 880 | 0.3 | 5239bfaa1 |
+| append-tail-4k-input-524283904b-result-500mib-ops-1-capped-v1 | INELIGIBLE | PASS | 41.3 | 16.1 | 11 | 173 | 880 | 0.3 | 5239bfaa1 |
+| insert-middle-4k-input-524283904b-result-500mib-ops-1-capped-v1 | FAIL | NOT_RUN | 0.0 | 0.0 | None | None | None | - | 5239bfaa1 |
+| prepend-head-4k-input-524283904b-result-500mib-ops-1-capped-v1 | FAIL | NOT_RUN | 0.0 | 0.0 | None | None | None | - | 5239bfaa1 |
+| replace-grow-middle-2k-to-4k-input-524285952b-result-500mib-ops-1-capped-v1 | FAIL | NOT_RUN | 0.0 | 0.0 | None | None | None | - | 5239bfaa1 |
+| zero-extend-tail-4k-input-524283904b-result-500mib-ops-1-capped-v1 | INELIGIBLE | PASS | 50.4 | 16.7 | 11 | 173 | 880 | 0.3 | 5239bfaa1 |
+| overwrite-head-4k-on-100mib-ops-1 | INELIGIBLE | PASS | 42.3 | 13.5 | 10 | 253 | 1311 | 0.3 | 5239bfaa1 |
+| overwrite-head-4k-on-10mib-ops-1 | INELIGIBLE | PASS | 39.3 | 13.9 | 10 | 253 | 1311 | 0.3 | 5239bfaa1 |
+| overwrite-head-4k-on-1mib-ops-1 | INELIGIBLE | PASS | 47.7 | 10.3 | 10 | 122 | 606 | 0.2 | 5239bfaa1 |
+| overwrite-head-4k-on-500mib-ops-1 | INELIGIBLE | PASS | 45.8 | 15.5 | 10 | 352 | 1824 | 0.3 | 5239bfaa1 |
+| overwrite-middle-4k-on-100mib-ops-1 | INELIGIBLE | PASS | 35.3 | 16.3 | 11 | 406 | 2123 | 0.3 | 5239bfaa1 |
+| overwrite-middle-4k-on-10mib-ops-1 | INELIGIBLE | PASS | 38.1 | 13.0 | 11 | 388 | 2015 | 0.3 | 5239bfaa1 |
+| overwrite-middle-4k-on-1mib-ops-1 | INELIGIBLE | PASS | 47.3 | 10.7 | 11 | 145 | 740 | 0.2 | 5239bfaa1 |
+| overwrite-middle-4k-on-500mib-ops-1 | INELIGIBLE | PASS | 43.8 | 15.5 | 11 | 452 | 2375 | 0.3 | 5239bfaa1 |
+| overwrite-tail-4k-on-100mib-ops-1 | INELIGIBLE | PASS | 42.4 | 13.4 | 10 | 224 | 1139 | 0.3 | 5239bfaa1 |
+| overwrite-tail-4k-on-10mib-ops-1 | INELIGIBLE | PASS | 41.1 | 14.3 | 10 | 224 | 1139 | 0.2 | 5239bfaa1 |
+| overwrite-tail-4k-on-1mib-ops-1 | INELIGIBLE | PASS | 38.6 | 13.9 | 10 | 123 | 608 | 0.2 | 5239bfaa1 |
+| overwrite-tail-4k-on-500mib-ops-1 | INELIGIBLE | PASS | 44.9 | 15.2 | 10 | 318 | 1631 | 0.3 | 5239bfaa1 |
+
+- **46 INELIGIBLE with proof PASS, 12 FAIL with proof FAIL, 3 FAIL with proof
+  NOT_RUN.** No row is PASS.
+- **The 12 with proof FAIL** are every insert, prepend and replace-grow case
+  that completed, at 1, 10, 100 and 500 MiB:
+  `independent-graph failed with exit 1` (O-6, with the owner). Every delete,
+  replace-shrink, append, truncate, zero-extend and overwrite case has proof
+  PASS.
+- **The 3 with proof NOT_RUN** are the insert, prepend and replace-grow of
+  `edit_length_changing_capped` (`...-capped-v1`):
+  `original event wall stop: command`. The command phase did not finish
+  inside that family's limit (O-9, with the owner); the same commands take
+  2.4 to 5.2 s of exec in the uncapped rows. No control sample of these three
+  exists in this run, so no comparison is made. Each left a daemon container
+  running, which this run stopped after the tier.
+- **Commit of the insert against the file size**: 10.9, 17.4, 19.3 and
+  26.3 ms at 1, 10, 100 and 500 MiB; overlay 0.3 to 0.4 MB at every size.
+  The prepend: 12.0, 16.7, 15.7, 19.6 ms. Replace-shrink: 13.5, 17.3, 20.1,
+  22.0 ms.
+- **Commit of the delete still follows the file size**: 10.3, 15.4, 31.6 and
+  90.0 ms, with 118, 361, 1,426 and 7,200 operation-record jobs, where
+  replace-shrink makes 147, 588, 629 and 759. See below.
+- **The length-preserving families are unchanged in kind**: 10 or 11
+  requests and 0.2 to 0.4 MB whatever the size. There is no control sample of
+  tier 3 in this run to compare their counts with.
+
+### Open: a few stored cells in the large delete
+
+The delete's stored payload is 8,704 bytes at 1 and 10 MiB, 16,896 at
+100 MiB and 41,472 at 500 MiB: two and eight more 4 KiB cells. Each such cell
+between two pieces is one more edit at Commit, which at that tree height
+costs several hundred record jobs. Replace-shrink, which differs only in
+moving the tail by 2 KiB and so in requests that do not begin on cell
+boundaries, shows two extra cells at 500 MiB and no extra edits.
+
+Not reproduced, and so not explained:
+
+| Attempt | Result |
+| --- | --- |
+| Workspace `recognize`, aligned delete over 96 MiB, cells emulated as the engine trims them | 3 stored cells, all at the edit |
+| Daemon `recognizer`, aligned and unaligned delete of 3 MiB through Commit | 42 record jobs each |
+| Linux `mounted_recognizer`, aligned delete of a 64 MiB file by `dd` through the kernel | 1 piece row, 16,384 stored bytes, no pass needed the Store |
+| Workspace `captured_piece_edits`, one delete at 1 and 6 MiB | same steps; record calls 41 and 171, as an insert's 44 and 172 (tree height) |
+
+What the three reproductions lack is the benchmark's size: at 500 MiB the
+recognizer's memory-only pass must sometimes be repeated over the Store.
+That path is the first suspect and was not tested at scale. **Rule D-5 for
+the delete: not met at 500 MiB as observed; left open.**
+
+### Decisions by agent, pending owner review
+
+1. **Phase 3's "nearly equal"** is reported as numbers, above, not judged.
+2. **The falling direction keeps bytes of a write** between two requests,
+   one chunk a slot, about 2.2 MiB for the daemon. The rising direction
+   keeps a hash state.
+3. **Byte-compared edges are not implemented.** They would save at most one
+   chunk an edit edge (the stored payload is already 33 to 62 KiB a case)
+   and add Store reads to the write path. A draft exists outside the tree.
+4. **Runs are now bounded per command** after the owner's message of
+   2026-10-11 ("we prefer a limit of 2 minutes timeout, for extreme case
+   with 5 minutes"): no tier is run as one background command again.
+
+### What failed or was not done
+
+- The delete's extra cells at 100 and 500 MiB: open, above.
+- Byte-compared edges: not done, decision 3.
+- Tier 4: not sampled at this entry.
+- Nothing was reverted.

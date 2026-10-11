@@ -320,6 +320,66 @@ fn a_tail_moved_from_the_end_backward_is_claimed_across_requests() {
     }
 }
 
+/// The cells a writer job would store for a tail moved down by one cell in
+/// requests that begin on cell boundaries: a claim is whole cells, so two
+/// claims that meet inside a cell without being one range leave that cell.
+#[test]
+fn an_aligned_delete_leaves_no_stored_cell_between_claims() {
+    const CELL: usize = 4096;
+    let committed = noise(96 * MIB, 41);
+    let base = base(committed.clone());
+    let p = 16 * MIB;
+    let mut content = committed.clone();
+    content.drain(p..p + CELL);
+    let request = 64 * KIB;
+    let (mut run, mut work) = (WriteRun::default(), RecognizeWork::default());
+    let mut stored = vec![false; content.len().div_ceil(CELL)];
+    let mut log: Vec<(usize, Vec<(u64, u64)>)> = Vec::new();
+    for (index, start) in (p..content.len()).step_by(request).enumerate() {
+        let data = &content[start..content.len().min(start + request)];
+        let Recognition::Decided(claims) =
+            run.recognize(&base.view, FILE, start as u64, data, &mut work)
+        else {
+            panic!("a client with a provider needs no base");
+        };
+        run.published(
+            start as u64,
+            (start + data.len()) as u64,
+            101 + index as i64,
+        );
+        stored[start / CELL..(start + data.len()).div_ceil(CELL)].fill(true);
+        let ranges = claims.map_or(Vec::new(), |claims| claims.ranges);
+        for range in &ranges {
+            let (from, to) = (
+                range.offset as usize,
+                (range.offset + range.length) as usize,
+            );
+            stored[from.div_ceil(CELL)..to / CELL].fill(false);
+        }
+        log.push((
+            start,
+            ranges
+                .iter()
+                .map(|r| (r.offset, r.offset + r.length))
+                .collect(),
+        ));
+    }
+    let cells: Vec<usize> = (0..stored.len()).filter(|cell| stored[*cell]).collect();
+    println!(
+        "RECOGNIZE aligned delete stored cells={} {work:?}",
+        cells.len()
+    );
+    for cell in cells.iter().take(6) {
+        let at = cell * CELL;
+        let near: Vec<_> = log
+            .iter()
+            .filter(|(start, _)| start + 2 * request > at && *start < at + 2 * request)
+            .collect();
+        println!("RECOGNIZE stored cell at {at} ({}): {near:?}", at % request);
+    }
+    assert!(cells.len() <= 12, "{}", cells.len());
+}
+
 #[test]
 fn a_whole_rewrite_follows_the_unchanged_part_and_finds_the_shift_after_an_edit() {
     let committed = noise(2 * MIB, 13);
