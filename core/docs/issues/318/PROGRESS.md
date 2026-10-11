@@ -313,3 +313,9 @@ equal. Times are single diagnostic samples.
   0 containers more; originals 1182 MB, result folder
   198 MB; host 225 GiB free; `docker system df`: Images=21.51GB, Containers=12.85GB, Local Volumes=69.06GB, Build Cache=4.843GB.
 - CSVs: `core/benchmark/fs-bench-pro/baselines/core/2026-10-11-1fbd41266/init_namespace/`.
+
+**Correction to the `init_namespace` entry above:** the Store sizes are not
+equal to iteration 1's. They differ by −8,192 to +229,376 bytes of 5 to 516 MB
+(table column `Store logical B`). Init keeps its parallel construction
+profile, and the file's page count is not fixed across runs; no cause beyond
+that was looked for.
