@@ -1,4 +1,7 @@
 //! Offline independent current-format graph and complete semantic tree proof.
+#[allow(dead_code)]
+#[path = "../../engine/recipes/boundary_metadata.rs"]
+mod boundary_metadata;
 use crate::{args::Args, events::Events, project::namespace::reference, Result};
 use layerfs_bridge::provision::StoreManifest;
 use layerfs_content::object::{AuthenticatedObjects, ObjectId};
@@ -467,7 +470,7 @@ fn verify_dedup_store(args: &Args, events: &mut Events, proof_mode: DedupProof) 
         || stack_record.scope != snapshot.scope
         || stack_record.profile != snapshot.profile
         || handles.profile().persistence != SqlitePersistenceProfile::Disposable
-        || handles.profile().journal_mode.to_ascii_lowercase() != "wal"
+        || !handles.profile().journal_mode.eq_ignore_ascii_case("wal")
         || handles.profile().synchronous != 0
     {
         return Err(
@@ -1158,6 +1161,7 @@ pub fn verify_history(args: &Args, events: &mut Events) -> Result<()> {
     let snapshot_case = case == "local-snapshot-create-25000-onebyte-v1";
     let legacy = small || snapshot_case;
     let m1 = crate::edit_model::is_m1(case);
+    let alias = case == reference::file_size_transition::ALIAS_ROUNDTRIP;
     let (commits, original_selection) = history_selection(case)?;
     if args
         .history_step
@@ -1165,6 +1169,19 @@ pub fn verify_history(args: &Args, events: &mut Events) -> Result<()> {
     {
         return Err("selected history state outside original verification checkpoints".into());
     }
+    let alias_custody = if alias {
+        let body = fs::read_to_string(
+            args.source
+                .as_ref()
+                .ok_or("alias proof requires measured --source-copy parent mtime custody")?,
+        )?;
+        Some((
+            boundary_metadata::parse(case, &body)?,
+            reference::sdk_edit_common::sha256_hex(body.as_bytes()),
+        ))
+    } else {
+        None
+    };
     let modes = if m1 {
         Some(created_modes(
             case,
@@ -1173,7 +1190,7 @@ pub fn verify_history(args: &Args, events: &mut Events) -> Result<()> {
                 .ok_or("M1 proof requires measured --source-copy created modes")?,
         )?)
     } else {
-        if args.source.is_some() {
+        if args.source.is_some() && !alias {
             return Err(
                 "history source-copy observations are only accepted for original M1".into(),
             );
@@ -1204,7 +1221,7 @@ pub fn verify_history(args: &Args, events: &mut Events) -> Result<()> {
     let catalog = handles.history.catalog_id();
     if catalog != CatalogId::derive(&manifest.binding)?
         || handles.profile().persistence != SqlitePersistenceProfile::Disposable
-        || handles.profile().journal_mode.to_ascii_lowercase() != "wal"
+        || !handles.profile().journal_mode.eq_ignore_ascii_case("wal")
         || handles.profile().synchronous != 0
     {
         return Err("public provider catalog/profile binding differs".into());
@@ -1314,12 +1331,22 @@ pub fn verify_history(args: &Args, events: &mut Events) -> Result<()> {
                 let scope = crate::edit_model::m1_state(case, step, modes.as_ref())?;
                 verify_tree(&reader, root, &scope.entries, false, Some(&scope), true)?
             } else {
-                let entries = reference::workspace_common::decode_manifest(&expected_body)?;
+                let mut entries = reference::workspace_common::decode_manifest(&expected_body)?;
                 if !legacy || snapshot_case {
                     let original = crate::edit_model::entries(case, step)?;
                     if reference::workspace_common::manifest(&original)? != expected_body {
                         return Err("selected manifest differs from original complete state".into());
                     }
+                }
+                if alias && step == boundary_metadata::STEP {
+                    entries = boundary_metadata::entries(
+                        case,
+                        step,
+                        alias_custody
+                            .as_ref()
+                            .ok_or("alias parent mtime custody missing")?
+                            .0,
+                    )?;
                 }
                 verify_tree(&reader, root, &entries, false, None, !legacy)?
             };
@@ -1368,6 +1395,13 @@ pub fn verify_history(args: &Args, events: &mut Events) -> Result<()> {
     drop(storage);
     handles.seal()?;
     let after = file_identity(sealed)?;
+    if let Some((_, digest)) = &alias_custody {
+        events.fields("history_automatic_parent_mtime_verified", None,
+            "independently qualified native alias automatic mtime; exact live-to-persisted nanosecond custody; all other independent fields unchanged",
+            &[("parent_mtime_custody_sha256", digest.clone()),
+              ("path", boundary_metadata::PATH.into()),
+              ("step", boundary_metadata::STEP.to_string())])?;
+    }
     events.numeric_fields("workspace_verified", Some(events.span(begun)),
         "original selected payload checkpoints plus all typed acknowledgements/parents/final head; independent bytes/metadata under the declared scope, public provider schema/source/binding validation and exhaustive inode census; separate typed proof copy",
         &[("status", "PASS".into()), ("root", crate::hex(&selected_root.to_bytes())),
@@ -1380,6 +1414,7 @@ pub fn verify_history(args: &Args, events: &mut Events) -> Result<()> {
           ("stack_id", crate::hex(stack.as_slice())), ("branch_id", crate::hex(branch.as_slice())),
           ("base_layer_id", crate::hex(snapshot.branch.base_layer.as_slice())),
           ("acknowledged_transcript_sha256", reference::sdk_edit_common::sha256_hex(body.as_bytes())),
+          ("parent_mtime_custody_sha256", alias_custody.as_ref().map(|(_, digest)| digest.clone()).unwrap_or_else(|| "-".into())),
           ("provider_store_sha256", before.0.clone()), ("provider_store_after_sha256", after.0.clone())],
         &[("roots", verified_roots), ("commits", commits as u64), ("paths", paths),
           ("verified_bytes", verified_bytes), ("catalog_incarnation", incarnation),
@@ -1695,7 +1730,7 @@ pub fn parse_topology(body: &str) -> Result<TopologyTranscript> {
 
 fn topology_roles(case: &str) -> Result<Vec<&'static str>> {
     if crate::edit_model::context_roles(case).is_ok() {
-        return Ok(crate::edit_model::context_roles(case)?);
+        return crate::edit_model::context_roles(case);
     }
     if matches!(
         case,
@@ -1710,7 +1745,7 @@ fn topology_limit(case: &str, role: &str) -> Result<usize> {
     if role == "main" {
         return history_limit(case);
     }
-    Ok(crate::edit_model::context_limit(case, role)?)
+    crate::edit_model::context_limit(case, role)
 }
 fn topology_selected(
     case: &str,
@@ -1827,7 +1862,7 @@ fn topology_proof(args: &Args, events: &mut Events, access_mode: bool) -> Result
     let catalog = handles.history.catalog_id();
     if catalog != CatalogId::derive(&manifest.binding)?
         || handles.profile().persistence != SqlitePersistenceProfile::Disposable
-        || handles.profile().journal_mode.to_ascii_lowercase() != "wal"
+        || !handles.profile().journal_mode.eq_ignore_ascii_case("wal")
         || handles.profile().synchronous != 0
     {
         return Err("topology public provider profile/catalog differs".into());
@@ -1965,7 +2000,8 @@ fn topology_proof(args: &Args, events: &mut Events, access_mode: bool) -> Result
         } else {
             topology_source(producer, role)?
         };
-        if branch.source_role != source
+        if branch.role != *role
+            || branch.source_role != source
             || branch.source_local != source_local
             || name.is_some_and(|name| name != branch.name)
             || branch.stack != stack

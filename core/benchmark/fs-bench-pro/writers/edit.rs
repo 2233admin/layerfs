@@ -1,9 +1,13 @@
 //! Bounded ordinary Unix splice writes for the frozen SDK-edit definitions.
+#[path = "../engine/recipes/boundary_metadata.rs"]
+mod boundary_metadata;
 #[path = "../engine/recipes/edit_model.rs"]
 mod edit_model;
 #[allow(dead_code)]
 #[path = "../../../../benchmark/fs-bench-pro/workload/main.rs"]
 mod reference;
+#[path = "../engine/recipes/sdk_edit_model.rs"]
+mod sdk_edit_model;
 
 use reference::sdk_edit_common::{self, ReplacementKind, Scenario};
 use std::fs::{File, OpenOptions};
@@ -257,15 +261,84 @@ fn apply_workspace(id: &str) -> reference::Result<()> {
     Ok(())
 }
 
+fn realtime() -> reference::Result<boundary_metadata::Timestamp> {
+    let value = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)?;
+    Ok(boundary_metadata::Timestamp {
+        seconds: i64::try_from(value.as_secs())?,
+        nanoseconds: value.subsec_nanos(),
+    })
+}
+
+/// One unchanged ordinary-helper attempt, with read-only timestamp custody.
+fn apply_boundary_alias(step: usize, helper: &Path) -> reference::Result<()> {
+    use std::os::unix::fs::MetadataExt;
+    if step != boundary_metadata::STEP {
+        return Err("automatic parent mtime wrapper only accepts alias step5".into());
+    }
+    let before = std::fs::symlink_metadata(boundary_metadata::PATH)?;
+    if !before.is_dir() {
+        return Err("original alias parent is not a directory".into());
+    }
+    let initial = boundary_metadata::Timestamp {
+        seconds: before.mtime(),
+        nanoseconds: u32::try_from(before.mtime_nsec())?,
+    };
+    if initial.seconds != reference::file_size_transition::DECLARED_MTIME_SECONDS
+        || initial.nanoseconds != 0
+    {
+        return Err("original alias parent mtime differs before helper attempt".into());
+    }
+    let started = realtime()?;
+    let status = std::process::Command::new(helper)
+        .args(["v016-boundary-alias", "1", "5"])
+        .status()?;
+    if !status.success() {
+        return Err(format!("unchanged alias helper failed once: {status}").into());
+    }
+    let after = std::fs::symlink_metadata(boundary_metadata::PATH)?;
+    let finished = realtime()?;
+    if !after.is_dir() || (before.dev(), before.ino()) != (after.dev(), after.ino()) {
+        return Err("original alias parent identity changed".into());
+    }
+    let custody = boundary_metadata::Custody {
+        initial,
+        started,
+        finished,
+        observed: boundary_metadata::Timestamp {
+            seconds: after.mtime(),
+            nanoseconds: u32::try_from(after.mtime_nsec())?,
+        },
+    };
+    let body = custody.encode();
+    boundary_metadata::parse(reference::file_size_transition::ALIAS_ROUNDTRIP, &body)?;
+    print!("{body}");
+    Ok(())
+}
+
+fn verify_boundary_alias(id: &str, step: usize, custody: &Path) -> reference::Result<()> {
+    let body = std::fs::read_to_string(custody)?;
+    let timestamp = boundary_metadata::parse(id, &body)?;
+    let entries = boundary_metadata::entries(id, step, timestamp)?;
+    for (key, value) in reference::workspace_common::verify_native(Path::new("."), &entries)? {
+        println!("{key}={value}");
+    }
+    println!(
+        "parent_mtime_custody_sha256={}",
+        sdk_edit_common::sha256_hex(body.as_bytes())
+    );
+    println!("parent_mtime_custody_scope=alias-state5-data-mtime-only-exact-nanoseconds");
+    Ok(())
+}
+
 fn apply_sdk_step(id: &str, step: usize, member: Option<usize>) -> reference::Result<()> {
-    apply_sdk_members(id, step, member, edit_model::sdk_step(id, step)?)
+    apply_sdk_members(id, step, member, sdk_edit_model::sdk_step(id, step)?)
 }
 
 fn apply_sdk_members(
     id: &str,
     step: usize,
     member: Option<usize>,
-    edits: Vec<edit_model::SdkSplice>,
+    edits: Vec<sdk_edit_model::SdkSplice>,
 ) -> reference::Result<()> {
     use reference::workspace_common::{self as common, EntryKind};
     if step == 0 {
@@ -354,7 +427,7 @@ fn read_prepared(path: &Path) -> reference::Result<Vec<u8>> {
 }
 
 fn prepare_sdk_step(id: &str, step: usize, folder: &Path) -> reference::Result<()> {
-    prepare_step_payloads(id, None, step, folder, edit_model::sdk_step(id, step)?)
+    prepare_step_payloads(id, None, step, folder, sdk_edit_model::sdk_step(id, step)?)
 }
 
 fn prepare_context_step(id: &str, role: &str, step: usize, folder: &Path) -> reference::Result<()> {
@@ -363,7 +436,7 @@ fn prepare_context_step(id: &str, role: &str, step: usize, folder: &Path) -> ref
         Some(role),
         step,
         folder,
-        edit_model::context_sdk_step(id, role, step)?,
+        sdk_edit_model::context_sdk_step(id, role, step)?,
     )
 }
 
@@ -372,7 +445,7 @@ fn prepare_step_payloads(
     role: Option<&str>,
     step: usize,
     folder: &Path,
-    edits: Vec<edit_model::SdkSplice>,
+    edits: Vec<sdk_edit_model::SdkSplice>,
 ) -> reference::Result<()> {
     use std::fmt::Write;
     if edits.is_empty() {
@@ -550,7 +623,7 @@ fn apply_prepared_step(
         metadata.mode = mode;
         metadata.mtime_seconds = seconds;
         metadata.mtime_nanoseconds = nanos;
-        edits.push(edit_model::SdkSplice {
+        edits.push(sdk_edit_model::SdkSplice {
             edit: SdkEdit {
                 path: fields[1].to_owned(),
                 start,
@@ -575,6 +648,9 @@ fn apply_prepared_step(
 fn main() -> reference::Result<()> {
     let args: Vec<String> = std::env::args().collect();
     match args.as_slice() {
+        [_, mode, step, helper] if mode == "apply-boundary-alias" => {
+            apply_boundary_alias(step.parse()?, Path::new(helper))
+        }
         [_, mode, id] if mode == "apply" => apply(id),
         [_, mode, id] if mode == "apply-workspace" => apply_workspace(id),
         [_, mode, id, step] if mode == "apply-sdk-step" => apply_sdk_step(id, step.parse()?, None),
@@ -623,6 +699,9 @@ fn main() -> reference::Result<()> {
                 println!("{key}={value}");
             }
             Ok(())
+        }
+        [_, mode, id, step, custody] if mode == "verify" => {
+            verify_boundary_alias(id, step.parse()?, Path::new(custody))
         }
         _ => Err("apply CASE | apply-workspace CASE | apply-sdk-step CASE STEP [MEMBER] | prepare-sdk-step CASE STEP FRESH_FOLDER | apply-sdk-step-prepared CASE STEP DESCRIPTOR SHA256 [MEMBER] | verify CASE STEP | verify-manifest MANIFEST required".into()),
     }

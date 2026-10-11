@@ -1279,7 +1279,7 @@
       ],
       "cache_class": "C",
       "oracle": {
-        "scope": "Independent original recipe and exact operation algebra; initial plus every acknowledged retained state from the measured Store, complete paths/kinds/required original metadata/full bytes; current authenticated inode census, exact exclusive 131072-byte WholeFile/Chunked classification and complete mapping totals/profile; all original Commit IDs/parents/head and clean terminal mount",
+        "scope": "Independent original recipe and exact operation algebra; initial plus every acknowledged retained state from the measured Store, complete paths/kinds/required original metadata/full bytes; current authenticated inode census, exact exclusive 131072-byte WholeFile/Chunked classification and complete mapping totals/profile; all original Commit IDs/parents/head and clean terminal mount; automatic state5 data parent mtime qualified by independent native replay and measured helper clock envelope, then exact live-to-persisted/fresh-mount nanosecond custody",
         "roots": "every initial/published root, allowing repeated content identities",
         "omissions": "retired SmallContent/schema10 canonical IDs and host data-plane resource domains do not transfer; no physical-encoding quota or comparison claim; no proof substitution from regenerated history",
         "alias_relation": "States0\u20134 share target serial/content and nlink2; state5 target separate/nlink1, alias keeps pre-replacement serial/content and nlink1; temporary absent after Commit"
@@ -1313,7 +1313,11 @@
         },
         {
           "what": "Frozen ordinary alias helper remains unchanged, including its checked live inode/length/tail/metadata observations and mounted-file synchronization calls; no parent-directory normalization",
-          "why": "Existing ordinary workload must not be changed to fit a generic fixed-metadata oracle; any mandatory parent-mtime incompatibility remains an explicit failed/applicability distinction."
+          "why": "Prospective owner-authorized correction models the one automatic parent mtime using independently qualified native replay and measured helper custody; original failed receipts remain. Every other metadata field stays exact."
+        },
+        {
+          "what": "Final-step read-only custody wrapper adds two parent metadata requests, two realtime observations and one unchanged-helper child launch; all are paid in the ordinary command timer and request counts",
+          "why": "Owner-authorized automatic timestamp correction needs exact prepublication custody; no parent-directory normalization or measured work moved into setup."
         }
       ],
       "registry": {
@@ -1345,7 +1349,7 @@
           "docs/roadmap/0.1/0.1.6/fixtures.md": "ae374c6c98850dce7e6487d8b1928c767299305b6bb09a098297183e34996ba3"
         },
         "operations": "Exact frozen boundary::operations() order; overwrite offsets0/2048 and256-byte replacement; roundtrip appends/removes1B; alias invokes unchanged v016-boundary-alias seed1 step1\u20135; final atomic replacement is131072B despite same-length prose, leaving131071B alias. One Commit after each operation.",
-        "oracle_coverage": "Focused original contract requires all retained states. Generic old executable verifies final and alias pre-replacement root; current prospective proof covers all actual acknowledged roots with complete independent bytes/classes. Required original metadata checks remain; parent-mtime incompatibility cannot be erased through mutation or relaxed oracle."
+        "oracle_coverage": "Focused original contract requires all retained states. Generic old executable verifies final and alias pre-replacement root; current proof covers every actual acknowledged root with complete independent bytes/classes. The parent-mtime incompatibility in historical fixed-epoch receipts stays failed; prospective native replay plus clock-qualified measured custody fixes only automatic state5 data mtime, retaining exact persisted/fresh-mounted nanosecond equality and all other metadata."
       },
       "expected_commit": "Committed",
       "ordinary_sdk_edits": false,
@@ -1457,6 +1461,17 @@
         "all_paid_backing_metadata_sqlite_phase_evidence": "UNAVAILABLE",
         "independent_own_write_pre_Commit_coldness": "UNAVAILABLE",
         "numeric_result": "INELIGIBLE; no changed cache treatment"
+      },
+      "automatic_parent_mtime": {
+        "schema": "original-boundary-parent-mtime-v1",
+        "path": "data",
+        "step": 5,
+        "native_precision_allowance_ns": 1000000000,
+        "max_operation_ns": 60000000000,
+        "validation": "observed nanoseconds between started realtime minus native precision allowance and finished realtime; initial parent epoch exact; canonical unique case/path/step custody; realtime regression refuses",
+        "publication": "fresh mounted and persisted selected state5 must equal measured live parent mtime at exact nanoseconds; other metadata and all independent payload/class proofs unchanged",
+        "native_qualification": "unchanged helper independently replayed once per step on an owned native tree; own bracket and exact timestamp custody; timestamp is not reused as a prediction of the later mounted execution",
+        "authority": "owner expanded all-failed-case fixes authorization; comparison rule decided by agent, pending owner review"
       }
     }
   ]

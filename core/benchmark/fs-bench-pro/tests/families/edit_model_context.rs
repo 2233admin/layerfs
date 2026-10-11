@@ -5,9 +5,12 @@ mod edit_model;
 #[allow(dead_code)]
 #[path = "../../../../../benchmark/fs-bench-pro/workload/main.rs"]
 mod reference;
+#[path = "../../engine/recipes/sdk_edit_model.rs"]
+mod sdk_edit_model;
 
-use edit_model::{context_entries, context_m1_state, context_sdk_step, ContextCreatedModes};
+use edit_model::{context_entries, context_m1_state, ContextCreatedModes};
 use reference::workspace_common::{Content, Entry, EntryKind};
+use sdk_edit_model::context_sdk_step;
 use std::{fs, path::Path, process::Command};
 
 const BRANCH: &str = "v016-branch-mixed-100mb-5000-k10-v1";
@@ -92,7 +95,7 @@ fn context_role_cycles_tags_sdk_order_and_original_selective_ranges_are_exact() 
             ),
             (1_048_320, 1_048_576, 256)
         );
-        let old = edit_model::sdk_step(SEQUENTIAL, 7).unwrap();
+        let old = sdk_edit_model::sdk_step(SEQUENTIAL, 7).unwrap();
         assert_eq!(members[1].edit.replacement, old[1].edit.replacement);
         let second = context_m1_state(BRANCH, role, 2, None).unwrap();
         assert_eq!(
@@ -469,7 +472,7 @@ fn context_legacy_prepared_header_and_two_ordered_members_remain_compatible() {
     let folder = Path::new(&std::env::var("LAYERFS_CONTEXT_TEST_OUTPUT").unwrap())
         .with_extension("legacy-members");
     fs::create_dir(&folder).unwrap();
-    let members = edit_model::sdk_step(SEQUENTIAL, 7).unwrap();
+    let members = sdk_edit_model::sdk_step(SEQUENTIAL, 7).unwrap();
     let before = edit_model::entries(SEQUENTIAL, 6).unwrap();
     for selected in &members {
         let target = folder.join(&selected.edit.path);

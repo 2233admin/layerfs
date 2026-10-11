@@ -5,6 +5,7 @@ mod edit_model;
 #[allow(dead_code)]
 #[path = "../../../../../benchmark/fs-bench-pro/workload/main.rs"]
 mod reference;
+mod sdk_edit_model;
 use std::os::unix::fs::MetadataExt;
 use std::{
     collections::BTreeMap,
@@ -441,7 +442,7 @@ fn main() -> reference::Result<()> {
         entries
     };
     if mode == "fixture" {
-        if let Some(wanted) = edit_model::fixture_sha256(id)? {
+        if let Some(wanted) = sdk_edit_model::fixture_sha256(id)? {
             if edit_model::original_fixture_hash(&entries)? != wanted {
                 return Err("original SDK fixture digest differs from frozen seal".into());
             }

@@ -4,6 +4,12 @@
 
 This independent harness workspace uses only existing first-party dependencies.
 It is exploratory, not admission eligible, and has no product source membership.
+The runtime imports the shared [semantic-state model](../engine/recipes/edit_model.rs)
+for independent verification. Ordinary writers and native fixture authors
+import [SDK edit plans](../engine/recipes/sdk_edit_model.rs) for ordered splice plans and fixture
+SHA256 requirements, reusing that same semantic model and frozen definitions.
+The shared builder routes remain active in the writer, fixture and external
+recipe tests; runtime verification compiles its own required model scope.
 The lead runs every build or invocation under the checkout lock and a declared
 wall stop. The harness performs one attempted operation and retains a container
 on original failure. It never removes containers, volumes, fixtures or evidence.

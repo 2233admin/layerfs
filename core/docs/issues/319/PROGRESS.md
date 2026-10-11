@@ -715,3 +715,120 @@ no new product path, dependency or proof relaxation. Syntax, formatting, guard
 and whitespace checked. Decided by agent, pending owner review: use this
 narrow compilation reuse; failures are retained, never converted into a seal.
 Production LOC:81727 ->81727 (delta +0), exact pinned active-core snapshots.
+
+### Phase 6 selected evidence at registration identity
+
+[Original selected receipts and bounded calls](checks/phase6-selected.json)
+are bound to clean `8dd3b184c`, tag `p319b6`, and the nine-binary build seal.
+M1 mixed100 K10, scattered CDC500 and exact reuse500 have functional/proof
+PASS, with overall INELIGIBLE as their receipts require. Requests/jobs/SQL:
+M1 2699/20449/110595; exact reuse7014/46769/282013; host CDC daemon counts
+UNAVAILABLE, not zero. D3 proof wall is43642502084 ns for scattered CDC and
+43187727126 ns for exact reuse, within the new75000/89000 ms declarations.
+These raw proof observations are not a speed comparison.
+
+The capped500 insert command and Commit now complete, but independent graph
+proof FAILs `persisted unchanged payload/source-offset transcript differs`:
+8011 requests,8455 owner jobs,102318 statements; Gone/KNOWN_STOP. The stricter
+mapping check exposes copied ragged edges still represented as replacement.
+The hotset500 run ends in FAIL at its unchanged cumulative120000 ms execution
+watchdog, with377 acknowledged Commits and proofNOT_RUN. Its300 s D5 call
+returns in130.64 s; this is a retained receipt, never an unchanged rerun.
+Branch500MB K100 preparation PASS in125.76 s under D5; no runtime sample was
+selected at this registration. All owned original/test resources were cleaned;
+protected services were untouched. Preparation and run used the same commit.
+
+Aggregate harness tests ran326 in25.29 s:2 failures,4 errors,3 skips. One error
+was the missing FSB_CONTEXT_NATIVE prerequisite; its corrected8-test module
+passes. Reliability CLI has an import-order package-attribute double defect:
+its isolated5 tests pass, while aggregate remains FAIL until the new regression
+and repair. No aggregate PASS is claimed.
+
+### Owner-expanded remaining-failures work
+
+After the selected capped failure, the owner explicitly authorized the retention
+repair, then authorized subagent research and fixes for all failed cases and
+prospectively larger budgets for extreme cases. This supersedes the phase6-only
+product restriction for correctness work. It does not erase existing receipts,
+turn NOT_APPLICABLE into PASS, or qualify interference/cache state. Decided by
+agent, pending owner review: repair bounded captured edit-edge authentication,
+validate exact automatic alias timestamp custody after independent native
+qualification, and extend only the named500-history cumulative execution
+allowance from120000 to210000 ms. Ordinary individual operations remain120000
+ms; reporting target15000 ms and independent proof limits remain unchanged.
+The environment action remains unticked, so phase8 is still gated. Commit Begin
+Busy and original concurrency-overlap proofs remain in force.
+
+### Owner concurrency clarification, after expanded repair authorization
+
+The owner now requires (1) at most one ongoing Commit per Workspace and
+(2) parallel Workspaces with concurrent Commits that do not conflict or mix
+state. Decided by agent, pending owner review: preserve the per-Workspace
+admission guard and original overlapping-public-Commit benchmark proof; research
+bounded before-effect admission of short global Store write transactions across
+connections/processes. No failed Commit or transaction is replayed. The interim
+branch-only harness serialization proposal is withdrawn before sampling because
+the latest direction selects actual concurrent product Commits. Historical D1
+Busy failures remain unchanged; external/uncoordinated writer refusal and exact
+unknown custody still require proofs. This correctness work is not a Commit
+speed optimization and does not qualify the gated clean-environment run.
+
+During harness formatting, recursive rustfmt followed shared reference modules
+and changed six frozen workload files. The changed bytes were verified exactly
+against rustfmt1.85.1 of HEAD with skip_children=true, then restored to exact HEAD;
+no frozen-format change enters a commit. Future harness formatting skips children.
+The resulting source-pin refusal is retained and its corrected owning check will
+run once. One root custody unit invocation omitted the wall wrapper (2PASS in
+0.008s); this procedural gap is recorded, and later invocations remain bounded.
+
+### Expanded repair verification before final catalogue selection
+
+Alias custody retains the original workload and independently qualifies the one
+native automatic parent-mtime field. The observation is bounded to the original
+epoch, step5, path data and operation clock envelope; later native and persisted
+publication compare its exact nanoseconds. All other model fields remain exact.
+The SDK-only model builders moved verbatim to an explicitly consumed helper
+module, eliminating six dead-code compiler warnings without modifying frozen
+reference sources. Native/parser qualification and 12 SDK model tests PASS.
+Runtime binary build/check PASS; warning-denying runtime Clippy remains FAIL on
+retained frozen and unrelated runtime lints. No compiler suppression is added.
+See the alias-custody and sdk-model check artifacts; earlier failures remain.
+
+A failing exact payload/source-offset regression preceded bounded captured-edge
+authentication. It trims at most64KiB per affected edge, only growth scripts with
+reference pieces and changing geometry. Six new cases plus21 related tests
+PASS. Existing delete counts remain identical; no schema/accounting change.
+The new edge counters are constructor observations, not fields of the current
+native numeric telemetry schema; no large-case telemetry count is invented.
+
+Phase7 count-first evidence: 2,050 creates use three authoritative1,024-serial
+reservations, unchanged overall; preparing the first range before Ready moves
+one reservation out of creates, leaving two refills. Two Ready mounts each
+reserve once and their first creates make zero Store reservations even with a
+raw SQLite writer held. Initial Attach Busy refuses before native mount. Eight
+inclusive reservation transaction observations have maximum46,750ns; this is
+not an exclusive physical lock maximum. Initial admission changes ordering,
+not range size, low-water256, retry policy or Commit Begin's raw SQLite Busy.
+Four serial admission regressions PASS after the retained red failure.
+
+The latest owner concurrency rule separately authorizes cooperative short writer
+admission. Linux FIFO-local and same-inode flock admission precede one SQL
+attempt under a shared two-second bound; no whole Commit/Save lock or failed
+SQL replay. Cross-process admission is bounded but not FIFO. macOS retains
+cross-session SQLite Busy because its advisory lock conflicts with SQLite.
+Linux eight and macOS six persistence tests PASS. The final native regression
+has both Workspaces concurrently Committing, typed duplicate Busy/InFlight,
+no ACK before admission release, distinct exact committed models and exact
+isolated live views. It PASSes; an invocation missing --fuse first failed before
+mount and is retained as a procedural failure. Workspace/daemon all-target
+Clippy PASS; persistence all-target Clippy PASS on both tested platforms.
+Decisions on queue/deadline and scope are by agent, pending owner review.
+
+Owner E1 prospective allowances: five500-step histories cumulative execution
+120000->210000ms; the named exhaustive500MiB complete invocation120000->275000ms,
+leaving13s inside the288s driver allocation for return/custody. Its original
+300000/310000ms proof declaration is retained. Ordinary individual filesystem
+and control operations, reporting targets, and smaller case limits are unchanged.
+No sample used the initially proposed300000ms owner ceiling; it was revised
+before collection. Prior hotset failure remains failed. Native final sampling
+waits for clean committed source, final reliability review and nine-binary seal.

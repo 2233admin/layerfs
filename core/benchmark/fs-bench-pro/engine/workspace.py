@@ -28,6 +28,46 @@ LARGE_CHECK_CASES = frozenset(("dedup-cdc-scattered-500", "dedup-workspace-exact
     "store-footprint-unique-100000", "store-footprint-metadata-cardinality-100000"))
 
 
+def alias_parent_custody(case, prepared, command, output):
+    """Bind the independently qualified single automatic alias field."""
+    declaration = case.get("automatic_parent_mtime")
+    expected = {"schema":"original-boundary-parent-mtime-v1", "path":"data", "step":5,
+                "native_precision_allowance_ns":1000000000, "max_operation_ns":60000000000,
+                "publication":"exact observed nanoseconds on fresh native and persisted trees"}
+    if (case.get("v016_case") != "v016-boundary-alias-roundtrip-v1"
+            or command["fields"].get("exit_code") != "0"
+            or not isinstance(declaration,dict) or any(declaration.get(k) != v for k,v in expected.items() if k != "publication")
+            or prepared.get("native_verification",{}).get("automatic-parent-mtime",{}).get("verification_status") != "pass"):
+        raise ValueError("original alias automatic-time declaration/native qualification differs")
+    text = Path(command["fields"]["stdout"]).read_text()
+    marker = expected["schema"] + "\n"
+    if text.count(marker) != 1:
+        raise ValueError("exactly one alias parent custody observation required")
+    body = text[text.index(marker):]
+    lines = body.splitlines()
+    if (len(lines) != 8 or not body.endswith("\n") or lines[:4] !=
+            [expected["schema"],"case\tv016-boundary-alias-roundtrip-v1","step\t5","path\tdata"]):
+        raise ValueError("alias parent custody fixed-domain rows differ")
+    values=[]
+    for name,line in zip(("initial","started","finished","observed"),lines[4:]):
+        fields=line.split("\t")
+        if len(fields)!=3 or fields[0]!=name:
+            raise ValueError("alias custody timestamp row differs")
+        seconds,nanos=map(int,fields[1:])
+        if seconds<0 or not 0<=nanos<1000000000 or line!=f"{name}\t{seconds}\t{nanos}":
+            raise ValueError("alias custody timestamp domain/canonical form differs")
+        values.append(seconds*1000000000+nanos)
+    initial,start,end,observed=values
+    if (initial!=1700000000000000000 or observed==initial or end<start
+            or end-start>60000000000 or observed<start-1000000000 or observed>end):
+        raise ValueError("alias custody original epoch/clock envelope differs")
+    path=script(output,"boundary-parent-mtime.tsv",body)
+    return {"index":5,"path":str(path),"sha256":identity.sha256(path),
+            "helper_stdout":command["fields"]["stdout"],
+            "helper_stdout_sha256":identity.sha256(command["fields"]["stdout"]),
+            "scope":"only alias data parent automatic mtime; all publication comparisons exact"}
+
+
 def import_proof_deadlines(case, charged_ns=0):
     budget = case["budget"]
     reserve = budget.get("cleanup_reserve_ms", case.get("original_resource_guards", {}).get("verification_cleanup_reserve_ms", 4000))
@@ -1150,6 +1190,9 @@ def one_family_case(family, case, prepared_folder, build_folder, output, *, prep
                         "helper_stdout":command["fields"]["stdout"],"helper_stdout_sha256":identity.sha256(command["fields"]["stdout"])}
                 created_modes,final_modes = history_observer(clock,row,f"original-created-modes-{index}",capture_modes)
                 row.setdefault("created_mode_prefixes",[]).append(final_modes)
+            if case.get("automatic_parent_mtime") and index == 5:
+                row["automatic_parent_mtime_custody"] = history_observer(clock,row,"original-alias-parent-custody",
+                    lambda: alias_parent_custody(case,prepared,command,output))
             if footprint or case.get("original_ordinary_guards"):
                 row["ordinary_resource_guards"]["steps"].append(history_observer(clock, row, f"ordinary-before-commit-{index}",
                     lambda: ordinary_resource_guard(runtime, build, output, f"ordinary-resources-before-commit-{index}", row["ordinary_resource_guards"]["before"],operation_deadline(phase_stop,15)-time.monotonic())))
@@ -1236,6 +1279,10 @@ def one_family_case(family, case, prepared_folder, build_folder, output, *, prep
                 raise ValueError("original measured created-mode observations unavailable")
             receipts.command([*docker,"cp",final_modes["path"],runtime.container+":/code/history/observed-final-modes.tsv"],output,"native-created-modes-stage",proof_seconds(15))
             verify_body = "/bin/bash /code/workload.sh verify-step " + shlex.quote(case["v016_case"])+f" {case['history_schedule']['commits']} /code/history/observed-final-modes.tsv"
+        elif case.get("automatic_parent_mtime"):
+            custody=row["automatic_parent_mtime_custody"]
+            receipts.command([*docker,"cp",custody["path"],runtime.container+":/code/history/observed-parent-mtime.tsv"],output,"native-alias-custody-stage",proof_seconds(15))
+            verify_body="/bin/bash /code/workload.sh verify "+shlex.quote(case["v016_case"])+" 5 /code/history/observed-parent-mtime.tsv"
         elif footprint:
             boundary=footprint_boundary(prepared)
             row["footprint_boundary"]=boundary
@@ -1249,6 +1296,8 @@ def one_family_case(family, case, prepared_folder, build_folder, output, *, prep
         proof = verify_native_receipt(case, verified, row.get("footprint_boundary"))
         if case.get("m1_schedule") and proof["created_modes_digest"]!=final_modes["sha256"]:
             raise ValueError("native selective proof did not bind exact measured mode observations")
+        if case.get("automatic_parent_mtime") and proof.get("parent_mtime_custody_sha256") != row["automatic_parent_mtime_custody"]["sha256"]:
+            raise ValueError("native alias proof differs from exact measured timestamp custody")
         if case.get("git_workflow"):
             row["git_semantics"] = verify_git_semantic_fields(proof, prepared)
         runtime.send("unmount", verify_mount, deadline=time.monotonic() + (proof_seconds(15, cleanup=True) if proof_deadlines else native_seconds(15)))
@@ -1319,6 +1368,8 @@ def one_family_case(family, case, prepared_folder, build_folder, output, *, prep
             graph_args.extend(["--history-file", str(transcript)])
             if case.get("m1_schedule"):
                 graph_args.extend(["--source-copy",final_modes["path"]])
+        if case.get("automatic_parent_mtime"):
+            graph_args.extend(["--source-copy",row["automatic_parent_mtime_custody"]["path"]])
         if case.get("git_workflow"):
             graph_args.extend(["--source-copy", row["git_precommit"]["path"]])
         if footprint:
@@ -1377,6 +1428,8 @@ def one_family_case(family, case, prepared_folder, build_folder, output, *, prep
             proof_events = [item for item in events if item["event"] == ("store_footprint_verified" if footprint else "workspace_verified")]
             if len(proof_events) != 1 or events[-1]["event"] != "finished" or proof_events[0]["fields"]["final_root" if footprint else "root"] != committed["fields"]["root"]:
                 raise ValueError("original persisted root proof differs from exact acknowledged Commit root")
+            if case.get("automatic_parent_mtime") and proof_events[0]["fields"].get("parent_mtime_custody_sha256") != row["automatic_parent_mtime_custody"]["sha256"]:
+                raise ValueError("persisted alias proof differs from exact measured timestamp custody")
             if footprint:
                 fields=proof_events[0]["fields"]
                 if any(fields.get(key)!=boundary[expected] for key,expected in (("selected_path","path"),("boundary_start","start"),("boundary_end","end"),("file_size","file_size"),("boundary_sha256","sha256"))):

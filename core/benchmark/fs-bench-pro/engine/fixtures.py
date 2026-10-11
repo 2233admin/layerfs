@@ -7,6 +7,7 @@ from pathlib import Path, PurePosixPath
 import shlex
 import shutil
 import subprocess
+import tempfile
 import uuid
 
 from . import identity, project, receipts
@@ -1585,6 +1586,8 @@ def prepare_recipe_history(case, folder, build):
     # Initial-tree qualification is untimed setup, not an extra M1 selected
     # retained-root payload proof. The actual transcript still binds genesis.
     check(source, 0)
+    if case.get("automatic_parent_mtime"):
+        native["automatic-parent-mtime"] = qualify_alias_parent(case, folder, build)
     for step in steps:
         if step == 0:
             root, summary = source, fixture
@@ -1641,6 +1644,47 @@ def prepare_recipe_history(case, folder, build):
         "performance_samples": 0,
         "scope": "only declared native checkpoints; M1 materialization is not actual created-mode or automatic-metadata proof; every acknowledgement is checked separately"})
     return fixture, expectation, native, history, None
+
+
+def qualify_alias_parent(case, folder, build):
+    """Replay the unchanged helper on one independent native tree, then remove it.
+
+    The algebraic manifests remain deterministic. Native replay qualifies only
+    the automatic-field rule; its timestamp never predicts the measured run.
+    """
+    if case["v016_case"] != "v016-boundary-alias-roundtrip-v1":
+        raise ValueError("automatic parent mtime is only the original alias case")
+    workload, edit, fixture = (build["binaries"][key] for key in
+                              ("workload-host", "edit-host", "workspace-writer"))
+    with tempfile.TemporaryDirectory(prefix="alias-native-replay-", dir=folder) as temporary:
+        root = Path(temporary) / "tree"
+        receipts.command([fixture["path"], "fixture", case["v016_case"], str(root)],
+                         folder, "alias-native-replay-fixture", 15)
+        for step in range(1, 5):
+            receipts.command([workload["path"], "v016-boundary-alias", "1", str(step)],
+                             folder, f"alias-native-replay-step-{step}", 15, cwd=root)
+            receipts.command([edit["path"], "verify", case["v016_case"], str(step)],
+                             folder, f"alias-native-replay-verify-{step}", 15, cwd=root)
+        applied = receipts.command([edit["path"], "apply-boundary-alias", "5", workload["path"]],
+                                   folder, "alias-native-replay-step-5", 15, cwd=root)
+        text = Path(applied["stdout"]).read_text()
+        marker = "original-boundary-parent-mtime-v1\n"
+        if text.count(marker) != 1:
+            raise ValueError("independent native alias custody missing or duplicate")
+        body = marker + text.split(marker, 1)[1]
+        custody = folder / "alias-native-parent-mtime.tsv"
+        with custody.open("x") as output:
+            output.write(body)
+        checked = receipts.command([edit["path"], "verify", case["v016_case"], "5", str(custody)],
+                                   folder, "alias-native-replay-verify-5", 15, cwd=root)
+        proof = dict(line.split("=", 1) for line in Path(checked["stdout"]).read_text().splitlines())
+        if proof.get("verification_status") != "pass" or proof.get("parent_mtime_custody_sha256") != identity.sha256(custody):
+            raise ValueError("independent native alias automatic timestamp qualification refused")
+    return {**proof, "custody": str(custody), "custody_sha256": identity.sha256(custody),
+            "helper_stdout_sha256": identity.sha256(applied["stdout"]),
+            "qualification_stdout_sha256": identity.sha256(checked["stdout"]),
+            "helper_sha256": workload["sha256"], "observer_sha256": edit["sha256"],
+            "scope": "unchanged native helper once per step; only state5 data mtime is automatic; exact other metadata, bytes and link classes; replay tree removed"}
 
 
 def sdk_step_indices(case):
