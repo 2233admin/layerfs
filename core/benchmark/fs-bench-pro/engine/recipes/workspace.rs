@@ -293,36 +293,6 @@ fn prepare_context_discard(id: &str, folder: &Path) -> reference::Result<()> {
 
 fn main() -> reference::Result<()> {
     let args: Vec<_> = std::env::args().collect();
-    if let [_, mode, id, root] = args.as_slice() {
-        if matches!(
-            mode.as_str(),
-            "materialize-reliability" | "verify-reliability-native"
-        ) {
-            let case = reference::workspace_reliability::resolve(id)?;
-            if !matches!(case.kind, "corrupt-descendant" | "missing-descendant") {
-                return Err("only original integrity reliability fixtures are admitted".into());
-            }
-            let entries = reference::workspace_reliability::fixture_for(&case)?;
-            let root = Path::new(root);
-            let manifest = reference::workspace_common::manifest(&entries)?;
-            if mode == "materialize-reliability" {
-                if root.exists() || root.with_extension("manifest.tsv").exists() {
-                    return Err("fresh reliability fixture and manifest required".into());
-                }
-                reference::workspace_common::create_fixture(root, &entries)?;
-                use std::io::Write;
-                fs::OpenOptions::new()
-                    .write(true)
-                    .create_new(true)
-                    .open(root.with_extension("manifest.tsv"))?
-                    .write_all(manifest.as_bytes())?;
-            }
-            let proof = reference::workspace_common::verify_native(root, &entries)?;
-            println!("{{\"schema\":\"fs-bench-pro-native-reliability-fixture-v1\",\"status\":\"PASS\",\"case\":\"{id}\",\"seed\":1,\"entries\":{},\"logical_bytes\":{},\"manifest_sha256\":\"{}\",\"verification_status\":\"pass\"}}",
-                entries.len(), proof["logical_bytes"], reference::sdk_edit_common::sha256_hex(manifest.as_bytes()));
-            return Ok(());
-        }
-    }
     if let [_, mode, id, step, root] = args.as_slice() {
         if mode == "import-qualified" {
             let step = step.parse::<usize>()?;

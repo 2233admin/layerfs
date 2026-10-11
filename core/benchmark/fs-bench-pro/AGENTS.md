@@ -8,15 +8,17 @@ Read [root instructions](../../../AGENTS.md), [core instructions](../../AGENTS.m
 [measurement workflow](../../../docs/general/agent-measurement-policy.md),
 [benchmark rules](../../../docs/general/benchmark_rules.md) and
 [report template](../../../benchmark_agent_report.md) before changing a harness
-or collecting a sample. The owner handoff selects the 25 frozen root families,
-in the spec's stage and batch order. No optimization or new family is selected.
+or collecting a sample. The original owner handoff selected the 25 frozen root families,
+in the spec's stage and batch order. Issue319's later owner direction selects repair/optimization and retires
+`workspace_reliability`:24 active families/245 cases; repository_history3 are
+set aside, leaving242 selected cases. Historical records remain unchanged.
 The [rollout ledger](../../docs/benchmark/fs-bench-pro/ROLLOUT-LEDGER.md) records
 implementation, checks, decisions, failures and outstanding work.
 
 ## Active route and profiles
 
 The workload benchmark's single entry point is `bench.py`, implemented in the
-rollout. `families/` contains only the 25 original-name family directories;
+rollout. `families/` contains the 24 active original-name family directories;
 each case starts pending and needs a committed definition, parity review,
 fixture and independent oracle before one sample. The engine owns machinery
 once. The moved `runtime/` is the ordinary SDK/Sandbox control driver from the

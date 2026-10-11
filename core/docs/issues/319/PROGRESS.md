@@ -1071,3 +1071,37 @@ absent (retired R9c; last counted65,417 at tree498dd1917812). Committed-tree
 confirmation follows each commit. Existing38 containers/413 volumes remain
 untouched; this branch's named check containers were removed after each run.
 Phase10 complete; no benchmark has been sampled on this branch yet.
+
+## Phase11 — reliability family retirement, 2026-10-12
+
+Phase10 source settlement committed at `e93a02508`; public comment
+[phase10](https://github.com/Ephemeral-AI-Lab/layerfs/issues/319#issuecomment-6113316151).
+[Retirement operands and all28 IDs](checks/phase11-retirement.json) preserve the
+owner reason and prior applicability gaps. The family definition/workload,
+engine route, integrity fixture branches, dedicated runtime module and their
+tests are removed together. Every other family definition stays byte-identical.
+The frozen root catalogue and all old receipts/baseline CSVs stay unchanged.
+`repository_history`3 remain selectable and NOT_RUN — set aside by owner.
+Registry target273 ->245, selected active set242. This is harness retirement;
+production LOC stays82335. Registry/harness verification follows before commit.
+
+Phase11 verification at this harness source: [check operands](checks/phase11-checks.json).
+Registry3PASS:245 unique case IDs/24 families; repository_history3 selectable.
+Other24 family definitions, frozen root definitions, historical receipts and
+all baseline CSVs are byte-unchanged. Engine310-test invocation retained3
+failures/15 subtest errors from7 unique Init-install tests because this command
+omitted `LAYERFS_CONSTRUCTION_WORKERS=1`; all7 corrected-environment tests PASS
+without source change. Already passing tests are not rerun. Native import1PASS
+resolves its compiler-only prerequisite skip. Public census/staging prerequisites
+remain explicit skips. Native splice8 are pending a clean nine-binary seal and
+will run once before phase12 samples; no fabricated engine-wide PASS.
+
+Host native helper builds PASS. Runtime all-target Clippy `-D warnings` remains
+FAIL on the unchanged frozen/unrelated lints already recorded in phase6; no
+suppression or frozen-source edit is introduced. The changed production packages'
+phase10 host/Linux all-target Clippy PASS remains valid; this retirement changes
+no production source. Formatting, boundary and whitespace checked before commit.
+Production LOC:82335 ->82335 (delta+0), exact parent/staged snapshots via the
+pinned counter; reference absent (retired R9c; last counted65,417 at tree498dd1917812).
+This single harness commit contains the complete family retirement. Phase11's
+engine exit and public comment follow the eight pending sealed-build tests.

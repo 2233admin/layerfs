@@ -71,7 +71,7 @@ def main(argv=None):
     if args.command == "run":
         from engine import fixtures, identity, project, receipts, workspace
         current = identity.source_identity()
-        if args.family not in ("cluster-two/cells", "init_namespace", "workspace_reliability", *fixtures.IMPORT_FAMILIES, *fixtures.WORKSPACE_FAMILIES):
+        if args.family not in ("cluster-two/cells", "init_namespace", *fixtures.IMPORT_FAMILIES, *fixtures.WORKSPACE_FAMILIES):
             parser.error("family workload runner is not implemented yet; all workload cases remain visible in list")
         registered = ([{"id": cell, "cache_class": "B", "v016_case": ""} for cell in fixtures.CELL_RECIPES]
             if args.family == "cluster-two/cells" else json.loads((HERE / "families" / args.family / "family.json").read_text())["cases"])
@@ -100,15 +100,6 @@ def main(argv=None):
         failed = False
         for cell in selected:
             case = next(item for item in registered if item["id"] == cell)
-            if case.get("status") == "not-applicable":
-                reason = case.get("not_applicable_reason", case.get("reason"))
-                if args.family != "workspace_reliability" or not reason:
-                    raise ValueError("source-reviewed not-applicable case reason required")
-                from engine import reliability
-                reliability.admit_sources(case)
-                print(json.dumps({"case": cell, "status": "NOT_APPLICABLE", "reason": reason,
-                                  "samples": 0, "verification_attempts": 0}))
-                continue
             recipe = fixtures.CELL_RECIPES[cell] if args.family == "cluster-two/cells" else case["fixture"]["recipe"]
             prepared = args.prepared if (args.prepared / "prepared.json").exists() else args.prepared / recipe
             if args.family == "cluster-two/cells":
@@ -117,9 +108,6 @@ def main(argv=None):
                 result = project.one_init(case, prepared, args.build, output / cell, family=args.family)
             elif args.family=="repository_history":
                 result = project.one_repository_history(case,prepared,args.build,output/cell)
-            elif args.family=="workspace_reliability":
-                from engine import reliability
-                result = reliability.one_case(case, prepared, args.build, output / cell)
             else:
                 result = workspace.one_family_case(args.family, case, prepared, args.build, output / cell)
             proof_only = case.get("proof_only") is True
@@ -129,7 +117,7 @@ def main(argv=None):
                 raise ValueError("verification-only driver requires one proof attempt and no performance sample")
             if result.get("publication_guard"):
                 receipts.acknowledge_guarded(output / cell, result)
-            if args.family in ("workspace_reliability", *fixtures.IMPORT_FAMILIES, *fixtures.WORKSPACE_FAMILIES):
+            if args.family in (*fixtures.IMPORT_FAMILIES, *fixtures.WORKSPACE_FAMILIES):
                 workspace.dispose_family_resources(output / cell, result)
             print(json.dumps({key: result.get(key) for key in ("case", "status", "counts", "cleanup", "container", "original_failure", "evidence")}))
             failed |= ((result.get("proof_status") != "PASS" or result.get("functional_status") != "PASS" or result["status"] == "FAIL")
@@ -149,13 +137,7 @@ def main(argv=None):
         results = []
         for case in selection["cases"]:
             folder = args.run / case["id"]
-            if case.get("status") == "not-applicable" and case["id"] not in recorded:
-                from engine import reliability
-                reliability.validate_case(case)
-                result = {"case": case["id"], "status": "NOT_APPLICABLE",
-                          "reason": case.get("not_applicable_reason", case.get("reason")),
-                          "scope": "source applicability only; zero workload or verifier attempts"}
-            elif selection["family"] in ("init_namespace", "workspace_reliability", *fixtures.IMPORT_FAMILIES, *fixtures.WORKSPACE_FAMILIES) and case["id"] in recorded:
+            if selection["family"] in ("init_namespace", *fixtures.IMPORT_FAMILIES, *fixtures.WORKSPACE_FAMILIES) and case["id"] in recorded:
                 row = recorded[case["id"]]
                 result = {"case": case["id"], "status": row["proof_status"],
                           "scope": "sealed retained independent public-read proof and original evidence hashes", "proof": row.get("verification")}
@@ -174,15 +156,11 @@ def main(argv=None):
         return
     if args.command == "parity":
         from engine import fixtures, project
-        if args.family not in ("init_namespace", "workspace_reliability", *fixtures.IMPORT_FAMILIES, *fixtures.WORKSPACE_FAMILIES):
+        if args.family not in ("init_namespace", *fixtures.IMPORT_FAMILIES, *fixtures.WORKSPACE_FAMILIES):
             parser.error("this family's parity transcription is not implemented yet")
         family = json.loads((HERE / "families" / args.family / "family.json").read_text())
         try:
-            if args.family == "workspace_reliability":
-                from engine import reliability
-                result = reliability.parity(family, args.prepared, args.out, args.build)
-            else:
-                result = (project.parity_namespace(family, args.prepared, args.out) if args.family == "init_namespace"
+            result = (project.parity_namespace(family, args.prepared, args.out) if args.family == "init_namespace"
                       else project.parity_import(family, args.prepared, args.out, args.build) if args.family in fixtures.IMPORT_FAMILIES
                       else project.parity_repository_history(family,args.prepared,args.out,args.build) if args.family=="repository_history"
                       else project.parity_footprint(family,args.prepared,args.out,args.build) if args.family=="store_footprint"
@@ -204,12 +182,7 @@ def main(argv=None):
         if not output.is_relative_to(results.resolve()):
             parser.error("fixture output must be a fresh directory under benchmark-results/fs-bench-pro")
         if args.reuse_producer is None:
-            if args.fixture in ("workspace-corrupt-descendant-compact-v2-proof", "workspace-missing-descendant-compact-v2-proof"):
-                from engine import reliability
-                family, case = fixtures.family_case(args.fixture)
-                result = reliability.prepare(case, output, args.build)
-            else:
-                result = fixtures.prepare(args.fixture, output, args.build)
+            result = fixtures.prepare(args.fixture, output, args.build)
         else:
             family, case = fixtures.family_case(args.fixture)
             if family["family"] != "historical_access":

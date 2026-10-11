@@ -21,15 +21,18 @@ identity = module("identity", BENCH / "engine/identity.py")
 
 
 class Catalogue(unittest.TestCase):
-    def test_every_original_case_and_family_is_present(self):
+    def test_every_active_contract_case_and_family_is_present(self):
         reference = identity.reference_catalogue(ROOT / "core/target/fs-bench-pro-catalogue")
         actual = bench.catalogue()
-        self.assertEqual(len(actual), 273)
+        self.assertEqual(len(actual), 245)
+        self.assertEqual(len({r["id"] for r in actual}), 245)
         self.assertEqual({(r["family"], r["id"]) for r in actual},
-                         {(r["family"], r["case"]) for r in reference})
+                         {(r["family"], r["case"]) for r in reference if r["family"] != "workspace_reliability"})
         families = {p.name for p in (ROOT / "benchmark/fs-bench-pro/families").iterdir() if p.is_dir()}
         self.assertEqual(len(families), 25)
-        self.assertEqual({r["family"] for r in actual}, families)
+        self.assertEqual({r["family"] for r in actual}, families - {"workspace_reliability"})
+        self.assertEqual(len({r["family"] for r in actual}), 24)
+        self.assertEqual(len([r for r in actual if r["family"] == "repository_history"]), 3)
         for row in actual:
             self.assertEqual(row["id"], row["v016_case"])
             self.assertIn(row["status"], ("pending", "ported", "not-applicable"))

@@ -11,7 +11,7 @@ comparison or release gate is selected.
 Stage 0.1 has harvested all 461 released source rows into
 [the reference catalogue](baselines/v0.1.6/README.md). Stage 0.2 has moved the
 working SDK runtime here and separated cluster-one and cluster-two harnesses.
-The catalogue contains all 25 original families and 273 cases. All seven batches
+The first-iteration catalogue contained all 25 original families and 273 cases. All seven batches
 are truthfully closed: 192 functional/verifier/clean-close passes, 50 failed
 outcomes, three actual cases unrun after failed preparation, and 28 complete
 reliability cases not applicable. Source-only reliability parity preserves the
@@ -20,6 +20,15 @@ native or mounted proof. The [iteration completion](../../docs/benchmark/fs-benc
 records every case, failed or unavailable scope, limit miss, fix, decision,
 source pair and production LOC. Raw receipts and claims remain append-only;
 closed results are not authorization to repeat an unchanged sample.
+
+Current issue319 owner direction retires `workspace_reliability` and its28
+cases, including the engine/runtime routes and dedicated tests. The active
+registry has24 families and245 unique cases. All3 `repository_history` cases
+remain selectable and are NOT_RUN — set aside by owner, leaving242 cases for
+the terminal campaign. Historical reliability receipts and baseline CSVs stay
+unchanged. This retirement tests the current contract scope, not performance;
+no failing/slow ordinary case is removed. See the
+[retirement record](../../docs/issues/319/checks/phase11-retirement.json).
 
 Use `bench.py build --out <fresh-results-path>`, then
 `bench.py prepare empty|big64m --build <seal> --out <fresh-results-path>`.
