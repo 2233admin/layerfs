@@ -237,3 +237,49 @@ Recorded results, not failures:
   an in-place rewrite.
 
 No product bug was found before the baseline.
+
+## Phase C — the twelve exact-count cells, tag `b1`, sampled at `d4d29ceb4`
+
+Baseline source for the whole of phase C: commit `d4d29ceb4` (the merge plus
+the phase B tests; production source is the merge's, 81,718 LOC). Build
+sealed once for tag `b1`; the daemon binary's SHA-256 is the same as the one
+built at the merge commit (`0215455c9d57…`). Commits between families change
+only this ledger, the driver copy and generated CSVs.
+
+Every row of phase C is sampled with the interference declared (leftover
+daemon containers of earlier runs share the 4 GB Docker VM), so a completed
+row's status is `INELIGIBLE`, never `PASS`; `functional` and `proof` are the
+receipt's own fields.
+
+| Cell | Original requests / jobs / statements | Iteration 1 | This run | Equal to original | Status / proof / cleanup |
+| --- | --- | --- | --- | --- | --- |
+| C01 | 5002 / 5002 / 44004 | 5002 / 5002 / 44004 | 5002 / 5002 / 44004 | yes | INELIGIBLE / PASS / Gone + KnownStop |
+| C02 | 6002 / 6002 / 46004 | 6002 / 6002 / 46004 | 6002 / 6002 / 46004 | yes | INELIGIBLE / PASS / Gone + KnownStop |
+| C03 | 9022 / 9038 / 102540 | 9022 / 9038 / 102540 | 9022 / 9038 / 102540 | yes | INELIGIBLE / PASS / Gone + KnownStop |
+| C04 | 5342 / 5342 / 42644 | 5342 / 5342 / 42644 | 5342 / 5342 / 42644 | yes | INELIGIBLE / PASS / Gone + KnownStop |
+| C05 | 5890 / 6000 / 46637 | 5890 / 6000 / 46637 | 5890 / 6000 / 46637 | yes | INELIGIBLE / PASS / Gone + KnownStop |
+| C06 | 518 / 518 / 9766 | 518 / 518 / 9766 | 518 / 518 / 9766 | yes | INELIGIBLE / PASS / Gone + KnownStop |
+| C07 | 1551 / 1550 / 23133 | 1551 / 1550 / 23133 | 1551 / 1550 / 23133 | yes | INELIGIBLE / PASS / Gone + KnownStop |
+| C08 | 521 / 521 / 9783 | 521 / 521 / 9783 | 521 / 521 / 9783 | yes | INELIGIBLE / PASS / Gone + KnownStop |
+| C09 | 517 / 517 / 1055 | 517 / 517 / 1055 | 517 / 517 / 1055 | yes | INELIGIBLE / PASS / Gone + KnownStop |
+| C10 | 1548 / 1547 / 14408 | 1547 / 1546 / 14406 | 1547 / 1546 / 14406 | **no** | FAIL / PASS / Gone + KnownStop |
+| C11 | 517 / 517 / 9760 | 517 / 517 / 9760 | 517 / 517 / 9760 | yes | INELIGIBLE / PASS / Gone + KnownStop |
+| C12 | 3436 / 3439 / 24146 | 3436 / 3439 / 24145 | 3436 / 3439 / 24146 | yes | INELIGIBLE / PASS / Gone + KnownStop |
+
+- **11 of 12 triples equal the original; 11 of 12 equal iteration 1's.**
+- **C10 is FAIL**, `stage 0.4 exact request/owner-job/statement counts
+  differ`: one READ fewer than the original, the same triple iteration 1
+  recorded. Its functional proof passed.
+- **C12 differs from iteration 1 by one statement and equals the original**
+  (24146). Iteration 1 attributed its 24145 to one conditional orphan-inode
+  probe during reclamation; this sample has the probe. Not a product change:
+  the count depends on interleaving, as iteration 1's ledger says.
+- The reference-piece work changes no count of the twelve cells.
+- **Storage after the cells:** every sample's clone volume and container
+  removed (12 of 12, sealed manifest whole before removal). Docker holds two
+  volumes more than before the run, the masters of the two originals
+  (`empty`, `big64m`, 67 MB on disk). Result folder 191 MB including 163 MB
+  left by issue 316's tags. Host 226 GiB free; `docker system df`: images
+  21.51 GB, containers 12.85 GB, volumes 69.07 GB, build cache 4.84 GB.
+- CSVs: `core/benchmark/cluster-two/baselines/2026-10-11-d4d29ceb4/`, beside
+  iteration 1's two cell folders.
