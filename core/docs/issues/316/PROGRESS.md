@@ -329,3 +329,149 @@ Phase 2: the recognizer without carry. One new request port; gate, continue
 and search in Workspace over the Content entry points; a fixed slot table in
 the daemon shared by all Workspaces; split of the daemon's overlay command
 file before any new variant. Tier 2 at each recognizer step.
+
+## Phase 2, step `p2a` — checkpoint 2026-10-11, commit `677a7f8d6`
+
+The first recognizer step: gate, follow and search, no carry. **The phase 2
+exit is not met at this step**: overlay bytes of the target improved, the
+regression cases are unchanged, and the Commit of the target cases got worse.
+Phase 2 stays open; tier 3 was not sampled (below).
+
+### What changed
+
+| Commit | Change | Production LOC |
+| --- | --- | --- |
+| `aad5c6632` | Ledger entry of phase 1 and the plan record (documentation) | 80953 -> 80953 (delta +0) |
+| `677a7f8d6` | Write recognizer without carry: `operations/file/recognize.rs` in Workspace, `store/recognizer.rs` in the daemon, one request port in `layerfs-fuse`, called once before a WRITE's first owner visit | 80953 -> 81457 (delta +504) |
+| this commit | This entry; two count tests (below) | 81457 -> 81457 (delta +0) |
+
+Scope of every count: active core; reference absent (retired R9c; last counted
+65,417 at tree 498dd1917812). Method: `count_absent_aware.py staged`.
+
+### Checks at `677a7f8d6`
+
+Each command under a 120 s stop, built with `--no-run` first.
+
+| Check | Result |
+| --- | --- |
+| `layerfs-workspace`, all targets, host | pass, 173 tests; new `recognize`, 6 tests |
+| `layerfs-fuse`, all targets, host | pass, 24 tests |
+| `layerfs-daemon`, 17 selected targets, host | pass, 72 tests; new `recognizer`, 2 tests |
+| Linux, pinned image: Workspace `recognize`, daemon `recognizer`, `native_mutation`, `mounted_store_read`, `mounted_execute`, `mounted_commit`, `native_coherence` (FUSE device, one test thread) | pass |
+| Linux `layerfs-fuse`, all targets | pass, 27 tests |
+| Linux `mounted_recognizer` (new): a process started outside the daemon shifts two tails with `dd`, `tail` and `truncate` | pass: 48 pieces, 2.12 of 3.07 MiB claimed; compared with a native replay, daemon READs, the published root and a fresh mount |
+| Clippy `-D warnings`: Workspace and FUSE all targets, daemon library and the touched tests | clean |
+| Formatting; product boundary guard | clean; PASS, 683 files |
+| Durable | `NOT_RUN — disabled by owner until explicit reauthorization` |
+
+### Tier 2, tag `p2a`
+
+Nine fixed cases, one sample each, at `677a7f8d6`. Control `c0` is in the
+phase 0 entry.
+
+| case | status | proof | exec ms | Commit ms | requests | writer jobs | statements | overlay MB | commit |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| append-tail-4k-on-500mib-result-capped-v2-ops-1 | INELIGIBLE | PASS | 34.5 | 13.6 | 11 | 173 | 880 | 0.3 | 677a7f8d6 |
+| delete-middle-4k-on-500mib-ops-1 | FAIL | NOT_RUN | 2205.3 | 0.0 | None | None | None | - | 677a7f8d6 |
+| insert-middle-4k-on-10mib-ops-1 | FAIL | FAIL | 61.1 | 264.5 | 171 | 26724 | 130250 | 2.4 | 677a7f8d6 |
+| insert-middle-4k-on-500mib-result-capped-v2-ops-1 | FAIL | NOT_RUN | 2640.4 | 0.0 | None | None | None | - | 677a7f8d6 |
+| prepend-head-4k-on-500mib-result-capped-v2-ops-1 | FAIL | NOT_RUN | 5383.1 | 0.0 | None | None | None | - | 677a7f8d6 |
+| overwrite-middle-4k-on-500mib-ops-1 | INELIGIBLE | PASS | 45.9 | 36.7 | 11 | 452 | 2375 | 0.3 | 677a7f8d6 |
+| payload-create-500m | INELIGIBLE | PASS | 969.3 | 5874.5 | 4014 | 20137 | 156610 | 533.4 | 677a7f8d6 |
+| tiny-bulk-create-100-mixed-v3 | INELIGIBLE | PASS | 691.0 | 1205.9 | 8709 | 71650 | 341790 | 108.7 | 677a7f8d6 |
+| workspace-dense-rewrite-100-mixed-v4 | INELIGIBLE | PASS | 1075.4 | 2088.3 | 12545 | 84438 | 424874 | 109.8 | 677a7f8d6 |
+
+Failures as recorded in the receipts:
+
+- `insert-middle-4k-on-10mib-ops-1`: `independent-graph failed with exit 1`
+  (the retention guard, as in `c0`; O-6, with the owner).
+- `insert-middle-4k-on-500mib-result-capped-v2-ops-1`,
+  `prepend-head-4k-on-500mib-result-capped-v2-ops-1` and
+  `delete-middle-4k-on-500mib-ops-1`: `original event wall stop: commit`. The
+  Commit did not finish inside the harness limit; the proof was not run and
+  the receipt holds no counts. **In `c0` and `p1` these Commits finished in
+  2.3 to 5.4 s. This is a regression of this step.**
+
+Rows as observed, in the order of comparison:
+
+- **Overlay bytes of the target that completed**: the 10 MiB insert holds
+  2,396,160 logical bytes, against 5,656,576 in `c0` (-58 %). The three
+  500 MiB targets have no reading.
+- **Commit writer jobs and statements of that target got worse**: 26,724
+  jobs and 130,250 statements, against 808 and 5,018. By class, completed
+  operation-record jobs went from 381 to 26,150; read jobs from 333 to 480;
+  mutation jobs are 86 in both.
+- **Store bytes of that target grew**: 12,865,184 logical bytes after the
+  Commit, against 11,044,144. The stored bytes between two pieces become new
+  chunks that share no boundary with the committed ones.
+- **Requests are equal to `c0` in the six cases that completed.**
+- **The five regression cases are equal to `c0` in requests, writer jobs and
+  statements**, to the unit. Overlay bytes differ from `c0` as they did at
+  `p1` (schema 33). Stop condition 3 is not triggered.
+- Five INELIGIBLE: functional PASS and proof PASS in each receipt;
+  ineligible for the declared interference. None of the nine rows is PASS.
+- Timings are single diagnostic samples.
+
+### Why the Commit got worse
+
+Without carry, the chunk that crosses the end of a request is never claimed,
+so every request leaves one stored stretch between two pieces. At Commit each
+stretch is one edit of the script: about 80 edits for the 10 MiB insert, about
+4,000 for a 500 MiB one.
+
+Two count tests, added with this entry, separate the two halves of the cost:
+
+| Step | Test | Edits | Record calls |
+| --- | --- | --- | --- |
+| Normalization (Workspace) | `captured_piece_edits`, `commit_record_calls_grow_with_the_edits_and_no_faster` | 8, 32, 128 | 20, 68, 261: linear, about two an edit |
+| Edit engine (Content) | `edit_scaling`, 12 MiB | 8, 32, 128 | 1,946, 8,186, 45,268 jobs: 243, 255, 353 an edit |
+| Edit engine (Content) | `edit_scaling`, 48 MiB | 32, 128, 512 | 8,186, 45,442, 425,401 jobs: 255, 355, 830 an edit |
+| Edit engine, run once and not kept in the test | 192 MiB, 384 MiB | 2,048, 4,096 | 5,154,837 and 16,020,338 jobs: 2,517 and 3,911 an edit |
+
+- The job count does not depend on the file length: 32 edits cost 8,186 jobs
+  on 12 MiB and on 48 MiB.
+- It grows faster than the number of edits over the whole measured range.
+  The histogram by record kind names the step: every hold and release of a
+  branch node reads three records (reference count, detached marker, draft)
+  for each child that is a draft, and the modified leaves stay drafts until
+  the end. At 512 edits these three kinds are 366,923 of 397,697 reads.
+- The growth has a ceiling in the source, 128 entries a node on each level,
+  and it was not reached at 4,096 edits. This is a property of the existing
+  edit engine with many edits in one file; a control Commit has one or two
+  edits a file and never reaches it. **Rule D-7 (nothing quadratic in `R`):
+  reported as observed, between linear and quadratic in the measured range,
+  with a ceiling from the fan-out. Rule D-5 states `k + R + H`; the measured
+  cost is nearer `R` times fan-out times `H`. Left to the owner.**
+
+### Decisions by agent, pending owner review
+
+1. **`677a7f8d6` stays.** It is correct (read-back, Commit and fresh mount
+   are byte-exact in every test) and it is the base of the carry. The carry
+   makes the pieces of a shifted tail contiguous, so they extend one row and
+   the stretch between them disappears: that is the plan's own next step and
+   the remedy for the number of edits.
+2. **Tier 3 is not sampled at this step.** The handoff widens "only when the
+   narrower tier is green", and tier 2 is not: three of four targets stop at
+   the Commit wall. Tier 3 will be sampled at the first step whose tier 2
+   completes the target Commits.
+3. **The edit engine is not changed in this step.** Its per-edit accounting
+   is Content's own algorithm, outside plan sections 3, 4 and 7. Recorded as
+   a candidate for the optimization track.
+4. **`edit_scaling` asserts what holds** (jobs independent of the length) and
+   prints the growth with edits without asserting a bound on it.
+
+### What failed or was not done
+
+- Phase 2's "target cases improve in Commit writer jobs": not met; worse.
+- Three Commit wall stops, above. Nothing was resampled.
+- Tier 3: not sampled, decision 2.
+- No SQLite claim is made in this entry: the counts are job and record
+  counts, not a query plan.
+- Nothing was reverted.
+
+### Next
+
+The carry: the identity so far of the chunk that crosses a request's end is
+kept in the file's slot (no bytes), the next request completes it, and its
+claim reaches back over the stored bytes under the content sequence of the
+publication that stored them. Tier 2 under a new tag at that commit.

@@ -175,6 +175,11 @@ impl Run {
     /// Reads the live and the sealed view, commits the file, and checks the
     /// sealed edits, the final bytes and the canonical root.
     fn commit(self, label: &str, edits: &[Edit]) -> (CapturedFileWork, u64) {
+        let (work, reads, _) = self.commit_counted(label, edits);
+        (work, reads)
+    }
+    /// The same, with the record calls of the attempt.
+    fn commit_counted(self, label: &str, edits: &[Edit]) -> (CapturedFileWork, u64, u64) {
         assert!(self.live() == self.expected, "{label}: live view");
         let (reader, scope) = self.case.captured(70);
         assert!(self.sealed(reader) == self.expected, "{label}: sealed view");
@@ -197,12 +202,13 @@ impl Run {
             edits: edits.to_vec(),
         };
         self.case.oracle(result.root, &self.expected, Some(&model));
+        let records = attempt.custody.records.work.calls;
         println!(
-            "PIECE_COMMIT {label} edits={} reads={reads} {work:?}",
+            "PIECE_COMMIT {label} edits={} reads={reads} records={records} {work:?}",
             edits.len()
         );
         self.case.release(attempt.custody, false);
-        (work, reads)
+        (work, reads, records)
     }
 }
 
@@ -358,4 +364,31 @@ fn commit_work_of_an_insert_does_not_grow_with_the_file() {
         large_reads <= small_reads + 8,
         "{small_reads} {large_reads}"
     );
+}
+
+#[test]
+fn commit_record_calls_grow_with_the_edits_and_no_faster() {
+    // Pieces of 32 KiB in place, each followed by 16 KiB of stored bytes
+    // that equal the base: one equal-length edit for each stretch.
+    let mut calls = Vec::new();
+    for count in [8_u64, 32, 128] {
+        let mut run = Run::new(2048 * C);
+        let base = run.case.bytes.clone();
+        let mut edits = Vec::new();
+        for index in 0..count {
+            let at = 64 * C + index * 12 * C;
+            run.piece(at, at, 8 * C);
+            let from = (at + 8 * C) as usize;
+            run.write(at + 8 * C, &base[from..from + 4 * C as usize]);
+            edits.push(Edit::new(at + 8 * C, at + 12 * C, 4 * C));
+        }
+        let (work, reads, records) = run.commit_counted("edits", &edits);
+        assert_eq!(work.committed_bytes, 0);
+        calls.push((count, records, reads));
+    }
+    println!("PIECE_COMMIT_SCALING {calls:?}");
+    // Four times the edits cost at most five times the record calls.
+    for pair in calls.windows(2) {
+        assert!(pair[1].1 <= pair[0].1 * 5, "{calls:?}");
+    }
 }
