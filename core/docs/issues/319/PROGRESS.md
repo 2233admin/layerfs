@@ -187,3 +187,43 @@ Decided by agent, pending owner review: retain provisionally until the listed
 samples show no worse count in either guard; revert on a guard count regression.
 A fresh sealed build and fresh originals follow at this committed identity,
 shared by phase 1 and phase 2's selected sampling.
+
+## Phase 1 exit — selected sampling, tag `p319-12`, 2026-10-11
+
+Sealed build and both preparation/sample calls use `0d1eeb560` (product tree
+`b99f79e3dd972ebd6bbd1db2fc2626d08a289e19`); daemon SHA-256
+`401eeb8eda506e61a33f719d8b8e149bf396dd97da1c74780c690cb52b269015`.
+The owning build seal validates source bytes before/after Linux compilation,
+repository ARM flags and the pinned image. Cargo builds explicitly use `-j 3`;
+whole seal stops at 118 seconds. Fresh originals, ordinary independent writable
+sample clones, one sample each; original and test copies removed afterward.
+Retained services share the 4 GB VM; interference is declared. Cache state
+retains the frozen family declaration, not a new cold claim.
+
+Counts below compare **b1 only**, never timings or iteration 1.
+
+| Case | Status | Functional / proof | Requests b1 → current | Jobs b1 → current | Statements b1 → current | Overlay bytes b1 → current |
+| --- | --- | --- | ---: | ---: | ---: | ---: |
+| dedup-workspace-exact-1-compact-v2 | INELIGIBLE | PASS / PASS | 28 → 28 | 186 → 186 | 981 → 981 | 1298432 → 1298432 |
+| store-footprint-unique-100-low-v1 | INELIGIBLE | PASS / PASS | 12 → 12 | 95 → 95 | 443 → 443 | 233472 → 233472 |
+
+Both receipts report functional PASS, proof PASS, Gone and KNOWN_STOP.
+Status remains INELIGIBLE; no speed/resource qualification is claimed. The
+three stale pins and missing version/count interpretation are fixed; all
+original accounting/schema/custody obligations remain. No product code was
+changed for phase 1. Its implementation commit `b97857b7f` records
+Production LOC: 81718 -> 81718 (delta +0).
+
+Exact reproduction: `go.py p319-12 110 prepare` and `run` with
+`dedup_workspace_reuse:dedup-workspace-exact-1-compact-v2` and
+`store_footprint:store-footprint-unique-100-low-v1`, each externally stopped by
+118 seconds. Raw receipts under `benchmark-results/fs-bench-pro/2026-10-11-issue318-p319-12-run-<family>/<case>/`.
+Engine-generated partial-selection CSVs (every other case explicitly NOT_RUN)
+are under `core/benchmark/fs-bench-pro/baselines/core/2026-10-11-0d1eeb560/`
+in those two family directories. This is not a complete-family pass.
+
+Required three harness modules: 23/23 PASS, retained above; changed Python
+scope adds no Rust crate requiring Clippy. Latest daemon/Workspace Clippy is
+PASS at the sampled source; formatting, whitespace and boundary guard checked
+for this evidence commit. Production LOC: 81727 -> 81727 (delta +0).
+Phase 1 complete. Decided by agent, pending owner review: retain the harness fix.
