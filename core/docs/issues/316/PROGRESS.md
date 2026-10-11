@@ -475,3 +475,92 @@ The carry: the identity so far of the chunk that crosses a request's end is
 kept in the file's slot (no bytes), the next request completes it, and its
 claim reaches back over the stored bytes under the content sequence of the
 publication that stored them. Tier 2 under a new tag at that commit.
+
+## Phase 3, step `p3a` — checkpoint 2026-10-11, commit `779324ee8`
+
+The carry in the direction of rising offsets. It repairs the delete and does
+nothing for the insert and the prepend, whose writer moves the tail from the
+end of the file backward.
+
+### What changed
+
+| Commit | Change | Production LOC |
+| --- | --- | --- |
+| `16541bcd8` | Ledger entry of step `p2a`, two count tests | 81457 -> 81457 (delta +0) |
+| `779324ee8` | Carry: `mapping::ChunkIdentity` in Content; the run keeps the identity so far of the chunk that crosses a request's end and the next request completes it, reaching back under the content sequence; the port records the revision of an applied write | 81457 -> 81617 (delta +160) |
+
+### Checks at `779324ee8`
+
+| Check | Result |
+| --- | --- |
+| `layerfs-content`, all targets, host | pass, 458 tests |
+| `layerfs-workspace`, all targets, host | pass, 174 tests; a shifted tail written forward is claimed but for 2 to 28 KiB |
+| `layerfs-fuse`, all targets, host | pass, 24 tests |
+| `layerfs-daemon`, 18 selected targets, host | pass, 73 tests; new: a second writer between two requests, a repeated request, reverse order, an appending writer, each equal to the model through Commit and a fresh bind |
+| Linux, pinned image, FUSE device, one test thread: 7 daemon targets | pass, 24 tests |
+| Linux `mounted_recognizer` (outside process, `dd`, `tail`, `truncate`, written forward) | pass: 2 piece rows and 33,792 stored bytes for 3.07 MiB written; 48 rows before |
+| Clippy `-D warnings`, formatting, product boundary guard | clean; clean; PASS, 683 files |
+| Durable | `NOT_RUN — disabled by owner until explicit reauthorization` |
+
+### Tier 2, tag `p3a`
+
+Nine fixed cases, one sample each, at `779324ee8`.
+
+| case | status | proof | exec ms | Commit ms | requests | writer jobs | statements | overlay MB | commit |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| append-tail-4k-on-500mib-result-capped-v2-ops-1 | INELIGIBLE | PASS | 46.8 | 16.7 | 11 | 173 | 880 | 0.3 | 779324ee8 |
+| delete-middle-4k-on-500mib-ops-1 | INELIGIBLE | PASS | 2153.5 | 96.0 | 6012 | 13247 | 123503 | 0.5 | 779324ee8 |
+| insert-middle-4k-on-10mib-ops-1 | FAIL | FAIL | 72.1 | 266.7 | 171 | 26724 | 130250 | 2.4 | 779324ee8 |
+| insert-middle-4k-on-500mib-result-capped-v2-ops-1 | FAIL | NOT_RUN | 2960.7 | 0.0 | None | None | None | - | 779324ee8 |
+| prepend-head-4k-on-500mib-result-capped-v2-ops-1 | FAIL | NOT_RUN | 6047.6 | 0.0 | None | None | None | - | 779324ee8 |
+| overwrite-middle-4k-on-500mib-ops-1 | INELIGIBLE | PASS | 47.3 | 23.4 | 11 | 452 | 2375 | 0.3 | 779324ee8 |
+| payload-create-500m | INELIGIBLE | PASS | 1108.3 | 6357.3 | 4014 | 20137 | 156610 | 533.4 | 779324ee8 |
+| tiny-bulk-create-100-mixed-v3 | INELIGIBLE | PASS | 744.1 | 1181.7 | 8709 | 71650 | 341790 | 108.7 | 779324ee8 |
+| workspace-dense-rewrite-100-mixed-v4 | INELIGIBLE | PASS | 1094.1 | 2025.5 | 12545 | 84438 | 424874 | 109.8 | 779324ee8 |
+
+Failures as recorded in the receipts:
+
+- `insert-middle-4k-on-10mib-ops-1`: `independent-graph failed with exit 1`.
+- `insert-middle-4k-on-500mib-result-capped-v2-ops-1` and
+  `prepend-head-4k-on-500mib-result-capped-v2-ops-1`:
+  `original event wall stop: commit`; proof not run; no counts. Still the
+  regression of step `p2a`.
+
+Rows as observed:
+
+- **`delete-middle-4k-on-500mib-ops-1` completed**: overlay 479,232 logical
+  bytes against 272,486,400 in `c0`; Commit 96.0 ms against 2,446.0 ms;
+  13,247 writer jobs and 123,503 statements against 25,449 and 223,248;
+  requests 6,012 in both. Functional PASS and proof PASS in the receipt, where
+  `c0` failed the retention guard; the row is INELIGIBLE for the declared
+  interference, not PASS.
+- **The 10 MiB insert is unchanged from `p2a`** to the unit: 26,724 writer
+  jobs, 130,250 statements, 2,396,160 overlay bytes.
+- **The five regression cases equal `c0`** in requests, writer jobs and
+  statements.
+- No row is PASS. Timings are single diagnostic samples.
+
+### Why the insert did not change
+
+The benchmark's writer (`writers/edit.rs`, unchanged) grows a file the way
+`memmove` does: it extends the file, then copies the suffix in 64 KiB blocks
+from the end of the file toward the edit. Its requests arrive in falling
+offsets, so no request begins where the one before it ended, and the chunk
+that crosses a boundary is cut the other way round: its end was written first.
+A delete copies in rising offsets, which is the direction of this step. The
+mounted proof wrote forward and did not show this.
+
+### Decisions by agent, pending owner review
+
+1. **Add the falling direction** as the next step: the earlier request keeps
+   the bytes of the chunk whose beginning lies before it (at most one chunk,
+   32 KiB, which is the slot the plan describes in 6.3), the next lower
+   request completes it, and its claim reaches past its own end under the
+   content sequence. The engine's claim grammar gains that reach; no schema
+   change.
+2. **Tier 3 still waits**: two of four targets stop at the Commit wall.
+
+### What failed or was not done
+
+- Two Commit wall stops and the unchanged 10 MiB insert, above.
+- Tier 3: not sampled. Nothing was reverted.
