@@ -13,6 +13,7 @@ from unittest.mock import Mock, patch
 
 BENCH = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(BENCH))
+import engine
 from engine import fixtures, identity, project, receipts, workspace
 spec = importlib.util.spec_from_file_location("reliability_bench_cli", BENCH / "bench.py")
 bench = importlib.util.module_from_spec(spec)
@@ -20,6 +21,11 @@ spec.loader.exec_module(bench)
 
 
 class ReliabilityCli(unittest.TestCase):
+    def test_routing_double_replaces_a_previously_imported_package_attribute(self):
+        actual = __import__("engine.reliability", fromlist=["reliability"])
+        with patch.object(engine, "reliability", actual):
+            self.exercise("run")
+
     def cases(self):
         # Retained pre-D77 prospective ported metadata is a routing double only.
         # Current source admission tests separately refuse execution of all28.
@@ -50,6 +56,7 @@ class ReliabilityCli(unittest.TestCase):
             ):
                 stack.enter_context(patch.object(target,name,**options))
             stack.enter_context(patch.dict(sys.modules,{"engine.reliability":module}))
+            stack.enter_context(patch.object(engine,"reliability",module,create=True))
             output = root / "benchmark-results/fs-bench-pro/run"
             args = {"run":["run","workspace_reliability","--build","build","--prepared","prepared","--out",str(output)],
                     "parity":["parity","workspace_reliability","--prepared","prepared","--build","build","--out",str(output)],
@@ -97,7 +104,7 @@ class ReliabilityCli(unittest.TestCase):
             run = Path(temporary)
             for recorded, expected in [({}, 0), ({selected[0]["id"]:{"proof_status":"FAIL"}}, 1)]:
                 output = io.StringIO()
-                with patch.dict(sys.modules,{"engine.reliability":module}), patch.object(receipts,"load_run",return_value=(selection,recorded)), redirect_stdout(output):
+                with patch.dict(sys.modules,{"engine.reliability":module}), patch.object(engine,"reliability",module,create=True), patch.object(receipts,"load_run",return_value=(selection,recorded)), redirect_stdout(output):
                     code = bench.main(["verify",str(run)])
                 self.assertEqual(code, expected)
                 result = json.loads(output.getvalue())
