@@ -831,3 +831,42 @@ Failure texts, as recorded:
   0 containers more; originals 5672 MB, result folder
   469 MB; host 220 GiB free; `docker system df`: Images=21.51GB, Containers=12.85GB, Local Volumes=69.72GB, Build Cache=4.843GB.
 - CSVs: `core/benchmark/fs-bench-pro/baselines/core/2026-10-11-7fb3b06a7/workspace_change_locality/`.
+
+## Phase C — batch 4, `file_size_transition`, tag `b1`, sampled at `51830f569`
+
+Iteration 1's value is left of each arrow, this run's right; one value means
+equal. Times are single diagnostic samples.
+
+| case | status | functional | proof | requests | writer jobs | statements | overlay logical B | Store logical B | exec ms | Commit ms |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| v016-boundary-small-control-v1 | INELIGIBLE | PASS | PASS | 14 | 192 -> 181 | 857 -> 823 | 229376 -> 233472 | 394304 | 82.2 -> 108.7 | 16.4 -> 17.2 |
+| v016-boundary-below-v1 | INELIGIBLE | PASS | PASS | 14 | 194 -> 182 | 865 -> 828 | 229376 -> 233472 | 789080 | 93.6 -> 94.2 | 21.1 -> 20.6 |
+| v016-boundary-exact-v1 | INELIGIBLE | PASS | PASS | 14 | 272 -> 261 | 1357 -> 1323 | 229376 -> 233472 | 529472 | 82.5 -> 90.4 | 18.1 -> 18.3 |
+| v016-boundary-above-v1 | INELIGIBLE | PASS | PASS | 14 | 272 -> 261 | 1357 -> 1323 | 229376 -> 233472 | 529472 | 71.4 -> 99.9 | 14.5 -> 18.6 |
+| v016-boundary-large-control-v1 | INELIGIBLE | PASS | PASS | 14 | 272 -> 261 | 1357 -> 1323 | 233472 -> 237568 | 1463408 | 83.4 -> 79.7 | 19.8 -> 19.6 |
+| v016-boundary-roundtrip-v1 | INELIGIBLE | PASS | PASS | 26 | 407 -> 386 | 1900 -> 1836 | 233472 -> 237568 | 727280 | 185.9 -> 177.6 | 30.8 -> 32.4 |
+| v016-boundary-alias-roundtrip-v1 | FAIL | FAIL -> - | FAIL | - | - | - | - | - | 241.1 -> 241.5 | 30.9 -> 41.1 |
+
+Failure texts, as recorded:
+
+- `v016-boundary-alias-roundtrip-v1`: original command exit is not known zero: 1
+
+- **6 of 7 are functional PASS and proof PASS, mount Gone with KnownStop; 1 is
+  FAIL, exactly as in iteration 1.**
+- `v016-boundary-alias-roundtrip-v1` is FAIL with proof FAIL; receipt text
+  `original command exit is not known zero: 1`, the same text iteration 1
+  recorded (the frozen alias save helper changes the parent directory's mtime
+  and the frozen verifier requires the fixture's). No counts were collected.
+  The driver removed its volume and container.
+- This family crosses the 128 KiB chunk threshold by truncate-and-rewrite and
+  by atomic save. Its six completed cases pass every byte check with the
+  piece work in place.
+- **Requests are equal in the 6 completed cases** (14 or 26). Writer jobs are
+  lower by 11 to 21 and statements by 34 to 64; overlay logical bytes 4,096
+  higher.
+
+- Storage after the family: 6 Docker volumes more than before the run
+  (6 of them masters of current originals, 0 unexplained),
+  0 containers more; originals 91 MB, result folder
+  480 MB; host 226 GiB free; `docker system df`: Images=21.51GB, Containers=12.85GB, Local Volumes=69.07GB, Build Cache=4.843GB.
+- CSVs: `core/benchmark/fs-bench-pro/baselines/core/2026-10-11-51830f569/file_size_transition/`.
