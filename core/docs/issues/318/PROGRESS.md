@@ -870,3 +870,78 @@ Failure texts, as recorded:
   0 containers more; originals 91 MB, result folder
   480 MB; host 226 GiB free; `docker system df`: Images=21.51GB, Containers=12.85GB, Local Volumes=69.07GB, Build Cache=4.843GB.
 - CSVs: `core/benchmark/fs-bench-pro/baselines/core/2026-10-11-51830f569/file_size_transition/`.
+
+## Phase C — batch 4, `dedup_branch_history`, tag `b1`, sampled at `de6e61269`
+
+Iteration 1's value is left of each arrow, this run's right; one value means
+equal. Times are single diagnostic samples.
+
+| case | status | functional | proof | requests | writer jobs | statements | overlay logical B | Store logical B | exec ms | Commit ms |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| dedup-history-distributed-1 | INELIGIBLE | PASS | PASS | 10 | 102 -> 95 | 466 -> 445 | 245760 -> 249856 | 1434304 -> 1430208 | 49.6 -> 47.4 | 11.1 -> 10.9 |
+| dedup-history-distributed-10 | INELIGIBLE | PASS | PASS | 68 | 971 -> 901 | 4395 -> 4182 | 245760 -> 249856 | 2180024 -> 2196528 | 453.1 -> 471.1 | 70.9 -> 77.3 |
+| dedup-history-distributed-100 | INELIGIBLE | PASS | PASS | 633 | 9623 -> 8922 | 43407 -> 41276 | 245760 -> 249856 | 6110928 -> 6094472 | 4063.1 -> 4801.4 | 789.1 -> 872.7 |
+| dedup-history-distributed-500 | FAIL | FAIL -> - | NOT_RUN | - | - | - | - | - | - -> 17352.2 | - -> 4169.1 |
+| dedup-history-hotset-1 | INELIGIBLE | PASS | PASS | 11 | 108 -> 100 | 496 -> 471 | 245760 -> 249856 | 1434304 -> 1442568 | 53.7 -> 49.4 | 12.1 -> 9.3 |
+| dedup-history-hotset-10 | INELIGIBLE | PASS | PASS | 201 | 1273 -> 1193 | 6776 -> 6526 | 245760 -> 249856 | 2159424 -> 2175928 | 536.4 -> 488.7 | 80.7 -> 81.4 |
+| dedup-history-hotset-100 | INELIGIBLE | PASS | PASS | 741 | 10273 -> 9473 | 46736 -> 44236 | 245760 -> 249856 | 6106760 -> 6069752 | 4607.4 -> 4793.8 | 915.0 -> 898.9 |
+| dedup-history-hotset-500 | FAIL | FAIL -> - | NOT_RUN | - | - | - | - | - | - -> 17896.7 | - -> 4153.6 |
+| dedup-history-recurring-1 | INELIGIBLE | PASS | PASS | 10 | 104 -> 96 | 479 -> 453 | 278528 -> 282624 | 1483744 -> 1492008 | 25.8 -> 50.1 | 12.2 -> 11.7 |
+| dedup-history-recurring-10 | INELIGIBLE | PASS | PASS | 55 | 960 -> 880 | 4306 -> 4046 | 278528 -> 282624 | 1817464 -> 1825728 | 387.2 -> 451.1 | 64.2 -> 73.4 |
+| dedup-history-recurring-100 | INELIGIBLE | PASS | PASS | 505 | 9510 -> 8710 | 42556 -> 39956 | 278528 -> 282624 | 5348304 -> 5352448 | 3599.7 -> 4689.3 | 637.6 -> 665.4 |
+| dedup-history-recurring-500 | FAIL | FAIL -> - | NOT_RUN | - | - | - | - | - | - -> 17649.6 | - -> 2493.7 |
+| dedup-history-metadata-1 | INELIGIBLE | PASS | PASS | 8 | 86 | 390 | 245760 -> 249856 | 1434304 -> 1438448 | 47.8 -> 46.2 | 12.3 -> 10.7 |
+| dedup-history-metadata-10 | INELIGIBLE | PASS | PASS | 35 | 798 | 3569 | 245760 -> 249856 | 1768024 -> 1772168 | 446.4 -> 472.1 | 71.3 -> 69.4 |
+| dedup-history-metadata-100 | INELIGIBLE | PASS | PASS | 305 | 7908 | 35339 | 245760 -> 249856 | 5327704 -> 5294768 | 4408.4 -> 4674.5 | 639.1 -> 635.4 |
+| dedup-history-metadata-500 | FAIL | FAIL -> - | NOT_RUN | - | - | - | - | - | - -> 17380.3 | - -> 2420.3 |
+| dedup-history-unrelated-1 | INELIGIBLE | PASS | PASS | 2206 | 10450 -> 9426 | 52021 -> 48741 | 1548288 -> 1552384 | 2649704 -> 2649728 | 287.7 -> 249.0 | 105.8 -> 88.8 |
+| dedup-history-unrelated-10 | INELIGIBLE | PASS | PASS | 19027 | 100279 -> 90039 | 476416 -> 443616 | 1548288 -> 1552384 | 15855616 -> 15851520 | 2056.8 -> 2011.3 | 945.9 -> 870.3 |
+| dedup-history-unrelated-100-mixed-v2 | INELIGIBLE | PASS | PASS | 6315 | 56515 -> 44715 | 269052 -> 229852 | 1306624 -> 1310720 | 109027328 -> 110096384 | 4958.0 -> 5457.9 | 2375.4 -> 2224.3 |
+| dedup-history-unrelated-500-mixed-v2 | FAIL | FAIL -> - | NOT_RUN | - | - | - | - | - | - -> 19084.1 | - -> 9147.5 |
+| v016-history-large-hotset-k10-v1 | INELIGIBLE | PASS | PASS | 59 | 1341 -> 1281 | 6658 -> 6470 | 241664 -> 245760 | 3711664 -> 3761104 | 450.0 -> 501.8 | 92.0 -> 81.0 |
+| v016-history-large-hotset-k100-v1 | INELIGIBLE | PASS | PASS | 539 | 13139 -> 12539 | 65204 -> 63336 | 241664 -> 245760 | 7175648 | 4409.1 -> 4660.0 | 696.2 -> 698.7 |
+| v016-history-namespace-inode-k10-v1 | INELIGIBLE | PASS | PASS | 162 | 1688 -> 1660 | 8014 -> 7914 | 237568 -> 241664 | 3711640 -> 3744600 | 470.4 -> 477.1 | 87.9 -> 79.2 |
+| v016-history-namespace-inode-k100-v1 | INELIGIBLE | PASS | PASS | 1530 | 16761 -> 16481 | 79337 -> 78337 | 237568 -> 241664 | 7409312 -> 7396976 | 4587.9 -> 4752.6 | 790.0 -> 761.6 |
+| v016-history-boundary-cycle-k10-v1 | INELIGIBLE | PASS | PASS | 115 | 1472 -> 1367 | 7083 -> 6763 | 233472 -> 237568 | 3530384 | 446.3 -> 485.9 | 73.3 -> 78.2 |
+| v016-history-boundary-cycle-k100-v1 | INELIGIBLE | PASS | PASS | 1105 | 14612 -> 13562 | 70308 -> 67108 | 233472 -> 237568 | 7192056 -> 7192032 | 4297.4 -> 4814.2 | 690.3 -> 700.6 |
+
+Failure texts, as recorded:
+
+- `dedup-history-distributed-500`: original event wall stop: command
+- `dedup-history-hotset-500`: original edit/Commit/End group watchdog expired
+- `dedup-history-recurring-500`: original edit/Commit/End group watchdog expired
+- `dedup-history-metadata-500`: original event wall stop: command
+- `dedup-history-unrelated-500-mixed-v2`: Command '['docker', '--host', 'unix:///Users/yifanxu/.docker/run/docker.sock', 'exec', '--user', '0:0', '2ba3be9bb868775f1a7610cca96eecdff68d3a88d9b3cbcca0c1a82bfa3d75ca', 'python3', '-B', '-c', "import json\nfrom pathlib import Path\nstore=Path('/layerfs-store/global/store.sqlite').stat()\nevents=d
+
+- **21 of 26 are functional PASS and proof PASS, mount Gone with KnownStop; 5
+  are FAIL with proof NOT_RUN: the same 21 and the same 5 as in iteration 1.**
+- **The 5 FAIL rows are the 500-step schedules.** Each case declares a 120 s
+  performance hard watchdog for its whole schedule; all five reached it with
+  358 to 392 of their 500 Commits acknowledged (distributed 373, hotset 392,
+  recurring 389, metadata 390, unrelated 358). Receipt texts, as recorded:
+  `original event wall stop: command` (distributed, metadata), `original
+  edit/Commit/End group watchdog expired` (hotset, recurring), and for
+  `unrelated` a resource observation that `timed out after 0.008…seconds`,
+  which is the same stop met inside an observer call. No count, storage,
+  proof, End or KnownStop followed.
+  - Iteration 1 recorded these five as stopped by its fixed outer 120 s
+    ceiling with no complete receipt. Here each ran in a call of its own with
+    a 200 or 300 s outer stop (decision 4 of phase A), so the case's own
+    watchdog ended it and a receipt exists. The outcome is the same FAIL.
+  - A 100-step schedule of this family takes 40 to 49 s as a whole sample.
+  - The driver removed the five volumes and their running containers.
+- **Requests are equal in all 21 completed cases.** Writer jobs and
+  statements are equal in the 3 metadata cases and lower in the other 18
+  (7 to 11,800 jobs). Overlay logical bytes are 4,096 higher in all 21.
+- **Store logical bytes: `dedup-history-unrelated-100-mixed-v2` is 1,069,056
+  bytes larger (109,027,328 -> 110,096,384, +1.0%).** The other 20 differ by
+  at most 50 KB in either direction. Not explained here; listed for phase D.
+- First sample measured for leftovers: a history sample keeps per-step
+  evidence (10 to 12 MB for 100 or more steps) and its exported Stores; the
+  driver removed the Stores (5 to 436 MB a sample), nothing else remained.
+
+- Storage after the family: 5 Docker volumes more than before the run
+  (5 of them masters of current originals, 0 unexplained),
+  0 containers more; originals 810 MB, result folder
+  748 MB; host 225 GiB free; `docker system df`: Images=21.51GB, Containers=12.85GB, Local Volumes=69.08GB, Build Cache=4.843GB.
+- CSVs: `core/benchmark/fs-bench-pro/baselines/core/2026-10-11-de6e61269/dedup_branch_history/`.
