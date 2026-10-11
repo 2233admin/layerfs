@@ -27,7 +27,13 @@ Commit runs on the control connection's own thread. It holds one control slot
 for its duration. It never runs on the SQL owner thread or on a Fuse receive or
 request-service worker; each captured port call is one short owner job. There
 is one construction producer by structure: one Storage producer, one Save, one
-closure, and the Workspace's `committing` flag. No construction thread is
+closure, and the Workspace's `committing` flag. The flag belongs to one
+invocation-owned guard shared by the direct and captured public entrypoints. The
+captured wrapper invokes the already-admitted driver; it does not acquire another
+guard. It retains admission through the reader and operation releases after known
+install or definite local settlement. An `InFlight` refusal owns no guard and
+cannot clear another call's admission. Disjoint Workspaces keep independent
+admission and may Commit concurrently. No construction thread is
 spawned.
 
 Every owner job of the Commit thread — Capture, the reader and owner
@@ -99,7 +105,11 @@ Nothing is released inside the closure. When the driver returns:
 The attempt's custody is dropped before the first release. A release that is
 refused or fails ends the sequence; the owner it did not release stays named
 in the receipt beside the original completion or submission error. Nothing is
-retried. The completion of a release that is done is dropped at once and only
+retried. A retained reader or operation owner keeps the public BoundWorkspace's
+admission held, even after a known install or local settlement; no caller may
+begin another Commit before that custody has ended. Unknown outcome and failed
+install also retain admission, and unwinding does not infer a safe release.
+The completion of a release that is done is dropped at once and only
 its fact is recorded (`released`): a held completion keeps a Lifecycle credit,
 and a Workspace has two.
 

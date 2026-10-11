@@ -871,3 +871,47 @@ own red-first tests and final source receipts. Decided by agent, pending owner
 review: retain diagnostic scope and wait for the clean-run gate before speed work.
 Production LOC:82179 ->82179 (delta +0), pinned active-core snapshots;
 reference absent (retired R9c; last counted65,417 at tree498dd1917812).
+
+### Owner explicitly selects the 28 reliability gaps for implementation
+
+After asking whether the28 NOT_APPLICABLE cases were being fixed, the owner
+asked whether they would be fixed. The agent accepted this as additional
+implementation work, not permission to turn a source review into a runtime
+PASS. Original historical N/A receipts remain unchanged. Missing creation-time
+Sandbox limits and allocation/event-peak observations are feature work; case-
+specific API/fault/cleanup obligations remain mandatory. Two integrity cases
+bypass the allocation check and can be selected after genuine creation-profile
+support. The final applicability review waits for the last product/test change.
+
+Read-only diagnosis of C10 also finds one fewer READ request than its frozen
+single diagnostic census: requests/jobs/statements1547/1546/14406 vs frozen
+1548/1547/14408. READ513->512, all other38opcode buckets identical; proofPASS
+in both historical forms. One Workspace and one Inode statement account for
+its two-statement difference. The cause of that request-shaping difference is
+unproven without individual read offsets/reply lengths. Frozen count FAIL stays
+FAIL; no artificial request or changed oracle is a correctness fix.
+
+Alias semantic scope clarification: native replay qualifies the one automatic
+field rule; the measured observation must lie in[start-1s,finish], wrapper<=60s,
+then all later publication checks compare exact observed nanoseconds. The1s
+allowance is declared, not measured calibration; an initial timestamp inside
+the permitted interval can pass. No exact cross-execution realtime equality or
+exact rename instant is claimed. Normal final proof includes allsix states.
+
+### Complete public Commit lifecycle admission
+
+One invocation-owned guard now covers capture, construction, publication, install
+and captured owner releases for both public BoundWorkspace entrypoints. InFlight
+acquires no guard and cannot clear another invocation; unknown/install failure,
+retained owners and unwind retain admission. Supervised red reproduction has
+known install while releases are parked and the prior flagfalse; green keeps
+ittrue, both duplicate APIs refuse with zero extra owner jobs, separateWorkspace
+progresses, exact committed/live models agree, known release clears admission.
+[Portable red/green/source evidence](checks/captured-lifecycle-admission.json).
+The initial fixture invocation hung at118s; revised independent5s resource-hold
+supervisors return their ownership before bounded joins. A later invocation
+omitting --fuse failed setup; corrected native parallel testPASS. Neither failure
+is relabeled. Functional23PASS; three existing product raw-writer publication
+refusal tests FAIL Committed vs Busy, now independently assigned for repair.
+Daemon all-target Clippy, scopedfmt and686-file boundary guardPASS. This commit
+fixes lifecycle admission only; concurrent writer qualification remains unfinished.

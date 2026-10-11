@@ -10,11 +10,26 @@ use layerfs_storage::Save;
 use layerfs_workspace::WorkspaceError;
 use std::sync::{atomic::Ordering, Arc};
 
+/// Admission belongs to exactly one invocation. It stays held unless that
+/// invocation establishes a safe disposition, including its captured releases.
+/// Unwinding or an unknown result conservatively retains admission.
+pub(super) struct CommitAdmission<'a> {
+    workspace: &'a BoundWorkspace,
+    pub(super) released: bool,
+}
+impl Drop for CommitAdmission<'_> {
+    fn drop(&mut self) {
+        if self.released {
+            self.workspace.committing.store(false, Ordering::Release);
+        }
+    }
+}
+
 impl BoundWorkspace {
     /// Captures once and drives one caller-owned Content producer over that
     /// exact context. The producer must represent the capture faithfully; live
     /// namespace normalization is a separate constructor, not an implicit Init.
-    /// No ownership guard spans construction or provider I/O. On definite
+    /// No owner or Workspace mutex spans construction or provider I/O. On definite
     /// nonpublication one local resolution preserves the accepted view; unknown
     /// and known-publication/install failure retain original custody.
     pub fn commit(
@@ -25,17 +40,38 @@ impl BoundWorkspace {
             &BranchSnapshot,
         ) -> Result<FilesystemRootId, CommitError>,
     ) -> Result<CommitSuccess, Box<CommitFailure>> {
-        if self
-            .committing
+        let mut admission = self.admit_commit()?;
+        let result = self.commit_admitted(construct);
+        admission.released = match &result {
+            Ok(_) => true,
+            Err(failure) => failure.locally_settled,
+        };
+        result
+    }
+    pub(super) fn admit_commit(&self) -> Result<CommitAdmission<'_>, Box<CommitFailure>> {
+        self.committing
             .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
-            .is_err()
-        {
-            return Err(Box::new(CommitFailure::new(
-                CommitError::InFlight,
-                self.identity,
-                self.route(),
-            )));
-        }
+            .map_err(|_| {
+                Box::new(CommitFailure::new(
+                    CommitError::InFlight,
+                    self.identity,
+                    self.route(),
+                ))
+            })?;
+        Ok(CommitAdmission {
+            workspace: self,
+            released: false,
+        })
+    }
+    /// The admitted invocation owns the flag through any wrapper's releases.
+    pub(super) fn commit_admitted(
+        &self,
+        construct: impl FnOnce(
+            &Save<'_>,
+            Capture,
+            &BranchSnapshot,
+        ) -> Result<FilesystemRootId, CommitError>,
+    ) -> Result<CommitSuccess, Box<CommitFailure>> {
         let mut retained = CommitFailure::new(
             CommitError::Context("incomplete Commit"),
             self.identity,
@@ -162,7 +198,6 @@ impl BoundWorkspace {
             retained.error = error;
             return Err(self.settle_failure(retained));
         }
-        self.committing.store(false, Ordering::Release);
         Ok(CommitSuccess {
             history: retained.published.expect("known publication"),
             saved: retained.saved.expect("known Save"),

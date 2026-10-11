@@ -20,6 +20,7 @@ impl BoundWorkspace {
     /// synchronous captured ports, so it is never a native receive or
     /// request-service worker.
     pub fn commit_captured(&self) -> Result<CommitSuccess, Box<CommitFailure>> {
+        let mut admission = self.admit_commit()?;
         // This thread keeps the capture's completion while it waits for
         // ordinary credits, and may keep one failed acquisition's while it
         // waits for a Lifecycle credit. With fewer than two slots of either
@@ -32,10 +33,11 @@ impl BoundWorkspace {
                 self.route(),
             );
             refused.locally_settled = true;
+            admission.released = true;
             return Err(Box::new(refused));
         }
         let held = RefCell::new(None);
-        let result = self.commit(|save, capture, _| {
+        let result = self.commit_admitted(|save, capture, _| {
             let mut slot = held.borrow_mut();
             self.construct_captured(save, capture, slot.insert(CapturedConstruction::default()))
         });
@@ -45,6 +47,7 @@ impl BoundWorkspace {
                 if let Some(held) = &mut held {
                     self.release_captured(held);
                 }
+                admission.released = held.as_ref().is_none_or(|held| !held.retained());
                 success.namespace = held;
                 Ok(success)
             }
@@ -57,6 +60,8 @@ impl BoundWorkspace {
                     failure.local = None;
                     self.release_captured(held);
                 }
+                admission.released =
+                    failure.locally_settled && held.as_ref().is_none_or(|held| !held.retained());
                 failure.namespace = held;
                 Err(failure)
             }

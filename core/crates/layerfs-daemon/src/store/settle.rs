@@ -1,7 +1,6 @@
 //! One exact local failure disposition, never a guessed history cleanup.
 use super::{BoundWorkspace, CommitFailure};
 use crate::{Command, Completion, OwnerError, Response};
-use std::sync::atomic::Ordering;
 
 impl BoundWorkspace {
     /// One original job of the Commit thread. Admission is a readiness wait
@@ -22,7 +21,6 @@ impl BoundWorkspace {
         }
         let Some(capture) = failure.capture else {
             failure.locally_settled = true;
-            self.committing.store(false, Ordering::Release);
             return Box::new(failure);
         };
         match self.job(Command::ResolveFailed(capture)) {
@@ -31,9 +29,6 @@ impl BoundWorkspace {
                 failure.local = Some(done);
             }
             Err(error) => failure.local_error = Some(error),
-        }
-        if failure.locally_settled {
-            self.committing.store(false, Ordering::Release);
         }
         Box::new(failure)
     }
