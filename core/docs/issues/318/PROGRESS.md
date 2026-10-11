@@ -1228,3 +1228,75 @@ and differ in 10 (−49,152 to +32,768 B); the eleventh entry the comparison cou
   0 containers more; originals 1861 MB, result folder
   1080 MB; host 224 GiB free; `docker system df`: Images=21.51GB, Containers=12.85GB, Local Volumes=69.06GB, Build Cache=4.843GB.
 - CSVs: `core/benchmark/fs-bench-pro/baselines/core/2026-10-11-67494a503/dedup_cross_file/`.
+
+## Phase C — batch 6, `dedup_workspace_reuse`, tag `b1`, sampled at `a142e9478`
+
+Iteration 1's value is left of each arrow, this run's right; one value means
+equal. Times are single diagnostic samples.
+
+| case | status | functional | proof | requests | writer jobs | statements | overlay logical B | Store logical B | exec ms | Commit ms |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| dedup-workspace-exact-1-compact-v2 | FAIL | PASS -> - | PASS -> FAIL | 28 | 250 -> 186 | 1237 -> 981 | 1294336 -> 1298432 | 1376912 | 39.4 -> 51.6 | 19.1 -> 18.2 |
+| dedup-workspace-exact-10-compact-v2 | FAIL | PASS -> - | PASS -> FAIL | 154 | 1519 -> 879 | 8167 -> 5607 | 10907648 -> 10911744 | 10953480 -> 10957624 | 63.9 -> 75.0 | 86.6 -> 82.8 |
+| dedup-workspace-exact-100 | FAIL | PASS -> - | PASS -> FAIL | 1414 | 15408 -> 9008 | 81076 -> 55476 | 106942464 -> 106946560 | 136209304 -> 136205208 | 246.6 -> 268.1 | 1110.8 -> 670.2 |
+| dedup-workspace-exact-500 | FAIL | FAIL -> - | FAIL | 7014 | 78769 -> 46769 | 410013 -> 282013 | 533868544 -> 533876736 | 136242264 -> 136267008 | 888.8 -> 1209.7 | 5194.1 -> 3877.0 |
+| dedup-workspace-local-1-compact-v2 | FAIL | PASS -> - | PASS -> FAIL | 28 | 250 -> 186 | 1237 -> 981 | 1294336 -> 1298432 | 1409872 | 50.3 -> 51.4 | 21.7 -> 18.2 |
+| dedup-workspace-local-10-compact-v2 | FAIL | PASS -> - | PASS -> FAIL | 154 | 1519 -> 879 | 8167 -> 5607 | 10907648 -> 10911744 | 11200680 -> 11192464 | 68.4 -> 75.4 | 106.1 -> 81.7 |
+| dedup-workspace-local-100 | FAIL | PASS -> - | PASS -> FAIL | 1414 | 15408 -> 9008 | 81076 -> 55476 | 106942464 -> 106946560 | 139760744 -> 139913208 | 259.7 -> 267.4 | 1048.6 -> 684.4 |
+| dedup-workspace-local-500 | FAIL | FAIL -> - | FAIL | 7014 | 78769 -> 46769 | 410013 -> 282013 | 533868544 -> 533876736 | 151089152 | 1166.8 -> 1290.8 | 5120.9 -> 4063.7 |
+| dedup-workspace-unique-1-compact-v2 | FAIL | PASS -> - | PASS -> FAIL | 28 | 250 -> 186 | 1237 -> 981 | 1294336 -> 1298432 | 2485192 | 43.3 -> 55.1 | 18.7 -> 17.8 |
+| dedup-workspace-unique-10-compact-v2 | FAIL | PASS -> - | PASS -> FAIL | 154 | 1519 -> 879 | 8167 -> 5607 | 10907648 -> 10911744 | 23273472 -> 23269376 | 67.3 -> 79.4 | 99.7 -> 84.8 |
+| dedup-workspace-unique-100 | FAIL | PASS -> - | PASS -> FAIL | 1414 | 15408 -> 9008 | 81076 -> 55476 | 106942464 -> 106946560 | 245587968 -> 245567488 | 280.6 -> 282.7 | 1108.6 -> 819.2 |
+| dedup-workspace-unique-500 | FAIL | FAIL -> - | FAIL | 7014 | 78769 -> 46769 | 410013 -> 282013 | 533868544 -> 533876736 | 670679040 -> 670691328 | 1258.1 -> 1232.4 | 16119.2 -> 18053.4 |
+| dedup-workspace-unique-1-base128-v3 | FAIL | PASS -> - | PASS -> FAIL | 28 | 250 -> 186 | 1237 -> 981 | 1294336 -> 1298432 | 137519464 -> 137507128 | 46.5 -> 45.2 | 24.2 -> 20.6 |
+| dedup-workspace-unique-10-base128-v3 | FAIL | PASS -> - | PASS -> FAIL | 154 | 1519 -> 879 | 8167 -> 5607 | 10907648 -> 10911744 | 148504576 -> 148500480 | 72.1 -> 78.1 | 100.3 -> 86.0 |
+
+Failure texts, as recorded:
+
+- `dedup-workspace-exact-1-compact-v2`: closed overlay authoritative schema/accounting source pin changed
+- `dedup-workspace-exact-10-compact-v2`: closed overlay authoritative schema/accounting source pin changed
+- `dedup-workspace-exact-100`: closed overlay authoritative schema/accounting source pin changed
+- `dedup-workspace-exact-500`: Command '['docker', '--host', 'unix:///Users/yifanxu/.docker/run/docker.sock', 'cp', '9fe255b48dd67604088b63c68b06604dd3a527fcbd442c3c39cdf2c0640663e3:/layerfs-local/overlay/overlay.sqlite', '/Users/yifanxu/Ephemeral-AI-Lab/layerfs-issue316/benchmark-results/fs-bench-pro/2026-10-11-issue318-b1-run-d
+- `dedup-workspace-local-1-compact-v2`: closed overlay authoritative schema/accounting source pin changed
+- `dedup-workspace-local-10-compact-v2`: closed overlay authoritative schema/accounting source pin changed
+- `dedup-workspace-local-100`: closed overlay authoritative schema/accounting source pin changed
+- `dedup-workspace-local-500`: Command '['docker', '--host', 'unix:///Users/yifanxu/.docker/run/docker.sock', 'cp', '02884ad4e854eed26e352afc70edde992e97b1b258be9e755e04a2d074686482:/layerfs-local/overlay/overlay.sqlite', '/Users/yifanxu/Ephemeral-AI-Lab/layerfs-issue316/benchmark-results/fs-bench-pro/2026-10-11-issue318-b1-run-d
+- `dedup-workspace-unique-1-compact-v2`: closed overlay authoritative schema/accounting source pin changed
+- `dedup-workspace-unique-10-compact-v2`: closed overlay authoritative schema/accounting source pin changed
+- `dedup-workspace-unique-100`: closed overlay authoritative schema/accounting source pin changed
+- `dedup-workspace-unique-500`: Command '['/Users/yifanxu/Ephemeral-AI-Lab/layerfs-issue316/benchmark-results/fs-bench-pro/binary-archive/ba6cf187f8bb3ca168c44e6bcd02462e315ed71575613208af6a3c49eef54400/layerfs-r7-runtime', 'verify-workspace', '--socket', '/Users/yifanxu/.docker/run/docker.sock', '--volume', 'layerfs-fsb-sample-a2
+- `dedup-workspace-unique-1-base128-v3`: closed overlay authoritative schema/accounting source pin changed
+- `dedup-workspace-unique-10-base128-v3`: closed overlay authoritative schema/accounting source pin changed
+
+Fourteen cases, all FAIL. Iteration 1: 11 PASS, 3 FAIL. Eleven rows are new failures; their cause is a
+check in the harness, not a result of the product.
+
+- The 11 cases that passed in iteration 1 (every 1, 10 and 100 MiB case and both `base128` cases) end with
+  `closed overlay authoritative schema/accounting source pin changed`. The harness's closed-overlay
+  accounting check carries SHA-256 pins of six product files (the overlay's `schema.sql` and
+  `accounting.sql`, three overlay source files and the bridge control types) taken at iteration 1's source.
+  The merged source has the reference-piece schema, so the pins do not match and the check stops before it
+  reads anything. Mount, command, Commit, cleanup (Gone) and custody (KNOWN_STOP) completed in all 11, and
+  their counts and sizes are recorded. The check was not changed in phase C; it is the first item this
+  family adds to phase D.
+- The three 500 MiB cases fail as in iteration 1: `dedup-workspace-exact-500` and `-local-500` when the
+  closed overlay export met the end of the check's 41 s work allowance (2.8 s and 2.4 s left), and
+  `dedup-workspace-unique-500` when the allowance ended in the final check command. For `unique-500` the
+  complete wall is 19,640 ms against the declared 15,000 ms (17,486 ms in the control).
+- Requests equal the control in all 14 (28; 154; 1,414; 7,014). Writer jobs are lower by 64, 640, 6,400 and
+  32,000 (one a 16 KiB cell written) and statements by 256, 2,560, 25,600 and 128,000 (four a cell).
+- Overlay logical bytes: +4,096 B in the 1, 10 and 100 MiB cases, +8,192 B in the 500 MiB cases. Store
+  logical bytes: equal in 4 cases, the other 10 differ by −20,480 to +152,464 B (largest:
+  `dedup-workspace-local-100`, 139,760,744 -> 139,913,208 B, +0.11%).
+- Commit, diagnostic only: 100 MiB cases 1,049–1,111 ms -> 670–819 ms; `exact-500` 5,194 -> 3,877 ms,
+  `local-500` 5,121 -> 4,064 ms, `unique-500` 16,119 -> 18,053 ms.
+- Storage, decided by agent: a sample of this family keeps `pristine-store.sqlite` and
+  `closed-overlay.sqlite` beside its receipt (up to 136 MB and 107 MB). They are whole copies of payload, so
+  the driver now removes them with the exported Stores and records each in the sample's cleanup record
+  with its manifest digest; the 11 samples taken before the change were cleaned the same way.
+
+- Storage after the family: 3 Docker volumes more than before the run
+  (3 of them masters of current originals, 0 unexplained),
+  0 containers more; originals 4255 MB, result folder
+  1110 MB; host 221 GiB free; `docker system df`: Images=21.51GB, Containers=12.85GB, Local Volumes=69.21GB, Build Cache=4.843GB.
+- CSVs: `core/benchmark/fs-bench-pro/baselines/core/2026-10-11-a142e9478/dedup_workspace_reuse/`.
