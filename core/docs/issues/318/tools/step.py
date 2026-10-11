@@ -344,6 +344,7 @@ if kind == "clean":
                 if Path(inner) == folder:
                     continue
                 os.chmod(inner, 0o700)
+                os.chmod(Path(inner).parent, 0o700)
                 for name in names:
                     os.unlink(Path(inner) / name)
                 os.rmdir(inner)

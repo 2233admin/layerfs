@@ -1390,3 +1390,57 @@ proof NOT_RUN.
   0 containers more; originals 5611 MB, result folder
   1155 MB; host 220 GiB free; `docker system df`: Images=21.51GB, Containers=12.85GB, Local Volumes=69.07GB, Build Cache=4.843GB.
 - CSVs: `core/benchmark/fs-bench-pro/baselines/core/2026-10-11-46a0e620c/repository_history/`.
+
+## Phase C — batch 7, `workspace_reliability`, tag `b1`, sampled at `9cce58eed`
+
+Iteration 1's value is left of each arrow, this run's right; one value means
+equal. Times are single diagnostic samples.
+
+| case | status | functional | proof | requests | writer jobs | statements | overlay logical B | Store logical B | exec ms | Commit ms |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| workspace-invalid-sdk-edit-compact-v2-proof | not sampled | NOT_APPLICABLE -> - | NOT_APPLICABLE -> - | - | - | - | - | - | - -> - | - -> - |
+| workspace-invalid-namespace-compact-v2-proof | not sampled | NOT_APPLICABLE -> - | NOT_APPLICABLE -> - | - | - | - | - | - | - -> - | - -> - |
+| workspace-lease-lifecycle-compact-v2-proof | not sampled | NOT_APPLICABLE -> - | NOT_APPLICABLE -> - | - | - | - | - | - | - -> - | - -> - |
+| workspace-open-writer-busy-compact-v2-proof | not sampled | NOT_APPLICABLE -> - | NOT_APPLICABLE -> - | - | - | - | - | - | - -> - | - -> - |
+| workspace-live-execution-busy-compact-v2-proof | not sampled | NOT_APPLICABLE -> - | NOT_APPLICABLE -> - | - | - | - | - | - | - -> - | - -> - |
+| workspace-candidate-failure-retry-compact-v2-proof | not sampled | NOT_APPLICABLE -> - | NOT_APPLICABLE -> - | - | - | - | - | - | - -> - | - -> - |
+| workspace-admission-batch-failure-retry-compact-v2-proof | not sampled | NOT_APPLICABLE -> - | NOT_APPLICABLE -> - | - | - | - | - | - | - -> - | - -> - |
+| workspace-final-publication-failure-retry-compact-v2-proof | not sampled | NOT_APPLICABLE -> - | NOT_APPLICABLE -> - | - | - | - | - | - | - -> - | - -> - |
+| workspace-published-presentation-failure-smoke-v3-proof | not sampled | NOT_APPLICABLE -> - | NOT_APPLICABLE -> - | - | - | - | - | - | - -> - | - -> - |
+| workspace-dirty-end-discard-compact-v2-proof | not sampled | NOT_APPLICABLE -> - | NOT_APPLICABLE -> - | - | - | - | - | - | - -> - | - -> - |
+| workspace-dirty-net-zero-compact-v2-proof | not sampled | NOT_APPLICABLE -> - | NOT_APPLICABLE -> - | - | - | - | - | - | - -> - | - -> - |
+| workspace-short-spool-write-compact-v2-proof | not sampled | NOT_APPLICABLE -> - | NOT_APPLICABLE -> - | - | - | - | - | - | - -> - | - -> - |
+| workspace-deferred-nospace-compact-v2-proof | not sampled | NOT_APPLICABLE -> - | NOT_APPLICABLE -> - | - | - | - | - | - | - -> - | - -> - |
+| workspace-workload-cancel-compact-v2-proof | not sampled | NOT_APPLICABLE -> - | NOT_APPLICABLE -> - | - | - | - | - | - | - -> - | - -> - |
+| workspace-dirty-runtime-disconnect-compact-v2-proof | not sampled | NOT_APPLICABLE -> - | NOT_APPLICABLE -> - | - | - | - | - | - | - -> - | - -> - |
+| workspace-corrupt-descendant-compact-v2-proof | not sampled | NOT_APPLICABLE -> - | NOT_APPLICABLE -> - | - | - | - | - | - | - -> - | - -> - |
+| workspace-missing-descendant-compact-v2-proof | not sampled | NOT_APPLICABLE -> - | NOT_APPLICABLE -> - | - | - | - | - | - | - -> - | - -> - |
+| workspace-parallel-read-write-compact-v2-proof | not sampled | NOT_APPLICABLE -> - | NOT_APPLICABLE -> - | - | - | - | - | - | - -> - | - -> - |
+| workspace-shared-path-contention-compact-v2-proof | not sampled | NOT_APPLICABLE -> - | NOT_APPLICABLE -> - | - | - | - | - | - | - -> - | - -> - |
+| workspace-hardlink-alias-compact-v2-proof | not sampled | NOT_APPLICABLE -> - | NOT_APPLICABLE -> - | - | - | - | - | - | - -> - | - -> - |
+| workspace-symlink-semantics-compact-v2-proof | not sampled | NOT_APPLICABLE -> - | NOT_APPLICABLE -> - | - | - | - | - | - | - -> - | - -> - |
+| workspace-open-rename-unlink-compact-v2-proof | not sampled | NOT_APPLICABLE -> - | NOT_APPLICABLE -> - | - | - | - | - | - | - -> - | - -> - |
+| workspace-metadata-chmod-compact-v2-proof | not sampled | NOT_APPLICABLE -> - | NOT_APPLICABLE -> - | - | - | - | - | - | - -> - | - -> - |
+| workspace-metadata-mtime-compact-v2-proof | not sampled | NOT_APPLICABLE -> - | NOT_APPLICABLE -> - | - | - | - | - | - | - -> - | - -> - |
+| workspace-metadata-xattr-compact-v2-proof | not sampled | NOT_APPLICABLE -> - | NOT_APPLICABLE -> - | - | - | - | - | - | - -> - | - -> - |
+| workspace-exec-500-compact-v2-proof | not sampled | NOT_APPLICABLE -> - | NOT_APPLICABLE -> - | - | - | - | - | - | - -> - | - -> - |
+| workspace-repeat-publication-compact-v2-proof | not sampled | NOT_APPLICABLE -> - | NOT_APPLICABLE -> - | - | - | - | - | - | - -> - | - -> - |
+| workspace-sustained-600s-compact-v2-proof | not sampled | NOT_APPLICABLE -> - | NOT_APPLICABLE -> - | - | - | - | - | - | - -> - | - -> - |
+
+Twenty-eight rows; none was produced. Iteration 1: 28 NOT_APPLICABLE with zero attempts.
+
+- The whole family was run in one call, as iteration 1 did. The harness ended in 1.1 s, before any case,
+  with `reviewed reliability product source tree changed; applicability needs new review`.
+- Iteration 1's NOT_APPLICABLE classification of each of the 28 cases is bound to the Git tree of the
+  product crates it was reviewed against (the tree `main` has). The merged source has another product tree
+  (the reference-piece work and the two test files of phase B), so the harness refuses to repeat the
+  classification without a new review of applicability at this source.
+- So the baseline has no status for these rows: they are not NOT_APPLICABLE, not PASS and not FAIL here.
+  Nothing was started, no container or volume was made, and nothing was changed. The new review is an item
+  for phase D.
+
+- Storage after the family: 0 Docker volumes more than before the run
+  (0 of them masters of current originals, 0 unexplained),
+  0 containers more; originals 0 MB, result folder
+  1155 MB; host 226 GiB free; `docker system df`: Images=21.51GB, Containers=12.85GB, Local Volumes=69.06GB, Build Cache=4.843GB.
+- CSVs: `core/benchmark/fs-bench-pro/baselines/core/2026-10-11-9cce58eed/workspace_reliability/`.
