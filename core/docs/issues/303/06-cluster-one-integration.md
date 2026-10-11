@@ -175,7 +175,13 @@ concurrently. Persistence admits one short SQL transaction at a time rather
 than refusing its own writer merely because another cooperative writer is
 active. Session FIFO admission covers reads and writes. Linux additionally
 polls a nonblocking exclusive flock on a separately opened description of the
-same main-file inode, before its one BEGIN. One two-second deadline covers
+existing Store parent-directory inode, before its one BEGIN. This coarse lane is
+shared by multiple Store files in the same directory. A bare relative filename
+uses `.`; it creates no coordination sidecar and opens no extra main/WAL/SHM
+file descriptor. Closing a main-file descriptor outside SQLite can cancel its
+live POSIX locks, so the earlier main-file advisory implementation is superseded
+by this directory-based ownership. Stable directory/name authority is required;
+active Store reparenting or renaming is not qualified. One two-second deadline covers
 both admission steps; 1,024 pending tickets bound local admission metadata.
 Timeout/Capacity are exact before-effect refusals, not automatic retries.
 The deadline and queue choice are decided by agent, pending owner review;

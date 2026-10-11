@@ -202,5 +202,9 @@
     "Initial hang remains failed, omitted-FUSE setup remains failed, three existing History Busy expectations remain failed.",
     "No persistence profile, oracle, encoding, SQLite schema or measured budget changed.",
     "Final batch reliability review and committed production LOC comparison are owned by root after all product/test changes."
-  ]
+  ],
+  "later_history_boundary_resolution": {
+    "proof": "core/docs/issues/319/checks/sqlite-lock-custody.json",
+    "outcome": "The3 original product History-held writer failures pass after eliminating the main-file advisory FD close. Original raw logs/statuses remain unchanged; no HeldWriter expectation was weakened."
+  }
 }

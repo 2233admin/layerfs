@@ -394,7 +394,11 @@ fixtures, examples and tools do not contribute to production LOC.
   clarification2026-10-12 requires one ongoing Commit per Workspace and allows
   concurrent Commits on different Workspaces. Bounded before-effect admission
   now queues SQL work within a Session and coordinates short Linux writer jobs
-  on the local Store inode; it does not gate whole Saves or Commits or replay
+  on the existing local Store parent-directory inode; multiple Store files in
+  one directory share this coarse short-transaction lane. Do not open/close a
+  separate main/WAL/SHM descriptor for advisory ownership: closing a main-file
+  descriptor can cancel SQLite's own process POSIX locks. This admission does
+  not gate whole Saves or Commits or replay
   a failed SQL attempt. macOS has Session admission only; separate macOS writers
   and uncoordinated raw SQLite writers retain exact Busy refusal. Follow the
   [integration contract](docs/issues/303/06-cluster-one-integration.md) and its

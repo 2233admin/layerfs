@@ -451,5 +451,10 @@
     "busy_timeout remains zero; one BEGIN/body attempt; no failed-operation replay and no gate around a whole Save or Commit.",
     "Unknown outcomes retain advisory ownership until SQLite teardown; release failures retain custody and uncertainty.",
     "All historical failures retained. Withdrawn harness Commit serialization provides no product qualification."
-  ]
+  ],
+  "qualification_supersession": {
+    "reason": "Main-inode advisory FD close cancels live SQLite POSIX locks. Source safety qualification is superseded by directory-based admission; original evidence and source pins remain historical and unchanged.",
+    "current_proof": "core/docs/issues/319/checks/sqlite-lock-custody.json",
+    "outcomes_relabelled": false
+  }
 }

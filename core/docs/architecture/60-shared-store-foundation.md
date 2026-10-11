@@ -46,7 +46,15 @@ concurrent-admission resource, independent of total files, bytes, Saves or
 Workspace lifetime. SQL counters are unchanged by admission itself.
 
 On Linux, a writable transaction also acquires an exclusive advisory flock of
-an independently opened main-file description, within that same deadline.
+an independently opened description of the existing Store parent directory,
+within that same deadline. It never opens an additional descriptor to the main,
+WAL or SHM files. Closing any main-file descriptor outside SQLite can cancel all
+of that process's POSIX locks on that inode; SQLite documents this
+[lock-corruption hazard](https://www.sqlite.org/howtocorrupt.html#_posix_advisory_locks_canceled_by_a_separate_thread_doing_close_).
+The directory inode is a coarse coordination key: multiple Store files in the
+same directory share the short transaction lane. A relative bare filename uses
+`.`. No sidecar is created. Existing Store placement requires stable names and
+parent directory authority; renamed/reparented active stores are not qualified.
 Nonblocking lock polling is readiness before the single BEGIN, not transaction
 replay. Separate handles and daemons on the same local named VM volume share
 this kernel admission. The lock covers one atomic transaction through its

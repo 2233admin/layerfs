@@ -31,7 +31,7 @@ use std::{
 struct AdmissionHolder(Child);
 impl AdmissionHolder {
     fn acquire(path: &std::path::Path) -> Self {
-        let body="import fcntl,sys,select\nf=open(sys.argv[1],'rb'); fcntl.flock(f,fcntl.LOCK_EX); print('held',flush=True)\nselect.select([sys.stdin],[],[],3)\nfcntl.flock(f,fcntl.LOCK_UN)\n";
+        let body="import fcntl,sys,select,os\nf=os.open(sys.argv[1],os.O_RDONLY|os.O_DIRECTORY); fcntl.flock(f,fcntl.LOCK_EX); print('held',flush=True)\nselect.select([sys.stdin],[],[],3)\nfcntl.flock(f,fcntl.LOCK_UN); os.close(f)\n";
         let mut held = Self(
             Command::new("python3")
                 .args(["-c", body])
@@ -87,7 +87,7 @@ fn parallel_workspace_commits_keep_distinct_captures_and_one_admission_each() {
     );
     let ea = native(root(&a));
     let eb = native(root(&b));
-    let holder = AdmissionHolder::acquire(&rig.fixture.config.path);
+    let holder = AdmissionHolder::acquire(rig.fixture.config.path.parent().unwrap());
     let (tx, rx) = mpsc::channel();
     let (ready_tx, ready_rx) = mpsc::channel();
     let mut starters = Vec::new();

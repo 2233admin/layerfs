@@ -142,7 +142,7 @@ impl Held {
         listener.set_nonblocking(true).unwrap();
         // The pinned Linux proof image supplies Python; its socket deadline releases
         // this independently opened real kernel owner if the controller fails.
-        let body = "import os,socket,fcntl\nf=open(os.environ['LAYERFS_ADMISSION_LOCK_CHILD'],'r+b')\nfcntl.flock(f,fcntl.LOCK_EX|fcntl.LOCK_NB)\ns=socket.socket(socket.AF_UNIX)\ns.settimeout(3)\ns.connect(os.environ['LAYERFS_ADMISSION_LOCK_SOCKET'])\ns.sendall(b'L')\ntry:\n assert s.recv(1)==b'R'\nfinally:\n fcntl.flock(f,fcntl.LOCK_UN)\n f.close()\n";
+        let body = "import os,socket,fcntl\nf=os.open(os.path.dirname(os.environ['LAYERFS_ADMISSION_LOCK_CHILD']) or '.',os.O_RDONLY|os.O_DIRECTORY)\nfcntl.flock(f,fcntl.LOCK_EX|fcntl.LOCK_NB)\ns=socket.socket(socket.AF_UNIX)\ns.settimeout(3)\ns.connect(os.environ['LAYERFS_ADMISSION_LOCK_SOCKET'])\ns.sendall(b'L')\ntry:\n assert s.recv(1)==b'R'\nfinally:\n fcntl.flock(f,fcntl.LOCK_UN)\n os.close(f)\n";
         let mut child = Command::new("python3")
             .args(["-c", body])
             .env("LAYERFS_ADMISSION_LOCK_CHILD", path)

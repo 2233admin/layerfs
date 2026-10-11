@@ -915,3 +915,23 @@ is relabeled. Functional23PASS; three existing product raw-writer publication
 refusal tests FAIL Committed vs Busy, now independently assigned for repair.
 Daemon all-target Clippy, scopedfmt and686-file boundary guardPASS. This commit
 fixes lifecycle admission only; concurrent writer qualification remains unfinished.
+
+### SQLite kernel lock custody repair
+
+The original raw-writer Busy failures exposed an unsafe main-file advisory
+owner: closing any additional descriptor to the database inode can cancel
+SQLite process POSIX locks. Independent kernel probes after real two-Session
+reserves/Save show main_shared=false before the fix, including after one peer
+Session drops. A simpler reserve-only Busy check passed and did not establish
+lock custody. [Red/green kernel and original test evidence](checks/sqlite-lock-custody.json).
+
+Linux cooperative admission now uses an existing parent-directory descriptor,
+never an additional main/WAL/SHM descriptor. Bare relative filenames use dot.
+This is a coarse lane shared by Stores in the same directory; short transactions
+only, no wholeSave/Commit lock, unchanged2s bound, no sidecar or SQL replay.
+Both kernel regressions show main_shared=true, rawBusy has one BEGIN and no
+transaction/commit/rollback. Allthree original History Busy failures pass with
+unchanged holder/expectations; cooperativewriter3, nativeparallel1, seals2PASS.
+Persistence+daemon all-target Clippy, scopedfmt,687-file boundary guardPASS.
+Earlier main-inode qualification is explicitly superseded; its receipts remain.
+Decided by agent, pending owner review: use this safe directory coordination.

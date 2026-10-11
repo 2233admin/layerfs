@@ -19,13 +19,21 @@ impl Writer {
     pub(crate) fn acquire(path: &Path, deadline: Instant) -> Result<Self, BackendError> {
         #[cfg(target_os = "linux")]
         {
-            // A separate open description, not dup/try_clone, coordinates both
-            // other sessions in this process and daemons on the shared volume.
-            let mut file = File::open(path).map_err(|_| BackendError::Integrity)?;
+            // Never open another FD to SQLite's main/WAL/SHM files here:
+            // closing any main-file FD cancels every process POSIX lock on
+            // that inode, including SQLite's live SHARED locks. An independent
+            // description of the existing parent directory coordinates short
+            // writer jobs without interfering with SQLite's descriptors.
+            // Multiple Store files in one directory share this coarse lane.
+            let directory = path
+                .parent()
+                .filter(|parent| !parent.as_os_str().is_empty())
+                .unwrap_or_else(|| Path::new("."));
+            let mut file = File::open(directory).map_err(|_| BackendError::Integrity)?;
             if !file
                 .metadata()
                 .map_err(|_| BackendError::Integrity)?
-                .is_file()
+                .is_dir()
             {
                 return Err(BackendError::Integrity);
             }
