@@ -1783,3 +1783,17 @@ the other 28 are iteration 1's failures with the same recorded cause.
    (9 rows) or the workload should change.
 5. The decisions by agent listed in phases A and C.
 6. Benchmark volumes that earlier runs left in Docker, untouched here.
+
+### Corrections to the phase D and E entry above
+
+- The capped rows: "takes 2.0 to 2.4 s" is not a recorded figure. The three
+  receipts have no command time; the command was stopped at the 2 s limit.
+  What is recorded is the same kind of edit in the uncapped family at
+  500 MiB: 2.0 to 4.9 s of exec.
+- Store sizes: "iteration 1's own repeated sources show the same scale" was
+  not checked and is withdrawn. The differences are recorded; their cause
+  is not examined.
+- "The other 28 are iteration 1's failures with the same recorded cause":
+  25 are; the other 3 are the `repository_history` rows, which have no
+  receipt here and were FAIL, FAIL and NOT_RUN in iteration 1 (stride3
+  failed there earlier, in the copy before any command).
