@@ -319,3 +319,47 @@ equal to iteration 1's. They differ by −8,192 to +229,376 bytes of 5 to 516 MB
 (table column `Store logical B`). Init keeps its parallel construction
 profile, and the file's page count is not fixed across runs; no cause beyond
 that was looked for.
+
+## Phase C — batch 1, `payload_create_read`, tag `b1`, sampled at `7bd91e498`
+
+Iteration 1's value is left of each arrow, this run's right; one value means
+equal. Times are single diagnostic samples.
+
+| case | status | functional | proof | requests | writer jobs | statements | overlay logical B | Store logical B | exec ms | Commit ms |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| payload-create-1m-compact-v2 | INELIGIBLE | PASS | PASS | 22 | 241 -> 177 | 1178 -> 922 | 1294336 -> 1298432 | 1411992 | 41.6 -> 35.3 | 17.6 -> 16.4 |
+| payload-create-10m-compact-v2 | INELIGIBLE | PASS | PASS | 94 | 1177 -> 537 | 6290 -> 3730 | 10895360 -> 10899456 | 12738560 | 67.1 -> 65.7 | 104.4 -> 81.6 |
+| payload-create-100m | INELIGIBLE | PASS | PASS | 814 | 10537 -> 4137 | 57410 -> 31810 | 106856448 -> 106860544 | 109649920 -> 109645824 | 232.7 -> 233.9 | 903.7 -> 1421.0 |
+| payload-create-500m | INELIGIBLE | PASS | PASS | 4014 | 52137 -> 20137 | 284610 -> 156610 | 533385216 -> 533389312 | 534945792 -> 534966272 | 1087.7 -> 1019.2 | 8237.9 -> 6309.2 |
+| payload-random-read-1-compact-v2 | INELIGIBLE | PASS | PASS | 6 | 52 | 236 | 229376 -> 233472 | 1327496 | 45.3 -> 40.2 | 10.0 -> 9.3 |
+| payload-random-read-10-compact-v2 | INELIGIBLE | PASS | PASS | 15 | 61 | 254 | 229376 -> 233472 | 10887584 | 49.8 -> 49.3 | 10.6 -> 8.3 |
+| payload-random-read-100 | INELIGIBLE | PASS | PASS | 105 | 151 | 434 | 229376 -> 233472 | 530792864 | 48.1 -> 49.7 | 8.9 -> 8.9 |
+| payload-random-read-500 | INELIGIBLE | PASS | PASS | 503 | 550 | 1232 | 229376 -> 233472 | 530792864 | 203.6 -> 158.9 | 7.5 -> 8.9 |
+
+- 8 of 8: functional PASS, proof PASS, mount Gone with KnownStop, as in
+  iteration 1. Status INELIGIBLE (`class B source demands or own-write cold
+  backing precondition unavailable`), as in iteration 1.
+- **Requests are equal in all 8 cases.**
+- **Writer jobs and statements are lower in the four create cases, by exactly
+  one job and four statements a 16 KiB cell written** (64 / 640 / 6,400 /
+  32,000 jobs for 1 / 10 / 100 / 500 MiB). This is not the reference-piece
+  work: it is branch commit `8c1993f4a` ("read captured payload once at
+  Commit and compose windows by run", +178 production LOC), which is on
+  `issue316-fsb-rescue` before the piece phases and was never on `main`.
+  The four read cases write nothing and are equal.
+- **Overlay logical bytes are 4,096 higher in all 8 cases**: one more page in
+  the empty overlay database, from the piece table of overlay schema 33.
+- Store logical bytes differ in two cases (−4,096 of 110 MB, +20,480 of
+  535 MB); not explained further.
+- Commit time of `payload-create-100m` is 903.7 -> 1421.0 ms and of
+  `payload-create-500m` 8237.9 -> 6309.2 ms; single samples on a shared
+  machine, not judged.
+- First sample measured for leftovers: the harness removes a completed
+  sample's volume and container itself; the driver removed the exported and
+  normalized Stores (1.3 MB to 530.7 MB a sample). Nothing else remained.
+
+- Storage after the family: 4 Docker volumes more than before the run
+  (4 of them masters of current originals, 0 unexplained),
+  0 containers more; originals 3197 MB, result folder
+  227 MB; host 223 GiB free; `docker system df`: Images=21.51GB, Containers=12.85GB, Local Volumes=69.61GB, Build Cache=4.843GB.
+- CSVs: `core/benchmark/fs-bench-pro/baselines/core/2026-10-11-7bd91e498/payload_create_read/`.
