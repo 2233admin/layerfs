@@ -97,3 +97,14 @@ or repeat loop extends a test. Host Cargo is `+1.85.1 --locked`, with the
 repository ARM64 flags. Use worktree-local Cargo targets. No CI or aggregate
 pre-push gate exists. After harness changes run owning scoped tests, preserving
 failures. Product changes additionally need the covering checks in core's guide.
+
+## Kept workload tiers
+
+The tracked tier entry point is `tier.py`: `all` is for the owner in their
+terminal; agents use `next`, exactly one case per command. Missing preparation
+returns the exact `bench.py prepare` command and starts no sample. Prepare that
+distinct fixture under the existing bound, then invoke `next`. See
+[kept fixture preparation](../../docs/benchmark/fs-bench-pro/PREPARED-FIXTURES.md)
+for producer keys, integrity, persistent ownership, source identity and cleanup.
+No script mode authorizes an unchanged retry, widened oracle, product tuning or
+Durable. Case counters and all original verdicts remain visible in the journal.

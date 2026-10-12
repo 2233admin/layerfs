@@ -35,7 +35,7 @@ Init inside the measured operation and have no setup Store.
 A complete case preparation has a separate producer key covering its declared
 case, native tools, setup producers and required Store builder. Case-specific
 expectations and helper assets remain separate from the shared initial input.
-The tracked tier driver will locate a preparation by this key and avoid invalidating it merely
+The tracked tier driver locates a preparation by this key and avoids invalidating it merely
 because a receipt, external test or documentation changed. The frozen root
 definitions and historical receipts remain unchanged.
 
@@ -45,3 +45,33 @@ was 597,182,824,448 bytes; Docker filesystem free space was 171,939,074,048 byte
 The inventory included 21 Project Init Store preparations and 18 distinct master
 volumes. These are the pre-retention observation; the final kept-fixture size
 will be reported again with the final baseline.
+
+The tracked entry point is `core/benchmark/fs-bench-pro/tier.py`. `all` is for
+the owner's terminal and executes a whole declared tier as sequential bounded
+case invocations. `next` advances exactly one unrun case. It requires that
+case's closed preparation first; a missing fixture produces the exact tracked
+`bench.py prepare` argv and starts no sample. Agents execute that preparation
+under its existing bound, then invoke `next`. Agents never invoke `all`.
+
+Examples use a clean committed source and its exact sealed build:
+
+```sh
+python3 core/benchmark/fs-bench-pro/tier.py next everyday --tag baseline --build "$SEALED_BUILD"
+python3 core/benchmark/fs-bench-pro/tier.py all heavy --tag baseline --build "$SEALED_BUILD"
+```
+
+The entry point serializes on the worktree-local measurement lock. Each case
+gets append-only output and an exact-source campaign identity; an existing
+attempted directory is never replayed. The journal retains command wall, phase
+metrics, count comparison, original verdicts and cleanup. Counts are compared
+with each case's own terminal row, including unavailable fields. A count,
+functional, proof or cleanup failure stops whole-tier advancement for diagnosis.
+The next explicit invocation can advance to an unrun case after that diagnosis.
+
+Cleanup scans only explicit resources created by that sample. A container is
+stopped/removed only when Docker ties it to one of those sample volumes.
+Pre-existing volumes are protected. Exported Store/test-copy data is removed
+after checking its complete manifest; removed hashes are retained. Closed
+masters remain. Default invocations stay below two minutes; only the owner's
+six named large runs and two preparations receive the 300-second allowance.
+The case's product, verifier, proof and reporting limits are unchanged.

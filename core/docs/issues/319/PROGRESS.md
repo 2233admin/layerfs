@@ -2387,3 +2387,19 @@ Before keeping: logical 3,071,784,966 B / allocated 3,393,814,528 B; host free
 remain exact; SDK/daemon/runtime checks recorded for this commit. Receipts:
 fixtures-before-retention.json, shared-input/context and stage2-cache logs.
 The tracked driver and complete simplified-source gate remain next.
+
+
+### Benchmark simplification: tracked tier entry point
+
+Cause: the former driver lived only in ignored artifacts. Change: track tier.py
+with owner-terminal all and agent next, one kept case per agent invocation.
+Missing preparations expose the exact tracked harness command without sampling.
+Producer keys locate closed kept inputs; attempted outputs never replay. Retain
+per-case phase/count/verdict/whole-command journal entries and terminal reference
+comparisons. Sample cleanup uses only explicit newly-created volume claims and
+Docker mount ties; pre-existing volumes and fixture masters remain protected.
+Commit: this tier entry point. Scoped mode/limit/no-replay/ownership tests PASS;
+SDK/daemon/runtime targets compile and SDK/native-control checks recorded.
+All original budgets, profile, construction worker, oracles and Storage readbacks
+remain. No whole tier was invoked and no intermediate sample ran. Receipts:
+stage2-tier-driver/cache test logs; simplified-source gate and baseline follow.
