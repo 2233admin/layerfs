@@ -353,3 +353,7 @@ that needs no owner decision (launch is P1; waiting on the one owner is P2),
 and for tier 3 one count to model first (16 Payload statements for a 64 KiB
 write) and one fence candidate (two of three statements of every record read).
 Verdict: waiting for the machine; nothing is claimed for T2 or T3.
+Later the same day the other worktree began its baseline build. From that
+point no build, test or sample of this run starts until its baseline is
+committed on `sdk-refactor`. Then, in order: rebase onto it, one sealed build,
+the six selected cases once, and the T1 stage end at that identity.
