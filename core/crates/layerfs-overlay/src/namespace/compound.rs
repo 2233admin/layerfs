@@ -209,7 +209,7 @@ impl Overlay {
             };
             // Computed once: it decides the row and is the value the row records.
             let (added, lower) =
-                self.name_inheritance(&state, route.ns, *parent, &change.name, inherited)?;
+                self.name_inheritance(&state, route.ns, *parent, &change.name, inherited, seen)?;
             if target.is_some() || lower {
                 self.bind_name(route.ns, &state, *parent, &change.name, *target, lower)?;
                 directory_entries += i64::from(added);
@@ -386,14 +386,10 @@ impl SourceRows<'_> {
         Ok(row.map(|row| row.inode))
     }
     /// The active row and the latest lower row of one name, in one seek.
+    /// Inside a job that keeps its reads, a name is read once.
     pub fn name(&self, parent: u64, name: &[u8]) -> OverlayResult<NameLayers> {
         let key = check_name(parent, name)?;
-        self.db.name_layers(
-            self.source.route.ns,
-            key,
-            name,
-            self.state.active.0,
-            self.state.installed,
-        )
+        self.db
+            .name_layers_seen(self.source.route.ns, &self.state, key, name, self.seen)
     }
 }

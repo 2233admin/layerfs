@@ -586,12 +586,12 @@ fn one_removed_file_costs_exactly_this_beside_any_files_and_after_any_orphans() 
 /// The six jobs' Inode-family attempts for one created and removed file:
 /// 11 of the requests' own, and the two of the reclamation in FORGET.
 const INODE: u64 = 13;
-/// The negative LOOKUP: the fence; the directory's row, read once, and one
-/// seek of the name's rows for each of its two evaluations.
+/// The negative LOOKUP: the fence; the directory's row and the name's rows,
+/// each read once for both of its evaluations.
 const LOOKUP: [(&str, u64, u64); 3] = [
     ("Workspace", 1, 1),
     ("Inode", 1, 1),
-    ("DirectoryEntry", 2, 2),
+    ("DirectoryEntry", 1, 1),
 ];
 /// CREATE, WRITE and RELEASE as `native_visit_cost` explains them.
 const CREATE: [(&str, u64, u64); 7] = [
@@ -600,7 +600,7 @@ const CREATE: [(&str, u64, u64); 7] = [
     ("Commit", 1, 1),
     ("Workspace", 2, 2),
     ("Inode", 3, 4),
-    ("DirectoryEntry", 5, 6),
+    ("DirectoryEntry", 2, 3),
     ("Lease", 3, 6),
 ];
 const WRITE: [(&str, u64, u64); 6] = [
@@ -620,11 +620,11 @@ const RELEASE: [(&str, u64, u64); 5] = [
 ];
 /// UNLINK under the kernel's lookup reference, in order. Reads: the fence
 /// [Workspace]; the directory's row, the name's rows and the file's row,
-/// then the name's rows again for the change [2 Inode, 2 DirectoryEntry].
+/// each once for every evaluation [2 Inode, DirectoryEntry].
 /// Then one transaction: the file's tombstone and the directory's time and
 /// entry counts, each an update over the row the job read [2 Inode]; the
-/// name's rows and the binding's removal [2 DirectoryEntry, with its
-/// trigger]; the orphan's row, absent [Lease]; the file's references
+/// binding's removal, decided by the name's rows the job read
+/// [DirectoryEntry, with its trigger]; the orphan's row, absent [Lease]; the file's references
 /// [Lease]; the orphan's row [Lease, with its trigger] and its
 /// orphan-domain inode row [Inode, with its count trigger]; the frontier
 /// [Workspace]. Nothing is queued: only the kernel's lookup holds the file.
@@ -634,7 +634,7 @@ const UNLINK: [(&str, u64, u64); 7] = [
     ("Commit", 1, 1),
     ("Workspace", 2, 2),
     ("Inode", 5, 6),
-    ("DirectoryEntry", 4, 5),
+    ("DirectoryEntry", 2, 3),
     ("Lease", 3, 4),
 ];
 /// FORGET of the last kernel reference, which reclaims the one-cell file

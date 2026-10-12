@@ -294,10 +294,30 @@ impl Overlay {
             lower: lower.map(|row| row.1),
         })
     }
+    /// The same rows at the current view for a job that keeps its reads:
+    /// the statement runs for the job's first read of the name only.
+    pub(crate) fn name_layers_seen(
+        &self,
+        ns: i64,
+        state: &WorkspaceState,
+        parent: i64,
+        name: &[u8],
+        seen: Option<&JobRows>,
+    ) -> OverlayResult<NameLayers> {
+        if let Some(layers) = seen.and_then(|seen| seen.name(parent, name)) {
+            return Ok(layers);
+        }
+        let layers = self.name_layers(ns, parent, name, state.active.0, state.installed)?;
+        if let Some(seen) = seen {
+            seen.record_name(parent, name, layers);
+        }
+        Ok(layers)
+    }
     /// Whether binding one name adds a row to the active generation, and
     /// whether the view below that generation binds the name: an active row
     /// has recorded it, a lower local row decides it, and otherwise the
-    /// caller's base fact does.
+    /// caller's base fact does. `seen` holds the name rows the running job
+    /// read: a name it read is not read again.
     pub(crate) fn name_inheritance(
         &self,
         state: &WorkspaceState,
@@ -305,8 +325,9 @@ impl Overlay {
         parent: i64,
         name: &[u8],
         base: bool,
+        seen: Option<&JobRows>,
     ) -> OverlayResult<(bool, bool)> {
-        let layers = self.name_layers(ns, parent, name, state.active.0, state.installed)?;
+        let layers = self.name_layers_seen(ns, state, parent, name, seen)?;
         Ok(match layers.active_inherited {
             Some(inherited) => (false, inherited),
             None => (true, layers.lower.map_or(base, |serial| serial.is_some())),
@@ -342,7 +363,8 @@ impl Overlay {
         target: Option<i64>,
         base: bool,
     ) -> OverlayResult<bool> {
-        let (added, inherited) = self.name_inheritance(state, route.ns, parent, name, base)?;
+        let (added, inherited) =
+            self.name_inheritance(state, route.ns, parent, name, base, None)?;
         self.bind_name(route.ns, state, parent, name, target, inherited)?;
         Ok(added)
     }

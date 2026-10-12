@@ -1047,8 +1047,8 @@ impl Pinned {
 /// LOOKUP of a base regular file this daemon has seen: one visit. Its
 /// length is remembered, so the visit decides over resident facts and adds
 /// one to the kernel's count in one transaction. No reader, no length batch.
-/// The visit reads the directory's row and the file's once each, however
-/// many evaluations it takes.
+/// The visit reads the directory's row, the file's and the name's once
+/// each, however many evaluations it takes.
 const LOOKUP_BASE: Pinned = Pinned {
     jobs: (1, 0, 0),
     grants: 0,
@@ -1059,7 +1059,7 @@ const LOOKUP_BASE: Pinned = Pinned {
         ("Commit", 1, 1),
         ("Workspace", 1, 1),
         ("Inode", 2, 2),
-        ("DirectoryEntry", 2, 2),
+        ("DirectoryEntry", 1, 1),
         ("Lease", 2, 2),
     ],
 };

@@ -1,18 +1,18 @@
-LookupMiss: requests=1 jobs(read,mutation,lifecycle)=[1, 0, 0] transactions=0 attempts=4 executions=4
+LookupMiss: requests=1 jobs(read,mutation,lifecycle)=[1, 0, 0] transactions=0 attempts=3 executions=3
   1 FENCE_LOOKUP
   1 INODE_LOOKUP
-  2 NAME_LAYERS
+  1 NAME_LAYERS
 Getattr: requests=2 jobs(read,mutation,lifecycle)=[2, 0, 0] transactions=0 attempts=4 executions=4
   2 FENCE_LOOKUP
   2 INODE_LOOKUP
-Create: requests=1 jobs(read,mutation,lifecycle)=[0, 1, 0] transactions=1 attempts=16 executions=22
+Create: requests=1 jobs(read,mutation,lifecycle)=[0, 1, 0] transactions=1 attempts=13 executions=19
   1 DIRECTORY_ENTRY_PUT
   1 FENCE_LOOKUP
   1 FILE_OPEN_LOOKUP_ADD
   1 FRONTIER_ADVANCE
   2 INODE_INSERT
   1 INODE_LOOKUP
-  4 NAME_LAYERS
+  1 NAME_LAYERS
   1 begin
   1 commit
   1 file-handle-insert

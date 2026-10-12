@@ -1,7 +1,7 @@
-LookupMiss: requests=1110 jobs(read,mutation,lifecycle)=[1110, 0, 0] transactions=0 attempts=3340 executions=3340
+LookupMiss: requests=1110 jobs(read,mutation,lifecycle)=[1110, 0, 0] transactions=0 attempts=3330 executions=3330
   1110 FENCE_LOOKUP
   1110 INODE_LOOKUP
-  1120 NAME_LAYERS
+  1110 NAME_LAYERS
 Lookup: requests=90 jobs(read,mutation,lifecycle)=[90, 0, 0] transactions=90 attempts=900 executions=900
   90 FENCE_LOOKUP
   180 INODE_LOOKUP
@@ -15,7 +15,7 @@ Lookup: requests=90 jobs(read,mutation,lifecycle)=[90, 0, 0] transactions=90 att
 Getattr: requests=1011 jobs(read,mutation,lifecycle)=[1011, 0, 0] transactions=0 attempts=2022 executions=2022
   1011 FENCE_LOOKUP
   1011 INODE_LOOKUP
-Create: requests=1000 jobs(read,mutation,lifecycle)=[0, 1000, 0] transactions=1000 attempts=15000 executions=20000
+Create: requests=1000 jobs(read,mutation,lifecycle)=[0, 1000, 0] transactions=1000 attempts=13000 executions=18000
   1000 DIRECTORY_ENTRY_PUT
   1000 FENCE_LOOKUP
   1000 FILE_OPEN_LOOKUP_ADD
@@ -23,13 +23,13 @@ Create: requests=1000 jobs(read,mutation,lifecycle)=[0, 1000, 0] transactions=10
   1000 INODE_INSERT
   1000 INODE_LOOKUP
   1000 INODE_UPDATE
-  3000 NAME_LAYERS
+  1000 NAME_LAYERS
   1000 begin
   1000 commit
   1000 file-handle-insert
   1000 freelist-count
   1000 native-lookup-insert
-Mkdir: requests=110 jobs(read,mutation,lifecycle)=[0, 110, 0] transactions=110 attempts=1660 executions=2211
+Mkdir: requests=110 jobs(read,mutation,lifecycle)=[0, 110, 0] transactions=110 attempts=1430 executions=1981
   110 DIRECTORY_ENTRY_PUT
   110 FENCE_LOOKUP
   110 FILE_LOOKUPS_ADD
@@ -37,7 +37,7 @@ Mkdir: requests=110 jobs(read,mutation,lifecycle)=[0, 110, 0] transactions=110 a
   111 INODE_INSERT
   110 INODE_LOOKUP
   109 INODE_UPDATE
-  340 NAME_LAYERS
+  110 NAME_LAYERS
   110 begin
   110 commit
   110 freelist-count

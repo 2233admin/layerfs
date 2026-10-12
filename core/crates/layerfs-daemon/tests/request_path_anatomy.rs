@@ -111,10 +111,10 @@ fn c01_create_files() {
         Pinned {
             requests: 5_001,
             owner_jobs: 5_002,
-            statements: 44_004,
-            attempts: 37_003,
+            statements: 40_004,
+            attempts: 33_003,
             transactions: 3_000,
-            vm_steps: 1_670_068,
+            vm_steps: 1_582_084,
             counts: include_str!("support/request_path_counts/c01.txt"),
         },
     );
@@ -152,10 +152,10 @@ fn c03_create_and_remove_files() {
         Pinned {
             requests: 9_020,
             owner_jobs: 9_037,
-            statements: 102_202,
-            attempts: 86_183,
+            statements: 96_202,
+            attempts: 80_183,
             transactions: 5_018,
-            vm_steps: 3_625_149,
+            vm_steps: 3_479_173,
             counts: include_str!("support/request_path_counts/c03.txt"),
         },
     );
@@ -203,10 +203,10 @@ fn c04_make_a_tree() {
         Pinned {
             requests: 5_341,
             owner_jobs: 5_342,
-            statements: 42_644,
-            attempts: 36_073,
+            statements: 40_404,
+            attempts: 33_833,
             transactions: 3_220,
-            vm_steps: 1_609_503,
+            vm_steps: 1_560_239,
             counts: include_str!("support/request_path_counts/c04.txt"),
         },
     );
@@ -231,10 +231,10 @@ fn c06_write_one_large_file() {
         Pinned {
             requests: 517,
             owner_jobs: 518,
-            statements: 9_766,
-            attempts: 7_711,
+            statements: 9_762,
+            attempts: 7_707,
             transactions: 514,
-            vm_steps: 439_105,
+            vm_steps: 439_033,
             counts: include_str!("support/request_path_counts/c06.txt"),
         },
     );
@@ -275,10 +275,10 @@ fn c10_copy_a_base_file() {
         Pinned {
             requests: 1_545,
             owner_jobs: 1_547,
-            statements: 14_408,
-            attempts: 12_349,
+            statements: 14_403,
+            attempts: 12_344,
             transactions: 1_029,
-            vm_steps: 607_943,
+            vm_steps: 607_853,
             counts: include_str!("support/request_path_counts/c10.txt"),
         },
     );
