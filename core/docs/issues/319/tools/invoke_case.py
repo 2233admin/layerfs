@@ -20,8 +20,18 @@ EXTENDED = frozenset(
 
 EXTREME = frozenset([('run','mixed_load_bearing:v016-mixed-exhaustive-500mb-30000-k100-v1')])
 
+# Owner decision 2026-10-12 (phase 13): three 500 MiB mixed runs hold two or three
+# mounted role proofs of 18 to 21 s each and do not fit one 2-minute command.
+LARGE_ROOT_RUNS = frozenset([
+    ('run','multi_workspace_development:v016-workspace-mixed-500mb-30000-k100-v1'),
+    ('run','branch_development:v016-branch-mixed-500mb-30000-k10-v1'),
+    ('run','branch_development:v016-branch-mixed-500mb-30000-k100-v1')])
+
 
 def call_policy(kind, item):
+    if (kind, item) in LARGE_ROOT_RUNS:
+        return {'outer_seconds':300,'driver_seconds':288,
+                'reason':'owner 2026-10-12 phase 13: exact three 500MiB mixed runs with two or three mounted role proofs; case verification, command, Commit and performance limits unchanged'}
     if (kind, item) in EXTREME:
         return {'outer_seconds':300,'driver_seconds':288,
                 'reason':'expanded owner E-1: exact500MiB exhaustive verification-only run; original300s proof and ordinary individual calls unchanged; complete invocation ceiling120->275s with13s driver return margin'}

@@ -2038,3 +2038,14 @@ hashing, compression and Store write byte counts and times are not exported, so
 the difference cannot be split between CPU and Store I/O from a receipt.
 No fix selected: no counter names a block, the case passes both checks inside
 its limits, and a profile would need an observation surface that does not exist.
+
+
+### Phase 13: invocation ceiling for three 500 MiB mixed runs (owner decision)
+
+Cause: workspace k100 needed about 112 s and was cut at the 109 s wall after its
+receipt was published; branch k10 and k100 hold three mounted role proofs and
+need about 110 to 135 s. Owner decision 2026-10-12: these three runs may use the
+300 s invocation policy. Change: `invoke_case.py` names exactly the three runs
+(300 s outer wall, 288 s driver budget); the case verification, command, Commit
+and performance limits are unchanged; one test, 15 policy tests pass. Result:
+all six cases are sampled once at the final identity in phase 15.
