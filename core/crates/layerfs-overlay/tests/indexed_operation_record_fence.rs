@@ -164,11 +164,12 @@ fn each_job_executes_a_fixed_number_of_fence_statements() {
         .unwrap();
     // Workspace, Lease, OperationRecord, Begin, Commit, free-list read.
     // A read is its fence and one record statement. A write of one change is
-    // its fence, the guard read and the put inside one transaction.
+    // its fence, the guard read and the put inside one transaction; it reads
+    // the Workspace row once, for both a stale route and a closed Workspace.
     let expected = [
         ("contains", [1, 1, 1, 0, 0, 0]),
         ("get", [1, 1, 1, 0, 0, 0]),
-        ("apply", [2, 1, 2, 1, 1, 1]),
+        ("apply", [1, 1, 2, 1, 1, 1]),
         ("first_keys", [1, 1, 1, 0, 0, 0]),
         ("first_keys_all", [1, 1, 1, 0, 0, 0]),
         ("keys_after", [1, 1, 1, 0, 0, 0]),

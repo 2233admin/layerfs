@@ -51,6 +51,11 @@ impl Overlay {
     }
     pub(crate) fn check_operation(&self, owner: OperationOwner) -> OverlayResult<()> {
         self.state(owner.route)?;
+        self.operation_custody(owner)
+    }
+    /// The owner half of `check_operation`, for a job that has already read
+    /// this Workspace's row in the same turn.
+    pub(crate) fn operation_custody(&self, owner: OperationOwner) -> OverlayResult<()> {
         if self
             .query(
                 StatementKind::Lease,

@@ -74,8 +74,10 @@ impl Overlay {
     ) -> OverlayResult<IndexedOperationRecordApply> {
         indexed_operation_record_changes_bytes(changes)?;
         self.atomic(|| {
+            // One read of the Workspace row decides both a stale route and a
+            // closed Workspace; the owner check follows it as before.
             self.live(scope.owner.route)?;
-            self.check_operation(scope.owner)?;
+            self.operation_custody(scope.owner)?;
             for (index, change) in changes.iter().enumerate() {
                 let actual = self.indexed_value(scope, change.key)?;
                 let matches = match (&change.expected, &actual) {
