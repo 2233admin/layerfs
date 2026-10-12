@@ -2428,3 +2428,16 @@ The new cross-key regression and 19 existing fixture tests PASS; SDK/daemon/runt
 all targets compile and SDK/native-control checks recorded. No sample started,
 no product path or timed work changed, and corrupt matching setup still refuses
 without fallback. Receipts: stage2-cache-master-discovery-* checks.
+
+### Benchmark simplification: shared-source reuse proof path
+
+Cause: exact-reuse-100 reproduced all terminal counts but its independent graph
+proof opened the former case-local source manifest after the source moved to
+shared setup. Change: bind the initial acknowledgement to the actual prepared
+source's unchanged complete manifest. Commit: this proof-path correction.
+The failed sample remains FAIL; command 261,224,583 ns, Commit 680,180,625 ns,
+requests 1,414, owner jobs 9,008, statements 55,476. Its verified sample copies,
+container and exported Stores were removed. No oracle or readback weakened;
+one new-identity sample of this case follows a clean seal. SDK/daemon/runtime
+all targets compile and SDK/native-control checks recorded. Receipts:
+stage2-sample-dedup-workspace-exact-100.log and independent-graph failure.

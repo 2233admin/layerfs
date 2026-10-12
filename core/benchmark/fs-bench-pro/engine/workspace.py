@@ -1419,7 +1419,7 @@ def one_family_case(family, case, prepared_folder, build_folder, output, *, prep
         if reuse:
             initial_root = row["pristine_payload_attribution"]["proof"]["fields"]["root"]
             transcript = script(output,"acknowledged-reuse.tsv",
-                "0\t-\t-\t"+initial_root+"\t"+str(Path(prepared_folder).resolve()/"source.manifest.tsv")+"\n"+
+                "0\t-\t-\t"+initial_root+"\t"+str(Path(prepared["source"]).resolve().with_suffix(".manifest.tsv"))+"\n"+
                 "1\t"+committed["fields"]["commit_id"]+"\t"+committed["fields"]["parent"]+"\t"+
                 committed["fields"]["root"]+"\t"+str(Path(prepared_folder).resolve()/"expected-native.manifest.tsv")+"\n")
             graph_args.extend(["--history-file",str(transcript)])
