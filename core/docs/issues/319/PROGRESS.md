@@ -2299,3 +2299,19 @@ twelve cells and 23 families remain. Intermediate results stay at their identiti
 Git's one empty orphan-inode probe remains an explained original difference;
 no reference, oracle, product scheduler or unchanged sample was altered.
 Receipts: docs-host/runtime-target-build logs; sdk-narrowing.json and prior checks.
+
+
+### SDK follow-up: Branches accounting source binding
+
+Cause: the completed API adds the authorized Branches request/reply to the bridge
+file pinned by the independent closed-overlay accounting oracle. Full harness
+validation refused that old hash; schema, accounting SQL and lifetime code match.
+Change: rebind only the exact reviewed control_types.rs hash; keep every schema,
+trigger, count, ownership, custody and Storage readback check unchanged.
+Commit: this source-binding correction. SDK/daemon/runtime all targets compile;
+SDK and affected native-control tests and closed-overlay oracle tests checked.
+The original 349-test harness outcome is retained: 19 errors, two skips. Seventeen
+errors come from this pin; native seal reuse and missing counter configuration
+account for the others. Native tests will use the completed identity's one seal.
+No benchmark sample ran, so there is no replacement sample or changed reference.
+Receipts: final-harness-engine.log; final-overlay-pin-* checks.

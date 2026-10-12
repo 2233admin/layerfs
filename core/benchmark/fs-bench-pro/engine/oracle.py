@@ -787,7 +787,7 @@ def _overlay_storage_source():
         'core/crates/layerfs-overlay/src/database/accounting.rs': '65a3b01fdedcbe065101d02dcc41cd7520def1d2de4fc29f3cc0f89f0d2bd4c4',
         'core/crates/layerfs-overlay/src/database/allocation.rs': '579cf990c709b51a7cf36820fa21524d7c4ebc18dcf43df4d47d4b1973d8f3c4',
         'core/crates/layerfs-overlay/src/lifetime/close.rs': '3fa9e4ee99097a9e08860ff07a33a81131dc219b87527f43b8e86d185df112ca',
-        'core/crates/layerfs-bridge/src/control_types.rs': 'd18ff0a0cc22ad7f8772b591c970806e889de49730362cd2e9a5200533e23c4b',
+        'core/crates/layerfs-bridge/src/control_types.rs': '1047a09284a17bc49ebe31da53ddb60445b3e68375d06736680b3c7e8b2a0bc9',
     }
     if ROOT is None or any(file_sha(ROOT / name) != digest for name, digest in pins.items()):
         raise ValueError('closed overlay authoritative schema/accounting source pin changed')
