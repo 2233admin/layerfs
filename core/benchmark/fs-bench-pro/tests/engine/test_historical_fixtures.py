@@ -25,6 +25,30 @@ def digest(value):
 
 
 class HistoricalFixtures(unittest.TestCase):
+    def test_paired_access_automatically_reuses_closed_producer_and_installed_master(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            cache = Path(temporary) / "kept-fixtures"
+            first = cache / "first-key"; first.mkdir(parents=True)
+            prior, build, current, genesis, _, _ = self.prepared(first, declared(0))
+            second = cache / "second-key"; second.mkdir()
+            calls = []
+            holder = {"closed": prior["closed_producer"]}
+            with patch.object(fixtures.identity, "load_build", return_value=build), \
+                 patch.object(fixtures.identity, "source_identity", return_value=current), \
+                 patch.object(fixtures, "validate_runtime_helpers", return_value={"status": "PASS"}) as helper_check, \
+                 patch.object(workspace, "prepare_history_producer") as replay, \
+                 patch.object(fixtures, "install_closed_history_store") as install, \
+                 patch.object(fixtures.receipts, "command", side_effect=self.tools(declared(1), calls, holder)):
+                result = fixtures.prepare_historical_workspace({"family": "historical_access"},
+                    declared(1), second / "access", "mock-build")
+            replay.assert_not_called(); install.assert_not_called()
+            helper_check.assert_called_once()
+            self.assertEqual(result["closed_producer"], prior["closed_producer"])
+            self.assertEqual(result["master_volume"], prior["master_volume"])
+            self.assertEqual(result["provision"], prior["provision"])
+            self.assertEqual(result["historical_selection"]["local"], 49)
+            self.assertEqual(result["closed_master_reuse"]["store_sha256"], prior["closed_producer"]["store_sha256"])
+
     def inputs(self, folder, case):
         tools = {"socket": "mock-socket", "binaries": {}}
         for name in ("workspace-writer", "workload-linux"):

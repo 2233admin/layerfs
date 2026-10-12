@@ -2488,3 +2488,19 @@ The 91 completed rows at 109a97ac4 remain original evidence; no relabeling.
 Preflight every kept preparation before another final-source baseline, with
 one bounded command per fixture and no unchanged retry. Receipts:
 shared-summary-* checks and the mixed-development preparation KeyError.
+
+
+### Share complete historical producers and nested genesis Stores
+
+Cause: native inputs were shared but paired historical selections still created
+separate closed producers/master copies; nested genesis Stores were outside the
+kept-cache lookup. Change: find sealed nested genesis inputs and share each
+complete same-source/product/uid/gid producer with its installed master. All
+original source admission, complete ACK graph, normalization, closure and
+current-case selected-native checks remain. Commit: this setup ownership fix.
+Twenty-one fixture checks, fourteen historical checks and paired no-replay/no-
+reinstall regression PASS; mock helper admission corrected in its retained test.
+SDK/daemon/runtime all targets compile and SDK/native-control checks recorded.
+No samples at the preceding preflight identity. Existing preparations/receipts
+remain; resume full preflight at the new key before the final baseline. Receipts:
+history-shared-* checks. Product execution and performance paths unchanged.

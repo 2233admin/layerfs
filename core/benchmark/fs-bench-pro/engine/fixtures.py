@@ -526,6 +526,21 @@ def prepare_historical_workspace(family, case, folder, build_folder, genesis_pre
     plan = historical_plan(case)
     build, current = identity.load_build(build_folder), identity.source_identity()
     folder = Path(folder).resolve(); folder.mkdir(parents=True, exist_ok=False)
+    shared = None
+    cache = next((parent for parent in folder.parents if parent.name == "kept-fixtures"), None)
+    if closed_producer_folder is None and genesis_prepared_folder is None and cache is not None:
+        for candidate in sorted(cache.glob("*/*/prepared.json")):
+            prior = json.loads(candidate.read_text())
+            producer = prior.get("closed_producer", {})
+            if (prior.get("schema") == HISTORICAL_PREPARED_SCHEMA and prior.get("status") == "PASS"
+                    and prior.get("identity", {}).get("source_commit") == current["source_commit"]
+                    and prior.get("store_builder_key") == prepared_inputs.product_store_key(current)
+                    and (prior.get("source_uid"), prior.get("source_gid")) == (os.getuid(), os.getgid())
+                    and producer.get("producer_case") == plan["producer_case"]
+                    and producer.get("producer_family") == plan["producer_family"]):
+                shared = load(candidate.parent)
+                closed_producer_folder = candidate.parent
+                break
     if closed_producer_folder is None:
         genesis = historical_genesis(plan, folder, build_folder, build, current, genesis_prepared_folder)
         _, producer = family_case(plan["producer_case"])
@@ -565,7 +580,14 @@ def prepare_historical_workspace(family, case, folder, build_folder, genesis_pre
               "setup_scope": "original complete history; independent immutable byte copy; no pre-read or warmup",
               "cache": "uncontrolled OS cache; original two-pass reader/verifier on same mount; verification only, no performance or cold claim"}
     validate_historical_helpers(case, result, build, genesis=genesis)
-    result["master_volume"], result["provision"] = install_closed_history_store(closed, genesis, folder / "project", build)
+    if shared is None:
+        result["master_volume"], result["provision"] = install_closed_history_store(closed, genesis, folder / "project", build)
+    else:
+        result["master_volume"], result["provision"] = shared["master_volume"], shared["provision"]
+        result["closed_master_reuse"] = {"prepared": str(closed_producer_folder.resolve()),
+            "prepared_manifest_sha256": identity.sha256(closed_producer_folder / "manifest.json"),
+            "store_sha256": closed["store_sha256"],
+            "scope": "complete sealed original history and installed master; current-case selected native oracle remains independent"}
     seal_prepared(folder, result, build_folder)
     return result
 
@@ -1449,8 +1471,10 @@ def compatible_master(folder, fixture, current, uid, gid):
     candidates = set(folder.parent.glob("*/prepared.json"))
     # Producer-key directories contain case views, rather than sibling views.
     # Search only this worktree's declared kept cache, never other campaigns.
-    if folder.parent.parent.name == "kept-fixtures":
-        candidates.update(folder.parent.parent.glob("*/*/prepared.json"))
+    cache = next((parent for parent in folder.parents if parent.name == "kept-fixtures"), None)
+    if cache is not None:
+        candidates.update(cache.glob("*/*/prepared.json"))
+        candidates.update(cache.glob("*/*/genesis/prepared.json"))
     for candidate in sorted(candidates):
         if candidate.parent == Path(folder):
             continue

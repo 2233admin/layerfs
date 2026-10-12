@@ -35,6 +35,12 @@ identity. A corrupt or incomplete input is retained and refused; it is never
 refreshed or replayed automatically. Native-only Init cases keep their original
 Init inside the measured operation and have no setup Store.
 
+Historical before/after selections share a complete sealed setup-only producer
+and its installed master when source, product builder, UID/GID and producer
+definition match. Full acknowledgement graphs, normalization, closure and
+current-case selected-root/native checks remain required. Nested historical
+genesis inputs participate in the same exact Store reuse lookup.
+
 A complete case preparation has a separate producer key covering its declared
 case, native tools, setup producers and required Store builder. Case-specific
 expectations and helper assets remain separate from the shared initial input.
