@@ -117,11 +117,22 @@ impl<'s, 'b> IndexedReducer<'s, 'b> {
             keys.extend(also.map(|kind| wire::key(kind, *serial)));
         }
         let mut values = self.state.read_keys(&keys)?.into_iter();
+        // The input answers for the whole job at once; a serial it calls
+        // fresh is then asked of the dropped parents one at a time.
+        let fresh = self.input.are_new(serials)?;
+        if fresh.len() != serials.len() {
+            return Err(ContentError::InvalidRecord("filesystem fresh answers"));
+        }
         for (index, serial) in serials.iter().enumerate() {
             let mut next = || values.next().ok_or(ContentError::UnexpectedEof);
             let (member, raw, touch) = (next()?, next()?, next()?);
             let extra = if also.is_some() { next()? } else { None };
-            let row = self.expected(*serial).and_then(|expected| {
+            let expected = if fresh[index] {
+                self.dropped.contains(*serial).map(|dropped| !dropped)
+            } else {
+                Ok(false)
+            };
+            let row = expected.and_then(|expected| {
                 self.fresh(expected, member.as_deref())?;
                 self.decoded(*serial, expected, raw.as_deref(), touch.as_deref())?
                     .ok_or(ContentError::InvalidRecord(

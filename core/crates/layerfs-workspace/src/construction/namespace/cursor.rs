@@ -113,18 +113,49 @@ impl<'s, 'a, P: OverlayCapturedNamespace + OverlayOperationRecords + ?Sized> Cur
             self.shared.borrow().ready()?;
             return Ok(rank);
         }
-        let rank = match self.record(FRESH, serial)? {
-            Some(raw) => Some(
-                read_number(&raw, "captured namespace fresh rank")
-                    .and_then(|rank| {
-                        usize::try_from(rank).map_err(|_| ContentError::LengthOverflow)
-                    })
-                    .map_err(|error| self.fail(error))?,
-            ),
-            None => None,
-        };
+        let rank = self.decode_rank(self.record(FRESH, serial)?)?;
         self.rank.set(serial, rank);
         Ok(rank)
+    }
+    fn decode_rank(&self, raw: Option<Vec<u8>>) -> ContentResult<Option<usize>> {
+        raw.map(|raw| {
+            read_number(&raw, "captured namespace fresh rank")
+                .and_then(|rank| usize::try_from(rank).map_err(|_| ContentError::LengthOverflow))
+                .map_err(|error| self.fail(error))
+        })
+        .transpose()
+    }
+    /// The fresh ranks of at most PAGE_ROWS serials: the answers not already
+    /// held are read as one record job.
+    fn ranks(&self, serials: &[u64]) -> ContentResult<Vec<Option<usize>>> {
+        self.shared.borrow().ready()?;
+        if serials.len() > PAGE_ROWS {
+            return Err(self.fail(ContentError::InvalidRecord(
+                "captured namespace point window",
+            )));
+        }
+        let mut ranks = serials
+            .iter()
+            .map(|serial| self.rank.get(*serial))
+            .collect::<Vec<_>>();
+        let unknown = serials
+            .iter()
+            .zip(&ranks)
+            .filter(|(_, rank)| rank.is_none())
+            .map(|(serial, _)| key(FRESH, *serial))
+            .collect::<Vec<_>>();
+        if !unknown.is_empty() {
+            let mut read = self.shared.borrow_mut().get_many(&unknown)?.into_iter();
+            for (serial, rank) in serials.iter().zip(&mut ranks) {
+                if rank.is_none() {
+                    let raw = read.next().ok_or(ContentError::UnexpectedEof)?;
+                    let answer = self.decode_rank(raw)?;
+                    self.rank.set(*serial, answer);
+                    *rank = Some(answer);
+                }
+            }
+        }
+        Ok(ranks.into_iter().map(Option::flatten).collect())
     }
     /// One original parent-local page of the retained reader.
     fn names(&self, parent: u64, after: Option<Vec<u8>>) -> ContentResult<Vec<DirectoryEntry>> {
@@ -371,5 +402,16 @@ impl<P: OverlayCapturedNamespace + OverlayOperationRecords + ?Sized> StreamedRow
     fn new_position(&self, serial: u64) -> ContentResult<Option<usize>> {
         self.count(|work| &mut work.fresh_points);
         self.rank(serial)
+    }
+    fn are_new(&self, serials: &[u64]) -> ContentResult<Vec<bool>> {
+        add(
+            &mut self.shared.borrow_mut().work.fresh_points,
+            serials.len() as u64,
+        );
+        Ok(self
+            .ranks(serials)?
+            .into_iter()
+            .map(|rank| rank.is_some())
+            .collect())
     }
 }

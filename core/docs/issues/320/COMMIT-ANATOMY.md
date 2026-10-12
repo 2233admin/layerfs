@@ -369,6 +369,33 @@ a scan refusal in place of `Closed`. A fenced read job that only checks "open
 for writing, owner current, context absent" would keep the refusal where it is
 and save that transaction; it is a new record job and is not built.
 
+**Stage C, producer: a row job asks the input once whether its serials are
+fresh.** Every row a pass or a release transfer read asked the producer
+`is_new` on its own; a serial whose answer had left the cursor's 64-slot
+window was a record job. The reducer now asks for the serials of one row job
+together (`OperationInput::are_new`, `StreamedRowSource::are_new`, default one
+at a time) and the Workspace cursor reads the ranks it does not hold as one
+record job (`layerfs-workspace/src/construction/namespace/cursor.rs` `ranks`).
+Predicted: jobs saved are the pass asks that miss the window, about 1,000 in
+large and few in step. Observed:
+
+| per Commit | small | step | large |
+| --- | ---: | ---: | ---: |
+| record jobs | 210 → 206 | 548 → 502 | 9,025 → 8,088 |
+| of which producer `fresh` point jobs | 32 → 28 | 144 → 98 | 2,466 → 1,529 |
+| Workspace statements | 296 → 292 | 784 → 738 | 11,019 → 10,082 |
+| record statements | 505 → 503 | 2,127 | 24,444 |
+| write transactions | 35 | 88 | 987 |
+
+Not done in stage C: the producer's `value` and `header` point reads (step 97
+and 46, large 1,912 and 1,469) and the remaining `fresh` ones. They are asked
+one serial at a time by validation and by the update's directory and value
+loops, before the reducer's passes. Reading the three kinds of one serial
+together, as section 6 proposed, would not lower the statement count (a point
+job is one fence and one read; a three-key job is one fence and three reads),
+so it was not built. Lowering them needs those loops to ask by wave, as the
+passes now do.
+
 ## 6. Recommendation — removing the per-key record jobs
 
 Owner direction of 2026-10-13 allows interface and overlay-schema changes.

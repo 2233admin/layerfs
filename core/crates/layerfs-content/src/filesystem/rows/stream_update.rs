@@ -58,6 +58,9 @@ impl StreamedRowSource for StreamedFilesystemInput<'_> {
     fn new_position(&self, serial: u64) -> ContentResult<Option<usize>> {
         self.rows.new_position(serial)
     }
+    fn are_new(&self, serials: &[u64]) -> ContentResult<Vec<bool>> {
+        self.rows.are_new(serials)
+    }
 }
 impl PreparedDirectoryStreams for StreamedFilesystemInput<'_> {
     fn base(&self) -> Option<FilesystemRootId> {

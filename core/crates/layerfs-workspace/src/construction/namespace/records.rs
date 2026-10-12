@@ -126,6 +126,29 @@ impl<P: OverlayOperationRecords + ?Sized> State<'_, P> {
         }
         Ok(value)
     }
+    /// The values of at most PAGE_ROWS keys as one record job.
+    pub fn get_many(&mut self, keys: &[EditRecordKey]) -> ContentResult<Vec<Option<Vec<u8>>>> {
+        self.ready()?;
+        add(&mut self.work.record_jobs, 1);
+        let result = self.records.get_many(keys);
+        let values = result.map_err(|error| self.content(error))?;
+        if let Some(actual) = values
+            .iter()
+            .flatten()
+            .map(Vec::capacity)
+            .find(|capacity| *capacity > OPERATION_RECORD_BYTES)
+        {
+            return Err(self.content(ContentError::BoundedCapacityExceeded {
+                what: "captured record returned capacity",
+                limit: OPERATION_RECORD_BYTES as u64,
+                actual: actual as u64,
+            }));
+        }
+        if values.len() != keys.len() {
+            return Err(self.content(ContentError::InvalidRecord("captured record answers")));
+        }
+        Ok(values)
+    }
     pub fn contains(&mut self, key: EditRecordKey) -> ContentResult<bool> {
         self.ready()?;
         add(&mut self.work.record_jobs, 1);

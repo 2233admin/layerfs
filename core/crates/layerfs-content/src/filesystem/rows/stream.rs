@@ -78,6 +78,11 @@ pub trait StreamedRowSource {
     fn is_new(&self, serial: u64) -> ContentResult<bool> {
         Ok(self.new_position(serial)?.is_some())
     }
+    /// Whether each of at most 64 serials is fresh, in the order asked. A
+    /// source may answer them as one job; the default asks one at a time.
+    fn are_new(&self, serials: &[u64]) -> ContentResult<Vec<bool>> {
+        serials.iter().map(|serial| self.is_new(*serial)).collect()
+    }
 }
 
 /// Fixed filesystem context over one stable streamed row source.
