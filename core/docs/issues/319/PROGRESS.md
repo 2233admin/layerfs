@@ -1993,3 +1993,48 @@ cases: development 25/35 -> 50/60 s, workspace 25/35 -> 80/90 s, branch 25/35 an
 30/40 -> 105/115 s. Reserve 3 s and publication guard 250 ms unchanged; command,
 Commit and performance limits unchanged. Named set, values and validation change
 together; five tests in `tests/engine/test_issue319_limits.py`. Result follows.
+
+Result at 36d9abdaa, tag p319a1, nine binaries sealed, one sample each, four of
+six sampled. Development k10 and k100: functional PASS, proof PASS, INELIGIBLE;
+proof wall 38.75 and 39.69 s (native 18.37 and 18.32 s, export 3.25 and 3.52 s,
+typed proof 7.76 and 8.60 s). Workspace k10 and k100: functional PASS, proof PASS,
+INELIGIBLE; proof wall 58.47 and 65.66 s (native 17.80 + 17.96 and 21.27 + 20.46 s,
+topology proof 10.68 and 11.58 s). Command and Commit sums stay inside their
+limits. Workspace k100: the receipt, manifest and publication acknowledgement were
+written, then the 109 s invocation wall expired during the sample's own resource
+removal (exit 124); the driver removed its one volume and one container after a
+full manifest check. Its receipt is reported as written, with this caveat. The
+two branch cases were not sampled: three native role proofs (54 to 63 s) plus the
+rest put the run at about 110 to 135 s, above the 2-minute command limit; they
+wait for an owner decision on the invocation ceiling. Receipts: p319a1
+`run-mixed_load_bearing` and `run-multi_workspace_development`, four cases.
+
+
+### Phase 14: C10 READ count, pin corrected to the source model
+
+Cause: the frozen C10 row (requests 1548, owner jobs 1547, statements 14408)
+holds 513 READ requests. The file is 67,108,864 bytes and the read window is
+131,072 bytes, so the source model gives 512. The frozen sample itself counts
+512 READs in its warm-up mount of the same command and 513 in its measured
+mount; frozen C09, a plain read of the same file, counts 512 (517 requests with
+five others); the #318 baseline and the phase 9 final sample both count 512. The
+extra READ is one kernel-shaped request: one request, one owner job, one Workspace
+and one Inode statement. Change: the harness expects 1547 / 1546 / 14406 for C10
+and records the frozen row beside it; the baseline file and its hash are
+unchanged; three tests. A kernel readahead split can still add one READ; such a
+sample fails this pin and is reported as it is. Result: sampled with the twelve
+cells in phase 15.
+
+
+### Phase 14: new-content Commit, no fix selected
+
+Numbers (tag p319n12, receipts `dedup-workspace-unique-500` and `-local-500`):
+both cases have 7,014 requests, 46,769 owner jobs and 282,013 statements. Commit
+takes 15.62 s for unique content and 3.57 s for locally reused content. The
+unique case writes 526,202,184 pack bytes and reads 331 payload bytes; the local
+case writes 11,332,326 pack bytes and reads 466,732,119. The 12.05 s difference
+goes with 514.9 MB more pack bytes, about 43 MB/s for new content. Chunking,
+hashing, compression and Store write byte counts and times are not exported, so
+the difference cannot be split between CPU and Store I/O from a receipt.
+No fix selected: no counter names a block, the case passes both checks inside
+its limits, and a profile would need an observation surface that does not exist.

@@ -16,6 +16,19 @@ from cells import counts, runner as cell_runner, workloads
 
 BASELINE = identity.ROOT / "core/docs/issues/307/checks/timing-baseline-20261010/baseline.json"
 BASELINE_SHA256 = "a6ada570050f14bb6ff5bd61c74c0d0fda439f323f695fdea1212b26b590d3f8"
+# Issue319 phase 14: the frozen C10 row holds one kernel-shaped extra READ (513).
+# The source model gives 512: 67,108,864 file bytes in READ_WINDOW 131,072 requests;
+# the frozen sample's own warm-up mount of the same command and frozen C09 on the
+# same file both count 512. One READ is one request, one owner job and two
+# statements. The baseline file itself stays unchanged.
+CELL_COUNT_CORRECTIONS = {"C10": {"requests": 1547, "owner_jobs": 1546, "statements": 14406}}
+
+
+def cell_expected_counts(cell, names):
+    """Frozen twelve-cell counts with the named source-model correction, and the frozen row."""
+    wanted = next(item for item in json.loads(BASELINE.read_text())["selections"] if item["cell"] == cell)
+    frozen = {name: wanted[name] for name in names}
+    return {**frozen, **{name: value for name, value in CELL_COUNT_CORRECTIONS.get(cell, {}).items() if name in frozen}}, frozen
 BATCH4_HISTORY_SCHEMAS = frozenset(("original-v016-boundary-sequence-v1",
     "original-dedup-history-sequence-v1", "original-m1-commit-sequence-v1"))
 BATCH4_FAMILIES = frozenset(("file_size_transition","dedup_branch_history","mixed_load_bearing"))
@@ -403,9 +416,11 @@ def one_cell(cell, prepared_folder, build_folder, output):
         row["observations"] = observations
         row["cache"]["status"] = cache.validate("B", row["cache"])
         row["status"] = "PASS" if row["cache"]["status"] == "ELIGIBLE" else "INELIGIBLE"
-        wanted = next(item for item in json.loads(BASELINE.read_text())["selections"] if item["cell"] == cell)
-        row["count_reproduction"] = {"expected": {name: wanted[name] for name in totals},
+        wanted, frozen = cell_expected_counts(cell, totals)
+        row["count_reproduction"] = {"expected": wanted,
                                       "actual": totals, "status": "PASS" if all(totals[name] == wanted[name] for name in totals) else "FAIL"}
+        if wanted != frozen:
+            row["count_reproduction"]["frozen_baseline"] = frozen
         if row["count_reproduction"]["status"] != "PASS":
             row.update(status="FAIL", tag="stage 0.4 exact request/owner-job/statement counts differ")
         if row["status"] == "PASS":

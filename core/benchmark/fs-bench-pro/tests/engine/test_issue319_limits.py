@@ -127,5 +127,31 @@ class LargeRootProofs(unittest.TestCase):
                         self.assertEqual(budget.get('publication_guard_ms', 250), 250)
 
 
+class CellCountPins(unittest.TestCase):
+    """Phase 14: only C10 is corrected, by exactly one READ, and the baseline file is unchanged."""
+    NAMES = ('requests', 'owner_jobs', 'statements')
+
+    def test_baseline_file_is_the_pinned_frozen_source(self):
+        self.assertEqual(workspace.identity.sha256(workspace.BASELINE), workspace.BASELINE_SHA256)
+
+    def test_only_c10_differs_from_its_frozen_row_by_one_read(self):
+        self.assertEqual(set(workspace.CELL_COUNT_CORRECTIONS), {'C10'})
+        for number in range(1, 13):
+            cell = f'C{number:02}'
+            with self.subTest(cell=cell):
+                expected, frozen = workspace.cell_expected_counts(cell, self.NAMES)
+                if cell == 'C10':
+                    self.assertEqual(frozen, {'requests': 1548, 'owner_jobs': 1547, 'statements': 14408})
+                    self.assertEqual([frozen[name] - expected[name] for name in self.NAMES], [1, 1, 2])
+                else:
+                    self.assertEqual(expected, frozen)
+
+    def test_source_model_read_count_matches_the_plain_read_cell(self):
+        # 64 MiB in 128 KiB read windows; frozen C09 reads the same file in 512 READs and 5 other requests.
+        reads = (64 * 1024 * 1024) // (128 * 1024)
+        self.assertEqual(reads, 512)
+        self.assertEqual(workspace.cell_expected_counts('C09', self.NAMES)[1]['requests'], reads + 5)
+
+
 if __name__ == '__main__':
     unittest.main()
