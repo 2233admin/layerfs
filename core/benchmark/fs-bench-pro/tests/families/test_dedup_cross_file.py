@@ -13,7 +13,7 @@ FAMILY = ROOT / "core/benchmark/fs-bench-pro/families/dedup_cross_file"
 SOURCE = "d296981ace76fe751bebf00dee52818fe18a3eef"
 TAG_OBJECT = "ae3310fada4a1fe35cb99ab02270b7538a0d03f7"
 KINDS = ("unique", "identical", "mixed")
-TIERS = (10, 100, 500)
+TIERS = (100,)
 MIB = 1048576
 
 
@@ -48,7 +48,7 @@ class Definition(unittest.TestCase):
         self.assertIn('.filter(|c| c.tier != 1)', original)
         self.assertEqual(self.family["engine"], "project")
         self.assertEqual([row["id"] for row in self.cases], [row[0] for row in expected_cases()])
-        self.assertEqual(len({row["id"] for row in self.cases}), 10)
+        self.assertEqual(len({row["id"] for row in self.cases}), 4)
         mixed_counts = {10: 7, 100: 75, 500: 375}
         for row, (ident, kind, tier) in zip(self.cases, expected_cases()):
             self.assertEqual((row["v016_case"], row["status"]), (ident, "ported"))
@@ -181,8 +181,8 @@ class NativeShellDispatch(unittest.TestCase):
             refused = [["apply", expected_cases()[0][0], native],
                        ["fixture", "dedup-cross-file-identical-1", native],
                        ["fixture", "dedup-cross-file-mixed-11", native],
-                       ["fixture", "dedup-cross-file-unique-10"],
-                       ["fixture", "dedup-cross-file-unique-10", native, "extra"]]
+                       ["fixture", "dedup-cross-file-unique-100"],
+                       ["fixture", "dedup-cross-file-unique-100", native, "extra"]]
             for args in refused:
                 checked = subprocess.run(["/bin/bash", str(FAMILY / "workload.sh"), *args],
                                          env=env, text=True, capture_output=True, timeout=5)

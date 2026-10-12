@@ -2350,3 +2350,21 @@ remain. Failed setup/source-pin outcomes and cleanup retained; no sample replay.
 Local snapshot command 11.626526208 s + Commit 8.704991042 s = 20.331517250 s;
 INELIGIBLE retained. Receipts: sdk-completed.json, sdk-narrowing.json and seal/check
 logs. Implementation and consolidated validation complete; Stage 2 follows.
+
+
+### Benchmark simplification: selected definitions and tiers
+
+Cause: 90 proposed drops included five capped edits with stronger source-offset
+and Commit checks. Change: remove 85 active definitions and their pins; retain
+all five capped cases in heavy. Declare everyday 108 / heavy 49, 157 active cases.
+Three repository_history definitions remain NOT_RUN outside both tiers. Correct
+the capped duplicate/drop classification; four removed sample cases use kept
+siblings and their own terminal rows, keeping the 23-family gate. Frozen root
+and historical receipts are unchanged; every kept definition hashes identically
+to the pre-simplification snapshot. Commit: this selection change. SDK/daemon/
+runtime targets compile; SDK/native-control, metadata/limit checks PASS. Family
+check: 84 tests, two skips, one stale split failure; focused split correction PASS.
+The debug exact-reuse-100 test reached 118 s: retained FAILED hang, existing
+full 101 MiB construction/verification cost, no retry/tuning; covering large
+byte checks remain for the final gate. Receipts: benchmark-simplification.json
+and stage2-selection-* logs. Shared fixtures/driver and sealed count gate remain.

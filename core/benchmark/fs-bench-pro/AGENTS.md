@@ -10,16 +10,21 @@ Read [root instructions](../../../AGENTS.md), [core instructions](../../AGENTS.m
 [report template](../../../benchmark_agent_report.md) before changing a harness
 or collecting a sample. The original owner handoff selected the 25 frozen root families,
 in the spec's stage and batch order. Issue319's later owner direction selects repair/optimization and retires
-`workspace_reliability`:24 active families/245 cases; repository_history3 are
-set aside, leaving242 selected cases. Historical records remain unchanged.
+`workspace_reliability`. The #319 SDK follow-up then removes 85 selected cases
+and keeps all five capped edits because their oracle is stricter than the twins.
+The active selection is 157 cases in [tiers.json](tiers.json): everyday 108 and
+heavy 49. Three repository_history definitions remain outside both tiers and
+NOT_RUN by owner direction, so the default catalogue has 160 definitions in 24
+family directories. Historical 242-case receipts and frozen root definitions
+remain unchanged; current tier selection supersedes their active membership.
 The [rollout ledger](../../docs/benchmark/fs-bench-pro/ROLLOUT-LEDGER.md) records
 implementation, checks, decisions, failures and outstanding work.
 
 ## Active route and profiles
 
 The workload benchmark's single entry point is `bench.py`, implemented in the
-rollout. `families/` contains the 24 active original-name family directories;
-each case starts pending and needs a committed definition, parity review,
+rollout. `families/` retains the 24 original-name family directories; the two
+tiers select 23 active families and exclude repository_history. Each case starts pending and needs a committed definition, parity review,
 fixture and independent oracle before one sample. The engine owns machinery
 once. The moved `runtime/` is the ordinary SDK/Sandbox control driver from the
 working cluster-two path. It is harness code, outside production LOC.

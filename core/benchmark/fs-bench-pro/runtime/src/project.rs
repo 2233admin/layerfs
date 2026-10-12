@@ -60,7 +60,6 @@ pub fn import_counts(case: &str) -> Result<Option<ImportCounts>> {
             // never invented labels attached to a large-object fixture.
             let id = match control.infra_tier {
                 100 => "namespace-100-compact-v3",
-                1_000 => "namespace-1000-compact-v3",
                 10_000 => "namespace-10000",
                 100_000 => "namespace-100000",
                 _ => return Err("original Store footprint geometry absent".into()),

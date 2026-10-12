@@ -7,23 +7,15 @@ route=$1; id=$2; step=$3
 [[ $step =~ ^(0|[1-9][0-9]*)$ ]] || exit 2
 case "$id" in
   dedup-history-distributed-1) maximum=1; kind=distributed ;;
-  dedup-history-distributed-10) maximum=10; kind=distributed ;;
   dedup-history-distributed-100) maximum=100; kind=distributed ;;
   dedup-history-distributed-500) maximum=500; kind=distributed ;;
   dedup-history-hotset-1) maximum=1; kind=hotset ;;
-  dedup-history-hotset-10) maximum=10; kind=hotset ;;
   dedup-history-hotset-100) maximum=100; kind=hotset ;;
-  dedup-history-hotset-500) maximum=500; kind=hotset ;;
   dedup-history-recurring-1) maximum=1; kind=recurring ;;
-  dedup-history-recurring-10) maximum=10; kind=recurring ;;
   dedup-history-recurring-100) maximum=100; kind=recurring ;;
-  dedup-history-recurring-500) maximum=500; kind=recurring ;;
   dedup-history-metadata-1) maximum=1; kind=metadata ;;
-  dedup-history-metadata-10) maximum=10; kind=metadata ;;
   dedup-history-metadata-100) maximum=100; kind=metadata ;;
-  dedup-history-metadata-500) maximum=500; kind=metadata ;;
   dedup-history-unrelated-1) maximum=1; kind=unrelated ;;
-  dedup-history-unrelated-10) maximum=10; kind=unrelated ;;
   dedup-history-unrelated-100-mixed-v2) maximum=100; kind=unrelated ;;
   dedup-history-unrelated-500-mixed-v2) maximum=500; kind=unrelated ;;
   v016-history-large-hotset-k10-v1) maximum=10; kind=large-hotset ;;

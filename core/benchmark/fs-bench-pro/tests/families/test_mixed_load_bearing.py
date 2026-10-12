@@ -12,7 +12,7 @@ FAMILY = BENCH / "families/mixed_load_bearing"
 SOURCE = "d296981ace76fe751bebf00dee52818fe18a3eef"
 TAG = "ae3310fada4a1fe35cb99ab02270b7538a0d03f7"
 EPISODES = [f"agent-episodes-{tier}" + ("-compact-v2" if tier <= 10 else "")
-            for tier in (1, 10, 100, 500)]
+            for tier in (1, 100, 500)]
 REGULAR = [f"v016-mixed-development-{load}-k{commits}-v1"
            for load in ("100mb-5000", "500mb-30000") for commits in (10, 100)]
 EXHAUSTIVE = [f"v016-mixed-exhaustive-{load}-k100-v1"
@@ -54,7 +54,7 @@ class MixedLoadBearing(unittest.TestCase):
         rows = self.document["cases"]
         self.assertEqual(self.document["family"], "mixed_load_bearing")
         self.assertEqual([row["id"] for row in rows], EPISODES + REGULAR + EXHAUSTIVE)
-        for row in rows[:4]:
+        for row in rows[:len(EPISODES)]:
             tier = int(row["registry"]["tier"])
             paths, directories, shards, cells = episode_census(tier)
             fixture = row["fixture"]
@@ -65,7 +65,7 @@ class MixedLoadBearing(unittest.TestCase):
             self.assertEqual(fixture["logical_bytes"], shards * 1048576 + cells * 32768)
             self.assertEqual(row["operation_model"]["final_paths"], fixture["paths"] + 2 * tier)
             self.assertEqual(row["original_operation_counts"], {"completed_episode_count": tier})
-        for row in rows[4:]:
+        for row in rows[len(EPISODES):]:
             large = "500mb" in row["id"]
             # Independent frozen class rows: empty, tiny, two medium classes,
             # exact boundary triple, moderate large and anchors.

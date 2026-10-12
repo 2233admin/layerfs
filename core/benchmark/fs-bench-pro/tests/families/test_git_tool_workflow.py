@@ -16,10 +16,10 @@ class GitToolWorkflow(unittest.TestCase):
     def setUpClass(cls):
         cls.cases = json.loads((FAMILY / "family.json").read_text())["cases"]
 
-    def test_exact_original_four_cases_fixtures_and_target_counts(self):
-        tiers = [1, 10, 100, 500]
+    def test_three_kept_cases_fixtures_and_target_counts(self):
+        tiers = [1, 100, 500]
         self.assertEqual([row["id"] for row in self.cases], [f"git-tool-{tier}-"+("compact-v2" if tier<=10 else "mixed-v4") for tier in tiers])
-        self.assertEqual([row["fixture"]["working_tree_files"] for row in self.cases], [51, 207, 2351, 5351])
+        self.assertEqual([row["fixture"]["working_tree_files"] for row in self.cases], [51, 2351, 5351])
         for row, tier in zip(self.cases, tiers):
             self.assertEqual(row["fixture"]["seed"], 1)
             self.assertTrue(row["git_workflow"])

@@ -40,8 +40,8 @@ class NativeSpliceWriter(unittest.TestCase):
         return subprocess.run([self.writer, *args], cwd=root, capture_output=True, text=True, timeout=15)
 
     def test_original_overwrite_and_all_splice_shapes_preserve_complete_tree(self):
-        ids = ["overwrite-head-4k-on-1mib-ops-1", "overwrite-middle-4k-on-1mib-ops-1",
-               "overwrite-tail-4k-on-1mib-ops-1", "insert-middle-4k-on-1mib-ops-1",
+        ids = ["overwrite-middle-4k-on-1mib-ops-1",
+               "insert-middle-4k-on-1mib-ops-1",
                "delete-middle-4k-on-1mib-ops-1", "append-tail-4k-on-1mib-ops-1",
                "prepend-head-4k-on-1mib-ops-1", "replace-grow-middle-2k-to-4k-on-1mib-ops-1",
                "replace-shrink-middle-4k-to-2k-on-1mib-ops-1", "truncate-tail-4k-on-1mib-ops-1",

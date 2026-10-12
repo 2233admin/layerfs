@@ -15,7 +15,7 @@ from . import identity, project, receipts
 MTIME_NS = 1_700_000_000_000_000_000
 BIG_BYTES = 64 * 1024 * 1024
 CELL_RECIPES = {f"C{n:02}": "big64m" if n in (9, 10, 11) else "empty" for n in range(1, 13)}
-NAMESPACE_RECIPES = ("namespace-100-compact-v3", "namespace-1000-compact-v3", "namespace-10000", "namespace-100000")
+NAMESPACE_RECIPES = ("namespace-100-compact-v3", "namespace-10000", "namespace-100000")
 IMPORT_FAMILIES = ("dedup_cdc_locality", "dedup_cross_file")
 WORKSPACE_FAMILIES = ("payload_create_read", "tiny_file_churn", "namespace_mutation",
                      "edit_length_preserving", "edit_length_changing", "edit_length_changing_capped",

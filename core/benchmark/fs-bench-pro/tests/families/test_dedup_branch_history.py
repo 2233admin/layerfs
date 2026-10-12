@@ -20,11 +20,11 @@ class DedupBranchHistory(unittest.TestCase):
     def test_original_registry_and_all_ordered_commits(self):
         ids = [f"dedup-history-{kind}-{n}" + ("-mixed-v2" if kind == "unrelated" and n > 10 else "")
                for kind in ("distributed", "hotset", "recurring", "metadata", "unrelated")
-               for n in (1, 10, 100, 500)]
+               for n in ((1, 100, 500) if kind in ("distributed", "unrelated") else (1, 100))]
         ids += [f"v016-history-{kind}-k{n}-v1"
                 for kind in ("large-hotset", "namespace-inode", "boundary-cycle") for n in (10, 100)]
         self.assertEqual([row["id"] for row in self.rows], ids)
-        self.assertEqual(sum(len(row["steps"]) for row in self.rows), 3385)
+        self.assertEqual(sum(len(row["steps"]) for row in self.rows), 1835)
         for row in self.rows:
             n = int(row["registry"]["tier"])
             self.assertEqual(row["history_schedule"]["commits"], n)
@@ -39,7 +39,6 @@ class DedupBranchHistory(unittest.TestCase):
         expected = {
             "dedup-history-distributed-500": [0, 1, 199, 200, 201, 250, 499, 500],
             "dedup-history-hotset-100": [0, 1, 7, 8, 9, 50, 99, 100],
-            "dedup-history-recurring-500": [0, 1, 2, 3, 499, 500],
             "dedup-history-metadata-100": [0, 1, 2, 49, 50, 99, 100],
             "v016-history-namespace-inode-k100-v1": [0, 1, 2, 49, 50, 94, 95, 99, 100],
             "v016-history-boundary-cycle-k100-v1": [0, 1, 2, 49, 50, 99, 100],
@@ -76,7 +75,7 @@ class DedupBranchHistory(unittest.TestCase):
     def test_original_distinct_budgets_resource_profile_and_unknown_cache(self):
         for row in self.rows:
             v016 = row["id"].startswith("v016-")
-            self.assertEqual(row["budget"], {"command_ms": 15000, "performance_hard_watchdog_ms": 210000 if row["id"] in {"dedup-history-distributed-500", "dedup-history-hotset-500", "dedup-history-recurring-500", "dedup-history-metadata-500", "dedup-history-unrelated-500-mixed-v2"} else 60000 if v016 else 120000,
+            self.assertEqual(row["budget"], {"command_ms": 15000, "performance_hard_watchdog_ms": 210000 if row["id"] in {"dedup-history-distributed-500", "dedup-history-unrelated-500-mixed-v2"} else 60000 if v016 else 120000,
                 "operation_watchdog_ms": 60000 if v016 else 120000, "verifier_ms": 25000 if v016 else 45000,
                 "verification_hard_watchdog_ms": 35000 if v016 else 59000, "cleanup_reserve_ms": 3000 if v016 else 4000,
                 "publication_guard_ms": 250})
@@ -102,7 +101,7 @@ class DedupBranchHistory(unittest.TestCase):
             fake.write_text('#!/bin/sh\nprintf "%s\\n" "$@"\n'); fake.chmod(0o755)
             env = {**os.environ, "WORKLOAD_WRITER": str(fake), "EDIT_WRITER": str(fake)}
             cases = [("dedup-history-distributed-500", 201, ["apply-sdk-step", "dedup-history-distributed-500", "201"]),
-                     ("dedup-history-metadata-10", 2, ["workspace-apply", "dedup-history-metadata-10", "1", "1", "performance"]),
+                     ("dedup-history-metadata-100", 2, ["workspace-apply", "dedup-history-metadata-100", "1", "1", "performance"]),
                      ("dedup-history-unrelated-100-mixed-v2", 100, ["workspace-apply", "dedup-history-unrelated-100-mixed-v2", "1", "99", "performance"]),
                      ("v016-history-boundary-cycle-k10-v1", 2, ["apply-sdk-step", "v016-history-boundary-cycle-k10-v1", "2"])]
             hn = "v016-history-namespace-inode-k100-v1"

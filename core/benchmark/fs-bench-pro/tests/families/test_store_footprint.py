@@ -18,14 +18,13 @@ class Footprint(unittest.TestCase):
         cls.family = json.loads((FAMILY/"family.json").read_text())
         cls.cases = cls.family["cases"]
 
-    def test_original_six_control_geometries_and_seed_are_exact(self):
+    def test_five_kept_control_geometries_and_seed_are_exact(self):
         expected = [("unique-100000",100000,1001,500000000,100000),
             ("metadata-cardinality-100000",100000,1001,500000000,100000),
             ("large-object-500m",100,2,500000000,100000),
             ("unique-100-low-v1",100,2,5000000,100),
-            ("metadata-cardinality-100-low-v1",100,2,5000000,100),
-            ("large-object-10m-low-v1",10,2,10000000,10)]
-        self.assertEqual(len(self.cases),6)
+            ("metadata-cardinality-100-low-v1",100,2,5000000,100)]
+        self.assertEqual(len(self.cases),5)
         for c,(suffix,files,dirs,logical,tier) in zip(self.cases,expected):
             ident = "store-footprint-"+suffix
             self.assertEqual((c["id"],c["v016_case"],c["status"]),(ident,ident,"ported"))

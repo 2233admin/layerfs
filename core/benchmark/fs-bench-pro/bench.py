@@ -9,7 +9,7 @@ import uuid
 HERE = Path(__file__).resolve().parent
 
 
-def catalogue():
+def catalogue(tier=None):
     rows = []
     for path in sorted((HERE / "families").glob("*/family.json")):
         family = json.loads(path.read_text())
@@ -19,6 +19,15 @@ def catalogue():
             rows.append({"family": family["family"], **case})
     if len({(row["family"], row["id"]) for row in rows}) != len(rows):
         raise ValueError("duplicate family/case identity")
+    if tier is not None:
+        tiers = json.loads((HERE / "tiers.json").read_text())
+        if tier not in tiers:
+            raise ValueError("unknown declared tier: " + tier)
+        by_key = {(row["family"], row["id"]): row for row in rows}
+        selected = [(family, case) for family, cases in tiers[tier].items() for case in cases]
+        if len(set(selected)) != len(selected) or any(key not in by_key for key in selected):
+            raise ValueError("tier has duplicate or unregistered case")
+        rows = [by_key[key] for key in selected]
     return rows
 
 
@@ -27,6 +36,7 @@ def main(argv=None):
     commands = parser.add_subparsers(dest="command", required=True)
     listing = commands.add_parser("list", help="every frozen family and case")
     listing.add_argument("--json", action="store_true")
+    listing.add_argument("--tier", choices=("everyday", "heavy"))
     building = commands.add_parser("build", help="locked release runtime and pinned-image daemon")
     building.add_argument("--out", type=Path)
     building.add_argument("--reuse-unchanged", type=Path,
@@ -192,7 +202,7 @@ def main(argv=None):
         print(json.dumps({"prepared": str(output), "status": result["status"],
                           "master_volume": result["master_volume"], "fixture": result["fixture"]}, indent=2))
         return
-    rows = catalogue()
+    rows = catalogue(args.tier)
     if args.json:
         print(json.dumps(rows, indent=2))
     else:

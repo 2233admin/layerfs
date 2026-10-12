@@ -12,9 +12,7 @@ import uuid
 ROOT = Path(__file__).resolve().parents[5]
 EXTENDED = frozenset(
     [('run', 'dedup_branch_history:' + case) for case in (
-        'dedup-history-distributed-500', 'dedup-history-hotset-500',
-        'dedup-history-recurring-500', 'dedup-history-metadata-500',
-        'dedup-history-unrelated-500-mixed-v2')]
+        'dedup-history-distributed-500', 'dedup-history-unrelated-500-mixed-v2')]
     + [('prepare', 'mixed_load_bearing:v016-mixed-exhaustive-500mb-30000-k100-v1'),
        ('prepare', 'branch_development:v016-branch-mixed-500mb-30000-k100-v1')])
 

@@ -45,7 +45,10 @@ fn main() {
         plans = list(csv.DictReader(io.StringIO(output.stdout), delimiter="\t"))
         pins = {fields[0]: fields[1:] for fields in (line.split("\t") for line in output.stderr.splitlines())}
         self.assertEqual(len(plans), 12)
-        for case, plan in zip(family["cases"], plans):
+        by_id = {plan["scenario_id"]: plan for plan in plans}
+        self.assertEqual(len(family["cases"]), 3)
+        for case in family["cases"]:
+            plan = by_id[case["id"]]
             with self.subTest(case=case["id"]):
                 self.assertEqual({k: str(v) for k, v in case["sdk_scenario"].items()}, plan)
                 initial, final, digest, fixture_digest = pins[case["id"]]

@@ -21,7 +21,7 @@ class WorkspaceChangeLocality(unittest.TestCase):
         kinds = ("workspace-clean-commit", "workspace-fixed-move",
                  "workspace-distributed-sdk-edit", "workspace-dense-rewrite")
         expected = [f"{kind}-{tier}-{'compact-v2' if tier <= 10 else 'mixed-v4'}"
-                    for kind in kinds for tier in (1, 10, 100, 500)]
+                    for kind in kinds for tier in (1, 100, 500)]
         self.assertEqual([row["id"] for row in family["cases"]], expected)
         pinned = subprocess.check_output(["git", "rev-parse", "reference-v0.1.6-final^{commit}"],
                                          cwd=ROOT, text=True).strip()
@@ -83,7 +83,7 @@ class NativeDistributedLocality(unittest.TestCase):
                               cwd=root, capture_output=True, text=True, timeout=15)
 
     def test_original_compact_replacements_keep_identity_suffix_and_background(self):
-        for tier in (1, 10):
+        for tier in (1,):
             with self.subTest(tier=tier):
                 case = f"workspace-distributed-sdk-edit-{tier}-compact-v2"
                 root = self.fixture(case, f"tier-{tier}")

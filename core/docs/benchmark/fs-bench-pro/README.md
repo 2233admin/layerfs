@@ -7,8 +7,10 @@ The current SDK implementation and its eleven operations are described in
 [sdk.md](../../../../sdk.md). The #319 owner follow-up completes this migration
 before one consolidated host/Linux/harness and sealed count gate, then simplifies
 the harness and records a final baseline. Capped edits retain all five cases due
-to their stricter oracle; expected simplification is 157 cases and a 23-family
-kept-sibling gate. Performance optimization, publish and faster launch remain
+to their stricter oracle. The declared selection is 157 cases: everyday 108 and
+heavy 49, with a 23-family kept-sibling gate. The three repository_history
+registrations remain NOT_RUN outside both tiers. Shared fixture preparation and
+the tracked tier driver are the remaining simplification work before validation. Performance optimization, publish and faster launch remain
 deferred. The September specifications and receipts below keep their historical
 source, contracts, failures and qualification scope; they do not describe the
 current SDK API or authorize a new campaign.

@@ -549,7 +549,7 @@ fn batch4_current_boundary_and_complete_mapping_totals_reject_forged_forms() {
 #[test]
 fn batch4_created_mode_domain_and_original_case_limits_are_not_global_caps() {
     assert_eq!(
-        workspace_oracle::history_limit("dedup-history-recurring-500").unwrap(),
+        workspace_oracle::history_limit("dedup-history-distributed-500").unwrap(),
         500
     );
     assert_eq!(
@@ -785,7 +785,7 @@ fn batch4_actual_public_boundary_history_rejects_omissions_parent_and_manifest_s
 
 #[test]
 fn batch4_recurring_public_history_accepts_repeated_roots_and_checks_ab_identity() {
-    let case = "dedup-history-recurring-10";
+    let case = "dedup-history-recurring-100";
     let home = prepared(case, "recurring");
     assert!(prove(&home, case, "good", None));
     assert!(fs::read_to_string(home.join("good.jsonl"))

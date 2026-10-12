@@ -1,4 +1,4 @@
-"""D-3 admission is confined to the six named large-check failures."""
+"""D-3 admission is confined to the three kept large-check failures."""
 import copy
 import json
 from pathlib import Path
@@ -11,9 +11,7 @@ sys.path.insert(0, str(BENCH))
 from engine import workspace
 
 LARGE = {
-    'dedup_cdc_locality': ['dedup-cdc-scattered-500'],
-    'dedup_workspace_reuse': ['dedup-workspace-exact-500', 'dedup-workspace-local-500',
-                              'dedup-workspace-unique-500'],
+    'dedup_workspace_reuse': ['dedup-workspace-unique-500'],
     'store_footprint': ['store-footprint-unique-100000', 'store-footprint-metadata-cardinality-100000'],
 }
 
@@ -23,7 +21,7 @@ def cases(family):
 
 
 class LargeChecks(unittest.TestCase):
-    def test_six_large_allowances_are_validated_together_with_deadlines(self):
+    def test_three_kept_large_allowances_are_validated_together_with_deadlines(self):
         for family, selected in LARGE.items():
             for case in cases(family):
                 with self.subTest(case=case['id']):
@@ -57,7 +55,7 @@ ROOT_PROOF = {
 
 
 class LargeRootProofs(unittest.TestCase):
-    """Phase 13 admission is confined to the six named 500 MiB mixed cases."""
+    """Phase 13 admission is confined to the three kept 500 MiB mixed cases."""
 
     def deadlines(self, family, case):
         if family == 'mixed_load_bearing':

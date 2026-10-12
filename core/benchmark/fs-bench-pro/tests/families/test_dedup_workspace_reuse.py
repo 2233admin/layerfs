@@ -18,12 +18,11 @@ class DedupWorkspaceReuse(unittest.TestCase):
     def setUpClass(cls):
         cls.rows = json.loads((FAMILY / "family.json").read_text())["cases"]
 
-    def test_original_fourteen_ids_and_separate_compact_fixed_base_controls(self):
-        expected = [f"dedup-workspace-{kind}-{n}" + ("-compact-v2" if n <= 10 else "")
-                    for kind in ("exact", "local", "unique") for n in (1, 10, 100, 500)]
-        expected += [f"dedup-workspace-unique-{n}-base128-v3" for n in (1, 10)]
+    def test_five_kept_ids_and_separate_compact_fixed_base_controls(self):
+        expected = [f"dedup-workspace-{kind}-100" for kind in ("exact", "local", "unique")]
+        expected += ["dedup-workspace-unique-500", "dedup-workspace-unique-1-base128-v3"]
         self.assertEqual([row["id"] for row in self.rows], expected)
-        self.assertEqual(len({row["id"] for row in self.rows}), 14)
+        self.assertEqual(len({row["id"] for row in self.rows}), 5)
         for row in self.rows:
             case = row["id"]
             self.assertEqual(row["v016_case"], case)

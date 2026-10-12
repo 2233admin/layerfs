@@ -36,8 +36,7 @@ BATCH4_FAMILIES = frozenset(("file_size_transition","dedup_branch_history","mixe
 
 
 # Owner D-3, issue319: only the six previously failing largest checks.
-LARGE_CHECK_CASES = frozenset(("dedup-cdc-scattered-500", "dedup-workspace-exact-500",
-    "dedup-workspace-local-500", "dedup-workspace-unique-500",
+LARGE_CHECK_CASES = frozenset(("dedup-workspace-unique-500",
     "store-footprint-unique-100000", "store-footprint-metadata-cardinality-100000"))
 
 

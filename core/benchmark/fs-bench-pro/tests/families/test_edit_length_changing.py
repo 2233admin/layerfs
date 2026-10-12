@@ -30,10 +30,10 @@ class LengthChanging(unittest.TestCase):
     def setUp(self):
         self.family = json.loads((FAMILY / "family.json").read_text())
 
-    def test_all_32_plans_match_the_frozen_registry_and_payload_digests(self):
+    def test_twenty_kept_plans_preserve_original_payload_and_plan_digests(self):
         rows = self.family["cases"]
-        self.assertEqual(len(rows), 32)
-        self.assertEqual(len({r["id"] for r in rows}), 32)
+        self.assertEqual(len(rows), 20)
+        self.assertEqual(len({r["id"] for r in rows}), 20)
         tsv = "\t".join(FIELDS) + "\n"
         for row in rows:
             plan = row["sdk_scenario"]
@@ -52,13 +52,13 @@ class LengthChanging(unittest.TestCase):
                     + struct.pack(">Q", plan["replacement_len"]) + bytes.fromhex(plan["payload_sha256"]))
             self.assertEqual(hashlib.sha256(data).hexdigest(), plan["plan_sha256"])
             tsv += "\t".join(str(plan[field]) for field in FIELDS) + "\n"
-        self.assertEqual(hashlib.sha256(tsv.encode()).hexdigest(), FROZEN_REGISTRY)
+        self.assertEqual(hashlib.sha256(tsv.encode()).hexdigest(), "66b6ecced2f74f69d2fe5bcdaddf6dd86f1d99531a03623402ff6159db96e88d")
         self.assertEqual(self.family["original_registry_sha256"], FROZEN_REGISTRY)
 
     def test_existing_capped_inputs_metadata_and_source_commit_are_preserved(self):
         capped = [r for r in self.family["cases"] if "500mib-result-capped-v2" in r["id"]]
-        self.assertEqual(len(capped), 5)
-        self.assertEqual({r["sdk_scenario"]["fixture_bytes"] for r in capped}, {524283904, 524285952})
+        self.assertEqual(len(capped), 2)
+        self.assertEqual({r["sdk_scenario"]["fixture_bytes"] for r in capped}, {524283904})
         self.assertEqual({r["sdk_scenario"]["final_bytes"] for r in capped}, {524288000})
         commit = subprocess.check_output(["git", "rev-parse", "reference-v0.1.6-final^{}"], cwd=ROOT, text=True).strip()
         tag = subprocess.check_output(["git", "rev-parse", "reference-v0.1.6-final"], cwd=ROOT, text=True).strip()
