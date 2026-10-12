@@ -444,8 +444,8 @@ mounted product):
 | step-no-files | 13.6 (12.0) | 11.9 (10.1) | 4.72 (365) | 2.87 (151) | 1,980 (4.53) | 1,499 (3.33) |
 | one-mode | 2.70 (2.62) | 2.82 (2.72) | 0.48 (54) | 0.47 (50) | 240 (0.61) | 222 (0.64) |
 
-Read with the counts: half the record jobs and a third of the write
-transactions removed 18% of the step Commit's record-port time and 39% of
+Read with the counts: removing half of the record jobs and two thirds of the
+write transactions took 18% off the step Commit's record-port time and 39% off
 step-no-files'; the one-mode Commit did not move. The statement time of step
 fell by only 0.7 ms because the statements that remain are mostly the record
 reads and writes of the same keys (2,124 of them, unchanged), and on this host
