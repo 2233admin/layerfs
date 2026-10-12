@@ -156,7 +156,7 @@ fn one_write_window_costs_the_same_statements_at_either_file_size_and_beside_ano
         let copies = db.payload_work().since(copies);
         assert_eq!(copies.write_input_bytes, 3 * WRITE_WINDOW as u64);
         // The two overwrites are written where their rows lie: the counts
-        // pinned below show four shape reads and no row changed for each,
+        // pinned below show one shape read and no row changed for each,
         // and `check` reads the new bytes back.
         assert_eq!((copies.cell_copy_bytes, copies.cell_zeroed_bytes), (0, 0));
         file.check();
@@ -168,14 +168,16 @@ fn one_write_window_costs_the_same_statements_at_either_file_size_and_beside_ano
         );
     }
     // (Payload attempts, Payload executions, Payload rows changed, attempts
-    // of the whole job). A fresh window is four rows of 32 KiB: per row one
-    // read of the slot's shapes and one insert with its accounting trigger
-    // program, which updates the namespace's row (it updated the daemon's
-    // too: 12 rows). Before rows of several cells this was (32, 64, 96, 42):
+    // of the whole job). A fresh window is four rows of 32 KiB: one read of
+    // the shapes of the window's four slots, and per row one insert with its
+    // accounting trigger program, which updates the namespace's row (it
+    // updated the daemon's too: 12 rows). With one shape read per slot it
+    // was (8, 12, 8, 19); before rows of several cells (32, 64, 96, 42):
     // 32 cell upserts and their trigger programs.
-    // An overwrite writes the four rows where they lie: four shape reads,
-    // no row changed, no trigger; it was (32, 64, 96, 42) as well.
-    let (first, fresh, over) = ((8, 12, 8, 19), (8, 12, 8, 18), (4, 4, 0, 14));
+    // An overwrite writes the four rows where they lie: one shape read,
+    // no row changed, no trigger; it was (4, 4, 0, 14), and (32, 64, 96, 42)
+    // before rows of several cells.
+    let (first, fresh, over) = ((5, 9, 8, 16), (5, 9, 8, 15), (1, 1, 0, 11));
     assert_eq!((seen[0].0, seen[0].1, seen[0].2), (first, over, over));
     assert_eq!((seen[1].0, seen[1].1, seen[1].2), (fresh, over, over));
     // Stored rows of the file and of the two files beside it.

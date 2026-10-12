@@ -3,6 +3,7 @@ use crate::{
     cells::{Stored, Window},
     db::integer,
     layers::Layer,
+    payload::runs::{slot, Shape},
     sql, BaseSource, Capture, InodeKind, LocalRead, Overlay, OverlayError, OverlayResult,
     StatementKind, CELL_BYTES, READ_WINDOW, RUN_BYTES,
 };
@@ -14,7 +15,8 @@ const RUN: u64 = RUN_BYTES as u64;
 impl Overlay {
     /// Writes `bytes` at `offset` into one layer inside the caller's
     /// transaction. Whole cells are written one aligned slot of `RUN_BYTES`
-    /// at a time: one read of the row shapes of that slot, then the bytes
+    /// at a time: the row shapes of the slot, read once for every
+    /// `READ_WINDOW` of slots ahead, then the bytes
     /// replace a live dense row in place or become one new row bound from
     /// the caller's slice. A partly covered cell is one point read and
     /// either an in-place write into a wide row or a merge of at most one
@@ -40,6 +42,12 @@ impl Overlay {
         // One handle serves every in-place write of this window. A commit
         // needs it closed, so it never outlives this call.
         let mut blob = None;
+        // Row shapes of the slots ahead, read once for at most one read
+        // window of them, and where that read ends. A slot's write changes
+        // rows of its own slot only, and a partly covered first cell is
+        // written before the first whole one is reached, so the shapes are
+        // the rows each slot's own read would return.
+        let (mut ahead, mut ahead_to) = (Vec::new(), 0);
         let mut at = offset;
         while at < end {
             let cell = at - at % CELL;
@@ -60,7 +68,12 @@ impl Overlay {
                 .saturating_add(u64::from(!whole));
             self.payload_work.set(observed);
             if whole {
-                self.write_whole(ns, serial, layer, at as i64, source, &mut blob)?;
+                if at >= ahead_to {
+                    let window = at - at % RUN + READ_WINDOW as u64;
+                    ahead_to = (end - end % CELL).min(window);
+                    ahead = self.shapes(ns, serial, layer.gen, at as i64, ahead_to as i64)?;
+                }
+                self.write_whole(ns, serial, layer, at as i64, source, &ahead, &mut blob)?;
             } else {
                 let low = (at - cell) as usize;
                 self.write_part(ns, serial, layer, cell as i64, low, source, &mut blob)?;
@@ -72,7 +85,10 @@ impl Overlay {
             None => Ok(()),
         }
     }
-    /// Whole cells `[from, from + source.len())` inside one slot.
+    /// Whole cells `[from, from + source.len())` inside one slot. `ahead`
+    /// holds the shapes of the layer's rows from that slot on, as they are
+    /// stored now.
+    #[allow(clippy::too_many_arguments)]
     fn write_whole<'a>(
         &'a self,
         ns: i64,
@@ -80,6 +96,7 @@ impl Overlay {
         layer: &Layer,
         from: i64,
         source: &[u8],
+        ahead: &[Shape],
         blob: &mut Option<Blob<'a>>,
     ) -> OverlayResult<()> {
         let to = from + source.len() as i64;
@@ -87,7 +104,11 @@ impl Overlay {
         let (mut low, mut high) = (from, to);
         // Rows that start inside the range, and the one that is exactly it.
         let (mut inside, mut same) = (0, None);
-        for shape in self.shapes(ns, serial, layer.gen, from, to)? {
+        // The rows that occupy a cell of the range: they start in its slot.
+        let start = slot(from);
+        let occupying =
+            |shape: &&Shape| shape.offset >= start && shape.offset < to && shape.end() > from;
+        for shape in ahead.iter().filter(occupying).copied() {
             let live = !self.stale(ns, serial, layer, shape.offset, shape.epoch)?;
             if shape.offset < from {
                 // Only a wide row reaches a later cell. A stale one is

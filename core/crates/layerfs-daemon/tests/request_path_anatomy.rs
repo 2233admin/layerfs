@@ -231,10 +231,10 @@ fn c06_write_one_large_file() {
         Pinned {
             requests: 517,
             owner_jobs: 518,
-            statements: 9_246,
-            attempts: 7_191,
+            statements: 7_710,
+            attempts: 5_655,
             transactions: 514,
-            vm_steps: 435_487,
+            vm_steps: 407_839,
             counts: include_str!("support/request_path_counts/c06.txt"),
         },
     );
@@ -275,10 +275,10 @@ fn c10_copy_a_base_file() {
         Pinned {
             requests: 1_545,
             owner_jobs: 1_547,
-            statements: 13_372,
-            attempts: 11_313,
+            statements: 12_348,
+            attempts: 10_289,
             transactions: 1_029,
-            vm_steps: 600_790,
+            vm_steps: 582_358,
             counts: include_str!("support/request_path_counts/c10.txt"),
         },
     );

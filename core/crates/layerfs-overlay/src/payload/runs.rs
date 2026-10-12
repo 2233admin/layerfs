@@ -88,8 +88,9 @@ impl Overlay {
         Ok(found.filter(|(shape, _)| shape.end() > cell))
     }
     /// Shapes of the rows of one layer that occupy a cell of `[from, to)`,
-    /// in order. The range lies inside one slot, so at most one slot of rows
-    /// is visited and no bytes are loaded.
+    /// in order. The range is one slot, or the slots of one read window
+    /// that a write is about to replace, so at most that many rows are
+    /// visited and no bytes are loaded.
     pub(crate) fn shapes(
         &self,
         ns: i64,

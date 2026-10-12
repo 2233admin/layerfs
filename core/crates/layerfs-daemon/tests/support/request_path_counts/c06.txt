@@ -15,9 +15,9 @@ Create: requests=1 jobs(read,mutation,lifecycle)=[0, 1, 0] transactions=1 attemp
   1 file-handle-insert
   1 freelist-count
   1 native-lookup-insert
-Write: requests=512 jobs(read,mutation,lifecycle)=[0, 512, 0] transactions=512 attempts=7168 executions=9216
+Write: requests=512 jobs(read,mutation,lifecycle)=[0, 512, 0] transactions=512 attempts=5632 executions=7680
   2048 CELL_PUT
-  2048 CELL_SHAPES
+  512 CELL_SHAPES
   512 FENCE_FILE_ROW
   512 FRONTIER_ADVANCE
   512 INODE_UPDATE
