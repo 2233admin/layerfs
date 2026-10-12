@@ -12,7 +12,7 @@ use layerfs_bridge::{
     provision::StoreManifest,
 };
 use layerfs_history::WorkspaceId;
-use layerfs_sdk::{control::Control, ProjectApi, WorkspaceApi};
+use layerfs_sdk::{internal::Control, ProjectApi, WorkspaceApi};
 use std::{
     collections::BTreeSet,
     fs::{self, File},

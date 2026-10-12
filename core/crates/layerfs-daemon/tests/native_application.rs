@@ -9,7 +9,7 @@ use layerfs_bridge::{
     native,
 };
 use layerfs_history::{CommitHistoryRequest, WorkspaceId};
-use layerfs_sdk::{control::Control, ProjectApi, WorkspaceApi};
+use layerfs_sdk::{internal::Control, ProjectApi, WorkspaceApi};
 use std::{
     fs::{self, File},
     io::{BufRead, BufReader, Read},

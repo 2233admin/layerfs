@@ -5,7 +5,7 @@ use layerfs_bridge::{
 };
 use layerfs_history::WorkspaceId;
 use layerfs_sdk::{
-    control::{Control, ControlPhase},
+    internal::{Control, ControlPhase},
     WorkspaceApi,
 };
 use std::{

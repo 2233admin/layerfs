@@ -45,7 +45,7 @@ use layerfs_daemon::{
 };
 use layerfs_history::{BranchId, WorkspaceId};
 use layerfs_overlay::{Inode, InodeKind, OverlayError, Publication, Route};
-use layerfs_sdk::control::Control;
+use layerfs_sdk::internal::Control;
 use std::{
     fs,
     sync::{mpsc, Arc},

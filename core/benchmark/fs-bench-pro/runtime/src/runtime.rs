@@ -110,7 +110,7 @@ pub fn start_with_keys(
 pub fn extra_control(
     owner: &mut ManagedSandbox,
     keys: &mut RuntimeKeys,
-) -> Result<layerfs_sdk::control::Control> {
+) -> Result<layerfs_sdk::internal::Control> {
     let endpoint = match keys.endpoint {
         Some(value) => value,
         None => {
@@ -128,7 +128,7 @@ pub fn extra_control(
     stream.set_write_timeout(Some(wait))?;
     let connection = native::initiate(stream, &keys.controller_private, keys.daemon_peer)?;
     connection.clear_io_waits()?;
-    let mut control = layerfs_sdk::control::Control::new(connection);
+    let mut control = layerfs_sdk::internal::Control::new(connection);
     std::mem::swap(&mut owner.control, &mut control);
     let hello = owner.status(true);
     std::mem::swap(&mut owner.control, &mut control);

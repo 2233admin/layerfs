@@ -12,7 +12,7 @@ use layerfs_history::{
     BranchId, CommitHistoryRequest, CommitStagedOutcome, ForkRequest, ForkSource, HistoryName,
     WorkspaceId,
 };
-use layerfs_sdk::{control::Control, OperationCause, ProjectApi, WorkspaceApi};
+use layerfs_sdk::{internal::Control, OperationCause, ProjectApi, WorkspaceApi};
 use std::sync::{
     atomic::{AtomicU8, Ordering},
     mpsc, Arc,

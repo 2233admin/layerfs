@@ -17,7 +17,7 @@ use layerfs_daemon::{
     install_types::{InstalledStore, StoreSettings},
 };
 use layerfs_history::{BranchId, WorkspaceId};
-use layerfs_sdk::{control::Control, OperationCause, WorkspaceApi};
+use layerfs_sdk::{internal::Control, OperationCause, WorkspaceApi};
 use mounted::{until, Harness};
 use nix::fcntl::OFlag;
 use std::{

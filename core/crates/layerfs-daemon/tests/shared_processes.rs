@@ -14,7 +14,7 @@ use layerfs_daemon::{install::receive_install, install_types::StoreSettings};
 use layerfs_history::{
     BranchId, CommitStagedOutcome, ForkRequest, ForkSource, HistoryName, WorkspaceId,
 };
-use layerfs_sdk::control::Control;
+use layerfs_sdk::internal::Control;
 use std::{fs, path::PathBuf, thread};
 fn identity(tag: u8) -> WorkspaceId {
     WorkspaceId::from_authority([tag; 32]).unwrap()

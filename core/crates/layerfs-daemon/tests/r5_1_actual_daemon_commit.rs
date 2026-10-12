@@ -41,7 +41,7 @@ use layerfs_bridge::{
 use layerfs_history::{
     BranchId, CommitHistoryRequest, CommitRecord, CommitStagedOutcome, WorkspaceId,
 };
-use layerfs_sdk::{control::Control, ProjectApi, WorkspaceApi};
+use layerfs_sdk::{internal::Control, ProjectApi, WorkspaceApi};
 use model::{assert_same, Flat};
 use mounted::COMMAND;
 use rig::{assert_kernel, bash_in, clock_masked, clocked, kernel, native as tree, passed};

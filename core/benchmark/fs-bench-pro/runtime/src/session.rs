@@ -7,7 +7,7 @@ use layerfs_history::{
     BranchId, CommitHistoryRequest, CommitId, CommitStagedOutcome, ForkRequest, ForkSource,
     HistoryName, LayerId, LayerStackId, WorkspaceId,
 };
-use layerfs_sdk::{control::Control, MountedWorkspace, ProjectApi, WorkspaceApi};
+use layerfs_sdk::{internal::Control, MountedWorkspace, ProjectApi, WorkspaceApi};
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs,

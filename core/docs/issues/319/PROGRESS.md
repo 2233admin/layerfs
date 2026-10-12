@@ -2139,3 +2139,18 @@ Not run: `repository_history` (3 cases), NOT_RUN — set aside by owner. Durable
 NOT_RUN — disabled by owner until explicit reauthorization. Open, not fixed:
 new-content Commit throughput (phase 14); the two unrun-precondition daemon
 proofs; the inherited `benchmark_history` example compile failure.
+
+
+### SDK follow-up: relocation from the terminal handoff
+
+Cause: the September SDK layout splits facades, operations and custody types.
+Change: operation files plus shared base plumbing; callers import the hidden
+control export; public operation behavior and bridge requests are unchanged.
+The owner proposal is copied as sdk.md and marked at its current partial state.
+Working defaults: no project argument to mount, base folder, existing exec
+delegation; publish and faster launch remain deferred. Commit: this relocation.
+Result: host all-target SDK/daemon/runtime compilation PASS; SDK 5 tests PASS;
+affected host daemon targets PASS (native-only targets have zero host tests).
+Receipts: relocation-final-build.log, relocation-runtime-build.log,
+relocation-sdk-tests.log and relocation-daemon-tests.log in the local gate log.
+No sample, source seal or new baseline yet; Linux coverage follows narrowing.

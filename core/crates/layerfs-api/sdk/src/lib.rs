@@ -2,13 +2,17 @@
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
+mod base;
+#[doc(hidden)]
+pub mod internal {
+    pub use crate::base::control::{Control, ControlCause, ControlFailure, ControlPhase};
+}
 pub mod control;
-mod operation;
 pub mod project;
 #[cfg(unix)]
 pub mod sandbox;
 pub mod workspace;
-pub use operation::{OperationCause, OperationFailure};
+pub use base::failure::{OperationCause, OperationFailure};
 pub use project::{
     initialize, install, InitError, InitFailure, InitRequest, InstallError, InstallFailure,
     InstallWork, Installed, ProjectApi, SealedProject,
