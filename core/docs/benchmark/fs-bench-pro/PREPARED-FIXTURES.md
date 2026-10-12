@@ -19,7 +19,10 @@ record declares the requesting case; it does not claim another generator run.
 Every case retains its original independent native verification and expected
 states. Contextual cases additionally qualify the shared initial tree with the
 original verifier for the requesting case and role, using the exact original
-empty-observation header at step zero. Full initial-byte verification remains.
+empty-observation header at step zero. Full initial-byte verification remains. When a contextual writer supplied an
+initial tree also used by an ordinary case, ordinary summary fields are derived
+from the sealed complete manifest; its hash must equal the original producer
+summary. The original cached summary and generation receipts remain unchanged.
 Selected later checkpoints, automatic-mode evidence, SDK payloads, Storage
 readback and proofs retain their original scope and limits.
 

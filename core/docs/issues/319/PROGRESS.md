@@ -2472,3 +2472,19 @@ no tracked edits occur during samples. Focused replay/identity custody tests
 PASS; SDK/daemon/runtime all targets compile and SDK/native-control checks
 recorded. Receipt: tier-sdk-baseline journal and exact-reuse claim collision.
 No product, oracle, phase limit or performance behavior changed.
+
+
+### Shared native summary compatibility before final baseline
+
+Cause: mixed-development preparation reused a contextual initial tree whose
+original summary names manifest_sha256, then ordinary preparation required
+fixture_digest. Both original native byte checks had already PASSed. Change:
+derive fixture_digest, recipe identity and file count from the intact sealed
+complete manifest; preserve original producer argv/stdout and cached summary.
+Commit: this setup-summary adapter. Five cache and ten contextual fixture tests
+PASS; SDK/daemon/runtime all targets compile and SDK/native-control checks
+recorded. Failed preparation remains retained with no Store/sample started.
+The 91 completed rows at 109a97ac4 remain original evidence; no relabeling.
+Preflight every kept preparation before another final-source baseline, with
+one bounded command per fixture and no unchanged retry. Receipts:
+shared-summary-* checks and the mixed-development preparation KeyError.

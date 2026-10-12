@@ -116,6 +116,17 @@ def make_initial(case, build, argv, output, label="native-fixture", environment=
     # Case is a declaration about the already verified identical initial input.
     # Original generator argv/stdout stay immutable under the original producer.
     fixture = dict(cached["fixture"])
+    if "fixture_digest" not in fixture and "manifest_sha256" in fixture:
+        # Context and ordinary writers declare the same complete initial tree
+        # with different summary names. Derive the ordinary view from the
+        # retained complete manifest; do not rewrite the producer's receipt.
+        manifest = root.with_suffix(".manifest.tsv")
+        digest_value = identity.sha256(manifest)
+        rows = manifest.read_text().splitlines()
+        if digest_value != fixture["manifest_sha256"] or rows[0] != "workspace-independent-manifest-v1":
+            raise ValueError("shared context initial manifest differs from its original producer")
+        fixture.update(fixture_digest=digest_value, recipe_identity=fixture["recipe_sha256"],
+            files=sum(row.split("\t")[1] == "file" for row in rows[1:]))
     if "case" in fixture:
         fixture["case"] = case["v016_case"]
     receipt = {"status": "REUSED_CLOSED_INPUT", "attempts": 0,

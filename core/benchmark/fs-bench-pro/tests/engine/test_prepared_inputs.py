@@ -13,6 +13,29 @@ from engine import prepared_inputs
 
 
 class PreparedInputs(unittest.TestCase):
+    def test_context_producer_supplies_checked_ordinary_initial_summary_without_regeneration(self):
+        with tempfile.TemporaryDirectory() as temporary, patch.object(prepared_inputs, "CACHE", Path(temporary) / "inputs"):
+            first, second, build = self.case("first"), self.case("second"), self.build()
+            root = prepared_inputs.source_path(first, build)
+            def generate(argv, output, label, seconds, **options):
+                root.mkdir(); (root / "payload.bin").write_bytes(b"closed input")
+                manifest = root.with_suffix(".manifest.tsv")
+                manifest.write_text("workspace-independent-manifest-v1\n.\tdirectory\n"+
+                    "payload.bin\tfile\n")
+                out = output / (label + ".stdout")
+                out.write_text(json.dumps({"case": "first", "role": "a", "step": 0, "seed": 1,
+                    "manifest_sha256": prepared_inputs.identity.sha256(manifest), "recipe_sha256": "b" * 64}))
+                return {"argv": argv, "stdout": str(out), "attempts": 1, "exit_code": 0}
+            with patch.object(prepared_inputs.receipts, "command", side_effect=generate) as generated:
+                one = prepared_inputs.make_initial(first, build,
+                    ["writer", "materialize-context", "first", "a", "0", str(root)], Path(temporary) / "one")
+                two = prepared_inputs.make_initial(second, build,
+                    ["writer", "fixture", "second", str(root)], Path(temporary) / "two")
+            self.assertEqual(generated.call_count, 1)
+            self.assertEqual(one["fixture_digest"], two["fixture_digest"])
+            self.assertEqual((two["files"], two["recipe_identity"], two["case"]), (1, "b" * 64, "second"))
+            self.assertNotIn("fixture_digest", prepared_inputs.load_source(second, build)["fixture"])
+
     def case(self, name):
         return {"id": name, "v016_case": name, "sdk_scenario": {"fixture_bytes": 16},
                 "fixture": {"recipe": name, "definition_source": "original", "generator_seed": 1,
