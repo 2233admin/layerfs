@@ -200,3 +200,21 @@ cases, a request for the prepend, and a file for Init and the snapshot.
 | Store logical / allocated bytes | 929,952 / 933,888 |
 | Overlay logical / allocated bytes | 28,934,144 / 297,369,600 |
 | Daemon peak memory | 49,557,504 |
+
+## T1 diagnosis (2026-10-13)
+
+No product change. The Commit of the tier 1 case was modelled from source until
+the Store side reproduced the receipt: 51.4 locator batches, 137.9 catalogue
+queries and 137.8 pack reads a Commit plus five fixed reads give the 332.1 Store
+transactions a Commit that the receipt counts. Five cause sentences and a ranked
+candidate list are in [T1-DIAGNOSIS.md](T1-DIAGNOSIS.md); the launcher proposal
+owner decision 1 asks for is [proposals/LAUNCHER.md](proposals/LAUNCHER.md).
+A count test was written first, `product_commit_history_cost` (twelve equal
+Commits from one Workspace, no mount). Run once on the host at this tree it
+shows the Store reads of a Commit growing with the Commits before it: pack reads
+9 to 41, catalogue queries 12 to 53, locator misses 50 to 72. It asserts only
+that each Commit captures the same rows; exact counts are staged with the fix.
+Checks: host build and one host run of the new test, PASS in under 1 s.
+Verdict: diagnosis complete; the owner is asked for targets. Candidates 1 to 5
+need no owner decision and continue; P1 to P4 are proposals.
+Remains a Commit: 1,555 record jobs, 332 Store transactions, 36.7 ms.
