@@ -2198,3 +2198,18 @@ Commit: this proof correction. Initial Linux target: 4 PASS, 1 FAIL; retained.
 One corrected failed-test invocation follows at the new identity. Other passing
 Linux targets (298 tests total before this correction) are reused.
 Receipts: narrow-linux-test-mounted_drain stdout/stderr and corrected proof log.
+
+
+### SDK follow-up: install test follows the folded create route
+
+Cause: H28 still searched fixture source for the separate install_project call.
+Change: require fixture start with the original Project, its retained installation
+acknowledgement, and the public create call in runtime. All real acknowledgement,
+refusal and held-Store identity checks remain. No product or oracle change.
+Commit: this source-route assertion correction; one failed test follows once.
+Other retained outcomes: runtime aggregate hit 118 s after 19 frozen helper
+tests passed; owned snapshot history proof missed its unchanged deadline at
+35.45 s whole-test wall (debug runtime), left FAIL. Census export initially
+missed its required output env; configured export PASS. FORGET corrected PASS.
+Receipts: narrow-runtime-tests-host, narrow-runtime-owned/remaining/last-host,
+narrow-census-configured and narrow-linux-forget-corrected logs.
