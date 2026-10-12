@@ -261,6 +261,46 @@ impl PoolReader {
             .ok_or(StorageError::Integrity("encoded pooled group cache"))
     }
 
+    /// Brings the encoded groups of several catalogue rows of one pack into
+    /// this wave's pack cache in one acquisition, for a caller about to read
+    /// each of them. Groups already decoded are not asked for, and one group
+    /// alone is left to the ordinary single read.
+    pub(crate) fn acquire_cohort(
+        &mut self,
+        connection: &dyn Source,
+        ceiling: i64,
+        rows: &[ValueGroupRow],
+    ) -> StorageResult<()> {
+        let Some(first) = rows.first() else {
+            return Ok(());
+        };
+        if rows.iter().any(|row| row.pack_id != first.pack_id) {
+            return Err(StorageError::Integrity("value group cohort pack"));
+        }
+        if first.pack_id > ceiling {
+            return Err(StorageError::VisibilityCeiling {
+                pack_id: first.pack_id,
+                ceiling,
+            });
+        }
+        let numbers: Vec<usize> = rows
+            .iter()
+            .filter(|row| !self.groups.contains_key(&row.first_ordinal))
+            .map(|row| row.group_number)
+            .collect();
+        if numbers.len() < 2 {
+            return Ok(());
+        }
+        let (fetched, bytes) = self
+            .packs
+            .acquire_groups(connection, first.pack_id, &numbers)?;
+        if fetched {
+            self.counters.pack_fetches = self.counters.pack_fetches.saturating_add(1);
+            self.counters.pack_bytes = self.counters.pack_bytes.saturating_add(bytes as u64);
+        }
+        Ok(())
+    }
+
     /// Rebuilds the physical body of one pooled leaf from its delta chain.
     pub fn leaf_body(
         &mut self,

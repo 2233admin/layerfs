@@ -19,6 +19,11 @@ use crate::encoding::pool::read::PoolReader;
 use crate::error::{StorageError, StorageResult};
 use crate::policy::{StorageCapacities, METADATA_INDEX_VALUES, VALUES_PER_GROUP};
 
+/// Groups of one pack a synchronization reads in one acquisition. Sixty-four
+/// groups of the largest permitted size stay well inside the pack cache's
+/// allowance, so a cohort can never evict its own members.
+const SYNC_COHORT_GROUPS: usize = 64;
+
 /// Bounded ordered set of `(fingerprint, ordinal)` candidates.
 #[derive(Clone, Debug, Default)]
 pub struct PoolIndex {
@@ -144,8 +149,22 @@ impl PoolIndex {
         let Ok(from) = u32::try_from(self.next) else {
             return Ok(());
         };
+        // Rows arrive in ordinal order, so the groups one Save wrote into one
+        // pack are neighbours: they are read in one acquisition a pack, not
+        // one a group.
+        let mut cohort: Vec<crate::location::ValueGroupRow> = Vec::new();
+        let mut next = self.next;
+        let mut flush = |index: &mut Self, cohort: &mut Vec<crate::location::ValueGroupRow>| {
+            reader.acquire_cohort(connection, ceiling, cohort)?;
+            for row in cohort.drain(..) {
+                let values =
+                    reader.group_values(connection, capacities, ceiling, workspace, &row)?;
+                index.note_group(row.first_ordinal, &values)?;
+            }
+            Ok::<(), StorageError>(())
+        };
         let mut visit = |row: crate::location::ValueGroupRow| {
-            if u64::from(row.first_ordinal) < self.next
+            if u64::from(row.first_ordinal) < next
                 || row.count == 0
                 || row.count > VALUES_PER_GROUP
                 || before.is_some_and(|bound| {
@@ -154,14 +173,22 @@ impl PoolIndex {
             {
                 return Err(StorageError::Integrity("metadata catalogue overlap/range"));
             }
-            let values = reader.group_values(connection, capacities, ceiling, workspace, &row)?;
-            self.note_group(row.first_ordinal, &values)
+            next = u64::from(row.first_ordinal) + row.count as u64;
+            if cohort.len() == SYNC_COHORT_GROUPS
+                || cohort
+                    .first()
+                    .is_some_and(|first| first.pack_id != row.pack_id)
+            {
+                flush(self, &mut cohort)?;
+            }
+            cohort.push(row);
+            Ok(())
         };
         match before {
             Some(bound) => connection.value_groups_before(from, bound, &mut visit)?,
             None => connection.value_groups(Some(from), &mut visit)?,
         }
-        Ok(())
+        flush(self, &mut cohort)
     }
 
     /// Discards candidates below the allocator's bounded reserved-value window.
