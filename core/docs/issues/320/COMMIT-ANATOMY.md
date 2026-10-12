@@ -222,17 +222,43 @@ the release work list, which must see an empty window because rows are added
 while it runs. The first two kinds could take the same rule (−3 jobs per
 Commit); not done.
 
-### 5.4 State after these commits (measured, exact)
+### 5.4 Several keys in one read job (stage A of section 6)
+
+The record port has a seventh job: the values of at most 64 keys, in the order
+asked, under one fence (`IndexedEditBacking::get_many`,
+`OverlayOperationRecords::operation_record_get_many`,
+`Overlay::indexed_operation_record_get_many`, the daemon's
+`IndexedOperationRecordJob::GetMany`). Both trait methods default to asking for
+each key in turn, so a provider that does not serve them together behaves as
+before. The values of one job share one 64 KiB reply envelope: a job whose
+values exceed it together is refused where single reads would succeed, so a
+caller may only batch keys whose values are small by construction.
+
+Its first user is the reference reducer: the fresh member, the row and the
+touched witness of one serial are one job
+(`layerfs-content/src/filesystem/references/indexed.rs`, `stored`). The three
+values are checked in the order they were once read in. Predicted: two jobs and
+two fence statements fewer for each of 68, 242 and 2,064 triples. Observed:
+record jobs 456 → 320, 1,481 → 997 and 17,260 → 13,132; Workspace statements
+542 → 406, 1,717 → 1,233 and 19,254 → 15,126; record statements unchanged.
+
+One difference in a failing state: when the fresh member or the row is
+invalid, the reads that used to follow it are no longer skipped, because all
+three arrive in the one job. No further job follows the refusal.
+
+### 5.5 State after these commits (measured, exact)
 
 | per Commit | small | step | large |
 | --- | ---: | ---: | ---: |
-| record jobs | 456 | 1,481 | 17,260 |
-| Workspace + Lease + record statements | 542 + 85 + 652 | 1,717 + 235 + 2,205 | 19,254 + 1,993 + 24,444 |
+| record jobs | 320 | 997 | 13,132 |
+| record jobs at `ea7535a42` | 472 | 1,497 | 17,276 |
+| Workspace + Lease + record statements | 406 + 85 + 652 | 1,233 + 235 + 2,205 | 15,126 + 1,993 + 24,444 |
 | the same three families at `ea7535a42` | 628 + 557 + 668 | 1,989 + 1,732 + 2,221 | 21,836 + 19,269 + 24,460 |
-| Begin = Commit | 76 | 262 | 2,572 |
+| Begin = Commit (write transactions) | 76 | 262 | 2,572 |
 
-Record-job statements in the three families fell by 31%, 30% and 30%. Sections
-2 and 6 give the counts before these commits.
+Record jobs fell by 32%, 33% and 24%; statements of the three families by 38%,
+38% and 37%. Write transactions are unchanged. None of these counts was timed
+after `63a1ab005`.
 
 ## 6. Recommendation — removing the per-key record jobs
 
@@ -243,6 +269,8 @@ writes, 41 key windows and membership tests; about 6,500 statements, of which
 read of 262 transactions. A read job is 2 fence statements and 1 record
 statement, so the fence and the transaction frame — not the record statement —
 are most of the statement count.
+
+Stage A below is built (section 5.4); B and C are not.
 
 **Stage A — several keys in one read job.** Add, with a default that loops over
 the single read so that every existing provider keeps its behaviour and its

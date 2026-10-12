@@ -72,14 +72,8 @@ impl Records {
             what: "original indexed reference failure",
         }
     }
-}
-impl IndexedConstructionBacking for Records {
-    fn contains(&mut self, key: ConstructionRecordKey) -> ContentResult<bool> {
-        self.enter()?;
-        Ok(self.values.contains_key(&key))
-    }
-    fn get(&mut self, key: ConstructionRecordKey) -> ContentResult<Option<Vec<u8>>> {
-        self.enter()?;
+    /// The answer one key gets inside a job that has already been entered.
+    fn value(&mut self, key: ConstructionRecordKey) -> ContentResult<Option<Vec<u8>>> {
         if topology(key.kind) {
             self.topology_reads += 1;
         }
@@ -105,6 +99,21 @@ impl IndexedConstructionBacking for Records {
             }
         }
         Ok(result)
+    }
+}
+impl IndexedConstructionBacking for Records {
+    fn contains(&mut self, key: ConstructionRecordKey) -> ContentResult<bool> {
+        self.enter()?;
+        Ok(self.values.contains_key(&key))
+    }
+    fn get(&mut self, key: ConstructionRecordKey) -> ContentResult<Option<Vec<u8>>> {
+        self.enter()?;
+        self.value(key)
+    }
+    /// One call: every key is answered by the same job, in the order asked.
+    fn get_many(&mut self, keys: &[ConstructionRecordKey]) -> ContentResult<Vec<Option<Vec<u8>>>> {
+        self.enter()?;
+        keys.iter().map(|key| self.value(*key)).collect()
     }
     fn apply(
         &mut self,

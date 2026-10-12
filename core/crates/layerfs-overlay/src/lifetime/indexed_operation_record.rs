@@ -2,7 +2,8 @@
 use crate::{
     db::integer, indexed_operation_record_changes_bytes, sql, IndexedOperationRecordApply,
     IndexedOperationRecordChange, IndexedOperationRecordKey, IndexedOperationRecordScope,
-    OperationRecordExpectedValue, Overlay, OverlayResult, StatementKind,
+    OperationRecordExpectedValue, Overlay, OverlayError, OverlayResult, StatementKind,
+    OPERATION_RECORD_BYTES, PAGE_ROWS,
 };
 
 impl Overlay {
@@ -40,6 +41,30 @@ impl Overlay {
     ) -> OverlayResult<Option<Vec<u8>>> {
         self.fence_operation(scope.owner, false)?;
         self.indexed_value(scope, key)
+    }
+
+    /// Reads the bounded raw values of at most `PAGE_ROWS` keys under one
+    /// fence, in the order asked. Together they stay inside one record envelope.
+    pub fn indexed_operation_record_get_many(
+        &self,
+        scope: IndexedOperationRecordScope,
+        keys: &[IndexedOperationRecordKey],
+    ) -> OverlayResult<Vec<Option<Vec<u8>>>> {
+        if keys.len() > PAGE_ROWS {
+            return Err(OverlayError::Invalid("indexed operation_record key list"));
+        }
+        self.fence_operation(scope.owner, false)?;
+        let mut values = Vec::with_capacity(keys.len());
+        let mut bytes = 0_usize;
+        for key in keys {
+            let value = self.indexed_value(scope, *key)?;
+            bytes = bytes.saturating_add(value.as_ref().map_or(0, Vec::len));
+            if bytes > OPERATION_RECORD_BYTES {
+                return Err(OverlayError::Invalid("indexed operation_record values"));
+            }
+            values.push(value);
+        }
+        Ok(values)
     }
 
     fn indexed_value(

@@ -25,10 +25,11 @@ fn scope(db: &Overlay, tag: u8) -> IndexedOperationRecordScope {
     }
 }
 
-/// The six jobs of the record service, in the order of the daemon's command.
-const JOBS: [&str; 6] = [
+/// The seven jobs of the record service, in the order of the daemon's command.
+const JOBS: [&str; 7] = [
     "contains",
     "get",
+    "get_many",
     "apply",
     "first_keys",
     "first_keys_all",
@@ -47,6 +48,9 @@ fn attempt(
             .indexed_operation_record_contains(scope, key(1, 0))
             .map(drop),
         "get" => db.indexed_operation_record_get(scope, key(1, 0)).map(drop),
+        "get_many" => db
+            .indexed_operation_record_get_many(scope, &[key(1, 0), key(1, 1)])
+            .map(drop),
         "apply" => db
             .indexed_operation_record_apply(scope, &[put(key(2, fresh), vec![1])])
             .map(|applied| assert_eq!(applied, IndexedOperationRecordApply::Applied)),
@@ -61,7 +65,7 @@ fn attempt(
     }
 }
 /// The refusal kind of each job, in `JOBS` order.
-fn refusals(db: &Overlay, scope: IndexedOperationRecordScope, fresh: u64) -> [&'static str; 6] {
+fn refusals(db: &Overlay, scope: IndexedOperationRecordScope, fresh: u64) -> [&'static str; 7] {
     std::array::from_fn(
         |job| match attempt(db, scope, JOBS[job], fresh + job as u64) {
             Ok(()) => "ok",
@@ -115,28 +119,28 @@ fn each_job_refuses_a_stale_route_then_a_closed_write_then_a_released_owner() {
     );
     db.indexed_operation_record_apply(held, &[put(key(1, 0), vec![5])])
         .unwrap();
-    assert_eq!(refusals(&db, held, 100), ["ok"; 6]);
+    assert_eq!(refusals(&db, held, 100), ["ok"; 7]);
     // A route of another engine is stale for every job, before anything else.
-    assert_eq!(refusals(&db, foreign, 200), ["stale"; 6]);
+    assert_eq!(refusals(&db, foreign, 200), ["stale"; 7]);
 
     // Open Workspace, released owner: every job is stale.
     let released = scope(&db, 41);
     db.release_operation(released.owner).unwrap();
-    assert_eq!(refusals(&db, released, 300), ["stale"; 6]);
+    assert_eq!(refusals(&db, released, 300), ["stale"; 7]);
 
     // Closed Workspace, held owner: existing custody stays readable and only
     // the write is refused, as closed.
     db.close(held.owner.route()).unwrap();
     assert_eq!(
         refusals(&db, held, 400),
-        ["ok", "ok", "closed", "ok", "ok", "ok"]
+        ["ok", "ok", "ok", "closed", "ok", "ok", "ok"]
     );
     // Closed Workspace, released owner: the write is still refused as closed,
     // not as stale, and every read is stale.
     db.release_operation(held.owner).unwrap();
     assert_eq!(
         refusals(&db, held, 500),
-        ["stale", "stale", "closed", "stale", "stale", "stale"]
+        ["stale", "stale", "stale", "closed", "stale", "stale", "stale"]
     );
 
     // The Workspace row itself gone: stale for every job, the write included.
@@ -152,7 +156,7 @@ fn each_job_refuses_a_stale_route_then_a_closed_write_then_a_released_owner() {
         }
     }
     assert!(reclaimed, "bounded terminal reclamation did not finish");
-    assert_eq!(refusals(&db, held, 600), ["stale"; 6]);
+    assert_eq!(refusals(&db, held, 600), ["stale"; 7]);
 }
 
 #[test]
@@ -169,6 +173,8 @@ fn each_job_executes_a_fixed_number_of_fence_statements() {
     let expected = [
         ("contains", [1, 0, 1, 0, 0, 0]),
         ("get", [1, 0, 1, 0, 0, 0]),
+        // Two keys: one fence, one read for each key.
+        ("get_many", [1, 0, 2, 0, 0, 0]),
         ("apply", [1, 0, 2, 1, 1, 1]),
         ("first_keys", [1, 0, 1, 0, 0, 0]),
         ("first_keys_all", [1, 0, 1, 0, 0, 0]),
@@ -222,6 +228,82 @@ fn the_fence_statements_are_point_searches() {
         assert!(
             !plan.contains("SCAN") && !plan.contains("TEMP B-TREE"),
             "{plan}"
+        );
+    }
+}
+
+#[test]
+fn several_keys_are_read_under_one_fence_in_the_order_asked() {
+    let temp = Temp::new();
+    let db = temp.db();
+    let held = scope(&db, 71);
+    db.indexed_operation_record_apply(held, &[put(key(1, 0), vec![5])])
+        .unwrap();
+    db.indexed_operation_record_apply(held, &[put(key(3, 7), vec![9; 100])])
+        .unwrap();
+    // The order asked, not key order; an absent key is its own answer.
+    let asked = [key(3, 7), key(9, 9), key(1, 0)];
+    assert_eq!(
+        db.indexed_operation_record_get_many(held, &asked).unwrap(),
+        [Some(vec![9; 100]), None, Some(vec![5])]
+    );
+    for (position, one) in asked.into_iter().enumerate() {
+        assert_eq!(
+            db.indexed_operation_record_get(held, one).unwrap(),
+            db.indexed_operation_record_get_many(held, &[one])
+                .unwrap()
+                .pop()
+                .unwrap(),
+            "{position}"
+        );
+    }
+    // No key is no read: the fence alone.
+    let before = db.diagnostics();
+    assert!(db
+        .indexed_operation_record_get_many(held, &[])
+        .unwrap()
+        .is_empty());
+    let work = db.diagnostics().since(&before);
+    assert_eq!(
+        (
+            work.statements[StatementKind::Workspace as usize].attempts,
+            work.statements[StatementKind::OperationRecord as usize].attempts
+        ),
+        (1, 0)
+    );
+    // The list is bounded, and refused before any statement.
+    let many = (0..65).map(|number| key(1, number)).collect::<Vec<_>>();
+    let before = db.diagnostics();
+    assert!(matches!(
+        db.indexed_operation_record_get_many(held, &many),
+        Err(OverlayError::Invalid("indexed operation_record key list"))
+    ));
+    let work = db.diagnostics().since(&before);
+    assert_eq!(
+        work.statements[StatementKind::Workspace as usize].attempts,
+        0
+    );
+    assert_eq!(
+        db.indexed_operation_record_get_many(held, &many[..64])
+            .unwrap()
+            .len(),
+        64
+    );
+    // The values of one job share one record envelope. Two values that each
+    // fit it but together do not are refused; each is still readable alone.
+    for number in [20, 21] {
+        db.indexed_operation_record_apply(held, &[put(key(5, number), vec![7; 40_000])])
+            .unwrap();
+    }
+    assert!(matches!(
+        db.indexed_operation_record_get_many(held, &[key(5, 20), key(5, 21)]),
+        Err(OverlayError::Invalid("indexed operation_record values"))
+    ));
+    for number in [20, 21] {
+        assert_eq!(
+            db.indexed_operation_record_get_many(held, &[key(5, number)])
+                .unwrap(),
+            [Some(vec![7; 40_000])]
         );
     }
 }

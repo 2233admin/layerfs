@@ -12,19 +12,21 @@ use layerfs_workspace::{
 };
 use std::{cell::RefCell, collections::BTreeMap, time::Instant};
 
-/// The five calls of the record port.
+/// The six calls of the record port.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum Call {
     Contains,
     Get,
+    GetMany,
     Apply,
     FirstKeys,
     KeysAfter,
 }
 impl Call {
-    pub const ALL: [Call; 5] = [
+    pub const ALL: [Call; 6] = [
         Call::Contains,
         Call::Get,
+        Call::GetMany,
         Call::Apply,
         Call::FirstKeys,
         Call::KeysAfter,
@@ -33,6 +35,7 @@ impl Call {
         match self {
             Call::Contains => "contains",
             Call::Get => "get",
+            Call::GetMany => "get_many",
             Call::Apply => "apply",
             Call::FirstKeys => "first_keys",
             Call::KeysAfter => "keys_after",
@@ -278,6 +281,15 @@ impl OverlayOperationRecords for Counting<'_> {
             self.seen.borrow_mut().absent_gets += 1;
         }
         reply
+    }
+    /// One job, recorded under the kind of its first key.
+    fn operation_record_get_many(
+        &self,
+        scope: IndexedOperationRecordScope,
+        keys: &[IndexedOperationRecordKey],
+    ) -> WorkspaceResult<OperationRecordReply<Vec<Option<Vec<u8>>>>> {
+        self.record(scope, Call::GetMany, keys.first().map_or(0, |key| key.kind));
+        self.record_call(|| self.inner.operation_record_get_many(scope, keys))
     }
     fn operation_record_apply(
         &self,

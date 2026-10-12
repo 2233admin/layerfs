@@ -44,20 +44,25 @@ impl<'s, 'b> IndexedReducer<'s, 'b> {
             wire::change(wire::TOUCH, serial, None, None),
         ])
     }
-    fn is_new(&self, serial: u64) -> ContentResult<bool> {
+    /// The fresh member, the row and the touched witness of one serial, read
+    /// as one job, and whether the serial is fresh. The three are checked in
+    /// the order they were once read in.
+    #[allow(clippy::type_complexity)]
+    fn stored(&self, serial: u64) -> ContentResult<(bool, Option<Vec<u8>>, Option<Vec<u8>>)> {
         let expected = self.input.is_new(serial)? && !self.dropped.contains(serial)?;
-        let member = self.state.read(wire::FRESH, serial)?;
+        let [member, row, touch] = self
+            .state
+            .read_kinds([wire::FRESH, wire::ROW, wire::TOUCH], serial)?;
         if let Some(bytes) = member.as_deref() {
             wire::membership(bytes)?;
         }
         if expected != member.is_some() {
             return Err(ContentError::InvalidRecord("filesystem fresh membership"));
         }
-        Ok(expected)
+        Ok((expected, row, touch))
     }
     pub fn row(&self, serial: u64) -> ContentResult<Option<Row>> {
-        let fresh = self.is_new(serial)?;
-        let raw = self.state.read(wire::ROW, serial)?;
+        let (fresh, raw, touch) = self.stored(serial)?;
         let row = raw
             .as_deref()
             .map(|bytes| wire::row(bytes, serial))
@@ -67,7 +72,6 @@ impl<'s, 'b> IndexedReducer<'s, 'b> {
                 "filesystem reference fresh tag",
             ));
         }
-        let touch = self.state.read(wire::TOUCH, serial)?;
         if let Some(bytes) = touch.as_deref() {
             wire::membership(bytes)?;
         }
@@ -91,8 +95,7 @@ impl<'s, 'b> IndexedReducer<'s, 'b> {
         if serial == 0 {
             return Err(ContentError::InvalidRecord("inode serial"));
         }
-        let fresh = self.is_new(serial)?;
-        let old = self.state.read(wire::ROW, serial)?;
+        let (fresh, old, touch) = self.stored(serial)?;
         let created = old.is_none();
         let mut row = match old.as_deref() {
             Some(bytes) => wire::row(bytes, serial)?,
@@ -112,7 +115,6 @@ impl<'s, 'b> IndexedReducer<'s, 'b> {
                 "filesystem reference fresh tag",
             ));
         }
-        let touch = self.state.read(wire::TOUCH, serial)?;
         if let Some(bytes) = touch.as_deref() {
             wire::membership(bytes)?;
         }

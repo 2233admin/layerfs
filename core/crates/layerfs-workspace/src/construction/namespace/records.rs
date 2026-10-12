@@ -232,6 +232,25 @@ impl<P: OverlayOperationRecords + ?Sized> IndexedEditBacking for Backing<'_, '_,
         }
         Ok(value)
     }
+    fn get_many(&mut self, keys: &[EditRecordKey]) -> ContentResult<Vec<Option<Vec<u8>>>> {
+        let mut owner = self.0.borrow_mut();
+        owner.ready()?;
+        let result = owner.records.get_many(keys);
+        let values = result.map_err(|error| owner.content(error))?;
+        if let Some(actual) = values
+            .iter()
+            .flatten()
+            .map(Vec::capacity)
+            .find(|capacity| *capacity > OPERATION_RECORD_BYTES)
+        {
+            return Err(owner.content(ContentError::BoundedCapacityExceeded {
+                what: "captured record returned capacity",
+                limit: OPERATION_RECORD_BYTES as u64,
+                actual: actual as u64,
+            }));
+        }
+        Ok(values)
+    }
     fn apply(&mut self, changes: Vec<EditRecordChange>) -> ContentResult<EditRecordApply> {
         let mut owner = self.0.borrow_mut();
         owner.ready()?;

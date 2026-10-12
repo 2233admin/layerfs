@@ -51,6 +51,13 @@ pub trait IndexedEditBacking {
     fn contains(&mut self, key: EditRecordKey) -> ContentResult<bool>;
     /// One bounded original raw value.
     fn get(&mut self, key: EditRecordKey) -> ContentResult<Option<Vec<u8>>>;
+    /// Original raw values of several keys, in the order asked, as one job
+    /// where the provider can serve them together: at most 64 keys whose values
+    /// fit one 64KiB envelope. The default asks for each key in turn, so its
+    /// first refusal is the first refused key's.
+    fn get_many(&mut self, keys: &[EditRecordKey]) -> ContentResult<Vec<Option<Vec<u8>>>> {
+        keys.iter().map(|key| self.get(*key)).collect()
+    }
     /// One sorted unique guarded batch within a64KiB retained-capacity envelope.
     fn apply(&mut self, changes: Vec<EditRecordChange>) -> ContentResult<EditRecordApply>;
     /// First at most64 keys, excluding only a root in this exact domain. None

@@ -54,6 +54,32 @@ impl<'a> SerialState<'a> {
         }
         Ok(value)
     }
+    /// The raw values of several kinds of one serial, as one backing job.
+    pub(crate) fn read_kinds<const N: usize>(
+        &self,
+        kinds: [u32; N],
+        serial: u64,
+    ) -> ContentResult<[Option<Vec<u8>>; N]> {
+        let backing = self
+            .backing
+            .as_ref()
+            .ok_or(ContentError::InvalidRecord("filesystem backing mode"))?;
+        let keys = kinds.map(|kind| codec::key(kind, serial));
+        let values = backing.borrow_mut().get_many(&keys)?;
+        if values.capacity() > 64
+            || values
+                .iter()
+                .flatten()
+                .any(|value| value.capacity() > codec::WINDOW)
+        {
+            return Err(ContentError::InvalidRecord(
+                "filesystem backing value window",
+            ));
+        }
+        values
+            .try_into()
+            .map_err(|_| ContentError::InvalidRecord("filesystem backing value window"))
+    }
     pub(crate) fn apply(&self, changes: Vec<ConstructionRecordChange>) -> ContentResult<()> {
         let mut bytes = changes
             .capacity()

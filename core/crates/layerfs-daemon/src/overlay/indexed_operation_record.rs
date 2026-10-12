@@ -16,6 +16,11 @@ pub enum IndexedOperationRecordJob {
         scope: IndexedOperationRecordScope,
         key: IndexedOperationRecordKey,
     },
+    /// At most `PAGE_ROWS` keys; their values share one reply envelope.
+    GetMany {
+        scope: IndexedOperationRecordScope,
+        keys: Vec<IndexedOperationRecordKey>,
+    },
     Apply {
         scope: IndexedOperationRecordScope,
         changes: Vec<IndexedOperationRecordChange>,
@@ -41,6 +46,7 @@ pub enum IndexedOperationRecordJob {
 pub enum IndexedOperationRecordReply {
     Contains(bool),
     Value(Option<Vec<u8>>),
+    Values(Vec<Option<Vec<u8>>>),
     Applied(IndexedOperationRecordApply),
     Keys(Vec<[u8; 32]>),
 }
@@ -50,6 +56,18 @@ impl IndexedOperationRecordJob {
         let (input, reply) = match self {
             Self::Contains { .. } => (0, 0),
             Self::Get { .. } => (0, OPERATION_RECORD_BYTES),
+            Self::GetMany { keys, .. } => {
+                if keys.len() > PAGE_ROWS {
+                    return None;
+                }
+                let input = keys
+                    .capacity()
+                    .checked_mul(std::mem::size_of::<IndexedOperationRecordKey>())?;
+                let slots = keys
+                    .len()
+                    .checked_mul(std::mem::size_of::<Option<Vec<u8>>>())?;
+                (input, OPERATION_RECORD_BYTES.checked_add(slots)?)
+            }
             Self::Apply { changes, .. } => {
                 let used = indexed_operation_record_changes_bytes(changes).ok()?;
                 let spare = changes
@@ -80,6 +98,7 @@ impl IndexedOperationRecordJob {
         let scope = match &self {
             Self::Contains { scope, .. }
             | Self::Get { scope, .. }
+            | Self::GetMany { scope, .. }
             | Self::Apply { scope, .. }
             | Self::FirstKeys { scope, .. }
             | Self::FirstKeysAll { scope, .. }
@@ -95,6 +114,9 @@ impl IndexedOperationRecordJob {
             Self::Get { key, .. } => db
                 .indexed_operation_record_get(scope, key)
                 .map(IndexedOperationRecordReply::Value),
+            Self::GetMany { keys, .. } => db
+                .indexed_operation_record_get_many(scope, &keys)
+                .map(IndexedOperationRecordReply::Values),
             Self::Apply { changes, .. } => db
                 .indexed_operation_record_apply(scope, &changes)
                 .map(IndexedOperationRecordReply::Applied),

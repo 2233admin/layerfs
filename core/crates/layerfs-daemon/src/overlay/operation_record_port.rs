@@ -73,6 +73,34 @@ impl OverlayOperationRecords for OwnerClient {
             _ => Err(WorkspaceError::Service(Box::new(done))),
         }
     }
+    fn operation_record_get_many(
+        &self,
+        scope: IndexedOperationRecordScope,
+        keys: &[IndexedOperationRecordKey],
+    ) -> WorkspaceResult<OperationRecordReply<Vec<Option<Vec<u8>>>>> {
+        let job = IndexedOperationRecordJob::GetMany {
+            scope,
+            keys: keys.to_vec(),
+        };
+        let done = original_job(self, scope, job)?;
+        match done.result() {
+            Ok(Response::IndexedOperationRecord(IndexedOperationRecordReply::Values(values))) => {
+                let value = values.clone();
+                let mut total = copies(&value);
+                for bytes in value.iter().flatten() {
+                    let one = copies(bytes);
+                    total.bytes += one.bytes;
+                    total.allocations += one.allocations;
+                    total.retained_bytes += one.retained_bytes;
+                }
+                Ok(OperationRecordReply {
+                    value,
+                    copies: total,
+                })
+            }
+            _ => Err(WorkspaceError::Service(Box::new(done))),
+        }
+    }
     fn operation_record_apply(
         &self,
         scope: IndexedOperationRecordScope,
