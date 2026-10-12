@@ -14,7 +14,10 @@ Disposable/WAL/OFF; `LAYERFS_CONSTRUCTION_WORKERS=1`; Durable:
 `NOT_RUN — disabled by owner until explicit reauthorization`.
 
 Companion documents: [receipt field mapping](RECEIPT-FIELD-MAPPING.md),
-[native diagnostic](NATIVE-DIAGNOSTIC.md), [refreshed candidate list](CANDIDATES.md).
+[native diagnostic](NATIVE-DIAGNOSTIC.md), [refreshed candidate list](CANDIDATES.md),
+[T1 diagnosis](T1-DIAGNOSIS.md). Proposals for the owner:
+[launcher](proposals/LAUNCHER.md), [batched record port](proposals/RECORD-PORT.md),
+[pooled value reads](proposals/POOLED-VALUE-READS.md).
 
 ## Setup (2026-10-13)
 
@@ -218,3 +221,121 @@ Checks: host build and one host run of the new test, PASS in under 1 s.
 Verdict: diagnosis complete; the owner is asked for targets. Candidates 1 to 5
 need no owner decision and continue; P1 to P4 are proposals.
 Remains a Commit: 1,555 record jobs, 332 Store transactions, 36.7 ms.
+
+## T1 batch 1: keep the producer between Commits (2026-10-13)
+
+Cause C2: each Commit made a new Storage producer handle and read the policy
+row, the content-hint table and the value-group catalogue again. Change: a
+bound Workspace keeps the handle of its last completed Commit; a Commit that
+does not complete drops it. Commit `56a6424e1`, tag `t1a`, one sealed build.
+Decisions used: none; question 4 of the T1 diagnosis checkpoint is open.
+Checks: count test restaged, PASS. One sample each of the tier 1 case, the
+twelve cells and the four-Workspace case: every proof PASS, every functional
+check PASS where a receipt has one, every timing row INELIGIBLE. Host daemon
+suite: 89 binaries PASS, the 2 known unrun-precondition binaries FAILED as
+before (`complete_installed_roots`, `host_handoff`). fmt and Clippy clean.
+Linux, one target a container: `mounted_concurrency` 5, `mounted_parking` 4,
+`finite_service` 1 and `install_slots` 1 tests PASS. Boundary guard PASS.
+Verdict: kept. Every predicted counter moved as predicted or further, storage
+is not worse, and the twelve cells are count-equal to "before".
+Remains a Commit of the tier 1 case: 1,555 record jobs, 94 Store transactions,
+73 pack reads (12 at Commit 1, 98 at Commit 100), 29.0 ms.
+
+Prediction against result, tier 1 case, 100 Commits:
+
+| Counter | Before | Predicted | After |
+| --- | ---: | ---: | ---: |
+| Storage catalogue queries | 13,793 | about 600 | 620 |
+| Store statements that sort | 13,693 | about 600 | 421 |
+| Policy reads / hint-table reads | 100 / 100 | 1 / 1 | 1 / 1 |
+| Store transactions | 33,211 | about 19,500 | 9,395 |
+| Store returned rows | 660,113 | under 100,000 | 30,958 |
+| Store full-scan steps | 553,786 | not predicted | 4,900 |
+| Locator batches / misses | 5,140 / 37,224 | lower, not predicted | 1,193 / 15,840 |
+| Pack reads | 13,775 | not predicted to move | 7,277 |
+| Pack bytes read | 77,637,638 | not predicted | 55,552,104 |
+| Pooled groups written / pack bytes written | 323 / 7,291,523 | equal | 323 / 7,291,238 |
+
+Two predictions were wrong on the low side. Transactions fell further because
+locator batches and pack reads fell too. Pack reads fell because the rebuild of
+the pooled-value index read every group of the window, not only the groups the
+Commit's leaves reference; the count test's small tree hid that, since its
+Commits read the same groups anyway (inferred from `sync_range`, not counted
+separately). Cause C3 remains: pack reads still grow from 12 to 98.
+
+Command time moved 7,616 to 8,094 ms (+6.3%) with identical requests, jobs and
+opcodes; that is inside the one-sample spread and is not attributed. Commit
+time moved 3,670 to 2,902 ms (-20.9%), more than the spread. Daemon peak
+memory fell from 87.9 MB to 74.9 MB.
+
+`v016-mixed-development-100mb-5000-k100-v1`, 100 units; before at `196c70fba`; after at `56a6424e1`
+
+| Measure | Before | After |
+| --- | ---: | ---: |
+| Functional / proof status | PASS / PASS (INELIGIBLE) | PASS / PASS (INELIGIBLE) |
+| Command time, total and per unit | 7,616.2 ms; 76.16 ms/unit | 8,094.2 ms; 80.94 ms/unit |
+| Commit time, total and per unit | 3,670.3 ms; 36.70 ms/unit | 2,902.0 ms; 29.02 ms/unit |
+| Elapsed time (concurrent cases) | n/a | n/a |
+| Mount / unmount time | 7.3 ms; 0.07 ms/unit / 3.8 ms; 0.04 ms/unit | 7.2 ms; 0.07 ms/unit / 5.3 ms; 0.05 ms/unit |
+| Requests, by opcode | 26,078: Getattr 5,766, Lookup 4,384, Release 3,260, Write 2,730, Forget 2,252, Unlink 2,160, Create 2,000, Open 1,260 | 26,078: Getattr 5,766, Lookup 4,384, Release 3,260, Write 2,730, Forget 2,253, Unlink 2,160, Create 2,000, Open 1,260 |
+| Owner jobs, by class | 201,510: Capture 200, Lifecycle 5,941, Mutation 9,665, OperationRecord 155,483, Read 30,221 | 201,510: Capture 200, Lifecycle 5,941, Mutation 9,665, OperationRecord 155,483, Read 30,221 |
+| Statements / executions / VM steps | 1,084,581 / 1,084,884 raw executions / 27,338,518 VM steps | 1,084,503 / 1,084,806 raw executions / 27,337,583 VM steps |
+| Owner service time / queue wait | 1,940.4 ms / 54.3 ms | 2,203.1 ms / 72.1 ms |
+| Command and Commit time outside the owner | 9,291.8 ms | 8,721.0 ms |
+| Store reader grants and batches | 4,818 grants; 8,995 batches | 4,818 grants; 8,995 batches |
+| Maintenance jobs during the interval | 2,379 jobs, 39,886 rows | 2,379 jobs, 39,886 rows |
+| Scans / sorts / auto-indexes / re-prepares (overlay, foreground) | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 |
+| Store logical / allocated bytes | 114,438,144 / 114,438,144 | 114,405,376 / 114,405,376 |
+| Overlay logical / allocated bytes | 659,456 / 269,094,912 | 659,456 / 269,094,912 |
+| Daemon peak memory | 87,928,832 | 74,936,320 |
+
+Four Workspaces (`v016-workspace-four-100mb-5000-k100-v1`), sampled at the same
+identity because it is the case where a kept handle meets other publishers:
+
+| Counter, 400 Commits | Before | After |
+| --- | ---: | ---: |
+| Storage catalogue queries | 55,874 | 2,480 |
+| Pack reads (last Commit) | 177,152 (877) | 32,027 (104) |
+| Pack bytes read | 694,834,623 | 218,040,719 |
+| Store transactions / statements | 255,288 / 834,088 | 40,512 / 136,394 |
+| Store transaction time, summed | 25,948 ms | 3,889 ms |
+| Pooled groups written / pack bytes written | 1,292 / 23,146,992 | 1,292 / 21,448,117 |
+
+Pooled reuse is equal (1,292 groups) and the Store is smaller, so the side
+effect named in the diagnosis (a duplicate value when another Workspace
+publishes below a kept cursor) did not occur in this sample. Overlay logical
+bytes are 49,152 higher (1,912,832 to 1,961,984) with the single-Workspace
+overlay equal; this change writes nothing to the overlay, so it is recorded as
+unexplained and watched in stage T2.
+
+`v016-workspace-four-100mb-5000-k100-v1`, 400 units; before at `196c70fba`; after at `56a6424e1`
+
+| Measure | Before | After |
+| --- | ---: | ---: |
+| Functional / proof status | PASS / PASS (INELIGIBLE) | PASS / PASS (INELIGIBLE) |
+| Command time, total and per unit | 38,292.0 ms; 95.73 ms/unit | 38,850.3 ms; 97.13 ms/unit |
+| Commit time, total and per unit | 65,203.3 ms; 163.01 ms/unit | 43,451.2 ms; 108.63 ms/unit |
+| Elapsed time (concurrent cases) | 27,087.1 ms | 22,079.4 ms |
+| Mount / unmount time | 23.0 ms; 0.06 ms/unit / 15.3 ms; 0.04 ms/unit | 21.6 ms; 0.05 ms/unit / 18.7 ms; 0.05 ms/unit |
+| Requests, by opcode | 104,311: per connection: 26,078, 26,078, 26,077, 26,078 | 104,312: per connection: 26,078, 26,078, 26,078, 26,078 |
+| Owner jobs, by class | 803,666: Read 119,115, Mutation 38,457, Capture 800, Lifecycle 23,783, OperationRecord 621,932 | 803,442: Read 118,913, Mutation 38,435, Capture 800, Lifecycle 23,783, OperationRecord 621,932 |
+| Statements / executions / VM steps | 4,352,051 / 4,353,323 raw executions / 109,522,354 VM steps | 4,355,725 / 4,356,997 raw executions / 109,544,563 VM steps |
+| Owner service time / queue wait | 11,534.4 ms / 19,002.4 ms | 11,001.5 ms / 24,148.4 ms |
+| Command and Commit time outside the owner | 72,958.5 ms | 47,151.7 ms |
+| Store reader grants and batches | 15,482 grants; 34,176 batches | 15,139 grants; 34,008 batches |
+| Maintenance jobs during the interval | 9,509 jobs, 161,749 rows | 9,393 jobs, 161,754 rows |
+| Scans / sorts / auto-indexes / re-prepares (overlay, foreground) | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 |
+| Store logical / allocated bytes | 132,616,192 / 132,616,192 | 130,990,080 / 130,990,080 |
+| Overlay logical / allocated bytes | 1,912,832 / 270,348,288 | 1,961,984 / 270,397,440 |
+| Daemon peak memory | 191,225,856 | 140,541,952 |
+
+Twelve cells at `56a6424e1`: requests, owner jobs and statements equal the
+"before" sample in all twelve; every proof PASS.
+
+Not run at this identity: the overlay, workspace and fuse suites (their source
+is unchanged), Clippy in Linux, and the other mounted daemon binaries; they
+belong to the hand-back at the close. One overlap is recorded: a preparation of
+this run (24 s, tag `t1a`, the tier 1 original) started while a build of the
+other worktree had just begun, because the busy check printed its result but
+did not stop the command. The check now gates by exit status. No sample of
+either worktree was running.
