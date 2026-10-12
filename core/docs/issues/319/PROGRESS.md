@@ -2416,3 +2416,15 @@ SDK/native-control checks recorded. No sample started at the first simplified
 seal, which remains retained. The corrected final source receives a new tag
 and seal; unaffected successful checks retain their exact implementation scope.
 Receipts: stage2-harness-engine.log and stage2-kept-policy-* checks.
+
+
+### Benchmark simplification: find shared Stores in producer-key cache
+
+Cause: case views moved under distinct producer-key directories, while Store
+reuse still searched immediate siblings. Change: search only the declared kept
+cache's sealed views, preserving exact input/profile/product/uid/gid matching
+and full retained-manifest validation before reuse. Commit: this cache lookup.
+The new cross-key regression and 19 existing fixture tests PASS; SDK/daemon/runtime
+all targets compile and SDK/native-control checks recorded. No sample started,
+no product path or timed work changed, and corrupt matching setup still refuses
+without fallback. Receipts: stage2-cache-master-discovery-* checks.

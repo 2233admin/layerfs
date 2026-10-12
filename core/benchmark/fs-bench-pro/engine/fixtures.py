@@ -1444,8 +1444,14 @@ def prepare_namespace(recipe, folder, build_folder):
 
 
 def compatible_master(folder, fixture, current, uid, gid):
-    """Reuse only a sealed sibling setup with the identical complete input tree."""
-    for candidate in sorted(Path(folder).parent.glob("*/prepared.json")):
+    """Reuse only a sealed setup with the identical complete input tree."""
+    folder = Path(folder)
+    candidates = set(folder.parent.glob("*/prepared.json"))
+    # Producer-key directories contain case views, rather than sibling views.
+    # Search only this worktree's declared kept cache, never other campaigns.
+    if folder.parent.parent.name == "kept-fixtures":
+        candidates.update(folder.parent.parent.glob("*/*/prepared.json"))
+    for candidate in sorted(candidates):
         if candidate.parent == Path(folder):
             continue
         summary = json.loads(candidate.read_text())

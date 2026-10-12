@@ -22,6 +22,25 @@ class IsolatedInputs(unittest.TestCase):
 
 
 class Fixtures(IsolatedInputs):
+    def test_master_reuse_crosses_producer_key_directories_in_kept_cache(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            cache = Path(temporary) / "kept-fixtures"
+            prior = cache / "first-key" / "first-recipe"
+            prior.mkdir(parents=True)
+            good = {"schema": "fs-bench-pro-prepared-workspace-v1", "status": "PASS",
+                "global_profile": "Disposable/WAL/OFF",
+                "store_builder_key": fixtures.prepared_inputs.product_store_key({"files": {}}),
+                "source_uid": 501, "source_gid": 20, "fixture": {"fixture_sha256": "same"},
+                "master_volume": "one-master", "provision": {"store_sha256": "same-store"}}
+            (prior / "prepared.json").write_text(json.dumps(good))
+            (prior / "manifest.json").write_text("retained provenance")
+            with patch.object(fixtures, "load", return_value=good) as checked:
+                reused, record = fixtures.compatible_master(cache / "second-key" / "second-recipe",
+                    {"fixture_sha256": "same"}, {"files": {}}, 501, 20)
+            checked.assert_called_once_with(prior)
+            self.assertEqual(reused["master_volume"], "one-master")
+            self.assertEqual(record["prepared"], str(prior.resolve()))
+
     def test_master_reuse_requires_exact_input_profile_product_and_identity(self):
         good = {"schema": "fs-bench-pro-prepared-workspace-v1", "status": "PASS",
                 "global_profile": "Disposable/WAL/OFF", "store_builder_key": fixtures.prepared_inputs.product_store_key({"files": {}}), "identity": {"product_tree": "product", "files": {}},
