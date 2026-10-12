@@ -253,25 +253,175 @@ statements; `native_jobs.rs` pins `BEGIN` and `COMMIT` executions, which did
 not change. A mounted pin that the search missed would show as an exact-count
 failure on Linux.
 
-## 6. Predicted cell counts (not run)
+## 6. Mounted cell expectations
 
-From the receipts and the replay's measured deltas:
+Expected counts of the twelve cells at `cd075772c`. **None of them was run.**
+They come from a source model: statements per kind of request, before and
+after, applied to the request mix the mount issued. The model was first
+checked against the old numbers: for every cell it reproduces the statement
+count of a mounted receipt taken before these changes, from that receipt's own
+per-opcode request counts, and that count is the frozen one
+(`timing-baseline-20261010/baseline.json`, with the named C10 correction of
+`CELL_COUNT_CORRECTIONS`). The receipts are
+`2026-10-13-issue320-i3b-run-cells/C01..C12` and, for C07,
+`2026-10-13-issue320-i1b-run-cells/C07`, read at the end-of-command snapshot of
+`observations.opcode_work`.
 
-| Cell | Receipt before | Predicted | Why |
-| --- | --- | --- | --- |
-| C01 | 44,004 | 36,003 | the replay equals the receipt exactly |
-| C04 | 42,644 | 36,073 | the same |
-| C06 | 9,766 | 7,710 | the same |
-| C10 | 14,406 | about 12,346 | the replay's LOOKUP of the base file is two visits, the mount's one |
-| C03 | 102,537 (102,540 also seen) | 82,535 to about 83,200 | timing dependent, below |
+Requests and owner jobs do not change: no change adds, removes or splits a
+request or a job. Statements are executions.
 
-C03: with every FORGET arriving before the next request the mount saves what
-the replay saves, 20,002. A visit that runs while a removed file still waits
-for its FORGET keeps its separate row read (the orphan domain is asked first),
-and an UNLINK then keeps its orphan probe. The mount showed about 334 such
-windows, so up to about 670 of the saving may not appear. Other cells were not
-replayed; any cell that issues GETATTR, LOOKUP, CREATE, WRITE, SETATTR, OPEN,
-UNLINK or FORGET moves by the per-request amounts of section 3.
+### 6.1 The model
+
+Executions per request, before -> after. "Measured" kinds are pinned by the
+host replay or by `read_cost`; "derived" kinds are a measured kind with one
+known difference.
+
+| Request | Before -> after | Basis |
+| --- | --- | --- |
+| state job of the status call | 1 -> 1 | measured |
+| GETATTR | 2 -> 1 | measured; deciding visit |
+| LOOKUP, absent name in the root | 4 -> 2 | measured; deciding visit, two name reads become one |
+| LOOKUP, absent name in a directory made in this Workspace | 3 -> 2 | measured (C04); one name read before and after |
+| LOOKUP of a base file, first in its mount | 13 -> 11 | derived: `read_cost` `LOOKUP_BASE` (10 -> 8) plus the lookup row and custody row it inserts with their two trigger runs |
+| OPEN | 8 -> 7 | measured; deciding visit |
+| CREATE in the root | 21 -> 17, the first in a mount 22 -> 18 | measured; the first inserts the root's local row |
+| WRITE inside one cell | 10 -> 9 | measured; deciding visit |
+| WRITE of 64 KiB, new rows | 13 -> 11 | measured; deciding visit and one of two shape reads |
+| WRITE of 128 KiB, new rows | 19 -> 15 | measured; deciding visit and three of four shape reads |
+| first WRITE of 128 KiB into a base file | 20 -> 16 | derived: the same with the inode's first local row inserted |
+| OPENDIR | 9 -> 8 | measured; deciding visit |
+| UNLINK of a last link, no orphan held | 20 -> 16 | measured |
+| FORGET that releases a removed one-cell file | 34 -> 28 | measured |
+| READ, RELEASE, READDIR, RELEASEDIR | unchanged | plain fences, measured |
+| FLUSH, refused COPY_FILE_RANGE, STATFS | no job, no statement | |
+
+A deciding visit loses its separate row read only while the engine holds no
+orphan (section 4.2). C03 and C12 remove files; every other cell never holds
+an orphan, so its count does not depend on timing.
+
+### 6.2 The table
+
+| Cell | Requests | Owner jobs | Statements before (frozen) | Model before | Statements expected | Exact |
+| --- | --- | --- | --- | --- | --- | --- |
+| C01 | 5,002 | 5,002 | 44,004 | 44,004 | **36,003** | yes |
+| C02 | 6,002 | 6,002 | 46,004 | 46,004 | **37,003** | yes |
+| C03 | 9,022 | 9,038 | 102,540 | 102,204 + P | **82,201 + 2P** | no, see 6.3 |
+| C04 | 5,342 | 5,342 | 42,644 | 42,644 | **36,073** | yes |
+| C05 | 5,890 | 6,000 | 46,637 | 46,637 | **39,853** | yes |
+| C06 | 518 | 518 | 9,766 | 9,766 | **7,710** | yes |
+| C07 | 1,551 | 1,550 | 23,133 | 23,133 | **19,018** | yes |
+| C08 | 521 | 521 | 9,783 | 9,783 | **7,725** | yes |
+| C09 | 517 | 517 | 1,055 | 1,055 | **1,051** | yes |
+| C10 | 1,547 | 1,546 | 14,406 (corrected) | 14,406 | **12,345** | yes |
+| C11 | 517 | 517 | 9,760 | 9,760 | **7,708** | yes |
+| C12 | 3,436 | 3,439 | 24,146 | not modelled | about 19,920 | no, see 6.4 |
+
+"Exact" means: for the frozen request mix. A different mix (a kernel that
+issues one request more or fewer) moves the number by that request's row of
+6.1.
+
+How each "model before" is built, and the same sum after:
+
+- **C01, C04, C06**: the host replay issues the mount's requests and equals
+  the receipt exactly before the changes (sections 1 and 2); the expected
+  number is the replay's measured number after them.
+- **C02** = C01 and 1,000 GETATTR of the files `stat` names: 44,004 + 2,000 =
+  46,004; after, 36,003 + 1,000.
+- **C05** = C04 and `find`: 101 GETATTR, 112 OPENDIR, 222 READDIR, 112
+  RELEASEDIR and one STATFS. The receipts' family counts of C05 minus C04
+  are those requests exactly (inode statements 435 = 101 + 112 + 222, one
+  fence for each of 658 jobs, 335 write transactions = 112 + 112 + 111) and
+  sum to 3,993 = 46,637 - 42,644. The 213 deciding visits lose one statement
+  each: 36,073 + 3,993 - 213.
+- **C06**: state job, one absent LOOKUP, two GETATTR, the first CREATE, 512
+  WRITE of 128 KiB, one RELEASE: 1 + 4 + 4 + 22 + 9,728 + 7 = 9,766; after,
+  1 + 2 + 2 + 18 + 7,680 + 7.
+- **C07** = C06 and `cp` of the file just written (its reads are served by
+  the page cache: the mount issued none): two absent LOOKUP, two GETATTR, one
+  OPEN, one CREATE, 1,024 WRITE of 64 KiB, two RELEASE: 9,766 + 8 + 4 + 8 +
+  21 + 13,312 + 14 = 23,133; after, 7,710 + 4 + 2 + 7 + 17 + 11,264 + 14.
+- **C08** = C06 and `cat` (page cache again): one GETATTR, one OPEN, one
+  RELEASE: 9,766 + 2 + 8 + 7 = 9,783; after, 7,710 + 1 + 7 + 7.
+- **C09**: state job, one GETATTR, the base file's LOOKUP, one OPEN, 512
+  READ, one RELEASE: 1 + 2 + 13 + 8 + 1,024 + 7 = 1,055; after, 1 + 1 + 11 +
+  7 + 1,024 + 7.
+- **C10**: state job, two GETATTR, the base file's LOOKUP, two absent LOOKUP,
+  one OPEN, the first CREATE, 512 READ, 1,024 WRITE of 64 KiB, two RELEASE:
+  1 + 4 + 13 + 8 + 8 + 22 + 1,024 + 13,312 + 14 = 14,406; after, 1 + 2 + 11 +
+  4 + 7 + 18 + 1,024 + 11,264 + 14 = 12,345. This replaces the "about
+  12,346" given earlier from the replay: the replay issues one GETATTR where
+  the mount issues two, one READ more, and takes two visits for the base
+  file's LOOKUP where the mount, whose daemon has seen the file in its
+  warm-up mount, takes one. 12,345 is exact for the mount's mix.
+- **C11**: state job, one GETATTR, the base file's LOOKUP, one OPEN, 512
+  WRITE of 128 KiB of which the first inserts the inode's local row, one
+  RELEASE: 1 + 2 + 13 + 8 + 9,729 + 7 = 9,760; after, 1 + 1 + 11 + 7 + 7,681
+  + 7.
+
+### 6.3 C03 is timing dependent
+
+`rm` removes a file and the kernel sends that inode's FORGET later, not in
+step with the next request. While a removed file waits for its FORGET the
+engine holds an orphan, and every inode read of a visit asks the orphan domain
+first. Let P be the number of such reads in a run (each is one more statement
+before these changes).
+
+- Before: 102,204 + P. The replay, which sends every FORGET at once, counts
+  102,202; the mount issues one GETATTR more. The frozen 102,540 is P = 336;
+  the sample that gave 102,537 is P = 333.
+- After: 82,201 + 2P. Without any waiting FORGET the count is the replay's
+  82,200 and the one GETATTR. A GETATTR in such a window costs two more than
+  outside it (the probe, and its row read, which the fence could not keep);
+  an UNLINK in such a window costs four more (two rows read, of which the
+  directory's is the named one, and the orphan probe UNLINK otherwise skips)
+  where it cost two more before. In both cases the extra is twice what it
+  was, and the `rm` phase issues no other kind of visit.
+- With the timing of the frozen sample: 82,873 (P = 336). With the other
+  observed sample: 82,867 (P = 333). With no late FORGET: 82,201.
+
+So C03 cannot be frozen as one number. A run's P can be read back from its
+own receipt (the count is 82,201 + 2P and nothing else moves), and the
+relation to the old runs is `after = 82,201 + 2 x (before - 102,204)`.
+Requests (9,022) and owner jobs (9,038) do not depend on it.
+
+### 6.4 C12 cannot be predicted exactly here
+
+C12 is `git init`, 100 files, `git add`, `git commit`: 957 LOOKUP, 865
+GETATTR, 231 CREATE, 235 WRITE, 229 OPEN, 106 UNLINK, 102 LINK, 97 MKDIR, 8
+RENAME, 8 FORGET, 5 SETATTR, 5 OPENDIR, 1 SYMLINK and the requests that do not
+move (READ, RELEASE, READDIR, RELEASEDIR). The replay does not issue this
+sequence, LINK, RENAME and SYMLINK were never counted per request, the name
+reads of each request depend on whether its directory exists in the base, and
+the cell removes and replaces files, so it has C03's timing term too (its
+samples gave 24,146 and 24,145). The estimate, each part with its assumption:
+
+| Part | Statements | Assumption |
+| --- | --- | --- |
+| frozen before | 24,146 | |
+| the named row read by the fence | -2,841 | every LOOKUP, GETATTR, SETATTR, MKDIR, UNLINK, SYMLINK, RENAME, LINK, OPEN, WRITE, OPENDIR and CREATE read its named inode's row, and none ran while an orphan was held |
+| names read once | -1,327 | the receipt's 3,390 name statements are 553 writes (one per CREATE, MKDIR, SYMLINK, LINK and UNLINK, two per RENAME) and 2,837 reads; after, one read per name of a request: 1,510 |
+| FORGET and release | -48 | each of the 8 FORGET releases a removed file of less than a page (six statements each) |
+| UNLINK and RENAME orphan probe | -8 | eight last links removed while no orphan was held |
+| writes | 0 | no write covers two whole 32 KiB slots |
+| expected | about 19,920 | |
+
+Each assumption can be off by a few statements, and a visit that runs while a
+removed file waits for its FORGET keeps one. A range of 19,900 to 19,980 is
+what this supports; it is an estimate, not a model result, and should be
+recorded as a range. Requests (3,436) and owner jobs (3,439) do not change.
+
+### 6.5 What the expectations rest on
+
+- The receipts' request mixes. A run whose mix differs is not a failure of
+  these changes; its count moves by the rows of 6.1.
+- One mounted fact that the host cannot show: the base file's LOOKUP is one
+  visit in C09, C10 and C11 because the daemon's warm-up mount has seen the
+  file. The receipts show it (their Read-class job counts leave one job for
+  it).
+- Two derived rows of 6.1 (the base file's first LOOKUP and the first WRITE
+  into a base file). Their before values reproduce C09, C10 and C11 exactly;
+  their after values apply the measured changes of the kinds they derive
+  from and were not themselves run.
 
 ## 7. The frame, several jobs per transaction, and the accounting triggers
 
