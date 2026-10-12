@@ -169,9 +169,11 @@ impl Keys {
                     .borrow_mut()
                     .content(ContentError::InvalidRecord("captured namespace key window")));
             }
-            match keys.last() {
-                Some(last) => self.after = Some(*last),
-                None => self.ended = true,
+            // A short window ends a sealed sequence: no empty window job
+            // follows. A full one may be the last, so one more is asked for.
+            self.ended = keys.len() < PAGE_ROWS;
+            if let Some(last) = keys.last() {
+                self.after = Some(*last);
             }
             self.window = keys.into_iter();
         }
