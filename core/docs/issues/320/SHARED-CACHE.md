@@ -1,9 +1,11 @@
 # Issue 320: the shared immutable object cache with several Workspaces
 
 > **Status:** Diagnosis; host in-process measurement and receipt analysis; not a qualified result.
-> Written 2026-10-13 on branch `perf-experiments-c`. Product source at the
-> end of this work: `8081d23f9`. The mounted receipts read here were recorded
-> by another worktree at product tree `ff47933c44f6` and are single samples.
+> Written 2026-10-13 on branch `perf-experiments-c`. Sections 1 to 7 and 9
+> describe product source `8081d23f9`. Section 8 records the seeding built
+> afterwards on the lead's direction; product source at the end: `292077c06`.
+> The mounted receipts read here were recorded by another worktree at product
+> tree `ff47933c44f6` and are single samples.
 
 This document answers five questions about the daemon's one shared immutable
 object cache (design: [sandbox cache design](../../../../docs/general/sandbox-cache-design.md)),
@@ -47,6 +49,11 @@ mounted product is claimed.
    portable mode and mtime are remembered by metadata root. Together they
    halve the cache acquisitions of the replay (416,571 to 210,181 for one
    Workspace) and change no Store demand.
+8. Built afterwards (section 8): a published Commit places the namespace
+   objects it constructed, and the lengths of the whole files it constructed,
+   in the shared cache. In the replay at 8 MiB the commands of one Workspace
+   ask the Store for 82 objects instead of 7,935, and of four Workspaces 82
+   instead of 31,410; all 82 are first touches of the base.
 
 ## 2. C1: what the misses are
 
@@ -259,7 +266,8 @@ One Workspace charges 5,600,785 bytes in all: 210,181 hits, 8,551 misses and
 no eviction at 8 MiB and above. From 64 MiB down to 2 MiB the misses of four
 Workspaces rise by 1.1% and length demands by 65%.
 
-With seeding emulated (section 8), one Workspace, command misses are 0 with no
+With seeding emulated by the test before it was built (mode 2 of the replay,
+which placed payload too), one Workspace, command misses are 0 with no
 eviction, 11 at 8 MiB, 40 at 4 MiB, 57 at 2 MiB and 63 at 1 MiB; four
 Workspaces at 8 MiB, 47. (Taken at `e28d482ab`; these runs first read the
 whole base, 9.1 MB of charge, so the cache is full from step 1.)
@@ -327,64 +335,207 @@ Not made, with the reason:
 - **A3, cheaper bookkeeping.** About 0.5 µs a hit on the host; by inference
   under 1% of a mounted step, and the hits are now half. Not a clear cost.
 
-## 8. Class B: for the owner
+## 8. Seeding from a published Commit (built)
 
-**B1, seed the cache with what a Commit constructed. Not built: the wiring is
-in files this work does not own. Measured potential on the host:** with every
-object new in a Commit's root placed in the cache after that Commit (emulated
-by the test demanding them), the next commands of one Workspace miss 0 objects
-instead of 7,850 and make 536 reader admissions instead of 8,380; of four
-Workspaces at 8 MiB, 47 instead of 31,410. The Commit's own validation still
-missed 280 (2.8 a Commit) only because the emulation seeds after it. Cost:
-12,391 objects and 3,572,666 bytes seeded for one Workspace, against 8,282
-that were read back without seeding: a third of what is seeded is never read,
-mostly content of created files. At 8 MiB with four Workspaces evictions rise
-from 17,841 to 41,886 and misses do not. In the mounted cases the same
-mechanism is the stage-1 pattern of section 2.1; how much of the 9,148 misses
-it would remove there is inferred, not measured.
+The lead directed this as an ordinary candidate after the owner allowed
+cache-lifetime changes. Two commits: `53e9ca5e1` (namespace objects) and
+`292077c06` (whole-file lengths). Design and rules:
+[workspace base architecture](../../architecture/20-workspace-base.md).
 
-What it needs: an insertion entry on the cache owner that checks the identity
-of the bytes before inserting, so that nothing enters unauthenticated; and a
-tee of the Save's sink in `store/captured.rs:102-107`, or a pass over the
-saved objects after `save.finish()` at `store/commit.rs:121`, before the
-validation at `:141-146`. It should seed namespace objects (inode, directory
-and attribute pages and values, symlink targets) and not file payload: the
-replay's files are 1 KiB; the mounted workload's are about 20 KiB, and 64 of
-them a Commit would displace the entries that are read back. The reuse
-distance to cover is ten Commits of each Workspace: about 1.1 MB of charge for
-one mounted Workspace and 2.8 MB for four at the receipts' rates, inside
-8 MiB.
+### 8.1 What it does
 
-The measurement rule: seeding is product behaviour, paid inside the measured
-Commit and visible in its counts; it is not setup. It does mean the command
-after a Commit starts with those objects resident by the product's own doing,
-as it already does today for what bind and validation read. A receipt must
-declare that state and may not call that command cold. A counter of seeded
-objects and bytes should be added with it so the two are never confused.
+- `store/captured.rs` wraps the Save's sink. Each finalized object is offered
+  to a `ConstructedObjects` set owned by that Commit attempt, then handed to
+  the Save unchanged.
+- **Staged:** every role except file payload. `WholeFile` never; a `Chunk`
+  only when its canonical bytes are no more than 256, the bookkeeping charge
+  of an entry. That rule exists because an attribute value's payload (the 4
+  bytes of a mode, the 12 of an mtime) is a `Chunk` and cannot be told from a
+  file's chunk by role; it also admits a file chunk that small. Of a
+  `WholeFile` the set keeps the length under its content root.
+- **What authenticates a seeded entry:** the identity `FinalizedObject::new`
+  computed from the same allocation (`layerfs-content/src/object/output.rs:104`;
+  `admit` checks it at `object/admission.rs:27`). The type cannot change its
+  bytes or identity afterwards. Nothing is hashed again.
+- **Copies:** one, at staging, because the Save takes the allocation.
+  Admission moves the bytes into the cache.
+- **When:** `commit_admitted` runs its `published` callback after History
+  answered the publication with the saved candidate root
+  (`store/commit.rs:186`, after the "publication differs" check). Construction,
+  Save, validation or publication that fails or is unknown never runs it; the
+  set is dropped with the attempt and no reader could ever reach it.
+- **Bounds:** the set holds at most one eighth of the cache allowance (1 MiB
+  at the default) and keeps the latest objects, which are the root and the
+  pages nearest to it; an object charged more than that is not staged.
+  Admission charges the ordinary allowance and evicts in the ordinary order.
+  The default allowance is unchanged.
+- **Counted:** `ClientWork::seeded_objects`, `seeded_bytes`, `seeded_lengths`,
+  appended to diagnostics row 10 after its seven existing values
+  (`application/diagnostics/schema.rs`; the receipt tool's `zip` ignores
+  trailing values).
 
-**B2, a different default allowance. Not justified by these cases.** With
-the present behaviour the misses do not depend on the allowance (section 5).
-It becomes a real question only with B1, or for a daemon with many more
-Workspaces than four: the receipts' insert rate is about 0.07 MB of charge a
-Commit and Workspace, so 8 MiB holds about 120 Workspace-Commits.
+### 8.2 The Commit's own readback does not hit
 
-**B3, protecting entries shared by several live roots. Not justified.** No
-harmful interference was found: no re-fetch after eviction in either mounted
-case, 1.1% more misses in the replay from 64 MiB down to 2 MiB, and the
-pressure proof shows exact bytes and progress at 3% of the working set.
+The lead asked that the Commit's readback of its new root now hit. It does
+not, and this is deliberate pending a decision. The readback
+(`store/commit.rs:144-155`, `store/bind.rs:85-119`) runs before publication,
+and the seeds may not be placed before publication. It still asks the Store
+for the new root's top: 3 objects a Commit, 7 when the root directory itself
+changed (its attribute page and the three objects of its new mtime). Those
+enter the cache as ordinary authenticated misses, as before. Two ways to
+remove them, neither built:
 
-**Outside these classes, for the owner:** the four objects per inode with its
-own mtime are a property of the canonical format (each attribute value is a
-file). A format in which mode and mtime are read with the attribute page
-would remove three of every four of these objects, their Store reads and
-their cache charge. That is a format change and is only named here.
+1. Place the seeds after `Save::finish` and before validation. Every seeded
+   object is then saved, but a Commit whose publication fails leaves them in
+   the cache: this is what the lead's rule forbids.
+2. Serve validation from the Commit's private set without inserting, and
+   keep one Store read of the root object for the prepared install. This
+   removes 2 to 6 reads a Commit and also removes the only pre-publication
+   proof that the Store returns the inode table's root page and the root
+   directory's page. That weakens a check someone designed; it needs a
+   decision.
+
+### 8.3 Proofs (exact counts, host, PASS)
+
+`core/crates/layerfs-daemon/tests/shared_cache_seeding.rs`:
+
+- A Commit of 14 changes (directories, three files, a symbolic link, a hard
+  link, a mode, a time, a rename, a removal). The new root has 53 objects the
+  base has not: 3 file payloads and 50 namespace objects. The Commit read 7
+  back from the Store and placed 43: 43 + 7 = 50, bytes 3,793 + 7,995 =
+  11,788, and exactly those 50 are resident, no payload among them. 3
+  lengths placed.
+- A new Workspace bound to that head: bind 0 Store objects; lookup, stat,
+  listing and readlink of all 12 written paths: 0 Store objects, 0 lengths, 0
+  misses. Reading each created file: exactly 1 Store object, its payload.
+- Publication refused (definite): 0 objects and 0 lengths seeded; of the
+  candidate's 53 objects exactly the 7 the Commit read back are resident.
+  The Workspace's next Commit constructs the same root, reads nothing back
+  and places the other 43.
+- Publication unknown (it happened; the answer was lost): 0 seeded, the same
+  7 resident.
+- Allowance 96 KiB: a Commit places 11 objects (the bound is 12 KiB); another
+  Workspace's whole-tree read evicts them; a new Workspace on the head asks
+  the Store again for 50 objects, each one miss and authenticated, and the
+  tree is the published one byte for byte.
+
+`core/crates/layerfs-workspace/tests/shared_cache_client.rs`: staging by
+role, each identity once, the bound keeping the latest, a dropped set leaving
+no trace, admission with exact charges and counters and no upstream demand,
+eviction in order. The two #314 proofs of sections 3 and 4 still pass.
+
+### 8.4 Replay, before and after
+
+Host counts, 100 Commits a Workspace, allowance 8 MiB. Before is product
+source `8081d23f9`. Predictions were written before each edit
+(`core/target/issue320/logs/shared-cache/B1-prediction.txt`): for one
+Workspace, command misses 85, Commit misses 616, reader admissions about
+2,470, no eviction; for lengths, command length demands 443.
+
+| Run | Measure | Before | Objects seeded | And lengths |
+| --- | --- | ---: | ---: | ---: |
+| One Workspace, long-lived | Misses (commands + Commits) | 7,935 + 616 | 82 + 616 | 82 + 616 |
+| | Store batches | 8,538 | 692 | 692 |
+| | Length demands | 1,779 | 1,779 | 1,092 |
+| | Reader admissions | 10,317 | 2,471 | 1,784 |
+| | Evictions | 0 | 0 | 0 |
+| | End charge, bytes | 5,600,785 | 7,393,178 | 7,439,642 |
+| One, a new Workspace per Commit | Misses | 8,551 | 698 | 698 |
+| | Store batches | 8,538 | 692 | 692 |
+| | Reader admissions | 10,417 | 2,571 | 1,884 |
+| | Evictions | 0 | 0 | 0 |
+| Four Workspaces, long-lived | Misses (commands + Commits) | 31,410 + 1,608 | 82 + 1,784 | 82 + 1,784 |
+| | Store batches | 32,987 | 1,860 | 1,860 |
+| | Length demands | 4,491 | 4,865 | 3,474 |
+| | Reader admissions | 37,478 | 6,725 | 5,334 |
+| | Evictions | 23,976 | 38,941 | 39,488 |
+| Four, a new Workspace per Commit | Misses | 33,018 | 1,866 | 1,866 |
+| | Store batches | 32,987 | 1,860 | 1,860 |
+| | Reader admissions | 37,878 | 7,125 | 5,734 |
+| | Evictions | 23,976 | 38,941 | 39,488 |
+
+- The per-tool-call shape differs from the long-lived one only by its binds:
+  each is 11 cache hits, 0 misses and 1 reader admission (the branch
+  snapshot). The cache is the daemon's, so a Workspace that ends takes
+  nothing with it.
+- The 82 command misses are first touches of the base. With the whole base
+  read first and no eviction, the commands of 100 steps ask the Store for
+  nothing: 0 objects, 0 lengths, 0 reader admissions.
+- What Commits still ask, one Workspace: 300 objects of readback (section
+  8.2), 132 payloads of files they rewrite, 184 first touches of the base,
+  and 800 lengths that construction asks of the Store every time by design
+  (`base/file.rs:21`).
+- Seeded: 114 objects and 21.5 kB a Commit, about 52 kB of charge with the
+  bookkeeping. 31% of the seeded objects were not read within the run: they
+  belong to files the workload does not return to before it ends, not to a
+  kind of object that could be left out.
+- The length prediction was 443 and the count 292: the prediction took the
+  base's share from the difference of two runs and overstated it.
+
+### 8.5 Eviction with seeding, and the allowance (B2)
+
+Four Workspaces, final source:
+
+| Allowance | Misses | Of which commands | Evictions | Length demands | Reader admissions |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Never evicts (at `53e9ca5e1`) | 1,634 | 82 | 0 | 4,379 | 6,007 |
+| 8 MiB | 1,866 | 82 | 39,488 | 3,474 | 5,334 |
+| 4 MiB | 1,986 | 82 | 49,751 | 3,944 | 5,924 |
+| 2 MiB | 19,357 | 17,373 | 75,349 | 5,928 | 25,270 |
+| 8 MiB before seeding | 33,018 | 31,410 | 23,976 | 4,491 | 37,478 |
+| 2 MiB before seeding | 33,323 | — | 40,663 | 7,246 | 40,538 |
+
+Seeding raises evictions at 8 MiB from 23,976 to 39,488 and this is not
+thrash: the commands lose nothing to it (82 misses with and without
+eviction) and the Commits 232 objects. What is evicted is not asked for
+again within the reuse distance. No remedy is needed at 8 MiB with four
+Workspaces, and none was built. The limit is visible at 2 MiB: this workload
+returns to what it wrote ten Commits earlier, so four Workspaces need about
+4 × 10 × 52 kB = 2.1 MB of seeds resident beside the base pages in use, and
+below that the command misses come back. By the same arithmetic 8 MiB covers
+about 16 such Workspaces; the per-tool-call use needs only the last Commit
+of each branch and is far inside it. A larger default is therefore not
+indicated by these cases; it becomes a question for many more concurrent
+branches with long reuse distances, at 1 MiB of logical charge for each
+further 2 such Workspaces.
+
+### 8.6 Measurement rule
+
+Seeding is product behaviour paid inside the measured Commit (one copy of
+each namespace object, and map inserts under the cache lock at publication)
+and visible in its counters. A command that follows a Commit in the same
+daemon starts with those objects resident by the product's own doing. A
+receipt must declare that state and may not call that command cold; the
+seeded counters make the two distinguishable.
+
+### 8.7 B3, protecting entries shared by several live roots
+
+Not justified. No harmful interference was found before seeding (section 5)
+or with it (section 8.5).
+
+### 8.8 Outside these classes, for the owner
+
+The four objects per inode with its own mtime are a property of the
+canonical format (each attribute value is a file). A format in which mode
+and mtime are read with the attribute page would remove three of every four
+of these objects, their Store reads, their seeds and their cache charge. If
+the format work in progress removes them, the 256-byte chunk rule of section
+8.1 has nothing left to admit and can go.
 
 ## 9. Not determined
 
 - The split of the mounted misses between command and Commit: not in a receipt.
 - How many of the mounted misses of stages 2 to 5 are Commit-written objects:
   inferred from the workload source, not counted.
-- The effect of either kept change on the mounted product: not run (host only).
+- The effect of any change here on the mounted product, seeding included:
+  not run (host only). The mounted workload's files are larger than the
+  replay's and may be chunked; a chunked file's length is not seeded.
+- What seeding costs inside a Commit in time: not timed.
+- Whether the Commit's readback should be served without the Store
+  (section 8.2): a decision, not built.
+- The replay's file contents repeat (256 distinct patterns for each length),
+  so its payload and length counts understate a workload with distinct
+  contents; namespace objects are distinct.
 - Contention on the cache mutex with four Workspaces: not measured.
 - Resident memory of the cache against its logical charge: not measured.
 - Why four mounted Workspaces miss slightly more than four times one in
@@ -401,10 +552,22 @@ cargo +1.85.1 test --locked --manifest-path core/Cargo.toml -p layerfs-daemon \
   --test shared_cache_branches --test shared_cache_pressure -- --nocapture
 cargo +1.85.1 test --locked --manifest-path core/Cargo.toml -p layerfs-workspace \
   --test shared_cache_client -- --nocapture
-# workspaces,steps,allowance_kib,mode  (mode 1: base read first; 2: seeding emulated)
-SHARED_CACHE_REPLAY=4,100,8192,0 cargo +1.85.1 test --locked --manifest-path core/Cargo.toml \
+cargo +1.85.1 test --locked --manifest-path core/Cargo.toml -p layerfs-daemon \
+  --test shared_cache_seeding -- --nocapture
+# workspaces,steps,allowance_kib,mode[,shape]
+# mode 1: base read first; 2: seeding emulated (meaningful before 53e9ca5e1)
+# shape 1: a new Workspace for every Commit
+SHARED_CACHE_REPLAY=4,100,8192,0,1 cargo +1.85.1 test --locked --manifest-path core/Cargo.toml \
   -p layerfs-daemon --test shared_cache_replay -- --nocapture
 ```
+
+Checks at `292077c06` on the host: every `layerfs-daemon` test binary
+passes except one test of `complete_installed_roots` that needs
+`LAYERFS_Q1_PREPARED` (`host_handoff` not run: it drives Docker);
+`layerfs-workspace` and `layerfs-fuse` 38 binaries, 214 tests PASS; Clippy
+with warnings denied for `layerfs-workspace` (all targets) and for the
+`layerfs-daemon` library, binary and shared-cache tests; rustfmt; product
+boundary guard. Mounted and Linux-only tests: not run.
 
 Checks at `8081d23f9` on the host: `layerfs-workspace` 33 test binaries PASS;
 `layerfs-fuse` 5 PASS; `layerfs-daemon` 90 of 92 PASS (`host_handoff` not run:
