@@ -195,7 +195,36 @@ impl Fetch {
         Ok(body)
     }
     pub(crate) fn prefetch_values(&self, ordinals: &[u32]) -> StorageResult<()> {
-        let wanted: Vec<_> = ordinals
+        self.ask_values(&self.unknown_values(ordinals))
+    }
+    /// The same advisory lookup for a Save, which meets whole leaves of one
+    /// group far more often than a path read does. Consecutive ordinals almost
+    /// always lie in one group, so the first of each run is asked for first,
+    /// and then whatever those rows left uncovered: two calls at most for one
+    /// page of ordinals, and one probe a group instead of one a value where
+    /// the runs are whole.
+    pub(crate) fn prefetch_value_runs(&self, ordinals: &[u32]) -> StorageResult<()> {
+        let mut previous = None;
+        let (starts, rest): (Vec<u32>, Vec<u32>) = self
+            .unknown_values(ordinals)
+            .into_iter()
+            .partition(|ordinal| {
+                let starts =
+                    previous.is_none_or(|before: u32| before.checked_add(1) != Some(*ordinal));
+                previous = Some(*ordinal);
+                starts
+            });
+        self.ask_values(&starts)?;
+        let rest: Vec<u32> = rest
+            .into_iter()
+            .filter(|ordinal| self.covering(*ordinal).is_none())
+            .collect();
+        self.ask_values(&rest)
+    }
+    /// The distinct ordinals, ascending, that this handle neither holds a row
+    /// for nor already found absent in this demand.
+    fn unknown_values(&self, ordinals: &[u32]) -> Vec<u32> {
+        ordinals
             .iter()
             .copied()
             .collect::<BTreeSet<_>>()
@@ -204,7 +233,11 @@ impl Fetch {
                 self.covering(*ordinal).is_none()
                     && !self.missing_ordinals.borrow().contains(ordinal)
             })
-            .collect();
+            .collect()
+    }
+    /// Asks the catalogue for exactly these ordinals and remembers, for this
+    /// demand, each one that no committed group covers.
+    fn ask_values(&self, wanted: &[u32]) -> StorageResult<()> {
         for page in wanted.chunks(READ_OBJECT_LIMIT) {
             let reply = self.catalogue(ValueGroupQuery::Ordinals(page))?;
             if reply.next.is_some() || reply.rows.len() > page.len() {

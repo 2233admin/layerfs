@@ -76,6 +76,17 @@ impl Source for WaveSource<'_> {
         }
         self.fetch.acquire_groups(id, groups, whole_for_reuse)
     }
+    /// A leaf's committed ordinals in at most two catalogue calls, where the
+    /// default asks for each group as its first value is decoded. Ordinals
+    /// this Save assigned are answered by its own packer and are not asked for.
+    fn prepare_value_groups(&self, ordinals: &[u32]) -> StorageResult<()> {
+        let committed: Vec<u32> = ordinals
+            .iter()
+            .copied()
+            .filter(|ordinal| self.packer.pooled_row(*ordinal).is_none())
+            .collect();
+        self.fetch.prefetch_value_runs(&committed)
+    }
     fn value_group(&self, ordinal: u32) -> StorageResult<Option<ValueGroupRow>> {
         match self.packer.pooled_row(ordinal) {
             Some(row) => Ok(Some(row)),
