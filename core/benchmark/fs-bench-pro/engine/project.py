@@ -352,7 +352,7 @@ def one_init(case, prepared_folder, build_folder, output, *, family="init_namesp
     output = Path(output).resolve()
     output.mkdir(parents=True, exist_ok=False)
     treatment = init_treatment(family, case, prepared, build, current)
-    key = hashlib.sha256(json.dumps(treatment, sort_keys=True).encode()).hexdigest()
+    key = receipts.sample_claim_key(treatment, current["source_commit"])
     claims = identity.ROOT / "benchmark-results/fs-bench-pro/claims"
     claims.mkdir(parents=True, exist_ok=True)
     with (claims / key).open("x") as stream:
@@ -938,7 +938,7 @@ def one_repository_history(case, prepared_folder, build_folder, output):
     treatment = {'case':case,'inputs':prepared['repository_inputs']['input_identity'],'product':current['product_tree'],
                  'helpers':prepared['helpers']['files'],'binaries':{k:v['sha256'] for k,v in build['binaries'].items()},
                  'engine':identity.sha256(__file__),'image':identity.IMAGE}
-    claim = hashlib.sha256(json.dumps(treatment,sort_keys=True).encode()).hexdigest()
+    claim = receipts.sample_claim_key(treatment, current["source_commit"])
     claims = identity.ROOT/'benchmark-results/fs-bench-pro/claims'
     claims.mkdir(parents=True,exist_ok=True)
     with (claims/claim).open('x') as stream:

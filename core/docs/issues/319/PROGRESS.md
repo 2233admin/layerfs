@@ -2457,3 +2457,18 @@ Earlier identities keep their original verdicts. SDK/daemon/runtime all targets
 compile; SDK/native-control and scoped harness checks recorded. No optimization,
 retry or whole-tier invocation. Receipts: sdk-simplified.json and gate journals.
 Final-source seal and one-sample-per-case baseline remain next.
+
+
+### Baseline source claim scope correction
+
+Cause: after 38 completed baseline rows, exact-reuse was refused before product
+execution by a prior Stage 2 claim over unchanged execution bytes. Change: scope
+all sample claims to the exact committed source identity, matching the owner's
+one-per-case/source rule and explicit final baseline assignment. Commit: this
+bookkeeping correction. The refused invocation remains FAIL with no product
+sample/receipt; no replay or claim deletion. Earlier 38 receipts retain identity
+820a2c395 and verdicts. A new source receives one seal and a complete baseline;
+no tracked edits occur during samples. Focused replay/identity custody tests
+PASS; SDK/daemon/runtime all targets compile and SDK/native-control checks
+recorded. Receipt: tier-sdk-baseline journal and exact-reuse claim collision.
+No product, oracle, phase limit or performance behavior changed.

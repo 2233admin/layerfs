@@ -275,8 +275,8 @@ def price(groups, events, bindings, measured_label="measured command", with_warm
 
 
 def claim_key(cell, current, prepared, build):
-    # Physical clone IDs, authority randomness, report dates and source commit
-    # labels cannot manufacture a new sample of unchanged execution bytes.
+    # The owner-directed final baseline is scoped to the exact committed source.
+    # Clone IDs, authority randomness and report dates never alter its claim.
     harness = {name: digest for name, digest in current["files"].items()
                if name.startswith(("core/benchmark/fs-bench-pro/engine/", "core/benchmark/cluster-two/cells/",
                                    "core/benchmark/cluster-two/cache/")) or name.endswith("/bench.py")}
@@ -284,7 +284,7 @@ def claim_key(cell, current, prepared, build):
              "product": current["product_tree"], "harness": harness,
              "binaries": {name: row["sha256"] for name, row in build["binaries"].items()},
              "image": identity.IMAGE, "body": workloads.COMMANDS[cell]}
-    return hashlib.sha256(json.dumps(value, sort_keys=True).encode()).hexdigest()
+    return receipts.sample_claim_key(value, current["source_commit"])
 
 
 def one_cell(cell, prepared_folder, build_folder, output):
@@ -1019,7 +1019,7 @@ def one_family_case(family, case, prepared_folder, build_folder, output, *, prep
                  "product": current["product_tree"], "body": bodies, "helpers": prepared["helpers"]["files"],
                  "binaries": {name: row["sha256"] for name, row in build["binaries"].items()},
                  "engine": identity.sha256(__file__), "image": identity.IMAGE}
-    key = hashlib.sha256(json.dumps(treatment, sort_keys=True).encode()).hexdigest()
+    key = receipts.sample_claim_key(treatment, current["source_commit"])
     claims = identity.ROOT / "benchmark-results/fs-bench-pro/claims"
     claims.mkdir(parents=True, exist_ok=True)
     if not preparation_only:
@@ -1815,7 +1815,7 @@ def one_access_case(family, case, prepared_folder, build_folder, output):
                  'helpers': prepared['helpers']['files'], 'producer_store': prepared['closed_producer']['store_sha256'],
                  'producer_transcript': prepared['closed_producer']['transcript_sha256'],
                  'binaries': {name: value['sha256'] for name, value in build['binaries'].items()}, 'image': identity.IMAGE}
-    claim = hashlib.sha256(json.dumps(treatment, sort_keys=True).encode()).hexdigest()
+    claim = receipts.sample_claim_key(treatment, current["source_commit"])
     claims = identity.ROOT / 'benchmark-results/fs-bench-pro/claims'; claims.mkdir(parents=True, exist_ok=True)
     with (claims / claim).open('x') as stream:
         stream.write(str(output) + '\n')
@@ -2327,7 +2327,7 @@ def one_context_case(family, case, prepared_folder, build_folder, output, *, pre
         'product': current['product_tree'], 'bodies': bodies, 'helpers': prepared['helpers']['files'],
         'binaries': {name: value['sha256'] for name, value in build['binaries'].items()},
         'engine': identity.sha256(__file__), 'image': identity.IMAGE}
-    claim = hashlib.sha256(json.dumps(treatment, sort_keys=True).encode()).hexdigest()
+    claim = receipts.sample_claim_key(treatment, current["source_commit"])
     claims = identity.ROOT / 'benchmark-results/fs-bench-pro/claims'
     claims.mkdir(parents=True, exist_ok=True)
     if not preparation_only:

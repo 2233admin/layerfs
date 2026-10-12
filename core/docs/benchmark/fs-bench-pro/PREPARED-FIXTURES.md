@@ -62,7 +62,9 @@ python3 core/benchmark/fs-bench-pro/tier.py all heavy --tag baseline --build "$S
 
 The entry point serializes on the worktree-local measurement lock. Each case
 gets append-only output and an exact-source campaign identity; an existing
-attempted directory is never replayed. The journal retains command wall, phase
+attempted directory is never replayed. Sample claims bind the exact committed
+source identity as directed for issue 319; unchanged bytes at a later explicitly
+selected final identity do not overwrite or relabel an earlier gate receipt. The journal retains command wall, phase
 metrics, count comparison, original verdicts and cleanup. Counts are compared
 with each case's own terminal row, including unavailable fields. A count,
 functional, proof or cleanup failure stops whole-tier advancement for diagnosis.
