@@ -1573,3 +1573,80 @@ now retains that exact narrow mapping and propagates MissingObject/other errors.
 Production LOC:82340 ->82362 (delta+22), exact first-parent/staged product
 snapshots with pinned production_loc counter; reference absent (retired R9c;
 last counted65,417 at tree498dd1917812).
+
+Named-stat stage p319n13r at7a4759173 seals all nine binaries cleanly and
+samples29 selections once:23 functional PASS/proof PASS guards (one overall
+PASS historical_access,22 INELIGIBLE retained timings),six original500MiB
+failure selections remain FAIL.46 owning CSVs preserve all failed/not-run rows
+and only path substitutions, with original/published hashes. All payloads and
+originals removed through their owned claims; no resampling or source edits
+during builds/samples.
+
+Mixed500K10 native17.811908542s passes its original native helper with30298
+entries/464192768 bytes, but export allowance2.306530875s expires after
+2.316013750s and384434176 copied bytes. Typed Storage proof never begins:
+whole row FAIL, proof FAIL, functional PASS absent. Its old c-stage native
+17.862722375s/export2.324152875s also failed; -0.284 percent native wall change
+is diagnostic only. Old b-stage native16.804990292s exported513130496 bytes
+in3.203089542s with3.409904666s remaining, then failed normalization. No timing
+effect is established by the real13 ->11 source count. Mixed500K100 now fails
+at normalization; both500MiB concurrency and branch K10/K100 fail original
+verify event wall stops. Every original failure remains its exact verdict.
+
+Six timer failures continue as unresolved slow-proof work; phase13 completion
+remains pending. Phase13 does not impose an all-PASS prerequisite before14,
+whose explicit Subjects-in-order starts with delete Commit, then500-step
+histories, exhaustive500 proof phase split, new-content Commit, C10. Begin
+delete's count diagnosis first; leave every failing row unqualified and return
+to the shared proof pipeline in the ordered proof subject. No feature/owner
+decision is inferred and no ceiling is raised.
+[Stage evidence](checks/named-stat-stage.json) pins every receipt.
+
+### Phase14 delete Commit: copied shrinking edge (count diagnosis)
+
+Inherited delete OperationRecord jobs at1/10/100/500MiB are118/361/1426/7200,
+versus replace-shrink147/588/629/759. Fresh bounded ordinary request-port
+count fixtures reproduce118/361 with namespace producer42 at both sizes,
+one reference row/one4096-byte payload cell, and no SQL fullscan/sort/reprepare.
+Complete owner jobs131/374 and statements667/1942 remain separate metrics.
+The single-file forwarding trace observes55/298 backing calls, difference243;
+42 namespace +55/298 file +21 other records exactly accounts for118/361.
+Duplicate detached parent GETs0/4 explain only4 of243, not the leading cause.
+
+The actual normalized script is one edit(p,p+8192,4096), not a many-edit
+expansion. Shrinking final_size<=base_size skips the existing bounded edge
+authentication, leaving4096 copied bytes replacement content. Frozen fixture
+bytes prove suffix4096 equal to base[p+4096..p+8192], prefix0. Before product
+edit, external test fails the exact expected(p,p+4096,0) after independently
+checking every constructed output byte and releasing both fixtures' custody.
+Both old work records have normalized_edits1,edge_windows0,retained0,
+committed_bytes0: no claim of a materialized4096-byte object. Predict after
+changing only the shrink exclusion: normalized1, retained4096, two windows,
+16384 logical authenticated source bytes, committed_bytes still0. Keep
+netzero/in-place exclusions, two64KiB windows, original signed translation,
+all mismatch/error checks and final Storage/live-byte readback. Complete
+post-edit job totals must be observed; no invented constant-count prediction.
+
+Post-edit count tier meets the written prediction at both sizes: exact pure
+4096-byte delete,normalized1,windows2,logical edge bytes16384,retained4096,
+committed_bytes0. File calls55 ->41 and298 ->249; full OperationRecord
+jobs118 ->104 and361 ->312; total owner131 ->118 and374 ->326. Namespace
+producer42 remains unchanged. SQL executions667 ->596 and1942 ->1712;
+VM15029 ->13497 and45433 ->40128, fullscan/sort/reprepare0. Existing indexed
+OperationRecord plan+runtime test PASS host/Linux at populations128/1024/4096;
+indexed visited rows remain unavailable. No timing/dominance claim from those
+counts; fixed-change work still grows and requires the larger receipts/next cause.
+
+Host/Linux Storage mapping7, captured file/piece25, recognized mutation patterns9
+PASS. Linux also passes3 diagnostics; host2 exact delete count tests PASS.
+Two negative-delta deletions retain correct base mapping at the second edit;
+mismatches at both ends remain replacement, one changed copied byte survives
+fresh Storage and live readback with exact payload offsets beyond it. Clippy
+Workspace+Daemon all-targets-D warnings PASS both;fmt/boundary686/selftests50
+PASS. Initial Linux parallel linking signal9 retained, serial-j1 build succeeds.
+New external normal/mismatch cases initially shared a directory label and
+failed AlreadyExists when simultaneous; unique labels fix fixture isolation,
+full target PASS. Own-lock refusals execute no command and remain recorded.
+[Count evidence](checks/delete-edge-count.json) preserves red/green log hashes.
+Production LOC:82362 ->82362 (delta+0), pinned exact parent/staged counter;
+reference absent (retired R9c; last counted65,417 at tree498dd1917812).

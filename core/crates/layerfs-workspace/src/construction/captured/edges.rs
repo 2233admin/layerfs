@@ -54,7 +54,7 @@ impl<'s, 'a, P: OverlayCapturedRuns + OverlayOperationRecords + ?Sized> Edges<'s
         // normalization. Pure inserts/deletes have no shared edge to compare.
         let overlap = edit.removed_len().min(edit.replacement_len());
         if !scripted
-            || self.facts.final_size <= self.facts.base_size
+            || self.facts.final_size == self.facts.base_size
             || (delta == 0 && edit.removed_len() == edit.replacement_len())
             || overlap == 0
         {

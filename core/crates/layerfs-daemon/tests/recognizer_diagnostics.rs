@@ -1,4 +1,6 @@
 //! Issue 319 phase 0: untimed counts through the ordinary request-port rig.
+#[path = "support/delete_trace.rs"]
+mod delete_trace;
 #[allow(dead_code)]
 #[path = "support/captured_drive.rs"]
 mod drive;
@@ -202,5 +204,166 @@ fn benchmark_delete_prints_piece_cells_and_commit_jobs_at_two_sizes() {
         ));
         commit(&rig, &workspace, &session, &format!("delete-{size}"));
         finish(rig, workspace);
+    }
+}
+
+#[test]
+fn benchmark_delete_counts_exact_normalized_script_and_backing_at_two_sizes() {
+    use layerfs_content::{filesystem::PathName, read_all, ConstructionPolicy};
+    use layerfs_overlay::{IndexedOperationRecordKey, IndexedOperationRecordScope};
+    use layerfs_workspace::{CapturedFileEdits, OverlayOperationRecords};
+    let mut observations = Vec::new();
+    for size in [MIB, 10 * MIB] {
+        let original = bytes(FIXTURE_SEED, size);
+        let rig = Rig::new(&format!("319-delete-script-{size}"), |source| {
+            fs::write(source.join("payload.bin"), &original).unwrap()
+        });
+        let workspace = rig.bind(1);
+        let mut session = Session::new(&workspace, rig.base.clone());
+        let p = size / 2;
+        let mut source = p + CELL;
+        while source < size {
+            let stop = size.min(source + REQUEST);
+            session.apply(Do::Recognized(
+                "payload.bin",
+                (source - CELL) as u64,
+                &original[source..stop],
+            ));
+            source = stop;
+        }
+        session.apply(Do::Truncate("payload.bin", (size - CELL) as u64));
+        let operation = workspace.operation().unwrap();
+        let overlay = operation.overlay();
+        let route = workspace.route();
+        let capture = match job(overlay, route, Command::Capture).result() {
+            Ok(Response::Captured(capture)) => *capture,
+            other => panic!("{other:?}"),
+        };
+        let reader = match job(
+            overlay,
+            route,
+            Command::AcquireCapturedReader {
+                capture,
+                request: 901,
+            },
+        )
+        .result()
+        {
+            Ok(Response::CapturedReader(Some(reader))) => *reader,
+            other => panic!("{other:?}"),
+        };
+        let owner = match job(overlay, route, Command::AcquireOperation { request: 902 }).result() {
+            Ok(Response::Operation(Some(owner))) => *owner,
+            other => panic!("{other:?}"),
+        };
+        let scope = IndexedOperationRecordScope {
+            owner,
+            file_scope: 903,
+        };
+        let base = operation.workspace().base().unwrap();
+        let serial = base
+            .child(
+                base.root().root_inode().serial(),
+                &PathName::new("payload.bin").unwrap(),
+            )
+            .unwrap()
+            .serial;
+        let records = delete_trace::Records {
+            inner: overlay,
+            events: Default::default(),
+        };
+        let prepared =
+            CapturedFileEdits::prepare(operation.workspace(), &records, reader, serial, scope)
+                .unwrap();
+        let policy = ConstructionPolicy::frozen_default();
+        let mut output = delete_trace::Objects::default();
+        let attempt = Timing::disabled("delete.count", |active| {
+            Ok::<_, layerfs_content::ContentError>(prepared.construct(
+                policy,
+                &policy.capacities(),
+                &mut output,
+                active.child("construct"),
+            ))
+        })
+        .0
+        .unwrap();
+        let root = attempt.result.as_ref().unwrap().root;
+        let (detached, duplicates, kinds) = records.counts();
+        evidence(format_args!("DELETE_BACKING size={size} normalized={} calls={} detached={detached} duplicate_parent_gets={duplicates} kinds={kinds:?}", attempt.custody.work.normalized_edits, attempt.custody.records.work.calls));
+        let mut after = None;
+        let mut edits = Vec::new();
+        loop {
+            let keys = overlay
+                .operation_record_keys_after(scope, 0x4346_0001, after)
+                .unwrap()
+                .value;
+            if keys.is_empty() {
+                break;
+            }
+            for key in &keys {
+                let row = overlay
+                    .operation_record_get(
+                        scope,
+                        IndexedOperationRecordKey {
+                            kind: 0x4346_0001,
+                            key: *key,
+                        },
+                    )
+                    .unwrap()
+                    .value
+                    .unwrap();
+                assert_eq!((row.len(), row[0]), (25, 1));
+                edits.push((
+                    u64::from_be_bytes(row[1..9].try_into().unwrap()),
+                    u64::from_be_bytes(row[9..17].try_into().unwrap()),
+                    u64::from_be_bytes(row[17..25].try_into().unwrap()),
+                ));
+            }
+            after = keys.last().copied();
+        }
+        assert_eq!(edits.len() as u64, attempt.custody.work.normalized_edits);
+        evidence(format_args!(
+            "DELETE_NORMALIZED size={size} edits={edits:?}"
+        ));
+        evidence(format_args!(
+            "DELETE_WORK size={size} {:?}",
+            attempt.custody.work
+        ));
+        observations.push((size, edits, attempt.custody.work));
+        let combined = delete_trace::Combined {
+            source: operation.client(),
+            output: &output,
+        };
+        let mut actual = Vec::new();
+        Timing::disabled("delete.output", |active| {
+            read_all(&combined, root, &mut actual, active.child("read"))
+        })
+        .0
+        .unwrap();
+        assert_eq!(&actual[..p], &original[..p]);
+        assert_eq!(&actual[p..], &original[p + CELL..]);
+        assert_eq!(actual.len(), size - CELL);
+        drop(attempt);
+        assert!(job(overlay, route, Command::ReleaseCapturedReader(reader))
+            .result()
+            .is_ok());
+        assert!(job(overlay, route, Command::ReleaseOperation(owner))
+            .result()
+            .is_ok());
+        drop(operation);
+        finish(rig, workspace);
+    }
+    for (size, edits, work) in observations {
+        let p = (size / 2) as u64;
+        assert_eq!(
+            edits,
+            vec![(p, p + CELL as u64, 0)],
+            "authenticated copied suffix must retain its existing base mapping"
+        );
+        assert_eq!(work.normalized_edits, 1);
+        assert_eq!(work.edge_retained_bytes, CELL as u64);
+        assert_eq!(work.edge_windows, 2);
+        assert_eq!(work.edge_read_bytes, (4 * CELL) as u64);
+        assert_eq!(work.committed_bytes, 0);
     }
 }

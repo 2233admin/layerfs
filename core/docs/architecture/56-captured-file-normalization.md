@@ -65,13 +65,13 @@ not consumed.
 
 Issue 319 update, 2026-10-11: ordinary shifted writes can prove whole chunks
 while leaving copied chunk fragments and ragged cell edges literal. For a file
-with pieces and a larger final size, preparation authenticates bounded edges
+with pieces and a changed final size, preparation authenticates bounded edges
 of provisional edits that change length or follow a length change. It compares at most two maximum chunks
 (64 KiB) at each end against the corresponding immutable base range, retains
 exactly equal prefix/suffix bytes, and seals the shortened edit. Comparison
 stops at a mismatching byte. The original provisional length deltas translate
 final offsets to base offsets; trimming preserves those deltas. Pure inserts,
-pure deletes, final-size shrink or no-growth, in-place scripts without a shift
+pure deletes, unchanged final size, in-place scripts without a shift
 and files without pieces keep
 their existing path.
 
@@ -88,6 +88,14 @@ mapping slice/split algorithm. CDC, edit-record encoding and context version
 remain unchanged. A read failure ends the same original attempt and retains its
 custody; no equality guess, alternate provider or retry is introduced.
 
+Issue 319 update, 2026-10-12: the same authentication also applies when the
+final file shrinks. Copied replacement suffixes can retain their immutable base
+mapping rather than reconstructing those equal bytes. Signed provisional deltas
+still translate each subsequent edit before trimming; shrinking and growing
+edits use identical checked ranges and bounded comparisons. A mismatch remains
+replacement content. Pure deletes with no replacement overlap and scripts with
+unchanged final size keep their existing path.
+
 `CapturedFileWork::edge_windows` counts successful comparison windows,
 `edge_read_bytes` counts logical bytes acquired from both sources, and
 `edge_retained_bytes` counts bytes preserved by trimming. These do not claim
@@ -100,7 +108,9 @@ counter. The external daemon `captured_edge_retention` target exercises only
 ordinary truncation and recognized writes, compares full live/fresh-root bytes,
 and observes exact persisted payload/source mappings including partial chunks.
 Its test scope includes unaligned middle insertion, prepend, replace-grow,
-changed copied edge bytes and a larger input. Verification outcomes are recorded
+shrinking deletion, changed copied edge bytes and a larger input. External
+Workspace tests also cover two shrinking edits after a negative provisional
+delta and copied replacement edges that mismatch at both ends. Verification outcomes are recorded
 in the owning issue ledger rather than inferred from this source description.
 
 The external test `captured_piece_edits` writes pieces through the ordinary

@@ -202,13 +202,23 @@ fn larger_insert_has_the_same_bounded_edge_scope() {
     shifted("edge-insert-large", size, size / 2, 0, false);
 }
 
-#[test]
-fn delete_keeps_its_existing_jobs_and_reads_no_edges() {
+fn deleted_suffix(mutate_edge: bool) {
     let original = bytes(5494771174636671793, MIB);
-    let rig = Rig::new("edge-delete-guard", |source| {
+    let label = if mutate_edge {
+        "edge-delete-mismatch"
+    } else {
+        "edge-delete-guard"
+    };
+    let rig = Rig::new(label, |source| {
         fs::write(source.join("payload.bin"), &original).unwrap()
     });
     let workspace = rig.bind(1);
+    let old = extents(&workspace);
+    let mut copied = original.clone();
+    let mismatch = MIB / 2 + CELL + 7;
+    if mutate_edge {
+        copied[mismatch] ^= 1;
+    }
     let mut session = Session::new(&workspace, rig.base.clone());
     let mut source = MIB / 2 + CELL;
     while source < MIB {
@@ -216,7 +226,7 @@ fn delete_keeps_its_existing_jobs_and_reads_no_edges() {
         session.apply(Do::Recognized(
             "payload.bin",
             (source - CELL) as u64,
-            &original[source..stop],
+            &copied[source..stop],
         ));
         source = stop;
     }
@@ -252,13 +262,41 @@ fn delete_keeps_its_existing_jobs_and_reads_no_edges() {
     );
     drop(operation);
     model::assert_same(&session.model.flat(), &live(&workspace), "delete live root");
+    let new = extents(&fresh);
+    let prefix = unchanged(&old, &new, 0..(MIB / 2) as u64, 0);
+    let source_start = if mutate_edge {
+        mismatch + 1
+    } else {
+        MIB / 2 + CELL
+    };
+    let suffix = unchanged(
+        &old,
+        &new,
+        source_start as u64..MIB as u64,
+        (source_start - CELL) as u64,
+    );
     rig.close(&fresh);
     rig.close(&workspace);
     drop(session);
     drop(workspace);
     rig.finish();
     assert_eq!(work.record_jobs, 42);
-    assert_eq!(work.file_edge_windows, 0);
-    assert_eq!(work.file_edge_read_bytes, 0);
-    assert_eq!(work.file_edge_retained_bytes, 0);
+    assert_eq!(work.file_edge_windows, 2);
+    assert_eq!(work.file_edge_read_bytes, (4 * CELL) as u64);
+    assert_eq!(
+        work.file_edge_retained_bytes,
+        (CELL - if mutate_edge { 8 } else { 0 }) as u64
+    );
+    assert!(prefix.is_ok(), "{prefix:?}");
+    assert!(suffix.is_ok(), "{suffix:?}");
+}
+
+#[test]
+fn delete_retains_authenticated_copied_suffix_and_exact_persisted_bytes() {
+    deleted_suffix(false);
+}
+
+#[test]
+fn delete_keeps_a_changed_copied_edge_as_a_mutation() {
+    deleted_suffix(true);
 }

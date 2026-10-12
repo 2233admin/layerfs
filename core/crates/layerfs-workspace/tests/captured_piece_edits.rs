@@ -285,6 +285,41 @@ fn several_edits_keep_their_own_final_offsets() {
 }
 
 #[test]
+fn two_shrinking_edges_translate_the_second_from_its_negative_delta() {
+    let (p, q) = (32 * C, 160 * C);
+    let mut run = Run::new(N);
+    let base = run.case.bytes.clone();
+    run.write(p, &base[(p + C) as usize..(p + 2 * C) as usize]);
+    run.piece(p + C, p + 2 * C, q - p - 2 * C);
+    run.write(q - C, &base[(q + C) as usize..(q + 2 * C) as usize]);
+    run.piece(q, q + 2 * C, N - q - 2 * C);
+    run.size(N - 2 * C);
+    let (work, _) = run.commit(
+        "two-shrinking-edges",
+        &[Edit::delete(p, p + C), Edit::delete(q - C, q)],
+    );
+    assert_eq!(work.edge_windows, 4);
+    assert_eq!(work.edge_read_bytes, 8 * C);
+    assert_eq!(work.edge_retained_bytes, 2 * C);
+    assert_eq!(work.committed_bytes, 0);
+}
+
+#[test]
+fn shrinking_edge_mismatches_at_both_ends_remain_replacement_bytes() {
+    let p = 96 * C;
+    let mut run = Run::new(N);
+    let mut copied = run.case.bytes[(p + C) as usize..(p + 2 * C) as usize].to_vec();
+    copied[0] ^= 1;
+    copied[C as usize - 1] ^= 1;
+    run.write(p, &copied);
+    run.piece(p + C, p + 2 * C, N - p - 2 * C);
+    run.size(N - C);
+    let (work, _) = run.commit("shrinking-mismatches", &[Edit::new(p, p + 2 * C, C)]);
+    assert_eq!(work.edge_windows, 2);
+    assert_eq!(work.edge_retained_bytes, 0);
+}
+
+#[test]
 fn an_insert_longer_than_the_tail_is_found_beyond_the_surviving_base() {
     let p = N - 8 * C;
     let mut run = Run::new(N);
