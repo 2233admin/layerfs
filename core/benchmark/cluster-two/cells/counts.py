@@ -37,7 +37,10 @@ STORAGE = ("policy", "locate", "read_packs", "read_pack_selections", "whole_sele
 STORE = ("object_batches", "object_ids", "length_batches", "length_ids", "serial_reservations")
 READER = ("stopping", "poisoned", "readers", "quarantined", "waiting", "assigned", "leased", "outstanding",
           "peak_outstanding", "grants", "queue_wait_ns", "maximum_queue_wait_ns", "scheduler_bytes")
-CACHE = ("cache_hits", "cache_misses", "upstream_batches", "authenticated_bytes", "evictions", "charged_cache_bytes", "cached_objects")
+CACHE = ("cache_hits", "cache_misses", "upstream_batches", "authenticated_bytes", "evictions", "charged_cache_bytes", "cached_objects",
+         "seeded_objects", "seeded_bytes", "seeded_lengths")
+# The five leading counters and the three seeded counters only grow; the two between them are gauges.
+CACHE_COUNTERS = CACHE[:5] + CACHE[7:]
 CONSTRUCTION = ("inode_rows", "entry_rows", "inode_pages", "entry_pages", "change_pages", "largest_page",
                 "parent_points", "base_lookups", "headers_written", "headers_dropped", "values_written",
                 "fresh_serials", "tombstones_skipped", "files_constructed", "files_unchanged", "symlinks",
@@ -283,7 +286,7 @@ def phase_counts(groups, before_identity, end_identity, *, exclusive_observer_sc
                         "scope": "count-only floor view; original public Status jobs retained in raw and Resources-adjusted views; SQL/time unchanged"}
         else:
             result["status_state_attribution"] = {"status": "UNAVAILABLE", "reason": "typed original Status.local outcome unavailable; no guessed job/SQL subtraction"}
-        for key, fields in (("store",STORE),("cache",CACHE[:5])):
+        for key, fields in (("store",STORE),("cache",CACHE_COUNTERS)):
             if key in before and key in end:
                 result["raw"][key] = difference(before[key],end[key],fields)
         if "reader" in before and "reader" in end:
