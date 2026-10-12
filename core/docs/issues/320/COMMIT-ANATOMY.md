@@ -257,8 +257,20 @@ three arrive in the one job. No further job follows the refusal.
 | Begin = Commit (write transactions) | 76 | 262 | 2,572 |
 
 Record jobs fell by 32%, 33% and 24%; statements of the three families by 38%,
-38% and 37%. Write transactions are unchanged. None of these counts was timed
-after `63a1ab005`.
+38% and 37%. Write transactions are unchanged.
+
+Timed once more at `a62103ed5` with the loop of section 3 (one sample per
+shape; macOS host; diagnostic):
+
+| shape | wall at `ea7535a42` | at `63a1ab005` | at `a62103ed5` | record port at `a62103ed5` (jobs) |
+| --- | ---: | ---: | ---: | ---: |
+| step | 51.0 (median 52.0) | 45.7 (43.6) | 38.5 (35.9) | 16.4 (1,001) |
+| step-no-files | 22.1 (21.7) | 20.2 (17.8) | 17.1 (15.0) | 5.5 (365) |
+| one-mode | 7.05 (6.5) | 3.57 (3.4) | 3.50 (3.2) | 0.54 (54) |
+
+Step at `a62103ed5`: 5,276 statements in 15.5 ms, of which 1,482 fence
+statements in 3.6 ms (3,744 in 6.9 ms before); 10.4 ms of construct is outside
+both ports and 8.5 ms follows construct.
 
 ## 6. Recommendation — removing the per-key record jobs
 
