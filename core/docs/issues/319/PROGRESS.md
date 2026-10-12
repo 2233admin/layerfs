@@ -2049,3 +2049,93 @@ need about 110 to 135 s. Owner decision 2026-10-12: these three runs may use the
 (300 s outer wall, 288 s driver budget); the case verification, command, Commit
 and performance limits are unchanged; one test, 15 policy tests pass. Result:
 all six cases are sampled once at the final identity in phase 15.
+
+
+### Phase 15: daemon tests follow the readiness serial reservation
+
+Cause: since 93ac3d77b a mount reserves its first inode-serial window (1,024
+serials) before readiness, so the first create no longer reserves. Five mounted
+daemon tests still pinned the old order, and one driver-cause test shared a
+fixture label between two sweeps. Change, tests only: `mounted_low_water`,
+`mounted_failure_scope` and `observed_application` expect the window at
+readiness and the next reservation after 1,024 creates; `r4_9_driver_causes`
+gives each sweep its own label. Commit fc45a1bc4. Result: mounted_low_water 3,
+mounted_failure_scope 2, observed_application 6 and r4_9_driver_causes 2 pass on
+Linux. Production LOC 82,368 -> 82,368 (delta +0).
+
+
+### Phase 15: gate at the final identity fc45a1bc4
+
+Run once. Format check PASS. Boundary guard PASS over 686 files; guard self-tests
+50 PASS. Clippy with warnings denied, host and Linux: 12 packages with all
+targets and `layerfs-project` library and tests PASS; the workspace-wide form
+stops at the `layerfs-project` example `benchmark_history`, whose included
+benchmark source has been absent since 13f9dec38 (inherited, not changed here).
+Host tests: content 459, overlay 153, storage 55, persistence 127, telemetry 43,
+workspace 182, fuse 24, bridge 32, sandbox 15, sdk 5, project 19, daemon 177
+pass. Linux tests: overlay 153, workspace 182, fuse 27, daemon 285 of 301 in one
+container; nine of the sixteen pass when each target has its own container
+(control filesystem already mounted, receive-thread and FORGET counts), five are
+the corrections above. Two proofs stay failed on both platforms as unrun
+preconditions: `huge_native_namespace_is_complete_after_install` and the shared
+process / macOS Init handoff proof. The fuser provenance check exits 1 with its
+two retained historical passthrough findings. Harness tests: 352 pass, 3 skipped.
+
+
+### Phase 15: twelve cells at fc45a1bc4, tag p319t15
+
+One sample each. All twelve: proof PASS, count reproduction PASS, cleanup Gone,
+custody KNOWN_STOP, timing INELIGIBLE (shared Docker VM). Eleven triples equal
+the frozen baseline. C10 counts 1547 requests, 1546 owner jobs and 14406
+statements, equal to the corrected pin; its receipt records the frozen row
+(1548 / 1547 / 14408) beside it. Evidence: `checks/phase15-terminal.json`,
+section `cells`, with each receipt's SHA-256.
+
+
+### Phase 15: terminal run, 242 of 242 cases pass both checks
+
+Source fc45a1bc4, product tree 5a6534d333cf, nine sealed binaries, pinned image,
+tag p319t15, Disposable/WAL/OFF, one construction worker. One sample per case,
+no retry, no failed or expired invocation, no case resampled. Every one of the
+242 receipts says functional PASS and proof PASS at this one identity. The
+performance rows are INELIGIBLE (233; timings are diagnostic on a shared VM) or
+N/A (9 verification-only cases); no timing claim is made. Cleanup: 238 Gone and
+4 sealed without a mount. The six 500 MiB mixed cases: proof wall 38.78 and
+38.07 s (limit 50), 62.72 and 59.16 s (limit 80), 84.50 and 86.71 s (limit 105).
+The exhaustive 500 MiB proof took 142.76 s (limit 300). After the run no sample
+volume, container or prepared original of this run remains. Rows with each
+receipt's SHA-256: [TERMINAL-RESULTS.csv](TERMINAL-RESULTS.csv); summary:
+`checks/phase15-terminal.json`; owning reports:
+`core/benchmark/fs-bench-pro/baselines/core/2026-10-12-fc45a1bc4/`.
+
+| Family | Cases | Functional PASS and proof PASS | Report status |
+| --- | ---: | ---: | --- |
+| init_namespace | 4 | 4 | INELIGIBLE 4 |
+| payload_create_read | 8 | 8 | INELIGIBLE 8 |
+| tiny_file_churn | 20 | 20 | INELIGIBLE 20 |
+| namespace_mutation | 4 | 4 | INELIGIBLE 4 |
+| edit_length_preserving | 12 | 12 | INELIGIBLE 12 |
+| edit_length_changing | 32 | 32 | INELIGIBLE 32 |
+| edit_length_changing_capped | 5 | 5 | INELIGIBLE 5 |
+| edit_canonical_chunk_count | 12 | 12 | INELIGIBLE 12 |
+| small_file_delta_smoke | 1 | 1 | INELIGIBLE 1 |
+| directory_construction_traversal | 12 | 12 | INELIGIBLE 12 |
+| git_tool_workflow | 4 | 4 | INELIGIBLE 4 |
+| local_snapshot | 1 | 1 | INELIGIBLE 1 |
+| workspace_change_locality | 16 | 16 | INELIGIBLE 16 |
+| file_size_transition | 7 | 7 | INELIGIBLE 7 |
+| dedup_branch_history | 26 | 26 | INELIGIBLE 26 |
+| mixed_load_bearing | 10 | 10 | INELIGIBLE 8, N/A 2 |
+| branch_development | 6 | 6 | INELIGIBLE 6 |
+| multi_workspace_development | 5 | 5 | INELIGIBLE 5 |
+| historical_access | 6 | 6 | N/A 6 |
+| dedup_cdc_locality | 21 | 21 | INELIGIBLE 20, N/A 1 |
+| dedup_cross_file | 10 | 10 | INELIGIBLE 10 |
+| dedup_workspace_reuse | 14 | 14 | INELIGIBLE 14 |
+| store_footprint | 6 | 6 | INELIGIBLE 6 |
+| **Total** | **242** | **242** | INELIGIBLE 233, N/A 9 |
+
+Not run: `repository_history` (3 cases), NOT_RUN — set aside by owner. Durable:
+NOT_RUN — disabled by owner until explicit reauthorization. Open, not fixed:
+new-content Commit throughput (phase 14); the two unrun-precondition daemon
+proofs; the inherited `benchmark_history` example compile failure.
