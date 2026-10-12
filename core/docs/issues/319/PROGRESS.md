@@ -1974,3 +1974,22 @@ was removed and the product tree equals 83d9589c1. Result: no product change,
 no sample. The six 500 MiB cases remain failing at verification time limits
 and are the next subject, ranked by time: one phase split of the verification
 first, then either one fix of the largest block or a named allowance.
+
+
+### Phase 13: six 500 MiB mixed cases, named verification allowance
+
+Cause: the mounted proof of one 30,298-path, 464,192,768-byte root takes 17.4 to
+20.8 s, which is 79 to 95 % of the 22 s work allowance (25 s less 3 s reserve);
+development needs one such proof, workspace two and branch three, before export
+(3.2 s at this size), normalization and the typed proof (3.3 s a root). Split of
+the proof at 100 MiB (3.9 s, 5,000 paths): 20,513 kernel requests, 4.1 a path
+(lookup, open, read, release), no amplification; owner service 1.00 s, owner wait
+0.016 s, outside the owner 2.9 s, undivided. The proof helper alone, on a native
+tree of the 500 MiB fixture, takes 1.5 s (0.47 s user), so the rest is the mounted
+read route. No single block can be removed by one commit, and the five earlier
+read-path commits did not move it (18.2, 18.1, 18.8 s).
+Change: verification work and hard publication limits for exactly these six
+cases: development 25/35 -> 50/60 s, workspace 25/35 -> 80/90 s, branch 25/35 and
+30/40 -> 105/115 s. Reserve 3 s and publication guard 250 ms unchanged; command,
+Commit and performance limits unchanged. Named set, values and validation change
+together; five tests in `tests/engine/test_issue319_limits.py`. Result follows.

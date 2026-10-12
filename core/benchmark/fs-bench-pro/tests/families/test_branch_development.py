@@ -33,7 +33,8 @@ class BranchDevelopment(unittest.TestCase):
             self.assertEqual((c["fixture"]["recipe"], c["fixture"]["seed"]), (cid, 1))
             self.assertEqual(c["cache_class"], "C")
             self.assertIn("INELIGIBLE under strict H-5", c["cache_contract"]["numeric_result"])
-            verifier = 30000 if cid == M1[-1] else 25000
+            # Owner direction 2026-10-12 (#319 phase 13): the two named 500 MiB mixed cases only.
+            verifier = 105000 if cid.startswith("v016-branch-mixed-500mb") else 25000
             self.assertEqual(c["budget"]["command_ms"], 15000)
             self.assertEqual(c["budget"]["performance_hard_watchdog_ms"], 60000)
             self.assertEqual(c["budget"]["performance_cleanup_reserve_ms"], 3000)

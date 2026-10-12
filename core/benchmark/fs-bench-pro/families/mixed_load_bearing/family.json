@@ -3784,11 +3784,11 @@
       },
       "budget": {
         "command_ms": 15000,
-        "verifier_ms": 25000,
+        "verifier_ms": 50000,
         "operation_watchdog_ms": 60000,
         "performance_hard_watchdog_ms": 60000,
         "performance_cleanup_reserve_ms": 3000,
-        "verification_hard_watchdog_ms": 35000,
+        "verification_hard_watchdog_ms": 60000,
         "verification_cleanup_reserve_ms": 3000
       },
       "reference": {
@@ -3810,7 +3810,8 @@
         "Original root oracle compared explicit mtime seconds; current selected proof additionally checks the original helper nanoseconds 123456789. Automatic mtimes and undeclared modes remain unconstrained.",
         "Closed-copy current SQLite global Commit census restores original all-row membership coverage; public typed catalog/ancestry/namespace/content proof remains mandatory. It is a read-only external format observer, not a product control route or retired-format decoder.",
         "Original 15s reporting target, 60s complete performance allowance including 3s cleanup reserve and 25s verification work including 3s reserve are retained. Slow completed rows record EXCEEDED; no optimization or limit change.",
-        "Original host-generated insertion bytes are prepared outside measured calls and source-bound by descriptor/payload seals. Each measured named ordinary member reads its sealed descriptor/payload and preserves target metadata; it does not regenerate recipes inside the measured command. No workload bytes, operation or cache eligibility changes."
+        "Original host-generated insertion bytes are prepared outside measured calls and source-bound by descriptor/payload seals. Each measured named ordinary member reads its sealed descriptor/payload and preserves target metadata; it does not regenerate recipes inside the measured command. No workload bytes, operation or cache eligibility changes.",
+        "Owner direction 2026-10-12 (#319 phase 13): verification work 25000 -> 50000 ms, hard publication 35000 -> 60000 ms for this named case only; cleanup reserve 3000 ms and publication guard 250 ms unchanged. Measured command, Commit and performance limits unchanged."
       ],
       "registry": {
         "family": "mixed_load_bearing",
@@ -6366,11 +6367,11 @@
       },
       "budget": {
         "command_ms": 15000,
-        "verifier_ms": 25000,
+        "verifier_ms": 50000,
         "operation_watchdog_ms": 60000,
         "performance_hard_watchdog_ms": 60000,
         "performance_cleanup_reserve_ms": 3000,
-        "verification_hard_watchdog_ms": 35000,
+        "verification_hard_watchdog_ms": 60000,
         "verification_cleanup_reserve_ms": 3000
       },
       "reference": {
@@ -6392,7 +6393,8 @@
         "Original root oracle compared explicit mtime seconds; current selected proof additionally checks the original helper nanoseconds 123456789. Automatic mtimes and undeclared modes remain unconstrained.",
         "Closed-copy current SQLite global Commit census restores original all-row membership coverage; public typed catalog/ancestry/namespace/content proof remains mandatory. It is a read-only external format observer, not a product control route or retired-format decoder.",
         "Original 15s reporting target, 60s complete performance allowance including 3s cleanup reserve and 25s verification work including 3s reserve are retained. Slow completed rows record EXCEEDED; no optimization or limit change.",
-        "Original host-generated insertion bytes are prepared outside measured calls and source-bound by descriptor/payload seals. Each measured named ordinary member reads its sealed descriptor/payload and preserves target metadata; it does not regenerate recipes inside the measured command. No workload bytes, operation or cache eligibility changes."
+        "Original host-generated insertion bytes are prepared outside measured calls and source-bound by descriptor/payload seals. Each measured named ordinary member reads its sealed descriptor/payload and preserves target metadata; it does not regenerate recipes inside the measured command. No workload bytes, operation or cache eligibility changes.",
+        "Owner direction 2026-10-12 (#319 phase 13): verification work 25000 -> 50000 ms, hard publication 35000 -> 60000 ms for this named case only; cleanup reserve 3000 ms and publication guard 250 ms unchanged. Measured command, Commit and performance limits unchanged."
       ],
       "registry": {
         "family": "mixed_load_bearing",

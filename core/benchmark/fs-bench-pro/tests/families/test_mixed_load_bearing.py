@@ -128,7 +128,9 @@ class MixedLoadBearing(unittest.TestCase):
             else:
                 self.assertEqual(row["budget"]["command_ms"], 15000)
                 self.assertEqual(row["budget"]["performance_hard_watchdog_ms"], 60000)
-                self.assertEqual(row["budget"]["verifier_ms"], 25000)
+                # Owner direction 2026-10-12 (#319 phase 13): the two named 500 MiB development cases only.
+                self.assertEqual((row["budget"]["verifier_ms"], row["budget"]["verification_hard_watchdog_ms"]),
+                                 (50000, 60000) if "500mb" in row["id"] else (25000, 35000))
                 self.assertEqual(row["budget"]["verification_cleanup_reserve_ms"], 3000)
 
     def test_recovery_source_hashes_and_ordered_shell_members(self):

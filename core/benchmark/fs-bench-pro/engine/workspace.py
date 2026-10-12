@@ -68,6 +68,18 @@ def alias_parent_custody(case, prepared, command, output):
             "scope":"only alias data parent automatic mtime; all publication comparisons exact"}
 
 
+# Owner direction 2026-10-12, issue319 phase 13: only the six 500 MiB mixed
+# cases, whose mounted proof of one 30298-path root alone takes 17-21 s.
+LARGE_ROOT_PROOF_LIMITS = {
+    "v016-mixed-development-500mb-30000-k10-v1": (50000, 60000),
+    "v016-mixed-development-500mb-30000-k100-v1": (50000, 60000),
+    "v016-workspace-mixed-500mb-30000-k10-v1": (80000, 90000),
+    "v016-workspace-mixed-500mb-30000-k100-v1": (80000, 90000),
+    "v016-branch-mixed-500mb-30000-k10-v1": (105000, 115000),
+    "v016-branch-mixed-500mb-30000-k100-v1": (105000, 115000),
+}
+
+
 def import_proof_deadlines(case, charged_ns=0):
     budget = case["budget"]
     reserve = budget.get("cleanup_reserve_ms", case.get("original_resource_guards", {}).get("verification_cleanup_reserve_ms", 4000))
@@ -859,9 +871,10 @@ def family_proof_deadlines(case, charged_ns=0, owner_stop=None):
         exhaustive_owner_ceiling(case)
         reserve = budget.get("verification_cleanup_reserve_ms", 3000)
     else:
-        if (work, hard) not in ((25000,35000),(45000,59000)):
+        named = LARGE_ROOT_PROOF_LIMITS.get(case.get("id"))
+        if (work, hard) not in ((named,) if named else ((25000,35000),(45000,59000))):
             raise ValueError("original history verification limits required")
-        reserve = budget.get("cleanup_reserve_ms", budget.get("verification_cleanup_reserve_ms", 3000 if work==25000 else 4000))
+        reserve = budget.get("cleanup_reserve_ms", budget.get("verification_cleanup_reserve_ms", 4000 if work==45000 else 3000))
     if reserve != (4000 if work==45000 else 3000) or budget.get("publication_guard_ms",250) != 250:
         raise ValueError("original history cleanup reserve and publication guard required")
     now = time.monotonic()
@@ -2119,7 +2132,8 @@ def context_deadlines(case, started, *, phase='verification'):
         return {'work': started + (hard - reserve) / 1000, 'cleanup': started + hard / 1000}
     work, hard = budget['verifier_ms'], budget['verification_hard_watchdog_ms']
     reserve = budget.get('verification_cleanup_reserve_ms', 3000)
-    if (work, hard) not in ((25000, 35000), (30000, 40000), (60000, 70000)) or reserve != 3000:
+    named = LARGE_ROOT_PROOF_LIMITS.get(case.get('id'))
+    if (work, hard) not in ((named,) if named else ((25000, 35000), (30000, 40000), (60000, 70000))) or reserve != 3000:
         raise ValueError('exact original batch5 verification work/hard/reserve required')
     return {'work': started + (work - reserve) / 1000, 'cleanup': started + work / 1000,
             'publication': started + hard / 1000}
