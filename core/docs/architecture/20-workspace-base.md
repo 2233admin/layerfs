@@ -186,6 +186,15 @@ the set is dropped and nothing of it was ever in the cache.
   `Chunk` only when its canonical bytes are no more than the 256-byte
   bookkeeping charge of an entry (an attribute value's payload is such a
   chunk and cannot be told from a file's by role). Each identity once.
+- **Whole-file lengths.** Of a `WholeFile` object the set keeps the length
+  under its content root, not the payload: canonical bytes less
+  `WHOLE_FILE_CANONICAL_OVERHEAD`, which is the Store's own answer for that
+  role (`layerfs-storage` `read/length.rs`). Admission remembers it exactly
+  as a length the Store answered: 264 bytes of charge, the same eviction
+  order, counted in `seeded_lengths`. The first stat of a file a Commit
+  created then asks the Store nothing. A chunked file's length is not
+  staged: its file state cannot be told from an attribute value's by role,
+  and the Store answers it as before.
 - **What authenticates an entry.** The identity is the `FinalizedObject`'s
   own: `FinalizedObject::new` computes it from the canonical allocation and
   `admit` checks it, and the type has no way to change either afterwards.

@@ -123,7 +123,8 @@ fn seen(daemon: &Daemon) -> Seen {
     Seen(daemon.cache(), daemon.store.work())
 }
 /// (cache misses, Store object ids, Store length ids, seeded objects,
-/// seeded bytes, authenticated bytes) between two observations.
+/// seeded bytes, authenticated bytes) between two observations. Seeded
+/// lengths are asserted where they are placed.
 fn between(before: &Seen, after: &Seen) -> [u64; 6] {
     [
         after.0.cache_misses - before.0.cache_misses,
@@ -162,9 +163,13 @@ fn a_new_workspace_reads_what_a_commit_wrote_without_the_store() {
 
     let before = seen(&daemon);
     let root = commit(&a);
-    let committed = between(&before, &seen(&daemon));
+    let after = seen(&daemon);
+    let committed = between(&before, &after);
     let head = daemon.snapshot(branch);
     assert_eq!(head.effective_root, root);
+    // The length of each created file was remembered with no Store demand.
+    assert_eq!(after.0.seeded_lengths - before.0.seeded_lengths, 3);
+    assert_eq!(after.0.file_lengths - before.0.file_lengths, 3);
     daemon.close(&a);
     drop(a);
 
@@ -184,9 +189,8 @@ fn a_new_workspace_reads_what_a_commit_wrote_without_the_store() {
         visited[1],
         visited[2]
     ));
-    // No object. One length for each regular file whose content the Commit
-    // constructed: the three created files.
-    assert_eq!(visited, [0, 0, 3, 0, 0, 0]);
+    // No object and no length: not of the files the Commit created either.
+    assert_eq!(visited, [0; 6]);
     // What the new root has that the base root has not, from the Store.
     let (_, fresh) = tracker.fresh(root);
     let payload: BTreeSet<_> = created()
@@ -310,7 +314,10 @@ fn unpublished(label: &str, outcome: u8, expected: HistoryError) {
     let failure = a
         .commit_captured()
         .expect_err("publication must not be known");
-    let failed = between(&before, &seen(&daemon));
+    let after = seen(&daemon);
+    let failed = between(&before, &after);
+    assert_eq!(after.0.seeded_lengths, before.0.seeded_lengths);
+    assert_eq!(after.0.file_lengths, before.0.file_lengths);
     assert_eq!(failure.error_kind(), expected);
     assert_eq!(failure.phase, CommitPhase::Publish);
     assert!(failure.published.is_none());

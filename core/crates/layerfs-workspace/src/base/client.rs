@@ -41,6 +41,9 @@ pub struct ClientWork {
     pub seeded_objects: u64,
     /// Canonical bytes of those objects.
     pub seeded_bytes: u64,
+    /// Whole-file lengths a published Commit constructed that were
+    /// remembered without a Store demand.
+    pub seeded_lengths: u64,
 }
 /// A runtime-backed authenticated object provider with bounded immutable caching.
 /// Upstream implements its public demand-window/authority contract; allocation
@@ -279,7 +282,7 @@ impl crate::FileLengths for CanonicalClient {
         }
         let length = self.provided_length(id)?;
         let mut state = self.state()?;
-        let evictions = state.cache.remember_length(id, length);
+        let evictions = state.cache.remember_length(id, length).unwrap_or(0);
         state.work.evictions = state.work.evictions.saturating_add(evictions);
         Ok(length)
     }

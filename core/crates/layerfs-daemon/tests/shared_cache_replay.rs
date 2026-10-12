@@ -447,8 +447,8 @@ fn replay_counts_what_commands_and_commits_ask_of_the_shared_cache() {
         end.0.charged_cache_bytes, end.0.cached_objects, end.0.file_lengths, end.0.evictions
     ));
     evidence(format_args!(
-        "  seeded by Commits: objects={} bytes={}",
-        end.0.seeded_objects, end.0.seeded_bytes
+        "  seeded by Commits: objects={} bytes={} lengths={}",
+        end.0.seeded_objects, end.0.seeded_bytes, end.0.seeded_lengths
     ));
     for (stage, (ran, committed)) in by_stage.iter().enumerate() {
         evidence(format_args!(

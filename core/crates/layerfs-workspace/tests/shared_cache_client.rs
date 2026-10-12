@@ -7,8 +7,8 @@
 mod common;
 use common::name;
 use layerfs_content::{
-    file::mapping::encode_chunk_object, AuthenticatedObjects, ContentError, ContentResult,
-    FinalizedObject, ObjectId, ObjectRole,
+    file::mapping::encode_chunk_object, policy::WHOLE_FILE_CANONICAL_OVERHEAD,
+    AuthenticatedObjects, ContentError, ContentResult, FinalizedObject, ObjectId, ObjectRole,
 };
 use layerfs_workspace::{BaseView, CanonicalCache, CanonicalClient, ClientWork, FileLengths};
 use std::{
@@ -484,6 +484,7 @@ fn constructed_objects_are_staged_by_role_within_a_bound_and_placed_without_a_fe
 
     // What is kept: every role but a file's payload; a chunk only when it
     // is no longer than an entry's own bookkeeping charge; each object once.
+    // Of a whole file, its length: canonical bytes less the fixed overhead.
     let mut staged = cache.constructed().unwrap();
     assert!(staged.is_empty());
     let whole = finalized(ObjectRole::WholeFile, 1, 100);
@@ -497,9 +498,11 @@ fn constructed_objects_are_staged_by_role_within_a_bound_and_placed_without_a_fe
     ] {
         staged.offer(object);
     }
-    assert_eq!(staged.len(), 3);
-    // Staging places nothing: the cache is as it was until admission.
+    assert_eq!(staged.len(), 4);
+    // Staging places nothing: the cache is as it was until admission, and
+    // with no length provider an unremembered length is refused.
     assert_eq!(work(&reader), ClientWork::default());
+    assert!(reader.file_length(whole.id()).is_err());
     cache.admit_constructed(staged).unwrap();
     let placed = [&value, &leaf, &page];
     let bytes: usize = placed.iter().map(|object| object.canonical_len()).sum();
@@ -508,10 +511,16 @@ fn constructed_objects_are_staged_by_role_within_a_bound_and_placed_without_a_fe
         ClientWork {
             seeded_objects: 3,
             seeded_bytes: bytes as u64,
-            charged_cache_bytes: bytes + 3 * OBJECT_CHARGE,
+            seeded_lengths: 1,
+            charged_cache_bytes: bytes + 3 * OBJECT_CHARGE + LENGTH_CHARGE,
             cached_objects: 3,
+            file_lengths: 1,
             ..ClientWork::default()
         }
+    );
+    assert_eq!(
+        reader.file_length(whole.id()).unwrap(),
+        (100 - WHOLE_FILE_CANONICAL_OVERHEAD) as u64
     );
     // A reader is served the placed objects with no upstream demand, and
     // must fetch what was not placed: its upstream does not have them.
@@ -566,7 +575,10 @@ fn constructed_objects_are_staged_by_role_within_a_bound_and_placed_without_a_fe
         ],
         [5, (bytes + 2000) as u64, 5]
     );
-    assert_eq!(now.charged_cache_bytes, bytes + 2000 + 5 * OBJECT_CHARGE);
+    assert_eq!(
+        now.charged_cache_bytes,
+        bytes + 2000 + 5 * OBJECT_CHARGE + LENGTH_CHARGE
+    );
     assert_eq!(
         reader.read_canonical(pages[0].id()),
         Err(ContentError::MissingObject)
@@ -596,7 +608,11 @@ fn constructed_objects_are_staged_by_role_within_a_bound_and_placed_without_a_fe
     let end = work(&reader);
     assert!(evictions > 0);
     assert_eq!(end.seeded_objects, 5 + 36);
-    assert_eq!(end.cached_objects as u64, end.seeded_objects - evictions);
+    assert_eq!([end.seeded_lengths, end.file_lengths as u64], [1, 0]);
+    assert_eq!(
+        end.cached_objects as u64,
+        end.seeded_objects + 1 - evictions
+    );
     // The oldest placed objects are gone; the latest is held.
     assert_eq!(
         reader.read_canonical(value.id()),

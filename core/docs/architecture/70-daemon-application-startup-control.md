@@ -152,7 +152,7 @@ array; it is never a successful zero-valued snapshot.
 | 6, 7 | 0 | Foreground and maintenance AllocationWork, all six source fields |
 | 8 | 0 | StoreWork: object_batches, object_ids, length_batches, length_ids, serial_reservations |
 | 9 | 0 | ReadServiceWork, all 13 source fields; booleans encoded as 0 or 1 |
-| 10 | 0 | ClientWork: cache_hits, cache_misses, upstream_batches, authenticated_bytes, evictions, charged_cache_bytes, cached_objects, then seeded_objects, seeded_bytes (appended for #320; earlier positions unchanged) |
+| 10 | 0 | ClientWork: cache_hits, cache_misses, upstream_batches, authenticated_bytes, evictions, charged_cache_bytes, cached_objects, then seeded_objects, seeded_bytes, seeded_lengths (appended for #320; earlier positions unchanged) |
 | 11 | 0 | DispatchWork, all ten source fields |
 | 12 | 0 | Native mount owner id, root serial, serving, detached, abort_bound |
 | 13 | -1 | Writer SqlWork scalars in declaration order, then seven statement_phases (calls, wall_ns), then seven commit_phases (calls, wall_ns) |

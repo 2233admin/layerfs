@@ -194,6 +194,7 @@ pub(super) fn store<W: Write>(
                     w.cached_objects as u64,
                     w.seeded_objects,
                     w.seeded_bytes,
+                    w.seeded_lengths,
                 ]),
             )?;
             Ok(())

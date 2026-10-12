@@ -1,6 +1,7 @@
 //! Bounded immutable-object cache. Eviction never changes authoritative state.
 use layerfs_content::filesystem::attributes::PortableMetadata;
 use layerfs_content::object::inode_leaf::InodeKind;
+use layerfs_content::policy::WHOLE_FILE_CANONICAL_OVERHEAD;
 use layerfs_content::{ContentError, ContentResult, FinalizedObject, ObjectId, ObjectRole};
 use std::{
     collections::{BTreeMap, VecDeque},
@@ -69,15 +70,26 @@ impl CanonicalCache {
         // Emission order: the root and the pages above the changed leaves
         // are placed last and are evicted last.
         for id in order {
-            let Some(value) = objects.remove(&id) else {
-                continue;
+            let evictions = match objects.remove(&id) {
+                Some(Constructed::Object(value)) => {
+                    let length = value.len() as u64;
+                    let placed = state.cache.place(id, value.len(), || value);
+                    if placed.is_some() {
+                        state.work.seeded_objects = state.work.seeded_objects.saturating_add(1);
+                        state.work.seeded_bytes = state.work.seeded_bytes.saturating_add(length);
+                    }
+                    placed
+                }
+                Some(Constructed::Length(length)) => {
+                    let placed = state.cache.remember_length(id, length);
+                    if placed.is_some() {
+                        state.work.seeded_lengths = state.work.seeded_lengths.saturating_add(1);
+                    }
+                    placed
+                }
+                None => None,
             };
-            let length = value.len() as u64;
-            if let Some(evictions) = state.cache.place(id, value.len(), || value) {
-                state.work.evictions = state.work.evictions.saturating_add(evictions);
-                state.work.seeded_objects = state.work.seeded_objects.saturating_add(1);
-                state.work.seeded_bytes = state.work.seeded_bytes.saturating_add(length);
-            }
+            state.work.evictions = state.work.evictions.saturating_add(evictions.unwrap_or(0));
         }
         Ok(())
     }
@@ -107,15 +119,32 @@ const OBJECT_CHARGE: usize = 256;
 /// attribute value's payload is such a chunk and cannot be told apart by role.
 const CONSTRUCTED_CHUNK_BYTES: usize = OBJECT_CHARGE;
 
+/// What is staged under one identity.
+enum Constructed {
+    /// The canonical bytes of a namespace object.
+    Object(Vec<u8>),
+    /// The logical length of a whole file, under its content root.
+    Length(u64),
+}
+impl Constructed {
+    fn charge(&self) -> usize {
+        match self {
+            Self::Object(value) => value.len() + OBJECT_CHARGE,
+            Self::Length(_) => LENGTH_CHARGE,
+        }
+    }
+}
+
 /// Namespace objects one Commit constructed, held apart from every reader
 /// until that Commit's root is published. Dropping it leaves no trace.
 ///
 /// It keeps the objects that describe the tree (every role except a file's
 /// payload) and the latest of them within its bound: construction emits
 /// children before parents, so what remains of an oversized Commit is the
-/// root and the pages nearest to it.
+/// root and the pages nearest to it. Of a whole file it keeps the length
+/// and not the payload.
 pub struct ConstructedObjects {
-    objects: BTreeMap<ObjectId, Vec<u8>>,
+    objects: BTreeMap<ObjectId, Constructed>,
     order: VecDeque<ObjectId>,
     charged: usize,
     limit: usize,
@@ -123,15 +152,23 @@ pub struct ConstructedObjects {
 impl ConstructedObjects {
     /// Copies one constructed object's bytes if it is kept. The identity is
     /// the finalized object's own, computed once from the same allocation.
+    /// A whole file's length is its canonical length less the format's fixed
+    /// overhead: the Store's own answer for that role.
     pub fn offer(&mut self, object: &FinalizedObject) {
         let bytes = object.canonical();
-        let kept = match object.role() {
-            ObjectRole::WholeFile => false,
-            ObjectRole::Chunk => bytes.len() <= CONSTRUCTED_CHUNK_BYTES,
-            _ => true,
+        let length = match object.role() {
+            ObjectRole::WholeFile => match bytes.len().checked_sub(WHOLE_FILE_CANONICAL_OVERHEAD) {
+                Some(length) if length > 0 => Some(length as u64),
+                _ => return,
+            },
+            ObjectRole::Chunk if bytes.len() > CONSTRUCTED_CHUNK_BYTES => return,
+            _ => None,
         };
-        let charge = bytes.len().saturating_add(OBJECT_CHARGE);
-        if !kept || charge > self.limit || self.objects.contains_key(&object.id()) {
+        let charge = match length {
+            Some(_) => LENGTH_CHARGE,
+            None => bytes.len().saturating_add(OBJECT_CHARGE),
+        };
+        if charge > self.limit || self.objects.contains_key(&object.id()) {
             return;
         }
         while self.charged > self.limit - charge {
@@ -139,14 +176,18 @@ impl ConstructedObjects {
                 break;
             };
             if let Some(dropped) = self.objects.remove(&oldest) {
-                self.charged -= dropped.len() + OBJECT_CHARGE;
+                self.charged -= dropped.charge();
             }
         }
         self.charged += charge;
-        self.objects.insert(object.id(), bytes.to_vec());
+        let staged = match length {
+            Some(length) => Constructed::Length(length),
+            None => Constructed::Object(bytes.to_vec()),
+        };
+        self.objects.insert(object.id(), staged);
         self.order.push_back(object.id());
     }
-    /// Objects currently staged.
+    /// Objects and lengths currently staged.
     pub fn len(&self) -> usize {
         self.objects.len()
     }
@@ -237,16 +278,16 @@ impl Cache {
     }
     /// Remembers one length the provider answered. An allowance too small
     /// for one entry remembers nothing; the provider is then asked each time.
-    pub(crate) fn remember_length(&mut self, id: ObjectId, length: u64) -> u64 {
+    pub(crate) fn remember_length(&mut self, id: ObjectId, length: u64) -> Option<u64> {
         if LENGTH_CHARGE > self.capacity || self.lengths.contains_key(&id) {
-            return 0;
+            return None;
         }
         let evicted = self.make_room(LENGTH_CHARGE);
         self.epoch = self.epoch.saturating_add(1);
         self.charged += LENGTH_CHARGE;
         self.lengths.insert(id, (length, self.epoch));
         self.ages.insert((self.epoch, LENGTH, id), ());
-        evicted
+        Some(evicted)
     }
     pub(crate) fn lengths(&self) -> usize {
         self.lengths.len()
