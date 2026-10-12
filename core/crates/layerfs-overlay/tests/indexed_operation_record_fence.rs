@@ -163,33 +163,33 @@ fn each_job_executes_a_fixed_number_of_fence_statements() {
     db.indexed_operation_record_apply(held, &[put(key(1, 0), vec![5])])
         .unwrap();
     // Workspace, Lease, OperationRecord, Begin, Commit, free-list read.
-    // A read is its fence and one record statement. A write of one change is
-    // its fence, the guard read and the put inside one transaction; it reads
-    // the Workspace row once, for both a stale route and a closed Workspace.
+    // A read is its one fence statement and one record statement. A write of
+    // one change is its fence, the guard read and the put inside one
+    // transaction. The fence is counted with the Workspace family.
     let expected = [
-        ("contains", [1, 1, 1, 0, 0, 0]),
-        ("get", [1, 1, 1, 0, 0, 0]),
-        ("apply", [1, 1, 2, 1, 1, 1]),
-        ("first_keys", [1, 1, 1, 0, 0, 0]),
-        ("first_keys_all", [1, 1, 1, 0, 0, 0]),
-        ("keys_after", [1, 1, 1, 0, 0, 0]),
+        ("contains", [1, 0, 1, 0, 0, 0]),
+        ("get", [1, 0, 1, 0, 0, 0]),
+        ("apply", [1, 0, 2, 1, 1, 1]),
+        ("first_keys", [1, 0, 1, 0, 0, 0]),
+        ("first_keys_all", [1, 0, 1, 0, 0, 0]),
+        ("keys_after", [1, 0, 1, 0, 0, 0]),
     ];
     for (number, (job, families)) in expected.into_iter().enumerate() {
         let (result, counted) = statements(&db, held, job, 100 + number as u64);
         assert!(result.is_ok(), "{job}: {result:?}");
         assert_eq!(counted, families, "{job}");
     }
-    // A write refused as closed has read the Workspace row once and nothing
-    // else: no owner statement, no transaction.
+    // A write refused as closed has run its fence and nothing else: no
+    // transaction.
     db.close(held.owner.route()).unwrap();
     let (result, counted) = statements(&db, held, "apply", 200);
     assert!(matches!(result, Err(OverlayError::Closed)), "{result:?}");
     assert_eq!(counted, [1, 0, 0, 0, 0, 0]);
-    // A read refused for a released owner has run its whole fence.
+    // A read refused for a released owner has run its fence alone.
     db.release_operation(held.owner).unwrap();
     let (result, counted) = statements(&db, held, "get", 300);
     assert!(matches!(result, Err(OverlayError::Stale)), "{result:?}");
-    assert_eq!(counted, [1, 1, 0, 0, 0, 0]);
+    assert_eq!(counted, [1, 0, 0, 0, 0, 0]);
 }
 
 #[test]
@@ -201,13 +201,24 @@ fn the_fence_statements_are_point_searches() {
     for plan in &plans {
         println!("INDEXED_OPERATION_RECORD_FENCE_PLAN {plan}");
     }
+    // The fence is two point searches and nothing else: the Workspace row by
+    // its key, and the owner row by its key.
     let operation = plans
         .iter()
-        .filter(|plan| plan.starts_with("operation:"))
+        .filter(|plan| plan.starts_with("operation-fence:"))
         .collect::<Vec<_>>();
-    assert!(!operation.is_empty(), "{plans:?}");
+    assert_eq!(operation.len(), 3, "{plans:?}");
+    assert!(operation
+        .iter()
+        .any(|plan| plan.contains("SEARCH workspace")));
+    assert!(operation
+        .iter()
+        .any(|plan| plan.contains("SEARCH operation_owner")));
     for plan in operation {
-        assert!(plan.contains("SEARCH"), "{plan}");
+        assert!(
+            plan.contains("SEARCH") || plan.contains("SCALAR SUBQUERY"),
+            "{plan}"
+        );
         assert!(
             !plan.contains("SCAN") && !plan.contains("TEMP B-TREE"),
             "{plan}"

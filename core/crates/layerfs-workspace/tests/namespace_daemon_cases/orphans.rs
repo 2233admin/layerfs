@@ -33,9 +33,11 @@ fn inherited_open_unlinked_log_keeps_bytes_through_owner_installs_failures_and_i
     let service = Service::new("orphan-log");
     service.job(Command::LifetimePlans, |r| match r {
         Response::LifetimePlans(plans) => {
-            assert!(plans
-                .iter()
-                .all(|p| p.contains("SEARCH") && !p.contains("TEMP")));
+            // Every access is a search; the record fence's owner search is a
+            // scalar subquery, which the plan lists as a node of its own.
+            assert!(plans.iter().all(|p| {
+                (p.contains("SEARCH") || p.contains("SCALAR SUBQUERY")) && !p.contains("TEMP")
+            }));
             println!("S6_CUSTODY_PLANS {plans:?}");
         }
         other => panic!("{other:?}"),

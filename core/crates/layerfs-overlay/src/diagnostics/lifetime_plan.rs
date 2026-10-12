@@ -19,6 +19,13 @@ impl Overlay {
                 |r| Ok(format!("{label}: {}", r.get::<_, String>(3)?)),
             )?);
         }
+        plans.extend(self.query(
+            StatementKind::Explain,
+            &format!("EXPLAIN QUERY PLAN {}", sql::OPERATION_FENCE),
+            &[&route.ns, &route.incarnation.as_slice(), &1_i64],
+            48,
+            |r| Ok(format!("operation-fence: {}", r.get::<_, String>(3)?)),
+        )?);
         Ok(plans)
     }
 }

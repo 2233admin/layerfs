@@ -219,6 +219,11 @@ pub(crate) const OWNED_OPERATION_RECORD_DELETE: &str =
     "DELETE FROM owned_operation_record WHERE ns=?1 AND operation=?2 AND kind=?3 AND key=?4";
 
 pub(crate) const OPERATION_CUSTODY: &str = "SELECT 1 FROM operation_owner WHERE ns=?1 AND owner=?2";
+/// The Workspace row of one route and that owner's custody, as two point
+/// searches in one statement: whether it is closed, and whether the owner holds.
+pub(crate) const OPERATION_FENCE: &str = "SELECT lifecycle,
+    EXISTS(SELECT 1 FROM operation_owner WHERE ns=?1 AND owner=?3)
+    FROM workspace WHERE ns=?1 AND incarnation=?2";
 
 pub(crate) const INDEXED_OPERATION_RECORD_CONTAINS: &str = "SELECT 1 FROM indexed_operation_record
     WHERE ns=?1 AND operation=?2 AND file_scope=?3 AND kind=?4 AND key=?5";

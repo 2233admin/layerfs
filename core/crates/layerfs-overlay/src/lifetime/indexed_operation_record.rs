@@ -13,7 +13,7 @@ impl Overlay {
         scope: IndexedOperationRecordScope,
         key: IndexedOperationRecordKey,
     ) -> OverlayResult<bool> {
-        self.check_operation(scope.owner)?;
+        self.fence_operation(scope.owner, false)?;
         let file = scope.file_scope.to_be_bytes();
         Ok(!self
             .query(
@@ -38,7 +38,7 @@ impl Overlay {
         scope: IndexedOperationRecordScope,
         key: IndexedOperationRecordKey,
     ) -> OverlayResult<Option<Vec<u8>>> {
-        self.check_operation(scope.owner)?;
+        self.fence_operation(scope.owner, false)?;
         self.indexed_value(scope, key)
     }
 
@@ -74,10 +74,7 @@ impl Overlay {
     ) -> OverlayResult<IndexedOperationRecordApply> {
         indexed_operation_record_changes_bytes(changes)?;
         self.atomic(|| {
-            // One read of the Workspace row decides both a stale route and a
-            // closed Workspace; the owner check follows it as before.
-            self.live(scope.owner.route)?;
-            self.operation_custody(scope.owner)?;
+            self.fence_operation(scope.owner, true)?;
             for (index, change) in changes.iter().enumerate() {
                 let actual = self.indexed_value(scope, change.key)?;
                 let matches = match (&change.expected, &actual) {
@@ -145,7 +142,7 @@ impl Overlay {
         kind: u32,
         excluded_root: Option<[u8; 32]>,
     ) -> OverlayResult<Vec<[u8; 32]>> {
-        self.check_operation(scope.owner)?;
+        self.fence_operation(scope.owner, false)?;
         let file = scope.file_scope.to_be_bytes();
         let operation = integer(scope.owner.owner)?;
         let kind = i64::from(kind);
@@ -185,7 +182,7 @@ impl Overlay {
         let Some(after) = after else {
             return self.indexed_operation_record_keys(scope, kind, None);
         };
-        self.check_operation(scope.owner)?;
+        self.fence_operation(scope.owner, false)?;
         let file = scope.file_scope.to_be_bytes();
         self.query(
             StatementKind::OperationRecord,

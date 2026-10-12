@@ -654,7 +654,8 @@ fn a_fixed_small_change_costs_the_same_counted_work_as_the_base_grows() {
         // the only difference between sizes is those record point jobs.
         let extra = other.work.record_jobs as i64 - small.work.record_jobs as i64;
         assert_eq!(other.jobs as i64 - small.jobs as i64, extra);
-        assert_eq!(other.statements as i64 - small.statements as i64, 3 * extra);
+        // A record point job is its one fence statement and its one read.
+        assert_eq!(other.statements as i64 - small.statements as i64, 2 * extra);
         assert_eq!(other.sql_changed, small.sql_changed);
         assert!((other.sql_rows as i64 - small.sql_rows as i64).abs() <= 4 * extra.abs());
         assert_eq!((other.fullscan, small.fullscan), (0, 0));

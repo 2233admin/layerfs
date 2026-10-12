@@ -190,7 +190,7 @@ fn original_atomic_refusal_and_credits_survive_independent_owner_jobs() {
     ));
     assert_eq!(
         missed.work().sql.total().returned_blob_bytes,
-        32 // Only the owning Workspace root; membership projects no draft BLOB.
+        0 // The fence reads no Workspace BLOB; membership projects no draft BLOB.
     );
     drop(missed);
     assert_eq!(
