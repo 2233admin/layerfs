@@ -123,6 +123,12 @@ impl fmt::Debug for SandboxFailure {
             .finish()
     }
 }
+impl fmt::Display for SandboxFailure {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Sandbox {:?}: {:?}", self.phase, self.cause)
+    }
+}
+impl std::error::Error for SandboxFailure {}
 /// Actual local Engine and authenticated daemon lifecycle organization.
 #[derive(Clone, Debug)]
 pub struct SandboxApi {
@@ -141,7 +147,7 @@ pub struct ManagedSandbox {
     pub startup: DaemonStatus,
     /// Actual original native handshake work.
     pub handshake: ChannelWork,
-    pub(super) command_identity: layerfs_sandbox::CommandIdentity,
+    pub(crate) command_identity: layerfs_sandbox::CommandIdentity,
 }
 impl SandboxApi {
     /// Uses one explicit local Engine endpoint and metadata wait policy.
@@ -201,28 +207,6 @@ impl SandboxApi {
     }
 }
 impl ManagedSandbox {
-    /// Creates one ordinary runtime command with this deployment's admitted nonroot identity.
-    /// Start/streams/status belong to the returned runtime owner; this registers no filesystem Exec.
-    pub fn exec(
-        &self,
-        arguments: Vec<String>,
-        environment: Vec<String>,
-        directory: String,
-        stdin: bool,
-    ) -> Result<
-        layerfs_sandbox::backend::docker::ExecCreated,
-        Box<layerfs_sandbox::backend::docker::ExecCreateFailure>,
-    > {
-        self.runtime
-            .create_exec(layerfs_sandbox::backend::docker::ExecRequest {
-                identity: self.command_identity,
-                arguments,
-                environment,
-                directory,
-                stdin,
-            })
-    }
-
     /// Explicit startup observation/wait on the same incarnation and Control owner.
     /// A later observation never resolves an earlier unknown operation.
     pub(crate) fn status(

@@ -2246,3 +2246,22 @@ affected daemon 10 tests PASS. Package Clippy, format and boundary checks PASS.
 Linux checks and the sealed count gate follow; unaffected prior tests are reused.
 Receipts: surface-host-build, surface-sdk-bridge-tests-host, surface-daemon-tests-
 host, surface-runtime-build-host and surface-clippy-host logs.
+
+
+### SDK follow-up: mounted commands and setup close
+
+Cause: callers still used ManagedSandbox::exec and separate setup deletion.
+Change: remove that method; public Workspace exec and internal native/concurrent
+calls share its original launcher. Setup and examples use exact stop/delete close;
+its error stays a typed SDK carrier. Observe exact setup-container absence once.
+Sample backend Stop remains until mandatory closed Store/overlay and log export;
+then the existing receipt owner removes its exact resources, with no proof change.
+Commit: this route migration. SDK focused exec/close tests cover cwd/identity,
+no daemon registration, one stop/delete, stop refusal and delete failure custody.
+Five initial test-peer failures: macOS inherited nonblocking accepted TCP; fixed
+blocking mode only, same two-second bounds; corrected 5 PASS. Other SDK 8 reused.
+Host all-target compilation PASS; SDK 13 and focused harness close/Init-install
+13 PASS; runtime focused 9 PASS. SDK Clippy PASS; unchanged daemon checks reused.
+Owner update: finish docs before one consolidated host/Linux/harness/seal/count gate;
+no more intermediate samples. Receipts: route-host/runtime-build, route-sdk-peer-
+corrected-tests and route-close-harness-tests logs; original failure log retained.

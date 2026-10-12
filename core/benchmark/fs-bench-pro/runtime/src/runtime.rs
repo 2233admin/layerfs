@@ -8,7 +8,7 @@ use layerfs_sandbox::{
     backend::docker::{Docker, ExecRequest},
     CommandIdentity,
 };
-use layerfs_sdk::{ManagedSandbox, SandboxApi, SandboxCreate};
+use layerfs_sdk::{ManagedSandbox, MountedWorkspace, SandboxApi, SandboxCreate, WorkspaceApi};
 use std::{
     fs,
     net::{SocketAddr, TcpStream},
@@ -150,17 +150,25 @@ pub fn extra_control(
     Ok(control)
 }
 
-/// An external ordinary runtime Bash: no WorkspaceApi.exec and no registration.
+pub enum Directory<'a> {
+    Mounted(&'a MountedWorkspace),
+    Native(&'a str, CommandIdentity),
+}
+/// One ordinary runtime Bash; the mounted convenience adds no daemon registration.
 /// Streams go directly to files, with no output-sized resident collection.
 pub fn command(
     owner: &ManagedSandbox,
     body: &str,
-    directory: &str,
+    location: Directory<'_>,
     label: &str,
     observer: bool,
     environment: &[String],
     events: &mut Events,
 ) -> Result<()> {
+    let directory = match &location {
+        Directory::Mounted(workspace) => workspace.ready.directory.as_str(),
+        Directory::Native(directory, _) => directory,
+    };
     command_created(
         &owner.runtime.identity().to_string(),
         body,
@@ -178,7 +186,19 @@ pub fn command(
                     stdin: false,
                 })
             } else {
-                owner.exec(arguments, environment.to_vec(), directory.into(), false)
+                match location {
+                    Directory::Mounted(workspace) => {
+                        WorkspaceApi::exec(owner, workspace, arguments, environment.to_vec(), false)
+                    }
+                    Directory::Native(directory, identity) => layerfs_sdk::internal::exec(
+                        &owner.runtime,
+                        identity,
+                        arguments,
+                        environment.to_vec(),
+                        directory.into(),
+                        false,
+                    ),
+                }
             }
             .map_err(|error| format!("external exec create {error:?}").into())
         },
@@ -207,15 +227,15 @@ pub fn concurrent_command(
         false,
         environment,
         |arguments| {
-            sandbox
-                .create_exec(ExecRequest {
-                    identity,
-                    arguments,
-                    environment: environment.to_vec(),
-                    directory: directory.into(),
-                    stdin: false,
-                })
-                .map_err(|error| format!("external parallel exec create {error:?}").into())
+            layerfs_sdk::internal::exec(
+                sandbox,
+                identity,
+                arguments,
+                environment.to_vec(),
+                directory.into(),
+                false,
+            )
+            .map_err(|error| format!("external parallel exec create {error:?}").into())
         },
         Some(work),
         events,
@@ -357,4 +377,11 @@ pub fn snapshot(owner: &ManagedSandbox, socket: &str, events: &mut Events) -> Re
         return Err(format!("original external snapshot failed {status:?}").into());
     }
     Ok(())
+}
+
+/// Explicit original stop/delete; the returned error retains the typed SDK custody.
+pub fn close(owner: ManagedSandbox, socket: &str) -> Result<()> {
+    SandboxApi::new(Docker::new(socket, Duration::from_secs(3))?)
+        .close(owner)
+        .map_err(|error| error as Box<dyn std::error::Error>)
 }

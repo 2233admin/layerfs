@@ -105,17 +105,17 @@ def provision(source, volume, folder, build):
     container = stopped[0]["value"]
     docker = ["docker", "--host", "unix://" + build["socket"]]
     status = receipts.command([*docker, "inspect", container, "--format", "{{.State.Running}}"],
-                              folder, "setup-container-state", 15)
-    if Path(status["stdout"]).read_text().strip() != "false":
-        raise ValueError("provisioning container still running; custody retained: " + container)
-    receipts.command([*docker, "rm", container], folder, "setup-remove-passing", 15)
+                              folder, "setup-container-state", 15, allow_failure=True)
+    missing = Path(status["stderr"]).read_text().strip()
+    if status["exit_code"] != 1 or missing != "Error: No such object: " + container:
+        raise ValueError("acknowledged SDK close lacks exact independent deletion observation: " + container)
     result = {"schema": "fs-bench-pro-provision-v1", "status": "PASS", "volume": volume,
               "source": str(source), "sealed_store": str(sealed), "store_sha256": identity.sha256(sealed),
               "manifest": str(manifest), "manifest_sha256": identity.sha256(manifest),
               "global_profile": "Disposable/WAL/OFF", "overlay_profile": "MEMORY/OFF/EXCLUSIVE",
               "construction_workers": 1, "init_parallel_profile": "supported Project Init profile unchanged",
               "attempt": attempted, "events": str(events), "container": container,
-              "container_disposition": "known Stop, inspected not running, removed",
+              "container_disposition": "SDK close acknowledged stop/delete; exact container absence independently observed",
               "host_sqlite": "original host_init_setup event", "daemon_sqlite": "original install_setup event"}
     receipts.write_new(folder / "provision.json", result)
     return result
@@ -240,7 +240,7 @@ def fresh_init_finish(handle, row, *, deadline):
         "manifest": str(handle["installed_manifest"]), "manifest_sha256": fields["installed_manifest_sha256"],
         "host_manifest": str(handle["host_manifest"]), "host_manifest_sha256": initial["manifest_sha256"],
         "sealed_store": str(handle["sealed"]), "store_sha256": handle["store_sha256"],
-        "global_profile": "Disposable/WAL/OFF", "container": cid, "container_disposition": "known Stop retained until final family outer acknowledgement",
+        "global_profile": "Disposable/WAL/OFF", "container": cid, "container_disposition": "SDK close acknowledged stop/delete; borrowed shared Store volume retained",
         "events": str(runtime.child_event_receipts[0]) if getattr(runtime, "child_event_receipts", None) else str(runtime.folder / "init-install.events.jsonl"),
         "attempt": {"project_init": ack, "project_install": installed, "setup_container_stopped": stopped},
         "host_observation": observation, "host_sqlite": fields["host_sqlite"], "daemon_sqlite": fields["daemon_sqlite"],

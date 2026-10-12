@@ -139,3 +139,19 @@ pub fn branches(
 ) -> Result<layerfs_history::PageResult<layerfs_history::BranchRecord>, Box<OperationFailure>> {
     crate::project::branches::branches(control, stack, page)
 }
+
+/// The same ordinary launcher for external native commands and disjoint concurrent proof borrows.
+#[cfg(unix)]
+pub fn exec(
+    sandbox: &layerfs_sandbox::backend::docker::Sandbox,
+    identity: layerfs_sandbox::CommandIdentity,
+    arguments: Vec<String>,
+    environment: Vec<String>,
+    directory: String,
+    stdin: bool,
+) -> Result<
+    layerfs_sandbox::backend::docker::ExecCreated,
+    Box<layerfs_sandbox::backend::docker::ExecCreateFailure>,
+> {
+    crate::workspace::exec::launch(sandbox, identity, arguments, environment, directory, stdin)
+}

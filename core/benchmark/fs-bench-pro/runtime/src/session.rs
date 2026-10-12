@@ -867,7 +867,17 @@ pub fn serve(args: &Args, events: &mut Events) -> Result<()> {
                 runtime::command(
                     &owner,
                     &body,
-                    &directory,
+                    if key.starts_with("native:") {
+                        runtime::Directory::Native(
+                            &directory,
+                            layerfs_sandbox::CommandIdentity {
+                                uid: args.uid,
+                                gid: args.gid,
+                            },
+                        )
+                    } else {
+                        runtime::Directory::Mounted(&selected(&mounts, key)?.mounted)
+                    },
                     operation,
                     false,
                     &args.environment,
@@ -1068,10 +1078,13 @@ pub fn serve(args: &Args, events: &mut Events) -> Result<()> {
                         ],
                     )?;
                 }
+                // Independent closed-Store and overlay readback still need this
+                // exact stopped container. The receipt owner deletes it after
+                // harvesting; do not destroy that evidence with whole-owner close.
                 owner
                     .runtime
                     .stop(1)
-                    .map_err(|e| format!("explicit container stop {e:?}"))?;
+                    .map_err(|error| format!("explicit container stop {error:?}"))?;
                 events.value("container_stopped", &owner.runtime.identity().to_string())?;
                 return Ok(());
             }

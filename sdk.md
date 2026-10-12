@@ -4,13 +4,13 @@
 > Drafted 2026-10-12 from an owner discussion; owner decisions of the same day
 > are marked. The "today" columns and line counts were read at `8f911fe6b`.
 > Stage 1 relocation and surface narrowing are implemented in this branch.
-> Exec, close, commits rename and branches are now implemented. Removing
-> ManagedSandbox::exec and switching the benchmark command route follow next.
+> Exec, close, commits rename, branches and the benchmark command migration
+> are implemented. ManagedSandbox::exec is removed; the consolidated gate follows.
 > This branch is not a released contract or a performance qualification.
 
-The public SDK is three groups and eleven methods. Everything else the SDK
-crate exports today is folded into one of these, moved to an internal module,
-or removed.
+The public SDK is three groups and eleven methods. The existing constructors organize these methods. Control/recovery/diagnostic
+plumbing is under the hidden internal module, and duplicate or retired operation
+methods are removed.
 
 | Group | Methods |
 | --- | --- |
@@ -218,3 +218,23 @@ claims), each command step cost a median of about 43 ms and a minimum of about
 in command time for roughly six filesystem requests per step. Attributing that
 floor to process launch through the Docker engine is an inference from those
 numbers; it was not profiled.
+
+## Implemented benchmark lifecycle
+
+Mounted benchmark commands call `WorkspaceApi::exec`. Concurrent callers with
+disjoint original control borrows and native commands outside a mount use the
+hidden internal delegate to the same existing Sandbox launcher. No launch path
+registers a daemon Exec, changes command identity or adds a faster launcher.
+Setup uses `SandboxApi::create` and `close`; close errors remain the original
+SDK carrier, including its runtime/channel/resource custody. Prepared Store
+volumes remain borrowed after the setup container is deleted, and the harness
+independently observes absence of that exact container.
+A measured sample preserves its existing separate backend Stop so the stopped
+container remains available for required closed Store/overlay export and raw
+telemetry. The receipt driver deletes only that sample's container and writable
+copies immediately after harvesting and verification. This proof-only lifecycle
+is not another public SDK operation and does not weaken closed Storage readback.
+The five capped-edit cases remain for simplification: only their family applies
+the strict untouched payload/source-offset transcript, and their two-second
+Commit watchdog is distinct. The expected simplified count is 157 in two tiers,
+with a 23-family gate and kept-sibling replacements against their own rows.

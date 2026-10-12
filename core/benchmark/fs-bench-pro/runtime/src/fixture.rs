@@ -128,15 +128,10 @@ pub fn install_sealed(
     {
         return Err("unexpected original EndSession acknowledgement".into());
     }
-    owner
-        .runtime
-        .stop(1)
-        .map_err(|e| format!("explicit setup container stop {e:?}"))?;
-    events.value(
-        "setup_container_stopped",
-        &owner.runtime.identity().to_string(),
-    )?;
-    // Container, volume, source copy and sealed master remain retained. The
-    // lead alone decides removal; this harness never deletes any resource.
+    let container = owner.runtime.identity().to_string();
+    runtime::close(owner, &args.socket)?;
+    events.value("setup_container_stopped", &container)?;
+    // The acknowledged close deletes this setup container. Shared volume,
+    // source copy and sealed master remain retained as the prepared input.
     Ok(())
 }

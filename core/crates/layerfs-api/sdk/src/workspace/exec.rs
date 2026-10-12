@@ -1,6 +1,9 @@
 //! Optional ordinary Sandbox launch at the acknowledged mounted directory.
 use crate::{ManagedSandbox, MountedWorkspace, WorkspaceApi};
-use layerfs_sandbox::backend::docker::{ExecCreateFailure, ExecCreated};
+use layerfs_sandbox::{
+    backend::docker::{ExecCreateFailure, ExecCreated, ExecRequest, Sandbox},
+    CommandIdentity,
+};
 
 impl WorkspaceApi<'_> {
     /// Creates one ordinary command at this mount using the deployment's admitted identity.
@@ -13,11 +16,29 @@ impl WorkspaceApi<'_> {
         environment: Vec<String>,
         stdin: bool,
     ) -> Result<ExecCreated, Box<ExecCreateFailure>> {
-        sandbox.exec(
+        launch(
+            &sandbox.runtime,
+            sandbox.command_identity,
             arguments,
             environment,
             workspace.ready.directory.clone(),
             stdin,
         )
     }
+}
+pub(crate) fn launch(
+    sandbox: &Sandbox,
+    identity: CommandIdentity,
+    arguments: Vec<String>,
+    environment: Vec<String>,
+    directory: String,
+    stdin: bool,
+) -> Result<ExecCreated, Box<ExecCreateFailure>> {
+    sandbox.create_exec(ExecRequest {
+        identity,
+        arguments,
+        environment,
+        directory,
+        stdin,
+    })
 }
