@@ -1,0 +1,60 @@
+LookupMiss: requests=2 jobs(read,mutation,lifecycle)=[2, 0, 0] transactions=0 attempts=8 executions=8
+  2 FENCE_LOOKUP
+  2 INODE_LOOKUP
+  4 NAME_LAYERS
+Lookup: requests=1 jobs(read,mutation,lifecycle)=[2, 0, 0] transactions=1 attempts=13 executions=15
+  2 FENCE_LOOKUP
+  1 FILE_LOOKUPS_ADD
+  3 INODE_LOOKUP
+  2 NAME_LAYERS
+  1 begin
+  1 commit
+  1 freelist-count
+  1 native-lookup-insert
+  1 native-lookup-row
+Getattr: requests=1 jobs(read,mutation,lifecycle)=[1, 0, 0] transactions=0 attempts=2 executions=2
+  1 FENCE_LOOKUP
+  1 INODE_LOOKUP
+Create: requests=1 jobs(read,mutation,lifecycle)=[0, 1, 0] transactions=1 attempts=16 executions=22
+  1 DIRECTORY_ENTRY_PUT
+  1 FENCE_LOOKUP
+  1 FILE_OPEN_LOOKUP_ADD
+  1 FRONTIER_ADVANCE
+  2 INODE_INSERT
+  1 INODE_LOOKUP
+  4 NAME_LAYERS
+  1 begin
+  1 commit
+  1 file-handle-insert
+  1 freelist-count
+  1 native-lookup-insert
+Write: requests=1024 jobs(read,mutation,lifecycle)=[0, 1024, 0] transactions=1024 attempts=11264 executions=13312
+  2048 CELL_PUT
+  2048 CELL_SHAPES
+  1024 FENCE_FILE
+  1024 FRONTIER_ADVANCE
+  1024 INODE_LOOKUP
+  1024 INODE_UPDATE
+  1024 begin
+  1024 commit
+  1024 freelist-count
+Release: requests=2 jobs(read,mutation,lifecycle)=[0, 0, 2] transactions=2 attempts=12 executions=14
+  2 FENCE_FILE
+  2 FILE_OPENS_DROP
+  2 begin
+  2 commit
+  2 file-handle-drop
+  2 freelist-count
+Open: requests=1 jobs(read,mutation,lifecycle)=[1, 0, 0] transactions=1 attempts=7 executions=8
+  1 FENCE_LOOKUP
+  1 FILE_OPENS_ADD
+  1 INODE_LOOKUP
+  1 begin
+  1 commit
+  1 file-handle-insert
+  1 freelist-count
+Read: requests=513 jobs(read,mutation,lifecycle)=[513, 0, 0] transactions=0 attempts=1026 executions=1026
+  513 FENCE_HANDLE
+  513 LAYERS
+Status: requests=1 jobs(read,mutation,lifecycle)=[0, 0, 1] transactions=0 attempts=1 executions=1
+  1 workspace-state

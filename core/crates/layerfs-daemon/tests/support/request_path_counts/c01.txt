@@ -1,0 +1,40 @@
+LookupMiss: requests=1000 jobs(read,mutation,lifecycle)=[1000, 0, 0] transactions=0 attempts=4000 executions=4000
+  1000 FENCE_LOOKUP
+  1000 INODE_LOOKUP
+  2000 NAME_LAYERS
+Getattr: requests=1001 jobs(read,mutation,lifecycle)=[1001, 0, 0] transactions=0 attempts=2002 executions=2002
+  1001 FENCE_LOOKUP
+  1001 INODE_LOOKUP
+Create: requests=1000 jobs(read,mutation,lifecycle)=[0, 1000, 0] transactions=1000 attempts=16000 executions=21001
+  1000 DIRECTORY_ENTRY_PUT
+  1000 FENCE_LOOKUP
+  1000 FILE_OPEN_LOOKUP_ADD
+  1000 FRONTIER_ADVANCE
+  1001 INODE_INSERT
+  1000 INODE_LOOKUP
+  999 INODE_UPDATE
+  4000 NAME_LAYERS
+  1000 begin
+  1000 commit
+  1000 file-handle-insert
+  1000 freelist-count
+  1000 native-lookup-insert
+Write: requests=1000 jobs(read,mutation,lifecycle)=[0, 1000, 0] transactions=1000 attempts=9000 executions=10000
+  1000 CELL_COVER
+  1000 CELL_PUT
+  1000 FENCE_FILE
+  1000 FRONTIER_ADVANCE
+  1000 INODE_LOOKUP
+  1000 INODE_UPDATE
+  1000 begin
+  1000 commit
+  1000 freelist-count
+Release: requests=1000 jobs(read,mutation,lifecycle)=[0, 0, 1000] transactions=1000 attempts=6000 executions=7000
+  1000 FENCE_FILE
+  1000 FILE_OPENS_DROP
+  1000 begin
+  1000 commit
+  1000 file-handle-drop
+  1000 freelist-count
+Status: requests=1 jobs(read,mutation,lifecycle)=[0, 0, 1] transactions=0 attempts=1 executions=1
+  1 workspace-state

@@ -1,0 +1,108 @@
+LookupMiss: requests=1000 jobs(read,mutation,lifecycle)=[1000, 0, 0] transactions=0 attempts=4000 executions=4000
+  1000 FENCE_LOOKUP
+  1000 INODE_LOOKUP
+  2000 NAME_LAYERS
+Getattr: requests=3001 jobs(read,mutation,lifecycle)=[3001, 0, 0] transactions=0 attempts=6002 executions=6002
+  3001 FENCE_LOOKUP
+  3001 INODE_LOOKUP
+Create: requests=1000 jobs(read,mutation,lifecycle)=[0, 1000, 0] transactions=1000 attempts=16000 executions=21001
+  1000 DIRECTORY_ENTRY_PUT
+  1000 FENCE_LOOKUP
+  1000 FILE_OPEN_LOOKUP_ADD
+  1000 FRONTIER_ADVANCE
+  1001 INODE_INSERT
+  1000 INODE_LOOKUP
+  999 INODE_UPDATE
+  4000 NAME_LAYERS
+  1000 begin
+  1000 commit
+  1000 file-handle-insert
+  1000 freelist-count
+  1000 native-lookup-insert
+Write: requests=1000 jobs(read,mutation,lifecycle)=[0, 1000, 0] transactions=1000 attempts=9000 executions=10000
+  1000 CELL_COVER
+  1000 CELL_PUT
+  1000 FENCE_FILE
+  1000 FRONTIER_ADVANCE
+  1000 INODE_LOOKUP
+  1000 INODE_UPDATE
+  1000 begin
+  1000 commit
+  1000 freelist-count
+Release: requests=1000 jobs(read,mutation,lifecycle)=[0, 0, 1000] transactions=1000 attempts=6000 executions=7000
+  1000 FENCE_FILE
+  1000 FILE_OPENS_DROP
+  1000 begin
+  1000 commit
+  1000 file-handle-drop
+  1000 freelist-count
+Unlink: requests=1000 jobs(read,mutation,lifecycle)=[0, 1000, 0] transactions=1000 attempts=17000 executions=20000
+  1000 DIRECTORY_ENTRY_DROP
+  1000 FENCE_LOOKUP
+  1000 FRONTIER_ADVANCE
+  1000 INODE_INSERT
+  2000 INODE_LOOKUP
+  2000 INODE_UPDATE
+  3000 NAME_LAYERS
+  1000 ORPHAN_LOOKUP
+  1000 begin
+  1000 commit
+  1000 file-custody-refs
+  1000 freelist-count
+  1000 orphan-insert
+Forget: requests=1000 jobs(read,mutation,lifecycle)=[0, 0, 1000] transactions=1000 attempts=28000 executions=34000
+  1000 CELL_DROP
+  1000 FILE_LOOKUPS_DROP
+  2000 GENERATION_HELD
+  2000 LAYERS
+  1000 ORPHAN_LOOKUP
+  1000 begin
+  1000 commit
+  1000 file-custody-drop
+  1000 freelist-count
+  2000 layer-payload-page
+  1000 layer-shrink-page
+  1000 maintenance-drop
+  1000 native-lookup-drop
+  1000 native-lookup-row
+  1000 native-mount-state
+  1000 orphan-drop
+  1000 orphan-inode-drop
+  1000 orphan-lower-top
+  1000 orphan-payload-page
+  1000 orphan-rows
+  1000 orphan-shrink-page
+  1000 orphan-wait-drop
+  1000 workspace-incarnation
+  2000 workspace-state
+Opendir: requests=1 jobs(read,mutation,lifecycle)=[1, 0, 0] transactions=1 attempts=8 executions=9
+  1 FENCE_LOOKUP
+  1 FILE_OPENS_ADD
+  1 INODE_LOOKUP
+  1 begin
+  1 commit
+  1 freelist-count
+  1 native-directory-insert
+  1 native-parent
+Readdir: requests=17 jobs(read,mutation,lifecycle)=[33, 0, 0] transactions=16 attempts=164 executions=180
+  16 COOKIE_PAGE
+  16 COOKIE_PAGE_AFTER
+  33 FENCE_DIRECTORY
+  17 INODE_LOOKUP
+  17 SOURCE_NAMES_KINDS
+  16 begin
+  16 commit
+  16 freelist-count
+  16 native-cookie-insert
+  1 native-parent
+Releasedir: requests=1 jobs(read,mutation,lifecycle)=[0, 0, 1] transactions=1 attempts=8 executions=9
+  1 COOKIE_PAGES
+  1 FENCE_DIRECTORY
+  1 FILE_OPENS_DROP
+  1 begin
+  1 commit
+  1 freelist-count
+  1 maintenance-enqueue
+  1 native-directory-close
+Status: requests=1 jobs(read,mutation,lifecycle)=[0, 0, 1] transactions=0 attempts=1 executions=1
+  1 workspace-state
