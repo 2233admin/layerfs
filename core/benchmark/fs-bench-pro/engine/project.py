@@ -107,7 +107,9 @@ def provision(source, volume, folder, build):
     status = receipts.command([*docker, "inspect", container, "--format", "{{.State.Running}}"],
                               folder, "setup-container-state", 15, allow_failure=True)
     missing = Path(status["stderr"]).read_text().strip()
-    if status["exit_code"] != 1 or missing != "Error: No such object: " + container:
+    absent = {"Error: No such object: " + container, "error: no such object: " + container}
+    if (status["exit_code"] != 1 or Path(status["stdout"]).read_text().strip()
+            or missing not in absent):
         raise ValueError("acknowledged SDK close lacks exact independent deletion observation: " + container)
     result = {"schema": "fs-bench-pro-provision-v1", "status": "PASS", "volume": volume,
               "source": str(source), "sealed_store": str(sealed), "store_sha256": identity.sha256(sealed),

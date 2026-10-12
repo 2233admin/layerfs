@@ -2315,3 +2315,20 @@ errors come from this pin; native seal reuse and missing counter configuration
 account for the others. Native tests will use the completed identity's one seal.
 No benchmark sample ran, so there is no replacement sample or changed reference.
 Receipts: final-harness-engine.log; final-overlay-pin-* checks.
+
+
+### SDK follow-up: exact setup-close CLI observation
+
+Cause: the first completed-SDK empty preparation acknowledged SDK stop/delete,
+but inspect returned the exact container's absence with lowercase CLI spelling.
+The harness required uppercase spelling and retained the preparation as failed;
+C01 did not start. Change: accept those two exact observed CLI spellings only,
+still requiring exit 1 and the complete original container ID; reject any output.
+Commit: this close-observer correction. Focused positive/negative close tests
+checked; SDK/daemon/runtime targets compile and SDK/native-control tests checked.
+The failed preparation's receipts remain; its own volume and exported Store
+were removed. No stop/delete was repeated and no Store or accounting proof changed.
+The first seal stays at its original identity; corrected source gets a new tag
+and seal before one new preparation and first samples. Broad unchanged checks
+retain their exact source scope. Receipts: sdks1f preparation failure and cleanup,
+final-close-cli-* checks; complete baseline/count gates remain outstanding.
