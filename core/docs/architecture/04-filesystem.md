@@ -1,5 +1,15 @@
 # Filesystem trees
 
+> **#319 inode decoder allocation repair (same-commit source over
+> `f1d2d8276`):** the private common inode-leaf decoder maps each fully checked
+> value directly into the typed wire representation. It still validates the
+> complete page, every serial/order/value, and all header/count/byte bounds.
+> The pooling reader retains its raw rows through the same grammar. The typed
+> reader removes one raw-row vector and the second value decode; public codecs,
+> canonical bytes and provider acquisitions are unchanged. External 8/100-row
+> allocation counts drop 2 -> 1, with the existing reallocation retained.
+> This is a source/count result, not native or typed-proof speed qualification.
+
 > **#258 stable identity reads:** The source in the same commit as this note
 > extends `FilesystemRead` with parent-serial child resolution, inode-serial
 > resolution/listing, and portable metadata and symlink reads by inode serial.

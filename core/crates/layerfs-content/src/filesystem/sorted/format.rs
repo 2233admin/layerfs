@@ -378,15 +378,14 @@ impl Format for CompactInodes {
             // bounded, ordered and value-checked there, and this route only maps
             // its rows into the engine's wire form.
             INODE_LEAF_ROLE if level == 0 => {
-                let rows = crate::object::inode_leaf::decode_leaf_value(value)?;
-                let mut entries = Vec::with_capacity(rows.len());
-                for row in rows {
-                    entries.push(WireEntry {
-                        key: row.serial,
+                let entries = crate::object::inode_leaf::decode_leaf_value_with(
+                    value,
+                    |serial, _, decoded| WireEntry {
+                        key: serial,
                         child: None,
-                        value: Some(crate::object::inode_leaf::decode_inode_value(&row.value)?),
-                    });
-                }
+                        value: Some(decoded),
+                    },
+                )?;
                 Ok(Wire {
                     level,
                     count: count as u64,

@@ -280,6 +280,18 @@ pub(crate) fn encode_leaf_value(rows: &[InodeLeafRow]) -> ContentResult<Vec<u8>>
 /// the declared byte total, serial ordering and the value grammar of every row.
 /// A caller that only needs the rows never re-encodes to discover malformation.
 pub(crate) fn decode_leaf_value(value: &[u8]) -> ContentResult<Vec<InodeLeafRow>> {
+    decode_leaf_value_with(value, |serial, bytes, _| InodeLeafRow {
+        serial,
+        value: *bytes,
+    })
+}
+
+/// Maps each fully checked row directly into the caller's private representation.
+/// The infallible mapping cannot skip grammar validation or reorder its errors.
+pub(crate) fn decode_leaf_value_with<T>(
+    value: &[u8],
+    mut map: impl FnMut(u64, &[u8; INODE_VALUE_BYTES], InodeValue) -> T,
+) -> ContentResult<Vec<T>> {
     if value.len() < NODE_HEADER_BYTES {
         return Err(ContentError::UnexpectedEof);
     }
@@ -343,13 +355,11 @@ pub(crate) fn decode_leaf_value(value: &[u8]) -> ContentResult<Vec<InodeLeafRow>
             return Err(ContentError::InvalidRecord("inode key order"));
         }
         previous = Some(serial);
-        let mut bytes = [0_u8; INODE_VALUE_BYTES];
-        bytes.copy_from_slice(&row[8..]);
-        decode_inode_value(&bytes)?;
-        rows.push(InodeLeafRow {
-            serial,
-            value: bytes,
-        });
+        let bytes: &[u8; INODE_VALUE_BYTES] = row[8..]
+            .try_into()
+            .map_err(|_| ContentError::UnexpectedEof)?;
+        let decoded = decode_inode_value(bytes)?;
+        rows.push(map(serial, bytes, decoded));
     }
     Ok(rows)
 }

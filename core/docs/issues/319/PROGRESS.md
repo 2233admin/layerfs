@@ -1785,3 +1785,74 @@ refusals unchanged. Covering Engine check follows cleancommit.
 [Count evidence](checks/history-direct-count.json) pins red/green logs.
 Production LOC:82362 ->82362 (delta+0), exactparent/staged pinnedcounter;
 reference absent (retired R9c; last counted65,417 at tree498dd1917812).
+
+
+History stage p319n14i atf1d2d8276 seals9 binaries and33 once-only receipts:
+27functional/proof PASS(26 INELIGIBLE,1 overallPASS),6large500MiB timerFAIL.
+CleanEngine339tests OK(skipped3),24.552s;44 portableCSVs preserve parsedfields
+except exactlocalpaths. Init unaffected/notselected: retain priorf3a699c4d
+p319n14e dualPASS/INELIGIBLE identity andp14h duplicateclaim refusal.
+
+All5histories complete500steps/1000guards each. Actual controller durations
+distributed/hotset/recurring/metadata/unrelated84.384563500/85.206569959/
+81.553475958/82.018959000/98.494984375s fit original120s and current210s
+execution ceilings; no repeated unchanged sample at120s. All5000guard
+completions PASS/attempt1/exit0, exact5values/snapshots match, hostPID/groupnull,
+OOM/swap0. Rootbody/cgroup/protectedStore/guard allowances unchanged.
+Source-model prediction1000host starts ->0 percase met, while500 workload
+commands/500Commits/1Status and1000root observations stay.
+
+Scope correction: priorp14h distributed137.345503591s is sum ofguard
+completion walls, not enclosingobserver intervals; enclosing138.641993631s.
+Current corresponding completion54.256949372s/enclosing56.728580120s.
+The current distributed500stepwall84.254726651s splitscommand20.847908507s,
+Commit5.602688320s,enclosingobserver56.728580120s,residual1.075549704s.
+Step20/400 owner93/88,OperationRecord69/69,namespace42/42,statements431/396;
+counts coverintervening command+Commit, notCommit-only. Otherfour OperationRecord
+69/69,69/69,66/66,298/298;namespace42/42,42/42,42/42,69/69. Wholecumulative
+request/job totals vary(kerneltraffic/runtime), not claimedidentical.
+
+RawStoreallocated old ->new:8458240 ->8466432,8454144 ->8466432,
+5636096 ->5644288,5607424 ->5562368,538189824 ->537112576B. Overlay
+allocationsunchanged or-4096B; providerStorehash exactlyunchanged before/after
+eachproof, sizes vary acrosssamples. No storage/cachebound/lane increase:
+producttree unchanged bythetransport fix; do notclaimuniform allocation
+improvement orattributeindividualWALframes. Alltimings retain INELIGIBLE
+(cache/priorownwrite/crossworktree interference); noqualifiedproductspeed.
+Historicalhotset377/500 at120s staysFAIL. [Stage evidence](checks/history-direct-stage.json)
+pins exactsource/receipts/CSVs; historysubject closes with originallimitfit.
+
+Nextphase14subject is exhaustive500MiB: p319n13v fullproof211.763216875s
+under275s, including native20rootspans61.354s andtypedprovider58.978s.
+The sixopen500MiB role proofs each completednative rootchecks30298paths/
+464192768bytes in15.898..18.529s; later role/export deadlineFAIL, no normalized
+phase completed. Exactper-native-role inode leafrow census UNAVAILABLE.
+Content source CompactInodes::decode calls the commonleafdecoder(onceperrow),
+then decodes eachrawvalue againwhilebuildingWireEntry:2N value decodes and
+one redundantN-row rawVec perleaf. PredictN decodedvalues andone fewerraw
+Vec allocation, canonicalacquisitions/stat9/named11 unchanged. At8/100rows
+sourcevalue calls16/200 ->8/100; externalallocatorred firstdetermines ABI
+allocationbaseline, no hardcodedtwo-allocation assumption(RustmayreuseWireVec).
+No claim thisdecoder dominatesnative/typedtime or resolvesall6timers.
+
+External decoder red atf1d2d8276:8/100rows raw InodeLeafRow size88B;
+allocation targets704/8800B bothobserved exactly1 allocation(2 totalallocs,
+1 realloc), expected0 failsafterbothfixturesdecoded/exactpage equalitychecked.
+Predictionremoves thatone rawrow allocation:target1 ->0,total2 ->1,realloc1
+unchanged; sourcevalue calls2N ->N. Publicgrammar/completeallrows validation
+andcanonicalbytes unchanged; typedroute mapsalreadycheckedvalue directly.
+No parser instrumentation/newpublicport or cachewarmth selected.
+
+Post-edit8/100row allocatorcounttier PASS host/Linux:88B row,704/8800B target
+allocations1 ->0,total2 ->1,reallocation1 unchanged. Commoninfalliblemapper
+retains fullgrammar/allrows,errororder; typedWire uses checkedInodeValue
+directly,pooledreader retainsrawrows throughsamegrammar. Hostalltargets
+460PASS/63targets/2documentedignores under62s;Linux9affectedtargets63PASS
+in7.2s;bothalltargetsContentClippy-Dwarnings PASS,fmt/boundary686/selftests50
+PASS. Last-row invalidkind rejects identicallyonbothtyped/pooledroutes.
+InitialbuildE0308 bytesinference retained; explicit &[u8;73] fixes it before
+firstgreen execution. NoSQLiteclaim or inferredruntimeleafcensus/dominance.
+[Count evidence](checks/inode-decode-count.json) binds exactlogs; seal/sample
+next. Architecture04 updates sourcealgorithm withoutcanonical/API change.
+Production LOC:82362 ->82368 (delta+6), exactfirstparent/staged pinnedcounter;
+reference absent (retired R9c; last counted65,417 at tree498dd1917812).

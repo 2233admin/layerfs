@@ -219,7 +219,10 @@ fn both_inode_leaf_routes_are_one_grammar() {
     zero[ENVELOPE + 31..ENVELOPE + 39].copy_from_slice(&0_u64.to_be_bytes());
     let mut unordered = sealed.clone();
     unordered[ENVELOPE + 31..ENVELOPE + 39].copy_from_slice(&9_u64.to_be_bytes());
+    let mut last_kind = sealed.clone();
+    last_kind[ENVELOPE + 31 + 81 + 8] = 0xff;
     for (name, bytes) in [
+        ("invalid kind in last row", last_kind),
         ("reserved flag", reserved),
         ("count disagrees", count),
         ("subtree total", total),
