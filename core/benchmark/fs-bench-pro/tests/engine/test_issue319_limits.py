@@ -126,23 +126,46 @@ class LargeRootProofs(unittest.TestCase):
 
 
 class CellCountPins(unittest.TestCase):
-    """Phase 14: only C10 is corrected, by exactly one READ, and the baseline file is unchanged."""
+    """Phase 14 corrected C10 by one READ; issue 320 lowers statements only; the baseline file is unchanged."""
     NAMES = ('requests', 'owner_jobs', 'statements')
+    # Statements after the request-path changes of issue 320 (REQUEST-PATH.md section 6), frozen before.
+    STATEMENTS = {'C01': (44004, 36003), 'C02': (46004, 37003), 'C04': (42644, 36073), 'C05': (46637, 39853),
+                  'C06': (9766, 7710), 'C07': (23133, 19018), 'C08': (9783, 7725), 'C09': (1055, 1051),
+                  'C10': (14408, 12345), 'C11': (9760, 7708)}
 
     def test_baseline_file_is_the_pinned_frozen_source(self):
         self.assertEqual(workspace.identity.sha256(workspace.BASELINE), workspace.BASELINE_SHA256)
 
-    def test_only_c10_differs_from_its_frozen_row_by_one_read(self):
-        self.assertEqual(set(workspace.CELL_COUNT_CORRECTIONS), {'C10'})
+    def test_requests_and_owner_jobs_stay_frozen_and_statements_follow_the_model(self):
+        self.assertEqual(set(workspace.CELL_COUNT_CORRECTIONS), set(self.STATEMENTS))
+        self.assertEqual(set(workspace.CELL_STATEMENT_RANGES), {'C03', 'C12'})
         for number in range(1, 13):
             cell = f'C{number:02}'
             with self.subTest(cell=cell):
                 expected, frozen = workspace.cell_expected_counts(cell, self.NAMES)
                 if cell == 'C10':
                     self.assertEqual(frozen, {'requests': 1548, 'owner_jobs': 1547, 'statements': 14408})
-                    self.assertEqual([frozen[name] - expected[name] for name in self.NAMES], [1, 1, 2])
+                    self.assertEqual([frozen[name] - expected[name] for name in self.NAMES[:2]], [1, 1])
+                else:
+                    self.assertEqual([expected[name] for name in self.NAMES[:2]], [frozen[name] for name in self.NAMES[:2]])
+                if cell in self.STATEMENTS:
+                    self.assertEqual((frozen['statements'], expected['statements']), self.STATEMENTS[cell])
+                    self.assertLess(expected['statements'], frozen['statements'])
                 else:
                     self.assertEqual(expected, frozen)
+
+    def test_a_ranged_cell_keeps_requests_and_owner_jobs_exact(self):
+        expected, _ = workspace.cell_expected_counts('C03', self.NAMES)
+        good = {**expected, 'statements': 82873}
+        self.assertTrue(workspace.cell_counts_reproduced('C03', good, expected))
+        for wrong in ({**good, 'statements': 82874}, {**good, 'statements': 82199}, {**good, 'statements': 90203},
+                      {**good, 'requests': good['requests'] + 1}, {**good, 'owner_jobs': good['owner_jobs'] - 1}):
+            self.assertFalse(workspace.cell_counts_reproduced('C03', wrong, expected))
+        expected, _ = workspace.cell_expected_counts('C12', self.NAMES)
+        self.assertTrue(workspace.cell_counts_reproduced('C12', {**expected, 'statements': 19920}, expected))
+        self.assertFalse(workspace.cell_counts_reproduced('C12', {**expected, 'statements': 24146}, expected))
+        exact, _ = workspace.cell_expected_counts('C01', self.NAMES)
+        self.assertFalse(workspace.cell_counts_reproduced('C01', {**exact, 'statements': 36004}, exact))
 
     def test_source_model_read_count_matches_the_plain_read_cell(self):
         # 64 MiB in 128 KiB read windows; frozen C09 reads the same file in 512 READs and 5 other requests.

@@ -21,7 +21,23 @@ BASELINE_SHA256 = "a6ada570050f14bb6ff5bd61c74c0d0fda439f323f695fdea1212b26b590d
 # the frozen sample's own warm-up mount of the same command and frozen C09 on the
 # same file both count 512. One READ is one request, one owner job and two
 # statements. The baseline file itself stays unchanged.
-CELL_COUNT_CORRECTIONS = {"C10": {"requests": 1547, "owner_jobs": 1546, "statements": 14406}}
+# Issue 320: the request path runs fewer statements for the same requests and owner
+# jobs (core/docs/issues/320/REQUEST-PATH.md section 6). Each statement count below is
+# the per-request model applied to the cell's frozen request mix; the same model first
+# reproduces the frozen count. C10 keeps its phase 14 request and owner-job correction.
+CELL_COUNT_CORRECTIONS = {
+    "C01": {"statements": 36003}, "C02": {"statements": 37003}, "C04": {"statements": 36073},
+    "C05": {"statements": 39853}, "C06": {"statements": 7710}, "C07": {"statements": 19018},
+    "C08": {"statements": 7725}, "C09": {"statements": 1051},
+    "C10": {"requests": 1547, "owner_jobs": 1546, "statements": 12345}, "C11": {"statements": 7708}}
+# Two cells cannot be one number: a request that runs while a removed file still waits
+# for the kernel's FORGET costs more. C03 is 82,201 + 2P, P the inode reads made in such
+# windows (at most one for each of 2,000 GETATTRs and two for each of 1,000 UNLINKs).
+# C12 runs git, whose LINK, RENAME and SYMLINK requests the model does not cover: an
+# estimate of 19,920 with a few statements of slack per assumption. Requests and owner
+# jobs of both stay exact.
+CELL_STATEMENT_RANGES = {"C03": {"low": 82201, "high": 82201 + 2 * 4000, "step": 2},
+                         "C12": {"low": 19900, "high": 19980, "step": 1}}
 
 
 def cell_expected_counts(cell, names):
@@ -29,6 +45,19 @@ def cell_expected_counts(cell, names):
     wanted = next(item for item in json.loads(BASELINE.read_text())["selections"] if item["cell"] == cell)
     frozen = {name: wanted[name] for name in names}
     return {**frozen, **{name: value for name, value in CELL_COUNT_CORRECTIONS.get(cell, {}).items() if name in frozen}}, frozen
+
+
+def cell_counts_reproduced(cell, totals, wanted):
+    """Exact for every count, except the statements of a cell with a declared range."""
+    allowed = CELL_STATEMENT_RANGES.get(cell)
+    for name in totals:
+        if name == "statements" and allowed is not None:
+            value = totals[name]
+            if not (allowed["low"] <= value <= allowed["high"] and (value - allowed["low"]) % allowed["step"] == 0):
+                return False
+        elif totals[name] != wanted[name]:
+            return False
+    return True
 BATCH4_HISTORY_SCHEMAS = frozenset(("original-v016-boundary-sequence-v1",
     "original-dedup-history-sequence-v1", "original-m1-commit-sequence-v1"))
 BATCH4_FAMILIES = frozenset(("file_size_transition","dedup_branch_history","mixed_load_bearing"))
@@ -417,7 +446,9 @@ def one_cell(cell, prepared_folder, build_folder, output):
         row["status"] = "PASS" if row["cache"]["status"] == "ELIGIBLE" else "INELIGIBLE"
         wanted, frozen = cell_expected_counts(cell, totals)
         row["count_reproduction"] = {"expected": wanted,
-                                      "actual": totals, "status": "PASS" if all(totals[name] == wanted[name] for name in totals) else "FAIL"}
+                                      "actual": totals, "status": "PASS" if cell_counts_reproduced(cell, totals, wanted) else "FAIL"}
+        if cell in CELL_STATEMENT_RANGES:
+            row["count_reproduction"]["statements_range"] = CELL_STATEMENT_RANGES[cell]
         if wanted != frozen:
             row["count_reproduction"]["frozen_baseline"] = frozen
         if row["count_reproduction"]["status"] != "PASS":
