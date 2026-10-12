@@ -77,6 +77,7 @@ impl BoundWorkspace {
             self.identity,
             self.route(),
         );
+        let mut producer = None;
         let result = (|| {
             let snapshot = self.snapshot().map_err(CommitError::Workspace)?;
             retained.binding = Some(snapshot.clone());
@@ -97,7 +98,10 @@ impl BoundWorkspace {
                 ));
             }
             retained.phase = CommitPhase::Begin;
-            let storage = self.store.producer().map_err(CommitError::Storage)?;
+            let (storage, before) = self
+                .producer
+                .take(&self.store)
+                .map_err(CommitError::Storage)?;
             let built = (|| {
                 let save = storage.begin_save().map_err(CommitError::Storage)?;
                 retained.phase = CommitPhase::Construct;
@@ -117,8 +121,9 @@ impl BoundWorkspace {
                 retained.saved = Some(save.finish().map_err(CommitError::Storage)?);
                 Ok(candidate)
             })();
-            retained.storage = Some(storage.diagnostics());
+            retained.storage = Some(super::producer::since(storage.diagnostics(), before));
             let candidate = built?;
+            producer = Some(storage);
             retained.intent = Some(StageRequest {
                 workspace: self.identity,
                 branch: snapshot.branch.id,
@@ -197,6 +202,9 @@ impl BoundWorkspace {
         if let Err(error) = result {
             retained.error = error;
             return Err(self.settle_failure(retained));
+        }
+        if let Some(storage) = producer {
+            self.producer.keep(storage);
         }
         Ok(CommitSuccess {
             history: retained.published.expect("known publication"),

@@ -3,7 +3,8 @@
 //! over a real Disposable Store and the real local owner, without a mount.
 //! Every Commit applies the same shape of change, so a count that differs
 //! between an early and a late Commit is a cost of the Commits already made.
-//! Counts are printed as evidence; nothing is timed.
+//! Counts are printed as evidence; only exact arithmetic is asserted. Nothing
+//! is timed.
 #[allow(dead_code)]
 #[path = "support/captured_drive.rs"]
 mod drive;
@@ -102,10 +103,7 @@ fn equal_commits_read_the_store_alike_whatever_was_committed_before() {
         let success = workspace
             .commit_captured()
             .unwrap_or_else(|failure| panic!("{failure:?}"));
-        assert!(matches!(
-            success.history,
-            CommitStagedOutcome::Committed(_)
-        ));
+        assert!(matches!(success.history, CommitStagedOutcome::Committed(_)));
         let work = success
             .namespace
             .as_ref()
@@ -134,6 +132,22 @@ fn equal_commits_read_the_store_alike_whatever_was_committed_before() {
     }
     // The same shape of change reaches the producer at every Commit.
     assert!(rows.iter().all(|row| *row == rows[0]), "{rows:?}");
+    // Only the first Commit of the Workspace opens a producer: it alone reads
+    // the policy row and the content-hint table.
+    assert_eq!((reads[0].policy, reads[0].signatures), (1, 1));
+    for (commit, pair) in reads.windows(2).enumerate() {
+        let (earlier, later) = (pair[0], pair[1]);
+        assert_eq!((later.policy, later.signatures), (0, 0), "{later:?}");
+        // A later Commit asks the catalogue for the window, for the groups
+        // published since its last Save, and once for each group the Commit
+        // before it published; never for a group it already asked for.
+        assert_eq!(
+            later.value_groups,
+            earlier.pooled_groups + 2,
+            "commit {}",
+            commit + 2
+        );
+    }
     drop(session);
     rig.close(&workspace);
     drop(workspace);

@@ -6,6 +6,7 @@ mod commit_types;
 mod open;
 mod operation;
 mod ports;
+mod producer;
 mod read_handle;
 mod read_scope;
 mod read_service;

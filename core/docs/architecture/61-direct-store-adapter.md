@@ -43,6 +43,11 @@ Every producer obtains its own Storage state through Store::producer, using
 the startup ReservationBlocks passed through concrete bootstrap. Only the
 opened provider is shared. No mutable Save is global, no ownership spans a
 whole Commit, and Init acquisition/cleanup is unavailable through these ports.
+A bound Workspace keeps the Storage state of its last completed Commit and
+gives it to its next one, so the bounded per-handle indexes are not read from
+the Store again by every Commit; admission already allows one Commit of a
+Workspace at a time. A Commit that does not complete drops that state, and the
+next one obtains a new one. Each Commit still reports only its own counts.
 The combined publication and paired local install are now implemented in
 [Store Commit](65-store-commit-composition.md); S10 still supplies live namespace
 normalization.
