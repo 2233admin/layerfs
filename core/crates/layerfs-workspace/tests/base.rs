@@ -8,8 +8,187 @@ use layerfs_content::filesystem::{
 use layerfs_content::object::inode_leaf::InodeKind;
 use layerfs_content::{AuthenticatedObjects, ContentError, ContentResult, ObjectId};
 use layerfs_overlay::{Overlay, ProfileConfig};
-use layerfs_workspace::{BaseView, CanonicalClient, Workspace};
-use std::sync::{atomic::Ordering, Arc, Mutex};
+use layerfs_workspace::{
+    BaseView, CanonicalCache, CanonicalClient, FileLengths, NativeReadDecision,
+    NativeReadOperation, Need, VisitFacts, Workspace,
+};
+use std::sync::{
+    atomic::{AtomicU64, Ordering},
+    Arc, Mutex,
+};
+
+struct CountingLengths {
+    store: Store,
+    calls: AtomicU64,
+}
+impl FileLengths for CountingLengths {
+    fn file_length(&self, id: ObjectId) -> layerfs_workspace::WorkspaceResult<u64> {
+        self.calls.fetch_add(1, Ordering::Relaxed);
+        self.store.file_length(id)
+    }
+}
+
+#[test]
+fn named_inode_length_errors_preserve_absence_and_provider_failure() {
+    struct ErrorLengths(ContentError);
+    impl FileLengths for ErrorLengths {
+        fn file_length(&self, _: ObjectId) -> layerfs_workspace::WorkspaceResult<u64> {
+            Err(self.0.clone().into())
+        }
+    }
+    for error in [ContentError::PathNotFound, ContentError::MissingObject] {
+        let f = common::fixture_with(Vec::new());
+        let client = Arc::new(CanonicalClient::with_lengths(
+            Arc::new(f.store.clone()),
+            Arc::new(ErrorLengths(error.clone())),
+            0,
+        ));
+        let base = BaseView::open(client, f.root, f.scope).unwrap();
+        let result = VisitFacts::default().supply(&base, &[Need::Name(1, name("file"))], None);
+        if error == ContentError::PathNotFound {
+            assert!(
+                result.is_ok(),
+                "retain the existing absent-inode mapping: {result:?}"
+            );
+        } else {
+            assert!(matches!(
+                result,
+                Err(layerfs_workspace::WorkspaceError::Content(
+                    ContentError::MissingObject
+                ))
+            ));
+        }
+    }
+}
+
+#[test]
+fn named_inode_facts_reuse_the_authenticated_child_without_cache_or_length_loss() {
+    for (parent, child, serial, ids, length_calls, size) in [
+        (1, "file", 2, 11, 1, 10),
+        (1, "symlink", 3, 12, 0, b"../.git/index".len() as u64),
+        (7, "result", 8, 11, 1, 0),
+    ] {
+        let f = common::fixture_with(Vec::new());
+        let lengths = Arc::new(CountingLengths {
+            store: f.store.clone(),
+            calls: AtomicU64::new(0),
+        });
+        let client = Arc::new(CanonicalClient::with_lengths(
+            Arc::new(f.store.clone()),
+            lengths.clone(),
+            0,
+        ));
+        let base = BaseView::open(client.clone(), f.root, f.scope).unwrap();
+        let mut facts = VisitFacts::default();
+        facts.supply(&base, &[Need::Inode(parent)], None).unwrap();
+        let before = client.diagnostics().unwrap();
+        let demand = f.store.demand.load(Ordering::Relaxed);
+        let calls = lengths.calls.load(Ordering::Relaxed);
+        facts
+            .supply(&base, &[Need::Name(parent, name(child))], None)
+            .unwrap();
+        let after = client.diagnostics().unwrap();
+        assert_eq!(f.store.demand.load(Ordering::Relaxed) - demand, ids);
+        assert_eq!(lengths.calls.load(Ordering::Relaxed) - calls, length_calls);
+        assert_eq!(after.charged_cache_bytes, 0);
+        assert_eq!(after.cached_objects, 0);
+        assert_eq!(after.file_lengths, 0);
+        assert_eq!(after.directory_count_scans, before.directory_count_scans);
+        println!("NAMED_FACTS child={child} canonical_ids={ids} owning_lengths={length_calls} cache_bytes=0");
+
+        let path = std::env::temp_dir().join(format!(
+            "layerfs-named-facts-{}-{serial}.sqlite",
+            std::process::id(),
+        ));
+        let overlay = Overlay::create(&path, ProfileConfig::default()).unwrap();
+        let workspace = Workspace::open(&overlay, client, f.root, f.scope, [94; 32]).unwrap();
+        let mount = overlay.create_native_mount(workspace.route(), 1).unwrap();
+        let memory = Arc::new(CanonicalClient::resident(Arc::new(CanonicalCache::new(0))));
+        if parent != 1 {
+            facts
+                .supply(
+                    &base,
+                    &[Need::Inode(1), Need::Name(1, name("output"))],
+                    None,
+                )
+                .unwrap();
+            let parent_visit = workspace
+                .native_read_visit(
+                    memory.clone(),
+                    mount,
+                    1,
+                    None,
+                    NativeReadOperation::Lookup {
+                        parent: 1,
+                        name: name("output"),
+                    },
+                    Arc::new(facts.clone()),
+                )
+                .unwrap();
+            let parent_outcome = parent_visit.perform(&overlay);
+            assert!(matches!(parent_outcome.result, Ok(None)));
+            assert!(matches!(parent_outcome.decision,
+                Some(NativeReadDecision::Value(inode)) if inode.serial == parent));
+        }
+        let visit = workspace
+            .native_read_visit(
+                memory,
+                mount,
+                parent,
+                None,
+                NativeReadOperation::Lookup {
+                    parent,
+                    name: name(child),
+                },
+                Arc::new(facts.clone()),
+            )
+            .unwrap();
+        let demand = f.store.demand.load(Ordering::Relaxed);
+        let outcome = visit.perform(&overlay);
+        assert!(matches!(outcome.result, Ok(None)), "{:?}", outcome.result);
+        let Some(NativeReadDecision::Value(inode)) = outcome.decision else {
+            panic!("named facts must decide native lookup")
+        };
+        assert_eq!(f.store.demand.load(Ordering::Relaxed), demand);
+        assert_eq!(inode.serial, serial);
+        assert_eq!(inode.size, size);
+        assert_eq!(inode.inherited_cutoff, size);
+        assert_eq!(inode.mtime_seconds, i64::MAX);
+        assert_eq!(inode.mtime_nanoseconds, 999_999_999);
+        assert_eq!((inode.entries, inode.subdirs, inode.born), (0, 0, 0));
+        assert_eq!(inode.mode, if serial == 3 { 0o777 } else { 0o644 });
+        assert_eq!(
+            inode.nlink,
+            match serial {
+                2 => 2,
+                3 => 1,
+                8 => 4,
+                _ => unreachable!(),
+            }
+        );
+        assert_eq!(
+            inode.kind,
+            if serial == 3 {
+                layerfs_overlay::InodeKind::Symlink
+            } else {
+                layerfs_overlay::InodeKind::File
+            }
+        );
+        if serial == 2 {
+            facts
+                .supply(&base, &[Need::Name(1, name("alias"))], None)
+                .unwrap();
+            assert_eq!(f.store.demand.load(Ordering::Relaxed) - demand, 4);
+            assert_eq!(lengths.calls.load(Ordering::Relaxed), calls + 1);
+        } else if serial == 3 {
+            assert_eq!(base.readlink(serial).unwrap().as_bytes(), b"../.git/index");
+        }
+        overlay.revoke_native_mount(mount).unwrap();
+        drop(workspace);
+        drop(overlay);
+        std::fs::remove_file(path).unwrap();
+    }
+}
 
 #[test]
 fn base_stat_reads_each_inode_table_path_once() {

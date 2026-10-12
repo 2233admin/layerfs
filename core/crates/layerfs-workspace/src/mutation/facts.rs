@@ -1,6 +1,6 @@
 //! Immutable base facts for one owned source, fetched outside the SQL owner.
-use crate::{BaseView, SourceView, WorkspaceError, WorkspaceResult};
-use layerfs_content::filesystem::PathName;
+use crate::{BaseStat, BaseView, SourceView, WorkspaceError, WorkspaceResult};
+use layerfs_content::filesystem::{PathName, Resolved};
 use layerfs_content::object::inode_leaf::InodeKind as BaseKind;
 use layerfs_content::ContentError;
 use layerfs_overlay::{Inode, InodeKind};
@@ -111,7 +111,13 @@ impl BaseView {
     /// such serial. Directory entry counts come from the directory root page;
     /// child-directory counts are derived, or remembered, per content root.
     fn base_inode(&self, serial: u64) -> WorkspaceResult<Option<Inode>> {
-        let stat = match self.stat(serial) {
+        self.base_inode_from_stat(self.stat(serial))
+    }
+    fn base_inode_from_stat(
+        &self,
+        stat: WorkspaceResult<BaseStat>,
+    ) -> WorkspaceResult<Option<Inode>> {
+        let stat = match stat {
             Ok(stat) => stat,
             Err(WorkspaceError::Content(ContentError::PathNotFound)) => return Ok(None),
             Err(error) => return Err(error),
@@ -126,7 +132,7 @@ impl BaseView {
             }
         };
         Ok(Some(Inode {
-            serial,
+            serial: stat.serial,
             kind,
             mode: u16::try_from(stat.metadata.mode)
                 .map_err(|_| ContentError::InvalidRecord("portable metadata"))?,
@@ -140,9 +146,9 @@ impl BaseView {
             subdirs,
         }))
     }
-    fn base_child(&self, parent: u64, name: &PathName) -> WorkspaceResult<Option<u64>> {
+    fn base_child(&self, parent: u64, name: &PathName) -> WorkspaceResult<Option<Resolved>> {
         match self.child(parent, name) {
-            Ok(child) => Ok(Some(child.serial)),
+            Ok(child) => Ok(Some(child)),
             // An absent or non-directory base parent binds no such name.
             Err(ContentError::PathNotFound | ContentError::WrongLogicalRole) => Ok(None),
             Err(error) => Err(error.into()),
@@ -175,19 +181,25 @@ impl BaseView {
                             .position(|step| *step == name)
                             .map(|at| &path[at + 1..])
                     });
-                    facts.directory_entries.push((parent, name, child));
-                    let Some(mut current) = child else {
+                    facts
+                        .directory_entries
+                        .push((parent, name, child.map(|found| found.serial)));
+                    let Some(child) = child else {
                         continue;
                     };
+                    let mut current = child.serial;
                     if facts.inode(current).is_none() {
-                        facts.inodes.push((current, self.base_inode(current)?));
+                        let stat = self.stat_resolved_with_lengths(child, self.client().as_ref());
+                        facts
+                            .inodes
+                            .push((current, self.base_inode_from_stat(stat)?));
                     }
                     for step in rest.unwrap_or(&[]) {
                         if facts.name(current, step).is_some() {
                             break;
                         }
                         facts.make_room();
-                        let next = self.base_child(current, step)?;
+                        let next = self.base_child(current, step)?.map(|found| found.serial);
                         facts.directory_entries.push((current, step.clone(), next));
                         match next {
                             Some(next) => current = next,

@@ -141,8 +141,15 @@ impl BaseView {
         serial: u64,
         lengths: &dyn crate::FileLengths,
     ) -> WorkspaceResult<BaseStat> {
-        let mut read = self.reader()?;
-        let value = read.resolve_inode(serial)?.value;
+        self.stat_resolved_with_lengths(self.inode(serial)?, lengths)
+    }
+    /// Complete stat from the child already authenticated in this base.
+    pub(crate) fn stat_resolved_with_lengths(
+        &self,
+        resolved: Resolved,
+        lengths: &dyn crate::FileLengths,
+    ) -> WorkspaceResult<BaseStat> {
+        let Resolved { serial, value } = resolved;
         let metadata = read_portable(
             self.client.as_ref(),
             value.metadata_root,
@@ -151,7 +158,11 @@ impl BaseView {
         )?;
         let logical_len = match value.kind {
             InodeKind::RegularFile => lengths.file_length(value.content_root)?,
-            InodeKind::Symlink => read.readlink_inode(serial)?.as_bytes().len() as u64,
+            InodeKind::Symlink => {
+                SymlinkTarget::decode(&self.client.read_canonical(value.content_root)?)?
+                    .as_bytes()
+                    .len() as u64
+            }
             InodeKind::Directory => 0,
         };
         Ok(BaseStat {

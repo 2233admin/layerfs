@@ -1517,3 +1517,59 @@ p319n13w nine-binary seal completed cleanly but is NOT_RUN for samples after
 this review found the refusal gap; it supplies no benchmark acceptance.
 Production LOC:82340 ->82340 (delta+0), exact pinned counter; reference absent
 (retired R9c; last counted65,417 at tree498dd1917812).
+
+Corrected traversal stage p319n13v at86a785e19 seals all nine binaries cleanly
+and samples23 selections once:23 functional PASS/proof PASS,3 overall PASS
+(two exhaustive selections plus historical membership),20 INELIGIBLE timing
+receipts retained,zero FAIL.21 owning-family guards include historical_access
+because traversal also changes membership-only verification.42 portable CSVs
+retain only path substitutions with exact original/published hashes.
+
+Exhaustive500MiB completes20/20 typed roots at steps5..100:605960 paths,
+9281233920 bytes,100 acknowledged Commits and exact global census. Receipt
+proof wall211.763216875s under275s; typed span58.978395334s and child completion
+61.354463750s. Provider Store517898240B has unchanged before/after hash.
+Wrapper217.4s is a distinct command duration. Preceding9cae8f766 stopped
+at14/20 roots under the same allowance; retain that FAIL, do not relabel it.
+The100MiB exhaustive control and25000-file snapshot pass both proof fields.
+All samples retain known-stop custody, Gone cleanup and manifest PASS before
+payload removal; every original removed before the next preparation.
+New phase13 work still required: six retained500MiB native-verification
+failures, then phase14 slow-case causes and phase15 terminal campaign.
+[Stage evidence](checks/typed-traversal-stage.json) pins every receipt.
+
+### Named base fact repeated inode acquisition (product)
+
+Receipt first: six retained500MiB failures still spend their native verification
+allowance or reach export without time for complete typed proof. M1 development
+K10 native17.650/16.805s in retained stages is diagnostic only; no assertion
+that a missing native SQL interval proves dominance. Source cause: Need::Name
+receives an authenticated child value, discards it to serial, then stat reacquires
+the same immutable root/inode before reading attributes and owning length.
+Zero-cache eight-inode external fixture actual red13 canonical IDs: child4 +
+stat9. Predict11: child4 + unchanged attributes7, length1 unchanged.
+Named symlink15 ->12 using the same existing kind-checked target decoder;
+empty regular file13 ->11 with owning zero-length call still1. Alias on already
+supplied inode remains4/no further length call. Remove two acquisitions, not
+owner jobs or SQLite statements; no SQL/latency claim without scoped evidence.
+Red actual external test fails13 versus11 before product edit.
+
+Observed count tier after named-stat edit: regular11 IDs/length1; empty regular
+11 IDs/length1 retaining0 bytes; symlink12 IDs/length0 retaining13-byte opaque
+target; supplied alias4 IDs/no extra length call. Zero cache bytes/objects/
+remembered lengths and no further directory-count scan. Original native owner
+visit consumes these facts with0 upstream demands and exact mode/mtime/nlink/
+size/cutoff/counts. Host/Linux10 base +6 native-visit tests PASS after no-run.
+Workspace all-target Clippy-D warnings PASS on both,fmt/boundary686/selftests50
+PASS. No public API, cache, schema, dependency, bounds or SQL job change.
+
+Retain initial green failure Stale from the synthetic non-root parent without
+a kernel lookup reference; fixture now acquires that reference through the
+original public native Lookup before child visit. Read-only review also caught
+the resolved route propagating PathNotFound where original base_inode mapped
+it to None. New external error test fails before correction; shared conversion
+now retains that exact narrow mapping and propagates MissingObject/other errors.
+[Count and error evidence](checks/named-stat-count.json) retains all log hashes.
+Production LOC:82340 ->82362 (delta+22), exact first-parent/staged product
+snapshots with pinned production_loc counter; reference absent (retired R9c;
+last counted65,417 at tree498dd1917812).

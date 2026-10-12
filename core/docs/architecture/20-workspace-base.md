@@ -110,3 +110,13 @@ The external eight-inode count diagnostic observes nine canonical lookups per
 resident regular-file stat rather than ten, with unchanged metadata, length,
 misses, upstream demands and remembered-length count. This is an operation-work
 count, not a cold-latency or SQLite performance claim.
+
+Named base facts now retain the Resolved child that the existing public child
+lookup authenticated, and pass that value to the private stat implementation.
+Portable metadata and owning lengths still use their existing ports. Symlink
+stat uses the same kind-checked SymlinkTarget decoder on the already resolved
+content root, preserving no-follow and target framing/limits. Serial-only stat
+resolves once and delegates. An external zero-cache named-file count is13 ->11
+canonical acquisitions, with one owning length call; named symlink15 ->12.
+No owner-job, SQLite, cold-latency, memory-residency or benchmark claim follows
+from these source counts. No public API or cache admission changes.
