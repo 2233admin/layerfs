@@ -58,6 +58,7 @@
 - [Benchmark instruction: the optimization iteration and its metrics](general/benchmark_instruction.md)
 - [Release policy](general/release-policy.md)
 - [Documentation policy](general/documentation-policy.md)
+- [Development workspace cleanup](general/cleanup.md): ownership checks, verified recovery, evidence retention, and disk-space reporting
 
 ## Explore
 
