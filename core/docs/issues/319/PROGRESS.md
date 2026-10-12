@@ -2403,3 +2403,16 @@ SDK/daemon/runtime targets compile and SDK/native-control checks recorded.
 All original budgets, profile, construction worker, oracles and Storage readbacks
 remain. No whole tier was invoked and no intermediate sample ran. Receipts:
 stage2-tier-driver/cache test logs; simplified-source gate and baseline follow.
+
+
+### Benchmark simplification: kept-history policy assertion
+
+Cause: the 367-test engine suite retained an assertion for five historical
+500-step runs although three definitions were removed. Change: assert the two
+kept runs plus two preparations, four selections; all original bounds remain.
+Commit: this test correction. Original one-failure/two-skip suite retained;
+focused policy check PASS. SDK/daemon/runtime targets compile and unchanged
+SDK/native-control checks recorded. No sample started at the first simplified
+seal, which remains retained. The corrected final source receives a new tag
+and seal; unaffected successful checks retain their exact implementation scope.
+Receipts: stage2-harness-engine.log and stage2-kept-policy-* checks.

@@ -1,4 +1,4 @@
-"""D-5's exact seven selections; owner E-1 separately names one large proof."""
+"""D-5's four kept selections; owner E-1 separately names one large proof."""
 import importlib.util
 from pathlib import Path
 import unittest
@@ -10,8 +10,8 @@ spec.loader.exec_module(driver)
 
 
 class DriverPolicy(unittest.TestCase):
-    def test_five_runs_and_two_preparations_get_300_seconds(self):
-        self.assertEqual(len(driver.EXTENDED),7)
+    def test_two_kept_runs_and_two_preparations_get_300_seconds(self):
+        self.assertEqual(len(driver.EXTENDED),4)
         self.assertEqual(sum(kind=='prepare' for kind,_ in driver.EXTENDED),2)
         for kind,item in driver.EXTENDED:
             with self.subTest(kind=kind,item=item):
