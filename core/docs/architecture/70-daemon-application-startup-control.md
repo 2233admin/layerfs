@@ -258,3 +258,17 @@ Workspace populations, exactly charged observer jobs/SQL, and original successfu
 after a failed diagnostic sink. Non-Linux application startup remains Unsupported;
 host codec/SDK proofs do not claim Linux binary execution. These tests and source
 descriptions do not constitute performance admission evidence.
+
+
+## SDK refactor addition — 2026-10-12
+
+The current [SDK surface](../../../sdk.md) has Project init/fork/branches/commits,
+Sandbox create/close and Workspace mount/exec/commit/status/unmount. Create folds
+the original installation and requires its ready observation; close is explicit
+container stop/delete and makes no application drain claim. Optional Workspace
+exec delegates Sandbox execution; this daemon still supervises no commands.
+The authorized Branch-page request is control tag 14, with reply tag 17 and one
+existing HistoryCatalog::branches dispatch. Numeric section 0 reports operation
+code 14 in its existing field. No other numeric section, column, persistence
+schema, control operation or execution component is added by this refactor.
+Earlier pinned statements and qualification gaps above retain their own scope.

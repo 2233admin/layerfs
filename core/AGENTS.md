@@ -198,8 +198,13 @@ executors, interactive shells and ordinary Sandbox execution.
 Sandbox setup or the external executor establishes command identity, mount
 visibility and protection of Store, Overlay and daemon credentials. Ordinary
 runtime execution owns standard I/O, exit status and caller-requested cancellation.
-SDK public organization uses ProjectApi, WorkspaceApi and SandboxApi. Optional
-WorkspaceApi.exec selects the mounted directory and delegates to Sandbox;
+SDK public organization is the eleven operations documented in
+[the implemented SDK surface](../sdk.md), with operation files under
+[layerfs-api/sdk/src](crates/layerfs-api/sdk/src/). Project offers init/fork/
+branches/commits; Sandbox offers create/close; Workspace offers mount/exec/
+commit/status/unmount. Shared control/recovery/diagnostic plumbing lives in
+base/ and the hidden internal module. Optional WorkspaceApi.exec selects the
+mounted directory and delegates the existing Sandbox launcher;
 the daemon has no exec/supervisor, launcher mode, per-Exec cgroups, command
 registration or custom Exec stream/status/cancellation protocol.
 

@@ -3,6 +3,16 @@
 > **Status:** The #235 first-pass runner is implemented; broader migration and
 > performance admission remain proposed. This page approves no numeric result.
 
+The current SDK implementation and its eleven operations are described in
+[sdk.md](../../../../sdk.md). The #319 owner follow-up completes this migration
+before one consolidated host/Linux/harness and sealed count gate, then simplifies
+the harness and records a final baseline. Capped edits retain all five cases due
+to their stricter oracle; expected simplification is 157 cases and a 23-family
+kept-sibling gate. Performance optimization, publish and faster launch remain
+deferred. The September specifications and receipts below keep their historical
+source, contracts, failures and qualification scope; they do not describe the
+current SDK API or authorize a new campaign.
+
 Current plan: the [implementation spec](implementation-spec.md) for one harness and the
 25 v0.1.6 workload families (proposal, 2026-10-10). The material below is the earlier
 first-pass migration and keeps its own status.

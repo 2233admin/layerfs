@@ -1,5 +1,12 @@
 # Exec to edit: SDK-only Workspace benchmark guideline
 
+> **Current API boundary, 2026-10-12:** [sdk.md](../../../../sdk.md) describes
+> the implemented operation surface. Workspace exec now returns the ordinary
+> Sandbox runtime owner at the mount; it adds no daemon command registration,
+> automatic Commit/unmount or ordinary command timeout. This page retains its
+> original September contract/source and verdicts; it is not current SDK API
+> documentation or a new measurement authorization.
+
 > **Status:** Current planning checklist; no release candidate exists.
 
 > **R7-retire, 2026-10-10:** the `layerfs-server` package named below was removed

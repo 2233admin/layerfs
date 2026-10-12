@@ -1,5 +1,12 @@
 # Parameters, telemetry, and receipts
 
+> **Current API boundary, 2026-10-12:** [sdk.md](../../../../sdk.md) describes
+> the implemented operation surface. Workspace exec now returns the ordinary
+> Sandbox runtime owner at the mount; it adds no daemon command registration,
+> automatic Commit/unmount or ordinary command timeout. This page retains its
+> original September contract/source and verdicts; it is not current SDK API
+> documentation or a new measurement authorization.
+
 > **Status:** Proposed selector and receipt fields. Values requiring a product
 > or workload decision remain unfrozen.
 
@@ -50,7 +57,7 @@ a 4 MiB pool and emits at most 16 KiB per record. Preserve those application
 limits and report a clipped tree as incomplete; do not add a benchmark-specific
 limit override.
 
-The existing daemon and Service assembly reads these settings:
+The historical September daemon and Service assemblies read these settings:
 
 | Existing setting | Meaning |
 | --- | --- |
@@ -66,8 +73,8 @@ bounded diagnostic. Therefore the runner must confirm actual operation and
 run-summary records in captured stderr; setting the environment is not proof
 that telemetry was active.
 
-The current [daemon](../../../crates/layerfs-daemon/src/config.rs) and
-[Service](../../../crates/layerfs-service/src/native/config.rs) assemblies select
+The historical [daemon at d9d8d1b04](https://github.com/Ephemeral-AI-Lab/layerfs/blob/d9d8d1b043a7e153cadd9d5479b54f2cfd0b5807/core/crates/layerfs-daemon/src/config.rs) and
+[Service at 27a0eb6aa](https://github.com/Ephemeral-AI-Lab/layerfs/blob/27a0eb6aabb4e0ca44878c5ad47d81077bc41654/core/crates/layerfs-service/src/native/config.rs) assemblies select
 timing, CPU and RSS, a 100 ms monitor interval, 600 history slots, 32 windows,
 and `OutputConfig::forward()` bounds.
 Do not add per-case interval, sampler, queue, or encoder knobs. Record the exact

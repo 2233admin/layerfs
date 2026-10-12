@@ -1,247 +1,206 @@
 # LayerFS SDK surface
 
-> **Status:** Proposal; target LayerFS 0.1.7; not a released contract.
-> Drafted 2026-10-12 from an owner discussion; owner decisions of the same day
-> are marked. The "today" columns and line counts were read at `8f911fe6b`.
-> Stage 1 relocation and surface narrowing are implemented in this branch.
-> Exec, close, commits rename, branches and the benchmark command migration
-> are implemented. ManagedSandbox::exec is removed; the consolidated gate follows.
-> This branch is not a released contract or a performance qualification.
+> **Status:** Implemented on `sdk-refactor`; not a released contract or a
+> performance qualification. Source layout and size are pinned to `ce4e214d9`.
+> The complete SDK migration awaits its consolidated host/Linux and benchmark
+> gate. Owner direction of 2026-10-12 governs the implementation and measurements.
 
-The public SDK is three groups and eleven methods. The existing constructors organize these methods. Control/recovery/diagnostic
-plumbing is under the hidden internal module, and duplicate or retired operation
-methods are removed.
+The SDK provides three groups with eleven operation methods, plus their existing
+constructors. A Project is a sealed initial Store and its history. A Sandbox owns
+one acknowledged container and its original authenticated control channel. A
+Workspace is the complete mutable filesystem view of a selected Branch.
 
-| Group | Methods |
+| Group | Operation methods | Constructor |
+| --- | --- | --- |
+| ProjectApi | init, fork, branches, commits | new() |
+| SandboxApi | create, close | new(Docker) |
+| WorkspaceApi | mount, exec, commit, status, unmount | new(&mut ManagedSandbox) |
+
+## Implemented Rust interface
+
+The original typed requests, outcomes, runtime owners and exact failure carriers
+remain. The following shapes describe the source; they introduce no builder,
+option, dependency, crate feature or additional operation.
+
+| Method | Inputs and returned result |
 | --- | --- |
-| [Project](#project) | `init`, `fork`, `branches`, `commits` |
-| [Sandbox](#sandbox) | `create`, `close` |
-| [Workspace](#workspace) | `mount`, `exec`, `commit`, `status`, `unmount` |
+| ProjectApi::init | `InitRequest`, caller `Active` timer; returns `SealedProject` or boxed `InitFailure` |
+| ProjectApi::fork | `&mut ManagedSandbox`, `ForkRequest`; returns `BranchSnapshot` or boxed `OperationFailure` |
+| ProjectApi::branches | `&mut ManagedSandbox`, `LayerStackId`, `Page`; returns `PageResult<BranchRecord>` or boxed `OperationFailure` |
+| ProjectApi::commits | `&mut ManagedSandbox`, `CommitHistoryRequest`; returns `PageResult<CommitRecord>` or boxed `OperationFailure` |
+| SandboxApi::create | `SandboxCreate`, `&SealedProject`; returns `ManagedSandbox` or boxed `SandboxFailure` |
+| SandboxApi::close | owned `ManagedSandbox`; returns `()` or boxed `SandboxFailure` |
+| WorkspaceApi::mount | borrowed facade, `WorkspaceId`, `BranchId`; returns `MountedWorkspace` or boxed `MountFailure` |
+| WorkspaceApi::exec | associated call with `&ManagedSandbox`, `&MountedWorkspace`, arguments, environment, stdin selection; returns the original `ExecCreated` or boxed `ExecCreateFailure` |
+| WorkspaceApi::commit | borrowed facade, `WorkspaceToken`; returns `CommitStagedOutcome` or boxed `OperationFailure` |
+| WorkspaceApi::status | borrowed facade, `WorkspaceToken`; returns `WorkspaceStatus` or boxed `OperationFailure` |
+| WorkspaceApi::unmount | borrowed facade, `WorkspaceToken`, `force: bool`; returns `Option<ForcedOutcome>` or boxed `OperationFailure` |
 
-`publish` (put a branch commit on the trunk) is deferred; see
-[Deferred](#deferred-and-open).
-
-The signatures below are a sketch of shape, not final Rust. Names of existing
-types are the ones the source defines.
-
-The implemented Rust methods retain the existing typed request, ownership and
-failure carriers. Project `fork`, `branches` and `commits` borrow a
-`ManagedSandbox`; proof-only control borrows are under the hidden `internal`
-module. `branches(sandbox, stack, Page)` sends one new bounded control request
-and returns one authenticated page in name order. It shares the existing
-32-record control window and History cursor; the caller advances continuation.
-`commits(sandbox, CommitHistoryRequest)` sends the unchanged `History` request.
-`WorkspaceApi::exec(sandbox, mounted, arguments, environment, stdin)` is an
-associated convenience call: it delegates the original Sandbox exec with
-`mounted.ready.directory` as working directory and returns its runtime owner.
-`SandboxApi::close(sandbox)` consumes the owner, stops once with the original
-one-second stop request, then deletes once. Stop failure does not attempt delete;
-any failure retains the exact runtime, channel, inputs and installation ack.
+Use temporary Workspace facade borrows for filesystem operations; ordinary Exec
+borrows the Sandbox runtime independently. Concurrent control callers keep their
+original separate authenticated channels. No operation reconnects, resets its
+correlation, retries a failure or silently cleans up an uncertain resource.
 
 ## Project
 
-Runs on the host. A project is one sealed Store file with its history.
+[Init](core/crates/layerfs-api/sdk/src/project/init.rs) imports the complete native
+tree, including Git metadata, ignored files, dependencies, symlinks, caches and
+output. It retains the original eleven-field InitRequest and caller timer: source,
+Store configuration, daemon locator, storage policy, catalog authority, stack and
+Branch identities/names, inode scope seed and explicit Init deadline. This refactor
+does not select new defaults or change the supported Namespace Init profile.
+Every permitted new Store explicitly selects Disposable/WAL/synchronous=OFF.
+Init publishes its original initial Layer and Branch, seals the sole Store, and
+returns a closed file and the actual original acknowledgements.
 
-```rust
-impl ProjectApi {
-    fn init(source: &Path, store: &Path) -> Result<Project, InitFailure>;
-    fn fork(sandbox: &Sandbox, branch: BranchId, commit: Option<CommitId>, new_branch_name: &str) -> Result<BranchId, OperationFailure>;
-    fn branches(sandbox: &Sandbox, limit: u16, cursor: Option<Cursor>) -> Result<PageResult<BranchRecord>, OperationFailure>;
-    fn commits(sandbox: &Sandbox, branch: BranchId, limit: u16, cursor: Option<Cursor>) -> Result<PageResult<CommitRecord>, OperationFailure>;
-}
-```
+[Fork](core/crates/layerfs-api/sdk/src/project/fork.rs) preserves the original
+explicit ForkRequest and its Layer or Commit source. It does not invent a latest
+head lookup or a hidden refresh. The history trunk is a LayerStack, not a Branch;
+the first working Branch is named main today.
 
-| Method | Purpose | Today |
-| --- | --- | --- |
-| `init` | Import a complete directory tree and produce a sealed project with its first layer and first branch | Exists as [`ProjectApi::init`](core/crates/layerfs-api/sdk/src/project/init.rs). Its request has eleven fields; most become defaults |
-| `fork` | Create a branch from a commit of another branch. Without a commit it starts where the source branch is now | Exists as [`ProjectApi::fork`](core/crates/layerfs-api/sdk/src/project/commits.rs) with source `Commit { branch, commit }` |
-| `branches` | List branches with id, name, base layer and head commit | The history catalog has [`branches(stack, page)`](core/crates/layerfs-history/src/contract/catalog.rs). No daemon control request and no SDK method |
-| `commits` | List one branch's commits from its head backwards | Exists as `ProjectApi::history` and the daemon's `History` request. This is a rename |
+[Branches](core/crates/layerfs-api/sdk/src/project/branches.rs) reads one page of a
+selected stack in name order, with id, name, base Layer and head Commit. It uses
+one authorized additive Bridge request (tag 14), one reply (tag 17) and one daemon
+dispatch arm to the existing HistoryCatalog::branches port. The existing control
+window is 32 records. The existing authenticated History cursor covers further
+pages; the caller advances it explicitly. The SDK checks stack identity, result
+size, ordered names and continuation shape without a second request.
 
-### History model
-
-The history layer already has a trunk, and it is not a branch.
-
-| Idea | In the history layer |
-| --- | --- |
-| Trunk ("main") | A layer stack: one ordered line of immutable layers with a single head |
-| Branch | A working line forked from a layer or from another branch's commit |
-| Commit | One captured Workspace state on a branch, with a parent pointer |
-| Publish | `add_layer`: one branch commit becomes the next layer of the stack |
+[Commits](core/crates/layerfs-api/sdk/src/project/commits.rs) renames the public
+history method. It sends the unchanged History request and returns one anchored,
+bounded ancestry page, newest first. Cursor authentication, captured-head scope,
+publication semantics and original control bytes are unchanged.
 
 ## Sandbox
 
-One container that runs the filesystem daemon and holds the installed project.
+[Create](core/crates/layerfs-api/sdk/src/sandbox/create.rs) uses the original
+explicit deployment/image/volume, private configuration, executable, authentication
+keys and startup wait. For a fresh Store it creates, uploads, starts, authenticates,
+sends the original initial Hello, installs the sealed Project once, then waits on
+the same incarnation for ControlReady. A nonready result is a failure, with the
+original observation, runtime, channel and installation acknowledgement retained.
+A matching explicit existing_store selection uses the original one-Hello ready
+startup and sends no second install. Its manifest must match the supplied Project;
+only the populated daemon SQLite version may differ from the host Init manifest.
+A mismatched selection fails at Validate before deployment or control effects.
 
-```rust
-impl SandboxApi {
-    fn create(options: SandboxOptions, project: &Project) -> Result<Sandbox, SandboxFailure>;
-    fn close(sandbox: Sandbox) -> Result<(), SandboxFailure>;
-}
-```
-
-| Method | Purpose | Today |
-| --- | --- | --- |
-| `create` | Start the container, authenticate, install the sealed project, wait until the daemon has opened it | [`SandboxApi::create`](core/crates/layerfs-api/sdk/src/sandbox/create.rs) exists. Install is a separate call (`ProjectApi::install`) and folds in here |
-| `close` | Stop and delete the container | New on the SDK. `stop` and `delete` exist on the [container type](core/crates/layerfs-sandbox/src/backend/docker/container.rs) one layer down |
-
-`ManagedSandbox::exec` is not part of the public surface. Command launch is
-reached through `WorkspaceApi::exec`.
+[Close](core/crates/layerfs-api/sdk/src/sandbox/close.rs) consumes the owner. It
+attempts the original one-second stop once, then deletes once after acknowledged
+stop, with force=false and v=false. Stop failure does not attempt delete. Either
+failure retains exact runtime, control, original inputs, handshake, observation
+and any installation acknowledgement. The failure implements standard Error so
+callers can preserve its typed carrier through their existing error interface.
+A successful close deletes this container, while the shared Store volume remains
+borrowed. Stop/delete acknowledges container lifecycle, not graceful filesystem
+or command/descriptor drain. The caller explicitly unmounts Workspaces first.
 
 ## Workspace
 
-One mounted, writable view of a branch inside a sandbox.
+[Mount](core/crates/layerfs-api/sdk/src/workspace/mount.rs) takes no Project argument;
+the Sandbox has already selected its Store. It sends the original bind and attach
+requests once each. The first acknowledgement carries the selected Branch/root;
+the second carries the mounted directory and native negotiation receipt. A failed
+attach retains the bound token in MountFailure. No bind, attach, unmount or rollback
+is guessed from a lost reply or attempted again automatically.
 
-```rust
-impl WorkspaceApi {
-    fn mount(sandbox: &Sandbox, branch: BranchId) -> Result<Workspace, MountFailure>;
-    fn exec(workspace: &Workspace, command: Command) -> Result<Exec, ExecFailure>;
-    fn commit(workspace: &Workspace) -> Result<CommitStagedOutcome, OperationFailure>;
-    fn status(workspace: &Workspace) -> Result<WorkspaceStatus, OperationFailure>;
-    fn unmount(workspace: &Workspace, force: bool) -> Result<(), OperationFailure>;
-}
-```
+[Exec](core/crates/layerfs-api/sdk/src/workspace/exec.rs) delegates ordinary existing
+Sandbox execution with the mount as working directory and the deployment's admitted
+identity. It returns the original runtime owner for Start, streams, exit status and
+explicit cancellation. It sends no daemon control request, registers no filesystem
+Exec, applies no ordinary command deadline, and performs no Commit or unmount.
+Any other permitted process can use the same mount through ordinary filesystem
+calls; the filesystem daemon supervises no commands.
 
-| Method | Purpose | Today |
-| --- | --- | --- |
-| `mount` | Create the Workspace over a branch and expose it as a mounted directory. Returns its identity and path | Exists as [`bind` then `attach`](core/crates/layerfs-api/sdk/src/workspace/mount.rs), wrapped by `mount`. The caller supplies a `WorkspaceId` |
-| `exec` | Run one ordinary command with the mounted directory as its working directory. The caller owns its streams and exit status | New. The [exec contract](core/docs/issues/303/workspace-api/exec.md) describes it as an optional convenience that delegates to Sandbox execution |
-| `commit` | Capture everything published in the Workspace so far as a new commit on its branch. Returns `Committed` or `UpToDate` | Exists as [`WorkspaceApi::commit`](core/crates/layerfs-api/sdk/src/workspace/commit.rs) |
-| `status` | Report the Workspace's current state | Exists as [`WorkspaceApi::status`](core/crates/layerfs-api/sdk/src/workspace/status.rs) |
-| `unmount` | Terminal unmount. Without `force`, a Workspace that is in use reports Busy and stays usable | Exists as [`unmount` and `force_unmount`](core/crates/layerfs-api/sdk/src/workspace/unmount.rs) |
+[Commit](core/crates/layerfs-api/sdk/src/workspace/commit.rs) captures the shared
+published frontier and returns Committed or UpToDate. It does not filter mutations
+by launch route or command completion. [Status](core/crates/layerfs-api/sdk/src/workspace/status.rs)
+retains the existing maintained-state scope and never resolves an unknown operation.
 
-A failed `mount` still reports which half failed, so that a kernel mount is
-never assumed from a Store binding alone.
+[Unmount](core/crates/layerfs-api/sdk/src/workspace/unmount.rs) folds normal and
+forced terminal operations into `unmount(token, force)`. Normal success returns
+None; forced success returns Some(ForcedOutcome) with the original dispositions.
+Normal Busy keeps the mount usable. Public force does not relinquish unknown
+Commit custody: its original explicit relinquishment flag is false. The component
+proof/recovery helper retains the original explicit flag internally. No unmount
+implicitly kills caller-owned processes or deletes global history.
+
+## Internal boundary and benchmark integration
+
+Shared control, failures, installation and recovery live in base/. The hidden
+internal module holds raw original-channel access, low-level bind/attach, locate,
+cleanup, explicit forced-custody recovery, observation-scoped borrows, channel
+work and component-proof startup/query helpers. These support existing tests and
+benchmark evidence. Control is absent from the ordinary public method parameters.
+Free initialize/install, public Project install, public bind/attach/force_unmount,
+public cleanup/locate/with_observations, ManagedSandbox status and ManagedSandbox
+exec are removed from the ordinary operation surface.
+
+Mounted benchmark commands use public Workspace exec. Native outside-mount commands
+and concurrent disjoint borrows use the hidden delegate to the same original
+launcher. Setup and examples use create/close, and setup independently observes
+absence of its exact deleted container. The benchmark retains its separate backend
+Stop for samples until required closed Store/overlay export and raw telemetry are
+harvested. The receipt driver then removes only that sample's container, copies
+and exported Store immediately. This proof-only sequence preserves strict closed
+Storage readback and adds no public SDK operation.
 
 ## Source layout
 
-One file per public method, named after it; everything shared lives in one
-folder.
+Scope: all SDK src/ production code at `ce4e214d9`, counted with pinned
+`tools/production_loc.py --files` (counter SHA-256 prefix c0fe7f36a0d4). Values are
+production LOC, excluding external tests and examples. Each directory subtotal
+covers all listed files beneath it. The shared folder is base/.
 
-The relocation co-locates Init and its request/failure types in `project/init.rs`,
-Fork in `project/fork.rs`, ancestry reads in `project/commits.rs`, Sandbox startup
-and its inputs in `sandbox/create.rs`, and bind/attach in `workspace/mount.rs`.
-Shared authenticated control, operation failures and install plumbing live in
-`base/`. Separate facade files are removed. The original public names remain
-available for this relocation; tests, examples and the benchmark now import
-control through the hidden `internal` export. Narrowing is implemented: control access, low-level bind/attach, lost-reply
-locate, cleanup and observation-scoped borrows are hidden under `internal`.
-`WorkspaceApi::new` borrows a ManagedSandbox; `mount(workspace, branch)` sends
-the original bind and attach requests once each. `unmount(token, force)` returns
-`None` for normal close or `Some(ForcedOutcome)` for forced close. Force does
-not implicitly relinquish unknown Commit custody. The hidden proof facade keeps
-the original explicit relinquishment flag. `SandboxApi::create(request, project)`
-performs the original startup, one install and a Ready observation; failures
-retain the owned runtime/channel and any installation acknowledgement. Existing
-Store startup remains available internally to the benchmark and lifecycle proofs.
-Duplicate free initialize/install and public ProjectApi install are removed;
-low-level streaming install remains internal for its original custody proofs. The completed layout will be recorded after the surface is implemented.
-Tests live outside `src/` and do not contribute to production LOC.
+```text
+src/                                             [1444]
+  lib.rs                                            19
+  base/                                          [644]
+    mod.rs                                           7
+    control.rs                                     215
+    failure.rs                                      51
+    install.rs                                     142
+    install_types.rs                                44
+    internal.rs                                    133
+    recovery.rs                                     52
+  project/                                       [242]
+    mod.rs                                           7
+    branches.rs                                     26
+    commits.rs                                      24
+    fork.rs                                         24
+    init.rs                                        161
+  sandbox/                                       [362]
+    mod.rs                                           4
+    close.rs                                        36
+    create.rs                                      322
+  workspace/                                     [177]
+    mod.rs                                           9
+    commit.rs                                       16
+    exec.rs                                         39
+    mount.rs                                        65
+    status.rs                                       15
+    unmount.rs                                      33
+```
 
-`branches` also needs a new control request in the bridge
-(`control_types.rs`, `control_request.rs`, `control_reply.rs`,
-`control_history.rs`) and one dispatch arm in the daemon
-(`control/operations.rs`, with its operation number in
-`application/diagnostics.rs`).
+SDK tests live under core/crates/layerfs-api/sdk/tests; affected daemon tests and
+benchmark runtime tests remain in their owning external test directories.
 
-## What leaves the public surface
+## Decisions and deferred work
 
-No product crate depends on the SDK. Its consumers are the benchmark runtime,
-the daemon's tests and the SDK's own tests and examples, so each item below costs
-test and benchmark edits, not product changes.
+Owner direction, 2026-10-12: complete the SDK migration and documentation before
+one consolidated host/Linux/harness gate, one sealed source identity, twelve cells
+and a 23-family refactor sample. Compare each case against its own terminal row;
+retain failures, unavailable count fields and eligibility. Then simplify the
+benchmark and record the final source baseline. No performance optimization.
 
-| Today | Disposition |
-| --- | --- |
-| `WorkspaceApi::bind`, `WorkspaceApi::attach` | Folded into `mount` |
-| `WorkspaceApi::force_unmount` | Folded into `unmount(force)` |
-| `ProjectApi::install`, free `install`, `Control::install_project` | Folded into `SandboxApi::create` |
-| `ManagedSandbox::exec` | Replaced by `WorkspaceApi::exec` |
-| `ManagedSandbox::status` | Removed; `create` already waits for startup |
-| `WorkspaceApi::cleanup` | Internal module; reclamation is automatic |
-| Free `initialize` | Removed; duplicate of `ProjectApi::init` |
-| `Control::into_connection` | Removed |
-| `Control::new`, `Control::call` | Internal module; tests call `call` directly |
-| `WorkspaceApi::with_observations`, `Control::channel_work` | Internal module; the benchmark's request, owner-job and statement counts depend on them |
-| `WorkspaceApi::locate` | Internal module; the recovery path after a lost reply |
+Working defaults remain explicit: mount takes no Project argument, shared code is
+in base/, and exec delegates the existing Sandbox launcher. Publish and a faster
+launcher are deferred. The History catalog's add_layer capability does not create
+a public SDK publish method or a daemon request here. No new commit metadata,
+merge capability, runtime supervision, dependency, feature or Store schema is built.
 
-The daemon's control requests are a separate question. This proposal changes
-the SDK surface and adds one request, for `branches`. It does not merge `Mount`
-with `Attach` or remove `Locate`, `Cleanup` or the `Observed` wrapper.
-
-## Decisions
-
-Owner decisions, 2026-10-12:
-
-- The refactor happens before the benchmark is simplified. It is gated by the
-  crates' tests, the twelve cells and one case per benchmark family, with
-  request, owner-job and statement counts equal to the #319 terminal run.
-- After the refactor and the benchmark simplification, the everyday tier and
-  then the heavy tier are each run once as the new baseline. Command and Commit
-  times are reported as measured.
-- Performance optimization is deferred to later work.
-
-Working defaults, proposed and not yet confirmed by the owner:
-
-- `mount` takes no project argument; the project is fixed at `SandboxApi::create`,
-  because one daemon serves one installed Store today.
-- `exec` delegates to the existing Sandbox execution.
-- The shared folder is named `base/`. The owner asked for `core/`; that name is
-  also the repository's workspace folder and Rust's standard `core` crate, which
-  makes `core::` paths ambiguous inside the SDK.
-
-## Deferred and open
-
-1. **`publish`.** The history catalog has `add_layer`, which carries the stack
-   head and branch base the caller expects and returns `Added`, `UpToDate` or
-   `NoChanges`. It has no daemon control request. This document reads the
-   expected values as a fast-forward-only rule; the implementation was not read
-   to confirm what happens when the trunk has moved.
-2. **A faster `exec` launcher.** An in-container launcher would be a new
-   component, and the current contract says the filesystem daemon supervises no
-   commands and adds no launcher to its control channel. Deferred with the
-   performance work.
-3. **Lost replies.** An operation is attempted once and never replayed. Each
-   method needs an "outcome unknown" result; `locate` stays reachable through
-   the internal module for a caller whose mount reply was lost.
-4. **Trunk and branch naming.** Callers name the first working branch "main"
-   today, while the real trunk is the layer stack.
-5. **Commit metadata.** A commit record holds an id, a root, a parent and a base
-   layer. A readable log would need a message, an author or a time.
-6. **Combining branches.** Nothing merges content from two branches.
-
-## Why `exec` matters for latency
-
-In the issue #319 terminal run (source `fc45a1bc4`, tag `p319t15`, single
-samples on a shared virtual machine, timings not eligible for performance
-claims), each command step cost a median of about 43 ms and a minimum of about
-28 ms regardless of its file work. The 500-step history cases spent about 22 s
-in command time for roughly six filesystem requests per step. Attributing that
-floor to process launch through the Docker engine is an inference from those
-numbers; it was not profiled.
-
-## Implemented benchmark lifecycle
-
-Mounted benchmark commands call `WorkspaceApi::exec`. Concurrent callers with
-disjoint original control borrows and native commands outside a mount use the
-hidden internal delegate to the same existing Sandbox launcher. No launch path
-registers a daemon Exec, changes command identity or adds a faster launcher.
-Setup uses `SandboxApi::create` and `close`; close errors remain the original
-SDK carrier, including its runtime/channel/resource custody. Prepared Store
-volumes remain borrowed after the setup container is deleted, and the harness
-independently observes absence of that exact container.
-A measured sample preserves its existing separate backend Stop so the stopped
-container remains available for required closed Store/overlay export and raw
-telemetry. The receipt driver deletes only that sample's container and writable
-copies immediately after harvesting and verification. This proof-only lifecycle
-is not another public SDK operation and does not weaken closed Storage readback.
-The five capped-edit cases remain for simplification: only their family applies
-the strict untouched payload/source-offset transcript, and their two-second
-Commit watchdog is distinct. The expected simplified count is 157 in two tiers,
-with a 23-family gate and kept-sibling replacements against their own rows.
-
-Public create also preserves the existing explicit `existing_store` selection:
-it must match the supplied Project manifest (the installed daemon SQLite value
-may be populated). It then uses the original one-Hello ready startup and sends
-no second install. A mismatch fails at Validate before deployment. Fresh install
-requires the following same-incarnation Hello to report ControlReady; a nonready
-observation retains the original runtime, control and installation acknowledgement.
+Simplification retains all five capped-edit cases because their untouched
+payload/source-offset oracle is stricter than their twins, with their distinct
+Commit watchdog preserved. The expected simplified harness is 157 cases in two
+tiers and a 23-family kept-sibling gate; every replacement uses its own terminal
+count row. Durable execution remains NOT_RUN — disabled by owner until explicit
+reauthorization. Repository history remains NOT_RUN — set aside by owner.

@@ -2281,3 +2281,21 @@ Initial fixture compile refusals (deadline field and Result Debug bound) retaine
 no sample ran and no product deadline or oracle changed. Runtime targets compile.
 Package SDK Clippy, format and boundary PASS; full consolidated gate follows docs.
 Receipts: create-selection-final-build/tests-host and runtime-build logs.
+
+
+### SDK follow-up: completed interface and documentation
+
+Cause: SDK and architecture/benchmark guidance still named the earlier operation
+surface and layout. Change: document all eleven implemented methods and existing
+constructors, exact requests/results/custody, one-file operations and shared base/.
+Source layout is pinned to ce4e214d9 and the production counter, SDK subtotal 1,444.
+Update core routing and current architecture; preserve historical September source,
+contracts and verdicts with an explicit API boundary. Historical links are pinned.
+Commit: this documentation update. Relative links 174 PASS; whitespace PASS.
+All SDK/daemon/runtime host targets compile. SDK 15 and unchanged affected daemon
+checks reuse exact implementation paths; no product source changes in this commit.
+Implementation complete; consolidated host/Linux/harness validation, one seal,
+twelve cells and 23 families remain. Intermediate results stay at their identities.
+Git's one empty orphan-inode probe remains an explained original difference;
+no reference, oracle, product scheduler or unchanged sample was altered.
+Receipts: docs-host/runtime-target-build logs; sdk-narrowing.json and prior checks.
