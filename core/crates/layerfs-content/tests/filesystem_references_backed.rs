@@ -320,6 +320,10 @@ fn a_touched_row_pass_reads_a_wave_of_rows_in_jobs_of_twenty_one_and_matches_can
     );
     assert_eq!(records.row_jobs, 5, "one guarded write a window");
     assert_eq!(records.work_jobs, 4 + 7, "seed waves and transfers");
+    assert_eq!(
+        records.enumerations, 4,
+        "each pass ends on its window of 37 keys without asking for one more"
+    );
     assert_eq!(records.maximum_changes, 64, "32 queued rows of a seed wave");
     assert_eq!(records.after_failure, 0);
 }
@@ -416,6 +420,50 @@ fn a_refused_window_writes_none_of_its_rows_and_keeps_the_whole_write_as_the_ori
     assert_eq!(refused.row_jobs, 1);
     assert_eq!(refused.after_failure, 0);
     no_final(&emitted);
+}
+
+#[test]
+fn a_batched_transfer_returns_its_first_items_refusal_and_writes_nothing() {
+    let directories = [directory(1, &[("a", 2), ("b", 3)])];
+    let kinds = [
+        (1, InodeKind::Directory),
+        (2, InodeKind::RegularFile),
+        (3, InodeKind::RegularFile),
+    ];
+    let (store, original) = base(&directories, &kinds);
+    let edits = [DirectoryUpdate {
+        parent: 1,
+        changes: ["a", "b"].map(|name| (name_of(name), None)).to_vec(),
+    }];
+    let input = update_input(&original, &edits, &[], &[], FilesystemResources::default());
+    // Serials 2 and 3 are queued as work items 1 and 2 and leave in one job.
+    // The second item's work record cannot be read; in one case the first
+    // item's node state is wrong as well.
+    for (first_is_wrong, refusal) in [
+        (true, "filesystem release node state"),
+        (false, "filesystem release work missing"),
+    ] {
+        let mut records = Records::default();
+        records.queued_answers.insert(key(WORK, 2), None);
+        if first_is_wrong {
+            records
+                .queued_answers
+                .insert(key(NODE, 2), Some(vec![1, 1]));
+        }
+        let (result, emitted, _) = backed(&store, &input, &mut records, false, None);
+        // The first item is checked before the second one's unreadable record
+        // is reported, as when each item was its own job.
+        assert_eq!(result, Err(ContentError::InvalidRecord(refusal)));
+        // Nothing of the job is written, the readable first item included.
+        assert_eq!(records.work_jobs, 1, "the seed's queueing job only");
+        assert!(records.values.contains_key(&key(WORK, 1)));
+        assert!(records.values.contains_key(&key(WORK, 2)));
+        assert_eq!(records.values[&key(NODE, 2)], [1, 0]);
+        assert_eq!(records.values[&key(NODE, 3)], [1, 0]);
+        assert!(!records.values.keys().any(|key| key.kind == FRAME));
+        assert_eq!(records.after_failure, 0);
+        no_final(&emitted);
+    }
 }
 
 #[test]

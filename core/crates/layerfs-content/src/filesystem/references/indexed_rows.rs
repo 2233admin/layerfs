@@ -13,6 +13,8 @@ pub(super) struct RowCursor {
     after: Option<[u8; 32]>,
     keys: std::vec::IntoIter<[u8; 32]>,
     seen: u64,
+    /// The window in hand held fewer than 64 keys: no key follows it.
+    short: bool,
     finished: bool,
 }
 impl RowCursor {
@@ -21,6 +23,7 @@ impl RowCursor {
             after: None,
             keys: Vec::new().into_iter(),
             seen: 0,
+            short: false,
             finished: false,
         }
     }
@@ -35,7 +38,14 @@ impl RowCursor {
         let mut rows = Vec::with_capacity(limit.min(64));
         while rows.len() < limit && !self.finished {
             if self.keys.len() == 0 {
-                let keys = reducer.state.keys_after(wire::TOUCH, self.after)?;
+                // A window of fewer than 64 keys held every remaining key, so
+                // the pass ends on it without asking for one more.
+                let keys = if self.short {
+                    Vec::new()
+                } else {
+                    reducer.state.keys_after(wire::TOUCH, self.after)?
+                };
+                self.short = keys.len() < 64;
                 if keys.is_empty() {
                     if self.seen != reducer.touched {
                         return Err(ContentError::InvalidRecord("filesystem touched membership"));

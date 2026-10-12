@@ -396,6 +396,43 @@ job is one fence and one read; a three-key job is one fence and three reads),
 so it was not built. Lowering them needs those loops to ask by wave, as the
 passes now do.
 
+**Minor pass: a key pass ends on a short window.** The two touched-row
+passes and the placement passes of validation asked for one more key window
+after a window of fewer than 64 keys
+(`references/indexed_rows.rs` `RowCursor::wave`, `validate/in_place.rs`,
+`validate/cycles.rs`). Predicted −3 jobs a Commit where one placement pass
+runs. Observed: record jobs 206 → 201, 502 → 499, 8,088 → 8,085; key windows
+that return no key 6 / 4 / 4 → 1 / 1 / 1 (the one left is the release work
+drain, which must see an empty window because releasing queues new work).
+
+### 5.7 State at the end of this branch (measured, exact, host)
+
+Per Commit, `commit_record_anatomy` at the head of `perf-experiments-x2`:
+
+| per Commit | small | step | large |
+| --- | ---: | ---: | ---: |
+| record jobs at `ea7535a42` (start) | 472 | 1,497 | 17,276 |
+| record jobs at `7818d058f` (base of this branch) | 320 | 997 | 13,132 |
+| record jobs now | 201 | 499 | 8,085 |
+| of which producer / namespace / file plan | 104 / 78 / 19 | 279 / 113 / 107 | 5,017 / 1,316 / 1,752 |
+| Workspace + Lease + record statements at `7818d058f` | 406 + 85 + 652 | 1,233 + 235 + 2,205 | 15,126 + 1,993 + 24,444 |
+| the same three families now | 287 + 85 + 498 | 735 + 235 + 2,124 | 10,079 + 1,993 + 24,441 |
+| write transactions at `7818d058f` | 76 | 262 | 2,572 |
+| write transactions now | 35 | 88 | 987 |
+
+From the base of this branch: record jobs −37%, −50%, −38%; write
+transactions −54%, −66%, −62%; statements of the three families −24%, −16%,
+−12%. Record statements barely move: the same keys are read and written, in
+fewer jobs and transactions.
+
+What is left, by count (step / large): producer point reads `fresh` 98 /
+1,529, `value` 97 / 1,912, `header` 46 / 1,469; file plan 107 / 1,752 (two
+writes and about two reads a changed file); namespace `root.get` 46 / 480 and
+`parent.get` 10 / 264; `topology_placed.get` 6 / 144 (one job per placement of
+a window, which one `get_many` per window would replace); record statements of
+guarded writes (each change is one guard read and one write statement: 468 /
+4,875 changes).
+
 ## 6. Recommendation — removing the per-key record jobs
 
 Owner direction of 2026-10-13 allows interface and overlay-schema changes.
@@ -406,7 +443,11 @@ read of 262 transactions. A read job is 2 fence statements and 1 record
 statement, so the fence and the transaction frame — not the record statement —
 are most of the statement count.
 
-Stage A below is built (section 5.4); B and C are not.
+Stage A below is built (section 5.4). Stages B and C are built as far as
+section 5.6 records: B(1) in section 5.2, B(2) for the reducer's rows and the
+release queue, C for the file plan's seal and edit reads and for the passes'
+fresh asks. Not built from C: one write per file plan (it would move a
+refusal; see 5.6) and the producer's `value` and `header` point reads.
 
 **Stage A — several keys in one read job.** Add, with a default that loops over
 the single read so that every existing provider keeps its behaviour and its

@@ -153,7 +153,11 @@ job of at most 63 keys (`IndexedReducer::required_many`,
 `references/indexed_rows.rs` `RowCursor::wave`). Every serial of the job gets
 the same checks a single row read makes, in serial order. No row beyond the
 wave is read, so the writes a caller makes between waves are never behind a
-row already in hand.
+row already in hand. A key window of fewer than 64 keys holds every remaining
+key, so a touched-row pass and each placement pass of validation end on it
+without asking for one more; no row or placement is added while its pass
+runs. The release work drain is not such a pass: releasing queues new work, so
+it still ends only on an empty window.
 
 The raw port's additive `keys_after(kind, after)` returns at most64 complete keys,
 strictly greater than the actual full32-byte boundary. None includes all-zero

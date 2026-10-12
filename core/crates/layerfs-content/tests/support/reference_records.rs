@@ -48,6 +48,8 @@ pub struct Records {
     pub missing_kind: Option<u32>,
     pub corrupt_row_tag: bool,
     pub missing_queued: bool,
+    /// Answers given in place of the stored ones once release work is queued.
+    pub queued_answers: BTreeMap<ConstructionRecordKey, Option<Vec<u8>>>,
     pub malformed_key: bool,
     pub duplicate_key: bool,
     pub maximum_job: usize,
@@ -92,6 +94,11 @@ impl Records {
         }
         if self.missing_kind == Some(key.kind) && self.values.contains_key(&key) {
             return Ok(None);
+        }
+        if self.values.keys().any(|stored| stored.kind == WORK) {
+            if let Some(answer) = self.queued_answers.get(&key) {
+                return Ok(answer.clone());
+            }
         }
         let mut result = self.values.get(&key).cloned();
         if self.corrupt_kind == Some(key.kind) && result.is_some() {
