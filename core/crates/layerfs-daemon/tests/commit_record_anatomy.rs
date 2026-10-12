@@ -134,7 +134,8 @@ struct Counted {
     root: ObjectId,
     /// Completed owner jobs by service class over the whole Commit.
     classes: [u64; 6],
-    /// Foreground statement executions by family over the whole Commit.
+    /// Foreground statements by family over the whole Commit: the engine's
+    /// own attempts, not SQLite's run counter, which also counts a trigger.
     statements: [u64; 14],
     /// The Commit's own Store reads and writes, and Content's update work.
     storage: String,
@@ -210,7 +211,7 @@ fn commit_counted(rig: &Rig, workspace: &BoundWorkspace) -> Counted {
         work,
         root,
         classes,
-        statements: std::array::from_fn(|kind| sql.statements[kind].executions),
+        statements: std::array::from_fn(|kind| sql.statements[kind].attempts),
         storage,
         content,
     }
@@ -498,8 +499,8 @@ fn record_jobs_of_three_commit_shapes_are_split_by_owner_kind_and_call() {
             empty_windows: 22,
             reader_jobs: 72,
             workspace_statements: 628,
-            lease_statements: 565,
-            record_statements: 795,
+            lease_statements: 557,
+            record_statements: 668,
             begin_statements: 76,
             commit_statements: 76,
         }
@@ -521,8 +522,8 @@ fn record_jobs_of_three_commit_shapes_are_split_by_owner_kind_and_call() {
             empty_windows: 20,
             reader_jobs: 222,
             workspace_statements: 1_989,
-            lease_statements: 1_740,
-            record_statements: 2_683,
+            lease_statements: 1_732,
+            record_statements: 2_221,
             begin_statements: 262,
             commit_statements: 262,
         }
@@ -544,8 +545,8 @@ fn record_jobs_of_three_commit_shapes_are_split_by_owner_kind_and_call() {
             empty_windows: 20,
             reader_jobs: 1_980,
             workspace_statements: 21_836,
-            lease_statements: 19_277,
-            record_statements: 29_047,
+            lease_statements: 19_269,
+            record_statements: 24_460,
             begin_statements: 2_572,
             commit_statements: 2_572,
         }
