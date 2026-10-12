@@ -1415,3 +1415,83 @@ and footprint use other verifiers, and all12 cells use the mounted Python
 oracle. Their unaffected earlier evidence remains separate; phase15 coverage
 is still required. New-source seal, exhaustive500MB/100MB samples and one
 guard per affected family follow the cause commit, without a raised ceiling.
+
+Scratch stage `9cae8f766` / `p319n13s`: all20 affected family guards have
+functional PASS/proof PASS, overall INELIGIBLE. Exhaustive100MB has overall
+PASS, functional PASS and proof PASS; exhaustive500MB remains FAIL at275s,
+functional unavailable/proof FAIL, despite100 command and100 Commit ACKs.
+[Stage operands](checks/typed-scratch-stage.json) retain all22 original hashes
+and40 owning CSVs; all payload-removal manifests PASS and originals removed
+one at a time. Compact branch162/2664/12058, capped edit8011/8376/101891,
+snapshot177581/1403960/6747991, Git5895/7400/45674 and the small controls
+match previous counts; unavailable fields remain unavailable.
+
+Large exhaustive retained typed progress improves13 ->14 of the20 required
+roots (ordinals5..65 ->5..70),393874 ->424172 paths,6032670976 ->6496863744
+checked bytes. Every root has30298 paths and alternates463930624/464192768B.
+The typed child retains124.340068250s allowance and stops after124.355175250s;
+its last successful root at122.753221375s is not complete proof. The thirteen
+common roots complete4.020903167s sooner on the child clock, a diagnostic
+comparison only. Exports PASS3.249292958/3.162731375s; normalization returned
+complete identities but its isolated duration is unavailable after payload
+cleanup. No benchmark-wide speed claim or raised limit.
+
+The host28-test result contained two inherited unqualified recipe child filters
+that matched0 tests. Those child exits are NOT_EXECUTED/no proof; the new
+scratch assertions ran directly with explicit counts. Each missed branch was
+then invoked once by its existing qualified test name and child flag in a
+fresh empty owned cwd: native payload/episode1 PASS, Git reference1 PASS.
+[Direct-child evidence](checks/ordinary-child-proof.json) records original log
+hashes and scoped cleanup. No frozen source changed and no Durable Store ran.
+Production LOC for the scratch cause:82340 ->82340 (delta+0); exact snapshots
+with pinned counter; reference absent (retired R9c; last counted65,417 at
+tree498dd1917812).
+
+### Typed namespace repeated path resolution (harness)
+
+Cause before editing: verify_tree discards five authenticated child bindings
+in a six-path/four32-byte-file fixture and resolves their paths again from the
+root. Initial source arithmetic predicted78 total; the retained red count
+corrects it to20 inode-leaf and12 directory-leaf requests, with47
+other role requests unchanged:79 total. The bounded repair queues directories
+only, validates each listed name through the existing public point lookup
+against that already authenticated parent, then batches child inode reads.
+Predict inode20 ->7, directory12 ->7, other47 unchanged:79 ->61 requests.
+The point lookup is retained because it checks child level and sibling lower
+bounds that listing/grouped lookup omit. No structural refusal may be removed.
+
+Every metadata/alias/length/mapping/byte-range/census check remains, with the
+existing128-entry/16384-byte listing and one transient batch. No all-file
+InodeValue queue, new cache, raised window, product port or schema is selected.
+A forwarding external AuthenticatedObjects counter classifies FinalizedObject
+roles before arming and asserts6 paths/128 bytes/four files and61 requests;
+retain the red observed histogram before modifying traversal. This is a
+canonical request count, not a SQLite, physical I/O or benchmark PASS claim.
+
+Observed count tier:79 ->61 canonical requests/batches, exactly1 filesystem
+root, inode20 ->7, directory12 ->7, attribute6, portable FileState/Extent/Chunk
+12 each and four WholeFile reads unchanged. Six paths/128 bytes/four files
+remain exact. Point validation is preserved on every listed name; the existing
+public Inode lookup_many propagates child level/maximum exactly as point lookup.
+No production API or validation change is needed. The one-page walk replaces
+the old all-path queue with directories only; its new source file is120 lines.
+External refusal support is separate, keeping test files below999 lines.
+
+Host full31 tests PASS in108.16s under118s, plus the new missing-serial/provider-
+loss/wrong-kind test1 PASS. Linux builds first and passes1 canonical count,
+3 scratch,3 namespace refusal and4 original oracle tests. Existing metadata,
+alias, mapping, final-tail and public-history tests stay intact. Child-level
+fixture explicitly demonstrates that listing alone accepts a wrong-level tree
+while point resolution and the repaired oracle reject it.129-file continuation,
+symlink success/wrong target, extra/omitted names, logical missing inode and
+authenticated provider loss are independently exercised.
+
+All initial compile/setup outcomes remain: guessed root_serial field E0609,
+wrong FilesystemRootId reexport E0425, a generated leaf instead of the intended
+malformed branch, and a zero-test unqualified filter after moving refusal tests.
+Each was corrected from source/output before the corresponding actual check.
+The malformed-page correction uses valid filled14-row leaves and an explicitly
+encoded wrong-level root. Two new needless-borrow Clippy diagnostics were fixed;
+final host/Linux all-target runtime Clippy retain only inherited frozen/untouched
+harness lints without suppression. No diagnostic remains in the new walk/tests.
+Fresh formatting/boundary/LOC and clean-identity samples follow before acceptance.

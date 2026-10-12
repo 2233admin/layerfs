@@ -2,6 +2,8 @@
 #[allow(dead_code)]
 #[path = "../../engine/recipes/boundary_metadata.rs"]
 mod boundary_metadata;
+#[path = "namespace_walk.rs"]
+mod namespace_walk;
 use crate::{args::Args, events::Events, project::namespace::reference, Result};
 use layerfs_bridge::provision::StoreManifest;
 use layerfs_content::object::{AuthenticatedObjects, ObjectId};
@@ -19,7 +21,7 @@ use layerfs_storage::{port::PackPersistence, Storage};
 use layerfs_telemetry::timer::Timing;
 use reference::workspace_common::{Content, Entry, EntryKind};
 use std::{
-    collections::{BTreeMap, BTreeSet, VecDeque},
+    collections::{BTreeMap, BTreeSet},
     fs,
     io::Read,
     path::Path,
@@ -772,8 +774,7 @@ pub fn verify_tree(
         .iter()
         .map(|entry| (entry.path.clone(), entry))
         .collect::<BTreeMap<_, _>>();
-    let mut tree = FilesystemRead::new(reader, FilesystemRootId(root))?;
-    let mut pending = VecDeque::from([".".to_owned()]);
+    let mut walk = namespace_walk::NamespaceWalk::new(reader, root)?;
     let mut seen = BTreeSet::new();
     let mut reachable_inodes = BTreeSet::new();
     let mut attributes = AttributeReadWork::default();
@@ -792,15 +793,13 @@ pub fn verify_tree(
     let mut file_roots = BTreeSet::new();
     let mut files = BTreeMap::new();
     let mut scratch = None;
-    while let Some(path) = pending.pop_front() {
+    while let Some((path, resolved)) = walk.next()? {
         if !seen.insert(path.clone()) {
             return Err("duplicate persisted namespace path".into());
         }
         let entry = expected
             .get(&path)
             .ok_or("unexpected persisted namespace path")?;
-        let logical = LogicalPath::new(if path == "." { "" } else { &path })?;
-        let resolved = tree.resolve(&logical)?;
         reachable_inodes.insert(resolved.serial);
         let inode = resolved.value;
         let metadata = read_portable(reader, inode.metadata_root, inode.kind, &mut attributes)?;
@@ -835,25 +834,11 @@ pub fn verify_tree(
                 if inode.kind != InodeKind::Directory {
                     return Err("persisted directory kind differs".into());
                 }
-                let mut after = None;
-                loop {
-                    let page = tree.list(&logical, after.as_ref(), 128, 16384)?;
-                    for (name, _) in page.entries {
-                        pending.push_back(if path == "." {
-                            name.as_str().to_owned()
-                        } else {
-                            format!("{path}/{}", name.as_str())
-                        });
-                    }
-                    after = page.continuation;
-                    if after.is_none() {
-                        break;
-                    }
-                }
+                walk.queue_directory(path.clone(), resolved);
             }
             EntryKind::Symlink(target) => {
                 if inode.kind != InodeKind::Symlink
-                    || tree.readlink(&logical)?.as_bytes() != target.as_bytes()
+                    || walk.tree.readlink_inode(resolved.serial)?.as_bytes() != target.as_bytes()
                 {
                     return Err("persisted symlink kind/target differs".into());
                 }
@@ -977,7 +962,7 @@ pub fn verify_tree(
     if seen.len() != expected.len() {
         return Err("persisted namespace path count differs".into());
     }
-    crate::edit_oracle::require_complete_membership(reader, tree.root(), &reachable_inodes)?;
+    crate::edit_oracle::require_complete_membership(reader, walk.tree.root(), &reachable_inodes)?;
     Ok(VerifiedTree {
         paths: seen.len() as u64,
         bytes: verified_bytes,

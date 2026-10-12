@@ -23,6 +23,8 @@ pub(crate) mod edit_oracle;
 #[allow(dead_code)]
 #[path = "../src/events.rs"]
 pub(crate) mod events;
+#[path = "support/namespace_cases.rs"]
+mod namespace_cases;
 #[path = "support/one_mib_alloc.rs"]
 mod one_mib_alloc;
 #[allow(dead_code)]
@@ -139,7 +141,8 @@ fn constructed(scope: InodeScope, entries: &[Entry]) -> (ObjectId, Bag) {
         let kind = match entry.kind {
             EntryKind::Directory => InodeKind::Directory,
             EntryKind::File(_) => InodeKind::RegularFile,
-            _ => panic!("test file/directory fixture required"),
+            EntryKind::Symlink(_) => InodeKind::Symlink,
+            _ => panic!("test file/directory/symlink fixture required"),
         };
         let content_root = match &entry.kind {
             EntryKind::File(content) => {
@@ -158,6 +161,16 @@ fn constructed(scope: InodeScope, entries: &[Entry]) -> (ObjectId, Bag) {
                 .0
                 .unwrap()
                 .root
+            }
+            EntryKind::Symlink(target) => {
+                let target = layerfs_content::filesystem::symlink::SymlinkTarget::new(
+                    target.as_bytes().to_vec(),
+                )
+                .unwrap();
+                let object = target.finalize().unwrap();
+                let id = object.id();
+                bag.accept(object).unwrap();
+                id
             }
             _ => ObjectId::for_bytes(b"directory replaced by public builder"),
         };
@@ -257,6 +270,54 @@ fn tiny_scratch_fixture() -> (ObjectId, Bag, Vec<Entry>) {
         .values()
         .all(|bytes| bytes.len() < one_mib_alloc::ONE_MIB));
     (root, bag, entries)
+}
+
+#[test]
+fn listed_bindings_share_inode_acquisition_with_point_name_validation() {
+    use std::cell::RefCell;
+    struct Counted<'a> {
+        reader: &'a Bag,
+        batches: RefCell<Vec<Vec<ObjectId>>>,
+    }
+    impl AuthenticatedObjects for Counted<'_> {
+        fn read_canonical_batch(&self, ids: &[ObjectId]) -> ContentResult<Vec<Vec<u8>>> {
+            self.batches.borrow_mut().push(ids.to_vec());
+            self.reader.read_canonical_batch(ids)
+        }
+    }
+    let (root, bag, entries) = tiny_scratch_fixture();
+    let roles = bag
+        .objects
+        .iter()
+        .map(|object| (object.id(), format!("{:?}", object.role())))
+        .collect::<BTreeMap<_, _>>();
+    let reader = Counted {
+        reader: &bag,
+        batches: RefCell::new(Vec::new()),
+    };
+    let proof = workspace_oracle::verify_tree(&reader, root, &entries, false, None, true).unwrap();
+    assert_eq!(proof.paths, 6);
+    assert_eq!(proof.bytes, 128);
+    assert_eq!(proof.files.len(), 4);
+    let batches = reader.batches.into_inner();
+    let mut histogram = BTreeMap::<&str, usize>::new();
+    for id in batches.iter().flatten() {
+        *histogram.entry(roles[id].as_str()).or_default() += 1;
+    }
+    println!(
+        "NAMESPACE_CANONICAL_REQUESTS {histogram:?} batches={}",
+        batches.len()
+    );
+    assert!(batches.iter().all(|ids| ids.len() == 1));
+    assert_eq!(histogram["FilesystemRoot"], 1);
+    assert_eq!(histogram["AttributeLeaf"], 6);
+    assert_eq!(histogram["FileState"], 12);
+    assert_eq!(histogram["ExtentLeaf"], 12);
+    assert_eq!(histogram["Chunk"], 12);
+    assert_eq!(histogram["WholeFile"], 4);
+    assert_eq!(batches.len(), 61);
+    assert_eq!(histogram["InodeLeaf"], 7);
+    assert_eq!(histogram["DirectoryLeaf"], 7);
 }
 
 #[test]

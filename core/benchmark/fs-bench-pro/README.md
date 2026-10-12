@@ -93,6 +93,15 @@ byte count, including a final partial window. A membership-only proof allocates
 neither payload buffer. All metadata, alias, mapping and complete inode-census
 checks remain in the same verifier; no scope or cache bound changes.
 
+Typed namespace traversal retains authenticated directory serials and acquires
+each listing's inode values as one bounded batch, using the existing 128-entry
+and 16,384-byte limits. It queues directories and holds only one listing page;
+file values leave that page after their complete verification. Every listed
+name still undergoes the existing point lookup against its authenticated parent
+and must return the same serial. This retains child-level and sibling-bound
+refusals that listing alone does not supply. Symlink decoding and the final
+complete inode census remain unchanged.
+
 Historical access setup first creates a new complete closed original producer.
 For a paired selection of that same producer, use `bench.py prepare <access-case>
 --build <seal> --reuse-producer <first-access-prepared-folder> --out <fresh-path>`.
