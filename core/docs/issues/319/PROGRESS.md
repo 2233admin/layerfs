@@ -1926,3 +1926,51 @@ priorContentbothpassretained. CleancoveringEngine followscommit.
 [Count evidence](checks/m1-checkpoint-count.json) retains red/green/control logs.
 Production LOC:82368 ->82368 (delta+0), exactparent/staged pinnedcounter;
 reference absent (retired R9c; last counted65,417 at tree498dd1917812).
+
+
+Checkpoint stage p319n14k at83d9589c1: five actual receipts, three dualPASS
+(two overallPASS, oneINELIGIBLE), two500MiB developmentFAIL. Sixth compact
+guard refused unchanged treatment claim before sample: innerexit1/no receipt,
+outer0 notPASS; retain exactp14j6f6e7f56b dualPASS/INELIGIBLE. Four topology
+500MiB FAILs unaffected/notselected. Two portableCSVs retain allparsedfields
+except exactlocalpaths. CleanEngine343OK skipped3,25.075s. Correctclean originals
+aftereveryselection; no tracked edit during sealed preparation/sample.
+[Stage evidence](checks/m1-checkpoint-stage.json).
+
+Exhaustive500 actualPASS/functionalPASS/proofPASS sample0 verificationattempt1
+full144.350032458s under275s; all20typedroots matchCommitACKs,605960paths/
+9281233920B,100Commitancestry/finalhead. Nativeonefinalroot30298paths/
+464192768B in18.806502334s. Typedspan65.456712917s/child67.896823542s,
+controller33.503871042s/400observers12.855185087s. Derivedsetup11.095059583s
+versus73.979091625s, lower62.884032042s; full lower53.616281625s. Typed/native
+intervals higher, no decoderelapsed/purehashdominance claim. Normalization
+time UNAVAILABLE. Freshpreparedgeneratedroots21->1/peak2 remains source-backed
+prediction atthislargecase; tiny2/4fixtures directlyprove3/5->1/peak3/5->2.
+Preparedmetadata cleaned beforea largepostprepare census/full20historyrecords
+was archived; retained115stagedfiles include20scopemanifests,20SDKsteps and
+recipes. Do notinventremovedbytes. AllactualStore/native readbacks preserved.
+GlobalStoreallocated520753152->521142272B;overlay271118336->270917632B;
+provider517025792->517079040B, before/afterproviderhashidentical. Producttree
+unchanged; no storageboundincrease/uniformrawstorageimprovement claim.
+
+Nextfailure cause/prediction beforeedit: remaining500MiB nativeproofs complete
+one30298path/464192768B root inabout18s, thenlaterrole/export deadlineFAIL.
+Base stat repeatedly acquires the7immutableportablemetadata objects even
+whenmetadata-root rawentry remains admitted: warmstat9canonical reads, named11.
+Predictwarmstat9->2/named11->4 byretaining onefixedchecked metadata value
+insideeach existingrawentry, charged evenwhenNone, evictedwiththeentry, no
+newmap/API/observation/bounds. Zero-cache9/11 unchanged; owningregularlength
+alwayscalls its suppliedport, kind/resident/identity/error controls retained.
+No claim thiscostdominates18s; externalred andcounttier precedeproductionedit.
+
+
+### Takeover 2026-10-12: metadata memo not pursued
+
+Cause: the paragraph above selected a per-entry metadata memo in the Workspace
+base cache (predicted warm stat reads 9 -> 2, named 11 -> 4). No receipt shows
+that this cost holds a large share of the 18 s native proof, so the edit was
+stopped before its count tier. Change: none; the unfinished working-tree edit
+was removed and the product tree equals 83d9589c1. Result: no product change,
+no sample. The six 500 MiB cases remain failing at verification time limits
+and are the next subject, ranked by time: one phase split of the verification
+first, then either one fix of the largest block or a named allowance.
