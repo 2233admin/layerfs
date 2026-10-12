@@ -1,6 +1,6 @@
 """Issue 320: the metrics table of one fs-bench-pro Workspace receipt, or two side by side.
 
-usage: receipt_metrics.py <receipt.json> [<after-receipt.json>] [--units N] [--json]
+usage: receipt_metrics.py <receipt.json> [<after-receipt.json>] [--units N] [--json | --markdown]
 
 Reads only. Every number is a difference of two original daemon snapshots that the
 receipt already carries: the snapshot of the measured interval's first control
@@ -48,9 +48,21 @@ GLOBAL_SQL = ("statements", "vm_steps", "fullscan_steps", "sorts", "autoindex_ro
 
 
 def call_of(row):
-    if "call" in row:
-        return json.loads(row["call"])[2]
-    return row["identity"][2]
+    """(control channel scope, call number): one daemon serves several channels."""
+    identity = json.loads(row["call"]) if "call" in row else row["identity"]
+    return (tuple(identity[1]), identity[2])
+
+
+def endpoints(receipt):
+    """The measured interval's first and last control call, in either receipt layout."""
+    counted = receipt.get("phase_counts")
+    if isinstance(counted, list) and counted and counted[0].get("status") == "AVAILABLE":
+        first, last = counted[0]["before_identity"], counted[0]["end_identity"]
+    elif isinstance(counted, dict) and "endpoints" in counted:
+        first, last = counted["endpoints"]["before"]["identities"][0], counted["endpoints"]["end"]["identities"][-1]
+    else:
+        return None
+    return (tuple(first[1]), first[2]), (tuple(last[1]), last[2])
 
 
 def series(receipt, name):
@@ -81,28 +93,38 @@ def summed(receipt, name):
 
 
 def metrics(receipt, units=None):
-    phases = receipt.get("phases") or {}
-    interval = (receipt.get("phase_counts") or [None])[0]
+    phases = dict(receipt.get("phases") or {})
+    if isinstance(receipt.get("performance_external_wall_ns"), int):
+        phases["elapsed_ns"] = receipt["performance_external_wall_ns"]
+    counted = receipt.get("phase_counts")
+    interval = counted[0] if isinstance(counted, list) and counted else None
+    ends = endpoints(receipt)
     out = {"case": receipt.get("case"), "source": (receipt.get("source_commit") or "")[:9],
            "status": receipt.get("status"), "functional": receipt.get("functional_status"),
            "proof": receipt.get("proof_status"), "cleanup": receipt.get("cleanup"),
            "phases": phases, "counts": receipt.get("counts")}
     commits = len((receipt.get("history") or {}).get("commits") or [])
+    if not commits:
+        commits = sum(1 for row in (counted or {}).get("correlation", []) if row.get("event") == "commit") if isinstance(counted, dict) else 0
     out["units"] = units or commits or 1
     out["commits"] = commits
     observed = receipt.get("observations") or {}
     for key in ("store_logical_bytes", "store_allocated_bytes", "overlay_logical_bytes", "overlay_allocated_bytes",
                 "daemon_vmhwm_bytes"):
         out[key] = (observed.get(key) or {}).get("value")
-    if not interval or interval.get("status") != "AVAILABLE":
+    if not ends:
         out["interval"] = "UNAVAILABLE"
         return out
-    before, end = interval["before_identity"][2], interval["end_identity"][2]
-    out["interval"] = [before, end]
-    raw = interval["raw"]
-    out["opcodes"] = {name: count for name, count in zip(OPCODES, raw["opcodes"]["by_opcode"]) if count}
-    out["disposition"] = raw["opcodes"]["disposition"]
-    out["completed"] = interval["adjusted"]["completed"]
+    before, end = ends
+    out["interval"] = [before[1], end[1]]
+    if interval:
+        raw = interval["raw"]
+        out["opcodes"] = {name: count for name, count in zip(OPCODES, raw["opcodes"]["by_opcode"]) if count}
+        out["disposition"] = raw["opcodes"]["disposition"]
+        out["completed"] = interval["adjusted"]["completed"]
+    else:
+        # Several kernel connections: the receipt keeps per-connection request totals only.
+        out["connections"] = [row["requests"] for row in counted.get("kernel_connections", [])]
     owner = delta(receipt, "owner_work", before, end)
     if owner:
         out["owner_wait_ns"] = dict(zip(CLASSES, owner[20:26]))
@@ -129,8 +151,8 @@ def metrics(receipt, units=None):
     writer = [row for row in series(receipt, "global_sql_work")
               if row.get("available") and row.get("section") == 13]
     if writer:
-        first = next((row["values"] for row in writer if row["identity"][2] == before), None)
-        last = next((row["values"] for row in writer if row["identity"][2] == end), None)
+        first = next((row["values"] for row in writer if call_of(row) == before), None)
+        last = next((row["values"] for row in writer if call_of(row) == end), None)
         if first and last:
             out["global_sql_writer"] = dict(zip(GLOBAL_SQL, (b - a for a, b in zip(first, last))))
     return out
@@ -155,9 +177,14 @@ def table(row):
         return lines
     counts = row["counts"]
     lines.append(("Requests / owner jobs / statements", f"{per(counts['requests'])} / {per(counts['owner_jobs'])} / {per(counts['statements'])}"))
-    lines.append(("Requests by opcode", ", ".join(f"{name} {count:,}" for name, count in sorted(row["opcodes"].items(), key=lambda item: -item[1]))))
-    lines.append(("Disposition", ", ".join(f"{name} {count:,}" for name, count in row["disposition"].items() if count)))
-    lines.append(("Owner jobs by class", ", ".join(f"{name} {count:,}" for name, count in row["completed"].items() if count)))
+    if "opcodes" in row:
+        lines.append(("Requests by opcode", ", ".join(f"{name} {count:,}" for name, count in sorted(row["opcodes"].items(), key=lambda item: -item[1]))))
+        lines.append(("Disposition", ", ".join(f"{name} {count:,}" for name, count in row["disposition"].items() if count)))
+        lines.append(("Owner jobs by class", ", ".join(f"{name} {count:,}" for name, count in row["completed"].items() if count)))
+    else:
+        lines.append(("Requests by kernel connection", ", ".join(f"{count:,}" for count in row.get("connections", []))))
+        if "owner_raw_completed" in row:
+            lines.append(("Owner jobs by class (raw, observer included)", ", ".join(f"{name} {count:,}" for name, count in row["owner_raw_completed"].items() if count)))
     if "owner_service_ns" in row:
         service, wait = row["owner_service_ns"], row["owner_wait_ns"]
         lines.append(("Owner service by class", ", ".join(f"{name} {ms(value)}" for name, value in service.items() if value)
@@ -201,6 +228,53 @@ def table(row):
     return lines
 
 
+def report(rows):
+    """The before/after table of issue 320 section 8, as Markdown. One or two receipts."""
+    def cells(row):
+        units, phases = row["units"], row["phases"]
+        time = lambda key: (f"{phases[key] / 1e6:,.1f} ms; {phases[key] / units / 1e6:,.2f} ms/unit"
+                            if isinstance(phases.get(key), int) else "n/a")
+        if row.get("interval") == "UNAVAILABLE":
+            unavailable = "UNAVAILABLE (no daemon counters)"
+            return [f"{row['functional']} / {row['proof']} ({row['status']})", time("command_ns"), time("commit_ns"), "n/a",
+                    f"{time('mount_ns')} / {time('unmount_ns')}"] + [unavailable] * 8 + [
+                    f"{row['store_logical_bytes']:,} / {row['store_allocated_bytes']:,}", "n/a", "UNAVAILABLE"]
+        service, wait = row.get("owner_service_ns", {}), row.get("owner_wait_ns", {})
+        fg = row.get("sql_foreground", {})
+        total = lambda key: sum(family[key] for family in fg.values())
+        measured = sum(phases.get(key, 0) or 0 for key in ("command_ns", "commit_ns"))
+        classes = row.get("completed") or row.get("owner_raw_completed") or {}
+        opcodes = (", ".join(f"{name} {count:,}" for name, count in sorted(row["opcodes"].items(), key=lambda item: -item[1])[:8])
+                   if "opcodes" in row else "per connection: " + ", ".join(f"{count:,}" for count in row.get("connections", [])))
+        reader, store, m = row.get("reader", {}), row.get("store", {}), row.get("maintenance", {})
+        return [f"{row['functional']} / {row['proof']} ({row['status']})", time("command_ns"), time("commit_ns"),
+                (f"{phases['elapsed_ns'] / 1e6:,.1f} ms" if isinstance(phases.get("elapsed_ns"), int) else "n/a"),
+                f"{time('mount_ns')} / {time('unmount_ns')}",
+                f"{row['counts']['requests']:,}: {opcodes}",
+                f"{row['counts']['owner_jobs']:,}: " + ", ".join(f"{name} {count:,}" for name, count in classes.items() if count),
+                f"{row['counts']['statements']:,} / {total('executions'):,} raw executions / {total('vm_steps'):,} VM steps",
+                f"{sum(service.values()) / 1e6:,.1f} ms / {sum(wait.values()) / 1e6:,.1f} ms",
+                f"{(measured - sum(service.values()) - sum(wait.values())) / 1e6:,.1f} ms",
+                f"{reader.get('grants', 0):,} grants; {store.get('object_batches', 0):,} batches",
+                f"{m.get('jobs', 0):,} jobs, {m.get('rows', 0):,} rows",
+                f"{total('fullscan_steps')} / {total('sorts')} / {total('autoindex_rows')} / {total('reprepares')}",
+                f"{row['store_logical_bytes']:,} / {row['store_allocated_bytes']:,}",
+                f"{row['overlay_logical_bytes']:,} / {row['overlay_allocated_bytes']:,}",
+                f"{row['daemon_vmhwm_bytes']:,}" if row["daemon_vmhwm_bytes"] else "UNAVAILABLE"]
+    names = ["Functional / proof status", "Command time, total and per unit", "Commit time, total and per unit",
+             "Elapsed time (concurrent cases)", "Mount / unmount time", "Requests, by opcode", "Owner jobs, by class",
+             "Statements / executions / VM steps", "Owner service time / queue wait", "Command and Commit time outside the owner",
+             "Store reader grants and batches", "Maintenance jobs during the interval",
+             "Scans / sorts / auto-indexes / re-prepares (overlay, foreground)", "Store logical / allocated bytes",
+             "Overlay logical / allocated bytes", "Daemon peak memory"]
+    columns = [cells(row) for row in rows]
+    head = f"`{rows[0]['case']}`, {rows[0]['units']} units; " + "; ".join(("before" if i == 0 else "after") + f" at `{row['source']}`" for i, row in enumerate(rows))
+    lines = [head, "", "| Measure | " + " | ".join(["Before", "After"][:len(rows)]) + " |", "| --- | " + " | ".join(["---:"] * len(rows)) + " |"]
+    for index, name in enumerate(names):
+        lines.append(f"| {name} | " + " | ".join(column[index] for column in columns) + " |")
+    return "\n".join(lines)
+
+
 def main():
     arguments = [value for value in sys.argv[1:] if not value.startswith("--")]
     units = int(sys.argv[sys.argv.index("--units") + 1]) if "--units" in sys.argv else None
@@ -209,6 +283,9 @@ def main():
     rows = [metrics(json.load(open(path)), units) for path in arguments]
     if "--json" in sys.argv:
         print(json.dumps(rows, indent=1))
+        return
+    if "--markdown" in sys.argv:
+        print(report(rows))
         return
     tables = [table(row) for row in rows]
     if len(tables) == 1:
