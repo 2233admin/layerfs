@@ -10,7 +10,7 @@ import subprocess
 import tempfile
 import uuid
 
-from . import identity, project, receipts
+from . import identity, prepared_inputs, project, receipts
 
 MTIME_NS = 1_700_000_000_000_000_000
 BIG_BYTES = 64 * 1024 * 1024
@@ -566,7 +566,7 @@ def prepare_historical_workspace(family, case, folder, build_folder, genesis_pre
               "cache": "uncontrolled OS cache; original two-pass reader/verifier on same mount; verification only, no performance or cold claim"}
     validate_historical_helpers(case, result, build, genesis=genesis)
     result["master_volume"], result["provision"] = install_closed_history_store(closed, genesis, folder / "project", build)
-    receipts.write_new(folder / "prepared.json", result); receipts.manifest(folder)
+    seal_prepared(folder, result, build_folder)
     return result
 
 
@@ -683,9 +683,32 @@ def prepare_context_native(case, folder, build, binding):
         if result.get("verification_status") != "pass":
             raise ValueError("original contextual full native input verification failed")
         native[label] = result
-    source = folder / "source"
-    fixture, initial_manifest, _, initial_recipe = materialize(plan["initial_role"], 0, source, "native-context-initial")
+    source = prepared_inputs.source_path(case, build)
+    argv = [writer["path"], "materialize-context", case["v016_case"], plan["initial_role"], "0", str(source)]
+    fixture = prepared_inputs.make_initial(case, build, argv, folder, "native-context-initial")
+    cached = prepared_inputs.load_source(case, build)
+    initial_manifest = source.with_suffix(".manifest.tsv")
+    scope = source.with_suffix(".scope.tsv") if case.get("m1_schedule") else initial_manifest
+    fixture.update(role=plan["initial_role"], fixture_digest=identity.sha256(initial_manifest),
+        recipe_identity=fixture["recipe_sha256"],
+        files=sum(row.split("\t")[1] == "file" for row in initial_manifest.read_text().splitlines()[1:]))
+    initial_recipe = {"argv": cached["generation"]["argv"], "binary_sha256": writer["sha256"],
+        "source_binding": binding, "receipt": cached["generation"]["stdout"],
+        "receipt_sha256": identity.sha256(cached["generation"]["stdout"]),
+        "input_reuse": {"key": cached["key"], "producer_case": cached["producer_case"],
+                        "requested_case": case["id"], "requested_role": plan["initial_role"],
+                        "manifest_sha256": identity.sha256(source.parent / "manifest.json")}}
     verify_full(source, initial_manifest, "original-context-initial-check")
+    modes = folder / "initial-created-modes.tsv"
+    modes.write_bytes(b"original-context-created-modes-v1\nrole\tpath\tmode\n")
+    qualifier = receipts.command([writer["path"], "verify-context", case["v016_case"],
+        plan["initial_role"], "0", str(source), str(modes) if case.get("m1_schedule") else "-"],
+        folder, "current-case-shared-initial-check", 120)
+    checks = [json.loads(line) for line in Path(qualifier["stdout"]).read_text().splitlines()]
+    if not checks or any(row.get("verification_status") != "pass" for row in checks):
+        raise ValueError("shared input lacks current-case original context qualification")
+    initial_recipe["current_case_qualification"] = qualifier
+    initial_recipe["current_case_qualification_sha256"] = identity.sha256(qualifier["stdout"])
     for selected in plan["checkpoints"]:
         role, step = selected["role"], selected["index"]
         root = folder / "context-native" / role / f"state-{step}"
@@ -855,7 +878,27 @@ def validate_context_helpers(case, prepared, build):
         helper(relative, build["binaries"][binary]["sha256"])
     helper("workload.sh", identity.sha256(identity.ROOT / "core/benchmark/fs-bench-pro/families" / case["registry"]["family"] / "workload.sh"))
     initial = prepared.get("context_initial_recipe", {}); initial_argv = initial.get("argv", [])
-    if (len(initial_argv) != 6 or initial_argv[1:5] != ["materialize-context", case["v016_case"], plan["initial_role"], "0"]
+    reuse = initial.get("input_reuse")
+    initial_case, initial_role = case["v016_case"], plan["initial_role"]
+    if reuse:
+        cached = prepared_inputs.load_source(case, build)
+        original = cached["fixture"]
+        if (reuse["key"] != prepared_inputs.native_key(case, build)
+                or reuse["producer_case"] != cached["producer_case"] or reuse["requested_case"] != case["id"]
+                or reuse["requested_role"] != plan["initial_role"]
+                or initial_argv != cached["generation"]["argv"]
+                or reuse["manifest_sha256"] != identity.sha256(Path(cached["source"]).parent / "manifest.json")):
+            raise ValueError("exact shared initial producer/current-case input binding required")
+        initial_case, initial_role = original["case"], original["role"]
+        qualification = initial["current_case_qualification"]
+        if (qualification["exit_code"] != 0
+                or qualification["argv"][1:6] != ["verify-context", case["v016_case"], plan["initial_role"], "0", cached["source"]]
+                or identity.sha256(qualification["stdout"]) != initial["current_case_qualification_sha256"]):
+            raise ValueError("current-case independent shared-input qualification changed")
+        checked = [json.loads(line) for line in Path(qualification["stdout"]).read_text().splitlines()]
+        if not checked or any(row.get("verification_status") != "pass" for row in checked):
+            raise ValueError("current-case shared initial oracle did not pass")
+    if (len(initial_argv) != 6 or initial_argv[1:5] != ["materialize-context", initial_case, initial_role, "0"]
             or initial.get("source_binding") != binding
             or initial.get("binary_sha256") != build["binaries"]["workspace-writer"]["sha256"]
             or identity.sha256(initial_argv[0]) != initial["binary_sha256"]
@@ -863,7 +906,7 @@ def validate_context_helpers(case, prepared, build):
         raise ValueError("exact pristine initial contextual fixture binding required")
     initial_summary = json.loads(Path(initial["receipt"]).read_text())
     initial_digest = identity.sha256(Path(initial_argv[-1]).with_suffix(".manifest.tsv"))
-    if (initial_summary.get("case") != case["v016_case"] or initial_summary.get("role") != plan["initial_role"]
+    if (initial_summary.get("case") != initial_case or initial_summary.get("role") != initial_role
             or type(initial_summary.get("step")) is not int or initial_summary["step"] != 0
             or type(initial_summary.get("seed")) is not int or initial_summary["seed"] != 1
             or initial_summary.get("manifest_sha256") != initial_digest
@@ -952,7 +995,7 @@ def prepare_context_workspace(family, case, folder, build_folder):
     binding = context_source_binding(case, current)
     folder = Path(folder).resolve(); folder.mkdir(parents=True, exist_ok=False)
     fixture, expectation, native, checkpoints, initial_recipe = prepare_context_native(case, folder, build, binding)
-    source = folder / "source"
+    source = prepared_inputs.source_path(case, build)
     fixture.update(recipe=case["fixture"]["recipe"], fixture_sha256=fixture["fixture_digest"])
     sdk = prepare_context_payloads(case, folder, build, binding)
     discard = prepare_context_discard(case, folder, build, binding)
@@ -1013,7 +1056,7 @@ def prepare_context_workspace(family, case, folder, build_folder):
         volume, provisioned = reused["master_volume"], reused["provision"]
         receipts.write_new(folder / "resource-claim.json", {"volume": volume, "created_by_this_run": False,
                            "purpose": "exact initial immutable master reused; independent sample byte copy only", "reuse": reuse})
-    result = {**context_fields, "status": "PASS", "family": family["family"],
+    result = {**context_fields, "status": "PASS", "family": family["family"], "build": str(Path(build_folder).resolve()),
               "recipe": case["fixture"]["recipe"], "identity": current, "fixture": fixture, "expectation": expectation,
               "native_verification": native, "context_binding": binding, "context_roles": roles,
               "context_initial_recipe": initial_recipe, "context_checkpoints": checkpoints, "sdk_context_steps": sdk,
@@ -1021,11 +1064,11 @@ def prepare_context_workspace(family, case, folder, build_folder):
               "prepared_context_runs": {role: {str(record["index"]): record["prepared_run"]
                                        for record in sdk if record["role"] == role} for role in plan["roles"]},
               "helpers": helpers, "master_volume": volume, "provision": provisioned, "master_reuse": reuse,
-              "source_uid": source.stat().st_uid, "source_gid": source.stat().st_gid, "master_measurement_mounts": 0,
+              "source": str(source), "source_uid": source.stat().st_uid, "source_gid": source.stat().st_gid, "master_measurement_mounts": 0,
               "global_profile": "Disposable/WAL/OFF", "overlay_profile": "MEMORY/OFF/EXCLUSIVE", "construction_workers": 1,
               "setup": "full pristine initial native input independently verified; role-scoped original checkpoints/descriptors sealed; selected M1 metadata placeholders are not actual proof; one closed Init/master, independent sample byte clones",
               "cache": "setup/native materialization warmth explicit; cloning establishes no cold paid-phase claim"}
-    receipts.write_new(folder / "prepared.json", result); receipts.manifest(folder)
+    seal_prepared(folder, result, build_folder)
     return result
 
 
@@ -1167,8 +1210,7 @@ def prepare(recipe, folder, build_folder):
               "global_profile": "Disposable/WAL/OFF", "overlay_profile": "MEMORY/OFF/EXCLUSIVE",
               "construction_workers": 1, "master_measurement_mounts": 0,
               "durable": "NOT_RUN — disabled by owner until explicit reauthorization"}
-    receipts.write_new(folder / "prepared.json", result)
-    receipts.manifest(folder)
+    seal_prepared(folder, result, build_folder)
     return result
 
 
@@ -1237,7 +1279,7 @@ def prepare_repository_history(family,case,folder,build_folder):
         "global_profile":"Disposable/WAL/OFF","overlay_profile":"MEMORY/OFF/EXCLUSIVE","construction_workers":1,
         "cache":"immutable input authentication and cloning are setup reuse; all paid backing/metadata/SQLite/own-write coldness unqualified",
         "durable":"NOT_RUN — disabled by owner until explicit reauthorization"}
-    receipts.write_new(folder/"prepared.json",result); receipts.manifest(folder)
+    seal_prepared(folder, result, build_folder)
     return result
 
 
@@ -1248,11 +1290,11 @@ def prepare_footprint(family,case,folder,build_folder):
         raise ValueError("original fresh Store-footprint import/edit declaration required")
     build,current = identity.load_build(build_folder),identity.source_identity()
     folder = Path(folder).resolve(); folder.mkdir(parents=True,exist_ok=False)
-    source = folder/"source"
+    source = prepared_inputs.source_path(case, build)
     shell = identity.ROOT/"core/benchmark/fs-bench-pro/families/store_footprint/workload.sh"
     env = {**os.environ,"WORKLOAD_WRITER":build["binaries"]["workload-host"]["path"]}
-    made = receipts.command(["/bin/bash",str(shell),"fixture",case["v016_case"],str(source)],folder,"native-fixture",120,environment=env)
-    fixture = json.loads(Path(made["stdout"]).read_text())
+    fixture = prepared_inputs.make_initial(case, build,
+        ["/bin/bash",str(shell),"fixture",case["v016_case"],str(source)],folder,environment=env)
     checked = receipts.command(["/bin/bash",str(shell),"verify-source",case["v016_case"],str(source)],
                                folder,"original-native-source-digest",120,environment=env)
     native = dict(line.split("=",1) for line in Path(checked["stdout"]).read_text().splitlines())
@@ -1276,7 +1318,7 @@ def prepare_footprint(family,case,folder,build_folder):
         "master_volume":None,"setup_method":"fresh complete original native control, no Store/Init before measured operation",
         "cache":"setup generated/wrote/read every original source byte; all paid source/backing/metadata coldness unavailable",
         "global_profile":"Disposable/WAL/OFF selected by future measured Init; no setup Store", "construction_workers":1}
-    receipts.write_new(folder/"prepared.json",result);receipts.manifest(folder)
+    seal_prepared(folder, result, build_folder)
     return result
 
 
@@ -1310,11 +1352,10 @@ def prepare_import(family, case, folder, build_folder):
     build, current = identity.load_build(build_folder), identity.source_identity()
     folder = Path(folder).resolve()
     folder.mkdir(parents=True, exist_ok=False)
-    source = folder / "source"
+    source = prepared_inputs.source_path(case, build)
     writer = build["binaries"]["workspace-writer"]["path"]
-    made = receipts.command([writer, "fixture", case["v016_case"], str(source)], folder,
-                            "native-fixture", 120)
-    fixture = json.loads(Path(made["stdout"]).read_text())
+    fixture = prepared_inputs.make_initial(case, build,
+        [writer, "fixture", case["v016_case"], str(source)], folder)
     checked = receipts.command([writer, "verify-step", case["v016_case"], "0", str(source)],
                                folder, "original-native-fixture-check", 120)
     native = json.loads(Path(checked["stdout"]).read_text())
@@ -1337,8 +1378,7 @@ def prepare_import(family, case, folder, build_folder):
               "cache": "setup generated/wrote/read every original source byte; host coldness unavailable",
               "global_profile": "Disposable/WAL/OFF selected by future Init; no Store during preparation",
               "construction_workers": 1, "durable": "NOT_RUN — disabled by owner until explicit reauthorization"}
-    receipts.write_new(folder / "prepared.json", result)
-    receipts.manifest(folder)
+    seal_prepared(folder, result, build_folder)
     return result
 
 
@@ -1378,11 +1418,12 @@ def prepare_namespace(recipe, folder, build_folder):
     current = identity.source_identity()
     folder = Path(folder).resolve()
     folder.mkdir(parents=True, exist_ok=False)
-    source = folder / "source"
+    _, case = family_case(recipe)
+    source = prepared_inputs.source_path(case, build)
     shell = identity.ROOT / "core/benchmark/fs-bench-pro/families/init_namespace/workload.sh"
-    made = receipts.command(["/bin/bash", str(shell), recipe, str(source)], folder, "native-fixture", 120,
+    fixture = prepared_inputs.make_initial(case, build,
+        ["/bin/bash", str(shell), recipe, str(source)], folder,
         environment={**os.environ, "NAMESPACE_WRITER": build["binaries"]["namespace-writer"]["path"]})
-    fixture = json.loads(Path(made["stdout"]).read_text())
     verified = receipts.command([build["binaries"]["workload-host"]["path"], "namespace-verify", str(source), recipe],
                                 folder, "original-native-fixture-verifier", 120)
     fields = dict(line.split("=", 1) for line in Path(verified["stdout"]).read_text().splitlines())
@@ -1398,8 +1439,7 @@ def prepare_namespace(recipe, folder, build_folder):
               "original_verification": fields,
               "cache": "setup generated/wrote/read all native bytes; source warmth retained; no cold admission claimed",
               "global_profile": "Disposable/WAL/OFF selected by the future Init; no Store executed during preparation"}
-    receipts.write_new(folder / "prepared.json", result)
-    receipts.manifest(folder)
+    seal_prepared(folder, result, build_folder)
     return result
 
 
@@ -1412,7 +1452,7 @@ def compatible_master(folder, fixture, current, uid, gid):
         if (summary.get("schema") not in ("fs-bench-pro-prepared-workspace-v1", CONTEXT_PREPARED_SCHEMA)
                 or summary.get("status") != "PASS"
                 or summary.get("global_profile") != "Disposable/WAL/OFF"
-                or summary.get("identity", {}).get("product_tree") != current["product_tree"]
+                or summary.get("store_builder_key") != prepared_inputs.product_store_key(current)
                 or (summary.get("source_uid"), summary.get("source_gid")) != (uid, gid)
                 or summary.get("fixture", {}).get("fixture_sha256") != fixture["fixture_sha256"]):
             continue
@@ -1501,10 +1541,9 @@ def prepare_snapshot_fixture(case, folder, build):
     """Existing frozen Rust generator plus independent equations/native all-state proof."""
     if case["v016_case"] != "local-snapshot-create-25000-onebyte-v1":
         raise ValueError("original local snapshot case required")
-    source, final = folder / "source", folder / "expected-native"
-    initial = receipts.command([build["binaries"]["workspace-writer"]["path"], "fixture", case["id"], str(source)],
-                               folder, "native-fixture", 120)
-    fixture = json.loads(Path(initial["stdout"]).read_text())
+    source, final = prepared_inputs.source_path(case, build), folder / "expected-native"
+    fixture = prepared_inputs.make_initial(case, build,
+        [build["binaries"]["workspace-writer"]["path"], "fixture", case["id"], str(source)], folder)
     state1 = folder / "native-states" / "state-1"
     state1.parent.mkdir()
     made = receipts.command([build["binaries"]["workspace-writer"]["path"], "expected", case["id"], str(state1)],
@@ -1560,10 +1599,9 @@ def prepare_recipe_history(case, folder, build):
     """Independent original native recipes at selected states, never all K+1."""
     steps = history_verification_steps(case)
     writer = build["binaries"]["workspace-writer"]
-    source, final = folder / "source", folder / "expected-native"
-    made = receipts.command([writer["path"], "fixture", case["v016_case"], str(source)],
-                            folder, "native-fixture", 120)
-    fixture = json.loads(Path(made["stdout"]).read_text())
+    source, final = prepared_inputs.source_path(case, build), folder / "expected-native"
+    fixture = prepared_inputs.make_initial(case, build,
+        [writer["path"], "fixture", case["v016_case"], str(source)], folder)
     manifests = folder / "history-manifests"
     manifests.mkdir()
     native, history, expectation = {}, [], None
@@ -1889,7 +1927,10 @@ def prepare_workspace(recipe, folder, build_folder):
     current = identity.source_identity()
     folder = Path(folder).resolve()
     folder.mkdir(parents=True, exist_ok=False)
-    source, expected = folder / "source", folder / "expected-native"
+    owned_input = case.get("git_workflow") or (case.get("history_schedule")
+        and case["history_schedule"]["schema"] not in (*RECIPE_HISTORY_SCHEMAS, "original-ordinary-commit-sequence-v1"))
+    source = folder / "source" if owned_input else prepared_inputs.source_path(case, build)
+    expected = folder / "expected-native"
     history = None
     if case.get("history_schedule", {}).get("schema") == "original-ordinary-commit-sequence-v1":
         fixture, expectation, native, history, original_history = prepare_snapshot_fixture(case, folder, build)
@@ -1899,8 +1940,12 @@ def prepare_workspace(recipe, folder, build_folder):
         fixture, expectation, native, history, original_history = prepare_ordered_fixture(case, folder, build)
     else:
         writer = build["binaries"]["workspace-writer"]["path"]
-        made = receipts.command([writer, "fixture", case["v016_case"], str(source)], folder, "native-fixture", 120)
-        fixture = json.loads(Path(made["stdout"]).read_text())
+        if case.get("git_workflow"):
+            made = receipts.command([writer, "fixture", case["v016_case"], str(source)], folder, "native-fixture", 120)
+            fixture = json.loads(Path(made["stdout"]).read_text())
+        else:
+            fixture = prepared_inputs.make_initial(case, build,
+                [writer, "fixture", case["v016_case"], str(source)], folder)
         authored = receipts.command([writer, "expected", case["v016_case"], str(expected)], folder, "native-expected", 120)
         expectation = json.loads(Path(authored["stdout"]).read_text())
     def original_check(root, step, label):
@@ -1980,7 +2025,7 @@ def prepare_workspace(recipe, folder, build_folder):
         volume, provisioned = reused["master_volume"], reused["provision"]
         receipts.write_new(folder / "resource-claim.json", {"volume": volume, "created_by_this_run": False,
                            "purpose": "compatible closed prepared master reused; never a mutated sample", "reuse": reuse})
-    result = {"schema": "fs-bench-pro-prepared-workspace-v1", "status": "PASS", "recipe": recipe,
+    result = {"schema": "fs-bench-pro-prepared-workspace-v1", "status": "PASS", "recipe": recipe, "build": str(Path(build_folder).resolve()),
               "family": family["family"], "case": case["id"], "identity": current, "fixture": fixture,
               "expectation": expectation, "native_verification": native, "helpers": helpers,
               "history_states": history,
@@ -1989,15 +2034,14 @@ def prepare_workspace(recipe, folder, build_folder):
               "git_reference": git_reference,
               "independent_dedup_inputs": dedup_inputs,
               "generator_sha256": build["binaries"]["workspace-writer"]["sha256"],
-              "master_volume": volume, "provision": provisioned, "source_uid": source.stat().st_uid,
+              "source": str(source), "master_volume": volume, "provision": provisioned, "source_uid": source.stat().st_uid,
               "master_reuse": reuse,
               "source_gid": source.stat().st_gid, "global_profile": "Disposable/WAL/OFF",
               "overlay_profile": "MEMORY/OFF/EXCLUSIVE", "construction_workers": 1,
               "setup": ("initial native fixture independently verified; selected M1 native expectations materialized with None mode observations and payloads removed after manifest/scope authoring; actual scoped proof binds measured helper observations; public Init/seal/install once; independent sample byte clone"
                         if case.get("m1_schedule") else "native fixture and independent algebraic selected states fully verified; public Init/seal/install once; sample uses independent closed byte clone"),
               "cache": "explicit setup source/Store warmth; class B additionally requires warm terminal cleanup and actual zero source demands"}
-    receipts.write_new(folder / "prepared.json", result)
-    receipts.manifest(folder)
+    seal_prepared(folder, result, build_folder)
     return result
 
 
@@ -2084,10 +2128,40 @@ def prepare_git_fixture(case, folder, build):
                               "git_independent_reference": qualification}
 
 
+def seal_prepared(folder, result, build_folder=None):
+    if build_folder is not None:
+        result["build"] = str(Path(build_folder).resolve())
+    build = identity.load_build(result["build"]) if result.get("build") else None
+    if build is not None:
+        _, case = family_case(result["recipe"]) if result["recipe"] not in ("empty", "big64m") else (None, None)
+        result["preparation_key"] = prepared_inputs.preparation_key(result["recipe"], case, result["identity"], build)
+    if result.get("provision"):
+        result["store_builder_key"] = prepared_inputs.product_store_key(result["identity"])
+    source = result.get("source")
+    if source and Path(source).is_relative_to(prepared_inputs.CACHE):
+        home = Path(source).parent
+        receipts.verify_manifest(home)
+        result["initial_input"] = {"source": source,
+            "metadata": str(home / "input.json"), "metadata_sha256": identity.sha256(home / "input.json"),
+            "manifest": str(home / "manifest.json"), "manifest_sha256": identity.sha256(home / "manifest.json")}
+    receipts.write_new(Path(folder) / "prepared.json", result)
+    receipts.manifest(folder)
+
+
 def load(folder, recipe=None):
     folder = Path(folder)
     receipts.verify_manifest(folder)
     result = json.loads((folder / "prepared.json").read_text())
+    if result.get("initial_input"):
+        pointer = result["initial_input"]
+        home = Path(pointer["source"]).parent
+        if (identity.sha256(pointer["metadata"]) != pointer["metadata_sha256"]
+                or identity.sha256(pointer["manifest"]) != pointer["manifest_sha256"]):
+            raise ValueError("shared initial input pointer changed")
+        receipts.verify_manifest(home)
+        cached = json.loads(Path(pointer["metadata"]).read_text())
+        if cached["tree"] != prepared_inputs.tree_record(pointer["source"]):
+            raise ValueError("shared initial input bytes/metadata/link classes changed")
     if result["status"] != "PASS" or recipe is not None and result["recipe"] != recipe:
         raise ValueError("sealed fixture recipe/status differs")
     if result["schema"] in ("fs-bench-pro-prepared-native-init-v1", "fs-bench-pro-prepared-native-import-v1", "fs-bench-pro-prepared-native-footprint-v1"):

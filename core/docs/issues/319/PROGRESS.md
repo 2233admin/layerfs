@@ -2368,3 +2368,22 @@ The debug exact-reuse-100 test reached 118 s: retained FAILED hang, existing
 full 101 MiB construction/verification cost, no retry/tuning; covering large
 byte checks remain for the final gate. Receipts: benchmark-simplification.json
 and stage2-selection-* logs. Shared fixtures/driver and sealed count gate remain.
+
+
+### Benchmark simplification: shared closed initial inputs
+
+Cause: separate case setup regenerated identical native inputs, and originals
+contain Project Init Stores. Change: retain one real initial input by native
+producer/bytes/metadata identity; share closed Stores by the complete product
+builder key, preserving independent writable sample clones and original oracles.
+Context reuse keeps original producer receipts and adds current-case/role
+qualification; later states, payloads, mode evidence and readbacks are unchanged.
+Commit: this shared-fixture change. Integrity/invalidation tests 4 PASS; contextual
+fixture tests 10 PASS; adapted recipe/ownership tests 19 PASS. Actual shared SDK
+and compact/M1 context inputs pass both original case verifiers and full bytes.
+An M1 smoke's missing header was retained and fixed with the required header.
+Before keeping: logical 3,071,784,966 B / allocated 3,393,814,528 B; host free
+597,182,824,448 B / Docker free 171,939,074,048 B. Source, Store keys and ownership
+remain exact; SDK/daemon/runtime checks recorded for this commit. Receipts:
+fixtures-before-retention.json, shared-input/context and stage2-cache logs.
+The tracked driver and complete simplified-source gate remain next.

@@ -20,8 +20,10 @@ def declared(family, position=0):
 
 
 def build(folder):
-    result = {"socket": "mock-socket", "binaries": {}}
-    for name in ("workspace-writer", "edit-host", "workload-linux", "edit-linux", "workspace-linux"):
+    # Each synthetic binary archive belongs to this bounded test fixture.
+    fixtures.prepared_inputs.CACHE = folder / "input-cache"
+    result = {"socket": "mock-socket", "binaries": {}, "flags": "mock sealed inputs", "explicit_rustflags": None}
+    for name in ("namespace-writer", "workspace-writer", "workload-host", "edit-host", "workload-linux", "edit-linux", "workspace-linux"):
         path = folder / name
         path.write_text("mocked sealed tool " + name)
         result["binaries"][name] = {"path": str(path), "sha256": fixtures.identity.sha256(path)}
@@ -29,6 +31,12 @@ def build(folder):
 
 
 class ContextFixtures(unittest.TestCase):
+    def setUp(self):
+        cache = tempfile.TemporaryDirectory()
+        self.addCleanup(cache.cleanup)
+        patcher = patch.object(fixtures.prepared_inputs, "CACHE", Path(cache.name) / "inputs")
+        patcher.start(); self.addCleanup(patcher.stop)
+
     def native_tools(self, case, calls, *, wrong_role=False, bad_payload=False):
         def command(argv, out, label, seconds, **options):
             calls.append((argv, label, seconds, options))
@@ -51,6 +59,14 @@ class ContextFixtures(unittest.TestCase):
                            "context_manifest_sha256": fixtures.identity.sha256(scope), "recipe_sha256": "a" * 64,
                            "entries": 2, "logical_bytes": len(data)}
                 output.write_text(json.dumps(summary))
+            elif mode == "verify-context":
+                _, _, name, role, step, source, modes = argv
+                if case.get("m1_schedule"):
+                    self.assertEqual(Path(modes).read_bytes(), b"original-context-created-modes-v1\nrole\tpath\tmode\n")
+                else:
+                    self.assertEqual(modes, "-")
+                output.write_text(json.dumps({"case": name, "role": role, "step": int(step),
+                                              "verification_status": "pass"}))
             elif mode == "verify-manifest":
                 output.write_text("verification_status=pass\n")
             elif mode == "prepare-context-step":
@@ -81,7 +97,7 @@ class ContextFixtures(unittest.TestCase):
                 output.write_text(argv[-1] + "\n")
             else:
                 self.fail("undeclared mocked tool invocation " + repr(argv))
-            return {"stdout": str(output), "status": "PASS", "exit_code": 0}
+            return {"argv": argv, "stdout": str(output), "status": "PASS", "exit_code": 0}
         return command
 
     def binding(self, case):
@@ -153,7 +169,9 @@ class ContextFixtures(unittest.TestCase):
                 materialize = [argv for argv, _, _, _ in calls if argv[1] == "materialize-context"]
                 expected = [(("trunk" if case.get("branch_schedule") else "0"), 0)]
                 expected += [(x["role"], x["index"]) for x in fixtures.context_plan(case)["checkpoints"]]
-                self.assertEqual([(argv[3], int(argv[4])) for argv in materialize], expected)
+                observed = [(argv[3], int(argv[4])) for argv in materialize]
+                self.assertEqual(observed, expected if observed and observed[0][1] == 0 else expected[1:])
+                self.assertEqual(sum(argv[1] == "verify-context" for argv, _, _, _ in calls), 1)
                 self.assertEqual(len(states), len(expected) - 1)
                 self.assertEqual(initial["role"], expected[0][0])
                 self.assertIn("original-context-initial-check", native)
@@ -256,11 +274,12 @@ class ContextFixtures(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             folder = Path(temporary); sibling = folder / "closed"; sibling.mkdir()
             good = {"schema": fixtures.CONTEXT_PREPARED_SCHEMA, "status": "PASS", "global_profile": "Disposable/WAL/OFF",
-                    "identity": {"product_tree": "product"}, "source_uid": 501, "source_gid": 20,
+                    "identity": {"product_tree": "product", "files": {}},
+                    "store_builder_key": fixtures.prepared_inputs.product_store_key({"files": {}}), "source_uid": 501, "source_gid": 20,
                     "fixture": {"fixture_sha256": "digest"}, "master_volume": "immutable", "provision": {"store_sha256": "seal"}}
             (sibling / "prepared.json").write_text(json.dumps(good)); (sibling / "manifest.json").write_text("sealed")
             with patch.object(fixtures, "load", return_value=good):
-                reused, record = fixtures.compatible_master(folder / "next", {"fixture_sha256": "digest"}, {"product_tree": "product"}, 501, 20)
+                reused, record = fixtures.compatible_master(folder / "next", {"fixture_sha256": "digest"}, {"product_tree": "product", "files": {}}, 501, 20)
             self.assertEqual(reused, good); self.assertIn("closed immutable setup", record["scope"])
             access = {"id": "original-access", "v016_case": "original-access", "fixture": {"recipe": "original-access", "seed": 1,
                        "producer": "original-producer", "producer_family": "dedup_branch_history"}}

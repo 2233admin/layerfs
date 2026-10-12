@@ -44,7 +44,7 @@ class Imports(unittest.TestCase):
                 self.assertEqual(plan["state"],0)
                 self.assertIn("fresh FUSE mount",case["oracle"]["mounted_verification"])
                 total += 1
-        self.assertEqual(total,31)
+        self.assertEqual(total,10)
 
     def test_import_admission_refuses_prepared_store_and_mutation_substitutions(self):
         family = rows("dedup_cross_file")
@@ -81,18 +81,21 @@ class Imports(unittest.TestCase):
         parts = [{"logical_start":i*16384,"len":16384,"raw_sha256":f"{i:064x}"} for i in range(64)]
         q = qualification(case["id"],{"files/f0000.dat":parts})
         called = []
-        build = {"binaries":{"workspace-writer":{"path":"/sealed/native","sha256":"a"*64}}}
+        build = {"binaries":{name:{"path":"/sealed/"+name,"sha256":"a"*64} for name in
+                    ("namespace-writer","workspace-writer","workload-host","edit-host")}, "flags":"mock tools", "explicit_rustflags":None}
         with tempfile.TemporaryDirectory() as temporary:
             folder = Path(temporary)/"fresh"
-            def command(argv, out, label, seconds):
+            cache = mock.patch.object(fixtures.prepared_inputs, "CACHE", Path(temporary)/"inputs")
+            cache.start(); self.addCleanup(cache.stop)
+            def command(argv, out, label, seconds, **options):
                 called.append(argv)
-                source = folder/"source"; source.mkdir(exist_ok=True)
+                source = Path(argv[-1]); source.mkdir(parents=True, exist_ok=True)
                 value = q if argv[1]=="import-qualified" else {"files":1,"entries":3,"logical_bytes":1048576,
                     "fixture_digest":"b"*64,"verification_status":"pass"}
                 path = Path(out)/(label+".stdout"); path.write_text(json.dumps(value))
-                return {"stdout":str(path)}
+                return {"argv":argv,"stdout":str(path),"exit_code":0}
             with mock.patch.object(fixtures.identity,"load_build",return_value=build), \
-                 mock.patch.object(fixtures.identity,"source_identity",return_value={"source_commit":"sealed"}), \
+                 mock.patch.object(fixtures.identity,"source_identity",return_value={"source_commit":"sealed","files":{}}), \
                  mock.patch.object(fixtures.receipts,"command",side_effect=command), \
                  mock.patch.object(fixtures.project,"provision",side_effect=AssertionError("setup Init forbidden")):
                 result = fixtures.prepare_import(family,case,folder,Path(temporary)/"build")
