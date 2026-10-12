@@ -1650,3 +1650,84 @@ full target PASS. Own-lock refusals execute no command and remain recorded.
 [Count evidence](checks/delete-edge-count.json) preserves red/green log hashes.
 Production LOC:82362 ->82362 (delta+0), pinned exact parent/staged counter;
 reference absent (retired R9c; last counted65,417 at tree498dd1917812).
+
+Delete stage p319n14e atf3a699c4d seals9 binaries, then35 once-only selections:
+all35 functional PASS/proof PASS;1 overall PASS/34 INELIGIBLE retained timing
+verdicts. Four delete sizes plus replace-shrink/truncate controls and23-family
+guards pass;46 portable CSVs preserve every parsed field except exact local
+path substitutions. All original/test payloads removed through owned claims
+after manifest PASS; no tracked edit occurred through the last sample.
+
+Delete OperationRecord jobs1/10/100/500MiB118/361/1426/7200 ->104/312/330/376,
+namespace producer42 at every size. Source cause removes copied replacement
+bytes, selecting existing pure-delete mapping path instead of replacement CDC
+and its transient branch custody. Persisted ExtentSlice stores payload ID,
+source offset and length; absolute offsets are computed during traversal, so
+unchanged suffix nodes can retain IDs. New large counts plateau; exact tuples
+are witnessed by external1/10MiB tests, not exposed by namespace31-field
+receipts at100/500MiB. Do not invent their tuple or physical hashing counts.
+Current Commit spans9.847250/15.334000/15.337916/22.367834ms remain diagnostic,
+all timings INELIGIBLE; no qualified speedup from interference.
+
+Actual per-Commit Storage pack-write bytes7413/17706/47089/115270 ->
+6797/16840/20115/26776, with4096 reserved directory bytes,one pooled pack/group
+unchanged. Whole-Store allocated deltas+12288/0/-49152/-180224B remain raw.
+At1MiB main1232896B and SHM32768B unchanged; extra2 WAL frames at Commit,
+3 after native proof. Historical serial reservations0; kept readiness repair
+93ac3d77b yields1/2/3 across warm/measured/proof mounts, not at Commit. This
+correlates with the WAL difference; individual SQL frame attribution is not
+proven. Matching command/verifier/oracle scopes and exact final byte counts
+qualify work comparison; helper/master seals differ across historical repairs.
+Initial-to-final allocation growth and initial extent census unavailable.
+Reduced Commit pack writing does not mean every final allocation is improved.
+[Stage evidence](checks/delete-edge-stage.json) retains identity/receipt/CSV
+hashes. Delete subject closes with counted bounded mapping work and full proof;
+next subject500-step histories starts from retained phase12 receipts.
+
+### Phase14 histories: external observer startup (receipt/source diagnosis)
+
+Retained p319n12 five500-step receipts all functional/proof PASS/INELIGIBLE
+under210s; original hotset120s FAIL stopped377/500 remains. Their500 step
+walls total156.376..170.602s, including1000 pre-/post-Commit root guards
+with127.019..127.954s wall,74.66..81.23percent. Hotset step20/400 owner93/93,
+OperationRecord69/69,namespace42/42; command40.669459/54.180125ms,Commit
+8.030625/12.331292ms,guards277.786209/276.696500ms. One terminal Status,
+not500; no demonstrated history-depth product growth. Existing SQL profile
+nested observations do not establish indexed plans or SQL cause; no such claim.
+
+Source performs500 ordinary SDK commands and500 public Commits, separately
+1000 root DockerCLI observations. Preserve exact pre/post stat of protected
+Store and actual same-container cgroup,4GiB bounds,OOM baseline/zero swap,
+absolute guard/stage deadlines,observer exclusion and all original failures.
+Ordinary product Exec cannot replace root stat: admitted nonroot identity and
+Store0700 already at25c; changing either would need forbidden capability.
+Instead replace only controller DockerCLI transport with same existing root
+Engine Exec create/start/inspect, Pythonstdlib, real bounded host child receipt.
+Predicted guard DockerCLI processes1000 ->0, root Engine Execs/observations
+1000 unchanged, workload SDKExec500/Commit500/terminalStatus1 unchanged.
+Source/product APIs,control variants,options,schema,observations,dependencies
+and limits unchanged; no persistent helper/background lane or operation replay.
+External mock guard first must fail1 DockerCLI launch versus expected0 while
+retaining exact5 values and append-only successful original completion.
+
+Guard count tier after replacement:0 DockerCLI launches/one real Python host
+child, same five values and PASS original attempt1. ScriptSHA22175c00865dd7386dd95d66bf04a7871bcc02a63d26c9e975b60a76f616e966
+unchanged; private fakeEngine exactroot/container/body andthree requests.
+Nine protocol/count controls PASS:read-ahead,byte fragmentation,empty/interleaved
+frames,huge claimed length with bounded windows,truncation/systemerror,wrong
+identity/running/unavailable/nonzero/bool exit,duplicate JSON,slowheaders at
+all3stages,partial andshortoutput writes. No retry/inspectafterfailure.
+Real child PID andexistingreceipt schema preserved; remoteack retainedstderr
+onfailure,cancellation notestablished. Helper usesone deadline across3exchanges;
+outerunchangedparentwall also coversPythonstartup. No productroot Exec bypass.
+
+Fullenginecheck initially omitted worker env (3FAIL/18ERROR); correctedenv
+thenexposed3 missing fixture variables. Pinnednativehelpers check reports323 tests,3skips,2configerrors: sealedbuild admission refuses dirtysource and
+M1_WORKLOAD_TEST_WRITER unset. These are retained, not a fullsuitePASS. Native
+writer compiledinputs are unchanged; aftercommit/newcleanseal run covering
+enginecheck withallfixtures. Newtransport9PASS plusfmt/boundary686/selftests50
+PASS; noRustcrate changed,ClippyN/A forprivatePythontransport. Inherited
+RuntimeClippy refusals remain their originalqualification.
+[Count evidence](checks/history-guard-count.json) pins the logs andold step
+operands. Production LOC:82362 ->82362 (delta+0), exactfirstparent/staged
+pinnedcounter; reference absent (retired R9c; last counted65,417 at tree498dd1917812).

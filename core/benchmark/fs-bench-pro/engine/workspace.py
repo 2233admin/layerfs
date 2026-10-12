@@ -652,17 +652,8 @@ def ordinary_resource_values(row, before=None):
 
 def ordinary_resource_guard(runtime, build, output, label, before=None, seconds=15):
     """Observe only the actual sample's backing stat/cgroup outside product time."""
-    body = """import json
-from pathlib import Path
-store=Path('/layerfs-store/global/store.sqlite').stat()
-events=dict(line.split() for line in Path('/sys/fs/cgroup/memory.events').read_text().splitlines())
-print(json.dumps({'store_main_logical_bytes':store.st_size,'store_main_allocated_bytes':store.st_blocks*512,
- 'oom':int(events['oom']),'oom_kill':int(events['oom_kill']),
- 'swap_current':int(Path('/sys/fs/cgroup/memory.swap.current').read_text())}))
-"""
-    docker = ["docker", "--host", "unix://" + build["socket"]]
-    attempted = receipts.command([*docker, "exec", "--user", "0:0", runtime.container,
-                                  "python3", "-B", "-c", body], output, label, seconds)
+    attempted = receipts.command([sys.executable, '-B', str(Path(__file__).with_name('resource_exec.py')),
+                                  build['socket'], runtime.container, str(seconds)], output, label, seconds)
     row = json.loads(Path(attempted["stdout"]).read_text())
     row["scope"] = "original 4GiB main Store apparent/allocated bound; actual own container OOM/swap; retired host Store RSS/physical-spool peak not asserted"
     return ordinary_resource_values(row, before)

@@ -64,6 +64,21 @@ mount and performs a separate offline current-format persisted proof. The
 runtime's `verify-workspace` mode is an independent harness oracle over a closed
 sample Store; the live daemon data path stays in-process in the shared volume.
 
+Ordinary resource guards remain root observers in the exact owned daemon
+container, separate from the product's admitted nonroot Exec. The controller
+uses the same Engine Exec create/start/inspect operations through a private
+Python host child instead of starting Docker CLI. The fixed observer script,
+protected Store path, actual cgroup fields, every pre-/post-Commit check and
+frozen apparent/allocated/OOM/swap limits remain unchanged. Existing child
+attempt/completion and stdout/stderr artifacts describe the actual host argv.
+An acknowledged remote Exec ID is retained on failure; closing a local socket
+or killing the host child does not establish remote cancellation. No request
+is retried and a running/unavailable/nonzero terminal observation fails.
+The helper uses one deadline across its three exchanges; the original outer
+child wall stop also covers Python startup. Eight KiB stream windows retain
+HTTP upgrade read-ahead and exact partial output. Observer wall remains excluded
+from product time and charged to the absolute watchdog, including failures.
+
 Topology transcripts retain every acknowledged Commit in role-local order.
 Only the frozen selected payload checkpoints carry a manifest and, for M1,
 the created-mode binding. Omitted checkpoints carry `-` in both scope columns;
