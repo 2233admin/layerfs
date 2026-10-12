@@ -1,13 +1,18 @@
 //! Indexed FIFO and namespace-depth frames with guarded cursor acknowledgement.
+use super::indexed::{IndexedReducer, RELEASE_ROWS};
 use super::record::Row;
 use super::release::ReleaseWork;
-use super::{indexed::IndexedReducer, indexed_rows::RowCursor, indexed_wire as wire, meaning};
+use super::{indexed_rows::RowCursor, indexed_wire as wire, meaning};
 use crate::filesystem::directory::read::{list_after, DirectoryReadWork};
 use crate::filesystem::inode::read::{lookup_many, InodeReadWork, InodeTable};
 use crate::filesystem::objects::FilesystemObjects;
 use crate::filesystem::sorted::finish::DirectoryRoot;
 use crate::object::inode_leaf::{InodeKind, InodeValue};
 use crate::{ConstructionRecordChange, ContentError, ContentResult};
+
+/// Zero rows of a seed wave one job queues: a work item and a node each,
+/// inside the 64 changes of one guarded job.
+const QUEUE_ROWS: usize = 32;
 
 struct Frontier {
     tail: u64,
@@ -36,12 +41,13 @@ pub(super) fn release(
     // lower serials, are now allowed; the later final pass starts from None.
     loop {
         let keys = reducer.state.first_keys(wire::WORK)?;
-        for key in &keys {
-            wire::serial(*key)?;
-        }
-        if !keys.is_empty() {
-            for key in keys {
-                frontier.transfer(objects, reducer, wire::serial(key)?)?;
+        let ordinals = keys
+            .into_iter()
+            .map(wire::serial)
+            .collect::<ContentResult<Vec<_>>>()?;
+        if !ordinals.is_empty() {
+            for ordinals in ordinals.chunks(RELEASE_ROWS) {
+                frontier.transfer(objects, reducer, ordinals)?;
             }
             continue;
         }
@@ -86,6 +92,10 @@ fn seed(
         )?;
         reads = reads.saturating_add(serials.len() as u64);
         let mut bases = bases.into_iter();
+        // The zero rows of a wave are queued together: work item and node of
+        // at most QUEUE_ROWS rows are one guarded job.
+        let mut queued = Vec::new();
+        let mut tail = frontier.tail;
         for row in wave {
             let base = if matches!(row, Row::Effect { .. }) {
                 bases.next().flatten()
@@ -94,107 +104,145 @@ fn seed(
             };
             let count = meaning::count(row, base)?;
             if count == 0 && row.serial() != root {
-                let next = frontier
-                    .tail
-                    .checked_add(1)
-                    .ok_or(ContentError::LengthOverflow)?;
-                reducer.state.apply(vec![
-                    wire::change(
-                        wire::WORK,
-                        next,
-                        None,
-                        Some(
-                            wire::Item {
-                                serial: row.serial(),
-                                base,
-                            }
-                            .encode(),
-                        ),
-                    ),
-                    wire::change(wire::NODE, row.serial(), None, Some(vec![1, 0])),
-                ])?;
-                frontier.tail = next;
+                if queued.len() == 2 * QUEUE_ROWS {
+                    frontier.queue(reducer, &mut queued, tail)?;
+                }
+                tail = tail.checked_add(1).ok_or(ContentError::LengthOverflow)?;
+                let item = wire::Item {
+                    serial: row.serial(),
+                    base,
+                };
+                queued.push(wire::change(wire::WORK, tail, None, Some(item.encode())));
+                queued.push(wire::change(
+                    wire::NODE,
+                    row.serial(),
+                    None,
+                    Some(vec![1, 0]),
+                ));
             }
             reducer.work.serials_scanned = reducer.work.serials_scanned.saturating_add(1);
         }
+        frontier.queue(reducer, &mut queued, tail)?;
     }
     Ok(reads)
 }
 
 impl Frontier {
+    /// Publishes the queued work items and nodes of a seed wave as one job.
+    fn queue(
+        &mut self,
+        reducer: &IndexedReducer<'_, '_>,
+        queued: &mut Vec<ConstructionRecordChange>,
+        tail: u64,
+    ) -> ContentResult<()> {
+        if queued.is_empty() {
+            return Ok(());
+        }
+        let mut changes = std::mem::take(queued);
+        changes.sort_by_key(|change| change.key);
+        reducer.state.apply(changes)?;
+        self.tail = tail;
+        Ok(())
+    }
+    /// Moves at most [`RELEASE_ROWS`] queued items, in FIFO order, to the
+    /// released state: their work records are one read job, their rows and
+    /// nodes a second, and every deletion, node step and new frame one guarded
+    /// job. The first refusal in item order is the one returned, and a
+    /// refusal applies nothing of the job.
     fn transfer(
         &mut self,
         objects: &FilesystemObjects<'_>,
         reducer: &mut IndexedReducer<'_, '_>,
-        ordinal: u64,
+        ordinals: &[u64],
     ) -> ContentResult<()> {
-        if ordinal
-            != self
-                .head
-                .checked_add(1)
-                .ok_or(ContentError::LengthOverflow)?
-            || ordinal > self.tail
-        {
-            return Err(ContentError::InvalidRecord("filesystem release FIFO"));
-        }
-        let old = reducer
-            .state
-            .read(wire::WORK, ordinal)?
-            .ok_or(ContentError::InvalidRecord(
-                "filesystem release work missing",
-            ))?;
-        let item = wire::Item::decode(&old)?;
-        let row = reducer.required(item.serial)?;
-        let merged = meaning::with_base(row, item.base)?;
-        let value = merged
-            .value()
-            .ok_or(ContentError::InvalidRecord("released new inode"))?;
-        let node =
-            reducer
-                .state
-                .read(wire::NODE, item.serial)?
-                .ok_or(ContentError::InvalidRecord(
-                    "filesystem release node missing",
-                ))?;
-        if node != [1, 0] {
-            return Err(ContentError::InvalidRecord("filesystem release node state"));
-        }
-        let mut changes = vec![wire::change(wire::WORK, ordinal, Some(old), None)];
-        let mut depth = self.depth;
-        if value.kind == InodeKind::Directory {
-            let accepted = item
-                .base
-                .is_none_or(|base| base.content_root != value.content_root);
-            if accepted {
-                objects.accepted_reader()?;
+        // An item that cannot be read ends the job after the items before it
+        // were checked: an earlier item's refusal still comes first.
+        let mut later = None;
+        let mut head = self.head;
+        let mut keys = Vec::with_capacity(ordinals.len());
+        for ordinal in ordinals {
+            match head.checked_add(1) {
+                Some(next) if next == *ordinal && next <= self.tail => {}
+                Some(_) => later = Some(ContentError::InvalidRecord("filesystem release FIFO")),
+                None => later = Some(ContentError::LengthOverflow),
             }
-            depth = depth.checked_add(1).ok_or(ContentError::LengthOverflow)?;
-            let frame = wire::Frame {
-                serial: item.serial,
-                root: value.content_root,
-                accepted,
-                finished: false,
-                after: None,
+            if later.is_some() {
+                break;
+            }
+            head = *ordinal;
+            keys.push(wire::key(wire::WORK, *ordinal));
+        }
+        let mut items = Vec::with_capacity(keys.len());
+        if !keys.is_empty() {
+            for (ordinal, old) in ordinals.iter().zip(reducer.state.read_keys(&keys)?) {
+                let item = old
+                    .ok_or(ContentError::InvalidRecord(
+                        "filesystem release work missing",
+                    ))
+                    .and_then(|old| Ok((wire::Item::decode(&old)?, old)));
+                match item {
+                    Ok((item, old)) => items.push((*ordinal, item, Some(old))),
+                    Err(error) => {
+                        later = Some(error);
+                        break;
+                    }
+                }
+            }
+        }
+        let serials = items
+            .iter()
+            .map(|(_, item, _)| item.serial)
+            .collect::<Vec<_>>();
+        let mut changes = Vec::with_capacity(3 * items.len());
+        let mut depth = self.depth;
+        reducer.read_rows(&serials, Some(wire::NODE), |index, row, node| {
+            let (ordinal, item, old) = &mut items[index];
+            let merged = meaning::with_base(row?, item.base)?;
+            let value = merged
+                .value()
+                .ok_or(ContentError::InvalidRecord("released new inode"))?;
+            let node = node.ok_or(ContentError::InvalidRecord(
+                "filesystem release node missing",
+            ))?;
+            if node != [1, 0] {
+                return Err(ContentError::InvalidRecord("filesystem release node state"));
+            }
+            changes.push(wire::change(wire::WORK, *ordinal, old.take(), None));
+            let state = if value.kind == InodeKind::Directory {
+                let accepted = item
+                    .base
+                    .is_none_or(|base| base.content_root != value.content_root);
+                if accepted {
+                    objects.accepted_reader()?;
+                }
+                depth = depth.checked_add(1).ok_or(ContentError::LengthOverflow)?;
+                let frame = wire::Frame {
+                    serial: item.serial,
+                    root: value.content_root,
+                    accepted,
+                    finished: false,
+                    after: None,
+                };
+                changes.push(wire::change(wire::FRAME, depth, None, Some(frame.encode())));
+                1
+            } else {
+                2
             };
-            changes.push(wire::change(wire::FRAME, depth, None, Some(frame.encode())));
             changes.push(wire::change(
                 wire::NODE,
                 item.serial,
                 Some(node),
-                Some(vec![1, 1]),
+                Some(vec![1, state]),
             ));
-        } else {
-            changes.push(wire::change(
-                wire::NODE,
-                item.serial,
-                Some(node),
-                Some(vec![1, 2]),
-            ));
+            Ok(())
+        })?;
+        if let Some(error) = later {
+            return Err(error);
         }
         changes.sort_by_key(|change| change.key);
         reducer.state.apply(changes)?;
         self.depth = depth;
-        self.head = ordinal;
+        self.head = head;
         self.work.peak_depth = self
             .work
             .peak_depth

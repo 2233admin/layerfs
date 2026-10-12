@@ -321,6 +321,27 @@ its window is written, not at the call naming the serial; and a declared
 serial's member is no longer read back before its first row is written (they
 are one guarded write now).
 
+**Release work queued and transferred by window.** A removed inode whose
+count reaches zero cost one write in the seed (work item and node) and four
+jobs when it left the FIFO (work item, row, node, one write): 90 jobs and 36
+write transactions for the 18 removed files of step. The seed now queues the
+zero rows of a wave in one job, and at most 16 items leave the FIFO per three
+jobs (`layerfs-content/src/filesystem/references/indexed_release.rs`
+`Frontier::queue`, `Frontier::transfer`). Predicted record jobs 215 / 586 /
+about 9,870 and write transactions 38 / 112 / about 1,350. Observed:
+
+| per Commit | small | step | large |
+| --- | ---: | ---: | ---: |
+| record jobs | 221 → 215 | 668 → 586 | 10,086 → 9,865 |
+| Workspace statements | 307 → 301 | 904 → 822 | 12,080 → 11,859 |
+| record statements | 505 | 2,127 | 24,444 |
+| write transactions | 40 → 38 | 144 → 112 | 1,430 → 1,347 |
+
+Not changed: the page of a released directory still costs three jobs and one
+write transaction for each child it releases (`Frontier::page`, read from the
+code; none of the three shapes removes a directory tree, so it is not in these
+counts).
+
 ## 6. Recommendation — removing the per-key record jobs
 
 Owner direction of 2026-10-13 allows interface and overlay-schema changes.

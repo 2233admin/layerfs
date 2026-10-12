@@ -11,6 +11,9 @@ use crate::{ConstructionRecordChange, ContentError, ContentResult};
 /// Rows one job of a touched-row pass reads: three records each, inside the
 /// 64 keys of one read job.
 pub(super) const PASS_ROWS: usize = 21;
+/// Queued rows one release job reads with their node states: four records
+/// each, inside the 64 keys of one read job.
+pub(super) const RELEASE_ROWS: usize = 16;
 
 pub(super) struct IndexedReducer<'s, 'b> {
     pub state: &'s SerialState<'b>,
@@ -82,42 +85,52 @@ impl<'s, 'b> IndexedReducer<'s, 'b> {
         }
         Ok(())
     }
-    pub fn row(&self, serial: u64) -> ContentResult<Option<Row>> {
-        let (fresh, raw, touch) = self.stored(serial)?;
-        self.decoded(serial, fresh, raw.as_deref(), touch.as_deref())
-    }
     /// The required rows of at most [`PASS_ROWS`] serials, their three records
     /// each read in one job. Every row is checked as `row` checks one, in the
     /// order of `serials`.
     pub fn required_many(&self, serials: &[u64]) -> ContentResult<Vec<Row>> {
-        self.settled()?;
         if serials.len() > PASS_ROWS {
             return Err(ContentError::InvalidRecord("filesystem touched window"));
         }
-        let mut keys = [wire::key(wire::FRESH, 0); 3 * PASS_ROWS];
-        for (slot, serial) in keys.chunks_exact_mut(3).zip(serials) {
-            slot[0] = wire::key(wire::FRESH, *serial);
-            slot[1] = wire::key(wire::ROW, *serial);
-            slot[2] = wire::key(wire::TOUCH, *serial);
-        }
-        let mut values = self
-            .state
-            .read_keys(&keys[..3 * serials.len()])?
-            .into_iter();
         let mut rows = Vec::with_capacity(serials.len());
+        self.read_rows(serials, None, |_, row, _| {
+            rows.push(row?);
+            Ok(())
+        })?;
+        Ok(rows)
+    }
+    /// One job for the member, row and witness of every serial and, when
+    /// asked, one more record of each. `each` is given, in the order of
+    /// `serials`, the index, the required row checked as `row` checks one, and
+    /// the extra record: it decides when a row's refusal is returned.
+    pub fn read_rows(
+        &self,
+        serials: &[u64],
+        also: Option<u32>,
+        mut each: impl FnMut(usize, ContentResult<Row>, Option<Vec<u8>>) -> ContentResult<()>,
+    ) -> ContentResult<()> {
+        self.settled()?;
+        let width = 3 + usize::from(also.is_some());
+        let mut keys = Vec::with_capacity(width * serials.len());
         for serial in serials {
+            keys.extend([wire::FRESH, wire::ROW, wire::TOUCH].map(|kind| wire::key(kind, *serial)));
+            keys.extend(also.map(|kind| wire::key(kind, *serial)));
+        }
+        let mut values = self.state.read_keys(&keys)?.into_iter();
+        for (index, serial) in serials.iter().enumerate() {
             let mut next = || values.next().ok_or(ContentError::UnexpectedEof);
             let (member, raw, touch) = (next()?, next()?, next()?);
-            let expected = self.expected(*serial)?;
-            self.fresh(expected, member.as_deref())?;
-            rows.push(
+            let extra = if also.is_some() { next()? } else { None };
+            let row = self.expected(*serial).and_then(|expected| {
+                self.fresh(expected, member.as_deref())?;
                 self.decoded(*serial, expected, raw.as_deref(), touch.as_deref())?
                     .ok_or(ContentError::InvalidRecord(
                         "filesystem reference row missing",
-                    ))?,
-            );
+                    ))
+            });
+            each(index, row, extra)?;
         }
-        Ok(rows)
+        Ok(())
     }
     /// Decodes one serial's row and checks it against its fresh tag and its
     /// touched witness.
@@ -143,11 +156,6 @@ impl<'s, 'b> IndexedReducer<'s, 'b> {
             ));
         }
         Ok(row)
-    }
-    pub fn required(&self, serial: u64) -> ContentResult<Row> {
-        self.row(serial)?.ok_or(ContentError::InvalidRecord(
-            "filesystem reference row missing",
-        ))
     }
     fn prepare(
         &self,

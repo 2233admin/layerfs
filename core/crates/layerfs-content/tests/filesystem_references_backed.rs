@@ -276,7 +276,10 @@ fn a_touched_row_pass_reads_a_wave_of_rows_in_jobs_of_twenty_one_and_matches_can
     // rows to a job: 21 + 11, 21 + 11, then 21 + 11 and 5. Seven jobs a pass
     // where each row was its own job before. The hundred removals and the
     // parent's value were held in five windows of at most 21 serials first:
-    // five read jobs and five guarded writes for 101 rows.
+    // five read jobs and five guarded writes for 101 rows. The hundred zero
+    // rows are queued by one job a seed wave (four jobs, at most 32 rows and
+    // 64 changes) and leave the queue sixteen to a job: seven times one read
+    // of the work items, one read of rows and nodes (64 keys), one write.
     let count = 100u64;
     let directories = [DirectoryUpdate {
         parent: 1,
@@ -309,14 +312,15 @@ fn a_touched_row_pass_reads_a_wave_of_rows_in_jobs_of_twenty_one_and_matches_can
     assert_eq!((actual.root, actual.value), (expected.root, expected.value));
     assert_eq!(actual.counters.references.serials_scanned, count + 1);
     assert_eq!(actual.counters.references.final_removals, count);
-    assert_eq!(records.maximum_read_keys, 63);
+    assert_eq!(records.maximum_read_keys, 64);
     assert_eq!(
         records.wide_reads,
-        5 + 14,
-        "five windows, seven jobs a pass"
+        5 + 14 + 2 * 7,
+        "five windows, seven jobs a pass, two reads a transfer"
     );
     assert_eq!(records.row_jobs, 5, "one guarded write a window");
-    assert_eq!(records.maximum_changes, 42, "row and witness of 21 serials");
+    assert_eq!(records.work_jobs, 4 + 7, "seed waves and transfers");
+    assert_eq!(records.maximum_changes, 64, "32 queued rows of a seed wave");
     assert_eq!(records.after_failure, 0);
 }
 

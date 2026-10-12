@@ -176,6 +176,15 @@ traversal order. `ReleaseWork::peak_depth` remains peak simultaneous release
 cursor-frame occupancy, including sibling seeds. It is not namespace path depth,
 an aggregate resident-memory measurement or O(path-depth) backing-size evidence.
 
+The seed queues the zero rows of one wave together: the work item and node of
+at most 32 rows are one guarded job. Queued items leave the FIFO at most 16 to
+a job, in ordinal order: their work records are one read job, their rows
+(member, row, witness) and node states a second of at most 64 keys, and every
+work deletion, node step and new directory frame one guarded job. An item that
+cannot be read ends the job after the items before it were checked, so the
+refusal returned is the first one in item order; a refusal applies nothing of
+the job.
+
 Each child decrement, row/touch guard, optional newly queued directory, node
 state and exact consumed name progress is one all-guards-before-effects change.
 The cursor never advances/delete-acks first or refetches/resends after uncertainty.
