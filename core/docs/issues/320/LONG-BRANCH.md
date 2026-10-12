@@ -23,8 +23,8 @@ rewritten, one stored file's mode and time changed (4 inode rows, 1 entry row).
 | distributed | Every file of the tree in turn; new files go to all 40 directories in turn |
 
 The Store is kept under `core/target/issue320/long-branch/` and copied at
-P = 0, 50, 200, 500, 1,000 and 2,000 Commits. A measurement copies one of those
-files, opens it as a new daemon does (one writer, two read handles, 2 MiB
+P = 0, 50, 200, 500, 1,000 and 2,000 Commits (section 7 adds 100, 400 and
+800). A measurement copies one of those files, opens it as a new daemon does (one writer, two read handles, 2 MiB
 canonical cache, a new local overlay), binds a NEW Workspace on the branch
 head and counts each step. `LAYERFS_CONSTRUCTION_WORKERS=1`.
 
@@ -298,3 +298,204 @@ was never touched is hit because other rows of its inode leaf were rewritten.
 first row. The bound, the cache and its lifetime are unchanged; nothing is
 retried. Whether the mounted failure is gone is the lead's rerun, not a claim
 of this document.
+
+## 7. Design B: inode values as rows of the Store
+
+> **Status:** Implemented on `perf-experiments-b`; host in-process measurement;
+> not a qualified result. Counts are exact, one run each. Milliseconds are
+> single host samples with no mount. The mounted figures quoted in 7.5 are the
+> lead's, not this document's.
+
+### 7.1 What changed
+
+Sections 1 to 4 found one cause: a leaf's 73-byte inode values lived in pooled
+value-group packs, found through an ordinal catalogue and a per-producer index
+rebuilt from history. Design B (owner direction 2026-10-13: format and schema
+changes allowed, nothing outside the Store file) stores each value as one row:
+
+```sql
+CREATE TABLE inode_value(
+  ordinal INTEGER PRIMARY KEY CHECK(ordinal BETWEEN 1 AND 4294967295),
+  value BLOB NOT NULL CHECK(length(value)=73)) STRICT;
+```
+
+| Commit | Change | Production LOC |
+| --- | --- | ---: |
+| `a6343e5f9` | Values as rows; value groups, ordinal catalogue, `PoolIndex` and its rebuild removed | 82,932 -> 81,977 (-955) |
+| `5e2ffd8dc` | The Content change `63a1ab005` (the sorted merge reads only the children a change reaches) picked onto B, test expectations settled | 81,977 -> 82,073 (+96) |
+| `b77fee002` | The pooled pack lane, its header versions 12/21/22 and its limits removed; four lanes remain | 82,073 -> 82,004 (-69) |
+
+* **Leaf record.** Unchanged: a body of (serial, ordinal) pairs, FULL or a
+  COPY/INSERT delta against one base, chain depth at most 8.
+* **Read.** One leaf read rebuilds every body of its chain, collects their
+  ordinals and asks once: one transaction holding one statement
+  (`json_each(?1)` of inclusive ordinal runs joined to `inode_value` by a
+  primary-key range). `SqlWork` counts it as 3 statements, because BEGIN and
+  COMMIT count. A handle keeps at most 512 KiB of values and drops them whole.
+* **Authentication.** No digest was added to the row. Every chain element, the
+  root last, is rebuilt to canonical bytes from the looked-up values and hashed
+  against its own ObjectId; a missing row is `metadata ordinal missing`. A
+  corrupt or exchanged row therefore fails the identity check before anything
+  is served (`stored_value_reads.rs`, `sqlite_inode_values.rs`, and
+  `pooled_dependency_integrity.rs`, which is why each element is checked and
+  not only the root: a valid dependent must not hide a corrupt base).
+* **Save.** A value keeps the ordinal it has in a predecessor leaf the object
+  names (at most 4, each read and authenticated); otherwise a per-Save memo
+  (at most 131,072 entries of 12 bytes, cleared whole) finds it; otherwise it
+  takes a new ordinal from the Save's reserved block and is published as a row
+  in the same transaction as the batch whose leaf uses it. Nothing is rebuilt
+  from history, so a producer's first Save no longer depends on P.
+* **Duplicates.** Decided by measurement. Inode values that repeat inside one
+  tree: 7 of 70,708 (0.01%) in this repository with `.git`, 4,999 of 24,441
+  (20.5%) in a cargo registry `src`, 12,370 of 86,922 (14.2%) in a
+  `node_modules`. The per-Save memo removes those inside a Save. A value equal
+  to one stored by an earlier Save, with no predecessor naming it, is stored
+  again: a global value index would be the history-sized structure this design
+  removes.
+* **Old Stores.** Schema versions moved from 1..6 to 7..12. A Store of the old
+  format is refused at open with `Malformed`; nothing is migrated.
+* **Limits.** None added: no bound on files, file size, edit size or edit
+  count. No side file; no fsync-family call added or removed; Durable not run.
+
+### 7.2 The one table
+
+Rig as in section 0, plus a third shape **tier** that copies the mounted
+session: 100 directories of 50 files of 2,048 bytes (5,101 inodes); a Commit
+creates 2 files, appends to 3 stored files, overwrites the first byte of 2
+more, at paths 997 files apart, and from Commit 20 unlinks one file
+created 20 Commits earlier. In every shape a new Workspace replaces the old
+one every 50 Commits while the branch is built. tier stops at P = 800: the
+branch of the previous head costs 196 ms a Commit there on this host, and
+2,000 would have taken about ten more bounded commands.
+
+Each cell is **pack reads / statements / transactions / VM steps** of the
+writer connection for one Commit (host ms in brackets). "First" is the first
+Commit of a new Workspace bound at P; the other row is the mean of its next 49.
+
+| Measure | Before, `120456785` | B alone, `a6343e5f9` | B with the merge change, `b77fee002` |
+| --- | --- | --- | --- |
+| hot, P = 0, first Commit | 12 / 273 / 69 / 7,513 (20 ms) | 6 / 207 / 62 / 16,821 (14 ms) | 6 / 96 / 25 / 4,675 (10 ms) |
+| hot, P = 0, Commits 2 to 50, mean | 68 / 291 / 86 / 4,407 (15 ms) | 12 / 224 / 67 / 16,851 (12 ms) | 10 / 108 / 28 / 4,617 (8 ms) |
+| hot, P = 500, first Commit | 1,045 / 3,677 / 1,186 / 90,865 (51 ms) | 35 / 438 / 138 / 32,187 (24 ms) | 16 / 177 / 51 / 14,225 (14 ms) |
+| hot, P = 500, Commits 2 to 50, mean | 691 / 2,167 / 710 / 16,404 (30 ms) | 42 / 345 / 107 / 22,649 (14 ms) | 15 / 125 / 33 / 5,632 (9 ms) |
+| hot, P = 2,000, first Commit | 4,167 / 12,986 / 4,287 / 300,741 (279 ms) | 57 / 517 / 164 / 64,490 (27 ms) | 13 / 145 / 40 / 36,995 (21 ms) |
+| hot, P = 2,000, Commits 2 to 50, mean | 2,198 / 6,706 / 2,222 / 47,787 (58 ms) | 61 / 494 / 157 / 32,725 (17 ms) | 15 / 125 / 34 / 5,687 (10 ms) |
+| distributed, P = 0, first Commit | 13 / 279 / 70 / 7,720 (11 ms) | 7 / 211 / 63 / 16,924 (11 ms) | 7 / 103 / 27 / 5,106 (9 ms) |
+| distributed, P = 0, Commits 2 to 50, mean | 87 / 347 / 104 / 4,805 (13 ms) | 31 / 279 / 85 / 17,629 (12 ms) | 13 / 114 / 30 / 4,727 (8 ms) |
+| distributed, P = 500, first Commit | 1,229 / 5,692 / 1,788 / 137,542 (59 ms) | 176 / 1,489 / 488 / 52,859 (30 ms) | 27 / 235 / 70 / 15,398 (13 ms) |
+| distributed, P = 500, Commits 2 to 50, mean | 1,166 / 3,584 / 1,183 / 25,256 (43 ms) | 153 / 676 / 217 / 36,768 (19 ms) | 24 / 162 / 46 / 5,970 (9 ms) |
+| distributed, P = 2,000, first Commit | 5,915 / 18,767 / 6,179 / 417,735 (299 ms) | 102 / 775 / 250 / 83,317 (42 ms) | 18 / 163 / 46 / 38,161 (24 ms) |
+| distributed, P = 2,000, Commits 2 to 50, mean | 4,088 / 13,563 / 4,407 / 256,278 (129 ms) | 123 / 675 / 217 / 51,228 (22 ms) | 21 / 142 / 39 / 6,138 (9 ms) |
+| tier, P = 0, first Commit | 27 / 593 / 151 / 91,179 (35 ms) | 15 / 436 / 138 / 114,274 (34 ms) | 15 / 151 / 43 / 83,104 (23 ms) |
+| tier, P = 0, Commits 2 to 50, mean | 94 / 422 / 124 / 6,857 (22 ms) | 32 / 492 / 155 / 40,804 (26 ms) | 24 / 182 / 52 / 7,817 (15 ms) |
+| tier, P = 500, first Commit | 1,783 / 8,694 / 2,677 / 447,174 (156 ms) | 149 / 1,644 / 538 / 206,768 (81 ms) | 25 / 237 / 69 / 124,963 (38 ms) |
+| tier, P = 500, Commits 2 to 50, mean | 1,950 / 6,015 / 1,985 / 46,393 (88 ms) | 157 / 895 / 289 / 86,553 (43 ms) | 31 / 206 / 60 / 10,072 (17 ms) |
+| tier, P = 800, first Commit | 4,265 / 16,756 / 5,352 / 600,237 (301 ms) | 186 / 2,241 / 737 / 234,351 (108 ms) | 30 / 300 / 90 / 136,673 (39 ms) |
+| tier, P = 800, Commits 2 to 50, mean | 4,044 / 15,348 / 4,842 / 392,599 (196 ms) | 191 / 1,017 / 330 / 97,753 (55 ms) | 32 / 213 / 62 / 10,766 (18 ms) |
+| Store bytes a Commit, hot, P 0 to 2,000 | 11,866 | 7,232 | same Store as B |
+| Store bytes a Commit, distributed, P 0 to 2,000 | 11,760 | 7,004 | same Store as B |
+| Store bytes a Commit, tier, P 0 to 800 | 14,899 | 10,732 | not rebuilt |
+| Store after 2,000 Commits, hot: committed (main file + WAL file) | 24,928,256 (24,907,776 + 4,194,304) | 15,663,104 (15,626,240 + 4,194,304) | same Store as B |
+| Store after 2,000 Commits, distributed | 24,715,264 (24,522,752 + 4,194,304) | 15,212,544 (15,196,160 + 4,194,304) | same Store as B |
+| Store after 800 Commits, tier | 15,667,200 (15,638,528 + 4,194,304) | 12,357,632 (12,197,888 + 4,194,304) | not rebuilt |
+| Pack bytes written, second Commit at P = 2,000, hot / distributed | 9,884 / 9,395 | 5,396 / 4,866 | 5,399 / 4,866 |
+| Init, 5,000 files of 2,048 bytes: sealed Store bytes | 3,768,320 | 3,788,800 | 3,772,416 |
+| Init, 5,000 files: wall ms (seal ms) | 815 (2) | 770 (2) | 738 (2) |
+| Init, 100,000 files of 128 bytes: sealed Store bytes | 65,265,664 | 65,765,376 | 65,859,584 |
+| Init, 100,000 files: wall ms (seal ms) | 21,779 (7) | 23,880 (7) | 21,017 (16) |
+
+How the storage rows were measured:
+
+* **Committed bytes** are the database length after the last committed
+  transaction: the page count in the last commit frame of the WAL whose salts
+  match the WAL header, times the 4,096-byte page. The files were read as
+  plain bytes; no SQLite tool opened them. It includes free pages. Every kept
+  snapshot after P = 0 has a 4,194,304-byte WAL file beside the main file in
+  both formats; sections 2 and earlier quote the main file alone, which is
+  16,384 to 270,336 bytes short of the committed length in these snapshots.
+* **Bytes a Commit** is (committed bytes at the last P minus the file at
+  P = 0) divided by the Commits. The hot and distributed branches of the B
+  column were built by `b77fee002`; the merge change does not alter what is
+  stored (pack bytes of a Commit agree to 3 bytes), so they stand for both.
+  The tier branch was built by `a6343e5f9`.
+* **Init** is a host Project Init of a generated tree through
+  `init_store_bytes`, sealed, one sample each. The two B samples of the same
+  tree (different builds; Init also constructs in parallel) differ by 16,384
+  and 94,208 bytes, so differences of that size are not attributed. What is measured: B's sealed
+  Store is 0.1% to 0.5% larger for 5,000 files and 0.8% to 0.9% larger for
+  100,000; the Init wall times overlap.
+* The B-alone session counts were taken on the tree that became `a6343e5f9`
+  with one literal different (a format profile number, reverted before the
+  commit). Counts were not retaken on the commit itself.
+
+### 7.3 What the table shows
+
+* The slope against P is gone from pack reads, statements and transactions.
+  A first Commit at P = 2,000 goes from 4,167 / 5,915 pack reads (hot /
+  distributed) to 13 / 18; the following Commits from 2,198 / 4,088 to 15 / 21.
+* B alone is worse than the previous head at P = 0: VM steps of a hot first
+  Commit 7,513 to 16,821, and on the tier tree a mean Commit 422 to 492
+  statements and 6,857 to 40,804 VM steps. Content read every inode leaf of
+  the tree for each Commit, and each leaf read is now one statement where a
+  warm in-memory catalogue used to answer. With the merge change only changed
+  leaves are read, and every count is below the previous head except the mean
+  VM steps at P = 0 of hot (4,407 to 4,617) and tier (6,857 to 7,817).
+* First-Commit VM steps still grow with P (4,675 at 0, 36,995 at 2,000, hot).
+  Pack reads and statements of that Commit do not. Not attributed further; the
+  owner has ruled the remaining first-Commit cost out of scope.
+* Storage: 39% to 40% fewer bytes a Commit on the 2,000-file shapes, 28% on
+  tier.
+  Resident state: the pooled index (one entry for each stored value in the
+  candidate window, rebuilt by every producer) is gone; what replaces it is
+  bounded by 131,072 x 12 bytes a Save and 512 KiB a read handle.
+
+### 7.4 Tests whose exact counts moved, and what ran
+
+Counts restaged because the format changed, not loosened:
+
+| Test | Was | Is |
+| --- | --- | --- |
+| daemon `product_commit_history_cost` | catalogue queries and value groups a Commit | value lookups `[4,4,4,4,4,4,4,4,3,3,3,3]`; value rows written = inode rows (4); policy and signatures read by the first Commit only |
+| persistence `concurrent_pooled_saves` | new value groups 0, reused 2 | new rows 2, reused 0 |
+| persistence `sqlite_ordinal_lookahead` | new 0 | new 5, counted in `inode_value` |
+| persistence `acquisition_schema`, `sqlite_group_rows`, `sqlite_group_rows_indexed` | schema versions 1 to 6 | 7 to 12; the fan-out case uses 16 Ordinary groups, 8,180 locators |
+| storage `physical_formats` | pooled pack headers 12/21/22 read | refused |
+| storage `pooled_dependency_integrity`, `pooled_demand_work`, `selected_cache_bounds` | group and catalogue counts | one value lookup a leaf demand |
+
+Added: storage `stored_value_reads` (5), persistence `sqlite_inode_values`
+(5, including a row corrupted through SQLite and an old Store). Removed with
+the code they covered: storage `pooled_value_retention`,
+`catalogue_row_bound`, `save_catalogue_calls`, `pool_index_rebuild_reads`;
+persistence `concurrent_pool_window`. The reproduction of section 6 went with
+them: the row cache it exercised no longer exists.
+
+Run on the host on the tree of `b77fee002`, each command under 120 s:
+`layerfs-storage` 18 binaries, 57 passed; `layerfs-persistence` 32 binaries,
+129 passed; `layerfs-daemon` 184 passed, 2 failed; `layerfs-history`,
+`layerfs-project` (`--tests`) and `layerfs-sdk` 13 binaries, 34 passed. The 2
+daemon failures need inputs this host does not have:
+`complete_installed_roots::huge_native_namespace_is_complete_after_install`
+(a closed prepared input) and
+`host_handoff::macos_init_handoff_to_linux_daemon_has_no_host_data_path` (the
+Linux binary). `layerfs-content`, on the tree of `5e2ffd8dc` (the crate is
+unchanged after it): the whole package was stopped by the 2-minute alarm with
+52 binaries finished, 419 passed and 0 failed; it was not rerun whole, and
+the three restaged binaries were run alone, 30 passed. Nothing mounted, no
+container and no benchmark harness ran here.
+
+### 7.5 Mounted figures (the lead's runs, quoted)
+
+With `a6343e5f9` and `63a1ab005`: median Commit 13 to 16 ms from 0 to 950
+earlier Commits (was 18 to 139 ms); first Commit of a new Workspace 17 to
+23 ms; Store +15.0 MB for 1,000 Commits (was +19.6); Store after Init
+106.84 MB (was 106.91). This document does not reproduce them.
+
+### 7.6 Not done
+
+* A Store of the old format is not converted.
+* Values duplicated across Saves without a named predecessor are stored
+  again; how often that happens in a long mounted session was not counted.
+* tier at P = 2,000, and any Init above 100,000 files.
+* The owner dropped the remaining first-Commit candidates (shared producer,
+  chain in one statement, decoded-leaf cache, levelled chains, backward delta
+  extension). None was built.

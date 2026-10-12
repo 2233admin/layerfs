@@ -37,7 +37,7 @@ use std::{
 };
 
 /// Lengths at which the kept Store is copied while it is extended.
-const CHECKPOINTS: [usize; 6] = [50, 100, 200, 500, 1_000, 2_000];
+const CHECKPOINTS: [usize; 8] = [50, 100, 200, 400, 500, 800, 1_000, 2_000];
 
 fn kept_root() -> Option<PathBuf> {
     std::env::var_os("LAYERFS_LONG_BRANCH_DIR").map(PathBuf::from)
@@ -273,7 +273,7 @@ fn session(snapshot: &Path, shape: Shape, p: usize, commits: usize) -> Vec<Step>
 
     // The first lookup and read of a stored file in a much-rewritten leaf,
     // then of its neighbour in the same directory.
-    for (n, path) in [shape.probe(), "d-01/f-26"].into_iter().enumerate() {
+    for (n, path) in [shape.probe(), shape.neighbour()].into_iter().enumerate() {
         let probe = Probe::start(&daemon);
         let bytes = window(&workspace, |operation, view| {
             let serial = resolve(operation, view, path);
@@ -318,7 +318,11 @@ fn session(snapshot: &Path, shape: Shape, p: usize, commits: usize) -> Vec<Step>
             .as_ref()
             .and_then(|namespace| namespace.work)
             .expect("the producer ran");
-        assert_eq!((work.inode_rows, work.entry_rows), (4, 1), "one shape");
+        // The Tier shape removes a file from its twentieth Commit on, so its
+        // first Commits change fewer rows than its later ones.
+        if shape != Shape::Tier {
+            assert_eq!((work.inode_rows, work.entry_rows), (4, 1), "one shape");
+        }
         step.producer = Reads::of(&success.storage);
         if n < 3 || (n + 1) % 10 == 0 || n + 1 == commits {
             report(
@@ -359,6 +363,90 @@ fn session(snapshot: &Path, shape: Shape, p: usize, commits: usize) -> Vec<Step>
     daemon.finish();
     fs::remove_dir_all(scratch).unwrap();
     steps
+}
+
+/// Initializes a Store from a tree of `files` files of `bytes` bytes, fifty a
+/// directory, through Project Init and the seal, as a host does, and prints
+/// the sealed file's length and the time of Init and of the seal. Selected
+/// by `LAYERFS_LONG_BRANCH_INIT=files:bytes,...`; a single timed sample.
+#[test]
+fn init_store_bytes() {
+    use layerfs_history::{HistoryCatalogConfig, HistoryName, LayerStackId};
+    use layerfs_persistence::{
+        Handles, PersistenceConfig, SqliteAcquisitionSchema, SqlitePersistenceProfile,
+    };
+    use layerfs_project::{init, InitRequest};
+    use layerfs_storage::{Storage, StoragePolicy};
+    use layerfs_telemetry::timer::Timing;
+    let Ok(selection) = std::env::var("LAYERFS_LONG_BRANCH_INIT") else {
+        return;
+    };
+    for item in selection.split(',') {
+        let (files, bytes) = item.split_once(':').expect("files:bytes");
+        let (files, bytes): (usize, usize) = (files.parse().unwrap(), bytes.parse().unwrap());
+        let directory = std::env::temp_dir().join(format!(
+            "layerfs-long-branch-init-{}-{files}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&directory);
+        let source = directory.join("source");
+        for index in 0..files {
+            if index % 50 == 0 {
+                fs::create_dir_all(source.join(format!("d{:05}", index / 50))).unwrap();
+            }
+            let line = format!("base file {index:07} of the init tree\n");
+            let content: Vec<u8> = line.bytes().cycle().take(bytes).collect();
+            fs::write(
+                source.join(format!("d{:05}/f{index:07}", index / 50)),
+                content,
+            )
+            .unwrap();
+        }
+        let sealed = directory.join("sealed.sqlite");
+        let handles = Handles::create(
+            PersistenceConfig::sqlite(&sealed)
+                .with_sqlite_profile(SqlitePersistenceProfile::Disposable)
+                .with_sqlite_acquisition(SqliteAcquisitionSchema::Tables),
+            StoragePolicy::frozen_default(),
+            &HistoryCatalogConfig {
+                binding_key: b"long-branch-init".to_vec(),
+                cursor_key: [44; 32],
+                incarnation: 1,
+            },
+        )
+        .unwrap();
+        let storage = Storage::new(handles.storage.clone()).unwrap();
+        let started = Instant::now();
+        let initialized = Timing::disabled("long-branch.init", |timing| {
+            init(
+                &storage,
+                &handles.history,
+                InitRequest {
+                    source: &source,
+                    acquisition: &handles.acquisition,
+                    stack: LayerStackId::from_authority([23; 16]),
+                    name: HistoryName::new("installed").unwrap(),
+                    scope_seed: [31; 32],
+                    deadline: Instant::now() + std::time::Duration::from_secs(100),
+                },
+                timing,
+            )
+        })
+        .0
+        .unwrap();
+        let init_ms = started.elapsed().as_millis();
+        let work = storage.diagnostics();
+        drop(storage);
+        let started = Instant::now();
+        let sealed = handles.seal().unwrap();
+        let seal_ms = started.elapsed().as_millis();
+        let length = fs::metadata(&sealed.path).unwrap().len();
+        evidence(format_args!(
+            "LONG_BRANCH_INIT files={files} file_bytes={bytes} entries={} store_bytes={length} init_ms={init_ms} seal_ms={seal_ms} value_rows_or_groups={} publish={} pack_write_bytes={}",
+            initialized.entries, work.pooled_groups, work.publish, work.pack_write_bytes
+        ));
+        fs::remove_dir_all(&directory).unwrap();
+    }
 }
 
 #[test]

@@ -49,18 +49,30 @@ pub enum Shape {
     Hot,
     /// Every file of the tree in turn: a different leaf at most Commits.
     Distributed,
+    /// The mounted branch session of issue 320 on its own tree: one hundred
+    /// directories of fifty files, and at every Commit three appends, two
+    /// first-byte overwrites, two new small files and the removal of a file
+    /// created twenty Commits earlier, the stored files chosen by
+    /// `(step * 5 + i * 997) mod 5000`.
+    Tier,
 }
+/// Directories and files of the `Tier` tree, and the bytes of each file.
+pub const TIER_DIRECTORIES: usize = 100;
+pub const TIER_FILES: usize = 50;
+pub const TIER_FILE_BYTES: usize = 2_048;
 impl Shape {
     pub fn name(self) -> &'static str {
         match self {
             Self::Hot => "hot",
             Self::Distributed => "distributed",
+            Self::Tier => "tier",
         }
     }
     pub fn parse(name: &str) -> Self {
         match name {
             "hot" => Self::Hot,
             "distributed" => Self::Distributed,
+            "tier" => Self::Tier,
             other => panic!("unknown shape {other}"),
         }
     }
@@ -91,14 +103,50 @@ impl Shape {
                     (commit / DIRECTORIES + commit + 25) % FILES
                 ),
             ),
+            Self::Tier => unreachable!("the Tier shape has its own change"),
         }
     }
-    /// A stored file whose leaf the shape has rewritten at many Commits.
+    /// A stored file whose leaf the shape has rewritten at many Commits, and
+    /// its neighbour in the same directory.
     pub fn probe(self) -> &'static str {
-        "d-01/f-25"
+        match self {
+            Self::Tier => "d001/f00075",
+            _ => "d-01/f-25",
+        }
+    }
+    pub fn neighbour(self) -> &'static str {
+        match self {
+            Self::Tier => "d001/f00076",
+            _ => "d-01/f-26",
+        }
+    }
+    /// The stored file `index` of the `Tier` tree.
+    pub fn tier_path(index: usize) -> String {
+        let index = index % (TIER_DIRECTORIES * TIER_FILES);
+        format!("d{:03}/f{index:05}", index / TIER_FILES)
+    }
+    /// The new file `which` (0 or 1) of `Tier` Commit `step`.
+    pub fn tier_new(step: usize, which: usize) -> String {
+        format!(
+            "d{:03}/n{step:06}-{which}",
+            (step * 7 + which * 31) % TIER_DIRECTORIES
+        )
     }
 }
 
+fn tier_tree(source: &Path) -> usize {
+    for directory in 0..TIER_DIRECTORIES {
+        let path = source.join(format!("d{directory:03}"));
+        fs::create_dir_all(&path).unwrap();
+        for file in 0..TIER_FILES {
+            let index = directory * TIER_FILES + file;
+            let line = format!("base file {index:05} of the tier tree\n");
+            let bytes: Vec<u8> = line.bytes().cycle().take(TIER_FILE_BYTES).collect();
+            fs::write(path.join(format!("f{index:05}")), bytes).unwrap();
+        }
+    }
+    TIER_DIRECTORIES * (TIER_FILES + 1)
+}
 fn tree(source: &Path) -> usize {
     for directory in 0..DIRECTORIES {
         let path = source.join(format!("d-{directory:02}"));
@@ -140,7 +188,10 @@ impl Kept {
             fs::create_dir_all(&kept.directory).unwrap();
             let fixture =
                 support::Fixture::built(&format!("long-branch-{}", shape.name()), |source| {
-                    tree(source)
+                    match shape {
+                        Shape::Tier => tier_tree(source),
+                        _ => tree(source),
+                    }
                 });
             assert_eq!(fixture.branch, branch());
             fs::copy(&fixture.config.path, kept.store()).unwrap();
@@ -297,7 +348,66 @@ fn mutate(
     }
 }
 /// Applies the change of Commit `commit` to the live Workspace.
+/// One `Tier` Commit: eight paths, as the mounted branch session changes them.
+fn tier_change(workspace: &BoundWorkspace, step: usize) {
+    let now = Time {
+        seconds: 1_800_000_000 + step as i64,
+        nanoseconds: 123_456_789,
+    };
+    let stored = |i: usize| Shape::tier_path(step * 5 + i * 997);
+    let line = format!("step {step} line\n");
+    window(workspace, |operation, view| {
+        for which in 0..2 {
+            let path = Shape::tier_new(step, which);
+            let (parent, last) = path.split_once('/').unwrap();
+            let parent = resolve(operation, view, parent);
+            let create = Operation::Create {
+                parent,
+                name: name(last),
+                mode: 0o644,
+            };
+            mutate(workspace, operation, view, create, now);
+        }
+        if step >= 20 {
+            let path = Shape::tier_new(step - 20, 0);
+            let (parent, last) = path.split_once('/').unwrap();
+            let parent = resolve(operation, view, parent);
+            let unlink = Operation::Unlink {
+                parent,
+                name: name(last),
+            };
+            mutate(workspace, operation, view, unlink, now);
+        }
+    });
+    window(workspace, |operation, view| {
+        let write = |path: &str, position: Position, data: &[u8]| {
+            let serial = resolve(operation, view, path);
+            let write = Operation::Write {
+                serial,
+                position,
+                data: data.into(),
+            };
+            mutate(workspace, operation, view, write, now);
+        };
+        for which in 0..2 {
+            write(
+                &Shape::tier_new(step, which),
+                Position::At(0),
+                line.as_bytes(),
+            );
+        }
+        for i in 0..3 {
+            write(&stored(i), Position::End, line.as_bytes());
+        }
+        for i in 3..5 {
+            write(&stored(i), Position::At(0), b"X");
+        }
+    });
+}
 pub fn change(workspace: &BoundWorkspace, shape: Shape, commit: usize) {
+    if shape == Shape::Tier {
+        return tier_change(workspace, commit);
+    }
     let (added, rewritten, moded) = shape.paths(commit);
     let now = Time {
         seconds: 1_800_000_000 + commit as i64,
