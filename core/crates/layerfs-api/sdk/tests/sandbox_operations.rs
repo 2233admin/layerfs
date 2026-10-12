@@ -63,6 +63,10 @@ struct Fixture {
 }
 impl Fixture {
     fn new(tail: Vec<Vec<u8>>) -> Self {
+        Self::new_for(None, tail)
+    }
+    fn new_for(project: Option<&layerfs_sdk::SealedProject>, tail: Vec<Vec<u8>>) -> Self {
+        let existing = project.is_some();
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let port = listener.local_addr().unwrap().port();
         listener.set_nonblocking(true).unwrap();
@@ -91,7 +95,7 @@ impl Fixture {
                 native::accept(socket, &[32; 32], native::public_key(&[31; 32]).unwrap()).unwrap();
             let call = Call::decode(channel.receive.receive().unwrap()).unwrap();
             assert!(
-                matches!(call.request, Request::Hello(request) if !request.wait_for_store && request.expected_instance.is_none())
+                matches!(call.request, Request::Hello(request) if request.wait_for_store == existing && request.expected_instance.is_none())
             );
             channel
                 .send
@@ -100,9 +104,13 @@ impl Fixture {
                         id: call.id,
                         reply: Reply::Hello(DaemonStatus {
                             instance: [9; 32],
-                            phase: DaemonPhase::InstallPending,
+                            phase: if existing {
+                                DaemonPhase::ControlReady
+                            } else {
+                                DaemonPhase::InstallPending
+                            },
                             overlay_sqlite: Some("3.51.0".into()),
-                            store_sqlite: None,
+                            store_sqlite: existing.then(|| "3.51.0".into()),
                         }),
                     }
                     .encode()
@@ -127,13 +135,19 @@ impl Fixture {
             NEXT.fetch_add(1, Ordering::Relaxed)
         ));
         fs::write(&binary, b"original executable input").unwrap();
+        let mut deployment_setup = setup([32; 32], native::public_key(&[31; 32]).unwrap());
+        if let Some(project) = project {
+            let mut manifest = project.manifest.clone();
+            manifest.daemon_sqlite = Some("3.51.0".into());
+            deployment_setup.existing_store = Some(manifest);
+        }
         let request = SandboxCreate {
             deployment: layerfs_sandbox::backend::docker::SandboxRequest {
                 image: IMAGE.into(),
                 store_volume: "lfs-test-borrowed".into(),
                 port: 30421,
             },
-            setup: setup([32; 32], native::public_key(&[31; 32]).unwrap()),
+            setup: deployment_setup,
             executable: binary.clone(),
             controller_private: [31; 32],
             daemon_peer: native::public_key(&[32; 32]).unwrap(),
@@ -148,7 +162,10 @@ impl Fixture {
             daemon: Some(daemon),
             binary,
         };
-        fixture.owner = Some(layerfs_sdk::internal::start(&fixture.api, request).unwrap());
+        fixture.owner = Some(match project {
+            Some(project) => fixture.api.create(request, project).unwrap(),
+            None => layerfs_sdk::internal::start(&fixture.api, request).unwrap(),
+        });
         fixture
     }
     fn calls(mut self) -> Vec<Vec<u8>> {
@@ -339,4 +356,104 @@ fn workspace_exec_failure_keeps_exact_original_request_and_container() {
     assert!(failure.transfer.attempted);
     fixture.api.close(fixture.owner.take().unwrap()).unwrap();
     assert_eq!(fixture.calls().len(), 9);
+}
+
+struct ProjectFixture {
+    directory: PathBuf,
+    project: layerfs_sdk::SealedProject,
+}
+impl ProjectFixture {
+    fn new() -> Self {
+        use layerfs_history::{BranchId, HistoryCatalogConfig, HistoryName, LayerStackId};
+        use layerfs_persistence::{PersistenceConfig, SqlitePersistenceProfile};
+        let directory = std::env::temp_dir().join(format!(
+            "sdk-existing-project-{}-{}",
+            std::process::id(),
+            NEXT.fetch_add(1, Ordering::Relaxed)
+        ));
+        fs::create_dir(&directory).unwrap();
+        let source = directory.join("source");
+        fs::create_dir(&source).unwrap();
+        fs::write(source.join("payload"), b"original complete project").unwrap();
+        let request = layerfs_sdk::InitRequest {
+            source,
+            store: PersistenceConfig::sqlite(directory.join("store.sqlite"))
+                .with_sqlite_profile(SqlitePersistenceProfile::Disposable),
+            locator: "/layerfs-store/global/store.sqlite".into(),
+            policy: layerfs_storage::StoragePolicy::frozen_default(),
+            catalog: HistoryCatalogConfig {
+                binding_key: b"sdk-existing-project".to_vec(),
+                incarnation: 1,
+                cursor_key: [7; 32],
+            },
+            stack: LayerStackId::from_authority([3; 16]),
+            stack_name: HistoryName::new("project").unwrap(),
+            branch: BranchId::from_authority([4; 16]),
+            branch_name: HistoryName::new("main").unwrap(),
+            scope_seed: [5; 32],
+            deadline: Instant::now() + Duration::from_secs(10),
+        };
+        let project = layerfs_telemetry::timer::Timing::disabled("sdk.existing.project", |timer| {
+            layerfs_sdk::ProjectApi::new().init(request, timer)
+        })
+        .0
+        .unwrap();
+        Self { directory, project }
+    }
+}
+impl Drop for ProjectFixture {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.directory);
+    }
+}
+#[test]
+fn create_matching_existing_project_keeps_one_original_hello_and_does_not_reinstall() {
+    let project = ProjectFixture::new();
+    let mut fixture = Fixture::new_for(
+        Some(&project.project),
+        vec![fixed(204, b""), fixed(204, b"")],
+    );
+    let owner = fixture.owner.as_mut().unwrap();
+    assert_eq!(owner.startup.phase, DaemonPhase::ControlReady);
+    assert!(owner.installed.is_none());
+    assert_eq!(
+        layerfs_sdk::internal::control(owner)
+            .channel_work()
+            .0
+            .records,
+        1
+    );
+    fixture.api.close(fixture.owner.take().unwrap()).unwrap();
+    assert_eq!(fixture.calls().len(), 8);
+}
+#[test]
+fn create_mismatched_existing_project_refuses_before_any_deployment_or_control_effect() {
+    let project = ProjectFixture::new();
+    let (docker, peer) = Peer::new(vec![], 4096);
+    let api = SandboxApi::new(docker);
+    let mut deployment_setup = setup([32; 32], native::public_key(&[31; 32]).unwrap());
+    let mut manifest = project.project.manifest.clone();
+    manifest.root[0] ^= 1;
+    deployment_setup.existing_store = Some(manifest);
+    let result = api.create(
+        SandboxCreate {
+            deployment: layerfs_sandbox::backend::docker::SandboxRequest {
+                image: IMAGE.into(),
+                store_volume: "lfs-test-borrowed".into(),
+                port: 30421,
+            },
+            setup: deployment_setup,
+            executable: project.project.store.path.clone(),
+            controller_private: [31; 32],
+            daemon_peer: native::public_key(&[32; 32]).unwrap(),
+            startup_wait: Duration::from_secs(2),
+        },
+        &project.project,
+    );
+    let Err(failure) = result else {
+        panic!("mismatched Project must refuse before effects")
+    };
+    assert_eq!(failure.phase, SandboxPhase::Validate);
+    assert!(failure.sandbox.is_none() && failure.control.is_none() && failure.installed.is_none());
+    assert!(peer.finish().is_empty());
 }

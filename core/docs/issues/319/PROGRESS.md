@@ -2265,3 +2265,19 @@ Host all-target compilation PASS; SDK 13 and focused harness close/Init-install
 Owner update: finish docs before one consolidated host/Linux/harness/seal/count gate;
 no more intermediate samples. Receipts: route-host/runtime-build, route-sdk-peer-
 corrected-tests and route-close-harness-tests logs; original failure log retained.
+
+
+### SDK follow-up: preserve explicit existing-Store create selection
+
+Cause: the folded create attempted another install after an existing-Store ready
+startup, and accepted a nonready post-install Hello as success.
+Change: match the existing selection to the Project before effects, preserve its
+original one-Hello open path, and require ControlReady after a fresh installation.
+All failures retain original inputs, runtime/control and any installation ack.
+The shared-Store example now calls public create for additional Sandboxes.
+Commit: this create selection correction. Focused matching/mismatch tests 2 PASS;
+SDK/daemon host targets compile; unaffected exec/close/Init/branch checks reused.
+Initial fixture compile refusals (deadline field and Result Debug bound) retained;
+no sample ran and no product deadline or oracle changed. Runtime targets compile.
+Package SDK Clippy, format and boundary PASS; full consolidated gate follows docs.
+Receipts: create-selection-final-build/tests-host and runtime-build logs.

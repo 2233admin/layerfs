@@ -132,7 +132,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     let mut second_setup = setup(daemon.private, keys.public);
     second_setup.existing_store = Some(installed.manifest.clone());
-    let second = layerfs_sdk::internal::start(&api, make(second_setup))
+    let second = api
+        .create(make(second_setup), &project)
         .map_err(|f| format!("second {f:?}"))?;
     println!(
         "OWNED_SECOND_CONTAINER {} phase={:?}",
@@ -161,7 +162,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     let mut reopened_setup = setup(daemon.private, keys.public);
     reopened_setup.existing_store = Some(installed.manifest.clone());
-    let mut reopened = layerfs_sdk::internal::start(&api, make(reopened_setup))
+    let mut reopened = api
+        .create(make(reopened_setup), &project)
         .map_err(|f| format!("reopen {f:?}"))?;
     println!(
         "OWNED_REOPEN_CONTAINER {} phase={:?}",

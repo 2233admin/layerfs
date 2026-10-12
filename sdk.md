@@ -238,3 +238,10 @@ The five capped-edit cases remain for simplification: only their family applies
 the strict untouched payload/source-offset transcript, and their two-second
 Commit watchdog is distinct. The expected simplified count is 157 in two tiers,
 with a 23-family gate and kept-sibling replacements against their own rows.
+
+Public create also preserves the existing explicit `existing_store` selection:
+it must match the supplied Project manifest (the installed daemon SQLite value
+may be populated). It then uses the original one-Hello ready startup and sends
+no second install. A mismatch fails at Validate before deployment. Fresh install
+requires the following same-incarnation Hello to report ControlReady; a nonready
+observation retains the original runtime, control and installation acknowledgement.

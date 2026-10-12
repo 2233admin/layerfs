@@ -160,7 +160,29 @@ impl SandboxApi {
         request: SandboxCreate,
         project: &crate::SealedProject,
     ) -> Result<ManagedSandbox, Box<SandboxFailure>> {
+        let existing = request.setup.existing_store.is_some();
+        if let Some(selected) = &request.setup.existing_store {
+            let mut expected = project.manifest.clone();
+            expected.daemon_sqlite = selected.daemon_sqlite.clone();
+            if *selected != expected {
+                return Err(Box::new(SandboxFailure {
+                    request,
+                    phase: SandboxPhase::Validate,
+                    sandbox: None,
+                    control: None,
+                    handshake: ChannelWork::default(),
+                    observed: None,
+                    installed: None,
+                    cause: SandboxCause::Setup(ControlError("selected existing Project")),
+                }));
+            }
+        }
         let mut owner = create(&self.docker, request)?;
+        if existing {
+            // The original startup already selected and waited for this Store.
+            // Installing again would change the existing one-attempt lifecycle.
+            return Ok(owner);
+        }
         let installed = owner.control.install_project(project).map_err(|cause| {
             Box::new(SandboxFailure {
                 request: owner.request.clone(),
@@ -189,10 +211,20 @@ impl SandboxApi {
                 wait_for_store: true,
             },
         ) {
-            Ok(status) => {
+            Ok(status) if status.phase == DaemonPhase::ControlReady => {
                 owner.startup = status;
                 Ok(owner)
             }
+            Ok(status) => Err(Box::new(SandboxFailure {
+                request: owner.request,
+                phase: SandboxPhase::Hello,
+                sandbox: Some(owner.runtime),
+                control: Some(owner.control),
+                handshake: owner.handshake,
+                observed: Some(status),
+                installed: owner.installed,
+                cause: SandboxCause::Setup(ControlError("original installed startup phase")),
+            })),
             Err(cause) => Err(Box::new(SandboxFailure {
                 request: owner.request,
                 phase: SandboxPhase::Hello,
