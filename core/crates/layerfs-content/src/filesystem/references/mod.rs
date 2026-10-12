@@ -4,6 +4,7 @@ pub mod backing;
 mod indexed;
 mod indexed_release;
 mod indexed_rows;
+mod indexed_window;
 mod indexed_wire;
 mod meaning;
 pub mod merge;

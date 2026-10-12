@@ -103,6 +103,10 @@ impl<'s, 'p, 'r, 'b> OperationReducer<'s, 'p, 'r, 'b> {
         batch: usize,
         root: u64,
     ) -> ContentResult<OperationRows<'a, 'p>> {
+        if let Some(indexed) = &mut self.indexed {
+            // The final pass reads stored rows: every held meaning is written.
+            indexed.flush()?;
+        }
         match (&mut self.memory, &self.indexed) {
             (Some(memory), _) => Ok(OperationRows {
                 route: RowRoute::Memory(Box::new(memory.finish(reader, table, batch, root)?)),

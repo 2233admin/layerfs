@@ -32,6 +32,8 @@ pub struct Records {
     /// Read jobs of two serials or more, and the most keys one read job asked.
     pub wide_reads: usize,
     pub maximum_read_keys: usize,
+    /// Guarded jobs that write a reference row.
+    pub row_jobs: usize,
     pub after_failure: usize,
     pub terminal: bool,
     pub original: Option<Vec<ConstructionRecordChange>>,
@@ -141,6 +143,7 @@ impl IndexedConstructionBacking for Records {
         assert!(bytes <= 65_536);
         self.maximum_job = self.maximum_job.max(bytes);
         self.maximum_changes = self.maximum_changes.max(changes.len());
+        self.row_jobs += usize::from(changes.iter().any(|change| change.key.kind == ROW));
         if changes.iter().any(|change| topology(change.key.kind)) {
             assert!(changes.iter().all(|change| topology(change.key.kind)));
             assert!(changes.len() <= 64, "one topology batch is one key window");

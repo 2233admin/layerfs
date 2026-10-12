@@ -1,4 +1,5 @@
 //! Direct fixed reference rows, fresh membership and touched witnesses.
+use super::indexed_window::{Step, Window};
 use super::{indexed_wire as wire, meaning, record::Row, reduce::ReferenceWork};
 use crate::filesystem::{
     rows::view::OperationInput,
@@ -17,6 +18,7 @@ pub(super) struct IndexedReducer<'s, 'b> {
     dropped: &'s dyn DroppedParents,
     pub work: ReferenceWork,
     pub touched: u64,
+    pub(super) window: Window,
 }
 pub(super) struct Transition {
     pub before: Row,
@@ -36,24 +38,34 @@ impl<'s, 'b> IndexedReducer<'s, 'b> {
             dropped,
             work: ReferenceWork::default(),
             touched: 0,
+            window: Window::default(),
         }
     }
     pub fn declare_new(&mut self, serial: u64) -> ContentResult<()> {
         if serial == 0 || !self.input.is_new(serial)? || self.dropped.contains(serial)? {
             return Err(ContentError::InvalidRecord("filesystem fresh declaration"));
         }
-        self.state.apply(vec![
-            wire::change(wire::FRESH, serial, None, Some(vec![1])),
-            wire::change(wire::ROW, serial, None, None),
-            wire::change(wire::TOUCH, serial, None, None),
-        ])
+        self.defer(serial, Step::Declare)
+    }
+    /// Whether the input declares the serial fresh in the result.
+    pub(super) fn expected(&self, serial: u64) -> ContentResult<bool> {
+        Ok(self.input.is_new(serial)? && !self.dropped.contains(serial)?)
+    }
+    /// A stored row is only read once every held meaning is written.
+    fn settled(&self) -> ContentResult<()> {
+        if self.window.is_empty() {
+            Ok(())
+        } else {
+            Err(ContentError::InvalidRecord("filesystem reference window"))
+        }
     }
     /// The fresh member, the row and the touched witness of one serial, read
     /// as one job, and whether the serial is fresh. The three are checked in
     /// the order they were once read in.
     #[allow(clippy::type_complexity)]
     fn stored(&self, serial: u64) -> ContentResult<(bool, Option<Vec<u8>>, Option<Vec<u8>>)> {
-        let expected = self.input.is_new(serial)? && !self.dropped.contains(serial)?;
+        self.settled()?;
+        let expected = self.expected(serial)?;
         let [member, row, touch] = self
             .state
             .read_kinds([wire::FRESH, wire::ROW, wire::TOUCH], serial)?;
@@ -61,7 +73,7 @@ impl<'s, 'b> IndexedReducer<'s, 'b> {
         Ok((expected, row, touch))
     }
     /// Checks one serial's fresh member against what the input declares.
-    fn fresh(&self, expected: bool, member: Option<&[u8]>) -> ContentResult<()> {
+    pub(super) fn fresh(&self, expected: bool, member: Option<&[u8]>) -> ContentResult<()> {
         if let Some(bytes) = member {
             wire::membership(bytes)?;
         }
@@ -72,12 +84,13 @@ impl<'s, 'b> IndexedReducer<'s, 'b> {
     }
     pub fn row(&self, serial: u64) -> ContentResult<Option<Row>> {
         let (fresh, raw, touch) = self.stored(serial)?;
-        self.decoded(serial, fresh, raw, touch)
+        self.decoded(serial, fresh, raw.as_deref(), touch.as_deref())
     }
     /// The required rows of at most [`PASS_ROWS`] serials, their three records
     /// each read in one job. Every row is checked as `row` checks one, in the
     /// order of `serials`.
     pub fn required_many(&self, serials: &[u64]) -> ContentResult<Vec<Row>> {
+        self.settled()?;
         if serials.len() > PASS_ROWS {
             return Err(ContentError::InvalidRecord("filesystem touched window"));
         }
@@ -95,33 +108,33 @@ impl<'s, 'b> IndexedReducer<'s, 'b> {
         for serial in serials {
             let mut next = || values.next().ok_or(ContentError::UnexpectedEof);
             let (member, raw, touch) = (next()?, next()?, next()?);
-            let expected = self.input.is_new(*serial)? && !self.dropped.contains(*serial)?;
+            let expected = self.expected(*serial)?;
             self.fresh(expected, member.as_deref())?;
-            rows.push(self.decoded(*serial, expected, raw, touch)?.ok_or(
-                ContentError::InvalidRecord("filesystem reference row missing"),
-            )?);
+            rows.push(
+                self.decoded(*serial, expected, raw.as_deref(), touch.as_deref())?
+                    .ok_or(ContentError::InvalidRecord(
+                        "filesystem reference row missing",
+                    ))?,
+            );
         }
         Ok(rows)
     }
     /// Decodes one serial's row and checks it against its fresh tag and its
     /// touched witness.
-    fn decoded(
+    pub(super) fn decoded(
         &self,
         serial: u64,
         fresh: bool,
-        raw: Option<Vec<u8>>,
-        touch: Option<Vec<u8>>,
+        raw: Option<&[u8]>,
+        touch: Option<&[u8]>,
     ) -> ContentResult<Option<Row>> {
-        let row = raw
-            .as_deref()
-            .map(|bytes| wire::row(bytes, serial))
-            .transpose()?;
+        let row = raw.map(|bytes| wire::row(bytes, serial)).transpose()?;
         if row.is_some_and(|row| matches!(row, Row::Count { .. }) != fresh) {
             return Err(ContentError::InvalidRecord(
                 "filesystem reference fresh tag",
             ));
         }
-        if let Some(bytes) = touch.as_deref() {
+        if let Some(bytes) = touch {
             wire::membership(bytes)?;
         }
         if row.is_some() != touch.is_some() {
@@ -213,18 +226,18 @@ impl<'s, 'b> IndexedReducer<'s, 'b> {
         Ok(())
     }
     pub fn note_retained_binding(&mut self, serial: u64) -> ContentResult<()> {
-        let transition = self.prepare(serial, meaning::retained)?;
-        self.apply_transition(transition, Vec::new())
+        self.note(serial, Step::Retained)
     }
     pub fn note_removed_binding(&mut self, serial: u64) -> ContentResult<()> {
-        let transition = self.prepare_removed(serial)?;
-        self.apply_transition(transition, Vec::new())
+        self.note(serial, Step::Removed)
     }
     pub fn note_value(&mut self, serial: u64, value: InodeValue) -> ContentResult<()> {
-        let transition = self.prepare(serial, |row| {
-            meaning::value(row, value);
-            Ok(())
-        })?;
-        self.apply_transition(transition, Vec::new())
+        self.note(serial, Step::Value(value))
+    }
+    fn note(&mut self, serial: u64, step: Step) -> ContentResult<()> {
+        if serial == 0 {
+            return Err(ContentError::InvalidRecord("inode serial"));
+        }
+        self.defer(serial, step)
     }
 }

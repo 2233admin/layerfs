@@ -292,6 +292,35 @@ statements 406 → 376, 1,233 → 1,127, 15,126 → 14,226 (one fence fewer per
 saved job). Record statements and write transactions do not move: the same
 keys are read.
 
+**One read and one write per window of reference rows.** Every declaration
+and every binding or value meaning was a row read (one job) and its own write
+transaction: 14 + 110 transactions in step. The reducer now holds them in a
+window of at most 21 distinct serials and 64 meanings
+(`layerfs-content/src/filesystem/references/indexed_window.rs`), reads the
+window's undeclared serials in one job and writes all its rows in one guarded
+job. Predicted (one read and one write per 21 serials in arrival order):
+record jobs about 224 / 670 / 10,090 and write transactions about 42 / 144 /
+1,430. Observed:
+
+| per Commit | small | step | large |
+| --- | ---: | ---: | ---: |
+| record jobs | 290 → 221 | 891 → 668 | 12,232 → 10,086 |
+| of which reference rows (`fresh.get_many`, `fresh.apply`, `row.apply`) | 75 → 6 | 260 → 38 | 2,364 → 218 |
+| Workspace statements | 376 → 307 | 1,127 → 904 | 14,226 → 12,080 |
+| Lease statements | 85 | 235 | 1,993 |
+| record statements | 652 → 505 | 2,205 → 2,127 | 24,444 → 24,444 |
+| write transactions | 76 → 40 | 262 → 144 | 2,572 → 1,430 |
+
+Handled and tested in Content (`tests/filesystem_references_backed.rs`): a
+serial moved inside one window is read once and written once, its second
+meaning applied to the first one's result; a refused window writes none of its
+rows and is retained whole as the original refusal; the lost fresh member of a
+declared serial is refused by the seed pass, before any final row. Two
+behaviours moved, both inside a failing operation: a row error surfaces when
+its window is written, not at the call naming the serial; and a declared
+serial's member is no longer read back before its first row is written (they
+are one guarded write now).
+
 ## 6. Recommendation — removing the per-key record jobs
 
 Owner direction of 2026-10-13 allows interface and overlay-schema changes.

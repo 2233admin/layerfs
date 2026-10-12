@@ -23,6 +23,8 @@ pub(super) fn release(
     batch: usize,
     root: u64,
 ) -> ContentResult<(ReleaseWork, u64)> {
+    // The seed pass reads stored rows: every held meaning is written first.
+    reducer.flush()?;
     let mut frontier = Frontier {
         tail: 0,
         head: 0,

@@ -124,10 +124,27 @@ final value. The selected negative-count clamp remains zero on both routes.
 Fresh declaration is separate from touched membership. Declaration atomically
 guards fresh/row/touch absence; it does not eagerly create a count row for an
 unused allocated identity. Each real point mutation guards the exact existing
-Row96 bytes and touched witness (or both Missing) in a single bounded job. A
+Row96 bytes and touched witness (or both Missing). A
 missing half, wrong key/serial, malformed version or Count/Effect disagreement
 with actual sealed fresh facts refuses before further requests. Touched
 cardinality is a checked scalar of successful row insertions, not a resident set.
+
+Declarations and the binding and value meanings before the release seed are
+held in a write-behind window (`references/indexed_window.rs`): at most 64
+meanings of at most 21 distinct serials, in arrival order. The input is asked
+whether a serial is fresh when it enters the window. A full window, the seed
+pass and the final pass write it: the fresh member, row and witness of every
+serial the window did not itself declare are read in one job, each serial's
+first meaning starts from that stored row after the checks above, a later
+meaning of the same serial is applied to the result of its earlier one, and
+all rows leave in one guarded job whose guards are the values that were read
+(or absence, for a serial the window declared). A refused write applies no
+row of the window and is retained whole as the original refusal. A second
+declaration of a serial the window holds writes the window first, so the
+stored guards refuse it as they would have. A stored row is never read while
+a meaning is held. What moved: a row error is met when its window is written,
+not at the call that named the serial, and a declared serial's member is read
+back by the passes, not before its first row is written.
 
 A touched-row pass (the release seed and the final rows) takes its rows in
 waves of at most the base read batch (never above 64) and reads a wave's rows
