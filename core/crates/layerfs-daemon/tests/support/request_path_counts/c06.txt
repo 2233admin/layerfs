@@ -1,29 +1,25 @@
-LookupMiss: requests=1 jobs(read,mutation,lifecycle)=[1, 0, 0] transactions=0 attempts=3 executions=3
-  1 FENCE_LOOKUP
-  1 INODE_LOOKUP
+LookupMiss: requests=1 jobs(read,mutation,lifecycle)=[1, 0, 0] transactions=0 attempts=2 executions=2
+  1 FENCE_LOOKUP_ROW
   1 NAME_LAYERS
-Getattr: requests=2 jobs(read,mutation,lifecycle)=[2, 0, 0] transactions=0 attempts=4 executions=4
-  2 FENCE_LOOKUP
-  2 INODE_LOOKUP
-Create: requests=1 jobs(read,mutation,lifecycle)=[0, 1, 0] transactions=1 attempts=13 executions=19
+Getattr: requests=2 jobs(read,mutation,lifecycle)=[2, 0, 0] transactions=0 attempts=2 executions=2
+  2 FENCE_LOOKUP_ROW
+Create: requests=1 jobs(read,mutation,lifecycle)=[0, 1, 0] transactions=1 attempts=12 executions=18
   1 DIRECTORY_ENTRY_PUT
-  1 FENCE_LOOKUP
+  1 FENCE_LOOKUP_ROW
   1 FILE_OPEN_LOOKUP_ADD
   1 FRONTIER_ADVANCE
   2 INODE_INSERT
-  1 INODE_LOOKUP
   1 NAME_LAYERS
   1 begin
   1 commit
   1 file-handle-insert
   1 freelist-count
   1 native-lookup-insert
-Write: requests=512 jobs(read,mutation,lifecycle)=[0, 512, 0] transactions=512 attempts=7680 executions=9728
+Write: requests=512 jobs(read,mutation,lifecycle)=[0, 512, 0] transactions=512 attempts=7168 executions=9216
   2048 CELL_PUT
   2048 CELL_SHAPES
-  512 FENCE_FILE
+  512 FENCE_FILE_ROW
   512 FRONTIER_ADVANCE
-  512 INODE_LOOKUP
   512 INODE_UPDATE
   512 begin
   512 commit

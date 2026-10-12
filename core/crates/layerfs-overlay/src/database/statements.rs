@@ -265,9 +265,9 @@ pub(crate) const GENERATION_HELD: &str = "SELECT 1 FROM lease INDEXED BY lease_r
 
 /// The fence of one native visit: the Workspace row, its native connection
 /// and the kernel's own reference on the inode the request names, in one
-/// statement. The last column is NULL when that reference is not held.
+/// statement. Column 14 is NULL when that reference is not held.
 macro_rules! fence {
-    ($held:literal) => {
+    ($held:expr) => {
         concat!(
             "SELECT w.active,w.captured,w.revision,w.base_root,w.dirty_inodes,",
             "w.dirty_directory_entries,w.lifecycle,w.installed,w.captured_revision,",
@@ -278,17 +278,53 @@ macro_rules! fence {
         )
     };
 }
+/// The same fence, and after its columns the latest local row of the inode
+/// the request names within the view the Workspace row gives, in the column
+/// order of `INODE_LOOKUP`: NULLs when the inode has no local row. A visit
+/// that decides over that inode reads its row here, by the same key and
+/// bounds as `INODE_LOOKUP`, in the one statement it runs anyway.
+macro_rules! fence_row {
+    ($held:expr) => {
+        concat!(
+            "SELECT w.active,w.captured,w.revision,w.base_root,w.dirty_inodes,",
+            "w.dirty_directory_entries,w.lifecycle,w.installed,w.captured_revision,",
+            "w.base_readers,w.consolidating,m.owner,m.root,m.revoked,(",
+            $held,
+            "),i.serial,i.kind,i.mode,i.mtime_seconds,i.mtime_nanoseconds,i.nlink,i.size,",
+            "i.inherited_cutoff,i.born,i.entries,i.subdirs,i.gen,i.epoch,i.height,",
+            "i.referenced,i.sequence ",
+            "FROM workspace w LEFT JOIN native_mount m ON m.ns=w.ns ",
+            "LEFT JOIN inode i ON i.ns=w.ns AND i.serial=?4 AND i.gen<=w.active ",
+            "AND i.gen>w.installed WHERE w.ns=?1 AND w.incarnation=?2 ",
+            "ORDER BY i.gen DESC LIMIT 1"
+        )
+    };
+}
 /// A kernel lookup count on the inode.
-pub(crate) const FENCE_LOOKUP: &str =
-    fence!("SELECT 1 FROM native_lookup l WHERE l.ns=w.ns AND l.mount=?3 AND l.serial=?4");
+macro_rules! held_lookup {
+    () => {
+        "SELECT 1 FROM native_lookup l WHERE l.ns=w.ns AND l.mount=?3 AND l.serial=?4"
+    };
+}
 /// An open regular-file descriptor of the inode; the column is its access mode.
-pub(crate) const FENCE_FILE: &str = fence!(
-    "SELECT f.writable FROM file_handle f WHERE f.ns=w.ns AND f.owner=?5 AND f.mount=?3 AND f.serial=?4"
-);
+macro_rules! held_file {
+    () => {
+        "SELECT f.writable FROM file_handle f WHERE f.ns=w.ns AND f.owner=?5 AND f.mount=?3 AND f.serial=?4"
+    };
+}
 /// An open file or directory descriptor of the inode.
-pub(crate) const FENCE_HANDLE: &str = fence!(
-    "CASE WHEN EXISTS(SELECT 1 FROM file_handle f WHERE f.ns=w.ns AND f.owner=?5 AND f.mount=?3 AND f.serial=?4) OR EXISTS(SELECT 1 FROM native_directory d WHERE d.ns=w.ns AND d.owner=?5 AND d.mount=?3 AND d.serial=?4 AND d.closed=0) THEN 1 END"
-);
+macro_rules! held_handle {
+    () => {
+        "CASE WHEN EXISTS(SELECT 1 FROM file_handle f WHERE f.ns=w.ns AND f.owner=?5 AND f.mount=?3 AND f.serial=?4) OR EXISTS(SELECT 1 FROM native_directory d WHERE d.ns=w.ns AND d.owner=?5 AND d.mount=?3 AND d.serial=?4 AND d.closed=0) THEN 1 END"
+    };
+}
+pub(crate) const FENCE_LOOKUP: &str = fence!(held_lookup!());
+pub(crate) const FENCE_FILE: &str = fence!(held_file!());
+pub(crate) const FENCE_HANDLE: &str = fence!(held_handle!());
+/// The three fences of a visit that decides over the inode it names.
+pub(crate) const FENCE_LOOKUP_ROW: &str = fence_row!(held_lookup!());
+pub(crate) const FENCE_FILE_ROW: &str = fence_row!(held_file!());
+pub(crate) const FENCE_HANDLE_ROW: &str = fence_row!(held_handle!());
 /// An open directory descriptor of the inode; the column is its floor.
 pub(crate) const FENCE_DIRECTORY: &str = fence!(
     "SELECT d.floor FROM native_directory d WHERE d.ns=w.ns AND d.owner=?5 AND d.mount=?3 AND d.serial=?4 AND d.closed=0"

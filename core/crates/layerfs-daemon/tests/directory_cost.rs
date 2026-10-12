@@ -724,7 +724,7 @@ impl Pinned {
 }
 const TRANSACTION: [(&str, u64, u64); 3] = [("Startup", 1, 1), ("Begin", 1, 1), ("Commit", 1, 1)];
 /// OPENDIR of a local directory: one visit. The fence on the kernel's lookup
-/// reference, the directory's row, and in its one transaction the parent it
+/// reference, which reads the directory's row, and in its one transaction the parent it
 /// was reached through, the handle row, its lease and the open count.
 const OPENDIR_LOCAL: Pinned = Pinned {
     jobs: (1, 0, 0),
@@ -734,7 +734,6 @@ const OPENDIR_LOCAL: Pinned = Pinned {
         TRANSACTION[1],
         TRANSACTION[2],
         ("Workspace", 1, 1),
-        ("Inode", 1, 1),
         ("Lease", 3, 4),
     ],
 };
@@ -748,7 +747,6 @@ const OPENDIR_BASE: Pinned = Pinned {
         TRANSACTION[1],
         TRANSACTION[2],
         ("Workspace", 1, 1),
-        ("Inode", 1, 1),
         ("Lease", 3, 4),
     ],
 };

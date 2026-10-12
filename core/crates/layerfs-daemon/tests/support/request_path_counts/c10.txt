@@ -1,39 +1,35 @@
-LookupMiss: requests=2 jobs(read,mutation,lifecycle)=[2, 0, 0] transactions=0 attempts=6 executions=6
-  2 FENCE_LOOKUP
-  2 INODE_LOOKUP
+LookupMiss: requests=2 jobs(read,mutation,lifecycle)=[2, 0, 0] transactions=0 attempts=4 executions=4
+  2 FENCE_LOOKUP_ROW
   2 NAME_LAYERS
-Lookup: requests=1 jobs(read,mutation,lifecycle)=[2, 0, 0] transactions=1 attempts=13 executions=15
-  2 FENCE_LOOKUP
+Lookup: requests=1 jobs(read,mutation,lifecycle)=[2, 0, 0] transactions=1 attempts=11 executions=13
+  2 FENCE_LOOKUP_ROW
   1 FILE_LOOKUPS_ADD
-  3 INODE_LOOKUP
+  1 INODE_LOOKUP
   2 NAME_LAYERS
   1 begin
   1 commit
   1 freelist-count
   1 native-lookup-insert
   1 native-lookup-row
-Getattr: requests=1 jobs(read,mutation,lifecycle)=[1, 0, 0] transactions=0 attempts=2 executions=2
-  1 FENCE_LOOKUP
-  1 INODE_LOOKUP
-Create: requests=1 jobs(read,mutation,lifecycle)=[0, 1, 0] transactions=1 attempts=13 executions=19
+Getattr: requests=1 jobs(read,mutation,lifecycle)=[1, 0, 0] transactions=0 attempts=1 executions=1
+  1 FENCE_LOOKUP_ROW
+Create: requests=1 jobs(read,mutation,lifecycle)=[0, 1, 0] transactions=1 attempts=12 executions=18
   1 DIRECTORY_ENTRY_PUT
-  1 FENCE_LOOKUP
+  1 FENCE_LOOKUP_ROW
   1 FILE_OPEN_LOOKUP_ADD
   1 FRONTIER_ADVANCE
   2 INODE_INSERT
-  1 INODE_LOOKUP
   1 NAME_LAYERS
   1 begin
   1 commit
   1 file-handle-insert
   1 freelist-count
   1 native-lookup-insert
-Write: requests=1024 jobs(read,mutation,lifecycle)=[0, 1024, 0] transactions=1024 attempts=11264 executions=13312
+Write: requests=1024 jobs(read,mutation,lifecycle)=[0, 1024, 0] transactions=1024 attempts=10240 executions=12288
   2048 CELL_PUT
   2048 CELL_SHAPES
-  1024 FENCE_FILE
+  1024 FENCE_FILE_ROW
   1024 FRONTIER_ADVANCE
-  1024 INODE_LOOKUP
   1024 INODE_UPDATE
   1024 begin
   1024 commit
@@ -45,10 +41,9 @@ Release: requests=2 jobs(read,mutation,lifecycle)=[0, 0, 2] transactions=2 attem
   2 commit
   2 file-handle-drop
   2 freelist-count
-Open: requests=1 jobs(read,mutation,lifecycle)=[1, 0, 0] transactions=1 attempts=7 executions=8
-  1 FENCE_LOOKUP
+Open: requests=1 jobs(read,mutation,lifecycle)=[1, 0, 0] transactions=1 attempts=6 executions=7
+  1 FENCE_LOOKUP_ROW
   1 FILE_OPENS_ADD
-  1 INODE_LOOKUP
   1 begin
   1 commit
   1 file-handle-insert

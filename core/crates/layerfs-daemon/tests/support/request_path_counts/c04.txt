@@ -1,10 +1,9 @@
-LookupMiss: requests=1110 jobs(read,mutation,lifecycle)=[1110, 0, 0] transactions=0 attempts=3330 executions=3330
-  1110 FENCE_LOOKUP
-  1110 INODE_LOOKUP
+LookupMiss: requests=1110 jobs(read,mutation,lifecycle)=[1110, 0, 0] transactions=0 attempts=2220 executions=2220
+  1110 FENCE_LOOKUP_ROW
   1110 NAME_LAYERS
-Lookup: requests=90 jobs(read,mutation,lifecycle)=[90, 0, 0] transactions=90 attempts=900 executions=900
-  90 FENCE_LOOKUP
-  180 INODE_LOOKUP
+Lookup: requests=90 jobs(read,mutation,lifecycle)=[90, 0, 0] transactions=90 attempts=810 executions=810
+  90 FENCE_LOOKUP_ROW
+  90 INODE_LOOKUP
   90 NAME_LAYERS
   90 begin
   90 commit
@@ -12,16 +11,14 @@ Lookup: requests=90 jobs(read,mutation,lifecycle)=[90, 0, 0] transactions=90 att
   90 native-lookup-count
   90 native-lookup-row
   90 native-parent-put
-Getattr: requests=1011 jobs(read,mutation,lifecycle)=[1011, 0, 0] transactions=0 attempts=2022 executions=2022
-  1011 FENCE_LOOKUP
-  1011 INODE_LOOKUP
-Create: requests=1000 jobs(read,mutation,lifecycle)=[0, 1000, 0] transactions=1000 attempts=13000 executions=18000
+Getattr: requests=1011 jobs(read,mutation,lifecycle)=[1011, 0, 0] transactions=0 attempts=1011 executions=1011
+  1011 FENCE_LOOKUP_ROW
+Create: requests=1000 jobs(read,mutation,lifecycle)=[0, 1000, 0] transactions=1000 attempts=12000 executions=17000
   1000 DIRECTORY_ENTRY_PUT
-  1000 FENCE_LOOKUP
+  1000 FENCE_LOOKUP_ROW
   1000 FILE_OPEN_LOOKUP_ADD
   1000 FRONTIER_ADVANCE
   1000 INODE_INSERT
-  1000 INODE_LOOKUP
   1000 INODE_UPDATE
   1000 NAME_LAYERS
   1000 begin
@@ -29,13 +26,12 @@ Create: requests=1000 jobs(read,mutation,lifecycle)=[0, 1000, 0] transactions=10
   1000 file-handle-insert
   1000 freelist-count
   1000 native-lookup-insert
-Mkdir: requests=110 jobs(read,mutation,lifecycle)=[0, 110, 0] transactions=110 attempts=1430 executions=1981
+Mkdir: requests=110 jobs(read,mutation,lifecycle)=[0, 110, 0] transactions=110 attempts=1320 executions=1871
   110 DIRECTORY_ENTRY_PUT
-  110 FENCE_LOOKUP
+  110 FENCE_LOOKUP_ROW
   110 FILE_LOOKUPS_ADD
   110 FRONTIER_ADVANCE
   111 INODE_INSERT
-  110 INODE_LOOKUP
   109 INODE_UPDATE
   110 NAME_LAYERS
   110 begin
@@ -43,10 +39,9 @@ Mkdir: requests=110 jobs(read,mutation,lifecycle)=[0, 110, 0] transactions=110 a
   110 freelist-count
   110 native-lookup-insert
   110 native-parent-put
-Setattr: requests=1000 jobs(read,mutation,lifecycle)=[0, 1000, 0] transactions=1000 attempts=7000 executions=7000
-  1000 FENCE_LOOKUP
+Setattr: requests=1000 jobs(read,mutation,lifecycle)=[0, 1000, 0] transactions=1000 attempts=6000 executions=6000
+  1000 FENCE_LOOKUP_ROW
   1000 FRONTIER_ADVANCE
-  1000 INODE_LOOKUP
   1000 INODE_UPDATE
   1000 begin
   1000 commit
@@ -58,10 +53,9 @@ Release: requests=1000 jobs(read,mutation,lifecycle)=[0, 0, 1000] transactions=1
   1000 commit
   1000 file-handle-drop
   1000 freelist-count
-Opendir: requests=10 jobs(read,mutation,lifecycle)=[10, 0, 0] transactions=10 attempts=80 executions=90
-  10 FENCE_LOOKUP
+Opendir: requests=10 jobs(read,mutation,lifecycle)=[10, 0, 0] transactions=10 attempts=70 executions=80
+  10 FENCE_LOOKUP_ROW
   10 FILE_OPENS_ADD
-  10 INODE_LOOKUP
   10 begin
   10 commit
   10 freelist-count

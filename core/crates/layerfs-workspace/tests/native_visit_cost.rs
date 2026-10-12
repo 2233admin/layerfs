@@ -233,17 +233,13 @@ fn the_five_jobs_of_one_created_file_cost_exactly_this_at_any_directory_size() {
         last.jobs, last.total
     );
 
-    // One fence, then the directory's local row.
-    let getattr: Cost = vec![("Workspace", 1, 1), ("Inode", 1, 1)];
-    // The fence; then the directory's row and one seek of the name's rows.
+    // One fence, which reads the directory's local row with the Workspace's.
+    let getattr: Cost = vec![("Workspace", 1, 1)];
+    // The fence, with the directory's row; then one seek of the name's rows.
     // The first evaluation needs the base's answer for the name and takes it
     // from resident objects; the second evaluation uses the rows the job
     // read, the directory's and the name's.
-    let lookup: Cost = vec![
-        ("Workspace", 1, 1),
-        ("Inode", 1, 1),
-        ("DirectoryEntry", 1, 1),
-    ];
+    let lookup: Cost = vec![("Workspace", 1, 1), ("DirectoryEntry", 1, 1)];
     let expected = [
         getattr,
         lookup,
@@ -280,8 +276,8 @@ fn the_five_jobs_of_one_created_file_cost_exactly_this_at_any_directory_size() {
     );
     b.overlay.revoke_native_mount(mount).unwrap();
 }
-/// CREATE, in order. Reads: the fence [Workspace]; the directory's row, once
-/// for the job [Inode]; the name's rows, once for every evaluation and for
+/// CREATE, in order. Reads: the fence, with the directory's row, once for
+/// the job [Workspace]; the name's rows, once for every evaluation and for
 /// the published binding's inheritance [DirectoryEntry]. Then one
 /// transaction, begun by its admission pragma
 /// [Startup] and BEGIN: the new inode, inserted without a read of its
@@ -296,12 +292,12 @@ const CREATE: [(&str, u64, u64); 7] = [
     ("Begin", 1, 1),
     ("Commit", 1, 1),
     ("Workspace", 2, 2),
-    ("Inode", 3, 4),
+    ("Inode", 2, 3),
     ("DirectoryEntry", 2, 3),
     ("Lease", 3, 6),
 ];
-/// WRITE, in order. Reads: the fence with the descriptor [Workspace]; the
-/// file's row, which carries its layer columns [Inode]. Then one
+/// WRITE, in order. Reads: the fence with the descriptor and the file's
+/// row, which carries its layer columns [Workspace]. Then one
 /// transaction: the inode's new size and time, updated over that row
 /// [Inode], the one partly covered cell read and written [2 Payload, the
 /// write with its trigger] and the frontier [Workspace].
@@ -310,7 +306,7 @@ const WRITE: [(&str, u64, u64); 6] = [
     ("Begin", 1, 1),
     ("Commit", 1, 1),
     ("Workspace", 2, 2),
-    ("Inode", 2, 2),
+    ("Inode", 1, 1),
     ("Payload", 2, 3),
 ];
 /// RELEASE, in order. The fence with the descriptor [Workspace]; then one
@@ -324,6 +320,6 @@ const RELEASE: [(&str, u64, u64); 5] = [
     ("Workspace", 1, 1),
     ("Lease", 2, 3),
 ];
-/// Attempts and executions of the whole cycle: 24 statements of the five
+/// Attempts and executions of the whole cycle: 20 statements of the five
 /// jobs and the admission pragma, BEGIN and COMMIT of three transactions.
-const TOTAL: (u64, u64) = (33, 40);
+const TOTAL: (u64, u64) = (29, 36);

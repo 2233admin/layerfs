@@ -584,22 +584,19 @@ fn one_removed_file_costs_exactly_this_beside_any_files_and_after_any_orphans() 
     b.overlay.revoke_native_mount(two.mount).unwrap();
 }
 /// The six jobs' Inode-family attempts for one created and removed file:
-/// 11 of the requests' own, and the two of the reclamation in FORGET.
-const INODE: u64 = 13;
-/// The negative LOOKUP: the fence; the directory's row and the name's rows,
-/// each read once for both of its evaluations.
-const LOOKUP: [(&str, u64, u64); 3] = [
-    ("Workspace", 1, 1),
-    ("Inode", 1, 1),
-    ("DirectoryEntry", 1, 1),
-];
+/// 7 of the requests' own, and the two of the reclamation in FORGET. The
+/// row of the inode a visit names is read by its fence, not by one of these.
+const INODE: u64 = 9;
+/// The negative LOOKUP: the fence, which reads the directory's row with the
+/// Workspace's, and the name's rows, read once for both of its evaluations.
+const LOOKUP: [(&str, u64, u64); 2] = [("Workspace", 1, 1), ("DirectoryEntry", 1, 1)];
 /// CREATE, WRITE and RELEASE as `native_visit_cost` explains them.
 const CREATE: [(&str, u64, u64); 7] = [
     ("Startup", 1, 1),
     ("Begin", 1, 1),
     ("Commit", 1, 1),
     ("Workspace", 2, 2),
-    ("Inode", 3, 4),
+    ("Inode", 2, 3),
     ("DirectoryEntry", 2, 3),
     ("Lease", 3, 6),
 ];
@@ -608,7 +605,7 @@ const WRITE: [(&str, u64, u64); 6] = [
     ("Begin", 1, 1),
     ("Commit", 1, 1),
     ("Workspace", 2, 2),
-    ("Inode", 2, 2),
+    ("Inode", 1, 1),
     ("Payload", 2, 3),
 ];
 const RELEASE: [(&str, u64, u64); 5] = [
@@ -618,9 +615,9 @@ const RELEASE: [(&str, u64, u64); 5] = [
     ("Workspace", 1, 1),
     ("Lease", 2, 3),
 ];
-/// UNLINK under the kernel's lookup reference, in order. Reads: the fence
-/// [Workspace]; the directory's row, the name's rows and the file's row,
-/// each once for every evaluation [2 Inode, DirectoryEntry].
+/// UNLINK under the kernel's lookup reference, in order. Reads: the fence,
+/// with the directory's row [Workspace]; the name's rows and the file's row,
+/// each once for every evaluation [Inode, DirectoryEntry].
 /// Then one transaction: the file's tombstone and the directory's time and
 /// entry counts, each an update over the row the job read [2 Inode]; the
 /// binding's removal, decided by the name's rows the job read
@@ -633,7 +630,7 @@ const UNLINK: [(&str, u64, u64); 7] = [
     ("Begin", 1, 1),
     ("Commit", 1, 1),
     ("Workspace", 2, 2),
-    ("Inode", 5, 6),
+    ("Inode", 4, 5),
     ("DirectoryEntry", 2, 3),
     ("Lease", 3, 4),
 ];

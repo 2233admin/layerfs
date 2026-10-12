@@ -8,24 +8,40 @@ use crate::{
 };
 
 pub(crate) fn decode(row: &rusqlite::Row<'_>) -> rusqlite::Result<Inode> {
-    let kind = match row.get::<_, i64>(1)? {
+    decode_at(row, 0)
+}
+/// The eleven inode columns starting at column `at`.
+fn decode_at(row: &rusqlite::Row<'_>, at: usize) -> rusqlite::Result<Inode> {
+    let kind = match row.get::<_, i64>(at + 1)? {
         1 => InodeKind::File,
         2 => InodeKind::Directory,
         3 => InodeKind::Symlink,
         _ => return Err(rusqlite::Error::InvalidQuery),
     };
     Ok(Inode {
-        serial: unsigned(row, 0)?,
+        serial: unsigned(row, at)?,
         kind,
-        mode: row.get(2)?,
-        mtime_seconds: row.get(3)?,
-        mtime_nanoseconds: row.get(4)?,
-        nlink: unsigned(row, 5)?,
-        size: unsigned(row, 6)?,
-        inherited_cutoff: unsigned(row, 7)?,
-        born: unsigned(row, 8)?,
-        entries: unsigned(row, 9)?,
-        subdirs: unsigned(row, 10)?,
+        mode: row.get(at + 2)?,
+        mtime_seconds: row.get(at + 3)?,
+        mtime_nanoseconds: row.get(at + 4)?,
+        nlink: unsigned(row, at + 5)?,
+        size: unsigned(row, at + 6)?,
+        inherited_cutoff: unsigned(row, at + 7)?,
+        born: unsigned(row, at + 8)?,
+        entries: unsigned(row, at + 9)?,
+        subdirs: unsigned(row, at + 10)?,
+    })
+}
+/// One local row in the column order of `INODE_LOOKUP`, starting at column
+/// `at`.
+pub(crate) fn local_row_at(row: &rusqlite::Row<'_>, at: usize) -> rusqlite::Result<LocalRow> {
+    Ok(LocalRow {
+        inode: decode_at(row, at)?,
+        gen: row.get(at + 11)?,
+        epoch: row.get(at + 12)?,
+        height: row.get(at + 13)?,
+        referenced: row.get(at + 14)?,
+        sequence: row.get(at + 15)?,
     })
 }
 pub(crate) fn optional_serial(value: Option<i64>, column: usize) -> rusqlite::Result<Option<u64>> {
@@ -102,16 +118,7 @@ impl Overlay {
                 sql::INODE_LOOKUP,
                 &[&ns, &serial, &gen.0, &installed],
                 32,
-                |row| {
-                    Ok(LocalRow {
-                        inode: decode(row)?,
-                        gen: row.get(11)?,
-                        epoch: row.get(12)?,
-                        height: row.get(13)?,
-                        referenced: row.get(14)?,
-                        sequence: row.get(15)?,
-                    })
-                },
+                |row| local_row_at(row, 0),
             )?
             .pop())
     }

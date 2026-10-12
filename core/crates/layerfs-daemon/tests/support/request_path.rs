@@ -766,6 +766,11 @@ const NAMES: &[(&str, &str)] = &[
     ("BEGIN IMMEDIATE", "begin"),
     ("COMMIT", "commit"),
     ("PRAGMA main.freelist_count", "freelist-count"),
+    // The fences that also read the named inode's row come first: each
+    // holds the text of its plain fence.
+    ("AND l.serial=?4),i.serial", "FENCE_LOOKUP_ROW"),
+    ("AND f.serial=?4),i.serial", "FENCE_FILE_ROW"),
+    ("THEN 1 END),i.serial", "FENCE_HANDLE_ROW"),
     ("(SELECT 1 FROM native_lookup l", "FENCE_LOOKUP"),
     ("(SELECT f.writable FROM file_handle f", "FENCE_FILE"),
     (
