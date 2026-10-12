@@ -1,6 +1,6 @@
 # Kept fixture preparation
 
-> **Status:** Implemented setup machinery; simplified-source count gate complete, final baseline pending.
+> **Status:** Implemented setup machinery; final-source count gate and baseline recorded.
 
 The current selection has 108 everyday and 49 heavy cases. Setup retains closed
 inputs between runs. Each measured case still receives its own writable Store
@@ -86,3 +86,12 @@ after checking its complete manifest; removed hashes are retained. Closed
 masters remain. Default invocations stay below two minutes; only the owner's
 six named large runs and two preparations receive the 300-second allowance.
 The case's product, verifier, proof and reporting limits are unchanged.
+
+The final source `587e9a8be` passed preparation preflight for all 169 selections
+before one complete baseline. The retained file/master inventory, including
+superseded source preparations, is 68,562,639,832 apparent / 71,561,019,392
+allocated bytes, with host free 411,500,744,704 and Docker free 161,731,170,304
+bytes. It includes 103 distinct referenced masters and zero missing references.
+All sample copies/containers/exported Stores were removed after verified sealed
+manifests. [Final baseline and precise scopes](../../issues/319/baseline-sdk-refactor/README.md)
+record the twelve cells, everyday 108 and heavy 49 once at one identity.

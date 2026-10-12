@@ -2504,3 +2504,20 @@ SDK/daemon/runtime all targets compile and SDK/native-control checks recorded.
 No samples at the preceding preflight identity. Existing preparations/receipts
 remain; resume full preflight at the new key before the final baseline. Receipts:
 history-shared-* checks. Product execution and performance paths unchanged.
+
+
+### Stage 3 complete: final-source SDK baseline
+
+Cause: finish the owner-ordered migration/simplification baseline. Change:
+record one clean sealed identity 587e9a8be, after all 169 preparations PASS,
+then twelve cells, everyday 108 and heavy 49, one case per command. Commit:
+this baseline record. All 169 proofs and 157 workload functional fields PASS;
+160 performance attempts remain INELIGIBLE, nine original proof-only rows PASS.
+Counts: 121 exact, 23 unchanged unavailable, 25 retained differences; nineteen
+have arithmetic explanations, six retain precise job-attribution limits. The
+final 35-row representative gate is 28 exact/two explained/five unavailable.
+Elapsed spans cells/everyday/heavy: 197.494248/2200.911162/3658.748524 s, including
+agent gaps; case-wall sums and concurrent elapsed scopes stay separate. Kept
+fixtures: 68,562,639,832 apparent/71,561,019,392 allocated B. Cleanup manifests
+PASS for all 169; all claimed sample volumes absent. Receipts: baseline JSON,
+CSVs, per-case/non-PASS tables, inventory and final-artifact-audit.json. No tuning.
