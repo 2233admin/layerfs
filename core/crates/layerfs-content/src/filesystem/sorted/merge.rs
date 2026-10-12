@@ -1,10 +1,13 @@
 //! Sorted final-state merge: split, sibling redistribution and untouched reuse.
 //!
 //! Only the last sibling of a page stays private until its neighbour establishes
-//! the final partition. A child whose key range holds no change is emitted as its
-//! stored identity without being materialized, so an update costs the changed
-//! path plus the siblings that prove its partition. Input order is checked once:
-//! a duplicate or unsorted change fails the attempt instead of being normalized.
+//! the final partition. A child whose key range holds no change is emitted as the
+//! identity its parent row records, without being read: an update reads the
+//! children its changes reach, the neighbour an underfull one joins, and the
+//! other children of a branch page only when that page splits or is joined. The
+//! new parent's totals are the stored parent's totals less the children that
+//! were read plus what replaced them. Input order is checked once: a duplicate
+//! or unsorted change fails the attempt instead of being normalized.
 
 use crate::error::{ContentError, ContentResult};
 use crate::filesystem::sorted::format::Format;
@@ -72,6 +75,8 @@ impl<'o, 'e, F: Format> Engine<'o, 'e, F> {
         if F::fits(size, page.entries.len(), page.level) {
             return Ok(None);
         }
+        // Each half records its own totals, so every row needs its summary.
+        self.resolve(page)?;
         let widths = page
             .entries
             .iter()
@@ -177,13 +182,6 @@ impl<'o, 'e, F: Format> Engine<'o, 'e, F> {
     where
         I: Iterator<Item = ContentResult<(F::Key, Option<F::Value>)>>,
     {
-        if !changes.in_range(bound) {
-            self.work.untouched_subtrees = self.work.untouched_subtrees.saturating_add(1);
-            return output(
-                self,
-                Node::existing(id.ok_or(ContentError::MissingObject)?, &read.wire),
-            );
-        }
         let mut page = self.page(read.wire.level)?;
         page.origin = id;
         if page.level == 0 {
@@ -221,6 +219,7 @@ impl<'o, 'e, F: Format> Engine<'o, 'e, F> {
                         count: 1,
                         size: 0,
                         items: 0,
+                        unread: false,
                         pending: None,
                     };
                     if let Some(node) = self.push(&mut page, entry)? {
@@ -230,77 +229,61 @@ impl<'o, 'e, F: Format> Engine<'o, 'e, F> {
             }
         } else {
             let level = page.level;
-            let entries = read.wire.entries;
-            let count = entries.len();
-            let mut old_count = 0_u64;
-            let mut old_bytes = 0_u64;
+            let count = read.wire.entries.len();
             let mut pending = None;
-            let mut start = 0;
-            while start < count {
-                // One bounded authenticated group serves this chunk: the provider
-                // resolves every location in one demand wave. The chunk narrows to
-                // the remaining budget instead of failing where a point read would
-                // have succeeded; every page is still read, authenticated, decoded
-                // and checked per child in ascending key order.
-                let width = crate::filesystem::sorted::page::BATCH_CHILDREN.min(count - start);
-                let (chunk, fetched, mut retained) =
-                    self.batch_children(&entries[start..], width)?;
-                let mut available = fetched;
-                for (index, entry) in entries[start..start + chunk].iter().enumerate() {
-                    let child_id = entry
-                        .child
-                        .ok_or(ContentError::InvalidRecord("branch row"))?;
-                    let child = if let Some(retained) = &mut retained {
-                        let position = available
-                            .iter()
-                            .position(|(id, _)| *id == child_id)
-                            .ok_or(ContentError::MissingObject)?;
-                        let (_, canonical) = available.remove(position);
-                        let child = self.decode_page(false, &canonical)?;
-                        retained.shrink(canonical.capacity());
-                        drop(canonical);
-                        child
-                    } else {
-                        self.read(child_id, false)?
-                    };
-                    self.check_child(level, &entry.key, &child.wire)?;
-                    old_count = old_count
-                        .checked_add(child.wire.count)
-                        .ok_or(ContentError::LengthOverflow)?;
-                    old_bytes = old_bytes
-                        .checked_add(child.wire.bytes)
-                        .ok_or(ContentError::LengthOverflow)?;
-                    let child_bound = if start + index + 1 == count {
-                        bound
-                    } else {
-                        Some(&entry.key)
-                    };
-                    self.edit(
-                        Some(child_id),
-                        child,
-                        child_bound,
-                        changes,
-                        &mut |engine, node| {
-                            engine.sibling(&mut pending, node, &mut |engine, node| {
-                                let entry = engine.entry(node)?;
-                                if let Some(node) = engine.push(&mut page, entry)? {
-                                    output(engine, node)?;
-                                }
-                                Ok(())
-                            })
-                        },
-                    )?;
+            self.known[usize::from(level - 1)] = (0, 0);
+            for (index, entry) in read.wire.entries.into_iter().enumerate() {
+                let child_id = entry
+                    .child
+                    .ok_or(ContentError::InvalidRecord("branch row"))?;
+                let child_bound = if index + 1 == count {
+                    bound
+                } else {
+                    Some(&entry.key)
+                };
+                let mut emit = |engine: &mut Self, node| {
+                    engine.sibling(&mut pending, node, &mut |engine, node| {
+                        let entry = engine.entry(node)?;
+                        if let Some(node) = engine.push(&mut page, entry)? {
+                            output(engine, node)?;
+                        }
+                        Ok(())
+                    })
+                };
+                if !changes.in_range(child_bound) {
+                    // No change reaches this child: it stays the identity this
+                    // row records and is not read.
+                    self.work.untouched_subtrees = self.work.untouched_subtrees.saturating_add(1);
+                    emit(self, Node::stored(child_id, entry.key.clone(), level - 1))?;
+                    continue;
                 }
-                start += chunk;
-            }
-            if old_count != read.wire.count || old_bytes != read.wire.bytes {
-                return Err(ContentError::InvalidRecord("tree subtree summary"));
+                let child = self.read(child_id, false)?;
+                self.check_child(level, &entry.key, &child.wire)?;
+                self.credit(&child.wire)?;
+                self.edit(Some(child_id), child, child_bound, changes, &mut emit)?;
             }
             if let Some(node) = pending {
                 let entry = self.entry(node)?;
                 if let Some(node) = self.push(&mut page, entry)? {
                     output(self, node)?;
                 }
+            }
+            // The stored page recorded the totals of all its children. Those
+            // that were read are accounted for exactly; what is left belongs to
+            // the unread ones, each of which holds at least one entry.
+            let known = self.known[usize::from(level - 1)];
+            let rest = read
+                .wire
+                .count
+                .checked_sub(known.0)
+                .zip(read.wire.bytes.checked_sub(known.1));
+            let unread = page.unread as u64;
+            match rest {
+                Some((0, 0)) if unread == 0 => {}
+                Some(rest) if unread > 0 && rest.0 >= unread && rest.1 >= unread => {
+                    page.carried = Some(rest);
+                }
+                _ => return Err(ContentError::InvalidRecord("tree subtree summary")),
             }
         }
         if !page.entries.is_empty() {

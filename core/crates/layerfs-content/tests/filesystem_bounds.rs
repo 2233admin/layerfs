@@ -1073,35 +1073,14 @@ struct WideRename {
     boundary_waves: u64,
     waves: Vec<usize>,
     demanded: usize,
-    /// Root the operation emitted.
-    root: ObjectId,
     /// Widest demand wave the provider served.
     peak_wave: usize,
 }
 
-impl WideRename {
-    /// Objects returned by grouped demand waves (a wave wider than one), which is
-    /// exactly the work `batch_children` does.
-    fn grouped_objects(&self) -> usize {
-        self.waves.iter().copied().filter(|width| *width > 1).sum()
-    }
-
-    /// Objects returned by single-object waves (point reads).
-    fn point_objects(&self) -> usize {
-        self.waves.iter().copied().filter(|width| *width == 1).sum()
-    }
-}
-
 /// Runs the three-name rename over a 4,000-entry directory (the wide shape) under
-/// the default resource ceilings.
+/// the default resource ceilings, reporting what the boundary charged so a
+/// counter test can read the page count and the provider's own demand shapes.
 fn wide_rename_charges() -> WideRename {
-    wide_rename_charges_with(resources())
-}
-
-/// The same rename under caller-supplied ceilings, reporting what the boundary
-/// charged so a counter test can read the page count and the provider's own
-/// demand shapes.
-fn wide_rename_charges_with(ceilings: FilesystemResources) -> WideRename {
     let Wide {
         session,
         directory,
@@ -1127,7 +1106,7 @@ fn wide_rename_charges_with(ceilings: FilesystemResources) -> WideRename {
         directories: &directories,
         inodes: &[],
         new_inodes: &[],
-        resources: ceilings,
+        resources: resources(),
     };
     let provider = CountingProvider::new(&session.store);
     let mut sink = TreeStore::new();
@@ -1137,7 +1116,6 @@ fn wide_rename_charges_with(ceilings: FilesystemResources) -> WideRename {
         boundary_waves: 0,
         waves: Vec::new(),
         demanded: 0,
-        root: ObjectId::for_bytes(b"unset"),
         peak_wave: 0,
     };
     {
@@ -1147,7 +1125,6 @@ fn wide_rename_charges_with(ceilings: FilesystemResources) -> WideRename {
         report.pages_read = result.counters.directories.pages_read;
         report.objects_read = result.counters.objects.objects_read;
         report.boundary_waves = result.counters.objects.read_waves;
-        report.root = result.root.0;
     }
     report.waves = provider.waves();
     report.demanded = provider.demands();
@@ -1155,12 +1132,46 @@ fn wide_rename_charges_with(ceilings: FilesystemResources) -> WideRename {
     report
 }
 
-#[test]
-fn a_branch_materialization_reads_children_in_one_wave() {
-    // A tree with more inode leaves than one branch page holds forces a level-1
-    // merge while it is built: the merge materializes two branch pages and reads
-    // their children. Those children used to be point-read one per wave; P1-3
-    // reads them in bounded groups instead.
+/// What the release of 300 inodes charged, in a table whose first level-1
+/// branch page it leaves underfull.
+struct JoinedBranch {
+    /// Demand widths the provider served, in order.
+    waves: Vec<usize>,
+    /// Objects the provider was asked for.
+    demanded: usize,
+    /// Waves and pages the inode engine charged itself.
+    inode_waves: u64,
+    inode_pages: u64,
+    /// Objects and waves the boundary charged.
+    objects_read: u64,
+    boundary_waves: u64,
+    /// Root the operation emitted.
+    root: ObjectId,
+}
+
+impl JoinedBranch {
+    /// Objects returned by grouped demand waves, which is exactly the work
+    /// `batch_children` does.
+    fn grouped_objects(&self) -> usize {
+        self.waves.iter().copied().filter(|width| *width > 1).sum()
+    }
+
+    /// Objects returned by single-object waves (point reads).
+    fn point_objects(&self) -> usize {
+        self.waves.iter().copied().filter(|width| *width == 1).sum()
+    }
+
+    /// Widest demand wave the provider served.
+    fn peak_wave(&self) -> usize {
+        self.waves.iter().copied().max().unwrap_or(0)
+    }
+}
+
+/// Builds a three-level inode table under the default ceilings, then releases
+/// its lowest 300 serials under `ceilings`.
+fn joined_branch_charges_with(ceilings: FilesystemResources) -> JoinedBranch {
+    // A tree with more inode leaves than one branch page holds, so that the
+    // table has level-1 branch pages beneath its root.
     let mut session = Session::new(1).expect("empty");
     let directory = session.allocate();
     let count = 13_000_usize;
@@ -1228,9 +1239,10 @@ fn a_branch_materialization_reads_children_in_one_wave() {
     );
 
     // Phase two: unbind the lowest 300 serials. Their inode rows are released, so
-    // the inode tree loses three leaves and one stored level-1 branch page drops
-    // below the 64-child fill rule. The merge that repairs it materializes two
-    // stored branch pages and reads their children — the path P1-3 batches.
+    // the inode tree loses leaves and one stored level-1 branch page drops below
+    // the 64-child fill rule. The merge joins it with the branch page after it,
+    // and a joined page needs every child's own summary: the 57 children the
+    // release did not reach, and the neighbour's 64.
     let released = serials[..300]
         .iter()
         .enumerate()
@@ -1246,7 +1258,7 @@ fn a_branch_materialization_reads_children_in_one_wave() {
         }],
         inodes: &[],
         new_inodes: &[],
-        resources: resources(),
+        resources: ceilings,
     };
     let provider = CountingProvider::new(&session.store);
     let mut sink = TreeStore::new();
@@ -1254,112 +1266,97 @@ fn a_branch_materialization_reads_children_in_one_wave() {
         let mut objects = FilesystemObjects::new(&provider, &mut sink);
         update_filesystem(&mut objects, &input, Some(&mut backing)).expect("release update")
     };
-    // Before P1-3 this update issued 170 waves: the release's own batch (50) plus
-    // two 64-child materializations, one of which the merge already batched and
-    // the other of which `page_from_wire` point-read child by child. After it,
-    // both materializations are one wave each. Bounded parent reuse now also
-    // eliminates the second directory-parent lookup: one level-2 root, one
-    // level-1 branch and one leaf. That removes exactly three point waves and
-    // three objects, without changing either materialization or the final root.
-    let waves = provider.waves();
-    let wide = waves
+    JoinedBranch {
+        waves: provider.waves(),
+        demanded: provider.demands(),
+        inode_waves: result.counters.inodes.read_waves,
+        inode_pages: result.counters.inodes.pages_read,
+        objects_read: result.counters.objects.objects_read,
+        boundary_waves: result.counters.objects.read_waves,
+        root: result.root.0,
+    }
+}
+
+#[test]
+fn a_joined_branch_page_reads_its_children_in_one_wave() {
+    // The release reads the leaves its changes reach one at a time. The branch
+    // page it leaves underfull is joined with its neighbour, and each of the two
+    // reads the children it has not read yet as one bounded group: 57 for the
+    // underfull page, 64 for the neighbour. Before the merge stopped reading
+    // children no change reaches, the same update issued 104 waves for 300
+    // objects, 134 of them inode pages in 5 waves, among them the whole
+    // 50-child directory page and the whole 64-child branch page as one wave
+    // each. The root it emits is the same.
+    let report = joined_branch_charges_with(resources());
+    let wide = report
+        .waves
         .iter()
         .copied()
         .filter(|width| *width > 32)
         .collect::<Vec<_>>();
     assert_eq!(
         wide,
-        vec![50, 64, 64],
-        "the release batch and both stored branch pages are grouped waves: {waves:?}"
+        vec![57, 64],
+        "both joined branch pages are grouped waves: {:?}",
+        report.waves
     );
+    assert_eq!(report.waves.len(), 112);
+    assert_eq!(report.inode_waves, 12, "the inode engine's own waves");
+    assert_eq!(report.demanded, 249);
+    assert_eq!(report.inode_pages, 131, "the inode pages it read");
     assert_eq!(
-        waves.len(),
-        104,
-        "107 after P1-3, minus the reused parent's three-page second lookup"
-    );
-    assert_eq!(
-        result.counters.inodes.read_waves, 5,
-        "the inode engine's own waves: 68 before P1-3"
-    );
-    assert_eq!(
-        provider.demands(),
-        300,
-        "303 before bounded parent reuse, minus three repeated inode pages"
-    );
-    assert_eq!(
-        result.counters.inodes.pages_read, 134,
-        "and the same pages are read"
-    );
-    assert_eq!(
-        result.root.0.to_string(),
+        report.root.to_string(),
         "78a3b9026cd9d295067684d267051a7ba9246dc9eec7cb6350639dfd4525c259",
         "and the emitted root is the pre-change value"
     );
 }
 
 #[test]
-fn a_wide_branch_page_reads_its_children_in_one_wave() {
-    // A 4,000-entry tree's inode branch has more than 32 children, so the width
-    // decides how many waves its children cost. Measured on this fixture:
+fn a_wide_branch_page_reads_the_children_a_change_reaches() {
+    // A 4,000-entry tree's inode branch has 80 children and its directory root
+    // has 14. The three-name rename reaches two directory leaves and one inode
+    // leaf, and reads those: no wave is wider than one object. Measured on this
+    // fixture:
     //
-    //   width 32  (before P1-1)  ... 32, 32, 16   -> 29 waves, boundary 6
-    //   width 256 (this commit)  ... 80           -> 27 waves, boundary 4
-    //
-    // and the work itself is unchanged: the same 119 objects are demanded, 96 are
-    // read and the directory engine decodes the same 15 pages. Only the grouping
-    // moved, which is what makes this a wave-width change and not a work change.
+    //   every child of an edited branch page   ... 80  -> 96 objects, 15 directory pages
+    //   the children the rename reaches        ... 1   ->  5 objects,  3 directory pages
     let report = wide_rename_charges();
-    let wide: Vec<usize> = report
-        .waves
-        .iter()
-        .copied()
-        .filter(|width| *width > 32)
-        .collect();
     assert_eq!(
-        wide,
-        vec![80],
-        "the 80-child branch is one wave, not ceil(80/32): {:?}",
+        report.peak_wave, 1,
+        "no branch page is read whole: {:?}",
         report.waves
-    );
-    assert_eq!(
-        report.peak_wave, 80,
-        "the widest wave is the branch's own child count"
     );
     // `provider.demands()` is deliberately **not** pinned to a total here: the
     // provider is shared with validation, whose own lookups are demanded through
-    // it, and P1-4's record memo legitimately lowers that total without touching
-    // the work this test is about. What the operation itself read is charged to
-    // its own counters, pinned on either side of this assertion.
+    // it. What the operation itself read is charged to its own counters.
     assert!(
         report.demanded >= report.objects_read as usize,
-        "every object the operation read was demanded from the provider: {} demands          for {} objects",
+        "every object the operation read was demanded from the provider: {} demands \
+         for {} objects",
         report.demanded,
         report.objects_read
     );
-    assert_eq!(report.objects_read, 96, "and the same objects are read");
+    assert_eq!(report.objects_read, 5, "two roots and three leaves");
     assert_eq!(
-        report.pages_read, 15,
-        "and the same directory pages are decoded"
+        report.pages_read, 3,
+        "the directory root and the two leaves the rename reaches"
     );
-    assert_eq!(
-        report.boundary_waves, 4,
-        "four charged waves where the 32-wide batch charged six"
-    );
+    assert_eq!(report.boundary_waves, 5, "one wave for each of them");
 }
 
 #[test]
 fn narrowing_keeps_a_small_scratch_working() {
     // A width the operation cannot afford must narrow, never refuse. Under a
-    // 512 KiB scratch lease the 80-child branch cannot be reserved at once, so
-    // the batch narrows to what fits — and the operation still produces the same
-    // root. The reservation arithmetic is one child slot of
-    // `MAXIMUM_PAGE_BYTES + associations` (8,280 B) plus one decode slot, so a
+    // 512 KiB scratch lease the 64 children of a joined branch page cannot be
+    // reserved at once, so the batch narrows to what fits — and the operation
+    // still produces the same root. The reservation arithmetic is one child slot
+    // of `MAXIMUM_PAGE_BYTES + associations` (8,280 B) plus one decode slot, so a
     // wave that fits the lease cannot reserve more than `scratch / 8,280` slots.
-    let narrow = wide_rename_charges_with(FilesystemResources {
+    let narrow = joined_branch_charges_with(FilesystemResources {
         scratch_bytes: 512 * 1024,
         ..resources()
     });
-    let wide = wide_rename_charges();
+    let wide = joined_branch_charges_with(resources());
     assert_eq!(
         narrow.root, wide.root,
         "narrowing changes the reservation, never the result"
@@ -1368,17 +1365,18 @@ fn narrowing_keeps_a_small_scratch_working() {
         narrow.demanded, wide.demanded,
         "and never the objects demanded"
     );
+    assert_eq!(wide.peak_wave(), 64);
     assert!(
-        narrow.peak_wave < wide.peak_wave,
+        narrow.peak_wave() < wide.peak_wave(),
         "the batch narrowed: {} against {}",
-        narrow.peak_wave,
-        wide.peak_wave
+        narrow.peak_wave(),
+        wide.peak_wave()
     );
     assert!(
-        narrow.peak_wave * (8_192 + 88) <= 512 * 1024,
+        narrow.peak_wave() * (8_192 + 88) <= 512 * 1024,
         "a wave of {} children cannot reserve {} bytes inside a 512 KiB lease",
-        narrow.peak_wave,
-        narrow.peak_wave * (8_192 + 88)
+        narrow.peak_wave(),
+        narrow.peak_wave() * (8_192 + 88)
     );
 }
 
@@ -1511,23 +1509,20 @@ fn one_grouped_demand_is_one_charged_wave() {
 
 #[test]
 fn a_grouped_demand_is_one_wave_and_every_page_it_decoded() {
-    // A wide directory's changed-path merge fetches its sibling children as one
-    // bounded group and then decodes each one. Two counter readings follow from
-    // that single fact: the group is **one** wave (not one per object, and not
-    // two), and the children it decoded are **pages read** (the counter's own
-    // doc says "including batched ones").
+    // A joined branch page fetches the children it has not read as one bounded
+    // group and then decodes each one. Two counter readings follow from that
+    // single fact: the group is **one** wave (not one per object, and not two),
+    // and the children it decoded are **pages read** (the counter's own doc says
+    // "including batched ones").
     //
-    // Measured on this fixture (4,000-entry directory, the three-name rename):
-    // the boundary issues 5 point reads and 1 grouped demand of 14 objects, so
-    // `read_waves` is 6 and the grouped call charges 14 decoded pages on top of
-    // one point-read page. Before both fixes the same run reported 9 waves (the
-    // group counted twice: once for the demand and once for its decode) and 1
-    // page (the 14 batched decodes were invisible).
-    let report = wide_rename_charges();
+    // Measured on this fixture (the release that leaves one inode branch page
+    // underfull): the provider serves grouped demands of 57 and 64 inode pages
+    // among its point reads.
+    let report = joined_branch_charges_with(resources());
     let grouped = report.grouped_objects();
     assert!(
-        grouped > 0,
-        "the fixture issued a grouped demand wave: {:?}",
+        grouped >= 57 + 64,
+        "the fixture issued its grouped demand waves: {:?}",
         report.waves
     );
     assert_eq!(
@@ -1537,11 +1532,8 @@ fn a_grouped_demand_is_one_wave_and_every_page_it_decoded() {
     );
     // The boundary charges at most one wave per provider call it makes, so its
     // own count can never exceed the provider's call count. Before C1 a grouped
-    // demand was charged twice and the same run reported 10 charged waves against
-    // 6 provider calls. The exact per-call semantics are pinned on single calls by
-    // `one_grouped_demand_is_one_charged_wave`: an operation-level total also
-    // counts the merge's batches, whose number is `ceil(children / BATCH_CHILDREN)`
-    // and therefore a function of the width P1-1 raises.
+    // demand was charged twice. The exact per-call semantics are pinned on single
+    // calls by `one_grouped_demand_is_one_charged_wave`.
     assert!(
         report.boundary_waves <= report.waves.len() as u64,
         "the boundary charged {} waves for {} provider calls",
@@ -1549,21 +1541,21 @@ fn a_grouped_demand_is_one_wave_and_every_page_it_decoded() {
         report.waves.len()
     );
     assert!(
-        report.boundary_waves < report.objects_read + 2,
+        report.boundary_waves < report.objects_read,
         "a grouped demand is one wave for many objects: {} waves for {} objects",
         report.boundary_waves,
         report.objects_read
     );
     assert!(
-        report.pages_read >= 15,
-        "the merged group's 14 batched children are pages read: {} reported for \
+        report.inode_pages >= 57 + 64,
+        "the joined pages' batched children are pages read: {} reported for \
          {} waves",
-        report.pages_read,
-        report.boundary_waves
+        report.inode_pages,
+        report.inode_waves
     );
     assert!(
-        report.objects_read >= grouped as u64,
-        "the grouped children are objects read as well: {} for {grouped}",
+        report.objects_read >= 57 + 64,
+        "the grouped children are objects read as well: {}",
         report.objects_read
     );
 }

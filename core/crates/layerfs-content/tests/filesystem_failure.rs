@@ -609,6 +609,11 @@ fn the_attribute_value_bound_is_the_chunk_maximum_at_its_boundary() {
 /// `FilesystemRoot::with_inode_table`. The directory holds 900 hard links to one
 /// file inode so the inode table stays a single leaf and the chain has exactly
 /// those two steps.
+///
+/// The merge reads the children its changes reach. A wrong recorded total is
+/// therefore refused by an update that reads every child of the damaged page;
+/// an update that leaves a child unread does not recompute the total and carries
+/// the recorded one into the page it writes.
 #[test]
 fn a_branch_that_misstates_its_summary_is_refused_by_the_tree_engine() {
     use layerfs_content::filesystem::directory::codec::{
@@ -683,7 +688,7 @@ fn a_branch_that_misstates_its_summary_is_refused_by_the_tree_engine() {
                 level,
                 // One entry more than the children hold. The encoder accepts it
                 // (it only requires the total to cover the row count); the engine
-                // compares it with the children it read.
+                // compares it with its children once it has read them all.
                 subtree_count: subtree_count + 1,
                 subtree_bytes,
                 children,
@@ -726,9 +731,16 @@ fn a_branch_that_misstates_its_summary_is_refused_by_the_tree_engine() {
             moved_root.encode().expect("root"),
         );
 
+        // The merge compares a branch page's recorded totals with the children
+        // it reads, and reads the children its changes reach. A change in every
+        // leaf reads them all; a wrong level is seen in the first child read.
         let updates = [DirectoryUpdate {
             parent: directory,
-            changes: vec![(name("f0000"), Some(file))],
+            changes: if damage == "subtree count" {
+                names.iter().map(|n| (n.clone(), Some(file))).collect()
+            } else {
+                vec![(name("f0000"), Some(file))]
+            },
         }];
         let input = FilesystemInput {
             base: Some(FilesystemRootId(moved_root_id)),

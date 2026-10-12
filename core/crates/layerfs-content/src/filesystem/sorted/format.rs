@@ -485,7 +485,8 @@ impl Format for CompactInodes {
             return finish_node(crate::object::inode_leaf::encode_leaf_value(&rows)?);
         }
         // A branch's recorded totals are its own summary: the engine passes the
-        // totals it accumulated from the children it read.
+        // totals of the children it read plus what the stored page recorded for
+        // the children it did not.
         let total = page.count;
         if total < count as u64 {
             return Err(ContentError::InvalidRecord("inode subtree summary"));
