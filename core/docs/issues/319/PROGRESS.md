@@ -2332,3 +2332,21 @@ The first seal stays at its original identity; corrected source gets a new tag
 and seal before one new preparation and first samples. Broad unchanged checks
 retain their exact source scope. Receipts: sdks1f preparation failure and cleanup,
 final-close-cli-* checks; complete baseline/count gates remain outstanding.
+
+
+### SDK follow-up: consolidated migration gate
+
+Cause: intermediate gates did not qualify the completed SDK. Change: one complete
+SDK gate at cdf115c67, tag sdk-refactor-s1-close-observation, seal sdks1f2.
+Commit: this retained gate record. All 35 proofs and 23 family functional checks
+PASS; 28 exact count matches, five unavailable unchanged, two explained differences.
+C03: 102,538 versus 102,540 statements; Git: 45,674 versus 45,673. Requests/jobs
+match; only zero-result orphan-inode probes differ. Original count FAILs remain.
+Original receipt verdicts: 33 INELIGIBLE, C03 FAIL, proof-only historical access PASS.
+Host/Linux SDK 15 and bridge 33 PASS each; daemon 177/299 PASS; runtime 63 PASS
+and one unchanged debug history deadline FAIL on each. Product Clippy/format/
+boundary PASS; inherited runtime lints, missing preconditions and fuser findings
+remain. Failed setup/source-pin outcomes and cleanup retained; no sample replay.
+Local snapshot command 11.626526208 s + Commit 8.704991042 s = 20.331517250 s;
+INELIGIBLE retained. Receipts: sdk-completed.json, sdk-narrowing.json and seal/check
+logs. Implementation and consolidated validation complete; Stage 2 follows.
