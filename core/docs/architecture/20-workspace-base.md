@@ -120,3 +120,21 @@ resolves once and delegates. An external zero-cache named-file count is13 ->11
 canonical acquisitions, with one owning length call; named symlink15 ->12.
 No owner-job, SQLite, cold-latency, memory-residency or benchmark claim follows
 from these source counts. No public API or cache admission changes.
+
+## Lookups start at the retained root (#320)
+
+`BaseView` keeps the filesystem root it decoded and checked at `open`. Its
+`inode`, `child`, `list`, `readlink` and child-directory count now start at
+that root's inode table with the same public Content readers
+(`inode::lookup`, `inode::lookup_many`, `directory::read::lookup_counted`,
+`list_after`) instead of building a `FilesystemRead`, which acquired and
+decoded the root object again on every call. The root is immutable and named
+by its identity, so the answers are the same. One base lookup makes one fewer
+cache acquisition: on the eight-inode fixture inode 2 to 1, child 4 to 3,
+stat of a file 9 to 8, stat of a symlink 10 to 9, readlink 3 to 2, list 3 to
+2, and a named file with no cache 11 to 10 canonical objects. Objects asked of
+the Store, bytes, lengths and bounds are unchanged. A memory-only client no
+longer needs the root object itself resident to answer from resident pages.
+The root object is no longer touched by lookups, so it ages like any other
+entry; `open` and a rebind still acquire it. These are counts on the host,
+not a timing or mounted claim.

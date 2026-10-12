@@ -64,9 +64,9 @@ fn named_inode_length_errors_preserve_absence_and_provider_failure() {
 #[test]
 fn named_inode_facts_reuse_the_authenticated_child_without_cache_or_length_loss() {
     for (parent, child, serial, ids, length_calls, size) in [
-        (1, "file", 2, 11, 1, 10),
-        (1, "symlink", 3, 12, 0, b"../.git/index".len() as u64),
-        (7, "result", 8, 11, 1, 0),
+        (1, "file", 2, 10, 1, 10),
+        (1, "symlink", 3, 11, 0, b"../.git/index".len() as u64),
+        (7, "result", 8, 10, 1, 0),
     ] {
         let f = common::fixture_with(Vec::new());
         let lengths = Arc::new(CountingLengths {
@@ -178,7 +178,7 @@ fn named_inode_facts_reuse_the_authenticated_child_without_cache_or_length_loss(
             facts
                 .supply(&base, &[Need::Name(1, name("alias"))], None)
                 .unwrap();
-            assert_eq!(f.store.demand.load(Ordering::Relaxed) - demand, 4);
+            assert_eq!(f.store.demand.load(Ordering::Relaxed) - demand, 3);
             assert_eq!(lengths.calls.load(Ordering::Relaxed), calls + 1);
         } else if serial == 3 {
             assert_eq!(base.readlink(serial).unwrap().as_bytes(), b"../.git/index");
@@ -211,8 +211,8 @@ fn base_stat_reads_each_inode_table_path_once() {
     assert_eq!(after.upstream_batches, before.upstream_batches);
     assert_eq!(
         after.cache_hits - before.cache_hits,
-        9,
-        "root1 + inode1 + attribute1 + mode3 + mtime3 canonical reads"
+        8,
+        "inode1 + attribute1 + mode3 + mtime3 canonical reads; the root is the one checked at open"
     );
 }
 
@@ -680,9 +680,15 @@ fn actual_provider_wait_allows_shared_progress_and_actor_install_pairs_the_selec
     use layerfs_overlay::{Cell, CELL_BYTES, MASK_BYTES};
     let f = fixture();
     let (entered, waiting) = std::sync::mpsc::sync_channel(1);
+    // A base lookup starts at the inode table of the root checked at open.
+    let table = layerfs_content::filesystem::FilesystemRoot::decode(
+        &f.store.read_canonical(f.root.0).unwrap(),
+    )
+    .unwrap()
+    .inode_table();
     let gate = Arc::new(Gate {
         store: f.store.clone(),
-        root: f.root.0,
+        root: table,
         state: Mutex::new((false, false)),
         wake: std::sync::Condvar::new(),
         entered,

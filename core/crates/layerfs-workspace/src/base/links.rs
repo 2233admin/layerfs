@@ -8,6 +8,7 @@
 //! function of the directory's content root and is remembered under it.
 use crate::BaseView;
 use layerfs_content::filesystem::directory::{list_after, DirectoryReadWork};
+use layerfs_content::filesystem::inode::{lookup_many, InodeReadWork};
 use layerfs_content::filesystem::{DirectoryRoot, PathName};
 use layerfs_content::object::inode_leaf::{InodeKind, InodeValue};
 use layerfs_content::{ContentError, ContentResult, ObjectId};
@@ -95,7 +96,6 @@ impl BaseView {
         if client.is_resident() {
             return Err(NOT_REMEMBERED);
         }
-        let mut read = self.reader()?;
         let mut work = DirectoryReadWork::default();
         let mut after: Option<PathName> = None;
         let (mut listed, mut count) = (0_u64, 0_u64);
@@ -109,7 +109,8 @@ impl BaseView {
                 &mut work,
             )?;
             let serials: Vec<u64> = page.entries.iter().map(|(_, serial)| *serial).collect();
-            for bound in read.lookup_inodes(&serials)? {
+            let kinds = &mut InodeReadWork::default();
+            for bound in lookup_many(client.as_ref(), self.table(), &serials, kinds)? {
                 let bound = bound.ok_or(ContentError::InvalidRecord("bound inode is absent"))?;
                 count += u64::from(bound.kind == InodeKind::Directory);
             }

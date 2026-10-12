@@ -1,9 +1,11 @@
 //! Demand reads through current public content APIs, without a base-tree mirror.
 use crate::{CanonicalClient, WorkspaceResult};
 use layerfs_content::filesystem::attributes::{read_portable, AttributeReadWork, PortableMetadata};
+use layerfs_content::filesystem::directory::read::{list_after, lookup_counted, DirectoryReadWork};
+use layerfs_content::filesystem::inode::{lookup, InodeReadWork, InodeTable};
 use layerfs_content::filesystem::{
-    DirectoryListing, FilesystemRead, FilesystemRoot, FilesystemRootId, InodeScope, PathName,
-    Resolved, SymlinkTarget,
+    DirectoryListing, DirectoryRoot, FilesystemRead, FilesystemRoot, FilesystemRootId, InodeScope,
+    PathName, Resolved, SymlinkTarget,
 };
 use layerfs_content::object::inode_leaf::{InodeKind, InodeValue};
 use layerfs_content::{AuthenticatedObjects, ContentError, ContentResult, FileView};
@@ -82,14 +84,35 @@ impl BaseView {
         let identity = FilesystemRootId(layerfs_content::ObjectId::from_bytes(&root)?);
         Ok(std::borrow::Cow::Owned(self.rebind(identity)?))
     }
-    pub(crate) fn reader(&self) -> ContentResult<FilesystemRead<'_>> {
-        FilesystemRead::new(self.client.as_ref(), self.identity)
+    /// The inode table of the root checked at open. The root is immutable,
+    /// so no lookup acquires or decodes that object again.
+    pub(crate) fn table(&self) -> InodeTable {
+        InodeTable {
+            root: self.root.inode_table(),
+            root_serial: self.root.root_inode().serial(),
+        }
     }
     pub fn child(&self, parent: u64, name: &PathName) -> ContentResult<Resolved> {
-        self.reader()?.resolve_child(parent, name)
+        let directory = self.inode(parent)?.value;
+        if directory.kind != InodeKind::Directory {
+            return Err(ContentError::WrongLogicalRole);
+        }
+        let found = lookup_counted(
+            self.client.as_ref(),
+            DirectoryRoot(directory.content_root),
+            name,
+            &mut DirectoryReadWork::default(),
+        )?;
+        self.inode(found.ok_or(ContentError::PathNotFound)?.1)
     }
+    /// A serial the table does not hold is a logical absence.
     pub fn inode(&self, serial: u64) -> ContentResult<Resolved> {
-        self.reader()?.resolve_inode(serial)
+        let work = &mut InodeReadWork::default();
+        let value = lookup(self.client.as_ref(), self.table(), serial, work)?;
+        Ok(Resolved {
+            serial,
+            value: value.ok_or(ContentError::PathNotFound)?,
+        })
     }
     pub fn list(
         &self,
@@ -98,7 +121,18 @@ impl BaseView {
         entries: usize,
         bytes: usize,
     ) -> ContentResult<DirectoryListing> {
-        self.reader()?.list_inode(serial, after, entries, bytes)
+        let value = self.inode(serial)?.value;
+        if value.kind != InodeKind::Directory {
+            return Err(ContentError::WrongLogicalRole);
+        }
+        list_after(
+            self.client.as_ref(),
+            DirectoryRoot(value.content_root),
+            after,
+            entries,
+            bytes,
+            &mut DirectoryReadWork::default(),
+        )
     }
     pub fn list_after_bytes(
         &self,
@@ -113,11 +147,11 @@ impl BaseView {
         }
         layerfs_content::filesystem::directory::read::list_after_bytes(
             self.client.as_ref(),
-            layerfs_content::filesystem::DirectoryRoot(value.content_root),
+            DirectoryRoot(value.content_root),
             after,
             entries,
             bytes,
-            &mut layerfs_content::filesystem::directory::DirectoryReadWork::default(),
+            &mut DirectoryReadWork::default(),
         )
     }
     /// Bindings recorded by a directory's root page: one authenticated object,
@@ -130,7 +164,11 @@ impl BaseView {
         Ok(layerfs_content::filesystem::directory::codec::page_shape(&page)?.1)
     }
     pub fn readlink(&self, serial: u64) -> ContentResult<SymlinkTarget> {
-        self.reader()?.readlink_inode(serial)
+        let value = self.inode(serial)?.value;
+        if value.kind != InodeKind::Symlink {
+            return Err(ContentError::WrongLogicalRole);
+        }
+        SymlinkTarget::decode(&self.client.read_canonical(value.content_root)?)
     }
     pub fn stat(&self, serial: u64) -> WorkspaceResult<BaseStat> {
         self.stat_with_lengths(serial, self.client.as_ref())

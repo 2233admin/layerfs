@@ -344,11 +344,12 @@ fn a_base_lookup_acquires_only_the_pages_on_its_path() {
         "BASE_ACQUISITIONS inode={} child={} stat_file={} stat_symlink={} readlink={} list={}",
         counted[0], counted[1], counted[2], counted[3], counted[4], counted[5]
     );
-    // Every call first acquires the filesystem root object again: 1. Then the
-    // one inode-table page of this small tree for each inode it resolves,
-    // one directory page, one symlink target; and for portable metadata the
-    // attribute page and three objects for each of mode and mtime: 7.
-    assert_eq!(counted, [2, 4, 9, 10, 3, 3]);
+    // The filesystem root is the one checked at open and is not acquired
+    // again. Each call acquires the one inode-table page of this small tree
+    // for each inode it resolves, one directory page, one symlink target;
+    // and for portable metadata the attribute page and three objects for
+    // each of mode and mtime: 7.
+    assert_eq!(counted, [1, 3, 8, 9, 2, 2]);
 }
 
 /// Host timing of a hit, for the diagnosis only: it asserts nothing about

@@ -68,9 +68,15 @@ impl Service {
     fn new(tag: &str) -> Self {
         let f = fixture();
         let (entered, waiting) = mpsc::sync_channel(1);
+        // A base lookup starts at the inode table of the root checked at open.
+        let table = layerfs_content::filesystem::FilesystemRoot::decode(
+            &f.store.read_canonical(f.root.0).unwrap(),
+        )
+        .unwrap()
+        .inode_table();
         let gate = Arc::new(Gate {
             store: f.store.clone(),
-            object: f.root.0,
+            object: table,
             state: Mutex::new((false, false)),
             wake: Condvar::new(),
             entered,
