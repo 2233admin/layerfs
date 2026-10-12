@@ -46,9 +46,11 @@ const ALLOWANCE: usize = 64 * 1024;
 const BIG: usize = 100_000;
 const DIRECTORIES: usize = 16;
 const FILES: usize = 20;
-/// The cache's logical charge of one object and of one remembered length.
+/// The cache's logical charge of one object, of one remembered length and
+/// of one remembered mode and mtime.
 const OBJECT_CHARGE: usize = 256;
 const LENGTH_CHARGE: usize = 8 + 256;
+const PORTABLE_CHARGE: usize = 16 + 256;
 
 fn tree(source: &Path) {
     for directory in 0..DIRECTORIES {
@@ -82,19 +84,22 @@ fn files(flat: &model::Flat) -> Vec<(String, &[u8])> {
 
 /// What must hold of the cache's accounting whenever it is observed.
 /// `bypassed` counts demands of the one object too large to retain; with a
-/// single reader at a time `exact` holds: every other miss and every length
-/// the Store answered became an entry, and each eviction removed one.
+/// single reader at a time `exact` holds: every other miss, every length the
+/// Store answered and every decoded mode and mtime became an entry, and each
+/// eviction removed one.
 fn accounted(daemon: &Daemon, bypassed: u64, exact: bool) {
     let cache = daemon.cache();
     let lengths = daemon.store.work().length_ids;
     assert!(cache.charged_cache_bytes <= ALLOWANCE, "{cache:?}");
     assert!(
-        cache.cached_objects * OBJECT_CHARGE + cache.file_lengths * LENGTH_CHARGE
+        cache.cached_objects * OBJECT_CHARGE
+            + cache.file_lengths * LENGTH_CHARGE
+            + cache.portable_metadata * PORTABLE_CHARGE
             <= cache.charged_cache_bytes,
         "{cache:?}"
     );
-    let held = (cache.cached_objects + cache.file_lengths) as u64;
-    let inserted = cache.cache_misses + lengths - bypassed;
+    let held = (cache.cached_objects + cache.file_lengths + cache.portable_metadata) as u64;
+    let inserted = cache.cache_misses + lengths + cache.portable_metadata_reads - bypassed;
     if exact {
         assert_eq!(held, inserted - cache.evictions, "{cache:?}");
     } else {
@@ -174,7 +179,7 @@ fn eviction_changes_no_byte_and_keeps_exact_accounts() {
     // More objects were fetched than exist: evicted ones were fetched again.
     assert!(interleaved.cache_misses > distinct.len() as u64);
     evidence(format_args!(
-        "interleaved: allowance={ALLOWANCE} working_set_charge={working_set} distinct_objects={} hits={} misses={} evictions={} charged={} cached_objects={} file_lengths={}",
+        "interleaved: allowance={ALLOWANCE} working_set_charge={working_set} distinct_objects={} hits={} misses={} evictions={} charged={} cached_objects={} file_lengths={} portable_metadata={}",
         distinct.len(),
         interleaved.cache_hits,
         interleaved.cache_misses,
@@ -182,6 +187,7 @@ fn eviction_changes_no_byte_and_keeps_exact_accounts() {
         interleaved.charged_cache_bytes,
         interleaved.cached_objects,
         interleaved.file_lengths,
+        interleaved.portable_metadata,
     ));
 
     // One object, exactly. The content of a file only branch B has is
@@ -316,11 +322,14 @@ fn eviction_changes_no_byte_and_keeps_exact_accounts() {
     );
     // Both readers walk the same order, so both often miss one object at
     // once: each fetches and authenticates it, and it is inserted once.
-    let inserted = (after.evictions - before.evictions) as i64
-        + (after.cached_objects + after.file_lengths) as i64
-        - (before.cached_objects + before.file_lengths) as i64;
-    let fetched =
-        after.cache_misses - before.cache_misses + daemon.store.work().length_ids - lengths_before;
+    let held = |work: &layerfs_workspace::ClientWork| {
+        (work.cached_objects + work.file_lengths + work.portable_metadata) as i64
+    };
+    let inserted = (after.evictions - before.evictions) as i64 + held(&after) - held(&before);
+    let fetched = after.cache_misses - before.cache_misses + daemon.store.work().length_ids
+        - lengths_before
+        + after.portable_metadata_reads
+        - before.portable_metadata_reads;
     evidence(format_args!(
         "concurrent: passes_a={} passes_b={} other_reader_progress_at_each_pass={seen:?} hits={} misses={} evictions={} fetched_while_another_reader_fetched_the_same={} reader_grants={} peak_outstanding={}",
         seen[0].len(),

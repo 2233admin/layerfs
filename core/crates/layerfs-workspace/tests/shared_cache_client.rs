@@ -346,10 +346,117 @@ fn a_base_lookup_acquires_only_the_pages_on_its_path() {
     );
     // The filesystem root is the one checked at open and is not acquired
     // again. Each call acquires the one inode-table page of this small tree
-    // for each inode it resolves, one directory page, one symlink target;
-    // and for portable metadata the attribute page and three objects for
-    // each of mode and mtime: 7.
-    assert_eq!(counted, [1, 3, 8, 9, 2, 2]);
+    // for each inode it resolves, one directory page, one symlink target.
+    // Portable mode and mtime are remembered by metadata root: none.
+    assert_eq!(counted, [1, 3, 1, 2, 2, 2]);
+}
+
+#[test]
+fn portable_metadata_is_decoded_once_remembered_by_root_and_evicted_in_turn() {
+    const PORTABLE_CHARGE: usize = 16 + 256;
+    struct Lengths(common::Store, std::sync::atomic::AtomicU64);
+    impl FileLengths for Lengths {
+        fn file_length(&self, id: ObjectId) -> layerfs_workspace::WorkspaceResult<u64> {
+            self.1.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            self.0.file_length(id)
+        }
+    }
+    let f = common::fixture_with(Vec::new());
+    let open = |allowance: usize| {
+        let lengths = Arc::new(Lengths(f.store.clone(), Default::default()));
+        let client = Arc::new(CanonicalClient::with_lengths(
+            Arc::new(f.store.clone()),
+            lengths.clone(),
+            allowance,
+        ));
+        let base = BaseView::open(client.clone(), f.root, f.scope).unwrap();
+        (client, base, lengths)
+    };
+    let (client, base, _) = open(1 << 20);
+    let demand = || f.store.demand.load(std::sync::atomic::Ordering::Relaxed);
+
+    // The first stat of a file reads the attribute page and three objects
+    // for each of mode and mtime, once, and remembers the checked answer.
+    let (start, asked) = (work(&client), demand());
+    let first = base.stat(2).unwrap();
+    let read = work(&client);
+    assert_eq!(demand() - asked, 1 + 7);
+    assert_eq!(
+        (read.portable_metadata_reads, read.portable_metadata),
+        (1, 1)
+    );
+    let objects = read.cached_objects - start.cached_objects;
+    assert_eq!(objects, 1 + 7);
+    assert_eq!(
+        read.charged_cache_bytes - start.charged_cache_bytes,
+        (read.authenticated_bytes - start.authenticated_bytes) as usize
+            + objects * OBJECT_CHARGE
+            + LENGTH_CHARGE
+            + PORTABLE_CHARGE
+    );
+    // Again: the inode page and nothing else, the same answer.
+    assert_eq!(
+        acquisitions(&client, || assert_eq!(base.stat(2).unwrap(), first)),
+        1
+    );
+    // The large file has the same metadata root and kind: remembered.
+    assert_eq!(
+        acquisitions(&client, || {
+            let other = base.stat(8).unwrap();
+            assert_eq!(other.metadata, first.metadata);
+        }),
+        1
+    );
+    // A symlink and a directory have metadata roots of their own.
+    base.stat(3).unwrap();
+    base.stat(1).unwrap();
+    let all = work(&client);
+    assert_eq!((all.portable_metadata_reads, all.portable_metadata), (3, 3));
+    assert_eq!(all.evictions, 0);
+
+    // An allowance that holds the objects of one stat and not of two:
+    // reading a second inode's metadata evicts the first answer in its
+    // turn, and the next stat of the first reads its objects again.
+    let (small, base, lengths) = open(read.charged_cache_bytes - start.charged_cache_bytes + 64);
+    let file = base.stat(2).unwrap();
+    assert_eq!(file, first);
+    assert_eq!(work(&small).portable_metadata, 1);
+    let link = base.stat(3).unwrap();
+    let pressed = work(&small);
+    assert!(pressed.evictions > 0);
+    assert!(
+        pressed.charged_cache_bytes <= read.charged_cache_bytes - start.charged_cache_bytes + 64
+    );
+    assert_eq!(pressed.portable_metadata_reads, 2);
+    assert_eq!(base.stat(2).unwrap(), first);
+    assert_eq!(base.stat(3).unwrap(), link);
+    let again = work(&small);
+    assert!(again.portable_metadata_reads > pressed.portable_metadata_reads);
+    assert!(again.charged_cache_bytes <= read.charged_cache_bytes - start.charged_cache_bytes + 64);
+    // Entries held are entries inserted less entries evicted, of all kinds.
+    assert_eq!(
+        (again.cached_objects + again.file_lengths + again.portable_metadata) as u64,
+        again.cache_misses
+            + lengths.1.load(std::sync::atomic::Ordering::Relaxed)
+            + again.portable_metadata_reads
+            - again.evictions
+    );
+
+    // With no allowance nothing is remembered and every stat reads.
+    let (none, base, _) = open(0);
+    for _ in 0..2 {
+        assert_eq!(
+            acquisitions(&none, || assert_eq!(base.stat(2).unwrap(), first)),
+            8
+        );
+    }
+    assert_eq!(
+        (
+            work(&none).portable_metadata,
+            work(&none).portable_metadata_reads
+        ),
+        (0, 2)
+    );
 }
 
 /// Host timing of a hit, for the diagnosis only: it asserts nothing about

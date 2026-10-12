@@ -1,5 +1,7 @@
 //! Authenticated canonical acquisition and exact immutable cache keys.
 use crate::cache::CanonicalCache;
+use layerfs_content::filesystem::attributes::{read_portable, AttributeReadWork, PortableMetadata};
+use layerfs_content::object::inode_leaf::InodeKind;
 use layerfs_content::{AuthenticatedObjects, ContentError, ContentResult, ObjectId};
 use std::sync::Arc;
 
@@ -28,6 +30,12 @@ pub struct ClientWork {
     /// File lengths currently remembered. Each is charged to the cache
     /// allowance and counted in `charged_cache_bytes`, not in `cached_objects`.
     pub file_lengths: usize,
+    /// Metadata roots whose portable mode and mtime were decoded from their
+    /// objects: a remembered answer was absent.
+    pub portable_metadata_reads: u64,
+    /// Portable mode and mtime answers currently remembered. Each is charged
+    /// to the cache allowance like a file length.
+    pub portable_metadata: usize,
 }
 /// A runtime-backed authenticated object provider with bounded immutable caching.
 /// Upstream implements its public demand-window/authority contract; allocation
@@ -121,6 +129,27 @@ impl CanonicalClient {
             .map_err(|_| ContentError::ProviderFailure {
                 what: "base cache owner",
             })
+    }
+    /// The checked portable mode and mtime of one inode's metadata root. It
+    /// is a pure function of that immutable root and the inode kind, so an
+    /// answer decoded once from objects this client authenticated is
+    /// remembered in the cache's own allowance and returned from memory
+    /// afterwards, with no object acquired. An evicted answer costs the
+    /// same reads again and nothing else; a failed read remembers nothing.
+    pub(crate) fn portable(
+        &self,
+        root: ObjectId,
+        kind: InodeKind,
+    ) -> ContentResult<PortableMetadata> {
+        if let Some(remembered) = self.state()?.cache.portable(root, kind) {
+            return Ok(remembered);
+        }
+        let metadata = read_portable(self, root, kind, &mut AttributeReadWork::default())?;
+        let mut state = self.state()?;
+        let evictions = state.cache.remember_portable(root, kind, metadata);
+        state.work.evictions = state.work.evictions.saturating_add(evictions);
+        state.work.portable_metadata_reads = state.work.portable_metadata_reads.saturating_add(1);
+        Ok(metadata)
     }
     /// The remembered child-directory count of one directory content root.
     pub(crate) fn directory_count(&self, root: ObjectId) -> ContentResult<Option<u64>> {

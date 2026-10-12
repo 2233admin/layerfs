@@ -138,3 +138,27 @@ longer needs the root object itself resident to answer from resident pages.
 The root object is no longer touched by lookups, so it ages like any other
 entry; `open` and a rebind still acquire it. These are counts on the host,
 not a timing or mounted claim.
+
+## Portable mode and mtime are remembered by metadata root (#320)
+
+A base stat needs the portable mode and mtime of the inode's metadata root.
+The canonical format stores each of the two as a small file of its own, so
+decoding them acquires seven objects: the attribute page, then a file state,
+a mapping leaf and a payload for each value. The answer is a pure function of
+the immutable metadata root and the inode kind it was checked against.
+`CanonicalClient::portable` therefore remembers the decoded, checked answer in
+the shared cache owner under exactly that root and kind, as a file length is
+already remembered under its content root: charged 272 bytes to the same
+allowance, evicted in the same least-recently-used order, shared by every
+Workspace of the daemon, never keyed by path, branch or Workspace. The first
+stat reads and authenticates the same seven objects as before; a failed read
+remembers nothing; an evicted answer costs the same reads again. With an
+allowance too small for one entry nothing is remembered. A hit grants no
+authority: the caller still needs its own authenticated inode value to name
+the root. `ClientWork` reports the entries held (`portable_metadata`) and the
+decodes made (`portable_metadata_reads`). Resident stat of a file on the
+eight-inode fixture: 8 acquisitions to 1; of a symlink 9 to 2. Objects asked
+of the Store on first touch are unchanged. Each remembered answer adds its
+272-byte charge, so a full cache evicts somewhat more: see the measured
+counts in [issue 320](../issues/320/SHARED-CACHE.md). Host counts, not a
+timing or mounted claim.

@@ -211,8 +211,8 @@ fn base_stat_reads_each_inode_table_path_once() {
     assert_eq!(after.upstream_batches, before.upstream_batches);
     assert_eq!(
         after.cache_hits - before.cache_hits,
-        8,
-        "inode1 + attribute1 + mode3 + mtime3 canonical reads; the root is the one checked at open"
+        1,
+        "inode1 canonical read; the root is the one checked at open and mode and mtime are remembered"
     );
 }
 
