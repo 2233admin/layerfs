@@ -5,6 +5,12 @@ use crate::{
     maintenance::{Item, Page, ORPHAN, PAGE, SERIAL_RETIRE},
     sql, Overlay, OverlayResult, StatementKind,
 };
+/// One page of a layer's payload rows: `PAGE.cells` rows at most, so fewer
+/// rows are all the layer holds.
+const LAYER_PAYLOAD_PAGE: &str =
+    "SELECT cell_offset,length(data)+ifnull(length(validity),0) FROM payload
+            WHERE ns=?1 AND serial=?2 AND gen=?3 ORDER BY cell_offset LIMIT 14";
+const _: () = assert!(PAGE.cells == 14);
 /// Step calls one releasing job makes: two for the orphan and two for each
 /// of its at most two lower layers.
 const RELEASE_CALLS: usize = 6;
@@ -18,6 +24,17 @@ pub(crate) enum Next {
     /// Its holder's release wakes it.
     Held,
     Done,
+}
+/// What one job has established about a layer it is retiring, for its next
+/// step of that layer in the same transaction. Nothing of it outlives the
+/// job: a queue item's step starts from nothing.
+#[derive(Clone, Copy, Default)]
+pub(crate) struct Retiring {
+    /// No generation owner holds the layer. The job writes no such owner.
+    free: bool,
+    /// A step of this job selected fewer payload rows than a page and
+    /// dropped them all: the layer holds no cell, and the job adds none.
+    cells_gone: bool,
 }
 /// One step of an orphan or of a layer's retirement without its queue item:
 /// the rows and bytes it reports, what it leaves, and the lower layer an
@@ -85,7 +102,7 @@ impl Overlay {
         };
         // Each call of the orphan's step releases at most one layer.
         let mut own = Next::Ready;
-        let mut layers = [(0, Next::Done); RELEASE_CALLS];
+        let mut layers = [(0, Next::Done, Retiring::default()); RELEASE_CALLS];
         let mut released = 0;
         'rounds: loop {
             let mut unfinished = false;
@@ -97,20 +114,20 @@ impl Overlay {
                 let step = self.reclaim_orphan(ns, serial, &mut orphan, page)?;
                 charge(&mut page, &step);
                 if let Some(gen) = step.released {
-                    layers[released] = (gen, Next::Ready);
+                    layers[released] = (gen, Next::Ready, Retiring::default());
                     released += 1;
                 }
                 own = step.next;
                 unfinished |= !matches!(own, Next::Done);
             }
             // Layers are released newest first and retired oldest first.
-            for (gen, next) in layers[..released].iter_mut().rev() {
+            for (gen, next, known) in layers[..released].iter_mut().rev() {
                 if matches!(next, Next::Ready) {
                     if spent(calls, page) {
                         break 'rounds;
                     }
                     calls += 1;
-                    let step = self.retire_layer(ns, serial, *gen, Some(orphan), page)?;
+                    let step = self.retire_layer(ns, serial, *gen, Some(orphan), page, known)?;
                     charge(&mut page, &step);
                     *next = step.next;
                     unfinished |= !matches!(next, Next::Done);
@@ -129,7 +146,7 @@ impl Overlay {
             self.wake_orphan(ns, serial)?;
             left = true;
         }
-        for (gen, next) in &layers[..released] {
+        for (gen, next, _) in &layers[..released] {
             match next {
                 Next::Done => {}
                 Next::Held => {
@@ -358,13 +375,17 @@ impl Overlay {
         Ok(step(3, 0, Next::Done))
     }
     pub(crate) fn retire_serial(&self, item: &Item, page: Page) -> OverlayResult<(u64, u64, bool)> {
-        let step = self.retire_layer(item.ns, item.resource, item.target, None, page)?;
+        let mut known = Retiring::default();
+        let step =
+            self.retire_layer(item.ns, item.resource, item.target, None, page, &mut known)?;
         self.settle_item(item, step)
     }
     /// One step of retiring layer `gen` of a serial: held by a generation
     /// owner or by the serial's orphan, or a page of its cells or shrink
     /// rows dropped, or its superseded row deleted. `orphan` is the serial's
-    /// orphan row when the caller holds it as this job left it.
+    /// orphan row when the caller holds it as this job left it. `known` is
+    /// what earlier steps of the same job established about the layer: a
+    /// fact it holds is not read again.
     fn retire_layer(
         &self,
         ns: i64,
@@ -372,8 +393,9 @@ impl Overlay {
         gen: i64,
         orphan: Option<Orphan>,
         page: Page,
+        known: &mut Retiring,
     ) -> OverlayResult<Step> {
-        if self.generation_held(ns, gen)?
+        if (!known.free && self.generation_held(ns, gen)?)
             || match orphan {
                 Some(orphan) => orphan.holds(gen),
                 None => self.orphan_holds(ns, serial, gen)?,
@@ -381,16 +403,20 @@ impl Overlay {
         {
             return Ok(step(0, 0, Next::Held));
         }
-        let rows = self.query(
-            StatementKind::Reclaim,
-            "SELECT cell_offset,length(data)+ifnull(length(validity),0) FROM payload
-            WHERE ns=?1 AND serial=?2 AND gen=?3 ORDER BY cell_offset LIMIT 14",
-            &[&ns, &serial, &gen],
-            24,
-            |r| Ok((r.get::<_, i64>(0)?, crate::db::unsigned(r, 1)?)),
-        )?;
+        known.free = true;
+        let rows = match known.cells_gone {
+            true => Vec::new(),
+            false => self.query(
+                StatementKind::Reclaim,
+                LAYER_PAYLOAD_PAGE,
+                &[&ns, &serial, &gen],
+                24,
+                |r| Ok((r.get::<_, i64>(0)?, crate::db::unsigned(r, 1)?)),
+            )?,
+        };
         if !rows.is_empty() {
             let fit = page.fit(rows.iter().map(|row| row.1));
+            known.cells_gone = rows.len() < PAGE.cells && fit.0 == rows.len();
             let mut bytes = 0;
             for (cell, size) in &rows[..fit.0] {
                 self.execute(
@@ -429,12 +455,21 @@ impl Overlay {
             return Ok(step(steps.len() as u64, 0, Next::Ready));
         }
         // Active tombstones prevent serial lookup falling through to the old
-        // base. Only already-installed metadata may be physically removed.
-        let state = self.state(self.route_for_ns(ns)?)?;
-        let superseded = !self
-            .layers(ns, serial, state.active.0, gen.max(state.installed))?
-            .is_empty();
-        if gen <= state.installed || superseded {
+        // base. Only already-installed metadata may be physically removed:
+        // a row at or below the install frontier, or one a later row of the
+        // view supersedes. One statement reads the Workspace's frontier and
+        // the serial's later rows.
+        let removable = self
+            .query(
+                StatementKind::Inode,
+                sql::LAYER_SUPERSEDED,
+                &[&ns, &serial, &gen],
+                24,
+                |r| r.get::<_, bool>(0),
+            )?
+            .pop()
+            .ok_or(crate::OverlayError::Stale)?;
+        if removable {
             self.execute(
                 StatementKind::Reclaim,
                 "DELETE FROM inode WHERE ns=?1 AND serial=?2 AND gen=?3",

@@ -321,6 +321,23 @@ macro_rules! held_handle {
 pub(crate) const FENCE_LOOKUP: &str = fence!(held_lookup!());
 pub(crate) const FENCE_FILE: &str = fence!(held_file!());
 pub(crate) const FENCE_HANDLE: &str = fence!(held_handle!());
+/// FORGET's fence: the Workspace row, its native connection and the whole
+/// lookup row the request names, whose columns are NULL when the kernel
+/// holds no lookup count on the inode.
+pub(crate) const FENCE_FORGET: &str = concat!(
+    "SELECT w.active,w.captured,w.revision,w.base_root,w.dirty_inodes,",
+    "w.dirty_directory_entries,w.lifecycle,w.installed,w.captured_revision,",
+    "w.base_readers,w.consolidating,m.owner,m.root,m.revoked,l.owner,l.nlookup,",
+    "l.implicit FROM workspace w LEFT JOIN native_mount m ON m.ns=w.ns ",
+    "LEFT JOIN native_lookup l ON l.ns=w.ns AND l.mount=?3 AND l.serial=?4 ",
+    "WHERE w.ns=?1 AND w.incarnation=?2"
+);
+/// Whether the row of layer ?3 of serial ?2 may be deleted once the layer
+/// is empty: it is installed, or a later row of the view supersedes it. No
+/// row when the namespace is gone.
+pub(crate) const LAYER_SUPERSEDED: &str = "SELECT ?3<=w.installed OR EXISTS(SELECT 1
+    FROM inode i WHERE i.ns=w.ns AND i.serial=?2 AND i.gen<=w.active
+    AND i.gen>max(?3,w.installed)) FROM workspace w WHERE w.ns=?1";
 /// The three fences of a visit that decides over the inode it names.
 pub(crate) const FENCE_LOOKUP_ROW: &str = fence_row!(held_lookup!());
 pub(crate) const FENCE_FILE_ROW: &str = fence_row!(held_file!());

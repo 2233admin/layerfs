@@ -621,8 +621,9 @@ const RELEASE: [(&str, u64, u64); 5] = [
 /// Then one transaction: the file's tombstone and the directory's time and
 /// entry counts, each an update over the row the job read [2 Inode]; the
 /// binding's removal, decided by the name's rows the job read
-/// [DirectoryEntry, with its trigger]; the orphan's row, absent [Lease]; the file's references
-/// [Lease]; the orphan's row [Lease, with its trigger] and its
+/// [DirectoryEntry, with its trigger]; the file's references [Lease]; the
+/// orphan's row, inserted without a probe while the engine holds no orphan
+/// (one more [Lease] read when it holds one) [Lease, with its trigger] and its
 /// orphan-domain inode row [Inode, with its count trigger]; the frontier
 /// [Workspace]. Nothing is queued: only the kernel's lookup holds the file.
 const UNLINK: [(&str, u64, u64); 7] = [
@@ -632,13 +633,13 @@ const UNLINK: [(&str, u64, u64); 7] = [
     ("Workspace", 2, 2),
     ("Inode", 4, 5),
     ("DirectoryEntry", 2, 3),
-    ("Lease", 3, 4),
+    ("Lease", 2, 3),
 ];
 /// FORGET of the last kernel reference, which reclaims the one-cell file
-/// in its own job and writes no queue item. Its own part: the Workspace's
-/// row, kept for the pending-close decision, and the mount's [Workspace,
-/// Lease]; the lookup's row and its deletion [2 Lease, the deletion with
-/// its trigger]; the file reference dropped by a statement
+/// in its own job and writes no queue item. Its own part: one fence reads
+/// the Workspace's row, kept for the pending-close decision, the mount's
+/// and the lookup's [Workspace]; the lookup's deletion [Lease, with its
+/// trigger]; the file reference dropped by a statement
 /// that returns what remains [Lease]; the orphan's row [Lease]. Then the
 /// four steps the owner ran, without their items. The orphan releases its
 /// lower layer: that layer's row, the wait row's deletion, the orphan's
@@ -647,17 +648,18 @@ const UNLINK: [(&str, u64, u64); 7] = [
 /// ends: its own cells and shrink rows, none; its inode row, its row, the
 /// engine's count of orphan rows and the custody row [5 Reclaim, Lease];
 /// the item an earlier descriptor or reader may have queued, deleted
-/// [Reclaim]. The retirement ends: the holders again, cells and shrink
-/// rows, none, the Workspace's route and row and the file's rows, where the
-/// tombstone stays [Lease, 2 Reclaim, 2 Workspace, Inode].
+/// [Reclaim]. The retirement ends with what the job already knows, no
+/// holder and no cell left of a page it emptied: its shrink rows, none,
+/// and one statement for the Workspace's frontier and the file's later
+/// rows, where the tombstone stays [Reclaim, Inode].
 const FORGET: [(&str, u64, u64); 7] = [
     ("Startup", 1, 1),
     ("Begin", 1, 1),
     ("Commit", 1, 1),
-    ("Workspace", 3, 3),
+    ("Workspace", 1, 1),
     ("Inode", 2, 2),
-    ("Lease", 10, 13),
-    ("Reclaim", 10, 13),
+    ("Lease", 7, 10),
+    ("Reclaim", 9, 12),
 ];
 /// FORGET of a file of four pages: the orphan releases its lower layer and
 /// that layer's retirement drops one page of 14 cells; then the orphan's
@@ -668,7 +670,7 @@ const FORGET_PAGE: [(&str, u64, u64); 7] = [
     ("Commit", 1, 1),
     ("Workspace", 1, 1),
     ("Inode", 1, 1),
-    ("Lease", 8, 9),
+    ("Lease", 6, 7),
     ("Reclaim", 19, 37),
 ];
 /// FORGET of a file whose cell the owner had migrated while it was open:
@@ -678,12 +680,12 @@ const FORGET_MIGRATED: [(&str, u64, u64); 6] = [
     ("Begin", 1, 1),
     ("Commit", 1, 1),
     ("Workspace", 1, 1),
-    ("Lease", 6, 9),
+    ("Lease", 4, 7),
     ("Reclaim", 8, 12),
 ];
-/// FORGET as the last reference of a file that keeps its name: the
-/// Workspace's row and the mount's [Workspace, Lease]; the lookup's row and
-/// its deletion [2 Lease]; the file reference dropped by a statement that
+/// FORGET as the last reference of a file that keeps its name: one fence
+/// for the Workspace's row, the mount's and the lookup's [Workspace]; the
+/// lookup's deletion [Lease]; the file reference dropped by a statement that
 /// returns what remains [Lease]; the custody row, deleted [Lease, with its
 /// trigger]. Nothing is queued.
 const LIVE_FORGET: [(&str, u64, u64); 5] = [
@@ -691,7 +693,7 @@ const LIVE_FORGET: [(&str, u64, u64); 5] = [
     ("Begin", 1, 1),
     ("Commit", 1, 1),
     ("Workspace", 1, 1),
-    ("Lease", 5, 8),
+    ("Lease", 3, 6),
 ];
 /// RELEASE as the last reference of such a file: the fence [Workspace]; the
 /// descriptor's row and the file reference [2 Lease]; the custody row,

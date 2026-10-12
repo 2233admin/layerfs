@@ -769,6 +769,11 @@ const NAMES: &[(&str, &str)] = &[
     // The fences that also read the named inode's row come first: each
     // holds the text of its plain fence.
     ("AND l.serial=?4),i.serial", "FENCE_LOOKUP_ROW"),
+    (
+        "l.owner,l.nlookup,l.implicit FROM workspace w",
+        "FENCE_FORGET",
+    ),
+    ("SELECT ?3<=w.installed OR EXISTS", "LAYER_SUPERSEDED"),
     ("AND f.serial=?4),i.serial", "FENCE_FILE_ROW"),
     ("THEN 1 END),i.serial", "FENCE_HANDLE_ROW"),
     ("(SELECT 1 FROM native_lookup l", "FENCE_LOOKUP"),

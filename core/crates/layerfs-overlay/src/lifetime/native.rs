@@ -192,6 +192,50 @@ impl Overlay {
             false,
         )
     }
+    /// FORGET's fence in one statement: the Workspace row, closed or not,
+    /// this mount attached and not revoked, and the lookup row the request
+    /// names (its owner, count and whether it is the connection's implicit
+    /// one). A missing or foreign Workspace, mount or lookup row is Stale.
+    fn forget_fence(
+        &self,
+        mount: NativeMount,
+        serial: u64,
+    ) -> OverlayResult<(WorkspaceState, u64, u64, bool)> {
+        self.check_route(mount.route)?;
+        let (owner, key) = (integer(mount.owner)?, integer(serial)?);
+        let (state, attached, root, revoked, lookup) = self
+            .query(
+                StatementKind::Workspace,
+                crate::sql::FENCE_FORGET,
+                &[
+                    &mount.route.ns,
+                    &mount.route.incarnation.as_slice(),
+                    &owner,
+                    &key,
+                ],
+                56,
+                |r| {
+                    let lookup = match r.get::<_, Option<i64>>(14)? {
+                        Some(_) => Some((unsigned(r, 14)?, unsigned(r, 15)?, r.get(16)?)),
+                        None => None,
+                    };
+                    Ok((
+                        crate::lifetime::workspace::decode(r)?,
+                        r.get::<_, Option<i64>>(11)?,
+                        r.get::<_, Option<i64>>(12)?,
+                        r.get::<_, Option<bool>>(13)?,
+                        lookup,
+                    ))
+                },
+            )?
+            .pop()
+            .ok_or(OverlayError::Stale)?;
+        if attached != Some(owner) || root != Some(integer(mount.root)?) || revoked != Some(false) {
+            return Err(OverlayError::Stale);
+        }
+        let (owner, held, implicit) = lookup.ok_or(OverlayError::Stale)?;
+        Ok((state, owner, held, implicit))
+    }
     /// Exact no-reply kernel decrement. Failure retains the original caller's
     /// record; it never compensates an unavailable send/delivery outcome.
     pub fn forget_native(&self, mount: NativeMount, serial: u64, count: u64) -> OverlayResult<()> {
@@ -199,10 +243,7 @@ impl Overlay {
             return Err(OverlayError::Invalid("zero native forget"));
         }
         self.atomic_cleanup(|| {
-            let state = self.check_native_attached(mount)?;
-            let (owner, held, implicit) = self
-                .native_lookup_row(mount, serial)?
-                .ok_or(OverlayError::Stale)?;
+            let (state, owner, held, implicit) = self.forget_fence(mount, serial)?;
             let after = held
                 .checked_sub(count)
                 .ok_or(OverlayError::Invalid("native lookup underflow"))?;

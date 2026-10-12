@@ -152,10 +152,10 @@ fn c03_create_and_remove_files() {
         Pinned {
             requests: 9_020,
             owner_jobs: 9_037,
-            statements: 89_200,
-            attempts: 73_181,
+            statements: 82_200,
+            attempts: 66_181,
             transactions: 5_018,
-            vm_steps: 3_430_225,
+            vm_steps: 3_349_222,
             counts: include_str!("support/request_path_counts/c03.txt"),
         },
     );

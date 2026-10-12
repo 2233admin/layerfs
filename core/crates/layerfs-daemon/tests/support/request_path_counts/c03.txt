@@ -32,7 +32,7 @@ Release: requests=1000 jobs(read,mutation,lifecycle)=[0, 0, 1000] transactions=1
   1000 commit
   1000 file-handle-drop
   1000 freelist-count
-Unlink: requests=1000 jobs(read,mutation,lifecycle)=[0, 1000, 0] transactions=1000 attempts=14000 executions=17000
+Unlink: requests=1000 jobs(read,mutation,lifecycle)=[0, 1000, 0] transactions=1000 attempts=13000 executions=16000
   1000 DIRECTORY_ENTRY_DROP
   1000 FENCE_LOOKUP_ROW
   1000 FRONTIER_ADVANCE
@@ -40,28 +40,27 @@ Unlink: requests=1000 jobs(read,mutation,lifecycle)=[0, 1000, 0] transactions=10
   1000 INODE_LOOKUP
   2000 INODE_UPDATE
   1000 NAME_LAYERS
-  1000 ORPHAN_LOOKUP
   1000 begin
   1000 commit
   1000 file-custody-refs
   1000 freelist-count
   1000 orphan-insert
-Forget: requests=1000 jobs(read,mutation,lifecycle)=[0, 0, 1000] transactions=1000 attempts=28000 executions=34000
+Forget: requests=1000 jobs(read,mutation,lifecycle)=[0, 0, 1000] transactions=1000 attempts=22000 executions=28000
   1000 CELL_DROP
+  1000 FENCE_FORGET
   1000 FILE_LOOKUPS_DROP
-  2000 GENERATION_HELD
-  2000 LAYERS
+  1000 GENERATION_HELD
+  1000 LAYERS
+  1000 LAYER_SUPERSEDED
   1000 ORPHAN_LOOKUP
   1000 begin
   1000 commit
   1000 file-custody-drop
   1000 freelist-count
-  2000 layer-payload-page
+  1000 layer-payload-page
   1000 layer-shrink-page
   1000 maintenance-drop
   1000 native-lookup-drop
-  1000 native-lookup-row
-  1000 native-mount-state
   1000 orphan-drop
   1000 orphan-inode-drop
   1000 orphan-lower-top
@@ -69,8 +68,6 @@ Forget: requests=1000 jobs(read,mutation,lifecycle)=[0, 0, 1000] transactions=10
   1000 orphan-rows
   1000 orphan-shrink-page
   1000 orphan-wait-drop
-  1000 workspace-incarnation
-  2000 workspace-state
 Opendir: requests=1 jobs(read,mutation,lifecycle)=[1, 0, 0] transactions=1 attempts=7 executions=8
   1 FENCE_LOOKUP_ROW
   1 FILE_OPENS_ADD

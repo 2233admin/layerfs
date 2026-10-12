@@ -77,7 +77,8 @@ impl Overlay {
             return Ok(());
         }
         let serial = integer(inode.serial)?;
-        if self.orphan(route.ns, serial)?.is_some() {
+        // While the engine holds no orphan this serial has none.
+        if self.orphan_seen.get() && self.orphan(route.ns, serial)?.is_some() {
             return Ok(());
         }
         // Every reference, and the ones that can read or write the file.
