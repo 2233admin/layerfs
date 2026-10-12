@@ -2441,3 +2441,19 @@ container and exported Stores were removed. No oracle or readback weakened;
 one new-identity sample of this case follows a clean seal. SDK/daemon/runtime
 all targets compile and SDK/native-control checks recorded. Receipts:
 stage2-sample-dedup-workspace-exact-100.log and independent-graph failure.
+
+
+### Stage 2 complete: simplified harness and count gate
+
+Cause: redundant definitions and per-case setup ownership. Change: remove 85
+cases, keep five stricter capped edits in heavy, declare everyday 108/heavy 49,
+share closed native inputs and exact product-keyed Stores, and track all/next.
+Commit: this gate record. Twelve cells and 23 kept-family selections completed;
+29 count rows match, five stay unavailable, C03's seven-fewer empty orphan probes
+are explained with unchanged SQL and all other adjusted fields equal. All 35
+final proof receipts PASS and all 23 family functional receipts PASS. One retained
+exact-reuse proof-path failure received one fix and one new-identity sample PASS.
+Earlier identities keep their original verdicts. SDK/daemon/runtime all targets
+compile; SDK/native-control and scoped harness checks recorded. No optimization,
+retry or whole-tier invocation. Receipts: sdk-simplified.json and gate journals.
+Final-source seal and one-sample-per-case baseline remain next.

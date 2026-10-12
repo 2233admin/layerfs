@@ -1,6 +1,6 @@
 # Kept fixture preparation
 
-> **Status:** Implemented setup machinery; final simplified-source count gate and baseline remain pending.
+> **Status:** Implemented setup machinery; simplified-source count gate complete, final baseline pending.
 
 The current selection has 108 everyday and 49 heavy cases. Setup retains closed
 inputs between runs. Each measured case still receives its own writable Store
