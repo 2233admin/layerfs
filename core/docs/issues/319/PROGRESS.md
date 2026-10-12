@@ -1495,3 +1495,25 @@ encoded wrong-level root. Two new needless-borrow Clippy diagnostics were fixed;
 final host/Linux all-target runtime Clippy retain only inherited frozen/untouched
 harness lints without suppression. No diagnostic remains in the new walk/tests.
 Fresh formatting/boundary/LOC and clean-identity samples follow before acceptance.
+
+### Typed namespace path-limit preservation (harness correction)
+
+Read-only review of31f3467be found one dropped existing check: valid individual
+components no longer passed through LogicalPath::new. Thus257 one-byte
+components (513B) and18 240-byte components (4337B) could escape the existing
+256-component/4096-byte limits. This is an oracle regression, not a reason to
+retire these contract checks or add capability. External red test fails with
+"whole-path limit must remain required" on the committed implementation.
+Restore one existing LogicalPath::new call per delivered path before metadata/
+content proof. Predict two malformed fixtures accepted -> zero; canonical
+requests remain61 because validation uses no provider.
+
+Observed: host/Linux four namespace refusals PASS including both limit
+fixtures; canonical-count1 PASS on each at61 with the unchanged histogram.
+Formatting, boundary686 and guard self-tests50 PASS. All-target runtime Clippy
+retains inherited frozen/untouched harness diagnostics; no new limit-test or
+walk diagnostic. No raised bound, schema, API or dependency. The preceding
+p319n13w nine-binary seal completed cleanly but is NOT_RUN for samples after
+this review found the refusal gap; it supplies no benchmark acceptance.
+Production LOC:82340 ->82340 (delta+0), exact pinned counter; reference absent
+(retired R9c; last counted65,417 at tree498dd1917812).

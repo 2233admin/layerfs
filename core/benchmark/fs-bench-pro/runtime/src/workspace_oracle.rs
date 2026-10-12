@@ -794,6 +794,7 @@ pub fn verify_tree(
     let mut files = BTreeMap::new();
     let mut scratch = None;
     while let Some((path, resolved)) = walk.next()? {
+        let _logical = LogicalPath::new(if path == "." { "" } else { &path })?;
         if !seen.insert(path.clone()) {
             return Err("duplicate persisted namespace path".into());
         }

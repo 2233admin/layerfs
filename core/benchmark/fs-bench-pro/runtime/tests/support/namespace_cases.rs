@@ -2,6 +2,37 @@
 use super::*;
 
 #[test]
+fn bounded_traversal_keeps_whole_path_limits() {
+    for (depth, width) in [(257, 1), (18, 240)] {
+        let mut entries = vec![Entry::directory(".")];
+        let component = "a".repeat(width);
+        let mut path = String::new();
+        for _ in 0..depth {
+            if !path.is_empty() {
+                path.push('/');
+            }
+            path.push_str(&component);
+            entries.push(Entry::directory(path.clone()));
+        }
+        assert!(matches!(
+            layerfs_content::LogicalPath::new(&path),
+            Err(ContentError::PathLimitExceeded)
+        ));
+        let (root, bag) = constructed(
+            layerfs_content::filesystem::root::scope_for_seed([95; 32]),
+            &entries,
+        );
+        let error = workspace_oracle::verify_tree(&bag, root, &entries, false, None, true)
+            .err()
+            .expect("whole-path limit must remain required");
+        assert!(matches!(
+            error.downcast_ref::<ContentError>(),
+            Some(ContentError::PathLimitExceeded)
+        ));
+    }
+}
+
+#[test]
 fn bounded_traversal_refuses_missing_serial_provider_and_wrong_kind() {
     use layerfs_content::filesystem::{
         directory::{decode_directory_page, encode_directory_page, DirectoryPage},

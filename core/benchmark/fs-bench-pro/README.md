@@ -100,7 +100,8 @@ file values leave that page after their complete verification. Every listed
 name still undergoes the existing point lookup against its authenticated parent
 and must return the same serial. This retains child-level and sibling-bound
 refusals that listing alone does not supply. Symlink decoding and the final
-complete inode census remain unchanged.
+complete inode census remain unchanged. Each delivered path still passes the
+existing LogicalPath validation, including its whole-path limits.
 
 Historical access setup first creates a new complete closed original producer.
 For a paired selection of that same producer, use `bench.py prepare <access-case>
