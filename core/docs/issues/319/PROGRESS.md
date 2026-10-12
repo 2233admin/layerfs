@@ -1856,3 +1856,73 @@ firstgreen execution. NoSQLiteclaim or inferredruntimeleafcensus/dominance.
 next. Architecture04 updates sourcealgorithm withoutcanonical/API change.
 Production LOC:82362 ->82368 (delta+6), exactfirstparent/staged pinnedcounter;
 reference absent (retired R9c; last counted65,417 at tree498dd1917812).
+
+
+Decoder stage p319n14j at6f6e7f56b:35once-only selections,29functional/proof
+PASS(2overallPASS,27INELIGIBLE),6large500MiB timerFAIL retained.46portable
+CSVs bindoriginal/publishedhashes withonlyexactlocalpathsubstitutions. Nine
+binariessealed;cleanEngine339OK(skipped3),24.985s. Init newproduct/runtime
+identitysampledualPASS/INELIGIBLE, historicalaccessPASS verificationonly.
+All5histories and23familyguards dualPASS. [Stage evidence](checks/inode-decode-stage.json).
+
+Cleanupcorrection: p14i per-case clean selector removedtests butleft closed
+preparedoriginals(onedistinctoriginalperpayload,neverextratestcopies). Beforej,
+correctclean originals removed33folders/19ownedmastervolumes in79.006208416s.
+All413protectedvolumes remained. p14j usesclean originals aftereachcase;
+finalzerooriginals/extra volumes andall413protectedpresent. Prior wording
+that impliedper-case originalsremoved duringp14i is correctedhere;tests
+werecleaned then, originals afterward. No pre-existingresources stopped.
+
+Exhaustive500receiptPASS/functionalPASS/proofPASS,sample0,verificationattempt1:
+full197.966314083s under275s;20selectedtypedroots/605960paths/9281233920B
+and100acknowledgedCommits/ancestry/finalhead exactlybound; nativefinalstep100
+one root30298paths/464192768B,18.132547709s. Typedspan59.259844334s enclosed
+bychild61.618909208s; priorp13v typed58.978395334s/child61.354463750s.
+Correction: earlierledger61.354s label'Native20roots' was wrong; itis the
+typedchild,notanotherNativeproof. p13v actualNative1root18.232671084s.
+The full211.763216875 ->197.966314083s reductionprimarily accompanies
+controller45.071006709 ->31.923690416s andobservers25.314277168 ->12.341451534s,
+notdemonstrateddecoder speed. Allocationcounterbenefit1 ->0,total2 ->1 and
+2N ->Nvaluecalls retainedwithallgrammar/controlPASS; runtimeleafcensus
+UNAVAILABLE. Pre-controller setup≈74.862966958 ->73.979091625s is derived
+fromownercutoffs,notpurehashing;largestknownblocks setup≈74s,typedchild≈62s.
+Normalizationduration UNAVAILABLE afterownedcleanup(retainedhashbinding);
+remaining≈9.18s residual notassignedtoSQLite. Provider517025792B/hashes
+unchangedbefore/after; all20root IDs matchselectedCommitacknowledgements.
+RawStoreallocated522018816 ->520753152B;overlay270970880 ->271118336B;
+provider517898240 ->517025792B. Mixedrawstoragechanges, noformat/cache/limit
+increase oruniformstoragereductionclaim; noqualifiedperformanceclaim.
+
+Nextcountcause beforeedit: prepare_recipe_history M1 expected-step materializes
+20checkpointpayloadtrees andretains themwithpristinesource; fixtures.load
+rehashes eachthroughpreparationmanifest. No laterM1 sample/proof consumer
+opens thosecheckpointpayloads: retainedfullmanifest/selectivescope/recipes/
+SDKmembers andactualStore roots supplyalloracles. TheseNone-mode expectations
+are notactualnativeproof. Predictretainedtrees21 ->1 (20generated ->0),
+preserving20actualStoreproofs/605960paths/9281233920B. Removeeachownfresh
+checkpointonlyafterunchangedmanifest/summary/scopeprocessing,then sealprepared
+input;retainpristinesource andallmetadata records. Context/historical consumers
+excluded. Exactcheckpointpayloadhashbytes andisolatedhashduration UNAVAILABLE,
+notguessedfrom75s; repeatedhelperhashes115+83 knownsmaller separatecause
+notselected. Externaltinytwo/fourcheckpoint testmust firstfailretention
+counter whileassertingunchangedmanifests/recipes/SDKstaging.
+
+Checkpointlifecycle red:2/4selectedM1 checkpoints retain3/5payloadroots,
+peak3/5,sealedpayloadentries3/5, versuspredicted1retained/2peak/1entry.
+Fullmanifest/nativehash/scope/recipe/equality controls passbeforebothfailed
+counterassertions. Non-M1 fullselectedroots explicitlyremainavailable.
+
+M1 checkpointlifecycle counttier meets writtenprediction at2/4checkpoints:
+retained3/5 ->1,peak3/5 ->2,sealedpayloadentries3/5 ->1.19fixtures tests
+PASS plus14historical guards PASS. Fullnative/scope manifests,digests,summaries,
+generatorrecipes,initialsourceverification,SDK descriptors/members/scripts
+remain unchanged; actualStore/nativeproofs unchanged. Newfresh-output/refuse
+symlink/owned-directory controls preserveforeignandpre-existingdata; corrupt
+fullmanifest refusesbeforecleanup, originalcleanupOSError staysoriginal and
+noPASS preparation emitted. Non-M1nativepayloads remain. Existingmetadata/setup
+strings stateformerrootpaths/noactualM1modeproof; no newobservation/schema/API
+option/dependency feature. fmt/boundary686/selftests50 PASS;ClippyN/A Python-only,
+priorContentbothpassretained. CleancoveringEngine followscommit.
+[Count evidence](checks/m1-checkpoint-count.json) retains red/green/control logs.
+Production LOC:82368 ->82368 (delta+0), exactparent/staged pinnedcounter;
+reference absent (retired R9c; last counted65,417 at tree498dd1917812).

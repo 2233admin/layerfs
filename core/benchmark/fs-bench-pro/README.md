@@ -64,6 +64,15 @@ mount and performs a separate offline current-format persisted proof. The
 runtime's `verify-workspace` mode is an independent harness oracle over a closed
 sample Store; the live daemon data path stays in-process in the shared volume.
 
+M1 recipe-history preparation retains the pristine native source and the full
+checkpoint manifests, selective scopes, summaries, generator identities and SDK
+assets. Each generated checkpoint payload tree is removed after those records
+are authored and checked, before sealing preparation. Its recorded `native_root`
+is the former materialization path. These None-mode expected trees are separate
+from actual mounted/Storage proofs: every selected measured root and its frozen
+byte/metadata scope remains independently verified. Other contextual/historical
+preparations retain their required native trees.
+
 Ordinary resource guards remain root observers in the exact owned daemon
 container, separate from the product's admitted nonroot Exec. The controller
 uses the same Engine Exec create/start/inspect operations through a private

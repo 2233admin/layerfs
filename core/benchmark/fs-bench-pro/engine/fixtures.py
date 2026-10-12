@@ -1586,6 +1586,8 @@ def prepare_recipe_history(case, folder, build):
         else:
             root = final if step == case["history_schedule"]["commits"] else folder / "native-states" / f"state-{step}"
             root.parent.mkdir(parents=True, exist_ok=True)
+            if case.get("m1_schedule") and (root.exists() or root.is_symlink()):
+                raise FileExistsError("original M1 checkpoint output must be fresh")
             argv = [writer["path"], "expected-step", case["v016_case"], str(step), str(root)]
             authored = receipts.command(argv, folder, f"native-state-{step}", 120)
             summary = json.loads(Path(authored["stdout"]).read_text())
@@ -1627,6 +1629,13 @@ def prepare_recipe_history(case, folder, build):
         history.append(record)
         if step == case["history_schedule"]["commits"]:
             expectation = summary
+        if case.get("m1_schedule"):
+            # The full manifest and selective scope above retain this expectation.
+            # Actual byte/mode proofs read measured Workspace and Store roots.
+            if root.is_symlink() or not root.is_dir():
+                raise ValueError("original M1 checkpoint must be its owned generated directory")
+            shutil.rmtree(root)
+            record["materialization_metadata"] += "; generated payload removed after manifest/scope authoring; recorded native_root is its former path"
     if expectation is None:
         raise ValueError("original selected final expected-state absent")
     receipts.write_new(folder / "history-native-recipes.json", {
@@ -1984,7 +1993,7 @@ def prepare_workspace(recipe, folder, build_folder):
               "master_reuse": reuse,
               "source_gid": source.stat().st_gid, "global_profile": "Disposable/WAL/OFF",
               "overlay_profile": "MEMORY/OFF/EXCLUSIVE", "construction_workers": 1,
-              "setup": ("initial native fixture independently verified; selected M1 native expectations materialized with None mode observations; actual scoped proof binds measured helper observations; public Init/seal/install once; independent sample byte clone"
+              "setup": ("initial native fixture independently verified; selected M1 native expectations materialized with None mode observations and payloads removed after manifest/scope authoring; actual scoped proof binds measured helper observations; public Init/seal/install once; independent sample byte clone"
                         if case.get("m1_schedule") else "native fixture and independent algebraic selected states fully verified; public Init/seal/install once; sample uses independent closed byte clone"),
               "cache": "explicit setup source/Store warmth; class B additionally requires warm terminal cleanup and actual zero source demands"}
     receipts.write_new(folder / "prepared.json", result)

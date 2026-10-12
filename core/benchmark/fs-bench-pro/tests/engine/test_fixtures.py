@@ -178,6 +178,7 @@ class RecipeHistory(unittest.TestCase):
             for state in history:
                 self.assertEqual(fixtures.identity.sha256(state["manifest"]), state["manifest_sha256"])
                 self.assertEqual(state["native_recipe"]["binary_sha256"], build["binaries"]["workspace-writer"]["sha256"])
+                self.assertTrue(Path(state["native_root"]).is_dir(), "non-M1 consumers keep their native roots")
             self.assertFalse((folder / "native-states/state-2").exists())
 
     def test_m1_regular_and_exhaustive_keep_materialization_separate_from_observed_modes(self):
@@ -199,6 +200,107 @@ class RecipeHistory(unittest.TestCase):
                     self.assertTrue(Path(state["manifest"]).read_text().startswith("original-m1-selective-scope-v1\n"))
                     self.assertNotEqual(state["manifest_sha256"], state["native_manifest_sha256"])
                     self.assertEqual(state["scope_recipe"]["binary_sha256"], build["binaries"]["edit-host"]["sha256"])
+
+    def test_m1_checkpoint_payloads_are_released_before_preparation_is_sealed(self):
+        outcomes=[]
+        for count in (10,20):
+            selected=list(range(5,count+1,5))
+            with self.subTest(count=count), tempfile.TemporaryDirectory() as temporary:
+                folder=Path(temporary); build=self.build(folder)
+                case=self.case("original-m1-commit-sequence-v1",count,selected,mixed=True)
+                calls=[]; peaks=[]; native_command=self.native_commands(calls)
+                def authored(argv, out, label, seconds, **options):
+                    result=native_command(argv,out,label,seconds,**options)
+                    if argv[1]=="expected-step":
+                        peaks.append(len(list(folder.rglob("independent-native-state"))))
+                    return result
+                with patch.object(fixtures.receipts,"command",side_effect=authored):
+                    initial,final,native,history,_=fixtures.prepare_recipe_history(case,folder,build)
+                self.assertEqual((initial["logical_bytes"],final["logical_bytes"]),(1,count+1))
+                self.assertEqual(set(native),{"state-0"})
+                self.assertEqual([state["index"] for state in history],selected)
+                for state in history:
+                    self.assertEqual(fixtures.identity.sha256(state["manifest"]),state["manifest_sha256"])
+                    self.assertEqual(fixtures.identity.sha256(state["native_manifest"]),state["native_manifest_sha256"])
+                    self.assertEqual(state["native_recipe"]["binary_sha256"],build["binaries"]["workspace-writer"]["sha256"])
+                    self.assertEqual(state["scope_recipe"]["binary_sha256"],build["binaries"]["edit-host"]["sha256"])
+                    self.assertEqual(state["verification_scope"],"original-m1-selective-scope-v1")
+                recipes=json.loads((folder/"history-native-recipes.json").read_text())
+                self.assertEqual(recipes["states"],history)
+                fixtures.receipts.manifest(folder)
+                sealed=fixtures.receipts.verify_manifest(folder)
+                payload_entries=[name for name in sealed["files"] if name.endswith("independent-native-state")]
+                retained=len(list(folder.rglob("independent-native-state")))
+                outcomes.append((count,retained,max(peaks),payload_entries))
+                self.assertIn("source/independent-native-state",payload_entries)
+                self.assertIn("history-native-recipes.json",sealed["files"])
+                for step in selected:
+                    self.assertIn(f"history-manifests/state-{step}.tsv",sealed["files"])
+        for count,retained,peak,payload_entries in outcomes:
+            print(json.dumps({"selected_checkpoints":count//5,"retained_payload_roots":retained,"peak_payload_roots":peak,"sealed_payload_entries":len(payload_entries)}))
+            with self.subTest(selected_checkpoints=count//5):
+                self.assertEqual(retained,1,f"{count//5} generated checkpoints must leave only the pristine source")
+                self.assertEqual(peak,2,"source plus one currently-generated checkpoint is the peak")
+                self.assertEqual(payload_entries,["source/independent-native-state"])
+
+    def test_m1_checkpoint_cleanup_refuses_foreign_or_existing_outputs(self):
+        for variant in ("existing","symlink"):
+            with self.subTest(variant=variant), tempfile.TemporaryDirectory() as temporary:
+                base=Path(temporary); folder=base/"prepared"; folder.mkdir()
+                foreign=base/"foreign"; foreign.mkdir(); (foreign/"keep").write_text("untouched")
+                build=self.build(folder); case=self.case("original-m1-commit-sequence-v1",5,[5],mixed=True)
+                calls=[]; command=self.native_commands(calls); target=folder/"expected-native"
+                if variant=="existing":
+                    target.mkdir(); (target/"keep").write_text("pre-existing")
+                def author(argv,out,label,seconds,**options):
+                    result=command(argv,out,label,seconds,**options)
+                    if variant=="symlink" and argv[1]=="expected-step":
+                        fixtures.shutil.rmtree(Path(argv[4]))
+                        Path(argv[4]).symlink_to(foreign,target_is_directory=True)
+                    return result
+                with patch.object(fixtures.receipts,"command",side_effect=author):
+                    with self.assertRaises(FileExistsError if variant=="existing" else ValueError):
+                        fixtures.prepare_recipe_history(case,folder,build)
+                self.assertEqual((foreign/"keep").read_text(),"untouched")
+                self.assertTrue((folder/"source/independent-native-state").is_file())
+                self.assertFalse((folder/"history-native-recipes.json").exists())
+                if variant=="existing":
+                    self.assertEqual((target/"keep").read_text(),"pre-existing")
+                    self.assertFalse(any(argv[1]=="expected-step" for argv,_,_ in calls))
+                else:
+                    self.assertTrue(target.is_symlink())
+
+    def test_m1_cleanup_failure_keeps_original_error_and_does_not_publish_preparation(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            folder=Path(temporary); build=self.build(folder)
+            case=self.case("original-m1-commit-sequence-v1",5,[5],mixed=True); calls=[]
+            with patch.object(fixtures.receipts,"command",side_effect=self.native_commands(calls)), \
+                    patch.object(fixtures.shutil,"rmtree",side_effect=OSError("original checkpoint cleanup refusal")) as remove:
+                with self.assertRaisesRegex(OSError,"original checkpoint cleanup refusal"):
+                    fixtures.prepare_recipe_history(case,folder,build)
+                remove.assert_called_once_with(folder/"expected-native")
+            self.assertTrue((folder/"expected-native/independent-native-state").is_file())
+            self.assertTrue((folder/"expected-native.manifest.tsv").is_file())
+            self.assertTrue((folder/"history-manifests/state-5.tsv").is_file())
+            self.assertFalse((folder/"history-native-recipes.json").exists())
+
+    def test_m1_invalid_full_manifest_is_not_cleaned_or_admitted(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            folder=Path(temporary); build=self.build(folder)
+            case=self.case("original-m1-commit-sequence-v1",5,[5],mixed=True)
+            command=self.native_commands([])
+            def corrupted(argv,out,label,seconds,**options):
+                result=command(argv,out,label,seconds,**options)
+                if argv[1]=="expected-step":
+                    Path(argv[4]).with_suffix(".manifest.tsv").write_text("original mismatch retained")
+                return result
+            with patch.object(fixtures.receipts,"command",side_effect=corrupted), \
+                    patch.object(fixtures.shutil,"rmtree",wraps=fixtures.shutil.rmtree) as remove:
+                with self.assertRaisesRegex(ValueError,"manifest identity differs"):
+                    fixtures.prepare_recipe_history(case,folder,build)
+                remove.assert_not_called()
+            self.assertTrue((folder/"expected-native/independent-native-state").is_file())
+            self.assertFalse((folder/"history-native-recipes.json").exists())
 
     def test_invalid_checkpoint_scope_refuses_before_native_authoring(self):
         cases = [self.case("unknown", 2, [0, 2]),
