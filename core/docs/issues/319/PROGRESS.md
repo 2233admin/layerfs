@@ -2184,3 +2184,17 @@ SDK/daemon/runtime host targets compile; SDK tests and Linux observation tests
 follow at the corrected identity, then the existing count gate.
 Receipts: narrow-linux-clippy, narrow-linux-daemon-tests-a-covered-build and
 narrow-linux-daemon-a-eight/b1/b2/b3/b4-build logs. No case has been sampled yet.
+
+
+### SDK follow-up: FORGET proof samples its required parked phase
+
+Cause: the partial-FORGET wait ended at lookup completion while the retained unit
+was queued (parked 0, queued 1); its assertion required parked 1. Exact custody
+still passed 1 -> 2 -> 1 -> 0, two units and owner rows 6 -> 4. The test and
+scheduler are unchanged from fc45a1bc4; this is a transient observation race.
+Change: include parked 1 and queued 0 in the existing bounded wait predicate.
+All assertions, the oracle and the wait bound stay unchanged; no product edit.
+Commit: this proof correction. Initial Linux target: 4 PASS, 1 FAIL; retained.
+One corrected failed-test invocation follows at the new identity. Other passing
+Linux targets (298 tests total before this correction) are reused.
+Receipts: narrow-linux-test-mounted_drain stdout/stderr and corrected proof log.

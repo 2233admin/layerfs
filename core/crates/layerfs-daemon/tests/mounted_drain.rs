@@ -1077,7 +1077,9 @@ fn fp31_a_forget_unit_smaller_than_the_held_count_leaves_the_exact_remainder() {
         })
     };
     let again = receiver.recv_timeout(HELD).ok();
-    let second = settled(&rig, token, |now| now.completed == parked.completed + 1);
+    let second = settled(&rig, token, |now| {
+        now.completed == parked.completed + 1 && now.parked == 1 && now.queued == 0
+    });
     let both = rig.harness.engine(helper);
     println!(
         "FP-31 partial hold: reclaim_requests={first_requests} forget_units={} parked_forget=1 second_lookup={again:?} handoffs={}->{} parked={} admitted={} owner_details(baseline={} looked={} while_parked={})",
