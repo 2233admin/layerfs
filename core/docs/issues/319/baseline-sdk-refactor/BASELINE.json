@@ -12463,11 +12463,11 @@
     "inventory_reader_cleanup": "Own inventory reader and explicitly created marker volume removed; no other container stopped"
   },
   "csv_sha256": {
-    "ALL-RESULTS.csv": "df2b6ed6dfced33e4b2ee813b9690b0eca0269f8f89990a511d0ef529e1412b8",
-    "HEAVY.csv": "86d06fec9edbecbb78cb95c48e970838da5d0bdb75d4de950e80e4f8f32e78d5",
-    "NON-PASS.csv": "fd6465de6567e18d0defb6bff330366bdf3c756d806adf47149580c42a51150c",
-    "EVERYDAY.csv": "1b8f4a83e6d3cee350fa8ff28b1cb12ad10cef9a2257c687420847e5065532e1",
-    "CELLS.csv": "587f3674490f16c9a37de016f99bf1ee41ca0db4b6a5cdf2761ed196fff5cf00"
+    "ALL-RESULTS.csv": "e12a78cf261058d71cf304611432c9708c3af671bb7554188c7d0efec696573b",
+    "HEAVY.csv": "20040aea272f012fbd15a8196400945ba38ad9c3782d806f780bc8ae034d7bb4",
+    "NON-PASS.csv": "634b6e00aff1c72535185543702ed9e9be00ca358c581a0ec4c9895c6527120a",
+    "EVERYDAY.csv": "ebd46efc3cac3c68c617101ec86b6982440ad8e2e853d461ad4547012bc2402d",
+    "CELLS.csv": "dde6f50a038db3b22a96c3d0f57c02f51d5051cee1033295700b775adf72b2d1"
   },
   "artifact_audit": {
     "status": "PASS",
@@ -12483,6 +12483,7 @@
       "non_PASS": 162
     },
     "private_paths_in_committed_reports": 0,
-    "inventory_reader_absent": true
+    "inventory_reader_absent": true,
+    "csv_line_endings": "LF; index hashes committed CSV blobs"
   }
 }

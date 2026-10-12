@@ -2521,3 +2521,14 @@ agent gaps; case-wall sums and concurrent elapsed scopes stay separate. Kept
 fixtures: 68,562,639,832 apparent/71,561,019,392 allocated B. Cleanup manifests
 PASS for all 169; all claimed sample volumes absent. Receipts: baseline JSON,
 CSVs, per-case/non-PASS tables, inventory and final-artifact-audit.json. No tuning.
+
+
+### Baseline artifact line-ending seal
+
+Cause: Git normalized CSV CRLF to LF when committing the baseline, so working
+CSV hashes differed from committed blobs. Change: use LF and index the exact
+committed bytes. Commit: this artifact-seal correction; measurements, receipt
+hashes, tables, count findings and verdicts unchanged. CSV cardinalities and
+committed-byte hash validation PASS. SDK/daemon/runtime all targets compile and
+SDK/native-control checks recorded at unchanged production source. Receipts:
+final-artifact-audit and committed CSV blob comparisons. No sample rerun.
