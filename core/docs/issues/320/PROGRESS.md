@@ -339,3 +339,17 @@ this run (24 s, tag `t1a`, the tier 1 original) started while a build of the
 other worktree had just begun, because the busy check printed its result but
 did not stop the command. The check now gates by exit status. No sample of
 either worktree was running.
+
+## Hold before the T1 stage end (2026-10-13)
+
+No product change and no sample. After batch 1 the other worktree ran its gate
+tier one case after another, and its baseline tiers follow; under the rules of
+this run nothing was started beside it. The T1 stage end (the four remaining
+selected cases, the six unselected cases and one off-benchmark run at
+`56a6424e1`) is therefore still owed, and stage T2 has not started. Meanwhile
+the receipts already held were read for tiers 2 and 3:
+[T2-T3-PRELIMINARY.md](T2-T3-PRELIMINARY.md). It finds no tier 2 candidate
+that needs no owner decision (launch is P1; waiting on the one owner is P2),
+and for tier 3 one count to model first (16 Payload statements for a 64 KiB
+write) and one fence candidate (two of three statements of every record read).
+Verdict: waiting for the machine; nothing is claimed for T2 or T3.
