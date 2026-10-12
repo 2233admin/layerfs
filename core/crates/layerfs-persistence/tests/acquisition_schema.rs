@@ -64,9 +64,9 @@ const ACQUISITION_TABLES: [&str; 4] = [
 #[test]
 fn each_pack_layout_has_one_version_with_and_one_without_the_tables() {
     for (layout, base) in [
-        (SqlitePackLayout::Monolithic, 1),
-        (SqlitePackLayout::GroupRows, 2),
-        (SqlitePackLayout::GroupRowsIndexed, 3),
+        (SqlitePackLayout::Monolithic, 7),
+        (SqlitePackLayout::GroupRows, 8),
+        (SqlitePackLayout::GroupRowsIndexed, 9),
     ] {
         let temp = Temp::new("acquisition-versions");
         let (plain, selected) = (temp.join("plain.sqlite"), temp.join("selected.sqlite"));

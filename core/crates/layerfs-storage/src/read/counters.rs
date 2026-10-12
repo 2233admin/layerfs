@@ -29,7 +29,8 @@ pub struct Diagnostics {
     pub range_acquired_bytes: u64,
     /// Prefix plus selected bytes returned, separately from scanned bytes.
     pub range_materialized_bytes: u64,
-    /// Catalogue set/page calls.
+    /// Stored inode value lookups: one statement execution each. The field
+    /// keeps the name the diagnostics schema publishes.
     pub value_groups: u64,
     /// Signature-ring reads.
     pub signatures: u64,
@@ -49,11 +50,12 @@ pub struct Diagnostics {
     pub pack_read_bytes: u64,
     /// Physical body bytes acknowledged by publication.
     pub pack_write_bytes: u64,
-    /// Sealed pooled packs acknowledged by registration.
+    /// Always zero: inode values are stored rows, not packs. Kept for the
+    /// diagnostics schema.
     pub pooled_packs: u64,
-    /// Value catalogue rows acknowledged by registration.
+    /// Inode value rows acknowledged by registration.
     pub pooled_groups: u64,
-    /// Actual reserved directory bytes in acknowledged pooled packs.
+    /// Always zero, as `pooled_packs`.
     pub reserved_directory_bytes: u64,
     /// Reservation calls containing ordinal allocation.
     pub ordinal_reservations: u64,

@@ -17,9 +17,8 @@ pub(crate) fn cost(pack: &PublishedPack) -> Result<(usize, u64), PersistenceErro
 }
 pub(crate) fn validate_batch(batch: &Publication) -> Result<(), PersistenceError> {
     let mut rows = batch.objects.len()
-        + batch.value_groups.len()
+        + batch.inode_values.len()
         + batch.signatures.len()
-        + usize::from(batch.window_start.is_some())
         + usize::from(batch.release_ordinals.is_some());
     let mut bytes = 0u64;
     for pack in &batch.packs {

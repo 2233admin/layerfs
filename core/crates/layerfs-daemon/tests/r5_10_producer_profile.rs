@@ -49,11 +49,10 @@ use layerfs_daemon::store::{ReadLimits, Store, StoreReader};
 use layerfs_history::{CommitRecord, CommitStagedOutcome, HistoryCatalog, WorkspaceId};
 use layerfs_persistence::{Handles, SqlitePersistenceProfile};
 use layerfs_storage::{
-    location::{LocatedObject, SignatureRow},
+    location::{InodeValueRow, LocatedObject, SignatureRow},
     port::{
         AcquiredPackRead, PackPersistence, PackReadPlan, PersistedPack, PersistedPackRead,
         PersistenceError, Publication, Published, PublishedPack, Reserve, Reserved,
-        ValueGroupQuery, ValueGroups,
     },
     ReservationBlocks, Storage, StoragePolicy,
 };
@@ -144,9 +143,9 @@ impl PackPersistence for Watch {
         self.note(Port::ReadScopedPack);
         self.inner.read_scoped_pack(id, plan)
     }
-    fn value_groups(&self, query: ValueGroupQuery<'_>) -> Answer<ValueGroups> {
+    fn inode_values(&self, ordinals: &[u32], out: &mut Vec<InodeValueRow>) -> Answer<()> {
         self.note(Port::ValueGroups);
-        self.inner.value_groups(query)
+        self.inner.inode_values(ordinals, out)
     }
     fn signatures(&self, out: &mut Vec<SignatureRow>) -> Answer<()> {
         self.note(Port::Signatures);

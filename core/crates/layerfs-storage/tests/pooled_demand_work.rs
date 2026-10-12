@@ -55,7 +55,7 @@ fn pooled_demand_reuses_one_checked_physical_reconstruction() {
             .lock()
             .unwrap()
             .iter()
-            .filter(|(name, _)| *name == "value_groups")
+            .filter(|(name, _)| *name == "inode_values")
             .count(),
         1
     );
@@ -70,7 +70,7 @@ fn pooled_demand_reuses_one_checked_physical_reconstruction() {
 }
 
 #[test]
-fn missing_catalogue_still_refuses_canonical_reconstruction() {
+fn a_missing_stored_value_still_refuses_canonical_reconstruction() {
     let metadata = Arc::new(metadata::MemoryMetadata::default());
     let store = Storage::new(metadata.clone()).unwrap();
     let canonical = InodeLeaf {
@@ -91,7 +91,7 @@ fn missing_catalogue_still_refuses_canonical_reconstruction() {
     let save = store.begin_save().unwrap();
     save.accept(object.clone()).unwrap();
     save.finish().unwrap();
-    metadata.state.lock().unwrap().groups.clear();
+    metadata.state.lock().unwrap().values.clear();
     let reading = Storage::new(metadata).unwrap();
     assert!(reading
         .reader()

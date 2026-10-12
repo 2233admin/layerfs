@@ -24,6 +24,8 @@ use std::{fs, path::Path};
 const COMMITS: usize = 12;
 /// Directories of the base, twenty files each.
 const DIRECTORIES: usize = 24;
+/// Stored-value lookups of one Commit of this tree, the first included.
+const VALUE_LOOKUPS: u64 = 10;
 
 fn tree(source: &Path) {
     for directory in 0..DIRECTORIES {
@@ -138,15 +140,21 @@ fn equal_commits_read_the_store_alike_whatever_was_committed_before() {
     for (commit, pair) in reads.windows(2).enumerate() {
         let (earlier, later) = (pair[0], pair[1]);
         assert_eq!((later.policy, later.signatures), (0, 0), "{later:?}");
-        // A later Commit asks the catalogue for the window, for the groups
-        // published since its last Save, and once for each group the Commit
-        // before it published; never for a group it already asked for.
+        // Every Commit looks stored inode values up the same number of
+        // times, once for each inode leaf it reads, whatever was committed
+        // before it; no lookup is made for an earlier Commit's sake.
         assert_eq!(
             later.value_groups,
-            earlier.pooled_groups + 2,
+            earlier.value_groups,
             "commit {}",
             commit + 2
         );
+    }
+    assert_eq!(reads[0].value_groups, VALUE_LOOKUPS);
+    // And every Commit stores exactly one value row for each inode row its
+    // change produced: an unchanged row keeps the ordinal it has.
+    for (commit, (one, row)) in reads.iter().zip(&rows).enumerate() {
+        assert_eq!(one.pooled_groups, row.0 as u64, "commit {}", commit + 1);
     }
     drop(session);
     rig.close(&workspace);

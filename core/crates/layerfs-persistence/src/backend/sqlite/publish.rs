@@ -43,18 +43,7 @@ pub(crate) fn run(tx: &Transaction<'_>, batch: &Publication) -> Result<Published
             );
         }
     }
-    for g in &batch.value_groups {
-        tx.query("INSERT INTO metadata_value_group(first_ordinal,count,pack_id,group_number,digest) VALUES(?1,?2,?3,?4,?5)",vec![Param::I64(i64::from(g.first_ordinal)),Param::I64(g.count as i64),Param::I64(g.pack_id),Param::I64(g.group_number as i64),Param::Bytes(g.digest.as_bytes().to_vec())])?;
-        // Late publications below the retained floor remain immutable/readable,
-        // but cannot rewind or charge the current candidate window. On overflow,
-        // retain the highest published group, regardless of reservation order.
-        // The indexed latest-row lookup runs only in the overflow CASE branch;
-        // no whole catalogue/suffix scan or extra SQL attempt is introduced.
-        tx.query("WITH latest AS (SELECT first_ordinal,count FROM metadata_value_group ORDER BY first_ordinal DESC LIMIT 1) UPDATE store_policy SET metadata_window_start=CASE WHEN ?2<metadata_window_start THEN metadata_window_start WHEN metadata_window_values+?1>131072 THEN max(metadata_window_start,(SELECT first_ordinal FROM latest)) ELSE metadata_window_start END,metadata_window_values=CASE WHEN ?2<metadata_window_start THEN metadata_window_values WHEN metadata_window_values+?1>131072 THEN (SELECT count FROM latest) ELSE metadata_window_values+?1 END WHERE id=1",vec![Param::I64(g.count as i64),Param::I64(i64::from(g.first_ordinal))])?;
-    }
-    if let Some(window) = batch.window_start {
-        tx.query("UPDATE store_policy SET metadata_window_start=max(metadata_window_start,?1) WHERE id=1",vec![Param::I64(i64::from(window))])?;
-    }
+    super::metadata_values::write(tx, &batch.inode_values)?;
     if let Some((first, count)) = batch.release_ordinals {
         tx.query(
             "UPDATE store_policy SET next_ordinal=?1 WHERE id=1 AND next_ordinal=?1+?2",

@@ -1,44 +1,10 @@
 //! Bounded atomic physical persistence; one transaction attempt per operation.
 
 use super::{PackReadPlan, PersistedPack, PersistedPackRead};
-use crate::location::{LocatedObject, ObjectLocation, PackInfo, SignatureRow, ValueGroupRow};
+use crate::location::{InodeValueRow, LocatedObject, ObjectLocation, PackInfo, SignatureRow};
 use crate::policy::StoragePolicy;
 use layerfs_content::ObjectId;
 use std::{fmt, sync::Arc};
-
-/// Bounded catalogue query: distinct ordinals or one chronological page.
-#[derive(Clone, Copy, Debug)]
-pub enum ValueGroupQuery<'a> {
-    /// Covering rows for at most READ_OBJECT_LIMIT ordinals, absent ones omitted.
-    Ordinals(&'a [u32]),
-    /// At most `limit` rows starting at `from`, inclusive.
-    Page {
-        /// First ordinal to visit.
-        from: u32,
-        /// Maximum rows, at most READ_OBJECT_LIMIT.
-        limit: usize,
-    },
-    /// A chronological page strictly below this Save's reserved ordinal block.
-    BeforePage {
-        /// First ordinal to visit, inclusive.
-        from: u32,
-        /// Exclusive upper ordinal, fixed before construction begins.
-        before: u32,
-        /// Maximum rows, at most READ_OBJECT_LIMIT.
-        limit: usize,
-    },
-}
-
-/// One catalogue page or set, with the retained candidate window.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ValueGroups {
-    /// Distinct covering rows, in increasing ordinal order.
-    pub rows: Vec<ValueGroupRow>,
-    /// First ordinal in the retained candidate window.
-    pub window_start: u32,
-    /// Start of the next page, only for a paginated query.
-    pub next: Option<u32>,
-}
 
 /// Requested allocation block. A zero count requests no allocation of that kind.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -74,12 +40,10 @@ pub struct Publication {
     pub packs: Vec<PublishedPack>,
     /// Insert-if-absent locators; the first writer wins.
     pub objects: Vec<ObjectLocation>,
-    /// Sealed pooled catalogue rows.
-    pub value_groups: Vec<ValueGroupRow>,
+    /// New inode values, each under an ordinal of this Save's reserved block.
+    pub inode_values: Vec<InodeValueRow>,
     /// Advisory signature-ring changes published with their objects.
     pub signatures: Vec<SignatureRow>,
-    /// Retained-window advance, when present.
-    pub window_start: Option<u32>,
     /// Unused tail to release, as first ordinal and count.
     pub release_ordinals: Option<(u32, usize)>,
 }
@@ -154,8 +118,14 @@ pub trait PackPersistence: Send + Sync {
     ) -> Result<super::AcquiredPackRead, PersistenceError> {
         Err(PersistenceError::BackendUnavailable)
     }
-    /// Reads one bounded catalogue set or page.
-    fn value_groups(&self, query: ValueGroupQuery<'_>) -> Result<ValueGroups, PersistenceError>;
+    /// Reads the stored inode values of at most READ_OBJECT_LIMIT distinct
+    /// ascending ordinals in one statement execution of one transaction. Rows
+    /// come back in ordinal order; an ordinal with no stored value is omitted.
+    fn inode_values(
+        &self,
+        ordinals: &[u32],
+        out: &mut Vec<InodeValueRow>,
+    ) -> Result<(), PersistenceError>;
     /// Reads at most 8,192 signature rows, in insertion order, once per handle.
     fn signatures(&self, out: &mut Vec<SignatureRow>) -> Result<(), PersistenceError>;
     /// Allocates one block of pack ids and/or pooled ordinals.
@@ -170,7 +140,7 @@ pub trait PackPersistence: Send + Sync {
         Ok((1, pack.body.len() as u64))
     }
     /// Atomically registers at most TRANSACTION_ROW_LIMIT rows and the canonical
-    /// byte budget, with first-wins object insertion. All sealed bodies, pooled
-    /// rows, signature changes and ordinal/window changes belong to this unit.
+    /// byte budget, with first-wins object insertion. All sealed bodies, inode
+    /// value rows, signature changes and ordinal changes belong to this unit.
     fn publish(&self, batch: &Publication) -> Result<Published, PersistenceError>;
 }

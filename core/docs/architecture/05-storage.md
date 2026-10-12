@@ -1,5 +1,47 @@
 # Storage (C2, `layerfs-storage`)
 
+### Issue 320 design B: inode values as stored rows (2026-10-13)
+
+Described against parent `120456785`. This supersedes, for inode values, every
+older section below that speaks of value groups, the ordinal catalogue, the
+retained window or `PoolIndex`; those sections are kept as history.
+
+- **What is stored.** A pooled leaf record is unchanged: a physical body of
+  `(serial, ordinal)` rows, FULL or COPY/INSERT against one direct base, at most
+  the persisted chain depth. The 73 value bytes of each row are one row of the
+  Store table `inode_value(ordinal INTEGER PRIMARY KEY, value BLOB)`. No value
+  pack, value group, catalogue row or window exists. Canonical objects and
+  their identities are unchanged; only the physical encoding moved.
+- **Read.** `PoolReader` rebuilds the bodies of the chain, collects the ordinals
+  of all of them and asks `Source::inode_values` once. `Fetch` forwards that to
+  `PackPersistence::inode_values`: one statement execution in one transaction,
+  the ordinals bound as one JSON parameter of inclusive runs, so values written
+  together are one rowid range scan. No pack is read and nothing is
+  decompressed for values.
+- **Authentication.** Every element of the chain, the requested leaf last, is
+  rebuilt to canonical bytes from those values and checked against its own
+  identity. Canonical bytes contain every value, so a wrong, replaced or absent
+  row can only fail the read (`pooled canonical identity`, `metadata ordinal
+  missing`). There is no per-row digest: the leaf identity is the check.
+- **Save.** A value keeps the ordinal it has in a stored leaf the object names
+  as an advisory predecessor; those leaves are read authenticated, including one
+  too deep to carry another delta. A value none of them holds is looked up in
+  the Save's own memo of the values it assigned (fingerprint candidates, full
+  bytes decide, at most 131,072 entries, dropped whole at the bound) and
+  otherwise takes the next ordinal of the Save's reserved block. New values are
+  published as rows in the Save's publication transactions, before or with the
+  first leaf that names them. A new Workspace's first Commit reads nothing of
+  earlier Commits for this purpose.
+- **Removed.** `encoding/pool/index.rs`, `encoding/pool/value_group.rs`, the
+  handle's catalogue row cache, the pooled tail of the packer, the window fields
+  of `store_policy` and of `Publication`, and `ValueGroupQuery`. The pooled pack
+  lane of the pack grammar is no longer written.
+- **Compatibility.** None with earlier Stores: schema versions 1 to 6 are
+  refused at open by version, table set and schema text.
+- **Not deduplicated.** A value saved again by a later Save that names no base
+  leaf holding it is stored again (about 80 bytes). Within one Save, which is
+  how a tree is first saved, a repeated value is stored once.
+
 ### #307 owning file-length metadata checkpoint
 
 The P5 slice after `bfeec632c` adds a saved-file length API and actual locator

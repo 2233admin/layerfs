@@ -75,8 +75,10 @@ fn earlier_reserved_save_finishes_after_a_higher_block_was_published() {
     next.accept(duplicate_a.clone()).unwrap();
     next.accept(duplicate_b.clone()).unwrap();
     let outcome = next.finish().unwrap();
-    assert_eq!(outcome.pool.new_values, 0);
-    assert_eq!(outcome.pool.reused_values, 2);
+    // Neither leaf names a stored leaf, so this Save cannot know that both
+    // values already have a row: each is stored once more.
+    assert_eq!(outcome.pool.new_values, 2);
+    assert_eq!(outcome.pool.reused_values, 0);
     assert_eq!(
         reader
             .read_objects(&[duplicate_a.id(), duplicate_b.id()])

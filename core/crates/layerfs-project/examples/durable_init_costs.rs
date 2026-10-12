@@ -263,12 +263,13 @@ impl layerfs_storage::port::PackPersistence for PackObserved {
             self.handles.storage.read_scoped_pack(id, plan)
         })
     }
-    fn value_groups(
+    fn inode_values(
         &self,
-        query: layerfs_storage::port::ValueGroupQuery<'_>,
-    ) -> Result<layerfs_storage::port::ValueGroups, layerfs_storage::port::PersistenceError> {
-        self.call("storage.value_groups", || {
-            self.handles.storage.value_groups(query)
+        ordinals: &[u32],
+        out: &mut Vec<layerfs_storage::location::InodeValueRow>,
+    ) -> Result<(), layerfs_storage::port::PersistenceError> {
+        self.call("storage.inode_values", || {
+            self.handles.storage.inode_values(ordinals, out)
         })
     }
     fn signatures(
@@ -296,7 +297,7 @@ impl layerfs_storage::port::PackPersistence for PackObserved {
         &self,
         batch: &layerfs_storage::port::Publication,
     ) -> Result<layerfs_storage::port::Published, layerfs_storage::port::PersistenceError> {
-        eprintln!("PUBLICATION_DIAGNOSTIC packs={} body_bytes={} objects={} value_groups={} signatures={} release={:?}",batch.packs.len(),batch.packs.iter().map(|p|p.body.len()).sum::<usize>(),batch.objects.len(),batch.value_groups.len(),batch.signatures.len(),batch.release_ordinals);
+        eprintln!("PUBLICATION_DIAGNOSTIC packs={} body_bytes={} objects={} inode_values={} signatures={} release={:?}",batch.packs.len(),batch.packs.iter().map(|p|p.body.len()).sum::<usize>(),batch.objects.len(),batch.inode_values.len(),batch.signatures.len(),batch.release_ordinals);
         self.call("storage.publish", || self.handles.storage.publish(batch))
     }
 }

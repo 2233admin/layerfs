@@ -86,9 +86,9 @@ fn fixture(h: &Handles) -> Vec<FinalizedObject> {
 #[test]
 fn declared_layouts_reopen_without_mutating_or_promoting_their_schema() {
     for (layout, version) in [
-        (SqlitePackLayout::Monolithic, 1),
-        (SqlitePackLayout::GroupRows, 2),
-        (SqlitePackLayout::GroupRowsIndexed, 3),
+        (SqlitePackLayout::Monolithic, 7),
+        (SqlitePackLayout::GroupRows, 8),
+        (SqlitePackLayout::GroupRowsIndexed, 9),
     ] {
         let t = support::Temp::new("indexed-legacy-open");
         let path = t.join("db");
@@ -133,7 +133,7 @@ fn declared_layouts_reopen_without_mutating_or_promoting_their_schema() {
                 |r| r.get(0),
             )
             .unwrap();
-        assert_eq!(index, i64::from(version == 3));
+        assert_eq!(index, i64::from(version == 9));
     }
 }
 #[test]

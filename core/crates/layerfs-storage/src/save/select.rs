@@ -68,6 +68,7 @@ impl State<'_> {
             fetch: &self.storage.source,
             packer: &self.packer,
             signatures: &self.signatures,
+            values: &self.values,
         };
         let capacities = self.storage.capacities();
         let mut input = SelectInput {
@@ -84,20 +85,17 @@ impl State<'_> {
             counters: &mut self.delta,
             profile: &mut self.profile,
         };
-        let (record, ordinals) = if object.role() == ObjectRole::InodeLeaf {
+        let record = if object.role() == ObjectRole::InodeLeaf {
             self.select_pooled(object, &advisory)?
         } else {
-            (
-                select(
-                    &mut input,
-                    object.id(),
-                    object.canonical(),
-                    object.role(),
-                    &advisory,
-                    &mut self.compression,
-                )?,
-                Vec::new(),
-            )
+            select(
+                &mut input,
+                object.id(),
+                object.canonical(),
+                object.role(),
+                &advisory,
+                &mut self.compression,
+            )?
         };
         let lane = record.lane;
         let body = assemble::framed_length(std::slice::from_ref(&record.record))?;
@@ -141,7 +139,6 @@ impl State<'_> {
             length: object.canonical_len(),
             references,
             prefix: record.base.is_some(),
-            ordinals,
         });
         if lane == PackLane::Singleton {
             self.packer.seal(

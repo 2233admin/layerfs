@@ -35,17 +35,7 @@ impl State<'_> {
                 .collect::<BTreeSet<_>>()
                 .into_iter()
                 .collect();
-            let ordinals: Vec<_> = self
-                .packer
-                .ready
-                .iter()
-                .flat_map(|p| &p.members)
-                .flat_map(|(_, member)| member.ordinals.iter().copied())
-                .collect::<BTreeSet<_>>()
-                .into_iter()
-                .collect();
             let before = self.packer.ready.len();
-            let pooled = self.packer.close_ordinals(&ordinals)?;
             let forced = self.packer.seal_pending(
                 &needed,
                 &mut self.compression,
@@ -54,7 +44,7 @@ impl State<'_> {
             )?;
             self.storage
                 .source
-                .note(|c| c.forced_seals += (forced + pooled) as u64);
+                .note(|c| c.forced_seals += forced as u64);
             if self.packer.ready.len() == before {
                 break;
             }
@@ -130,40 +120,16 @@ impl State<'_> {
         let mut physical_bytes = 0_u64;
         let mut pack_rows = 0usize;
         let mut packs = BTreeSet::new();
-        let pool_packs: Vec<_> = self
-            .packer
-            .ready
-            .iter()
-            .enumerate()
-            .filter_map(|(index, pack)| (!pack.value_groups.is_empty()).then_some(index))
-            .collect();
-        for index in pool_packs {
-            let pack = &self.packer.ready[index];
-            let (added_rows, size) = self.pack_cost(PublishedPack {
-                info: pack.info,
-                body: pack.body.clone(),
-            })?;
-            let rows = pack.value_groups.len();
-            if !batch.packs.is_empty()
-                && (physical_bytes.saturating_add(size) > limits.transaction_physical_bytes
-                    || pack_rows + batch.value_groups.len() + rows + added_rows
-                        > limits.transaction_rows as usize)
-            {
+        // Every value this Save assigned so far is published before any leaf
+        // that may name it: in this batch or in one acknowledged before it.
+        for (ordinal, value) in std::mem::take(&mut self.values) {
+            if batch.inode_values.len() + 1 > limits.transaction_rows as usize {
                 self.acknowledge(&mut batch, &members)?;
                 batch = Publication::default();
-                canonical_bytes = 0;
-                physical_bytes = 0;
-                pack_rows = 0;
             }
-            let pack = &self.packer.ready[index];
-            batch.packs.push(PublishedPack {
-                info: pack.info,
-                body: pack.body.clone(),
-            });
-            batch.value_groups.extend_from_slice(&pack.value_groups);
-            physical_bytes += size;
-            pack_rows += added_rows;
-            packs.insert(pack.info.pack_id);
+            batch
+                .inode_values
+                .push(crate::location::InodeValueRow { ordinal, value });
         }
         for id in order {
             let (location, _, _) = &members[&id];
@@ -188,7 +154,7 @@ impl State<'_> {
                 && (canonical_bytes.saturating_add(canonical_cost) > limits.transaction_bytes
                     || physical_bytes.saturating_add(body_bytes)
                         > limits.transaction_physical_bytes
-                    || batch.objects.len() + pack_rows + batch.value_groups.len() + added_rows + 1
+                    || batch.objects.len() + pack_rows + batch.inode_values.len() + added_rows + 1
                         > limits.transaction_rows as usize)
             {
                 self.acknowledge(&mut batch, &members)?;
@@ -229,7 +195,7 @@ impl State<'_> {
             {
                 return Err(StorageError::Integrity("signature names absent object"));
             }
-            if batch.objects.len() + pack_rows + batch.value_groups.len() + batch.signatures.len()
+            if batch.objects.len() + pack_rows + batch.inode_values.len() + batch.signatures.len()
                 >= limits.transaction_rows as usize
             {
                 self.acknowledge(&mut batch, &members)?;
@@ -249,6 +215,7 @@ impl State<'_> {
         if !batch.objects.is_empty()
             || !batch.signatures.is_empty()
             || !batch.packs.is_empty()
+            || !batch.inode_values.is_empty()
             || batch.release_ordinals.is_some()
         {
             self.acknowledge(&mut batch, &members)?;
@@ -264,15 +231,6 @@ impl State<'_> {
         batch: &mut Publication,
         members: &BTreeMap<ObjectId, (ObjectLocation, Vec<ObjectId>, bool)>,
     ) -> StorageResult<()> {
-        if let Some(window) = self.window_change {
-            if batch
-                .value_groups
-                .iter()
-                .any(|row| row.first_ordinal == window)
-            {
-                batch.window_start = Some(window);
-            }
-        }
         self.storage.source.note(|c| c.publish += 1);
         let result = {
             let _work = self.storage.work.span(super::Stage::Metadata);
@@ -285,25 +243,8 @@ impl State<'_> {
                 .map(|pack| &pack.body)
                 .map(|body| body.len() as u64)
                 .sum::<u64>();
-            c.pooled_groups += batch.value_groups.len() as u64;
-            for pack in batch.packs.iter().filter(|pack| {
-                batch
-                    .value_groups
-                    .iter()
-                    .any(|row| row.pack_id == pack.info.pack_id)
-            }) {
-                c.pooled_packs += 1;
-                c.reserved_directory_bytes +=
-                    crate::pack::directory_capacity(crate::pack::PackLane::PooledMetadata) as u64;
-                let _ = pack;
-            }
+            c.pooled_groups += batch.inode_values.len() as u64;
         });
-        if batch.window_start.is_some() {
-            self.window_change = None;
-        }
-        if !batch.value_groups.is_empty() {
-            self.storage.source.refresh_window();
-        }
         let mut lost = BTreeSet::new();
         for id in &result.lost {
             if !batch.objects.iter().any(|row| row.object_id == *id) || !lost.insert(*id) {

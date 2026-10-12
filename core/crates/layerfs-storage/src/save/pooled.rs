@@ -1,8 +1,15 @@
-//! Existing pooled value assignment and COPY/INSERT selection through the ports.
+//! Pooled leaf selection: ordinal assignment for inode values and COPY/INSERT
+//! selection against a stored base, through the ports.
+//!
+//! A value keeps the ordinal it already has in a base leaf the caller named.
+//! A value no base holds gets a new ordinal from this Save's reserved block and
+//! becomes one stored row, published before the leaf that names it. Nothing is
+//! rebuilt from history: the only memory of earlier values is the base leaf
+//! itself and a bounded memo of what this Save assigned.
 use super::{source::WaveSource, state::State};
 use crate::{
     encoding::{
-        pool::{delta, leaf, value_group},
+        pool::{delta, leaf},
         EncodedRecord,
     },
     error::{StorageError, StorageResult},
@@ -15,110 +22,98 @@ use layerfs_content::{
     FinalizedObject, ObjectId, ObjectRole,
 };
 use std::collections::{BTreeMap, BTreeSet};
+
+/// One stored leaf the caller named as a likely predecessor.
+struct Base {
+    id: ObjectId,
+    body: Vec<u8>,
+    /// Chain depth and canonical work of reading it, as the depth walk charged.
+    depth: u8,
+    chain_canonical: u64,
+    chain_encoded: u64,
+}
+
+/// Candidate filter of one value: eight bytes of each of its two digests.
+fn fingerprint(value: &[u8; INODE_VALUE_BYTES]) -> u64 {
+    let word = |from: usize| {
+        let mut bytes = [0_u8; 8];
+        bytes.copy_from_slice(&value[from..from + 8]);
+        u64::from_le_bytes(bytes)
+    };
+    word(INODE_VALUE_BYTES - 64) ^ word(INODE_VALUE_BYTES - 32).rotate_left(29) ^ word(0)
+}
+
 impl State<'_> {
-    pub(super) fn sync_pool(&mut self) -> StorageResult<()> {
-        if self.pool_synced {
-            return Ok(());
-        }
-        self.storage.source.refresh_window();
-        let capacities = self.storage.capacities();
-        self.pool_index.sync_before(
-            &self.storage.source,
-            &capacities,
-            i64::MAX,
-            &mut self.pool,
-            &mut self.decode,
-            u32::try_from(self.next_ordinal)
-                .map_err(|_| StorageError::Integrity("metadata ordinal"))?,
-        )?;
-        self.pool_synced = true;
-        Ok(())
-    }
     pub(super) fn select_pooled(
         &mut self,
         object: &FinalizedObject,
         advisory: &[ObjectId],
-    ) -> StorageResult<(EncodedRecord, Vec<u32>)> {
-        self.sync_pool()?;
+    ) -> StorageResult<EncodedRecord> {
         let input = PoolingLeaf::decode(object.canonical())?;
-        let mut seen = BTreeSet::new();
-        let unknown: Vec<_> = input
+        let mut known = BTreeMap::<[u8; INODE_VALUE_BYTES], u32>::new();
+        let bases = self.pooled_bases(advisory, &mut known)?;
+        // Values no base holds may still be ones this Save already assigned,
+        // which is the common case while a whole tree is first saved.
+        let mut candidates = BTreeSet::new();
+        for row in input.rows() {
+            if !known.contains_key(&row.value) {
+                if let Some(ordinal) = self.value_memo.get(&fingerprint(&row.value)) {
+                    candidates.insert(*ordinal);
+                }
+            }
+        }
+        if !candidates.is_empty() {
+            let ordinals: Vec<u32> = candidates.into_iter().collect();
+            let source = WaveSource {
+                fetch: &self.storage.source,
+                packer: &self.packer,
+                signatures: &self.signatures,
+                values: &self.values,
+            };
+            for (ordinal, value) in ordinals.iter().zip(source.inode_values(&ordinals)?) {
+                known.entry(value).or_insert(*ordinal);
+            }
+        }
+        let fresh_count = input
             .rows()
             .iter()
-            .filter_map(|row| seen.insert(row.value).then_some(row.value))
-            .collect();
-        let capacities = self.storage.capacities();
-        let source = WaveSource {
-            fetch: &self.storage.source,
-            packer: &self.packer,
-            signatures: &self.signatures,
-        };
-        let known = self.pool_index.find(
-            &source,
-            &capacities,
-            i64::MAX,
-            &mut self.pool,
-            &mut self.decode,
-            &unknown,
-        )?;
-        let fresh_count = unknown
-            .iter()
-            .filter(|value| !known.contains_key(*value))
-            .count();
+            .filter(|row| !known.contains_key(&row.value))
+            .map(|row| row.value)
+            .collect::<BTreeSet<_>>()
+            .len();
         if fresh_count > 0
             && fresh_count as u64 > self.ordinal_end.saturating_sub(self.next_ordinal)
         {
             self.reserve_ordinals(fresh_count.max(self.storage.reservations.ordinals))?;
         }
-        let mut memo = BTreeMap::<[u8; INODE_VALUE_BYTES], u32>::new();
-        let mut fresh = Vec::new();
         let mut ordinals = Vec::with_capacity(input.rows().len());
-        let mut first = None;
         for row in input.rows() {
-            let ordinal =
-                if let Some(ordinal) = memo.get(&row.value).or_else(|| known.get(&row.value)) {
-                    self.pool_stats.reused_values += 1;
-                    *ordinal
-                } else {
-                    if self.next_ordinal >= self.ordinal_end {
-                        return Err(StorageError::Integrity(
-                            "metadata ordinal reservation exhausted",
-                        ));
-                    }
-                    let ordinal = u32::try_from(self.next_ordinal)
-                        .map_err(|_| StorageError::Integrity("metadata ordinal maximum"))?;
-                    self.next_ordinal += 1;
-                    first.get_or_insert(ordinal);
-                    memo.insert(row.value, ordinal);
-                    fresh.push(row.value);
-                    self.pool_stats.new_values += 1;
-                    ordinal
-                };
+            let ordinal = if let Some(ordinal) = known.get(&row.value) {
+                self.pool_stats.reused_values += 1;
+                *ordinal
+            } else {
+                if self.next_ordinal >= self.ordinal_end {
+                    return Err(StorageError::Integrity(
+                        "metadata ordinal reservation exhausted",
+                    ));
+                }
+                let ordinal = u32::try_from(self.next_ordinal)
+                    .map_err(|_| StorageError::Integrity("metadata ordinal maximum"))?;
+                self.next_ordinal += 1;
+                known.insert(row.value, ordinal);
+                self.values.insert(ordinal, row.value);
+                // The memo is dropped whole at its bound: the cost of a miss is
+                // one more stored row for a repeated value, never a failure.
+                if self.value_memo.len() >= METADATA_INDEX_VALUES {
+                    self.value_memo.clear();
+                }
+                self.value_memo
+                    .entry(fingerprint(&row.value))
+                    .or_insert(ordinal);
+                self.pool_stats.new_values += 1;
+                ordinal
+            };
             ordinals.push(ordinal);
-        }
-        if let Some(first) = first {
-            if self.pool_index.len() + fresh.len() > METADATA_INDEX_VALUES {
-                self.pool_index.advance_window(first);
-                self.window_change = Some(first);
-            }
-            for (number, values) in fresh.chunks(crate::policy::VALUES_PER_GROUP).enumerate() {
-                let first = first
-                    .checked_add((number * crate::policy::VALUES_PER_GROUP) as u32)
-                    .ok_or(StorageError::Integrity("metadata ordinal maximum"))?;
-                let canonical = values
-                    .iter()
-                    .map(value_group::canonical_value)
-                    .collect::<StorageResult<Vec<_>>>()?;
-                let started = std::time::Instant::now();
-                let group = value_group::build(&canonical, &mut self.compression);
-                super::SaveProfile::charge(&mut self.profile.group_ns, started);
-                let group = group?;
-                self.packer
-                    .add_values(first, group, &mut self.next_pack, self.pack_end)?;
-                self.pool.release_packs();
-                self.pool_index.note_group(first, values)?;
-                self.pool_stats.groups += 1;
-            }
         }
         let body = input.body(&ordinals)?;
         let started = std::time::Instant::now();
@@ -126,58 +121,66 @@ impl State<'_> {
         super::SaveProfile::charge(&mut self.profile.full_ns, started);
         let full = full?;
         self.pool_stats.leaves += 1;
-        if let Some((id, base)) =
-            self.pooled_base(advisory, object.canonical_len() as u64, full.len() as u64)?
-        {
+        let capacities = self.storage.capacities();
+        let cap = capacities.metadata_delta_max_depth;
+        for base in &bases {
+            if base.depth >= cap {
+                continue;
+            }
+            if base
+                .chain_canonical
+                .saturating_add(object.canonical_len() as u64)
+                > capacities.metadata_chain_canonical_limit
+                || base.chain_encoded.saturating_add(full.len() as u64)
+                    > capacities.metadata_chain_encoded_limit
+            {
+                self.pool_stats.work_exceeded += 1;
+                continue;
+            }
             self.pool_stats.trials += 1;
             let mut budget = crate::policy::METADATA_MATCH_BUDGET_BYTES;
             let started = std::time::Instant::now();
-            let program = delta::build(id, &base, &body, &mut budget);
+            let program = delta::build(base.id, &base.body, &body, &mut budget);
             super::SaveProfile::charge(&mut self.profile.delta_ns, started);
             if let Some(program) = program? {
                 if program.len() < full.len() {
                     self.pool_stats.delta_leaves += 1;
-                    return Ok((
-                        EncodedRecord {
-                            lane: PackLane::Ordinary,
-                            record: program,
-                            canonical_length: object.canonical_len(),
-                            raw_length: body.len(),
-                            base: Some(id),
-                        },
-                        ordinals,
-                    ));
+                    return Ok(EncodedRecord {
+                        lane: PackLane::Ordinary,
+                        record: program,
+                        canonical_length: object.canonical_len(),
+                        raw_length: body.len(),
+                        base: Some(base.id),
+                    });
                 }
             }
+            break;
         }
         self.pool_stats.full_leaves += 1;
-        Ok((
-            EncodedRecord {
-                lane: PackLane::Ordinary,
-                record: full,
-                canonical_length: object.canonical_len(),
-                raw_length: body.len(),
-                base: None,
-            },
-            ordinals,
-        ))
+        Ok(EncodedRecord {
+            lane: PackLane::Ordinary,
+            record: full,
+            canonical_length: object.canonical_len(),
+            raw_length: body.len(),
+            base: None,
+        })
     }
-    fn pooled_base(
+    /// Reads every stored inode leaf the caller named, authenticated, and adds
+    /// the ordinal of each of its values to `known`. A base too deep to carry
+    /// another delta still gives its rows their ordinals.
+    fn pooled_bases(
         &mut self,
         advisory: &[ObjectId],
-        canonical: u64,
-        encoded: u64,
-    ) -> StorageResult<Option<(ObjectId, Vec<u8>)>> {
+        known: &mut BTreeMap<[u8; INODE_VALUE_BYTES], u32>,
+    ) -> StorageResult<Vec<Base>> {
         let capacities = self.storage.capacities();
-        let cap = capacities.metadata_delta_max_depth;
-        if cap == 0 {
-            return Ok(None);
-        }
         let source = WaveSource {
             fetch: &self.storage.source,
             packer: &self.packer,
             signatures: &self.signatures,
+            values: &self.values,
         };
+        let mut bases = Vec::new();
         for id in advisory {
             let Some(location) = source.location(*id, i64::MAX)? else {
                 continue;
@@ -207,15 +210,7 @@ impl State<'_> {
             else {
                 continue;
             };
-            if cost.depth >= cap {
-                continue;
-            }
-            if cost.canonical.saturating_add(canonical) > capacities.metadata_chain_canonical_limit
-            {
-                self.pool_stats.work_exceeded += 1;
-                continue;
-            }
-            let body = self.pool.leaf_body_with_caches(
+            let (body, canonical) = self.pool.leaf_parts_with_caches(
                 &source,
                 &capacities,
                 i64::MAX,
@@ -226,14 +221,18 @@ impl State<'_> {
                     decoded: &mut self.groups,
                 }),
             )?;
-            if self.pool.chain_encoded_bytes().saturating_add(encoded)
-                > capacities.metadata_chain_encoded_limit
-            {
-                self.pool_stats.work_exceeded += 1;
-                continue;
+            let stored = PoolingLeaf::decode(&canonical)?;
+            for (row, pooled) in stored.rows().iter().zip(leaf::rows(&body)?) {
+                known.entry(row.value).or_insert(pooled.ordinal);
             }
-            return Ok(Some((*id, body)));
+            bases.push(Base {
+                id: *id,
+                body,
+                depth: cost.depth,
+                chain_canonical: cost.canonical,
+                chain_encoded: self.pool.chain_encoded_bytes(),
+            });
         }
-        Ok(None)
+        Ok(bases)
     }
 }

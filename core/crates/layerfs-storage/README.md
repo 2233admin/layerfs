@@ -31,10 +31,10 @@ needs no Workspace, branch, commit, mount or daemon.
 | Records per group | `<= 8191`; `1` in the compact, pooled and singleton lanes |
 | Groups per pack | `<= 256`; `1` in the singleton lane |
 | Chain budgets | `512 KiB` canonical and `256 KiB` encoded per chain, independent of the accepted depths |
-| Metadata pooling | implemented: supplied canonical inode leaves are stored pooled; 165 values per value group, 100 rows per leaf page, ordinals assigned in first-encounter order |
+| Metadata pooling | implemented: supplied canonical inode leaves are stored pooled; each 73-byte inode value is one stored row under its ordinal (issue 320 design B, 2026-10-13), 100 rows per leaf page; a row keeps the ordinal its value has in a named base leaf, a new value takes the next ordinal of the Save's reserved block |
 | Pooled record grammar | `0 | physical body` (FULL) or `1 | base id | output length | instruction count | program` (COPY/INSERT), the ordinary lane's tags read under the `InodeLeaf` role |
 | Pooled chain budgets | depth `0..=50` (own persisted field); 64 KiB canonical and 139 KiB encoded per chain; 8 KiB per pooled record; match budget 128 KiB per trial |
-| Pooled index | Store-owned `BTreeSet<(fingerprint, ordinal)>`, at most 131,072 retained entries, whole-window reset, invalidated on any failed save; the fingerprint filters candidates and full value bytes decide |
+| Value memo | per Save only: `BTreeMap<fingerprint, ordinal>` of the values this Save assigned, at most 131,072 entries, dropped whole at the bound; the fingerprint filters candidates and full value bytes decide. Nothing is rebuilt from history; a value neither in a named base leaf nor in the memo is stored again |
 | Lookup page | `128` identifiers |
 | Pending batch | `512` objects and `512 KiB` canonical bytes |
 | Write transaction | `8191` rows and `4 MiB - 1` canonical bytes, shared across batches |
@@ -42,8 +42,9 @@ needs no Workspace, branch, commit, mount or daemon.
 
 Object roles are persisted as `1..=6` (`WHOLE_FILE`, `CHUNK`, `EXTENT_LEAF`,
 `EXTENT_BRANCH`, `FILE_STATE`, `INODE_LEAF`). `INODE_LEAF` is the pooled metadata
-role: its physical record is the pooled body and its dependencies are resolved
-through authenticated value groups. Producing those leaves is a filesystem-tree
+role: its physical record is the pooled body and its ordinals are resolved
+through stored inode value rows; every element of its chain is rebuilt to
+canonical bytes and checked against its own identity. Producing those leaves is a filesystem-tree
 concern and remains Stage 5 scope; C2 accepts any supplied canonical leaf. `base_object_id` records the direct physical base
 of a PREFIX record and is `NULL` for a FULL record; it is constrained by a direct
 self-FK and by the `objects_bases` index.
@@ -117,8 +118,9 @@ destructor.
 
 - Filesystem trees, runtime adapters and cloud placement are later scope. Payload
   DELTA chains and pooled metadata are implemented.
-- Only the four tables above exist: the pooled catalogue is
-  `metadata_value_groups`, and the values themselves live only inside v6 packs.
+- Inode values are rows of `inode_value` (ordinal, 73 value bytes). The earlier
+  value-group catalogue and v6 value packs are no longer written or read; a
+  Store that has them is refused at open.
 - The retained index window boundary (131,072 entries) and its cold-start replay
   are implemented but not exercised end to end: reaching them needs 131,072 stored
   values. The rule is covered by the catalogue-only replay path and reported as a

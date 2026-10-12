@@ -237,7 +237,7 @@ fn path_demands(store: &Path, shape: Shape, p: usize, root: layerfs_content::Obj
             one.reads.read_bytes,
             one.pooled.chain_edges,
             one.pooled.physical_record_calls,
-            one.pooled.value_group_decodes,
+            one.pooled.value_rows,
         ));
     }
 }

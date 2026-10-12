@@ -86,6 +86,7 @@ impl State<'_> {
                 fetch: &self.storage.source,
                 packer: &self.packer,
                 signatures: &self.signatures,
+                values: &self.values,
             };
             if let Some(location) = view.location(object.id(), i64::MAX)? {
                 if location.role != object.role()
@@ -96,12 +97,8 @@ impl State<'_> {
                 }
                 self.outcome.reused += 1;
             } else {
-                // One new object group and at most one value-group pack per
-                // inode leaf, plus every currently unfinished group/queue.
-                let pooled = usize::from(object.role() == layerfs_content::ObjectRole::InodeLeaf)
-                    * layerfs_content::inode_leaf::MAXIMUM_LEAF_ROWS
-                        .div_ceil(crate::policy::VALUES_PER_GROUP);
-                let required = self.packer.finish_pack_bound() + 1 + pooled;
+                // One new object group plus every currently unfinished group/queue.
+                let required = self.packer.finish_pack_bound() + 1;
                 self.reserve_packs(required)?;
                 self.offer(object)?;
             }
@@ -119,6 +116,7 @@ impl State<'_> {
             fetch: &self.storage.source,
             packer: &self.packer,
             signatures: &self.signatures,
+            values: &self.values,
         };
         self.candidates.flush(&view)?;
         Ok(())
@@ -128,6 +126,7 @@ impl State<'_> {
             fetch: &self.storage.source,
             packer: &self.packer,
             signatures: &self.signatures,
+            values: &self.values,
         };
         let capacities = self.storage.capacities();
         Resolver::new(
