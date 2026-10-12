@@ -143,6 +143,24 @@ impl Daemon {
                 .workspace,
         )
     }
+    /// A Workspace of its own identity for each `number`, for a run that
+    /// binds a new one per Commit.
+    pub fn bind_numbered(&self, branch: BranchId, number: u32) -> Arc<BoundWorkspace> {
+        let mut identity = [0xA5; 32];
+        identity[..4].copy_from_slice(&number.to_be_bytes());
+        Arc::new(
+            self.store
+                .bind(
+                    self.owner.client(),
+                    BindRequest {
+                        branch,
+                        workspace: WorkspaceId::from_authority(identity).unwrap(),
+                    },
+                )
+                .unwrap()
+                .workspace,
+        )
+    }
     pub fn close(&self, workspace: &BoundWorkspace) {
         assert!(matches!(
             drive::job(&self.owner.client(), workspace.route(), Command::Close).result(),

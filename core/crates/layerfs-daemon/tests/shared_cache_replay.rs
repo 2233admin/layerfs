@@ -11,8 +11,11 @@
 //! directories an earlier cycle of the same Workspace created and committed,
 //! and the base tree has one modification time.
 //!
-//! `SHARED_CACHE_REPLAY="workspaces,steps,allowance_kib,mode"` selects a
-//! run; without it a short one runs. Mode 1 first reads the whole base tree
+//! `SHARED_CACHE_REPLAY="workspaces,steps,allowance_kib,mode[,shape]"`
+//! selects a run; without it a short one runs. Shape 1 is the per-tool-call
+//! use: every step binds a new Workspace on the branch head, runs the
+//! command, Commits and closes it, so each command reads what the Commit of
+//! the Workspace before it wrote. Mode 1 first reads the whole base tree
 //! through the shared cache, so that with an allowance that never evicts,
 //! every later miss is an object a Commit wrote. Mode 2 also demands, after
 //! every Commit, each object the new root has that no earlier root had: it
@@ -321,13 +324,18 @@ fn replay_counts_what_commands_and_commits_ask_of_the_shared_cache() {
                 .expect("workspaces,steps,allowance_kib,mode")
         })
         .collect();
-    let [workspaces, steps, allowance_kib, mode] = numbers[..] else {
-        panic!("workspaces,steps,allowance_kib,mode");
+    let (workspaces, steps, allowance_kib, mode, shape) = match numbers[..] {
+        [workspaces, steps, allowance_kib, mode] => (workspaces, steps, allowance_kib, mode, 0),
+        [workspaces, steps, allowance_kib, mode, shape] => {
+            (workspaces, steps, allowance_kib, mode, shape)
+        }
+        _ => panic!("workspaces,steps,allowance_kib,mode[,shape]"),
     };
+    let per_call = shape == 1;
     let allowance = allowance_kib * 1024;
     let tree = Tree::new("shared-cache-replay", workspaces, tree);
     let daemon = tree.daemon(4, allowance);
-    let bound: Vec<_> = (0..workspaces)
+    let mut bound: Vec<_> = (0..workspaces)
         .map(|w| daemon.bind(tree.branches[w], 20 + w as u8))
         .collect();
     let mounted = seen(&daemon);
@@ -352,14 +360,32 @@ fn replay_counts_what_commands_and_commits_ask_of_the_shared_cache() {
         phase(&before, &seen(&daemon), true)
     };
 
+    if per_call {
+        for workspace in &bound {
+            daemon.close(workspace);
+        }
+    }
     let mut clock = 1_800_000_000;
-    let (mut commands, mut commits, mut seeds) =
-        (Phase::default(), Phase::default(), Phase::default());
+    let (mut commands, mut commits, mut seeds, mut binds) = (
+        Phase::default(),
+        Phase::default(),
+        Phase::default(),
+        Phase::default(),
+    );
     let mut by_stage = [(Phase::default(), Phase::default()); STAGES];
     let (mut operations, mut seeded, mut seeded_bytes) = (0, 0_usize, 0_usize);
     let mut filled_at = None;
     for step in 0..steps {
-        for (w, workspace) in bound.iter().enumerate() {
+        for w in 0..workspaces {
+            if per_call {
+                // The Workspace of the step before is closed; this one binds
+                // the head its Commit published.
+                let before = seen(&daemon);
+                let number = (step * workspaces + w) as u32;
+                bound[w] = daemon.bind_numbered(tree.branches[w], number);
+                binds.add(phase(&before, &seen(&daemon), true));
+            }
+            let workspace = &bound[w];
             let before = seen(&daemon);
             operations += command(workspace, &mut clock, w, step);
             let between = seen(&daemon);
@@ -391,13 +417,21 @@ fn replay_counts_what_commands_and_commits_ask_of_the_shared_cache() {
             if filled_at.is_none() && daemon.cache().evictions > 0 {
                 filled_at = Some((step + 1, w));
             }
+            if per_call {
+                daemon.close(workspace);
+            }
         }
     }
     let end = seen(&daemon);
     evidence(format_args!(
-        "REPLAY workspaces={workspaces} steps={steps} commits={} operations={operations} allowance={allowance} mode={mode}",
+        "REPLAY workspaces={workspaces} steps={steps} commits={} operations={operations} allowance={allowance} mode={mode} shape={shape}",
         steps * workspaces
     ));
+    let mut total = binds;
+    total.add(commands);
+    total.add(commits);
+    evidence(format_args!("  binds:    {binds}"));
+    evidence(format_args!("  total:    {total}"));
     evidence(format_args!(
         "  bind: hits={} misses={}",
         mounted.0.cache_hits, mounted.0.cache_misses
@@ -427,10 +461,13 @@ fn replay_counts_what_commands_and_commits_ask_of_the_shared_cache() {
 
     // Each Workspace's live view is its own published root, read
     // independently from the Store port through a cache of the test's own.
-    for (w, workspace) in bound.iter().enumerate() {
+    for w in 0..workspaces {
+        if per_call {
+            bound[w] = daemon.bind_numbered(tree.branches[w], u32::MAX - w as u32);
+        }
         let expected = daemon.expected(&daemon.snapshot(tree.branches[w]));
-        model::assert_same(&expected, &drive::live(workspace), "replayed Workspace");
-        daemon.close(workspace);
+        model::assert_same(&expected, &drive::live(&bound[w]), "replayed Workspace");
+        daemon.close(&bound[w]);
     }
     assert!(daemon.cache().charged_cache_bytes <= allowance);
     drop(bound);
