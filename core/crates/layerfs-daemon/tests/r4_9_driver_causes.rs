@@ -582,8 +582,9 @@ fn slot_of(call: Call, nth: u64, parent_points: u64) -> Kept {
 
 /// The unfailed attempt of the scenario through the same closure: its call
 /// counts, and how many inode points belong to the name pass.
-fn counted() -> (BTreeMap<Call, u64>, u64) {
-    let rig = Rig::new("r4-9-count", tree);
+fn counted(how: How) -> (BTreeMap<Call, u64>, u64) {
+    // Both sweeps run in one process: a shared label would race on the fixture directory.
+    let rig = Rig::new(&format!("r4-9-count-{how:?}"), tree);
     let first = rig.bind(1);
     let mut session = Session::new(&first, rig.base.clone());
     scenario(&mut session);
@@ -822,7 +823,7 @@ fn failed(call: Call, nth: u64, how: How, parent_points: u64) {
 /// The first call of every kind, and the inode point at the boundary of its
 /// two callers.
 fn sweep(how: How) {
-    let (counts, parent_points) = counted();
+    let (counts, parent_points) = counted(how);
     let mut cases = 0;
     for call in CALLS {
         let mut selected = vec![0];

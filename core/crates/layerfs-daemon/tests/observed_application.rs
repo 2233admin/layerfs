@@ -662,15 +662,16 @@ fn configured_serial_low_water_reaches_a_mounted_create_on_both_startup_routes()
         );
         seen.push((route, low_water, counts));
     }
-    // The first create finds no range and reserves. Below 1,023 the second
-    // makes the one early reservation and the third makes none; with 0 no
-    // create inside the window reserves.
+    // The mount reserves the first window before readiness, so the first
+    // create reserves nothing. Below 1,023 the second makes the one early
+    // reservation and the third makes none; with 0 no create inside the
+    // window reserves.
     assert_eq!(
         seen,
         [
-            ("install", LOW, vec![0, 1, 2, 2]),
-            ("existing", LOW, vec![0, 1, 2, 2]),
-            ("existing", 0, vec![0, 1, 1, 1]),
+            ("install", LOW, vec![1, 1, 2, 2]),
+            ("existing", LOW, vec![1, 1, 2, 2]),
+            ("existing", 0, vec![1, 1, 1, 1]),
         ]
     );
     fs::remove_dir(&mounts).unwrap();
