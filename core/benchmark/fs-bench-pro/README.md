@@ -67,10 +67,13 @@ sample Store; the live daemon data path stays in-process in the shared volume.
 Ordinary resource guards remain root observers in the exact owned daemon
 container, separate from the product's admitted nonroot Exec. The controller
 uses the same Engine Exec create/start/inspect operations through a private
-Python host child instead of starting Docker CLI. The fixed observer script,
+synchronous Python calls in the existing controller, without a host helper child. The fixed observer script,
 protected Store path, actual cgroup fields, every pre-/post-Commit check and
-frozen apparent/allocated/OOM/swap limits remain unchanged. Existing child
-attempt/completion and stdout/stderr artifacts describe the actual host argv.
+frozen apparent/allocated/OOM/swap limits remain unchanged. Append-only attempt/completion and stdout/stderr artifacts describe the actual
+remote observer argv; host PID/group and unknown remote exit remain explicit
+null. One absolute allowance starts before evidence setup and covers all three
+exchanges and output close. Post-write checks refuse late completion; only an
+owned provisional success link is revoked, retaining its exact attempt bytes.
 An acknowledged remote Exec ID is retained on failure; closing a local socket
 or killing the host child does not establish remote cancellation. No request
 is retried and a running/unavailable/nonzero terminal observation fails.

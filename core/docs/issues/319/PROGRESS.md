@@ -1731,3 +1731,57 @@ RuntimeClippy refusals remain their originalqualification.
 [Count evidence](checks/history-guard-count.json) pins the logs andold step
 operands. Production LOC:82362 ->82362 (delta+0), exactfirstparent/staged
 pinnedcounter; reference absent (retired R9c; last counted65,417 at tree498dd1917812).
+
+
+History stage p319n14h at10e4f3713: sealed9 binaries,34 selections attempted
+once.33 new receipts:27 functional PASS/proof PASS (26 INELIGIBLE,1 overall
+PASS),6 retained500MiB Native/export timer FAIL. Init correctly refuses the
+unchanged treatment claim before product execution: inner exit1/no receipt,
+outer driver exit0 is not PASS. Reuse p319n14e Init atf3a699c4d explicitly,
+functional/proof PASS/INELIGIBLE; source product/runtime/four Init execution
+files unchanged. No retry or new sample. Original/test payload cleanup retains
+owned manifests, protected external resources unchanged.46 portable CSVs retain
+every field except exact local path substitutions. Clean identity Engine331
+tests OK(skipped3),23.783s, with all binary fixtures pinned.
+
+All five500-step histories complete under inherited210s, functional/proof
+PASS/INELIGIBLE. Distributed controller166.620083708s; step walls166.491500164s
+including guards137.345503591s versus phase12 guards127.796297718s. The CLI
+count prediction succeeds (1000 ->0) but observer wall increases9.549205873s:
+no claimed speedup.1000 real Python host startups and1000 root Engine Execs
+remain;500 SDK commands,500 Commits,1 terminal Status unchanged. Product
+request3443/owner45111/statement209694 totals unchanged. SQL nested profiles
+do not establish a SQLite cause. Complete proof500 Commits/8roots/2672paths/
+8388608bytes and actual Store8457888logical/8458240allocated bytes retained.
+[Stage evidence](checks/history-guard-stage.json) preserves exact receipts and
+CSV hashes. The next cause is1000 redundant host helper startups; predict0
+while keeping all1000 synchronous root Engine observations, same five values,
+root script, unchanged guard/210s stage deadlines and bounds. Preserve generic
+child-command custody for all other consumers; the guard's no-child custody
+will be explicit null PID/group, never an invented controller child identity.
+External count test must first fail1 host launch versus expected0.
+
+
+Phase14 histories, next cause: each of1000 root resource guards still starts
+one host Python child. External red observes1 versus predicted0, with the
+original5values andPASS completion unchanged. Synchronous existing controller
+transport now starts0 children;1/4guard cost test observes exactly3/12 Engine
+requests, original root/user/body/container, five values andPASS attempt1/exit0.
+17count/protocol tests PASS, including known nonzero/unknown exit, partial
+stdout, setup/three exchange deadlines, output-close and receipt-write errors,
+late completion write/link. No product capability/API/control/schema/options/
+observation/dependency change. Generic receipts.command remains unchanged.
+
+No-child custody records null host PID/group, remote argv and unknown exit,
+never a fictional helper identity. Shared absolute deadline starts before
+evidence setup, covers exchanges and output close. Disk writes are not
+interruptible: successful attempt bytes remain append-only, post-write/link
+checks refuse late success and retain FAIL effective completion. Only a link
+created by this invocation can be revoked; no remote cancel/retry/inspection
+after failed transport. All1000 root observations and500workload commands/
+500Commits/1Status remain predicted, unchanged210s/individual allowances.
+fmt/boundary686/selftests50 PASS; Clippy N/A(no Rust source changed), inherited
+refusals unchanged. Covering Engine check follows cleancommit.
+[Count evidence](checks/history-direct-count.json) pins red/green logs.
+Production LOC:82362 ->82362 (delta+0), exactparent/staged pinnedcounter;
+reference absent (retired R9c; last counted65,417 at tree498dd1917812).

@@ -3,11 +3,14 @@ import http.client
 import io
 import json
 import math
+import os
+from pathlib import Path
 import re
 import socket
 import struct
-import sys
 import time
+
+from engine import receipts
 
 BODY = """import json
 from pathlib import Path
@@ -149,11 +152,12 @@ def streams(response, deadline, stdout, stderr):
             raise RuntimeError('guard Engine system-error stream')
 
 
-def execute(path, container, seconds, stdout, stderr):
+def execute(path, container, seconds, stdout, stderr, *, deadline=None):
     if not re.fullmatch('[0-9a-f]{64}', container):
         raise ValueError('exact owned guard container ID required')
-    deadline = Deadline(seconds)
+    deadline = Deadline(seconds) if deadline is None else deadline
     acknowledged = None
+    terminal_exit = None
     try:
         body = {'User': '0:0', 'Cmd': ['python3', '-B', '-c', BODY],
                 'AttachStdout': True, 'AttachStderr': True, 'AttachStdin': False,
@@ -170,10 +174,16 @@ def execute(path, container, seconds, stdout, stderr):
         if (observed.get('ID') != acknowledged or observed.get('ContainerID') != container
                 or observed.get('Running') is not False or type(observed.get('ExitCode')) is not int):
             raise ValueError('guard Engine exact terminal identity/exit unavailable')
+        terminal_exit = observed['ExitCode']
         if observed['ExitCode'] != 0:
-            raise RuntimeError(f'original root resource guard exit {observed["ExitCode"]}')
+            refused = RuntimeError(f'original root resource guard exit {observed["ExitCode"]}')
+            refused.guard_exit_code = observed["ExitCode"]
+            raise refused
         deadline.left()
+        return 0
     except BaseException as original:
+        if terminal_exit is not None:
+            original.guard_exit_code = terminal_exit
         try:
             stderr.write(f'guard Exec acknowledgement={acknowledged}; remote cancellation NOT_ESTABLISHED\n'.encode())
             stderr.flush()
@@ -182,5 +192,78 @@ def execute(path, container, seconds, stdout, stderr):
         raise
 
 
-if __name__ == '__main__':
-    execute(sys.argv[1], sys.argv[2], float(sys.argv[3]), sys.stdout.buffer, sys.stderr.buffer)
+def command(path, container, folder, label, seconds):
+    """One synchronous root observation; null host-child custody is deliberate.
+
+    The same absolute allowance covers evidence setup, transport and close.
+    Disk writes are not interruptible: post-write checks refuse late success.
+    Only our provisional completion link may be removed; attempt bytes remain.
+    """
+    started = time.monotonic_ns()
+    deadline = Deadline(seconds)
+    folder = Path(folder)
+    record = {'argv': ['python3', '-B', '-c', BODY], 'cwd': None, 'attempts': 1,
+              'wall_stop_seconds': seconds, 'status': 'ATTEMPT_DECLARED',
+              'stdout': str(folder / (label + '.stdout')),
+              'stderr': str(folder / (label + '.stderr')), 'exit_code': None}
+    original = None
+    outputs = []
+    completion = folder / (label + '.completion.json')
+    def fail(error):
+        nonlocal original
+        if original is None:
+            original = error
+            record.update(status='FAIL', original_failure_type=type(error).__name__,
+                          original_failure=str(error), timeout=isinstance(error, TimeoutError),
+                          remote_cancellation='NOT_ESTABLISHED; retain exact Docker resources')
+        else:
+            original.independent_receipt_failure = error
+    try:
+        deadline.left()
+        folder.mkdir(parents=True, exist_ok=True)
+        receipts.write_new(folder / (label + '.attempt.json'), record)
+        deadline.left()
+        receipts.write_new(folder / (label + '.host-custody.json'), {
+            'host_pid': None, 'host_group': None, 'remote_cancellation': 'NOT_ESTABLISHED'})
+        deadline.left()
+        for field in ('stdout', 'stderr'):
+            outputs.append(Path(record[field]).open('xb'))
+            deadline.left()
+        record['exit_code'] = execute(path, container, seconds, *outputs, deadline=deadline)
+        deadline.left()
+        record['status'] = 'PASS'
+    except BaseException as error:
+        record['exit_code'] = getattr(error, 'guard_exit_code', record['exit_code'])
+        fail(error)
+    finally:
+        for output in reversed(outputs):
+            try:
+                output.close()
+                deadline.left()
+            except BaseException as closing:
+                fail(closing)
+        record['complete_wall_ns'] = time.monotonic_ns() - started
+        try:
+            if original is not None:
+                receipts.write_new(completion, record)
+            else:
+                # Exact attempt is append-only; the success link requires a post-write check.
+                attempt = folder / (label + '.completion.attempt.json')
+                receipts.write_new(attempt, record)
+                deadline.left()
+                os.link(attempt, completion)
+                try:
+                    deadline.left()
+                except BaseException:
+                    completion.unlink()  # Only the link created above, never another receipt.
+                    raise
+        except BaseException as writing:
+            fail(writing)
+            if not completion.exists():
+                try:
+                    receipts.write_new(completion, record)
+                except BaseException as recording:
+                    original.independent_receipt_failure = recording
+    if original is not None:
+        raise original
+    return record

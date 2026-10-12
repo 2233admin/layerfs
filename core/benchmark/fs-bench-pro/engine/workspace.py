@@ -652,8 +652,8 @@ def ordinary_resource_values(row, before=None):
 
 def ordinary_resource_guard(runtime, build, output, label, before=None, seconds=15):
     """Observe only the actual sample's backing stat/cgroup outside product time."""
-    attempted = receipts.command([sys.executable, '-B', str(Path(__file__).with_name('resource_exec.py')),
-                                  build['socket'], runtime.container, str(seconds)], output, label, seconds)
+    from . import resource_exec
+    attempted = resource_exec.command(build['socket'], runtime.container, output, label, seconds)
     row = json.loads(Path(attempted["stdout"]).read_text())
     row["scope"] = "original 4GiB main Store apparent/allocated bound; actual own container OOM/swap; retired host Store RSS/physical-spool peak not asserted"
     return ordinary_resource_values(row, before)
