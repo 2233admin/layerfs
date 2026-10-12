@@ -2171,3 +2171,16 @@ Harness initial invocation lacked native binaries and worker env; retained faile
 remaining checks, sealed build, Linux tests and exact count gate follow this commit.
 Receipts: narrow-final-build, narrow-final-clippy-host, narrow-tests-host,
 narrow-remaining-tests-host, narrow-host-shift1m/shift64k/patterns-remaining logs.
+
+
+### SDK follow-up: Linux caller import after install folding
+
+Cause: the Linux-only observation test no longer calls ProjectApi::install,
+so its ProjectApi import is unused and warning-denying Linux Clippy refuses it.
+Change: remove that import; no production or test behavior changes.
+Commit: this caller correction. Prior Clippy refusal and the 118 s compile-only
+stop stay retained; daemon test compilation is split into bounded target groups.
+SDK/daemon/runtime host targets compile; SDK tests and Linux observation tests
+follow at the corrected identity, then the existing count gate.
+Receipts: narrow-linux-clippy, narrow-linux-daemon-tests-a-covered-build and
+narrow-linux-daemon-a-eight/b1/b2/b3/b4-build logs. No case has been sampled yet.
