@@ -56,7 +56,7 @@ pub fn record_width(lane: PackLane, base: Option<ObjectId>, frame_length: usize)
     match lane {
         PackLane::WholeFile => 1 + 8 + usize::from(base.is_some()) * ID_BYTES + frame_length,
         PackLane::Native => 1 + 4 + usize::from(base.is_some()) * ID_BYTES + frame_length,
-        PackLane::Ordinary | PackLane::PooledMetadata | PackLane::Singleton => {
+        PackLane::Ordinary | PackLane::Singleton => {
             1 + 8 + usize::from(base.is_some()) * ID_BYTES + frame_length
         }
     }
@@ -110,10 +110,7 @@ pub fn encode_tagged(
     let mut record = Vec::with_capacity(record_width(lane, base, frame.len()));
     record.push(tag);
     match lane {
-        PackLane::WholeFile
-        | PackLane::Ordinary
-        | PackLane::PooledMetadata
-        | PackLane::Singleton => {
+        PackLane::WholeFile | PackLane::Ordinary | PackLane::Singleton => {
             record.extend_from_slice(
                 &u32::try_from(raw_length)
                     .map_err(|_| StorageError::Integrity("record raw length"))?
@@ -153,7 +150,7 @@ pub fn parse(
         PackLane::WholeFile => parse_compact(record, canonical_length),
         PackLane::Native => parse_native(record),
         PackLane::Ordinary => parse_ordinary(record),
-        PackLane::PooledMetadata | PackLane::Singleton => parse_framed(record),
+        PackLane::Singleton => parse_framed(record),
     }
 }
 

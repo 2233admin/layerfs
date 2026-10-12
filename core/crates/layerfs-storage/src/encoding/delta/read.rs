@@ -477,9 +477,6 @@ pub fn stored_base(
                 location.role,
             )
         }
-        PackLane::PooledMetadata => Err(StorageError::Integrity(
-            "pooled metadata locator has no object record",
-        )),
     }
 }
 

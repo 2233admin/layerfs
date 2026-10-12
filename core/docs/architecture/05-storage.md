@@ -35,7 +35,9 @@ retained window or `PoolIndex`; those sections are kept as history.
 - **Removed.** `encoding/pool/index.rs`, `encoding/pool/value_group.rs`, the
   handle's catalogue row cache, the pooled tail of the packer, the window fields
   of `store_policy` and of `Publication`, and `ValueGroupQuery`. The pooled pack
-  lane of the pack grammar is no longer written.
+  lane (`PackLane::PooledMetadata`, header versions 12, 21 and 22) and its
+  limits are removed from the pack grammar: such a pack is refused as an
+  unsupported framing, and four lanes remain.
 - **Compatibility.** None with earlier Stores: schema versions 1 to 6 are
   refused at open by version, table set and schema text.
 - **Not deduplicated.** A value saved again by a later Save that names no base

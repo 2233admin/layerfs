@@ -1,12 +1,12 @@
 //! One Storage producer handle of a bound Workspace, kept between its Commits.
 //!
 //! A Storage handle owns the bounded indexes a completed Save seeds: located
-//! objects, value-group rows, the pooled-value candidates and the content
-//! hints. A handle made for each Commit read all of them again, so a Commit
-//! paid one catalogue row and one pack read for every pooled group published
-//! before it. The handle of a Commit that completed is kept and its next Save
-//! reads only what was published since. A Commit that did not complete drops
-//! its handle, and the next one starts from the Store as before.
+//! objects, pack descriptors and the content hints. A handle made for each
+//! Commit reads the policy row and the content-hint table again; the handle
+//! of a Commit that completed is kept and its next Save does not. A Commit
+//! that did not complete drops its handle, and the next one starts from the
+//! Store as before. Inode values need no such memory: they are stored rows,
+//! and a Save reads only those of the leaves its change reaches.
 use super::Store;
 use layerfs_storage::{Diagnostics, Storage, StorageResult};
 use std::sync::Mutex;

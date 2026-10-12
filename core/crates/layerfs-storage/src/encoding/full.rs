@@ -152,9 +152,6 @@ fn encode_representation(
                 base: None,
             })
         }
-        PackLane::PooledMetadata => Err(StorageError::Integrity(
-            "pooled metadata lane is encoded by its own module",
-        )),
         PackLane::WholeFile | PackLane::Native => {
             let raw = raw_payload(canonical, role)?;
             let profile = match PackLane::for_role(role) {
@@ -297,7 +294,6 @@ pub fn lane_body_limit(lane: PackLane, capacities: &StorageCapacities) -> usize 
         PackLane::WholeFile => capacities.pack_limit,
         PackLane::Native => capacities.group_limit,
         PackLane::Ordinary => capacities.group_limit,
-        PackLane::PooledMetadata => capacities.metadata_group_limit,
         PackLane::Singleton => capacities.singleton_pack_limit,
     }
 }

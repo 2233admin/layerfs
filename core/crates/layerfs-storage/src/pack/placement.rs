@@ -206,13 +206,10 @@ impl LanePlacement {
                 records,
             });
         }
-        let keep_open = lane == PackLane::PooledMetadata;
         if let Some(entry) = pending {
-            writes.push(self.increment(lane, entry, !keep_open)?);
+            writes.push(self.increment(lane, entry, true)?);
         }
-        if !keep_open {
-            self.open = None;
-        }
+        self.open = None;
         Ok(writes)
     }
 

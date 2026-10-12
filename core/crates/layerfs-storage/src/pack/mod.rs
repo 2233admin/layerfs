@@ -14,8 +14,7 @@ pub use layout::{
     append_fits, assembled_length, body_area_offset, declared_length, directory_capacity,
     directory_entry_len, group_view, pack_capacity, parse_header, EncodedGroup, GroupCodec,
     GroupView, PackHeader, PackLane, DIRECTORY_ENTRY_LEN, HEADER_LEN, PACK_MAGIC, VERSION_NATIVE,
-    VERSION_NATIVE_STORED, VERSION_ORDINARY, VERSION_POOLED_METADATA, VERSION_SINGLETON,
-    VERSION_SINGLETON_STORED, VERSION_WHOLE_FILE, VERSION_WHOLE_FILE_STORED,
-    WHOLE_FILE_COMPACT_DROP, WHOLE_FILE_ENTRY_LEN,
+    VERSION_NATIVE_STORED, VERSION_ORDINARY, VERSION_SINGLETON, VERSION_SINGLETON_STORED,
+    VERSION_WHOLE_FILE, VERSION_WHOLE_FILE_STORED, WHOLE_FILE_COMPACT_DROP, WHOLE_FILE_ENTRY_LEN,
 };
 pub use placement::{LanePlacement, PlacedGroup, SelectedWrite};

@@ -43,8 +43,8 @@ pub(super) struct Sealed {
     pub(super) members: Vec<(ObjectLocation, Member)>,
 }
 pub(super) struct Packer {
-    pub(super) groups: [Group; 5],
-    queued: [Queue; 5],
+    pub(super) groups: [Group; 4],
+    queued: [Queue; 4],
     pub(super) ready: Vec<Sealed>,
     pub(super) group_ns: u64,
 }

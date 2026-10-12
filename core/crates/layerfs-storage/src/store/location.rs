@@ -55,7 +55,7 @@ impl PackDomain {
     pub const fn for_lane(lane: crate::pack::layout::PackLane) -> Self {
         use crate::pack::layout::PackLane;
         match lane {
-            PackLane::Ordinary | PackLane::PooledMetadata => Self::Metadata,
+            PackLane::Ordinary => Self::Metadata,
             PackLane::Native | PackLane::WholeFile | PackLane::Singleton => Self::Payload,
         }
     }

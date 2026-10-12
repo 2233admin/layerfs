@@ -24,11 +24,11 @@ needs no Workspace, branch, commit, mount or daemon.
 | Persisted policy | one row, `id = 1`, twenty-one columns: cutoff, three depths, the publication watermark |
 | Accepted policy | cutoff a power of two in `131072..=1048576`; each depth `0..=50`; defaults 128 KiB / whole-file 8 / chunk 4 / pooled metadata 8 |
 | Encoding | **FULL and PREFIX** payload records. One PREFIX trial per object against at most one eligible candidate; the complete framed record cost decides |
-| Pack framings | v1 ordinary groups, v2 native chunk records, v4 compact whole-file records, v6 pooled metadata groups, v7 singleton packs |
+| Pack framings | v1 ordinary groups, v2 native chunk records, v4 compact whole-file records, v7 singleton packs; the pooled value-group framing (v6, header versions 12, 21 and 22) is removed and refused |
 | Rejected framings | v3, v5 and unknown versions fail explicitly; no trial decoding |
 | Pack size | `<= 256 KiB` for v1/v2/v4/v6, `<= 16 MiB + 4096` for the single-group v7 lane |
 | Group body | `<= 64 KiB` (v1/v2/v4), `<= 16 KiB` (v6) |
-| Records per group | `<= 8191`; `1` in the compact, pooled and singleton lanes |
+| Records per group | `<= 8191`; `1` in the compact and singleton lanes |
 | Groups per pack | `<= 256`; `1` in the singleton lane |
 | Chain budgets | `512 KiB` canonical and `256 KiB` encoded per chain, independent of the accepted depths |
 | Metadata pooling | implemented: supplied canonical inode leaves are stored pooled; each 73-byte inode value is one stored row under its ordinal (issue 320 design B, 2026-10-13), 100 rows per leaf page; a row keeps the ordinal its value has in a named base leaf, a new value takes the next ordinal of the Save's reserved block |
