@@ -129,6 +129,15 @@ missing half, wrong key/serial, malformed version or Count/Effect disagreement
 with actual sealed fresh facts refuses before further requests. Touched
 cardinality is a checked scalar of successful row insertions, not a resident set.
 
+A touched-row pass (the release seed and the final rows) takes its rows in
+waves of at most the base read batch (never above 64) and reads a wave's rows
+together: fresh member, row and touched witness of at most 21 serials are one
+job of at most 63 keys (`IndexedReducer::required_many`,
+`references/indexed_rows.rs` `RowCursor::wave`). Every serial of the job gets
+the same checks a single row read makes, in serial order. No row beyond the
+wave is read, so the writes a caller makes between waves are never behind a
+row already in hand.
+
 The raw port's additive `keys_after(kind, after)` returns at most64 complete keys,
 strictly greater than the actual full32-byte boundary. None includes all-zero
 identities. Unsupported providers refuse explicitly. Content checks returned

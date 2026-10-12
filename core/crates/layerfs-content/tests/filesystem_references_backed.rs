@@ -269,6 +269,50 @@ fn wide_multiwindow_direct_rows_remove_the_reducer_quota_and_match_canonical_roo
 }
 
 #[test]
+fn a_touched_row_pass_reads_a_wave_of_rows_in_jobs_of_twenty_one_and_matches_canonical_roots() {
+    // One hundred files leave a directory: a hundred and one touched rows, in
+    // key windows of 64 and 37. Each of the two passes takes them in waves of
+    // the default 32 rows and reads a wave three records a row, at most 21
+    // rows to a job: 21 + 11, 21 + 11, then 21 + 11 and 5. Seven jobs a pass
+    // where each row was its own job before.
+    let count = 100u64;
+    let directories = [DirectoryUpdate {
+        parent: 1,
+        changes: (2..count + 2)
+            .map(|serial| (name_of(&format!("f{serial:05}")), Some(serial)))
+            .collect(),
+    }];
+    let mut kinds = vec![(1, InodeKind::Directory)];
+    kinds.extend((2..count + 2).map(|serial| (serial, InodeKind::RegularFile)));
+    let (store, original) = base(&directories, &kinds);
+    let edits = [DirectoryUpdate {
+        parent: 1,
+        changes: directories[0]
+            .changes
+            .iter()
+            .map(|(name, _)| (name.clone(), None))
+            .collect(),
+    }];
+    let input = update_input(&original, &edits, &[], &[], FilesystemResources::default());
+    let mut records = Records::default();
+    let (actual, _, _) = backed(&store, &input, &mut records, false, None);
+    let actual = actual.unwrap();
+    let mut expected_store = TreeStore::new();
+    let expected = update_filesystem(
+        &mut FilesystemObjects::new(&store, &mut expected_store),
+        &input,
+        None,
+    )
+    .unwrap();
+    assert_eq!((actual.root, actual.value), (expected.root, expected.value));
+    assert_eq!(actual.counters.references.serials_scanned, count + 1);
+    assert_eq!(actual.counters.references.final_removals, count);
+    assert_eq!(records.maximum_read_keys, 63);
+    assert_eq!(records.wide_reads, 14, "seven jobs of several rows a pass");
+    assert_eq!(records.after_failure, 0);
+}
+
+#[test]
 fn release_creates_lower_serial_rows_repeated_counts_and_surviving_aliases_without_losing_final_rows(
 ) {
     let directories = [

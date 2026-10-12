@@ -60,13 +60,26 @@ impl<'a> SerialState<'a> {
         kinds: [u32; N],
         serial: u64,
     ) -> ContentResult<[Option<Vec<u8>>; N]> {
+        self.read_keys(&kinds.map(|kind| codec::key(kind, serial)))?
+            .try_into()
+            .map_err(|_| ContentError::InvalidRecord("filesystem backing value window"))
+    }
+    /// The raw values of at most 64 keys, in the order asked, as one backing
+    /// job. Every key is answered and every value is inside the value window.
+    pub(crate) fn read_keys(
+        &self,
+        keys: &[crate::ConstructionRecordKey],
+    ) -> ContentResult<Vec<Option<Vec<u8>>>> {
         let backing = self
             .backing
             .as_ref()
             .ok_or(ContentError::InvalidRecord("filesystem backing mode"))?;
-        let keys = kinds.map(|kind| codec::key(kind, serial));
-        let values = backing.borrow_mut().get_many(&keys)?;
-        if values.capacity() > 64
+        if keys.len() > 64 {
+            return Err(ContentError::InvalidRecord("filesystem backing key window"));
+        }
+        let values = backing.borrow_mut().get_many(keys)?;
+        if values.len() != keys.len()
+            || values.capacity() > 64
             || values
                 .iter()
                 .flatten()
@@ -76,9 +89,7 @@ impl<'a> SerialState<'a> {
                 "filesystem backing value window",
             ));
         }
-        values
-            .try_into()
-            .map_err(|_| ContentError::InvalidRecord("filesystem backing value window"))
+        Ok(values)
     }
     pub(crate) fn apply(&self, changes: Vec<ConstructionRecordChange>) -> ContentResult<()> {
         let mut bytes = changes

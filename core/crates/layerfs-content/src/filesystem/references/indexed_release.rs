@@ -67,13 +67,7 @@ fn seed(
     let mut cursor = RowCursor::new();
     let mut reads = 0u64;
     loop {
-        let mut wave = Vec::with_capacity(batch.clamp(1, 64));
-        while wave.len() < batch.clamp(1, 64) {
-            match cursor.next(reducer)? {
-                Some(row) => wave.push(row),
-                None => break,
-            }
-        }
+        let wave = cursor.wave(reducer, batch.clamp(1, 64))?;
         if wave.is_empty() {
             break;
         }

@@ -29,6 +29,9 @@ pub fn key(kind: u32, serial: u64) -> ConstructionRecordKey {
 pub struct Records {
     pub values: BTreeMap<ConstructionRecordKey, Vec<u8>>,
     pub calls: usize,
+    /// Read jobs of two serials or more, and the most keys one read job asked.
+    pub wide_reads: usize,
+    pub maximum_read_keys: usize,
     pub after_failure: usize,
     pub terminal: bool,
     pub original: Option<Vec<ConstructionRecordChange>>,
@@ -113,6 +116,9 @@ impl IndexedConstructionBacking for Records {
     /// One call: every key is answered by the same job, in the order asked.
     fn get_many(&mut self, keys: &[ConstructionRecordKey]) -> ContentResult<Vec<Option<Vec<u8>>>> {
         self.enter()?;
+        assert!(keys.len() <= 64, "one read job asks at most 64 keys");
+        self.wide_reads += usize::from(keys.len() > 3);
+        self.maximum_read_keys = self.maximum_read_keys.max(keys.len());
         keys.iter().map(|key| self.value(*key)).collect()
     }
     fn apply(

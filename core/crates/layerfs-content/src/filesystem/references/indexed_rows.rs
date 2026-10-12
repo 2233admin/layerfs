@@ -1,6 +1,10 @@
 //! Non-destructive sealed membership passes; final rows restart after release.
 use super::reduce::{FinalChange, ReferenceWork};
-use super::{indexed::IndexedReducer, indexed_wire as wire, meaning, record::Row};
+use super::{
+    indexed::{IndexedReducer, PASS_ROWS},
+    indexed_wire as wire, meaning,
+    record::Row,
+};
 use crate::filesystem::inode::read::{lookup_many, InodeReadWork, InodeTable};
 use crate::{AuthenticatedObjects, ContentError, ContentResult};
 use std::collections::VecDeque;
@@ -20,38 +24,54 @@ impl RowCursor {
             finished: false,
         }
     }
-    pub fn next(&mut self, reducer: &IndexedReducer<'_, '_>) -> ContentResult<Option<Row>> {
-        if self.finished {
-            return Ok(None);
-        }
-        if self.keys.len() == 0 {
-            let keys = reducer.state.keys_after(wire::TOUCH, self.after)?;
-            if keys.is_empty() {
-                if self.seen != reducer.touched {
+    /// The next rows of the pass, at most `limit` of them and none once it
+    /// has ended. The rows of one job are read together; no row beyond the
+    /// wave is read, so a caller that writes between waves is never behind.
+    pub fn wave(
+        &mut self,
+        reducer: &IndexedReducer<'_, '_>,
+        limit: usize,
+    ) -> ContentResult<Vec<Row>> {
+        let mut rows = Vec::with_capacity(limit.min(64));
+        while rows.len() < limit && !self.finished {
+            if self.keys.len() == 0 {
+                let keys = reducer.state.keys_after(wire::TOUCH, self.after)?;
+                if keys.is_empty() {
+                    if self.seen != reducer.touched {
+                        return Err(ContentError::InvalidRecord("filesystem touched membership"));
+                    }
+                    self.finished = true;
+                    break;
+                }
+                for key in &keys {
+                    wire::serial(*key)?;
+                }
+                self.keys = keys.into_iter();
+            }
+            let take = (limit - rows.len()).min(PASS_ROWS).min(self.keys.len());
+            let mut serials = [0_u64; PASS_ROWS];
+            let mut last = self.after;
+            for slot in &mut serials[..take] {
+                let key = self
+                    .keys
+                    .next()
+                    .ok_or(ContentError::InvalidRecord("filesystem touched window"))?;
+                *slot = wire::serial(key)?;
+                last = Some(key);
+            }
+            for row in reducer.required_many(&serials[..take])? {
+                self.seen = self
+                    .seen
+                    .checked_add(1)
+                    .ok_or(ContentError::LengthOverflow)?;
+                if self.seen > reducer.touched {
                     return Err(ContentError::InvalidRecord("filesystem touched membership"));
                 }
-                self.finished = true;
-                return Ok(None);
+                rows.push(row);
             }
-            for key in &keys {
-                wire::serial(*key)?;
-            }
-            self.keys = keys.into_iter();
+            self.after = last;
         }
-        let key = self
-            .keys
-            .next()
-            .ok_or(ContentError::InvalidRecord("filesystem touched window"))?;
-        let row = reducer.required(wire::serial(key)?)?;
-        self.seen = self
-            .seen
-            .checked_add(1)
-            .ok_or(ContentError::LengthOverflow)?;
-        if self.seen > reducer.touched {
-            return Err(ContentError::InvalidRecord("filesystem touched membership"));
-        }
-        self.after = Some(key);
-        Ok(Some(row))
+        Ok(rows)
     }
 }
 
@@ -101,13 +121,7 @@ impl<'s, 'b, 'r> IndexedRows<'s, 'b, 'r> {
     }
     fn next_inner(&mut self) -> ContentResult<Option<FinalChange>> {
         if self.rows.is_empty() {
-            let mut wave = Vec::with_capacity(self.batch);
-            while wave.len() < self.batch {
-                match self.cursor.next(self.reducer)? {
-                    Some(row) => wave.push(row),
-                    None => break,
-                }
-            }
+            let wave = self.cursor.wave(self.reducer, self.batch)?;
             if wave.is_empty() {
                 return Ok(None);
             }

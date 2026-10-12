@@ -7,6 +7,10 @@ use crate::filesystem::{
 use crate::object::inode_leaf::InodeValue;
 use crate::{ConstructionRecordChange, ContentError, ContentResult};
 
+/// Rows one job of a touched-row pass reads: three records each, inside the
+/// 64 keys of one read job.
+pub(super) const PASS_ROWS: usize = 21;
+
 pub(super) struct IndexedReducer<'s, 'b> {
     pub state: &'s SerialState<'b>,
     input: &'s dyn OperationInput,
@@ -53,16 +57,61 @@ impl<'s, 'b> IndexedReducer<'s, 'b> {
         let [member, row, touch] = self
             .state
             .read_kinds([wire::FRESH, wire::ROW, wire::TOUCH], serial)?;
-        if let Some(bytes) = member.as_deref() {
+        self.fresh(expected, member.as_deref())?;
+        Ok((expected, row, touch))
+    }
+    /// Checks one serial's fresh member against what the input declares.
+    fn fresh(&self, expected: bool, member: Option<&[u8]>) -> ContentResult<()> {
+        if let Some(bytes) = member {
             wire::membership(bytes)?;
         }
         if expected != member.is_some() {
             return Err(ContentError::InvalidRecord("filesystem fresh membership"));
         }
-        Ok((expected, row, touch))
+        Ok(())
     }
     pub fn row(&self, serial: u64) -> ContentResult<Option<Row>> {
         let (fresh, raw, touch) = self.stored(serial)?;
+        self.decoded(serial, fresh, raw, touch)
+    }
+    /// The required rows of at most [`PASS_ROWS`] serials, their three records
+    /// each read in one job. Every row is checked as `row` checks one, in the
+    /// order of `serials`.
+    pub fn required_many(&self, serials: &[u64]) -> ContentResult<Vec<Row>> {
+        if serials.len() > PASS_ROWS {
+            return Err(ContentError::InvalidRecord("filesystem touched window"));
+        }
+        let mut keys = [wire::key(wire::FRESH, 0); 3 * PASS_ROWS];
+        for (slot, serial) in keys.chunks_exact_mut(3).zip(serials) {
+            slot[0] = wire::key(wire::FRESH, *serial);
+            slot[1] = wire::key(wire::ROW, *serial);
+            slot[2] = wire::key(wire::TOUCH, *serial);
+        }
+        let mut values = self
+            .state
+            .read_keys(&keys[..3 * serials.len()])?
+            .into_iter();
+        let mut rows = Vec::with_capacity(serials.len());
+        for serial in serials {
+            let mut next = || values.next().ok_or(ContentError::UnexpectedEof);
+            let (member, raw, touch) = (next()?, next()?, next()?);
+            let expected = self.input.is_new(*serial)? && !self.dropped.contains(*serial)?;
+            self.fresh(expected, member.as_deref())?;
+            rows.push(self.decoded(*serial, expected, raw, touch)?.ok_or(
+                ContentError::InvalidRecord("filesystem reference row missing"),
+            )?);
+        }
+        Ok(rows)
+    }
+    /// Decodes one serial's row and checks it against its fresh tag and its
+    /// touched witness.
+    fn decoded(
+        &self,
+        serial: u64,
+        fresh: bool,
+        raw: Option<Vec<u8>>,
+        touch: Option<Vec<u8>>,
+    ) -> ContentResult<Option<Row>> {
         let row = raw
             .as_deref()
             .map(|bytes| wire::row(bytes, serial))

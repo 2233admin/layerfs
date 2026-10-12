@@ -272,6 +272,26 @@ Step at `a62103ed5`: 5,276 statements in 15.5 ms, of which 1,482 fence
 statements in 3.6 ms (3,744 in 6.9 ms before); 10.4 ms of construct is outside
 both ports and 8.5 ms follows construct.
 
+### 5.6 Stages B(2), C and the minor pass (branch `perf-experiments-x2`, base `7818d058f`)
+
+Counts are the three shapes of section 2, per Commit, exact, from
+`commit_record_anatomy`; "write transactions" is the Begin (= Commit)
+statement count.
+
+**A touched-row pass reads a wave of rows in one or two jobs.** The release
+seed and the final-row pass each read every touched row as its own
+three-record job. A pass now takes a wave of at most 32 rows (the default base
+read batch) and reads it 21 rows to a job
+(`layerfs-content/src/filesystem/references/indexed_rows.rs` `RowCursor::wave`,
+`indexed.rs` `required_many`, `state/store.rs` `read_keys`). Predicted from
+two passes over the touched rows, one job per 21 rows of a key window: record
+jobs 320 → 294, 997 → 893, 13,132 → 12,232. Observed: 290, 891 and 12,232; the
+two smaller shapes have 16 and 56 touched rows, not the 14 and 55 the
+prediction assumed, and a 32-row wave is two jobs (21 + 11). Workspace
+statements 406 → 376, 1,233 → 1,127, 15,126 → 14,226 (one fence fewer per
+saved job). Record statements and write transactions do not move: the same
+keys are read.
+
 ## 6. Recommendation — removing the per-key record jobs
 
 Owner direction of 2026-10-13 allows interface and overlay-schema changes.
