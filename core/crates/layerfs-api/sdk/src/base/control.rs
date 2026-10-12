@@ -212,6 +212,21 @@ fn matches_reply(request: &Request, reply: &Reply) -> bool {
                 && request.stack == binding.branch.stack
                 && request.name == binding.branch.name
         }
+        (
+            Request::Branches {
+                stack,
+                page: request,
+            },
+            Reply::Branches(page),
+        ) => {
+            page.records.len() <= request.limit as usize
+                && (!page.records.is_empty() || page.continuation.is_none())
+                && page.records.iter().all(|record| record.stack == *stack)
+                && page
+                    .records
+                    .windows(2)
+                    .all(|rows| rows[0].name.as_str() < rows[1].name.as_str())
+        }
         (Request::History(request), Reply::History(page)) => {
             page.records.len() <= request.limit as usize
                 && (!page.records.is_empty() || page.continuation.is_none())

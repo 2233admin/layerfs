@@ -41,7 +41,7 @@ use layerfs_bridge::{
 use layerfs_history::{
     BranchId, CommitHistoryRequest, CommitRecord, CommitStagedOutcome, WorkspaceId,
 };
-use layerfs_sdk::{internal::Control, ProjectApi};
+use layerfs_sdk::internal::Control;
 use model::{assert_same, Flat};
 use mounted::COMMAND;
 use rig::{assert_kernel, bash_in, clock_masked, clocked, kernel, native as tree, passed};
@@ -240,17 +240,16 @@ fn unmount(control: &mut Control, ready: &ReadyMount) {
     );
 }
 fn history(control: &mut Control, branch: BranchId) -> Vec<CommitRecord> {
-    let page = ProjectApi::new()
-        .history(
-            control,
-            CommitHistoryRequest {
-                branch,
-                start: None,
-                cursor: None,
-                limit: 4,
-            },
-        )
-        .unwrap();
+    let page = layerfs_sdk::internal::commits(
+        control,
+        CommitHistoryRequest {
+            branch,
+            start: None,
+            cursor: None,
+            limit: 4,
+        },
+    )
+    .unwrap();
     assert!(page.continuation.is_none());
     page.records
 }

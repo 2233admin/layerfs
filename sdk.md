@@ -4,8 +4,9 @@
 > Drafted 2026-10-12 from an owner discussion; owner decisions of the same day
 > are marked. The "today" columns and line counts were read at `8f911fe6b`.
 > Stage 1 relocation and surface narrowing are implemented in this branch.
-> Exec, close, commits rename and branches remain pending. No
-> measurement or qualification is claimed.
+> Exec, close, commits rename and branches are now implemented. Removing
+> ManagedSandbox::exec and switching the benchmark command route follow next.
+> This branch is not a released contract or a performance qualification.
 
 The public SDK is three groups and eleven methods. Everything else the SDK
 crate exports today is folded into one of these, moved to an internal module,
@@ -22,6 +23,20 @@ or removed.
 
 The signatures below are a sketch of shape, not final Rust. Names of existing
 types are the ones the source defines.
+
+The implemented Rust methods retain the existing typed request, ownership and
+failure carriers. Project `fork`, `branches` and `commits` borrow a
+`ManagedSandbox`; proof-only control borrows are under the hidden `internal`
+module. `branches(sandbox, stack, Page)` sends one new bounded control request
+and returns one authenticated page in name order. It shares the existing
+32-record control window and History cursor; the caller advances continuation.
+`commits(sandbox, CommitHistoryRequest)` sends the unchanged `History` request.
+`WorkspaceApi::exec(sandbox, mounted, arguments, environment, stdin)` is an
+associated convenience call: it delegates the original Sandbox exec with
+`mounted.ready.directory` as working directory and returns its runtime owner.
+`SandboxApi::close(sandbox)` consumes the owner, stops once with the original
+one-second stop request, then deletes once. Stop failure does not attempt delete;
+any failure retains the exact runtime, channel, inputs and installation ack.
 
 ## Project
 

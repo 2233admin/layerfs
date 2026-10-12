@@ -10,9 +10,9 @@ use layerfs_bridge::control::{Activity, ControlCode, Reply, Request, WorkspaceTo
 use layerfs_daemon::control::Service;
 use layerfs_history::{
     BranchId, CommitHistoryRequest, CommitStagedOutcome, ForkRequest, ForkSource, HistoryName,
-    WorkspaceId,
+    Page, WorkspaceId,
 };
-use layerfs_sdk::{internal::Control, OperationCause, ProjectApi};
+use layerfs_sdk::{internal::Control, OperationCause};
 use std::sync::{
     atomic::{AtomicU8, Ordering},
     mpsc, Arc,
@@ -131,55 +131,74 @@ fn native_mount_commit_status_fork_history_and_terminal_unmount() {
     assert_eq!(overwritten.parent, original.branch.head_commit);
     assert_ne!(overwritten.root, first.root);
     let fork = BranchId::from_authority([75; 16]);
-    let forked = ProjectApi::new()
-        .fork(
-            &mut client,
-            ForkRequest {
-                stack: original.branch.stack,
-                branch: fork,
-                name: HistoryName::new("fork").unwrap(),
-                source: ForkSource::Commit {
-                    branch,
-                    commit: overwritten.id,
-                },
+    let forked = layerfs_sdk::internal::fork(
+        &mut client,
+        ForkRequest {
+            stack: original.branch.stack,
+            branch: fork,
+            name: HistoryName::new("fork").unwrap(),
+            source: ForkSource::Commit {
+                branch,
+                commit: overwritten.id,
             },
-        )
-        .unwrap();
+        },
+    )
+    .unwrap();
     assert_eq!(forked.effective_root, overwritten.root);
+    let first_page = layerfs_sdk::internal::branches(
+        &mut client,
+        original.branch.stack,
+        Page {
+            cursor: None,
+            limit: 1,
+        },
+    )
+    .unwrap();
+    assert_eq!(first_page.records, [forked.branch.clone()]);
+    let second_page = layerfs_sdk::internal::branches(
+        &mut client,
+        original.branch.stack,
+        Page {
+            cursor: Some(first_page.continuation.unwrap()),
+            limit: 1,
+        },
+    )
+    .unwrap();
+    assert_eq!(second_page.records[0].id, branch);
+    assert_eq!(second_page.records[0].head_commit, Some(overwritten.id));
+    assert!(second_page.continuation.is_none());
     let (c, binding) = mount(&mut client, identity(73), fork);
     assert_eq!(binding.effective_root, overwritten.root);
     fixture::write(&f.service, a, b'C');
     tag.store(b'C', Ordering::Release);
     let second = committed(&mut client, a);
     assert_eq!(second.parent, Some(first.id));
-    let page = ProjectApi::new()
-        .history(
-            &mut client,
-            CommitHistoryRequest {
-                branch,
-                start: None,
-                cursor: None,
-                limit: 1,
-            },
-        )
-        .unwrap();
+    let page = layerfs_sdk::internal::commits(
+        &mut client,
+        CommitHistoryRequest {
+            branch,
+            start: None,
+            cursor: None,
+            limit: 1,
+        },
+    )
+    .unwrap();
     assert_eq!(page.records, vec![second.clone()]);
     let cursor = page.continuation.unwrap();
     fixture::write(&f.service, a, b'D');
     tag.store(b'D', Ordering::Release);
     let third = committed(&mut client, a);
     assert_eq!(third.parent, Some(second.id));
-    let page = ProjectApi::new()
-        .history(
-            &mut client,
-            CommitHistoryRequest {
-                branch,
-                start: None,
-                cursor: Some(cursor),
-                limit: 1,
-            },
-        )
-        .unwrap();
+    let page = layerfs_sdk::internal::commits(
+        &mut client,
+        CommitHistoryRequest {
+            branch,
+            start: None,
+            cursor: Some(cursor),
+            limit: 1,
+        },
+    )
+    .unwrap();
     assert_eq!(page.records, vec![first]);
     assert!(page.continuation.is_none());
     let stale_token = WorkspaceToken {
@@ -198,7 +217,7 @@ fn native_mount_commit_status_fork_history_and_terminal_unmount() {
     let (end, _) = mount(&mut client, last, branch);
     close(&mut client, end);
     let count = worker.join();
-    assert_eq!(count, 20);
+    assert_eq!(count, 22);
     println!("CONTROL_FLOW overwrite_last_effect=true captured_parent_preserved=true calls={count} Store_SQL_for_status=0 history_anchor_stable=true stale_namespace_fenced=true");
     f.cleanup();
 }

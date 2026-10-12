@@ -64,6 +64,10 @@ pub enum SandboxPhase {
     Hello,
     /// One original sealed Project installation.
     Install,
+    /// One explicit whole-Sandbox stop attempt.
+    Stop,
+    /// One delete attempt after acknowledged stop.
+    Delete,
 }
 /// Exact original failure, independent of owned resource disposition.
 #[derive(Debug)]

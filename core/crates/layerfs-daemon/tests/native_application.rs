@@ -9,7 +9,7 @@ use layerfs_bridge::{
     native,
 };
 use layerfs_history::{CommitHistoryRequest, WorkspaceId};
-use layerfs_sdk::{internal::Control, ProjectApi};
+use layerfs_sdk::internal::Control;
 use std::{
     fs::{self, File},
     io::{BufRead, BufReader, Read},
@@ -154,17 +154,16 @@ fn actual_daemon_install_hello_bind_status_no_constructor_and_session_end() {
         .unwrap();
     assert_eq!(after.binding, before.binding);
     assert_eq!(after.activity, before.activity);
-    let history = ProjectApi::new()
-        .history(
-            &mut control,
-            CommitHistoryRequest {
-                branch: bound.binding.branch.id,
-                start: None,
-                cursor: None,
-                limit: 1,
-            },
-        )
-        .unwrap();
+    let history = layerfs_sdk::internal::commits(
+        &mut control,
+        CommitHistoryRequest {
+            branch: bound.binding.branch.id,
+            start: None,
+            cursor: None,
+            limit: 1,
+        },
+    )
+    .unwrap();
     assert!(history.records.is_empty());
     layerfs_sdk::internal::workspace(&mut control)
         .unmount(bound.token, false)

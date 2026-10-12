@@ -2213,3 +2213,36 @@ tests passed; owned snapshot history proof missed its unchanged deadline at
 missed its required output env; configured export PASS. FORGET corrected PASS.
 Receipts: narrow-runtime-tests-host, narrow-runtime-owned/remaining/last-host,
 narrow-census-configured and narrow-linux-forget-corrected logs.
+
+
+### SDK follow-up: narrowed-surface count gate
+
+Cause: folding lifecycle/control operations requires exact count reproduction.
+Change: seal sdks1n2 at 4e7c7173f; twelve cells and 23 families sampled once.
+Result: cell proofs 12 PASS; family functional/proof 23 PASS each; 29 numeric
+rows exact, five count-unavailable rows unchanged, one Git statement difference.
+Git: 45,674 versus 45,673; requests 5,895 and owner jobs 7,400 match. One empty
+orphan-inode probe adds 164 SQL bytes, 16 bound bytes and 12 VM steps. All other
+foreground/maintenance statement counters match; daemon/overlay trees are exact.
+Cause is the existing orphan_seen/reclamation scheduling interval; no fix/resample.
+Runtime host/Linux debug snapshot proof remains FAIL (35.45/36.92 s invocation),
+unchanged deadline. Runtime Clippy finds unchanged/frozen-source lints; retained.
+Linux frozen Git contract hit 118 s; five earlier tests passed, later ones unrun.
+Commit: recorded with the next SDK surface change. Receipts: sdk-narrowing.json,
+narrow-git-count-analysis, narrow-runtime and narrow-linux-runtime logs.
+
+
+### SDK follow-up: exec, close and bounded Project queries
+
+Cause: the narrowed SDK still lacked four approved operations/names.
+Change: add ordinary mounted-directory exec and explicit stop/delete close;
+rename history to commits and add a bounded branches request/reply/dispatch.
+Project queries borrow ManagedSandbox; raw component-proof channels stay internal.
+The old exec implementation remains for the next benchmark-route commit.
+Tests cover original byte vectors, bounds/truncation, exact continuation,
+wrong-stack reply custody and actual daemon Branch pages. No performance change.
+Commit: this surface addition. Host all targets compiled; SDK 8, bridge 33 and
+affected daemon 10 tests PASS. Package Clippy, format and boundary checks PASS.
+Linux checks and the sealed count gate follow; unaffected prior tests are reused.
+Receipts: surface-host-build, surface-sdk-bridge-tests-host, surface-daemon-tests-
+host, surface-runtime-build-host and surface-clippy-host logs.

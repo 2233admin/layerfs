@@ -280,6 +280,7 @@ fn operation_code(operation: &Request) -> u64 {
         Request::Unmount(_) => 4,
         Request::Fork(_) => 5,
         Request::History(_) => 6,
+        Request::Branches { .. } => 14,
         Request::Hello(_) => 7,
         Request::EndSession => 8,
         Request::Attach(_) => 9,

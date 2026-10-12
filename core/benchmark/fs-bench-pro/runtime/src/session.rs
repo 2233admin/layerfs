@@ -579,8 +579,7 @@ pub fn serve(args: &Args, events: &mut Events) -> Result<()> {
                 )?;
                 let before = layerfs_sdk::internal::control(&mut owner).channel_work();
                 let begun = Instant::now();
-                let snapshot =
-                    ProjectApi::new().fork(layerfs_sdk::internal::control(&mut owner), request)?;
+                let snapshot = ProjectApi::new().fork(&mut owner, request)?;
                 let span = events.span(begun);
                 let after = layerfs_sdk::internal::control(&mut owner).channel_work();
                 events.numeric_fields(
@@ -626,8 +625,7 @@ pub fn serve(args: &Args, events: &mut Events) -> Result<()> {
                 )?;
                 let before = layerfs_sdk::internal::control(&mut owner).channel_work();
                 let begun = Instant::now();
-                let page = ProjectApi::new()
-                    .history(layerfs_sdk::internal::control(&mut owner), request)?;
+                let page = ProjectApi::new().commits(&mut owner, request)?;
                 let span = events.span(begun);
                 let after = layerfs_sdk::internal::control(&mut owner).channel_work();
                 for record in &page.records {

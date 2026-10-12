@@ -1,7 +1,7 @@
 //! Public native-control vocabulary; no immutable-content data service.
 use layerfs_history::{
-    error::MovedState, BranchId, BranchSnapshot, CommitHistoryRequest, CommitRecord,
-    CommitStagedOutcome, ForkRequest, PageResult, WorkspaceId,
+    error::MovedState, BranchId, BranchRecord, BranchSnapshot, CommitHistoryRequest, CommitRecord,
+    CommitStagedOutcome, ForkRequest, LayerStackId, Page, PageResult, WorkspaceId,
 };
 /// History processing window; authenticated continuation covers arbitrarily many pages.
 pub const HISTORY_WINDOW: u16 = 32;
@@ -50,6 +50,13 @@ pub enum Request {
     Fork(ForkRequest),
     /// Read one bounded anchored ancestry page through the daemon.
     History(CommitHistoryRequest),
+    /// Read one bounded Branch page in stack-local name order through the daemon.
+    Branches {
+        /// Explicit selected stack, without a hidden catalog scan.
+        stack: LayerStackId,
+        /// Bounded page and authenticated continuation from the caller.
+        page: Page,
+    },
     /// Mount the bound Workspace natively; acknowledged only when it is Ready.
     Attach(WorkspaceToken),
     /// Observe one incarnation by identity alone; settles no original unknown.
@@ -213,6 +220,8 @@ pub enum Reply {
     Forked(BranchSnapshot),
     /// Bounded immutable ancestry page and authenticated continuation.
     History(PageResult<CommitRecord>),
+    /// Bounded stack-local Branch page and authenticated continuation.
+    Branches(PageResult<BranchRecord>),
     /// Original typed refusal.
     Refused(ControlRefusal),
     /// Mounted, handshake complete and every receive loop serving.

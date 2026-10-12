@@ -4,7 +4,7 @@ use layerfs_content::ObjectId;
 use layerfs_history::{
     error::MovedState, BranchId, BranchRecord, BranchSnapshot, CommitHistoryRequest, CommitId,
     CommitRecord, CommitStagedOutcome, ForkRequest, ForkSource, HistoryName, LayerId, LayerStackId,
-    PageResult, WorkspaceId,
+    Page, PageResult, WorkspaceId,
 };
 fn binding() -> BranchSnapshot {
     let root = ObjectId::for_bytes(b"control root");
@@ -62,6 +62,13 @@ fn commands_are_bounded_exact_and_reject_every_truncated_prefix() {
                 commit: record().id,
             },
         }),
+        Request::Branches {
+            stack: binding.branch.stack,
+            page: Page {
+                cursor: Some(vec![5; 160]),
+                limit: 1,
+            },
+        },
         Request::History(CommitHistoryRequest {
             branch: binding.branch.id,
             start: None,
@@ -116,6 +123,10 @@ fn replies_preserve_scoped_status_conflict_and_known_publication() {
             binding: binding.clone(),
         },
         Reply::Committed(outcome.clone()),
+        Reply::Branches(PageResult {
+            records: vec![binding.branch.clone()],
+            continuation: Some(vec![5; 160]),
+        }),
         Reply::Status(Box::new(WorkspaceStatus {
             token,
             binding: binding.clone(),
@@ -354,4 +365,40 @@ fn native_block_is_additive_and_bounded_fields_are_refused_before_send() {
         .encode()
         .is_err());
     }
+}
+
+#[test]
+fn branch_page_bounds_are_checked_before_encoding_or_allocating_records() {
+    let binding = binding();
+    for limit in [0, HISTORY_WINDOW + 1] {
+        assert!(Call {
+            id: 1,
+            request: Request::Branches {
+                stack: binding.branch.stack,
+                page: Page {
+                    cursor: None,
+                    limit
+                },
+            }
+        }
+        .encode()
+        .is_err());
+    }
+    assert!(Answer {
+        id: 1,
+        reply: Reply::Branches(PageResult {
+            records: vec![binding.branch; HISTORY_WINDOW as usize + 1],
+            continuation: None,
+        })
+    }
+    .encode()
+    .is_err());
+    let mut bytes = b"LFSA\x01".to_vec();
+    bytes.extend_from_slice(&1u64.to_be_bytes());
+    bytes.push(17);
+    bytes.extend_from_slice(&(HISTORY_WINDOW + 1).to_be_bytes());
+    assert_eq!(
+        Answer::decode(&bytes).unwrap_err().0,
+        "branches result window"
+    );
 }

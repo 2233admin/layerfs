@@ -6,7 +6,7 @@ use crate::{
 };
 use layerfs_history::{
     BranchId, CommitHistoryRequest, ForkRequest, ForkSource, HistoryName, LayerId, LayerStackId,
-    WorkspaceId,
+    Page, WorkspaceId,
 };
 pub(crate) const MAGIC: &[u8] = b"LFSC\x01";
 impl Call {
@@ -83,6 +83,13 @@ impl Call {
                 put_token(&mut out, *token)?;
                 out.byte(u8::from(*relinquish_unknown))?;
             }
+            Request::Branches { stack, page } => {
+                window(page.limit)?;
+                out.byte(14)?;
+                out.put(&stack.to_bytes())?;
+                put_cursor(&mut out, &page.cursor)?;
+                out.put(&page.limit.to_be_bytes())?;
+            }
             Request::History(value) => {
                 window(value.limit)?;
                 out.byte(6)?;
@@ -122,6 +129,16 @@ impl Call {
             tag
         };
         let request = match tag {
+            14 => {
+                let stack = history(LayerStackId::from_bytes(input.array()?))?;
+                let cursor = cursor(&mut input)?;
+                let limit = u16::from_be_bytes(input.array()?);
+                window(limit)?;
+                Request::Branches {
+                    stack,
+                    page: Page { cursor, limit },
+                }
+            }
             13 => Request::Cleanup(token(&mut input)?),
             8 => Request::EndSession,
             7 => Request::Hello(crate::daemon_wire::request(&mut input)?),

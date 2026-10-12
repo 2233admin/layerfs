@@ -68,6 +68,19 @@ impl Service {
                 .fork(request)
                 .map(|snapshot| Success::reply(Reply::Forked(snapshot)))
                 .map_err(Failure::History),
+            Request::Branches { stack, page } => {
+                if page.limit == 0 || page.limit > HISTORY_WINDOW {
+                    return Err(Failure::Rejected(
+                        ControlCode::Invalid,
+                        "branches processing window",
+                    ));
+                }
+                self.store
+                    .history()
+                    .branches(*stack, page)
+                    .map(|page| Success::reply(Reply::Branches(page)))
+                    .map_err(Failure::History)
+            }
             Request::History(request) => {
                 if request.limit == 0 || request.limit > HISTORY_WINDOW {
                     return Err(Failure::Rejected(
