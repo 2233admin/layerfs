@@ -286,6 +286,15 @@ impl Fetch {
         if reply.window_start == 0 || reply.rows.len() > READ_OBJECT_LIMIT {
             return Err(StorageError::Integrity("catalogue bound/window"));
         }
+        // Room for the whole reply is made once, before its first row. Making
+        // it row by row dropped the rows of this same reply that were already
+        // remembered, and the caller then took their ordinals for absent.
+        {
+            let mut cache = self.groups.borrow_mut();
+            if cache.len() + reply.rows.len() > READ_OBJECT_LIMIT {
+                cache.clear();
+            }
+        }
         let mut end = 0;
         for row in &reply.rows {
             if row.first_ordinal == 0
@@ -302,9 +311,6 @@ impl Fetch {
                 return Err(StorageError::Integrity("ordinal range"));
             }
             let mut cache = self.groups.borrow_mut();
-            if cache.len() >= READ_OBJECT_LIMIT {
-                cache.clear();
-            }
             if cache.get(&row.first_ordinal).is_some_and(|old| old != row) {
                 return Err(StorageError::Integrity("inconsistent value group"));
             }
