@@ -14,6 +14,9 @@ use layerfs_content::{
 use std::cell::Cell;
 
 const BATCH: usize = 64;
+/// The edits of the next guarded job. A full job is written at once, so
+/// fewer than a full job's edits remain when the plan ends: they and the
+/// sealing context change are one job.
 struct Writer {
     changes: Vec<EditRecordChange>,
     count: usize,
@@ -23,11 +26,26 @@ impl Writer {
         &mut self,
         shared: &Shared<'_, P>,
     ) -> ContentResult<()> {
-        if !self.changes.is_empty() {
-            let changes = std::mem::replace(&mut self.changes, Vec::with_capacity(BATCH));
-            shared.borrow_mut().apply(changes)?;
-        }
-        Ok(())
+        let changes = std::mem::replace(&mut self.changes, Vec::with_capacity(BATCH));
+        shared.borrow_mut().apply(changes)
+    }
+    /// Seals the opened context in the job of the last edits: the context
+    /// key sorts before every edit key.
+    fn seal<P: OverlayOperationRecords + ?Sized>(
+        mut self,
+        shared: &Shared<'_, P>,
+        initial: Vec<u8>,
+        sealed: Vec<u8>,
+    ) -> ContentResult<()> {
+        self.changes.insert(
+            0,
+            EditRecordChange {
+                key: key(CONTEXT, 0),
+                expected: EditRecordExpected::ExactBytes(initial),
+                value: Some(sealed),
+            },
+        );
+        shared.borrow_mut().apply(self.changes)
     }
     fn push<P: OverlayOperationRecords + ?Sized>(
         &mut self,
@@ -102,14 +120,10 @@ pub(super) fn prepare<'a, P: OverlayCapturedRuns + OverlayOperationRecords + ?Si
         script.overwrite(&mut emit)?;
     }
     script.finish(facts.final_size, &mut emit)?;
-    writer.flush(shared)?;
-    let sealed = context::encode(facts, writer.count, Some(scripted))?;
-    shared.borrow_mut().apply(vec![EditRecordChange {
-        key: key(CONTEXT, 0),
-        expected: EditRecordExpected::ExactBytes(initial),
-        value: Some(sealed.clone()),
-    }])?;
+    let count = writer.count;
+    let sealed = context::encode(facts, count, Some(scripted))?;
+    writer.seal(shared, initial, sealed.clone())?;
     shared.borrow_mut().work.normalized_edits =
-        u64::try_from(writer.count).map_err(|_| ContentError::LengthOverflow)?;
-    Ok((writer.count, sealed))
+        u64::try_from(count).map_err(|_| ContentError::LengthOverflow)?;
+    Ok((count, sealed))
 }

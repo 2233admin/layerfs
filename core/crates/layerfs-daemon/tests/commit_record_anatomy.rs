@@ -487,73 +487,73 @@ fn record_jobs_of_three_commit_shapes_are_split_by_owner_kind_and_call() {
     assert_eq!(
         small,
         Totals {
-            record_jobs: 215,
+            record_jobs: 210,
             producer: 108,
             namespace: 83,
-            file_plan: 24,
+            file_plan: 19,
             edit_engine: 0,
             contains: 0,
-            get: 149,
-            get_many: 5,
-            apply: 32,
+            get: 145,
+            get_many: 7,
+            apply: 29,
             first_keys: 2,
             keys_after: 27,
             applied_changes: 91,
             empty_windows: 6,
             reader_jobs: 72,
-            workspace_statements: 301,
+            workspace_statements: 296,
             lease_statements: 85,
             record_statements: 505,
-            begin_statements: 38,
-            commit_statements: 38,
+            begin_statements: 35,
+            commit_statements: 35,
         }
     );
     assert_eq!(
         step,
         Totals {
-            record_jobs: 586,
+            record_jobs: 548,
             producer: 325,
             namespace: 116,
-            file_plan: 145,
+            file_plan: 107,
             edit_engine: 0,
             contains: 1,
-            get: 437,
-            get_many: 18,
-            apply: 106,
+            get: 409,
+            get_many: 32,
+            apply: 82,
             first_keys: 2,
             keys_after: 22,
             applied_changes: 468,
             empty_windows: 4,
             reader_jobs: 222,
-            workspace_statements: 822,
+            workspace_statements: 784,
             lease_statements: 235,
             record_statements: 2_127,
-            begin_statements: 112,
-            commit_statements: 112,
+            begin_statements: 88,
+            commit_statements: 88,
         }
     );
     assert_eq!(
         large,
         Totals {
-            record_jobs: 9_865,
+            record_jobs: 9_025,
             producer: 5_954,
             namespace: 1_319,
-            file_plan: 2_592,
+            file_plan: 1_752,
             edit_engine: 0,
             contains: 24,
-            get: 8_312,
-            get_many: 118,
-            apply: 1_341,
+            get: 7_352,
+            get_many: 598,
+            apply: 981,
             first_keys: 2,
             keys_after: 68,
             applied_changes: 4_875,
             empty_windows: 4,
             reader_jobs: 1_980,
-            workspace_statements: 11_859,
+            workspace_statements: 11_019,
             lease_statements: 1_993,
             record_statements: 24_444,
-            begin_statements: 1_347,
-            commit_statements: 1_347,
+            begin_statements: 987,
+            commit_statements: 987,
         }
     );
 }
@@ -614,8 +614,8 @@ fn edit_engine_jobs_of_one_stored_file_by_size_and_edit() {
     // (plan jobs, edit-engine jobs) of the one file's scope. A final length
     // the policy represents as one whole-file object never reaches the
     // engine; a chunked one costs the same at 300,000 bytes and at 2 MiB.
-    let whole = [(6, 0); 4];
-    let chunked = [(6, 49), (6, 19), (6, 13), (6, 17)];
+    let whole = [(4, 0); 4];
+    let chunked = [(4, 49), (4, 19), (4, 13), (4, 17)];
     let expected = [whole, whole, chunked, chunked].concat();
     assert_eq!(
         rows.iter().map(|row| (row.2, row.3)).collect::<Vec<_>>(),

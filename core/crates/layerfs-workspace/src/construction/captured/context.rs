@@ -65,17 +65,21 @@ pub(super) fn edit<P: OverlayOperationRecords + ?Sized>(
             return Ok(edit);
         }
     }
-    verify(shared, expected)?;
-    let mut owner = shared.borrow_mut();
     if index >= count {
-        return Err(owner.content(ContentError::InvalidEdit {
+        verify(shared, expected)?;
+        return Err(shared.borrow_mut().content(ContentError::InvalidEdit {
             what: "captured file edit index",
         }));
     }
     let number = u64::try_from(index).map_err(|_| ContentError::LengthOverflow)?;
-    let raw = owner
-        .get(key(EDITS, number))?
-        .ok_or(ContentError::InvalidRecord("missing captured edit"));
+    // The sealed context and the edit are one read job; the context is
+    // checked first, as when it was read alone.
+    let mut owner = shared.borrow_mut();
+    let [actual, raw] = owner.get_pair([key(CONTEXT, 0), key(EDITS, number)])?;
+    if actual.as_deref() != Some(expected) {
+        return Err(owner.content(ContentError::InvalidRecord("captured file context")));
+    }
+    let raw = raw.ok_or(ContentError::InvalidRecord("missing captured edit"));
     let edit = match raw.and_then(|raw| decode(&raw)) {
         Ok(edit) => edit,
         Err(original) => return Err(owner.content(original)),

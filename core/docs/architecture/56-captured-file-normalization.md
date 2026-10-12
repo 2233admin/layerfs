@@ -23,6 +23,13 @@ new-file stream and before its End. Where the text below says that source
 lookup rechecks the sealed context, that now applies to a lookup that reads a
 record.
 
+Issue 320 update, 2026-10-13: the context is still opened by its own guarded
+write before any normalization step. A full job of 64 edits is written at
+once; the edits that remain when the plan ends and the sealing context change
+(opened bytes to sealed bytes) are one guarded job, the context key first. A
+lookup that reads an edit record reads the sealed context and that edit as one
+two-key job and checks the context first.
+
 Issue 316 update, 2026-10-11 (reference pieces, overlay schema 33): the final
 changes of a file are an
 [edit script](../../crates/layerfs-workspace/src/construction/captured/script.rs).

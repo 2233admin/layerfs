@@ -342,6 +342,33 @@ write transaction for each child it releases (`Frontier::page`, read from the
 code; none of the three shapes removes a directory tree, so it is not in these
 counts).
 
+**Stage C, file plan: the last edits and the seal are one write; the context
+and an edit are one read.** A changed file's plan was written by three jobs
+(open the context, the edits, seal the context) and every edit read back cost
+a context read and an edit read. The sealing change now leaves in the job of
+the last edits, and the sealed context and the edit are one two-key read job
+(`layerfs-workspace/src/construction/captured/normalize.rs` `Writer::seal`,
+`captured/context.rs` `edit`). Predicted record jobs 210 / 548 / 9,025 and
+write transactions 35 / 88 / 987. Observed:
+
+| per Commit | small | step | large |
+| --- | ---: | ---: | ---: |
+| record jobs | 215 → 210 | 586 → 548 | 9,865 → 9,025 |
+| of which file plan | 24 → 19 | 145 → 107 | 2,592 → 1,752 |
+| Workspace statements | 301 → 296 | 822 → 784 | 11,859 → 11,019 |
+| record statements | 505 | 2,127 | 24,444 |
+| write transactions | 38 → 35 | 112 → 88 | 1,347 → 987 |
+
+The opening context write is kept on purpose. Folding it into the same job
+(one write per file: step 54 → 27, large 768 → 384) was built and withdrawn:
+the opening write is where a closed Workspace or an occupied scope is refused
+before any normalization step, and four Workspace tests pin that
+(`captured_file_edits`: `normalization_steps == 0`, `records.work.calls == 1`).
+Without it a closed Workspace would first read captured runs and could report
+a scan refusal in place of `Closed`. A fenced read job that only checks "open
+for writing, owner current, context absent" would keep the refusal where it is
+and save that transaction; it is a new record job and is not built.
+
 ## 6. Recommendation — removing the per-key record jobs
 
 Owner direction of 2026-10-13 allows interface and overlay-schema changes.
