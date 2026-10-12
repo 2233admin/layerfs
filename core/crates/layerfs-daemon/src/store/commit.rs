@@ -41,7 +41,7 @@ impl BoundWorkspace {
         ) -> Result<FilesystemRootId, CommitError>,
     ) -> Result<CommitSuccess, Box<CommitFailure>> {
         let mut admission = self.admit_commit()?;
-        let result = self.commit_admitted(construct);
+        let result = self.commit_admitted(construct, || ());
         admission.released = match &result {
             Ok(_) => true,
             Err(failure) => failure.locally_settled,
@@ -64,6 +64,9 @@ impl BoundWorkspace {
         })
     }
     /// The admitted invocation owns the flag through any wrapper's releases.
+    /// `published` runs once, only after History answered this publication
+    /// with the saved candidate root; a failed or unknown publication, and
+    /// every earlier failure, never runs it.
     pub(super) fn commit_admitted(
         &self,
         construct: impl FnOnce(
@@ -71,6 +74,7 @@ impl BoundWorkspace {
             Capture,
             &BranchSnapshot,
         ) -> Result<FilesystemRootId, CommitError>,
+        published: impl FnOnce(),
     ) -> Result<CommitSuccess, Box<CommitFailure>> {
         let mut retained = CommitFailure::new(
             CommitError::Context("incomplete Commit"),
@@ -179,6 +183,7 @@ impl BoundWorkspace {
                     "publication differs from saved candidate",
                 ));
             }
+            published();
             next.branch.head_commit = head;
             next.head_root = head.map(|_| root);
             retained.phase = CommitPhase::Install;

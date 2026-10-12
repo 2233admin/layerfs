@@ -7,12 +7,31 @@ use super::{
 };
 use crate::{Command, Completion, OwnerError, Response};
 use layerfs_content::{
-    filesystem::FilesystemRootId, ContentError, ContentResult, FilesystemResult,
+    filesystem::FilesystemRootId, ContentError, ContentResult, FilesystemResult, FinalizedConsumer,
+    FinalizedObject,
 };
 use layerfs_overlay::Capture;
-use layerfs_storage::Save;
-use layerfs_workspace::{CapturedNamespace, CapturedNamespaceAttempt, WorkspaceError};
+use layerfs_storage::{Save, SaveSink};
+use layerfs_workspace::{
+    CapturedNamespace, CapturedNamespaceAttempt, ConstructedObjects, WorkspaceError,
+};
 use std::{cell::RefCell, sync::Arc};
+
+/// The Save's sink, and beside it the namespace objects this attempt
+/// constructed. They stay with the attempt: nothing is placed in the shared
+/// cache here, and a refused object ends construction as it did.
+struct Staging<'s, 'a, 'c> {
+    sink: SaveSink<'s, 'a>,
+    constructed: Option<&'c mut ConstructedObjects>,
+}
+impl FinalizedConsumer for Staging<'_, '_, '_> {
+    fn accept(&mut self, object: FinalizedObject) -> ContentResult<()> {
+        if let Some(constructed) = &mut self.constructed {
+            constructed.offer(&object);
+        }
+        self.sink.accept(object)
+    }
+}
 
 impl BoundWorkspace {
     /// Commits the shared published frontier: every locally published change,
@@ -37,10 +56,29 @@ impl BoundWorkspace {
             return Err(Box::new(refused));
         }
         let held = RefCell::new(None);
-        let result = self.commit_admitted(|save, capture, _| {
-            let mut slot = held.borrow_mut();
-            self.construct_captured(save, capture, slot.insert(CapturedConstruction::default()))
-        });
+        // What construction staged for the shared cache. It is placed there
+        // only by the publication callback; every other path drops it.
+        let constructed = RefCell::new(None);
+        let result = self.commit_admitted(
+            |save, capture, _| {
+                let mut slot = held.borrow_mut();
+                let mut staged = self.store.cache.constructed().ok();
+                let root = self.construct_captured(
+                    save,
+                    capture,
+                    slot.insert(CapturedConstruction::default()),
+                    staged.as_mut(),
+                )?;
+                *constructed.borrow_mut() = staged;
+                Ok(root)
+            },
+            || {
+                if let Some(staged) = constructed.borrow_mut().take() {
+                    // Cache policy can lose a hit, never fail a known Commit.
+                    let _ = self.store.cache.admit_constructed(staged);
+                }
+            },
+        );
         let mut held = held.into_inner();
         match result {
             Ok(mut success) => {
@@ -74,6 +112,7 @@ impl BoundWorkspace {
         save: &Save<'_>,
         capture: Capture,
         held: &mut CapturedConstruction,
+        constructed: Option<&mut ConstructedObjects>,
     ) -> Result<FilesystemRootId, CommitError> {
         let operation = self.operation().map_err(CommitError::Workspace)?;
         // Only Commit acquires these owners, one capture at a time, so the
@@ -99,7 +138,10 @@ impl BoundWorkspace {
         )?;
         held.operation = Some(owner);
         let policy = self.store.policy().construction();
-        let mut sink = save.sink();
+        let mut sink = Staging {
+            sink: save.sink(),
+            constructed,
+        };
         let CapturedNamespaceAttempt {
             result,
             mut custody,

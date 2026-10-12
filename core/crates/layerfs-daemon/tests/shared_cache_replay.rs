@@ -376,16 +376,16 @@ fn replay_counts_what_commands_and_commits_ask_of_the_shared_cache() {
     let (mut operations, mut seeded, mut seeded_bytes) = (0, 0_usize, 0_usize);
     let mut filled_at = None;
     for step in 0..steps {
-        for w in 0..workspaces {
+        for (w, slot) in bound.iter_mut().enumerate() {
             if per_call {
                 // The Workspace of the step before is closed; this one binds
                 // the head its Commit published.
                 let before = seen(&daemon);
                 let number = (step * workspaces + w) as u32;
-                bound[w] = daemon.bind_numbered(tree.branches[w], number);
+                *slot = daemon.bind_numbered(tree.branches[w], number);
                 binds.add(phase(&before, &seen(&daemon), true));
             }
-            let workspace = &bound[w];
+            let workspace = &*slot;
             let before = seen(&daemon);
             operations += command(workspace, &mut clock, w, step);
             let between = seen(&daemon);
@@ -446,6 +446,10 @@ fn replay_counts_what_commands_and_commits_ask_of_the_shared_cache() {
         "  end: charged={} cached_objects={} file_lengths={} evictions={} first_eviction_at_step_workspace={filled_at:?}",
         end.0.charged_cache_bytes, end.0.cached_objects, end.0.file_lengths, end.0.evictions
     ));
+    evidence(format_args!(
+        "  seeded by Commits: objects={} bytes={}",
+        end.0.seeded_objects, end.0.seeded_bytes
+    ));
     for (stage, (ran, committed)) in by_stage.iter().enumerate() {
         evidence(format_args!(
             "  stage {}: command misses={} hits={} bytes={} | commit misses={} hits={} bytes={}",
@@ -461,13 +465,13 @@ fn replay_counts_what_commands_and_commits_ask_of_the_shared_cache() {
 
     // Each Workspace's live view is its own published root, read
     // independently from the Store port through a cache of the test's own.
-    for w in 0..workspaces {
+    for (w, slot) in bound.iter_mut().enumerate() {
         if per_call {
-            bound[w] = daemon.bind_numbered(tree.branches[w], u32::MAX - w as u32);
+            *slot = daemon.bind_numbered(tree.branches[w], u32::MAX - w as u32);
         }
         let expected = daemon.expected(&daemon.snapshot(tree.branches[w]));
-        model::assert_same(&expected, &drive::live(&bound[w]), "replayed Workspace");
-        daemon.close(&bound[w]);
+        model::assert_same(&expected, &drive::live(slot), "replayed Workspace");
+        daemon.close(slot);
     }
     assert!(daemon.cache().charged_cache_bytes <= allowance);
     drop(bound);

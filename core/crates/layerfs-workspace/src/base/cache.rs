@@ -1,8 +1,11 @@
 //! Bounded immutable-object cache. Eviction never changes authoritative state.
 use layerfs_content::filesystem::attributes::PortableMetadata;
 use layerfs_content::object::inode_leaf::InodeKind;
-use layerfs_content::{ContentError, ContentResult, ObjectId};
-use std::{collections::BTreeMap, sync::Mutex};
+use layerfs_content::{ContentError, ContentResult, FinalizedObject, ObjectId, ObjectRole};
+use std::{
+    collections::{BTreeMap, VecDeque},
+    sync::Mutex,
+};
 
 pub(crate) struct State {
     pub(crate) cache: Cache,
@@ -47,6 +50,109 @@ impl CanonicalCache {
         work.file_lengths = state.cache.lengths();
         work.portable_metadata = state.cache.portables();
         Ok(work)
+    }
+    /// Places what one Commit constructed in this cache, once that Commit's
+    /// root is known published. Each entry is charged and evicted like any
+    /// other and moved in without a copy or a second hash: its identity is
+    /// the one its `FinalizedObject` computed from these bytes. An object
+    /// already cached is left as it is. A seeded entry grants no authority.
+    pub fn admit_constructed(&self, constructed: ConstructedObjects) -> ContentResult<()> {
+        let ConstructedObjects {
+            mut objects, order, ..
+        } = constructed;
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|_| ContentError::ProviderFailure {
+                what: "base cache owner",
+            })?;
+        // Emission order: the root and the pages above the changed leaves
+        // are placed last and are evicted last.
+        for id in order {
+            let Some(value) = objects.remove(&id) else {
+                continue;
+            };
+            let length = value.len() as u64;
+            if let Some(evictions) = state.cache.place(id, value.len(), || value) {
+                state.work.evictions = state.work.evictions.saturating_add(evictions);
+                state.work.seeded_objects = state.work.seeded_objects.saturating_add(1);
+                state.work.seeded_bytes = state.work.seeded_bytes.saturating_add(length);
+            }
+        }
+        Ok(())
+    }
+    /// An empty staging set bounded by a fixed share of this allowance.
+    pub fn constructed(&self) -> ContentResult<ConstructedObjects> {
+        let state = self
+            .state
+            .lock()
+            .map_err(|_| ContentError::ProviderFailure {
+                what: "base cache owner",
+            })?;
+        Ok(ConstructedObjects {
+            objects: BTreeMap::new(),
+            order: VecDeque::new(),
+            charged: 0,
+            limit: state.cache.capacity / CONSTRUCTED_SHARE,
+        })
+    }
+}
+
+/// One Commit may place at most this share of the allowance: a large Commit
+/// never displaces the whole cache, and its staging set is bounded.
+const CONSTRUCTED_SHARE: usize = 8;
+/// What an object is charged beyond its bytes.
+const OBJECT_CHARGE: usize = 256;
+/// A chunk no longer than its own entry's bookkeeping charge is staged: an
+/// attribute value's payload is such a chunk and cannot be told apart by role.
+const CONSTRUCTED_CHUNK_BYTES: usize = OBJECT_CHARGE;
+
+/// Namespace objects one Commit constructed, held apart from every reader
+/// until that Commit's root is published. Dropping it leaves no trace.
+///
+/// It keeps the objects that describe the tree (every role except a file's
+/// payload) and the latest of them within its bound: construction emits
+/// children before parents, so what remains of an oversized Commit is the
+/// root and the pages nearest to it.
+pub struct ConstructedObjects {
+    objects: BTreeMap<ObjectId, Vec<u8>>,
+    order: VecDeque<ObjectId>,
+    charged: usize,
+    limit: usize,
+}
+impl ConstructedObjects {
+    /// Copies one constructed object's bytes if it is kept. The identity is
+    /// the finalized object's own, computed once from the same allocation.
+    pub fn offer(&mut self, object: &FinalizedObject) {
+        let bytes = object.canonical();
+        let kept = match object.role() {
+            ObjectRole::WholeFile => false,
+            ObjectRole::Chunk => bytes.len() <= CONSTRUCTED_CHUNK_BYTES,
+            _ => true,
+        };
+        let charge = bytes.len().saturating_add(OBJECT_CHARGE);
+        if !kept || charge > self.limit || self.objects.contains_key(&object.id()) {
+            return;
+        }
+        while self.charged > self.limit - charge {
+            let Some(oldest) = self.order.pop_front() else {
+                break;
+            };
+            if let Some(dropped) = self.objects.remove(&oldest) {
+                self.charged -= dropped.len() + OBJECT_CHARGE;
+            }
+        }
+        self.charged += charge;
+        self.objects.insert(object.id(), bytes.to_vec());
+        self.order.push_back(object.id());
+    }
+    /// Objects currently staged.
+    pub fn len(&self) -> usize {
+        self.objects.len()
+    }
+    /// Whether nothing is staged.
+    pub fn is_empty(&self) -> bool {
+        self.objects.is_empty()
     }
 }
 
@@ -106,7 +212,10 @@ impl Cache {
                 break;
             };
             let freed = match tag {
-                OBJECT => self.objects.remove(&id).map(|(old, _)| old.len() + 256),
+                OBJECT => self
+                    .objects
+                    .remove(&id)
+                    .map(|(old, _)| old.len() + OBJECT_CHARGE),
                 LENGTH => self.lengths.remove(&id).map(|_| LENGTH_CHARGE),
                 _ => self.portable.remove(&(id, tag)).map(|_| PORTABLE_CHARGE),
             };
@@ -199,20 +308,29 @@ impl Cache {
             .is_some_and(|(value, _)| value.len() <= limit)
     }
     pub(crate) fn insert(&mut self, id: ObjectId, value: &[u8]) -> u64 {
+        self.place(id, value.len(), || value.to_vec()).unwrap_or(0)
+    }
+    /// Retains one object of `length` bytes and returns what it evicted, or
+    /// nothing when it is already cached or larger than the allowance.
+    /// `value` is taken only when the object is retained.
+    fn place(
+        &mut self,
+        id: ObjectId,
+        length: usize,
+        value: impl FnOnce() -> Vec<u8>,
+    ) -> Option<u64> {
         // Charge canonical bytes and a conservative bookkeeping allowance.
         // This is logical accounting, not a measured allocator/RSS bound.
-        let Some(charge) = value.len().checked_add(256) else {
-            return 0;
-        };
+        let charge = length.checked_add(OBJECT_CHARGE)?;
         if charge > self.capacity || self.objects.contains_key(&id) {
-            return 0;
+            return None;
         }
         let evicted = self.make_room(charge);
         self.epoch = self.epoch.saturating_add(1);
         self.charged += charge;
-        self.objects.insert(id, (value.to_vec(), self.epoch));
+        self.objects.insert(id, (value(), self.epoch));
         self.ages.insert((self.epoch, OBJECT, id), ());
-        evicted
+        Some(evicted)
     }
     pub(crate) fn charged(&self) -> usize {
         self.charged

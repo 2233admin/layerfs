@@ -36,6 +36,11 @@ pub struct ClientWork {
     /// Portable mode and mtime answers currently remembered. Each is charged
     /// to the cache allowance like a file length.
     pub portable_metadata: usize,
+    /// Objects a published Commit constructed that were placed in the cache
+    /// without a Store read. They are not misses and not authenticated bytes.
+    pub seeded_objects: u64,
+    /// Canonical bytes of those objects.
+    pub seeded_bytes: u64,
 }
 /// A runtime-backed authenticated object provider with bounded immutable caching.
 /// Upstream implements its public demand-window/authority contract; allocation

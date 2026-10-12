@@ -6,7 +6,10 @@
 //! only, except one labelled host timing that asserts nothing.
 mod common;
 use common::name;
-use layerfs_content::{AuthenticatedObjects, ContentError, ContentResult, ObjectId};
+use layerfs_content::{
+    file::mapping::encode_chunk_object, AuthenticatedObjects, ContentError, ContentResult,
+    FinalizedObject, ObjectId, ObjectRole,
+};
 use layerfs_workspace::{BaseView, CanonicalCache, CanonicalClient, ClientWork, FileLengths};
 use std::{
     collections::BTreeMap,
@@ -462,6 +465,152 @@ fn portable_metadata_is_decoded_once_remembered_by_root_and_evicted_in_turn() {
 /// Host timing of a hit, for the diagnosis only: it asserts nothing about
 /// time. The cache holds 8,192 objects of one size; every hit is of a
 /// different object than the one before.
+/// One finalized object of `role` whose canonical bytes are `length` long.
+fn finalized(role: ObjectRole, tag: u8, length: usize) -> FinalizedObject {
+    let overhead = encode_chunk_object(&[0]).unwrap().len() - 1;
+    let value: Vec<u8> = (0..length - overhead).map(|n| tag ^ (n as u8)).collect();
+    let object = FinalizedObject::new(role, encode_chunk_object(&value).unwrap()).unwrap();
+    assert_eq!(object.canonical_len(), length);
+    object
+}
+
+#[test]
+fn constructed_objects_are_staged_by_role_within_a_bound_and_placed_without_a_fetch() {
+    // A Commit may place one eighth of the allowance.
+    let allowance = 8 * 4096;
+    let cache = Arc::new(CanonicalCache::new(allowance));
+    let upstream = Arc::new(Upstream::default());
+    let reader = CanonicalClient::with_cache(upstream.clone(), None, cache.clone());
+
+    // What is kept: every role but a file's payload; a chunk only when it
+    // is no longer than an entry's own bookkeeping charge; each object once.
+    let mut staged = cache.constructed().unwrap();
+    assert!(staged.is_empty());
+    let whole = finalized(ObjectRole::WholeFile, 1, 100);
+    let chunk = finalized(ObjectRole::Chunk, 2, OBJECT_CHARGE + 1);
+    let value = finalized(ObjectRole::Chunk, 3, OBJECT_CHARGE);
+    let leaf = finalized(ObjectRole::InodeLeaf, 4, 300);
+    let page = finalized(ObjectRole::DirectoryLeaf, 5, 500);
+    let oversize = finalized(ObjectRole::InodeBranch, 6, 4096 - OBJECT_CHARGE + 1);
+    for object in [
+        &whole, &chunk, &value, &leaf, &page, &leaf, &oversize, &value,
+    ] {
+        staged.offer(object);
+    }
+    assert_eq!(staged.len(), 3);
+    // Staging places nothing: the cache is as it was until admission.
+    assert_eq!(work(&reader), ClientWork::default());
+    cache.admit_constructed(staged).unwrap();
+    let placed = [&value, &leaf, &page];
+    let bytes: usize = placed.iter().map(|object| object.canonical_len()).sum();
+    assert_eq!(
+        work(&reader),
+        ClientWork {
+            seeded_objects: 3,
+            seeded_bytes: bytes as u64,
+            charged_cache_bytes: bytes + 3 * OBJECT_CHARGE,
+            cached_objects: 3,
+            ..ClientWork::default()
+        }
+    );
+    // A reader is served the placed objects with no upstream demand, and
+    // must fetch what was not placed: its upstream does not have them.
+    for object in placed {
+        assert_eq!(
+            reader.read_canonical(object.id()).unwrap(),
+            object.canonical()
+        );
+    }
+    assert!(upstream.demanded().is_empty());
+    for object in [&whole, &chunk, &oversize] {
+        assert_eq!(
+            reader.read_canonical(object.id()),
+            Err(ContentError::MissingObject)
+        );
+    }
+    assert_eq!(upstream.demanded().len(), 3);
+    let after = work(&reader);
+    assert_eq!(
+        [
+            after.cache_hits,
+            after.cache_misses,
+            after.authenticated_bytes
+        ],
+        [3, 3, 0]
+    );
+
+    // A staging set that is dropped leaves no trace.
+    let mut dropped = cache.constructed().unwrap();
+    dropped.offer(&finalized(ObjectRole::Symlink, 7, 200));
+    drop(dropped);
+    assert_eq!(work(&reader), after);
+
+    // The bound keeps the latest: four objects of 1,256 charged bytes do
+    // not fit 4,096, so the first is dropped. One already cached is left
+    // as it is and is not counted.
+    let pages: Vec<_> = (10..14)
+        .map(|tag| finalized(ObjectRole::DirectoryBranch, tag, 1000))
+        .collect();
+    let mut staged = cache.constructed().unwrap();
+    for object in pages.iter().chain([&page]) {
+        staged.offer(object);
+    }
+    assert_eq!(staged.len(), 3);
+    cache.admit_constructed(staged).unwrap();
+    let now = work(&reader);
+    assert_eq!(
+        [
+            now.seeded_objects,
+            now.seeded_bytes,
+            now.cached_objects as u64
+        ],
+        [5, (bytes + 2000) as u64, 5]
+    );
+    assert_eq!(now.charged_cache_bytes, bytes + 2000 + 5 * OBJECT_CHARGE);
+    assert_eq!(
+        reader.read_canonical(pages[0].id()),
+        Err(ContentError::MissingObject)
+    );
+    assert_eq!(
+        reader.read_canonical(pages[3].id()).unwrap(),
+        pages[3].canonical()
+    );
+
+    // Placed entries are charged to the one allowance and make room like
+    // any other: least recently used first, whatever placed them.
+    let mut evictions = 0;
+    for round in 0..12_u8 {
+        let mut staged = cache.constructed().unwrap();
+        for tag in 0..3 {
+            staged.offer(&finalized(
+                ObjectRole::InodeLeaf,
+                100 + round * 3 + tag,
+                1000,
+            ));
+        }
+        cache.admit_constructed(staged).unwrap();
+        let seen = work(&reader);
+        assert!(seen.charged_cache_bytes <= allowance);
+        evictions = seen.evictions;
+    }
+    let end = work(&reader);
+    assert!(evictions > 0);
+    assert_eq!(end.seeded_objects, 5 + 36);
+    assert_eq!(end.cached_objects as u64, end.seeded_objects - evictions);
+    // The oldest placed objects are gone; the latest is held.
+    assert_eq!(
+        reader.read_canonical(value.id()),
+        Err(ContentError::MissingObject)
+    );
+    assert_eq!(
+        reader
+            .read_canonical(finalized(ObjectRole::InodeLeaf, 100 + 35, 1000).id())
+            .unwrap()
+            .len(),
+        1000
+    );
+}
+
 #[test]
 fn host_timing_of_a_hit_is_printed_and_not_asserted() {
     for length in [128_usize, 1_024, 8_192, 65_536] {

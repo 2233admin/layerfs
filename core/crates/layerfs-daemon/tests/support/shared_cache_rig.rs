@@ -11,14 +11,17 @@ use layerfs_content::{
 };
 use layerfs_daemon::{
     bootstrap::open_store,
-    store::{BindRequest, BoundWorkspace, Store, StoreOperation, StorePorts},
+    store::{
+        BindRequest, BoundWorkspace, ReadLimits, Store, StoreOperation, StorePorts, StoreReader,
+    },
     Command, Owner, OwnerConfig, Response,
 };
 use layerfs_history::{
-    BranchId, BranchSnapshot, ForkRequest, ForkSource, HistoryName, WorkspaceId,
+    BranchId, BranchSnapshot, ForkRequest, ForkSource, HistoryCatalog, HistoryName, WorkspaceId,
 };
 use layerfs_overlay::ProfileConfig;
-use layerfs_storage::ReservationBlocks;
+use layerfs_persistence::Handles;
+use layerfs_storage::{ReservationBlocks, Storage};
 use layerfs_workspace::{
     CanonicalClient, ClientWork, Operation, Outcome, Position, SourceView, Time, ViewStat,
 };
@@ -101,6 +104,48 @@ impl Tree {
             ReservationBlocks::default(),
         )
         .unwrap();
+        let owner = Owner::start(
+            &self
+                .fixture
+                .directory
+                .join(format!("overlay-{number}.sqlite")),
+            ProfileConfig::default(),
+            OwnerConfig::default(),
+        )
+        .unwrap();
+        Daemon { store, owner }
+    }
+    /// The same daemon over a History catalog the test wraps around the real
+    /// writable one: external orchestration at a public port, no product hook.
+    pub fn daemon_over(
+        &self,
+        readers: usize,
+        cache: usize,
+        history: impl FnOnce(Arc<Handles>) -> Arc<dyn HistoryCatalog>,
+    ) -> Daemon {
+        let number = self.daemons.fetch_add(1, Ordering::Relaxed);
+        let config = || self.fixture.config.clone();
+        let handles =
+            Arc::new(Handles::open_writable(config(), support::BINDING, support::CURSOR).unwrap());
+        let writer = handles.storage.clone();
+        let readers = (0..readers)
+            .map(|_| {
+                let read =
+                    Handles::open_read_only(config(), support::BINDING, support::CURSOR).unwrap();
+                StoreReader::new(Storage::new(read.storage).unwrap(), Arc::new(read.history))
+            })
+            .collect();
+        let store = Arc::new(
+            Store::new(
+                writer,
+                history(handles),
+                readers,
+                cache,
+                ReservationBlocks::default(),
+                ReadLimits::default(),
+            )
+            .unwrap(),
+        );
         let owner = Owner::start(
             &self
                 .fixture
@@ -366,6 +411,36 @@ pub fn apply(workspace: &BoundWorkspace, clock: &mut i64, step: Do<'_>) -> bool 
             }
             Outcome::Unchanged { .. } => false,
         }
+    })
+}
+
+/// What an ordinary reader asks about one path: every component looked up,
+/// the last one's attributes, a directory's whole listing and a symbolic
+/// link's target. No file content.
+pub fn visit(workspace: &BoundWorkspace, path: &str) -> ViewStat {
+    drive::window(workspace, |operation, view| {
+        let overlay = operation.overlay();
+        let stat = walk(operation, view, &parts(path));
+        match stat.kind {
+            InodeKind::Directory => {
+                let mut after: Option<Vec<u8>> = None;
+                loop {
+                    let page = view.list(overlay, stat.serial, after.as_deref()).unwrap();
+                    match page.continuation {
+                        Some(next) => {
+                            assert!(after.as_ref() < Some(&next), "listing did not advance");
+                            after = Some(next);
+                        }
+                        None => break,
+                    }
+                }
+            }
+            InodeKind::Symlink => {
+                view.readlink(overlay, stat.serial).unwrap();
+            }
+            InodeKind::RegularFile => {}
+        }
+        stat
     })
 }
 

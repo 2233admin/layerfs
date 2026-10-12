@@ -162,3 +162,57 @@ of the Store on first touch are unchanged. Each remembered answer adds its
 272-byte charge, so a full cache evicts somewhat more: see the measured
 counts in [issue 320](../issues/320/SHARED-CACHE.md). Host counts, not a
 timing or mounted claim.
+
+## A published Commit places the namespace objects it constructed (#320)
+
+A Commit hands every object it constructs to its Save. Until this change it
+kept none, so the first reader of each one fetched it back from the Store:
+one Store read, one reader admission and one identity hash for each. Most
+steady-state cache misses were such objects
+([issue 320](../issues/320/SHARED-CACHE.md)).
+
+The product Commit now stages them. `store/captured.rs` wraps the Save's
+sink in a consumer that offers each finalized object to a
+`ConstructedObjects` set before handing it on unchanged. The set belongs to
+that one Commit attempt and no reader can reach it. `commit_admitted` calls
+its `published` callback once, only after History has answered this
+publication with the saved candidate root (Committed or UpToDate); the
+callback moves the set into the shared cache with
+`CanonicalCache::admit_constructed`. A construction, Save, validation or
+publication that fails or whose outcome is unknown never runs the callback:
+the set is dropped and nothing of it was ever in the cache.
+
+- **What is staged.** Every role except a file's payload: `WholeFile` never,
+  `Chunk` only when its canonical bytes are no more than the 256-byte
+  bookkeeping charge of an entry (an attribute value's payload is such a
+  chunk and cannot be told from a file's by role). Each identity once.
+- **What authenticates an entry.** The identity is the `FinalizedObject`'s
+  own: `FinalizedObject::new` computes it from the canonical allocation and
+  `admit` checks it, and the type has no way to change either afterwards.
+  The staged bytes are one copy of that allocation, made while the object is
+  still owned by the constructor. Nothing is hashed again and the bytes are
+  moved, not copied, into the cache.
+- **Bounds.** The set is charged like the cache (bytes plus 256) and holds at
+  most one eighth of the cache allowance; when a Commit constructs more, the
+  oldest staged objects are dropped. Construction emits children before
+  parents, so what remains is the root and the pages nearest to it. An
+  object charged more than that bound is not staged. Admission charges the
+  ordinary allowance and evicts in the ordinary least-recently-used order;
+  an object already cached is left alone. One Commit can therefore displace
+  at most an eighth of the cache.
+- **No authority.** A placed entry is keyed by identity only. A reader still
+  needs an authenticated root to name it.
+- **Counted.** `ClientWork::seeded_objects` and `seeded_bytes` count what was
+  placed. They are not misses, upstream batches or authenticated bytes.
+
+The Commit's own validation still reads the new root's top from the Store
+before publication (three objects, seven when the root directory itself
+changed): that happens before the set may be placed, and it is the one check
+that the saved root is readable. Those objects enter the cache as ordinary
+authenticated misses, as before.
+
+This is product behaviour paid inside the Commit, not setup. A command that
+follows a Commit in the same daemon starts with those objects resident by
+the product's own doing; a measurement that claims a cold phase after a
+Commit must declare that state and may not call it cold.
+

@@ -192,6 +192,8 @@ pub(super) fn store<W: Write>(
                     w.evictions,
                     w.charged_cache_bytes as u64,
                     w.cached_objects as u64,
+                    w.seeded_objects,
+                    w.seeded_bytes,
                 ]),
             )?;
             Ok(())
