@@ -433,6 +433,27 @@ a window, which one `get_many` per window would replace); record statements of
 guarded writes (each change is one guard read and one write statement: 468 /
 4,875 changes).
 
+Timed with the loop of section 3 at the base of this branch and at its head,
+one sample per shape and commit, clocked route, 14 s loops, macOS host,
+release build, other agents building on the same machine (diagnostic; not the
+mounted product):
+
+| shape | wall mean (median) at `7818d058f`, ms | at `25a445f7f` | record port at `7818d058f`, ms (jobs) | at `25a445f7f` | statements (their time, ms) at `7818d058f` | at `25a445f7f` |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| step | 36.3 (34.8) | 35.1 (31.3) | 14.6 (1,001) | 11.9 (499) | 5,282 (13.9) | 4,211 (13.2) |
+| step-no-files | 13.6 (12.0) | 11.9 (10.1) | 4.72 (365) | 2.87 (151) | 1,980 (4.53) | 1,499 (3.33) |
+| one-mode | 2.70 (2.62) | 2.82 (2.72) | 0.48 (54) | 0.47 (50) | 240 (0.61) | 222 (0.64) |
+
+Read with the counts: half the record jobs and a third of the write
+transactions removed 18% of the step Commit's record-port time and 39% of
+step-no-files'; the one-mode Commit did not move. The statement time of step
+fell by only 0.7 ms because the statements that remain are mostly the record
+reads and writes of the same keys (2,124 of them, unchanged), and on this host
+a write transaction of the Disposable overlay is cheap. The next reduction on
+this path is therefore in record statements (one statement for a guarded
+change in place of a guard read and a write; fewer producer point reads), not
+in jobs. The mount was not measured here.
+
 ## 6. Recommendation — removing the per-key record jobs
 
 Owner direction of 2026-10-13 allows interface and overlay-schema changes.
