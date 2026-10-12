@@ -22,7 +22,7 @@ def ident(tag, length, ordinal=1):
 
 
 class StoreFixture:
-    def __init__(self, home, version=1, commits=3):
+    def __init__(self, home, version=7, commits=3):
         home=home.resolve()
         self.path=home/"store.sqlite"; self.manifest=home/"installed.manifest"; self.transcript=home/"ack.tsv"
         self.runtime=home/"runtime.events.jsonl"; self.export=home/"export.completion.json"
@@ -98,14 +98,14 @@ class StoreFixture:
 class CommitCensus(unittest.TestCase):
     def test_all_six_current_schemas_and_streaming_eof_preserve_source(self):
         with tempfile.TemporaryDirectory(prefix="fsb-census-test-") as temporary:
-            for version in range(1,7):
+            for version in range(7,13):
                 home=Path(temporary)/str(version);home.mkdir()
-                fixture=StoreFixture(home,version,commits=130 if version==3 else 3)
+                fixture=StoreFixture(home,version,commits=130 if version==9 else 3)
                 before=oracle.file_sha(fixture.path)
                 result=fixture.run()
                 self.assertEqual(result["status"],"PASS");self.assertEqual(result["schema_version"],version)
                 self.assertEqual(result["commit_count"],len(fixture.expected))
-                self.assertEqual(result["fetch_batches_including_eof"],3 if version==3 else 2)
+                self.assertEqual(result["fetch_batches_including_eof"],3 if version==9 else 2)
                 self.assertEqual(oracle.file_sha(fixture.path),before)
                 self.assertEqual(result["query"],oracle.CENSUS_SQL)
                 self.assertNotIn(fixture.binding.decode(),json.dumps(result))
@@ -153,7 +153,9 @@ class CommitCensus(unittest.TestCase):
                 with self.assertRaises(ValueError):fixture.run()
 
     def test_schema_source_definition_app_catalog_binding_and_provider_are_mandatory(self):
-        mutations=[("PRAGMA application_id=1",()),("PRAGMA user_version=7",()),
+        mutations=[("PRAGMA application_id=1",()),("PRAGMA user_version=13",()),("PRAGMA user_version=6",()),
+                   ("PRAGMA user_version=1",()),("PRAGMA user_version=8",()),("DROP TABLE inode_value",()),
+                   ("CREATE TABLE metadata_value_group(first_ordinal INTEGER PRIMARY KEY,value_count INTEGER)",()),
                    ("UPDATE history_meta SET schema_source='forged'",()),
                    ("UPDATE history_meta SET schema_definition='forged'",()),
                    ("UPDATE history_meta SET binding_key=?",(b"different",)),

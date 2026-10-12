@@ -227,7 +227,7 @@ class ClosedOverlayStorage(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix='fsb-overlay-test-') as temp:
             fixture = store_support.StoreFixture(Path(temp))
             result = oracle.observe_closed_storage(fixture.path, fixture.custody, kind='store')
-            self.assertEqual(result['schema_version'], 1)
+            self.assertEqual(result['schema_version'], 7)
             self.assertEqual(result['source_main_store_4gib_status'], 'UNAVAILABLE')
             self.assertEqual(result['namespace_cleanup_status'], 'UNAVAILABLE')
             stdout, completion = Path(temp) / 'source-stat.stdout', Path(temp) / 'source-stat.completion.json'

@@ -25,12 +25,13 @@ PROVIDER_KEYS = ("provider_validation", "catalog_id", "catalog_incarnation", "bi
 CUSTODY_KEYS = ("custody", "container", "volume", "remote_source", "local_source", "source_sha256", "source_size",
                 "prepared_manifest", "prepared_manifest_sha256", "transcript", "transcript_sha256",
                 "export_completion", "export_completion_sha256", "runtime_events", "runtime_events_sha256")
+SCHEMA_VERSIONS = range(7, 13)
 SCHEMA_PINS = {
-    "core/crates/layerfs-persistence/src/backend/sqlite/schema.rs": "d5e4d452a1f53e4bb5a5175a3a70d6cbf4ef346d40cbd066a3a4cb6e33ee6299",
+    "core/crates/layerfs-persistence/src/backend/sqlite/schema.rs": "79471286517cbdbd19918deb17b17556a8dc89c73ce89260871a4b030d18b0b3",
     "core/crates/layerfs-persistence/sql/sqlite/objects.sql": "e5aa57bd69bb3d2a60ce7c6b4b00400316ac2269344d1d05ddca8790cf6e6e80",
     "core/crates/layerfs-persistence/sql/sqlite/objects_units.sql": "d0d464efda7b48dd88240ddeb4670b1b397a5c28373d907b9c16856e47d5d6bc",
     "core/crates/layerfs-persistence/sql/sqlite/objects_units_index.sql": "d888eeaeadf65e5845483c39ca7a2af007b0a7950a4d94b4d71184b061222d46",
-    "core/crates/layerfs-persistence/sql/sqlite/metadata.sql": "bfea5532191e5be4f8dc72c04601afe468a7251ee69befe051a3688a5c470cbd",
+    "core/crates/layerfs-persistence/sql/sqlite/metadata.sql": "7095571b3365d79571078ca8e7471888dca8b2faf715059ddcb119cb7f1ad35a",
     "core/crates/layerfs-persistence/sql/sqlite/history.sql": "469e4bae00a6d23711f21dc41e2091d18d2d4e4f9a4c4dbec8377c3929faf2ef",
     "core/crates/layerfs-persistence/sql/sqlite/acquisition/schema.sql": "76c8bcaef4562497456628a7ddcd0598317cdc0dcba5a37eb4c3bf015a651d6d",
     "core/crates/layerfs-bridge/src/provision_wire.rs": "1c73c25ee7ba9d04dbca9b169aa9b0b0abdf59e55a10d44cd59e81684ccf34e2",
@@ -69,7 +70,10 @@ def _sealed_identity(path):
 
 
 def _schema_source(version):
-    if type(version) is not int or version not in range(1, 7):
+    # Issue 320 design B: inode values are rows of `inode_value` and the stored
+    # versions are 7..12 (pack layout 7/8/9, plus 3 with acquisition tables).
+    # Versions 1..6 held `metadata_value_group`; the product refuses them at open.
+    if type(version) is not int or version not in SCHEMA_VERSIONS:
         raise ValueError("census unsupported current SQLite schema version")
     if ROOT is None:
         raise ValueError("census authoritative repository schema sources unavailable")
@@ -80,13 +84,13 @@ def _schema_source(version):
             raise ValueError("census authoritative schema/wire source pin changed")
         scripts[relative] = path.read_text()
     prefix = "core/crates/layerfs-persistence/sql/sqlite/"
-    layout = (version-1)%3+1
+    layout = (version-SCHEMA_VERSIONS.start)%3+1
     source = scripts[prefix+("objects.sql" if layout == 1 else "objects_units.sql")]
     if layout == 3:
         source += scripts[prefix+"objects_units_index.sql"]
     for name in ("metadata.sql", "history.sql"):
         source += scripts[prefix+name].replace("schema_version=1", f"schema_version={version}")
-    if version >= 4:
+    if version >= SCHEMA_VERSIONS.start+3:
         source += scripts[prefix+"acquisition/schema.sql"]
     with closing(sqlite3.connect(":memory:", isolation_level=None, timeout=0)) as native:
         native.execute("PRAGMA synchronous=OFF")

@@ -17,18 +17,20 @@ class ContainerOracleImport(unittest.TestCase):
         self.assertTrue(callable(scope['prepare']))
         with patch.object(scope['sqlite3'], 'connect') as opened:
             with self.assertRaisesRegex(ValueError, 'authoritative repository schema sources unavailable'):
-                scope['_schema_source'](1)
+                scope['_schema_source'](7)
         opened.assert_not_called()
 
     def test_host_schema_pin_checker_remains_exact(self):
         self.assertEqual(oracle.ROOT, BENCH.parents[2])
-        source, definition, tables = oracle._schema_source(1)
+        source, definition, tables = oracle._schema_source(7)
         self.assertIn('branch', tables)
+        self.assertIn('inode_value', tables)
+        self.assertNotIn('metadata_value_group', tables)
         self.assertIn('CREATE TABLE', source)
         self.assertTrue(definition)
         with patch.dict(oracle.SCHEMA_PINS, {next(iter(oracle.SCHEMA_PINS)): '0' * 64}):
             with self.assertRaisesRegex(ValueError, 'authoritative schema/wire source pin changed'):
-                oracle._schema_source(1)
+                oracle._schema_source(7)
 
 
 if __name__ == '__main__':
