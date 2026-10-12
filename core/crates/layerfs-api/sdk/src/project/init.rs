@@ -1,9 +1,5 @@
 //! Native Init and original handoff/failure custody.
-use crate::{InstallFailure, Installed};
-use layerfs_bridge::{
-    native::Connection,
-    provision::{check_destination, ProviderKind, StoreManifest, StoreProfile},
-};
+use layerfs_bridge::provision::{check_destination, ProviderKind, StoreManifest, StoreProfile};
 use layerfs_history::{
     BranchId, BranchSnapshot, ForkRequest, ForkSource, HistoryCatalog, HistoryCatalogConfig,
     HistoryError, HistoryName, LayerStackId,
@@ -90,7 +86,7 @@ impl std::error::Error for InitFailure {}
 /// Builds and seals one complete Store. It never opens that Store again and
 /// returns no data-serving runtime. On failure, output and original known
 /// outcomes remain owned by the caller; no file deletion or replay occurs.
-pub fn initialize(
+pub(crate) fn initialize(
     request: InitRequest,
     timer: &TimingScope<'_, Active>,
 ) -> Result<SealedProject, Box<InitFailure>> {
@@ -201,14 +197,5 @@ impl ProjectApi {
         timer: &TimingScope<'_, Active>,
     ) -> Result<SealedProject, Box<InitFailure>> {
         initialize(request, timer)
-    }
-    /// Streams one closed file through an already authenticated connection once.
-    /// The host never opens the installed Store; original failure custody is kept.
-    pub fn install(
-        &self,
-        project: &SealedProject,
-        connection: &mut Connection,
-    ) -> Result<Installed, Box<InstallFailure>> {
-        crate::base::install::install(project, connection)
     }
 }

@@ -9,7 +9,7 @@ use layerfs_bridge::{
     native,
 };
 use layerfs_history::{CommitHistoryRequest, WorkspaceId};
-use layerfs_sdk::{internal::Control, ProjectApi, WorkspaceApi};
+use layerfs_sdk::{internal::Control, ProjectApi};
 use std::{
     fs::{self, File},
     io::{BufRead, BufReader, Read},
@@ -117,7 +117,7 @@ fn actual_daemon_install_hello_bind_status_no_constructor_and_session_end() {
         Reply::SessionEnded
     );
     let mut channel = connect(address);
-    let installed = ProjectApi::new().install(&f.project, &mut channel).unwrap();
+    let installed = layerfs_sdk::internal::install(&f.project, &mut channel).unwrap();
     assert!(installed.manifest.daemon_sqlite.is_some());
     let mut control = Control::new(channel);
     let ready = match control
@@ -135,19 +135,23 @@ fn actual_daemon_install_hello_bind_status_no_constructor_and_session_end() {
     assert!(
         matches!(control.call(Request::Hello(HelloRequest {expected_instance:Some([99;32]),wait_for_store:false})).unwrap(), Reply::Refused(v) if v.code == ControlCode::Invalid)
     );
-    let bound = WorkspaceApi::new(&mut control)
+    let bound = layerfs_sdk::internal::workspace(&mut control)
         .bind(
             WorkspaceId::from_authority([88; 32]).unwrap(),
             f.project.branch.branch.id,
         )
         .unwrap();
-    let before = WorkspaceApi::new(&mut control).status(bound.token).unwrap();
+    let before = layerfs_sdk::internal::workspace(&mut control)
+        .status(bound.token)
+        .unwrap();
     // The real binary's Commit of an unchanged Workspace: the same root, no
     // new Commit record.
     assert!(
         matches!(control.call(Request::Commit(bound.token)).unwrap(), Reply::Committed(layerfs_history::CommitStagedOutcome::UpToDate { head: None, root }) if root == bound.binding.effective_root)
     );
-    let after = WorkspaceApi::new(&mut control).status(bound.token).unwrap();
+    let after = layerfs_sdk::internal::workspace(&mut control)
+        .status(bound.token)
+        .unwrap();
     assert_eq!(after.binding, before.binding);
     assert_eq!(after.activity, before.activity);
     let history = ProjectApi::new()
@@ -162,15 +166,15 @@ fn actual_daemon_install_hello_bind_status_no_constructor_and_session_end() {
         )
         .unwrap();
     assert!(history.records.is_empty());
-    WorkspaceApi::new(&mut control)
-        .unmount(bound.token)
+    layerfs_sdk::internal::workspace(&mut control)
+        .unmount(bound.token, false)
         .unwrap();
     assert_eq!(
         control.call(Request::EndSession).unwrap(),
         Reply::SessionEnded
     );
     assert!(!control.call(Request::EndSession).unwrap_err().attempted);
-    let mut ended = control.into_connection();
+    let mut ended = layerfs_sdk::internal::into_connection(control);
     assert!(matches!(
         ended.send.send(b"cannot reset ended session"),
         Err(native::ChannelError::Quarantined)

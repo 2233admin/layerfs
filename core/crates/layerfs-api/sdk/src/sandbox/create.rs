@@ -1,5 +1,5 @@
 //! Ordinary Sandbox startup, original deployment inputs and failure custody.
-use crate::{control::Control, OperationFailure};
+use crate::{internal::Control, OperationFailure};
 use layerfs_bridge::{
     control::{ControlError, DaemonPhase, DaemonStatus, HelloRequest, Reply, Request},
     daemon_setup::DaemonSetup,
@@ -62,6 +62,8 @@ pub enum SandboxPhase {
     Policy,
     /// One correlated Hello through the retained Control owner.
     Hello,
+    /// One original sealed Project installation.
+    Install,
 }
 /// Exact original failure, independent of owned resource disposition.
 #[derive(Debug)]
@@ -82,6 +84,8 @@ pub enum SandboxCause {
     Channel(ChannelError),
     /// Original correlated daemon control exchange/refusal.
     Control(Box<OperationFailure>),
+    /// Original streaming installation failure and exact publication knowledge.
+    Install(Box<crate::InstallFailure>),
 }
 /// Caller retains exact acknowledged owner, connection and original deployment inputs.
 pub struct SandboxFailure {
@@ -97,6 +101,8 @@ pub struct SandboxFailure {
     pub handshake: ChannelWork,
     /// Original correlated Hello, even if its phase failed selection validation.
     pub observed: Option<DaemonStatus>,
+    /// Installation acknowledgement, retained if the following Ready observation fails.
+    pub installed: Option<crate::Installed>,
     /// Exact original cause.
     pub cause: SandboxCause,
 }
@@ -116,14 +122,17 @@ impl fmt::Debug for SandboxFailure {
 /// Actual local Engine and authenticated daemon lifecycle organization.
 #[derive(Clone, Debug)]
 pub struct SandboxApi {
-    pub(super) docker: Docker,
+    pub(crate) docker: Docker,
 }
 /// Exact acknowledged container and authenticated control owner.
 pub struct ManagedSandbox {
     /// Owned runtime container; explicit stop/delete only.
     pub runtime: Sandbox,
     /// Existing sequential control owner; correlation and failed state are never reset.
-    pub control: Control,
+    pub(crate) control: Control,
+    /// Original acknowledged installation, when this create installed the Project.
+    pub installed: Option<crate::Installed>,
+    pub(crate) request: SandboxCreate,
     /// Original correlated startup status; this is not native Workspace Ready.
     pub startup: DaemonStatus,
     /// Actual original native handshake work.
@@ -136,8 +145,55 @@ impl SandboxApi {
         Self { docker }
     }
     /// Creates, privately configures, starts and authenticates once, preserving partial ownership on failure.
-    pub fn create(&self, request: SandboxCreate) -> Result<ManagedSandbox, Box<SandboxFailure>> {
-        create(&self.docker, request)
+    pub fn create(
+        &self,
+        request: SandboxCreate,
+        project: &crate::SealedProject,
+    ) -> Result<ManagedSandbox, Box<SandboxFailure>> {
+        let mut owner = create(&self.docker, request)?;
+        let installed = owner.control.install_project(project).map_err(|cause| {
+            Box::new(SandboxFailure {
+                request: owner.request.clone(),
+                phase: SandboxPhase::Install,
+                sandbox: None,
+                control: None,
+                handshake: owner.handshake,
+                observed: Some(owner.startup.clone()),
+                installed: None,
+                cause: SandboxCause::Install(cause),
+            })
+        });
+        let installed = match installed {
+            Ok(installed) => installed,
+            Err(mut failure) => {
+                failure.sandbox = Some(owner.runtime);
+                failure.control = Some(owner.control);
+                return Err(failure);
+            }
+        };
+        owner.installed = Some(installed);
+        match hello(
+            &mut owner.control,
+            HelloRequest {
+                expected_instance: Some(owner.startup.instance),
+                wait_for_store: true,
+            },
+        ) {
+            Ok(status) => {
+                owner.startup = status;
+                Ok(owner)
+            }
+            Err(cause) => Err(Box::new(SandboxFailure {
+                request: owner.request,
+                phase: SandboxPhase::Hello,
+                sandbox: Some(owner.runtime),
+                control: Some(owner.control),
+                handshake: owner.handshake,
+                observed: Some(owner.startup),
+                installed: owner.installed,
+                cause: SandboxCause::Control(cause),
+            })),
+        }
     }
 }
 impl ManagedSandbox {
@@ -165,7 +221,10 @@ impl ManagedSandbox {
 
     /// Explicit startup observation/wait on the same incarnation and Control owner.
     /// A later observation never resolves an earlier unknown operation.
-    pub fn status(&mut self, wait_for_store: bool) -> Result<DaemonStatus, Box<OperationFailure>> {
+    pub(crate) fn status(
+        &mut self,
+        wait_for_store: bool,
+    ) -> Result<DaemonStatus, Box<OperationFailure>> {
         hello(
             &mut self.control,
             HelloRequest {
@@ -185,7 +244,7 @@ pub(super) fn hello(
         reply => Err(OperationFailure::unexpected(request, reply)),
     }
 }
-pub(super) fn create(
+pub(crate) fn create(
     docker: &Docker,
     request: SandboxCreate,
 ) -> Result<ManagedSandbox, Box<SandboxFailure>> {
@@ -275,6 +334,8 @@ pub(super) fn create(
     })();
     match result {
         Ok(startup) => Ok(ManagedSandbox {
+            request: request.clone(),
+            installed: None,
             runtime: sandbox.take().expect("owned"),
             control: control.take().expect("authenticated"),
             startup,
@@ -291,6 +352,7 @@ pub(super) fn create(
             control,
             handshake,
             observed,
+            installed: None,
             cause,
         })),
     }

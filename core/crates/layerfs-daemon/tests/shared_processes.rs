@@ -65,7 +65,7 @@ fn overlapping_saves_ordered_overwrites_and_killed_daemon_preserve_the_shared_st
     let (mut channel, installer) = support::pair(move |connection| {
         receive_install(connection, &destination, StoreSettings::default())
     });
-    let installed = layerfs_sdk::install(&source.project, &mut channel).unwrap();
+    let installed = layerfs_sdk::internal::install(&source.project, &mut channel).unwrap();
     drop(installer.join().unwrap());
     drop(channel);
     let manifest = shared.join("manifest.bin");

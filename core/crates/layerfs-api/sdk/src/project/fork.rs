@@ -1,6 +1,6 @@
 //! Project history facade over caller-owned authenticated filesystem control.
 use super::ProjectApi;
-use crate::{base::failure::exchange, control::Control, OperationFailure};
+use crate::{base::failure::exchange, internal::Control, OperationFailure};
 use layerfs_bridge::control::{Reply, Request};
 use layerfs_history::{BranchSnapshot, ForkRequest};
 

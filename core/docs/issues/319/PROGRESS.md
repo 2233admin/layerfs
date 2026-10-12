@@ -2154,3 +2154,20 @@ affected host daemon targets PASS (native-only targets have zero host tests).
 Receipts: relocation-final-build.log, relocation-runtime-build.log,
 relocation-sdk-tests.log and relocation-daemon-tests.log in the local gate log.
 No sample, source seal or new baseline yet; Linux coverage follows narrowing.
+
+
+### SDK follow-up: narrow the lifecycle surface
+
+Cause: separate bind/attach, force-unmount and install expose implementation steps.
+Change: hide control, recovery and observations; mount keeps both acknowledgements;
+unmount(force) retains forced facts without implicit unknown relinquishment;
+create owns startup/install/Ready and exact failed resource custody. No wire change.
+Callers and fixture Init use the facade; hidden existing-Store startup stays once.
+Commit: this surface change. Host compile/Clippy PASS; SDK 6 tests PASS. Host daemon
+combined run timed out at 118 s; retained as FAIL, then uncompleted selections
+passed separately. Completed target checks are reused, not sampled again.
+The two named daemon proofs are NOT_RUN (known missing handoff preconditions).
+Harness initial invocation lacked native binaries and worker env; retained failed;
+remaining checks, sealed build, Linux tests and exact count gate follow this commit.
+Receipts: narrow-final-build, narrow-final-clippy-host, narrow-tests-host,
+narrow-remaining-tests-host, narrow-host-shift1m/shift64k/patterns-remaining logs.

@@ -139,7 +139,7 @@ impl Control {
     }
     /// Installs one sealed Project through this same control owner without resetting correlation.
     /// Failed attempted installation retains its original failure and makes this owner terminal.
-    pub fn install_project(
+    pub(crate) fn install_project(
         &mut self,
         project: &crate::SealedProject,
     ) -> Result<crate::Installed, Box<crate::InstallFailure>> {
@@ -156,7 +156,7 @@ impl Control {
                 fence_error: None,
             }));
         }
-        crate::install(project, &mut self.connection).inspect_err(|failure| {
+        crate::base::install::install(project, &mut self.connection).inspect_err(|failure| {
             if failure.request_attempted {
                 self.failed = true;
             }
@@ -170,7 +170,7 @@ impl Control {
         (self.connection.send.work(), self.connection.receive.work())
     }
     /// Transfers the original channel owner; no reconnect or failure reset occurs.
-    pub fn into_connection(self) -> Connection {
+    pub(crate) fn into_connection(self) -> Connection {
         self.connection
     }
 }

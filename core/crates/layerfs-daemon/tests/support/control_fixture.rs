@@ -39,7 +39,7 @@ impl Fixture {
         let (mut client, worker) = support::pair(move |connection| {
             receive_install(connection, &target, StoreSettings::default())
         });
-        layerfs_sdk::install(&native.project, &mut client).unwrap();
+        layerfs_sdk::internal::install(&native.project, &mut client).unwrap();
         let installed = worker.join().unwrap();
         let owner = Owner::start(
             &native.directory.join("overlay.sqlite"),

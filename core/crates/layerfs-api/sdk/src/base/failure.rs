@@ -1,5 +1,5 @@
 //! Typed facade failures over the single existing control exchange owner.
-use crate::control::{Control, ControlFailure};
+use crate::internal::{Control, ControlFailure};
 use layerfs_bridge::control::{ControlRefusal, Reply, Request};
 use std::fmt;
 

@@ -8,9 +8,7 @@ use layerfs_bridge::{
 use layerfs_history::{BranchId, HistoryCatalogConfig, HistoryName, LayerStackId, WorkspaceId};
 use layerfs_persistence::{PersistenceConfig, SqlitePersistenceProfile};
 use layerfs_sandbox::backend::docker::{Docker, SandboxRequest};
-use layerfs_sdk::{
-    InitRequest, ManagedSandbox, ProjectApi, SandboxApi, SandboxCreate, WorkspaceApi,
-};
+use layerfs_sdk::{InitRequest, ManagedSandbox, ProjectApi, SandboxApi, SandboxCreate};
 use layerfs_storage::StoragePolicy;
 use layerfs_telemetry::timer::Timing;
 use std::{
@@ -115,7 +113,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         startup_wait: Duration::from_secs(3),
     };
     let mut first = api
-        .create(make(setup(daemon.private, keys.public)))
+        .create(make(setup(daemon.private, keys.public)), &project)
         .map_err(|f| format!("first {f:?}"))?;
     println!(
         "OWNED_FIRST_CONTAINER {} phase={:?}",
@@ -123,9 +121,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         first.startup.phase
     );
     std::io::stdout().flush()?;
-    assert_eq!(first.startup.phase, DaemonPhase::InstallPending);
-    let installed = first.control.install_project(&project)?;
-    let ready = first.status(true)?;
+    assert_eq!(first.startup.phase, DaemonPhase::ControlReady);
+    let installed = first.installed.take().expect("installed");
+    let ready = layerfs_sdk::internal::sandbox_status(&mut first, true)?;
     assert_eq!(ready.phase, DaemonPhase::ControlReady);
     println!(
         "DIRECT_STORE host_sqlite={} daemon_sqlite={:?} incarnation={:?} profile=Disposable",
@@ -133,8 +131,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     let mut second_setup = setup(daemon.private, keys.public);
     second_setup.existing_store = Some(installed.manifest.clone());
-    let mut second = api
-        .create(make(second_setup))
+    let mut second = layerfs_sdk::internal::start(&api, make(second_setup))
         .map_err(|f| format!("second {f:?}"))?;
     println!(
         "OWNED_SECOND_CONTAINER {} phase={:?}",
@@ -146,13 +143,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     assert_ne!(first.startup.instance, second.startup.instance);
     for (n, owner) in [(1, &mut first), (2, &mut second)] {
         ordinary(owner)?;
-        let mut workspace = WorkspaceApi::new(&mut owner.control);
+        let mut workspace = layerfs_sdk::internal::workspace(layerfs_sdk::internal::control(owner));
         let bound = workspace.bind(WorkspaceId::from_authority([40 + n; 32])?, branch)?;
         assert_eq!(bound.binding.effective_root, project.initialized.root);
-        workspace.unmount(bound.token)?;
+        workspace.unmount(bound.token, false)?;
         assert!(matches!(
-            owner
-                .control
+            layerfs_sdk::internal::control(owner)
                 .call(Request::EndSession)
                 .map_err(|f| format!("end {f:?}"))?,
             Reply::SessionEnded
@@ -170,21 +166,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     let mut reopened_setup = setup(daemon.private, keys.public);
     reopened_setup.existing_store = Some(installed.manifest.clone());
-    let mut reopened = api
-        .create(make(reopened_setup))
+    let mut reopened = layerfs_sdk::internal::start(&api, make(reopened_setup))
         .map_err(|f| format!("reopen {f:?}"))?;
     println!(
         "OWNED_REOPEN_CONTAINER {} phase={:?}",
         reopened.runtime.identity(),
         reopened.startup.phase
     );
-    let mut workspace = WorkspaceApi::new(&mut reopened.control);
+    let mut workspace =
+        layerfs_sdk::internal::workspace(layerfs_sdk::internal::control(&mut reopened));
     let bound = workspace.bind(WorkspaceId::from_authority([43; 32])?, branch)?;
     assert_eq!(bound.binding.effective_root, project.initialized.root);
-    workspace.unmount(bound.token)?;
+    workspace.unmount(bound.token, false)?;
     assert!(matches!(
-        reopened
-            .control
+        layerfs_sdk::internal::control(&mut reopened)
             .call(Request::EndSession)
             .map_err(|f| format!("end {f:?}"))?,
         Reply::SessionEnded

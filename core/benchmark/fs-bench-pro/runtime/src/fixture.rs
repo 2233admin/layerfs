@@ -79,9 +79,12 @@ pub fn install_sealed(
     events: &mut Events,
 ) -> Result<()> {
     crate::project::install_ready(project)?;
-    let mut owner = runtime::start(args, None, events)?;
     let begun = Instant::now();
-    let installed = owner.control.install_project(project)?;
+    let mut owner = runtime::start(args, project, events)?;
+    let installed = owner
+        .installed
+        .take()
+        .ok_or("original create installation acknowledgement missing")?;
     let elapsed = events.span(begun);
     events.phase(
         "install_setup",
@@ -121,7 +124,8 @@ pub fn install_sealed(
         )?;
     }
     runtime::snapshot(&owner, &args.socket, events)?;
-    if owner.control.call(Request::EndSession)? != Reply::SessionEnded {
+    if layerfs_sdk::internal::control(&mut owner).call(Request::EndSession)? != Reply::SessionEnded
+    {
         return Err("unexpected original EndSession acknowledgement".into());
     }
     owner

@@ -4,18 +4,15 @@
 
 mod base;
 #[doc(hidden)]
-pub mod internal {
-    pub use crate::base::control::{Control, ControlCause, ControlFailure, ControlPhase};
-}
-pub mod control;
+pub use base::internal;
 pub mod project;
 #[cfg(unix)]
 pub mod sandbox;
 pub mod workspace;
 pub use base::failure::{OperationCause, OperationFailure};
 pub use project::{
-    initialize, install, InitError, InitFailure, InitRequest, InstallError, InstallFailure,
-    InstallWork, Installed, ProjectApi, SealedProject,
+    InitError, InitFailure, InitRequest, InstallError, InstallFailure, InstallWork, Installed,
+    ProjectApi, SealedProject,
 };
 #[cfg(unix)]
 pub use sandbox::{

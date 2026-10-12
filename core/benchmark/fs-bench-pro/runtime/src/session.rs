@@ -7,7 +7,7 @@ use layerfs_history::{
     BranchId, CommitHistoryRequest, CommitId, CommitStagedOutcome, ForkRequest, ForkSource,
     HistoryName, LayerId, LayerStackId, WorkspaceId,
 };
-use layerfs_sdk::{internal::Control, MountedWorkspace, ProjectApi, WorkspaceApi};
+use layerfs_sdk::{internal::Control, MountedWorkspace, ProjectApi};
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
@@ -323,7 +323,7 @@ fn commit_ack(
 ) -> Result<()> {
     let before = control.channel_work();
     let begun = Instant::now();
-    let outcome = WorkspaceApi::with_observations(control, scope).commit(token)?;
+    let outcome = layerfs_sdk::internal::with_observations(control, scope).commit(token)?;
     let span = events.span(begun);
     let after = control.channel_work();
     let (kind, root) = match &outcome {
@@ -534,7 +534,10 @@ pub fn serve(args: &Args, events: &mut Events) -> Result<()> {
     let mut mounts = BTreeMap::new();
     let mut closed = BTreeMap::new();
     let mut used_keys = BTreeSet::new();
-    let origin = owner.control.channel_work().0.records;
+    let origin = layerfs_sdk::internal::control(&mut owner)
+        .channel_work()
+        .0
+        .records;
     if origin != 1 {
         return Err(
             "serve fresh Control must have exactly one Hello and no installation sends".into(),
@@ -549,7 +552,10 @@ pub fn serve(args: &Args, events: &mut Events) -> Result<()> {
             ("control_send_records", origin),
             (
                 "control_receive_records",
-                owner.control.channel_work().1.records,
+                layerfs_sdk::internal::control(&mut owner)
+                    .channel_work()
+                    .1
+                    .records,
             ),
         ],
     )?;
@@ -571,11 +577,12 @@ pub fn serve(args: &Args, events: &mut Events) -> Result<()> {
                     base_layer,
                     &branches,
                 )?;
-                let before = owner.control.channel_work();
+                let before = layerfs_sdk::internal::control(&mut owner).channel_work();
                 let begun = Instant::now();
-                let snapshot = ProjectApi::new().fork(&mut owner.control, request)?;
+                let snapshot =
+                    ProjectApi::new().fork(layerfs_sdk::internal::control(&mut owner), request)?;
                 let span = events.span(begun);
-                let after = owner.control.channel_work();
+                let after = layerfs_sdk::internal::control(&mut owner).channel_work();
                 events.numeric_fields(
                     "fork",
                     Some(span),
@@ -617,11 +624,12 @@ pub fn serve(args: &Args, events: &mut Events) -> Result<()> {
                     &fs::read_to_string(fields.get(2).ok_or("history body file required")?)?,
                     branch,
                 )?;
-                let before = owner.control.channel_work();
+                let before = layerfs_sdk::internal::control(&mut owner).channel_work();
                 let begun = Instant::now();
-                let page = ProjectApi::new().history(&mut owner.control, request)?;
+                let page = ProjectApi::new()
+                    .history(layerfs_sdk::internal::control(&mut owner), request)?;
                 let span = events.span(begun);
-                let after = owner.control.channel_work();
+                let after = layerfs_sdk::internal::control(&mut owner).channel_work();
                 for record in &page.records {
                     events.fields(
                         "history_record",
@@ -673,10 +681,11 @@ pub fn serve(args: &Args, events: &mut Events) -> Result<()> {
                     &mounts,
                     &progress,
                 )?;
+                let (runtime, control) = layerfs_sdk::internal::parts(&mut owner);
                 execute_round(
                     args,
-                    &owner.runtime,
-                    &mut owner.control,
+                    runtime,
+                    control,
                     &mut extras,
                     &scopes,
                     key,
@@ -746,7 +755,11 @@ pub fn serve(args: &Args, events: &mut Events) -> Result<()> {
                         ],
                     )?;
                 }
-                let control = channel_control(&mut owner.control, &mut extras, channel)?;
+                let control = channel_control(
+                    layerfs_sdk::internal::control(&mut owner),
+                    &mut extras,
+                    channel,
+                )?;
                 if used_keys.contains(&key.to_ascii_lowercase()) {
                     return Err("reused Workspace authority key; fresh incarnation required".into());
                 }
@@ -754,7 +767,7 @@ pub fn serve(args: &Args, events: &mut Events) -> Result<()> {
                 let before = control.channel_work().0.records;
                 let receive_before = control.channel_work().1.records;
                 let begun = Instant::now();
-                let mounted = WorkspaceApi::with_observations(control, &scopes[channel])
+                let mounted = layerfs_sdk::internal::with_observations(control, &scopes[channel])
                     .mount(id, branch)
                     .map_err(|failure| format!("mount original failure {failure:?}"))?;
                 let elapsed = events.span(begun);
@@ -835,8 +848,12 @@ pub fn serve(args: &Args, events: &mut Events) -> Result<()> {
                 } else {
                     selected(&mounts, key)?.channel
                 };
-                let work =
-                    channel_control(&mut owner.control, &mut extras, channel)?.channel_work();
+                let work = channel_control(
+                    layerfs_sdk::internal::control(&mut owner),
+                    &mut extras,
+                    channel,
+                )?
+                .channel_work();
                 let mut command_events = events
                     .contextual(&[
                         ("key", key.into()),
@@ -861,13 +878,17 @@ pub fn serve(args: &Args, events: &mut Events) -> Result<()> {
             }
             "commit" => {
                 let channel = selected(&mounts, key)?.channel;
-                let control = channel_control(&mut owner.control, &mut extras, channel)?;
+                let control = channel_control(
+                    layerfs_sdk::internal::control(&mut owner),
+                    &mut extras,
+                    channel,
+                )?;
                 let token = selected(&mounts, key)?.mounted.bound.token;
                 let before = control.channel_work().0.records;
                 let receive_before = control.channel_work().1.records;
                 let begun = Instant::now();
-                let outcome =
-                    WorkspaceApi::with_observations(control, &scopes[channel]).commit(token)?;
+                let outcome = layerfs_sdk::internal::with_observations(control, &scopes[channel])
+                    .commit(token)?;
                 let elapsed = events.span(begun);
                 let after = control.channel_work().0.records;
                 let receive_after = control.channel_work().1.records;
@@ -915,12 +936,16 @@ pub fn serve(args: &Args, events: &mut Events) -> Result<()> {
             }
             "snapshot" => {
                 let channel = selected(&mounts, key)?.channel;
-                let control = channel_control(&mut owner.control, &mut extras, channel)?;
+                let control = channel_control(
+                    layerfs_sdk::internal::control(&mut owner),
+                    &mut extras,
+                    channel,
+                )?;
                 let token = selected(&mounts, key)?.mounted.bound.token;
                 let before = control.channel_work().0.records;
                 let receive_before = control.channel_work().1.records;
-                let observed =
-                    WorkspaceApi::with_observations(control, &scopes[channel]).status(token)?;
+                let observed = layerfs_sdk::internal::with_observations(control, &scopes[channel])
+                    .status(token)?;
                 let after = control.channel_work().0.records;
                 let receive_after = control.channel_work().1.records;
                 let mut numbers = vec![
@@ -952,12 +977,17 @@ pub fn serve(args: &Args, events: &mut Events) -> Result<()> {
             "observe" => runtime::snapshot(&owner, &args.socket, events)?,
             "unmount" => {
                 let channel = selected(&mounts, key)?.channel;
-                let control = channel_control(&mut owner.control, &mut extras, channel)?;
+                let control = channel_control(
+                    layerfs_sdk::internal::control(&mut owner),
+                    &mut extras,
+                    channel,
+                )?;
                 let token = selected(&mounts, key)?.mounted.bound.token;
                 let before = control.channel_work().0.records;
                 let receive_before = control.channel_work().1.records;
                 let begun = Instant::now();
-                WorkspaceApi::with_observations(control, &scopes[channel]).unmount(token)?;
+                layerfs_sdk::internal::with_observations(control, &scopes[channel])
+                    .unmount(token, false)?;
                 let elapsed = events.span(begun);
                 let after = control.channel_work().0.records;
                 let receive_after = control.channel_work().1.records;
@@ -969,12 +999,16 @@ pub fn serve(args: &Args, events: &mut Events) -> Result<()> {
                 let (token, channel) = *closed
                     .get(key)
                     .ok_or("unknown original closed Workspace key")?;
-                let control = channel_control(&mut owner.control, &mut extras, channel)?;
+                let control = channel_control(
+                    layerfs_sdk::internal::control(&mut owner),
+                    &mut extras,
+                    channel,
+                )?;
                 let before = control.channel_work().0.records;
                 let receive_before = control.channel_work().1.records;
                 let begun = Instant::now();
-                let state =
-                    WorkspaceApi::with_observations(control, &scopes[channel]).cleanup(token)?;
+                let state = layerfs_sdk::internal::with_observations(control, &scopes[channel])
+                    .cleanup(token)?;
                 let span = events.span(begun);
                 let after = control.channel_work().0.records;
                 let receive_after = control.channel_work().1.records;
@@ -1009,7 +1043,11 @@ pub fn serve(args: &Args, events: &mut Events) -> Result<()> {
                     return Err("explicit unmount and known Gone required before stop".into());
                 }
                 for channel in 0..=extras.len() {
-                    let control = channel_control(&mut owner.control, &mut extras, channel)?;
+                    let control = channel_control(
+                        layerfs_sdk::internal::control(&mut owner),
+                        &mut extras,
+                        channel,
+                    )?;
                     let before = control.channel_work();
                     let begun = Instant::now();
                     if control.call(Request::EndSession)? != Reply::SessionEnded {

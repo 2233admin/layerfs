@@ -19,10 +19,10 @@ use std::{
 
 pub fn start(
     args: &Args,
-    manifest: Option<StoreManifest>,
+    project: &layerfs_sdk::SealedProject,
     events: &mut Events,
 ) -> Result<ManagedSandbox> {
-    Ok(start_with_keys(args, manifest, events)?.0)
+    Ok(start_inner(args, None, Some(project), events)?.0)
 }
 
 /// Private authentication material retained only for original extra channels.
@@ -35,6 +35,14 @@ pub struct RuntimeKeys {
 pub fn start_with_keys(
     args: &Args,
     manifest: Option<StoreManifest>,
+    events: &mut Events,
+) -> Result<(ManagedSandbox, RuntimeKeys)> {
+    start_inner(args, manifest, None, events)
+}
+fn start_inner(
+    args: &Args,
+    manifest: Option<StoreManifest>,
+    project: Option<&layerfs_sdk::SealedProject>,
     events: &mut Events,
 ) -> Result<(ManagedSandbox, RuntimeKeys)> {
     let controller = native::generate_keypair()?;
@@ -67,20 +75,23 @@ pub fn start_with_keys(
     };
     events.value("sandbox_create_attempt", &format!("volume={} image={} executable={} acknowledged_container=UNAVAILABLE until original create returns", args.volume,args.image,args.executable.display()))?;
     let begun = Instant::now();
-    let owner = SandboxApi::new(Docker::new(&args.socket, Duration::from_secs(3))?)
-        .create(SandboxCreate {
-            deployment: layerfs_sandbox::backend::docker::SandboxRequest {
-                image: args.image.clone(),
-                store_volume: args.volume.clone(),
-                port: 30421,
-            },
-            setup,
-            executable: args.executable.clone(),
-            controller_private: controller.private,
-            daemon_peer: daemon.public,
-            startup_wait: Duration::from_secs(3),
-        })
-        .map_err(|error| format!("sandbox original failure phase={:?} cause={:?} acknowledged_container={}; private request omitted",error.phase,error.cause,error.sandbox.as_ref().map(|runtime|runtime.identity().to_string()).unwrap_or_else(||"UNAVAILABLE".into())))?;
+    let api = SandboxApi::new(Docker::new(&args.socket, Duration::from_secs(3))?);
+    let request = SandboxCreate {
+        deployment: layerfs_sandbox::backend::docker::SandboxRequest {
+            image: args.image.clone(),
+            store_volume: args.volume.clone(),
+            port: 30421,
+        },
+        setup,
+        executable: args.executable.clone(),
+        controller_private: controller.private,
+        daemon_peer: daemon.public,
+        startup_wait: Duration::from_secs(3),
+    };
+    let owner = match project {
+        Some(project) => api.create(request, project),
+        None => layerfs_sdk::internal::start(&api, request),
+    }.map_err(|error| format!("sandbox original failure phase={:?} cause={:?} acknowledged_container={}; private request omitted",error.phase,error.cause,error.sandbox.as_ref().map(|runtime|runtime.identity().to_string()).unwrap_or_else(||"UNAVAILABLE".into())))?;
     let elapsed = events.span(begun);
     let instance = crate::hex(&owner.startup.instance);
     events.fields(
@@ -129,9 +140,9 @@ pub fn extra_control(
     let connection = native::initiate(stream, &keys.controller_private, keys.daemon_peer)?;
     connection.clear_io_waits()?;
     let mut control = layerfs_sdk::internal::Control::new(connection);
-    std::mem::swap(&mut owner.control, &mut control);
-    let hello = owner.status(true);
-    std::mem::swap(&mut owner.control, &mut control);
+    std::mem::swap(layerfs_sdk::internal::control(owner), &mut control);
+    let hello = layerfs_sdk::internal::sandbox_status(owner, true);
+    std::mem::swap(layerfs_sdk::internal::control(owner), &mut control);
     let status = hello.map_err(|failure| format!("extra channel original Hello {failure:?}"))?;
     if status.instance != owner.startup.instance || status.phase != owner.startup.phase {
         return Err("extra channel same daemon incarnation/phase required".into());

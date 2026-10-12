@@ -68,17 +68,21 @@ fn facade_observation_is_explicit_and_does_not_persist_on_channel() {
         }
     });
     assert_eq!(
-        WorkspaceApi::new(&mut control).cleanup(token()).unwrap(),
-        CleanupObservation::Gone
-    );
-    assert_eq!(
-        WorkspaceApi::with_observations(&mut control, &[7; 32])
+        layerfs_sdk::internal::workspace(&mut control)
             .cleanup(token())
             .unwrap(),
         CleanupObservation::Gone
     );
     assert_eq!(
-        WorkspaceApi::new(&mut control).cleanup(token()).unwrap(),
+        layerfs_sdk::internal::with_observations(&mut control, &[7; 32])
+            .cleanup(token())
+            .unwrap(),
+        CleanupObservation::Gone
+    );
+    assert_eq!(
+        layerfs_sdk::internal::workspace(&mut control)
+            .cleanup(token())
+            .unwrap(),
         CleanupObservation::Gone
     );
     worker.join().unwrap();
@@ -115,4 +119,50 @@ fn observed_facade_borrows_scope_with_same_two_pointer_layout() {
         std::mem::size_of::<WorkspaceApi<'_>>(),
         2 * std::mem::size_of::<usize>()
     );
+}
+
+#[test]
+fn unmount_force_selects_one_original_request_without_unknown_relinquishment() {
+    use layerfs_bridge::control::{ControlCode, ControlRefusal};
+    let (mut control, worker) = pair(|mut channel| {
+        for force in [false, true] {
+            let call = Call::decode(channel.receive.receive().unwrap()).unwrap();
+            let reply = if force {
+                assert_eq!(
+                    call.request,
+                    Request::ForceUnmount {
+                        token: token(),
+                        relinquish_unknown: false
+                    }
+                );
+                Reply::Refused(ControlRefusal {
+                    code: ControlCode::Busy,
+                    phase: "force:admission".into(),
+                    moved: None,
+                    published: None,
+                    detail: "original owner retained".into(),
+                })
+            } else {
+                assert_eq!(call.request, Request::Unmount(token()));
+                Reply::Unmounted(token())
+            };
+            channel
+                .send
+                .send(&Answer { id: call.id, reply }.encode().unwrap())
+                .unwrap();
+        }
+    });
+    assert_eq!(
+        layerfs_sdk::internal::workspace(&mut control)
+            .unmount(token(), false)
+            .unwrap(),
+        None
+    );
+    let failure = layerfs_sdk::internal::workspace(&mut control)
+        .unmount(token(), true)
+        .unwrap_err();
+    assert!(
+        matches!(failure.cause, layerfs_sdk::OperationCause::Remote(ref cause) if cause.code == ControlCode::Busy && cause.phase == "force:admission")
+    );
+    worker.join().unwrap();
 }

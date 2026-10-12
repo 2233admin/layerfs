@@ -1,28 +1,21 @@
 //! Logical binding and native mount acknowledgements.
-use crate::{control::Control, OperationFailure};
-use layerfs_bridge::control::{ReadyMount, Reply, Request, WorkspaceStatus, WorkspaceToken};
+use crate::{internal::Control, OperationFailure};
+use layerfs_bridge::control::{ReadyMount, Reply, Request, WorkspaceToken};
 use layerfs_history::{BranchId, BranchSnapshot, WorkspaceId};
 
 /// Explicit filesystem operations on one caller-owned sequential control channel.
 /// Concurrent callers use separate authenticated channels. This owns no process.
 pub struct WorkspaceApi<'a> {
     pub(crate) control: &'a mut Control,
-    observation_scope: Option<&'a [u8; 32]>,
+    pub(crate) observation_scope: Option<&'a [u8; 32]>,
 }
 impl<'a> WorkspaceApi<'a> {
-    /// Borrows an existing authenticated channel without reconnect or correlation reset.
-    pub fn new(control: &'a mut Control) -> Self {
+    /// Borrows this Sandbox's original authenticated filesystem control owner.
+    #[cfg(unix)]
+    pub fn new(sandbox: &'a mut crate::ManagedSandbox) -> Self {
         Self {
-            control,
+            control: &mut sandbox.control,
             observation_scope: None,
-        }
-    }
-    /// Borrows a channel with explicit numeric diagnostics for this facade's
-    /// calls. The daemon retains no preference and returns the ordinary replies.
-    pub fn with_observations(control: &'a mut Control, scope: &'a [u8; 32]) -> Self {
-        Self {
-            control,
-            observation_scope: Some(scope),
         }
     }
     pub(crate) fn exchange(
@@ -48,21 +41,6 @@ pub struct BoundWorkspace {
     /// Coherent selected Branch/root snapshot, without a whole-tree scan.
     pub binding: BranchSnapshot,
 }
-impl WorkspaceApi<'_> {
-    /// Prepares one logical Store/engine binding once. This is not a native mount.
-    /// Lost delivery keeps the original request/unknown, with no automatic rebind.
-    pub fn bind(
-        &mut self,
-        workspace: WorkspaceId,
-        branch: BranchId,
-    ) -> Result<BoundWorkspace, Box<OperationFailure>> {
-        let request = Request::Mount { workspace, branch };
-        match self.exchange(request.clone())? {
-            Reply::Bound { token, binding } => Ok(BoundWorkspace { token, binding }),
-            reply => Err(OperationFailure::unexpected(request, reply)),
-        }
-    }
-}
 
 /// A Workspace that is both bound and natively Ready.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -83,28 +61,6 @@ pub struct MountFailure {
     pub failure: Box<OperationFailure>,
 }
 impl WorkspaceApi<'_> {
-    /// Attaches one bound Workspace once. Ready means the kernel mount exists,
-    /// the handshake completed and every receive loop is serving. A lost reply
-    /// leaves the outcome unknown; observe it with `locate`, never by replay.
-    pub fn attach(&mut self, token: WorkspaceToken) -> Result<ReadyMount, Box<OperationFailure>> {
-        let request = Request::Attach(token);
-        match self.exchange(request.clone())? {
-            Reply::Ready(ready) => Ok(*ready),
-            reply => Err(OperationFailure::unexpected(request, reply)),
-        }
-    }
-    /// Observes one incarnation by identity alone, for a caller whose binding
-    /// or attachment acknowledgement was lost. It binds and attaches nothing.
-    pub fn locate(
-        &mut self,
-        workspace: WorkspaceId,
-    ) -> Result<WorkspaceStatus, Box<OperationFailure>> {
-        let request = Request::Locate(workspace);
-        match self.exchange(request.clone())? {
-            Reply::Located(status) => Ok(*status),
-            reply => Err(OperationFailure::unexpected(request, reply)),
-        }
-    }
     /// Two separately acknowledged attempts: bind, then attach. Each keeps its
     /// own original failure; a failed attach leaves the Workspace bound.
     pub fn mount(

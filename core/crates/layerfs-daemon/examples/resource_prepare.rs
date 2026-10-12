@@ -1,7 +1,7 @@
 //! Separate host-only preparation for the registered growth cases.
 use layerfs_history::{BranchId, HistoryCatalogConfig, HistoryName, LayerStackId};
 use layerfs_persistence::{PersistenceConfig, SqlitePersistenceProfile};
-use layerfs_sdk::{initialize, InitRequest};
+use layerfs_sdk::{InitRequest, ProjectApi};
 use layerfs_storage::StoragePolicy;
 use layerfs_telemetry::timer::Timing;
 use std::{
@@ -34,7 +34,7 @@ fn main() {
     let file = fs::metadata(source.join("entry-000000")).unwrap();
     let directory = fs::metadata(&source).unwrap();
     let project = Timing::disabled("growth.prepare", |scope| {
-        initialize(
+        ProjectApi::new().init(
             InitRequest {
                 source: source.clone(),
                 store: PersistenceConfig::sqlite(folder.join("prepared.sqlite"))

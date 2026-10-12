@@ -12,7 +12,7 @@ use layerfs_history::{
     BranchId, CommitHistoryRequest, CommitStagedOutcome, ForkRequest, ForkSource, HistoryName,
     WorkspaceId,
 };
-use layerfs_sdk::{internal::Control, OperationCause, ProjectApi, WorkspaceApi};
+use layerfs_sdk::{internal::Control, OperationCause, ProjectApi};
 use std::sync::{
     atomic::{AtomicU8, Ordering},
     mpsc, Arc,
@@ -26,20 +26,29 @@ fn mount(
     workspace: WorkspaceId,
     branch: BranchId,
 ) -> (WorkspaceToken, layerfs_history::BranchSnapshot) {
-    let bound = WorkspaceApi::new(client).bind(workspace, branch).unwrap();
+    let bound = layerfs_sdk::internal::workspace(client)
+        .bind(workspace, branch)
+        .unwrap();
     (bound.token, bound.binding)
 }
 fn committed(client: &mut Control, token: WorkspaceToken) -> layerfs_history::CommitRecord {
-    match WorkspaceApi::new(client).commit(token).unwrap() {
+    match layerfs_sdk::internal::workspace(client)
+        .commit(token)
+        .unwrap()
+    {
         CommitStagedOutcome::Committed(value) => value,
         other => panic!("{other:?}"),
     }
 }
 fn status(client: &mut Control, token: WorkspaceToken) -> layerfs_bridge::control::WorkspaceStatus {
-    WorkspaceApi::new(client).status(token).unwrap()
+    layerfs_sdk::internal::workspace(client)
+        .status(token)
+        .unwrap()
 }
 fn close(client: &mut Control, token: WorkspaceToken) {
-    WorkspaceApi::new(client).unmount(token).unwrap();
+    layerfs_sdk::internal::workspace(client)
+        .unmount(token, false)
+        .unwrap();
 }
 
 fn serve(
@@ -107,7 +116,7 @@ fn native_mount_commit_status_fork_history_and_terminal_unmount() {
     fixture::write(&f.service, b, b'B');
     let first = committed(&mut client, a);
     assert!(
-        matches!(WorkspaceApi::new(&mut client).commit(a).unwrap(),CommitStagedOutcome::UpToDate{head:Some(head),root} if head==first.id&&root==first.root)
+        matches!(layerfs_sdk::internal::workspace(&mut client).commit(a).unwrap(),CommitStagedOutcome::UpToDate{head:Some(head),root} if head==first.id&&root==first.root)
     );
     let sql = f.statements();
     let stale = status(&mut client, b);
@@ -210,7 +219,7 @@ fn control_busy_keeps_the_channel_healthy_for_a_later_explicit_call() {
     let writer =
         held_writer::HeldWriter::acquire(&std::path::PathBuf::from(&f.installed.manifest.locator));
     assert!(
-        matches!(WorkspaceApi::new(&mut client).commit(token).unwrap_err().cause, OperationCause::Remote(value) if value.code==ControlCode::Busy)
+        matches!(layerfs_sdk::internal::workspace(&mut client).commit(token).unwrap_err().cause, OperationCause::Remote(value) if value.code==ControlCode::Busy)
     );
     writer.release();
     let observed = status(&mut client, token);
@@ -248,7 +257,8 @@ fn original_lost_control_reply_is_not_replayed_or_settled_by_an_observer() {
     let (token, _) = mount(&mut client, last, branch);
     fixture::write(&f.service, token, b'L');
     let server_fence = fence.recv_timeout(Duration::from_secs(3)).unwrap();
-    let calling = std::thread::spawn(move || WorkspaceApi::new(&mut client).commit(token));
+    let calling =
+        std::thread::spawn(move || layerfs_sdk::internal::workspace(&mut client).commit(token));
     entered.recv_timeout(Duration::from_secs(3)).unwrap();
     server_fence.close().unwrap();
     send_release.send(()).unwrap();
@@ -616,7 +626,7 @@ fn forced_unmount_refuses_a_workspace_without_a_connection_before_any_effect() {
     }
     // The SDK operation carries the same refusal.
     assert!(
-        matches!(WorkspaceApi::new(&mut client).force_unmount(token, false).unwrap_err().cause, OperationCause::Remote(value) if value.code == ControlCode::Invalid && value.phase == "force:admission")
+        matches!(layerfs_sdk::internal::workspace(&mut client).unmount(token, true).unwrap_err().cause, OperationCause::Remote(value) if value.code == ControlCode::Invalid && value.phase == "force:admission")
     );
     // At the control owner: the original typed failure, and the ordinary
     // token refusals ahead of it.

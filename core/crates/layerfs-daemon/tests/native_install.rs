@@ -15,7 +15,7 @@ fn authenticated_install_opens_one_store_and_reads_the_complete_root() {
     let (mut client, worker) = support::pair(move |connection| {
         receive_install(connection, &target, StoreSettings::default())
     });
-    let ack = layerfs_sdk::install(&fixture.project, &mut client).unwrap();
+    let ack = layerfs_sdk::internal::install(&fixture.project, &mut client).unwrap();
     let installed = worker.join().unwrap();
     assert_eq!(ack.manifest, installed.manifest);
     assert_eq!(ack.work.sent_bytes, installed.work.written);
@@ -43,7 +43,7 @@ fn existing_store_is_refused_before_upload_and_preserved() {
     let (mut client, worker) = support::pair(move |connection| {
         receive_install(connection, &destination, StoreSettings::default())
     });
-    let failure = layerfs_sdk::install(&fixture.project, &mut client).unwrap_err();
+    let failure = layerfs_sdk::internal::install(&fixture.project, &mut client).unwrap_err();
     assert!(
         matches!(failure.error,layerfs_sdk::InstallError::Remote(ref remote) if remote.kind==RefusalKind::Exists && !remote.published && !remote.claim_acknowledged && remote.written==0)
     );
@@ -77,7 +77,7 @@ fn interrupted_transfer_keeps_original_partial_file_and_claim_refuses_another_in
     let (mut second, other) = support::pair(move |connection| {
         receive_install(connection, &target, StoreSettings::default())
     });
-    let refusal = layerfs_sdk::install(&fixture.project, &mut second).unwrap_err();
+    let refusal = layerfs_sdk::internal::install(&fixture.project, &mut second).unwrap_err();
     assert!(
         matches!(refusal.error,layerfs_sdk::InstallError::Remote(ref value) if value.kind==RefusalKind::Exists)
     );

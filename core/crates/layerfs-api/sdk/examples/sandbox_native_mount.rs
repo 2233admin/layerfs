@@ -180,24 +180,30 @@ fn main() -> Result<(), Box<dyn Error>> {
     let daemon = native::generate_keypair()?;
     let api = SandboxApi::new(Docker::new(&args[1], Duration::from_secs(3))?);
     let mut owner = api
-        .create(SandboxCreate {
-            deployment: SandboxRequest {
-                image: args[2].clone(),
-                store_volume: args[3].clone(),
-                port: 30421,
+        .create(
+            SandboxCreate {
+                deployment: SandboxRequest {
+                    image: args[2].clone(),
+                    store_volume: args[3].clone(),
+                    port: 30421,
+                },
+                setup: setup(daemon.private, keys.public),
+                executable: PathBuf::from(&args[4]),
+                controller_private: keys.private,
+                daemon_peer: daemon.public,
+                startup_wait: Duration::from_secs(3),
             },
-            setup: setup(daemon.private, keys.public),
-            executable: PathBuf::from(&args[4]),
-            controller_private: keys.private,
-            daemon_peer: daemon.public,
-            startup_wait: Duration::from_secs(3),
-        })
+            &project,
+        )
         .map_err(|f| format!("create {f:?}"))?;
     println!("OWNED_CONTAINER {}", owner.runtime.identity());
     mark("sandbox_started");
-    assert_eq!(owner.startup.phase, DaemonPhase::InstallPending);
-    let installed = owner.control.install_project(&project)?;
-    assert_eq!(owner.status(true)?.phase, DaemonPhase::ControlReady);
+    assert_eq!(owner.startup.phase, DaemonPhase::ControlReady);
+    let installed = owner.installed.take().expect("installed");
+    assert_eq!(
+        layerfs_sdk::internal::sandbox_status(&mut owner, true)?.phase,
+        DaemonPhase::ControlReady
+    );
     println!(
         "DIRECT_STORE host_sqlite={} daemon_sqlite={:?} profile=Disposable volume={}",
         installed.manifest.host_sqlite, installed.manifest.daemon_sqlite, args[3]
@@ -205,7 +211,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // Two acknowledgements: bound, then natively Ready.
     let workspace = WorkspaceId::from_authority([71; 32])?;
-    let mounted = WorkspaceApi::new(&mut owner.control)
+    let mounted = WorkspaceApi::new(&mut owner)
         .mount(workspace, branch)
         .map_err(|f| format!("mount {f:?}"))?;
     assert_eq!(
@@ -310,8 +316,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         ),
         "/",
     )?;
-    let busy = WorkspaceApi::new(&mut owner.control)
-        .unmount(mounted.bound.token)
+    let busy = WorkspaceApi::new(&mut owner)
+        .unmount(mounted.bound.token, false)
         .unwrap_err();
     match &busy.cause {
         OperationCause::Remote(refusal) => {
@@ -322,7 +328,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
         other => panic!("{other:?}"),
     }
-    let status = WorkspaceApi::new(&mut owner.control).status(mounted.bound.token)?;
+    let status = WorkspaceApi::new(&mut owner).status(mounted.bound.token)?;
     let native = status.native.expect("native status block");
     assert_eq!(native.phase, NativePhase::Ready);
     assert_eq!(
@@ -336,15 +342,15 @@ fn main() -> Result<(), Box<dyn Error>> {
     mark("busy");
 
     // Terminal unmount: detach, loop joins, drain, revocation and Close.
-    WorkspaceApi::new(&mut owner.control)
-        .unmount(mounted.bound.token)
+    WorkspaceApi::new(&mut owner)
+        .unmount(mounted.bound.token, false)
         .map_err(|f| format!("unmount {f:?}"))?;
     run(
         &owner,
         &format!("set -e; test ! -e {root}; ! grep -q ' {root} ' /proc/self/mountinfo"),
         "/",
     )?;
-    let gone = WorkspaceApi::new(&mut owner.control)
+    let gone = layerfs_sdk::internal::workspace(layerfs_sdk::internal::control(&mut owner))
         .locate(workspace)
         .unwrap_err();
     assert!(
@@ -355,7 +361,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // Frequent fresh mounts of the same Branch: new namespace, new directory.
     for tag in 72..75 {
-        let fresh = WorkspaceApi::new(&mut owner.control)
+        let fresh = WorkspaceApi::new(&mut owner)
             .mount(WorkspaceId::from_authority([tag; 32])?, branch)
             .map_err(|f| format!("fresh mount {f:?}"))?;
         assert_ne!(fresh.ready.directory, root);
@@ -367,15 +373,14 @@ fn main() -> Result<(), Box<dyn Error>> {
             )?,
             [format!("{FILE_BYTES}\n").as_bytes(), FILES[1].1].concat()
         );
-        WorkspaceApi::new(&mut owner.control)
-            .unmount(fresh.bound.token)
+        WorkspaceApi::new(&mut owner)
+            .unmount(fresh.bound.token, false)
             .map_err(|f| format!("fresh unmount {f:?}"))?;
     }
     println!("FRESH_MOUNTS count=3 each_ready_read_unmounted=true");
     mark("fresh_mounts");
     assert!(matches!(
-        owner
-            .control
+        layerfs_sdk::internal::control(&mut owner)
             .call(Request::EndSession)
             .map_err(|f| format!("end {f:?}"))?,
         Reply::SessionEnded

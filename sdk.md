@@ -3,8 +3,8 @@
 > **Status:** Proposal; target LayerFS 0.1.7; not a released contract.
 > Drafted 2026-10-12 from an owner discussion; owner decisions of the same day
 > are marked. The "today" columns and line counts were read at `8f911fe6b`.
-> Stage 1 relocation is implemented in this branch; the surface changes remain
-> proposed until their gates complete. No
+> Stage 1 relocation and surface narrowing are implemented in this branch.
+> Exec, close, commits rename and branches remain pending. No
 > measurement or qualification is claimed.
 
 The public SDK is three groups and eleven methods. Everything else the SDK
@@ -109,8 +109,18 @@ and its inputs in `sandbox/create.rs`, and bind/attach in `workspace/mount.rs`.
 Shared authenticated control, operation failures and install plumbing live in
 `base/`. Separate facade files are removed. The original public names remain
 available for this relocation; tests, examples and the benchmark now import
-control through the hidden `internal` export. Narrowing follows in a separate
-change. The completed layout will be recorded after the surface is implemented.
+control through the hidden `internal` export. Narrowing is implemented: control access, low-level bind/attach, lost-reply
+locate, cleanup and observation-scoped borrows are hidden under `internal`.
+`WorkspaceApi::new` borrows a ManagedSandbox; `mount(workspace, branch)` sends
+the original bind and attach requests once each. `unmount(token, force)` returns
+`None` for normal close or `Some(ForcedOutcome)` for forced close. Force does
+not implicitly relinquish unknown Commit custody. The hidden proof facade keeps
+the original explicit relinquishment flag. `SandboxApi::create(request, project)`
+performs the original startup, one install and a Ready observation; failures
+retain the owned runtime/channel and any installation acknowledgement. Existing
+Store startup remains available internally to the benchmark and lifecycle proofs.
+Duplicate free initialize/install and public ProjectApi install are removed;
+low-level streaming install remains internal for its original custody proofs. The completed layout will be recorded after the surface is implemented.
 Tests live outside `src/` and do not contribute to production LOC.
 
 `branches` also needs a new control request in the bridge
