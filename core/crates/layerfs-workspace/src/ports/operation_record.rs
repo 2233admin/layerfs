@@ -101,6 +101,9 @@ pub trait OverlayOperationRecords {
     ) -> WorkspaceResult<OperationRecordReply<Vec<[u8; 32]>>>;
     /// Non-destructive complete-key cursor, returning at most 64 sorted keys.
     /// None precedes all identities; Some excludes keys <= that full identity.
+    /// A window of fewer than 64 keys holds every remaining key: a provider
+    /// never returns a short window while later keys exist, and a pass over a
+    /// sealed kind ends on one without asking again.
     /// Older providers refuse this separate capability explicitly.
     fn operation_record_keys_after(
         &self,

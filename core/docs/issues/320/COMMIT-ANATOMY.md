@@ -169,6 +169,8 @@ The owner thread was parked for 94.6% of its samples.
 | --- | --- | --- | --- |
 | `63a1ab005` | The sorted merge reads the children a change reaches | 3 leaves for a 3-leaf change in an 80-leaf page | leaves demanded 80 → 3; pages read 81 → 4 |
 | `4e9a9396a` | A record write reads its Workspace row once | −70 / −256 / −2,566 Workspace statements | 628 → 558, 1,989 → 1,733, 21,836 → 19,270 |
+| `402a01dfa` | One fence statement for every indexed record job | −472 / −1,497 / −17,276 Lease statements | 557 → 85, 1,732 → 235, 19,269 → 1,993 |
+| `e3ae1faa4` | A sealed key pass ends on a short window | −16 record jobs per Commit | 472 → 456, 1,497 → 1,481, 17,276 → 17,260 |
 
 ### 5.1 The sorted merge (`63a1ab005`)
 
@@ -195,6 +197,42 @@ and overlay statements. Two costs are accepted and need the lead's decision:
 unread children are not re-validated against their parent, and a dense update
 issues one read wave per changed child where it issued one batch per branch
 page (the `large` row).
+
+### 5.2 The record fence (`402a01dfa`)
+
+A record job ran two fence statements, the Workspace row and the owner row. It
+now runs one: the Workspace row's lifecycle with the owner's existence as a
+scalar subquery (`layerfs-overlay/src/database/statements.rs`,
+`OPERATION_FENCE`; `lifetime/operation.rs`, `fence_operation`). The refusals
+and their order — stale route, then closed for a write, then stale owner — are
+decided from that one row in the same sequence, and
+`indexed_operation_record_fence.rs` asserts the same refusal table as before
+the change. Its plan is `SEARCH workspace USING INTEGER PRIMARY KEY`, `SCALAR
+SUBQUERY 1`, `SEARCH operation_owner USING PRIMARY KEY (ns=? AND owner=?)`. A
+read job is now 2 statements and a one-change write 6.
+
+### 5.3 The key pass (`e3ae1faa4`)
+
+The producer's pass over a sealed record kind ended only on an empty window.
+It now ends on a window shorter than 64 keys; the port states that a provider
+never returns a short window while later keys exist. The empty windows that
+remain per Commit (6, 4 and 4) are Content's own: the two touched-row passes
+(`references/indexed_rows.rs:28`), the placed-topology pass and the drain of
+the release work list, which must see an empty window because rows are added
+while it runs. The first two kinds could take the same rule (−3 jobs per
+Commit); not done.
+
+### 5.4 State after these commits (measured, exact)
+
+| per Commit | small | step | large |
+| --- | ---: | ---: | ---: |
+| record jobs | 456 | 1,481 | 17,260 |
+| Workspace + Lease + record statements | 542 + 85 + 652 | 1,717 + 235 + 2,205 | 19,254 + 1,993 + 24,444 |
+| the same three families at `ea7535a42` | 628 + 557 + 668 | 1,989 + 1,732 + 2,221 | 21,836 + 19,269 + 24,460 |
+| Begin = Commit | 76 | 262 | 2,572 |
+
+Record-job statements in the three families fell by 31%, 30% and 30%. Sections
+2 and 6 give the counts before these commits.
 
 ## 6. Recommendation — removing the per-key record jobs
 
