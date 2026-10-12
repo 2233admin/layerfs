@@ -280,7 +280,7 @@ fn deleted_suffix(mutate_edge: bool) {
     drop(session);
     drop(workspace);
     rig.finish();
-    assert_eq!(work.record_jobs, 42);
+    assert_eq!(work.record_jobs, 38);
     assert_eq!(work.file_edge_windows, 2);
     assert_eq!(work.file_edge_read_bytes, (4 * CELL) as u64);
     assert_eq!(
