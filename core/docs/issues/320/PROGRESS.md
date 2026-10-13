@@ -918,3 +918,72 @@ Local tooling-only seal `i321-a-observe-3`: Production LOC: 83,704 -> 83,704
 (delta +0), identical pinned counter on exact first-parent/final staged archives.
 Reference absent (retired R9c; last counted 65,417 at tree 498dd1917812). Mandatory
 A runs/walk are still owed; no source-identity treatment is resampled here.
+
+
+## Issue 321 Step A sealed selections (2026-10-14)
+
+**Owner must know:** the four-Workspace selection FAILS; its independent proof
+is NOT_RUN and cleanup is UNAVAILABLE. This is not hidden by the passing native
+concurrency proofs or the tier-1 functional result. It failed at Commit call 51
+with the original UnexpectedEof and close OS57. Retained log call 50 has section
+28 unavailable and section 30 `[0,0]`: its Resources observation was not admitted.
+The daemon remained running, with no OOM. The original cause is not serialized
+as AdmissionFull; do not claim it was. The two-slot root observation machinery
+is removed in B, not tuned. Original receipt verdicts remain; explicit disposal
+of its positively volume-bound container does not establish product cleanup.
+
+All selections used PASS sealed build `2026-10-14-issue321-a-observe-3-build`,
+clean source `d5c6d2678`, same production implementation as `b43cf2a1a`,
+construction workers 1, existing separate-cache compilation flag and the pinned
+image. Host build completed in 47 s; no tracked edits overlapped a build/sample.
+Fresh append-only run names below identify retained records, not eligibility.
+
+| Selection | Outcome | Run identity |
+| --- | --- | --- |
+| exec, 2 CPUs | exit 0; all phases returned; cleanup complete; diagnostic only, no oracle/proof | `2026-10-14-issue321-a3-exec-2cpu` |
+| exec, unlimited CPUs | exit 0; all phases returned; cleanup complete; same diagnostic limits | `2026-10-14-issue321-a3-exec-unlimited` |
+| 16 × 50 plus new evicted-Store daemon × 50 | both exits 0; 850 Commits / 17 sessions; no early stop; eviction exit 0; cleanup complete; diagnostic only | `2026-10-14-issue321-a3-session` |
+| tier 1 / mixed 100 MB, 5,000, k100 | INELIGIBLE; receipt functional PASS, proof PASS, cleanup Gone; 26,078 requests, 93,702 jobs, 562,975 statements | `2026-10-14-issue321-a3-tier1` |
+| four Workspaces / 100 MB, 5,000, k100 | FAIL; proof NOT_RUN; counts unavailable; cleanup UNAVAILABLE | `2026-10-14-issue321-a3-four` |
+
+Tier-1 raw comparison with the retained Step-1 row; both cache-ineligible:
+
+| Field | Step 1 | A | Signed raw delta |
+| --- | ---: | ---: | ---: |
+| command ns | 6,986,988,251 | 7,041,905,044 | +54,916,793 |
+| Commit ns | 1,834,896,674 | 1,930,366,501 | +95,469,827 |
+| mount ns | 9,114,000 | 9,130,708 | +16,708 |
+| unmount ns | 4,903,333 | 3,802,375 | -1,100,958 |
+| complete wall ns | 9,179,726,432 | 9,277,185,038 | +97,458,606 |
+| statements | 645,242 | 562,975 | -82,267 |
+| overlay logical/allocated B, terminal template endpoint | 233,472 | 135,168 | -98,304 |
+| Store logical B, same external endpoint scope | 114,528,256 | 114,532,352 | +4,096 |
+| Store allocated B | 114,532,352 | 114,536,448 | +4,096 |
+
+The overlay endpoint is the remaining template after cleanup, not the peak
+active Workspace footprint. Store growth is preserved, not described as an
+algorithmic storage saving. This is no eligible speed comparison. Tier-1
+export copies were removed after a PASS sealed-manifest check (450.0 MB), retaining
+all receipts. Four's exact container/clone relationship and final logs precede
+its own external disposal record. No original or unrelated container was removed.
+
+The 2-CPU diagnostic's one-writer create/append/read were 270.5/125.4/192.6 us
+per file; four writers 636.2/325.4/420.5. Unlimited: one writer 272.5/128.0/179.2;
+four 354.0/163.1/249.6. Mutation service time rose 30 -> 62 us under 2 CPUs,
+30 -> 46 us unlimited. Exact original class counts/service/wait operands and
+point memory/SQLite logical+allocated observations stay in each diagnostic.
+They are shared-machine single observations, not eligible speed claims. The
+session took 58.4 s; final cold session Store observation 119,607,296 B. Its
+original source_commit null field remains, tied to the pinned selected build.
+
+The first standalone tier-1 lstat diagnostic completed and cleaned up, but
+numeric snapshots preceded the walk: `observe` collects external state without
+issuing Status. Its population measurement is INCOMPLETE in a separate disposition,
+not a fabricated kernel-map PASS. The corrected, independently pinned diagnostic
+requests actual Status before/after the walk and retains SQL and memory fields.
+This is a tooling correction, not a workload/performance resampling or oracle change.
+Its source is `tools/kernel_reference_walk.py`; the first diagnostic remains.
+No production code changes: Production LOC: 83,704 -> 83,704 (delta +0), pinned
+counter on exact first-parent/final staged archives. Reference absent (retired
+R9c; last counted 65,417 at tree 498dd1917812). A's map population remains owed
+until that corrected observation. B/C/D/E remain NOT_RUN. Durable remains NOT_RUN.

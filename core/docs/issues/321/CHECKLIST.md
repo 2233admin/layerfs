@@ -134,3 +134,13 @@ current observations without synthesizing removed SQL counters. Historical
 arrays keep their original shape. Twelve-cell and Storage pins remain unchanged;
 final E repinning/compatibility/guide work is NOT_RUN. Mandatory A runs follow
 this clean source seal; A is still IN_PROGRESS.
+
+
+A sealed selections at `d5c6d2678`: both exec diagnostics and the 850-Commit
+session completed/cleaned up (no oracle/proof); tier 1 INELIGIBLE with receipt
+functional/proof PASS and cleanup Gone; four-Workspace FAIL, proof NOT_RUN,
+cleanup UNAVAILABLE. Exact failure retained; owned external disposal does not
+change its verdict. Speed/storage operands and deltas are in the #320 ledger.
+The first standalone walk lacks post-walk numeric counts: population INCOMPLETE.
+A corrected Status-based diagnostic is pinned separately; no A benchmark is
+retried and no final E count/Storage pin is changed. A remains IN_PROGRESS.
