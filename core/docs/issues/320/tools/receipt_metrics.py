@@ -36,6 +36,7 @@ CACHE = ("cache_hits", "cache_misses", "upstream_batches", "authenticated_bytes"
          "charged_cache_bytes", "cached_objects")
 MOUNT = ("received", "admitted", "queued", "running", "parked", "retained", "owned_input_bytes", "future_bytes",
          "receive_units", "completed", "steps", "wakes", "terminal")
+DIRECT_MOUNT = ("active", "retained", "requests", "completed", "terminal")
 CONSTRUCTION = ("inode_rows", "entry_rows", "inode_pages", "entry_pages", "change_pages", "largest_page",
                 "parent_points", "base_lookups", "headers_written", "headers_dropped", "values_written",
                 "fresh_serials", "tombstones_skipped", "files_constructed", "files_unchanged", "symlinks",
@@ -121,12 +122,20 @@ def metrics(receipt, units=None):
         raw = interval["raw"]
         out["opcodes"] = {name: count for name, count in zip(OPCODES, raw["opcodes"]["by_opcode"]) if count}
         out["disposition"] = raw["opcodes"]["disposition"]
-        out["completed"] = interval["adjusted"]["completed"]
+        # A daemon with one lock per Workspace (issue 321 step B) names the same counts `jobs_by_class`.
+        out["completed"] = interval["adjusted"].get("completed") or interval["adjusted"]["jobs_by_class"]
     else:
         # Several kernel connections: the receipt keeps per-connection request totals only.
         out["connections"] = [row["requests"] for row in counted.get("kernel_connections", [])]
     owner = delta(receipt, "owner_work", before, end)
-    if owner:
+    if owner and len(owner) == 24:
+        # One lock per Workspace: jobs, lock wait and hold time by class; no queue exists.
+        out["owner_wait_ns"] = dict(zip(CLASSES, owner[12:18]))
+        out["owner_service_ns"] = dict(zip(CLASSES, owner[18:24]))
+        out["owner_raw_completed"] = dict(zip(CLASSES, owner[6:12]))
+        out["maintenance"] = {"jobs": owner[1], "rows": owner[2], "data_bytes": owner[4], "ns": owner[5]}
+        out["peak_queued"] = "n/a (no queue)"
+    elif owner:
         out["owner_wait_ns"] = dict(zip(CLASSES, owner[20:26]))
         out["owner_service_ns"] = dict(zip(CLASSES, owner[26:32]))
         out["owner_raw_completed"] = dict(zip(CLASSES, owner[14:20]))
@@ -143,6 +152,8 @@ def metrics(receipt, units=None):
     for name, fields, label in (("reader_work", READER, "reader"), ("store_work", STORE, "store"),
                                 ("cache_work", CACHE, "cache"), ("mount_work", MOUNT, "mount")):
         values = delta(receipt, name, before, end)
+        if values and label == "mount" and len(values) == len(DIRECT_MOUNT):
+            fields = DIRECT_MOUNT
         if values:
             out[label] = dict(zip(fields, values))
     construction = summed(receipt, "construction_work")
@@ -211,7 +222,8 @@ def table(row):
                       f"cache hits {cache.get('cache_hits')}, misses {cache.get('cache_misses')}, evictions {cache.get('evictions')}"))
     if "mount" in row:
         mount = row["mount"]
-        lines.append(("Mount dispatch", f"completed {mount['completed']:,}, steps {mount['steps']:,}, wakes {mount['wakes']:,}"))
+        lines.append(("Mount requests", f"received {mount['requests']:,}, completed {mount['completed']:,}") if "requests" in mount else
+                     ("Mount dispatch", f"completed {mount['completed']:,}, steps {mount['steps']:,}, wakes {mount['wakes']:,}"))
     if "construction" in row:
         c = row["construction"]
         lines.append(("Construction (sum of Commits)", ", ".join(f"{key} {c[key]:,}" for key in
@@ -263,7 +275,7 @@ def report(rows):
                 f"{row['daemon_vmhwm_bytes']:,}" if row["daemon_vmhwm_bytes"] else "UNAVAILABLE"]
     names = ["Functional / proof status", "Command time, total and per unit", "Commit time, total and per unit",
              "Elapsed time (concurrent cases)", "Mount / unmount time", "Requests, by opcode", "Owner jobs, by class",
-             "Statements / executions / VM steps", "Owner service time / queue wait", "Command and Commit time outside the owner",
+             "Statements / executions / VM steps", "Owner service (lock hold) time / queue (lock) wait", "Command and Commit time outside the owner",
              "Store reader grants and batches", "Maintenance jobs during the interval",
              "Scans / sorts / auto-indexes / re-prepares (overlay, foreground)", "Store logical / allocated bytes",
              "Overlay logical / allocated bytes", "Daemon peak memory"]
