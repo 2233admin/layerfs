@@ -1,8 +1,10 @@
 //! Fixed startup resources and exact terminal request/worker dispositions.
 use std::{any::Any, error::Error, fmt, future::Future, pin::Pin};
 
-/// Plain receive workers per Workspace, provisional until the Step B measurement.
-pub const RECEIVE_SLOTS: usize = 1;
+/// Plain receive workers per Workspace. Two lets one request proceed while
+/// another waits on a Store read; a second worker also contends for the one
+/// Workspace lock, so more workers slow writers of the same Workspace.
+pub const RECEIVE_SLOTS: usize = 2;
 pub const MAX_INPUT_BYTES: usize = layerfs_overlay::WRITE_WINDOW + 2 * 255;
 
 /// Completion means original reply/result/source consumers are disposed. A

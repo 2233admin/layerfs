@@ -1,7 +1,7 @@
 """Issue 321 Step B: threads, memory and lock service time of W Workspaces with P writers each.
 
 usage: workspace_load.py <build-folder> <prepared-original-folder> <out-folder> <workspaces> <writers-per-workspace>
-                         [<files-per-writer> [<budget-seconds> [<cpus>]]]
+                         [<files-per-writer> [<budget-seconds> [<cpus> [<load>]]]]
 
 One daemon mounts <workspaces> Workspaces of the prepared tree. Point
 observations of the daemon (threads, resident and anonymous memory, the cgroup,
@@ -16,6 +16,12 @@ files, append a line to each, read the first line of each, shell builtins only,
 self-timed. A Status of the first Workspace before and after the load carries
 the daemon's cumulative jobs, lock wait and hold time by class; the two Status
 calls are inside the difference.
+
+With <load> `read-base`, each process instead reads every regular file of its
+share of the mounted prepared tree once (the files in sorted order, dealt in
+turn to the processes of a Workspace), so the bytes come from the Store through
+the daemon. <files-per-writer> is then unused. The Store file's page-cache
+state is whatever the clone left; it is not a cold claim.
 
 With <cpus>, the CPU limit of the container this run started is changed first
 (0 removes the limit). The limit used is recorded.
@@ -54,6 +60,14 @@ def body(label, files):
         'echo "$t0 $t1 $t2 $t3"']) + "\n"
 
 
+def read_body(share, shares):
+    return "\n".join([
+        "set -eu", "t0=$EPOCHREALTIME",
+        f"n=$(find . -type f | LC_ALL=C sort | awk 'NR % {shares} == {share}' | tee /tmp/x321-read-$$ | wc -l)",
+        "t1=$EPOCHREALTIME", "xargs -d '\\n' cat < /tmp/x321-read-$$ > /dev/null", "t2=$EPOCHREALTIME",
+        "rm /tmp/x321-read-$$", 'echo "$t0 $t1 $t2 $n"']) + "\n"
+
+
 def status_fields(text):
     found = {}
     for line in text.splitlines():
@@ -69,6 +83,9 @@ def main():
     files = int(sys.argv[6]) if len(sys.argv) > 6 else 1000
     budget = float(sys.argv[7]) if len(sys.argv) > 7 else 90.0
     cpus = sys.argv[8] if len(sys.argv) > 8 else None
+    load = sys.argv[9] if len(sys.argv) > 9 else "write"
+    if load not in ("write", "read-base"):
+        sys.exit("load is write or read-base")
     started = time.monotonic()
     lock = (ROOT / "core/target/issue320/measurement.lock").open("a")
     fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -82,8 +99,9 @@ def main():
               "case_tree": prepared["case"], "build": build_folder.name, "source_commit": build["identity"]["source_commit"],
               "source_tree": build["identity"]["source_tree"],
               "sqlite_compile_flags": build.get("explicit_sqlite_flags"),
-              "workspaces": workspaces, "writers_per_workspace": per_workspace, "files_per_writer": files,
-              "writer": "create, append, read of every file; shell builtins; self-timed",
+              "workspaces": workspaces, "writers_per_workspace": per_workspace, "files_per_writer": files, "load": load,
+              "writer": ("create, append, read of every file; shell builtins; self-timed" if load == "write" else
+                         "list the tree, then read every regular file of its share once; self-timed"),
               "interference": {"other_containers_at_start": others}, "resident_observations": []}
     clone = fixtures.clone(prepared, out / "clone", build)
     environment = out / "environment.txt"
@@ -107,8 +125,9 @@ def main():
 
         def write(directory, label, into, slot):
             begun = time.monotonic_ns()
+            script = body(label, files) if load == "write" else read_body(slot % per_workspace, per_workspace)
             done = subprocess.run([*docker, "exec", *identity, "--workdir", directory, runtime.container,
-                                   "/bin/bash", "-c", body(label, files)], capture_output=True, text=True, timeout=60)
+                                   "/bin/bash", "-c", script], capture_output=True, text=True, timeout=60)
             into[slot] = {"exit": done.returncode, "launch_and_run_ms": round((time.monotonic_ns() - begun) / 1e6, 1),
                           "stamps": done.stdout.split(), "stderr": done.stderr[-300:]}
 
@@ -233,12 +252,17 @@ def main():
     (out / "result.json").write_text(json.dumps(result, indent=1) + "\n")
 
     def stages(outcome):
+        if load == "read-base":
+            listed, begun, ended, count = outcome["stamps"]
+            return [round((float(begun) - float(listed)) * 1e3, 1), round((float(ended) - float(begun)) * 1e3, 1), int(count)]
         stamps = [float(value) for value in outcome["stamps"]]
         return [round((right - left) * 1e6 / files, 1) for left, right in zip(stamps, stamps[1:])]
 
     done = [stages(outcome) for outcome in result.get("outcomes", []) if outcome and outcome["exit"] == 0]
     mean = [round(sum(column) / len(column), 1) for column in zip(*done)] if done else ["failed"]
-    print("workspaces writers/workspace", *(stage + "_us_per_file" for stage in STAGES), "| class jobs wait_us/job hold_us/job")
+    print("workspaces writers/workspace",
+          *((stage + "_us_per_file" for stage in STAGES) if load == "write" else ("list_ms", "read_ms", "files_read")),
+          "| class jobs wait_us/job hold_us/job")
     print(workspaces, per_workspace, *mean, "|",
           " ".join(f"{name}:{value['jobs']}/{value['wait_ns'] / max(1, value['jobs']) / 1e3:.0f}/"
                    f"{value['hold_ns'] / max(1, value['jobs']) / 1e3:.0f}"
