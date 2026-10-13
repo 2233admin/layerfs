@@ -6,6 +6,26 @@ schema16. Earlier algorithm and proof pins retain their original scope; see
 
 > **Status:** Current general guide.
 
+Issue 321 step-1 temporary-state correction, 2026-10-13: each overlay
+connection selects and verifies `temp_store=MEMORY` (readback 2), in addition
+to MEMORY journal/OFF/EXCLUSIVE, mmap off and zero busy timeout. This removes
+SQLite's auxiliary temporary database/sorter-file route. The historical FILE
+selection below describes its original pin. No canonical or global Store
+format/profile changes. Each Workspace still uses its independent database
+copy and connection; schema 33 remains until the selected step-2 revision.
+
+Temporary state is bounded by the ordinary checked job windows: four inode
+and two name changes, 128 KiB read/write, 32 KiB payload rows, 18 reference
+claims and 64-row metadata/record pages. Piece mutation staging covers at most
+the write window plus one 32 KiB run at either edge (48 aligned piece starts).
+Cookie retirement handles at most eight 16 KiB pages, and live maintenance
+uses its existing row/byte window. Indexed plans avoid temporary sorts on
+request paths. MEMORY rollback and statement journals retain pages only for
+one atomic job; SQLite frees their chunks at its completion. These source
+windows do not make the cache-size suggestion or admission ledger an RSS
+bound. SQLite connection/statement caches, journals/ephemeral state, stacks,
+allocator retention and kernel file cache require separate resource evidence.
+
 Issue 316 update, 2026-10-11 (overlay schema 33, phase 1 of the
 [reference-piece plan](../issues/316/PIECE-STRUCTURE-IMPLEMENTATION-PLAN.md)):
 a file range of a layer has a fourth kind, the reference piece. The new table

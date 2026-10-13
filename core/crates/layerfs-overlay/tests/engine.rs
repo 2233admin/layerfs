@@ -219,7 +219,7 @@ fn profile_namespace_binary_values_and_atomic_refusals() {
     );
     assert_eq!(
         (p.page_size, p.cache_size, p.foreign_keys, p.temp_store),
-        (4096, -2048, 1, 1)
+        (4096, -2048, 1, 2)
     );
     assert!(!p.compile_options.is_empty());
     let a = db.open_workspace([1; 32], [9; 32]).unwrap();

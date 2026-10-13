@@ -537,3 +537,63 @@ full tier-1 and four-Workspace samples, and affected correctness coverage remain
 required. Steps 2–4 are NOT_RUN. Twelve-cell exact-count compatibility remains
 unqualified until step 4; no pin was weakened. Historical failures above remain
 unchanged. Durable: NOT_RUN — disabled by owner until explicit reauthorization.
+
+## Issue 321 step 1: temporary backing and loaded diagnostic (2026-10-13)
+
+The overlay now selects and verifies `temp_store=MEMORY` (2), keeping schema 33
+and MEMORY journal/OFF/EXCLUSIVE. Source audit of the pinned SQLite confirms
+main and statement journals do not spill; ephemeral btrees and sorters follow
+the temp-store selection. Ordinary metadata/payload/record/cookie/maintenance
+windows bound their cardinalities; request plans/counters retain zero sorts,
+full scans, automatic indexes and repreparation. The engine architecture note
+records these bounds and distinguishes them from resident memory.
+
+Host and pinned Linux each passed 37 tests: compound 3, engine 12, directory
+5, pieces 9, resources 6, template 2. Both builds were separate `--no-run`;
+host/Linux Overlay all-target warning-denying Clippy, fmt, boundary scan (688
+production files) and 50 boundary self-tests passed. Each invocation has its
+own bounded retained record (`temp-memory-*`); Linux containers were removed.
+The first relative-path build launch was refused by the busy gate matching its
+own argv; no build began. The worktree-qualified command then gated FREE.
+No count compatibility pin or byte/custody oracle was weakened.
+
+Before this source change, an external loaded-owner diagnostic reused the
+hash-checked disabled-arm libraries from `878af2cea`, product tree
+`f47fd01593372b64cb6aa2149026b6da14969fc0`. Probe source SHA-256
+`97b4bd1976fd1c174f367473511e54bc1a44cd0fa51edf19366cbbb7ba12be29`,
+binary `9959eec1cb8be20d445aec46f80a6d024c9b6edee02bd9f49a2a701b5368c160`.
+All 16 configured owners were open; ordinary public Publish, reply and captured
+cell read-back exercised 1/4/16 writers at 512 files and 16 at 2,048 additional
+files, one 4 KiB payload per file. Exit 0; checked connection close and owned
+diagnostic-container removal. No FUSE/global Store, terminal deletion proof,
+maximum 128 KiB write-window exercise or eligible timing result.
+
+| Phase | Writers × new files | SQLite exact loaded-phase allocator highwater B | Sampled process RSS maximum B | Sampled anonymous RSS maximum B | Sampled cgroup file / dirty maximum B |
+| --- | --- | ---: | ---: | ---: | ---: |
+| 0 | 1 × 512 | 5,397,328 | 14,532,608 | 8,314,880 | 12,480,512 / 6,324,224 |
+| 1 | 4 × 512 | 5,823,416 | 15,388,672 | 9,093,120 | 21,897,216 / 15,740,928 |
+| 2 | 16 × 512 | 7,178,112 | 18,796,544 | 12,500,992 | 60,383,232 / 54,226,944 |
+| 3 | 16 × 2,048 | 8,792,056 | 22,736,896 | 16,441,344 | 214,085,632 / 207,929,344 |
+
+Sampling requested 2 ms; actual maximum gaps 3,497,833 / 3,582,042 /
+3,507,875 / 4,625,333 ns, with 6 / 29 / 112 / 488 samples. These are sampled
+loaded-window maxima, not continuous phase peaks. SQLite highwater was reset
+at each boundary; it includes SQLite allocations across all owners, distinct
+from Rust heap/threads/kernel cache. The naked diagnostic container omitted
+the owning family's physical resource profile; its points cannot qualify that
+profile. The final resource observation reports 178,257,920 payload bytes.
+
+The 8 MiB credit limit is not an 8 MiB RSS/SQLite-heap bound: its last point had
+zero jobs, 104,016 fixed credited bytes and a 1 MiB pager suggestion, while
+SQLite current heap was 8,160,568 B. This is a coverage gap, not proof of a leak.
+Owners and statements were progressively activated, and background maintenance
+was still pending at points (`ready_targets=16`, `maintenance_targets=16`).
+SQLite private bulk pages are not included in PAGECACHE_OVERFLOW, so that
+counter's 131,200 B cannot explain all pager allocations. File cache grows with
+written database pages and remains a separately unresolved physical domain.
+
+The next diagnostic must hold the ordinary statement paths constant, observe
+maintenance-idle fences, and apply the owning resource profile, retaining
+maximum-window/record-page/admission observations. This checkpoint claims no
+aggregate physical bound or cache-build selection. Step 1 remains INCOMPLETE;
+step 2 is not started. Durable remains NOT_RUN.

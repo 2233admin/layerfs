@@ -57,7 +57,7 @@ pub(crate) fn initialize(
     crate::diagnostics::startup::batch(c, work, &format!(
         "PRAGMA page_size=4096; PRAGMA auto_vacuum=NONE; PRAGMA journal_mode=MEMORY; PRAGMA synchronous=OFF;
          PRAGMA locking_mode=EXCLUSIVE; PRAGMA mmap_size=0; PRAGMA foreign_keys=ON;
-         PRAGMA temp_store=FILE; PRAGMA cache_size=-{}; PRAGMA max_page_count={};",
+         PRAGMA temp_store=MEMORY; PRAGMA cache_size=-{}; PRAGMA max_page_count={};",
         config.pager_kib, max_pages
     ))?;
     let integer = |name: &str| readback(c, work, &format!("PRAGMA {name}"), |r| r.get::<_, i64>(0));
@@ -111,7 +111,7 @@ pub(crate) fn initialize(
         || p.max_pages != i64::from(max_pages)
         || p.foreign_keys != 1
         || p.busy_timeout != 0
-        || p.temp_store != 1
+        || p.temp_store != 2
         || p.auto_vacuum != 0
     {
         return Err(OverlayError::Invalid("profile readback differs"));
