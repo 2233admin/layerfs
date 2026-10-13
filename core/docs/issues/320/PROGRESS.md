@@ -668,3 +668,36 @@ check passed (`notification-fuser-owning-scope`). The broader repository scan
 again refuses the unchanged passthrough benchmark's local fuser lock/patch;
 retain `notification-fuser-integrity` as FAIL, rather than report a broad PASS.
 That unrelated harness is not modified by this correction.
+
+## Issue 321: owner second-round decisions and revised plan (2026-10-13)
+
+Documentation only, on top of unchanged source `20f237499`; production LOC
+84,220. No build, test or sample ran for this entry, and no receipt changes.
+
+Owner decisions, recorded in [the plan](../321/PLAN.md) and the issue body:
+
+- Each Workspace's memory is independent; no budget is shared between
+  Workspaces. The configured Workspace capacity is the only global bound.
+- Three rules are dropped with their machinery: the owner thread with its
+  queue, admission, credits and completion tracking; open-file,
+  directory-position and kernel-reference state in SQLite; row-by-row cleanup
+  of an unmounted Workspace.
+- Three rules stay: exact counts as evidence; exact failure with no retry or
+  replay; file requests served while a Commit of the same Workspace runs.
+
+Consequences for this ledger:
+
+- Checklist rows "aggregate memory/page cache" and "job classes/in-Workspace
+  queue" are SUPERSEDED, not passed. Their retained diagnostics keep their pins
+  and verdicts.
+- Steps 2 and 3 are replaced by steps A to D; step 4 is step E. Order:
+  1, A, B, C, D, E. Step 1 stays INCOMPLETE: the long-history/cold-daemon
+  session, full tier 1 and the four-Workspace sample have not run on it.
+- The page-cache build option is selected by the independence decision
+  (separate caches), conditional on the one-Workspace measurement after step B.
+- Source expectations in the plan (about 77,500 to 79,500 production lines after
+  steps A and B) are estimates from file sizes, not a measured or traced result.
+- Open for the owner: the in-memory kernel-reference map grows with the files
+  the kernel remembers; the revised guide wording is a draft, not applied.
+
+Durable: NOT_RUN — disabled by owner until explicit reauthorization.

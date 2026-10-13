@@ -2,11 +2,13 @@
 
 > **Status:** Dated planning checkpoint; not release evidence or a product contract.
 > Takeover 2026-10-13 at `878af2cea`; local branch `issue321-workspace-overlay`.
+> Revised 2026-10-13 at `20f237499` for the owner's second-round decisions:
+> steps 2 and 3 are replaced by steps A to D of the [plan](PLAN.md).
 
-The GitHub checklist governs completion. Implemented rows below describe source,
-not a claim that final qualification ran at the newest identity. Existing receipts
-retain their own source/build pins. Steps proceed in order. Temporary backing is
-also a step-1 obligation; `temp_store=FILE` remains unresolved at takeover.
+The GitHub checklist governs completion; [PLAN.md](PLAN.md) mirrors the issue
+body. Implemented rows below describe source, not a claim that final
+qualification ran at the newest identity. Existing receipts retain their own
+source/build pins. Steps proceed in order: 1, A, B, C, D, E.
 
 ## Step 1
 
@@ -18,40 +20,59 @@ also a step-1 obligation; `temp_store=FILE` remains unresolved at takeover.
 | route every job/observation | implemented | overlay/workspaces.rs; control registry/cleanup; owner/resources/application receipts |
 | reservation removed | implemented | database/physical.rs; connection.rs; reservation/device proofs |
 | full-device rollback/no-space including I/O | implemented | connection.rs; physical.rs; device and four mounted arms at their pins |
-| aggregate memory/page cache | INCOMPLETE | overlay/budget.rs; profile.rs; idle point and four diagnostics only |
-| job classes/in-Workspace queue | implemented | overlay/queue.rs; owner/finite-service coverage to reconcile |
-| service-time cause | INCOMPLETE | owner service / SQLite / CPU; retained counters; source model ongoing |
-| page-cache option selection | INCOMPLETE | LIBSQLITE3_FLAGS/runtime compile options; retained enabled/disabled builds; memory needed |
+| aggregate memory/page cache | SUPERSEDED | owner 2026-10-13: no budget shared between Workspaces; overlay/budget.rs is removed in step B; retained idle and loaded diagnostics keep their pins |
+| job classes/in-Workspace queue | SUPERSEDED | owner 2026-10-13: queue, credits and admission are removed in step B; classes remain as counters only |
+| service-time cause | INCOMPLETE; moved to step B | re-measure after the queue and credit code is removed; retained counters and the notification work model keep their pins |
+| page-cache option selection | SELECTED BY DECISION; moved to step B | separate page caches follow from independent Workspace memory, unless one Workspace alone slows beyond run-to-run difference; retained enabled/disabled builds; memory still needed |
+| SQLite temporary data in memory | implemented | database/profile.rs (`temp_store=MEMORY`, `1285ebf6c`); host and Linux engine tests at that pin |
 | distinct ordinary identities | implemented | workspaces.rs; startup allocator; template and workspace-files proofs |
 
-## Step 2
+## Step A — open state in memory, unmount deletes the file
+
+| Checklist item | Disposition | Source/evidence |
+| --- | --- | --- |
+| trace the eleven tables; move the ones that hold | NOT_RUN |  |
+| one in-memory open-state structure per Workspace | NOT_RUN |  |
+| remove moved tables, statements, triggers, cleanup jobs, plan diagnostics, typed jobs | NOT_RUN |  |
+| remove `reclaim` and terminal row cleanup | NOT_RUN |  |
+| bytes per kernel-reference entry; map size after the tier-1 walk | NOT_RUN |  |
+
+## Step B — one lock per Workspace
+
+| Checklist item | Disposition | Source/evidence |
+| --- | --- | --- |
+| one lock around connection and open state; caller runs the job | NOT_RUN |  |
+| remove owner thread, queue, admission, credits, ledger, completion tracking | NOT_RUN |  |
+| plain workers per mount replace the daemon-wide dispatcher; threads reported | NOT_RUN |  |
+| separate SQLite page caches | NOT_RUN |  |
+| idle and loaded memory at 1, 4 and 16 Workspaces | NOT_RUN |  |
+| service-time cause re-measured | NOT_RUN |  |
+
+## Step C — table revision of what remains
 
 | Checklist item | Disposition | Source/evidence |
 | --- | --- | --- |
 | remove Workspace columns | NOT_RUN |  |
 | selected table names | NOT_RUN |  |
-| trace/apply valid merges | NOT_RUN |  |
-| drop terminal reclaim/row cleanup | NOT_RUN |  |
+| trace/apply the record-table merge | NOT_RUN |  |
 | schema bump/no migration | NOT_RUN |  |
 
-## Step 3
+## Step D — fewer statements and round trips
 
 | Checklist item | Disposition | Source/evidence |
 | --- | --- | --- |
 | review accounting triggers | NOT_RUN |  |
-| consolidate in-flight holders/statements | NOT_RUN |  |
 | remove repeated attributes | NOT_RUN |  |
 | reduce write frame | NOT_RUN |  |
 | reduce Commit jobs/new file | NOT_RUN |  |
-| Commit yields to same-Workspace requests | NOT_RUN |  |
 
-## Step 4
+## Step E — re-qualify once
 
 | Checklist item | Disposition | Source/evidence |
 | --- | --- | --- |
 | twelve exact-count pins | NOT_RUN |  |
 | all Linux mounted proof binaries | NOT_RUN |  |
-| harness schema/profile compatibility | NOT_RUN |  |
+| harness schema/profile/receipt-field compatibility | NOT_RUN |  |
 | contracts/cache/architecture/guides | NOT_RUN |  |
 | selected/held-out samples | NOT_RUN |  |
 | rebase SDK baseline/recompute LOC | NOT_RUN |  |
