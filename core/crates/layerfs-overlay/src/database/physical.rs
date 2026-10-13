@@ -101,9 +101,10 @@ impl Allocation {
         let filesystem = nix::sys::statvfs::fstatvfs(&self.file)
             .map_err(|error| std::io::Error::from_raw_os_error(error as i32))?;
         // Do not translate quota/size-limit/read/corruption failures. The
-        // descriptor's filesystem must have no free blocks at all, including
-        // privileged reserves; the original I/O cause remains in the result.
-        Ok(filesystem.blocks_free() == 0)
+        // descriptor's filesystem must have no available blocks. ext4 may
+        // still count reserved/internal blocks in blocks_free at real ENOSPC;
+        // those are not ordinary writable capacity. Retain the original cause.
+        Ok(filesystem.blocks_available() == 0)
     }
     #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     pub(crate) fn device_full(&self) -> OverlayResult<bool> {

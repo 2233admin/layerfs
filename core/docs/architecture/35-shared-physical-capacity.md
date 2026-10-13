@@ -22,7 +22,7 @@ receipt decoding; they describe no remaining reservation implementation.
 Direct SQLite Full is a definite no-space result only after whole-job rollback,
 including capacity failure at `COMMIT`. A write/truncate I/O error can also report
 no space when the original file identity is verified, its descriptor's filesystem
-has zero free blocks, and SQLite has automatically rolled back or the engine's
+has zero available blocks, and SQLite has automatically rolled back or the engine's
 one explicit `ROLLBACK` succeeds. `NoSpace` retains the original SQLite cause.
 No witness before an ordinary write is added; `capacity_checks` counts only
 failure observations. Other I/O errors, a non-full device, corrupt state, failed

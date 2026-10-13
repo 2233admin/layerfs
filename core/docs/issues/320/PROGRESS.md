@@ -431,3 +431,12 @@ ticket, lifetime and error-identity tests: 21 passed; Overlay/Fuse warning-denyi
 Clippy and host/Linux proof builds passed. Separate device proof cases cover
 statement spill versus COMMIT and external translation of actual ENOSPC to EIO;
 their execution remains owed. No performance sample; step 1 is incomplete.
+
+At `9e36c2a83`, actual ext4 exhaustion passed separately at statement spill and
+COMMIT: original SQLite Full, unchanged state/capture bytes/other Workspace,
+no reservation and successful exact releases/reclamation. The external I/O-error
+case FAILED: original IOERR_WRITE was quarantined because `blocks_free` included
+2,621 reserved/internal blocks despite `blocks_available=0` and actual ENOSPC.
+Correct the witness to available capacity (`f_bavail`); retain all original proof
+oracles and the failed outcome. Production LOC for that patch: 84,020 -> 84,071
+(+51). No timing/storage performance result or step completion is claimed.
