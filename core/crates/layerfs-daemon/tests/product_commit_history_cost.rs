@@ -90,18 +90,28 @@ fn change(session: &mut Session<'_>, commit: usize) {
 
 #[test]
 fn equal_commits_read_the_store_alike_whatever_was_committed_before() {
+    evidence(format_args!("PRODUCT_COMMIT_HISTORY_PHASE init"));
     let rig = Rig::new("product-commit-history-cost", tree);
     assert_eq!(
         rig.f.config.sqlite_profile,
         SqlitePersistenceProfile::Disposable
     );
+    evidence(format_args!("PRODUCT_COMMIT_HISTORY_PHASE bind"));
     let workspace = rig.bind(1);
     let mut session = Session::new(&workspace, rig.base.clone());
     let mut reads = Vec::with_capacity(COMMITS);
     let mut rows = Vec::with_capacity(COMMITS);
     for commit in 0..COMMITS {
+        evidence(format_args!(
+            "PRODUCT_COMMIT_HISTORY_PHASE change {}",
+            commit + 1
+        ));
         change(&mut session, commit);
         settled(&rig.owner.client(), 0);
+        evidence(format_args!(
+            "PRODUCT_COMMIT_HISTORY_PHASE capture {}",
+            commit + 1
+        ));
         let success = workspace
             .commit_captured()
             .unwrap_or_else(|failure| panic!("{failure:?}"));

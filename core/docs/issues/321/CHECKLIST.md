@@ -35,7 +35,7 @@ source/build pins. Steps proceed in order: 1, A, B, C, D, E.
 | one in-memory open-state structure per Workspace | IN_SOURCE; qualification owed | open/ next to Overlay connection; touched-entry undo |
 | remove moved tables, statements, triggers, cleanup jobs, plan diagnostics, typed jobs | IN_SOURCE; final removal audit owed | SQL/schema/accounting and dedicated native/cookie retirement deleted; real filesystem jobs still use the owner until B |
 | remove `reclaim` and terminal row cleanup | IN_SOURCE; mounted disposal qualification owed | raw close retains rows; control closes/deletes whole file |
-| bytes per kernel-reference entry; map size after the tier-1 walk | DIAGNOSTIC ONLY; walk NOT_RUN | 854,848 requested Rust B / 5,000 = 170.9696 B/entry, kernel+custody maps/journals; no RSS/SQLite C-heap bound |
+| bytes per kernel-reference entry; map size after the tier-1 walk | MEASURED; diagnostic scope | 854,848 requested Rust B / 5,000 = 170.9696 B/entry; actual walk 5,048 kernel / 64 parent entries, unchanged SQL/pages/files; whole-daemon point RSS 23,056 KiB; no hard bound |
 
 ## Step B — one lock per Workspace
 
@@ -144,3 +144,19 @@ change its verdict. Speed/storage operands and deltas are in the #320 ledger.
 The first standalone walk lacks post-walk numeric counts: population INCOMPLETE.
 A corrected Status-based diagnostic is pinned separately; no A benchmark is
 retried and no final E count/Storage pin is changed. A remains IN_PROGRESS.
+
+
+2026-10-14 qualification follow-up: corrected mounted walk functional PASS,
+measurement AVAILABLE at `i321-a-kernel-4` tool / `d5c6d2678` build. Six pinned
+physical-device arms PASS (DML, COMMIT, translated EIO, raw daemon, normal and
+forced mounted drain), with owned teardown. Four Linux resource observations
+and scoped warning-denying Clippy PASS. SQL removal audit finds no remaining
+references to moved tables or terminal retirement modules. The original 120 s
+history-cost hang stays FAILED; the new phase-instrumented external test passed
+all twelve unchanged Storage assertions in 0.31 s, cause of the old timeout
+unknown. One obsolete raw-Close row-disposal expectation failed and was replaced
+with Queued/retained-row checks; real terminal control disposal uses existing
+proofs. A narrow route-free Read-slot mismatch is corrected without changing
+configured capacities. A new seal and one affected four-Workspace selection
+are pending. Earlier passing treatments are reused at exact pins; no final
+cell pin, guide or contract is weakened. A remains IN_PROGRESS; B NOT_RUN.

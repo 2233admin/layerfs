@@ -2,7 +2,7 @@
 use super::{
     backing::Backing,
     budget::{Budget, JobPermit},
-    commands::{Command, Response},
+    commands::{Command, Response, ServiceClass},
     credits::Credit,
     owner::{Owner, OwnerClient, OwnerConfig, OwnerError},
     queue::{OwnerWork, Shared},
@@ -382,7 +382,12 @@ impl Workspaces {
         if state.stopping {
             return Err((OwnerError::Stopped, command));
         }
-        if *state.lane.slots(class) >= root.shared.config.lifecycle_jobs_per_namespace {
+        let bound = if class == ServiceClass::Lifecycle {
+            root.shared.config.lifecycle_jobs_per_namespace
+        } else {
+            root.shared.config.jobs_per_namespace
+        };
+        if *state.lane.slots(class) >= bound {
             return Err((OwnerError::AdmissionFull, command));
         }
         if let Err(cause) = root.shared.budget.acquire(bytes, class) {

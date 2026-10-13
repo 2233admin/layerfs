@@ -2,17 +2,52 @@
 use layerfs_daemon::application::{ResourceDiagnosticError, ResourceFailure, ResourceObservation};
 use layerfs_daemon::{Command, Owner, OwnerConfig, OwnerError, Response, ServiceClass};
 use layerfs_overlay::{CleanupState, ProfileConfig, StatementKind};
-use std::{
-    fs,
-    future::Future,
-    pin::Pin,
-    sync::Arc,
-    task::{Context, Poll, Wake, Waker},
-    time::{Duration, Instant},
-};
-struct Noop;
-impl Wake for Noop {
-    fn wake(self: Arc<Self>) {}
+use std::fs;
+#[test]
+fn global_resources_uses_read_slots_and_preserves_an_unadmitted_command() {
+    let directory =
+        std::env::temp_dir().join(format!("layerfs-resource-slots-{}", std::process::id()));
+    fs::create_dir(&directory).unwrap();
+    let owner = Owner::start(
+        &directory.join("overlay.sqlite"),
+        ProfileConfig::default(),
+        OwnerConfig {
+            jobs_per_namespace: 3,
+            lifecycle_jobs_per_namespace: 1,
+            ..OwnerConfig::default()
+        },
+    )
+    .unwrap();
+    let client = owner.client();
+    let before = client.diagnostics().unwrap();
+    let mut held = Vec::new();
+    for _ in 0..3 {
+        let done = client
+            .try_submit(None, Command::Resources { global: true })
+            .unwrap()
+            .wait()
+            .unwrap();
+        assert!(matches!(done.result(), Ok(Response::Resources(_))));
+        held.push(done);
+    }
+    let admitted = client.diagnostics().unwrap();
+    assert_eq!(admitted.admitted - before.admitted, 3);
+    assert_eq!(admitted.outstanding - before.outstanding, 3);
+    assert!(matches!(
+        client.try_submit(None, Command::Resources { global: true }),
+        Err((
+            OwnerError::AdmissionFull,
+            Command::Resources { global: true }
+        ))
+    ));
+    let refused = client.diagnostics().unwrap();
+    assert_eq!(refused.admitted, admitted.admitted);
+    assert_eq!(refused.outstanding, admitted.outstanding);
+    assert_eq!(refused.sql_foreground, admitted.sql_foreground);
+    drop(held);
+    drop(client);
+    drop(owner);
+    fs::remove_dir_all(directory).unwrap();
 }
 #[test]
 fn stopped_operator_observation_retains_the_exact_unattempted_command() {
@@ -114,7 +149,7 @@ fn failed_resource_receipt_and_real_output_failure_keep_both_originals_and_credi
 }
 
 #[test]
-fn global_resources_is_read_only_before_bind_and_after_terminal_cleanup() {
+fn global_resources_is_read_only_before_bind_and_after_raw_close() {
     let directory = std::env::temp_dir().join(format!(
         "layerfs-resource-observation-{}",
         std::process::id()
@@ -206,44 +241,30 @@ fn global_resources_is_read_only_before_bind_and_after_terminal_cleanup() {
         .unwrap();
     assert!(matches!(closed.result(), Ok(Response::Done)));
     drop(closed);
-    let deadline = Instant::now() + Duration::from_secs(3);
-    loop {
-        let observed = client
-            .try_submit(
-                None,
-                Command::ObserveCleanup {
-                    namespace: route.namespace(),
-                    incarnation: [7; 32],
-                },
-            )
-            .unwrap()
-            .wait()
-            .unwrap();
-        let gone = matches!(
-            observed.result(),
-            Ok(Response::CleanupState(CleanupState::Gone))
-        );
-        drop(observed);
-        if gone {
-            break;
-        }
-        assert!(
-            Instant::now() < deadline,
-            "terminal cleanup failed to reach Gone"
-        );
-        std::thread::sleep(Duration::from_millis(1));
-    }
-    let mut admission = client
-        .submit_when_available(None, Command::Resources { global: true })
+    // Raw Close records the drain state. Whole-file disposal belongs to
+    // terminal control, covered by workspace_databases and mounted_drain.
+    let observed = client
+        .try_submit(
+            None,
+            Command::ObserveCleanup {
+                namespace: route.namespace(),
+                incarnation: [7; 32],
+            },
+        )
+        .unwrap()
+        .wait()
         .unwrap();
-    let waker = Waker::from(Arc::new(Noop));
-    let pending = match Pin::new(&mut admission).poll(&mut Context::from_waker(&waker)) {
-        Poll::Ready(result) => result.unwrap(),
-        Poll::Pending => panic!("idle resource admission unexpectedly pending"),
-    };
+    assert!(matches!(
+        observed.result(),
+        Ok(Response::CleanupState(CleanupState::Queued))
+    ));
+    drop(observed);
+    let pending = client
+        .try_submit(None, Command::Resources { global: true })
+        .unwrap();
     let final_resources = pending.wait().unwrap();
     assert!(
-        matches!(final_resources.result(),Ok(Response::Resources(resources)) if resources.counts.namespaces==0)
+        matches!(final_resources.result(),Ok(Response::Resources(resources)) if resources.counts.namespaces==1)
     );
     assert_eq!(
         final_resources

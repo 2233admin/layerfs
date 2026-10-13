@@ -987,3 +987,73 @@ No production code changes: Production LOC: 83,704 -> 83,704 (delta +0), pinned
 counter on exact first-parent/final staged archives. Reference absent (retired
 R9c; last counted 65,417 at tree 498dd1917812). A's map population remains owed
 until that corrected observation. B/C/D/E remain NOT_RUN. Durable remains NOT_RUN.
+
+
+## Issue 321 Step A qualification follow-up (2026-10-14)
+
+The owner must know: A is still IN_PROGRESS. The required four-Workspace
+selection failed at the earlier seal; no finished-step comment is posted and
+B has not started. The smallest relevant correction makes route-free Read
+observations use the already configured ordinary slot limit, as routed Read
+jobs do, instead of the Lifecycle limit. Neither configured capacity nor the
+shared-budget machinery is tuned. This entire mechanism is removed in B.
+A focused test holds three successful observations at a configured three-slot
+Read limit, then asserts the exact original unadmitted fourth command and no
+additional admitted/SQL work. The earlier failed selection remains FAIL;
+a new sealed identity is required before the affected selection runs once.
+
+Actual mounted memory diagnostic: the corrected Status-based walk at tool tag
+`i321-a-kernel-4`, against sealed product `d5c6d2678` (production unchanged from
+`b43cf2a1a`), observed 5,048 paths: 4,984 regular files and 64 directories,
+99,934,464 logical regular-file bytes. Kernel references grew from 1 to 5,048,
+parent entries from 1 to 64, and file custody from 1 to 5,048. One native mount
+remained; other open-state categories were zero. SQL rows were unchanged,
+as were 66 aggregate pages and the two 135,168-byte SQLite files. PID 1's
+point RSS was 23,056 KiB (23,609,344 B); this includes the whole daemon/shared
+part, not map-only memory or a per-Workspace bound. The isolated Rust-allocation
+diagnostic remains 854,848 / 5,000 = 170.9696 requested B per entry including
+companion custody and retained journal capacity. It excludes C heap, allocator
+rounding and kernel memory. Walk receipt is functional PASS, measurement
+AVAILABLE, exit 0 and owned cleanup complete, 3.984 s wrapper wall. The first
+incomplete walk receipt is preserved. No cache-eligible speed claim follows.
+
+Physical-device qualification at the unchanged OFF SQLite build setting:
+DML-full, COMMIT-full and ENOSPC-to-EIO translation each PASS; exact failure
+phase, one original attempt, SQL and memory rollback, retained capture and peer
+isolation are asserted. Raw-daemon-at-full PASS (0.45 s), normal mounted drain
+PASS (0.07 s), forced mounted drain PASS (0.06 s); each owned loop fixture
+reports completed teardown. The first non-pinned device invocation remains a
+separate scoped receipt. The pinned DML command included 13 s of feature-set
+compilation despite a combined-package --no-run build; the matching overlay-only
+--no-run then passed before the remaining overlay proofs. Daemon/mounted proofs
+were built with their matching package selection first. Every test command had
+a wall stop <=120 s; the fixture also stops its test at 90 s.
+
+Linux `resources_observation`: four tests PASS, 0.01 s, including original
+failure custody, unchanged SQL accounting and the three-held-results check.
+Its first host run retained an obsolete expectation that raw Close performs
+terminal row disposal: FAIL after a bounded 3 s. Raw Close now checks Queued
+and retained namespace rows; whole-file terminal control disposal remains
+covered by existing `workspace_databases` and `mounted_drain` proofs. No
+compatibility production API was added. Scoped Linux Clippy with warnings
+as errors passed for the changed observation and device proofs.
+
+The original 120 s broad-command `product_commit_history_cost` hang remains
+FAILED. Its retained output contained no phase marker, so it cannot establish
+whether Init, bind, mutation or Commit was blocked. Source uses the real product
+constructor and Disposable Store, so it is relevant rather than a retired
+cleanup-mechanism test. Four small phase markers were added to this external
+test, without changing its 12 Commits, tree, or exact Storage assertions.
+The new instrumented identity, separately built --no-run, completed all twelve
+Commits and the original assertions in 0.31 s (1.788 s wrapper, 115 s test
+wall stop). This identifies no reproducible A correctness failure and does not
+turn the older aggregate timeout into PASS or claim its cause is known.
+
+Final A SQL removal scan finds no references to the eleven moved tables or
+`reclaim` in overlay production source/shipped SQL; all three terminal/native
+retirement modules are absent. Exact memory ownership remains distinct from
+SQL/storage counters; live generation/payload maintenance remains. Twelve
+frozen cells have not been re-pinned; retained host count checks FAIL and the
+sealed twelve-cell selection is NOT_RUN. Durable is NOT_RUN — disabled by
+owner until explicit reauthorization. A's final four-Workspace selection,
+new build seal and finished-step disposition are pending.

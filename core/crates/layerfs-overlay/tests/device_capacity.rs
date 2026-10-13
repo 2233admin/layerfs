@@ -106,6 +106,15 @@ fn capacity(pager_kib: u32, at_commit: bool) {
         u64::from(at_commit),
         "failure phase"
     );
+    let after_failed = db.resources(Some(a)).unwrap();
+    assert_eq!(
+        after_failed.counts, physical.counts,
+        "whole-job SQL rollback"
+    );
+    assert_eq!(
+        after_failed.open, physical.open,
+        "whole-job memory rollback"
+    );
     assert_eq!(db.state(a).unwrap(), before);
     assert_eq!(
         db.diagnostics().statements[StatementKind::Begin as usize].executions,
