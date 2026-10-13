@@ -63,6 +63,34 @@ class CounterViews(unittest.TestCase):
         self.assertEqual(decoded["allocation_state"]["logical_bytes"], 17)
         self.assertEqual(decoded["pages"]["debt_upper_bytes"], 30)
 
+    def test_memory_ownership_has_exact_distinct_field_slices(self):
+        rows = snapshot(2)
+        rows.append(dict(rows[0], section=28, index=0, values=list(range(28))))
+        rows.append(dict(rows[0], section=32, index=0, values=list(range(11))))
+        decoded = counts.decode(rows)
+        self.assertEqual(decoded["resource_schema"], "issue321-open-memory")
+        self.assertEqual(decoded["stored_counts"]["namespaces"], 0)
+        self.assertEqual(decoded["stored_counts"]["ready_targets"], 13)
+        self.assertEqual(decoded["allocation_state"]["logical_bytes"], 14)
+        self.assertEqual(decoded["pages"]["debt_upper_bytes"], 27)
+        self.assertEqual(decoded["open_state"]["kernel_entries"], 0)
+        self.assertEqual(decoded["open_state"]["cookie_pages"], 10)
+        self.assertFalse({"wait_refs", "orphan_rows", "retire_targets"} & decoded["stored_counts"].keys())
+        rows[-1]["values"].pop()
+        with self.assertRaisesRegex(ValueError, "cardinality"):
+            counts.decode(rows)
+
+    def test_new_resource_width_requires_original_memory_discriminator(self):
+        rows = snapshot(2)
+        rows.append(dict(rows[0], section=28, index=0, values=list(range(28))))
+        with self.assertRaisesRegex(ValueError, "cardinality"):
+            counts.decode(rows)
+        rows.append(dict(rows[0], section=32, index=0, values=list(range(11))))
+        rows[-2]["available"] = False
+        rows[-2]["values"] = []
+        with self.assertRaisesRegex(ValueError, "memory ownership without resource"):
+            counts.decode(rows)
+
     def test_unavailable_cost_has_no_fabricated_work(self):
         rows = snapshot(2)
         rows[-1]["values"] = [1,0]

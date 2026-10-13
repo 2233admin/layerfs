@@ -577,17 +577,17 @@ def ingest_observations(groups, observations, cache):
     def available(values, provenance):
         return {"status": "AVAILABLE", "value": values, "provenance": provenance}
     views = [counts.decode(group) for group in groups.values()]
-    for field, observation_name in (("stored_counts", "stored_counts"), ("pages", "cleanup_debt"),
+    for field, observation_name in (("stored_counts", "stored_counts"), ("open_state", "open_state_counts"), ("pages", "cleanup_debt"),
                                     ("reader_storage", "reader_storage_diagnostics"), ("observer", "observer_work")):
         selected = [{"identity": view["identity"], "operation_tag": view["operation_tag"], "value": view[field]}
                     for view in views if field in view and view[field]]
         if selected:
             observations[observation_name] = available({"schema_source": counts.SCHEMA_SOURCE,
                          "scope": "original absolute/per-call values; no gauge/peak/timer subtraction", "snapshots": selected},
-                         "original numeric schema sections 28/29/30; source field order decoded")
+                         "original numeric schema sections 28/29/30/32; source field order decoded")
     names = {1: "owner_work", 8: "store_work", 9: "reader_work", 10: "cache_work", 16: "storage_diagnostics",
              11: "dispatch_work", 12: "native_work", 13: "global_sql_work", 15: "construction_work", 26: "opcode_work",
-             25: "mount_work", 28: "resource_diagnostics", 29: "reader_storage_raw"}
+             25: "mount_work", 28: "resource_diagnostics", 29: "reader_storage_raw", 32: "open_state_raw"}
     for section, name in names.items():
         rows = [{"call": call, "operation": group[0]["values"][0], "index": row["index"], "values": row["values"]}
                 for call, group in groups.items() for row in group if row["section"] == section and row["available"]]

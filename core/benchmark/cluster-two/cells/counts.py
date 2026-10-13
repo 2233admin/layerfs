@@ -24,6 +24,14 @@ CLASSES = ("Read", "Mutation", "Capture", "Lifecycle", "OperationRecord", "Sourc
 STORED = ("wait_refs", "namespaces", "inode_rows", "directory_entry_rows", "payload_cells", "payload_bytes",
           "shrink_rows", "operation_record_rows", "operation_record_bytes", "orphan_rows", "owner_rows",
           "source_rows", "owner_details", "reply_tickets", "retire_targets", "maintenance_targets", "ready_targets")
+# Original arrays remain readable for retained receipts. Step A reports memory
+# separately and removes three SQL counters; it supplies section 32 as the
+# explicit discriminator. No deleted counter is synthesized for current calls.
+STORED_OPEN_MEMORY = tuple(name for name in STORED if name not in
+                          {"wait_refs", "orphan_rows", "retire_targets"})
+OPEN_STATE = ("kernel_entries", "directory_parents", "file_handles", "file_reads",
+              "lookup_owners", "file_custody", "orphan_files", "generation_waits",
+              "mounts", "directory_handles", "cookie_pages")
 ALLOCATION_STATE = ("logical_bytes", "allocated_bytes", "high_water_allocated_bytes", "reserved_tail_bytes", "cleanup_headroom_bytes")
 STORAGE = ("policy", "locate", "read_packs", "read_pack_selections", "whole_selected", "whole_due_density",
            "whole_due_singleton", "whole_due_small", "whole_due_reuse", "range_selected", "range_scan_bytes",
@@ -114,13 +122,20 @@ def decode(group):
         if all(values is not None for values in families):
             result[key] = [names(values, STATEMENT) for values in families]
         result["field_availability"][key] = "AVAILABLE" if key in result else "UNAVAILABLE"
-    values = row(group, 28)
+    values, open_values = row(group, 28), row(group, 32)
+    result["field_availability"]["open_state"] = "AVAILABLE" if open_values is not None else "UNAVAILABLE"
+    if open_values is not None:
+        require(values is not None, "memory ownership without resource observation")
+        result["open_state"] = names(open_values, OPEN_STATE)
     if values is not None:
-        require(len(values) == 31, "resource schema cardinality")
-        result["stored_counts"] = names(values[:17], STORED)
-        result["allocation_state"] = names(values[17:22], ALLOCATION_STATE)
-        result["allocation_work"] = names(values[22:28], ALLOCATION)
-        result["pages"] = names(values[28:], ("database_pages", "free_pages", "debt_upper_bytes"))
+        fields = STORED_OPEN_MEMORY if open_values is not None else STORED
+        require(len(values) == len(fields) + 14, "resource schema cardinality")
+        at = len(fields)
+        result["resource_schema"] = ("issue321-open-memory" if open_values is not None else "original-sql-ownership")
+        result["stored_counts"] = names(values[:at], fields)
+        result["allocation_state"] = names(values[at:at+5], ALLOCATION_STATE)
+        result["allocation_work"] = names(values[at+5:at+11], ALLOCATION)
+        result["pages"] = names(values[at+11:], ("database_pages", "free_pages", "debt_upper_bytes"))
     result["reader_storage"] = {item["index"]: names(item["values"], STORAGE) for item in group
                                 if item["section"] == 29 and item["available"]}
     opcode = row(group,26)

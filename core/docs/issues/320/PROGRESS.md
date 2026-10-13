@@ -890,3 +890,31 @@ Production LOC: 83,704 -> 83,704 (delta +0). The pinned counter on exact first-
 parent/final staged archives owns the comparison. Reference absent (retired R9c;
 last counted 65,417 at tree 498dd1917812). The source seal does not finish Step A.
 Durable: NOT_RUN — disabled by owner until explicit reauthorization.
+
+
+## Issue 321 Step A counter-reader compatibility (2026-10-14)
+
+**Owner must know:** this is strict observation decoding so the mandatory
+runs can collect current data. It does not re-pin any cell, storage schema,
+profile, source oracle or final guide. A/E qualification remains incomplete.
+The prior reader required the old 31-value resource array; removed SQL ownership
+counters made the new 28-value array unreadable, which would stop the session's
+observation after its first fifty Commits. Treating removed counters as zero
+would misreport current state and is not used.
+
+The reader now uses the actually emitted section 32 as the explicit discriminator:
+28 resource values plus exactly eleven memory values. SQL and memory fields stay
+separate; current SQL dictionaries contain no wait_refs/orphan_rows/retire_targets.
+Historical 31-value arrays remain readable with their original fields. A short
+array without the memory discriminator, wrong memory cardinality, or memory
+without its resource observation is refused. Original cumulative/per-call memory
+arrays are retained; no phase delta, resident bound or fake SQL row is produced.
+Frozen request/job/statement expectations and Storage readback/source pins stay
+unchanged and failing until E. The changed counter/runner suite passed 306 tests
+in 9.502 s, bounded at 120 s; focused decoder tests passed 25. The proposed guide
+wording is not applied.
+
+Local tooling-only seal `i321-a-observe-3`: Production LOC: 83,704 -> 83,704
+(delta +0), identical pinned counter on exact first-parent/final staged archives.
+Reference absent (retired R9c; last counted 65,417 at tree 498dd1917812). Mandatory
+A runs/walk are still owed; no source-identity treatment is resampled here.

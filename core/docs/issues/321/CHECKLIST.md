@@ -125,3 +125,12 @@ memory ownership, physical file disposal and the smaller schema. Local
 (delta +0), same archive counter. No final count pin changed. The actual tier-1
 walk, mandatory A selections and physical-device-full variants remain owed.
 A is IN_PROGRESS; B/C/D/E remain NOT_RUN.
+
+
+2026-10-14 intermediate observation reader: `i321-a-observe-3`, tests/tooling/docs
+only, Production LOC: 83,704 -> 83,704 (delta +0). Strict section-32 memory and
+section-28 SQL decoding passed the 306-test counter/runner suite; it supports
+current observations without synthesizing removed SQL counters. Historical
+arrays keep their original shape. Twelve-cell and Storage pins remain unchanged;
+final E repinning/compatibility/guide work is NOT_RUN. Mandatory A runs follow
+this clean source seal; A is still IN_PROGRESS.
