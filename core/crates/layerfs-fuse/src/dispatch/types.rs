@@ -2,7 +2,7 @@
 use std::{any::Any, error::Error, fmt, future::Future, pin::Pin};
 
 /// Plain receive workers per Workspace, provisional until the Step B measurement.
-pub const RECEIVE_SLOTS: usize = 4;
+pub const RECEIVE_SLOTS: usize = 1;
 pub const MAX_INPUT_BYTES: usize = layerfs_overlay::WRITE_WINDOW + 2 * 255;
 
 /// Completion means original reply/result/source consumers are disposed. A
