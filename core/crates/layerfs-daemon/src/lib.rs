@@ -20,6 +20,7 @@ pub(crate) use overlay::queue;
 
 pub use commands::{Command, Response, ServiceClass};
 pub use overlay::admission::Admission;
+pub use overlay::budget::BudgetWork;
 pub use overlay::indexed_operation_record::{
     IndexedOperationRecordJob, IndexedOperationRecordReply,
 };

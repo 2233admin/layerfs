@@ -134,3 +134,15 @@ See [shared physical capacity](35-shared-physical-capacity.md) and the
 [S6 exit audit](../issues/307/S6-EXIT-AUDIT.md) for current scope/evidence. Earlier
 checkpoint limitations and numbers above retain their original source identity.
 Native/runtime/kernel and integrated qualification remain later milestones.
+
+## Issue 321 step 1 terminal file ownership
+
+The per-Workspace daemon route now checks the sole connection close and joins
+its worker after terminal control fencing/Close. Clients and completions retain
+an independent backing owner; its last release unlinks only that Workspace's
+original inode after known close/terminal facts. Gone means the file is deleted;
+Queued includes a closed file still retained by a result/client. Failed deletion
+is recorded without replay, and a replaced path is preserved. Global history and
+other Workspace databases are unchanged. Live SQL reclamation continues. The
+schema-33 terminal row-reclaim implementation remains until step 2 and its old
+receipts keep their original claims. No numerical reclamation deadline is added.

@@ -81,8 +81,6 @@ impl Job {
 /// startup; a lane is reused once its last credit is released. Each counter is
 /// the credits of its classes: queued, executing and caller-held results.
 pub(crate) struct Lane {
-    pub namespace: i64,
-    pub active: bool,
     pub queues: [VecDeque<Box<Job>>; 6],
     pub next: usize,
     pub ordinary: usize,
@@ -102,8 +100,6 @@ impl Lane {
     }
     fn new(config: OwnerConfig) -> Self {
         Self {
-            namespace: 0,
-            active: false,
             queues: std::array::from_fn(|class| {
                 VecDeque::with_capacity(if class == ServiceClass::Lifecycle as usize {
                     config.lifecycle_jobs_per_namespace
@@ -170,9 +166,9 @@ impl Lane {
     }
 }
 pub(crate) struct State {
-    pub lanes: Vec<Lane>,
-    pub rotation: VecDeque<i64>,
+    pub lane: Lane,
     pub stopping: bool,
+    pub opened: bool,
     pub next: u64,
     pub work: OwnerWork,
     pub event: u64,
@@ -190,44 +186,31 @@ impl State {
     pub fn maintenance_due(&self) -> bool {
         self.maintenance && self.served >= 8
     }
-    /// The next runnable job in namespace rotation, with every lane fence.
+    /// One Workspace connection; rotate only between its job classes.
     pub fn take(&mut self) -> Option<Box<Job>> {
-        for _ in 0..self.rotation.len() {
-            let ns = self.rotation.pop_front()?;
-            self.rotation.push_back(ns);
-            if let Some(job) = self.lane(ns)?.take() {
-                self.work.queued -= 1;
-                return Some(job);
-            }
-        }
-        None
-    }
-    pub fn lane(&mut self, namespace: i64) -> Option<&mut Lane> {
-        self.lanes
-            .iter_mut()
-            .find(|lane| lane.active && lane.namespace == namespace)
+        let job = self.lane.take()?;
+        self.work.queued -= 1;
+        Some(job)
     }
     pub fn queued(&mut self) {
         self.work.queued += 1;
         self.work.peak_queued = self.work.peak_queued.max(self.work.queued);
     }
-    /// Returns one job's slot; its lane leaves the rotation with its last job.
-    pub fn release(&mut self, namespace: i64, class: ServiceClass) {
-        let Some(lane) = self.lane(namespace) else {
-            return;
-        };
-        *lane.slots(class) -= 1;
-        if lane.lifecycle == 0 && lane.ordinary == 0 && lane.source == 0 {
-            lane.active = false;
-            self.rotation.retain(|ns| *ns != namespace);
-        }
+    /// Returns one queued, executing or retained completion slot.
+    pub fn release(&mut self, class: ServiceClass) {
+        *self.lane.slots(class) -= 1;
     }
 }
 pub(crate) struct Shared {
-    pub state: Mutex<State>,
+    pub state: Box<Mutex<State>>,
     pub wake: Condvar,
     pub config: OwnerConfig,
-    pub admission: super::admission::Notifications,
+    pub admission: Arc<super::admission::Notifications>,
+    pub budget: Arc<super::budget::Budget>,
+    pub backing: OnceLock<Arc<super::backing::Backing>>,
+    _fixed: super::budget::FixedCredit,
+    pub close_error: Mutex<Option<OwnerError>>,
+    pub initial: Mutex<Option<Arc<layerfs_overlay::CreationWork>>>,
     /// The one engine connection. `State::busy` grants a turn before this
     /// lock is taken, so the lock itself is never waited for in service.
     pub connection: Mutex<Option<Box<Overlay>>>,
@@ -238,25 +221,17 @@ pub(crate) struct Shared {
 }
 impl Shared {
     pub fn job_capacity(&self, class: ServiceClass, work: &OwnerWork) -> usize {
-        let capacity = self.config.bytes.saturating_sub(work.scheduler_bytes);
-        if class == ServiceClass::Lifecycle {
-            capacity
-        } else {
-            capacity.saturating_sub(self.config.lifecycle_reserve)
-        }
+        let _ = work;
+        self.budget.capacity(class)
     }
     /// Startup scheduler bytes for a configuration, before any is allocated.
     pub fn planned_bytes(config: OwnerConfig) -> Option<usize> {
-        let pointers = config
+        config
             .jobs_per_namespace
             .checked_mul(5)?
             .checked_add(config.lifecycle_jobs_per_namespace)?
-            .checked_mul(size_of::<Box<Job>>())?;
-        pointers
-            .checked_add(size_of::<Lane>() + size_of::<i64>())?
-            .checked_mul(config.namespaces)?
-            .checked_add(2 * size_of::<usize>() + size_of::<Self>())?
-            .checked_add(super::admission::Notifications::planned_bytes(config)?)
+            .checked_mul(size_of::<Box<Job>>())?
+            .checked_add(size_of::<Self>() + size_of::<State>() + 256)
     }
     pub fn sql_progress(
         &self,
@@ -277,27 +252,27 @@ impl Shared {
             }
         }
     }
-    pub fn new(config: OwnerConfig) -> Self {
-        let mut lanes = Vec::with_capacity(config.namespaces);
-        lanes.resize_with(config.namespaces, || Lane::new(config));
-        let rotation = VecDeque::with_capacity(config.namespaces);
-        let admission = super::admission::Notifications::new(config);
-        // Actual capacities, which an allocator may round above the request.
-        let scheduler_bytes = 2 * size_of::<usize>()
-            + size_of::<Self>()
-            + admission.bytes()
-            + lanes.capacity() * size_of::<Lane>()
-            + rotation.capacity() * size_of::<i64>()
-            + lanes
+    pub fn new(
+        config: OwnerConfig,
+        budget: Arc<super::budget::Budget>,
+        backing: Option<Arc<super::backing::Backing>>,
+    ) -> Result<Self, OwnerError> {
+        let fixed =
+            budget.fixed(Self::planned_bytes(config).ok_or(OwnerError::InvalidAdmission)?)?;
+        let lane = Lane::new(config);
+        let scheduler_bytes = size_of::<Self>()
+            + size_of::<State>()
+            + 256
+            + lane
+                .queues
                 .iter()
-                .flat_map(|lane| &lane.queues)
-                .map(|queue| queue.capacity() * size_of::<Box<Job>>())
+                .map(|q| q.capacity() * size_of::<Box<Job>>())
                 .sum::<usize>();
-        Self {
-            state: Mutex::new(State {
-                lanes,
-                rotation,
+        Ok(Self {
+            state: Box::new(Mutex::new(State {
+                lane,
                 stopping: false,
+                opened: false,
                 next: 1,
                 work: OwnerWork {
                     scheduler_bytes,
@@ -308,14 +283,19 @@ impl Shared {
                 busy: false,
                 served: 0,
                 maintenance: false,
-            }),
+            })),
             wake: Condvar::new(),
             config,
-            admission,
+            admission: budget.notifications.clone(),
+            budget,
+            backing: backing.map_or_else(OnceLock::new, OnceLock::from),
+            _fixed: fixed,
+            close_error: Mutex::new(None),
+            initial: Mutex::new(None),
             connection: Mutex::new(None),
             panic: Mutex::new(None),
             tickets: OnceLock::new(),
-        }
+        })
     }
     pub fn scheduler_bytes(&self) -> usize {
         self.state
@@ -401,10 +381,8 @@ impl Shared {
     pub fn maintenance(&self, step: layerfs_overlay::ReclaimStep, closed: bool, ns: u64) {
         if let Ok(mut state) = self.state.lock() {
             state.event = state.event.wrapping_add(1);
-            if let Some(lane) = state.lane(step.namespace as i64) {
-                for job in &mut lane.queues[ServiceClass::Capture as usize] {
-                    job.blocked = false;
-                }
+            for job in &mut state.lane.queues[ServiceClass::Capture as usize] {
+                job.blocked = false;
             }
             state.work.maintenance_jobs = state.work.maintenance_jobs.saturating_add(1);
             if closed && step.done {
@@ -439,11 +417,10 @@ impl Shared {
     pub fn park(&self, mut job: Box<Job>) {
         if let Ok(mut state) = self.state.lock() {
             let stopping = state.stopping;
-            let namespace = job.route.map_or(0, Route::namespace);
-            if let Some(lane) = state.lane(namespace).filter(|_| !stopping) {
+            if !stopping {
                 job.work.parked_turns = job.work.parked_turns.saturating_add(1);
                 job.blocked = true;
-                lane.queues[job.command.class() as usize].push_front(job);
+                state.lane.queues[job.command.class() as usize].push_front(job);
                 state.queued();
                 return;
             }
@@ -451,7 +428,7 @@ impl Shared {
         // The outcome and its credit are released outside the queue lock.
         job.refuse(OwnerError::Stopped);
     }
-    pub fn progress(&self, ns: i64, class: ServiceClass, wait: u64, service: u64) {
+    pub fn progress(&self, class: ServiceClass, wait: u64, service: u64) {
         if let Ok(mut state) = self.state.lock() {
             state.event = state.event.wrapping_add(1);
             state.served = state.served.saturating_add(1);
@@ -462,10 +439,8 @@ impl Shared {
             work.service_ns[class as usize] =
                 work.service_ns[class as usize].saturating_add(service);
             if matches!(class, ServiceClass::Mutation | ServiceClass::Lifecycle) {
-                if let Some(lane) = state.lane(ns) {
-                    for job in &mut lane.queues[ServiceClass::Capture as usize] {
-                        job.blocked = false;
-                    }
+                for job in &mut state.lane.queues[ServiceClass::Capture as usize] {
+                    job.blocked = false;
                 }
             }
         }
@@ -476,9 +451,10 @@ impl Shared {
             state.event = state.event.wrapping_add(1);
             state.work.queued = 0;
             state
-                .lanes
+                .lane
+                .queues
                 .iter_mut()
-                .flat_map(|lane| lane.queues.iter_mut().flat_map(|q| q.drain(..)))
+                .flat_map(|q| q.drain(..))
                 .collect::<Vec<_>>()
         } else {
             Vec::new()
@@ -489,5 +465,49 @@ impl Shared {
         }
         self.admission.notify();
         self.wake.notify_all();
+    }
+}
+
+impl OwnerWork {
+    /// Adds disjoint owner counters. Concurrent snapshots retain their own
+    /// scope; a sum of observed peaks is not a simultaneous physical peak.
+    pub(crate) fn accumulate(&mut self, next: &Self) {
+        self.sql_foreground.accumulate(next.sql_foreground);
+        self.sql_maintenance.accumulate(next.sql_maintenance);
+        self.payload_foreground.accumulate(next.payload_foreground);
+        self.payload_maintenance
+            .accumulate(next.payload_maintenance);
+        self.allocation_foreground
+            .accumulate(next.allocation_foreground);
+        self.allocation_maintenance
+            .accumulate(next.allocation_maintenance);
+        for class in 0..6 {
+            self.completed[class] = self.completed[class].saturating_add(next.completed[class]);
+            self.queue_wait_ns[class] =
+                self.queue_wait_ns[class].saturating_add(next.queue_wait_ns[class]);
+            self.service_ns[class] = self.service_ns[class].saturating_add(next.service_ns[class]);
+        }
+        self.admitted = self.admitted.saturating_add(next.admitted);
+        self.credited_bytes = self.credited_bytes.saturating_add(next.credited_bytes);
+        self.peak_credited_bytes = self
+            .peak_credited_bytes
+            .saturating_add(next.peak_credited_bytes);
+        self.outstanding = self.outstanding.saturating_add(next.outstanding);
+        self.scheduler_bytes = self.scheduler_bytes.saturating_add(next.scheduler_bytes);
+        self.queued = self.queued.saturating_add(next.queued);
+        self.peak_queued = self.peak_queued.saturating_add(next.peak_queued);
+        self.receipt_overruns = self.receipt_overruns.saturating_add(next.receipt_overruns);
+        self.receipt_overrun_bytes = self
+            .receipt_overrun_bytes
+            .saturating_add(next.receipt_overrun_bytes);
+        self.maintenance_jobs = self.maintenance_jobs.saturating_add(next.maintenance_jobs);
+        self.maintenance_rows = self.maintenance_rows.saturating_add(next.maintenance_rows);
+        self.closed_namespaces = self
+            .closed_namespaces
+            .saturating_add(next.closed_namespaces);
+        self.maintenance_data_bytes = self
+            .maintenance_data_bytes
+            .saturating_add(next.maintenance_data_bytes);
+        self.maintenance_ns = self.maintenance_ns.saturating_add(next.maintenance_ns);
     }
 }

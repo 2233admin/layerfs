@@ -386,3 +386,19 @@ The reservation patch is `1bf04d038`, production LOC 83,042 -> 82,884 (-158).
 The next patch supplies daemon template ownership, per-Workspace routing/threads,
 shared credits/pager allowance and last-owner deletion. Linux device I/O-error
 proof and all step-end selections remain owed. Durable execution is NOT_RUN.
+
+## Issue 321 step 1: per-Workspace daemon owners (2026-10-13)
+
+The closed template now creates one file/connection/thread at each bind; all
+filesystem and Commit ports receive the route-specific owner. One common ledger
+covers pager allowances, scheduler storage and queued/executing/retained jobs.
+Namespace rotation is removed; class/capture/install/source fences remain.
+Terminal control checks close/joins the worker; last client/result release owns
+identity-checked unlink. Replacement/unlink failure preserves custody, no replay.
+Host owner suite: 12 passed; cleanup control: 1 passed; new file/budget/deletion
+custody proofs: 3 passed. Unchanged completion-storage proof passed after retained
+weak scheduler storage was fixed by boxing state; both prior failures remain.
+All-target Daemon Clippy passed after removing one pre-existing redundant cast
+in its Commit count test; boundary scanned 688 files. No sample or step completion
+claim. Linux mounted/device proofs, I/O-error capacity handling, memory/page-cache
+selection and five step-end selections remain owed; cells stay unqualified.

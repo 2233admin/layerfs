@@ -1,5 +1,7 @@
 //! Responsibility-scoped implementation modules and reexports.
 pub(crate) mod admission;
+pub(crate) mod backing;
+pub(crate) mod budget;
 mod captured_namespace_port;
 mod captured_run_port;
 pub(crate) mod commands;
@@ -12,3 +14,4 @@ mod operation_record_port;
 pub(crate) mod owner;
 pub(crate) mod queue;
 pub(crate) mod read_port;
+pub(crate) mod workspaces;

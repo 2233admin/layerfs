@@ -156,6 +156,15 @@ fn initialize(path: &Path, config: ProfileConfig, template: Option<(&Path, i64)>
             return Err(crate::OverlayError::Invalid("overlay schema readback"));
         }
         if let Some((_, namespace)) = template {
+            let populated: i64 = super::profile::readback(
+                &connection,
+                &sql,
+                "SELECT EXISTS(SELECT 1 FROM workspace WHERE ns>0 LIMIT 1)",
+                |row| row.get(0),
+            )?;
+            if populated != 0 {
+                return Err(crate::OverlayError::Invalid("populated overlay template"));
+            }
             // The existing INSERT/RETURNING job remains unchanged. Seed its
             // ordinary AUTOINCREMENT allocator with the daemon's next identity.
             // The copy is still private and has no Workspace row or owner.

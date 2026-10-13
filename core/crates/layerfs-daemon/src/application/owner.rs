@@ -58,7 +58,7 @@ impl Application {
             })
         };
         let started = Owner::start_observed(
-            std::path::Path::new(&setup.overlay),
+            &std::path::Path::new(&setup.overlay).with_file_name("template.sqlite"),
             ProfileConfig {
                 pager_kib: l.pager_kib,
                 max_pages: None,

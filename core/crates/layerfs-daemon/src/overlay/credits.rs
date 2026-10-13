@@ -9,15 +9,16 @@ use std::{
     mem::size_of,
     sync::{
         atomic::{AtomicUsize, Ordering},
-        Weak,
+        Arc, Weak,
     },
 };
 
 pub(crate) struct Credit {
     pub shared: Weak<Shared>,
-    pub namespace: i64,
     pub bytes: AtomicUsize,
     pub class: ServiceClass,
+    pub budget: Arc<super::budget::Budget>,
+    pub _backing: Option<Arc<super::backing::Backing>>,
 }
 impl Credit {
     /// Charges retained receipt rows beyond this job's admitted allowance. Only
@@ -32,11 +33,12 @@ impl Credit {
         let Some(excess) = bytes.checked_sub(allowed).filter(|excess| *excess != 0) else {
             return;
         };
+        self.bytes.fetch_add(excess, Ordering::Relaxed);
+        self.budget.excess(excess);
         let Some(shared) = self.shared.upgrade() else {
             return;
         };
         if let Ok(mut state) = shared.state.lock() {
-            self.bytes.fetch_add(excess, Ordering::Relaxed);
             let work = &mut state.work;
             work.credited_bytes += excess;
             work.peak_credited_bytes = work.peak_credited_bytes.max(work.credited_bytes);
@@ -47,13 +49,14 @@ impl Credit {
 }
 impl Drop for Credit {
     fn drop(&mut self) {
+        self.budget.release(*self.bytes.get_mut());
         let Some(shared) = self.shared.upgrade() else {
             return;
         };
         if let Ok(mut state) = shared.state.lock() {
             state.work.credited_bytes -= *self.bytes.get_mut();
             state.work.outstanding -= 1;
-            state.release(self.namespace, self.class);
+            state.release(self.class);
         }
         shared.admission.notify();
     }

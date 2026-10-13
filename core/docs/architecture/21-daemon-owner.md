@@ -6,6 +6,50 @@ schema16. Earlier algorithm and proof pins retain their original scope; see
 
 > **Status:** Current general guide.
 
+## Issue 321 step 1 ownership update (2026-10-13)
+
+The implementation based on `06be791ea` changes `Owner::start_observed` into a
+closed-template owner: startup creates/configures schema 33 and checks its close
+before readiness. The actual application uses `template.sqlite`. A mount copies
+that empty file into an ordinary monotonic `<namespace>.sqlite`, opens one
+connection and starts its own owner thread. No pool of spares or offset identities
+is present. Existing job SQL and Workspace columns are unchanged in this step.
+`Store::bind` transfers the route-specific `OwnerClient` to `BoundWorkspace`, so
+filesystem/Commit ports go directly to their own connection. Control routes and
+cleanup observations resolve the same owner; daemon resources aggregate separate
+short observations without a cross-Workspace transaction. Copy/profile startup
+SQL is retained in the first job and its owner aggregate, not hidden in setup.
+
+The queue has one Workspace lane and six class queues. Capture, install, source
+and mutation fences remain; there is no rotation between Workspaces. One daemon
+ledger charges queued/executing/retained jobs, fixed scheduler allocations and
+the sum of configured pager allowances. The daemon's pager setting is divided
+across its existing configured Workspace admission capacity (at least one page
+per connection); `BudgetWork` reports the common ledger. SQLite cache_size is
+still a suggestion, not an RSS bound. Journal, SQLite statement memory, native
+buffers and thread stacks require separate physical observations. Large files,
+namespaces and edit histories retain their backed, windowed structures.
+
+After the existing terminal native/control fence and acknowledged Close, control
+removes that route, checks connection close and joins its worker. Retained clients
+and completions own the file through a separate backing reference. The last one
+unlinks only the original singly linked inode after known terminal/close facts.
+An identity mismatch/unlink/close failure retains original custody and is not
+retried. Live Workspace maintenance stays automatic; terminal row cleanup code
+is retained only until the table revision in step 2. The independent heap proof
+still compares actual retained job allocations against job credits: boxing the
+large scheduler state allows it to be released when only weak completion
+notifications survive shutdown.
+
+Host owner, completion-storage, cleanup-control and new file/budget/custody proofs
+cover these seams. Linux mounted/device proofs, page-cache build selection and
+step-end measurements are still pending; this note claims no speed, physical
+memory qualification or step-1 completion. Historical descriptions and receipts
+below retain their original shared-database scope. Both AGENTS.md guides remain
+unchanged pending the owner's wording approval.
+
+## Historical shared-connection description
+
 S5 update after `f5558fc22`: `SourceRead` provides one composed local byte
 window, with base I/O outside the owner. `DatabaseWork` exposes a connection
 counter snapshot after route validation, and `PayloadPlans` exposes the actual

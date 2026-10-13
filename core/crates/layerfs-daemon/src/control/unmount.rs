@@ -123,6 +123,12 @@ impl Service {
                 original: Box::new(success),
             });
         }
+        if let Err(cause) = self.owner.retire_namespace(token.namespace) {
+            return Err(Failure::After {
+                cause: Box::new(Failure::Owner(cause)),
+                original: Box::new(success),
+            });
+        }
         Ok(success)
     }
     /// Close was not acknowledged. Without a connection the entry returns to

@@ -61,6 +61,7 @@ impl Store {
                 Ok(Response::Opened(route)) => *route,
                 _ => return Err(BindError::Completion(Box::new(open))),
             };
+            let owner = owner.workspace_client(route).map_err(BindError::Owner)?;
             Ok(BindSuccess {
                 workspace: BoundWorkspace {
                     store: self.clone(),

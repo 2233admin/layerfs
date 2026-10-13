@@ -130,3 +130,103 @@ impl Overlay {
         Ok(plans)
     }
 }
+
+impl Resources {
+    /// Adds disjoint connection snapshots. It is an aggregate observation,
+    /// not an atomic cross-Workspace snapshot or exclusive freed-page claim.
+    pub fn accumulate(&mut self, next: &Self) {
+        self.counts.wait_refs = self.counts.wait_refs.saturating_add(next.counts.wait_refs);
+        self.counts.namespaces = self
+            .counts
+            .namespaces
+            .saturating_add(next.counts.namespaces);
+        self.counts.inode_rows = self
+            .counts
+            .inode_rows
+            .saturating_add(next.counts.inode_rows);
+        self.counts.directory_entry_rows = self
+            .counts
+            .directory_entry_rows
+            .saturating_add(next.counts.directory_entry_rows);
+        self.counts.payload_cells = self
+            .counts
+            .payload_cells
+            .saturating_add(next.counts.payload_cells);
+        self.counts.payload_bytes = self
+            .counts
+            .payload_bytes
+            .saturating_add(next.counts.payload_bytes);
+        self.counts.shrink_rows = self
+            .counts
+            .shrink_rows
+            .saturating_add(next.counts.shrink_rows);
+        self.counts.reference_rows = self
+            .counts
+            .reference_rows
+            .saturating_add(next.counts.reference_rows);
+        self.counts.operation_record_rows = self
+            .counts
+            .operation_record_rows
+            .saturating_add(next.counts.operation_record_rows);
+        self.counts.operation_record_bytes = self
+            .counts
+            .operation_record_bytes
+            .saturating_add(next.counts.operation_record_bytes);
+        self.counts.orphan_rows = self
+            .counts
+            .orphan_rows
+            .saturating_add(next.counts.orphan_rows);
+        self.counts.owner_rows = self
+            .counts
+            .owner_rows
+            .saturating_add(next.counts.owner_rows);
+        self.counts.source_rows = self
+            .counts
+            .source_rows
+            .saturating_add(next.counts.source_rows);
+        self.counts.owner_details = self
+            .counts
+            .owner_details
+            .saturating_add(next.counts.owner_details);
+        self.counts.reply_tickets = self
+            .counts
+            .reply_tickets
+            .saturating_add(next.counts.reply_tickets);
+        self.counts.retire_targets = self
+            .counts
+            .retire_targets
+            .saturating_add(next.counts.retire_targets);
+        self.counts.maintenance_targets = self
+            .counts
+            .maintenance_targets
+            .saturating_add(next.counts.maintenance_targets);
+        self.counts.ready_targets = self
+            .counts
+            .ready_targets
+            .saturating_add(next.counts.ready_targets);
+        self.allocation.logical_bytes = self
+            .allocation
+            .logical_bytes
+            .saturating_add(next.allocation.logical_bytes);
+        self.allocation.allocated_bytes = self
+            .allocation
+            .allocated_bytes
+            .saturating_add(next.allocation.allocated_bytes);
+        self.allocation.high_water_allocated_bytes = self
+            .allocation
+            .high_water_allocated_bytes
+            .saturating_add(next.allocation.high_water_allocated_bytes);
+        self.allocation.reserved_tail_bytes = self
+            .allocation
+            .reserved_tail_bytes
+            .saturating_add(next.allocation.reserved_tail_bytes);
+        self.allocation.cleanup_headroom_bytes = self
+            .allocation
+            .cleanup_headroom_bytes
+            .saturating_add(next.allocation.cleanup_headroom_bytes);
+        self.allocation.work.accumulate(next.allocation.work);
+        self.database_pages = self.database_pages.saturating_add(next.database_pages);
+        self.free_pages = self.free_pages.saturating_add(next.free_pages);
+        self.debt_upper_bytes = self.debt_upper_bytes.saturating_add(next.debt_upper_bytes);
+    }
+}

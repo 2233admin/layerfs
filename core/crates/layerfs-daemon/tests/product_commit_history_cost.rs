@@ -149,7 +149,7 @@ fn equal_commits_read_the_store_alike_whatever_was_committed_before() {
     // And every Commit stores exactly one value row for each inode row its
     // change produced: an unchanged row keeps the ordinal it has.
     for (commit, (one, row)) in reads.iter().zip(&rows).enumerate() {
-        assert_eq!(one.pooled_groups, row.0 as u64, "commit {}", commit + 1);
+        assert_eq!(one.pooled_groups, row.0, "commit {}", commit + 1);
     }
     drop(session);
     rig.close(&workspace);

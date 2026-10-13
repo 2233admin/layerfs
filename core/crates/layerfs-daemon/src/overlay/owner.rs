@@ -39,6 +39,8 @@ pub enum OwnerError {
     Io(io::Error),
     Overlay(OverlayError),
     Stopped,
+    Retained(Arc<OwnerError>),
+    Observation(Box<crate::Completion>),
     AdmissionFull,
     InvalidAdmission,
     IdentityExhausted,
@@ -65,6 +67,8 @@ impl fmt::Display for OwnerError {
 impl std::error::Error for OwnerError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
+            Self::Retained(error) => Some(error.as_ref()),
+            Self::Observation(error) => Some(error.as_ref()),
             Self::Io(error) => Some(error),
             Self::Overlay(error) => Some(error),
             Self::Unattempted { cause, .. } => Some(cause.as_ref()),
@@ -83,20 +87,33 @@ struct ExitFence<'a>(&'a Shared);
 impl Drop for ExitFence<'_> {
     fn drop(&mut self) {
         self.0.stop();
-        let closed = self.0.connection().take();
-        drop(closed);
+        if let Some(db) = self.0.connection().take() {
+            match db.close_database() {
+                Ok(()) => {
+                    if let Some(backing) = self.0.backing.get() {
+                        backing.closed();
+                    }
+                }
+                Err(cause) => {
+                    *self.0.close_error.lock().unwrap_or_else(|e| e.into_inner()) =
+                        Some(OwnerError::Overlay(cause));
+                }
+            }
+        }
     }
 }
 
 /// One initialized daemon service. It owns the connection thread's entire lifetime.
 pub struct Owner {
-    client: OwnerClient,
-    worker: Option<JoinHandle<()>>,
-    profile: DatabaseProfile,
-    startup: Arc<layerfs_overlay::CreationWork>,
+    pub(super) pool: Option<Arc<super::workspaces::Workspaces>>,
+    pub(super) client: OwnerClient,
+    pub(super) worker: Option<JoinHandle<()>>,
+    pub(super) profile: DatabaseProfile,
+    pub(super) startup: Arc<layerfs_overlay::CreationWork>,
 }
 #[derive(Clone)]
 pub struct OwnerClient {
+    pub(super) pool: Option<Arc<super::workspaces::Workspaces>>,
     pub(super) shared: Arc<Shared>,
 }
 impl Owner {
@@ -115,6 +132,17 @@ impl Owner {
         path: &Path,
         profile: ProfileConfig,
         config: OwnerConfig,
+    ) -> crate::OwnerStart {
+        super::workspaces::start(path, profile, config)
+    }
+
+    pub(super) fn start_copy(
+        path: &Path,
+        template: &Path,
+        namespace: i64,
+        profile: ProfileConfig,
+        config: OwnerConfig,
+        shared: Arc<Shared>,
     ) -> crate::OwnerStart {
         let started = Instant::now();
         let mut startup = Arc::new(layerfs_overlay::CreationWork::default());
@@ -141,19 +169,30 @@ impl Owner {
             {
                 return Err(OwnerError::InvalidAdmission);
             }
-            let shared = Arc::new(Shared::new(config));
             if shared.scheduler_bytes() >= config.bytes - config.lifecycle_reserve {
                 return Err(OwnerError::InvalidAdmission);
             }
             let owner_shared = shared.clone();
             let path = path.to_owned();
+            let template = template.to_owned();
             let (ready, receiver) = mpsc::sync_channel(1);
             let worker = thread::Builder::new()
                 .name("layerfs-overlay-owner".into())
                 .spawn(move || {
                     let _exit = ExitFence(&owner_shared);
-                    let created = Overlay::create_observed(&path, profile);
+                    let created =
+                        Overlay::copy_template_observed(&path, profile, &template, namespace);
                     let startup = Arc::new(created.work);
+                    *owner_shared
+                        .initial
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner()) = Some(startup.clone());
+                    owner_shared.sql_progress(
+                        startup.sql,
+                        startup.allocation,
+                        layerfs_overlay::PayloadWork::default(),
+                        false,
+                    );
                     let db = match created.result {
                         Ok(db) => db,
                         Err(error) => {
@@ -194,7 +233,8 @@ impl Owner {
                 }
             };
             Ok(Self {
-                client: OwnerClient { shared },
+                pool: None,
+                client: OwnerClient { shared, pool: None },
                 worker: Some(worker),
                 profile,
                 startup: startup.clone(),
@@ -225,6 +265,9 @@ impl Owner {
     /// Stops this daemon service, cancelling only unattempted queued jobs. Whole
     /// daemon teardown is distinct from a single Workspace terminal unmount.
     pub fn stop(mut self) -> Result<(), OwnerError> {
+        if let Some(pool) = &self.pool {
+            return pool.stop();
+        }
         self.client.shared.stop();
         self.worker
             .take()
@@ -233,12 +276,26 @@ impl Owner {
             .map_err(|payload| OwnerError::WorkerPanicked(Mutex::new(payload)))?;
         match self.client.shared.panicked() {
             Some(payload) => Err(OwnerError::WorkerPanicked(Mutex::new(payload))),
-            None => Ok(()),
+            None => match self
+                .client
+                .shared
+                .close_error
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .take()
+            {
+                Some(cause) => Err(cause),
+                None => Ok(()),
+            },
         }
     }
 }
 impl Drop for Owner {
     fn drop(&mut self) {
+        if let Some(pool) = &self.pool {
+            let _ = pool.stop();
+            return;
+        }
         self.client.shared.stop();
         if let Some(worker) = self.worker.take() {
             let _ = worker.join();
@@ -252,6 +309,17 @@ impl OwnerClient {
         &self,
         route: Option<Route>,
         command: Command,
+    ) -> Result<Pending, (OwnerError, Command)> {
+        if let Some(pool) = &self.pool {
+            return pool.submit(self, route, command);
+        }
+        self.submit_leaf(route, command, None)
+    }
+    pub(super) fn submit_leaf(
+        &self,
+        route: Option<Route>,
+        command: Command,
+        permit: Option<super::budget::JobPermit>,
     ) -> Result<Pending, (OwnerError, Command)> {
         if (route.is_none()
             && !matches!(
@@ -272,13 +340,15 @@ impl OwnerClient {
             return Err((OwnerError::InvalidAdmission, command));
         };
         let class = command.class();
-        let namespace = route.map_or(0, Route::namespace);
         let mut state = match self.shared.state.lock() {
             Ok(s) => s,
             Err(_) => return Err((OwnerError::Stopped, command)),
         };
         if state.stopping {
             return Err((OwnerError::Stopped, command));
+        }
+        if matches!(command, Command::Open { .. }) && state.opened {
+            return Err((OwnerError::InvalidAdmission, command));
         }
         let config = self.shared.config;
         // Fixed scheduler state is never available to jobs; ordinary classes
@@ -294,38 +364,40 @@ impl OwnerClient {
         } else {
             config.jobs_per_namespace
         };
-        let active = |lane: &crate::queue::Lane| lane.active && lane.namespace == namespace;
-        let slot = match state.lanes.iter().position(active) {
-            Some(slot) => {
-                if *state.lanes[slot].slots(class) == bound {
-                    return Err((OwnerError::AdmissionFull, command));
-                }
-                slot
-            }
-            None => match state.lanes.iter().position(|lane| !lane.active) {
-                Some(slot) => slot,
-                None => return Err((OwnerError::AdmissionFull, command)),
-            },
-        };
+        if *state.lane.slots(class) == bound {
+            return Err((OwnerError::AdmissionFull, command));
+        }
         let id = state.next;
         let Some(next) = id.checked_add(1) else {
             return Err((OwnerError::IdentityExhausted, command));
         };
+        match &permit {
+            Some(permit) if !permit.covers(&self.shared.budget, bytes, class) => {
+                return Err((OwnerError::InvalidAdmission, command))
+            }
+            Some(_) => {}
+            None => {
+                if let Err(error) = self.shared.budget.acquire(bytes, class) {
+                    return Err((error, command));
+                }
+            }
+        }
+        if let Some(permit) = permit {
+            permit.transfer();
+        }
+        if matches!(command, Command::Open { .. }) {
+            state.opened = true;
+        }
         state.next = next;
         state.event = state.event.wrapping_add(1);
         let (publisher, pending) = completion::admit(Credit {
             shared: Arc::downgrade(&self.shared),
-            namespace,
             bytes: AtomicUsize::new(bytes),
             class,
+            budget: self.shared.budget.clone(),
+            _backing: self.shared.backing.get().cloned(),
         });
-        let lane = &mut state.lanes[slot];
-        let new = !lane.active;
-        if new {
-            lane.active = true;
-            lane.namespace = namespace;
-            lane.next = 0;
-        }
+        let lane = &mut state.lane;
         *lane.slots(class) += 1;
         lane.queues[class as usize].push_back(Box::new(Job {
             id,
@@ -337,9 +409,6 @@ impl OwnerClient {
             wait_consolidation: false,
             work: crate::JobWork::default(),
         }));
-        if new {
-            state.rotation.push_back(namespace);
-        }
         state.queued();
         state.work.credited_bytes += bytes;
         state.work.outstanding += 1;
@@ -377,6 +446,24 @@ impl OwnerClient {
         }
         Ok(pending)
     }
+    /// Resolves a newly bound route to its own connection, outside all jobs.
+    pub fn workspace_client(&self, route: Route) -> Result<Self, OwnerError> {
+        match &self.pool {
+            Some(pool) => pool.client(route.namespace()),
+            None => Ok(self.clone()),
+        }
+    }
+    /// Terminal control has fenced native, Store and SQL custody. Retire only
+    /// this connection; retained clients/completions keep its file owner.
+    pub(crate) fn retire_namespace(&self, namespace: i64) -> Result<(), OwnerError> {
+        self.pool
+            .as_ref()
+            .ok_or(OwnerError::InvalidAdmission)?
+            .retire(namespace)
+    }
+    pub fn budget_work(&self) -> super::budget::BudgetWork {
+        self.shared.budget.diagnostics()
+    }
     /// Records one reply attempt of a publication from the replying thread,
     /// with no owner turn. `Watched` says an owner job waited for it: the
     /// caller then owes one `Command::ReplySettled`.
@@ -384,6 +471,11 @@ impl OwnerClient {
         &self,
         publication: layerfs_overlay::Publication,
     ) -> Result<layerfs_overlay::Settled, OwnerError> {
+        if let Some(pool) = &self.pool {
+            return pool
+                .client(publication.route().namespace())?
+                .reply_attempted(publication);
+        }
         self.shared
             .tickets
             .get()
@@ -392,6 +484,9 @@ impl OwnerClient {
             .map_err(OwnerError::Overlay)
     }
     pub fn diagnostics(&self) -> Result<OwnerWork, OwnerError> {
+        if let Some(pool) = &self.pool {
+            return pool.diagnostics();
+        }
         self.shared
             .state
             .lock()
@@ -400,15 +495,15 @@ impl OwnerClient {
     }
     /// First automatic-maintenance error, retained without an automatic retry.
     pub fn maintenance_failure(&self) -> Result<Option<Arc<OverlayError>>, OwnerError> {
+        if let Some(pool) = &self.pool {
+            return pool.maintenance_failure();
+        }
         self.shared
             .state
             .lock()
             .map(|s| s.maintenance_error.clone())
             .map_err(|_| OwnerError::Stopped)
     }
-}
-fn ns(route: Option<Route>) -> i64 {
-    route.map_or(0, Route::namespace)
 }
 fn elapsed(start: Instant) -> u64 {
     start.elapsed().as_nanos().min(u64::MAX as u128) as u64
@@ -504,6 +599,15 @@ fn serve(shared: &Shared, db: &Overlay, mut job: Box<Job>) {
         job.refuse(OwnerError::Stopped);
         return;
     }
+    if let Some(initial) = shared
+        .initial
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .take()
+    {
+        job.work.sql.accumulate(&initial.sql);
+        job.work.allocation.accumulate(initial.allocation);
+    }
     let turn = Turn::begin(db);
     match ready(db, &mut job) {
         Ok(true) => {}
@@ -516,18 +620,12 @@ fn serve(shared: &Shared, db: &Overlay, mut job: Box<Job>) {
         Err(error) => {
             turn.settle(shared, Some(&mut job.work));
             job.work.queue_wait_ns = elapsed(job.admitted);
-            shared.progress(
-                ns(job.route),
-                job.command.class(),
-                job.work.queue_wait_ns,
-                0,
-            );
+            shared.progress(job.command.class(), job.work.queue_wait_ns, 0);
             job.refuse(OwnerError::Overlay(error));
             return;
         }
     }
     let class = job.command.class();
-    let namespace = ns(job.route);
     let wait = elapsed(job.admitted);
     let start = Instant::now();
     // The queued job's storage is released before its outcome exists.
@@ -542,7 +640,7 @@ fn serve(shared: &Shared, db: &Overlay, mut job: Box<Job>) {
     turn.settle(shared, Some(&mut work));
     work.queue_wait_ns = wait;
     work.service_ns = elapsed(start);
-    shared.progress(namespace, class, wait, work.service_ns);
+    shared.progress(class, wait, work.service_ns);
     publisher.publish(Box::new(Outcome { result, work }));
 }
 fn run(shared: &Shared) {
