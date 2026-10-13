@@ -1,26 +1,23 @@
 //! Captured namespace construction over existing bounded original reader jobs.
-use crate::{Command, OwnerClient, Response};
+use crate::{OwnerClient, Response};
 use layerfs_overlay::{CapturedReader, DirectoryEntry, Inode};
 use layerfs_workspace::{OverlayCapturedNamespace, WorkspaceError, WorkspaceResult};
 
 impl OwnerClient {
     /// This synchronous port serves the constructor thread, never a native
-    /// dispatch/service worker. It waits for a credit before its one attempt.
-    /// Failure keeps the original command/completion.
+    /// receive worker. Each call is one attempt under the Workspace lock.
+    /// Failure keeps the original input or receipt.
     fn captured_namespace_job(
         &self,
         reader: CapturedReader,
-        command: Command,
-    ) -> WorkspaceResult<crate::Completion> {
-        self.submit_waiting(Some(reader.capture().route()), command)
-            .map_err(|(cause, command)| {
-                WorkspaceError::Service(Box::new(crate::OwnerError::Unattempted {
-                    cause: Box::new(cause),
-                    command: Box::new(command),
-                }))
-            })?
-            .wait()
-            .map_err(|original| WorkspaceError::Service(Box::new(original)))
+        command: impl FnOnce(
+                &crate::OwnerClient,
+                Option<layerfs_overlay::Route>,
+            ) -> Result<crate::JobReceipt, crate::OwnerError>
+            + Send,
+    ) -> WorkspaceResult<crate::JobReceipt> {
+        command(self, Some(reader.capture().route()))
+            .map_err(|cause| WorkspaceError::Service(Box::new(cause)))
     }
 }
 
@@ -30,10 +27,13 @@ impl OverlayCapturedNamespace for OwnerClient {
         reader: CapturedReader,
         after: u64,
     ) -> WorkspaceResult<Vec<Inode>> {
-        let done = self.captured_namespace_job(reader, Command::ReaderInodes { reader, after })?;
+        let done = self
+            .captured_namespace_job(reader, |job_client: &crate::OwnerClient, route| {
+                job_client.reader_inodes(route, reader, after)
+            })?;
         match done.result() {
-            // The constructor's bounded copy briefly overlaps the credited
-            // original completion. This is not a zero-copy service interface.
+            // The constructor's bounded copy briefly overlaps the original
+            // receipt. This is not a zero-copy service interface.
             Ok(Response::Inodes(rows)) => Ok(rows.clone()),
             _ => Err(WorkspaceError::Service(Box::new(done))),
         }
@@ -45,7 +45,9 @@ impl OverlayCapturedNamespace for OwnerClient {
         after: Option<(u64, Vec<u8>)>,
     ) -> WorkspaceResult<Vec<DirectoryEntry>> {
         let done =
-            self.captured_namespace_job(reader, Command::ReaderDirectoryEntries { reader, after })?;
+            self.captured_namespace_job(reader, |job_client: &crate::OwnerClient, route| {
+                job_client.reader_directory_entries(route, reader, after)
+            })?;
         match done.result() {
             // Full names stay in bounded row values; no truncated identity key.
             Ok(Response::DirectoryEntries(rows)) => Ok(rows.clone()),
@@ -59,14 +61,10 @@ impl OverlayCapturedNamespace for OwnerClient {
         parent: u64,
         after: Option<Vec<u8>>,
     ) -> WorkspaceResult<Vec<DirectoryEntry>> {
-        let done = self.captured_namespace_job(
-            reader,
-            Command::ReaderParentDirectoryEntries {
-                reader,
-                parent,
-                after,
-            },
-        )?;
+        let done =
+            self.captured_namespace_job(reader, |job_client: &crate::OwnerClient, route| {
+                job_client.reader_parent_directory_entries(route, reader, parent, after)
+            })?;
         match done.result() {
             Ok(Response::DirectoryEntries(rows)) => Ok(rows.clone()),
             _ => Err(WorkspaceError::Service(Box::new(done))),
@@ -80,14 +78,10 @@ impl OverlayCapturedNamespace for OwnerClient {
         name: &[u8],
     ) -> WorkspaceResult<Option<DirectoryEntry>> {
         // The command owns its name, so an unattempted job returns it intact.
-        let done = self.captured_namespace_job(
-            reader,
-            Command::ReaderDirectoryEntry {
-                reader,
-                parent,
-                name: name.to_vec(),
-            },
-        )?;
+        let done =
+            self.captured_namespace_job(reader, |job_client: &crate::OwnerClient, route| {
+                job_client.reader_directory_entry(route, reader, parent, name.to_vec())
+            })?;
         match done.result() {
             Ok(Response::DirectoryEntry(row)) => Ok(row.clone()),
             _ => Err(WorkspaceError::Service(Box::new(done))),
@@ -96,7 +90,9 @@ impl OverlayCapturedNamespace for OwnerClient {
 
     fn captured_symlink(&self, reader: CapturedReader, serial: u64) -> WorkspaceResult<Vec<u8>> {
         let done =
-            self.captured_namespace_job(reader, Command::ReaderSymlink { reader, serial })?;
+            self.captured_namespace_job(reader, |job_client: &crate::OwnerClient, route| {
+                job_client.reader_symlink(route, reader, serial)
+            })?;
         match done.result() {
             Ok(Response::Symlink(target)) => Ok(target.clone()),
             _ => Err(WorkspaceError::Service(Box::new(done))),

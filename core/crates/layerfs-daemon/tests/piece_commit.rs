@@ -11,7 +11,7 @@ mod model;
 #[allow(dead_code)]
 #[path = "support/installed_store.rs"]
 mod support;
-use drive::{content_root, evidence, live, settled, Do, Rig, Session};
+use drive::{content_root, evidence, live, Do, Rig, Session};
 use layerfs_content::ObjectId;
 use layerfs_daemon::{store::CommitSuccess, Response};
 use layerfs_history::CommitStagedOutcome;
@@ -162,7 +162,6 @@ fn pieces_commit_install_and_read_back_from_a_fresh_bind() {
         "live view after the second install",
     );
 
-    settled(&rig.owner.client(), 0);
     rig.close(&first);
     drop(first);
     rig.finish();

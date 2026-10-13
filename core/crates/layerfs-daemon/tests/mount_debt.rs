@@ -1,33 +1,26 @@
 //! A new Mount is refused `Capacity` / `mount:debt` while automatic
 //! maintenance is stopped (specification 4.2, D-13; R8b track P-B).
 //!
-//! The owner keeps the first failure of an automatic maintenance turn and
-//! attempts no further turn. The stage that produces one here uses real
-//! resources only, in an order every step of which is waited for:
+//! A Workspace keeps the first reason its automatic maintenance stopped and
+//! attempts no further step. The stage that produces one here uses real
+//! resources only:
 //!
-//! 1. Two namespaces of the test's own are opened through the public owner
-//!    client in the same engine. The first publishes once and leaves that
-//!    reply unattempted, so a capture of it parks: one admitted job stays
-//!    queued. While a job is queued, every later job is served by the owner
-//!    thread, and the owner thread's next turn with no runnable job is a
-//!    maintenance turn.
-//! 2. The engine's backing file is renamed aside and another file is written
-//!    at its path, as `resources_observation.rs` does: a real external change
-//!    of the path identity the engine checks before every write.
-//! 3. One publication on the second namespace is that write (a mutation of
-//!    the first would wait behind its capture). Its admission reads the
-//!    changed identity, so the job fails with unknown outcome and the engine
-//!    quarantines itself.
-//! 4. The owner thread's next maintenance turn finds the engine unavailable.
-//!    That is the retained first failure: maintenance is stopped. The capture
-//!    stays parked: its reply is still unattempted.
+//! 1. One namespace of the test's own is opened through the public owner
+//!    client. Each Workspace has its own backing file.
+//! 2. That file is renamed aside and another file is written at its path, as
+//!    `resources_observation.rs` does: a real external change of the path
+//!    identity the engine checks before every write.
+//! 3. One publication on that namespace is that write. Its admission reads
+//!    the changed identity, so the job fails with unknown outcome and the
+//!    engine quarantines itself. A quarantined engine can run no later
+//!    maintenance step: that is the retained stop, recorded with no statement.
 //!
 //! No product hook, fault injection, mocked engine or replay is involved,
 //! and no kernel mount is needed: the refusal is decided at control
-//! admission. What is not staged: a maintenance turn that is itself the
-//! first to meet the failing resource. A turn is taken as soon as the job
-//! that made it pending has committed, on another thread, so a change placed
-//! between the two would be a race.
+//! admission. What is not staged: a maintenance step that is itself the
+//! first to meet the failing resource. A step runs on the thread whose job
+//! made it pending, as that job returns, so a change placed between the two
+//! would be a race.
 //!
 //! Every control call below travels one real authenticated channel, so the
 //! refusal is asserted as the bytes a controller receives, beside the
@@ -41,16 +34,16 @@ mod support;
 use layerfs_bridge::control::{Activity, ControlCode, ControlRefusal, Reply, Request};
 use layerfs_daemon::{
     control::{Failure, Service},
-    Command, Completion, OwnerClient, OwnerError, OwnerWork, Pending, Response,
+    JobReceipt, OwnerClient, OwnerError, OwnerWork, Response,
 };
 use layerfs_history::{BranchId, WorkspaceId};
-use layerfs_overlay::{Inode, InodeKind, OverlayError, Publication, Route};
+use layerfs_overlay::{Inode, InodeKind, OverlayError, Route};
 use layerfs_sdk::internal::Control;
 use std::{
     fs,
     sync::{mpsc, Arc},
     thread,
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 const WAIT: Duration = Duration::from_secs(10);
@@ -101,24 +94,7 @@ fn call(service: &Arc<Service>, request: Request) -> (Reply, Receipt) {
     let reply = Control::new(channel).call(request).unwrap();
     (reply, worker.join())
 }
-fn submit(client: &OwnerClient, route: Option<Route>, command: Command) -> Pending {
-    match client.try_submit(route, command) {
-        Ok(pending) => pending,
-        Err((error, _)) => panic!("admission: {error:?}"),
-    }
-}
-/// A completion, observed with a bound: no wait depends on another thread.
-fn done(pending: &Pending, what: &str) -> Completion {
-    let deadline = Instant::now() + WAIT;
-    loop {
-        if let Some(done) = pending.try_complete().unwrap() {
-            return done;
-        }
-        assert!(Instant::now() < deadline, "{what}: no completion");
-        thread::sleep(Duration::from_millis(1));
-    }
-}
-fn publish(client: &OwnerClient, route: Route, serial: u64) -> Completion {
+fn publish(client: &OwnerClient, route: Route, serial: u64) -> JobReceipt {
     let inode = Inode {
         serial,
         kind: InodeKind::File,
@@ -132,25 +108,16 @@ fn publish(client: &OwnerClient, route: Route, serial: u64) -> Completion {
         entries: 0,
         subdirs: 0,
     };
-    let pending = submit(
-        client,
-        Some(route),
-        Command::Publish {
-            inode,
-            name: None,
-            cell: None,
-        },
-    );
-    done(&pending, "publish")
+    client
+        .publish(Some(route), inode, None, None)
+        .unwrap_or_else(|error| panic!("publish: {error:?}"))
 }
-/// The owner counters a refused Mount must leave as they were.
-fn admission(work: &OwnerWork) -> (u64, [u64; 6], usize, usize, u64) {
+/// The connection counters a refused Mount must leave as they were.
+fn admission(work: &OwnerWork) -> ([u64; 6], u64, u64) {
     (
-        work.admitted,
-        work.completed,
-        work.outstanding,
-        work.queued,
+        work.jobs,
         work.maintenance_jobs,
+        work.sql_foreground.total().attempts,
     )
 }
 
@@ -174,60 +141,34 @@ fn a_new_mount_is_refused_capacity_at_mount_debt_while_maintenance_is_stopped() 
         matches!(admitted, (Reply::Bound { .. }, Receipt::Success)),
         "{admitted:?}"
     );
-    assert_eq!(after.0.admitted - before.0.admitted, 1, "one Open job");
+    assert_eq!(
+        after.0.jobs.iter().sum::<u64>() - before.0.jobs.iter().sum::<u64>(),
+        1,
+        "one Open job"
+    );
     assert!(after.1 > before.1, "a Mount reads History");
     assert!(client.maintenance_failure().unwrap().is_none());
     println!(
         "MOUNT_DEBT control: Mount admitted, owner admitted {} -> {}, Store statements {} -> {}, maintenance_failure=None",
-        before.0.admitted, after.0.admitted, before.1, after.1
+        before.0.jobs.iter().sum::<u64>(), after.0.jobs.iter().sum::<u64>(), before.1, after.1
     );
 
-    // 1. The test's own namespaces: in one, a publication whose reply is
-    //    not attempted and a capture that parks behind it.
-    let open = |tag: u8| {
-        let opened = done(
-            &submit(
-                &client,
-                None,
-                Command::Open {
-                    incarnation: [tag; 32],
-                    base_root: [17; 32],
-                },
-            ),
-            "open",
-        );
-        match opened.result() {
-            Ok(Response::Opened(route)) => *route,
-            other => panic!("open: {other:?}"),
-        }
+    // 1. The test's own namespace, with its own backing file.
+    let opened = client
+        .open(None, [202; 32], [17; 32])
+        .unwrap_or_else(|error| panic!("open: {error:?}"));
+    let other = match opened.result() {
+        Ok(Response::Opened(route)) => *route,
+        other => panic!("open: {other:?}"),
     };
-    let (route, other) = (open(201), open(202));
-    let first = publish(&client, route, 2);
-    let unattempted: Publication = match first.result() {
-        Ok(Response::Published(publication)) => *publication,
-        other => panic!("publish: {other:?}"),
-    };
-    drop(first);
-    let attempts = client
-        .diagnostics()
-        .unwrap()
-        .sql_foreground
-        .total()
-        .attempts;
-    let capture = submit(&client, Some(route), Command::Capture);
-    let deadline = Instant::now() + WAIT;
-    loop {
-        let work = client.diagnostics().unwrap();
-        if work.queued == 1 && work.sql_foreground.total().attempts > attempts {
-            break;
-        }
-        assert!(Instant::now() < deadline, "the capture never parked");
-        thread::sleep(Duration::from_millis(1));
-    }
-    assert!(capture.try_complete().unwrap().is_none());
+    drop(opened);
 
     // 2. A real external change of the backing file's path identity.
-    let backing = f.native.directory.join("overlay.sqlite");
+    // Each Workspace has its own file; the one the next write uses is changed.
+    let backing = f
+        .native
+        .directory
+        .join(format!("{}.sqlite", other.namespace()));
     fs::rename(&backing, f.native.directory.join("original-overlay.sqlite")).unwrap();
     fs::write(&backing, b"different physical inode").unwrap();
     assert!(client.maintenance_failure().unwrap().is_none());
@@ -239,39 +180,22 @@ fn a_new_mount_is_refused_capacity_at_mount_debt_while_maintenance_is_stopped() 
         matches!(
             failed.result(),
             Err(OwnerError::Overlay(OverlayError::Uncertain { .. }))
-        ) && write_failure.contains("allocation path identity"),
+        ),
         "{write_failure}"
     );
     drop(failed);
 
-    // 4. The owner thread's next maintenance turn: observed, bounded.
-    let deadline = Instant::now() + WAIT;
-    let stopped = loop {
-        if let Some(stopped) = client.maintenance_failure().unwrap() {
-            break stopped;
-        }
-        assert!(
-            Instant::now() < deadline,
-            "no maintenance failure was retained: {:?}",
+    // The quarantine is the retained stop of that Workspace's maintenance.
+    let stopped = client.maintenance_failure().unwrap().unwrap_or_else(|| {
+        panic!(
+            "no maintenance stop was retained: {:?}",
             admission(&client.diagnostics().unwrap())
-        );
-        thread::sleep(Duration::from_millis(1));
-    };
+        )
+    });
     assert!(matches!(*stopped, OverlayError::Quarantined), "{stopped:?}");
-    // Only the parked capture is left: queued, and held by this test.
-    let deadline = Instant::now() + WAIT;
-    let quiet = loop {
-        let work = client.diagnostics().unwrap();
-        if work.outstanding == 1 && work.queued == 1 {
-            break work;
-        }
-        assert!(Instant::now() < deadline, "{:?}", admission(&work));
-        thread::sleep(Duration::from_millis(1));
-    };
-    assert!(capture.try_complete().unwrap().is_none());
+    let quiet = client.diagnostics().unwrap();
     println!(
-        "MOUNT_DEBT stage: unattempted publication revision={} write under the changed identity={write_failure} maintenance_failure={stopped:?} owner (admitted, completed, outstanding, queued, maintenance_jobs)={:?}",
-        unattempted.revision(),
+        "MOUNT_DEBT stage: write under the changed identity={write_failure} maintenance_failure={stopped:?} connection (jobs, maintenance_jobs, statement attempts)={:?}",
         admission(&quiet)
     );
 
@@ -296,7 +220,7 @@ fn a_new_mount_is_refused_capacity_at_mount_debt_while_maintenance_is_stopped() 
             store.work(),
         );
         println!(
-            "MOUNT_DEBT Mount {tag}: reply={reply:?} receipt={receipt:?} owner (admitted, completed, outstanding, queued, maintenance_jobs) {:?} -> {:?} Store statements {} -> {}",
+            "MOUNT_DEBT Mount {tag}: reply={reply:?} receipt={receipt:?} connection (jobs, maintenance_jobs, statement attempts) {:?} -> {:?} Store statements {} -> {}",
             before.0, after.0, before.1, after.1
         );
         assert_eq!(reply, Reply::Refused(expected.clone()));
@@ -310,7 +234,7 @@ fn a_new_mount_is_refused_capacity_at_mount_debt_while_maintenance_is_stopped() 
                 original: true,
             }
         );
-        assert_eq!(after.0, before.0, "no owner job was submitted");
+        assert_eq!(after.0, before.0, "no connection job ran");
         assert_eq!(after.1, before.1, "no Store statement was issued");
         assert_eq!(after.2, before.2, "no Store demand was made");
         // No registry entry: the incarnation is absent, not retained.
@@ -331,8 +255,8 @@ fn a_new_mount_is_refused_capacity_at_mount_debt_while_maintenance_is_stopped() 
         other => panic!("duplicate Mount: {other:?}"),
     }
 
-    // The Workspace bound before the failure still answers Status, with its
-    // control fields; the engine's own observation is its original refusal.
+    // The Workspace bound before the failure has its own engine: it still
+    // answers Status with its control fields and its own local observation.
     let status = match call(&f.service, Request::Status(anchor)) {
         (Reply::Status(status), Receipt::Success) => *status,
         other => panic!("Status: {other:?}"),
@@ -344,13 +268,16 @@ fn a_new_mount_is_refused_capacity_at_mount_debt_while_maintenance_is_stopped() 
     assert_eq!(status.token, anchor);
     assert_eq!(status.binding, anchor_binding);
     assert_eq!(status.activity, Activity::Idle);
-    assert!(status.local.is_none() && status.local_failure.is_some());
+    assert!(
+        status.local.is_some() && status.local_failure.is_none(),
+        "a peer is not touched by another Workspace's quarantine"
+    );
     assert!(matches!(
         *client.maintenance_failure().unwrap().unwrap(),
         OverlayError::Quarantined
     ));
 
-    // The engine is quarantined: the owner is stopped as process scope, with
+    // One engine is quarantined: the owner is stopped as process scope, with
     // a bound, and whatever it answers is recorded, not required.
     let fixture::Fixture {
         native,
@@ -364,13 +291,9 @@ fn a_new_mount_is_refused_capacity_at_mount_debt_while_maintenance_is_stopped() 
         let _ = send.send(format!("{:?}", owner.stop()));
     });
     match joined.recv_timeout(WAIT) {
-        Ok(answer) => println!(
-            "MOUNT_DEBT owner stop: {answer}; parked capture answered={:?}",
-            capture.try_complete().map(|done| done.is_some())
-        ),
+        Ok(answer) => println!("MOUNT_DEBT owner stop: {answer}"),
         Err(_) => panic!("the owner did not stop"),
     }
-    drop(capture);
     drop(installed);
     native.cleanup();
 }

@@ -410,7 +410,7 @@ fn fp2_the_ready_receipt_is_exactly_the_section_8_1_profile_with_every_forbidden
     let work = native.work.unwrap();
     let threads = loop_threads();
     println!(
-        "FP-2 loops: specification section 8.1 says one; receipt.loops={} status(loops_configured={} loops_entered={}) receive-loop threads in /proc/self/task={threads}",
+        "FP-2 loops: declared receive workers; receipt.loops={} status(loops_configured={} loops_entered={}) receive-loop threads in /proc/self/task={threads}",
         receipt.loops, work.loops_configured, work.loops_entered
     );
     assert_eq!(
@@ -419,7 +419,11 @@ fn fp2_the_ready_receipt_is_exactly_the_section_8_1_profile_with_every_forbidden
         "{work:?}"
     );
     assert_eq!(threads, usize::from(receipt.loops), "thread count");
-    assert_eq!(receipt.loops, 1, "section 8.1: one receive loop");
+    assert_eq!(
+        usize::from(receipt.loops),
+        layerfs_fuse::RECEIVE_SLOTS,
+        "the mount's declared receive workers"
+    );
     // Reported, not judged. The pinned library hides FUSE_INIT_EXT from the
     // offered set it shows the filesystem (`KernelConfig::capabilities`) and
     // always adds it to its INIT reply when the kernel sent it
@@ -500,7 +504,7 @@ fn fp2_the_kernel_sends_the_requests_of_a_connection_without_four_forbidden_capa
         .unwrap()
         .work
         .unwrap();
-    assert_eq!((work.retained, work.terminal, work.unadmitted), (0, 0, 0));
+    assert_eq!((work.retained, work.terminal), (0, 0));
     let receipt = rig.unmount(&ready);
     let counts = opcodes(&receipt);
     let count = |opcode: Opcode| counts[opcode as usize];

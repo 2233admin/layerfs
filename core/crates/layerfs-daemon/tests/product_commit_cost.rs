@@ -10,9 +10,9 @@ mod model;
 #[allow(dead_code)]
 #[path = "support/installed_store.rs"]
 mod support;
-use drive::{evidence, settled, Do, Rig, Session};
+use drive::{evidence, Do, Rig, Session};
 use layerfs_content::ObjectId;
-use layerfs_daemon::{store::ReleasedOwner, Completion, OwnerWork, ServiceClass};
+use layerfs_daemon::{store::ReleasedOwner, JobReceipt, OwnerWork, ServiceClass};
 use layerfs_history::CommitStagedOutcome;
 use layerfs_overlay::{DatabaseWork, StatementKind};
 use layerfs_persistence::SqlitePersistenceProfile;
@@ -230,18 +230,17 @@ fn families(sql: &DatabaseWork) -> String {
     line
 }
 /// One original completion's own receipt: its statement families and turns.
-fn receipt(name: &str, done: &Completion) -> String {
+fn receipt(name: &str, done: &JobReceipt) -> String {
     let work = done.work();
     format!(
-        "{name}(result_ok={} parked_turns={} statements={}{})",
+        "{name}(result_ok={} statements={}{})",
         done.result().is_ok(),
-        work.parked_turns,
         work.sql.total().executions,
         families(&work.sql.expanded())
     )
 }
 fn jobs(before: &OwnerWork, after: &OwnerWork) -> [u64; 6] {
-    std::array::from_fn(|class| after.completed[class] - before.completed[class])
+    std::array::from_fn(|class| after.jobs[class] - before.jobs[class])
 }
 /// The published root as a fresh bind sees it, walked completely.
 fn rebound(rig: &Rig, tag: u8, root: ObjectId) -> Flat {
@@ -285,7 +284,6 @@ fn measure(
     // No complete walk of the live view precedes the Commit: it would fill the
     // shared canonical cache and change what the Commit's own reads find. The
     // cache holds what binding and the mutations above read, nothing more.
-    settled(&rig.owner.client(), 0);
     let owner_before = rig.owner.client().diagnostics().unwrap();
     let (store_before, reads_before, cache_before) = (
         rig.store.work(),
@@ -326,7 +324,6 @@ fn measure(
     let (storage, saved) = (success.storage, success.saved);
     // The Commit's own completions are caller-held credits until dropped.
     drop(success);
-    settled(&rig.owner.client(), 0);
     let owner_after = rig.owner.client().diagnostics().unwrap();
     model::assert_same(&expected, &rebound(&rig, 2, published.root), "fresh bind");
 
@@ -348,7 +345,7 @@ fn measure(
     ));
     evidence(format_args!(
         "PRODUCT_COMMIT_COST_OWNER_JOBS case={case} total={total_jobs} admitted={}{classes}",
-        owner_after.admitted - owner_before.admitted
+        owner_after.jobs.iter().sum::<u64>() - owner_before.jobs.iter().sum::<u64>()
     ));
     evidence(format_args!(
         "PRODUCT_COMMIT_COST_SQL case={case} statements={} rows_returned={} rows_changed={} vm_steps={} fullscan_steps={} sorts={} autoindex_rows={} reprepares={} families:{}",

@@ -16,8 +16,7 @@ use layerfs_content::filesystem::PathName;
 use layerfs_daemon::{
     bootstrap::open_store,
     store::{BindRequest, BoundWorkspace, Store},
-    Command, Completion, NativeJob, NativeReply, Owner, OwnerClient, OwnerConfig, Response,
-    ServiceClass,
+    JobReceipt, NativeReply, Owner, OwnerClient, OwnerConfig, Response, ServiceClass,
 };
 use layerfs_fuse::{
     operations::{
@@ -98,19 +97,15 @@ fn wait<T>(future: impl Future<Output = T>) -> T {
         }
     }
 }
-fn until(what: &str, mut condition: impl FnMut() -> bool) {
-    let deadline = Instant::now() + WAIT;
-    while !condition() {
-        assert!(Instant::now() < deadline, "bounded observation: {what}");
-        std::thread::yield_now();
-    }
-}
-fn finish(client: &OwnerClient, route: layerfs_overlay::Route, command: Command) -> Completion {
-    let pending = match client.try_submit(Some(route), command) {
-        Ok(pending) => pending,
-        Err((error, command)) => panic!("admission of {command:?}: {error:?}"),
-    };
-    wait(pending).unwrap()
+fn finish(
+    client: &OwnerClient,
+    route: layerfs_overlay::Route,
+    command: impl FnOnce(
+        &layerfs_daemon::OwnerClient,
+        Option<layerfs_overlay::Route>,
+    ) -> Result<layerfs_daemon::JobReceipt, layerfs_daemon::OwnerError>,
+) -> JobReceipt {
+    command(client, Some(route)).unwrap_or_else(|error| panic!("{error:?}"))
 }
 fn pattern(length: usize, seed: u8) -> Vec<u8> {
     (0..length)
@@ -220,7 +215,9 @@ impl Rig {
         let done = finish(
             &client,
             bound.route(),
-            Command::Native(NativeJob::Mount { root }),
+            |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.native_mount(job_route, root)
+            },
         );
         let mount = match done.result() {
             Ok(Response::Native(NativeReply::Mount(mount))) => *mount,
@@ -246,15 +243,12 @@ impl Rig {
     }
     /// Taken once every result of the request under observation is returned.
     fn snapshot(&self) -> Snapshot {
-        until("owner results returned", || {
-            self.client.diagnostics().unwrap().outstanding == 0
-        });
         let work = self.client.diagnostics().unwrap();
         let readers = self.store.read_work();
         assert_eq!((readers.outstanding, readers.waiting), (0, 0));
         Snapshot {
-            completed: work.completed,
-            admitted: work.admitted,
+            completed: work.jobs,
+            admitted: work.jobs.iter().sum::<u64>(),
             grants: readers.grants,
             length_batches: self.store.work().length_batches,
             sql: work.sql_foreground,
@@ -439,11 +433,14 @@ impl Rig {
         } = self;
         // No request of this test, measured or not, recorded a request
         // source: no Source-class job ran and no source row exists.
-        until("owner credits returned", || {
-            client.diagnostics().unwrap().outstanding == 0
-        });
-        assert_eq!(client.diagnostics().unwrap().completed[SOURCE], 0);
-        let done = finish(&client, bound.route(), Command::Resources { global: false });
+        assert_eq!(client.diagnostics().unwrap().jobs[SOURCE], 0);
+        let done = finish(
+            &client,
+            bound.route(),
+            |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.resources(job_route, false)
+            },
+        );
         match done.result() {
             Ok(Response::Resources(resources)) => assert_eq!(resources.counts.source_rows, 0),
             other => panic!("resources: {other:?}"),
@@ -452,7 +449,9 @@ impl Rig {
         let done = finish(
             &client,
             bound.route(),
-            Command::Native(NativeJob::Revoke(mount)),
+            |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.native_revoke(job_route, mount)
+            },
         );
         assert!(
             matches!(done.result(), Ok(Response::Native(NativeReply::Done))),
@@ -460,9 +459,6 @@ impl Rig {
             done.result()
         );
         drop(done);
-        until("owner credits returned", || {
-            client.diagnostics().unwrap().outstanding == 0
-        });
         assert_eq!(store.read_work().outstanding, 0);
         drop(bound);
         owner.stop().unwrap();
@@ -810,14 +806,11 @@ fn an_unlinked_open_file_still_reads_its_own_bytes_in_one_visit() {
         assert_eq!((cost.grants, cost.length_batches), (grants, 0), "{label}");
         // The fence, the orphan's row, and its own and its retained layers.
         let families: Vec<_> = cost.sql.iter().map(|(family, ..)| *family).collect();
-        assert_eq!(
-            families,
-            ["Workspace", "Inode", "Payload", "Lease"],
-            "{label}"
-        );
+        assert_eq!(families, ["Workspace", "Inode", "Payload"], "{label}");
         assert_eq!(cost.family("Workspace"), (1, 1), "{label}");
         assert_eq!(cost.family("Inode"), (2, 2), "{label}");
-        assert_eq!(cost.family("Lease"), (1, 1), "{label}");
+        // The orphan is held by open state in memory: no lease statement.
+        assert_eq!(cost.family("Lease"), (0, 0), "{label}");
         // One cell range for each layer that still holds the file's cells:
         // the orphan's own, and the retained one below it until background
         // reclamation has moved its cells up. Never more than these two here.
@@ -889,7 +882,6 @@ fn a_window_reads_the_base_its_visit_named_whatever_is_installed_before_its_byte
     let old = rig.bound.operation().unwrap().workspace().base().unwrap();
     assert_eq!(window.root, old.identity().0.to_bytes());
     assert!(window.inherits(0, false) && window.whole(false).is_none());
-    assert_eq!(rig.client.diagnostics().unwrap().outstanding, 0);
 
     // Before its bytes are read, the inherited part of the same window is
     // overwritten and the Workspace is committed: the installed base now
@@ -1055,13 +1047,9 @@ const LOOKUP_BASE: Pinned = Pinned {
     grants: 0,
     length_batches: 0,
     sql: &[
-        ("Startup", 1, 1),
-        ("Begin", 1, 1),
-        ("Commit", 1, 1),
         ("Workspace", 1, 1),
         ("Inode", 1, 1),
         ("DirectoryEntry", 1, 1),
-        ("Lease", 2, 2),
     ],
 };
 /// GETATTR of the same file: one visit, whose fence reads its row in the
@@ -1080,13 +1068,9 @@ const LOOKUP_UNSEEN: Pinned = Pinned {
     grants: 1,
     length_batches: 1,
     sql: &[
-        ("Startup", 1, 1),
-        ("Begin", 1, 1),
-        ("Commit", 1, 1),
         ("Workspace", 2, 2),
         ("Inode", 1, 1),
         ("DirectoryEntry", 2, 2),
-        ("Lease", 2, 2),
     ],
 };
 /// READ of base bytes: one read-only visit (the mount, the descriptor and
@@ -1132,26 +1116,14 @@ const OPEN_BASE: Pinned = Pinned {
     jobs: (1, 0, 0),
     grants: 0,
     length_batches: 0,
-    sql: &[
-        ("Startup", 1, 1),
-        ("Begin", 1, 1),
-        ("Commit", 1, 1),
-        ("Workspace", 1, 1),
-        ("Lease", 2, 3),
-    ],
+    sql: &[("Workspace", 1, 1)],
 };
 /// OPEN of a local file: the same visit, decided by the local row.
 const OPEN_LOCAL: Pinned = Pinned {
     jobs: (1, 0, 0),
     grants: 0,
     length_batches: 0,
-    sql: &[
-        ("Startup", 1, 1),
-        ("Begin", 1, 1),
-        ("Commit", 1, 1),
-        ("Workspace", 1, 1),
-        ("Lease", 2, 3),
-    ],
+    sql: &[("Workspace", 1, 1)],
 };
 /// OPEN of a base file whose inode or length is not in memory: two visits
 /// around one reader. Only the second writes.
@@ -1159,26 +1131,14 @@ const OPEN_UNSEEN: Pinned = Pinned {
     jobs: (2, 0, 0),
     grants: 1,
     length_batches: 1,
-    sql: &[
-        ("Startup", 1, 1),
-        ("Begin", 1, 1),
-        ("Commit", 1, 1),
-        ("Workspace", 2, 2),
-        ("Lease", 2, 3),
-    ],
+    sql: &[("Workspace", 2, 2)],
 };
 /// RELEASE: one job, one transaction.
 const RELEASE: Pinned = Pinned {
     jobs: (0, 1, 0),
     grants: 0,
     length_batches: 0,
-    sql: &[
-        ("Startup", 1, 1),
-        ("Begin", 1, 1),
-        ("Commit", 1, 1),
-        ("Workspace", 1, 1),
-        ("Lease", 2, 3),
-    ],
+    sql: &[("Workspace", 1, 1)],
 };
 /// READLINK of a base link: the visit, under the kernel's lookup reference,
 /// and one reader for the target.
@@ -1201,5 +1161,5 @@ const READ_BASE_BESIDE_ORPHAN: Pinned = Pinned {
     jobs: (1, 0, 0),
     grants: 1,
     length_batches: 0,
-    sql: &[("Workspace", 1, 1), ("Inode", 1, 1), ("Lease", 1, 1)],
+    sql: &[("Workspace", 1, 1), ("Inode", 1, 1)],
 };

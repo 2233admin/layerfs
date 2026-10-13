@@ -5,7 +5,7 @@ use super::{
     BoundWorkspace, CapturedConstruction, CommitError, CommitFailure, CommitSuccess, PortError,
     ReleasedOwner, StoreOperation,
 };
-use crate::{Command, Completion, OwnerError, Response};
+use crate::{JobReceipt, OwnerError, Response};
 use layerfs_content::{
     filesystem::FilesystemRootId, ContentError, ContentResult, FilesystemResult, FinalizedConsumer,
     FinalizedObject,
@@ -40,21 +40,6 @@ impl BoundWorkspace {
     /// request-service worker.
     pub fn commit_captured(&self) -> Result<CommitSuccess, Box<CommitFailure>> {
         let mut admission = self.admit_commit()?;
-        // This thread keeps the capture's completion while it waits for
-        // ordinary credits, and may keep one failed acquisition's while it
-        // waits for a Lifecycle credit. With fewer than two slots of either
-        // kind that wait could never end, so nothing is attempted.
-        let slots = self.owner.configuration();
-        if slots.jobs_per_namespace < 2 || slots.lifecycle_jobs_per_namespace < 2 {
-            let mut refused = CommitFailure::new(
-                CommitError::Context("owner job slots below the Commit minimum"),
-                self.identity,
-                self.route(),
-            );
-            refused.locally_settled = true;
-            admission.released = true;
-            return Err(Box::new(refused));
-        }
         let held = RefCell::new(None);
         // What construction staged for the shared cache. It is placed there
         // only by the publication callback; every other path drops it.
@@ -93,8 +78,8 @@ impl BoundWorkspace {
                 // Only a definite, locally resolved nonpublication ends the
                 // attempt's ownership. Anything else keeps every owner.
                 if let (true, Some(held)) = (failure.locally_settled, &mut held) {
-                    // The resolution is known done; its completion would keep
-                    // a Lifecycle credit that the releases wait for.
+                    // The resolution is known done; its receipt is not kept
+                    // past the releases.
                     failure.local = None;
                     self.release_captured(held);
                 }
@@ -122,7 +107,9 @@ impl BoundWorkspace {
             .filter(|number| *number != 0)
             .ok_or(CommitError::Context("capture generation as request"))?;
         let reader = self.owned(
-            Command::AcquireCapturedReader { capture, request },
+            |job_client: &crate::OwnerClient, route| {
+                job_client.acquire_captured_reader(route, capture, request)
+            },
             |response| match response {
                 Response::CapturedReader(Some(reader)) => Some(*reader),
                 _ => None,
@@ -130,7 +117,9 @@ impl BoundWorkspace {
         )?;
         held.reader = Some(reader);
         let owner = self.owned(
-            Command::AcquireOperation { request },
+            |job_client: &crate::OwnerClient, job_route| {
+                job_client.acquire_operation(job_route, request)
+            },
             |response| match response {
                 Response::Operation(Some(owner)) => Some(*owner),
                 _ => None,
@@ -175,37 +164,58 @@ impl BoundWorkspace {
     /// One owner job whose expected reply carries the acquired value.
     fn owned<T>(
         &self,
-        command: Command,
+        command: impl FnOnce(
+                &crate::OwnerClient,
+                Option<layerfs_overlay::Route>,
+            ) -> Result<crate::JobReceipt, crate::OwnerError>
+            + Send,
         take: impl FnOnce(&Response) -> Option<T>,
     ) -> Result<T, CommitError> {
         let done = self.job(command).map_err(CommitError::Owner)?;
         match done.result().as_ref().ok().and_then(take) {
             Some(value) => Ok(value),
-            None => Err(CommitError::Completion(Box::new(done))),
+            None => Err(CommitError::JobReceipt(Box::new(done))),
         }
     }
     /// The attempt's custody is dropped first, then the reader is released,
     /// then the operation owner. A release that is refused or fails stops the
     /// sequence; what it did not release stays named in the receipt. A done
-    /// release's completion is dropped at once: holding it would keep a
-    /// Lifecycle credit of this Workspace.
+    /// release's receipt is dropped at once.
     fn release_captured(&self, held: &mut CapturedConstruction) {
         held.custody = None;
         if let Some(reader) = held.reader {
-            if !self.released(Command::ReleaseCapturedReader(reader), held) {
+            if !self.released(
+                |job_client: &crate::OwnerClient, route| {
+                    job_client.release_captured_reader(route, reader)
+                },
+                held,
+            ) {
                 return;
             }
             held.reader = None;
             held.released.push(ReleasedOwner::Reader);
         }
         if let Some(owner) = held.operation {
-            if self.released(Command::ReleaseOperation(owner), held) {
+            if self.released(
+                |job_client: &crate::OwnerClient, job_route| {
+                    job_client.release_operation(job_route, owner)
+                },
+                held,
+            ) {
                 held.operation = None;
                 held.released.push(ReleasedOwner::Operation);
             }
         }
     }
-    fn released(&self, command: Command, held: &mut CapturedConstruction) -> bool {
+    fn released(
+        &self,
+        command: impl FnOnce(
+                &crate::OwnerClient,
+                Option<layerfs_overlay::Route>,
+            ) -> Result<crate::JobReceipt, crate::OwnerError>
+            + Send,
+        held: &mut CapturedConstruction,
+    ) -> bool {
         match self.job(command) {
             Ok(done) if matches!(done.result(), Ok(Response::Done)) => true,
             Ok(done) => {
@@ -242,8 +252,8 @@ fn classify(
         (Err(label), _) => label,
     };
     Err(match original {
-        Some(WorkspaceError::Service(service)) => match service.downcast::<Completion>() {
-            Ok(completion) => CommitError::Completion(completion),
+        Some(WorkspaceError::Service(service)) => match service.downcast::<JobReceipt>() {
+            Ok(completion) => CommitError::JobReceipt(completion),
             Err(other) => match other.downcast::<OwnerError>() {
                 Ok(owner) => CommitError::Owner(*owner),
                 Err(other) => match other.downcast::<Arc<PortError>>() {

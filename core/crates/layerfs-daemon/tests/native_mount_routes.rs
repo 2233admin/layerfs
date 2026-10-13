@@ -315,7 +315,7 @@ fn fresh_mounts_repeat_and_one_mount_sustains_uncached_work() {
     }
     until("asynchronous releases served", || {
         let work = h.status(ready.token).native.unwrap().work.unwrap();
-        work.received == 0 && work.admitted == 0
+        work.active == 0
     });
     let after = h.status(ready.token).native.unwrap().work.unwrap();
     // Per round: open, four windowed reads, two tail reads, opendir, at least
@@ -324,13 +324,10 @@ fn fresh_mounts_repeat_and_one_mount_sustains_uncached_work() {
         after.completed - before.completed >= (2 * ROUNDS * 10) as u64,
         "{before:?} {after:?}"
     );
-    assert_eq!(
-        (after.retained, after.terminal, after.unadmitted),
-        (0, 0, 0)
-    );
+    assert_eq!((after.retained, after.terminal), (0, 0));
     assert_eq!(
         (after.loops_entered, after.loops_exited),
-        (1, 0),
+        (layerfs_fuse::RECEIVE_SLOTS as u16, 0),
         "same connection throughout"
     );
     whole_root(&root);

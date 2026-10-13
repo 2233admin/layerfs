@@ -369,7 +369,9 @@ impl OverlayCapturedNamespace for Counting<'_> {
         after: Option<Vec<u8>>,
     ) -> WorkspaceResult<Vec<DirectoryEntry>> {
         self.read("captured_directory_entries");
-        self.read_call(|| self.inner.captured_directory_entries(reader, parent, after))
+        self.read_call(|| {
+            OverlayCapturedNamespace::captured_directory_entries(self.inner, reader, parent, after)
+        })
     }
     fn captured_directory_entry(
         &self,

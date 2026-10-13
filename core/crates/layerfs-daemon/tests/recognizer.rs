@@ -12,7 +12,7 @@ mod model;
 #[allow(dead_code)]
 #[path = "support/installed_store.rs"]
 mod support;
-use drive::{evidence, live, settled, Do, Rig, Session};
+use drive::{evidence, live, Do, Rig, Session};
 use layerfs_content::ObjectId;
 use layerfs_daemon::{
     store::{CommitSuccess, RECOGNIZER_SLOTS},
@@ -168,7 +168,6 @@ fn plain_writes_of_a_shifted_tail_become_pieces_and_commit() {
     );
     assert_eq!(rig.store.recognizer_work().passes.failed, 0);
 
-    settled(&rig.owner.client(), 0);
     rig.close(&first);
     drop(first);
     rig.finish();
@@ -215,7 +214,6 @@ fn a_tail_moved_from_the_end_backward_becomes_pieces_and_commits() {
     model::assert_same(&expected, &rebound(&rig, 2, root), "fresh bind");
     model::assert_same(&expected, &live(&first), "live view after install");
 
-    settled(&rig.owner.client(), 0);
     rig.close(&first);
     drop(first);
     rig.finish();
@@ -254,7 +252,6 @@ fn an_aligned_delete_is_one_run_and_one_edit() {
         let root = published(&success);
         drop(success);
         model::assert_same(&expected, &rebound(&rig, 2, root), "fresh bind");
-        settled(&rig.owner.client(), 0);
         rig.close(&first);
         drop(first);
         rig.finish();
@@ -337,7 +334,6 @@ fn interleaved_and_unordered_writes_never_claim_another_writers_bytes() {
     evidence(format_args!("RECOGNIZER unordered {end:?}"));
     assert_eq!(end.passes.failed, 0);
 
-    settled(&rig.owner.client(), 0);
     rig.close(&first);
     drop(first);
     rig.finish();
@@ -389,7 +385,6 @@ fn the_slot_table_is_fixed_and_an_evicted_file_starts_over() {
     assert_eq!(again.slots, RECOGNIZER_SLOTS);
 
     model::assert_same(&session.model.flat(), &live(&first), "live view");
-    settled(&rig.owner.client(), 0);
     rig.close(&first);
     drop(first);
     rig.finish();

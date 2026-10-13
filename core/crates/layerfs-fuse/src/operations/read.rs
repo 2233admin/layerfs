@@ -73,13 +73,12 @@ impl Custody {
         if visit.get().whole(link).is_some() {
             return Ok(Ok(NativeData(Bytes::Visit(visit))));
         }
-        // The request's own copy: the job and its credit are gone before any
+        // The request's own copy: the job and its receipt are gone before any
         // provider wait.
         let window = NativeWindow::clone(visit.get());
         drop(visit);
         let base = if window.inherits(offset, link) {
             // Provider reads never run on the loop that received the request.
-            crate::LeaveReceiver::default().await;
             Some(self.services.base().await?)
         } else {
             None

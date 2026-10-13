@@ -35,12 +35,7 @@ impl BaseFacts {
             .find(|(key, bound, _)| *key == parent && bound == name)
             .map(|(_, _, value)| *value)
     }
-    /// Heap bytes retained by this job input, for owner admission accounting.
-    pub fn charge(&self) -> usize {
-        self.inodes.capacity() * std::mem::size_of::<(u64, Option<Inode>)>()
-            + self.directory_entries.capacity()
-                * (std::mem::size_of::<(u64, PathName, Option<u64>)>() + 255)
-    }
+
     fn has(&self, need: &Need) -> bool {
         match need {
             Need::Inode(serial) => self.inode(*serial).is_some(),
@@ -78,9 +73,7 @@ impl VisitFacts {
     pub(crate) fn of(&self, root: [u8; 32]) -> Option<&BaseFacts> {
         (self.root == Some(root)).then_some(&self.facts)
     }
-    pub fn charge(&self) -> usize {
-        self.facts.charge()
-    }
+
     /// Reads what an undecided visit asked for from the Workspace's current
     /// base. Facts of another base are dropped first. Needs this base already
     /// answered mean the visit did not accept them: the binding and the

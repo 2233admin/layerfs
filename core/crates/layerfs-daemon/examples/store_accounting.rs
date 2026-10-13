@@ -19,7 +19,7 @@ mod records;
 #[path = "../tests/support/native_install.rs"]
 mod support;
 use layerfs_content::filesystem::{FilesystemRootId, PathName};
-use layerfs_daemon::{store::BindRequest, Command, Owner, OwnerConfig, Response};
+use layerfs_daemon::{store::BindRequest, Owner, OwnerConfig, Response};
 use layerfs_history::{CommitStagedOutcome, WorkspaceId};
 use std::{
     fs::OpenOptions,
@@ -115,7 +115,10 @@ fn main() {
             (local, local_after),
         );
         assert_eq!(whole, exact);
-        assert_eq!(local_after.admitted - local.admitted, 2);
+        assert_eq!(
+            local_after.jobs.iter().sum::<u64>() - local.jobs.iter().sum::<u64>(),
+            2
+        );
         assert_eq!(writes, result.storage.reserve + result.storage.publish + 1);
         assert_eq!(result.storage.initial_reservations, 1);
         assert_eq!(result.storage.reservation_refills, 0);
@@ -126,7 +129,6 @@ fn main() {
         assert_eq!(scans, result.storage.signatures * 8191);
         println!("STORE_WHOLE_COMMIT outcome={kind} owner_jobs=2 writes={} initial={} refills={} publication={} history=1 namespace_files=100000",result.storage.reserve+result.storage.publish+1,result.storage.initial_reservations,result.storage.reservation_refills,result.storage.publish);
         drop(result);
-        assert_eq!(owner.client().diagnostics().unwrap().outstanding, 0);
     }
     phase("verify");
     let op = bound.operation().unwrap();
@@ -151,13 +153,7 @@ fn main() {
     drop((base, op));
     phase("release");
     assert!(matches!(
-        owner
-            .client()
-            .try_submit(Some(bound.route()), Command::Close)
-            .unwrap()
-            .wait()
-            .unwrap()
-            .result(),
+        owner.client().close(Some(bound.route())).unwrap().result(),
         Ok(Response::Done)
     ));
     drop(bound);

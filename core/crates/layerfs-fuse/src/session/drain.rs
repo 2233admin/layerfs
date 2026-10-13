@@ -31,17 +31,17 @@ impl NativeSession {
         match syscalls::detach(&self.directory) {
             Ok(()) => {
                 self.detached.store(true, Ordering::Release);
-                // Known detach is the fence: wake every borrowed admission
-                // waiter. Already admitted work keeps its original disposition.
-                let _ = self.queue.stop_admission();
+                // Known detach is the fence: later receives are refused and
+                // drain waiters wake. A running request keeps its disposition.
+                let _ = self.queue.stop_receive();
                 Ok(Detach::Detached)
             }
             Err(Errno::EBUSY) => Ok(Detach::Busy),
             Err(errno) => Err(errno),
         }
     }
-    /// Establishes that every created loop is joined and no received, admitted
-    /// or retained request remains, then releases the lane. Waits are bounded
+    /// Establishes that every created loop is joined and no received, running
+    /// or retained request remains, then releases the mount. Waits are bounded
     /// observations: expiry keeps the whole owner and fabricates nothing.
     pub fn drain(mut self) -> Result<Box<Drained>, Box<Undrained>> {
         if !self.is_detached() {
@@ -53,8 +53,10 @@ impl NativeSession {
             Err(stop) => Err(self.stopped(stop)),
         }
     }
-    /// The half both terminal paths share: every created loop joined, the
-    /// owner and watcher returned, and no received or admitted request left.
+    /// The half both terminal paths share: no request still running, every
+    /// created loop joined, the owner and watcher returned, and no received or
+    /// retained request left. A receive loop runs its request itself, so a
+    /// running request is observed first: it is what keeps its loop unjoined.
     /// It makes no syscall and releases nothing.
     pub(super) fn quiesce(&mut self, deadline: Instant) -> Result<MountWork, Stop> {
         let stop = |stage, panic| Stop {
@@ -62,6 +64,17 @@ impl NativeSession {
             panic,
             lane: None,
         };
+        match self.queue.wait_quiescent(deadline) {
+            Ok(work) if work.active == 0 => {}
+            Ok(_) => return Err(stop(DrainStage::Requests, None)),
+            Err(lane) => {
+                return Err(Stop {
+                    stage: DrainStage::Lane,
+                    panic: None,
+                    lane: Some(lane),
+                })
+            }
+        }
         if let (Some(monitor), true) = (&self.monitor, self.owner.is_some()) {
             let mut loops = monitor.snapshot();
             while loops.phase != SessionPhase::Joined {
@@ -84,7 +97,7 @@ impl NativeSession {
             }
         }
         match self.queue.wait_quiescent(deadline) {
-            Ok(work) if work.received == 0 && work.admitted == 0 => Ok(work),
+            Ok(work) if work.active == 0 && work.retained == 0 => Ok(work),
             Ok(_) => Err(stop(DrainStage::Requests, None)),
             Err(lane) => Err(Stop {
                 stage: DrainStage::Lane,
@@ -94,7 +107,7 @@ impl NativeSession {
         }
     }
     /// The release half, only for a detached and quiesced connection: the
-    /// lane's fixed slot, then the one removal of the unmounted directory.
+    /// request owner, then the one removal of the unmounted directory.
     pub(super) fn release(self, work: MountWork) -> Result<Box<Drained>, Box<Undrained>> {
         if let Err(lane) = self.queue.finish() {
             let mut undrained = self.undrained(DrainStage::Lane, None);

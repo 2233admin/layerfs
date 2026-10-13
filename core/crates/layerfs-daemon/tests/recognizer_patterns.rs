@@ -13,11 +13,11 @@ mod model;
 #[allow(dead_code)]
 #[path = "support/installed_store.rs"]
 mod support;
-use drive::{evidence, job, live, settled, Do, Rig, Session};
+use drive::{evidence, job, live, Do, Rig, Session};
 use layerfs_content::ObjectId;
 use layerfs_daemon::{
     store::{BoundWorkspace, CommitSuccess},
-    Command, Response,
+    Response,
 };
 use layerfs_history::CommitStagedOutcome;
 use layerfs_overlay::StoredCounts;
@@ -80,7 +80,7 @@ fn counts(rig: &Rig, workspace: &BoundWorkspace) -> StoredCounts {
     match job(
         &rig.owner.client(),
         workspace.route(),
-        Command::Resources { global: true },
+        |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.resources(job_route, true),
     )
     .result()
     {
@@ -152,7 +152,6 @@ fn commit_and_compare(
     root
 }
 fn end(rig: Rig, workspace: std::sync::Arc<BoundWorkspace>) {
-    settled(&rig.owner.client(), 0);
     rig.close(&workspace);
     drop(workspace);
     rig.finish();
@@ -506,7 +505,6 @@ fn a_later_commit_and_a_second_workspace_over_a_file_with_pieces() {
     );
     let root = commit_and_compare(&rig, &first, &session, 3, "second Commit");
     let model_after = session.model.clone();
-    settled(&rig.owner.client(), 0);
     rig.close(&first);
     drop(first);
 

@@ -6,10 +6,8 @@ mod fixture;
 #[path = "support/native_install.rs"]
 mod support;
 use layerfs_bridge::control::{CleanupObservation, Reply, Request, WorkspaceToken};
-use layerfs_daemon::{Command, Owner, OwnerConfig, OwnerError, Response};
+use layerfs_daemon::Response;
 use layerfs_history::{BranchId, WorkspaceId};
-use layerfs_overlay::ProfileConfig;
-use std::time::{Duration, Instant};
 
 fn token(reply: &Reply) -> WorkspaceToken {
     match reply {
@@ -60,13 +58,7 @@ fn terminal_unmount_deletes_only_its_file_after_retained_completions_release() {
         }
     );
     drop(queued);
-    let observed = f
-        .owner
-        .client()
-        .try_submit(None, Command::Resources { global: true })
-        .unwrap()
-        .wait()
-        .unwrap();
+    let observed = f.owner.client().resources(None, true).unwrap();
     match observed.result() {
         Ok(Response::Resources(resources)) => {
             assert_eq!(resources.counts.namespaces, 1);
@@ -104,111 +96,6 @@ fn terminal_unmount_deletes_only_its_file_after_retained_completions_release() {
     assert!(!b_file.exists());
     assert!(!f.native.directory.join("3.sqlite").exists());
     f.cleanup();
-}
-
-#[test]
-fn retained_results_of_different_workspaces_share_one_credit_budget() {
-    let directory =
-        std::env::temp_dir().join(format!("layerfs-issue321-budget-{}", std::process::id()));
-    std::fs::create_dir(&directory).unwrap();
-    let config = OwnerConfig {
-        bytes: 3 * 1024 * 1024,
-        ..OwnerConfig::default()
-    };
-    let owner = Owner::start(
-        &directory.join("template.sqlite"),
-        ProfileConfig::default(),
-        config,
-    )
-    .unwrap();
-    let root = owner.client();
-    let mut clients = Vec::new();
-    for tag in [114, 115] {
-        let done = root
-            .try_submit(
-                None,
-                Command::Open {
-                    incarnation: [tag; 32],
-                    base_root: [116; 32],
-                },
-            )
-            .unwrap()
-            .wait()
-            .unwrap();
-        let route = match done.result() {
-            Ok(Response::Opened(route)) => *route,
-            other => panic!("{other:?}"),
-        };
-        let client = root.workspace_client(route).unwrap();
-        let taken = client
-            .try_submit(Some(route), Command::AcquireBaseSource { owner: 1 })
-            .unwrap()
-            .wait()
-            .unwrap();
-        let source = match taken.result() {
-            Ok(Response::BaseSource(source)) => *source,
-            other => panic!("{other:?}"),
-        };
-        assert!(matches!(
-            client.try_submit(
-                None,
-                Command::Open {
-                    incarnation: [tag + 10; 32],
-                    base_root: [116; 32]
-                }
-            ),
-            Err((OwnerError::InvalidAdmission, Command::Open { .. }))
-        ));
-        clients.push((client, route, source));
-    }
-    let mut held = Vec::new();
-    let mut refused = false;
-    for round in 0..16 {
-        let (client, route, source) = &clients[round % 2];
-        match client.try_submit(
-            Some(*route),
-            Command::SourceRead {
-                source: *source,
-                serial: 7,
-                offset: 0,
-                length: 131072,
-            },
-        ) {
-            Ok(pending) => held.push(pending.wait().unwrap()),
-            Err((OwnerError::AdmissionFull, Command::SourceRead { .. })) => {
-                refused = true;
-                break;
-            }
-            Err(other) => panic!("unexpected admission: {other:?}"),
-        }
-    }
-    assert!(
-        refused,
-        "the same bytes cannot be admitted separately by both connections"
-    );
-    let work = root.budget_work();
-    assert!(work.job_bytes > 0);
-    assert!(work.peak_job_bytes + work.fixed_bytes + work.pager_bytes <= work.limit_bytes);
-    for (client, route, _) in &clients {
-        assert!(client
-            .try_submit(Some(*route), Command::State)
-            .unwrap()
-            .wait()
-            .unwrap()
-            .result()
-            .is_ok());
-    }
-    drop(held);
-    let deadline = Instant::now() + Duration::from_secs(3);
-    while root.budget_work().job_bytes != 0 {
-        assert!(Instant::now() < deadline, "retained credit release");
-        std::thread::yield_now();
-    }
-    owner.stop().unwrap();
-    assert_eq!(root.budget_work().job_bytes, 0);
-    drop(clients);
-    drop(root);
-    std::fs::remove_dir_all(directory).unwrap();
 }
 
 #[test]

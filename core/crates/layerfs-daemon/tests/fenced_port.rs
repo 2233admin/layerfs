@@ -1,15 +1,15 @@
 //! The daemon's Fuse port under a stopped fence, without a kernel mount: the
-//! real owner, the real Store readers and the real dispatcher lane whose
-//! `stop_service` stops the fence. Public API only; every wait is bounded and
-//! no thread is spawned by the test.
+//! real Workspace service, the real Store readers and the real per-mount request
+//! drain whose `stop_service` stops the fence. Public API only; every wait is
+//! bounded. A request that must wait runs on its own thread, as a mount worker
+//! runs it.
 #[path = "support/installed_store.rs"]
 mod support;
 use layerfs_content::filesystem::PathName;
 use layerfs_daemon::{
     bootstrap::open_store,
     store::{BindRequest, BoundWorkspace, Store},
-    Command, Completion, NativeJob, NativeReply, Owner, OwnerClient, OwnerConfig, Response,
-    ServiceClass,
+    JobReceipt, NativeReply, Owner, OwnerClient, OwnerConfig, Response, ServiceClass,
 };
 use layerfs_fuse::{
     operations::{
@@ -17,7 +17,7 @@ use layerfs_fuse::{
         NativeRead, ReadDataInput,
     },
     ports::{Fence, Fenced, MountServices, RequestServices, ServiceError},
-    Dispatch, DispatchConfig, MountQueue, RequestDisposition,
+    MountRequests, RequestDisposition,
 };
 use layerfs_history::WorkspaceId;
 use layerfs_overlay::{NativeMount, ProfileConfig};
@@ -91,16 +91,36 @@ fn refused<T>(what: &str, future: impl Future<Output = Result<T, ServiceError>>)
         Poll::Pending => panic!("{what}: waited on a stopped fence"),
     }
 }
-fn finish(client: &OwnerClient, route: layerfs_overlay::Route, command: Command) -> Completion {
-    let pending = match client.try_submit(Some(route), command) {
-        Ok(pending) => pending,
-        Err((error, command)) => panic!("admission of {command:?}: {error:?}"),
-    };
-    wait(pending).unwrap()
+/// One request on its own receive thread, as a mount worker runs it.
+fn serve(
+    queue: &MountRequests,
+    input: usize,
+    future: layerfs_fuse::RequestFuture,
+) -> std::thread::JoinHandle<()> {
+    let queue = queue.clone();
+    std::thread::spawn(move || {
+        queue
+            .receive()
+            .unwrap()
+            .request(input)
+            .unwrap()
+            .serve(future)
+            .unwrap()
+    })
+}
+fn finish(
+    client: &OwnerClient,
+    route: layerfs_overlay::Route,
+    command: impl FnOnce(
+        &layerfs_daemon::OwnerClient,
+        Option<layerfs_overlay::Route>,
+    ) -> Result<layerfs_daemon::JobReceipt, layerfs_daemon::OwnerError>,
+) -> JobReceipt {
+    command(client, Some(route)).unwrap_or_else(|error| panic!("{error:?}"))
 }
 
-/// One bound Workspace with a native mount group and a dispatcher lane, and
-/// no kernel connection. The lane exists so that the product's own
+/// One bound Workspace with a native mount group and its request drain, and
+/// no kernel connection. The drain exists so that the product's own
 /// `stop_service` stops the fence the port observes.
 struct Rig {
     fixture: support::Fixture,
@@ -111,8 +131,7 @@ struct Rig {
     bound: BoundWorkspace,
     root: u64,
     mount: NativeMount,
-    pool: Dispatch,
-    queue: MountQueue,
+    queue: MountRequests,
 }
 impl Rig {
     fn new(label: &str, authority: u8) -> Self {
@@ -157,19 +176,16 @@ impl Rig {
         let done = finish(
             &client,
             bound.route(),
-            Command::Native(NativeJob::Mount { root }),
+            |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.native_mount(job_route, root)
+            },
         );
         let mount = match done.result() {
             Ok(Response::Native(NativeReply::Mount(mount))) => *mount,
             other => panic!("mount: {other:?}"),
         };
         drop(done);
-        let pool = Dispatch::start(DispatchConfig {
-            read_handles: 1,
-            namespaces: 1,
-        })
-        .unwrap();
-        let queue = pool.register(mount).unwrap();
+        let queue = MountRequests::new(mount);
         Self {
             fixture,
             store,
@@ -179,7 +195,6 @@ impl Rig {
             bound,
             root,
             mount,
-            pool,
             queue,
         }
     }
@@ -220,8 +235,8 @@ impl Rig {
     fn owner_work(&self) -> layerfs_daemon::OwnerWork {
         self.client.diagnostics().unwrap()
     }
-    /// Reply tickets still owed in the Workspace: one Read-class owner job
-    /// of the test, submitted beside the port and not through its fence.
+    /// Reply tickets still owed in the Workspace: one Read-class job of the
+    /// test, called beside the port and not through its fence.
     fn pending_publications(
         &self,
         route: layerfs_overlay::Route,
@@ -229,7 +244,9 @@ impl Rig {
         let done = finish(
             &self.client,
             route,
-            Command::PendingPublications { after: 0 },
+            |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.pending_publications(job_route, 0)
+            },
         );
         match done.result() {
             Ok(Response::Publications(pending)) => pending.clone(),
@@ -238,11 +255,13 @@ impl Rig {
     }
     /// Revocation refuses while any request source or read row remains, so
     /// its success shows that every request gave back what it held.
-    fn revoke_and_stop(mut self) {
+    fn revoke_and_stop(self) {
         let done = finish(
             &self.client,
             self.bound.route(),
-            Command::Native(NativeJob::Revoke(self.mount)),
+            |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.native_revoke(job_route, self.mount)
+            },
         );
         assert!(
             matches!(done.result(), Ok(Response::Native(NativeReply::Done))),
@@ -250,12 +269,8 @@ impl Rig {
             done.result()
         );
         drop(done);
-        until("owner credits returned", || {
-            self.owner_work().outstanding == 0
-        });
         assert_eq!(self.store.read_work().outstanding, 0);
         self.queue.finish().unwrap();
-        assert!(self.pool.stop().unwrap().clean());
         drop(self.bound);
         self.owner.stop().unwrap();
         drop(self.store);
@@ -325,7 +340,7 @@ fn a_stopped_fence_refuses_every_acquiring_call_and_no_disposal_call() {
     .unwrap();
     assert!(published.value().unwrap().changed);
 
-    let admitted = rig.owner_work().admitted;
+    let admitted = rig.owner_work().jobs.iter().sum::<u64>();
     let grants = rig.store.read_work().grants;
     rig.queue.stop_service().unwrap();
     assert!(fence.stopped());
@@ -374,37 +389,40 @@ fn a_stopped_fence_refuses_every_acquiring_call_and_no_disposal_call() {
         other => panic!("reserve_serial on a stopped fence: {other:?}"),
     }
     // Refused before the attempt: no owner job was admitted, no reader granted.
-    assert_eq!(rig.owner_work().admitted, admitted);
+    assert_eq!(rig.owner_work().jobs.iter().sum::<u64>(), admitted);
     assert_eq!(rig.store.read_work().grants, grants);
     assert_eq!(rig.store.read_work().outstanding, 0);
 
     // Every disposal call still runs: ticket, handles, lookup.
     // A replied mutation holds no source, and its reply attempt gives back a
-    // ticket held in the engine's memory: nothing waits for this Workspace's
-    // tickets, so the attempt is recorded with no owner job at all.
+    // ticket held in the engine's memory: the attempt is no job and runs
+    // no SQL.
     let route = rig.bound.route();
     assert_eq!(rig.pending_publications(route).len(), 1);
-    let admitted = rig.owner_work().admitted;
+    let admitted = rig.owner_work().jobs.iter().sum::<u64>();
+    let attempts = rig.owner_work().sql_foreground.total().attempts;
     wait(published.replied()).unwrap();
-    assert_eq!(rig.owner_work().admitted, admitted);
+    let replied = rig.owner_work();
+    assert_eq!(replied.jobs.iter().sum::<u64>(), admitted);
+    assert_eq!(replied.sql_foreground.total().attempts, attempts);
     drop(wait(services.close_file(mount, serial, handle)).unwrap());
     drop(wait(services.close_directory(mount, directory.serial(), directory.owner_id())).unwrap());
     drop(wait(services.forget(mount, serial, 1)).unwrap());
     // A READ or READLINK served before the stop left nothing to dispose.
-    assert_eq!(rig.owner_work().admitted, admitted + 3);
+    assert_eq!(rig.owner_work().jobs.iter().sum::<u64>(), admitted + 3);
     // The stopped fence did not keep the ticket: it was returned.
     assert!(rig.pending_publications(route).is_empty());
     // The port itself replies to nothing.
     assert_eq!(fence.terminal_replies(), 0);
     println!(
-        "FENCED-CALLS refused=8 owner_admitted_during_refusals=0 reader_grants_during_refusals=0 reply_attempt_jobs_after_stop=0 disposal_jobs_after_stop=3"
+        "FENCED-CALLS refused=8 owner_admitted_during_refusals=0 reader_grants_during_refusals=0 reply_attempt_jobs_after_stop=0 reply_attempt_sql_after_stop=0 disposal_jobs_after_stop=3"
     );
     drop(services);
     rig.revoke_and_stop();
 }
 
 #[test]
-fn a_wait_for_admission_or_for_a_reader_ends_at_the_stop_with_nothing_attempted() {
+fn a_wait_for_a_reader_ends_at_the_stop_with_nothing_attempted() {
     let rig = Rig::new("fenced-port-waits", 142);
     let (mount, root) = (rig.mount, rig.root);
     let fence = rig.queue.fence();
@@ -431,21 +449,19 @@ fn a_wait_for_admission_or_for_a_reader_ends_at_the_stop_with_nothing_attempted(
     wait(opened.dispose()).unwrap();
 
     // Store readers: the only reader is leased to the test, so three cold
-    // requests handed to the dispatcher park before their provider demand. A
-    // lookup is served by owner visits and parks holding nothing; a READ of
-    // base bytes made its one visit, recorded nothing and parks holding
-    // nothing; an OPENDIR is an owner visit too and parks holding nothing.
+    // requests of the mount wait before their provider demand. A lookup is
+    // served by Workspace visits and waits holding nothing; a READ of base
+    // bytes made its one visit, recorded nothing and waits holding nothing;
+    // an OPENDIR is a visit too and waits holding nothing.
     let reader = wait(rig.store.read_ticket(Some(rig.identity)).unwrap()).unwrap();
     let (send, observed) = mpsc::channel();
     {
         let services = rig.services(&fence);
         let send = send.clone();
-        rig.queue
-            .receive()
-            .unwrap()
-            .admit(0)
-            .unwrap()
-            .handoff(Box::pin(async move {
+        serve(
+            &rig.queue,
+            0,
+            Box::pin(async move {
                 let window = ReadDataInput::File {
                     offset: 0,
                     length: 4096,
@@ -463,8 +479,8 @@ fn a_wait_for_admission_or_for_a_reader_ends_at_the_stop_with_nothing_attempted(
                         }
                     }
                 }
-            }))
-            .unwrap();
+            }),
+        );
     }
     for (request, operation) in [
         (
@@ -478,12 +494,10 @@ fn a_wait_for_admission_or_for_a_reader_ends_at_the_stop_with_nothing_attempted(
     ] {
         let services = rig.services(&fence);
         let send = send.clone();
-        rig.queue
-            .receive()
-            .unwrap()
-            .admit(11)
-            .unwrap()
-            .handoff(Box::pin(async move {
+        serve(
+            &rig.queue,
+            11,
+            Box::pin(async move {
                 let prepared =
                     NativeRead::prepare(services, mount, request, root, None, operation).await;
                 match prepared {
@@ -503,52 +517,26 @@ fn a_wait_for_admission_or_for_a_reader_ends_at_the_stop_with_nothing_attempted(
                         }
                     }
                 }
-            }))
-            .unwrap();
+            }),
+        );
     }
-    until("the three cold requests parked for a reader", || {
-        rig.store.read_work().waiting == 3 && rig.queue.work().unwrap().parked == 3
+    until("the three cold requests wait for a reader", || {
+        rig.store.read_work().waiting == 3 && rig.queue.work().unwrap().active == 3
     });
-    until("their owner results were returned", || {
-        rig.owner_work().outstanding == 0
-    });
-
-    // Owner admission: the namespace's whole job bound is held by results
-    // the test keeps, so one more acquisition waits before it is submitted.
-    let bound = OwnerConfig::default().jobs_per_namespace;
-    let getattr = |request: u64| {
-        services.observe_visit(
-            mount,
-            request,
-            root,
-            None,
-            NativeReadOperation::Getattr { serial: root },
-            Arc::new(VisitFacts::default()),
-        )
-    };
-    let holders: Vec<_> = (0..bound)
-        .map(|index| wait(getattr(100 + index as u64)).unwrap())
-        .collect();
-    assert_eq!(rig.owner_work().outstanding, bound);
-    let admitted = rig.owner_work().admitted;
-    let mut blocked = getattr(200);
-    assert!(stepper.poll(blocked.as_mut()).is_pending());
-    assert!(stepper.poll(blocked.as_mut()).is_pending());
-    assert_eq!(rig.owner_work().admitted, admitted);
-    // One direct reader wait on the port, beside the parked requests': for
+    // One direct reader wait on the port, beside the waiting requests': for
     // the Workspace's current base.
     let mut cold_base = services.base();
     assert!(stepper.poll(cold_base.as_mut()).is_pending());
-    until("all four reader waits parked", || {
-        rig.store.read_work().waiting == 4 && rig.queue.work().unwrap().parked == 3
+    until("all four reader waits registered", || {
+        rig.store.read_work().waiting == 4 && rig.queue.work().unwrap().active == 3
     });
     let grants = rig.store.read_work().grants;
     let before = rig.owner_work();
 
     rig.queue.stop_service().unwrap();
 
-    // The parked requests needed no wakeup of their own: the stop ran them and
-    // each failed before its demand. The lookup, the OPENDIR and the READ
+    // The waiting requests needed no wakeup of their own: the stop woke them
+    // and each failed before its demand. The lookup, the OPENDIR and the READ
     // held nothing.
     let mut seen = [
         observed.recv_timeout(WAIT).unwrap(),
@@ -560,45 +548,38 @@ fn a_wait_for_admission_or_for_a_reader_ends_at_the_stop_with_nothing_attempted(
         seen,
         [(300, Some(true)), (301, Some(true)), (302, Some(true))]
     );
-    until("the fenced requests left the lane", || {
-        rig.queue.work().unwrap().admitted == 0
+    until("the fenced requests ended", || {
+        rig.queue.work().unwrap().active == 0
     });
     let lane = rig.queue.work().unwrap();
     assert_eq!((lane.completed, lane.retained), (3, 0));
-    // The two waits on the port end as `Fenced`, having attempted nothing.
+    // The wait on the port ends as `Fenced`, having attempted nothing.
     match stepper.poll(cold_base.as_mut()) {
         Poll::Ready(Err(error)) if error.is::<Fenced>() => {}
         _ => panic!("base reader wait survived the stop"),
     }
-    match stepper.poll(blocked.as_mut()) {
-        Poll::Ready(Err(error)) if error.is::<Fenced>() => {}
-        _ => panic!("admission wait survived the stop"),
-    }
-    drop((cold_base, blocked));
+    drop(cold_base);
     let readers = rig.store.read_work();
     assert_eq!(
         (readers.waiting, readers.outstanding, readers.grants),
         (0, 1, grants)
     );
     drop(reader);
-    // Nothing was admitted since the stop: the fenced lookup, the fenced
-    // OPENDIR and the fenced READ had nothing to release, and the blocked
-    // acquisition never was admitted.
-    until("only the held results keep their credits", || {
-        rig.owner_work().outstanding == bound
-    });
+    // No job ran since the stop: the fenced lookup, the fenced OPENDIR and
+    // the fenced READ had nothing to release.
     let after = rig.owner_work();
-    assert_eq!(after.admitted, before.admitted);
     assert_eq!(
-        after.completed[ServiceClass::Source as usize],
-        before.completed[ServiceClass::Source as usize]
+        after.jobs.iter().sum::<u64>(),
+        before.jobs.iter().sum::<u64>()
+    );
+    assert_eq!(
+        after.jobs[ServiceClass::Source as usize],
+        before.jobs[ServiceClass::Source as usize]
     );
     println!(
-        "FENCED-WAITS admission_wait=Fenced base_reader_wait=Fenced parked_lookup=(fenced,no_source,no_read)->Complete parked_read=(fenced,no_source,no_read)->Complete parked_opendir=(fenced,no_source,no_read)->Complete owner_jobs_after_stop=0 source_jobs_after_stop=0 reader_grants_after_stop=0"
+        "FENCED-WAITS base_reader_wait=Fenced waiting_lookup=(fenced,no_source,no_read)->Complete waiting_read=(fenced,no_source,no_read)->Complete waiting_opendir=(fenced,no_source,no_read)->Complete owner_jobs_after_stop=0 source_jobs_after_stop=0 reader_grants_after_stop=0"
     );
 
-    // The results the test held return their credits; they hold no row.
-    drop(holders);
     drop(wait(services.close_file(mount, serial, handle)).unwrap());
     drop(wait(services.forget(mount, serial, 1)).unwrap());
     drop(services);
@@ -606,63 +587,58 @@ fn a_wait_for_admission_or_for_a_reader_ends_at_the_stop_with_nothing_attempted(
 }
 
 #[test]
-fn a_job_submitted_before_the_stop_is_awaited_to_its_original_result() {
+fn a_job_waiting_before_the_stop_is_awaited_to_its_original_result() {
     let rig = Rig::new("fenced-port-submitted", 143);
     let (mount, root, route) = (rig.mount, rig.root, rig.bound.route());
     let fence = rig.queue.fence();
-    let stepper = Stepper::new();
 
     // A published directory whose reply attempt is owed keeps a capture
-    // parked, and a parked capture holds back every later mutation job.
+    // waiting, and a waiting capture holds back every later mutation job.
     let first = wait(NativeMutation::perform(
         rig.services(&fence),
         rig.make_directory(1, root, "first"),
     ))
     .unwrap();
     let parent = first.value().unwrap().stat.as_ref().unwrap().serial;
-    let unparked = rig.owner_work().sql_foreground.total().attempts;
-    let capture = rig
-        .client
-        .try_submit(Some(route), Command::Capture)
-        .unwrap();
-    // Queued again after its readiness turn, which observed the ticket
-    // pending: that turn's read is published before the job is requeued.
-    until("capture parked behind the ticket", || {
-        let work = rig.owner_work();
-        work.queued == 1 && work.sql_foreground.total().attempts > unparked
+    let checks = rig.owner_work().jobs[ServiceClass::Capture as usize];
+    let capture = {
+        let client = rig.client.clone();
+        std::thread::spawn(move || client.capture(Some(route)))
+    };
+    // Its readiness check observed the ticket pending: one counted job.
+    until("capture waits behind the ticket", || {
+        rig.owner_work().jobs[ServiceClass::Capture as usize] > checks
     });
-    let sources = rig.owner_work().completed[ServiceClass::Source as usize];
-    let mutations = rig.owner_work().completed[ServiceClass::Mutation as usize];
+    let before = rig.owner_work();
     // Inside the new local directory nothing has to be read from the base, so
-    // this mutation's first owner job is the one that publishes. It is also
-    // its only one: a mutation is an owner visit that acquires no source.
-    let mut second = std::pin::pin!(NativeMutation::perform(
-        rig.services(&fence),
-        rig.make_directory(2, parent, "second"),
-    ));
-    let deadline = Instant::now() + WAIT;
-    loop {
-        assert!(stepper.poll(second.as_mut()).is_pending());
-        let work = rig.owner_work();
-        assert_eq!(work.completed[ServiceClass::Source as usize], sources);
-        assert_eq!(work.completed[ServiceClass::Mutation as usize], mutations);
-        if work.queued == 2 {
-            break;
-        }
-        assert!(
-            Instant::now() < deadline,
-            "mutation never queued behind the capture: {work:?}"
+    // this mutation's first Workspace job is the one that publishes. It is
+    // also its only one, and it waits behind the capture before any effect.
+    let second = {
+        let (services, request) = (
+            rig.services(&fence),
+            rig.make_directory(2, parent, "second"),
         );
-        let _ = stepper.woken.recv_timeout(Duration::from_millis(20));
-    }
-    assert!(capture.try_complete().unwrap().is_none());
-    let admitted = rig.owner_work().admitted;
+        std::thread::spawn(move || {
+            let made = wait(NativeMutation::perform(services, request))
+                .unwrap_or_else(|failure| panic!("waiting job lost its result: {failure:?}"));
+            let value = made.value().unwrap();
+            let answer = (value.changed, value.stat.as_ref().unwrap().serial);
+            wait(made.replied()).unwrap();
+            answer
+        })
+    };
+    std::thread::sleep(Duration::from_millis(50));
+    assert!(!second.is_finished() && !capture.is_finished());
+    let admitted = rig.owner_work().jobs;
+    assert_eq!(
+        admitted[ServiceClass::Mutation as usize],
+        before.jobs[ServiceClass::Mutation as usize]
+    );
 
     rig.queue.stop_service().unwrap();
     assert!(fence.stopped());
-    // Submitted and not yet run: the stop neither fails nor cancels it.
-    assert!(stepper.poll(second.as_mut()).is_pending());
-    assert_eq!(rig.owner_work().queued, 2);
+    // Called and not yet run: the stop neither fails nor cancels it.
+    assert!(!second.is_finished());
     // A mutation that starts now is refused before it acquires anything.
     let late = match wait(NativeMutation::perform(
         rig.services(&fence),
@@ -673,36 +649,39 @@ fn a_job_submitted_before_the_stop_is_awaited_to_its_original_result() {
     };
     assert!(late.fenced());
     // Refused before its first visit: nothing published, nothing held, and
-    // neither the attempt nor giving it up admitted an owner job.
+    // neither the attempt nor giving it up ran a Workspace job.
     assert!(late.publication().is_none());
     wait(late.relinquish()).unwrap();
-    assert_eq!(rig.owner_work().admitted, admitted);
+    assert_eq!(rig.owner_work().jobs, admitted);
 
-    // The owed reply attempt is a disposal call: it runs after the stop.
-    // The attempt itself is recorded with no owner job; because the parked
-    // capture observed this last ticket pending, it wakes that existing
-    // job without new admission. The capture completes and the held-back job
-    // runs to its own result.
-    let lifecycle = rig.owner_work().completed[ServiceClass::Lifecycle as usize];
+    // The owed reply attempt is a disposal call: it runs after the stop, as
+    // no job and without SQL. It wakes the waiting capture; the capture
+    // completes and the held-back mutation then runs to its own result.
     wait(first.replied()).unwrap();
-    let work = rig.owner_work();
-    assert_eq!(work.admitted, admitted);
-    assert_eq!(work.completed[ServiceClass::Lifecycle as usize], lifecycle);
-    let captured = wait(capture).unwrap();
+    until("the capture returned", || capture.is_finished());
+    let captured = capture.join().unwrap().unwrap();
     assert!(matches!(captured.result(), Ok(Response::Captured(_))));
-    assert!(captured.work().parked_turns >= 1);
+    // Its receipt reports its readiness checks with its one effect.
+    assert!(captured.work().jobs >= 2);
     drop(captured);
-    let second = stepper
-        .finish(second.as_mut(), "submitted mutation")
-        .unwrap_or_else(|failure| panic!("submitted job lost its result: {failure:?}"));
-    let made = second.value().unwrap();
-    assert!(made.changed);
-    let serial = made.stat.as_ref().unwrap().serial;
-    // Nothing waits for the second publication's ticket: no owner job.
-    wait(second.replied()).unwrap();
-    let work = rig.owner_work();
-    assert_eq!(work.admitted, admitted);
-    assert_eq!(work.completed[ServiceClass::Lifecycle as usize], lifecycle);
+    until("the waiting mutation returned", || second.is_finished());
+    let (changed, serial) = second.join().unwrap();
+    assert!(changed);
+    let after = rig.owner_work();
+    assert_eq!(
+        after.jobs[ServiceClass::Mutation as usize],
+        before.jobs[ServiceClass::Mutation as usize] + 1
+    );
+    assert_eq!(
+        after.jobs[ServiceClass::Source as usize],
+        before.jobs[ServiceClass::Source as usize]
+    );
+    // Neither reply attempt was a job.
+    assert_eq!(
+        after.jobs[ServiceClass::Lifecycle as usize],
+        before.jobs[ServiceClass::Lifecycle as usize]
+    );
+    assert_eq!(after.reply_attempts, before.reply_attempts + 2);
     assert_eq!(fence.terminal_replies(), 0);
 
     // Read back through a fence that was never stopped: the second directory
@@ -726,7 +705,7 @@ fn a_job_submitted_before_the_stop_is_awaited_to_its_original_result() {
     assert!(absent.value().is_err());
     wait(absent.dispose()).unwrap();
     println!(
-        "FENCED-SUBMITTED held_job=Mutation result_after_stop=Published(changed) late_mutation=Fenced(no owner job, no ticket)"
+        "FENCED-WAITING held_job=Mutation result_after_stop=Published(changed) late_mutation=Fenced(no job, no ticket)"
     );
     rig.revoke_and_stop();
 }
@@ -803,7 +782,7 @@ fn a_fenced_mutation_holds_nothing_and_fenced_source_requests_give_back_what_the
         );
         let _ = stepper.woken.recv_timeout(Duration::from_millis(20));
     }
-    let admitted = rig.owner_work().admitted;
+    let admitted = rig.owner_work().jobs.iter().sum::<u64>();
 
     rig.queue.stop_service().unwrap();
 
@@ -817,7 +796,7 @@ fn a_fenced_mutation_holds_nothing_and_fenced_source_requests_give_back_what_the
     // it holds nothing, and giving it up admits no owner job.
     assert!(failure.publication().is_none());
     wait(failure.relinquish()).unwrap();
-    assert_eq!(rig.owner_work().admitted, admitted);
+    assert_eq!(rig.owner_work().jobs.iter().sum::<u64>(), admitted);
 
     let failure = match stepper.poll(opening.as_mut()) {
         Poll::Ready(Err(failure)) => failure,
@@ -826,7 +805,7 @@ fn a_fenced_mutation_holds_nothing_and_fenced_source_requests_give_back_what_the
     };
     assert!(failure.fenced());
     wait(failure.relinquish()).unwrap();
-    assert_eq!(rig.owner_work().admitted, admitted);
+    assert_eq!(rig.owner_work().jobs.iter().sum::<u64>(), admitted);
     assert_eq!(rig.store.read_work().waiting, 0);
 
     let failure = match wait(stream.next()) {
@@ -850,7 +829,7 @@ fn a_fenced_mutation_holds_nothing_and_fenced_source_requests_give_back_what_the
     assert!(failure.fenced() && failure.offered().is_none());
     wait(failure.relinquish()).unwrap();
     // Nothing was held, so nothing was released: no owner job was admitted.
-    assert_eq!(rig.owner_work().admitted, admitted);
+    assert_eq!(rig.owner_work().jobs.iter().sum::<u64>(), admitted);
     drop(reader);
     drop(wait(services.close_directory(mount, directory.serial(), directory.owner_id())).unwrap());
 

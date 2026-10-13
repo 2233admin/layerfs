@@ -209,8 +209,8 @@ fn quiet_within(harness: &Harness, token: WorkspaceToken, limit: Duration) -> bo
     let mut last = None;
     within(limit, || {
         let work = harness.status(token).native.unwrap().work.unwrap();
-        let now = (work.received, work.admitted, work.completed);
-        let settled = work.received == 0 && work.admitted == 0 && last == Some(now);
+        let now = (work.active, work.completed);
+        let settled = work.active == 0 && last == Some(now);
         last = Some(now);
         settled
     })

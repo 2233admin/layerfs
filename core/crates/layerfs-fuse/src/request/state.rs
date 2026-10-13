@@ -6,15 +6,15 @@ use crate::{
     attributes::Identity,
     mount::Negotiation,
     ports::{Fence, MountServices},
-    DispatchError, MountQueue, Permit, RequestFuture,
+    DispatchError, MountRequests, RequestFuture, RequestOwner,
 };
 use fuser::{Errno, INodeNo};
 use layerfs_workspace::NativeReadOperation;
 use std::sync::{Arc, OnceLock};
 
 pub struct NativeFilesystem {
-    pub(super) queue: MountQueue,
-    /// The lane's terminal stop, handed to every request's services.
+    pub(super) queue: MountRequests,
+    /// The mount's terminal stop, handed to every request's services.
     pub(super) fence: Fence,
     pub(super) services: Arc<dyn MountServices>,
     pub(super) identity: Identity,
@@ -23,7 +23,7 @@ pub struct NativeFilesystem {
 }
 impl NativeFilesystem {
     pub fn new(
-        queue: MountQueue,
+        queue: MountRequests,
         services: Arc<dyn MountServices>,
         identity: Identity,
     ) -> Result<Self, DispatchError> {
@@ -45,23 +45,23 @@ impl NativeFilesystem {
     pub fn accounting(&self) -> Arc<Accounting> {
         self.accounting.clone()
     }
-    pub(super) fn admit(
+    pub(super) fn receive_request(
         &self,
         opcode: Opcode,
         reply: ReadReply,
         bytes: usize,
-    ) -> Option<(Permit, ReadReply)> {
-        self.admit_reply(opcode, bytes, reply, ReadReply::error)
+    ) -> Option<(RequestOwner, ReadReply)> {
+        self.receive_reply(opcode, bytes, reply, ReadReply::error)
     }
-    /// This handoff-capacity wait is the only wait of a receive loop. A refusal
-    /// makes exactly one error attempt on the still-borrowed reply.
-    pub(super) fn admit_reply<R>(
+    /// Receiving never waits: a receive worker runs its request itself. A
+    /// refusal makes exactly one error attempt on the still-borrowed reply.
+    pub(super) fn receive_reply<R>(
         &self,
         opcode: Opcode,
         bytes: usize,
         reply: R,
         error: fn(R, Errno),
-    ) -> Option<(Permit, R)> {
+    ) -> Option<(RequestOwner, R)> {
         self.accounting.opcode(opcode);
         let received = match self.queue.receive() {
             Ok(received) => received,
@@ -71,7 +71,7 @@ impl NativeFilesystem {
                 return None;
             }
         };
-        match received.admit(bytes) {
+        match received.request(bytes) {
             Ok(permit) => Some((permit, reply)),
             Err(failure) => {
                 error(reply, Errno::ENOTCONN);
@@ -81,13 +81,14 @@ impl NativeFilesystem {
             }
         }
     }
-    /// Even a shutdown-racing handoff retains this exact future and reply.
-    pub(super) fn handoff(&self, permit: Permit, future: RequestFuture) {
+    /// Runs the request on this receive worker. A failure retains this exact
+    /// future and reply.
+    pub(super) fn serve(&self, permit: RequestOwner, future: RequestFuture) {
         // Counted before the first step, which may reply on this thread.
-        self.accounting.disposed(Disposal::Handoff);
-        let _ = permit.handoff(future);
+        self.accounting.disposed(Disposal::Served);
+        let _ = permit.serve(future);
     }
-    /// An admitted unit decided on the loop: its permit returns unused.
+    /// A received unit decided on the loop before any request runs.
     pub(super) fn serial<R>(
         &self,
         inode: INodeNo,
@@ -143,7 +144,7 @@ impl NativeFilesystem {
     }
     pub(super) fn submit(
         &self,
-        permit: Permit,
+        permit: RequestOwner,
         request: u64,
         protected: u64,
         handle: Option<u64>,
@@ -154,7 +155,7 @@ impl NativeFilesystem {
         let fence = self.fence.clone();
         let mount = self.queue.identity();
         let identity = self.identity;
-        self.handoff(
+        self.serve(
             permit,
             Box::pin(async move {
                 let services = match services.request(&fence) {

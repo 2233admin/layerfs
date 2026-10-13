@@ -1,8 +1,7 @@
-//! Credited short raw-record jobs, with no Content algorithm or provider I/O.
+//! Short raw-record jobs, with no Content algorithm or provider I/O.
 use layerfs_overlay::{
-    indexed_operation_record_changes_bytes, IndexedOperationRecordApply,
-    IndexedOperationRecordChange, IndexedOperationRecordKey, IndexedOperationRecordScope, Overlay,
-    OverlayError, OverlayResult, Route, OPERATION_RECORD_BYTES, PAGE_ROWS,
+    IndexedOperationRecordApply, IndexedOperationRecordChange, IndexedOperationRecordKey,
+    IndexedOperationRecordScope, Overlay, OverlayError, OverlayResult, Route,
 };
 
 /// Complete bounded inputs for the existing OperationRecord service class.
@@ -41,7 +40,7 @@ pub enum IndexedOperationRecordJob {
     },
 }
 
-/// Original deciding outcomes stay inside the existing credited Completion.
+/// Original deciding outcomes stay inside the job's JobReceipt.
 #[derive(Debug)]
 pub enum IndexedOperationRecordReply {
     Contains(bool),
@@ -52,44 +51,6 @@ pub enum IndexedOperationRecordReply {
 }
 
 impl IndexedOperationRecordJob {
-    pub(crate) fn charge(&self) -> Option<usize> {
-        let (input, reply) = match self {
-            Self::Contains { .. } => (0, 0),
-            Self::Get { .. } => (0, OPERATION_RECORD_BYTES),
-            Self::GetMany { keys, .. } => {
-                if keys.len() > PAGE_ROWS {
-                    return None;
-                }
-                let input = keys
-                    .capacity()
-                    .checked_mul(std::mem::size_of::<IndexedOperationRecordKey>())?;
-                let slots = keys
-                    .len()
-                    .checked_mul(std::mem::size_of::<Option<Vec<u8>>>())?;
-                (input, OPERATION_RECORD_BYTES.checked_add(slots)?)
-            }
-            Self::Apply { changes, .. } => {
-                let used = indexed_operation_record_changes_bytes(changes).ok()?;
-                let spare = changes
-                    .capacity()
-                    .checked_sub(changes.len())?
-                    .checked_mul(std::mem::size_of::<IndexedOperationRecordChange>())?;
-                let input = used.checked_add(spare)?;
-                if input > OPERATION_RECORD_BYTES {
-                    return None;
-                }
-                (input, OPERATION_RECORD_BYTES)
-            }
-            Self::FirstKeys { .. } | Self::FirstKeysAll { .. } | Self::KeysAfter { .. } => {
-                (0, PAGE_ROWS * 32)
-            }
-        };
-        std::mem::size_of::<Self>()
-            .checked_add(std::mem::size_of::<IndexedOperationRecordReply>())?
-            .checked_add(input)?
-            .checked_add(reply)
-    }
-
     pub(crate) fn perform(
         self,
         db: &Overlay,

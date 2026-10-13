@@ -13,7 +13,7 @@ mod model;
 #[allow(dead_code)]
 #[path = "support/installed_store.rs"]
 mod support;
-use drive::{evidence, job, live, settled, Do, Rig, Session};
+use drive::{evidence, job, live, Do, Rig, Session};
 use history_boundary::Boundary;
 use layerfs_content::ObjectId;
 use layerfs_daemon::{
@@ -21,7 +21,7 @@ use layerfs_daemon::{
         BoundWorkspace, CapturedConstruction, CommitError, CommitPhase, CommitSuccess, ReadLimits,
         ReleasedOwner, Store, StoreReader,
     },
-    Command, Completion, Owner, OwnerConfig, OwnerError, Response,
+    JobReceipt, Owner, OwnerConfig, Response,
 };
 use layerfs_history::{
     BranchSnapshot, CommitHistoryRequest, CommitRecord, CommitStagedOutcome, HistoryCatalog,
@@ -34,10 +34,7 @@ use std::{
     fs,
     os::unix::fs::{symlink, PermissionsExt},
     path::Path,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
+    sync::{atomic::AtomicBool, Arc},
     time::{Duration, Instant},
 };
 
@@ -61,7 +58,9 @@ fn retained(
     let reader = match job(
         &client,
         workspace.route(),
-        Command::RetainedCapturedReader { request },
+        |job_client: &layerfs_daemon::OwnerClient, job_route| {
+            job_client.retained_captured_reader(job_route, request)
+        },
     )
     .result()
     {
@@ -71,7 +70,9 @@ fn retained(
     let owner = match job(
         &client,
         workspace.route(),
-        Command::RetainedOperation { request },
+        |job_client: &layerfs_daemon::OwnerClient, job_route| {
+            job_client.retained_operation(job_route, request)
+        },
     )
     .result()
     {
@@ -102,8 +103,8 @@ fn receipt(namespace: Option<&CapturedConstruction>, capture: Capture) -> u64 {
     assert!(namespace.release_failure.is_none(), "{namespace:?}");
     request(capture)
 }
-fn done(completion: Option<&Completion>) -> bool {
-    matches!(completion.map(Completion::result), Some(Ok(Response::Done)))
+fn done(completion: Option<&JobReceipt>) -> bool {
+    matches!(completion.map(JobReceipt::result), Some(Ok(Response::Done)))
 }
 /// The Branch's current ancestry from its head, newest first.
 fn history(rig: &Rig) -> Vec<CommitRecord> {
@@ -287,7 +288,6 @@ fn every_kind_of_change_commits_through_the_product_constructor() {
     evidence(format_args!(
         "PRODUCT_COMMIT_READBACK commits=1 fresh_binds=2 oracle=independent_model live_after_install=exact retained_reader=None retained_operation=None"
     ));
-    settled(&rig.owner.client(), 0);
     rig.close(&first);
     drop(first);
     rig.finish();
@@ -363,7 +363,6 @@ fn an_unchanged_workspace_is_up_to_date_and_creates_no_commit() {
     evidence(format_args!(
         "PRODUCT_COMMIT_UP_TO_DATE unchanged_bound=UpToDate(head={first_head:?}) history_records_before=0 after=0 changed=Committed(parent={first_head:?}) repeated=UpToDate(head=committed) history_records=1 owners_released=3of3"
     ));
-    settled(&rig.owner.client(), 0);
     rig.close(&first);
     drop(first);
     rig.finish();
@@ -476,7 +475,6 @@ fn a_stale_unchanged_candidate_overwrites_a_moved_head() {
     evidence(format_args!(
         "PRODUCT_COMMIT_STALE outcome=Committed root=bound_root parent=captured_head(original) branch_head=B ancestry=[B,original] displaced_commit=readable displaced_root=exact fresh_bind=B_tree"
     ));
-    settled(&rig.owner.client(), 0);
     for workspace in [&seed, &a, &b, &fresh] {
         rig.close(workspace);
     }
@@ -589,7 +587,6 @@ fn repeated_incremental_commits_keep_the_store_open_and_each_root_is_exact() {
         rig.f.config.sqlite_profile, profile.persistence, profile.journal_mode, profile.synchronous
     ));
     drop(observer);
-    settled(&rig.owner.client(), 0);
     rig.close(&first);
     drop(first);
     rig.finish();
@@ -673,10 +670,8 @@ fn unpublished(
 }
 /// Two real definite refusals of one Workspace and a later exact Commit. A
 /// real external process holds the Store writer each time: before the Save
-/// begins, and when the driver publishes. `config` is the local owner's
-/// admission; nothing else differs between the tests that call this.
+/// begins, and when the driver publishes.
 fn definite_refusal(label: &str, config: OwnerConfig) {
-    let slots = config.lifecycle_jobs_per_namespace;
     let (rig, handles) = observed(label, Boundary::HeldWriter, config);
     let workspace = rig.bind(1);
     let original = workspace.snapshot().unwrap();
@@ -707,7 +702,7 @@ fn definite_refusal(label: &str, config: OwnerConfig) {
     assert!(begin.namespace.is_none(), "the closure never ran");
     let first_request = request(begin.capture.unwrap());
     evidence(format_args!(
-        "PRODUCT_COMMIT_REFUSAL case=writer_held_before_save lifecycle_slots={slots} phase={:?} error={:?} locally_settled={} namespace=None request={first_request} published=None",
+        "PRODUCT_COMMIT_REFUSAL case=writer_held_before_save phase={:?} error={:?} locally_settled={} namespace=None request={first_request} published=None",
         begin.phase, begin.error, begin.locally_settled
     ));
     drop(begin);
@@ -747,7 +742,7 @@ fn definite_refusal(label: &str, config: OwnerConfig) {
     );
     // The observed receipt, printed before it is checked.
     evidence(format_args!(
-        "PRODUCT_COMMIT_REFUSAL_OBSERVED case=writer_held_at_publication lifecycle_slots={slots} phase={:?} error={:?} locally_settled={} retained={} reader={:?} operation={:?} released={:?} release_error={:?}",
+        "PRODUCT_COMMIT_REFUSAL_OBSERVED case=writer_held_at_publication phase={:?} error={:?} locally_settled={} retained={} reader={:?} operation={:?} released={:?} release_error={:?}",
         publish.phase,
         publish.error,
         publish.locally_settled,
@@ -762,7 +757,7 @@ fn definite_refusal(label: &str, config: OwnerConfig) {
     let second_request = receipt(publish.namespace.as_ref(), publish.capture.unwrap());
     assert_ne!(second_request, first_request);
     evidence(format_args!(
-        "PRODUCT_COMMIT_REFUSAL case=writer_held_at_publication lifecycle_slots={slots} phase={:?} error={:?} locally_settled={} namespace=Some released={} request={second_request} published=None work={:?}",
+        "PRODUCT_COMMIT_REFUSAL case=writer_held_at_publication phase={:?} error={:?} locally_settled={} namespace=Some released={} request={second_request} published=None work={:?}",
         publish.phase,
         publish.error,
         publish.locally_settled,
@@ -808,36 +803,18 @@ fn definite_refusal(label: &str, config: OwnerConfig) {
     model::assert_same(&expected, &live(&workspace), "live view after install");
     assert_eq!(history(&rig), vec![published]);
     evidence(format_args!(
-        "PRODUCT_COMMIT_REFUSAL_LATER lifecycle_slots={slots} later_commit=Committed fresh_bind=exact live=exact owners_released=true"
+        "PRODUCT_COMMIT_REFUSAL_LATER later_commit=Committed fresh_bind=exact live=exact owners_released=true"
     ));
-    settled(&rig.owner.client(), 0);
     rig.close(&workspace);
     drop((workspace, handles));
     rig.finish();
 }
 
-/// The local owner's default admission, the same as `Rig::new` and the native
-/// control fixtures use: two Lifecycle slots for each namespace.
+/// The default local configuration, the same as `Rig::new` and the native
+/// control fixtures use.
 #[test]
 fn the_product_constructor_classifies_and_settles_a_definite_refusal() {
     definite_refusal("product-commit-refusal", OwnerConfig::default());
-}
-
-/// The same body under the owner admission `native_application.rs` gives the
-/// real binary: four Lifecycle slots for each namespace. Kept beside the
-/// default case so the two receipts differ in the admission alone.
-#[test]
-fn a_definite_refusal_under_four_lifecycle_slots_releases_both_owners() {
-    definite_refusal(
-        "product-commit-refusal-four",
-        OwnerConfig {
-            bytes: 16 * 1024 * 1024,
-            lifecycle_reserve: 2 * 1024 * 1024,
-            namespaces: 8,
-            jobs_per_namespace: 16,
-            lifecycle_jobs_per_namespace: 4,
-        },
-    );
 }
 
 /// Scope: the external catalog boundary reports an unknown outcome after the
@@ -933,79 +910,9 @@ fn an_unknown_history_outcome_keeps_the_reader_and_owner_with_the_failure() {
     f.cleanup();
 }
 
-/// Admission is a readiness wait before the Commit's one attempt, as it is
-/// for a filesystem request. With every ordinary credit of the Workspace held
-/// by another caller the Commit neither fails nor finishes; when the credits
-/// are released it runs once and is exact.
-#[test]
-fn a_commit_waits_for_owner_admission_and_is_not_refused() {
-    let rig = Rig::new("product-commit-admission", tree);
-    let workspace = rig.bind(1);
-    let mut session = Session::new(&workspace, rig.base.clone());
-    session.all(&[
-        Do::Create("waited.txt", 0o644),
-        Do::Write("waited.txt", 0, b"committed after the wait"),
-        Do::Remove("gone/x"),
-    ]);
-    let expected = session.model.flat();
-    let client = rig.owner.client();
-    let slots = rig.owner.configuration().jobs_per_namespace;
-    // Each held job is counted from an exactly settled owner: the engine
-    // drops its own credit just after a completion is observed.
-    settled(&client, 0);
-    let mut held: Vec<Completion> = Vec::new();
-    for count in 0..slots {
-        held.push(job(&client, workspace.route(), Command::Inode(1)));
-        settled(&client, count + 1);
-    }
-    assert!(matches!(
-        client.try_submit(Some(workspace.route()), Command::Inode(1)),
-        Err((OwnerError::AdmissionFull, Command::Inode(1)))
-    ));
-    let admitted_before = client.diagnostics().unwrap().admitted;
-    let finished = AtomicBool::new(false);
-    let success = std::thread::scope(|scope| {
-        // Owned here so an assertion failure below releases the credits
-        // before the scope joins the Commit thread.
-        let held = held;
-        let commit = scope.spawn(|| {
-            let result = workspace.commit_captured();
-            finished.store(true, Ordering::Release);
-            result
-        });
-        // An observation window, not a threshold: nothing may happen in it.
-        let until = Instant::now() + Duration::from_millis(400);
-        while Instant::now() < until {
-            assert!(!finished.load(Ordering::Acquire), "Commit ended early");
-            std::thread::yield_now();
-        }
-        assert_eq!(
-            client.diagnostics().unwrap().admitted,
-            admitted_before,
-            "no Commit job was admitted while the credits were held"
-        );
-        drop(held);
-        commit.join().unwrap()
-    })
-    .unwrap_or_else(|failure| panic!("{failure:?}"));
-    let published = record(&success);
-    receipt(success.namespace.as_ref(), success.capture);
-    evidence(format_args!(
-        "PRODUCT_COMMIT_ADMISSION held_ordinary_credits={slots} refused=false admitted_while_held=0 outcome=Committed"
-    ));
-    drop(success);
-    model::assert_same(&expected, &rebound(&rig, 2, published.root), "fresh bind");
-    model::assert_same(&expected, &live(&workspace), "live view after install");
-    settled(&client, 0);
-    rig.close(&workspace);
-    rig.finish();
-}
-
 /// The reader is acquired, then the operation owner is refused with a
-/// definite original completion, which the failure keeps with its Lifecycle
-/// credit. The local resolution and the reader's release each need one more:
-/// with two per Workspace the Commit must still end, settled, and must
-/// release the reader it acquired.
+/// definite original receipt, which the failure keeps. The Commit must still
+/// end, settled, and must release the reader it acquired.
 #[test]
 fn a_refused_owner_acquisition_is_settled_and_releases_the_reader() {
     let rig = Rig::new("product-commit-owner-refused", tree);
@@ -1017,24 +924,24 @@ fn a_refused_owner_acquisition_is_settled_and_releases_the_reader() {
     ]);
     let expected = session.model.flat();
     let client = rig.owner.client();
-    assert_eq!(rig.owner.configuration().lifecycle_jobs_per_namespace, 2);
     // A real operation owner already holds the request the first capture of
     // this Workspace uses, so the constructor's own acquisition is refused.
     let blocker = match job(
         &client,
         workspace.route(),
-        Command::AcquireOperation { request: 1 },
+        |job_client: &layerfs_daemon::OwnerClient, job_route| {
+            job_client.acquire_operation(job_route, 1)
+        },
     )
     .result()
     {
         Ok(Response::Operation(Some(owner))) => *owner,
         other => panic!("{other:?}"),
     };
-    settled(&client, 0);
     let failure = std::thread::scope(|scope| {
         let commit = scope.spawn(|| workspace.commit_captured());
-        // A Commit parked on its own credits can never be joined: end the
-        // process with the evidence instead of waiting for the wall limit.
+        // A Commit that never returns can never be joined: end the process
+        // with the evidence instead of waiting for the wall limit.
         // A panic of the Commit thread ends the wait and is joined below.
         let until = Instant::now() + Duration::from_secs(30);
         while !commit.is_finished() {
@@ -1052,7 +959,7 @@ fn a_refused_owner_acquisition_is_settled_and_releases_the_reader() {
     .expect_err("the operation owner was refused");
     assert_eq!(failure.phase, CommitPhase::Construct);
     assert_eq!(request(failure.capture.unwrap()), 1);
-    let CommitError::Completion(original) = &failure.error else {
+    let CommitError::JobReceipt(original) = &failure.error else {
         panic!("{:?}", failure.error)
     };
     assert!(original.result().is_err(), "{original:?}");
@@ -1069,7 +976,7 @@ fn a_refused_owner_acquisition_is_settled_and_releases_the_reader() {
         "{namespace:?}"
     );
     evidence(format_args!(
-        "PRODUCT_COMMIT_OWNER_REFUSED lifecycle_slots=2 phase={:?} original={:?} locally_settled={} released={:?} retained={}",
+        "PRODUCT_COMMIT_OWNER_REFUSED phase={:?} original={:?} locally_settled={} released={:?} retained={}",
         failure.phase,
         original.result().as_ref().err(),
         failure.locally_settled,
@@ -1082,7 +989,8 @@ fn a_refused_owner_acquisition_is_settled_and_releases_the_reader() {
     assert!(done(Some(&job(
         &client,
         workspace.route(),
-        Command::ReleaseOperation(blocker)
+        |job_client: &layerfs_daemon::OwnerClient, job_route| job_client
+            .release_operation(job_route, blocker)
     ))));
     model::assert_same(&expected, &live(&workspace), "live view after the refusal");
     let success = workspace
@@ -1092,81 +1000,6 @@ fn a_refused_owner_acquisition_is_settled_and_releases_the_reader() {
     receipt(success.namespace.as_ref(), success.capture);
     drop(success);
     model::assert_same(&expected, &rebound(&rig, 2, published.root), "fresh bind");
-    settled(&client, 0);
     rig.close(&workspace);
     rig.finish();
-}
-
-/// The Commit thread keeps one completion of each kind while it waits for
-/// another. An owner started with a single Lifecycle slot could never serve
-/// that wait, so the product route refuses before any effect.
-#[test]
-fn a_commit_is_refused_before_effect_below_two_job_slots() {
-    for (label, config) in [
-        (
-            "product-commit-slots-lifecycle",
-            OwnerConfig {
-                lifecycle_jobs_per_namespace: 1,
-                ..OwnerConfig::default()
-            },
-        ),
-        (
-            "product-commit-slots-ordinary",
-            OwnerConfig {
-                jobs_per_namespace: 1,
-                ..OwnerConfig::default()
-            },
-        ),
-    ] {
-        let (rig, handles) = observed(label, Boundary::LostAcknowledgement, config);
-        let workspace = rig.bind(1);
-        // No mutation and no view read here: the fixture's own readers need
-        // more than one ordinary slot. The refusal is shown to precede every
-        // effect by the owner's admitted-job count, which does not move.
-        let client = rig.owner.client();
-        let before = history(&rig);
-        let admitted = client.diagnostics().unwrap().admitted;
-        let refused = workspace.commit_captured().unwrap_err();
-        assert_eq!(client.diagnostics().unwrap().admitted, admitted);
-        assert_eq!(refused.phase, CommitPhase::Admission);
-        assert!(
-            matches!(
-                refused.error,
-                CommitError::Context("owner job slots below the Commit minimum")
-            ),
-            "{:?}",
-            refused.error
-        );
-        assert!(refused.locally_settled && refused.published.is_none());
-        assert!(refused.capture.is_none() && refused.namespace.is_none());
-        evidence(format_args!(
-            "PRODUCT_COMMIT_SLOTS ordinary_slots={} lifecycle_slots={} phase={:?} error={:?} locally_settled={} capture=None owner_jobs_admitted_by_the_call=0",
-            config.jobs_per_namespace,
-            config.lifecycle_jobs_per_namespace,
-            refused.phase,
-            refused.error,
-            refused.locally_settled
-        ));
-        drop(refused);
-        assert_eq!(history(&rig), before);
-        rig.close(&workspace);
-        drop(handles);
-        rig.finish();
-    }
-}
-
-/// The minimum the product route accepts: two ordinary and two Lifecycle job
-/// slots. Two definite refusals are settled and release what they acquired,
-/// and a later changed Commit is exact, with no wait on the thread's own
-/// credits. A hang here reaches the wall limit and fails.
-#[test]
-fn a_commit_completes_at_the_minimum_of_two_job_slots() {
-    definite_refusal(
-        "product-commit-minimum",
-        OwnerConfig {
-            jobs_per_namespace: 2,
-            lifecycle_jobs_per_namespace: 2,
-            ..OwnerConfig::default()
-        },
-    );
 }

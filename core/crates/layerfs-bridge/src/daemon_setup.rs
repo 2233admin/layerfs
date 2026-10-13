@@ -5,7 +5,7 @@ use crate::{
     wire::{Reader, Writer},
 };
 use std::fmt;
-const MAGIC: &[u8] = b"LFSD\x02";
+const MAGIC: &[u8] = b"LFSD\x03";
 /// Explicit daemon startup resources; these are windows/admission, not file caps.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct DaemonLimits {
@@ -18,16 +18,8 @@ pub struct DaemonLimits {
     pub read_handles: u16,
     /// Shared immutable cache allowance, separate from whole-process memory.
     pub cache_bytes: u64,
-    /// Overlay owner aggregate job credits.
-    pub owner_bytes: u64,
-    /// Reserved Overlay lifecycle job credits.
-    pub lifecycle_reserve: u64,
     /// Explicit simultaneously admitted Workspace count.
     pub namespaces: u32,
-    /// Ordinary jobs per admitted Workspace.
-    pub ordinary_jobs: u32,
-    /// Lifecycle jobs per admitted Workspace.
-    pub lifecycle_jobs: u32,
     /// Explicit Overlay pager suggestion, not a resident ceiling.
     pub pager_kib: u32,
     /// Unconsumed local inode serials below which a create makes one early
@@ -75,10 +67,8 @@ impl DaemonSetup {
         out.put(&l.connections.to_be_bytes())?;
         out.put(&l.read_handles.to_be_bytes())?;
         out.put(&l.handshake_ms.to_be_bytes())?;
-        for v in [l.cache_bytes, l.owner_bytes, l.lifecycle_reserve] {
-            out.put(&v.to_be_bytes())?;
-        }
-        for v in [l.namespaces, l.ordinary_jobs, l.lifecycle_jobs, l.pager_kib] {
+        out.put(&l.cache_bytes.to_be_bytes())?;
+        for v in [l.namespaces, l.pager_kib] {
             out.put(&v.to_be_bytes())?;
         }
         out.put(&l.serial_low_water.to_be_bytes())?;
@@ -104,11 +94,7 @@ impl DaemonSetup {
             read_handles: u16::from_be_bytes(input.array()?),
             handshake_ms: u32::from_be_bytes(input.array()?),
             cache_bytes: u64::from_be_bytes(input.array()?),
-            owner_bytes: u64::from_be_bytes(input.array()?),
-            lifecycle_reserve: u64::from_be_bytes(input.array()?),
             namespaces: u32::from_be_bytes(input.array()?),
-            ordinary_jobs: u32::from_be_bytes(input.array()?),
-            lifecycle_jobs: u32::from_be_bytes(input.array()?),
             pager_kib: u32::from_be_bytes(input.array()?),
             serial_low_water: u64::from_be_bytes(input.array()?),
         };
@@ -161,10 +147,7 @@ impl DaemonSetup {
         if l.handshake_ms == 0
             || l.connections == 0
             || l.read_handles == 0
-            || l.owner_bytes <= l.lifecycle_reserve
             || l.namespaces == 0
-            || l.ordinary_jobs == 0
-            || l.lifecycle_jobs == 0
             || l.pager_kib == 0
         {
             return Err(ControlError("daemon resources"));

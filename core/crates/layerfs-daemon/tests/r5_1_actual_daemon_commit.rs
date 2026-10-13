@@ -118,11 +118,7 @@ fn start(f: &support::Fixture, mounts: &Path) -> (Process, SocketAddr) {
             read_handles: 2,
             handshake_ms: 3000,
             cache_bytes: 64 * 1024,
-            owner_bytes: 16 * 1024 * 1024,
-            lifecycle_reserve: 2 * 1024 * 1024,
             namespaces: 8,
-            ordinary_jobs: 8,
-            lifecycle_jobs: 4,
             pager_kib: 1024,
             serial_low_water: 0,
         },
@@ -216,8 +212,8 @@ fn quiet(control: &mut Control, token: WorkspaceToken) {
             .unwrap()
             .work
             .unwrap();
-        let now = (work.received, work.admitted, work.completed);
-        if work.received == 0 && work.admitted == 0 && last == Some(now) {
+        let now = (work.active, work.completed);
+        if work.active == 0 && last == Some(now) {
             return;
         }
         last = Some(now);

@@ -49,7 +49,7 @@ mod rig;
 use layerfs_bridge::control::{
     Activity, NativeWork, ReadyMount, Reply, Request, WorkspaceStatus, WorkspaceToken,
 };
-use layerfs_daemon::{control::Service, Command, OwnerClient, OwnerWork, Response, ServiceClass};
+use layerfs_daemon::{control::Service, OwnerClient, OwnerWork, Response, ServiceClass};
 use layerfs_history::{CommitRecord, CommitStagedOutcome};
 use layerfs_overlay::Route;
 use model::{assert_same, Flat, DIRECTORY, FILE};
@@ -59,19 +59,16 @@ use rig::{bash_in, native, passed, pattern, receipt, root, Rig};
 use std::{
     fmt::Debug,
     fs::{self, OpenOptions},
-    future::Future,
     io::{Read, Write},
     os::unix::{fs::OpenOptionsExt, process::CommandExt},
     path::Path,
-    pin::Pin,
     process::{Child, Command as Process, Stdio},
     sync::{
         atomic::{AtomicBool, AtomicUsize, Ordering},
         mpsc::{self, RecvTimeoutError},
         Arc, Mutex,
     },
-    task::{Context, Poll, Wake, Waker},
-    thread::{self, JoinHandle, Thread},
+    thread::{self, JoinHandle},
     time::{Duration, Instant},
 };
 
@@ -404,54 +401,21 @@ fn status(service: &Service, token: WorkspaceToken) -> Option<WorkspaceStatus> {
         _ => None,
     }
 }
-struct Unpark(Thread);
-impl Wake for Unpark {
-    fn wake(self: Arc<Self>) {
-        self.0.unpark();
-    }
-}
-/// One read-only engine observation of a Workspace through the owner's
-/// public admission wait: whether a capture is retained, and the installed
-/// base root. Control Status asks for the same row without waiting and is
-/// refused whenever both Lifecycle slots of the lane are in use. `None` when
-/// no slot was free, or the job was not done, within `wait`; dropping the
-/// unadmitted wait cancels only that wait.
-fn engine(owner: &OwnerClient, route: Route, wait: Duration) -> Option<(bool, [u8; 32])> {
-    let deadline = Instant::now() + wait;
-    let mut admission = owner
-        .submit_when_available(Some(route), Command::State)
-        .ok()?;
-    let waker = Waker::from(Arc::new(Unpark(thread::current())));
-    let pending = loop {
-        match Pin::new(&mut admission).poll(&mut Context::from_waker(&waker)) {
-            Poll::Ready(outcome) => break outcome.ok()?,
-            Poll::Pending => {
-                let now = Instant::now();
-                if now >= deadline {
-                    return None;
-                }
-                thread::park_timeout(deadline - now);
-            }
-        }
-    };
-    loop {
-        match pending.try_complete() {
-            Ok(Some(done)) => {
-                return match done.result() {
-                    Ok(Response::State(state)) => Some((state.captured.is_some(), state.base_root)),
-                    _ => None,
-                }
-            }
-            Ok(None) if Instant::now() < deadline => thread::sleep(Duration::from_micros(100)),
-            _ => return None,
-        }
+/// One read-only engine observation of a Workspace: whether a capture is
+/// retained, and the installed base root. The call takes the Workspace lock
+/// like any other job, on this thread; `None` when it is refused.
+fn engine(owner: &OwnerClient, route: Route) -> Option<(bool, [u8; 32])> {
+    let done = owner.state(Some(route)).ok()?;
+    match done.result() {
+        Ok(Response::State(state)) => Some((state.captured.is_some(), state.base_root)),
+        _ => None,
     }
 }
 fn work(rig: &Rig, token: WorkspaceToken) -> NativeWork {
     rig.harness.status(token).native.unwrap().work.unwrap()
 }
 fn completed(before: &OwnerWork, after: &OwnerWork) -> [u64; 6] {
-    std::array::from_fn(|class| after.completed[class] - before.completed[class])
+    std::array::from_fn(|class| after.jobs[class] - before.jobs[class])
 }
 fn classes(delta: [u64; 6]) -> String {
     CLASSES
@@ -492,7 +456,7 @@ fn unmount(rig: &Rig, ready: &ReadyMount) {
     let mut last = None;
     within("connection quiescent", || {
         let now = work(rig, ready.token);
-        let settled = now.received == 0 && now.admitted == 0 && last == Some(now.completed);
+        let settled = now.active == 0 && last == Some(now.completed);
         last = Some(now.completed);
         thread::sleep(Duration::from_millis(10));
         settled
@@ -508,11 +472,9 @@ fn stalled(rig: &Rig, token: WorkspaceToken, what: &str) -> ! {
     println!(
         "COMMIT STALLED owner={}",
         brief(&rig.harness.owner.client().diagnostics().map(|work| (
-            work.admitted,
-            work.completed,
-            work.outstanding,
-            work.queued,
-            work.peak_queued
+            work.jobs,
+            work.lock_wait_ns,
+            work.hold_ns
         )))
     );
     println!("COMMIT STALLED store_reads={:?}", rig.store.read_work());
@@ -638,9 +600,7 @@ fn rest(flat: &Flat) -> Flat {
 #[derive(Clone, Copy, Default)]
 struct Peak {
     samples: u64,
-    admitted: u32,
-    received: u32,
-    parked: u32,
+    active: u32,
 }
 /// Base files the R6-1 processes read, with the seed of their bytes.
 const READ: [(&str, u8, usize); 4] = [
@@ -697,9 +657,7 @@ fn r6_1_twenty_four_processes_read_and_write_through_three_commits() {
             let mut peaks = peaks.lock().unwrap();
             let peak = &mut peaks[commit];
             peak.samples += 1;
-            peak.admitted = peak.admitted.max(now.admitted);
-            peak.received = peak.received.max(now.received);
-            peak.parked = peak.parked.max(now.parked);
+            peak.active = peak.active.max(now.active);
         })
     };
     let mut processes: Vec<Proc> = (0..PROCESSES)
@@ -735,15 +693,13 @@ fn r6_1_twenty_four_processes_read_and_write_through_three_commits() {
         let now = made();
         let peak = peaks.lock().unwrap()[number];
         println!(
-            "{what}: returned=true alive={alive} files_before_call={files} files_after_return={now} mount_completed=+{} mount_handoffs=+{} owner_completed {} filesystem_only=+{} samples_while_current={} max_admitted={} max_received={} max_parked={} mount_retained={}",
+            "{what}: returned=true alive={alive} files_before_call={files} files_after_return={now} mount_completed=+{} mount_served=+{} owner_completed {} filesystem_only=+{} samples_while_current={} max_active={} mount_retained={}",
             after_work.completed - before_work.completed,
-            after_work.handoffs - before_work.handoffs,
+            after_work.served - before_work.served,
             classes(completed(&before, &after)),
             filesystem_only(completed(&before, &after)),
             peak.samples,
-            peak.admitted,
-            peak.received,
-            peak.parked,
+            peak.active,
             after_work.retained
         );
         assert_eq!(record.parent, parent, "{what}: parent is the previous head");
@@ -798,16 +754,13 @@ fn r6_1_twenty_four_processes_read_and_write_through_three_commits() {
         );
     }
     let last = work(&rig, ready.token);
-    let peak = owner.diagnostics().unwrap();
     println!(
-        "R6-1 mounted: no stall observed. processes={PROCESSES} commits=3 exits_zero={} reads={} writes={} mount_completed={} mount_retained={} owner_peak_queued={} owner_outstanding={}",
+        "R6-1 mounted: no stall observed. processes={PROCESSES} commits=3 exits_zero={} reads={} writes={} mount_completed={} mount_retained={}",
         reports.len(),
         reports.iter().map(|(reads, _)| reads).sum::<usize>(),
         reports.iter().map(|(_, writes)| writes).sum::<usize>(),
         last.completed,
-        last.retained,
-        peak.peak_queued,
-        peak.outstanding
+        last.retained
     );
     unmount(&rig, &ready);
     rig.finish();
@@ -892,7 +845,7 @@ fn r6_2_a_commit_against_twenty_writers_holds_an_exact_prefix_of_each() {
         .unwrap()
         .workspace()
         .route();
-    let (_, base_root) = engine(&owner, route, WAIT).expect("engine observation");
+    let (_, base_root) = engine(&owner, route).expect("engine observation");
 
     let armed = Arc::new(AtomicBool::new(false));
     let inside = Arc::new(Mutex::new(Inside::default()));
@@ -908,7 +861,7 @@ fn r6_2_a_commit_against_twenty_writers_holds_an_exact_prefix_of_each() {
             };
             // No capture yet; a capture retained; the base root replaced.
             let stage = || {
-                engine(&owner, route, Duration::from_millis(20)).map(|(captured, root)| {
+                engine(&owner, route).map(|(captured, root)| {
                     if captured {
                         1
                     } else if root != base_root {
@@ -980,23 +933,19 @@ fn r6_2_a_commit_against_twenty_writers_holds_an_exact_prefix_of_each() {
 
     let across = completed(&before, &after);
     println!(
-        "{what} owner jobs, before the call -> after the return: admitted=+{} completed {} filesystem_only(mutation+source)=+{} mount_completed=+{} mount_handoffs=+{} outstanding={}->{} peak_queued={}",
-        after.admitted - before.admitted,
+        "{what} owner jobs, before the call -> after the return: jobs=+{} by class {} filesystem_only(mutation+source)=+{} mount_completed=+{} mount_served=+{}",
+        after.jobs.iter().sum::<u64>() - before.jobs.iter().sum::<u64>(),
         classes(across),
         filesystem_only(across),
         after_work.completed - before_work.completed,
-        after_work.handoffs - before_work.handoffs,
-        before.outstanding,
-        after.outstanding,
-        after.peak_queued
+        after_work.served - before_work.served
     );
     let (within_commit, admitted_inside) = {
         let inside = inside.lock().unwrap();
         let span = Inside::delta(&inside.span);
-        let admitted = inside
-            .span
-            .as_ref()
-            .map_or(0, |(first, last)| last.admitted - first.admitted);
+        let admitted = inside.span.as_ref().map_or(0, |(first, last)| {
+            last.jobs.iter().sum::<u64>() - first.jobs.iter().sum::<u64>()
+        });
         println!(
             "{what} owner jobs inside the Commit (Status said Committing before and after each snapshot): samples={} admitted=+{admitted} completed {} filesystem_only=+{} stage_unobserved={} status_engine_observation_refused={}",
             inside.samples,
@@ -1416,7 +1365,7 @@ fn r6_6_finite_arrivals_on_two_workspaces_both_finish() {
         let mut last = None;
         within("connection quiescent", || {
             let now = work(&rig, token);
-            let settled = now.received == 0 && now.admitted == 0 && last == Some(now.completed);
+            let settled = now.active == 0 && last == Some(now.completed);
             last = Some(now.completed);
             thread::sleep(Duration::from_millis(10));
             settled
@@ -1430,29 +1379,23 @@ fn r6_6_finite_arrivals_on_two_workspaces_both_finish() {
         let together = together.lock().unwrap();
         (together.samples, together.both_advanced)
     };
-    let dispatch = rig.harness.serving.work().unwrap();
     let (writes, operations) = (
         BIG_PROCESSES * WRITES_EACH,
         SMALL_PROCESSES * OPERATIONS_EACH,
     );
     println!(
-        "{what}: a_processes={BIG_PROCESSES} a_writes={writes} a_block={BLOCK} a_completed=+{} a_handoffs=+{} b_processes={SMALL_PROCESSES} b_operations={operations} b_completed=+{} b_handoffs=+{} b_completed_at_commit_call=+{b_at_commit} b_completed_at_commit_return=+{b_after_commit} samples={samples} samples_where_both_advanced={both_advanced}",
+        "{what}: a_processes={BIG_PROCESSES} a_writes={writes} a_block={BLOCK} a_completed=+{} a_served=+{} b_processes={SMALL_PROCESSES} b_operations={operations} b_completed=+{} b_served=+{} b_completed_at_commit_call=+{b_at_commit} b_completed_at_commit_return=+{b_after_commit} samples={samples} samples_where_both_advanced={both_advanced}",
         a_after.completed - a_before.completed,
-        a_after.handoffs - a_before.handoffs,
+        a_after.served - a_before.served,
         b_after.completed - b_before.completed,
-        b_after.handoffs - b_before.handoffs
+        b_after.served - b_before.served
     );
     println!(
-        "{what}: owner_admitted=+{} owner_completed {} outstanding={} peak_queued={} a_retained={} b_retained={} dispatch_retained={} dispatch_parked={} dispatch_queued={}",
-        after.admitted - before.admitted,
+        "{what}: jobs=+{} by class {} a_retained={} b_retained={}",
+        after.jobs.iter().sum::<u64>() - before.jobs.iter().sum::<u64>(),
         classes(delta),
-        after.outstanding,
-        after.peak_queued,
         a_after.retained,
-        b_after.retained,
-        dispatch.retained,
-        dispatch.parked,
-        dispatch.queued
+        b_after.retained
     );
     // Both finished (every process reported its whole sequence above), and
     // each mount completed at least one request per write or operation.
@@ -1477,11 +1420,10 @@ fn r6_6_finite_arrivals_on_two_workspaces_both_finish() {
         (
             a_after.retained,
             b_after.retained,
-            dispatch.retained,
             a_after.terminal,
             b_after.terminal
         ),
-        (0, 0, 0, 0, 0),
+        (0, 0, 0, 0),
         "{what}: nothing is retained"
     );
     assert!(
@@ -1678,7 +1620,7 @@ fn readers_on_two_workspaces_read_exact_bytes_while_one_is_written() {
         let mut last = None;
         within("connection quiescent", || {
             let now = work(&rig, token);
-            let settled = now.received == 0 && now.admitted == 0 && last == Some(now.completed);
+            let settled = now.active == 0 && last == Some(now.completed);
             last = Some(now.completed);
             thread::sleep(Duration::from_millis(10));
             settled
@@ -1692,30 +1634,24 @@ fn readers_on_two_workspaces_read_exact_bytes_while_one_is_written() {
         let together = together.lock().unwrap();
         (together.samples, together.both_advanced)
     };
-    let dispatch = rig.harness.serving.work().unwrap();
     // One OPEN, at least one READ and one RELEASE of every turn reached the
     // daemon: the descriptor is `O_DIRECT`.
     let turns = (READERS * TURNS) as u64;
     println!(
-        "{what}: readers_each_mount={READERS} turns_each={TURNS} files={} a_completed=+{} a_handoffs=+{} b_writers={WRITERS} b_writes={} b_block={BLOCK} b_completed=+{} b_handoffs=+{} samples={samples} samples_where_both_advanced={both_advanced}",
+        "{what}: readers_each_mount={READERS} turns_each={TURNS} files={} a_completed=+{} a_served=+{} b_writers={WRITERS} b_writes={} b_block={BLOCK} b_completed=+{} b_served=+{} samples={samples} samples_where_both_advanced={both_advanced}",
         SHARED.len(),
         a_after.completed - a_before.completed,
-        a_after.handoffs - a_before.handoffs,
+        a_after.served - a_before.served,
         WRITERS * WRITES_EACH,
         b_after.completed - b_before.completed,
-        b_after.handoffs - b_before.handoffs
+        b_after.served - b_before.served
     );
     println!(
-        "{what}: owner_admitted=+{} owner_completed {} outstanding={} peak_queued={} a_retained={} b_retained={} dispatch_retained={} dispatch_parked={} dispatch_queued={}",
-        after.admitted - before.admitted,
+        "{what}: jobs=+{} by class {} a_retained={} b_retained={}",
+        after.jobs.iter().sum::<u64>() - before.jobs.iter().sum::<u64>(),
         classes(delta),
-        after.outstanding,
-        after.peak_queued,
         a_after.retained,
-        b_after.retained,
-        dispatch.retained,
-        dispatch.parked,
-        dispatch.queued
+        b_after.retained
     );
     assert!(
         a_after.completed - a_before.completed >= 3 * turns,
@@ -1729,12 +1665,10 @@ fn readers_on_two_workspaces_read_exact_bytes_while_one_is_written() {
         (
             a_after.retained,
             b_after.retained,
-            dispatch.retained,
             a_after.terminal,
-            b_after.terminal,
-            after.outstanding
+            b_after.terminal
         ),
-        (0, 0, 0, 0, 0, 0),
+        (0, 0, 0, 0),
         "{what}: nothing is retained"
     );
     assert!(

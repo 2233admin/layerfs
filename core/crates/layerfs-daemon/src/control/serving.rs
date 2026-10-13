@@ -6,44 +6,27 @@ use layerfs_bridge::control::{
 };
 use layerfs_fuse::{
     session::{DrainStage, NativeSession, SessionFacts, SessionObserver},
-    Dispatch, DispatchConfig, DispatchError, MountQueue, StartFailure,
+    DispatchError, MountRequests,
 };
 use layerfs_overlay::NativeMount;
-use std::{fmt, path::PathBuf, sync::Mutex};
+use std::{fmt, path::PathBuf};
 
-/// Process-wide native serving: fixed workers shared by all mount lanes.
+/// Process-wide native serving registry: each mount has its own receive workers.
 pub struct NativeServing {
     /// Short registration and observation sections only; never held across
     /// a mount, a kernel request or an engine job.
-    dispatch: Mutex<Dispatch>,
     pub(super) config: NativeConfig,
 }
 impl NativeServing {
     /// Starts the fixed worker pool once. No mount, device or kernel effect.
-    pub fn start(config: NativeConfig) -> Result<Self, Box<StartFailure>> {
-        let dispatch = Dispatch::start(DispatchConfig {
-            read_handles: config.read_handles,
-            namespaces: config.namespaces,
-        })
-        .map_err(Box::new)?;
-        Ok(Self {
-            dispatch: Mutex::new(dispatch),
-            config,
-        })
+    pub fn start(config: NativeConfig) -> Result<Self, std::io::Error> {
+        Ok(Self { config })
     }
-    /// Claims one fixed lane for an engine mount incarnation.
-    pub(super) fn register(&self, mount: NativeMount) -> Result<MountQueue, DispatchError> {
-        self.dispatch
-            .lock()
-            .map_err(|_| DispatchError::Stopped)?
-            .register(mount)
+    pub(super) fn register(&self, mount: NativeMount) -> Result<MountRequests, DispatchError> {
+        Ok(MountRequests::new(mount))
     }
     pub fn config(&self) -> &NativeConfig {
         &self.config
-    }
-    /// Maintained daemon-wide worker and lane counters.
-    pub fn work(&self) -> Option<layerfs_fuse::DispatchWork> {
-        self.dispatch.lock().ok().map(|dispatch| dispatch.work())
     }
     /// A namespace is never reused by this daemon, so neither is its directory.
     pub(super) fn directory(&self, token: WorkspaceToken) -> PathBuf {
@@ -54,7 +37,6 @@ impl fmt::Debug for NativeServing {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("NativeServing")
             .field("config", &self.config)
-            .field("work", &self.work())
             .finish()
     }
 }
@@ -129,18 +111,13 @@ pub(super) fn work(facts: &SessionFacts) -> NativeWork {
         loops_entered: count(entered),
         loops_exited: count(exited),
         loops_joined: count(joined),
-        received: narrow(lane.received),
-        admitted: narrow(lane.admitted),
-        queued: narrow(lane.queued),
-        running: narrow(lane.running),
-        parked: narrow(lane.parked),
+        active: narrow(lane.active),
         retained: narrow(lane.retained),
         completed: lane.completed,
-        handoffs: facts.opcodes.handoffs,
+        served: facts.opcodes.served,
         inline: facts.opcodes.inline,
         refused: facts.opcodes.refused,
         terminal: facts.opcodes.terminal,
-        unadmitted: facts.opcodes.unadmitted,
         forget_units: facts.opcodes.forget_units,
     }
 }

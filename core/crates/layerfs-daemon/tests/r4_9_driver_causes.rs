@@ -38,11 +38,11 @@ mod model;
 #[allow(dead_code)]
 #[path = "support/installed_store.rs"]
 mod support;
-use drive::{evidence, job, live, settled, Do, Rig, Session};
+use drive::{evidence, job, live, Do, Rig, Session};
 use layerfs_content::ObjectId;
 use layerfs_daemon::{
     store::{BoundWorkspace, CommitError, CommitFailure, CommitPhase, CommitSuccess},
-    Command, Completion, OwnerClient, OwnerError, Response,
+    JobReceipt, OwnerClient, OwnerError, Response,
 };
 use layerfs_history::{CommitHistoryRequest, CommitRecord, CommitStagedOutcome};
 use layerfs_overlay::{
@@ -169,14 +169,18 @@ impl<'a> Failing<'a> {
                 match how {
                     How::Opaque => Err(WorkspaceError::Service(Box::new(Injected(call)))),
                     How::Engine => {
-                        let (command, released) = match owner {
-                            Some(owner) => (Command::ReleaseOperation(owner), Released::Operation),
+                        let route = Some(self.route);
+                        let (done, released) = match owner {
+                            Some(owner) => (
+                                self.client.release_operation(route, owner),
+                                Released::Operation,
+                            ),
                             None => (
-                                Command::ReleaseCapturedReader(self.reader),
+                                self.client.release_captured_reader(route, self.reader),
                                 Released::Reader,
                             ),
                         };
-                        let done = job(self.client, self.route, command);
+                        let done = done.unwrap_or_else(|error| panic!("{error:?}"));
                         assert!(
                             matches!(done.result(), Ok(Response::Done)),
                             "{call:?}: the foreign release: {done:?}"
@@ -359,14 +363,24 @@ fn commit(
         let reader = match job(
             overlay,
             route,
-            Command::AcquireCapturedReader { capture, request },
+            |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.acquire_captured_reader(job_route, capture, request)
+            },
         )
         .result()
         {
             Ok(Response::CapturedReader(Some(reader))) => *reader,
             other => panic!("{other:?}"),
         };
-        let owner = match job(overlay, route, Command::AcquireOperation { request }).result() {
+        let owner = match job(
+            overlay,
+            route,
+            |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.acquire_operation(job_route, request)
+            },
+        )
+        .result()
+        {
             Ok(Response::Operation(Some(owner))) => *owner,
             other => panic!("{other:?}"),
         };
@@ -433,19 +447,29 @@ fn commit(
         match (result, original) {
             (Ok(built), original) => {
                 assert!(original.is_none(), "a result with a retained cause");
-                assert!(job(overlay, route, Command::ReleaseCapturedReader(reader))
-                    .result()
-                    .is_ok());
-                assert!(job(overlay, route, Command::ReleaseOperation(owner))
-                    .result()
-                    .is_ok());
+                assert!(job(
+                    overlay,
+                    route,
+                    |job_client: &layerfs_daemon::OwnerClient, job_route| job_client
+                        .release_captured_reader(job_route, reader)
+                )
+                .result()
+                .is_ok());
+                assert!(job(
+                    overlay,
+                    route,
+                    |job_client: &layerfs_daemon::OwnerClient, job_route| job_client
+                        .release_operation(job_route, owner)
+                )
+                .result()
+                .is_ok());
                 Ok(built.root)
             }
             // An owner job goes back as what it was: its completion, or the
             // refusal that never admitted it.
             (Err(_), Some(WorkspaceError::Service(service))) => {
-                Err(match service.downcast::<Completion>() {
-                    Ok(completion) => CommitError::Completion(completion),
+                Err(match service.downcast::<JobReceipt>() {
+                    Ok(completion) => CommitError::JobReceipt(completion),
                     Err(other) => match other.downcast::<OwnerError>() {
                         Ok(owner) => CommitError::Owner(*owner),
                         Err(other) => CommitError::Workspace(WorkspaceError::Service(other)),
@@ -507,15 +531,39 @@ fn held(
 ) {
     let client = rig.owner.client();
     let route = workspace.route();
-    let reader = match job(&client, route, Command::RetainedCapturedReader { request }).result() {
+    let reader = match job(
+        &client,
+        route,
+        |job_client: &layerfs_daemon::OwnerClient, job_route| {
+            job_client.retained_captured_reader(job_route, request)
+        },
+    )
+    .result()
+    {
         Ok(Response::CapturedReader(kept)) => *kept,
         other => panic!("{other:?}"),
     };
-    let owner = match job(&client, route, Command::RetainedOperation { request }).result() {
+    let owner = match job(
+        &client,
+        route,
+        |job_client: &layerfs_daemon::OwnerClient, job_route| {
+            job_client.retained_operation(job_route, request)
+        },
+    )
+    .result()
+    {
         Ok(Response::Operation(kept)) => *kept,
         other => panic!("{other:?}"),
     };
-    let capture = match job(&client, route, Command::RetainedCapture).result() {
+    let capture = match job(
+        &client,
+        route,
+        |job_client: &layerfs_daemon::OwnerClient, job_route| {
+            job_client.retained_capture(job_route)
+        },
+    )
+    .result()
+    {
         Ok(Response::RetainedCapture(kept)) => *kept,
         other => panic!("{other:?}"),
     };
@@ -621,7 +669,6 @@ fn counted(how: How) -> (BTreeMap<Call, u64>, u64) {
         produced.counts,
         produced.order.len()
     ));
-    settled(&rig.owner.client(), 0);
     rig.close(&first);
     drop(first);
     rig.finish();
@@ -686,7 +733,7 @@ fn failed(call: Call, nth: u64, how: How, parent_points: u64) {
         How::Engine => {
             // The engine's own refusal, in its original completion.
             let refusal = match &failure.error {
-                CommitError::Completion(done) => match done.result() {
+                CommitError::JobReceipt(done) => match done.result() {
                     Err(error) => format!("{error:?}"),
                     Ok(other) => panic!("{what}: the call was answered: {other:?}"),
                 },
@@ -710,7 +757,7 @@ fn failed(call: Call, nth: u64, how: How, parent_points: u64) {
                 "{what}: {failure:?}"
             );
             assert!(matches!(
-                failure.local.as_ref().map(Completion::result),
+                failure.local.as_ref().map(JobReceipt::result),
                 Some(Ok(Response::Done))
             ));
             "definite"
@@ -747,8 +794,8 @@ fn failed(call: Call, nth: u64, how: How, parent_points: u64) {
         owner.is_some(),
         kept_capture.is_some()
     ));
-    let done = |command| {
-        let done = job(&client, route, command);
+    let done = |done: Result<layerfs_daemon::JobReceipt, layerfs_daemon::OwnerError>| {
+        let done = done.unwrap_or_else(|error| panic!("{what}: {error:?}"));
         assert!(
             matches!(done.result(), Ok(Response::Done)),
             "{what}: {done:?}"
@@ -780,13 +827,12 @@ fn failed(call: Call, nth: u64, how: How, parent_points: u64) {
         // nothing was published, so the capture is resolved and the reader
         // and the owner released through the owner client. The Workspace
         // stays fenced; the driver is not told.
-        done(Command::ResolveFailed(capture));
-        done(Command::ReleaseCapturedReader(produced.reader));
-        done(Command::ReleaseOperation(produced.owner));
+        done(client.resolve_failed(Some(route), capture));
+        done(client.release_captured_reader(Some(route), produced.reader));
+        done(client.release_operation(Some(route), produced.owner));
         assert_eq!(held(&rig, &first, 1), (None, None, None), "{what}");
         model::assert_same(&expected, &live(&first), "live view after teardown");
         assert!(first.commit_in_flight());
-        settled(&client, 0);
         rig.close(&first);
         drop(first);
         rig.finish();
@@ -795,10 +841,10 @@ fn failed(call: Call, nth: u64, how: How, parent_points: u64) {
     // The caller's step after a settled failure, as in the product route:
     // the reader and then the operation owner, whichever are still held.
     if reader.is_some() {
-        done(Command::ReleaseCapturedReader(produced.reader));
+        done(client.release_captured_reader(Some(route), produced.reader));
     }
     if owner.is_some() {
-        done(Command::ReleaseOperation(produced.owner));
+        done(client.release_operation(Some(route), produced.owner));
     }
     assert_eq!(held(&rig, &first, 1), (None, None, None), "{what}");
     model::assert_same(&expected, &live(&first), "live view after the failure");
@@ -815,7 +861,6 @@ fn failed(call: Call, nth: u64, how: How, parent_points: u64) {
         "fresh bind after the failure",
     );
     assert_eq!(history(&rig), vec![published]);
-    settled(&client, 0);
     rig.close(&first);
     drop(first);
     rig.finish();

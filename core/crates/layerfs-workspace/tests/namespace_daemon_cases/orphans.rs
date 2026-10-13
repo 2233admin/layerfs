@@ -11,10 +11,13 @@ use layerfs_workspace::Position;
 fn read_window(service: &Service, open: OpenFile) -> Vec<u8> {
     service.window(|view| {
         let read = service.job(
-            Command::AcquireFileRead {
-                source: view.source(),
-                file: open,
-                request: service.owners.fetch_add(1, Ordering::Relaxed) + 10000,
+            |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.acquire_file_read(
+                    job_route,
+                    view.source(),
+                    open,
+                    service.owners.fetch_add(1, Ordering::Relaxed) + 10000,
+                )
             },
             |r| match r {
                 Response::FileReader(Some(read)) => *read,
@@ -24,29 +27,36 @@ fn read_window(service: &Service, open: OpenFile) -> Vec<u8> {
         let mut out = Vec::new();
         view.read_file(&service.client, read, 0, 131072, &mut out)
             .unwrap();
-        service.job(Command::ReleaseFileRead(read), |_| ());
+        service.job(
+            |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.release_file_read(job_route, read)
+            },
+            |_| (),
+        );
         out
     })
 }
 #[test]
 fn inherited_open_unlinked_log_keeps_bytes_through_owner_installs_failures_and_idle_cleanup() {
     let service = Service::new("orphan-log");
-    service.job(Command::LifetimePlans, |r| match r {
-        Response::LifetimePlans(plans) => {
-            // Every access is a search; the record fence's owner search is a
-            // scalar subquery, which the plan lists as a node of its own.
-            assert!(plans.iter().all(|p| {
-                (p.contains("SEARCH") || p.contains("SCALAR SUBQUERY")) && !p.contains("TEMP")
-            }));
-            println!("S6_CUSTODY_PLANS {plans:?}");
-        }
-        other => panic!("{other:?}"),
-    });
+    service.job(
+        |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.lifetime_plans(job_route),
+        |r| match r {
+            Response::LifetimePlans(plans) => {
+                // Every access is a search; the record fence's owner search is a
+                // scalar subquery, which the plan lists as a node of its own.
+                assert!(plans.iter().all(|p| {
+                    (p.contains("SEARCH") || p.contains("SCALAR SUBQUERY")) && !p.contains("TEMP")
+                }));
+                println!("S6_CUSTODY_PLANS {plans:?}");
+            }
+            other => panic!("{other:?}"),
+        },
+    );
     let open = service.window(|view| {
         let base = service.job(
-            Command::SourceInode {
-                source: view.source(),
-                serial: 2,
+            |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.source_inode(job_route, view.source(), 2)
             },
             |r| match r {
                 Response::Inode(inode) => inode.clone(),
@@ -70,11 +80,8 @@ fn inherited_open_unlinked_log_keeps_bytes_through_owner_installs_failures_and_i
             subdirs: 0,
         };
         service.job(
-            Command::OpenFile {
-                source: view.source(),
-                request: 1,
-                base: inode,
-                writable: true,
+            |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.open_file(job_route, view.source(), 1, inode, true)
             },
             |r| match r {
                 Response::File(Some(file)) => *file,
@@ -123,31 +130,41 @@ fn inherited_open_unlinked_log_keeps_bytes_through_owner_installs_failures_and_i
             expect.resize(9000, 0);
         }
         assert_eq!(read_window(&service, open), expect);
-        let capture = service.job(Command::Capture, |r| match r {
-            Response::Captured(c) => *c,
-            other => panic!("{other:?}"),
-        });
+        let capture = service.job(
+            |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.capture(job_route),
+            |r| match r {
+                Response::Captured(c) => *c,
+                other => panic!("{other:?}"),
+            },
+        );
         if round % 2 == 0 {
             let prepared = service
                 .workspace
                 .prepare_base_install(capture, next)
                 .unwrap();
             service.job(
-                Command::InstallPrepared {
-                    workspace: service.workspace.clone(),
-                    input: prepared,
+                |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                    job_client.install_prepared(job_route, service.workspace.clone(), prepared)
                 },
                 |_| (),
             );
         } else {
-            service.job(Command::ResolveFailed(capture), |_| ());
+            service.job(
+                |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                    job_client.resolve_failed(job_route, capture)
+                },
+                |_| (),
+            );
         }
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
         loop {
-            let ready = service.job(Command::State, |r| match r {
-                Response::State(s) => s.consolidating.is_none(),
-                other => panic!("{other:?}"),
-            });
+            let ready = service.job(
+                |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.state(job_route),
+                |r| match r {
+                    Response::State(s) => s.consolidating.is_none(),
+                    other => panic!("{other:?}"),
+                },
+            );
             if ready {
                 break;
             }
@@ -157,10 +174,8 @@ fn inherited_open_unlinked_log_keeps_bytes_through_owner_installs_failures_and_i
     }
     let read: FileRead = service.window(|view| {
         service.job(
-            Command::AcquireFileRead {
-                source: view.source(),
-                file: open,
-                request: 99999,
+            |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.acquire_file_read(job_route, view.source(), open, 99999)
             },
             |r| match r {
                 Response::FileReader(Some(read)) => *read,
@@ -168,19 +183,32 @@ fn inherited_open_unlinked_log_keeps_bytes_through_owner_installs_failures_and_i
             },
         )
     });
-    service.job(Command::CloseFile(open), |_| ());
+    service.job(
+        |job_client: &layerfs_daemon::OwnerClient, job_route| {
+            job_client.close_file(job_route, open)
+        },
+        |_| (),
+    );
     let source = read.source();
     let view = service.workspace.view_for_source(source).unwrap();
     let mut got = Vec::new();
     view.read_file(&service.client, read, 0, 131072, &mut got)
         .unwrap();
     assert_eq!(got, expect);
-    service.job(Command::ReleaseFileRead(read), |_| ());
+    service.job(
+        |job_client: &layerfs_daemon::OwnerClient, job_route| {
+            job_client.release_file_read(job_route, read)
+        },
+        |_| (),
+    );
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
     loop {
-        if service.job(Command::MaintenanceIdle, |r| {
-            matches!(r, Response::MaintenanceIdle(true))
-        }) {
+        if service.job(
+            |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.maintenance_idle(job_route)
+            },
+            |r| matches!(r, Response::MaintenanceIdle(true)),
+        ) {
             break;
         }
         assert!(std::time::Instant::now() < deadline);
@@ -251,10 +279,15 @@ fn non_file_lookup_custody_survives_real_owner_installs_and_a_last_consumer() {
     let directory = service.applied(mkdir(1, "removed-dir")).unwrap().serial;
     let acquire = |serial, request| {
         service.window(|view| {
-            let local = service.job(Command::Inode(serial), |r| match r {
-                Response::Inode(i) => i.clone(),
-                other => panic!("{other:?}"),
-            });
+            let local = service.job(
+                |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                    job_client.inode(job_route, serial)
+                },
+                |r| match r {
+                    Response::Inode(i) => i.clone(),
+                    other => panic!("{other:?}"),
+                },
+            );
             let base = local.unwrap_or_else(|| {
                 let stat = view.stat(&service.client, serial).unwrap();
                 layerfs_overlay::Inode {
@@ -272,11 +305,8 @@ fn non_file_lookup_custody_survives_real_owner_installs_and_a_last_consumer() {
                 }
             });
             service.job(
-                Command::AcquireLookup {
-                    source: view.source(),
-                    request,
-                    base,
-                    root: 1,
+                |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                    job_client.acquire_lookup(job_route, view.source(), request, base, 1)
                 },
                 |r| match r {
                     Response::Lookup(Some(l)) => *l,
@@ -291,28 +321,35 @@ fn non_file_lookup_custody_survives_real_owner_installs_and_a_last_consumer() {
     service.applied(rmdir(1, "removed-dir"));
     let next = root_without(&service, &["symlink"]);
     for round in 0..12 {
-        let capture = service.job(Command::Capture, |r| match r {
-            Response::Captured(c) => *c,
-            other => panic!("{other:?}"),
-        });
+        let capture = service.job(
+            |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.capture(job_route),
+            |r| match r {
+                Response::Captured(c) => *c,
+                other => panic!("{other:?}"),
+            },
+        );
         if round % 2 == 0 {
             let input = service
                 .workspace
                 .prepare_base_install(capture, next)
                 .unwrap();
             service.job(
-                Command::InstallPrepared {
-                    workspace: service.workspace.clone(),
-                    input,
+                |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                    job_client.install_prepared(job_route, service.workspace.clone(), input)
                 },
                 |_| (),
             );
         } else {
-            service.job(Command::ResolveFailed(capture), |_| ());
+            service.job(
+                |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                    job_client.resolve_failed(job_route, capture)
+                },
+                |_| (),
+            );
         }
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
         while !service.job(
-            Command::State,
+            |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.state(job_route),
             |r| matches!(r,Response::State(s) if s.consolidating.is_none()),
         ) {
             assert!(std::time::Instant::now() < deadline);
@@ -333,10 +370,8 @@ fn non_file_lookup_custody_survives_real_owner_installs_and_a_last_consumer() {
     }
     let read = service.window(|view| {
         service.job(
-            Command::AcquireLookupRead {
-                source: view.source(),
-                lookup: link,
-                request: 100,
+            |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.acquire_lookup_read(job_route, view.source(), link, 100)
             },
             |r| match r {
                 Response::FileReader(Some(read)) => *read,
@@ -344,22 +379,43 @@ fn non_file_lookup_custody_survives_real_owner_installs_and_a_last_consumer() {
             },
         )
     });
-    service.job(Command::ReleaseLookup(link), |_| ());
-    service.job(Command::ReleaseLookup(dir), |_| ());
+    service.job(
+        |job_client: &layerfs_daemon::OwnerClient, job_route| {
+            job_client.release_lookup(job_route, link)
+        },
+        |_| (),
+    );
+    service.job(
+        |job_client: &layerfs_daemon::OwnerClient, job_route| {
+            job_client.release_lookup(job_route, dir)
+        },
+        |_| (),
+    );
     let view = service.workspace.view_for_source(read.source()).unwrap();
-    service.job(Command::Close, |_| ());
+    service.job(
+        |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.close(job_route),
+        |_| (),
+    );
     assert_eq!(
         view.readlink_owned(&service.client, read)
             .unwrap()
             .as_bytes(),
         b"../.git/index"
     );
-    service.job(Command::ReleaseFileRead(read), |_| ());
-    assert!(service.job(Command::CleanupState, |r| {
-        matches!(
-            r,
-            Response::CleanupState(layerfs_overlay::CleanupState::Queued)
-        )
-    }));
+    service.job(
+        |job_client: &layerfs_daemon::OwnerClient, job_route| {
+            job_client.release_file_read(job_route, read)
+        },
+        |_| (),
+    );
+    assert!(service.job(
+        |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.cleanup_state(job_route),
+        |r| {
+            matches!(
+                r,
+                Response::CleanupState(layerfs_overlay::CleanupState::Queued)
+            )
+        }
+    ));
     println!("S6_NONFILE_OWNER captures=12 success=6 failures=6 directory_metadata=true inherited_symlink_bytes=true lookup_release_before_last_request=true whole_file_disposal_eligible=true");
 }

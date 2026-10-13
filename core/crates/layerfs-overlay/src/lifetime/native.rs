@@ -14,20 +14,59 @@ impl Overlay {
         integer(root)?;
         self.atomic(|| {
             self.live(route)?;
+            let held = self.open.borrow().mounts.rows.get(&route.ns).copied();
+            let replaced = match held {
+                Some((_, false)) => return Err(OverlayError::Invalid("duplicate native mount")),
+                Some((revoked, true)) => {
+                    self.retire_revoked_mount(revoked)?;
+                    true
+                }
+                None => false,
+            };
             let owner = self.mint_owner()?;
             let mount = NativeMount { route, owner, root };
             {
                 let mut state = self.open.borrow_mut();
-                if state.mounts.rows.contains_key(&route.ns) {
-                    return Err(OverlayError::Invalid("duplicate native mount"));
-                }
                 state.mounts.put(route.ns, (mount, false));
-                state.count(route.ns, 8, true);
+                if !replaced {
+                    state.count(route.ns, 8, true);
+                }
             }
             self.insert_native_lookup(mount, root, true, 0)?;
             self.set_native_parent(mount, root, root)?;
             Ok(mount)
         })
+    }
+    /// A revoked mount is drained and can receive nothing: its remaining
+    /// kernel references and parents leave with it when the Workspace is
+    /// attached again.
+    fn retire_revoked_mount(&self, revoked: NativeMount) -> OverlayResult<()> {
+        let ns = revoked.route.ns;
+        let (references, parents) = {
+            let state = self.open.borrow();
+            let references = state
+                .kernel
+                .rows
+                .range((ns, revoked.owner, 0)..=(ns, revoked.owner, u64::MAX))
+                .map(|(key, _)| *key)
+                .collect::<Vec<_>>();
+            let parents = state
+                .parents
+                .rows
+                .range((ns, 0)..=(ns, u64::MAX))
+                .filter(|(_, (owner, _))| *owner == revoked.owner)
+                .map(|(key, _)| *key)
+                .collect::<Vec<_>>();
+            (references, parents)
+        };
+        for key in references {
+            self.open.borrow_mut().remove_kernel(key);
+            self.file_ref(ns, integer(key.2)?, LeaseKind::LookupOwner, false)?;
+        }
+        for key in parents {
+            self.open.borrow_mut().remove_parent(key);
+        }
+        Ok(())
     }
     /// Observes the original connection, without adopting or replaying attach.
     pub fn retained_native_mount(&self, route: Route) -> OverlayResult<Option<NativeMount>> {

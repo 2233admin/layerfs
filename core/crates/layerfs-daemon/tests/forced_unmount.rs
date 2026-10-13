@@ -393,7 +393,7 @@ fn quiet(rig: &Rig, token: WorkspaceToken) {
     let mut last = None;
     within("connection quiescent", || {
         let now = work(rig, token);
-        let settled = now.received == 0 && now.admitted == 0 && last == Some(now.completed);
+        let settled = now.active == 0 && last == Some(now.completed);
         last = Some(now.completed);
         thread::sleep(Duration::from_millis(10));
         settled
@@ -561,8 +561,7 @@ fn held_reference(name: &'static str, label: &str, mode: &str) {
     // request left.
     checks.that(
         custody.work.is_some_and(|work| {
-            work.received == 0
-                && work.admitted == 0
+            work.active == 0
                 && work.retained == 0
                 && work.loops_joined == work.loops_configured
                 && work.loops_configured != 0
@@ -765,9 +764,7 @@ fn parked_readers_are_ended(name: &'static str, label: &str, count: usize) {
     // longer exists, which is not an answer of the aborted connection.
     within("the readers' requests parked", || {
         let now = work(&rig, token);
-        (now.admitted, now.parked, now.received)
-            == (admitted as u32, admitted as u32, received as u32)
-            && connection.waiting() == count as u64
+        now.active == admitted as u32 && connection.waiting() == count as u64
     });
     let before = work(&rig, token);
     let waiting = rig.store.read_work();
@@ -780,7 +777,7 @@ fn parked_readers_are_ended(name: &'static str, label: &str, count: usize) {
     // OPEN of every reader that is parked, and of no more than every reader.
     let opened = before.completed - idle.completed;
     assert_eq!(
-        before.handoffs - idle.handoffs,
+        before.served - idle.served,
         admitted as u64 + opened,
         "every handed-off request is parked or completed: {before:?}"
     );
@@ -794,11 +791,9 @@ fn parked_readers_are_ended(name: &'static str, label: &str, count: usize) {
         .sum::<usize>();
     assert_eq!(blocked, count, "every reader is blocked in its call");
     println!(
-        "{name} before: readers={count} leases_held={} admitted={} parked={} received={} terminal={} read_admissions_waiting={} kernel_waiting={} readers_blocked={blocked}",
+        "{name} before: readers={count} leases_held={} active={} terminal={} read_admissions_waiting={} kernel_waiting={} readers_blocked={blocked}",
         leases.count(),
-        before.admitted,
-        before.parked,
-        before.received,
+        before.active,
         before.terminal,
         waiting.waiting,
         connection.waiting()
@@ -888,7 +883,7 @@ fn parked_readers_are_ended(name: &'static str, label: &str, count: usize) {
     checks.that(
         facts.fenced == admitted as u64
             && last.terminal - before.terminal == received as u64
-            && (last.received, last.admitted, last.retained) == (0, 0, 0),
+            && (last.active, last.retained) == (0, 0),
         || {
             format!(
                 "{name}: fenced={} (admitted {admitted}), terminal {} -> {} (received {received}), left {:?}",
@@ -897,15 +892,14 @@ fn parked_readers_are_ended(name: &'static str, label: &str, count: usize) {
         },
     );
     println!(
-        "{name} force: disposition={} abort={:?} detach={:?} fenced={} admitted_before={admitted} terminal={}->{} received_before={received} left=({},{},{}) completed={}->{} leases_held_through_force={}",
+        "{name} force: disposition={} abort={:?} detach={:?} fenced={} admitted_before={admitted} terminal={}->{} received_before={received} left=({},{}) completed={}->{} leases_held_through_force={}",
         if done.is_some() { "ForceUnmounted" } else { "Retained" },
         facts.abort,
         facts.detach,
         facts.fenced,
         before.terminal,
         last.terminal,
-        last.received,
-        last.admitted,
+        last.active,
         last.retained,
         before.completed,
         last.completed,
@@ -984,10 +978,10 @@ fn a_read_parked_after_its_visit_holds_no_engine_row_and_is_ended_by_the_fence()
     writeln!(holder.input.as_mut().unwrap(), "probe").unwrap();
     within("the READ is parked on reader admission", || {
         let now = work(&rig, token);
-        (now.admitted, now.parked, now.received) == (1, 1, 0) && rig.store.read_work().waiting == 1
+        now.active == 1 && rig.store.read_work().waiting == 1
     });
     let before = work(&rig, token);
-    assert_eq!(before.handoffs - idle.handoffs, 1, "one parked request");
+    assert_eq!(before.served - idle.served, 1, "one parked request");
     let parked_rows = rig.harness.engine(helper);
     let local = rig
         .harness
@@ -996,7 +990,7 @@ fn a_read_parked_after_its_visit_holds_no_engine_row_and_is_ended_by_the_fence()
         .expect("the engine is observed beside the parked READ");
     println!(
         "{name} parked: admitted={} parked={} read_admissions_waiting=1 engine_rows(idle={idle_rows:?} parked={parked_rows:?}) base_readers={}",
-        before.admitted, before.parked, local.base_readers
+        before.active, before.active, local.base_readers
     );
     checks.that(parked_rows == idle_rows && local.base_readers == 0, || {
         format!(
@@ -1016,7 +1010,7 @@ fn a_read_parked_after_its_visit_holds_no_engine_row_and_is_ended_by_the_fence()
     let busy = work(&rig, token);
     checks.that(
         rig.harness.phase(token) == NativePhase::Ready
-            && (busy.admitted, busy.parked, busy.terminal) == (1, 1, before.terminal)
+            && (busy.active, busy.terminal) == (1, before.terminal)
             && rig.store.read_work().waiting == 1,
         || format!("{name}: the busy Unmount had an effect: {before:?} -> {busy:?}"),
     );
@@ -1039,7 +1033,7 @@ fn a_read_parked_after_its_visit_holds_no_engine_row_and_is_ended_by_the_fence()
             .as_ref()
             .is_some_and(|facts| facts.fenced == 1)
             && custody.work.is_some_and(|work| {
-                (work.received, work.admitted, work.retained) == (0, 0, 0)
+                (work.active, work.retained) == (0, 0)
                     && work.loops_joined == work.loops_configured
                     && work.loops_configured != 0
             }),
@@ -1066,7 +1060,7 @@ fn a_read_parked_after_its_visit_holds_no_engine_row_and_is_ended_by_the_fence()
         custody.forced.as_ref().map(|facts| facts.fenced),
         custody
             .work
-            .map(|work| (work.received, work.admitted, work.retained)),
+            .map(|work| (work.active, work.retained)),
         held.grants,
         after.grants,
         after.waiting
@@ -1083,12 +1077,6 @@ fn a_read_parked_after_its_visit_holds_no_engine_row_and_is_ended_by_the_fence()
     assert!(mount_entry(&ready.directory).is_none());
     abandon(rig);
     checks.done(name);
-}
-
-/// FP-34, terminal half: twenty cold readers saturate the mount.
-#[test]
-fn fp34_force_ends_every_admitted_and_received_callback_of_a_saturated_mount() {
-    parked_readers_are_ended("FP-34 terminal", "fp34-terminal", COLD);
 }
 
 /// FP-22-FS, in this container's single mount namespace: a reference in A

@@ -9,7 +9,7 @@ mod model;
 #[allow(dead_code)]
 #[path = "support/installed_store.rs"]
 mod support;
-use drive::{content_root, evidence, live, settled, Do, Rig, Session};
+use drive::{content_root, evidence, live, Do, Rig, Session};
 use layerfs_content::{file::Extent, FileView, ObjectId};
 use layerfs_daemon::store::BoundWorkspace;
 use layerfs_history::CommitStagedOutcome;
@@ -116,7 +116,6 @@ fn shifted(label: &str, size: usize, start: usize, removed: usize, mutate_edge: 
         &live(&workspace),
         "live before Commit",
     );
-    settled(&rig.owner.client(), 0);
     let success = workspace
         .commit_captured()
         .unwrap_or_else(|e| panic!("{e:?}"));
@@ -159,7 +158,6 @@ fn shifted(label: &str, size: usize, start: usize, removed: usize, mutate_edge: 
         )
     };
     rig.close(&fresh);
-    settled(&rig.owner.client(), 0);
     rig.close(&workspace);
     drop(session);
     drop(workspace);
@@ -231,7 +229,6 @@ fn deleted_suffix(mutate_edge: bool) {
         source = stop;
     }
     session.apply(Do::Truncate("payload.bin", (MIB - CELL) as u64));
-    settled(&rig.owner.client(), 0);
     let before = rig.owner.client().diagnostics().unwrap();
     let success = workspace
         .commit_captured()
@@ -242,14 +239,8 @@ fn deleted_suffix(mutate_edge: bool) {
         other => panic!("{other:?}"),
     };
     drop(success);
-    settled(&rig.owner.client(), 0);
     let after = rig.owner.client().diagnostics().unwrap();
-    let jobs: u64 = before
-        .completed
-        .iter()
-        .zip(after.completed)
-        .map(|(a, b)| b - a)
-        .sum();
+    let jobs: u64 = before.jobs.iter().zip(after.jobs).map(|(a, b)| b - a).sum();
     evidence(format_args!(
         "EDGE_DELETE_GUARD owner_jobs={jobs} work={work:?}"
     ));

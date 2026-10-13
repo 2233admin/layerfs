@@ -10,7 +10,7 @@ use crate::{
     wire::{Reader, Writer},
 };
 use layerfs_history::PageResult;
-const MAGIC: &[u8] = b"LFSA\x01";
+const MAGIC: &[u8] = b"LFSA\x02";
 impl Answer {
     /// Encodes one bounded original result; publication is independent of delivery.
     pub fn encode(&self) -> Result<Vec<u8>, ControlError> {

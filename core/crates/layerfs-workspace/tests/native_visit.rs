@@ -242,11 +242,9 @@ fn a_read_visit_decides_in_one_job_from_resident_objects_or_names_the_facts_it_n
 
     // The facts are read outside the owner, from the Workspace's base.
     let mut facts = VisitFacts::default();
-    assert_eq!(facts.charge(), 0);
     let demand = b.demand();
     facts.supply(&base, &wanted, None).unwrap();
     assert!(b.demand() > demand);
-    assert!(facts.charge() > 0);
 
     // The next visit decides from them, with nothing resident, and takes the
     // answer's kernel reference in its one transaction.

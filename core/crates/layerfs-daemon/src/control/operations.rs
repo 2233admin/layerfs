@@ -4,12 +4,9 @@ use super::{
     types::NativeFailure,
     Failure, Service, Success,
 };
-use crate::{
-    store::{
-        BindPhase, BindRequest, BoundWorkspace, CapturedConstruction, CommitError, CommitFailure,
-        CommitSuccess,
-    },
-    Command, OwnerError,
+use crate::store::{
+    BindPhase, BindRequest, BoundWorkspace, CapturedConstruction, CommitError, CommitFailure,
+    CommitSuccess,
 };
 use layerfs_bridge::control::{
     Activity, ControlCode, Reply, Request, WorkspaceToken, HISTORY_WINDOW,
@@ -254,17 +251,12 @@ impl Service {
     pub(super) fn job(
         &self,
         route: layerfs_overlay::Route,
-        command: Command,
-    ) -> Result<crate::Completion, Failure> {
-        self.owner
-            .try_submit(Some(route), command)
-            .map_err(|(cause, command)| {
-                Failure::Owner(OwnerError::Unattempted {
-                    cause: Box::new(cause),
-                    command: Box::new(command),
-                })
-            })?
-            .wait()
-            .map_err(Failure::Owner)
+        command: impl FnOnce(
+                &crate::OwnerClient,
+                Option<layerfs_overlay::Route>,
+            ) -> Result<crate::JobReceipt, crate::OwnerError>
+            + Send,
+    ) -> Result<crate::JobReceipt, Failure> {
+        command(&self.owner, Some(route)).map_err(Failure::Owner)
     }
 }

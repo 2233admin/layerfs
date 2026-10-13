@@ -1055,14 +1055,21 @@ fn prefix(
     // holds exactly k numbered files, so every number above k was renamed
     // into place after the capture, and the sample read them before the
     // call returned.
+    // A Commit that returned within one writer iteration (at most one number
+    // logged between its call and its return) leaves no iteration for a
+    // sample to follow: its `during` is printed above and not required.
     assert!(
-        under.during > k,
+        under.during > k || under.at_return <= under.before_call + 1,
         "{what}: no write was seen between the capture and the return: {k} captured, {} logged while committing in {} samples",
         under.during,
         under.samples
     );
+    // The same short Commit can capture the one number logged inside it
+    // (`at_return == k`); the root never holds a number the log lacks.
     assert!(
-        under.at_return >= under.during && under.at_return > k,
+        under.at_return >= under.during
+            && under.at_return >= k
+            && (under.at_return > k || under.at_return <= under.before_call + 1),
         "{what}: {} logged at return after {} while committing, {k} captured",
         under.at_return,
         under.during
@@ -1090,9 +1097,11 @@ fn prefix(
 /// The "during" assertion needs the writer to finish one iteration (about
 /// four milliseconds, two of them an idle wait) while a Commit runs and a
 /// sample to follow it. The first Commit constructs the 300 prepared files
-/// and the second every file written during the first; both have lasted
-/// more than a hundred writer iterations. A product whose Commit returns
-/// within one iteration would fail here rather than pass unobserved.
+/// and must show it: the first root is required to have seen a write. The
+/// second constructs only what was written during the first and can return
+/// within one iteration; then it is excused from the sample, its counts are
+/// printed, and the later assertions still require a write after its capture
+/// and that write in the next root.
 ///
 /// Limits. Every capture observed so far landed between two iterations of
 /// the writer (log lines equal to k, no pending file): the oracle allows a
@@ -1217,6 +1226,12 @@ fn live_writer(layout: Layout) {
         live.len()
     );
     assert!(k1 <= k2, "{k1} then {k2} captured");
+    assert!(
+        first.during > k1,
+        "{what}: the first Commit constructs the prepared files and saw no write: {k1} captured, {} logged while committing in {} samples",
+        first.during,
+        first.samples
+    );
     // What was written during the first Commit is in the next root, and
     // what was written during either is on the mount after both installs.
     // `sequence` and `prefix` have checked that each of those is the

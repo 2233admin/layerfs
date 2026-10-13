@@ -44,11 +44,11 @@ mod rig;
 #[path = "support/installed_store.rs"]
 mod support;
 use counts::Counting;
-use drive::{evidence, settled};
+use drive::evidence;
 use layerfs_daemon::{
     bootstrap::{open_store_observed, OpenedStore},
     store::{BoundWorkspace, CommitError},
-    Command, Completion, Owner, OwnerClient, OwnerConfig, OwnerWork, Response, ServiceClass,
+    JobReceipt, Owner, OwnerClient, OwnerConfig, OwnerWork, Response, ServiceClass,
 };
 use layerfs_history::CommitStagedOutcome;
 use layerfs_overlay::{ProfileConfig, Route, StatementKind};
@@ -318,12 +318,15 @@ struct Sample {
     read_ns: u64,
 }
 /// One owner job as the product's synchronous ports wait for it.
-fn job(owner: &OwnerClient, route: Route, command: Command) -> Completion {
-    owner
-        .try_submit(Some(route), command)
-        .unwrap_or_else(|(error, _)| panic!("{error:?}"))
-        .wait()
-        .unwrap_or_else(|error| panic!("{error:?}"))
+fn job(
+    owner: &OwnerClient,
+    route: Route,
+    command: impl FnOnce(
+        &layerfs_daemon::OwnerClient,
+        Option<layerfs_overlay::Route>,
+    ) -> Result<layerfs_daemon::JobReceipt, layerfs_daemon::OwnerError>,
+) -> JobReceipt {
+    command(owner, Some(route)).unwrap_or_else(|error| panic!("{error:?}"))
 }
 /// The product constructor's own steps through the public driver, with the
 /// constructor-thread ports clocked.
@@ -343,14 +346,24 @@ fn commit(run: &Run, workspace: &BoundWorkspace) -> Sample {
         let reader = match job(
             overlay,
             route,
-            Command::AcquireCapturedReader { capture, request },
+            |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.acquire_captured_reader(job_route, capture, request)
+            },
         )
         .result()
         {
             Ok(Response::CapturedReader(Some(reader))) => *reader,
             other => panic!("{other:?}"),
         };
-        let owner = match job(overlay, route, Command::AcquireOperation { request }).result() {
+        let owner = match job(
+            overlay,
+            route,
+            |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.acquire_operation(job_route, request)
+            },
+        )
+        .result()
+        {
             Ok(Response::Operation(Some(owner))) => *owner,
             other => panic!("{other:?}"),
         };
@@ -375,12 +388,22 @@ fn commit(run: &Run, workspace: &BoundWorkspace) -> Sample {
         sample.read_calls = seen.read_calls;
         sample.read_ns = seen.read_ns;
         let releasing = Instant::now();
-        assert!(job(overlay, route, Command::ReleaseCapturedReader(reader))
-            .result()
-            .is_ok());
-        assert!(job(overlay, route, Command::ReleaseOperation(owner))
-            .result()
-            .is_ok());
+        assert!(job(
+            overlay,
+            route,
+            |job_client: &layerfs_daemon::OwnerClient, job_route| job_client
+                .release_captured_reader(job_route, reader)
+        )
+        .result()
+        .is_ok());
+        assert!(job(
+            overlay,
+            route,
+            |job_client: &layerfs_daemon::OwnerClient, job_route| job_client
+                .release_operation(job_route, owner)
+        )
+        .result()
+        .is_ok());
         sample.release = nanos(releasing);
         closed = Some(Instant::now());
         Ok::<_, CommitError>(built.root)
@@ -420,7 +443,6 @@ struct Interval {
     write_transactions: u64,
     maintenance_jobs: u64,
     maintenance_ns: u64,
-    peak_queued: u64,
     writer_transactions: u64,
     writer_writes: u64,
     writer_transaction_ns: u64,
@@ -441,10 +463,9 @@ fn interval(before: &Counters, after: &Counters, wall: u64) -> Interval {
         ..Interval::default()
     };
     for class in 0..6 {
-        interval.jobs[class] = after.owner.completed[class] - before.owner.completed[class];
-        interval.service[class] = after.owner.service_ns[class] - before.owner.service_ns[class];
-        interval.waited[class] =
-            after.owner.queue_wait_ns[class] - before.owner.queue_wait_ns[class];
+        interval.jobs[class] = after.owner.jobs[class] - before.owner.jobs[class];
+        interval.service[class] = after.owner.hold_ns[class] - before.owner.hold_ns[class];
+        interval.waited[class] = after.owner.lock_wait_ns[class] - before.owner.lock_wait_ns[class];
     }
     let sql = after
         .owner
@@ -455,7 +476,6 @@ fn interval(before: &Counters, after: &Counters, wall: u64) -> Interval {
     interval.write_transactions = sql.statements[StatementKind::Commit as usize].attempts;
     interval.maintenance_jobs = after.owner.maintenance_jobs - before.owner.maintenance_jobs;
     interval.maintenance_ns = after.owner.maintenance_ns - before.owner.maintenance_ns;
-    interval.peak_queued = after.owner.peak_queued as u64;
     let (w, v) = (&after.writer, &before.writer);
     interval.writer_transactions = w.transactions - v.transactions;
     interval.writer_writes = w.write_transactions - v.write_transactions;
@@ -486,7 +506,6 @@ struct Run {
 impl Run {
     /// Read while no Workspace has a job or a completion outstanding.
     fn counters(&self) -> Counters {
-        settled(&self.client, 0);
         let store = self.opened.diagnostics().unwrap();
         let reads = self.opened.store.read_work();
         let cache = self.opened.store.cache_work().unwrap();
@@ -682,7 +701,7 @@ fn report(workspaces: usize, kind: &str, commits: &[Sample], intervals: &[Interv
     let busy = intervals.iter().map(|interval| interval.cpu).sum::<u64>() as f64;
     let name = format!("MULTI_WORKSPACE workspaces={workspaces} rounds={kind}");
     evidence(format_args!(
-        "{name} commits={} commit_ms({}) command_ms={} elapsed_ms={} elapsed_per_commit_ms={} cpu_thread_ms={} cpu_process_per_commit_ms={} cores_busy={:.2} owner_busy={:.2} peak_queued={}",
+        "{name} commits={} commit_ms({}) command_ms={} elapsed_ms={} elapsed_per_commit_ms={} cpu_thread_ms={} cpu_process_per_commit_ms={} cores_busy={:.2} owner_busy={:.2}",
         commits.len(),
         spread(commits.iter().map(|sample| sample.wall).collect()),
         ms(m(|s| s.command)),
@@ -692,11 +711,6 @@ fn report(workspaces: usize, kind: &str, commits: &[Sample], intervals: &[Interv
         ms(busy / n),
         busy / elapsed,
         (per(|i| i.service.iter().sum()) + per(|i| i.maintenance_ns)) * n / elapsed,
-        intervals
-            .iter()
-            .map(|interval| interval.peak_queued)
-            .max()
-            .unwrap_or(0),
     ));
     evidence(format_args!(
         "{name} PARTS before_ms={} acquire_ms={} construct_ms={} release_ms={} after_ms={} record_port(calls={:.1} ms={}) reader_port(calls={:.1} ms={}) construct_outside_ports_ms={}",

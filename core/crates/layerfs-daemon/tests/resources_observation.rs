@@ -1,54 +1,8 @@
 //! Route-free Resources uses one original bounded read job and actual SQL work.
 use layerfs_daemon::application::{ResourceDiagnosticError, ResourceFailure, ResourceObservation};
-use layerfs_daemon::{Command, Owner, OwnerConfig, OwnerError, Response, ServiceClass};
+use layerfs_daemon::{Owner, OwnerConfig, OwnerError, Response, ServiceClass};
 use layerfs_overlay::{CleanupState, ProfileConfig, StatementKind};
 use std::fs;
-#[test]
-fn global_resources_uses_read_slots_and_preserves_an_unadmitted_command() {
-    let directory =
-        std::env::temp_dir().join(format!("layerfs-resource-slots-{}", std::process::id()));
-    fs::create_dir(&directory).unwrap();
-    let owner = Owner::start(
-        &directory.join("overlay.sqlite"),
-        ProfileConfig::default(),
-        OwnerConfig {
-            jobs_per_namespace: 3,
-            lifecycle_jobs_per_namespace: 1,
-            ..OwnerConfig::default()
-        },
-    )
-    .unwrap();
-    let client = owner.client();
-    let before = client.diagnostics().unwrap();
-    let mut held = Vec::new();
-    for _ in 0..3 {
-        let done = client
-            .try_submit(None, Command::Resources { global: true })
-            .unwrap()
-            .wait()
-            .unwrap();
-        assert!(matches!(done.result(), Ok(Response::Resources(_))));
-        held.push(done);
-    }
-    let admitted = client.diagnostics().unwrap();
-    assert_eq!(admitted.admitted - before.admitted, 3);
-    assert_eq!(admitted.outstanding - before.outstanding, 3);
-    assert!(matches!(
-        client.try_submit(None, Command::Resources { global: true }),
-        Err((
-            OwnerError::AdmissionFull,
-            Command::Resources { global: true }
-        ))
-    ));
-    let refused = client.diagnostics().unwrap();
-    assert_eq!(refused.admitted, admitted.admitted);
-    assert_eq!(refused.outstanding, admitted.outstanding);
-    assert_eq!(refused.sql_foreground, admitted.sql_foreground);
-    drop(held);
-    drop(client);
-    drop(owner);
-    fs::remove_dir_all(directory).unwrap();
-}
 #[test]
 fn stopped_operator_observation_retains_the_exact_unattempted_command() {
     let directory =
@@ -74,16 +28,18 @@ fn stopped_operator_observation_retains_the_exact_unattempted_command() {
     assert!(carrier.output.is_none());
     {
         let original = carrier.original.lock().unwrap();
-        assert!(matches!(
-            &*original,
-            ResourceFailure::Admission {
-                cause: OwnerError::Stopped,
-                command: Command::Resources { global: true }
+        match &*original {
+            ResourceFailure::BeforeEffect(OwnerError::Unattempted { cause, input }) => {
+                assert!(matches!(cause.as_ref(), OwnerError::Stopped));
+                input.inspect::<(Option<layerfs_overlay::Route>, bool), _>(|value| {
+                    assert_eq!(value, Some(&(None, true)))
+                });
             }
-        ));
+            other => panic!("{other:?}"),
+        }
     }
     let after = client.diagnostics().unwrap();
-    assert_eq!(after.admitted, before.admitted);
+
     assert_eq!(after.sql_foreground, before.sql_foreground);
     drop(error);
     drop(client);
@@ -91,7 +47,7 @@ fn stopped_operator_observation_retains_the_exact_unattempted_command() {
 }
 #[cfg(target_os = "linux")]
 #[test]
-fn failed_resource_receipt_and_real_output_failure_keep_both_originals_and_credit() {
+fn failed_resource_receipt_and_real_output_failure_keep_both_originals() {
     use std::io::Write;
     let directory =
         std::env::temp_dir().join(format!("layerfs-resource-identity-{}", std::process::id()));
@@ -99,16 +55,12 @@ fn failed_resource_receipt_and_real_output_failure_keep_both_originals_and_credi
     let backing = directory.join("overlay.sqlite");
     let owner = Owner::start(&backing, ProfileConfig::default(), OwnerConfig::default()).unwrap();
     let client = owner.client();
-    let before = client.diagnostics().unwrap();
     // A real external identity change in this test's own backing directory;
     // no product hook, mocked engine or failed-operation replay is involved.
     fs::rename(&backing, directory.join("original.sqlite")).unwrap();
     fs::write(&backing, b"different physical inode").unwrap();
     let observed = ResourceObservation::acquire(&client);
-    let held = client.diagnostics().unwrap();
-    assert_eq!(held.admitted - before.admitted, 1);
-    assert_eq!(held.outstanding, before.outstanding + 1);
-    assert!(held.credited_bytes > before.credited_bytes);
+
     let output = fs::File::options()
         .write(true)
         .open("/dev/full")
@@ -126,7 +78,7 @@ fn failed_resource_receipt_and_real_output_failure_keep_both_originals_and_credi
     {
         let original = carrier.original.lock().unwrap();
         let completion = match &*original {
-            ResourceFailure::Completion(completion) => completion,
+            ResourceFailure::Result(completion) => completion,
             other => panic!("{other:?}"),
         };
         assert!(matches!(
@@ -137,11 +89,7 @@ fn failed_resource_receipt_and_real_output_failure_keep_both_originals_and_credi
         ));
         assert_eq!(completion.work().sql.total().executions, 0);
     }
-    assert_eq!(
-        client.diagnostics().unwrap().credited_bytes,
-        held.credited_bytes
-    );
-    assert_eq!(client.diagnostics().unwrap().outstanding, held.outstanding);
+
     drop(error);
     drop(client);
     drop(owner);
@@ -163,11 +111,7 @@ fn global_resources_is_read_only_before_bind_and_after_raw_close() {
     .unwrap();
     let client = owner.client();
     let before = client.diagnostics().unwrap();
-    let done = client
-        .try_submit(None, Command::Resources { global: true })
-        .unwrap()
-        .wait()
-        .unwrap();
+    let done = client.resources(None, true).unwrap();
     let resources = match done.result() {
         Ok(Response::Resources(resources)) => **resources,
         other => panic!("{other:?}"),
@@ -179,47 +123,27 @@ fn global_resources_is_read_only_before_bind_and_after_raw_close() {
     assert!(done.work().sql.family(StatementKind::Begin).is_none());
     assert!(done.work().sql.family(StatementKind::Commit).is_none());
     assert_eq!(done.work().allocation.observations, 1);
-    let held = client.diagnostics().unwrap();
-    assert_eq!(held.outstanding, before.outstanding + 1);
-    assert!(held.credited_bytes > before.credited_bytes);
+
     drop(done);
     let after = client.diagnostics().unwrap();
-    assert_eq!(after.admitted - before.admitted, 1);
+
     assert_eq!(
-        after.completed[ServiceClass::Read as usize]
-            - before.completed[ServiceClass::Read as usize],
-        1
+        after.jobs[ServiceClass::Read as usize] - before.jobs[ServiceClass::Read as usize],
+        0,
+        "roster composition holds no Workspace connection"
     );
-    assert_eq!(after.scheduler_bytes, before.scheduler_bytes);
-    // The caller released its reference; the original publisher's reference
-    // may still hold that same credit. No wait or retry forces a zero snapshot.
-    assert!((before.credited_bytes..=held.credited_bytes).contains(&after.credited_bytes));
-    assert!((before.outstanding..=held.outstanding).contains(&after.outstanding));
-    assert!(matches!(
-        client.try_submit(None, Command::Resources { global: false }),
-        Err((OwnerError::InvalidAdmission, _))
-    ));
-    let open = client
-        .try_submit(
-            None,
-            Command::Open {
-                incarnation: [7; 32],
-                base_root: [8; 32],
-            },
-        )
-        .unwrap()
-        .wait()
-        .unwrap();
+
+    let refusal = client.resources(None, false).unwrap_err();
+    assert!(
+        matches!(refusal, OwnerError::Unattempted { cause, .. } if matches!(cause.as_ref(), OwnerError::InvalidAdmission))
+    );
+    let open = client.open(None, [7; 32], [8; 32]).unwrap();
     let route = match open.result() {
         Ok(Response::Opened(route)) => *route,
         other => panic!("{other:?}"),
     };
     drop(open);
-    let routed = client
-        .try_submit(Some(route), Command::Resources { global: true })
-        .unwrap()
-        .wait()
-        .unwrap();
+    let routed = client.resources(Some(route), true).unwrap();
     assert!(
         matches!(routed.result(),Ok(Response::Resources(resources)) if resources.counts.namespaces==1)
     );
@@ -234,35 +158,21 @@ fn global_resources_is_read_only_before_bind_and_after_raw_close() {
         "routed validation retained"
     );
     drop(routed);
-    let closed = client
-        .try_submit(Some(route), Command::Close)
-        .unwrap()
-        .wait()
-        .unwrap();
+    let closed = client.close(Some(route)).unwrap();
     assert!(matches!(closed.result(), Ok(Response::Done)));
     drop(closed);
     // Raw Close records the drain state. Whole-file disposal belongs to
     // terminal control, covered by workspace_databases and mounted_drain.
     let observed = client
-        .try_submit(
-            None,
-            Command::ObserveCleanup {
-                namespace: route.namespace(),
-                incarnation: [7; 32],
-            },
-        )
-        .unwrap()
-        .wait()
+        .observe_cleanup(None, route.namespace(), [7; 32])
         .unwrap();
     assert!(matches!(
         observed.result(),
         Ok(Response::CleanupState(CleanupState::Queued))
     ));
     drop(observed);
-    let pending = client
-        .try_submit(None, Command::Resources { global: true })
-        .unwrap();
-    let final_resources = pending.wait().unwrap();
+    let pending = client.resources(None, true).unwrap();
+    let final_resources = pending;
     assert!(
         matches!(final_resources.result(),Ok(Response::Resources(resources)) if resources.counts.namespaces==1)
     );

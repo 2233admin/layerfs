@@ -82,13 +82,6 @@ impl NativeInput {
     fn creates(&self) -> bool {
         matches!(self, Self::Named(operation) if operation.creates())
     }
-    fn charge(&self) -> usize {
-        match self {
-            Self::Write { data, .. } => data.charge(),
-            Self::Named(Operation::Write { data, .. }) => data.charge(),
-            _ => 0,
-        }
-    }
 }
 /// One native mutation request as its callback received it.
 #[derive(Clone, Debug)]
@@ -272,9 +265,7 @@ impl NativeReadVisit {
     pub const fn mount(&self) -> NativeMount {
         self.mount
     }
-    pub fn charge(&self) -> usize {
-        self.facts.charge() + 255
-    }
+
     /// The answer, a refusal or the needs of an undecided visit. An
     /// undecided visit has written nothing. A decided OPEN or OPENDIR
     /// carries its descriptor as the observation's open or directory
@@ -310,9 +301,7 @@ impl NativeMutationVisit {
     pub const fn mount(&self) -> NativeMount {
         self.request.mount
     }
-    pub fn charge(&self) -> usize {
-        self.request.input.charge() + self.request.facts.charge() + 2 * 255 + 4096
-    }
+
     /// The applied outcome, a definite answer without effect, or the needs
     /// of an undecided visit. An undecided visit has written nothing.
     pub fn perform(&self, db: &Overlay) -> NativeMutationOutcome {

@@ -1,11 +1,11 @@
 //! How far a failed base demand reaches, without a kernel mount: the real
-//! owner, the real Store read sessions and the real dispatcher lane. A Store
+//! Workspace service, the real Store read sessions and the real request drain. A Store
 //! read failure ends the one request that made the demand and leaves its
-//! original cause in the mount's bounded record; an owner job's failure is
+//! original cause in the mount's bounded record; a Workspace job's failure is
 //! retained as before. The uncertain read session is staged the way
 //! `store_read_service.rs` stages it, through the provider's public port with
-//! the provider's own answer. Public API only; every wait is bounded and no
-//! thread is spawned by the test.
+//! the provider's own answer. Public API only; every wait is bounded. Each
+//! served request runs on its own thread, as a mount worker runs it.
 #[path = "support/installed_store.rs"]
 mod support;
 use layerfs_content::{filesystem::PathName, ObjectId};
@@ -13,8 +13,7 @@ use layerfs_daemon::{
     store::{
         BindRequest, BoundWorkspace, PortError, ReadAdmissionError, ReadLimits, Store, StoreReader,
     },
-    Command, Completion, NativeJob, NativeReply, Owner, OwnerClient, OwnerConfig, Response,
-    ServiceClass,
+    JobReceipt, NativeReply, Owner, OwnerClient, OwnerConfig, Response, ServiceClass,
 };
 use layerfs_fuse::{
     operations::{
@@ -22,7 +21,7 @@ use layerfs_fuse::{
         NativeRead, ReadDataInput, ReadFailure,
     },
     ports::{FailedDemands, Fence, MountServices, RequestServices},
-    Dispatch, DispatchConfig, FailureView, MountQueue, RequestDisposition,
+    FailureView, MountRequests, RequestDisposition,
 };
 use layerfs_history::{HistoryCatalog, WorkspaceId};
 use layerfs_overlay::{NativeMount, ProfileConfig, READ_WINDOW};
@@ -80,12 +79,32 @@ fn until(what: &str, mut condition: impl FnMut() -> bool) {
         std::thread::yield_now();
     }
 }
-fn finish(client: &OwnerClient, route: layerfs_overlay::Route, command: Command) -> Completion {
-    let pending = match client.try_submit(Some(route), command) {
-        Ok(pending) => pending,
-        Err((error, command)) => panic!("admission of {command:?}: {error:?}"),
-    };
-    wait(pending).unwrap()
+/// One request on its own receive thread, as a mount worker runs it.
+fn serve(
+    queue: &MountRequests,
+    input: usize,
+    future: layerfs_fuse::RequestFuture,
+) -> std::thread::JoinHandle<()> {
+    let queue = queue.clone();
+    std::thread::spawn(move || {
+        queue
+            .receive()
+            .unwrap()
+            .request(input)
+            .unwrap()
+            .serve(future)
+            .unwrap()
+    })
+}
+fn finish(
+    client: &OwnerClient,
+    route: layerfs_overlay::Route,
+    command: impl FnOnce(
+        &layerfs_daemon::OwnerClient,
+        Option<layerfs_overlay::Route>,
+    ) -> Result<layerfs_daemon::JobReceipt, layerfs_daemon::OwnerError>,
+) -> JobReceipt {
+    command(client, Some(route)).unwrap_or_else(|error| panic!("{error:?}"))
 }
 
 struct Uncertain;
@@ -122,7 +141,7 @@ async fn end(failure: ReadFailure) -> RequestDisposition {
 }
 
 /// One bound Workspace over a Store with two read sessions and no object
-/// cache, a native mount group and a dispatcher lane, and no kernel
+/// cache, a native mount group and its request drain, and no kernel
 /// connection. The Store is composed from the public pieces `open_store`
 /// composes so that the test keeps each read session's provider.
 struct Rig {
@@ -136,8 +155,7 @@ struct Rig {
     bound: BoundWorkspace,
     root: u64,
     mount: NativeMount,
-    pool: Dispatch,
-    queue: MountQueue,
+    queue: MountRequests,
 }
 impl Rig {
     fn new(label: &str, authority: u8) -> Self {
@@ -206,19 +224,16 @@ impl Rig {
         let done = finish(
             &client,
             bound.route(),
-            Command::Native(NativeJob::Mount { root }),
+            |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.native_mount(job_route, root)
+            },
         );
         let mount = match done.result() {
             Ok(Response::Native(NativeReply::Mount(mount))) => *mount,
             other => panic!("mount: {other:?}"),
         };
         drop(done);
-        let pool = Dispatch::start(DispatchConfig {
-            read_handles: 2,
-            namespaces: 1,
-        })
-        .unwrap();
-        let queue = pool.register(mount).unwrap();
+        let queue = MountRequests::new(mount);
         Self {
             fixture,
             readers,
@@ -230,7 +245,6 @@ impl Rig {
             bound,
             root,
             mount,
-            pool,
             queue,
         }
     }
@@ -255,11 +269,13 @@ impl Rig {
     }
     /// Revocation refuses while any request source or read row remains, so
     /// its success shows that every request gave back what it held.
-    fn revoke_and_stop(mut self, retained: bool) {
+    fn revoke_and_stop(self, retained: bool) {
         let done = finish(
             &self.client,
             self.bound.route(),
-            Command::Native(NativeJob::Revoke(self.mount)),
+            |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.native_revoke(job_route, self.mount)
+            },
         );
         assert!(
             matches!(done.result(), Ok(Response::Native(NativeReply::Done))),
@@ -269,22 +285,14 @@ impl Rig {
         drop(done);
         assert_eq!(self.store.read_work().outstanding, 0);
         if retained {
-            // A retained request keeps its lane slot and the original owner
-            // result it failed with; nothing disposes it but the lane's end.
-            until("only the retained result is outstanding", || {
-                self.owner_work().outstanding == 1
-            });
+            // A retained request keeps the original result it failed with;
+            // nothing disposes it but the end of the mount's request drain.
             assert!(self.queue.finish().is_err());
-            drop(self.pool);
             drop(self.queue);
         } else {
-            self.queue.stop_admission().unwrap();
+            self.queue.stop_receive().unwrap();
             self.queue.finish().unwrap();
-            assert!(self.pool.stop().unwrap().clean());
         }
-        until("owner credits returned", || {
-            self.client.diagnostics().unwrap().outstanding == 0
-        });
         drop(self.bound);
         self.owner.stop().unwrap();
         drop(self.store);
@@ -312,12 +320,10 @@ fn a_failed_base_demand_ends_its_own_request_and_keeps_its_original_cause() {
     let (send, observed) = mpsc::channel();
     {
         let services = rig.services(&fence);
-        rig.queue
-            .receive()
-            .unwrap()
-            .admit(11)
-            .unwrap()
-            .handoff(Box::pin(async move {
+        serve(
+            &rig.queue,
+            11,
+            Box::pin(async move {
                 let prepared = NativeRead::prepare(
                     services,
                     mount,
@@ -346,8 +352,8 @@ fn a_failed_base_demand_ends_its_own_request_and_keeps_its_original_cause() {
                         end(failure).await
                     }
                 }
-            }))
-            .unwrap();
+            }),
+        );
     }
     let (fenced, cause) = observed
         .recv_timeout(WAIT)
@@ -358,7 +364,7 @@ fn a_failed_base_demand_ends_its_own_request_and_keeps_its_original_cause() {
     // failed demand found it holding nothing, and it was not fenced.
     assert!(!fenced);
     until("the request left the lane", || {
-        rig.queue.work().unwrap().admitted == 0
+        rig.queue.work().unwrap().active == 0
     });
     let lane = rig.queue.work().unwrap();
     assert_eq!(
@@ -367,15 +373,14 @@ fn a_failed_base_demand_ends_its_own_request_and_keeps_its_original_cause() {
     );
     assert!(!fence.stopped());
     assert_eq!(fence.terminal_replies(), 0);
-    until("the request's owner results were returned", || {
-        rig.owner_work().outstanding == 0
-    });
     // Its whole owner work was the one undecided visit before the demand:
     // no source was acquired, so no disposal call followed the failure.
     let after = rig.owner_work();
-    let class =
-        |work: &layerfs_daemon::OwnerWork, class: ServiceClass| work.completed[class as usize];
-    assert_eq!(after.admitted, before.admitted + 1);
+    let class = |work: &layerfs_daemon::OwnerWork, class: ServiceClass| work.jobs[class as usize];
+    assert_eq!(
+        after.jobs.iter().sum::<u64>(),
+        before.jobs.iter().sum::<u64>() + 1
+    );
     assert_eq!(
         class(&after, ServiceClass::Read),
         class(&before, ServiceClass::Read) + 1
@@ -421,12 +426,10 @@ fn a_failed_base_demand_ends_its_own_request_and_keeps_its_original_cause() {
     let (send, found) = mpsc::channel();
     {
         let services = rig.services(&fence);
-        rig.queue
-            .receive()
-            .unwrap()
-            .admit(11)
-            .unwrap()
-            .handoff(Box::pin(async move {
+        serve(
+            &rig.queue,
+            11,
+            Box::pin(async move {
                 let answer = match NativeRead::prepare(
                     services,
                     mount,
@@ -448,15 +451,15 @@ fn a_failed_base_demand_ends_its_own_request_and_keeps_its_original_cause() {
                     Ok(()) => RequestDisposition::Complete,
                     Err(failure) => RequestDisposition::Retained(Box::new(failure)),
                 }
-            }))
-            .unwrap();
+            }),
+        );
     }
     let serial = found
         .recv_timeout(WAIT)
         .expect("the later lookup was answered")
         .expect("the later lookup found the file");
     until("the later request left the lane", || {
-        rig.queue.work().unwrap().admitted == 0
+        rig.queue.work().unwrap().active == 0
     });
     let lane = rig.queue.work().unwrap();
     assert_eq!((lane.completed, lane.retained), (2, 0));
@@ -548,10 +551,13 @@ fn a_failed_base_demand_ends_its_own_request_and_keeps_its_original_cause() {
     assert_eq!(failure.data_input(), Some(window));
     wait(failure.relinquish()).unwrap();
     let after = rig.owner_work();
-    assert_eq!(after.admitted, before.admitted + 1);
     assert_eq!(
-        after.completed[ServiceClass::Read as usize],
-        before.completed[ServiceClass::Read as usize] + 1
+        after.jobs.iter().sum::<u64>(),
+        before.jobs.iter().sum::<u64>() + 1
+    );
+    assert_eq!(
+        after.jobs[ServiceClass::Read as usize],
+        before.jobs[ServiceClass::Read as usize] + 1
     );
 
     // OPENDIR is a visit too: it needs the directory's base inode, is
@@ -569,10 +575,10 @@ fn a_failed_base_demand_ends_its_own_request_and_keeps_its_original_cause() {
     };
     stopped(failure.base_demand().unwrap().cause());
     assert!(!failure.fenced());
-    let admitted = rig.owner_work().admitted;
+    let admitted = rig.owner_work().jobs.iter().sum::<u64>();
     wait(failure.relinquish()).unwrap();
     // Giving it up admits no owner job.
-    assert_eq!(rig.owner_work().admitted, admitted);
+    assert_eq!(rig.owner_work().jobs.iter().sum::<u64>(), admitted);
 
     let before = rig.owner_work();
     let failure = match wait(NativeMutation::perform(
@@ -597,10 +603,13 @@ fn a_failed_base_demand_ends_its_own_request_and_keeps_its_original_cause() {
     assert!(failure.publication().is_none());
     wait(failure.relinquish()).unwrap();
     let after = rig.owner_work();
-    assert_eq!(after.admitted, before.admitted + 1);
     assert_eq!(
-        after.completed[ServiceClass::Mutation as usize],
-        before.completed[ServiceClass::Mutation as usize] + 1
+        after.jobs.iter().sum::<u64>(),
+        before.jobs.iter().sum::<u64>() + 1
+    );
+    assert_eq!(
+        after.jobs[ServiceClass::Mutation as usize],
+        before.jobs[ServiceClass::Mutation as usize] + 1
     );
 
     let failure = match wait(stream.next()) {
@@ -670,24 +679,22 @@ fn an_owner_job_failure_is_not_a_base_demand_and_is_still_retained() {
     };
 
     let request = through_closed(2);
-    rig.queue
-        .receive()
-        .unwrap()
-        .admit(11)
-        .unwrap()
-        .handoff(Box::pin(async move {
+    serve(
+        &rig.queue,
+        11,
+        Box::pin(async move {
             match request.await {
                 Err(failure) => end(failure).await,
                 Ok(_) => panic!("a closed directory handle acquired a source"),
             }
-        }))
-        .unwrap();
+        }),
+    );
     until("the owner failure was retained", || {
         rig.queue.work().unwrap().retained == 1
     });
     let reason = rig
         .queue
-        .inspect_retained(0, |failure| {
+        .inspect_failure(0, |failure| {
             let FailureView::Request(error) = failure else {
                 panic!("expected the request's original failure")
             };
@@ -698,8 +705,12 @@ fn an_owner_job_failure_is_not_a_base_demand_and_is_still_retained() {
             error.reason.to_string()
         })
         .unwrap();
+    // The failure is retained before its worker gives the request back.
+    until("the retained request left its worker", || {
+        rig.queue.work().unwrap().active == 0
+    });
     let lane = rig.queue.work().unwrap();
-    assert_eq!((lane.completed, lane.retained, lane.admitted), (0, 1, 1));
+    assert_eq!((lane.completed, lane.retained, lane.active), (0, 1, 0));
 
     // The relinquisher itself returns such a failure unchanged.
     let failure = match wait(through_closed(3)) {
@@ -707,10 +718,10 @@ fn an_owner_job_failure_is_not_a_base_demand_and_is_still_retained() {
         Ok(_) => panic!("a closed directory handle acquired a source"),
     };
     assert!(failure.base_demand().is_none());
-    let admitted = rig.owner_work().admitted;
+    let admitted = rig.owner_work().jobs.iter().sum::<u64>();
     let failure = wait(failure.relinquish()).unwrap_err();
     assert_eq!(failure.request(), 3);
-    assert_eq!(rig.owner_work().admitted, admitted);
+    assert_eq!(rig.owner_work().jobs.iter().sum::<u64>(), admitted);
     drop(failure);
 
     // Nothing was recorded as a failed base demand, and no reader was touched.

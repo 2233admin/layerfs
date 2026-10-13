@@ -10,8 +10,8 @@ use std::{
     sync::Arc,
 };
 
-/// Daemon-local engine. The daemon runs short jobs on it one exclusive turn
-/// at a time, on its owner thread or on the thread that submitted the job.
+/// Daemon-local engine of one Workspace. The daemon runs short jobs on it one
+/// at a time, each on its calling thread under the Workspace lock.
 pub struct Overlay {
     pub(crate) identity: u64,
     pub(crate) connection: Connection,
@@ -112,6 +112,11 @@ impl Overlay {
     /// Bounded cumulative statement-family observations, not phase-local memory.
     pub fn diagnostics(&self) -> DatabaseWork {
         *self.work.borrow()
+    }
+    /// Whether an uncertain outcome closed this engine to every later job and
+    /// maintenance step. It is never cleared.
+    pub fn quarantined(&self) -> bool {
+        self.quarantined.get()
     }
     /// Whether a maintenance turn may find work: the connection-local hints
     /// that live `maintain` consults. False is exact; true can

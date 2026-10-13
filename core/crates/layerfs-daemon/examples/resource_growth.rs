@@ -19,7 +19,7 @@ mod produce;
 mod support;
 #[global_allocator]
 static ALLOCATOR: allocation::Observed = allocation::Observed;
-use layerfs_daemon::{store::BindRequest, Command, Owner, OwnerConfig, Response};
+use layerfs_daemon::{store::BindRequest, Owner, OwnerConfig, Response};
 use layerfs_history::{BranchId, WorkspaceId};
 use std::{
     fs,
@@ -99,13 +99,7 @@ fn main() {
     }
     observe::phase("close");
     assert!(matches!(
-        owner
-            .client()
-            .try_submit(Some(bound.route()), Command::Close)
-            .unwrap()
-            .wait()
-            .unwrap()
-            .result(),
+        owner.client().close(Some(bound.route())).unwrap().result(),
         Ok(Response::Done)
     ));
     drop(bound);

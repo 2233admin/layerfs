@@ -2,9 +2,8 @@
 #[path = "support/installed_store.rs"]
 mod support;
 use layerfs_daemon::{
-    bootstrap::open_store, store::BindRequest, Command, Completion, NativeDirectoryJob,
-    NativeDirectoryReply, NativeJob, NativeReply, Owner, OwnerClient, OwnerConfig, Pending,
-    Response,
+    bootstrap::open_store, store::BindRequest, JobReceipt, NativeDirectoryReply, NativeReply,
+    Owner, OwnerClient, OwnerConfig, Response,
 };
 use layerfs_history::WorkspaceId;
 use layerfs_overlay::{ProfileConfig, Route, StatementKind};
@@ -12,34 +11,16 @@ use layerfs_workspace::{
     BaseView, NativeReadDecision, NativeReadOperation, NativeReadOutcome, NativeReadVisit,
     VisitFacts,
 };
-use std::{
-    future::Future,
-    pin::Pin,
-    sync::{mpsc, Arc},
-    task::{Context, Poll, Wake, Waker},
-    time::{Duration, Instant},
-};
-struct Event(mpsc::SyncSender<()>);
-impl Wake for Event {
-    fn wake(self: Arc<Self>) {
-        let _ = self.0.try_send(());
-    }
-}
-fn finish(mut pending: Pending) -> Completion {
-    let (sender, receiver) = mpsc::sync_channel(1);
-    let waker = Waker::from(Arc::new(Event(sender)));
-    let deadline = Instant::now() + Duration::from_secs(3);
-    loop {
-        match Pin::new(&mut pending).poll(&mut Context::from_waker(&waker)) {
-            Poll::Ready(result) => return result.unwrap(),
-            Poll::Pending => receiver
-                .recv_timeout(deadline.saturating_duration_since(Instant::now()))
-                .expect("original owner completion did not wake"),
-        }
-    }
-}
-fn job(client: &OwnerClient, route: Route, command: Command) -> Completion {
-    finish(client.try_submit(Some(route), command).unwrap())
+use std::sync::Arc;
+fn job(
+    client: &OwnerClient,
+    route: Route,
+    command: impl FnOnce(
+        &layerfs_daemon::OwnerClient,
+        Option<layerfs_overlay::Route>,
+    ) -> Result<layerfs_daemon::JobReceipt, layerfs_daemon::OwnerError>,
+) -> JobReceipt {
+    command(client, Some(route)).unwrap_or_else(|error| panic!("{error:?}"))
 }
 /// An OPEN or OPENDIR owner visit until it decides, reading outside the
 /// owner the base facts an undecided visit names.
@@ -48,15 +29,15 @@ fn visit(
     route: Route,
     base: &BaseView,
     make: impl Fn(Arc<VisitFacts>) -> NativeReadVisit,
-) -> (Arc<NativeReadOutcome>, Completion) {
+) -> (Arc<NativeReadOutcome>, JobReceipt) {
     let mut facts = VisitFacts::default();
     for _ in 0..4 {
         let done = job(
             client,
             route,
-            Command::Native(NativeJob::ObserveVisit(Box::new(make(Arc::new(
-                facts.clone(),
-            ))))),
+            |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.native_observe_visit(job_route, Box::new(make(Arc::new(facts.clone()))))
+            },
         );
         let original = match done.result() {
             Ok(Response::Native(NativeReply::Observed(original))) => original.clone(),
@@ -72,13 +53,6 @@ fn visit(
         }
     }
     panic!("bounded visit fact rounds")
-}
-fn dir_job(client: &OwnerClient, route: Route, command: NativeDirectoryJob) -> Completion {
-    job(
-        client,
-        route,
-        Command::Native(NativeJob::Directory(Box::new(command))),
-    )
 }
 #[test]
 fn native_lookup_uses_actual_owner_and_preserves_original_receipt_until_disposal() {
@@ -119,7 +93,13 @@ fn native_lookup_uses_actual_owner_and_preserves_original_receipt_until_disposal
         .root()
         .root_inode()
         .serial();
-    let done = job(&client, route, Command::Native(NativeJob::Mount { root }));
+    let done = job(
+        &client,
+        route,
+        |job_client: &layerfs_daemon::OwnerClient, job_route| {
+            job_client.native_mount(job_route, root)
+        },
+    );
     let mount = match done.result() {
         Ok(Response::Native(NativeReply::Mount(mount))) => *mount,
         other => panic!("{other:?}"),
@@ -151,7 +131,6 @@ fn native_lookup_uses_actual_owner_and_preserves_original_receipt_until_disposal
     assert_eq!(stat.logical_len, support::bytes(0).len() as u64);
     assert!(receipt.work().sql.family(StatementKind::Begin).is_none());
     assert!(receipt.work().sql.family(StatementKind::Commit).is_none());
-    assert!(client.diagnostics().unwrap().credited_bytes > 0);
     let serial = stat.serial;
     drop((original, receipt));
     // OPEN is one owner visit that records no request source: the visit
@@ -176,10 +155,9 @@ fn native_lookup_uses_actual_owner_and_preserves_original_receipt_until_disposal
     let done = job(
         &client,
         route,
-        Command::Native(NativeJob::RetainedFile {
-            mount,
-            request: u64::MAX - 1,
-        }),
+        |job_client: &layerfs_daemon::OwnerClient, job_route| {
+            job_client.native_retained_file(job_route, mount, u64::MAX - 1)
+        },
     );
     assert!(
         matches!(done.result(), Ok(Response::Native(NativeReply::RetainedFile(Some(retained)))) if *retained == file)
@@ -189,33 +167,32 @@ fn native_lookup_uses_actual_owner_and_preserves_original_receipt_until_disposal
     assert!(job(
         &client,
         route,
-        Command::Native(NativeJob::Forget {
-            mount,
-            serial,
-            count: 1
-        })
+        |job_client: &layerfs_daemon::OwnerClient, job_route| job_client
+            .native_forget(job_route, mount, serial, 1)
     )
     .result()
     .is_ok());
     assert!(job(
         &client,
         route,
-        Command::Native(NativeJob::CloseFile {
+        |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.native_close_file(
+            job_route,
             mount,
             serial,
-            handle: file.owner_id(),
-        })
+            file.owner_id()
+        )
     )
     .result()
     .is_ok());
     assert!(job(
         &client,
         route,
-        Command::Native(NativeJob::File {
+        |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.native_file(
+            job_route,
             mount,
             serial,
-            handle: file.owner_id(),
-        })
+            file.owner_id()
+        )
     )
     .result()
     .is_err());
@@ -242,7 +219,13 @@ fn native_lookup_uses_actual_owner_and_preserves_original_receipt_until_disposal
         )
         .unwrap();
     let before = store.work();
-    let window_reply = dir_job(&client, route, NativeDirectoryJob::Visit(visit));
+    let window_reply = job(
+        &client,
+        route,
+        |job_client: &layerfs_daemon::OwnerClient, job_route| {
+            job_client.native_directory_visit(job_route, visit)
+        },
+    );
     assert_eq!(store.work(), before, "directory owner made Store demand");
     let window = match window_reply.result() {
         Ok(Response::Native(NativeReply::Directory(NativeDirectoryReply::Window(window)))) => {
@@ -258,51 +241,61 @@ fn native_lookup_uses_actual_owner_and_preserves_original_receipt_until_disposal
     let offer = batch.publish.expect("a fresh reply publishes its names");
     let names: Vec<_> = batch.entries.into_iter().map(|entry| entry.name).collect();
     let before = store.work();
-    assert!(dir_job(
+    assert!(job(
         &client,
         route,
-        NativeDirectoryJob::Publish {
-            offer: offer.clone(),
-            names: names.clone(),
-        }
+        |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.native_directory_publish(
+            job_route,
+            offer.clone(),
+            names.clone()
+        )
     )
     .result()
     .is_ok());
     assert_eq!(store.work(), before, "directory owner made Store demand");
-    assert!(dir_job(
+    assert!(job(
         &client,
         route,
-        NativeDirectoryJob::Close {
+        |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.native_directory_close(
+            job_route,
             mount,
-            serial: directory.serial(),
-            handle: directory.owner_id(),
-        }
+            directory.serial(),
+            directory.owner_id()
+        )
     )
     .result()
     .is_ok());
     // A reply racing RELEASEDIR publishes nothing, and neither visit left
     // anything that could hold the mount.
-    assert!(
-        dir_job(&client, route, NativeDirectoryJob::Publish { offer, names })
-            .result()
-            .is_err()
+    assert!(job(
+        &client,
+        route,
+        |job_client: &layerfs_daemon::OwnerClient, job_route| job_client
+            .native_directory_publish(job_route, offer, names)
+    )
+    .result()
+    .is_err());
+    assert!(job(
+        &client,
+        route,
+        |job_client: &layerfs_daemon::OwnerClient, job_route| job_client
+            .native_revoke(job_route, mount)
+    )
+    .result()
+    .is_ok());
+    assert!(job(
+        &client,
+        route,
+        |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.close(job_route)
+    )
+    .result()
+    .is_ok());
+    assert_eq!(client.diagnostics().unwrap().closed_namespaces, 0);
+    let observed = job(
+        &client,
+        route,
+        |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.cleanup_state(job_route),
     );
-    assert!(
-        job(&client, route, Command::Native(NativeJob::Revoke(mount)))
-            .result()
-            .is_ok()
-    );
-    assert!(job(&client, route, Command::Close).result().is_ok());
-    let deadline = Instant::now() + Duration::from_secs(3);
-    loop {
-        let work = client.diagnostics().unwrap();
-        if work.closed_namespaces == 0 && work.outstanding == 0 {
-            break;
-        }
-        assert!(Instant::now() < deadline, "native result disposal deadline");
-        std::thread::yield_now();
-    }
-    let observed = job(&client, route, Command::CleanupState);
     assert!(matches!(
         observed.result(),
         Ok(Response::CleanupState(
@@ -311,7 +304,6 @@ fn native_lookup_uses_actual_owner_and_preserves_original_receipt_until_disposal
     ));
     drop(observed);
     assert!(client.maintenance_failure().unwrap().is_none());
-    assert_eq!(client.diagnostics().unwrap().receipt_overruns, 0);
     drop((base, operation, bound, store));
     owner.stop().unwrap();
     f.cleanup();

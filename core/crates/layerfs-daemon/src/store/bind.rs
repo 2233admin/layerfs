@@ -1,6 +1,6 @@
 //! One coherent snapshot and bounded root demand before local namespace creation.
 use super::{BindError, BindPhase, BindRefusal, BindRequest, BindSuccess, BoundWorkspace, Store};
-use crate::{Command, OwnerClient, OwnerError, Response};
+use crate::{OwnerClient, Response};
 use layerfs_content::filesystem::{
     attributes::{read_portable, AttributeReadWork},
     directory::decode_directory_page,
@@ -43,23 +43,16 @@ impl Store {
             })?;
             phase = BindPhase::Open;
             let pending = owner
-                .try_submit(
+                .open(
                     None,
-                    Command::Open {
-                        incarnation: request.workspace.to_bytes(),
-                        base_root: captured.effective_root.to_bytes(),
-                    },
+                    request.workspace.to_bytes(),
+                    captured.effective_root.to_bytes(),
                 )
-                .map_err(|(cause, command)| {
-                    BindError::Owner(OwnerError::Unattempted {
-                        cause: Box::new(cause),
-                        command: Box::new(command),
-                    })
-                })?;
-            let open = pending.wait().map_err(BindError::Owner)?;
+                .map_err(BindError::Owner)?;
+            let open = pending;
             let route = match open.result() {
                 Ok(Response::Opened(route)) => *route,
-                _ => return Err(BindError::Completion(Box::new(open))),
+                _ => return Err(BindError::JobReceipt(Box::new(open))),
             };
             let owner = owner.workspace_client(route).map_err(BindError::Owner)?;
             Ok(BindSuccess {

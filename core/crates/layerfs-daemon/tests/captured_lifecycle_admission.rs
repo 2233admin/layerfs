@@ -1,6 +1,6 @@
-//! Public BoundWorkspace admission covers known install and captured releases.
-//! Real reader leases stage construction; real caller-held Lifecycle results
-//! stage release. No faults, hooks or private source are compiled by this test.
+//! Public BoundWorkspace admission covers a Commit in flight and its release.
+//! Real reader leases stage construction. No faults, hooks or private source
+//! are compiled by this test.
 #[allow(dead_code)]
 #[path = "support/captured_drive.rs"]
 mod drive;
@@ -12,15 +12,12 @@ mod model;
 #[allow(dead_code)]
 #[path = "support/installed_store.rs"]
 mod support;
-use drive::{evidence, live, settled, Do, Rig, Session};
+use drive::{evidence, live, Do, Rig, Session};
 use layerfs_daemon::store::CommitError;
 use layerfs_history::CommitStagedOutcome;
 use std::{
     fs,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        mpsc, Arc,
-    },
+    sync::mpsc,
     thread,
     time::{Duration, Instant},
 };
@@ -42,7 +39,7 @@ fn bounded_join<T>(thread: thread::JoinHandle<T>) -> T {
 }
 
 #[test]
-fn known_install_keeps_admission_until_captured_owners_are_released() {
+fn commit_in_flight_refuses_duplicates_before_jobs_and_releases() {
     evidence(format_args!("LIFECYCLE_STAGE fixture_begin"));
     let rig = Rig::new("captured-lifecycle-admission", |source| {
         fs::write(source.join("payload.bin"), vec![47; 1 << 20]).unwrap()
@@ -56,9 +53,7 @@ fn known_install_keeps_admission_until_captured_owners_are_released() {
     sb.apply(Do::Create("peer.txt", 0o644));
     sb.apply(Do::Write("peer.txt", 0, b"independent B"));
     evidence(format_args!("LIFECYCLE_STAGE mutations_ready"));
-    let original = a.snapshot().unwrap().effective_root;
     let client = rig.owner.client();
-    settled(&client, 0);
     evidence(format_args!("LIFECYCLE_STAGE leases_begin"));
     let leases = holds::Leases::all(&rig.store, WAIT);
     evidence(format_args!("LIFECYCLE_STAGE leases_ready"));
@@ -91,57 +86,11 @@ fn known_install_keeps_admission_until_captured_owners_are_released() {
         thread::yield_now();
     }
     evidence(format_args!("LIFECYCLE_STAGE construction_staged={staged}"));
-    let (credit_release, credit_release_rx) = mpsc::channel();
-    let (credit_ready, credit_ready_rx) = mpsc::channel();
-    let credits_active = Arc::new(AtomicBool::new(false));
-    let credit_guard = {
-        let client = client.clone();
-        let route = a.route();
-        let active = credits_active.clone();
-        thread::spawn(move || {
-            evidence(format_args!("LIFECYCLE_STAGE credits_begin"));
-            let credits = holds::Credits::lifecycle(&client, route, 2, WAIT);
-            active.store(true, Ordering::Release);
-            let _ = credit_ready.send(credits.count());
-            evidence(format_args!("LIFECYCLE_STAGE credits_ready"));
-            let _ = credit_release_rx.recv_timeout(WAIT);
-            active.store(false, Ordering::Release);
-            credits.release();
-            evidence(format_args!("LIFECYCLE_STAGE supervised_credits_released"));
-        })
-    };
-    let credits_ready = credit_ready_rx.recv_timeout(WAIT + WAIT).ok() == Some(2);
-    evidence(format_args!(
-        "LIFECYCLE_STAGE credits_observed={credits_ready}"
-    ));
-    let _ = lease_release.send(());
-    bounded_join(lease_guard);
-    evidence(format_args!("LIFECYCLE_STAGE readers_returned"));
-    let until = Instant::now() + WAIT;
-    let mut installed = false;
-    while Instant::now() < until {
-        if a.snapshot().unwrap().effective_root != original {
-            installed = true;
-            break;
-        }
-        if first.is_finished() {
-            break;
-        }
-        thread::yield_now();
-    }
-    evidence(format_args!("LIFECYCLE_STAGE installed={installed}"));
-    // An observation interval under real held ownership, not a speed gate.
-    let until = Instant::now() + Duration::from_millis(100);
-    let mut active_during_releases = installed && credits_active.load(Ordering::Acquire);
-    while Instant::now() < until && credits_active.load(Ordering::Acquire) {
-        active_during_releases &= a.commit_in_flight();
-        thread::yield_now();
-    }
-    evidence(format_args!(
-        "LIFECYCLE_STAGE active_during_releases={active_during_releases} diagnostics_begin"
-    ));
-    let admitted_before_duplicate = client.diagnostics().unwrap().admitted;
-    let duplicate = if active_during_releases {
+    // A's Commit is in flight for as long as its construction waits for a
+    // reader; both duplicate APIs refuse before any connection job.
+    let in_flight = staged && a.commit_in_flight();
+    let jobs_before_duplicate = client.diagnostics().unwrap().jobs.iter().sum::<u64>();
+    let duplicate = if in_flight {
         let captured = a
             .commit_captured()
             .expect_err("duplicate captured lifecycle must refuse");
@@ -153,10 +102,14 @@ fn known_install_keeps_admission_until_captured_owners_are_released() {
     } else {
         false
     };
-    let duplicate_jobs = client.diagnostics().unwrap().admitted - admitted_before_duplicate;
+    let duplicate_jobs =
+        client.diagnostics().unwrap().jobs.iter().sum::<u64>() - jobs_before_duplicate;
     evidence(format_args!(
         "LIFECYCLE_STAGE duplicate_done={duplicate} duplicate_jobs={duplicate_jobs}"
     ));
+    let _ = lease_release.send(());
+    bounded_join(lease_guard);
+    evidence(format_args!("LIFECYCLE_STAGE readers_returned"));
     let (peer_tx, peer_rx) = mpsc::channel();
     let peer = {
         let workspace = b.clone();
@@ -164,21 +117,10 @@ fn known_install_keeps_admission_until_captured_owners_are_released() {
             let _ = peer_tx.send(workspace.commit_captured());
         })
     };
-    let peer_before_release = peer_rx.recv_timeout(WAIT).ok();
-    let disjoint_progress = peer_before_release.is_some() && credits_active.load(Ordering::Acquire);
-    evidence(format_args!(
-        "LIFECYCLE_STAGE peer_observed={disjoint_progress}"
-    ));
-    // Always return the held resources before collecting failures or joining.
-    let _ = credit_release.send(());
-    bounded_join(credit_guard);
-    evidence(format_args!("LIFECYCLE_STAGE credits_returned"));
     let first_result = rx.recv_timeout(WAIT).expect("bounded first Commit result");
-    let peer_result = peer_before_release.unwrap_or_else(|| {
-        peer_rx
-            .recv_timeout(WAIT)
-            .expect("bounded peer Commit result")
-    });
+    let peer_result = peer_rx
+        .recv_timeout(WAIT)
+        .expect("bounded peer Commit result");
     evidence(format_args!("LIFECYCLE_STAGE results_received"));
     bounded_join(first);
     bounded_join(peer);
@@ -214,7 +156,6 @@ fn known_install_keeps_admission_until_captured_owners_are_released() {
     evidence(format_args!("LIFECYCLE_STAGE live_begin"));
     model::assert_same(&sa.model.flat(), &live(&a), "A live install");
     model::assert_same(&sb.model.flat(), &live(&b), "B live install");
-    settled(&client, 0);
     evidence(format_args!("LIFECYCLE_STAGE close_begin"));
     rig.close(&a);
     rig.close(&b);
@@ -225,22 +166,11 @@ fn known_install_keeps_admission_until_captured_owners_are_released() {
     evidence(format_args!("LIFECYCLE_STAGE finish_begin"));
     rig.finish();
     evidence(format_args!("LIFECYCLE_STAGE finish_done"));
-    evidence(format_args!("CAPTURED_LIFECYCLE staged={staged} installed={installed} active_during_releases={active_during_releases} duplicate_inflight={duplicate} duplicate_jobs={duplicate_jobs} disjoint_progress={disjoint_progress} released={released} clear_after_release={clear_after_release}"));
-    assert!(
-        staged && credits_ready && installed,
-        "real construction and post-install release staging"
-    );
-    assert!(
-        active_during_releases,
-        "captured lifecycle admission ended before acquired owners were released"
-    );
+    evidence(format_args!("CAPTURED_LIFECYCLE staged={staged} in_flight={in_flight} duplicate_inflight={duplicate} duplicate_jobs={duplicate_jobs} released={released} clear_after_release={clear_after_release}"));
+    assert!(staged && in_flight, "real construction staging");
     assert!(
         duplicate && duplicate_jobs == 0,
         "both duplicate APIs must refuse before jobs"
-    );
-    assert!(
-        disjoint_progress,
-        "another Workspace can Commit while A awaits release"
     );
     assert!(
         released && clear_after_release,

@@ -7,7 +7,7 @@ use layerfs_daemon::{
         BindRequest, PortError, ReadAdmissionError, ReadLease, ReadLimits, ReadTicket, Store,
         StoreReader,
     },
-    Command, Owner, OwnerConfig,
+    Owner, OwnerConfig,
 };
 use layerfs_history::{HistoryCatalog, HistoryError, WorkspaceId};
 use layerfs_persistence::{Handles, StorageProvider};
@@ -498,9 +498,7 @@ fn bind_reads_snapshot_while_the_original_writer_session_is_occupied() {
     assert!(held.join().unwrap().is_ok());
     assert!(owner
         .client()
-        .try_submit(Some(bound.workspace.route()), Command::Close)
-        .unwrap()
-        .wait()
+        .close(Some(bound.workspace.route()))
         .unwrap()
         .result()
         .is_ok());

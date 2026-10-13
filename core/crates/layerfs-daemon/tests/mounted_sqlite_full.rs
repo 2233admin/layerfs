@@ -11,14 +11,14 @@ mod installed;
 use layerfs_daemon::{
     bootstrap::open_store,
     store::{BindRequest, BoundWorkspace},
-    Command, Completion, NativeJob, NativeReply, Owner, OwnerClient, OwnerConfig, Response,
+    NativeReply, Owner, OwnerClient, OwnerConfig, Response,
 };
 use layerfs_fuse::{
     attributes::Identity,
     mount::AbortWrite,
     ports::{Fence, MountServices, RequestServices, ServiceError, ServiceFuture, ServiceReply},
     session::{Detach, NativeSession, SessionConfig},
-    Dispatch, DispatchConfig, HANDOFFS,
+    MountRequests,
 };
 use layerfs_history::WorkspaceId;
 use layerfs_overlay::{NativeCookieOffer, NativeMount, OverlayError, ProfileConfig, Publication};
@@ -115,26 +115,33 @@ impl RequestServices for ObserveRequest {
         })
     }
 }
-fn job(client: &OwnerClient, route: layerfs_overlay::Route, command: Command) -> Completion {
-    let pending = client.try_submit(Some(route), command).unwrap();
-    let until = Instant::now() + Duration::from_secs(3);
-    loop {
-        if let Some(done) = pending.try_complete().unwrap() {
-            return done;
-        }
-        assert!(Instant::now() < until, "bounded owner completion");
-        std::thread::sleep(Duration::from_millis(1));
-    }
+fn job(
+    client: &OwnerClient,
+    route: layerfs_overlay::Route,
+    action: impl FnOnce(
+        &OwnerClient,
+        Option<layerfs_overlay::Route>,
+    ) -> Result<layerfs_daemon::JobReceipt, layerfs_daemon::OwnerError>,
+) -> layerfs_daemon::JobReceipt {
+    action(client, Some(route)).unwrap()
 }
 fn state(client: &OwnerClient, route: layerfs_overlay::Route) -> layerfs_overlay::WorkspaceState {
-    let done = job(client, route, Command::State);
+    let done = job(
+        client,
+        route,
+        move |owner: &layerfs_daemon::OwnerClient, route| owner.state(route),
+    );
     match done.result() {
         Ok(Response::State(state)) => *state,
         other => panic!("{other:?}"),
     }
 }
 fn resources(client: &OwnerClient, route: layerfs_overlay::Route) -> layerfs_overlay::Resources {
-    let done = job(client, route, Command::Resources { global: false });
+    let done = job(
+        client,
+        route,
+        move |owner: &layerfs_daemon::OwnerClient, route| owner.resources(route, false),
+    );
     match done.result() {
         Ok(Response::Resources(resources)) => **resources,
         other => panic!("{other:?}"),
@@ -222,18 +229,17 @@ fn run(forced: bool, device: bool) {
         .root()
         .root_inode()
         .serial();
-    let done = job(&client, route, Command::Native(NativeJob::Mount { root }));
+    let done = job(
+        &client,
+        route,
+        move |owner: &layerfs_daemon::OwnerClient, route| owner.native_mount(route, root),
+    );
     let mount = match done.result() {
         Ok(Response::Native(NativeReply::Mount(mount))) => *mount,
         other => panic!("{other:?}"),
     };
     drop(done);
-    let mut pool = Dispatch::start(DispatchConfig {
-        read_handles: 2,
-        namespaces: 1,
-    })
-    .unwrap();
-    let queue = pool.register(mount).unwrap();
+    let queue = MountRequests::new(mount);
     let full = Arc::new(AtomicU64::new(0));
     let mut session = NativeSession::attach(
         SessionConfig {
@@ -346,11 +352,11 @@ assert open('prior.dat','rb').read() == bytes([17])*4096
         .unwrap()
         .unwrap();
     let remaining = queue.work().unwrap();
-    println!("SQLITE_FULL_NATIVE device={device} io_full={io_full} known_full={known_full} reservation_refusals={reservation_refusals} sql={work:?} initial={initial:?} final={final_state:?} dispatch={remaining:?}");
+    println!("SQLITE_FULL_NATIVE device={device} io_full={io_full} known_full={known_full} reservation_refusals={reservation_refusals} sql={work:?} initial={initial:?} final={final_state:?} requests={remaining:?}");
     // On the old implementation the real failed completion is retained.
     // Inspect it without taking, releasing, or replacing its owner.
-    for slot in 0..HANDOFFS {
-        if let Ok(detail) = queue.inspect_retained(slot, |failure| match failure {
+    for slot in 0..remaining.retained {
+        if let Ok(detail) = queue.inspect_failure(slot, |failure| match failure {
             layerfs_fuse::FailureView::Request(error) => format!("{error:?}"),
             layerfs_fuse::FailureView::Panic(_) => "panic".to_owned(),
         }) {
@@ -379,15 +385,24 @@ assert open('prior.dat','rb').read() == bytes([17])*4096
         }
     };
     if clean {
-        let revoked = job(&client, route, Command::Native(NativeJob::Revoke(mount)));
+        let revoked = job(
+            &client,
+            route,
+            move |owner: &layerfs_daemon::OwnerClient, route| owner.native_revoke(route, mount),
+        );
         assert!(matches!(
             revoked.result(),
             Ok(Response::Native(NativeReply::Done))
         ));
         drop(revoked);
-        assert!(job(&client, route, Command::Close).result().is_ok());
+        assert!(job(
+            &client,
+            route,
+            move |owner: &layerfs_daemon::OwnerClient, route| owner.close(route),
+        )
+        .result()
+        .is_ok());
         drop(queue);
-        assert!(pool.stop().unwrap().clean());
         drop(bound);
         drop(client);
         owner.stop().unwrap();

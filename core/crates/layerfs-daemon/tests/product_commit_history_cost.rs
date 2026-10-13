@@ -14,7 +14,7 @@ mod model;
 #[allow(dead_code)]
 #[path = "support/installed_store.rs"]
 mod support;
-use drive::{evidence, settled, Do, Rig, Session};
+use drive::{evidence, Do, Rig, Session};
 use layerfs_history::CommitStagedOutcome;
 use layerfs_persistence::SqlitePersistenceProfile;
 use layerfs_storage::Diagnostics;
@@ -107,7 +107,6 @@ fn equal_commits_read_the_store_alike_whatever_was_committed_before() {
             commit + 1
         ));
         change(&mut session, commit);
-        settled(&rig.owner.client(), 0);
         evidence(format_args!(
             "PRODUCT_COMMIT_HISTORY_PHASE capture {}",
             commit + 1

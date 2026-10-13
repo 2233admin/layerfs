@@ -202,13 +202,15 @@ def main():
         tags = [view["operation_tag"] for view in marked]
         commit_tag = max(set(tags), key=tags.count)
         owners = [view["owner"] for view in marked if view["operation_tag"] == commit_tag]
-        result["overlay_budget_observations"] = [view.get("overlay_budget") for view in marked
-                                                  if view["operation_tag"] == commit_tag]
+        direct_mode = bool(owners and "jobs_by_class" in owners[0])
+        observation_key = "sqlite_cache_group_observations" if direct_mode else "overlay_budget_observations"
+        source_key = "sqlite_cache_group" if direct_mode else "overlay_budget"
+        result[observation_key] = [view[source_key] for view in marked if view["operation_tag"] == commit_tag and source_key in view]
         if len(owners) != snapshots:
             raise ValueError(f"{len(owners)} marker Commits in the daemon log, {snapshots} sent")
+        fields = (("jobs", "jobs_by_class"), ("wait_ns", "lock_wait_ns"), ("hold_ns", "hold_ns")) if direct_mode else (("jobs", "completed"), ("wait_ns", "queue_wait_ns"), ("hold_ns", "service_ns"))
         for phase, before, after in zip(result["phases"], owners, owners[1:]):
-            phase["owner"] = {name: {kind: after[field][name] - before[field][name] for kind, field in
-                                     (("jobs", "completed"), ("wait_ns", "queue_wait_ns"), ("service_ns", "service_ns"))}
+            phase["owner"] = {name: {kind: after[field][name] - before[field][name] for kind, field in fields}
                               for name in counts.CLASSES}
     except BaseException as failure:
         result["owner_failure"] = f"{type(failure).__name__}: {failure}"
@@ -225,7 +227,7 @@ def main():
         rows = [stages(outcome) for outcome in phase["outcomes"] if outcome and outcome["exit"] == 0]
         mean = [round(sum(column) / len(column), 1) for column in zip(*rows)] if rows else ["failed"]
         owner = " ".join(f"{name}:{value['jobs']}/{value['wait_ns'] / max(1, value['jobs']) / 1e3:.0f}/"
-                         f"{value['service_ns'] / max(1, value['jobs']) / 1e3:.0f}"
+                         f"{value['hold_ns'] / max(1, value['jobs']) / 1e3:.0f}"
                          for name, value in phase.get("owner", {}).items() if value["jobs"])
         print(phase["phase"], phase["writers"], *mean, "|", owner, "|", phase.get("commit", ""))
     print("resident observations retained:", ", ".join(item["label"] for item in result["resident_observations"]))

@@ -11,7 +11,7 @@ use layerfs_content::{
 use layerfs_daemon::{
     bootstrap::open_store,
     store::{BindRequest, BoundWorkspace, Store, StoreOperation},
-    Command, Completion, Owner, OwnerClient, OwnerConfig, Response,
+    JobReceipt, Owner, OwnerClient, OwnerConfig, Response,
 };
 use layerfs_history::WorkspaceId;
 use layerfs_overlay::{ProfileConfig, Route};
@@ -32,32 +32,16 @@ pub fn evidence(line: std::fmt::Arguments<'_>) {
     use std::io::Write;
     writeln!(std::io::stdout().lock(), "{line}").unwrap();
 }
-pub fn job(owner: &OwnerClient, route: Route, command: Command) -> Completion {
-    let pending = owner
-        .try_submit(Some(route), command)
-        .unwrap_or_else(|e| panic!("{e:?}"));
-    let until = Instant::now() + Duration::from_secs(5);
-    loop {
-        if let Some(done) = pending.try_complete().unwrap() {
-            return done;
-        }
-        assert!(Instant::now() < until, "bounded original local completion");
-        std::thread::yield_now();
-    }
+pub fn job(
+    owner: &OwnerClient,
+    route: Route,
+    command: impl FnOnce(
+        &layerfs_daemon::OwnerClient,
+        Option<layerfs_overlay::Route>,
+    ) -> Result<layerfs_daemon::JobReceipt, layerfs_daemon::OwnerError>,
+) -> JobReceipt {
+    command(owner, Some(route)).unwrap_or_else(|error| panic!("{error:?}"))
 }
-/// The engine thread drops its own final credit after the consumer observes a
-/// completion: bound the wait for that release before an exact counter check.
-pub fn settled(client: &OwnerClient, outstanding: usize) {
-    let end = Instant::now() + Duration::from_secs(3);
-    while client.diagnostics().unwrap().outstanding != outstanding {
-        assert!(
-            Instant::now() < end,
-            "engine did not release its final credit"
-        );
-        std::thread::yield_now();
-    }
-}
-
 /// A sealed, installed Disposable Store whose base is the model of the native
 /// source it was initialized from, plus one local owner.
 pub struct Rig {
@@ -113,7 +97,12 @@ impl Rig {
     }
     pub fn close(&self, workspace: &BoundWorkspace) {
         assert!(matches!(
-            job(&self.owner.client(), workspace.route(), Command::Close).result(),
+            job(
+                &self.owner.client(),
+                workspace.route(),
+                |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.close(job_route)
+            )
+            .result(),
             Ok(Response::Done)
         ));
     }
@@ -134,8 +123,8 @@ pub fn window<T>(
     let acquired = job(
         operation.overlay(),
         workspace.route(),
-        Command::AcquireBaseSource {
-            owner: NEXT.fetch_add(1, Ordering::Relaxed),
+        |job_client: &layerfs_daemon::OwnerClient, job_route| {
+            job_client.acquire_base_source(job_route, NEXT.fetch_add(1, Ordering::Relaxed))
         },
     );
     let source = match acquired.result() {
@@ -149,7 +138,8 @@ pub fn window<T>(
     assert!(job(
         operation.overlay(),
         workspace.route(),
-        Command::ReleaseBaseSource(source)
+        |job_client: &layerfs_daemon::OwnerClient, job_route| job_client
+            .release_base_source(job_route, source)
     )
     .result()
     .is_ok());
@@ -355,7 +345,8 @@ impl<'a> Session<'a> {
                     assert!(job(
                         operation.overlay(),
                         self.workspace.route(),
-                        Command::ReplyAttempted(publication)
+                        |job_client: &layerfs_daemon::OwnerClient, _| job_client
+                            .reply_attempted(publication)
                     )
                     .result()
                     .is_ok());

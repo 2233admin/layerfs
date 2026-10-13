@@ -18,7 +18,7 @@ use std::{
 pub type ServiceError = Box<dyn Error + Send + Sync>;
 pub type ServiceFuture<'a, T> = Pin<Box<dyn Future<Output = Result<T, ServiceError>> + Send + 'a>>;
 
-/// One mount's terminal stop, shared by its lane, its requests and their
+/// One mount's terminal stop, shared by its request owner, its requests and their
 /// service ports. Only forced teardown sets it, once; nothing clears it. A
 /// default fence is never stopped. It carries no request, job or lease.
 ///
@@ -121,8 +121,8 @@ impl fmt::Display for Fenced {
 }
 impl Error for Fenced {}
 
-/// A projection and its original service completion. Field order drops the
-/// projection before its credit owner. Keep this receipt through every consumer
+/// A projection and its original service receipt. Field order drops the
+/// projection before its receipt. Keep this receipt through every consumer
 /// sharing its original payload. Consuming a bounded response into independent
 /// request-owned storage ends those consumers; Arc::clone alone does not. Copying
 /// an engine token acquires no new lease and does not release its backed owner.

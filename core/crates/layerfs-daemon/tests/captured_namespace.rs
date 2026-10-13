@@ -1,14 +1,13 @@
 //! Captured namespace ports use the original retained reader, never live rows.
 #[path = "../../layerfs-overlay/tests/payload_support/mod.rs"]
 mod payload_support;
-use layerfs_daemon::{Command, Completion, Owner, OwnerClient, OwnerConfig, OwnerError, Response};
+use layerfs_daemon::{JobReceipt, Owner, OwnerClient, OwnerConfig, OwnerError, Response};
 use layerfs_overlay::{
     CapturedReader, Cell, DirectoryEntry, Inode, InodeKind, OverlayError, ProfileConfig, Route,
     CELL_BYTES, MASK_BYTES, PAGE_ROWS,
 };
 use layerfs_workspace::{OverlayCapturedNamespace, OverlayCapturedRuns, WorkspaceError};
 use payload_support::Temp;
-use std::time::{Duration, Instant};
 
 fn inode(serial: u64) -> Inode {
     Inode {
@@ -35,18 +34,15 @@ fn entry(serial: u64) -> DirectoryEntry {
         inherited: true,
     }
 }
-fn job(client: &OwnerClient, route: Option<Route>, command: Command) -> Completion {
-    let pending = client
-        .try_submit(route, command)
-        .unwrap_or_else(|(e, c)| panic!("{e:?}: {c:?}"));
-    let until = Instant::now() + Duration::from_secs(3);
-    loop {
-        if let Some(done) = pending.try_complete().unwrap() {
-            return done;
-        }
-        assert!(Instant::now() < until, "bounded namespace setup job");
-        std::thread::yield_now();
-    }
+fn job(
+    client: &OwnerClient,
+    route: Option<Route>,
+    command: impl FnOnce(
+        &layerfs_daemon::OwnerClient,
+        Option<layerfs_overlay::Route>,
+    ) -> Result<layerfs_daemon::JobReceipt, layerfs_daemon::OwnerError>,
+) -> JobReceipt {
+    command(client, route).unwrap_or_else(|error| panic!("{error:?}"))
 }
 fn publish(client: &OwnerClient, route: Route, serial: u64) {
     publish_row(client, route, inode(serial), Some(entry(serial)), None);
@@ -58,15 +54,25 @@ fn publish_row(
     name: Option<DirectoryEntry>,
     cell: Option<Cell>,
 ) {
-    let done = job(client, Some(route), Command::Publish { inode, name, cell });
+    let done = job(
+        client,
+        Some(route),
+        |job_client: &layerfs_daemon::OwnerClient, job_route| {
+            job_client.publish(job_route, inode, name, cell)
+        },
+    );
     let ticket = match done.result() {
         Ok(Response::Published(p)) => *p,
         other => panic!("{other:?}"),
     };
     drop(done);
-    assert!(job(client, Some(route), Command::ReplyAttempted(ticket))
-        .result()
-        .is_ok());
+    assert!(job(
+        client,
+        Some(route),
+        |job_client: &layerfs_daemon::OwnerClient, _| job_client.reply_attempted(ticket)
+    )
+    .result()
+    .is_ok());
 }
 fn assert_pages(provider: &impl OverlayCapturedNamespace, reader: CapturedReader) {
     let mut after = 0;
@@ -166,32 +172,18 @@ fn assert_pages(provider: &impl OverlayCapturedNamespace, reader: CapturedReader
         None
     );
 }
-/// The engine thread drops its own final credit slightly after the consumer
-/// observes a completion: bound the wait for the expected count.
-fn outstanding(client: &OwnerClient, expected: usize) {
-    let until = Instant::now() + Duration::from_secs(3);
-    while client.diagnostics().unwrap().outstanding != expected {
-        assert!(Instant::now() < until, "owner credit did not settle");
-        std::thread::yield_now();
-    }
-}
-/// A failed attempted job: the original completion with its SQL receipt and
-/// credit stays inside the error until the caller drops it.
-fn attempted(client: &OwnerClient, error: WorkspaceError, expected: &str) {
+/// A failed attempted job: the original receipt with its SQL work stays inside
+/// the error until the caller drops it.
+fn attempted(error: WorkspaceError, expected: &str) {
     let WorkspaceError::Service(original) = error else {
         panic!("original completion expected")
     };
-    let completion = original.downcast_ref::<Completion>().unwrap();
+    let completion = original.downcast_ref::<JobReceipt>().unwrap();
     match completion.result() {
         Err(OwnerError::Overlay(cause)) => assert_eq!(format!("{cause:?}"), expected),
         other => panic!("{other:?}"),
     }
     assert!(completion.work().sql.total().attempts > 0);
-    outstanding(client, 1);
-    assert!(client.diagnostics().unwrap().credited_bytes > 0);
-    drop(original);
-    outstanding(client, 0);
-    assert_eq!(client.diagnostics().unwrap().credited_bytes, 0);
 }
 fn link(serial: u64, target: &[u8], born: u64) -> (Inode, Cell) {
     let mut data = Box::new([0_u8; CELL_BYTES]);
@@ -293,9 +285,8 @@ fn owner_pages_preserve_original_failed_completion_and_unattempted_command() {
     let done = job(
         &client,
         None,
-        Command::Open {
-            incarnation: [194; 32],
-            base_root: [195; 32],
+        |job_client: &layerfs_daemon::OwnerClient, job_route| {
+            job_client.open(job_route, [194; 32], [195; 32])
         },
     );
     let route = match done.result() {
@@ -306,7 +297,11 @@ fn owner_pages_preserve_original_failed_completion_and_unattempted_command() {
     for serial in 1..=130 {
         publish(&client, route, serial);
     }
-    let done = job(&client, Some(route), Command::Capture);
+    let done = job(
+        &client,
+        Some(route),
+        |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.capture(job_route),
+    );
     let capture = match done.result() {
         Ok(Response::Captured(c)) => *c,
         other => panic!("{other:?}"),
@@ -315,9 +310,8 @@ fn owner_pages_preserve_original_failed_completion_and_unattempted_command() {
     let done = job(
         &client,
         Some(route),
-        Command::AcquireCapturedReader {
-            capture,
-            request: 1,
+        |job_client: &layerfs_daemon::OwnerClient, job_route| {
+            job_client.acquire_captured_reader(job_route, capture, 1)
         },
     );
     let reader = match done.result() {
@@ -332,14 +326,18 @@ fn owner_pages_preserve_original_failed_completion_and_unattempted_command() {
     assert!(job(
         &client,
         Some(route),
-        Command::Install {
-            capture,
-            root: [196; 32]
-        }
+        |job_client: &layerfs_daemon::OwnerClient, job_route| job_client
+            .install(job_route, capture, [196; 32])
     )
     .result()
     .is_ok());
-    assert!(job(&client, Some(route), Command::Close).result().is_ok());
+    assert!(job(
+        &client,
+        Some(route),
+        |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.close(job_route)
+    )
+    .result()
+    .is_ok());
     assert_pages(&client, reader);
     let error = client
         .captured_directory_entry_page(reader, Some((1, vec![b'x'; 256])))
@@ -347,7 +345,7 @@ fn owner_pages_preserve_original_failed_completion_and_unattempted_command() {
     let WorkspaceError::Service(original) = error else {
         panic!("original completion expected")
     };
-    let completion = original.downcast_ref::<Completion>().unwrap();
+    let completion = original.downcast_ref::<JobReceipt>().unwrap();
     assert!(matches!(
         completion.result(),
         Err(OwnerError::Overlay(OverlayError::Invalid(
@@ -355,31 +353,30 @@ fn owner_pages_preserve_original_failed_completion_and_unattempted_command() {
         )))
     ));
     assert!(completion.work().sql.total().attempts > 0);
-    assert_eq!(client.diagnostics().unwrap().outstanding, 1);
     drop(original);
     // The failed read did not dispose the reader or turn later observation into
     // a replay. This is a distinct explicit original point call.
     assert_eq!(client.captured_inode(reader, 1).unwrap(), Some(inode(1)));
-    assert!(
-        job(&client, Some(route), Command::ReleaseCapturedReader(reader))
-            .result()
-            .is_ok()
-    );
+    assert!(job(
+        &client,
+        Some(route),
+        |job_client: &layerfs_daemon::OwnerClient, job_route| job_client
+            .release_captured_reader(job_route, reader)
+    )
+    .result()
+    .is_ok());
     owner.stop().unwrap();
     let error = client.captured_inode_page(reader, 64).unwrap_err();
     let WorkspaceError::Service(original) = error else {
         panic!("unattempted command expected")
     };
     match original.downcast_ref::<OwnerError>().unwrap() {
-        OwnerError::Unattempted { cause, command } => {
+        // The unattempted action is returned opaque and is never replayed.
+        OwnerError::Unattempted { cause, .. } => {
             assert!(matches!(**cause, OwnerError::Stopped));
-            assert!(
-                matches!(command.as_ref(),Command::ReaderInodes{reader:r,after:64} if *r==reader)
-            );
         }
         other => panic!("{other:?}"),
     }
-    assert_eq!(client.diagnostics().unwrap().credited_bytes, 0);
 }
 
 #[test]
@@ -395,9 +392,8 @@ fn owner_parent_names_points_and_symlinks_keep_original_custody() {
     let done = job(
         &client,
         None,
-        Command::Open {
-            incarnation: [197; 32],
-            base_root: [198; 32],
+        |job_client: &layerfs_daemon::OwnerClient, job_route| {
+            job_client.open(job_route, [197; 32], [198; 32])
         },
     );
     let route = match done.result() {
@@ -405,7 +401,11 @@ fn owner_parent_names_points_and_symlinks_keep_original_custody() {
         other => panic!("{other:?}"),
     };
     drop(done);
-    let done = job(&client, Some(route), Command::State);
+    let done = job(
+        &client,
+        Some(route),
+        |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.state(job_route),
+    );
     let born = match done.result() {
         Ok(Response::State(state)) => state.active.number() as u64,
         other => panic!("{other:?}"),
@@ -428,7 +428,11 @@ fn owner_parent_names_points_and_symlinks_keep_original_custody() {
         let name = named(8, format!("l{serial}").as_bytes(), Some(serial), false);
         publish_row(&client, route, inode, Some(name), Some(cell));
     }
-    let done = job(&client, Some(route), Command::Capture);
+    let done = job(
+        &client,
+        Some(route),
+        |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.capture(job_route),
+    );
     let capture = match done.result() {
         Ok(Response::Captured(c)) => *c,
         other => panic!("{other:?}"),
@@ -437,9 +441,8 @@ fn owner_parent_names_points_and_symlinks_keep_original_custody() {
     let done = job(
         &client,
         Some(route),
-        Command::AcquireCapturedReader {
-            capture,
-            request: 1,
+        |job_client: &layerfs_daemon::OwnerClient, job_route| {
+            job_client.acquire_captured_reader(job_route, capture, 1)
         },
     );
     let reader = match done.result() {
@@ -485,15 +488,24 @@ fn owner_parent_names_points_and_symlinks_keep_original_custody() {
     );
 
     let sealed = |client: &OwnerClient| {
-        let first = client.captured_directory_entries(reader, 7, None).unwrap();
+        let first =
+            OverlayCapturedNamespace::captured_directory_entries(client, reader, 7, None).unwrap();
         assert!(first.len() == PAGE_ROWS && first.capacity() <= PAGE_ROWS);
-        let rest = client
-            .captured_directory_entries(reader, 7, Some(first[PAGE_ROWS - 1].name.clone()))
-            .unwrap();
-        assert!(client
-            .captured_directory_entries(reader, 7, Some(b"w".to_vec()))
-            .unwrap()
-            .is_empty());
+        let rest = OverlayCapturedNamespace::captured_directory_entries(
+            client,
+            reader,
+            7,
+            Some(first[PAGE_ROWS - 1].name.clone()),
+        )
+        .unwrap();
+        assert!(OverlayCapturedNamespace::captured_directory_entries(
+            client,
+            reader,
+            7,
+            Some(b"w".to_vec())
+        )
+        .unwrap()
+        .is_empty());
         let rows = [first, rest].concat();
         assert_eq!(rows, expected);
         for row in &rows {
@@ -524,20 +536,19 @@ fn owner_parent_names_points_and_symlinks_keep_original_custody() {
         );
     };
     sealed(&client);
-    // A successful call leaves no credit behind.
-    outstanding(&client, 0);
-    assert_eq!(client.diagnostics().unwrap().credited_bytes, 0);
 
     // Each failed job keeps its original completion; none disposes the reader.
     attempted(
-        &client,
-        client
-            .captured_directory_entries(reader, 7, Some(vec![b'x'; 256]))
-            .unwrap_err(),
+        OverlayCapturedNamespace::captured_directory_entries(
+            &client,
+            reader,
+            7,
+            Some(vec![b'x'; 256]),
+        )
+        .unwrap_err(),
         "Invalid(\"captured name cursor\")",
     );
     attempted(
-        &client,
         client
             .captured_directory_entry(reader, 7, &[b'x'; 256])
             .unwrap_err(),
@@ -546,7 +557,6 @@ fn owner_parent_names_points_and_symlinks_keep_original_custody() {
     // A regular file, an active-only symlink and a serial with no row.
     for serial in [100, 52, 9_999] {
         attempted(
-            &client,
             client.captured_symlink(reader, serial).unwrap_err(),
             "Missing",
         );
@@ -556,77 +566,66 @@ fn owner_parent_names_points_and_symlinks_keep_original_custody() {
     assert!(job(
         &client,
         Some(route),
-        Command::Install {
-            capture,
-            root: [199; 32]
-        }
+        |job_client: &layerfs_daemon::OwnerClient, job_route| job_client
+            .install(job_route, capture, [199; 32])
     )
     .result()
     .is_ok());
     sealed(&client);
-    assert!(job(&client, Some(route), Command::Close).result().is_ok());
-    sealed(&client);
-    assert!(
-        job(&client, Some(route), Command::ReleaseCapturedReader(reader))
-            .result()
-            .is_ok()
-    );
-    attempted(
+    assert!(job(
         &client,
-        client
-            .captured_directory_entries(reader, 7, None)
-            .unwrap_err(),
+        Some(route),
+        |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.close(job_route)
+    )
+    .result()
+    .is_ok());
+    sealed(&client);
+    assert!(job(
+        &client,
+        Some(route),
+        |job_client: &layerfs_daemon::OwnerClient, job_route| job_client
+            .release_captured_reader(job_route, reader)
+    )
+    .result()
+    .is_ok());
+    attempted(
+        OverlayCapturedNamespace::captured_directory_entries(&client, reader, 7, None).unwrap_err(),
         "Stale",
     );
     attempted(
-        &client,
         client
             .captured_directory_entry(reader, 7, b"n00")
             .unwrap_err(),
         "Stale",
     );
-    attempted(
-        &client,
-        client.captured_symlink(reader, 50).unwrap_err(),
-        "Stale",
-    );
+    attempted(client.captured_symlink(reader, 50).unwrap_err(), "Stale");
 
-    // A stopped owner returns each exact command, never attempted.
+    // A stopped service returns each call unattempted, with its exact cause.
     owner.stop().unwrap();
-    let unattempted = |error: WorkspaceError, check: &dyn Fn(&Command) -> bool| {
+    let unattempted = |error: WorkspaceError| {
         let WorkspaceError::Service(original) = error else {
-            panic!("unattempted command expected")
+            panic!("unattempted call expected")
         };
         match original.downcast_ref::<OwnerError>().unwrap() {
-            OwnerError::Unattempted { cause, command } => {
+            OwnerError::Unattempted { cause, .. } => {
                 assert!(matches!(**cause, OwnerError::Stopped));
-                assert!(check(command), "{command:?}");
             }
             other => panic!("{other:?}"),
         }
     };
     unattempted(
-        client
-            .captured_directory_entries(reader, 7, Some(b"n10".to_vec()))
-            .unwrap_err(),
-        &|command| {
-            matches!(command, Command::ReaderParentDirectoryEntries { reader: r, parent: 7, after: Some(after) }
-                if *r == reader && after == b"n10")
-        },
+        OverlayCapturedNamespace::captured_directory_entries(
+            &client,
+            reader,
+            7,
+            Some(b"n10".to_vec()),
+        )
+        .unwrap_err(),
     );
     unattempted(
         client
             .captured_directory_entry(reader, 7, b"n11")
             .unwrap_err(),
-        &|command| {
-            matches!(command, Command::ReaderDirectoryEntry { reader: r, parent: 7, name }
-                if *r == reader && name == b"n11")
-        },
     );
-    unattempted(
-        client.captured_symlink(reader, 50).unwrap_err(),
-        &|command| matches!(command, Command::ReaderSymlink { reader: r, serial: 50 } if *r == reader),
-    );
-    assert_eq!(client.diagnostics().unwrap().outstanding, 0);
-    assert_eq!(client.diagnostics().unwrap().credited_bytes, 0);
+    unattempted(client.captured_symlink(reader, 50).unwrap_err());
 }

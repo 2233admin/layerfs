@@ -56,6 +56,16 @@ class Growth(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "retains credits"):
             self.check(self.values)
 
+    def test_current_points_carry_no_scheduling_gauge(self):
+        retired = ("credited_bytes", "outstanding", "queued", "receipt_overruns")
+        for index in (1, 3, 4):
+            self.values[index] = {k: v for k, v in self.values[index].items() if k not in retired}
+            self.values[index]["schema"] = "pre-s8-growth-point-v2"
+        self.assertEqual(self.check(self.values)["functional_counts"], "PASS")
+        self.values[3]["queued"] = 0
+        with self.assertRaisesRegex(ValueError, "retired scheduling gauge"):
+            self.check(self.values)
+
     def test_missing_terminal_cleanup(self):
         self.values[4]["closed_namespaces"] = 0
         with self.assertRaisesRegex(ValueError, "terminal namespace"):

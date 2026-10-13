@@ -55,7 +55,7 @@ fn actual_default_startup_records_then_stops_without_creating_a_route() {
     assert!(startup.contains("\"cleanup_headroom_bytes\":0"));
     assert!(startup.contains("daemon-startup-lifetime-observed-allocation"));
     assert_eq!(probes.lines().count(), 2);
-    assert!(probes.contains("\"admitted\":0"));
+    assert!(probes.contains("\"jobs\":[0,0,0,0,0,0]"));
     assert_eq!(std::fs::metadata(out.join("jobs.jsonl")).unwrap().len(), 0);
     assert!(manifest.contains("UNRUN-route_unavailable"));
     assert!(manifest.contains("\"qualification_status\":\"NOT_EVALUATED\""));
@@ -82,10 +82,7 @@ fn pre_creation_refusal_keeps_original_error_and_emits_unavailable_work() {
         &out,
         &identity,
         ProfileConfig::default(),
-        OwnerConfig {
-            bytes: 1,
-            ..Default::default()
-        },
+        OwnerConfig { namespaces: 0 },
     )
     .expect_err("original invalid admission must refuse");
     assert!(matches!(

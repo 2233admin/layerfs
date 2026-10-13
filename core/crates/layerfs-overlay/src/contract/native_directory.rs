@@ -120,10 +120,4 @@ impl NativeCookieOffer {
             _ => None,
         }
     }
-    pub fn heap_bytes(&self) -> usize {
-        self.after.capacity()
-            + self.existing().map_or(0, |(_, names)| {
-                std::mem::size_of_val(names) + names.iter().map(Vec::capacity).sum::<usize>()
-            })
-    }
 }

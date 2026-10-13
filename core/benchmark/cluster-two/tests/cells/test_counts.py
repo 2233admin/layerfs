@@ -286,5 +286,40 @@ class ExactSubtraction(unittest.TestCase):
         self.assertEqual(adjusted,[(5,4),(5,4)])
 
 
+class DirectWorkspaceCounters(unittest.TestCase):
+    @staticmethod
+    def direct(call, *, jobs=0, read=0, mutation=0, startup=0):
+        rows = snapshot(call, startup=startup)
+        owner = next(row for row in rows if row["section"] == 1)
+        owner["values"] = [jobs,0,0,0,0,0,read,mutation,0,0,0,0] + [0]*12
+        cost = next(row for row in rows if row["section"] == 30)
+        cost["values"] = cost["values"][:32] + [0,0]
+        cost["values"][2:5] = [6,6,6]
+        cost["values"][9] = 60
+        rows += [dict(owner,section=33,values=[0]), dict(owner,section=34,values=[4])]
+        return rows
+    def test_deleted_gauges_are_absent_and_current_width_requires_marker(self):
+        rows = self.direct(2, jobs=7, read=4, mutation=3, startup=6)
+        value = counts.decode(rows)
+        self.assertEqual(value["owner"]["jobs"], 7)
+        self.assertNotIn("admitted", value["owner"])
+        self.assertNotIn("overlay_budget", value)
+        self.assertEqual(value["observer"]["jobs"],4)
+        self.assertNotIn("parked_turns", value["observer"]["times"])
+        self.assertNotIn("lock_only_holds", value)
+        owner = next(row for row in rows if row["section"] == 1)
+        held = counts.decode(rows + [dict(owner,section=35,values=[2,5,900])])
+        self.assertEqual(held["lock_only_holds"], {"observations": 2, "reply_attempts": 5, "reply_hold_ns": 900})
+        with self.assertRaises(ValueError): counts.decode(rows + [dict(owner,section=35,values=[2,5])])
+        with self.assertRaises(ValueError): counts.decode([row for row in rows if row["section"] != 33])
+        with self.assertRaises(ValueError): counts.decode([row for row in rows if row["section"] != 34])
+    def test_exact_constituent_jobs_and_sql_are_subtracted_once(self):
+        before, end = self.direct(2), self.direct(3, jobs=7, read=4, mutation=3, startup=6)
+        result = counts.phase_counts(groups(before,end), counts.identity(before), counts.identity(end), exclusive_observer_scope=True)
+        self.assertEqual(result["status"],"AVAILABLE",result)
+        self.assertEqual(result["adjusted"]["owner"]["jobs"],3)
+        self.assertEqual(result["adjusted"]["jobs_by_class"]["Read"],0)
+        self.assertEqual(result["adjusted"]["sql_foreground"][0]["executions"],0)
+
 if __name__ == "__main__":
     unittest.main()

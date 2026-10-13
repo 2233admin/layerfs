@@ -25,15 +25,14 @@ impl NativeSession {
         drop(control);
         let _ = self.aborted.set(written);
         if written == AbortWrite::Written {
-            // Wake receive waiters and give every parked request the turn in
-            // which it observes the stop. A lane cannot be stale while this
-            // session owns it.
+            // Refuse later receives and wake every request waiting inside its
+            // service so that it observes the stop.
             let _ = self.queue.stop_service();
         }
         Ok(written)
     }
     /// After a `Written` abort: the same local drain as a normal unmount,
-    /// then exactly one plain detach, then the lane and directory. The detach
+    /// then exactly one plain detach, then the request owner and directory. The detach
     /// is attempted only once the local drain held, and never again: `EBUSY`
     /// or any other errno stops at `Detach` with the connection aborted and
     /// still mounted. Called again, it observes the same predicate; a

@@ -14,7 +14,7 @@ use layerfs_daemon::{
     store::{
         BindRequest, BoundWorkspace, ReadLimits, Store, StoreOperation, StorePorts, StoreReader,
     },
-    Command, Owner, OwnerConfig, Response,
+    Owner, OwnerConfig, Response,
 };
 use layerfs_history::{
     BranchId, BranchSnapshot, ForkRequest, ForkSource, HistoryCatalog, HistoryName, WorkspaceId,
@@ -104,11 +104,11 @@ impl Tree {
             ReservationBlocks::default(),
         )
         .unwrap();
+        // Each daemon keeps its Workspace files beside its own overlay path.
+        let local = self.fixture.directory.join(format!("overlay-{number}"));
+        std::fs::create_dir_all(&local).unwrap();
         let owner = Owner::start(
-            &self
-                .fixture
-                .directory
-                .join(format!("overlay-{number}.sqlite")),
+            &local.join("overlay.sqlite"),
             ProfileConfig::default(),
             OwnerConfig::default(),
         )
@@ -146,11 +146,11 @@ impl Tree {
             )
             .unwrap(),
         );
+        // Each daemon keeps its Workspace files beside its own overlay path.
+        let local = self.fixture.directory.join(format!("overlay-{number}"));
+        std::fs::create_dir_all(&local).unwrap();
         let owner = Owner::start(
-            &self
-                .fixture
-                .directory
-                .join(format!("overlay-{number}.sqlite")),
+            &local.join("overlay.sqlite"),
             ProfileConfig::default(),
             OwnerConfig::default(),
         )
@@ -208,7 +208,12 @@ impl Daemon {
     }
     pub fn close(&self, workspace: &BoundWorkspace) {
         assert!(matches!(
-            drive::job(&self.owner.client(), workspace.route(), Command::Close).result(),
+            drive::job(
+                &self.owner.client(),
+                workspace.route(),
+                |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.close(job_route)
+            )
+            .result(),
             Ok(Response::Done)
         ));
     }
@@ -403,7 +408,8 @@ pub fn apply(workspace: &BoundWorkspace, clock: &mut i64, step: Do<'_>) -> bool 
                 assert!(drive::job(
                     operation.overlay(),
                     workspace.route(),
-                    Command::ReplyAttempted(publication)
+                    |job_client: &layerfs_daemon::OwnerClient, _| job_client
+                        .reply_attempted(publication)
                 )
                 .result()
                 .is_ok());

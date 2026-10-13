@@ -5,7 +5,7 @@ mod fixture;
 #[path = "support/native_install.rs"]
 mod support;
 use layerfs_bridge::control::{CleanupObservation, Reply, Request, WorkspaceToken};
-use layerfs_daemon::{Command, OwnerError, Response};
+use layerfs_daemon::{OwnerError, Response};
 use layerfs_history::WorkspaceId;
 use std::time::{Duration, Instant};
 
@@ -64,23 +64,16 @@ fn explicit_cleanup_observes_after_registry_removal_without_recreating_a_binding
     }
     assert!(f.service.execute_control(&Request::Status(token)).is_err());
     // Diagnostic params can never authorize a mutable routed operation.
-    let wrong_route = f.owner.client().try_submit(None, Command::State);
+    let wrong_route = f.owner.client().state(None);
     assert!(matches!(
         wrong_route,
-        Err((OwnerError::InvalidAdmission, Command::State))
+        Err(OwnerError::Unattempted { ref cause, .. })
+            if matches!(cause.as_ref(), OwnerError::InvalidAdmission)
     ));
     let done = f
         .owner
         .client()
-        .try_submit(
-            None,
-            Command::ObserveCleanup {
-                namespace: token.namespace,
-                incarnation: workspace.to_bytes(),
-            },
-        )
-        .unwrap()
-        .wait()
+        .observe_cleanup(None, token.namespace, workspace.to_bytes())
         .unwrap();
     assert!(matches!(
         done.result(),

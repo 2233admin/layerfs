@@ -4,9 +4,7 @@ mod content_support;
 use layerfs_content::{
     EditRecordApply, EditRecordChange, EditRecordExpected, EditRecordKey, IndexedEditBacking,
 };
-use layerfs_daemon::{
-    Command, Completion, Owner, OwnerClient, OwnerConfig, OwnerError, Pending, Response,
-};
+use layerfs_daemon::{JobReceipt, Owner, OwnerClient, OwnerConfig, OwnerError, Response};
 use layerfs_overlay::{
     IndexedOperationRecordApply, IndexedOperationRecordScope, ProfileConfig, Route,
 };
@@ -36,42 +34,22 @@ impl Drop for Temp {
         std::fs::remove_dir_all(&self.0).unwrap();
     }
 }
-fn wait(pending: Pending) -> Completion {
-    let deadline = Instant::now() + Duration::from_secs(3);
-    loop {
-        if let Some(done) = pending.try_complete().unwrap() {
-            return done;
-        }
-        assert!(Instant::now() < deadline, "bounded original owner result");
-        std::thread::yield_now();
-    }
-}
-/// The engine thread drops its own final credit after the consumer observes a
-/// completion: bound the wait for that release before an exact counter check.
-fn settled(client: &OwnerClient, outstanding: usize) {
-    let end = Instant::now() + Duration::from_secs(3);
-    while client.diagnostics().unwrap().outstanding != outstanding {
-        assert!(
-            Instant::now() < end,
-            "engine did not release its final credit"
-        );
-        std::thread::yield_now();
-    }
-}
-fn job(client: &OwnerClient, route: Option<Route>, command: Command) -> Completion {
-    wait(
-        client
-            .try_submit(route, command)
-            .unwrap_or_else(|(cause, command)| panic!("{cause:?}: {command:?}")),
-    )
+fn job(
+    client: &OwnerClient,
+    route: Option<Route>,
+    command: impl FnOnce(
+        &layerfs_daemon::OwnerClient,
+        Option<layerfs_overlay::Route>,
+    ) -> Result<layerfs_daemon::JobReceipt, layerfs_daemon::OwnerError>,
+) -> JobReceipt {
+    command(client, route).unwrap_or_else(|error| panic!("{error:?}"))
 }
 fn scope(client: &OwnerClient, tag: u8, file_scope: u64) -> IndexedOperationRecordScope {
     let opened = job(
         client,
         None,
-        Command::Open {
-            incarnation: [tag; 32],
-            base_root: [3; 32],
+        |job_client: &layerfs_daemon::OwnerClient, job_route| {
+            job_client.open(job_route, [tag; 32], [3; 32])
         },
     );
     let route = match opened.result() {
@@ -82,7 +60,9 @@ fn scope(client: &OwnerClient, tag: u8, file_scope: u64) -> IndexedOperationReco
     let acquired = job(
         client,
         Some(route),
-        Command::AcquireOperation { request: 1 },
+        |job_client: &layerfs_daemon::OwnerClient, job_route| {
+            job_client.acquire_operation(job_route, 1)
+        },
     );
     let owner = match acquired.result() {
         Ok(Response::Operation(Some(owner))) => *owner,
@@ -106,7 +86,9 @@ fn release(client: &OwnerClient, scope: IndexedOperationRecordScope) {
     let done = job(
         client,
         Some(scope.owner.route()),
-        Command::ReleaseOperation(scope.owner),
+        |job_client: &layerfs_daemon::OwnerClient, job_route| {
+            job_client.release_operation(job_route, scope.owner)
+        },
     );
     assert!(done.result().is_ok(), "{done:?}");
 }
@@ -150,8 +132,8 @@ fn terminal_refusal_keeps_original_completion_and_other_scope_progresses() {
         .unwrap()
         .source()
         .unwrap()
-        .downcast_ref::<Completion>()
-        .expect("original attempted Completion retained");
+        .downcast_ref::<JobReceipt>()
+        .expect("original attempted JobReceipt retained");
     assert!(matches!(
         done.result(),
         Ok(Response::IndexedOperationRecord(
@@ -161,10 +143,7 @@ fn terminal_refusal_keeps_original_completion_and_other_scope_progresses() {
         ))
     ));
     assert!(done.work().sql.total().vm_steps > 0);
-    settled(&client, 1);
     let before = client.diagnostics().unwrap();
-    assert_eq!(before.outstanding, 1);
-    assert!(before.credited_bytes > 0);
     let calls = backing.work().calls;
     assert!(backing.contains(key(5, 0)).is_err());
     assert!(backing.get(key(5, 0)).is_err());
@@ -173,15 +152,16 @@ fn terminal_refusal_keeps_original_completion_and_other_scope_progresses() {
     assert_eq!(backing.work().calls, calls);
     assert_eq!(backing.work().terminal_calls, 4);
     let after = client.diagnostics().unwrap();
-    assert_eq!(before.admitted, after.admitted);
+    assert_eq!(
+        before.jobs.iter().sum::<u64>(),
+        after.jobs.iter().sum::<u64>()
+    );
     let mut healthy = IndexedEditRecords::new(&client, other);
     assert_eq!(
         healthy.apply(vec![put(key(5, 0), vec![4])]).unwrap(),
         EditRecordApply::Applied
     );
     assert_eq!(healthy.get(key(5, 0)).unwrap(), Some(vec![4]));
-    settled(&client, 1);
-    assert_eq!(client.diagnostics().unwrap().outstanding, 1);
     let custody = backing.into_custody();
     assert_eq!(custody.scope, first);
     drop(custody);
@@ -222,7 +202,10 @@ fn oversized_unattempted_input_and_stopped_owner_retain_first_cause() {
     assert_eq!(failure.changes[0].value, Some(vec![8]));
     assert!(failure.retained_bytes.unwrap() > 65536);
     assert_eq!(backing.work().calls, 0);
-    assert_eq!(client.diagnostics().unwrap().admitted, before.admitted);
+    assert_eq!(
+        client.diagnostics().unwrap().jobs.iter().sum::<u64>(),
+        before.jobs.iter().sum::<u64>()
+    );
     assert!(backing.first_keys(1, None).is_err());
     drop(backing.into_custody());
     // The refused batch had no SQL effect and no implicit owner release.
@@ -333,7 +316,9 @@ fn canonical_file_edit_uses_real_owner_records_and_explicit_last_owner_cleanup()
     let before = job(
         &client,
         Some(scope.owner.route()),
-        Command::Resources { global: false },
+        |job_client: &layerfs_daemon::OwnerClient, job_route| {
+            job_client.resources(job_route, false)
+        },
     );
     match before.result() {
         Ok(Response::Resources(work)) => {
@@ -349,7 +334,9 @@ fn canonical_file_edit_uses_real_owner_records_and_explicit_last_owner_cleanup()
         let done = job(
             &client,
             Some(scope.owner.route()),
-            Command::Resources { global: false },
+            |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.resources(job_route, false)
+            },
         );
         let work = match done.result() {
             Ok(Response::Resources(work)) => work,
@@ -366,8 +353,6 @@ fn canonical_file_edit_uses_real_owner_records_and_explicit_last_owner_cleanup()
         drop(done);
         std::thread::yield_now();
     }
-    settled(&client, 0);
-    assert_eq!(client.diagnostics().unwrap().outstanding, 0);
     owner.stop().unwrap();
 }
 

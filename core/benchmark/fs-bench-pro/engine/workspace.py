@@ -298,7 +298,7 @@ def price(groups, events, bindings, measured_label="measured command", with_warm
     if "opcodes" not in command["raw"]:
         raise ValueError("original kernel opcode count unavailable")
     totals = {"requests": sum(command["raw"]["opcodes"]["by_opcode"]),
-              "owner_jobs": command["adjusted"]["owner"]["admitted"],
+              "owner_jobs": command["adjusted"]["owner"]["jobs" if "jobs" in command["adjusted"]["owner"] else "admitted"],
               "statements": sum(row["executions"] for row in command["adjusted"]["sql_foreground"])}
     return totals, priced, correlated
 
@@ -2679,11 +2679,13 @@ def context_numeric_counts(groups, events):
                 for key in item['identities']]
     if not interval or any(not row.get('observer', {}).get('completion_available') for row in interval):
         raise ValueError('exact completed Resources cost of every concurrent observer required')
-    raw_owner = counts.difference(first['owner'], last['owner'], ('admitted',))['admitted']
+    owner_count = 'jobs' if first.get('service_schema') == 'issue321-direct-workspace' else 'admitted'
+    raw_owner = counts.difference(first['owner'], last['owner'], (owner_count,))[owner_count]
+    observer_jobs = sum(row['observer']['jobs'] for row in interval) if owner_count == 'jobs' else len(interval)
     sql = [counts.difference(left, right, ('executions',))['executions']
            for left, right in zip(first['sql_foreground'], last['sql_foreground'])]
     observer_sql = sum(row['observer']['sql']['executions'] for row in interval)
-    if raw_owner < len(interval) or sql[0] < observer_sql:
+    if raw_owner < observer_jobs or sql[0] < observer_sql:
         raise ValueError('exact observer costs exceed original whole-daemon cumulative delta')
     # Kernel counters belong to individual mount connections, not the daemon.
     # Each last acknowledged Unmount snapshot retains that connection's totals.
@@ -2702,10 +2704,10 @@ def context_numeric_counts(groups, events):
         owners.add(native['owner_id']); kernel.append({'key': item['key'], 'native_owner_id': native['owner_id'], 'requests': sum(rows)})
     if len(kernel) != len(mounts):
         raise ValueError('every measured connection terminal request census required')
-    totals = {'requests': sum(row['requests'] for row in kernel), 'owner_jobs': raw_owner - len(interval),
+    totals = {'requests': sum(row['requests'] for row in kernel), 'owner_jobs': raw_owner - observer_jobs,
               'statements': sum(sql) - observer_sql}
     return {'totals': totals, 'scope': 'one daemon cumulative first-ready to last measured Status interval; every acknowledged channel Resources cost subtracted exactly once; per-connection terminal opcode totals include original witness/reopen',
             'raw': {'owner_jobs': raw_owner, 'statement_executions_by_family': sql},
-            'observer': {'jobs': len(interval), 'statement_executions': observer_sql},
+            'observer': {'jobs': observer_jobs, 'statement_executions': observer_sql},
             'kernel_connections': kernel, 'correlation': correlation,
             'endpoints': {'before': begin, 'end': end}, 'source': counts.SCHEMA_SOURCE}

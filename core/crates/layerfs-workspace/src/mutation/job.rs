@@ -47,26 +47,7 @@ impl NamespaceJob {
     pub const fn source(&self) -> BaseSource {
         self.source
     }
-    /// Heap bytes of this input beyond its own size, for admission accounting.
-    pub fn charge(&self) -> usize {
-        let names = match &self.operation {
-            Operation::Rename {
-                destination_path, ..
-            } => destination_path.as_ref().map_or(0, |path| {
-                path.capacity()
-                    * (std::mem::size_of::<layerfs_content::filesystem::PathName>() + 255)
-            }),
-            _ => 0,
-        };
-        let data = match &self.operation {
-            Operation::Write { data, .. }
-            | Operation::WriteOpen { data, .. }
-            | Operation::StoreOpen { data, .. } => data.charge(),
-            _ => 0,
-        };
-        // Operation names and one symlink target are bounded by their grammar.
-        self.facts.charge() + names + data + 2 * 255 + 4096
-    }
+
     /// Runs inside one owner job. A refusal or a need publishes nothing; the
     /// single `apply` is the operation's only attempt and is never replayed.
     pub fn perform(&self, db: &Overlay) -> WorkspaceResult<JobOutcome> {

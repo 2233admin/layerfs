@@ -173,9 +173,9 @@ impl Application {
         // The operation keeps its exact original result independently of every
         // later counter acquisition and diagnostic sink outcome.
         let outcome = self.control_operation(operation, slot);
-        // One explicitly charged read-only observer job. The caller drops its
-        // Completion before the snapshot, but publisher credit may remain
-        // transiently. This observation never replaces the original outcome.
+        // One explicitly charged read-only observer job. The caller dropped its
+        // JobReceipt before the snapshot. This observation never replaces the
+        // original outcome.
         let resources = resources::ResourceObservation::acquire(&self.owner.client());
         let store = service.as_ref().map(|service| service.observed_store());
         let result = (|| {
@@ -203,25 +203,16 @@ impl Application {
             )?;
             resources::emit(&mut rows, &resources)?;
             schema::owner(&mut rows, self.owner.client().diagnostics().ok())?;
-            let budget = self.owner.client().budget_work();
             rows.row(
-                31,
+                33,
                 0,
-                Some(&[
-                    budget.limit_bytes as u64,
-                    budget.pager_bytes as u64,
-                    budget.fixed_bytes as u64,
-                    budget.job_bytes as u64,
-                    budget.peak_job_bytes as u64,
-                    budget.outstanding as u64,
-                    u64::from(
-                        self.owner
-                            .profile()
-                            .compile_options
-                            .iter()
-                            .any(|option| option == "ENABLE_MEMORY_MANAGEMENT"),
-                    ),
-                ]),
+                Some(&[u64::from(
+                    self.owner
+                        .profile()
+                        .compile_options
+                        .iter()
+                        .any(|option| option == "ENABLE_MEMORY_MANAGEMENT"),
+                )]),
             )?;
             if let Some(store) = &store {
                 schema::store(&mut rows, store)?;
@@ -230,13 +221,6 @@ impl Application {
                     rows.row(section, 0, None)?;
                 }
             }
-            #[cfg(target_os = "linux")]
-            schema::dispatch(
-                &mut rows,
-                self.native.as_ref().and_then(|native| native.work()),
-            )?;
-            #[cfg(not(target_os = "linux"))]
-            rows.row(11, 0, None)?;
             #[cfg(target_os = "linux")]
             {
                 let observer = observer.or_else(|| {

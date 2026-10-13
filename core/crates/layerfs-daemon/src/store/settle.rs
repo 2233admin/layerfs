@@ -1,19 +1,20 @@
 //! One exact local failure disposition, never a guessed history cleanup.
 use super::{BoundWorkspace, CommitFailure};
-use crate::{Command, Completion, OwnerError, Response};
+use crate::{JobReceipt, OwnerError, Response};
 
 impl BoundWorkspace {
     /// One original job of the Commit thread. Admission is a readiness wait
     /// before the single attempt, as for a filesystem request: a Workspace
     /// busy with other callers delays the Commit and does not refuse it.
-    pub(super) fn job(&self, command: Command) -> Result<Completion, OwnerError> {
-        self.owner
-            .submit_waiting(Some(self.route()), command)
-            .map_err(|(cause, command)| OwnerError::Unattempted {
-                cause: Box::new(cause),
-                command: Box::new(command),
-            })?
-            .wait()
+    pub(super) fn job(
+        &self,
+        command: impl FnOnce(
+                &crate::OwnerClient,
+                Option<layerfs_overlay::Route>,
+            ) -> Result<crate::JobReceipt, crate::OwnerError>
+            + Send,
+    ) -> Result<JobReceipt, OwnerError> {
+        command(&self.owner, Some(self.route()))
     }
     pub(super) fn settle_failure(&self, mut failure: CommitFailure) -> Box<CommitFailure> {
         if failure.published.is_some() || failure.error.uncertain() {
@@ -23,7 +24,9 @@ impl BoundWorkspace {
             failure.locally_settled = true;
             return Box::new(failure);
         };
-        match self.job(Command::ResolveFailed(capture)) {
+        match self.job(|job_client: &crate::OwnerClient, job_route| {
+            job_client.resolve_failed(job_route, capture)
+        }) {
             Ok(done) => {
                 failure.locally_settled = matches!(done.result(), Ok(Response::Done));
                 failure.local = Some(done);

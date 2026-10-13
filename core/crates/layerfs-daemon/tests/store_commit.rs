@@ -15,7 +15,7 @@ use layerfs_content::{
 use layerfs_daemon::{
     bootstrap::open_store,
     store::{BindRequest, BoundWorkspace, CommitError, CommitPhase, Store},
-    Command, Completion, Owner, OwnerClient, OwnerConfig, Response,
+    JobReceipt, Owner, OwnerClient, OwnerConfig, Response,
 };
 use layerfs_history::{BranchSnapshot, CommitStagedOutcome, HistoryError, WorkspaceId};
 use layerfs_overlay::{ProfileConfig, Route};
@@ -28,21 +28,18 @@ use std::{
         atomic::{AtomicU64, Ordering},
         mpsc, Arc,
     },
-    time::{Duration, Instant},
+    time::Duration,
 };
 
-fn job(owner: &OwnerClient, route: Route, command: Command) -> Completion {
-    let pending = owner
-        .try_submit(Some(route), command)
-        .unwrap_or_else(|e| panic!("{e:?}"));
-    let until = Instant::now() + Duration::from_secs(5);
-    loop {
-        if let Some(done) = pending.try_complete().unwrap() {
-            return done;
-        }
-        assert!(Instant::now() < until, "bounded original local completion");
-        std::thread::yield_now();
-    }
+fn job(
+    owner: &OwnerClient,
+    route: Route,
+    command: impl FnOnce(
+        &layerfs_daemon::OwnerClient,
+        Option<layerfs_overlay::Route>,
+    ) -> Result<layerfs_daemon::JobReceipt, layerfs_daemon::OwnerError>,
+) -> JobReceipt {
+    command(owner, Some(route)).unwrap_or_else(|error| panic!("{error:?}"))
 }
 fn bind(store: &Arc<Store>, owner: &Owner, f: &support::Fixture, tag: u8) -> Arc<BoundWorkspace> {
     Arc::new(
@@ -92,8 +89,8 @@ fn window<T>(
     let acquired = job(
         operation.overlay(),
         workspace.route(),
-        Command::AcquireBaseSource {
-            owner: NEXT.fetch_add(1, Ordering::Relaxed),
+        |job_client: &layerfs_daemon::OwnerClient, job_route| {
+            job_client.acquire_base_source(job_route, NEXT.fetch_add(1, Ordering::Relaxed))
         },
     );
     let source = match acquired.result() {
@@ -107,7 +104,8 @@ fn window<T>(
     assert!(job(
         operation.overlay(),
         workspace.route(),
-        Command::ReleaseBaseSource(source)
+        |job_client: &layerfs_daemon::OwnerClient, job_route| job_client
+            .release_base_source(job_route, source)
     )
     .result()
     .is_ok());
@@ -147,7 +145,7 @@ fn write(workspace: &BoundWorkspace, value: &[u8]) {
         assert!(job(
             operation.overlay(),
             workspace.route(),
-            Command::ReplyAttempted(publication)
+            |job_client: &layerfs_daemon::OwnerClient, _| job_client.reply_attempted(publication)
         )
         .result()
         .is_ok());
@@ -207,7 +205,12 @@ fn construct(
 }
 fn close(owner: &Owner, workspace: &BoundWorkspace) {
     assert!(matches!(
-        job(&owner.client(), workspace.route(), Command::Close).result(),
+        job(
+            &owner.client(),
+            workspace.route(),
+            |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.close(job_route)
+        )
+        .result(),
         Ok(Response::Done)
     ));
 }
@@ -414,8 +417,10 @@ fn known_publication_survives_an_unattempted_local_install() {
             .error,
         CommitError::InFlight
     ));
+    // Each daemon keeps its Workspace files beside its own path.
+    std::fs::create_dir(f.directory.join("next")).unwrap();
     let next_owner = Owner::start(
-        &f.directory.join("next-overlay.sqlite"),
+        &f.directory.join("next").join("overlay.sqlite"),
         ProfileConfig::default(),
         OwnerConfig::default(),
     )

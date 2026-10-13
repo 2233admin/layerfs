@@ -15,8 +15,7 @@ use layerfs_content::filesystem::PathName;
 use layerfs_daemon::{
     bootstrap::open_store,
     store::{BindRequest, BoundWorkspace, Store},
-    Command, Completion, NativeJob, NativeReply, Owner, OwnerClient, OwnerConfig, Response,
-    ServiceClass,
+    JobReceipt, NativeReply, Owner, OwnerClient, OwnerConfig, Response, ServiceClass,
 };
 use layerfs_fuse::{
     operations::{
@@ -101,12 +100,15 @@ fn until(what: &str, mut condition: impl FnMut() -> bool) {
         std::thread::yield_now();
     }
 }
-fn finish(client: &OwnerClient, route: layerfs_overlay::Route, command: Command) -> Completion {
-    let pending = match client.try_submit(Some(route), command) {
-        Ok(pending) => pending,
-        Err((error, command)) => panic!("admission of {command:?}: {error:?}"),
-    };
-    wait(pending).unwrap()
+fn finish(
+    client: &OwnerClient,
+    route: layerfs_overlay::Route,
+    command: impl FnOnce(
+        &layerfs_daemon::OwnerClient,
+        Option<layerfs_overlay::Route>,
+    ) -> Result<layerfs_daemon::JobReceipt, layerfs_daemon::OwnerError>,
+) -> JobReceipt {
+    command(client, Some(route)).unwrap_or_else(|error| panic!("{error:?}"))
 }
 pub fn name(text: &str) -> PathName {
     PathName::new(text).unwrap()
@@ -217,8 +219,9 @@ impl Rig {
         )
         .unwrap();
         let overlay = fixture.directory.join("overlay");
+        // The one Workspace bound below has its own file beside the owner's.
         let suffix = format!(
-            "{}/overlay",
+            "{}/1.sqlite",
             fixture.directory.file_name().unwrap().to_str().unwrap()
         );
         let trace = statement_trace::watch(&suffix);
@@ -248,7 +251,9 @@ impl Rig {
         let done = finish(
             &client,
             bound.route(),
-            Command::Native(NativeJob::Mount { root }),
+            |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.native_mount(job_route, root)
+            },
         );
         let mount = match done.result() {
             Ok(Response::Native(NativeReply::Mount(mount))) => *mount,
@@ -282,13 +287,10 @@ impl Rig {
         (self.bound.request(&Fence::default()).unwrap(), request)
     }
     fn snapshot(&self) -> Snapshot {
-        until("owner results returned", || {
-            self.client.diagnostics().unwrap().outstanding == 0
-        });
         let work = self.client.diagnostics().unwrap();
         Snapshot {
-            completed: work.completed,
-            admitted: work.admitted,
+            completed: work.jobs,
+            admitted: work.jobs.iter().sum::<u64>(),
             foreground: work.sql_foreground,
         }
     }
@@ -333,8 +335,8 @@ impl Rig {
             .iter()
             .map(|family| (family.attempts, family.executions, family.vm_steps))
             .collect();
-        // A job that took its turn on this thread ran every statement here;
-        // the owner thread's own maintenance turns are not part of it.
+        // A job runs every statement on its calling thread; maintenance
+        // steps are counted apart from the foreground work.
         let mine: Vec<&statement_trace::Run> = runs.iter().filter(|run| run.own).collect();
         let mut shapes = self.shapes.borrow_mut();
         if mine.len() as u64 == total.attempts {
@@ -351,9 +353,9 @@ impl Rig {
             row.add(&shape);
             shapes.known.entry((kind, signature)).or_insert(shape);
         } else {
-            // The owner thread served a job of this request, between its
-            // own maintenance turns: the templates are those of a request
-            // of the same kind and signature, resolved at the end.
+            // A maintenance step ran inside this request's window: the
+            // templates are those of a request of the same kind and
+            // signature, resolved at the end.
             shapes.elsewhere.push((kind, signature));
         }
         drop(shapes);
@@ -561,7 +563,11 @@ impl Rig {
     /// The state job the control plane runs once around a measured command.
     pub fn status(&self) {
         self.observed(Kind::Status, || {
-            drop(finish(&self.client, self.bound.route(), Command::State));
+            drop(finish(
+                &self.client,
+                self.bound.route(),
+                |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.state(job_route),
+            ));
         })
     }
     /// Requests made before a measured command, attributed to no kind: what
@@ -578,7 +584,13 @@ impl Rig {
     /// measured window holds one of its turns.
     pub fn settle(&self) {
         until("maintenance idle", || {
-            let done = finish(&self.client, self.bound.route(), Command::MaintenanceIdle);
+            let done = finish(
+                &self.client,
+                self.bound.route(),
+                |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                    job_client.maintenance_idle(job_route)
+                },
+            );
             matches!(done.result(), Ok(Response::MaintenanceIdle(true)))
         });
     }
@@ -589,7 +601,7 @@ impl Rig {
         for (kind, signature) in shapes.elsewhere {
             let row = table.get_mut(&kind).unwrap();
             let shape = shapes.known.get(&(kind, signature)).unwrap_or_else(|| {
-                panic!("{kind:?}: the owner thread served the only request of its shape")
+                panic!("{kind:?}: no request of this shape ran its statements on the caller")
             });
             row.add(shape);
             row.elsewhere += 1;
@@ -606,13 +618,12 @@ impl Rig {
             mount,
             ..
         } = self;
-        until("owner credits returned", || {
-            client.diagnostics().unwrap().outstanding == 0
-        });
         let done = finish(
             &client,
             bound.route(),
-            Command::Native(NativeJob::Revoke(mount)),
+            |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.native_revoke(job_route, mount)
+            },
         );
         assert!(
             matches!(done.result(), Ok(Response::Native(NativeReply::Done))),
@@ -620,9 +631,6 @@ impl Rig {
             done.result()
         );
         drop(done);
-        until("owner credits returned", || {
-            client.diagnostics().unwrap().outstanding == 0
-        });
         assert_eq!(store.read_work().outstanding, 0);
         drop(bound);
         owner.stop().unwrap();

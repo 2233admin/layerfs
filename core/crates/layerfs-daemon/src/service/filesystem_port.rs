@@ -1,8 +1,7 @@
 //! Async Fuse ports over the existing fair SQL owner and direct Store readers.
 use crate::{
     store::{BoundWorkspace, PortError, ReadAdmissionError, StoreOperation},
-    Command, Completion, NativeDirectoryJob, NativeDirectoryReply, NativeJob, NativeReply,
-    OwnerError, Response,
+    JobReceipt, NativeDirectoryReply, NativeReply, OwnerError, Response,
 };
 use layerfs_fuse::ports::{
     BaseDemandFailed, Fence, Fenced, MountServices, RequestServices, ServiceError, ServiceFuture,
@@ -70,35 +69,31 @@ impl FilesystemPort {
         let marker: BaseDemandFailed = self.1.failed_demand(cause);
         Box::new(marker)
     }
-    fn complete(&self, command: Command, gated: bool) -> ServiceFuture<'_, Completion> {
+    fn complete(
+        &self,
+        command: impl FnOnce(
+                &crate::OwnerClient,
+                Option<layerfs_overlay::Route>,
+            ) -> Result<crate::JobReceipt, crate::OwnerError>
+            + Send
+            + 'static,
+        gated: bool,
+    ) -> ServiceFuture<'_, JobReceipt> {
         Box::pin(async move {
-            let unattempted = |(cause, command)| -> ServiceError {
-                Box::new(OwnerError::Unattempted {
-                    cause: Box::new(cause),
-                    command: Box::new(command),
-                })
-            };
             self.fenced(gated)?;
-            let pending = {
-                let mut admission = self
-                    .0
-                    .overlay()
-                    .submit_when_available(Some(self.0.workspace().route()), command)
-                    .map_err(unattempted)?;
-                // Leaving this block on a stop drops the admission and with
-                // it the command, which was never submitted.
-                poll_fn(|cx| match self.fenced(gated) {
-                    Ok(()) => Pin::new(&mut admission).poll(cx).map_err(unattempted),
-                    Err(fenced) => Poll::Ready(Err(fenced)),
-                })
-                .await?
-            };
-            Ok(pending.await?)
+            let pending = command(self.0.overlay(), Some(self.0.workspace().route()))
+                .map_err(|cause| Box::new(cause) as ServiceError)?;
+            Ok(pending)
         })
     }
     fn job<T: Send + 'static>(
         &self,
-        command: Command,
+        command: impl FnOnce(
+                &crate::OwnerClient,
+                Option<layerfs_overlay::Route>,
+            ) -> Result<crate::JobReceipt, crate::OwnerError>
+            + Send
+            + 'static,
         gated: bool,
         project: fn(&Response) -> Option<T>,
     ) -> ServiceFuture<'_, ServiceReply<T>> {
@@ -155,7 +150,12 @@ impl FilesystemPort {
     /// A call that acquires: refused by a stopped fence before its attempt.
     fn acquire<T: Send + 'static>(
         &self,
-        command: Command,
+        command: impl FnOnce(
+                &crate::OwnerClient,
+                Option<layerfs_overlay::Route>,
+            ) -> Result<crate::JobReceipt, crate::OwnerError>
+            + Send
+            + 'static,
         project: fn(&Response) -> Option<T>,
     ) -> ServiceFuture<'_, ServiceReply<T>> {
         self.job(command, true, project)
@@ -163,7 +163,12 @@ impl FilesystemPort {
     /// A call that only gives back: never refused by the fence.
     fn dispose<T: Send + 'static>(
         &self,
-        command: Command,
+        command: impl FnOnce(
+                &crate::OwnerClient,
+                Option<layerfs_overlay::Route>,
+            ) -> Result<crate::JobReceipt, crate::OwnerError>
+            + Send
+            + 'static,
         project: fn(&Response) -> Option<T>,
     ) -> ServiceFuture<'_, ServiceReply<T>> {
         self.job(command, false, project)
@@ -192,9 +197,9 @@ impl RequestServices for FilesystemPort {
         );
         match visit {
             Ok(visit) => self.acquire(
-                Command::Native(NativeJob::Directory(Box::new(NativeDirectoryJob::Visit(
-                    visit,
-                )))),
+                move |job_client: &crate::OwnerClient, route| {
+                    job_client.native_directory_visit(route, visit)
+                },
                 |response| match response {
                     Response::Native(NativeReply::Directory(NativeDirectoryReply::Window(
                         value,
@@ -211,9 +216,9 @@ impl RequestServices for FilesystemPort {
         names: Vec<Vec<u8>>,
     ) -> ServiceFuture<'_, ServiceReply<()>> {
         self.acquire(
-            Command::Native(NativeJob::Directory(Box::new(
-                NativeDirectoryJob::Publish { offer, names },
-            ))),
+            move |job_client: &crate::OwnerClient, route| {
+                job_client.native_directory_publish(route, offer, names)
+            },
             directory_done,
         )
     }
@@ -224,11 +229,9 @@ impl RequestServices for FilesystemPort {
         handle: u64,
     ) -> ServiceFuture<'_, ServiceReply<()>> {
         self.dispose(
-            Command::Native(NativeJob::Directory(Box::new(NativeDirectoryJob::Close {
-                mount,
-                serial,
-                handle,
-            }))),
+            move |job_client: &crate::OwnerClient, route| {
+                job_client.native_directory_close(route, mount, serial, handle)
+            },
             directory_done,
         )
     }
@@ -254,7 +257,9 @@ impl RequestServices for FilesystemPort {
         );
         match visit {
             Ok(visit) => self.acquire(
-                Command::Native(NativeJob::ReadVisit(Box::new(visit))),
+                move |job_client: &crate::OwnerClient, route| {
+                    job_client.native_read_visit(route, Box::new(visit))
+                },
                 |response| match response {
                     Response::Native(NativeReply::Window(value)) => Some(value.clone()),
                     _ => None,
@@ -270,11 +275,9 @@ impl RequestServices for FilesystemPort {
         handle: u64,
     ) -> ServiceFuture<'_, ServiceReply<()>> {
         self.dispose(
-            Command::Native(NativeJob::CloseFile {
-                mount,
-                serial,
-                handle,
-            }),
+            move |job_client: &crate::OwnerClient, route| {
+                job_client.native_close_file(route, mount, serial, handle)
+            },
             |response| matches!(response, Response::Native(NativeReply::Done)).then_some(()),
         )
     }
@@ -331,7 +334,9 @@ impl RequestServices for FilesystemPort {
         };
         match visit {
             Ok(visit) => self.acquire(
-                Command::Native(NativeJob::ObserveVisit(Box::new(visit))),
+                move |job_client: &crate::OwnerClient, route| {
+                    job_client.native_observe_visit(route, Box::new(visit))
+                },
                 |response| match response {
                     Response::Native(NativeReply::Observed(value)) => Some(value.clone()),
                     _ => None,
@@ -364,7 +369,9 @@ impl RequestServices for FilesystemPort {
             .native_mutation_visit(self.0.resident(), request);
         let job = match visit {
             Ok(visit) => self.acquire(
-                Command::Native(NativeJob::MutateVisit(Box::new(visit))),
+                move |job_client: &crate::OwnerClient, route| {
+                    job_client.native_mutate_visit(route, Box::new(visit))
+                },
                 |response| match response {
                     Response::Native(NativeReply::Mutated(value)) => Some(value.clone()),
                     _ => None,
@@ -404,7 +411,6 @@ impl RequestServices for FilesystemPort {
             }
             // Hashing and page reads never run on the loop that received
             // the request.
-            layerfs_fuse::LeaveReceiver::default().await;
             let resident = base.with_client(self.0.resident());
             let mut outcome = run.recognize(&resident, serial, offset, &data, &mut work);
             if outcome == Recognition::NeedsBase {
@@ -434,11 +440,9 @@ impl RequestServices for FilesystemPort {
         count: u64,
     ) -> ServiceFuture<'_, ServiceReply<()>> {
         self.dispose(
-            Command::Native(NativeJob::Forget {
-                mount,
-                serial,
-                count,
-            }),
+            move |job_client: &crate::OwnerClient, route| {
+                job_client.native_forget(route, mount, serial, count)
+            },
             |response| matches!(response, Response::Native(NativeReply::Done)).then_some(()),
         )
     }
@@ -457,18 +461,19 @@ impl RequestServices for FilesystemPort {
             Err(error) => Err(Box::new(error)),
         }
     }
-    /// The attempt is recorded from this thread, with no owner turn. Only
-    /// the last attempt of a Workspace that an owner job waits for owes one.
+    /// The attempt is one short job of this thread with no SQL; the last
+    /// attempt wakes a Capture waiting on the same Workspace lock.
     fn reply_attempted(&self, publication: Publication) -> ServiceFuture<'_, ServiceReply<()>> {
         let settled = if publication.route() == self.0.workspace().route() {
             self.0.overlay().reply_attempted(publication)
         } else {
             Err(OwnerError::Overlay(layerfs_overlay::OverlayError::Stale))
         };
-        match settled {
-            Ok(_) => Box::pin(std::future::ready(Ok(ServiceReply::new((), ())))),
-            Err(error) => Box::pin(std::future::ready(Err(Box::new(error) as ServiceError))),
-        }
+        Box::pin(std::future::ready(match settled {
+            Ok(done) if done.result().is_ok() => Ok(ServiceReply::new((), done)),
+            Ok(done) => Err(Box::new(done) as ServiceError),
+            Err(error) => Err(Box::new(error) as ServiceError),
+        }))
     }
 }
 /// The allocator's immediate admission refusal: nothing was reserved.

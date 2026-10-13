@@ -5,7 +5,7 @@ use layerfs_bridge::control::{
 use layerfs_daemon::{
     control::{Failure, NativeConfig, NativeServing, Service, Success},
     store::Store,
-    Command, Owner, OwnerConfig, Response,
+    Owner, OwnerConfig, Response,
 };
 use layerfs_history::{BranchId, WorkspaceId};
 use nix::unistd::{Gid, Uid};
@@ -45,8 +45,6 @@ impl Harness {
                 owner_gid: Gid::effective().as_raw(),
                 command_uid: COMMAND,
                 command_gid: COMMAND,
-                read_handles: READ_HANDLES,
-                namespaces: OwnerConfig::default().namespaces,
                 ready_wait: Duration::from_secs(3),
                 drain_wait: Duration::from_secs(3),
             })
@@ -140,33 +138,39 @@ impl Harness {
     /// SQL and memory remain distinct observations of the original job.
     pub fn engine_resources(&self, through: WorkspaceToken) -> layerfs_overlay::Resources {
         let _operation = self.service.operation(through).unwrap();
-        let pending = self
-            .owner
-            .client()
-            .try_submit(None, Command::Resources { global: true })
-            .unwrap();
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
-        let done = loop {
-            if let Some(done) = pending.try_complete().unwrap() {
-                break done;
-            }
-            assert!(
-                std::time::Instant::now() < deadline,
-                "resource observation deadline"
-            );
-            std::thread::yield_now();
-        };
+        let pending = self.owner.client().resources(None, true).unwrap();
+        let done = pending;
         match done.result() {
             Ok(Response::Resources(resources)) => **resources,
             other => panic!("{other:?}"),
         }
     }
 
+    /// Stops a daemon that keeps a failed Workspace. The aggregate resources
+    /// observation is refused with that original failure, and the stop
+    /// reports what it kept.
+    pub fn stop_retained(self) {
+        let observed = self.owner.client().resources(None, true);
+        assert!(
+            !matches!(observed.as_ref().map(|done| done.result()), Ok(Ok(_))),
+            "{observed:?}"
+        );
+        drop(observed);
+        drop(self.service);
+        drop(self.serving);
+        println!("HARNESS_STOP retained={:?}", self.owner.stop().err());
+    }
     pub fn stop(self) {
-        let work = self.serving.work().unwrap();
-        assert_eq!(work.mounts, 0, "{work:?}");
-        assert_eq!(work.live_workers, READ_HANDLES + 2, "{work:?}");
-        assert_eq!((work.queued, work.running, work.retained), (0, 0, 0));
+        let observed = self.owner.client().resources(None, true).unwrap();
+        match observed.result() {
+            // No mount and no open state is left; a Workspace that was only
+            // bound may remain.
+            Ok(Response::Resources(resources)) => {
+                assert_eq!(resources.open.values(), [0; 11], "{resources:?}");
+            }
+            other => panic!("{other:?}"),
+        }
+        drop(observed);
         drop(self.service);
         drop(self.serving);
         self.owner.stop().unwrap();

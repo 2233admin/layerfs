@@ -1,40 +1,27 @@
 #[path = "../../layerfs-overlay/tests/payload_support/mod.rs"]
 mod payload_support;
-use layerfs_daemon::{
-    Command, Completion, Owner, OwnerClient, OwnerConfig, OwnerError, Pending, Response,
-};
+use layerfs_daemon::{JobReceipt, Owner, OwnerClient, OwnerConfig, OwnerError, Response};
 use layerfs_overlay::*;
 use layerfs_workspace::{OverlayCapturedRuns, WorkspaceError};
 use payload_support::Temp;
-use std::{
-    error::Error,
-    time::{Duration, Instant},
-};
+use std::error::Error;
 
-fn wait(pending: Pending) -> Completion {
-    let end = Instant::now() + Duration::from_secs(3);
-    loop {
-        if let Some(done) = pending.try_complete().unwrap() {
-            return done;
-        }
-        assert!(Instant::now() < end, "bounded captured-run job");
-        std::thread::yield_now();
-    }
-}
-fn job(client: &OwnerClient, route: Option<Route>, command: Command) -> Completion {
-    wait(
-        client
-            .try_submit(route, command)
-            .unwrap_or_else(|(e, c)| panic!("{e:?} {c:?}")),
-    )
+fn job(
+    client: &OwnerClient,
+    route: Option<Route>,
+    command: impl FnOnce(
+        &layerfs_daemon::OwnerClient,
+        Option<layerfs_overlay::Route>,
+    ) -> Result<layerfs_daemon::JobReceipt, layerfs_daemon::OwnerError>,
+) -> JobReceipt {
+    command(client, route).unwrap_or_else(|error| panic!("{error:?}"))
 }
 fn setup(client: &OwnerClient, tag: u8, size: u64, with_cell: bool) -> (Route, CapturedReader) {
     let opened = job(
         client,
         None,
-        Command::Open {
-            incarnation: [tag; 32],
-            base_root: [tag + 1; 32],
+        |job_client: &layerfs_daemon::OwnerClient, job_route| {
+            job_client.open(job_route, [tag; 32], [tag + 1; 32])
         },
     );
     let route = match opened.result() {
@@ -52,22 +39,25 @@ fn setup(client: &OwnerClient, tag: u8, size: u64, with_cell: bool) -> (Route, C
     let published = job(
         client,
         Some(route),
-        Command::Publish {
-            inode: Inode {
-                serial: 17,
-                kind: InodeKind::File,
-                mode: 0o644,
-                mtime_seconds: 1,
-                mtime_nanoseconds: 0,
-                nlink: 1,
-                size,
-                inherited_cutoff: 0,
-                born: 0,
-                entries: 0,
-                subdirs: 0,
-            },
-            name: None,
-            cell: with_cell.then_some(cell),
+        |job_client: &layerfs_daemon::OwnerClient, job_route| {
+            job_client.publish(
+                job_route,
+                Inode {
+                    serial: 17,
+                    kind: InodeKind::File,
+                    mode: 0o644,
+                    mtime_seconds: 1,
+                    mtime_nanoseconds: 0,
+                    nlink: 1,
+                    size,
+                    inherited_cutoff: 0,
+                    born: 0,
+                    entries: 0,
+                    subdirs: 0,
+                },
+                None,
+                with_cell.then_some(cell),
+            )
         },
     );
     let publication = match published.result() {
@@ -75,12 +65,18 @@ fn setup(client: &OwnerClient, tag: u8, size: u64, with_cell: bool) -> (Route, C
         v => panic!("{v:?}"),
     };
     drop(published);
-    assert!(
-        job(client, Some(route), Command::ReplyAttempted(publication))
-            .result()
-            .is_ok()
+    assert!(job(
+        client,
+        Some(route),
+        |job_client: &layerfs_daemon::OwnerClient, _| job_client.reply_attempted(publication)
+    )
+    .result()
+    .is_ok());
+    let captured = job(
+        client,
+        Some(route),
+        |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.capture(job_route),
     );
-    let captured = job(client, Some(route), Command::Capture);
     let capture = match captured.result() {
         Ok(Response::Captured(c)) => *c,
         v => panic!("{v:?}"),
@@ -89,9 +85,8 @@ fn setup(client: &OwnerClient, tag: u8, size: u64, with_cell: bool) -> (Route, C
     let acquired = job(
         client,
         Some(route),
-        Command::AcquireCapturedReader {
-            capture,
-            request: 1,
+        |job_client: &layerfs_daemon::OwnerClient, job_route| {
+            job_client.acquire_captured_reader(job_route, capture, 1)
         },
     );
     let reader = match acquired.result() {
@@ -132,34 +127,33 @@ fn actual_owner_returns_bounded_window_with_original_root_after_install_and_clos
             assert!(job(
                 &client,
                 Some(route),
-                Command::Install {
-                    capture: reader.capture(),
-                    root: [199; 32]
-                }
+                |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.install(
+                    job_route,
+                    reader.capture(),
+                    [199; 32]
+                )
             )
             .result()
             .is_ok());
         }
         if phase == 1 {
-            assert!(job(&client, Some(route), Command::Close).result().is_ok());
+            assert!(job(
+                &client,
+                Some(route),
+                |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.close(job_route)
+            )
+            .result()
+            .is_ok());
         }
     }
-    assert!(
-        job(&client, Some(route), Command::ReleaseCapturedReader(reader))
-            .result()
-            .is_ok()
-    );
-    // The publisher drops its own final credit after the consumer observes the
-    // completion: bound the wait for that release before the exact check.
-    let end = Instant::now() + Duration::from_secs(3);
-    while client.diagnostics().unwrap().outstanding != 0 {
-        assert!(
-            Instant::now() < end,
-            "publisher did not release final credit"
-        );
-        std::thread::yield_now();
-    }
-    assert_eq!(client.diagnostics().unwrap().credited_bytes, 0);
+    assert!(job(
+        &client,
+        Some(route),
+        |job_client: &layerfs_daemon::OwnerClient, job_route| job_client
+            .release_captured_reader(job_route, reader)
+    )
+    .result()
+    .is_ok());
     owner.stop().unwrap();
 }
 
@@ -181,10 +175,11 @@ fn captured_inode_point_retains_old_metadata_and_forward_seek_bounds() {
     assert!(job(
         &client,
         Some(route),
-        Command::Install {
-            capture: reader.capture(),
-            root: [198; 32]
-        }
+        |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.install(
+            job_route,
+            reader.capture(),
+            [198; 32]
+        )
     )
     .result()
     .is_ok());
@@ -194,10 +189,8 @@ fn captured_inode_point_retains_old_metadata_and_forward_seek_bounds() {
     let published = job(
         &client,
         Some(route),
-        Command::Publish {
-            inode: current,
-            name: None,
-            cell: None,
+        |job_client: &layerfs_daemon::OwnerClient, job_route| {
+            job_client.publish(job_route, current, None, None)
         },
     );
     let publication = match published.result() {
@@ -205,16 +198,22 @@ fn captured_inode_point_retains_old_metadata_and_forward_seek_bounds() {
         v => panic!("{v:?}"),
     };
     drop(published);
-    assert!(
-        job(&client, Some(route), Command::ReplyAttempted(publication))
-            .result()
-            .is_ok()
-    );
+    assert!(job(
+        &client,
+        Some(route),
+        |job_client: &layerfs_daemon::OwnerClient, _| job_client.reply_attempted(publication)
+    )
+    .result()
+    .is_ok());
     assert_eq!(
         client.captured_inode(reader, 17).unwrap(),
         Some(original.clone())
     );
-    let changed = job(&client, Some(route), Command::Inode(17));
+    let changed = job(
+        &client,
+        Some(route),
+        |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.inode(job_route, 17),
+    );
     assert!(matches!(changed.result(),Ok(Response::Inode(Some(i))) if i.size==9 && i.mode==0o600));
     drop(changed);
     let cursor = CapturedRunCursor::new(reader, 17, 0, CELL_BYTES as u64).unwrap();
@@ -250,16 +249,25 @@ fn captured_inode_point_retains_old_metadata_and_forward_seek_bounds() {
         (CapturedGap::Zero, 200, CELL_BYTES as u64 - 200)
     );
     assert_eq!(next.reader(), reader);
-    assert!(job(&client, Some(route), Command::Close).result().is_ok());
+    assert!(job(
+        &client,
+        Some(route),
+        |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.close(job_route)
+    )
+    .result()
+    .is_ok());
     assert_eq!(
         client.captured_inode(reader, 17).unwrap(),
         Some(original.clone())
     );
-    assert!(
-        job(&client, Some(route), Command::ReleaseCapturedReader(reader))
-            .result()
-            .is_ok()
-    );
+    assert!(job(
+        &client,
+        Some(route),
+        |job_client: &layerfs_daemon::OwnerClient, job_route| job_client
+            .release_captured_reader(job_route, reader)
+    )
+    .result()
+    .is_ok());
     assert!(client.captured_inode(reader, 17).is_err());
     owner.stop().unwrap();
 }
@@ -280,7 +288,7 @@ fn original_attempted_and_unattempted_run_errors_keep_custody_and_other_scope_pr
     let done = error
         .source()
         .unwrap()
-        .downcast_ref::<Completion>()
+        .downcast_ref::<JobReceipt>()
         .expect("original completion");
     assert!(matches!(
         done.result(),
@@ -288,7 +296,6 @@ fn original_attempted_and_unattempted_run_errors_keep_custody_and_other_scope_pr
             "captured run size"
         )))
     ));
-    assert!(client.diagnostics().unwrap().credited_bytes > 0);
     let (other, other_reader) = setup(&client, 165, (1_u64 << 32) + 9, false);
     let other_cursor = CapturedRunCursor::new(other_reader, 17, 0, (1_u64 << 32) + 9).unwrap();
     assert!(matches!(
@@ -300,12 +307,21 @@ fn original_attempted_and_unattempted_run_errors_keep_custody_and_other_scope_pr
     ));
     drop(error);
     for (route, reader) in [(route, reader), (other, other_reader)] {
-        assert!(
-            job(&client, Some(route), Command::ReleaseCapturedReader(reader))
-                .result()
-                .is_ok()
-        );
-        assert!(job(&client, Some(route), Command::Close).result().is_ok());
+        assert!(job(
+            &client,
+            Some(route),
+            |job_client: &layerfs_daemon::OwnerClient, job_route| job_client
+                .release_captured_reader(job_route, reader)
+        )
+        .result()
+        .is_ok());
+        assert!(job(
+            &client,
+            Some(route),
+            |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.close(job_route)
+        )
+        .result()
+        .is_ok());
     }
     owner.stop().unwrap();
     // A fresh request position, never submitted while the owner was live.
@@ -315,8 +331,8 @@ fn original_attempted_and_unattempted_run_errors_keep_custody_and_other_scope_pr
         panic!("original service failure")
     };
     assert!(
-        matches!(original.downcast_ref::<OwnerError>(),Some(OwnerError::Unattempted{cause,command})
-        if matches!(cause.as_ref(),OwnerError::Stopped)
-            && matches!(command.as_ref(),Command::CapturedRun(input) if input.reader()==other_reader && input.offset()==1 && input.logical_size()==(1_u64<<32)+9))
+        // The unattempted action owns its original cursor; it is not replayed.
+        matches!(original.downcast_ref::<OwnerError>(), Some(OwnerError::Unattempted { cause, .. })
+        if matches!(cause.as_ref(), OwnerError::Stopped))
     );
 }

@@ -1,7 +1,7 @@
 //! External authenticated endpoints and complete small-root installation oracle.
 use layerfs_bridge::native::{self, Connection};
 use layerfs_daemon::{
-    install_types::InstalledStore, store::BindRequest, Command, Owner, OwnerConfig, Response,
+    install_types::InstalledStore, store::BindRequest, Owner, OwnerConfig, Response,
 };
 use layerfs_history::{BranchId, HistoryCatalogConfig, HistoryName, LayerStackId, WorkspaceId};
 use layerfs_persistence::{PersistenceConfig, SqlitePersistenceProfile};
@@ -209,12 +209,7 @@ pub fn oracle(installed: &InstalledStore, overlay: &Path) {
         );
         assert!(operation.ports().failure().unwrap().is_none());
     }
-    let closed = owner
-        .client()
-        .try_submit(Some(bound.workspace.route()), Command::Close)
-        .unwrap()
-        .wait()
-        .unwrap();
+    let closed = owner.client().close(Some(bound.workspace.route())).unwrap();
     assert!(matches!(closed.result(), Ok(Response::Done)));
     drop((closed, bound));
     owner.stop().unwrap();

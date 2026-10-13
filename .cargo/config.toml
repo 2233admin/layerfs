@@ -39,3 +39,8 @@ rustflags = [
 # neither), so the bridge's build-time refusal exempts documentation builds
 # (`not(doc)`) in the crate itself. A doc build produces no binary, and every
 # build that does still requires this profile.
+
+# Each Workspace has an independent SQLite page-cache group (#321).
+# Existing libsqlite3-sys build setting; no bundled source modification.
+[env]
+LIBSQLITE3_FLAGS = "-USQLITE_ENABLE_MEMORY_MANAGEMENT"

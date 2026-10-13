@@ -9,12 +9,12 @@ mod model;
 #[allow(dead_code)]
 #[path = "support/installed_store.rs"]
 mod support;
-use drive::{content_root, evidence, job, live, settled, Do, Rig, Session};
+use drive::{content_root, evidence, job, live, Do, Rig, Session};
 use layerfs_content::{
     file::{Extent, FileView},
     ObjectId,
 };
-use layerfs_daemon::{store::BoundWorkspace, Command, Response, ServiceClass};
+use layerfs_daemon::{store::BoundWorkspace, Response, ServiceClass};
 use layerfs_history::CommitStagedOutcome;
 use layerfs_overlay::StoredCounts;
 use layerfs_telemetry::timer::Timing;
@@ -42,7 +42,7 @@ fn counts(rig: &Rig, workspace: &BoundWorkspace) -> StoredCounts {
     match job(
         &rig.owner.client(),
         workspace.route(),
-        Command::Resources { global: true },
+        |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.resources(job_route, true),
     )
     .result()
     {
@@ -66,7 +66,6 @@ fn extents(workspace: &BoundWorkspace, root: ObjectId) -> Vec<Extent> {
     .unwrap()
 }
 fn commit(rig: &Rig, workspace: &BoundWorkspace, session: &Session<'_>, label: &str) {
-    settled(&rig.owner.client(), 0);
     let before = rig.owner.client().diagnostics().unwrap();
     let success = workspace
         .commit_captured()
@@ -77,16 +76,10 @@ fn commit(rig: &Rig, workspace: &BoundWorkspace, session: &Session<'_>, label: &
         other => panic!("{other:?}"),
     };
     drop(success);
-    settled(&rig.owner.client(), 0);
     let after = rig.owner.client().diagnostics().unwrap();
-    let jobs: u64 = before
-        .completed
-        .iter()
-        .zip(after.completed)
-        .map(|(a, b)| b - a)
-        .sum();
-    let record_jobs = after.completed[ServiceClass::OperationRecord as usize]
-        - before.completed[ServiceClass::OperationRecord as usize];
+    let jobs: u64 = before.jobs.iter().zip(after.jobs).map(|(a, b)| b - a).sum();
+    let record_jobs = after.jobs[ServiceClass::OperationRecord as usize]
+        - before.jobs[ServiceClass::OperationRecord as usize];
     let sql = after.sql_foreground.since(&before.sql_foreground).total();
     evidence(format_args!("DIAGNOSTIC_COMMIT {label} producer_record_jobs={} record_class_jobs={record_jobs} owner_jobs={jobs} statements={} vm_steps={} fullscan_steps={} sorts={} reprepares={}",
         work.record_jobs, sql.executions, sql.vm_steps, sql.fullscan_steps, sql.sorts, sql.reprepares));
@@ -107,7 +100,6 @@ fn commit(rig: &Rig, workspace: &BoundWorkspace, session: &Session<'_>, label: &
     );
 }
 fn finish(rig: Rig, workspace: std::sync::Arc<BoundWorkspace>) {
-    settled(&rig.owner.client(), 0);
     rig.close(&workspace);
     drop(workspace);
     rig.finish();
@@ -235,16 +227,21 @@ fn benchmark_delete_counts_exact_normalized_script_and_backing_at_two_sizes() {
         let operation = workspace.operation().unwrap();
         let overlay = operation.overlay();
         let route = workspace.route();
-        let capture = match job(overlay, route, Command::Capture).result() {
+        let capture = match job(
+            overlay,
+            route,
+            |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.capture(job_route),
+        )
+        .result()
+        {
             Ok(Response::Captured(capture)) => *capture,
             other => panic!("{other:?}"),
         };
         let reader = match job(
             overlay,
             route,
-            Command::AcquireCapturedReader {
-                capture,
-                request: 901,
+            |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.acquire_captured_reader(job_route, capture, 901)
             },
         )
         .result()
@@ -252,7 +249,15 @@ fn benchmark_delete_counts_exact_normalized_script_and_backing_at_two_sizes() {
             Ok(Response::CapturedReader(Some(reader))) => *reader,
             other => panic!("{other:?}"),
         };
-        let owner = match job(overlay, route, Command::AcquireOperation { request: 902 }).result() {
+        let owner = match job(
+            overlay,
+            route,
+            |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.acquire_operation(job_route, 902)
+            },
+        )
+        .result()
+        {
             Ok(Response::Operation(Some(owner))) => *owner,
             other => panic!("{other:?}"),
         };
@@ -344,12 +349,22 @@ fn benchmark_delete_counts_exact_normalized_script_and_backing_at_two_sizes() {
         assert_eq!(&actual[p..], &original[p + CELL..]);
         assert_eq!(actual.len(), size - CELL);
         drop(attempt);
-        assert!(job(overlay, route, Command::ReleaseCapturedReader(reader))
-            .result()
-            .is_ok());
-        assert!(job(overlay, route, Command::ReleaseOperation(owner))
-            .result()
-            .is_ok());
+        assert!(job(
+            overlay,
+            route,
+            |job_client: &layerfs_daemon::OwnerClient, job_route| job_client
+                .release_captured_reader(job_route, reader)
+        )
+        .result()
+        .is_ok());
+        assert!(job(
+            overlay,
+            route,
+            |job_client: &layerfs_daemon::OwnerClient, job_route| job_client
+                .release_operation(job_route, owner)
+        )
+        .result()
+        .is_ok());
         drop(operation);
         finish(rig, workspace);
     }

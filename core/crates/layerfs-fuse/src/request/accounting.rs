@@ -51,21 +51,17 @@ pub const OPCODES: usize = Opcode::CopyFileRange as usize + 1;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(usize)]
 pub enum Disposal {
-    /// An owned bounded unit entered the shared dispatcher with its reply.
-    /// Its first step, and with it the reply, may still run on the loop.
-    Handoff,
-    /// Replied on the receive loop with no dispatcher slot; no engine job,
+    /// The receiving worker ran the original request and its reply.
+    Served,
+    /// Replied on the receive loop with no engine job,
     /// durability or SQL work.
     Inline,
     /// A declared refusal or invalid identity, replied on the receive loop.
     Refused,
     /// Reply-bearing unit met terminal/failed admission: one error attempt.
     Terminal,
-    /// No-reply ownership unit met terminal admission. Its kernel reference is
-    /// disposed only by drain-qualified revocation, never a guessed decrement.
-    Unadmitted,
 }
-const DISPOSALS: usize = Disposal::Unadmitted as usize + 1;
+const DISPOSALS: usize = Disposal::Terminal as usize + 1;
 
 pub struct Accounting {
     opcodes: [AtomicU64; OPCODES],
@@ -79,11 +75,10 @@ pub struct Accounting {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct OpcodeWork {
     pub opcodes: [u64; OPCODES],
-    pub handoffs: u64,
+    pub served: u64,
     pub inline: u64,
     pub refused: u64,
     pub terminal: u64,
-    pub unadmitted: u64,
     /// Independently bounded ownership units, distinct from FORGET frames.
     pub forget_units: u64,
     /// WRITE units that carried the per-request page-cache flag: stores from
@@ -140,11 +135,10 @@ impl Accounting {
         let disposal = |value: Disposal| self.disposals[value as usize].load(Ordering::Relaxed);
         OpcodeWork {
             opcodes: std::array::from_fn(|index| self.opcodes[index].load(Ordering::Relaxed)),
-            handoffs: disposal(Disposal::Handoff),
+            served: disposal(Disposal::Served),
             inline: disposal(Disposal::Inline),
             refused: disposal(Disposal::Refused),
             terminal: disposal(Disposal::Terminal),
-            unadmitted: disposal(Disposal::Unadmitted),
             forget_units: self.forget_units.load(Ordering::Relaxed),
             store_units: self.store_units.load(Ordering::Relaxed),
             largest_read: self.largest_read.load(Ordering::Relaxed),

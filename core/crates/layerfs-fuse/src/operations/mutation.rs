@@ -1,10 +1,7 @@
 //! One native mutation: owner visits that record no request source, fact
 //! reads between undecided visits, a single publishing visit, then the exact
 //! post-reply release of its ticket.
-use crate::{
-    ports::{BaseDemandFailed, Fenced, RequestServices, ServiceError, ServiceReply},
-    NextTurn,
-};
+use crate::ports::{BaseDemandFailed, Fenced, RequestServices, ServiceError, ServiceReply};
 use layerfs_overlay::{NativeMount, OpenFile, Publication};
 use layerfs_workspace::{
     JobOutcome, NativeMutationOutcome, NativeVisitRequest, Refusal, Time, ViewStat, VisitFacts,
@@ -54,7 +51,7 @@ pub struct Published {
 pub(super) struct Custody {
     services: Arc<dyn RequestServices>,
     request: MutationRequest,
-    // Retain engine completion credit through every consumer of the outcome.
+    // Retain the engine receipt through every consumer of the outcome.
     receipt: Option<ServiceReply<Arc<NativeMutationOutcome>>>,
     /// Published and not yet released: exactly one reply attempt is owed.
     publication: Option<Publication>,
@@ -288,7 +285,6 @@ impl Custody {
             };
             self.receipt = None;
             // Provider reads never run on the loop that received the request.
-            crate::LeaveReceiver::default().await;
             let base = self.services.base().await?;
             let path = match &self.request.input {
                 MutationInput::Named(operation) => operation.destination_path(),
@@ -299,7 +295,6 @@ impl Custody {
             if let Err(error) = result {
                 return Err(self.services.failed_base_read(error.into()));
             }
-            NextTurn::default().await;
         }
     }
     async fn release(&mut self) -> Result<(), ServiceError> {

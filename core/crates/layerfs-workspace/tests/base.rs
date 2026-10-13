@@ -460,10 +460,7 @@ fn known_install_advances_selected_base_and_preserves_retained_plans_and_later_r
     let later_publication = overlay
         .publish(workspace.route(), &later, None, None)
         .unwrap();
-    workspace
-        .install_prepared_base(&overlay, prepared)
-        .map_err(|(error, _)| error)
-        .unwrap();
+    workspace.install_prepared_base(&overlay, prepared).unwrap();
     assert_eq!(workspace.base().unwrap().identity(), root);
     assert_eq!(
         overlay.state(workspace.route()).unwrap().base_root,
@@ -668,15 +665,28 @@ impl AuthenticatedObjects for Gate {
 fn actor_submit(
     client: &layerfs_daemon::OwnerClient,
     route: Option<layerfs_overlay::Route>,
-    command: layerfs_daemon::Command,
-) -> layerfs_daemon::Pending {
-    client
-        .try_submit(route, command)
-        .unwrap_or_else(|(error, _)| panic!("{error:?}"))
+    command: impl FnOnce(
+        &layerfs_daemon::OwnerClient,
+        Option<layerfs_overlay::Route>,
+    ) -> Result<layerfs_daemon::JobReceipt, layerfs_daemon::OwnerError>,
+) -> layerfs_daemon::JobReceipt {
+    command(client, route).unwrap_or_else(|error| panic!("{error:?}"))
+}
+/// Bounded wait until a waiting install has recorded its readiness check.
+fn install_waits(client: &layerfs_daemon::OwnerClient, checks: u64) {
+    let capture = layerfs_daemon::ServiceClass::Capture as usize;
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+    while client.diagnostics().unwrap().jobs[capture] <= checks {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "install readiness check"
+        );
+        std::thread::yield_now();
+    }
 }
 #[test]
 fn actual_provider_wait_allows_shared_progress_and_actor_install_pairs_the_selected_base() {
-    use layerfs_daemon::{Command, Owner, OwnerConfig, Response};
+    use layerfs_daemon::{Owner, OwnerConfig, Response};
     use layerfs_overlay::{Cell, CELL_BYTES, MASK_BYTES};
     let f = fixture();
     let (entered, waiting) = std::sync::mpsc::sync_channel(1);
@@ -712,13 +722,10 @@ fn actual_provider_wait_allows_shared_progress_and_actor_install_pairs_the_selec
     let opened = actor_submit(
         &service,
         None,
-        Command::Open {
-            incarnation: [102; 32],
-            base_root: f.root.0.to_bytes(),
+        |job_client: &layerfs_daemon::OwnerClient, job_route| {
+            job_client.open(job_route, [102; 32], f.root.0.to_bytes())
         },
-    )
-    .wait()
-    .unwrap();
+    );
     let route = match opened.result() {
         Ok(Response::Opened(r)) => *r,
         x => panic!("{x:?}"),
@@ -739,33 +746,36 @@ fn actual_provider_wait_allows_shared_progress_and_actor_install_pairs_the_selec
     let done = actor_submit(
         &service,
         Some(route),
-        Command::Publish {
-            inode,
-            name: None,
-            cell: Some(Cell {
-                offset: 0,
-                data,
-                validity: mask,
-            }),
+        |job_client: &layerfs_daemon::OwnerClient, job_route| {
+            job_client.publish(
+                job_route,
+                inode,
+                None,
+                Some(Cell {
+                    offset: 0,
+                    data,
+                    validity: mask,
+                }),
+            )
         },
-    )
-    .wait()
-    .unwrap();
+    );
     let p = match done.result() {
         Ok(Response::Published(p)) => *p,
         x => panic!("{x:?}"),
     };
     drop(done);
-    assert!(
-        actor_submit(&service, Some(route), Command::ReplyAttempted(p))
-            .wait()
-            .unwrap()
-            .result()
-            .is_ok()
+    assert!(actor_submit(
+        &service,
+        Some(route),
+        |job_client: &layerfs_daemon::OwnerClient, _| job_client.reply_attempted(p)
+    )
+    .result()
+    .is_ok());
+    let captured = actor_submit(
+        &service,
+        Some(route),
+        |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.capture(job_route),
     );
-    let captured = actor_submit(&service, Some(route), Command::Capture)
-        .wait()
-        .unwrap();
     let capture = match captured.result() {
         Ok(Response::Captured(c)) => *c,
         x => panic!("{x:?}"),
@@ -795,10 +805,10 @@ fn actual_provider_wait_allows_shared_progress_and_actor_install_pairs_the_selec
     let source_done = actor_submit(
         &service,
         Some(route),
-        Command::AcquireBaseSource { owner: 7 },
-    )
-    .wait()
-    .unwrap();
+        |job_client: &layerfs_daemon::OwnerClient, job_route| {
+            job_client.acquire_base_source(job_route, 7)
+        },
+    );
     let source = match source_done.result() {
         Ok(Response::BaseSource(s)) => *s,
         x => panic!("{x:?}"),
@@ -811,59 +821,49 @@ fn actual_provider_wait_allows_shared_progress_and_actor_install_pairs_the_selec
     waiting
         .recv_timeout(std::time::Duration::from_secs(2))
         .unwrap();
-    let install = actor_submit(
+    // The install waits before its effect on the calling thread for the
+    // earlier source; other jobs of the Workspace keep running beside it.
+    let checks =
+        service.diagnostics().unwrap().jobs[layerfs_daemon::ServiceClass::Capture as usize];
+    let install = {
+        let (service, ws) = (service.clone(), ws.clone());
+        std::thread::spawn(move || service.install_prepared(Some(route), ws, prepared))
+    };
+    install_waits(&service, checks);
+    assert!(!install.is_finished());
+    let observed = actor_submit(
         &service,
         Some(route),
-        Command::InstallPrepared {
-            workspace: ws.clone(),
-            input: prepared,
-        },
+        |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.state(job_route),
     );
-    let later_source = actor_submit(
-        &service,
-        Some(route),
-        Command::AcquireBaseSource { owner: 8 },
-    );
-    assert!(install.try_complete().unwrap().is_none());
-    assert!(later_source.try_complete().unwrap().is_none());
-    let observed = actor_submit(&service, Some(route), Command::State)
-        .wait()
-        .unwrap();
     assert!(matches!(observed.result(),Ok(Response::State(s)) if s.base_root==f.root.0.to_bytes()));
     drop(observed);
     let done = actor_submit(
         &service,
         Some(route),
-        Command::Publish {
-            inode: local(2, 22, 2),
-            name: None,
-            cell: None,
+        |job_client: &layerfs_daemon::OwnerClient, job_route| {
+            job_client.publish(job_route, local(2, 22, 2), None, None)
         },
-    )
-    .wait()
-    .unwrap();
+    );
     let later = match done.result() {
         Ok(Response::Published(p)) => *p,
         x => panic!("{x:?}"),
     };
     drop(done);
-    assert!(
-        actor_submit(&service, Some(route), Command::ReplyAttempted(later))
-            .wait()
-            .unwrap()
-            .result()
-            .is_ok()
-    );
+    assert!(actor_submit(
+        &service,
+        Some(route),
+        |job_client: &layerfs_daemon::OwnerClient, _| job_client.reply_attempted(later)
+    )
+    .result()
+    .is_ok());
     let unrelated = actor_submit(
         &service,
         None,
-        Command::Open {
-            incarnation: [103; 32],
-            base_root: f.root.0.to_bytes(),
+        |job_client: &layerfs_daemon::OwnerClient, job_route| {
+            job_client.open(job_route, [103; 32], f.root.0.to_bytes())
         },
-    )
-    .wait()
-    .unwrap();
+    );
     assert!(unrelated.result().is_ok());
     drop(unrelated);
     gate.state.lock().unwrap().1 = true;
@@ -873,15 +873,22 @@ fn actual_provider_wait_allows_shared_progress_and_actor_install_pairs_the_selec
         (stat.serial, stat.logical_len, stat.metadata.mode),
         (2, 22, 0o600)
     );
-    assert!(
-        actor_submit(&service, Some(route), Command::ReleaseBaseSource(source))
-            .wait()
-            .unwrap()
-            .result()
-            .is_ok()
+    assert!(actor_submit(
+        &service,
+        Some(route),
+        |job_client: &layerfs_daemon::OwnerClient, job_route| job_client
+            .release_base_source(job_route, source)
+    )
+    .result()
+    .is_ok());
+    assert!(install.join().unwrap().unwrap().result().is_ok());
+    let next = actor_submit(
+        &service,
+        Some(route),
+        |job_client: &layerfs_daemon::OwnerClient, job_route| {
+            job_client.acquire_base_source(job_route, 8)
+        },
     );
-    assert!(install.wait().unwrap().result().is_ok());
-    let next = later_source.wait().unwrap();
     let next_source = match next.result() {
         Ok(Response::BaseSource(s)) => *s,
         x => panic!("{x:?}"),
@@ -892,10 +899,9 @@ fn actual_provider_wait_allows_shared_progress_and_actor_install_pairs_the_selec
     assert!(actor_submit(
         &service,
         Some(route),
-        Command::ReleaseBaseSource(next_source)
+        |job_client: &layerfs_daemon::OwnerClient, job_route| job_client
+            .release_base_source(job_route, next_source)
     )
-    .wait()
-    .unwrap()
     .result()
     .is_ok());
     let mut output = Vec::new();
@@ -923,7 +929,7 @@ impl AuthenticatedObjects for Refused {
 }
 #[test]
 fn source_errors_and_unattempted_actor_install_preserve_exact_custody() {
-    use layerfs_daemon::{Command, Owner, OwnerConfig, OwnerError, Response};
+    use layerfs_daemon::{Owner, OwnerConfig, OwnerError, Response};
     let f = fixture();
     let client = Arc::new(CanonicalClient::with_lengths(
         Arc::new(f.store.clone()),
@@ -944,22 +950,21 @@ fn source_errors_and_unattempted_actor_install_preserve_exact_custody() {
     let done = actor_submit(
         &service,
         None,
-        Command::Open {
-            incarnation: [104; 32],
-            base_root: f.root.0.to_bytes(),
+        |job_client: &layerfs_daemon::OwnerClient, job_route| {
+            job_client.open(job_route, [104; 32], f.root.0.to_bytes())
         },
-    )
-    .wait()
-    .unwrap();
+    );
     let route = match done.result() {
         Ok(Response::Opened(r)) => *r,
         x => panic!("{x:?}"),
     };
     drop(done);
     let ws = Arc::new(Workspace::bind(route, base));
-    let done = actor_submit(&service, Some(route), Command::Capture)
-        .wait()
-        .unwrap();
+    let done = actor_submit(
+        &service,
+        Some(route),
+        |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.capture(job_route),
+    );
     let capture = match done.result() {
         Ok(Response::Captured(c)) => *c,
         x => panic!("{x:?}"),
@@ -969,31 +974,34 @@ fn source_errors_and_unattempted_actor_install_preserve_exact_custody() {
     let done = actor_submit(
         &service,
         Some(route),
-        Command::AcquireBaseSource { owner: 8 },
-    )
-    .wait()
-    .unwrap();
+        |job_client: &layerfs_daemon::OwnerClient, job_route| {
+            job_client.acquire_base_source(job_route, 8)
+        },
+    );
     let source = match done.result() {
         Ok(Response::BaseSource(s)) => *s,
         x => panic!("{x:?}"),
     };
     drop(done);
-    let pending = actor_submit(
-        &service,
-        Some(route),
-        Command::InstallPrepared {
-            workspace: ws.clone(),
-            input,
-        },
-    );
-    assert!(pending.try_complete().unwrap().is_none());
+    let checks =
+        service.diagnostics().unwrap().jobs[layerfs_daemon::ServiceClass::Capture as usize];
+    let pending = {
+        let (service, ws) = (service.clone(), ws.clone());
+        std::thread::spawn(move || service.install_prepared(Some(route), ws, input))
+    };
+    install_waits(&service, checks);
+    assert!(!pending.is_finished());
     owner.stop().unwrap();
-    let done = pending.wait().unwrap();
+    // Stopped before any effect: the unattempted action owns its original
+    // prepared input and nothing was installed.
+    let refused = pending.join().unwrap().unwrap_err();
     assert!(
-        matches!(done.result(),Err(OwnerError::Unattempted{cause,command}) if matches!(cause.as_ref(),OwnerError::Stopped)&&matches!(command.as_ref(),Command::InstallPrepared{input,..} if input.root()==f.root&&input.capture()==capture))
+        matches!(&refused, OwnerError::Unattempted { cause, .. } if matches!(cause.as_ref(), OwnerError::Stopped)),
+        "{refused:?}"
     );
     assert_eq!(ws.base().unwrap().identity(), f.root);
-    drop(done);
+    drop(refused);
+    let _ = (source, capture);
     std::fs::remove_dir_all(path).unwrap();
     // The source error remains a source failure, never logical absence or fallback.
     let client = Arc::new(CanonicalClient::new(Arc::new(Refused), 0));

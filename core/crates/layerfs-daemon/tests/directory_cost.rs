@@ -13,8 +13,7 @@ use layerfs_content::filesystem::PathName;
 use layerfs_daemon::{
     bootstrap::open_store,
     store::{BindRequest, BoundWorkspace, Store},
-    Command, Completion, NativeJob, NativeReply, Owner, OwnerClient, OwnerConfig, Response,
-    ServiceClass,
+    JobReceipt, NativeReply, Owner, OwnerClient, OwnerConfig, Response, ServiceClass,
 };
 use layerfs_fuse::{
     operations::{
@@ -106,12 +105,15 @@ fn until(what: &str, mut condition: impl FnMut() -> bool) {
         std::thread::yield_now();
     }
 }
-fn finish(client: &OwnerClient, route: layerfs_overlay::Route, command: Command) -> Completion {
-    let pending = match client.try_submit(Some(route), command) {
-        Ok(pending) => pending,
-        Err((error, command)) => panic!("admission of {command:?}: {error:?}"),
-    };
-    wait(pending).unwrap()
+fn finish(
+    client: &OwnerClient,
+    route: layerfs_overlay::Route,
+    command: impl FnOnce(
+        &layerfs_daemon::OwnerClient,
+        Option<layerfs_overlay::Route>,
+    ) -> Result<layerfs_daemon::JobReceipt, layerfs_daemon::OwnerError>,
+) -> JobReceipt {
+    command(client, Some(route)).unwrap_or_else(|error| panic!("{error:?}"))
 }
 fn name(text: &str) -> PathName {
     PathName::new(text).unwrap()
@@ -226,7 +228,13 @@ impl Rig {
     /// The maintenance turns and rows the owner has run, once none is due.
     fn maintenance(&self) -> (u64, u64) {
         until("maintenance idle", || {
-            let done = finish(&self.client, self.bound.route(), Command::MaintenanceIdle);
+            let done = finish(
+                &self.client,
+                self.bound.route(),
+                |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                    job_client.maintenance_idle(job_route)
+                },
+            );
             matches!(done.result(), Ok(Response::MaintenanceIdle(true)))
         });
         let work = self.client.diagnostics().unwrap();
@@ -237,7 +245,9 @@ impl Rig {
         let result = finish(
             &self.client,
             self.bound.route(),
-            Command::Resources { global: false },
+            |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.resources(job_route, false)
+            },
         );
         let open = match result.result() {
             Ok(Response::Resources(r)) => r.open,
@@ -246,15 +256,12 @@ impl Rig {
         open.directory_handles + open.cookie_pages
     }
     fn snapshot(&self) -> Snapshot {
-        until("owner results returned", || {
-            self.client.diagnostics().unwrap().outstanding == 0
-        });
         let work = self.client.diagnostics().unwrap();
         let readers = self.store.read_work();
         assert_eq!((readers.outstanding, readers.waiting), (0, 0));
         Snapshot {
-            completed: work.completed,
-            admitted: work.admitted,
+            completed: work.jobs,
+            admitted: work.jobs.iter().sum::<u64>(),
             grants: readers.grants,
             sql: work.sql_foreground,
         }
@@ -304,9 +311,6 @@ impl Rig {
             home,
         } = self;
         home.leave(&client);
-        until("owner credits returned", || {
-            client.diagnostics().unwrap().outstanding == 0
-        });
         assert_eq!(store.read_work().outstanding, 0);
         owner.stop().unwrap();
         drop(store);
@@ -343,7 +347,9 @@ impl Seat {
         let done = finish(
             client,
             bound.route(),
-            Command::Native(NativeJob::Mount { root }),
+            |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.native_mount(job_route, root)
+            },
         );
         let mount = match done.result() {
             Ok(Response::Native(NativeReply::Mount(mount))) => *mount,
@@ -510,7 +516,9 @@ impl Seat {
         let done = finish(
             client,
             self.bound.route(),
-            Command::Native(NativeJob::Revoke(self.mount)),
+            |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.native_revoke(job_route, self.mount)
+            },
         );
         assert!(
             matches!(done.result(), Ok(Response::Native(NativeReply::Done))),

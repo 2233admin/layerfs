@@ -1,55 +1,34 @@
 LookupMiss: requests=2 jobs(read,mutation,lifecycle)=[2, 0, 0] transactions=0 attempts=4 executions=4
-  2 FENCE_LOOKUP_ROW
   2 NAME_LAYERS
-Lookup: requests=1 jobs(read,mutation,lifecycle)=[2, 0, 0] transactions=1 attempts=11 executions=13
-  2 FENCE_LOOKUP_ROW
-  1 FILE_LOOKUPS_ADD
+  2 SELECT w.active,w.captured,w.revision,w.base_root,w.dirty_inodes, w.dirty_directory_entries,w.lifecycle,w.installed,w.captured_revision,w.base_readers,w.consolidating, i.serial,i.kind,i.mode,i.mtime_seconds,i.mtime_nanoseconds,i.nlink,i.size, i.inherited_cutoff,i.born,i.entries,i.subdirs,i.gen,i.epoch,i.height,i.referenced,i.sequence FROM workspace w LEFT JOIN inode i ON i.ns=w.ns AND i.serial=?3 AND i.gen<=w.active AND i.gen>w.installed WHERE w.ns=?1 AND w.incarnation=?2 ORDER BY i.gen DESC LIMIT 1
+Lookup: requests=1 jobs(read,mutation,lifecycle)=[2, 0, 0] transactions=0 attempts=5 executions=5
   1 INODE_LOOKUP
   2 NAME_LAYERS
-  1 begin
-  1 commit
-  1 freelist-count
-  1 native-lookup-insert
-  1 native-lookup-row
+  2 SELECT w.active,w.captured,w.revision,w.base_root,w.dirty_inodes, w.dirty_directory_entries,w.lifecycle,w.installed,w.captured_revision,w.base_readers,w.consolidating, i.serial,i.kind,i.mode,i.mtime_seconds,i.mtime_nanoseconds,i.nlink,i.size, i.inherited_cutoff,i.born,i.entries,i.subdirs,i.gen,i.epoch,i.height,i.referenced,i.sequence FROM workspace w LEFT JOIN inode i ON i.ns=w.ns AND i.serial=?3 AND i.gen<=w.active AND i.gen>w.installed WHERE w.ns=?1 AND w.incarnation=?2 ORDER BY i.gen DESC LIMIT 1
 Getattr: requests=1 jobs(read,mutation,lifecycle)=[1, 0, 0] transactions=0 attempts=1 executions=1
-  1 FENCE_LOOKUP_ROW
-Create: requests=1 jobs(read,mutation,lifecycle)=[0, 1, 0] transactions=1 attempts=12 executions=18
+  1 SELECT w.active,w.captured,w.revision,w.base_root,w.dirty_inodes, w.dirty_directory_entries,w.lifecycle,w.installed,w.captured_revision,w.base_readers,w.consolidating, i.serial,i.kind,i.mode,i.mtime_seconds,i.mtime_nanoseconds,i.nlink,i.size, i.inherited_cutoff,i.born,i.entries,i.subdirs,i.gen,i.epoch,i.height,i.referenced,i.sequence FROM workspace w LEFT JOIN inode i ON i.ns=w.ns AND i.serial=?3 AND i.gen<=w.active AND i.gen>w.installed WHERE w.ns=?1 AND w.incarnation=?2 ORDER BY i.gen DESC LIMIT 1
+Create: requests=1 jobs(read,mutation,lifecycle)=[0, 1, 0] transactions=1 attempts=8 executions=11
   1 DIRECTORY_ENTRY_PUT
-  1 FENCE_LOOKUP_ROW
-  1 FILE_OPEN_LOOKUP_ADD
   1 FRONTIER_ADVANCE
   2 INODE_INSERT
   1 NAME_LAYERS
+  1 SELECT w.active,w.captured,w.revision,w.base_root,w.dirty_inodes, w.dirty_directory_entries,w.lifecycle,w.installed,w.captured_revision,w.base_readers,w.consolidating, i.serial,i.kind,i.mode,i.mtime_seconds,i.mtime_nanoseconds,i.nlink,i.size, i.inherited_cutoff,i.born,i.entries,i.subdirs,i.gen,i.epoch,i.height,i.referenced,i.sequence FROM workspace w LEFT JOIN inode i ON i.ns=w.ns AND i.serial=?3 AND i.gen<=w.active AND i.gen>w.installed WHERE w.ns=?1 AND w.incarnation=?2 ORDER BY i.gen DESC LIMIT 1
   1 begin
   1 commit
-  1 file-handle-insert
-  1 freelist-count
-  1 native-lookup-insert
-Write: requests=1024 jobs(read,mutation,lifecycle)=[0, 1024, 0] transactions=1024 attempts=9216 executions=11264
+Write: requests=1024 jobs(read,mutation,lifecycle)=[0, 1024, 0] transactions=1024 attempts=8192 executions=10240
   2048 CELL_PUT
   1024 CELL_SHAPES
-  1024 FENCE_FILE_ROW
   1024 FRONTIER_ADVANCE
   1024 INODE_UPDATE
+  1024 SELECT w.active,w.captured,w.revision,w.base_root,w.dirty_inodes, w.dirty_directory_entries,w.lifecycle,w.installed,w.captured_revision,w.base_readers,w.consolidating, i.serial,i.kind,i.mode,i.mtime_seconds,i.mtime_nanoseconds,i.nlink,i.size, i.inherited_cutoff,i.born,i.entries,i.subdirs,i.gen,i.epoch,i.height,i.referenced,i.sequence FROM workspace w LEFT JOIN inode i ON i.ns=w.ns AND i.serial=?3 AND i.gen<=w.active AND i.gen>w.installed WHERE w.ns=?1 AND w.incarnation=?2 ORDER BY i.gen DESC LIMIT 1
   1024 begin
   1024 commit
-  1024 freelist-count
-Release: requests=2 jobs(read,mutation,lifecycle)=[0, 0, 2] transactions=2 attempts=12 executions=14
-  2 FENCE_FILE
-  2 FILE_OPENS_DROP
-  2 begin
-  2 commit
-  2 file-handle-drop
-  2 freelist-count
-Open: requests=1 jobs(read,mutation,lifecycle)=[1, 0, 0] transactions=1 attempts=6 executions=7
-  1 FENCE_LOOKUP_ROW
-  1 FILE_OPENS_ADD
-  1 begin
-  1 commit
-  1 file-handle-insert
-  1 freelist-count
+Release: requests=2 jobs(read,mutation,lifecycle)=[0, 0, 2] transactions=0 attempts=2 executions=2
+  2 workspace-state
+Open: requests=1 jobs(read,mutation,lifecycle)=[1, 0, 0] transactions=0 attempts=1 executions=1
+  1 SELECT w.active,w.captured,w.revision,w.base_root,w.dirty_inodes, w.dirty_directory_entries,w.lifecycle,w.installed,w.captured_revision,w.base_readers,w.consolidating, i.serial,i.kind,i.mode,i.mtime_seconds,i.mtime_nanoseconds,i.nlink,i.size, i.inherited_cutoff,i.born,i.entries,i.subdirs,i.gen,i.epoch,i.height,i.referenced,i.sequence FROM workspace w LEFT JOIN inode i ON i.ns=w.ns AND i.serial=?3 AND i.gen<=w.active AND i.gen>w.installed WHERE w.ns=?1 AND w.incarnation=?2 ORDER BY i.gen DESC LIMIT 1
 Read: requests=513 jobs(read,mutation,lifecycle)=[513, 0, 0] transactions=0 attempts=1026 executions=1026
-  513 FENCE_HANDLE
   513 LAYERS
+  513 workspace-state
 Status: requests=1 jobs(read,mutation,lifecycle)=[0, 0, 1] transactions=0 attempts=1 executions=1
   1 workspace-state

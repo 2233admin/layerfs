@@ -87,7 +87,7 @@ fn an_idle_workspace_is_forced_with_one_abort_and_one_detach() {
     assert!(done.observation_failure.is_none());
     assert!(done.completion.is_some(), "logical Close receipt");
     let work = outcome.work;
-    assert_eq!((work.received, work.admitted, work.retained), (0, 0, 0));
+    assert_eq!((work.active, work.retained), (0, 0));
     assert_eq!(work.loops_joined, work.loops_configured, "{work:?}");
     let receipt = format!("{:?}", done.native.as_ref().expect("drain receipt"));
     assert!(receipt.contains("Drained"), "{receipt}");

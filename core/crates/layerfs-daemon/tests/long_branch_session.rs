@@ -24,7 +24,7 @@ mod model;
 #[allow(dead_code)]
 #[path = "support/installed_store.rs"]
 mod support;
-use drive::{evidence, settled, window};
+use drive::{evidence, window};
 use layerfs_content::filesystem::{FilesystemRead, FilesystemRootId, PathName};
 use layerfs_history::CommitStagedOutcome;
 use layerfs_persistence::Handles;
@@ -306,7 +306,6 @@ fn session(snapshot: &Path, shape: Shape, p: usize, commits: usize) -> Vec<Step>
     let mut steps = Vec::with_capacity(commits);
     for n in 0..commits {
         change(&workspace, shape, p + n);
-        settled(&daemon.owner.client(), 0);
         let probe = Probe::start(&daemon);
         let success = workspace
             .commit_captured()

@@ -33,12 +33,12 @@ mod model;
 #[path = "support/installed_store.rs"]
 mod support;
 use counts::Counting;
-use drive::{evidence, job, settled, window};
+use drive::{evidence, job, window};
 use layerfs_content::filesystem::{PathName, SymlinkTarget};
 use layerfs_daemon::{
     bootstrap::{open_store_observed, OpenedStore},
     store::{BindRequest, BoundWorkspace, CommitError},
-    Command, Owner, OwnerConfig, OwnerWork, Response, ServiceClass,
+    Owner, OwnerConfig, OwnerWork, Response, ServiceClass,
 };
 use layerfs_history::{CommitStagedOutcome, WorkspaceId};
 use layerfs_overlay::{ProfileConfig, StatementKind};
@@ -255,7 +255,12 @@ impl Bench {
     }
     fn finish(self, workspace: Arc<BoundWorkspace>) {
         assert!(matches!(
-            job(&self.owner.client(), workspace.route(), Command::Close).result(),
+            job(
+                &self.owner.client(),
+                workspace.route(),
+                |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.close(job_route)
+            )
+            .result(),
             Ok(Response::Done)
         ));
         drop(workspace);
@@ -390,7 +395,8 @@ impl Driver<'_> {
                 Outcome::Applied { publication, .. } => assert!(job(
                     overlay,
                     self.workspace.route(),
-                    Command::ReplyAttempted(publication)
+                    |job_client: &layerfs_daemon::OwnerClient, _| job_client
+                        .reply_attempted(publication)
                 )
                 .result()
                 .is_ok()),
@@ -579,7 +585,6 @@ struct Counters {
     readers: Vec<SqlWork>,
 }
 fn counters(bench: &Bench) -> Counters {
-    settled(&bench.owner.client(), 0);
     let store = bench.opened.diagnostics().unwrap();
     Counters {
         owner: bench.owner.client().diagnostics().unwrap(),
@@ -589,9 +594,9 @@ fn counters(bench: &Bench) -> Counters {
 }
 fn differences(sample: &mut Sample, before: &Counters, after: &Counters) {
     for class in 0..6 {
-        sample.jobs[class] = after.owner.completed[class] - before.owner.completed[class];
-        sample.service[class] = after.owner.service_ns[class] - before.owner.service_ns[class];
-        sample.waited[class] = after.owner.queue_wait_ns[class] - before.owner.queue_wait_ns[class];
+        sample.jobs[class] = after.owner.jobs[class] - before.owner.jobs[class];
+        sample.service[class] = after.owner.hold_ns[class] - before.owner.hold_ns[class];
+        sample.waited[class] = after.owner.lock_wait_ns[class] - before.owner.lock_wait_ns[class];
     }
     let sql = after
         .owner
@@ -664,14 +669,24 @@ fn commit_clocked(bench: &Bench, workspace: &BoundWorkspace) -> Sample {
         let reader = match job(
             overlay,
             route,
-            Command::AcquireCapturedReader { capture, request },
+            |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.acquire_captured_reader(job_route, capture, request)
+            },
         )
         .result()
         {
             Ok(Response::CapturedReader(Some(reader))) => *reader,
             other => panic!("{other:?}"),
         };
-        let owner = match job(overlay, route, Command::AcquireOperation { request }).result() {
+        let owner = match job(
+            overlay,
+            route,
+            |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.acquire_operation(job_route, request)
+            },
+        )
+        .result()
+        {
             Ok(Response::Operation(Some(owner))) => *owner,
             other => panic!("{other:?}"),
         };
@@ -696,12 +711,22 @@ fn commit_clocked(bench: &Bench, workspace: &BoundWorkspace) -> Sample {
         sample.read_calls = seen.read_calls;
         sample.read_ns = seen.read_ns;
         let releasing = Instant::now();
-        assert!(job(overlay, route, Command::ReleaseCapturedReader(reader))
-            .result()
-            .is_ok());
-        assert!(job(overlay, route, Command::ReleaseOperation(owner))
-            .result()
-            .is_ok());
+        assert!(job(
+            overlay,
+            route,
+            |job_client: &layerfs_daemon::OwnerClient, job_route| job_client
+                .release_captured_reader(job_route, reader)
+        )
+        .result()
+        .is_ok());
+        assert!(job(
+            overlay,
+            route,
+            |job_client: &layerfs_daemon::OwnerClient, job_route| job_client
+                .release_operation(job_route, owner)
+        )
+        .result()
+        .is_ok());
         sample.release = nanos(releasing);
         closed = Some(Instant::now());
         Ok::<_, CommitError>(built.root)

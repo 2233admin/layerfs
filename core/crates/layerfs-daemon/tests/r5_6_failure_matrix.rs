@@ -72,7 +72,7 @@ use layerfs_daemon::{
         CapturedConstruction, CommitError, CommitFailure, CommitPhase, ReadLimits, ReleasedOwner,
         Store, StoreReader,
     },
-    Command, Completion, OwnerError, Response,
+    JobReceipt, OwnerError, Response,
 };
 use layerfs_history::{
     CommitId, CommitStagedOutcome, HistoryCatalog, HistoryError, StageRecord, WorkspaceId,
@@ -347,8 +347,8 @@ fn quiet(harness: &Harness, token: WorkspaceToken) {
     let mut last = None;
     until("connection quiescent", || {
         let work = harness.status(token).native.unwrap().work.unwrap();
-        let now = (work.received, work.admitted, work.completed);
-        let settled = work.received == 0 && work.admitted == 0 && last == Some(now);
+        let now = (work.active, work.completed);
+        let settled = work.active == 0 && last == Some(now);
         last = Some(now);
         settled
     });
@@ -436,14 +436,16 @@ fn request(failure: &CommitFailure) -> u64 {
     u64::try_from(failure.capture.expect("the capture").generation.number()).unwrap()
 }
 /// One owner job through the public owner client, attempted once.
-fn job(fx: &Fx, route: Route, command: Command) -> Result<Completion, String> {
-    fx.harness
-        .owner
-        .client()
-        .try_submit(Some(route), command)
-        .map_err(|(cause, _)| format!("unattempted: {cause:?}"))?
-        .wait()
-        .map_err(|error| format!("{error:?}"))
+fn job(
+    fx: &Fx,
+    route: Route,
+    command: impl FnOnce(
+        &layerfs_daemon::OwnerClient,
+        Option<layerfs_overlay::Route>,
+    ) -> Result<layerfs_daemon::JobReceipt, layerfs_daemon::OwnerError>,
+) -> Result<JobReceipt, String> {
+    command(&fx.harness.owner.client(), Some(route))
+        .map_err(|error| format!("unattempted: {error:?}"))
 }
 /// What the engine itself holds for one request: the two public `Retained*`
 /// owner jobs, each asked once.
@@ -452,11 +454,27 @@ fn engine(
     route: Route,
     request: u64,
 ) -> Result<(Option<CapturedReader>, Option<OperationOwner>), String> {
-    let reader = match job(fx, route, Command::RetainedCapturedReader { request })?.result() {
+    let reader = match job(
+        fx,
+        route,
+        |job_client: &layerfs_daemon::OwnerClient, job_route| {
+            job_client.retained_captured_reader(job_route, request)
+        },
+    )?
+    .result()
+    {
         Ok(Response::CapturedReader(kept)) => *kept,
         other => return Err(format!("{other:?}")),
     };
-    let owner = match job(fx, route, Command::RetainedOperation { request })?.result() {
+    let owner = match job(
+        fx,
+        route,
+        |job_client: &layerfs_daemon::OwnerClient, job_route| {
+            job_client.retained_operation(job_route, request)
+        },
+    )?
+    .result()
+    {
         Ok(Response::Operation(kept)) => *kept,
         other => return Err(format!("{other:?}")),
     };
@@ -1260,7 +1278,7 @@ fn r5_6_b_a_native_attempted_install_failure_after_a_known_publication_keeps_cus
     // The install was admitted and performed, and did not answer Done.
     assert_eq!(failure.phase, CommitPhase::Install);
     let installed = match &failure.error {
-        CommitError::Completion(done) => done,
+        CommitError::JobReceipt(done) => done,
         other => panic!("{name}: the install was not attempted: {}", brief(other)),
     };
     let cause = match installed.result() {
@@ -1377,7 +1395,7 @@ fn r5_6_b_a_native_attempted_install_failure_after_a_known_publication_keeps_cus
         "{name}: nothing was resent or discarded"
     );
     println!(
-        "{name} CLASSIFIED error=Completion(Install) native=true published=Committed candidate_is_branch_root(independent_session)=true reader=kept owner=kept engine=quarantined mount_serves=false activity=LocalFailure reply_code=Unknown later_commit=refused unmount=refused"
+        "{name} CLASSIFIED error=JobReceipt(Install) native=true published=Committed candidate_is_branch_root(independent_session)=true reader=kept owner=kept engine=quarantined mount_serves=false activity=LocalFailure reply_code=Unknown later_commit=refused unmount=refused"
     );
     detach(&fx, &ready, name);
     drop(failure);
@@ -1429,7 +1447,14 @@ fn r5_7_a_release_refused_after_a_settled_failure_keeps_the_owner_and_answers_un
             Ok((Some(reader), Some(owner))) => (reader, owner),
             other => panic!("the held Commit's owners: {other:?}"),
         };
-        let released = job(&fx, route, Command::ReleaseCapturedReader(reader)).unwrap();
+        let released = job(
+            &fx,
+            route,
+            |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.release_captured_reader(job_route, reader)
+            },
+        )
+        .unwrap();
         assert!(
             matches!(released.result(), Ok(Response::Done)),
             "{released:?}"

@@ -24,7 +24,7 @@ impl NativeFilesystem {
         reply: ReplyDirectory,
     ) {
         let Some((permit, reply)) =
-            self.admit_reply(Opcode::Readdir, 0, reply, ReplyDirectory::error)
+            self.receive_reply(Opcode::Readdir, 0, reply, ReplyDirectory::error)
         else {
             return;
         };
@@ -33,7 +33,7 @@ impl NativeFilesystem {
         let fence = self.fence.clone();
         let identity = self.identity;
         let request = req.unique().0;
-        self.handoff(
+        self.serve(
             permit,
             Box::pin(async move {
                 let input = KernelInput::Directory {
@@ -87,7 +87,7 @@ impl NativeFilesystem {
         reply: ReplyEmpty,
     ) {
         let Some((permit, reply)) =
-            self.admit_reply(Opcode::Releasedir, 0, reply, ReplyEmpty::error)
+            self.receive_reply(Opcode::Releasedir, 0, reply, ReplyEmpty::error)
         else {
             return;
         };
@@ -96,7 +96,7 @@ impl NativeFilesystem {
         let fence = self.fence.clone();
         let serial = self.identity.serial(inode);
         let request = req.unique().0;
-        self.handoff(
+        self.serve(
             permit,
             Box::pin(async move {
                 let outcome = async {

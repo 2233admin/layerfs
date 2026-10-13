@@ -36,9 +36,12 @@ pub fn commit(
     exact.accumulate(result.installed.work().sql.expanded());
     let whole = local_after.sql_foreground.since(&local.sql_foreground);
     let d = result.storage;
-    writeln!(out,"{{\"schema\":\"pre-s8-growth-operation-v1\",\"kind\":\"commit\",\"index\":{index},\"attempts\":1,\"root\":\"{}\",\"head\":\"{}\",\"writes\":{},\"reserve\":{},\"initial\":{},\"refills\":{},\"publish\":{},\"history\":1,\"pack_bytes\":{},\"sql_statements\":{},\"scan_steps\":{},\"engine_jobs\":{},\"engine_statements\":{}}}",record.root,record.id,after.write_commits-before.write_commits,d.reserve,d.initial_reservations,d.reservation_refills,d.publish,d.pack_write_bytes,after.statements-before.statements,after.fullscan_steps-before.fullscan_steps,local_after.admitted-local.admitted,whole.total().attempts).unwrap();
+    writeln!(out,"{{\"schema\":\"pre-s8-growth-operation-v1\",\"kind\":\"commit\",\"index\":{index},\"attempts\":1,\"root\":\"{}\",\"head\":\"{}\",\"writes\":{},\"reserve\":{},\"initial\":{},\"refills\":{},\"publish\":{},\"history\":1,\"pack_bytes\":{},\"sql_statements\":{},\"scan_steps\":{},\"engine_jobs\":{},\"engine_statements\":{}}}",record.root,record.id,after.write_commits-before.write_commits,d.reserve,d.initial_reservations,d.reservation_refills,d.publish,d.pack_write_bytes,after.statements-before.statements,after.fullscan_steps-before.fullscan_steps,local_after.jobs.iter().sum::<u64>()-local.jobs.iter().sum::<u64>(),whole.total().attempts).unwrap();
     assert_eq!(whole, exact);
-    assert_eq!(local_after.admitted - local.admitted, 2);
+    assert_eq!(
+        local_after.jobs.iter().sum::<u64>() - local.jobs.iter().sum::<u64>(),
+        2
+    );
     assert_eq!(
         after.write_commits - before.write_commits,
         d.reserve + d.publish + 1

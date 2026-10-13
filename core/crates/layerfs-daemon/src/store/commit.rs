@@ -2,7 +2,7 @@
 use super::{
     bind::checked_base, BoundWorkspace, CommitError, CommitFailure, CommitPhase, CommitSuccess,
 };
-use crate::{Command, Response};
+use crate::Response;
 use layerfs_content::filesystem::FilesystemRootId;
 use layerfs_history::{BranchSnapshot, CommitStagedOutcome, StageRequest};
 use layerfs_overlay::Capture;
@@ -87,10 +87,12 @@ impl BoundWorkspace {
             retained.binding = Some(snapshot.clone());
             let original_base = self.workspace.base().map_err(CommitError::Workspace)?;
             retained.phase = CommitPhase::Capture;
-            let captured = self.job(Command::Capture).map_err(CommitError::Owner)?;
+            let captured = self
+                .job(|job_client: &crate::OwnerClient, job_route| job_client.capture(job_route))
+                .map_err(CommitError::Owner)?;
             let capture = match captured.result() {
                 Ok(Response::Captured(capture)) => *capture,
-                _ => return Err(CommitError::Completion(Box::new(captured))),
+                _ => return Err(CommitError::JobReceipt(Box::new(captured))),
             };
             retained.capture = Some(capture);
             retained.captured = Some(captured);
@@ -188,14 +190,17 @@ impl BoundWorkspace {
             next.head_root = head.map(|_| root);
             retained.phase = CommitPhase::Install;
             let installed = self
-                .job(Command::InstallPrepared {
-                    workspace: self.workspace.clone(),
-                    input: retained.prepared.take().expect("prepared install"),
+                .job(|job_client: &crate::OwnerClient, route| {
+                    job_client.install_prepared(
+                        route,
+                        self.workspace.clone(),
+                        retained.prepared.take().expect("prepared install"),
+                    )
                 })
                 .map_err(CommitError::Owner)?;
             let installed_ok = matches!(installed.result(), Ok(Response::Done));
             if !installed_ok {
-                return Err(CommitError::Completion(Box::new(installed)));
+                return Err(CommitError::JobReceipt(Box::new(installed)));
             }
             retained.local = Some(installed);
             *self

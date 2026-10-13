@@ -1,26 +1,26 @@
 //! Real owner plus automatic idle reclamation on an exclusively owned ext4 fixture.
 #![cfg(target_os = "linux")]
-use layerfs_daemon::{Command, Completion, Owner, OwnerClient, OwnerConfig, OwnerError, Response};
+use layerfs_daemon::{JobReceipt, Owner, OwnerClient, OwnerConfig, OwnerError, Response};
 use layerfs_overlay::{Cell, Inode, InodeKind, Lease, LeaseKind, ProfileConfig, Route};
-use std::{
-    fs::OpenOptions,
-    io::Write,
-    path::PathBuf,
-    time::{Duration, Instant},
-};
-fn run(client: &OwnerClient, route: Option<Route>, command: Command) -> Completion {
-    let pending = client.try_submit(route, command).unwrap();
-    let deadline = Instant::now() + Duration::from_secs(5);
-    loop {
-        assert!(Instant::now() < deadline, "owner job deadline");
-        if let Some(done) = pending.try_complete().unwrap() {
-            return done;
-        }
-        std::thread::yield_now();
-    }
+use std::{fs::OpenOptions, io::Write, path::PathBuf};
+fn run(
+    client: &OwnerClient,
+    route: Option<Route>,
+    command: impl FnOnce(
+        &layerfs_daemon::OwnerClient,
+        Option<layerfs_overlay::Route>,
+    ) -> Result<layerfs_daemon::JobReceipt, layerfs_daemon::OwnerError>,
+) -> JobReceipt {
+    command(client, route).unwrap_or_else(|error| panic!("{error:?}"))
 }
 fn resources(client: &OwnerClient, _route: Route) -> layerfs_overlay::Resources {
-    match run(client, None, Command::Resources { global: true }).result() {
+    match run(
+        client,
+        None,
+        |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.resources(job_route, true),
+    )
+    .result()
+    {
         Ok(Response::Resources(r)) => **r,
         x => panic!("{x:?}"),
     }
@@ -39,9 +39,8 @@ fn real_owner_reclaims_at_device_full_after_last_owner_without_a_cleanup_job() {
     let open = |tag| match run(
         &client,
         None,
-        Command::Open {
-            incarnation: [tag; 32],
-            base_root: [17; 32],
+        |job_client: &layerfs_daemon::OwnerClient, job_route| {
+            job_client.open(job_route, [tag; 32], [17; 32])
         },
     )
     .result()
@@ -69,14 +68,17 @@ fn real_owner_reclaims_at_device_full_after_last_owner_without_a_cleanup_job() {
         let done = run(
             &client,
             Some(route),
-            Command::Publish {
-                inode: inode.clone(),
-                name: None,
-                cell: Some(Cell {
-                    offset: 0,
-                    data: Box::new([91; 4096]),
-                    validity: Box::new([255; 512]),
-                }),
+            |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.publish(
+                    job_route,
+                    inode.clone(),
+                    None,
+                    Some(Cell {
+                        offset: 0,
+                        data: Box::new([91; 4096]),
+                        validity: Box::new([255; 512]),
+                    }),
+                )
             },
         );
         let p = match done.result() {
@@ -84,11 +86,21 @@ fn real_owner_reclaims_at_device_full_after_last_owner_without_a_cleanup_job() {
             x => panic!("{x:?}"),
         };
         drop(done);
-        assert!(run(&client, Some(route), Command::ReplyAttempted(p))
-            .result()
-            .is_ok());
+        assert!(run(
+            &client,
+            Some(route),
+            |job_client: &layerfs_daemon::OwnerClient, _| job_client.reply_attempted(p)
+        )
+        .result()
+        .is_ok());
     }
-    let capture = match run(&client, Some(route), Command::Capture).result() {
+    let capture = match run(
+        &client,
+        Some(route),
+        |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.capture(job_route),
+    )
+    .result()
+    {
         Ok(Response::Captured(c)) => *c,
         x => panic!("{x:?}"),
     };
@@ -97,10 +109,20 @@ fn real_owner_reclaims_at_device_full_after_last_owner_without_a_cleanup_job() {
         owner: 901,
         resource: 0,
     };
-    assert!(run(&client, Some(route), Command::Acquire(lease))
-        .result()
-        .is_ok());
-    let other_state = match run(&client, Some(other), Command::State).result() {
+    assert!(run(
+        &client,
+        Some(route),
+        |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.acquire(job_route, lease)
+    )
+    .result()
+    .is_ok());
+    let other_state = match run(
+        &client,
+        Some(other),
+        |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.state(job_route),
+    )
+    .result()
+    {
         Ok(Response::State(s)) => *s,
         x => panic!("{x:?}"),
     };
@@ -133,23 +155,30 @@ fn real_owner_reclaims_at_device_full_after_last_owner_without_a_cleanup_job() {
         let done = run(
             &client,
             Some(route),
-            Command::Publish {
-                inode: inode.clone(),
-                name: None,
-                cell: Some(Cell {
-                    offset: 0,
-                    data: Box::new([92; 4096]),
-                    validity: Box::new([255; 512]),
-                }),
+            |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.publish(
+                    job_route,
+                    inode.clone(),
+                    None,
+                    Some(Cell {
+                        offset: 0,
+                        data: Box::new([92; 4096]),
+                        validity: Box::new([255; 512]),
+                    }),
+                )
             },
         );
         match done.result() {
             Ok(Response::Published(p)) => {
                 let p = *p;
                 drop(done);
-                assert!(run(&client, Some(route), Command::ReplyAttempted(p))
-                    .result()
-                    .is_ok());
+                assert!(run(
+                    &client,
+                    Some(route),
+                    |job_client: &layerfs_daemon::OwnerClient, _| job_client.reply_attempted(p)
+                )
+                .result()
+                .is_ok());
                 accepted += 1;
             }
             Err(OwnerError::Overlay(error)) if error.is_sqlite_full() => {
@@ -171,21 +200,40 @@ fn real_owner_reclaims_at_device_full_after_last_owner_without_a_cleanup_job() {
         before.counts.payload_cells + accepted
     );
     assert!(
-        matches!(run(&client,Some(route),Command::RetainedCapture).result(),Ok(Response::RetainedCapture(Some(c))) if *c==capture)
+        matches!(run(&client,Some(route),|job_client: &layerfs_daemon::OwnerClient, job_route| job_client.retained_capture(job_route)).result(),Ok(Response::RetainedCapture(Some(c))) if *c==capture)
     );
-    assert!(run(&client, Some(route), Command::Close).result().is_ok());
-    assert!(
-        run(&client, Some(route), Command::ReleaseClosedCapture(capture))
-            .result()
-            .is_ok()
-    );
-    assert!(run(&client, Some(route), Command::Release(lease))
-        .result()
-        .is_ok());
+    assert!(run(
+        &client,
+        Some(route),
+        |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.close(job_route)
+    )
+    .result()
+    .is_ok());
+    assert!(run(
+        &client,
+        Some(route),
+        |job_client: &layerfs_daemon::OwnerClient, job_route| job_client
+            .release_closed_capture(job_route, capture)
+    )
+    .result()
+    .is_ok());
+    assert!(run(
+        &client,
+        Some(route),
+        |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.release(job_route, lease)
+    )
+    .result()
+    .is_ok());
     // Terminal close sweeps no rows, even at full capacity. Exact last-owner
     // releases leave the file eligible for the terminal owner's checked close.
     assert!(matches!(
-        run(&client, Some(route), Command::CleanupState).result(),
+        run(
+            &client,
+            Some(route),
+            |job_client: &layerfs_daemon::OwnerClient, job_route| job_client
+                .cleanup_state(job_route)
+        )
+        .result(),
         Ok(Response::CleanupState(
             layerfs_overlay::CleanupState::Queued
         ))
@@ -195,7 +243,7 @@ fn real_owner_reclaims_at_device_full_after_last_owner_without_a_cleanup_job() {
     assert_eq!(after.counts.payload_cells, 128 + accepted);
     assert_eq!(after.allocation.reserved_tail_bytes, 0);
     assert!(
-        matches!(run(&client,Some(other),Command::State).result(),Ok(Response::State(s)) if *s==other_state)
+        matches!(run(&client,Some(other),|job_client: &layerfs_daemon::OwnerClient, job_route| job_client.state(job_route)).result(),Ok(Response::State(s)) if *s==other_state)
     );
     println!("S6_OWNER_DEVICE fixture_filled={filled} accepted_distinct_windows={accepted} before={before:?} after={after:?} owner_work={:?} terminal_row_sweep=false ordinary_refusal=ENOSPC",client.diagnostics().unwrap());
     assert!(client.maintenance_failure().unwrap().is_none());

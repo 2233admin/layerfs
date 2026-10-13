@@ -4,8 +4,9 @@
 //! is written by a refused visit.
 use layerfs_overlay::{
     Binding, Changes, CleanupState, DirectoryEntryChange, Inode, InodeKind, MaintenanceCursor,
-    NativeDecision, NativeEffect, NativeMount, OpenFile, Overlay, OverlayError, PayloadWrite,
-    ProfileConfig, Publication, Route, StatementKind, StoredCounts, WorkspaceState, READ_WINDOW,
+    NativeDecision, NativeEffect, NativeMount, NativeMountState, OpenFile, Overlay, OverlayError,
+    PayloadWrite, ProfileConfig, Publication, Route, StatementKind, StoredCounts, WorkspaceState,
+    READ_WINDOW,
 };
 use std::{
     path::PathBuf,
@@ -427,8 +428,22 @@ fn a_revoked_or_replaced_mount_is_stale_for_every_fenced_job() {
         Err(OverlayError::Stale)
     ));
 
-    // Terminal unmount consumes this Workspace's file. Reattachment does not
-    // reuse its namespace or revive tokens while the revoked file remains.
+    // Reattachment is a new mount incarnation. It revives no token of the
+    // revoked one, and a second live mount is refused.
+    let again = w.db.create_native_mount(w.route, 1).unwrap();
+    assert_ne!(again, w.mount);
+    assert_eq!(
+        w.db.native_mount_state(again).unwrap(),
+        NativeMountState::Live
+    );
+    assert!(matches!(
+        w.db.native_mount_state(w.mount),
+        Err(OverlayError::Stale)
+    ));
+    assert!(matches!(
+        w.db.native_file(again, 50, file.owner_id()),
+        Err(OverlayError::Stale)
+    ));
     assert!(matches!(
         w.db.create_native_mount(w.route, 1),
         Err(OverlayError::Invalid("duplicate native mount"))

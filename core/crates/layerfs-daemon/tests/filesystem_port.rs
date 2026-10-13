@@ -1,17 +1,17 @@
-//! Actual native dispatcher -> async owner -> admitted direct Store composition.
+//! Actual per-mount request drain -> direct Workspace jobs -> direct Store composition.
 #[path = "support/installed_store.rs"]
 mod support;
 use layerfs_content::filesystem::PathName;
 use layerfs_daemon::{
-    bootstrap::open_store, store::BindRequest, Command, NativeJob, NativeReply, Owner, OwnerConfig,
-    OwnerError, Response, ServiceClass,
+    bootstrap::open_store, store::BindRequest, NativeReply, Owner, OwnerClient, OwnerConfig,
+    OwnerError, OwnerWork, Response, ServiceClass,
 };
 use layerfs_fuse::{
     operations::{
         DirectoryStep, DirectoryStream, NativeData, NativeRead, ReadDataInput, ReadFailure,
     },
     ports::{Fence, MountServices},
-    Dispatch, DispatchConfig, FailureView, RequestDisposition,
+    FailureView, MountRequests, RequestDisposition,
 };
 use layerfs_history::WorkspaceId;
 use layerfs_overlay::ProfileConfig;
@@ -42,6 +42,26 @@ fn wait<T>(future: impl Future<Output = T>) -> T {
                 .unwrap(),
         }
     }
+}
+/// One request on its own receive thread, as a mount worker runs it.
+fn serve(
+    queue: &MountRequests,
+    input: usize,
+    future: layerfs_fuse::RequestFuture,
+) -> std::thread::JoinHandle<()> {
+    let queue = queue.clone();
+    std::thread::spawn(move || {
+        queue
+            .receive()
+            .unwrap()
+            .request(input)
+            .unwrap()
+            .serve(future)
+            .unwrap()
+    })
+}
+fn work(client: &OwnerClient) -> OwnerWork {
+    client.diagnostics().unwrap()
 }
 fn until(mut condition: impl FnMut() -> bool) {
     let deadline = Instant::now() + WAIT;
@@ -91,39 +111,24 @@ fn real_native_steps_park_for_readers_and_release_original_consumers() {
         .root()
         .root_inode()
         .serial();
-    let done = wait(
-        client
-            .try_submit(
-                Some(bound.route()),
-                Command::Native(NativeJob::Mount { root }),
-            )
-            .unwrap(),
-    )
-    .unwrap();
+    let done = client.native_mount(Some(bound.route()), root).unwrap();
     let mount = match done.result() {
         Ok(Response::Native(NativeReply::Mount(value))) => *value,
         value => panic!("{value:?}"),
     };
     drop(done);
-    let mut pool = Dispatch::start(DispatchConfig {
-        read_handles: 1,
-        namespaces: 1,
-    })
-    .unwrap();
-    let queue = pool.register(mount).unwrap();
-    // Exhaust the actual provider, then park all K requests. A fourth runnable
-    // continuation must execute while those original reader tickets wait.
+    let queue = MountRequests::new(mount);
+    // Exhaust the actual provider, then let three requests wait for it. A
+    // fourth request must run while those original reader tickets wait.
     let held = wait(store.read_ticket(Some(identity)).unwrap()).unwrap();
     let (send, recv) = mpsc::channel();
     for request in 1..=3 {
         let services = bound.request(&Fence::default()).unwrap();
         let send = send.clone();
-        queue
-            .receive()
-            .unwrap()
-            .admit(11)
-            .unwrap()
-            .handoff(Box::pin(async move {
+        serve(
+            &queue,
+            11,
+            Box::pin(async move {
                 let answer = NativeRead::prepare(
                     services,
                     mount,
@@ -142,35 +147,27 @@ fn real_native_steps_park_for_readers_and_release_original_consumers() {
                 answer.dispose().await.unwrap();
                 send.send(observation).unwrap();
                 RequestDisposition::Complete
-            }))
-            .unwrap();
+            }),
+        );
     }
-    until(|| store.read_work().waiting == 3 && queue.work().unwrap().parked == 3);
-    assert_eq!(
-        client.diagnostics().unwrap().outstanding,
-        0,
-        "fact rounds released SQL completions before reader wait"
-    );
+    until(|| store.read_work().waiting == 3 && queue.work().unwrap().active == 3);
     let (progress, observed) = mpsc::sync_channel(1);
-    queue
-        .receive()
-        .unwrap()
-        .admit(0)
-        .unwrap()
-        .handoff(Box::pin(async move {
+    serve(
+        &queue,
+        0,
+        Box::pin(async move {
             progress.send(()).unwrap();
             RequestDisposition::Complete
-        }))
-        .unwrap();
+        }),
+    );
     observed.recv_timeout(WAIT).unwrap();
     assert_eq!(store.read_work().waiting, 3);
     drop(held); // Original reader-release event, with no subsequent request.
     let values: Vec<_> = (0..3).map(|_| recv.recv_timeout(WAIT).unwrap()).collect();
     assert!(values.iter().all(|value| *value == values[0]));
     assert_eq!(values[0].1, support::bytes(0).len() as u64);
-    until(|| queue.work().unwrap().admitted == 0);
+    until(|| queue.work().unwrap().active == 0);
     assert_eq!(store.read_work().outstanding, 0);
-    assert_eq!(client.diagnostics().unwrap().outstanding, 0);
     let services = bound.request(&Fence::default()).unwrap();
     let serial = values[0].0;
     let opened = wait(NativeRead::prepare(
@@ -209,21 +206,14 @@ fn real_native_steps_park_for_readers_and_release_original_consumers() {
         "provider returned before reply consumer"
     );
     // The read holds nothing in the owner: its bytes are the request's own.
-    assert_eq!(client.diagnostics().unwrap().outstanding, 0);
     drop(data);
     // Prepare an actual mixed inherited/local 128KiB window through the normal
     // Workspace mutation API; the native read copies its local part in its
     // one visit and fills the inherited part from the base that visit named.
     let operation = bound.operation().unwrap();
-    let acquired = wait(
-        client
-            .try_submit(
-                Some(bound.route()),
-                Command::AcquireBaseSource { owner: 991 },
-            )
-            .unwrap(),
-    )
-    .unwrap();
+    let acquired = client
+        .acquire_base_source(Some(bound.route()), 991)
+        .unwrap();
     let source = match acquired.result() {
         Ok(Response::BaseSource(source)) => *source,
         other => panic!("{other:?}"),
@@ -251,22 +241,14 @@ fn real_native_steps_park_for_readers_and_release_original_consumers() {
     let Outcome::Applied { publication, .. } = outcome else {
         panic!("local window was not published")
     };
-    let disposed = wait(
-        client
-            .try_submit(Some(bound.route()), Command::ReplyAttempted(publication))
-            .unwrap(),
-    )
-    .unwrap();
+    let disposed = client.reply_attempted(publication).unwrap();
     assert!(disposed.result().is_ok());
     drop(disposed);
     drop(view);
     drop(operation);
-    let released = wait(
-        client
-            .try_submit(Some(bound.route()), Command::ReleaseBaseSource(source))
-            .unwrap(),
-    )
-    .unwrap();
+    let released = client
+        .release_base_source(Some(bound.route()), source)
+        .unwrap();
     assert!(released.result().is_ok());
     drop(released);
     let data = wait(NativeData::read(
@@ -287,10 +269,10 @@ fn real_native_steps_park_for_readers_and_release_original_consumers() {
     drop(wait(services.close_file(mount, serial, handle)).unwrap());
 
     // A definite missing-name refusal of a lookup is not confused with an
-    // uncertain SQL failure, and owns nothing: the lookup was two owner
+    // uncertain SQL failure, and owns nothing: the lookup was two Workspace
     // visits around one base read, with no source and no retained result, so
-    // disposing the reply admits no job.
-    let before = client.diagnostics().unwrap();
+    // disposing the reply runs no job.
+    let before = work(&client);
     let grants = store.read_work().grants;
     let missing = wait(NativeRead::prepare(
         bound.request(&Fence::default()).unwrap(),
@@ -305,24 +287,23 @@ fn real_native_steps_park_for_readers_and_release_original_consumers() {
     ))
     .unwrap();
     assert!(matches!(missing.value(), Err(Refusal::Missing)));
-    let visited = client.diagnostics().unwrap();
-    assert_eq!(visited.outstanding, 0);
-    assert_eq!(visited.admitted, before.admitted + 2);
+    let visited = work(&client);
     assert_eq!(
-        visited.completed[ServiceClass::Read as usize],
-        before.completed[ServiceClass::Read as usize] + 2
+        visited.jobs.iter().sum::<u64>(),
+        before.jobs.iter().sum::<u64>() + 2
     );
     assert_eq!(
-        visited.completed[ServiceClass::Source as usize],
-        before.completed[ServiceClass::Source as usize]
+        visited.jobs[ServiceClass::Read as usize],
+        before.jobs[ServiceClass::Read as usize] + 2
+    );
+    assert_eq!(
+        visited.jobs[ServiceClass::Source as usize],
+        before.jobs[ServiceClass::Source as usize]
     );
     assert_eq!(store.read_work().grants, grants + 1);
     wait(missing.dispose()).unwrap();
-    let disposed = client.diagnostics().unwrap();
-    assert_eq!(
-        (disposed.outstanding, disposed.admitted),
-        (0, visited.admitted)
-    );
+    let disposed = work(&client);
+    assert_eq!(disposed.jobs, visited.jobs);
     // OPEN of a directory is refused the same way, by two visits around
     // one base read, and owns nothing either: no source, no descriptor, and
     // no job after the reply.
@@ -340,28 +321,23 @@ fn real_native_steps_park_for_readers_and_release_original_consumers() {
     ))
     .unwrap();
     assert!(matches!(refused.value(), Err(Refusal::IsDirectory)));
-    let visited = client.diagnostics().unwrap();
+    let visited = work(&client);
     assert_eq!(
         (
-            visited.outstanding,
-            visited.admitted,
-            visited.completed[ServiceClass::Read as usize],
-            visited.completed[ServiceClass::Source as usize]
+            visited.jobs.iter().sum::<u64>(),
+            visited.jobs[ServiceClass::Read as usize],
+            visited.jobs[ServiceClass::Source as usize]
         ),
         (
-            0,
-            disposed.admitted + 2,
-            disposed.completed[ServiceClass::Read as usize] + 2,
-            disposed.completed[ServiceClass::Source as usize]
+            disposed.jobs.iter().sum::<u64>() + 2,
+            disposed.jobs[ServiceClass::Read as usize] + 2,
+            disposed.jobs[ServiceClass::Source as usize]
         )
     );
     assert_eq!(store.read_work().grants, grants + 1);
     wait(refused.dispose()).unwrap();
-    let disposed = client.diagnostics().unwrap();
-    assert_eq!(
-        (disposed.outstanding, disposed.admitted),
-        (0, visited.admitted)
-    );
+    let disposed = work(&client);
+    assert_eq!(disposed.jobs, visited.jobs);
     // OPENDIR is a visit as well: its definite refusal, of a regular file
     // the kernel references, holds nothing and is followed by no release.
     let found = wait(NativeRead::prepare(
@@ -378,7 +354,7 @@ fn real_native_steps_park_for_readers_and_release_original_consumers() {
     .unwrap();
     assert_eq!(found.value().unwrap().stat.serial, serial);
     wait(found.dispose()).unwrap();
-    let disposed = client.diagnostics().unwrap();
+    let disposed = work(&client);
     let refused = wait(NativeRead::prepare(
         bound.request(&Fence::default()).unwrap(),
         mount,
@@ -389,45 +365,31 @@ fn real_native_steps_park_for_readers_and_release_original_consumers() {
     ))
     .unwrap();
     assert!(matches!(refused.value(), Err(Refusal::NotDirectory)));
-    let held = client.diagnostics().unwrap();
+    let held = work(&client);
     assert_eq!(
         (
-            held.outstanding,
-            held.admitted,
-            held.completed[ServiceClass::Read as usize],
-            held.completed[ServiceClass::Source as usize]
+            held.jobs.iter().sum::<u64>(),
+            held.jobs[ServiceClass::Read as usize],
+            held.jobs[ServiceClass::Source as usize]
         ),
         (
-            0,
-            disposed.admitted + 1,
-            disposed.completed[ServiceClass::Read as usize] + 1,
-            disposed.completed[ServiceClass::Source as usize]
+            disposed.jobs.iter().sum::<u64>() + 1,
+            disposed.jobs[ServiceClass::Read as usize] + 1,
+            disposed.jobs[ServiceClass::Source as usize]
         )
     );
     wait(refused.dispose()).unwrap();
-    let released = client.diagnostics().unwrap();
-    assert_eq!(
-        (released.outstanding, released.admitted),
-        (0, held.admitted)
-    );
+    let released = work(&client);
+    assert_eq!(released.jobs, held.jobs);
     drop(wait(services.forget(mount, serial, 1)).unwrap());
-    let done = wait(
-        client
-            .try_submit(
-                Some(bound.route()),
-                Command::Native(NativeJob::Revoke(mount)),
-            )
-            .unwrap(),
-    )
-    .unwrap();
+    let done = client.native_revoke(Some(bound.route()), mount).unwrap();
     assert!(matches!(
         done.result(),
         Ok(Response::Native(NativeReply::Done))
     ));
     drop(done);
-    queue.stop_admission().unwrap();
+    queue.stop_receive().unwrap();
     queue.finish().unwrap();
-    assert!(pool.stop().unwrap().clean());
     drop(services);
     drop(bound);
     owner.stop().unwrap();
@@ -474,29 +436,17 @@ fn terminal_owner_failure_retains_unattempted_input_without_replay() {
         .root()
         .root_inode()
         .serial();
-    let done = wait(
-        client
-            .try_submit(
-                Some(bound.route()),
-                Command::Native(NativeJob::Mount { root }),
-            )
-            .unwrap(),
-    )
-    .unwrap();
+    let done = client.native_mount(Some(bound.route()), root).unwrap();
     let mount = match done.result() {
         Ok(Response::Native(NativeReply::Mount(value))) => *value,
         value => panic!("{value:?}"),
     };
     drop(done);
-    let pool = Dispatch::start(DispatchConfig {
-        read_handles: 1,
-        namespaces: 1,
-    })
-    .unwrap();
-    let queue = pool.register(mount).unwrap();
+    let queue = MountRequests::new(mount);
     owner.stop().unwrap();
-    let before = client.diagnostics().unwrap().admitted;
-    // The first owner job of a lookup and of an OPENDIR is its visit. Each
+    // A stopped service has no open Workspace left to hold or count.
+    let before = client.diagnostics().unwrap().jobs;
+    // The first Workspace job of a lookup and of an OPENDIR is its visit. Each
     // is retained in its own slot.
     let requests = [
         (
@@ -508,31 +458,32 @@ fn terminal_owner_failure_retains_unattempted_input_without_replay() {
         ),
         (u64::MAX - 1, NativeReadOperation::Opendir { serial: root }),
     ];
-    // Both are admitted before either runs: the first retained failure makes
-    // the lane terminal, which refuses later admission and not a handoff.
-    let permits = requests
+    // Both are received before either runs: the first retained failure makes
+    // the mount terminal, which refuses later receives and not a served request.
+    let received = requests
         .iter()
-        .map(|_| queue.receive().unwrap().admit(0).unwrap())
+        .map(|_| queue.receive().unwrap().request(0).unwrap())
         .collect::<Vec<_>>();
-    for (slot, (permit, (request, operation))) in permits
+    for (slot, (owner, (request, operation))) in received
         .into_iter()
         .zip(requests.iter().cloned())
         .enumerate()
     {
         let services = bound.request(&Fence::default()).unwrap();
-        permit
-            .handoff(Box::pin(async move {
+        owner
+            .serve(Box::pin(async move {
                 match NativeRead::prepare(services, mount, request, root, None, operation).await {
                     Err(error) => RequestDisposition::Retained(Box::new(error)),
-                    Ok(_) => panic!("a stopped owner cannot run a new job"),
+                    Ok(_) => panic!("a stopped service cannot run a new job"),
                 }
             }))
             .unwrap();
-        until(|| queue.work().unwrap().retained == slot + 1);
+        assert_eq!(queue.work().unwrap().retained, slot + 1);
     }
+    assert!(queue.receive().is_err());
     for (slot, (request, operation)) in requests.iter().enumerate() {
         queue
-            .inspect_retained(slot, |failure| {
+            .inspect_failure(slot, |failure| {
                 let FailureView::Request(error) = failure else {
                     panic!("expected original owner error")
                 };
@@ -551,23 +502,16 @@ fn terminal_owner_failure_retains_unattempted_input_without_replay() {
                     other => panic!("retained another operation: {other:?}"),
                 }
                 let original = error.reason.downcast_ref::<OwnerError>().unwrap();
-                let OwnerError::Unattempted { cause, command } = original else {
+                // The action that never ran comes back opaque, with its cause.
+                let OwnerError::Unattempted { cause, .. } = original else {
                     panic!("{original:?}")
                 };
                 assert!(matches!(cause.as_ref(), OwnerError::Stopped));
-                // The command that was never submitted comes back unchanged.
-                match (command.as_ref(), operation) {
-                    (
-                        Command::Native(NativeJob::ObserveVisit(visit)),
-                        NativeReadOperation::Lookup { .. } | NativeReadOperation::Opendir { .. },
-                    ) => assert_eq!(visit.mount(), mount),
-                    other => panic!("unattempted another command: {other:?}"),
-                }
+                let _ = operation;
             })
             .unwrap();
     }
-    assert_eq!(client.diagnostics().unwrap().admitted, before);
-    drop(pool);
+    assert_eq!(client.diagnostics().unwrap().jobs, before);
     drop(queue);
     drop(bound);
     drop(store);
@@ -575,7 +519,7 @@ fn terminal_owner_failure_retains_unattempted_input_without_replay() {
 }
 
 #[test]
-fn a_full_handoff_of_parked_reads_holds_no_owner_credit_and_every_read_completes() {
+fn many_waiting_reads_of_one_mount_all_complete_through_one_reader() {
     use std::sync::Mutex;
     struct Gate(Mutex<(bool, Vec<Option<Waker>>)>);
     struct Turn(Arc<Gate>, usize);
@@ -628,15 +572,7 @@ fn a_full_handoff_of_parked_reads_holds_no_owner_credit_and_every_read_completes
         .root()
         .root_inode()
         .serial();
-    let done = wait(
-        client
-            .try_submit(
-                Some(bound.route()),
-                Command::Native(NativeJob::Mount { root }),
-            )
-            .unwrap(),
-    )
-    .unwrap();
+    let done = client.native_mount(Some(bound.route()), root).unwrap();
     let mount = match done.result() {
         Ok(Response::Native(NativeReply::Mount(mount))) => *mount,
         other => panic!("{other:?}"),
@@ -656,13 +592,8 @@ fn a_full_handoff_of_parked_reads_holds_no_owner_credit_and_every_read_completes
     .unwrap();
     let serial = lookup.value().unwrap().stat.serial;
     wait(lookup.dispose()).unwrap();
-    let mut pool = Dispatch::start(DispatchConfig {
-        read_handles: 1,
-        namespaces: 1,
-    })
-    .unwrap();
-    let queue = pool.register(mount).unwrap();
-    let count = layerfs_fuse::HANDOFFS;
+    let queue = MountRequests::new(mount);
+    let count = 16;
     let gate = Arc::new(Gate(Mutex::new((false, vec![None; count]))));
     let (prepared, ready) = mpsc::channel();
     let (done, completed) = mpsc::channel();
@@ -671,12 +602,10 @@ fn a_full_handoff_of_parked_reads_holds_no_owner_credit_and_every_read_completes
         let prepared = prepared.clone();
         let done = done.clone();
         let gate = gate.clone();
-        queue
-            .receive()
-            .unwrap()
-            .admit(0)
-            .unwrap()
-            .handoff(Box::pin(async move {
+        serve(
+            &queue,
+            0,
+            Box::pin(async move {
                 prepared.send(()).unwrap();
                 Turn(gate, index).await;
                 let data = NativeData::read(
@@ -697,15 +626,13 @@ fn a_full_handoff_of_parked_reads_holds_no_owner_credit_and_every_read_completes
                 drop(data);
                 done.send(()).unwrap();
                 RequestDisposition::Complete
-            }))
-            .unwrap();
+            }),
+        );
     }
     for _ in 0..count {
         ready.recv_timeout(WAIT).unwrap();
     }
-    until(|| queue.work().unwrap().parked == count);
-    // A read has no metadata phase: a parked one holds no owner credit.
-    assert_eq!(client.diagnostics().unwrap().outstanding, 0);
+    until(|| queue.work().unwrap().active == count);
     let wakes = {
         let mut state = gate.0.lock().unwrap();
         state.0 = true;
@@ -716,27 +643,17 @@ fn a_full_handoff_of_parked_reads_holds_no_owner_credit_and_every_read_completes
     }
     for _ in 0..count {
         completed.recv_timeout(WAIT).unwrap_or_else(|error| panic!(
-            "full native handoff cannot advance: {error}; native={:?}; owner={:?}; store={:?}; fixture={:?}",
+            "waiting reads cannot advance: {error}; native={:?}; owner={:?}; store={:?}; fixture={:?}",
             queue.work().unwrap(), client.diagnostics().unwrap(), store.read_work(), f.directory));
     }
-    until(|| queue.work().unwrap().admitted == 0);
-    assert_eq!(client.diagnostics().unwrap().outstanding, 0);
+    until(|| queue.work().unwrap().active == 0);
     let services = bound.request(&Fence::default()).unwrap();
     drop(wait(services.forget(mount, serial, 1)).unwrap());
-    let done = wait(
-        client
-            .try_submit(
-                Some(bound.route()),
-                Command::Native(NativeJob::Revoke(mount)),
-            )
-            .unwrap(),
-    )
-    .unwrap();
+    let done = client.native_revoke(Some(bound.route()), mount).unwrap();
     assert!(done.result().is_ok());
     drop(done);
-    queue.stop_admission().unwrap();
+    queue.stop_receive().unwrap();
     queue.finish().unwrap();
-    assert!(pool.stop().unwrap().clean());
     drop(services);
     drop(bound);
     owner.stop().unwrap();
@@ -784,15 +701,7 @@ fn directory_consumer_publishes_only_accepted_names_and_a_reply_racing_releasedi
         .root()
         .root_inode()
         .serial();
-    let done = wait(
-        client
-            .try_submit(
-                Some(bound.route()),
-                Command::Native(NativeJob::Mount { root }),
-            )
-            .unwrap(),
-    )
-    .unwrap();
+    let done = client.native_mount(Some(bound.route()), root).unwrap();
     let mount = match done.result() {
         Ok(Response::Native(NativeReply::Mount(mount))) => *mount,
         other => panic!("{other:?}"),
@@ -825,11 +734,10 @@ fn directory_consumer_publishes_only_accepted_names_and_a_reply_racing_releasedi
     wait(attributes.dispose()).unwrap();
 
     let services = bound.request(&Fence::default()).unwrap();
-    // Keep every admitted request's offered page alive at once. Their original
-    // SQL replies must already be consumed, so publishing any prefix still has
-    // admission capacity without raising the owner's16-slot configuration.
+    // Keep many requests' offered pages alive at once. Their original SQL
+    // replies are already consumed, so publishing any prefix waits for none.
     let mut offered = Vec::new();
-    for index in 0..layerfs_fuse::HANDOFFS {
+    for index in 0..16 {
         let stream = wait(DirectoryStream::prepare(
             services.clone(),
             mount,
@@ -844,7 +752,6 @@ fn directory_consumer_publishes_only_accepted_names_and_a_reply_racing_releasedi
         };
         offered.push(batch);
     }
-    until(|| client.diagnostics().unwrap().outstanding == 0);
     for batch in offered {
         drop(wait(batch.accept(0)).unwrap());
     }
@@ -861,7 +768,6 @@ fn directory_consumer_publishes_only_accepted_names_and_a_reply_racing_releasedi
         stream.dots().collect::<Vec<_>>(),
         vec![(".", root, 1), ("..", root, 2)]
     );
-    until(|| client.diagnostics().unwrap().outstanding == 0);
     let DirectoryStep::Batch(batch) = wait(stream.next()).unwrap() else {
         panic!("missing first directory page")
     };
@@ -870,7 +776,6 @@ fn directory_consumer_publishes_only_accepted_names_and_a_reply_racing_releasedi
         .map(|(entry, cookie)| (entry.name.clone(), cookie))
         .collect();
     assert_eq!(first.len(), 64);
-    until(|| client.diagnostics().unwrap().outstanding == 0);
     let last_accepted = first[2].1;
     let never_accepted = first[3].1;
     let stream = wait(batch.accept(3)).unwrap();
@@ -937,17 +842,8 @@ fn directory_consumer_publishes_only_accepted_names_and_a_reply_racing_releasedi
     assert!(!raced.fenced() && raced.base_demand().is_none());
     assert_eq!(raced.prefix(), Some((remainder.len(), true)));
     drop(raced);
-    until(|| client.diagnostics().unwrap().outstanding == 0);
     assert_eq!(store.read_work().outstanding, 0);
-    let done = wait(
-        client
-            .try_submit(
-                Some(bound.route()),
-                Command::Native(NativeJob::Revoke(mount)),
-            )
-            .unwrap(),
-    )
-    .unwrap();
+    let done = client.native_revoke(Some(bound.route()), mount).unwrap();
     assert!(done.result().is_ok());
     drop(done);
     drop(services);

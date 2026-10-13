@@ -76,11 +76,7 @@ fn configure(f: &support::Fixture, deployment: &Deployment) -> PathBuf {
             read_handles: 2,
             handshake_ms: 3000,
             cache_bytes: 64 * 1024,
-            owner_bytes: 16 * 1024 * 1024,
-            lifecycle_reserve: 2 * 1024 * 1024,
             namespaces: 8,
-            ordinary_jobs: 8,
-            lifecycle_jobs: 4,
             pager_kib: 1024,
             serial_low_water: deployment.serial_low_water,
         },
@@ -340,7 +336,7 @@ fn equal_calls_and_reused_slot_have_distinct_public_observation_identity() {
     f.cleanup();
 }
 #[test]
-fn observer_job_is_charged_and_cardinality_does_not_follow_unrelated_workspaces() {
+fn observer_reads_are_charged_and_cardinality_does_not_follow_unrelated_workspaces() {
     let mut cardinalities = Vec::new();
     for (population, label) in [(1, "observed-small"), (4, "observed-large")] {
         let f = support::Fixture::new(label, None);
@@ -386,8 +382,8 @@ fn observer_job_is_charged_and_cardinality_does_not_follow_unrelated_workspaces(
         };
         assert_eq!(
             admitted(&last) - admitted(&first),
-            3 + population as u64,
-            "two Status jobs, one charged aggregate observer and one read per Workspace"
+            2 + population as u64,
+            "two Status jobs and one read per Workspace; the aggregate observation is no job"
         );
         for rows in [&first, &last] {
             let cost = values(
@@ -406,17 +402,11 @@ fn observer_job_is_charged_and_cardinality_does_not_follow_unrelated_workspaces(
                     .find(|line| number(line, "section") == 28)
                     .unwrap(),
             );
-            assert_eq!(resources.len(), 31);
-            assert_eq!(resources[1], population as u64);
-            let budget = values(
-                rows.iter()
-                    .find(|line| number(line, "section") == 31)
-                    .unwrap(),
-            );
-            assert_eq!(budget.len(), 7);
-            assert_eq!(budget[0], 16 * 1024 * 1024);
-            assert_eq!(budget[1], 1024 * 1024);
-            assert!(budget[6] <= 1, "actual compile-option readback bit");
+            assert_eq!(resources.len(), 28);
+            assert_eq!(resources[0], population as u64);
+            // No daemon-wide byte budget exists: each Workspace owns its
+            // connection and memory, and no budget row is emitted.
+            assert!(!rows.iter().any(|line| number(line, "section") == 31));
             for index in 0..2 {
                 let reader = rows
                     .iter()
@@ -648,8 +638,8 @@ fn configured_serial_low_water_reaches_a_mounted_create_on_both_startup_routes()
                 .unwrap()
                 .work
                 .unwrap();
-            let now = (work.received, work.admitted, work.completed);
-            if work.received == 0 && work.admitted == 0 && last == Some(now) {
+            let now = (work.active, work.completed);
+            if work.active == 0 && last == Some(now) {
                 break;
             }
             last = Some(now);

@@ -10,7 +10,7 @@ use layerfs_history::{
     PageResult, WorkspaceId,
 };
 const CALL: &[u8] = b"LFSC\x01";
-const ANSWER: &[u8] = b"LFSA\x01";
+const ANSWER: &[u8] = b"LFSA\x02";
 /// One nonzero correlation and its big-endian bytes.
 const ID: u64 = 0x0102_0304_0506_0708;
 const ID_BYTES: &[u8] = &[1, 2, 3, 4, 5, 6, 7, 8];
@@ -258,32 +258,25 @@ const WORK: NativeWork = NativeWork {
     loops_entered: 3,
     loops_exited: 2,
     loops_joined: 1,
-    received: 5,
-    admitted: 16,
-    queued: 6,
-    running: 7,
-    parked: 8,
+    active: 5,
     retained: 9,
     completed: 10,
-    handoffs: 11,
+    served: 11,
     inline: 12,
     refused: 13,
     terminal: 14,
-    unadmitted: 15,
     forget_units: 0x0102_0304_0506_0708,
 };
-/// Four u16 loop counts, six u32 request gauges, seven u64 counters: 88 bytes.
+/// Four u16 loop counts, two u32 request gauges, six u64 counters: 64 bytes.
 fn work_bytes() -> Vec<u8> {
     join(&[
         &[0, 4, 0, 3, 0, 2, 0, 1],
-        &[0, 0, 0, 5, 0, 0, 0, 16, 0, 0, 0, 6],
-        &[0, 0, 0, 7, 0, 0, 0, 8, 0, 0, 0, 9],
+        &[0, 0, 0, 5, 0, 0, 0, 9],
         &[0, 0, 0, 0, 0, 0, 0, 10],
         &[0, 0, 0, 0, 0, 0, 0, 11],
         &[0, 0, 0, 0, 0, 0, 0, 12],
         &[0, 0, 0, 0, 0, 0, 0, 13],
         &[0, 0, 0, 0, 0, 0, 0, 14],
-        &[0, 0, 0, 0, 0, 0, 0, 15],
         &[1, 2, 3, 4, 5, 6, 7, 8],
     ])
 }

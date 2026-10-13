@@ -9,6 +9,7 @@ pub(super) fn owner<W: Write>(
 ) -> io::Result<()> {
     let Some(w) = work else {
         rows.row(1, 0, None)?;
+        rows.row(35, 0, None)?;
         for family in 0..14 {
             rows.row(2, family, None)?;
             rows.row(3, family, None)?;
@@ -22,39 +23,37 @@ pub(super) fn owner<W: Write>(
         1,
         0,
         Some(&[
-            w.admitted,
-            w.credited_bytes as u64,
-            w.peak_credited_bytes as u64,
-            w.outstanding as u64,
-            w.scheduler_bytes as u64,
-            w.queued as u64,
-            w.peak_queued as u64,
-            w.receipt_overruns,
-            w.receipt_overrun_bytes as u64,
+            w.jobs.iter().sum(),
             w.maintenance_jobs,
             w.maintenance_rows,
             w.closed_namespaces,
             w.maintenance_data_bytes,
             w.maintenance_ns,
-            w.completed[0],
-            w.completed[1],
-            w.completed[2],
-            w.completed[3],
-            w.completed[4],
-            w.completed[5],
-            w.queue_wait_ns[0],
-            w.queue_wait_ns[1],
-            w.queue_wait_ns[2],
-            w.queue_wait_ns[3],
-            w.queue_wait_ns[4],
-            w.queue_wait_ns[5],
-            w.service_ns[0],
-            w.service_ns[1],
-            w.service_ns[2],
-            w.service_ns[3],
-            w.service_ns[4],
-            w.service_ns[5],
+            w.jobs[0],
+            w.jobs[1],
+            w.jobs[2],
+            w.jobs[3],
+            w.jobs[4],
+            w.jobs[5],
+            w.lock_wait_ns[0],
+            w.lock_wait_ns[1],
+            w.lock_wait_ns[2],
+            w.lock_wait_ns[3],
+            w.lock_wait_ns[4],
+            w.lock_wait_ns[5],
+            w.hold_ns[0],
+            w.hold_ns[1],
+            w.hold_ns[2],
+            w.hold_ns[3],
+            w.hold_ns[4],
+            w.hold_ns[5],
         ]),
+    )?;
+    // Workspace lock holds that run no SQL and are no job of any class.
+    rows.row(
+        35,
+        0,
+        Some(&[w.observations, w.reply_attempts, w.reply_hold_ns]),
     )?;
     for family in 0..14 {
         statement(rows, 2, family as i64, w.sql_foreground.statements[family])?;
@@ -200,31 +199,6 @@ pub(super) fn store<W: Write>(
             Ok(())
         }
         Err(_) => rows.row(10, 0, None),
-    }
-}
-#[cfg(target_os = "linux")]
-pub(super) fn dispatch<W: Write>(
-    rows: &mut Records<'_, W>,
-    work: Option<layerfs_fuse::DispatchWork>,
-) -> io::Result<()> {
-    match work {
-        Some(w) => rows.row(
-            11,
-            0,
-            Some(&[
-                w.configured_workers as u64,
-                w.entered_workers as u64,
-                w.live_workers as u64,
-                w.mounts as u64,
-                w.queued as u64,
-                w.running as u64,
-                w.parked as u64,
-                w.retained as u64,
-                w.stopping as u64,
-                w.failed as u64,
-            ]),
-        ),
-        None => rows.row(11, 0, None),
     }
 }
 pub(super) fn sql<W: Write>(

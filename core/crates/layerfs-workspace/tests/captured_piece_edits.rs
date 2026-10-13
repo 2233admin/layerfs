@@ -6,7 +6,7 @@ mod captured_support;
 mod common;
 use captured_support::*;
 use layerfs_content::{Edit, ObjectId};
-use layerfs_daemon::{Command, Response};
+use layerfs_daemon::Response;
 use layerfs_overlay::{CapturedReader, ClaimedRange, IndexedOperationRecordScope, WriteClaims};
 use layerfs_workspace::{
     CapturedFileWork, Operation, OverlayOperationRecords, Position, WriteData,
@@ -92,9 +92,11 @@ impl Run {
         self.claimed(at, self.root, &base, source, length);
     }
     fn view<T>(&self, read: impl FnOnce(&layerfs_workspace::SourceView) -> T) -> T {
-        let acquired = self.case.job(Command::AcquireBaseSource {
-            owner: self.case.request(),
-        });
+        let acquired = self
+            .case
+            .job(|job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.acquire_base_source(job_route, self.case.request())
+            });
         let source = match acquired.result() {
             Ok(Response::BaseSource(source)) => *source,
             other => panic!("{other:?}"),
@@ -104,7 +106,10 @@ impl Run {
         let value = read(&view);
         assert!(self
             .case
-            .job(Command::ReleaseBaseSource(source))
+            .job(
+                |job_client: &layerfs_daemon::OwnerClient, job_route| job_client
+                    .release_base_source(job_route, source)
+            )
             .result()
             .is_ok());
         value

@@ -5,7 +5,7 @@ mod harness;
 use common::{fixture, name, Store};
 use harness::{create, link, mkdir, path, rename, rmdir, unlink, Allocator, T1, T2};
 use layerfs_content::{AuthenticatedObjects, ContentError, ContentResult, ObjectId};
-use layerfs_daemon::{Command, Owner, OwnerClient, OwnerConfig, OwnerError, Response};
+use layerfs_daemon::{Owner, OwnerClient, OwnerConfig, Response};
 use layerfs_overlay::{ProfileConfig, Route};
 use layerfs_workspace::{
     BaseView, CanonicalClient, Operation, Outcome, OverlayRead, Refusal, Time, ViewStat, Workspace,
@@ -100,16 +100,8 @@ impl Service {
         .unwrap();
         let client = owner.client();
         let opened = client
-            .try_submit(
-                None,
-                Command::Open {
-                    incarnation: [77; 32],
-                    base_root: f.root.0.to_bytes(),
-                },
-            )
-            .unwrap_or_else(|(error, _)| panic!("{error:?}"))
-            .wait()
-            .unwrap();
+            .open(None, [77; 32], f.root.0.to_bytes())
+            .unwrap_or_else(|error| panic!("{error:?}"));
         let route = match opened.result() {
             Ok(Response::Opened(route)) => *route,
             other => panic!("{other:?}"),
@@ -130,28 +122,17 @@ impl Service {
             path,
         }
     }
-    /// Submits one owner job. Admission refusal precedes any attempt and
-    /// returns the original command, so waiting for credits is not a replay.
-    fn job<T>(&self, mut command: Command, read: impl FnOnce(&Response) -> T) -> T {
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
-        let pending = loop {
-            assert!(std::time::Instant::now() < deadline, "admission deadline");
-            match self.client.try_submit(Some(self.route), command) {
-                Ok(pending) => break pending,
-                Err((OwnerError::AdmissionFull, original)) => {
-                    command = original;
-                    thread::yield_now();
-                }
-                Err((error, _)) => panic!("{error:?}"),
-            }
-        };
-        let done = loop {
-            assert!(std::time::Instant::now() < deadline, "owner job deadline");
-            if let Some(done) = pending.try_complete().unwrap() {
-                break done;
-            }
-            thread::yield_now();
-        };
+    /// One connection job on the calling thread, with its result projected.
+    fn job<T>(
+        &self,
+        command: impl FnOnce(
+            &layerfs_daemon::OwnerClient,
+            Option<layerfs_overlay::Route>,
+        ) -> Result<layerfs_daemon::JobReceipt, layerfs_daemon::OwnerError>,
+        read: impl FnOnce(&Response) -> T,
+    ) -> T {
+        let done =
+            command(&self.client, Some(self.route)).unwrap_or_else(|error| panic!("{error:?}"));
         match done.result() {
             Ok(response) => read(response),
             Err(error) => panic!("{error:?}"),
@@ -159,13 +140,23 @@ impl Service {
     }
     fn window<T>(&self, work: impl FnOnce(&layerfs_workspace::SourceView) -> T) -> T {
         let owner = self.owners.fetch_add(1, Ordering::Relaxed) + 1;
-        let source = self.job(Command::AcquireBaseSource { owner }, |r| match r {
-            Response::BaseSource(source) => *source,
-            other => panic!("{other:?}"),
-        });
+        let source = self.job(
+            |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.acquire_base_source(job_route, owner)
+            },
+            |r| match r {
+                Response::BaseSource(source) => *source,
+                other => panic!("{other:?}"),
+            },
+        );
         let view = self.workspace.view_for_source(source).unwrap();
         let result = work(&view);
-        self.job(Command::ReleaseBaseSource(source), |_| ());
+        self.job(
+            |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.release_base_source(job_route, source)
+            },
+            |_| (),
+        );
         result
     }
     fn run(&self, operation: Operation, now: Time) -> WorkspaceResult<Outcome> {
@@ -174,7 +165,12 @@ impl Service {
                 .mutate(&self.client, &self.allocator, view, operation, now)
         });
         if let Ok(Outcome::Applied { publication, .. }) = &outcome {
-            self.job(Command::ReplyAttempted(*publication), |_| ());
+            self.job(
+                |job_client: &layerfs_daemon::OwnerClient, _| {
+                    job_client.reply_attempted(*publication)
+                },
+                |_| (),
+            );
         }
         outcome
     }
@@ -271,22 +267,11 @@ fn concurrent_operations_through_real_owner_jobs_keep_counts_and_references_exac
     assert_eq!(service.lookup(1, "alias").unwrap().namespace_refs, 2);
     service.applied(rmdir(1, "shared"));
     assert_eq!(service.lookup(1, "shared"), None);
-    // The engine thread drops its own final credit after the consumer observes
-    // a completion: bound the wait for that release before the exact check.
-    let end = std::time::Instant::now() + std::time::Duration::from_secs(3);
-    while service.client.diagnostics().unwrap().outstanding != 0 {
-        assert!(
-            std::time::Instant::now() < end,
-            "engine did not release its final credit"
-        );
-        thread::yield_now();
-    }
     let work = service.client.diagnostics().unwrap();
     assert!(
-        work.completed[1] >= (2 * names.len()) as u64,
+        work.jobs[1] >= (2 * names.len()) as u64,
         "mutation-class jobs"
     );
-    assert_eq!(work.outstanding, 0);
     assert!(service.client.maintenance_failure().unwrap().is_none());
 }
 
@@ -347,10 +332,13 @@ fn a_blocked_base_fact_leaves_the_owner_free_and_publishes_after_a_capture() {
         assert_eq!(service.lookup(1, "gated"), None);
         // A capture seals what is published; the blocked operation has
         // published nothing and holds no ticket, so it does not delay it.
-        let capture = service.job(Command::Capture, |r| match r {
-            Response::Captured(capture) => *capture,
-            other => panic!("{other:?}"),
-        });
+        let capture = service.job(
+            |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.capture(job_route),
+            |r| match r {
+                Response::Captured(capture) => *capture,
+                other => panic!("{other:?}"),
+            },
+        );
         {
             let mut state = service.gate.state.lock().unwrap();
             state.1 = true;
@@ -358,9 +346,8 @@ fn a_blocked_base_fact_leaves_the_owner_free_and_publishes_after_a_capture() {
         }
         let gated = blocked.join().unwrap();
         let sealed = service.job(
-            Command::CapturedDirectoryEntries {
-                capture,
-                after: None,
+            |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.captured_directory_entries(job_route, capture, None)
             },
             |r| match r {
                 Response::DirectoryEntries(rows) => rows
@@ -373,10 +360,15 @@ fn a_blocked_base_fact_leaves_the_owner_free_and_publishes_after_a_capture() {
         assert_eq!(sealed, vec!["dir", "free", "inner"]);
         // Its one publication landed in the generation current at its attempt.
         let born = |serial| {
-            service.job(Command::Inode(serial), |r| match r {
-                Response::Inode(Some(inode)) => inode.born,
-                other => panic!("{other:?}"),
-            })
+            service.job(
+                |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                    job_client.inode(job_route, serial)
+                },
+                |r| match r {
+                    Response::Inode(Some(inode)) => inode.born,
+                    other => panic!("{other:?}"),
+                },
+            )
         };
         assert_eq!(born(free.serial), capture.generation.number() as u64);
         assert_eq!(born(gated.serial), capture.generation.number() as u64 + 1);
@@ -390,12 +382,20 @@ fn closed_and_stopped_services_return_exact_outcomes_without_effect() {
     let dir = service.applied(mkdir(1, "dir")).unwrap().serial;
     // A source acquired before logical close keeps its reads; mutation through
     // it is refused by the one attempted publication with the engine's cause.
-    let source = service.job(Command::AcquireBaseSource { owner: 900 }, |r| match r {
-        Response::BaseSource(source) => *source,
-        other => panic!("{other:?}"),
-    });
+    let source = service.job(
+        |job_client: &layerfs_daemon::OwnerClient, job_route| {
+            job_client.acquire_base_source(job_route, 900)
+        },
+        |r| match r {
+            Response::BaseSource(source) => *source,
+            other => panic!("{other:?}"),
+        },
+    );
     let view = service.workspace.view_for_source(source).unwrap();
-    service.job(Command::Close, |_| ());
+    service.job(
+        |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.close(job_route),
+        |_| (),
+    );
     let refused = service
         .workspace
         .mutate(
@@ -431,10 +431,7 @@ fn closed_and_stopped_services_return_exact_outcomes_without_effect() {
         )
         .unwrap_err();
     let text = format!("{stopped:?}");
-    assert!(
-        text.contains("Unattempted { cause: Stopped, command: Namespace(NamespaceJob"),
-        "{text}"
-    );
+    assert!(text.contains("Unattempted { cause: Stopped"), "{text}");
     let _ = OverlayRead::inode(&service.client, source, dir).unwrap_err();
 }
 
@@ -535,7 +532,9 @@ fn payload_complete_operations_have_indexed_work_through_the_real_owner() {
     });
     let plans = service.window(|view| {
         service.job(
-            Command::PayloadPlans(view.source()),
+            |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.payload_plans(job_route, view.source())
+            },
             |response| match response {
                 Response::PayloadPlans(plans) => plans.clone(),
                 other => panic!("{other:?}"),
@@ -551,9 +550,12 @@ fn payload_complete_operations_have_indexed_work_through_the_real_owner() {
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
         loop {
             assert!(std::time::Instant::now() < deadline, "maintenance deadline");
-            if service.job(Command::MaintenanceIdle, |response| {
-                matches!(response, Response::MaintenanceIdle(true))
-            }) {
+            if service.job(
+                |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                    job_client.maintenance_idle(job_route)
+                },
+                |response| matches!(response, Response::MaintenanceIdle(true)),
+            ) {
                 break;
             }
             thread::yield_now();

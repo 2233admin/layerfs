@@ -5,9 +5,6 @@
 //! - `Leases`: every reader of the Store's fixed read set, each an ordinary
 //!   granted `ReadLease`. While they are held, anything that needs the Store
 //!   waits for reader admission; nothing is blocked inside a provider call.
-//! - `Credits`: completions of real read-only owner jobs on one Workspace's
-//!   lane. A kept completion keeps its job slot and its credited bytes, as
-//!   any caller-held result does, until it is dropped.
 //!
 //! Taking a hold is one bounded readiness wait; it panics with the service's
 //! own counters when the hold cannot be staged. A hold is returned by
@@ -17,7 +14,6 @@ use layerfs_bridge::control::WorkspaceToken;
 use layerfs_daemon::{
     control::Service,
     store::{ReadLease, ReadTicket, Store},
-    Command, Completion, OwnerClient, OwnerError,
 };
 use layerfs_history::WorkspaceId;
 use layerfs_overlay::Route;
@@ -34,7 +30,7 @@ use std::{
 /// of a test may be bound with tag 255.
 pub const HOLDER: [u8; 32] = [255; 32];
 
-/// The owner route of a bound Workspace, for `Credits`.
+/// The connection route of a bound Workspace.
 pub fn route(service: &Service, token: WorkspaceToken) -> Route {
     service.operation(token).unwrap().workspace().route()
 }
@@ -133,67 +129,4 @@ impl Drop for Leases {
     fn drop(&mut self) {
         self.give_back();
     }
-}
-
-/// Completions of the test's own read-only jobs on one Workspace lane.
-pub struct Credits {
-    held: Vec<Completion>,
-}
-impl Credits {
-    /// `count` Lifecycle-class credits: `State` observations, kept.
-    pub fn lifecycle(client: &OwnerClient, route: Route, count: usize, wait: Duration) -> Self {
-        Self::of(client, route, count, wait, || Command::State)
-    }
-    /// `count` ordinary credits (Read class): local `Resources` observations,
-    /// kept.
-    pub fn ordinary(client: &OwnerClient, route: Route, count: usize, wait: Duration) -> Self {
-        Self::of(client, route, count, wait, || Command::Resources {
-            global: false,
-        })
-    }
-    fn of(
-        client: &OwnerClient,
-        route: Route,
-        count: usize,
-        wait: Duration,
-        command: fn() -> Command,
-    ) -> Self {
-        let deadline = Instant::now() + wait;
-        let expired = |what: &str| {
-            assert!(
-                Instant::now() < deadline,
-                "owner credit hold: {what} within {wait:?}: {:?}",
-                client.diagnostics()
-            );
-            thread::sleep(Duration::from_millis(1));
-        };
-        let mut held = Vec::with_capacity(count);
-        while held.len() < count {
-            // A slot whose result was just dropped is free only once its
-            // publisher has let go as well: a bounded readiness wait.
-            let pending = match client.try_submit(Some(route), command()) {
-                Ok(pending) => pending,
-                Err((OwnerError::AdmissionFull, _)) => {
-                    expired("no free slot");
-                    continue;
-                }
-                Err((error, command)) => panic!("owner credit hold: {command:?}: {error:?}"),
-            };
-            let done = loop {
-                match pending.try_complete().unwrap() {
-                    Some(done) => break done,
-                    None => expired("the job did not complete"),
-                }
-            };
-            assert!(done.result().is_ok(), "owner credit hold: {done:?}");
-            held.push(done);
-        }
-        Self { held }
-    }
-    pub fn count(&self) -> usize {
-        self.held.len()
-    }
-    /// Drops every kept completion; each slot is free once its publisher has
-    /// let go too, which the owner's `outstanding` count shows.
-    pub fn release(self) {}
 }

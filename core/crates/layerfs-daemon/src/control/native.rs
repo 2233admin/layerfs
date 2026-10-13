@@ -13,10 +13,6 @@ pub struct NativeConfig {
     /// Runtime command identity presented as every inode's owner.
     pub command_uid: u32,
     pub command_gid: u32,
-    /// Store reader population; fixes the shared worker count.
-    pub read_handles: usize,
-    /// Fixed mount lanes, equal to the engine namespace capacity.
-    pub namespaces: usize,
     /// Observation deadline for all-loop serving during Attach.
     pub ready_wait: Duration,
     /// Observation deadline for loop joins and request drain.

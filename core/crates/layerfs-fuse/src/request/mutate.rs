@@ -13,7 +13,7 @@ use crate::{
         write::time, Declined, MutationInput, MutationRequest, NativeMutation, Published,
     },
     ports::{Fence, RequestServices, ServiceError},
-    Permit, RequestDisposition,
+    RequestDisposition, RequestOwner,
 };
 use fuser::{
     Errno, FileAttr, FileHandle, Generation, INodeNo, ReplyAttr, ReplyCreate, ReplyEmpty,
@@ -138,7 +138,7 @@ impl NativeFilesystem {
     #[allow(clippy::too_many_arguments)]
     pub(super) fn mutate(
         &self,
-        permit: Permit,
+        permit: RequestOwner,
         request: u64,
         protected: u64,
         handle: Option<u64>,
@@ -150,7 +150,7 @@ impl NativeFilesystem {
         let fence = self.fence.clone();
         let mount: NativeMount = self.queue.identity();
         let identity = self.identity;
-        self.handoff(
+        self.serve(
             permit,
             Box::pin(async move {
                 let Some(now) = time(SystemTime::now()) else {
@@ -211,7 +211,7 @@ impl NativeFilesystem {
             return self.refuse(opcode, reply, MutationReply::error, Errno::ENAMETOOLONG);
         }
         let bytes = extra + names.iter().map(|name| name.len()).sum::<usize>();
-        let Some((permit, reply)) = self.admit_reply(opcode, bytes, reply, MutationReply::error)
+        let Some((permit, reply)) = self.receive_reply(opcode, bytes, reply, MutationReply::error)
         else {
             return;
         };

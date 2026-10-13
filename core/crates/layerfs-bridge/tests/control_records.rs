@@ -219,18 +219,13 @@ fn native_replies(binding: &BranchSnapshot, token: WorkspaceToken) -> Vec<Reply>
         loops_entered: 2,
         loops_exited: 1,
         loops_joined: 0,
-        received: 2,
-        admitted: 16,
-        queued: 3,
-        running: 4,
-        parked: 9,
+        active: 2,
         retained: 1,
         completed: u64::MAX,
-        handoffs: 12,
+        served: 12,
         inline: 5,
         refused: 6,
         terminal: 7,
-        unadmitted: 8,
         forget_units: 9,
     };
     let status = |activity, native| WorkspaceStatus {
@@ -393,7 +388,7 @@ fn branch_page_bounds_are_checked_before_encoding_or_allocating_records() {
     }
     .encode()
     .is_err());
-    let mut bytes = b"LFSA\x01".to_vec();
+    let mut bytes = b"LFSA\x02".to_vec();
     bytes.extend_from_slice(&1u64.to_be_bytes());
     bytes.push(17);
     bytes.extend_from_slice(&(HISTORY_WINDOW + 1).to_be_bytes());

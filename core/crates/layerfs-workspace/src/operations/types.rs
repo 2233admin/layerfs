@@ -1,7 +1,7 @@
 //! Ordinary namespace operations, their exact refusals and published results.
 use crate::ViewStat;
 use layerfs_content::filesystem::{PathName, SymlinkTarget};
-use layerfs_overlay::{ClaimedRange, OpenFile, Publication, WriteClaims, WRITE_CLAIMS};
+use layerfs_overlay::{OpenFile, Publication, WriteClaims};
 use std::{fmt, ops::Deref, sync::Arc};
 
 /// Bytes of one write window. Shared, so an operation's owner rounds and its
@@ -24,14 +24,6 @@ impl WriteData {
     /// offset publishes them; an append and a mapped store drop them.
     pub fn claimed(self, claims: WriteClaims) -> Self {
         Self(self.0, Some(Arc::new(claims)))
-    }
-    /// Heap bytes of this input, for admission accounting.
-    pub fn charge(&self) -> usize {
-        self.0.len()
-            + self.1.as_ref().map_or(0, |_| {
-                std::mem::size_of::<WriteClaims>()
-                    + WRITE_CLAIMS * std::mem::size_of::<ClaimedRange>()
-            })
     }
 }
 impl Deref for WriteData {

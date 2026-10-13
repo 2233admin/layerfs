@@ -19,11 +19,11 @@ mod model;
 #[path = "support/installed_store.rs"]
 mod support;
 use counts::{Call, Counting, Owner, Seen};
-use drive::{evidence, job, settled, Do, Rig, Session};
+use drive::{evidence, job, Do, Rig, Session};
 use layerfs_content::ObjectId;
 use layerfs_daemon::{
     store::{BoundWorkspace, CommitError},
-    Command, Response, ServiceClass,
+    Response, ServiceClass,
 };
 use layerfs_history::CommitStagedOutcome;
 use layerfs_overlay::StatementKind;
@@ -148,7 +148,6 @@ fn commit_counted(rig: &Rig, workspace: &BoundWorkspace) -> Counted {
     let operation = workspace.operation().unwrap();
     let route = workspace.route();
     let policy = rig.store.policy().construction();
-    settled(&rig.owner.client(), 0);
     let before = rig.owner.client().diagnostics().unwrap();
     let mut produced = None;
     let result = workspace.commit(|save, capture, _| {
@@ -157,14 +156,24 @@ fn commit_counted(rig: &Rig, workspace: &BoundWorkspace) -> Counted {
         let reader = match job(
             overlay,
             route,
-            Command::AcquireCapturedReader { capture, request },
+            |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.acquire_captured_reader(job_route, capture, request)
+            },
         )
         .result()
         {
             Ok(Response::CapturedReader(Some(reader))) => *reader,
             other => panic!("{other:?}"),
         };
-        let owner = match job(overlay, route, Command::AcquireOperation { request }).result() {
+        let owner = match job(
+            overlay,
+            route,
+            |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.acquire_operation(job_route, request)
+            },
+        )
+        .result()
+        {
             Ok(Response::Operation(Some(owner))) => *owner,
             other => panic!("{other:?}"),
         };
@@ -180,12 +189,22 @@ fn commit_counted(rig: &Rig, workspace: &BoundWorkspace) -> Counted {
         let work = custody.work;
         drop(custody);
         produced = Some((counting.into_seen(), work, format!("{:?}", built.counters)));
-        assert!(job(overlay, route, Command::ReleaseCapturedReader(reader))
-            .result()
-            .is_ok());
-        assert!(job(overlay, route, Command::ReleaseOperation(owner))
-            .result()
-            .is_ok());
+        assert!(job(
+            overlay,
+            route,
+            |job_client: &layerfs_daemon::OwnerClient, job_route| job_client
+                .release_captured_reader(job_route, reader)
+        )
+        .result()
+        .is_ok());
+        assert!(job(
+            overlay,
+            route,
+            |job_client: &layerfs_daemon::OwnerClient, job_route| job_client
+                .release_operation(job_route, owner)
+        )
+        .result()
+        .is_ok());
         Ok::<_, CommitError>(built.root)
     });
     let success = result.unwrap_or_else(|failure| panic!("{failure:?}"));
@@ -195,12 +214,10 @@ fn commit_counted(rig: &Rig, workspace: &BoundWorkspace) -> Counted {
     };
     let storage = format!("{:?} {:?}", success.storage, success.saved);
     drop(success);
-    settled(&rig.owner.client(), 0);
     let after = rig.owner.client().diagnostics().unwrap();
     let sql = after.sql_foreground.since(&before.sql_foreground);
     let (seen, work, content) = produced.expect("the constructor ran");
-    let classes: [u64; 6] =
-        std::array::from_fn(|class| after.completed[class] - before.completed[class]);
+    let classes: [u64; 6] = std::array::from_fn(|class| after.jobs[class] - before.jobs[class]);
     // Every counted record call is one OperationRecord job, and no other.
     assert_eq!(
         seen.record_jobs(),
@@ -501,8 +518,8 @@ fn record_jobs_of_three_commit_shapes_are_split_by_owner_kind_and_call() {
             applied_changes: 91,
             empty_windows: 1,
             reader_jobs: 72,
-            workspace_statements: 287,
-            lease_statements: 85,
+            workspace_statements: 284,
+            lease_statements: 83,
             record_statements: 498,
             begin_statements: 35,
             commit_statements: 35,
@@ -525,8 +542,8 @@ fn record_jobs_of_three_commit_shapes_are_split_by_owner_kind_and_call() {
             applied_changes: 468,
             empty_windows: 1,
             reader_jobs: 222,
-            workspace_statements: 735,
-            lease_statements: 235,
+            workspace_statements: 732,
+            lease_statements: 233,
             record_statements: 2_124,
             begin_statements: 88,
             commit_statements: 88,
@@ -549,8 +566,8 @@ fn record_jobs_of_three_commit_shapes_are_split_by_owner_kind_and_call() {
             applied_changes: 4_875,
             empty_windows: 1,
             reader_jobs: 1_980,
-            workspace_statements: 10_079,
-            lease_statements: 1_993,
+            workspace_statements: 10_076,
+            lease_statements: 1_991,
             record_statements: 24_441,
             begin_statements: 987,
             commit_statements: 987,

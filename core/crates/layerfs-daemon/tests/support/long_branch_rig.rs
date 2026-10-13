@@ -5,14 +5,14 @@
 //! after `SESSION` Commits, without a mount. Nothing here reads a benchmark
 //! size or path; the shapes are this file's own.
 use super::{
-    drive::{evidence, job, settled, window},
+    drive::{evidence, job, window},
     support,
 };
 use layerfs_content::filesystem::PathName;
 use layerfs_daemon::{
     bootstrap::{open_store_observed, OpenedStore},
     store::{BindRequest, BoundWorkspace, StoreOperation},
-    Command, Owner, OwnerConfig, Response,
+    Owner, OwnerConfig, Response,
 };
 use layerfs_history::{BranchId, CommitStagedOutcome, WorkspaceId};
 use layerfs_overlay::ProfileConfig;
@@ -279,7 +279,12 @@ impl Daemon {
     }
     pub fn close(&self, workspace: &BoundWorkspace) {
         assert!(matches!(
-            job(&self.owner.client(), workspace.route(), Command::Close).result(),
+            job(
+                &self.owner.client(),
+                workspace.route(),
+                |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.close(job_route)
+            )
+            .result(),
             Ok(Response::Done)
         ));
     }
@@ -340,7 +345,7 @@ fn mutate(
         Outcome::Applied { publication, .. } => assert!(job(
             operation.overlay(),
             workspace.route(),
-            Command::ReplyAttempted(publication)
+            |job_client: &layerfs_daemon::OwnerClient, _| job_client.reply_attempted(publication)
         )
         .result()
         .is_ok()),
@@ -479,7 +484,6 @@ pub fn extend(kept: &Kept, shape: Shape, commits: usize, checkpoints: &[usize]) 
         let started = Instant::now();
         for commit in done..until {
             change(&workspace, shape, commit);
-            settled(&daemon.owner.client(), 0);
             let success = workspace
                 .commit_captured()
                 .unwrap_or_else(|failure| panic!("{failure:?}"));

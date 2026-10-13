@@ -119,8 +119,9 @@ fn invalid(message: &'static str) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidInput, message)
 }
 
-/// R16 native handoffs plus the fixed control connection population; one
-/// additional namespace lane serves explicitly unscoped constructor callers.
+/// Store-read tickets one namespace may have waiting: sixteen native requests
+/// plus the fixed control connection population. One additional namespace
+/// serves explicitly unscoped constructor callers.
 pub(super) fn read_limits(
     limits: layerfs_bridge::daemon_setup::DaemonLimits,
 ) -> crate::store::ReadLimits {

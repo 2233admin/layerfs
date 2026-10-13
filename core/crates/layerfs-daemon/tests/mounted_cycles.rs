@@ -33,7 +33,7 @@ use layerfs_bridge::control::{
     Activity, ControlCode, NativePhase, ReadyMount, Reply, Request, WorkspaceStatus, WorkspaceToken,
 };
 use layerfs_content::ObjectId;
-use layerfs_daemon::{control::Failure, Command, OwnerWork, Response};
+use layerfs_daemon::{control::Failure, OwnerWork, Response};
 use layerfs_history::{
     BranchId, BranchSnapshot, ForkRequest, ForkSource, HistoryName, WorkspaceId,
 };
@@ -123,8 +123,8 @@ fn quiet(rig: &Rig, token: WorkspaceToken) -> bool {
     let mut last = None;
     eventually(|| {
         let work = rig.harness.status(token).native.unwrap().work.unwrap();
-        let now = (work.received, work.admitted, work.completed);
-        let settled = work.received == 0 && work.admitted == 0 && last == Some(now);
+        let now = (work.active, work.completed);
+        let settled = work.active == 0 && last == Some(now);
         last = Some(now);
         settled
     })
@@ -136,16 +136,14 @@ fn resources(rig: &Rig, through: WorkspaceToken, global: bool) -> Resources {
     let daemon = rig.harness.owner.client();
     let client = if global { &daemon } else { operation.overlay() };
     let done = client
-        .try_submit(
+        .resources(
             if global {
                 None
             } else {
                 Some(operation.workspace().route())
             },
-            Command::Resources { global },
+            global,
         )
-        .unwrap()
-        .wait()
         .unwrap();
     match done.result() {
         Ok(Response::Resources(resources)) => **resources,
@@ -412,7 +410,7 @@ fn cycles(label: &str, live: bool) {
             cycle: number,
             namespace: ready.token.namespace,
             commit: format!("{:?}", record.id),
-            admitted: work.admitted,
+            admitted: work.jobs.iter().sum::<u64>(),
             maintenance_jobs: work.maintenance_jobs,
             maintenance_rows: work.maintenance_rows,
             free_pages: global.free_pages,

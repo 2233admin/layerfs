@@ -7,7 +7,7 @@ use layerfs_content::{
     construct_runs, ConstructionPolicy, ContentError, ContentResult, Edit, FileRun, FileRuns,
     FinalizedConsumer, FinalizedObject, ObjectRole,
 };
-use layerfs_daemon::{Command, Completion, OwnerClient};
+use layerfs_daemon::{JobReceipt, OwnerClient};
 use layerfs_overlay::{CapturedReader, IndexedOperationRecordScope};
 use layerfs_telemetry::timer::Timing;
 use layerfs_workspace::{
@@ -59,8 +59,6 @@ fn overlapping_writes_shrink_regrow_and_cross_cell_spans_match_final_bytes() {
         Some(&1)
     );
     case.release(attempt.custody, false);
-    settled(&case.client, 0);
-    assert_eq!(case.client.diagnostics().unwrap().credited_bytes, 0);
 }
 
 #[test]
@@ -105,7 +103,10 @@ fn length_growth_and_true_new_file_do_not_use_a_fabricated_base() {
     drop(attempt.custody);
     drop(fresh_attempt.custody);
     assert!(case
-        .job(Command::ReleaseCapturedReader(reader))
+        .job(
+            |job_client: &layerfs_daemon::OwnerClient, job_route| job_client
+                .release_captured_reader(job_route, reader)
+        )
         .result()
         .is_ok());
     release_operation(&case, scope.owner);
@@ -141,10 +142,13 @@ fn many_edits_use_numbered_records_after_install_and_reads_survive_close() {
     let prepared =
         CapturedFileEdits::prepare(&case.workspace, &case.client, reader, 8, scope).unwrap();
     assert!(case
-        .job(Command::Install {
-            capture: reader.capture(),
-            root: reader.root()
-        })
+        .job(
+            |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.install(
+                job_route,
+                reader.capture(),
+                reader.root()
+            )
+        )
         .result()
         .is_ok());
     let policy = ConstructionPolicy::frozen_default();
@@ -202,7 +206,10 @@ fn many_edits_use_numbered_records_after_install_and_reads_survive_close() {
         after = keys.last().copied();
     }
     assert_eq!(count, 129);
-    assert!(case.job(Command::Close).result().is_ok());
+    assert!(case
+        .job(|job_client: &layerfs_daemon::OwnerClient, job_route| job_client.close(job_route))
+        .result()
+        .is_ok());
     let reply = case
         .client
         .captured_run_step(layerfs_overlay::CapturedRunCursor::new(reader, 8, 0, 400000).unwrap())
@@ -336,12 +343,14 @@ fn occupied_context_and_retired_reader_keep_original_completions_without_replay(
     let Some(WorkspaceError::Service(original)) = &custody.records.failure else {
         panic!("original deciding completion")
     };
-    assert!(original.downcast_ref::<Completion>().is_some());
+    assert!(original.downcast_ref::<JobReceipt>().is_some());
     assert_eq!(custody.work.normalization_steps, 0);
-    assert!(case.client.diagnostics().unwrap().credited_bytes > 0);
     drop(custody);
     assert!(case
-        .job(Command::ReleaseCapturedReader(reader))
+        .job(
+            |job_client: &layerfs_daemon::OwnerClient, job_route| job_client
+                .release_captured_reader(job_route, reader)
+        )
         .result()
         .is_ok());
     let policy = ConstructionPolicy::frozen_default();
@@ -359,7 +368,7 @@ fn occupied_context_and_retired_reader_keep_original_completions_without_replay(
     let Some(WorkspaceError::Service(original)) = &attempt.custody.failure else {
         panic!("original captured failure")
     };
-    let done = original.downcast_ref::<Completion>().unwrap();
+    let done = original.downcast_ref::<JobReceipt>().unwrap();
     assert!(matches!(
         done.result(),
         Err(layerfs_daemon::OwnerError::Overlay(
@@ -614,7 +623,10 @@ fn logical_close_allows_retained_reads_but_refuses_normalization_record_mutation
     let case = Case::new();
     case.write(8, 17, b"changed");
     let (reader, scope) = case.captured(92);
-    assert!(case.job(Command::Close).result().is_ok());
+    assert!(case
+        .job(|job_client: &layerfs_daemon::OwnerClient, job_route| job_client.close(job_route))
+        .result()
+        .is_ok());
     let read = case
         .client
         .captured_run_step(layerfs_overlay::CapturedRunCursor::new(reader, 8, 0, 400000).unwrap())
@@ -628,9 +640,9 @@ fn logical_close_allows_retained_reads_but_refuses_normalization_record_mutation
         Err(original) => original,
     };
     let Some(WorkspaceError::Service(original)) = &custody.records.failure else {
-        panic!("original closed Completion")
+        panic!("original closed JobReceipt")
     };
-    let done = original.downcast_ref::<Completion>().unwrap();
+    let done = original.downcast_ref::<JobReceipt>().unwrap();
     assert!(matches!(
         done.result(),
         Err(layerfs_daemon::OwnerError::Overlay(
@@ -740,10 +752,13 @@ fn prepare_after_actual_binding_install_rebinds_only_the_retained_original_root(
         .prepare_base_install(reader.capture(), next)
         .unwrap();
     assert!(case
-        .job(Command::InstallPrepared {
-            workspace: case.workspace.clone(),
-            input
-        })
+        .job(
+            |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.install_prepared(
+                job_route,
+                case.workspace.clone(),
+                input
+            )
+        )
         .result()
         .is_ok());
     assert_eq!(case.workspace.base().unwrap().identity(), next);
@@ -780,7 +795,7 @@ fn small_window_with_oversized_retained_capacity_refuses_before_pending_or_outpu
             record_oversized: false,
             continuation: None,
         };
-        let admitted = case.client.diagnostics().unwrap().admitted;
+        let admitted = case.client.diagnostics().unwrap().jobs.iter().sum::<u64>();
         let objects = case.store.objects.lock().unwrap().len();
         let custody = match CapturedFileEdits::prepare(&case.workspace, &provider, reader, 2, scope)
         {
@@ -801,7 +816,7 @@ fn small_window_with_oversized_retained_capacity_refuses_before_pending_or_outpu
             "only the initial Missing context; no edit or sealing jobs"
         );
         assert_eq!(
-            case.client.diagnostics().unwrap().admitted,
+            case.client.diagnostics().unwrap().jobs.iter().sum::<u64>(),
             admitted + 3,
             "one exact inode point, initial context and original window; no later job"
         );
@@ -824,7 +839,7 @@ fn small_window_with_oversized_retained_capacity_refuses_before_pending_or_outpu
     };
     let prepared =
         CapturedFileEdits::prepare(&case.workspace, &provider, reader, 2, scope).unwrap();
-    let admitted = case.client.diagnostics().unwrap().admitted;
+    let admitted = case.client.diagnostics().unwrap().jobs.iter().sum::<u64>();
     let mut consumer = RejectFinal {
         store: case.store.clone(),
         children: 0,
@@ -848,7 +863,7 @@ fn small_window_with_oversized_retained_capacity_refuses_before_pending_or_outpu
     assert_eq!(consumer.children, 0);
     assert_eq!(attempt.custody.work.source_steps, 0);
     assert_eq!(
-        case.client.diagnostics().unwrap().admitted,
+        case.client.diagnostics().unwrap().jobs.iter().sum::<u64>(),
         admitted + 1,
         "original context point only; no later source/backing job"
     );
@@ -868,7 +883,7 @@ fn unchanged_or_restarted_continuation_refuses_without_spinning_or_output() {
             record_oversized: false,
             continuation: Some(restart),
         };
-        let admitted = case.client.diagnostics().unwrap().admitted;
+        let admitted = case.client.diagnostics().unwrap().jobs.iter().sum::<u64>();
         let objects = case.store.objects.lock().unwrap().len();
         let custody = match CapturedFileEdits::prepare(&case.workspace, &provider, reader, 8, scope)
         {
@@ -885,7 +900,7 @@ fn unchanged_or_restarted_continuation_refuses_without_spinning_or_output() {
         assert_eq!(custody.work.normalized_edits, 0);
         assert_eq!(custody.records.work.calls, 1);
         assert_eq!(
-            case.client.diagnostics().unwrap().admitted,
+            case.client.diagnostics().unwrap().jobs.iter().sum::<u64>(),
             admitted + 3,
             "one original metadata unit and no later call"
         );

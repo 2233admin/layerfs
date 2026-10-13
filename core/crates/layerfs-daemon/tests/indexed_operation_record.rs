@@ -1,12 +1,11 @@
 //! Public bounded owner jobs and retained original operation_record completions.
 use layerfs_daemon::{
-    Command, Completion, IndexedOperationRecordJob, IndexedOperationRecordReply, Owner,
-    OwnerClient, OwnerConfig, OwnerError, Pending, Response,
+    IndexedOperationRecordJob, IndexedOperationRecordReply, JobReceipt, Owner, OwnerClient,
+    OwnerConfig, OwnerError, Response,
 };
 use layerfs_overlay::{
     IndexedOperationRecordApply, IndexedOperationRecordChange, IndexedOperationRecordKey,
     IndexedOperationRecordScope, OperationRecordExpectedValue, OverlayError, ProfileConfig, Route,
-    OPERATION_RECORD_BYTES,
 };
 use std::{
     path::PathBuf,
@@ -32,32 +31,22 @@ impl Drop for Temp {
         std::fs::remove_dir_all(&self.0).unwrap();
     }
 }
-fn wait(pending: Pending) -> Completion {
-    let deadline = Instant::now() + Duration::from_secs(3);
-    loop {
-        if let Some(done) = pending.try_complete().unwrap() {
-            return done;
-        }
-        assert!(
-            Instant::now() < deadline,
-            "bounded original job did not complete"
-        );
-        std::thread::yield_now();
-    }
-}
-fn submit(client: &OwnerClient, route: Option<Route>, command: Command) -> Completion {
-    match client.try_submit(route, command) {
-        Ok(pending) => wait(pending),
-        Err((error, command)) => panic!("{error:?}: {command:?}"),
-    }
+fn submit(
+    client: &OwnerClient,
+    route: Option<Route>,
+    command: impl FnOnce(
+        &layerfs_daemon::OwnerClient,
+        Option<layerfs_overlay::Route>,
+    ) -> Result<layerfs_daemon::JobReceipt, layerfs_daemon::OwnerError>,
+) -> JobReceipt {
+    command(client, route).unwrap_or_else(|error| panic!("{error:?}"))
 }
 fn open(client: &OwnerClient, tag: u8) -> Route {
     let done = submit(
         client,
         None,
-        Command::Open {
-            incarnation: [tag; 32],
-            base_root: [3; 32],
+        |job_client: &layerfs_daemon::OwnerClient, job_route| {
+            job_client.open(job_route, [tag; 32], [3; 32])
         },
     );
     match done.result() {
@@ -66,7 +55,13 @@ fn open(client: &OwnerClient, tag: u8) -> Route {
     }
 }
 fn scope(client: &OwnerClient, route: Route, request: u64) -> IndexedOperationRecordScope {
-    let done = submit(client, Some(route), Command::AcquireOperation { request });
+    let done = submit(
+        client,
+        Some(route),
+        |job_client: &layerfs_daemon::OwnerClient, job_route| {
+            job_client.acquire_operation(job_route, request)
+        },
+    );
     match done.result() {
         Ok(Response::Operation(Some(owner))) => IndexedOperationRecordScope {
             owner: *owner,
@@ -91,28 +86,15 @@ fn operation_record(
     client: &OwnerClient,
     scope: IndexedOperationRecordScope,
     job: IndexedOperationRecordJob,
-) -> Completion {
+) -> JobReceipt {
     submit(
         client,
         Some(scope.owner.route()),
-        Command::IndexedOperationRecord(Box::new(job)),
+        |job_client: &layerfs_daemon::OwnerClient, job_route| {
+            job_client.indexed_operation_record(job_route, Box::new(job))
+        },
     )
 }
-fn credits(client: &OwnerClient, outstanding: usize) -> layerfs_daemon::OwnerWork {
-    let deadline = Instant::now() + Duration::from_secs(3);
-    loop {
-        let work = client.diagnostics().unwrap();
-        if work.outstanding == outstanding {
-            return work;
-        }
-        assert!(
-            Instant::now() < deadline,
-            "credit last-owner release did not complete: {work:?}"
-        );
-        std::thread::yield_now();
-    }
-}
-
 #[test]
 fn original_atomic_refusal_and_credits_survive_independent_owner_jobs() {
     let temp = Temp::new();
@@ -142,7 +124,6 @@ fn original_atomic_refusal_and_credits_survive_independent_owner_jobs() {
     ));
     assert!(done.work().sql.total().vm_steps > 0);
     drop(done);
-    let before = credits(&client, 0);
     let deciding = operation_record(
         &client,
         scope,
@@ -171,10 +152,11 @@ fn original_atomic_refusal_and_credits_survive_independent_owner_jobs() {
         }
         result => panic!("{result:?}"),
     }
-    let held = credits(&client, before.outstanding + 1);
-    assert_eq!(held.outstanding, before.outstanding + 1);
-    assert!(held.credited_bytes > before.credited_bytes);
-    let healthy = submit(&client, Some(other), Command::State);
+    let healthy = submit(
+        &client,
+        Some(other),
+        |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.state(job_route),
+    );
     assert!(healthy.result().is_ok());
     drop(healthy);
     let missed = operation_record(
@@ -193,51 +175,22 @@ fn original_atomic_refusal_and_credits_survive_independent_owner_jobs() {
         0 // The fence reads no Workspace BLOB; membership projects no draft BLOB.
     );
     drop(missed);
-    assert_eq!(
-        credits(&client, held.outstanding).outstanding,
-        held.outstanding
-    );
     drop(deciding);
-    let released = credits(&client, before.outstanding);
-    assert_eq!(released.credited_bytes, before.credited_bytes);
     let wrong_route = submit(
         &client,
         Some(other),
-        Command::IndexedOperationRecord(Box::new(IndexedOperationRecordJob::Get {
-            scope,
-            key: key(1),
-        })),
+        |job_client: &layerfs_daemon::OwnerClient, job_route| {
+            job_client.indexed_operation_record(
+                job_route,
+                Box::new(IndexedOperationRecordJob::Get { scope, key: key(1) }),
+            )
+        },
     );
     assert!(matches!(
         wrong_route.result(),
         Err(OwnerError::Overlay(OverlayError::Stale))
     ));
     drop(wrong_route);
-    let mut oversized = Vec::with_capacity(OPERATION_RECORD_BYTES);
-    oversized.push(put(key(2), vec![]));
-    let before = client.diagnostics().unwrap();
-    match client.try_submit(
-        Some(route),
-        Command::IndexedOperationRecord(Box::new(IndexedOperationRecordJob::Apply {
-            scope,
-            changes: oversized,
-        })),
-    ) {
-        Err((OwnerError::InvalidAdmission, Command::IndexedOperationRecord(job))) => match *job {
-            IndexedOperationRecordJob::Apply {
-                scope: returned,
-                changes,
-            } => {
-                assert_eq!(returned, scope);
-                assert_eq!(changes.len(), 1);
-                assert_eq!(changes.capacity(), OPERATION_RECORD_BYTES);
-                assert_eq!(changes[0].key, key(2));
-            }
-            command => panic!("{command:?}"),
-        },
-        _ => panic!("capacity refusal lost its original command"),
-    }
-    assert_eq!(client.diagnostics().unwrap().admitted, before.admitted);
     let value = operation_record(
         &client,
         scope,
@@ -296,9 +249,13 @@ fn released_indexed_rows_reclaim_automatically_and_close_preserves_actual_owner(
         result => panic!("{result:?}"),
     }
     drop(done);
-    assert!(submit(&client, Some(route), Command::Close)
-        .result()
-        .is_ok());
+    assert!(submit(
+        &client,
+        Some(route),
+        |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.close(job_route)
+    )
+    .result()
+    .is_ok());
     let read = operation_record(
         &client,
         scope,
@@ -321,19 +278,34 @@ fn released_indexed_rows_reclaim_automatically_and_close_preserves_actual_owner(
         Err(OwnerError::Overlay(OverlayError::Closed))
     ));
     drop(denied);
-    let resources = submit(&client, Some(route), Command::Resources { global: false });
+    let resources = submit(
+        &client,
+        Some(route),
+        |job_client: &layerfs_daemon::OwnerClient, job_route| {
+            job_client.resources(job_route, false)
+        },
+    );
     assert!(
         matches!(resources.result(), Ok(Response::Resources(r)) if r.counts.operation_record_rows == 72 && r.counts.operation_record_bytes == 72 * 6000)
     );
     drop(resources);
-    assert!(
-        submit(&client, Some(route), Command::ReleaseOperation(scope.owner))
-            .result()
-            .is_ok()
-    );
+    assert!(submit(
+        &client,
+        Some(route),
+        |job_client: &layerfs_daemon::OwnerClient, job_route| job_client
+            .release_operation(job_route, scope.owner)
+    )
+    .result()
+    .is_ok());
     let deadline = Instant::now() + Duration::from_secs(3);
     loop {
-        let resources = submit(&client, Some(route), Command::Resources { global: false });
+        let resources = submit(
+            &client,
+            Some(route),
+            |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.resources(job_route, false)
+            },
+        );
         if matches!(resources.result(), Ok(Response::Resources(r)) if r.counts.operation_record_rows == 0 && r.counts.namespaces == 1)
         {
             break;
@@ -345,7 +317,13 @@ fn released_indexed_rows_reclaim_automatically_and_close_preserves_actual_owner(
         drop(resources);
         std::thread::yield_now();
     }
-    let peer = submit(&client, Some(other), Command::Resources { global: false });
+    let peer = submit(
+        &client,
+        Some(other),
+        |job_client: &layerfs_daemon::OwnerClient, job_route| {
+            job_client.resources(job_route, false)
+        },
+    );
     assert!(
         matches!(peer.result(), Ok(Response::Resources(r)) if r.counts.namespaces == 1 && r.counts.operation_record_rows == 0)
     );

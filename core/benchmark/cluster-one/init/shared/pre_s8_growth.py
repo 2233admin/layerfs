@@ -14,12 +14,17 @@ def validate(path, case):
 
     def point(stage, index):
         value = next(stream)
-        require(value.get("schema") == "pre-s8-growth-point-v1" and value["stage"] == stage and
-                value["index"] == index, "original point order")
+        require(value.get("schema") in ("pre-s8-growth-point-v1", "pre-s8-growth-point-v2") and
+                value["stage"] == stage and value["index"] == index, "original point order")
         require(all(integer(v) for k, v in value.items() if k not in {"schema", "stage"}), "point counter type")
         require(value["read_handles"] == 4 and value["cache_bytes"] <= 8388608, "fixed read/cache capacity")
-        require(value["credited_bytes"] == value["outstanding"] == value["queued"] == value["receipt_overruns"] == 0,
-                "released operation retains credits/jobs")
+        retired = ("credited_bytes", "outstanding", "queued", "receipt_overruns")
+        if value["schema"] == "pre-s8-growth-point-v1":
+            # Historical receipts of the queued owner: its gauges must read released.
+            require(all(value[name] == 0 for name in retired), "released operation retains credits/jobs")
+        else:
+            # A Workspace runs each job on its caller: there is no queue or credit to report.
+            require(not any(name in value for name in retired), "retired scheduling gauge in a v2 point")
         require(value["closed_namespaces"] == (1 if stage == "drained" else 0), "terminal namespace ownership")
         points.append(value)
 

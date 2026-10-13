@@ -103,9 +103,7 @@ impl NativeDirectoryVisit {
     pub const fn mount(&self) -> NativeMount {
         self.mount
     }
-    pub fn charge(&self) -> usize {
-        self.after.as_ref().map_or(0, Vec::capacity)
-    }
+
     /// The visit always answers: what memory does not hold of the base is
     /// left to the one read that follows outside the owner. The reuse lookup
     /// is skipped only when the job itself found that no name is listed.
@@ -149,15 +147,6 @@ impl NativeDirectoryWindow {
     pub fn rewound(&self) -> bool {
         *self.page.cursor() == NativeDirectoryCursor::Rewound
     }
-    /// The reply's bound of one visit: two local windows, the merged window,
-    /// and one published reply's names to compare with.
-    pub const CHARGE: usize = 3
-        * PAGE_ROWS
-        * (std::mem::size_of::<layerfs_overlay::DirectoryEntry>()
-            + std::mem::size_of::<NativeDirectoryEntry>()
-            + 255)
-        + PAGE_ROWS * (std::mem::size_of::<Vec<u8>>() + 255)
-        + 3 * 255;
     /// The entries this window may offer and their offsets. `base` is the
     /// Workspace's base over an admitted Store reader and is required when
     /// the visit left the merge undone; it is read at the root the visit

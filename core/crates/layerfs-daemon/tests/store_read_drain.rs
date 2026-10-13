@@ -1,12 +1,12 @@
 //! A request INSIDE a Store read while its mount is torn down, without a
-//! kernel mount: the real owner, the real Store read sessions and the real
-//! dispatcher lane, whose `stop_admission`, `stop_service`, `wait_quiescent`
+//! kernel mount: the real Workspace service, the real Store read sessions and the
+//! real per-mount request drain, whose `stop_receive`, `stop_service`, `wait_quiescent`
 //! and `finish` are the calls a native session's detach, abort, drain and
 //! release make (`layerfs-fuse` `session/drain.rs`, `session/force.rs`).
 //!
 //! A READ, a READLINK, an OPEN and a READDIR reading visit record nothing in
-//! the engine, so revocation cannot see them; the lane's drain predicate
-//! (`received == 0 && admitted == 0`) is what keeps `Revoke` behind them
+//! the engine, so revocation cannot see them; the mount's drain predicate
+//! (`active == 0`) is what keeps `Revoke` behind them
 //! ([native read custody](../../../docs/architecture/73-native-read-custody.md)).
 //! The Store read is held open by `support/store_gate.rs` at the public pack
 //! persistence port of each read session. No object cache is configured, so
@@ -14,7 +14,8 @@
 //!
 //! The kernel half (detach, abort, the session's own `drain` and the control
 //! replies) is staged on real mounts in `mounted_store_read.rs`. Public API
-//! only; every wait is bounded and no thread is spawned by the test.
+//! only; every wait is bounded. Each held request runs on its own receive
+//! thread, as a mount worker runs it.
 #[allow(dead_code)]
 #[path = "support/store_gate.rs"]
 mod store_gate;
@@ -23,13 +24,12 @@ mod support;
 use layerfs_content::filesystem::PathName;
 use layerfs_daemon::{
     store::{BindRequest, BoundWorkspace, ReadLimits, Store, StoreReader},
-    Command, Completion, NativeJob, NativeReply, Owner, OwnerClient, OwnerConfig, Response,
+    JobReceipt, NativeReply, Owner, OwnerClient, OwnerConfig, Response,
 };
 use layerfs_fuse::{
     operations::{DirectoryStep, DirectoryStream, NativeData, NativeRead, ReadDataInput},
     ports::{Fence, MountServices, RequestServices},
-    Dispatch, DispatchConfig, DispatchError, MountQueue, MountWork, RequestDisposition,
-    RequestFuture,
+    DispatchError, MountRequests, MountWork, RequestDisposition, RequestFuture,
 };
 use layerfs_history::WorkspaceId;
 use layerfs_overlay::{NativeMount, NativeMountState, ProfileConfig, StoredCounts};
@@ -80,12 +80,32 @@ fn until(what: &str, mut condition: impl FnMut() -> bool) {
         std::thread::yield_now();
     }
 }
-fn finish(client: &OwnerClient, route: layerfs_overlay::Route, command: Command) -> Completion {
-    let pending = match client.try_submit(Some(route), command) {
-        Ok(pending) => pending,
-        Err((error, command)) => panic!("admission of {command:?}: {error:?}"),
-    };
-    wait(pending).unwrap()
+/// One request on its own receive thread, as a mount worker runs it.
+fn serve(
+    queue: &MountRequests,
+    input: usize,
+    future: RequestFuture,
+) -> std::thread::JoinHandle<()> {
+    let queue = queue.clone();
+    std::thread::spawn(move || {
+        queue
+            .receive()
+            .unwrap()
+            .request(input)
+            .unwrap()
+            .serve(future)
+            .unwrap()
+    })
+}
+fn finish(
+    client: &OwnerClient,
+    route: layerfs_overlay::Route,
+    command: impl FnOnce(
+        &layerfs_daemon::OwnerClient,
+        Option<layerfs_overlay::Route>,
+    ) -> Result<layerfs_daemon::JobReceipt, layerfs_daemon::OwnerError>,
+) -> JobReceipt {
+    command(client, Some(route)).unwrap_or_else(|error| panic!("{error:?}"))
 }
 
 /// What a held request answered once its Store read returned.
@@ -99,7 +119,7 @@ enum Answer {
 }
 
 /// One bound Workspace over a Store with two gated read sessions and no
-/// object cache, a native mount group and a dispatcher lane, and no kernel
+/// object cache, a native mount group and its request drain, and no kernel
 /// connection. Composed from the public pieces `open_store` composes.
 struct Rig {
     fixture: support::Fixture,
@@ -110,8 +130,7 @@ struct Rig {
     bound: BoundWorkspace,
     root: u64,
     mount: NativeMount,
-    pool: Dispatch,
-    queue: MountQueue,
+    queue: MountRequests,
 }
 impl Rig {
     fn new(label: &str, authority: u8) -> Self {
@@ -171,19 +190,16 @@ impl Rig {
         let done = finish(
             &client,
             bound.route(),
-            Command::Native(NativeJob::Mount { root }),
+            |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.native_mount(job_route, root)
+            },
         );
         let mount = match done.result() {
             Ok(Response::Native(NativeReply::Mount(mount))) => *mount,
             other => panic!("mount: {other:?}"),
         };
         drop(done);
-        let pool = Dispatch::start(DispatchConfig {
-            read_handles: 2,
-            namespaces: 1,
-        })
-        .unwrap();
-        let queue = pool.register(mount).unwrap();
+        let queue = MountRequests::new(mount);
         Self {
             fixture,
             gate,
@@ -193,7 +209,6 @@ impl Rig {
             bound,
             root,
             mount,
-            pool,
             queue,
         }
     }
@@ -236,11 +251,16 @@ impl Rig {
     fn lane(&self) -> MountWork {
         self.queue.work().unwrap()
     }
+    fn jobs(&self) -> u64 {
+        self.client.diagnostics().unwrap().jobs.iter().sum::<u64>()
+    }
     fn counts(&self) -> StoredCounts {
         let done = finish(
             &self.client,
             self.bound.route(),
-            Command::Resources { global: true },
+            |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.resources(job_route, true)
+            },
         );
         match done.result() {
             Ok(Response::Resources(resources)) => resources.counts,
@@ -251,51 +271,40 @@ impl Rig {
         let done = finish(
             &self.client,
             self.bound.route(),
-            Command::Native(NativeJob::State(self.mount)),
+            |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.native_state(job_route, self.mount)
+            },
         );
         match done.result() {
             Ok(Response::Native(NativeReply::State(state))) => *state,
             other => panic!("mount state: {other:?}"),
         }
     }
-    /// Hands one request to the lane with the gate armed and returns once it
-    /// is inside its Store read: admitted, not parked, one reader leased and
-    /// one provider call held.
+    /// Starts one request of the mount with the gate armed and returns once it
+    /// is inside its Store read: active, one reader leased and one provider
+    /// call held.
     fn held(&self, future: RequestFuture) {
         let before = self.gate.observe();
         assert_eq!(before.holding, 0);
         self.gate.arm();
-        self.queue
-            .receive()
-            .unwrap()
-            .admit(0)
-            .unwrap()
-            .handoff(future)
-            .unwrap();
+        drop(serve(&self.queue, 0, future));
         until("the request is inside its Store read", || {
             let lane = self.lane();
             self.gate.observe().holding == 1
-                && (lane.admitted, lane.parked, lane.received) == (1, 0, 0)
+                && (lane.active, lane.retained) == (1, 0)
                 && self.store.read_work().outstanding == 1
-        });
-        until("the request's owner results were returned", || {
-            self.client.diagnostics().unwrap().outstanding == 0
         });
     }
     /// The drain a native session makes after its detach or abort, with the
     /// request still inside its Store read: the product's own bounded wait
-    /// ends at its deadline with the request admitted, the lane's release is
+    /// ends at its deadline with the request active, the mount's release is
     /// refused, and nothing was revoked. `Revoke` is not submitted here: the
     /// product submits it only after this predicate holds.
     fn not_drained(&self, idle: StoredCounts) {
         let started = Instant::now();
         let work = self.queue.wait_quiescent(started + WINDOW).unwrap();
         assert!(started.elapsed() >= WINDOW, "the drain wait ended early");
-        assert_eq!(
-            (work.received, work.admitted, work.retained, work.parked),
-            (0, 1, 0, 0),
-            "{work:?}"
-        );
+        assert_eq!((work.active, work.retained), (1, 0), "{work:?}");
         assert!(matches!(self.queue.finish(), Err(DispatchError::Busy)));
         assert_eq!(self.gate.observe().holding, 1);
         assert_eq!(self.store.read_work().outstanding, 1);
@@ -303,13 +312,13 @@ impl Rig {
         assert_eq!(self.counts(), idle);
         assert_eq!(self.state(), NativeMountState::Live);
     }
-    /// After the release: the lane drains inside the bounded wait, every
+    /// After the release: the mount drains inside the bounded wait, every
     /// provider call returned, and revocation then succeeds.
-    fn drained_and_revoked(mut self, completed: u64) {
+    fn drained_and_revoked(self, completed: u64) {
         let work = self.queue.wait_quiescent(Instant::now() + WAIT).unwrap();
         assert_eq!(
-            (work.received, work.admitted, work.retained, work.completed),
-            (0, 0, 0, completed),
+            (work.active, work.retained, work.completed),
+            (0, 0, completed),
             "{work:?}"
         );
         let calls = self.gate.observe();
@@ -319,7 +328,9 @@ impl Rig {
         let done = finish(
             &self.client,
             self.bound.route(),
-            Command::Native(NativeJob::Revoke(self.mount)),
+            |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.native_revoke(job_route, self.mount)
+            },
         );
         assert!(
             matches!(done.result(), Ok(Response::Native(NativeReply::Done))),
@@ -330,11 +341,7 @@ impl Rig {
         assert_ne!(self.state(), NativeMountState::Live);
         // No Store read followed the revocation.
         assert_eq!(self.gate.observe(), calls);
-        until("owner credits returned", || {
-            self.client.diagnostics().unwrap().outstanding == 0
-        });
         self.queue.finish().unwrap();
-        assert!(self.pool.stop().unwrap().clean());
         drop(self.bound);
         self.owner.stop().unwrap();
         drop(self.store);
@@ -379,10 +386,10 @@ fn reading(
     })
 }
 
-/// Normal unmount, lane half. Contract (architecture 73): the request "stays
-/// `admitted` from its receive until its future ends, whether it is parked
-/// for a reader or inside a Store read", and Unmount "requires the lane's
-/// drain (`received == 0 && admitted == 0`) before `Revoke` is submitted".
+/// Normal unmount, request-drain half. Contract (architecture 73): the request
+/// stays `active` from its receive until its future ends, whether it waits
+/// for a reader or is inside a Store read, and Unmount requires the mount's
+/// drain (`active == 0`) before `Revoke` is submitted.
 #[test]
 fn a_read_inside_its_store_read_keeps_the_lane_undrained_until_it_replies() {
     let rig = Rig::new("store-read-drain", 161);
@@ -402,7 +409,7 @@ fn a_read_inside_its_store_read_keeps_the_lane_undrained_until_it_replies() {
     assert_eq!(rig.store.read_work().grants, grants + 1);
 
     // What a known kernel detach does to the lane, then its drain.
-    rig.queue.stop_admission().unwrap();
+    rig.queue.stop_receive().unwrap();
     assert!(!fence.stopped());
     rig.not_drained(idle);
     assert!(matches!(answer.try_recv(), Err(mpsc::TryRecvError::Empty)));
@@ -414,7 +421,7 @@ fn a_read_inside_its_store_read_keeps_the_lane_undrained_until_it_replies() {
         "the READ answers the file's bytes once its Store read returns"
     );
     println!(
-        "STORE-READ-DRAIN read: held(admitted=1 parked=0 readers_leased=1 engine_rows=idle mount=Live lane_release=Busy) drain_wait_ended_at_deadline=true after_release(answer=exact bytes grants={}->{})",
+        "STORE-READ-DRAIN read: held(active=1 readers_leased=1 engine_rows=idle mount=Live lane_release=Busy) drain_wait_ended_at_deadline=true after_release(answer=exact bytes grants={}->{})",
         grants,
         rig.store.read_work().grants
     );
@@ -455,7 +462,7 @@ fn a_stopped_fence_does_not_end_a_read_inside_its_store_read() {
     assert!(matches!(answer.try_recv(), Err(mpsc::TryRecvError::Empty)));
     assert_eq!(fence.terminal_replies(), 0);
     // A READ that starts now is refused before its visit and takes no reader.
-    let admitted = rig.client.diagnostics().unwrap().admitted;
+    let admitted = rig.jobs();
     let late = match wait(NativeData::read(
         rig.services(&fence),
         rig.mount,
@@ -472,7 +479,7 @@ fn a_stopped_fence_does_not_end_a_read_inside_its_store_read() {
     };
     assert!(late.fenced());
     wait(late.relinquish()).unwrap();
-    assert_eq!(rig.client.diagnostics().unwrap().admitted, admitted);
+    assert_eq!(rig.jobs(), admitted);
     assert_eq!(rig.store.read_work().grants, grants);
 
     rig.gate.release();
@@ -526,7 +533,7 @@ fn an_open_inside_its_store_read_keeps_the_lane_undrained_and_records_nothing_ye
         }
     }));
 
-    rig.queue.stop_admission().unwrap();
+    rig.queue.stop_receive().unwrap();
     rig.not_drained(idle);
     assert!(matches!(answer.try_recv(), Err(mpsc::TryRecvError::Empty)));
 
@@ -537,9 +544,9 @@ fn an_open_inside_its_store_read_keeps_the_lane_undrained_and_records_nothing_ye
     };
     assert_ne!(second, first);
     println!(
-        "STORE-READ-DRAIN open: held(admitted=1 engine_rows=idle lane_release=Busy) after_release(descriptor recorded by the deciding visit)"
+        "STORE-READ-DRAIN open: held(active=1 engine_rows=idle lane_release=Busy) after_release(descriptor recorded by the deciding visit)"
     );
-    until("the OPEN left the lane", || rig.lane().admitted == 0);
+    until("the OPEN left the lane", || rig.lane().active == 0);
     for handle in [first, second] {
         drop(wait(services.close_file(rig.mount, serial, handle)).unwrap());
     }
@@ -597,7 +604,7 @@ fn a_readdir_inside_its_store_read_keeps_the_lane_undrained_until_its_names_are_
         }
     }));
 
-    rig.queue.stop_admission().unwrap();
+    rig.queue.stop_receive().unwrap();
     rig.not_drained(idle);
     assert!(matches!(answer.try_recv(), Err(mpsc::TryRecvError::Empty)));
 
@@ -607,9 +614,9 @@ fn a_readdir_inside_its_store_read_keeps_the_lane_undrained_until_its_names_are_
         Answer::Names(vec![b"file-000000".to_vec()])
     );
     println!(
-        "STORE-READ-DRAIN readdir: held(admitted=1 engine_rows=idle lane_release=Busy) after_release(names=[file-000000] offsets_published=0)"
+        "STORE-READ-DRAIN readdir: held(active=1 engine_rows=idle lane_release=Busy) after_release(names=[file-000000] offsets_published=0)"
     );
-    until("the READDIR left the lane", || rig.lane().admitted == 0);
+    until("the READDIR left the lane", || rig.lane().active == 0);
     drop(wait(services.close_directory(rig.mount, directory.serial(), handle)).unwrap());
     drop(services);
     rig.drained_and_revoked(1);
@@ -658,17 +665,14 @@ fn a_stopped_fence_refuses_the_visit_after_an_opens_store_read_and_records_nothi
             }
         }
     }));
-    let (grants, jobs) = (
-        rig.store.read_work().grants,
-        rig.client.diagnostics().unwrap().admitted,
-    );
+    let (grants, jobs) = (rig.store.read_work().grants, rig.jobs());
 
     rig.queue.stop_service().unwrap();
     assert!(fence.stopped());
     rig.not_drained(idle);
     assert!(matches!(answer.try_recv(), Err(mpsc::TryRecvError::Empty)));
     // The observations of `not_drained` are the only owner jobs since.
-    let observed = rig.client.diagnostics().unwrap().admitted;
+    let observed = rig.jobs();
 
     rig.gate.release();
     assert_eq!(
@@ -676,13 +680,13 @@ fn a_stopped_fence_refuses_the_visit_after_an_opens_store_read_and_records_nothi
         Answer::Fenced,
         "an OPEN whose Store read returns after the stop is refused before its deciding visit"
     );
-    until("the OPEN left the lane", || rig.lane().admitted == 0);
+    until("the OPEN left the lane", || rig.lane().active == 0);
     // No second descriptor, no visit and no second reader followed.
-    assert_eq!(rig.client.diagnostics().unwrap().admitted, observed);
+    assert_eq!(rig.jobs(), observed);
     assert_eq!(rig.store.read_work().grants, grants);
     assert_eq!(rig.counts(), idle);
     println!(
-        "STORE-READ-FENCE open: held(admitted=1 engine_rows=idle lane_release=Busy) after_release(answer=Fenced owner_jobs={jobs}->{observed} (observations only) reader_grants={grants} engine_rows=idle)"
+        "STORE-READ-FENCE open: held(active=1 engine_rows=idle lane_release=Busy) after_release(answer=Fenced owner_jobs={jobs}->{observed} (observations only) reader_grants={grants} engine_rows=idle)"
     );
     drop(wait(services.close_file(rig.mount, serial, first)).unwrap());
     drop(wait(services.forget(rig.mount, serial, 1)).unwrap());
@@ -765,7 +769,7 @@ fn a_stopped_fence_refuses_the_publication_after_a_readdirs_store_read_and_store
     assert!(fence.stopped());
     rig.not_drained(idle);
     assert!(matches!(answer.try_recv(), Err(mpsc::TryRecvError::Empty)));
-    let observed = rig.client.diagnostics().unwrap().admitted;
+    let observed = rig.jobs();
 
     rig.gate.release();
     assert_eq!(
@@ -778,13 +782,13 @@ fn a_stopped_fence_refuses_the_publication_after_a_readdirs_store_read_and_store
         Answer::Fenced,
         "the publication of their offsets is refused before its attempt"
     );
-    until("the READDIR left the lane", || rig.lane().admitted == 0);
+    until("the READDIR left the lane", || rig.lane().active == 0);
     // No reply row, no publishing job and no second reader followed.
-    assert_eq!(rig.client.diagnostics().unwrap().admitted, observed);
+    assert_eq!(rig.jobs(), observed);
     assert_eq!(rig.store.read_work().grants, grants);
     assert_eq!(rig.counts(), idle);
     println!(
-        "STORE-READ-FENCE readdir: held(admitted=1 engine_rows=idle lane_release=Busy) after_release(names=[file-000000] publication=Fenced offsets_stored=0 reader_grants={grants})"
+        "STORE-READ-FENCE readdir: held(active=1 engine_rows=idle lane_release=Busy) after_release(names=[file-000000] publication=Fenced offsets_stored=0 reader_grants={grants})"
     );
     drop(wait(services.close_directory(rig.mount, directory.serial(), handle)).unwrap());
     drop(services);

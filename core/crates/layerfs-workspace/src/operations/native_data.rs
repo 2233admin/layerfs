@@ -82,13 +82,7 @@ impl NativeDataVisit {
     pub const fn mount(&self) -> NativeMount {
         self.mount
     }
-    /// The reply's bound: the window's bytes, one inherited bit for each, and
-    /// the reference ranges with their map.
-    pub fn charge(&self) -> usize {
-        self.length as usize
-            + (self.length as usize).div_ceil(8)
-            + layerfs_overlay::reference_bytes(self.length as usize)
-    }
+
     /// The visit always decides: what memory does not answer about the base
     /// is left to the one read that follows outside the owner.
     pub fn perform(&self, db: &Overlay) -> OverlayResult<NativeWindow> {
