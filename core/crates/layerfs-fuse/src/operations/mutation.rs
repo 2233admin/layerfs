@@ -275,7 +275,7 @@ impl Custody {
                 // normal release. Uncertain wrappers/provider ambiguity remain
                 // attempted failures with their original custody.
                 Err(WorkspaceError::Overlay(error))
-                    if error.is_sqlite_full()
+                    if error.is_no_space()
                         && self.publication.is_none()
                         && self
                             .services

@@ -19,11 +19,23 @@ allocation telemetry fields report zero attempts, requested bytes, admitted
 capacity jobs, refusals, reserved tail and cleanup headroom. These fields preserve
 receipt decoding; they describe no remaining reservation implementation.
 
-Direct SQLite Full after the engine establishes rollback remains a definite
-no-space result at the native mutation adapter. Unsafe I/O, corrupt state,
-failed rollback and unknown Commit remain original quarantined custody. The
-full-device I/O-error successor proof and per-Workspace connection/file lifetime
-are still pending in step 1; this patch claims neither of them. The Linux startup
+Direct SQLite Full is a definite no-space result only after whole-job rollback,
+including capacity failure at `COMMIT`. A write/truncate I/O error can also report
+no space when the original file identity is verified, its descriptor's filesystem
+has zero free blocks, and SQLite has automatically rolled back or the engine's
+one explicit `ROLLBACK` succeeds. `NoSpace` retains the original SQLite cause.
+No witness before an ordinary write is added; `capacity_checks` counts only
+failure observations. Other I/O errors, a non-full device, corrupt state, failed
+rollback/observation and other unknown Commit outcomes keep quarantined custody.
+Reply tickets and connection-local hints revert only after known whole-job
+failure. This uses SQLite's documented [transaction error handling](https://sqlite.org/lang_transaction.html).
+
+The device proofs keep state, capture bytes, independent-Workspace and exact
+failure-phase oracles. A separate external syscall fixture translates only a real
+ENOSPC `pwrite` failure into EIO, after the one unchanged syscall, so SQLite's
+I/O-error path is exercised on a full ext4 device. No SQLite/product hook or
+operation replay is introduced. These successor device runs are still pending;
+the source path is not physical qualification. The Linux startup
 filesystem observation remains, but the reservation-specific magic refusal is
 removed. Host-share execution is not thereby qualified.
 

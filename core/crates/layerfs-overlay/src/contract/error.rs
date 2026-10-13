@@ -15,6 +15,11 @@ pub enum OverlayError {
     ReplyAttemptsPending,
     BaseSourcesPending,
     Quarantined,
+    /// A write I/O error on an identity-verified full device, returned only
+    /// after the entire atomic job has been rolled back. Keeps SQLite's cause.
+    NoSpace {
+        cause: Box<OverlayError>,
+    },
     Uncertain {
         cause: Box<OverlayError>,
         completion: Option<Box<OverlayError>>,
@@ -26,7 +31,16 @@ impl fmt::Display for OverlayError {
         write!(f, "{self:?}")
     }
 }
-impl std::error::Error for OverlayError {}
+impl std::error::Error for OverlayError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Io(cause) => Some(cause),
+            Self::Sql(cause) => Some(cause),
+            Self::NoSpace { cause } | Self::Uncertain { cause, .. } => Some(cause.as_ref()),
+            _ => None,
+        }
+    }
+}
 impl From<rusqlite::Error> for OverlayError {
     fn from(value: rusqlite::Error) -> Self {
         Self::Sql(value)
@@ -45,6 +59,16 @@ impl OverlayError {
     pub fn is_sqlite_full(&self) -> bool {
         matches!(self, Self::Sql(rusqlite::Error::SqliteFailure(error, _))
             if error.code == rusqlite::ErrorCode::DiskFull)
+    }
+    /// Known no-space outcomes of an atomic mutation. Never unwraps an
+    /// uncertain result, even if its retained cause is a capacity failure.
+    pub fn is_no_space(&self) -> bool {
+        self.is_sqlite_full() || matches!(self, Self::NoSpace { .. })
+    }
+    pub(crate) fn capacity_io(&self) -> bool {
+        matches!(self, Self::Sql(rusqlite::Error::SqliteFailure(error, _))
+            if matches!(error.extended_code, rusqlite::ffi::SQLITE_IOERR_WRITE
+                | rusqlite::ffi::SQLITE_IOERR_TRUNCATE))
     }
     pub(crate) fn unsafe_database_state(&self) -> bool {
         matches!(self, Self::Sql(rusqlite::Error::SqliteFailure(error, _))

@@ -414,3 +414,20 @@ Count terminal reclamation only on successful last-owner file unlink; aggregate
 proof observations now use the daemon owner, retaining all plateau/isolation
 assertions. The corrected Linux test binaries compile. No performance sample or
 step completion; the failed run remains retained and the affected proofs are owed.
+
+## Issue 321 step 1: capacity rollback path (2026-10-13)
+
+At `f898edb1f`, Linux sibling/idle twelve-cycle plateau proofs and stale-token
+isolation each passed; mounted Commit passed 7 tests and mounted SQLite Full
+passed 2. The previous cycle-suite timeout stays FAILED. The owner's section-9
+guide wording is approved for both AGENTS files; apply it in step 4.
+
+Capacity failure at COMMIT now establishes whole-job rollback and withdraws its
+reply tickets/hints. Write/truncate I/O errors are narrowly eligible for a
+retained-cause NoSpace result after a verified zero-free-block device observation
+and whole-job rollback. Other I/O/unknown outcomes remain quarantined. Ordinary
+successful writes pay no added statement or physical check. Host transaction,
+ticket, lifetime and error-identity tests: 21 passed; Overlay/Fuse warning-denying
+Clippy and host/Linux proof builds passed. Separate device proof cases cover
+statement spill versus COMMIT and external translation of actual ENOSPC to EIO;
+their execution remains owed. No performance sample; step 1 is incomplete.

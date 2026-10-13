@@ -15,6 +15,8 @@ pub struct AllocationWork {
     pub refusals: u64,
     /// Calls reading descriptor and path identity; each uses two metadata calls.
     pub observations: u64,
+    /// Full-device checks after a write I/O failure, never write admission.
+    pub capacity_checks: u64,
     /// Retained diagnostic field; reservation removal leaves this zero.
     pub freelist_queries: u64,
 }
@@ -90,6 +92,23 @@ impl Allocation {
     pub(crate) fn work(&self) -> AllocationWork {
         self.work.get()
     }
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    pub(crate) fn device_full(&self) -> OverlayResult<bool> {
+        self.state()?;
+        let mut work = self.work.get();
+        work.capacity_checks = work.capacity_checks.saturating_add(1);
+        self.work.set(work);
+        let filesystem = nix::sys::statvfs::fstatvfs(&self.file)
+            .map_err(|error| std::io::Error::from_raw_os_error(error as i32))?;
+        // Do not translate quota/size-limit/read/corruption failures. The
+        // descriptor's filesystem must have no free blocks at all, including
+        // privileged reserves; the original I/O cause remains in the result.
+        Ok(filesystem.blocks_free() == 0)
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    pub(crate) fn device_full(&self) -> OverlayResult<bool> {
+        Err(OverlayError::UnsupportedPlatform)
+    }
 }
 
 impl AllocationWork {
@@ -101,6 +120,7 @@ impl AllocationWork {
             admitted_jobs: self.admitted_jobs.saturating_sub(before.admitted_jobs),
             refusals: self.refusals.saturating_sub(before.refusals),
             observations: self.observations.saturating_sub(before.observations),
+            capacity_checks: self.capacity_checks.saturating_sub(before.capacity_checks),
             freelist_queries: self
                 .freelist_queries
                 .saturating_sub(before.freelist_queries),
@@ -112,6 +132,7 @@ impl AllocationWork {
         self.admitted_jobs = self.admitted_jobs.saturating_add(delta.admitted_jobs);
         self.refusals = self.refusals.saturating_add(delta.refusals);
         self.observations = self.observations.saturating_add(delta.observations);
+        self.capacity_checks = self.capacity_checks.saturating_add(delta.capacity_checks);
         self.freelist_queries = self.freelist_queries.saturating_add(delta.freelist_queries);
     }
 }

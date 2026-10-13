@@ -1,4 +1,4 @@
-//! One owner connection; no database, schema or connection per Workspace.
+//! One exclusive owner connection for one disposable Workspace file.
 use crate::{
     metrics, DatabaseProfile, DatabaseWork, OverlayError, OverlayResult, ProfileConfig,
     StatementKind,
@@ -57,7 +57,7 @@ pub(super) enum Transaction {
     None,
     /// The job has executed no writing statement; its reads ran in autocommit.
     Wanted,
-    /// Admission and BEGIN are executing for the job's first writing statement.
+    /// BEGIN is executing for the job's first writing statement.
     Beginning,
     Begun,
 }
@@ -186,17 +186,9 @@ impl Overlay {
             },
             decode,
         );
-        match result {
-            Err(cause) if cause.unsafe_database_state() => {
-                self.quarantined.set(true);
-                Err(OverlayError::Uncertain {
-                    cause: Box::new(cause),
-                    completion: None,
-                })
-            }
-            result => result,
-        }
+        result.map_err(|cause| self.failed(cause))
     }
+
     pub(crate) fn execute(
         &self,
         kind: StatementKind,
@@ -217,6 +209,22 @@ impl Overlay {
     pub(crate) fn failed(&self, cause: OverlayError) -> OverlayError {
         if !cause.unsafe_database_state() {
             return cause;
+        }
+        // Only a writing job can defer quarantine for capacity classification.
+        // Its caller must still establish a whole-job rollback before returning
+        // NoSpace. Read failures and non-capacity I/O stay uncertain.
+        if self.writing() && cause.capacity_io() {
+            match self.allocation.device_full() {
+                Ok(true) => return cause,
+                Ok(false) => {}
+                Err(observation) => {
+                    self.quarantined.set(true);
+                    return OverlayError::Uncertain {
+                        cause: Box::new(cause),
+                        completion: Some(Box::new(observation)),
+                    };
+                }
+            }
         }
         self.quarantined.set(true);
         OverlayError::Uncertain {
@@ -266,7 +274,7 @@ impl Overlay {
     /// Runs one job atomically. Reads before the job's first writing statement
     /// execute in autocommit: this connection is the only one, holds the
     /// exclusive lock and runs one job at a time, so they see the same state.
-    /// A job that writes nothing begins, commits and admits nothing.
+    /// A job that writes nothing begins and commits nothing.
     fn transaction<T>(&self, job: impl FnOnce() -> OverlayResult<T>) -> OverlayResult<T> {
         self.available()?;
         if self.transaction.get() != Transaction::None {
@@ -276,58 +284,68 @@ impl Overlay {
         self.release_step.set(true);
         let (orphans, pieces) = (self.orphan_seen.get(), self.pieces_seen.get());
         let result = job();
-        // A failed job's orphan and piece rows are as they were before it.
-        if result.is_err() {
-            self.orphan_seen.set(orphans);
-            self.pieces_seen.set(pieces);
-        }
-        // A ticket exists for its holder only once its job has succeeded.
         let issued = std::mem::take(&mut *self.issued.borrow_mut());
-        if result.is_err() {
-            for (ns, revision) in issued {
-                self.tickets.withdraw(ns, revision);
-            }
-        }
-        if self.transaction.replace(Transaction::None) != Transaction::Begun {
-            return result;
-        }
-        let failure = match result {
-            Ok(value) => match self.execute(StatementKind::Commit, "COMMIT", &[], 0) {
-                Ok(_) => return Ok(value),
+        let begun = self.transaction.get() == Transaction::Begun;
+        let failed = match result {
+            Ok(value) if begun => match self.execute(StatementKind::Commit, "COMMIT", &[], 0) {
+                Ok(_) => {
+                    self.transaction.set(Transaction::None);
+                    return Ok(value);
+                }
+                Err(cause) if cause.is_sqlite_full() || cause.capacity_io() => cause,
                 Err(cause) => {
+                    self.transaction.set(Transaction::None);
                     self.quarantined.set(true);
-                    OverlayError::Uncertain {
+                    return Err(OverlayError::Uncertain {
                         cause: Box::new(cause),
                         completion: None,
-                    }
+                    });
                 }
             },
-            Err(cause) => {
-                if self.quarantined.get() {
-                    return Err(cause);
-                }
-                if !self.connection.is_autocommit() {
-                    if let Err(error) = self.execute(StatementKind::Rollback, "ROLLBACK", &[], 0) {
-                        self.quarantined.set(true);
-                        return Err(OverlayError::Uncertain {
-                            cause: Box::new(cause),
-                            completion: Some(Box::new(error)),
-                        });
-                    }
-                }
-                cause
+            Ok(value) => {
+                self.transaction.set(Transaction::None);
+                return Ok(value);
             }
+            Err(cause) => self.failed(cause),
         };
-        // A failed job keeps its original cause. Physical observation is paid
-        // only here and in explicit diagnostics, never before ordinary writes.
-        if let Err(cause) = self.allocation.state() {
-            self.quarantined.set(true);
-            return Err(OverlayError::Uncertain {
-                cause: Box::new(cause),
-                completion: Some(Box::new(failure)),
-            });
+        self.transaction.set(Transaction::None);
+        if self.quarantined.get() {
+            return Err(failed);
         }
-        Err(failure)
+        if begun && !self.connection.is_autocommit() {
+            // One rollback attempt, only when SQLite has not already rolled
+            // back the transaction. A failed rollback retains both causes.
+            if let Err(completion) = self.execute(StatementKind::Rollback, "ROLLBACK", &[], 0) {
+                self.quarantined.set(true);
+                return Err(OverlayError::Uncertain {
+                    cause: Box::new(failed),
+                    completion: Some(Box::new(completion)),
+                });
+            }
+        }
+        // Hints and reply tickets revert only after known whole-job failure,
+        // including a capacity failure at COMMIT, never on an unknown outcome.
+        self.orphan_seen.set(orphans);
+        self.pieces_seen.set(pieces);
+        for (ns, revision) in issued {
+            self.tickets.withdraw(ns, revision);
+        }
+        if begun {
+            if let Err(observation) = self.allocation.state() {
+                self.quarantined.set(true);
+                return Err(OverlayError::Uncertain {
+                    cause: Box::new(failed),
+                    completion: Some(Box::new(observation)),
+                });
+            }
+        }
+        if failed.capacity_io() {
+            Err(OverlayError::NoSpace {
+                cause: Box::new(failed),
+            })
+        } else {
+            Err(failed)
+        }
     }
     /// Admission and BEGIN for the first writing statement of an atomic job,
     /// before that statement executes. A failure is returned by that statement
