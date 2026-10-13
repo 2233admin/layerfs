@@ -1,12 +1,19 @@
 """Issue 320: one labelled mounted diagnostic of short Workspaces on a growing branch.
 
-usage: branch_session.py <build-folder> <prepared-original-folder> <out-folder> <sessions> <commits> [<budget-seconds> [<observe-every>]]
+usage: branch_session.py <build-folder> <prepared-original-folder> <out-folder> <sessions> <commits> [<budget-seconds> [<observe-every> [<cold-sessions> <cold-commits>]]]
 
 The usage this measures: a Workspace is mounted on a branch, runs <commits>
 steps (one ordinary command, then one Commit), and is unmounted for good. The
 next Workspace is mounted on the same branch, which is now <commits> Commits
 longer. <sessions> Workspaces run one after another in one daemon, so session
 N starts on a branch that already holds (N-1) x <commits> Commits.
+
+With <cold-sessions>, the daemon is then stopped and a NEW daemon is started on
+the same Store volume, and <cold-sessions> more Workspaces of <cold-commits>
+steps run in it: a daemon that has never seen the branch (empty object cache,
+new read handles, new producer) on the long history the first one left. The
+operating system's page cache is not dropped, so this is a cold daemon on warm
+files, not a cold disk.
 
 It uses the product the way a sample does: an independent byte copy of the
 prepared original's sealed Store, the sealed runtime and daemon of the build,
@@ -78,6 +85,7 @@ def main():
     sessions, commits = int(sys.argv[4]), int(sys.argv[5])
     budget = float(sys.argv[6]) if len(sys.argv) > 6 else 100.0
     observe_every = int(sys.argv[7]) if len(sys.argv) > 7 else 1
+    cold_sessions, cold_commits = (int(sys.argv[8]), int(sys.argv[9])) if len(sys.argv) > 9 else (0, 0)
     started = time.monotonic()
     lock = (ROOT / "core/target/issue320/measurement.lock").open("a")
     fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -106,58 +114,64 @@ def main():
             "--manifest", prepared["provision"]["manifest"], "--receipt", str(out / "runtime.events.jsonl"),
             "--uid", str(prepared["source_uid"]), "--gid", str(prepared["source_gid"]),
             "--environment-file", str(environment), "--observation-scope", secrets.token_hex(32)]
-    runtime = cell_runner.EventProcess(argv, out, "runtime")
     step = 0
+    containers = []
+    plans = [("runtime", sessions, commits)] + ([("runtime-cold", cold_sessions, cold_commits)] if cold_sessions else [])
     try:
-        runtime.event("protocol_ready", time.monotonic() + 15)
-        setup = next(row for row in runtime.rows if row["event"] == "daemon_setup")
-        result["daemon_setup_ms"] = round(setup["span"]["duration_ns"] / 1e6, 1)
-        for session in range(1, sessions + 1):
-            if time.monotonic() - started > budget:
-                result["stopped_early"] = f"budget reached before session {session}"
-                break
-            key = secrets.token_hex(32)
-            mount = runtime.send("mount", key, deadline=time.monotonic() + 15)
-            commands, saves, kinds = [], [], []
-            for _ in range(commits):
-                step += 1
-                path = bodies / f"step-{step}.sh"
-                path.write_text(body(files, directories, step))
-                command = runtime.send("command", key, path, deadline=time.monotonic() + 30)
-                commit = runtime.send("commit", key, deadline=time.monotonic() + 30)
-                commands.append(command["span"]["duration_ns"])
-                saves.append(commit["span"]["duration_ns"])
-                kinds.append(commit["fields"].get("commit_kind"))
-            unmount = runtime.send("unmount", key, deadline=time.monotonic() + 15)
-            waited = time.monotonic_ns()
-            while runtime.send("cleanup", key, deadline=time.monotonic() + 10)["fields"]["state"] != "Gone":
-                pass
-            cleanup_ns = time.monotonic_ns() - waited
-            observed = {}
-            if session % observe_every == 0:
-                runtime.send("observe", deadline=time.monotonic() + 15)
-                cell_runner.snapshot_observations(runtime, observed)
-            result["sessions"].append({
-                "session": session, "branch_commits_before": step - commits, "branch_commits_after": step,
-                "mount_ms": round(mount["span"]["duration_ns"] / 1e6, 2),
-                "unmount_ms": round(unmount["span"]["duration_ns"] / 1e6, 2), "cleanup_wait_ms": round(cleanup_ns / 1e6, 2),
-                "commit_kinds": sorted(set(kinds)), "command": summary(commands), "commit": summary(saves),
-                "commit_ms": milliseconds(saves), "command_ms": milliseconds(commands),
-                **{name: value["value"] for name, value in observed.items()}})
-        runtime.send("stop", deadline=time.monotonic() + 15)
-        runtime.event("finished", time.monotonic() + 15)
-        result["runtime_exit"] = runtime.process.wait(timeout=5)
+        for label, planned, per_session in plans:
+            if label != "runtime":
+                argv[argv.index("--receipt") + 1] = str(out / (label + ".events.jsonl"))
+                argv[argv.index("--observation-scope") + 1] = secrets.token_hex(32)
+            runtime = cell_runner.EventProcess(argv, out, label)
+            runtime.event("protocol_ready", time.monotonic() + 15)
+            containers.append(runtime.container)
+            setup = next(row for row in runtime.rows if row["event"] == "daemon_setup")
+            result.setdefault("daemon_setup_ms", {})[label] = round(setup["span"]["duration_ns"] / 1e6, 1)
+            for session in range(1, planned + 1):
+                if label == "runtime" and time.monotonic() - started > budget:
+                    result["stopped_early"] = f"budget reached before session {session}"
+                    break
+                key = secrets.token_hex(32)
+                mount = runtime.send("mount", key, deadline=time.monotonic() + 15)
+                commands, saves, kinds = [], [], []
+                for _ in range(per_session):
+                    step += 1
+                    path = bodies / f"step-{step}.sh"
+                    path.write_text(body(files, directories, step))
+                    command = runtime.send("command", key, path, deadline=time.monotonic() + 30)
+                    commit = runtime.send("commit", key, deadline=time.monotonic() + 30)
+                    commands.append(command["span"]["duration_ns"])
+                    saves.append(commit["span"]["duration_ns"])
+                    kinds.append(commit["fields"].get("commit_kind"))
+                unmount = runtime.send("unmount", key, deadline=time.monotonic() + 15)
+                waited = time.monotonic_ns()
+                while runtime.send("cleanup", key, deadline=time.monotonic() + 10)["fields"]["state"] != "Gone":
+                    pass
+                cleanup_ns = time.monotonic_ns() - waited
+                observed = {}
+                if label != "runtime" or session % observe_every == 0:
+                    runtime.send("observe", deadline=time.monotonic() + 15)
+                    cell_runner.snapshot_observations(runtime, observed)
+                result["sessions"].append({
+                    "daemon": label, "session": session, "branch_commits_before": step - per_session, "branch_commits_after": step,
+                    "mount_ms": round(mount["span"]["duration_ns"] / 1e6, 2),
+                    "unmount_ms": round(unmount["span"]["duration_ns"] / 1e6, 2), "cleanup_wait_ms": round(cleanup_ns / 1e6, 2),
+                    "commit_kinds": sorted(set(kinds)), "command": summary(commands), "commit": summary(saves),
+                    "commit_ms": milliseconds(saves), "command_ms": milliseconds(commands),
+                    **{name: value["value"] for name, value in observed.items()}})
+            runtime.send("stop", deadline=time.monotonic() + 15)
+            runtime.event("finished", time.monotonic() + 15)
+            result.setdefault("runtime_exit", {})[label] = runtime.process.wait(timeout=5)
     except BaseException as failure:  # the partial result and the cause are both kept
         result["failure"] = f"{type(failure).__name__}: {failure}"
         runtime.process.kill()
     finally:
-        if runtime.container:
-            logs = subprocess.run([*docker, "logs", "--timestamps=false", runtime.container], capture_output=True)
-            (out / "daemon.stdout").write_bytes(logs.stdout)
-            (out / "daemon.stderr").write_bytes(logs.stderr)
-            subprocess.run([*docker, "rm", "--force", runtime.container], capture_output=True)
+        for index, container in enumerate(item for item in containers if item):
+            logs = subprocess.run([*docker, "logs", "--timestamps=false", container], capture_output=True)
+            (out / f"daemon-{index}.stderr").write_bytes(logs.stderr)
+            subprocess.run([*docker, "rm", "--force", container], capture_output=True)
         removed = subprocess.run([*docker, "volume", "rm", clone["volume"]], capture_output=True)
-        result["cleanup"] = "container and volume removed" if removed.returncode == 0 else "volume removal failed"
+        result["cleanup"] = "containers and volume removed" if removed.returncode == 0 else "volume removal failed"
         result["interference"]["other_containers_at_end"] = subprocess.run(
             [*docker, "ps", "--format", "{{.Names}}"], capture_output=True, text=True).stdout.split()
         result["wall_seconds"] = round(time.monotonic() - started, 1)
@@ -165,9 +179,9 @@ def main():
     if len(result["sessions"]) > 40:
         print(json.dumps({key: value for key, value in result.items() if key != "sessions"}))
         return
-    print("session branch_before mount_ms commit_first commit_median commit_mean_rest commit_p95 commit_sum command_median store_bytes")
+    print("daemon session branch_before mount_ms commit_first commit_median commit_mean_rest commit_p95 commit_sum command_median store_bytes")
     for row in result["sessions"]:
-        print(row["session"], row["branch_commits_before"], row["mount_ms"], row["commit"]["first_ms"],
+        print(row["daemon"], row["session"], row["branch_commits_before"], row["mount_ms"], row["commit"]["first_ms"],
               row["commit"]["median_ms"], row["commit"]["mean_rest_ms"], row["commit"]["p95_ms"], row["commit"]["sum_ms"],
               row["command"]["median_ms"], row.get("store_logical_bytes"))
     print(json.dumps({key: value for key, value in result.items() if key != "sessions"}))
