@@ -486,3 +486,54 @@ database-file close port, keeping the existing open-file Close API unchanged.
 Overlay/Daemon all-target warning-denying Clippy passed; count decoder tests 23
 passed. Section 31 reports the actual cache-build readback and common budget.
 Cache-option/RSS qualification and all step-end samples remain pending.
+
+## Issue 321 takeover: retained cache diagnostics (2026-10-13)
+
+Reconciled at unchanged source `878af2ceabdd5debc28ee4ec0fe59c6cfe94ad40`,
+product tree `f47fd01593372b64cb6aa2149026b6da14969fc0`, production LOC 84,204.
+The clean private branch is `issue321-workspace-overlay`. No comparison arm was
+rerun. The current GitHub issue body and REST comments were read; the owner
+handoff supplies the already-granted section-9 wording approval.
+
+Both locked release build receipts are PASS: tags `i321-s1-mm-on` and
+`i321-s1-mm-off`; pinned Linux image
+`sha256:378b799ef43343fc64008b6a5ef456dd6bf0cb8f6ea4cec72e7b42dfc17d2cd6`.
+Actual compilation-option readback matches enabled and disabled arms. Disabled
+uses `LIBSQLITE3_FLAGS=-USQLITE_ENABLE_MEMORY_MANAGEMENT`; enabled has no explicit
+flags. Four retained concurrent exec diagnostics use the tier-1 prepared tree,
+2,000 files per writer and the same workload. All have runtime exit 0 and owned
+container/volume cleanup. These are diagnostics with exit-code checks; no byte
+oracle or independent proof, no performance eligibility.
+
+| Arm | CPU allowance | 1 writer wall ms | 4 writers wall ms | Mutation service us/job, 1 / 4 writers | Concurrent writer/Commit phase wall ms |
+| --- | --- | ---: | ---: | ---: | ---: |
+| disabled | 2 | 1409.6 | 3499.5 | 35.651 / 76.580 | 2723.7 |
+| disabled | unrestricted | 1543.2 | 2045.2 | 41.714 / 67.378 | 1808.5 |
+| enabled | 2 | 1291.9 | 4004.0 | 29.867 / 113.397 | 3342.9 |
+| enabled | unrestricted | 1328.9 | 2076.7 | 30.804 / 69.946 | 1922.4 |
+
+Raw evidence: `benchmark-results/fs-bench-pro/2026-10-13-issue320-i321-s1-`
+plus each `mm-on`/`mm-off` `exec-2cpu-tier1`/`exec-unlimited-tier1` tag,
+`result.json` and its retained runtime artifacts. Whole phase wall includes
+launch and concurrent work; it is not the Commit call time. Constant SQL work
+and near-zero owner queue wait do not identify exclusive CPU or lock cost.
+The two-CPU observations include substantial CPU throttling. No cache option
+is selected by this checkpoint.
+
+The retained disabled-arm overlay-only idle probe also exits 0 with owned
+container cleanup. At 16 admitted Workspaces: VmRSS 12,004 KiB, RssAnon
+7,728 KiB, RssFile 4,276 KiB, threads 17, common credited limit 8,388,608 B,
+pager allowance 1,048,576 B, fixed credits 104,016 B, jobs/outstanding 0.
+At zero Workspaces: VmRSS 4,944 KiB, RssAnon 856 KiB. Actual RSS therefore
+grows within configured admission; the credit ledger is not measured RSS.
+Probe/build source and binary hashes are retained in `owner-memory-off-*`
+records under the ignored issue321 target. It contains no FUSE or global Store,
+measures idle points, and closes connections without proving terminal file
+deletion. It is not loaded-memory, phase-peak or whole-system qualification.
+
+Step 1 remains INCOMPLETE: loaded aggregate memory, SQLite temporary backing,
+service-time attribution/build selection, long-history/cold-daemon session,
+full tier-1 and four-Workspace samples, and affected correctness coverage remain
+required. Steps 2–4 are NOT_RUN. Twelve-cell exact-count compatibility remains
+unqualified until step 4; no pin was weakened. Historical failures above remain
+unchanged. Durable: NOT_RUN — disabled by owner until explicit reauthorization.
