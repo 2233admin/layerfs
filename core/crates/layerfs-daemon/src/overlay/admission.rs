@@ -87,18 +87,24 @@ impl Notifications {
             return;
         }
         let count = self.slots.lock().unwrap_or_else(|e| e.into_inner()).len();
-        for index in 0..count {
-            let waker = {
+        // Fixed stack windows keep wake/drop callbacks outside the lock while
+        // avoiding one lock acquisition for every empty notification slot.
+        const WINDOW: usize = 16;
+        for start in (0..count).step_by(WINDOW) {
+            let mut ready: [Option<Waker>; WINDOW] = std::array::from_fn(|_| None);
+            {
                 let mut slots = self.slots.lock().unwrap_or_else(|e| e.into_inner());
-                let slot = &mut slots[index];
-                if slot.active {
-                    slot.changed = true;
-                    slot.waker.take()
-                } else {
-                    None
+                for (target, slot) in ready
+                    .iter_mut()
+                    .zip(&mut slots[start..count.min(start + WINDOW)])
+                {
+                    if slot.active {
+                        slot.changed = true;
+                        *target = slot.waker.take();
+                    }
                 }
-            };
-            if let Some(waker) = waker {
+            }
+            for waker in ready.into_iter().flatten() {
                 waker.wake();
             }
         }

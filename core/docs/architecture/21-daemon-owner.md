@@ -51,6 +51,25 @@ memory qualification or step-1 completion. Historical descriptions and receipts
 below retain their original shared-database scope. Both AGENTS.md guides remain
 unchanged pending the owner's wording approval.
 
+### Common admission notifications
+
+The independent owners use one fixed daemon notification table. Completion
+release publishes the local lane slot before returning common byte credit;
+`Budget::release` then notifies that same table once. A completion surviving
+its local owner still returns its shared credit and notifies. No lock spans
+a caller's wake/drop callback. Notifications move at most 16 wakers per fixed
+stack window, unlock, and invoke them before reading the next window. All
+slots are visited; the window is not a registration/Workspace/workload cap.
+
+With the default 288 slots, an active notification uses 19 table-lock turns
+(one length observation plus 18 windows), versus the prior 289. Removing the
+duplicate completion notification takes source-derived table-lock turns per
+active credit release from 578 to 19. This is work removed outside the owner
+service clock; it is not evidence that this cost alone explains service wall
+growth. SQL, publication, queued capture/install and original refusal/custody
+semantics are unchanged. Reentrant wake, cancellation, saturation and owner-loss
+proofs cover availability after both local/shared release facts.
+
 ## Historical shared-connection description
 
 S5 update after `f5558fc22`: `SourceRead` provides one composed local byte

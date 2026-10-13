@@ -49,15 +49,16 @@ impl Credit {
 }
 impl Drop for Credit {
     fn drop(&mut self) {
-        self.budget.release(*self.bytes.get_mut());
-        let Some(shared) = self.shared.upgrade() else {
-            return;
-        };
-        if let Ok(mut state) = shared.state.lock() {
-            state.work.credited_bytes -= *self.bytes.get_mut();
-            state.work.outstanding -= 1;
-            state.release(self.class);
+        // Publish local slot availability before returning shared bytes. Both
+        // admissions use the same notification table, so its one wake follows
+        // both facts, including when this completion outlives its local owner.
+        if let Some(shared) = self.shared.upgrade() {
+            if let Ok(mut state) = shared.state.lock() {
+                state.work.credited_bytes -= *self.bytes.get_mut();
+                state.work.outstanding -= 1;
+                state.release(self.class);
+            }
         }
-        shared.admission.notify();
+        self.budget.release(*self.bytes.get_mut());
     }
 }
