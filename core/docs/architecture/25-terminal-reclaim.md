@@ -146,3 +146,10 @@ is recorded without replay, and a replaced path is preserved. Global history and
 other Workspace databases are unchanged. Live SQL reclamation continues. The
 schema-33 terminal row-reclaim implementation remains until step 2 and its old
 receipts keep their original claims. No numerical reclamation deadline is added.
+
+The backing keeps an original descriptor through last-owner release, preventing
+inode reuse from making a replacement path appear owned. Successful unlink is
+followed by identity-handle close before Gone is published. Failed unlink retains
+both the original descriptor and error in the failed slot. A SQLite checked-close
+refusal also retains its connection without a destructor-driven close retry;
+that quarantined custody lasts until process exit. No sync or replay is added.

@@ -76,6 +76,17 @@ class CounterViews(unittest.TestCase):
         decoded = counts.decode(rows)
         self.assertEqual(decoded["reader_storage"][1]["forced_seals"], 41)
 
+    def test_overlay_budget_preserves_the_actual_cache_build_bit(self):
+        rows = snapshot(2)
+        self.assertEqual(counts.decode(rows)["field_availability"]["overlay_budget"], "UNAVAILABLE")
+        rows.append(dict(rows[0], section=31, index=0, values=[8388608,1048576,8192,64,128,1,0]))
+        budget = counts.decode(rows)["overlay_budget"]
+        self.assertEqual(budget["pager_allowance_bytes"], 1048576)
+        self.assertEqual(budget["memory_management_enabled"], 0)
+        rows[-1]["values"].pop()
+        with self.assertRaisesRegex(ValueError, "cardinality"):
+            counts.decode(rows)
+
     def test_cardinality_cannot_be_silently_truncated(self):
         rows = snapshot(2)
         rows[1]["values"].pop()

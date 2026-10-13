@@ -37,6 +37,11 @@ impl Default for OwnerConfig {
 #[derive(Debug)]
 pub enum OwnerError {
     Io(io::Error),
+    /// Failed unlink keeps the original file identity handle, not just its path.
+    Deletion {
+        cause: io::Error,
+        backing: std::fs::File,
+    },
     Overlay(OverlayError),
     Stopped,
     Retained(Arc<OwnerError>),
@@ -70,6 +75,7 @@ impl std::error::Error for OwnerError {
             Self::Retained(error) => Some(error.as_ref()),
             Self::Observation(error) => Some(error.as_ref()),
             Self::Io(error) => Some(error),
+            Self::Deletion { cause, .. } => Some(cause),
             Self::Overlay(error) => Some(error),
             Self::Unattempted { cause, .. } => Some(cause.as_ref()),
             Self::Install { cause, .. } => Some(cause.as_ref()),

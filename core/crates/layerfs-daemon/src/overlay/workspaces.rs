@@ -49,6 +49,8 @@ pub(crate) struct Workspaces {
     config: OwnerConfig,
     shared: Arc<Shared>,
     template_resources: Resources,
+    template_file: Mutex<layerfs_overlay::ClosedFile>,
+    template_origin: layerfs_overlay::AllocationWork,
     state: Mutex<State>,
 }
 
@@ -93,13 +95,16 @@ pub(super) fn start(path: &Path, profile: ProfileConfig, config: OwnerConfig) ->
         receipt.sql = db.diagnostics();
         receipt.allocation = db.allocation_work();
         receipt.allocation_state = Some(Ok(resources.allocation));
-        db.close_database().map_err(OwnerError::Overlay)?;
+        let template_file = db.close_database_file().map_err(OwnerError::Overlay)?;
+        let template_origin = template_file.allocation_work();
         let pool = Arc::new(Workspaces {
             template: path.to_owned(),
             profile,
             config,
             shared: shared.clone(),
             template_resources: resources,
+            template_file: Mutex::new(template_file),
+            template_origin,
             state: Mutex::new(State {
                 slots: BTreeMap::new(),
                 next: 1,
@@ -167,6 +172,17 @@ impl Workspaces {
         if incarnation == [0; 32] {
             return Err(OwnerError::Overlay(layerfs_overlay::OverlayError::Invalid(
                 "zero incarnation",
+            )));
+        }
+        let physical = self
+            .template_file
+            .lock()
+            .map_err(|_| OwnerError::Stopped)?
+            .allocation()
+            .map_err(OwnerError::Overlay)?;
+        if physical.logical_bytes != self.template_resources.allocation.logical_bytes {
+            return Err(OwnerError::Overlay(layerfs_overlay::OverlayError::Invalid(
+                "template size",
             )));
         }
         let namespace = {
@@ -420,6 +436,21 @@ impl Workspaces {
             }
         }
         let mut resources = self.template_resources;
+        {
+            let file = self.template_file.lock().map_err(|_| OwnerError::Stopped)?;
+            let before = file.allocation_work();
+            let physical = file.allocation();
+            work.allocation
+                .accumulate(file.allocation_work().since(before));
+            resources.allocation = physical.map_err(OwnerError::Overlay)?;
+            if resources.allocation.logical_bytes
+                != self.template_resources.allocation.logical_bytes
+            {
+                return Err(OwnerError::Overlay(layerfs_overlay::OverlayError::Invalid(
+                    "template size",
+                )));
+            }
+        }
         for client in self.clients()? {
             let done = client
                 .try_submit(None, Command::Resources { global: true })
@@ -485,6 +516,13 @@ impl Workspaces {
             work.closed_namespaces = 0;
             total.accumulate(&work);
         }
+        total.allocation_foreground.accumulate(
+            self.template_file
+                .lock()
+                .map_err(|_| OwnerError::Stopped)?
+                .allocation_work()
+                .since(self.template_origin),
+        );
         let budget = self.shared.budget.diagnostics();
         total.outstanding = budget.outstanding;
         total.credited_bytes = budget.job_bytes;
@@ -554,7 +592,12 @@ impl Workspaces {
             Err(cause) => Err(self.fail(namespace, cause)),
         }
     }
-    pub fn deleted(&self, namespace: i64, _incarnation: [u8; 32], result: std::io::Result<()>) {
+    pub fn deleted(
+        &self,
+        namespace: i64,
+        _incarnation: [u8; 32],
+        result: Result<(), (std::io::Error, std::fs::File)>,
+    ) {
         if let Ok(mut state) = self.state.lock() {
             match result {
                 Ok(()) => {
@@ -562,11 +605,11 @@ impl Workspaces {
                     state.retired.closed_namespaces =
                         state.retired.closed_namespaces.saturating_add(1);
                 }
-                Err(cause) => {
+                Err((cause, backing)) => {
                     state.slots.insert(
                         namespace,
                         Slot::Failed {
-                            cause: Arc::new(OwnerError::Io(cause)),
+                            cause: Arc::new(OwnerError::Deletion { cause, backing }),
                             incarnation: _incarnation,
                         },
                     );

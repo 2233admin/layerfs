@@ -88,13 +88,21 @@ impl Overlay {
     /// Callers establish all request/capture/handle fences before consuming it.
     /// The path is retained on failure; close never authorizes an implicit replay.
     pub fn close_database(self) -> OverlayResult<()> {
+        self.close_database_file().map(drop)
+    }
+    /// Checked close retaining only the physical file identity, for an immutable
+    /// template observed after readiness. The returned handle has no connection.
+    pub fn close_database_file(self) -> OverlayResult<crate::ClosedFile> {
         self.connection.flush_prepared_statement_cache();
         self.connection
             .close()
-            .map_err(|(_, cause)| OverlayError::Uncertain {
-                cause: Box::new(OverlayError::Sql(cause)),
+            .map_err(|refused| OverlayError::Uncertain {
+                cause: Box::new(OverlayError::Close(Box::new(refused.into()))),
                 completion: None,
-            })
+            })?;
+        Ok(crate::ClosedFile {
+            allocation: self.allocation,
+        })
     }
 
     /// Selected settings actually read back from this initialized connection.

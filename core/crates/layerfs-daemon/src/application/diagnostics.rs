@@ -203,6 +203,26 @@ impl Application {
             )?;
             resources::emit(&mut rows, &resources)?;
             schema::owner(&mut rows, self.owner.client().diagnostics().ok())?;
+            let budget = self.owner.client().budget_work();
+            rows.row(
+                31,
+                0,
+                Some(&[
+                    budget.limit_bytes as u64,
+                    budget.pager_bytes as u64,
+                    budget.fixed_bytes as u64,
+                    budget.job_bytes as u64,
+                    budget.peak_job_bytes as u64,
+                    budget.outstanding as u64,
+                    u64::from(
+                        self.owner
+                            .profile()
+                            .compile_options
+                            .iter()
+                            .any(|option| option == "ENABLE_MEMORY_MANAGEMENT"),
+                    ),
+                ]),
+            )?;
             if let Some(store) = &store {
                 schema::store(&mut rows, store)?;
             } else {

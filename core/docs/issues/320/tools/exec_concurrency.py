@@ -30,6 +30,10 @@ Not a harness case and not a sample: no oracle, no proof, exit codes only.
 Times are single observations on a shared machine and are not eligible for a
 performance claim. It removes the container and the volume it created, and
 nothing else.
+
+Point daemon RSS/anonymous memory, cgroup memory/CPU and every SQLite file's
+logical/allocated bytes are retained outside each self-timed command body.
+The cgroup lifetime peak is never relabelled as a phase-local peak.
 """
 import fcntl
 import json
@@ -74,7 +78,10 @@ def main():
     others = subprocess.run([*docker, "ps", "--format", "{{.Names}}"], capture_output=True, text=True).stdout.split()
     result = {"label": "issue 320 concurrent exec diagnostic; one-off; not a harness case; no oracle or proof; "
                        "exit codes only; shared machine; times not eligible for a claim",
-              "case_tree": prepared["case"], "build": build_folder.name, "source_commit": build["identity"].get("commit"),
+              "case_tree": prepared["case"], "build": build_folder.name, "source_commit": build["identity"]["source_commit"],
+              "source_tree": build["identity"]["source_tree"],
+              "sqlite_compile_flags": build.get("explicit_sqlite_flags"),
+              "resident_observations": [],
               "files_per_writer": files, "writer": "create, append, read of every file; shell builtins; self-timed",
               "interference": {"other_containers_at_start": others}, "phases": []}
     clone = fixtures.clone(prepared, out / "clone", build)
@@ -107,6 +114,26 @@ def main():
             [*docker, "inspect", "--format", "nano={{.HostConfig.NanoCpus}} quota={{.HostConfig.CpuQuota}} "
              "period={{.HostConfig.CpuPeriod}} cpuset={{.HostConfig.CpusetCpus}} memory={{.HostConfig.Memory}}",
              runtime.container], capture_output=True, text=True).stdout.strip()
+        def memory(label):
+            # Point observations outside each command's self-timed body. A
+            # lifetime cgroup peak is retained as such, never a phase peak.
+            script = "\n".join([
+                "set -eu", "echo DAEMON_STATUS", "cat /proc/1/status",
+                "echo DAEMON_RESIDENT", "if ! cat /proc/1/smaps_rollup; then echo SMAPS_UNAVAILABLE_PROTECTED_DAEMON; fi",
+                "echo OWN_CGROUP",
+                "for p in memory.current memory.peak memory.stat cpu.stat; do echo $p; cat /sys/fs/cgroup/$p; done",
+                "echo SQLITE_FILES",
+                "for p in /layerfs-local/overlay/*.sqlite /layerfs-store/global/store.sqlite*; do if test -f \"$p\"; then stat -c '%n %s %b %B' \"$p\"; fi; done",
+            ])
+            observed = subprocess.run([*docker, "exec", "--user", "0:0", runtime.container,
+                                       "/bin/bash", "-c", script], capture_output=True, text=True, timeout=10)
+            result["resident_observations"].append({"label": label, "exit": observed.returncode,
+                "stdout": observed.stdout, "stderr": observed.stderr,
+                "scope": "point RSS/anonymous from status; protected smaps may be unavailable; VmHWM/cgroup peak are lifetime; outside body timing; all SQLite file bytes/blocks"})
+            if observed.returncode:
+                raise RuntimeError("original resident observation failed")
+
+        memory("ready-before-mounts")
         native = [None]
         write("/tmp", "native", native, 0)
         result["native"] = native[0]
@@ -124,6 +151,7 @@ def main():
 
         plans = [("w1", 1, False), ("w2", 2, False), ("w3", 3, False), ("w4", 4, False), ("w3-commit", 3, True)]
         snapshot()
+        memory("five-workspaces-before-writes")
         for label, count, commit in plans:
             if time.monotonic() - started > budget:
                 result["stopped_early"] = "budget reached before phase " + label
@@ -146,10 +174,12 @@ def main():
             phase["marker"] = snapshot()
             phase["outcomes"] = outcomes
             result["phases"].append(phase)
+            memory(label + "-after-writes")
         for key, _, _ in mounts:
             runtime.send("unmount", key, deadline=time.monotonic() + 15)
             while runtime.send("cleanup", key, deadline=time.monotonic() + 10)["fields"]["state"] != "Gone":
                 pass
+        memory("after-last-owner-cleanup")
         runtime.send("stop", deadline=time.monotonic() + 15)
         runtime.event("finished", time.monotonic() + 15)
         result["runtime_exit"] = runtime.process.wait(timeout=5)
@@ -172,6 +202,8 @@ def main():
         tags = [view["operation_tag"] for view in marked]
         commit_tag = max(set(tags), key=tags.count)
         owners = [view["owner"] for view in marked if view["operation_tag"] == commit_tag]
+        result["overlay_budget_observations"] = [view.get("overlay_budget") for view in marked
+                                                  if view["operation_tag"] == commit_tag]
         if len(owners) != snapshots:
             raise ValueError(f"{len(owners)} marker Commits in the daemon log, {snapshots} sent")
         for phase, before, after in zip(result["phases"], owners, owners[1:]):
@@ -196,7 +228,9 @@ def main():
                          f"{value['service_ns'] / max(1, value['jobs']) / 1e3:.0f}"
                          for name, value in phase.get("owner", {}).items() if value["jobs"])
         print(phase["phase"], phase["writers"], *mean, "|", owner, "|", phase.get("commit", ""))
-    print(json.dumps({key: value for key, value in result.items() if key not in ("phases", "native")}))
+    print("resident observations retained:", ", ".join(item["label"] for item in result["resident_observations"]))
+    print(json.dumps({key: value for key, value in result.items()
+                      if key not in ("phases", "native", "resident_observations")}))
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-//! One daemon-owned disposable SQLite database, with typed namespaced jobs.
+//! One Workspace's disposable SQLite database and typed atomic jobs.
 //!
 //! The engine owns SQL and profiling. Filesystem validation, scheduling, native
 //! replies and process lifetimes belong to its callers. Windows bound each job;
@@ -42,11 +42,11 @@ pub use contract::native_directory::{
     NativeCookieOffer, NativeDirectory, NativeDirectoryCursor, NativeDirectoryPage,
 };
 pub use database::accounting::{Resources, StoredCounts};
-pub use database::physical::{AllocationState, AllocationWork};
+pub use database::physical::{AllocationState, AllocationWork, ClosedFile};
 pub use database::startup::{Creation, CreationWork};
 pub use db::Overlay;
 pub use diagnostics::payload::PayloadWork;
-pub use error::{OverlayError, OverlayResult};
+pub use error::{CloseFailure, OverlayError, OverlayResult};
 pub use lifetime::tickets::{ReplyTickets, Settled};
 pub use maintenance::{MaintenanceCursor, MaintenanceStep};
 pub use metrics::{DatabaseWork, StatementKind, StatementWork};

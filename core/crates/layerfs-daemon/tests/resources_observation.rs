@@ -100,7 +100,7 @@ fn failed_resource_receipt_and_real_output_failure_keep_both_originals_and_credi
                 "allocation path identity"
             )))
         ));
-        assert_eq!(completion.work().sql.total().executions, 3);
+        assert_eq!(completion.work().sql.total().executions, 0);
     }
     assert_eq!(
         client.diagnostics().unwrap().credited_bytes,
@@ -138,12 +138,9 @@ fn global_resources_is_read_only_before_bind_and_after_terminal_cleanup() {
         other => panic!("{other:?}"),
     };
     assert_eq!(resources.counts.namespaces, 0);
-    let sql = done.work().sql.family(StatementKind::Startup).unwrap();
-    assert_eq!(sql.attempts, 3);
-    assert_eq!(sql.executions, 3);
-    assert_eq!(sql.rows_returned, 3);
-    assert_eq!(sql.rows_changed, 0);
-    assert!(sql.vm_steps > 0);
+    // Before bind the template connection is closed. Its immutable logical
+    // counts need no SQL; the retained physical identity is actually observed.
+    assert_eq!(done.work().sql.total().attempts, 0);
     assert!(done.work().sql.family(StatementKind::Begin).is_none());
     assert!(done.work().sql.family(StatementKind::Commit).is_none());
     assert_eq!(done.work().allocation.observations, 1);

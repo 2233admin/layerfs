@@ -11,6 +11,7 @@ use std::{
 
 pub(crate) struct Backing {
     pub path: PathBuf,
+    file: Option<std::fs::File>,
     namespace: i64,
     incarnation: [u8; 32],
     device: u64,
@@ -26,10 +27,19 @@ impl Backing {
         incarnation: [u8; 32],
         pool: Weak<Workspaces>,
     ) -> io::Result<Self> {
-        let metadata = std::fs::symlink_metadata(&path)?;
+        let file = std::fs::File::open(&path)?;
+        let metadata = file.metadata()?;
+        #[cfg(unix)]
+        let named = std::fs::symlink_metadata(&path)?;
         #[cfg(unix)]
         let (device, inode, links) = {
             use std::os::unix::fs::MetadataExt;
+            if !named.is_file() || (named.dev(), named.ino()) != (metadata.dev(), metadata.ino()) {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "overlay path identity",
+                ));
+            }
             (metadata.dev(), metadata.ino(), metadata.nlink())
         };
         #[cfg(not(unix))]
@@ -42,6 +52,7 @@ impl Backing {
         }
         Ok(Self {
             path,
+            file: Some(file),
             namespace,
             incarnation,
             device,
@@ -59,11 +70,18 @@ impl Backing {
     }
     fn delete(&self) -> io::Result<()> {
         let metadata = std::fs::symlink_metadata(&self.path)?;
+        let original = self
+            .file
+            .as_ref()
+            .expect("retained identity file")
+            .metadata()?;
         #[cfg(unix)]
         {
             use std::os::unix::fs::MetadataExt;
             if !metadata.is_file()
                 || metadata.nlink() != 1
+                || original.nlink() != 1
+                || (original.dev(), original.ino()) != (self.device, self.inode)
                 || (metadata.dev(), metadata.ino()) != (self.device, self.inode)
             {
                 return Err(io::Error::new(
@@ -87,7 +105,15 @@ impl Drop for Backing {
         if !self.terminal.load(Ordering::Acquire) || !self.closed.load(Ordering::Acquire) {
             return;
         }
-        let result = self.delete();
+        let deleted = self.delete();
+        let file = self.file.take().expect("retained identity file");
+        let result = match deleted {
+            Ok(()) => {
+                drop(file);
+                Ok(())
+            }
+            Err(cause) => Err((cause, file)),
+        };
         if let Some(pool) = self.pool.upgrade() {
             pool.deleted(self.namespace, self.incarnation, result);
         }

@@ -90,6 +90,11 @@ def decode(group):
               "namespace": group[0]["index"], "schema_source": SCHEMA_SOURCE,
               "field_availability": {}}
     scalar = row(group, 1)
+    budget = row(group, 31)
+    if budget is not None:
+        result["overlay_budget"] = names(budget, ("limit_bytes", "pager_allowance_bytes", "fixed_bytes",
+            "job_bytes", "peak_job_bytes", "outstanding", "memory_management_enabled"))
+    result["field_availability"]["overlay_budget"] = "AVAILABLE" if budget is not None else "UNAVAILABLE"
     if scalar is not None:
         require(len(scalar) == 32, "owner scalar/class schema cardinality")
         result["owner"] = names(scalar[:14], OWNER_SCALARS)

@@ -386,8 +386,8 @@ fn observer_job_is_charged_and_cardinality_does_not_follow_unrelated_workspaces(
         };
         assert_eq!(
             admitted(&last) - admitted(&first),
-            3,
-            "two Status jobs plus exactly one charged resource observer job"
+            3 + population as u64,
+            "two Status jobs, one charged aggregate observer and one read per Workspace"
         );
         for rows in [&first, &last] {
             let cost = values(
@@ -396,9 +396,9 @@ fn observer_job_is_charged_and_cardinality_does_not_follow_unrelated_workspaces(
                     .unwrap(),
             );
             assert_eq!(&cost[..2], &[1, 1]);
-            assert_eq!(cost[2], 3, "observer SQL attempts");
-            assert_eq!(cost[3], 3, "observer SQL executions");
-            assert_eq!(cost[4], 3, "observer returned rows");
+            assert_eq!(cost[2], 3 * population as u64, "observer SQL attempts");
+            assert_eq!(cost[3], 3 * population as u64, "observer SQL executions");
+            assert_eq!(cost[4], 3 * population as u64, "observer returned rows");
             assert_eq!(cost[5], 0, "observer changed rows");
             assert!(cost[9] > 0, "actual observer VM steps");
             let resources = values(
@@ -408,6 +408,15 @@ fn observer_job_is_charged_and_cardinality_does_not_follow_unrelated_workspaces(
             );
             assert_eq!(resources.len(), 31);
             assert_eq!(resources[1], population as u64);
+            let budget = values(
+                rows.iter()
+                    .find(|line| number(line, "section") == 31)
+                    .unwrap(),
+            );
+            assert_eq!(budget.len(), 7);
+            assert_eq!(budget[0], 16 * 1024 * 1024);
+            assert_eq!(budget[1], 1024 * 1024);
+            assert!(budget[6] <= 1, "actual compile-option readback bit");
             for index in 0..2 {
                 let reader = rows
                     .iter()
@@ -569,11 +578,14 @@ fn configured_serial_low_water_reaches_a_mounted_create_on_both_startup_routes()
         (2, "existing", 0),
     ] {
         let log = f.directory.join(format!("stderr-{run}.log"));
+        let local = f.directory.join(format!("overlay-{run}"));
+        fs::create_dir(&local).unwrap();
+        fs::set_permissions(&local, fs::Permissions::from_mode(0o700)).unwrap();
         let (process, _, mut control, served) = start_with(
             &f,
             File::create(&log).unwrap(),
             Deployment {
-                overlay: f.directory.join(format!("overlay-{run}.sqlite")),
+                overlay: local.join("template.sqlite"),
                 mounts: mounts.clone(),
                 serial_low_water: low_water,
                 existing_store: manifest.clone(),

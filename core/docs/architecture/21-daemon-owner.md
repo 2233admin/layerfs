@@ -10,7 +10,8 @@ schema16. Earlier algorithm and proof pins retain their original scope; see
 
 The implementation based on `06be791ea` changes `Owner::start_observed` into a
 closed-template owner: startup creates/configures schema 33 and checks its close
-before readiness. The actual application uses `template.sqlite`. A mount copies
+before readiness. The configured Overlay path is the template file; its physical
+identity handle remains after checked connection close. A mount copies
 that empty file into an ordinary monotonic `<namespace>.sqlite`, opens one
 connection and starts its own owner thread. No pool of spares or offset identities
 is present. Existing job SQL and Workspace columns are unchanged in this step.
@@ -19,6 +20,8 @@ filesystem/Commit ports go directly to their own connection. Control routes and
 cleanup observations resolve the same owner; daemon resources aggregate separate
 short observations without a cross-Workspace transaction. Copy/profile startup
 SQL is retained in the first job and its owner aggregate, not hidden in setup.
+The closed template pays identity/physical observations without SQL; live files
+pay their own read jobs. The aggregate observer's original costs remain explicit.
 
 The queue has one Workspace lane and six class queues. Capture, install, source
 and mutation fences remain; there is no rotation between Workspaces. One daemon

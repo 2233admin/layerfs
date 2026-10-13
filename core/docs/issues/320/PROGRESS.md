@@ -449,3 +449,40 @@ the preceding I/O-error failure remains. Add mounted device variants of the
 unchanged no-space syscall/drain proof: select actual device exhaustion or the
 existing page limit; the transparent observer requires the exact selected
 SQLite cause. Linux binaries compile; mounted device runs remain pending.
+
+At `a45f6725e`, all four mounted real-device arms passed separately: Full and
+retained IOERR_WRITE, each normal and forced drain. Original ordinary ENOSPC,
+zero acknowledged bytes, unchanged Workspace/file/payload/history, no retained
+request custody and clean native drain are proved. The unrelated RLIMIT_FSIZE
+install failure also passed its unchanged uncertainty/publication/custody oracle.
+
+For the pending page-cache decision, the owning harness forwards the actual
+LIBSQLITE3_FLAGS environment into its Linux build container and seals it in build
+metadata. Runtime-only reuse refuses a different compilation arm and checks the
+original container's flags. Build-identity tests: 9 passed. Concurrent diagnostics
+retain point anonymous/RSS, lifetime cgroup memory/CPU and all SQLite file bytes,
+with the actual sealed source identity; no phase-local peak or qualification is
+inferred from these points. No cache-option choice or memory qualification yet;
+all step-end samples remain owed. Guides' approved wording waits for step 4.
+
+The pending observation patch also retains the checked-closed template's physical
+identity handle: before bind its observer does zero SQL and one actual physical
+observation; each live file contributes its own three SQL observations. The prior
+host resource-count proof failed on its obsolete three-SQL expectation; the exact
+new accounting and unchanged failure/custody oracle passed (host 8 tests across
+template/resources/Workspace files/completion storage; Linux resources 3).
+Workspace backing descriptors survive connection close, prevent inode reuse and
+remain in custody on failed unlink; successful unlink closes the handle before
+Gone. A refused SQLite close retains the original connection without Drop replay.
+
+Linux application observations first passed 4/6; two fixture-path failures were
+retained. Respect the configured template filename and give repeated daemon
+starts separate private directories. The next run passed 5/6; the new private
+directory's default 0755 violated the existing protected-directory contract.
+Set the owned fixture directory to 0700; the unchanged serial low-water proof
+passed both startup routes. No product permission or oracle was weakened.
+The initial host compile also refused a method-name collision; rename the checked
+database-file close port, keeping the existing open-file Close API unchanged.
+Overlay/Daemon all-target warning-denying Clippy passed; count decoder tests 23
+passed. Section 31 reports the actual cache-build readback and common budget.
+Cache-option/RSS qualification and all step-end samples remain pending.

@@ -38,6 +38,19 @@ pub(crate) struct Allocation {
     work: Cell<AllocationWork>,
     high_water: Cell<u64>,
 }
+/// A checked-closed SQLite file's retained physical identity handle. It has no
+/// SQLite connection and performs only read-only observations, never sync.
+pub struct ClosedFile {
+    pub(crate) allocation: Allocation,
+}
+impl ClosedFile {
+    pub fn allocation(&self) -> OverlayResult<AllocationState> {
+        self.allocation.state()
+    }
+    pub fn allocation_work(&self) -> AllocationWork {
+        self.allocation.work()
+    }
+}
 impl Allocation {
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     pub(crate) fn new(file: File, path: &Path) -> OverlayResult<Self> {

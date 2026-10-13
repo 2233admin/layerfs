@@ -23,7 +23,7 @@ pub struct Creation {
 #[derive(Debug, Default)]
 pub struct CreationWork {
     pub file_create_calls: u64,
-    /// Independent byte copies of the closed empty template; no reflink/hardlink.
+    /// Copies into fresh, independently writable files; never a hardlink.
     pub file_copy_calls: u64,
     pub copied_bytes: u64,
     /// Actual Linux read-only O_NOFOLLOW opens of the newly created file for

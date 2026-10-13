@@ -1,5 +1,29 @@
 //! Original errors and exact failure knowledge, with no operation replay.
-use std::{fmt, io};
+use std::{fmt, io, mem::ManuallyDrop, sync::Mutex};
+
+/// Original checked-close refusal and its still-owned connection. Quarantine
+/// cannot replay close through Connection's destructor. The failed daemon/slot
+/// retains this custody; OS process exit ultimately releases the connection.
+pub struct CloseFailure {
+    pub cause: rusqlite::Error,
+    _connection: Mutex<ManuallyDrop<rusqlite::Connection>>,
+}
+impl From<(rusqlite::Connection, rusqlite::Error)> for CloseFailure {
+    fn from((connection, cause): (rusqlite::Connection, rusqlite::Error)) -> Self {
+        Self {
+            cause,
+            _connection: Mutex::new(ManuallyDrop::new(connection)),
+        }
+    }
+}
+impl fmt::Debug for CloseFailure {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("CloseFailure")
+            .field("cause", &self.cause)
+            .field("connection", &"retained; no close replay")
+            .finish()
+    }
+}
 
 pub type OverlayResult<T> = Result<T, OverlayError>;
 #[derive(Debug)]
@@ -15,6 +39,7 @@ pub enum OverlayError {
     ReplyAttemptsPending,
     BaseSourcesPending,
     Quarantined,
+    Close(Box<CloseFailure>),
     /// A write I/O error on an identity-verified full device, returned only
     /// after the entire atomic job has been rolled back. Keeps SQLite's cause.
     NoSpace {
@@ -36,6 +61,7 @@ impl std::error::Error for OverlayError {
         match self {
             Self::Io(cause) => Some(cause),
             Self::Sql(cause) => Some(cause),
+            Self::Close(failure) => Some(&failure.cause),
             Self::NoSpace { cause } | Self::Uncertain { cause, .. } => Some(cause.as_ref()),
             _ => None,
         }
