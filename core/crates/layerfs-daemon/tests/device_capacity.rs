@@ -1,9 +1,7 @@
 //! Real owner plus automatic idle reclamation on an exclusively owned ext4 fixture.
 #![cfg(target_os = "linux")]
 use layerfs_daemon::{Command, Completion, Owner, OwnerClient, OwnerConfig, OwnerError, Response};
-use layerfs_overlay::{
-    Cell, Inode, InodeKind, Lease, LeaseKind, OverlayError, ProfileConfig, Route, CLEANUP_HEADROOM,
-};
+use layerfs_overlay::{Cell, Inode, InodeKind, Lease, LeaseKind, ProfileConfig, Route};
 use std::{
     fs::OpenOptions,
     io::Write,
@@ -154,13 +152,12 @@ fn real_owner_reclaims_at_device_full_after_last_owner_without_a_cleanup_job() {
                     .is_ok());
                 accepted += 1;
             }
-            Err(OwnerError::Overlay(OverlayError::Reservation { cause, .. })) if matches!(cause.as_ref(),OverlayError::Io(e) if e.raw_os_error()==Some(28)) =>
-            {
+            Err(OwnerError::Overlay(error)) if error.is_sqlite_full() => {
                 assert_eq!(
                     client.diagnostics().unwrap().sql_foreground.statements
                         [layerfs_overlay::StatementKind::Begin as usize]
                         .executions,
-                    work.statements[layerfs_overlay::StatementKind::Begin as usize].executions
+                    work.statements[layerfs_overlay::StatementKind::Begin as usize].executions + 1
                 );
                 reached_refusal = true;
                 break;
@@ -201,7 +198,7 @@ fn real_owner_reclaims_at_device_full_after_last_owner_without_a_cleanup_job() {
     ));
     assert_eq!(after.counts.payload_cells, 0);
     assert!(after.free_pages > before.free_pages);
-    assert!(after.allocation.reserved_tail_bytes >= CLEANUP_HEADROOM);
+    assert_eq!(after.allocation.reserved_tail_bytes, 0);
     assert!(
         matches!(run(&client,Some(other),Command::State).result(),Ok(Response::State(s)) if *s==other_state)
     );

@@ -7,7 +7,32 @@ schema16. Earlier algorithm and proof pins retain their original scope; see
 > **Status:** Current implementation guide, S6 completion slice after `be651a048`.
 > Qualification and retained outcomes are in the [S6 audit](../issues/307/S6-EXIT-AUDIT.md).
 
-The [allocation owner](../../crates/layerfs-overlay/src/database/allocation.rs)
+## Issue 321 reservation removal (2026-10-13)
+
+The step-1 patch based on `06be791ea` removes the physical reservation, its
+allocation primitives and its pre-write freelist/capacity check. An ordinary
+writing job goes directly to its single `BEGIN IMMEDIATE`; read-only jobs still
+start no transaction. No storage is reserved beyond SQLite's logical file end.
+`physical.rs` performs read-only identity and allocated-byte observations during
+startup, explicit resource diagnostics and failure completion. The retained
+allocation telemetry fields report zero attempts, requested bytes, admitted
+capacity jobs, refusals, reserved tail and cleanup headroom. These fields preserve
+receipt decoding; they describe no remaining reservation implementation.
+
+Direct SQLite Full after the engine establishes rollback remains a definite
+no-space result at the native mutation adapter. Unsafe I/O, corrupt state,
+failed rollback and unknown Commit remain original quarantined custody. The
+full-device I/O-error successor proof and per-Workspace connection/file lifetime
+are still pending in step 1; this patch claims neither of them. The Linux startup
+filesystem observation remains, but the reservation-specific magic refusal is
+removed. Host-share execution is not thereby qualified.
+
+The original derivation and receipts below retain their historical scope. Their
+reservation/headroom claims do not describe the current implementation.
+
+## Historical reservation implementation
+
+The [allocation owner](../../crates/layerfs-overlay/src/database/physical.rs)
 retains the descriptor for the fresh private disposable SQLite file, checks its
 path/device/inode/link identity and establishes physical capacity before startup
 DDL or each BEGIN. It uses existing locked nix0.31.3 safe allocation calls. Linux

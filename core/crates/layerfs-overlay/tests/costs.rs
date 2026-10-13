@@ -3,11 +3,11 @@ use layerfs_overlay::*;
 use payload_support::*;
 
 #[test]
-fn complete_mutation_reports_triggers_blob_delivery_and_physical_reservation() {
+fn complete_mutation_reports_triggers_blob_delivery_without_reservation() {
     let temp = Temp::new();
     let db = temp.db();
     let initial = db.allocation().unwrap();
-    assert!(initial.allocated_bytes >= MUTATION_GROWTH + CLEANUP_HEADROOM);
+    assert_eq!(initial.reserved_tail_bytes, 0);
     let route = db.open_workspace([231; 32], [232; 32]).unwrap();
     let source = db.acquire_base_source(route, 1).unwrap();
     let mut file = File::new(&db, source, 7, Vec::new());
@@ -29,13 +29,13 @@ fn complete_mutation_reports_triggers_blob_delivery_and_physical_reservation() {
     // memory, and its owner turn finds a live Workspace with nothing to
     // queue, so it begins no transaction and pays no admission.
     // Count-trigger changes of the mutation remain visible.
-    assert_eq!(admission.freelist_queries, 1);
-    assert_eq!(admission.admitted_jobs, 1);
+    assert_eq!(admission.freelist_queries, 0);
+    assert_eq!(admission.admitted_jobs, 0);
     assert_eq!(admission.refusals, 0);
     // The file has not grown since its range was last established, so
     // the admission does not allocate, on Linux as on macOS.
     assert_eq!(admission.attempts, 0);
-    assert_eq!(admission.observations, 1);
+    assert_eq!(admission.observations, 0);
     let work = db.diagnostics().since(&sql);
     assert_eq!(work.statements[StatementKind::Begin as usize].executions, 1);
     assert_eq!(
@@ -177,7 +177,7 @@ fn one_write_window_costs_the_same_statements_at_either_file_size_and_beside_ano
     // An overwrite writes the four rows where they lie: one shape read,
     // no row changed, no trigger; it was (4, 4, 0, 14), and (32, 64, 96, 42)
     // before rows of several cells.
-    let (first, fresh, over) = ((5, 9, 8, 16), (5, 9, 8, 15), (1, 1, 0, 11));
+    let (first, fresh, over) = ((5, 9, 8, 15), (5, 9, 8, 14), (1, 1, 0, 10));
     assert_eq!((seen[0].0, seen[0].1, seen[0].2), (first, over, over));
     assert_eq!((seen[1].0, seen[1].1, seen[1].2), (fresh, over, over));
     // Stored rows of the file and of the two files beside it.

@@ -49,16 +49,14 @@ pub struct Overlay {
     /// Tickets issued by the running atomic job, withdrawn if it fails.
     pub(crate) issued: RefCell<Vec<(i64, i64)>>,
     pub(super) profile: DatabaseProfile,
-    pub(super) allocation: crate::database::allocation::Allocation,
+    pub(super) allocation: crate::database::physical::Allocation,
 }
 /// An atomic job starts its SQLite transaction at its first writing statement.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum Transaction {
     None,
     /// The job has executed no writing statement; its reads ran in autocommit.
-    Wanted {
-        cleanup: bool,
-    },
+    Wanted,
     /// Admission and BEGIN are executing for the job's first writing statement.
     Beginning,
     Begun,
@@ -149,7 +147,7 @@ impl Overlay {
     ) -> OverlayResult<Vec<T>> {
         self.available()?;
         let begin = || self.begin();
-        let wanted = matches!(self.transaction.get(), Transaction::Wanted { .. });
+        let wanted = matches!(self.transaction.get(), Transaction::Wanted);
         let result = metrics::query(
             &self.connection,
             &self.work,
@@ -202,13 +200,13 @@ impl Overlay {
         }
     }
     pub(crate) fn atomic<T>(&self, job: impl FnOnce() -> OverlayResult<T>) -> OverlayResult<T> {
-        self.transaction(false, job)
+        self.transaction(job)
     }
     pub(crate) fn atomic_cleanup<T>(
         &self,
         job: impl FnOnce() -> OverlayResult<T>,
     ) -> OverlayResult<T> {
-        self.transaction(true, job)
+        self.transaction(job)
     }
     /// The engine's reply tickets, for the threads that attempt replies.
     pub fn reply_tickets(&self) -> Arc<crate::ReplyTickets> {
@@ -229,22 +227,27 @@ impl Overlay {
     }
     pub fn allocation(&self) -> OverlayResult<crate::AllocationState> {
         self.available()?;
-        self.allocation.state()
+        match self.allocation.state() {
+            Ok(state) => Ok(state),
+            Err(cause) => {
+                self.quarantined.set(true);
+                Err(OverlayError::Uncertain {
+                    cause: Box::new(cause),
+                    completion: None,
+                })
+            }
+        }
     }
     /// Runs one job atomically. Reads before the job's first writing statement
     /// execute in autocommit: this connection is the only one, holds the
     /// exclusive lock and runs one job at a time, so they see the same state.
     /// A job that writes nothing begins, commits and admits nothing.
-    fn transaction<T>(
-        &self,
-        cleanup: bool,
-        job: impl FnOnce() -> OverlayResult<T>,
-    ) -> OverlayResult<T> {
+    fn transaction<T>(&self, job: impl FnOnce() -> OverlayResult<T>) -> OverlayResult<T> {
         self.available()?;
         if self.transaction.get() != Transaction::None {
             return Err(OverlayError::Invalid("nested transaction"));
         }
-        self.transaction.set(Transaction::Wanted { cleanup });
+        self.transaction.set(Transaction::Wanted);
         self.release_step.set(true);
         let (orphans, pieces) = (self.orphan_seen.get(), self.pieces_seen.get());
         let result = job();
@@ -265,8 +268,6 @@ impl Overlay {
         }
         let failure = match result {
             Ok(value) => match self.execute(StatementKind::Commit, "COMMIT", &[], 0) {
-                // A commit never shrinks this file. The next admission's own
-                // observation sees the committed length and allocation.
                 Ok(_) => return Ok(value),
                 Err(cause) => {
                     self.quarantined.set(true);
@@ -292,9 +293,8 @@ impl Overlay {
                 cause
             }
         };
-        // Observe rollback truncation before another admission or resource
-        // report can credit discarded physical tail. An unknown identity or
-        // metadata result quarantines this connection with original custody.
+        // A failed job keeps its original cause. Physical observation is paid
+        // only here and in explicit diagnostics, never before ordinary writes.
         if let Err(cause) = self.allocation.state() {
             self.quarantined.set(true);
             return Err(OverlayError::Uncertain {
@@ -308,60 +308,17 @@ impl Overlay {
     /// before that statement executes. A failure is returned by that statement
     /// and leaves no transaction open.
     fn begin(&self) -> OverlayResult<()> {
-        let Transaction::Wanted { cleanup } = self.transaction.get() else {
+        let Transaction::Wanted = self.transaction.get() else {
             return Ok(());
         };
         // BEGIN IMMEDIATE is itself a writing statement.
         self.transaction.set(Transaction::Beginning);
-        let begun = self
-            .admit(cleanup)
-            .and_then(|()| self.execute(StatementKind::Begin, "BEGIN IMMEDIATE", &[], 0));
+        let begun = self.execute(StatementKind::Begin, "BEGIN IMMEDIATE", &[], 0);
         self.transaction.set(match begun {
             Ok(_) => Transaction::Begun,
-            Err(_) => Transaction::Wanted { cleanup },
+            Err(_) => Transaction::Wanted,
         });
         begun.map(|_| ())
-    }
-    fn admit(&self, cleanup: bool) -> OverlayResult<()> {
-        // page_count includes Expire in the supported SQLite VM. Keep it out
-        // of the hot admission path; committed dense descriptor length supplies
-        // the physical bound, and freelist_count reads one nonexpiring cookie.
-        self.allocation.freelist_query();
-        let free = self.query(
-            StatementKind::Startup,
-            "PRAGMA main.freelist_count",
-            &[],
-            0,
-            |r| unsigned(r, 0),
-        )?[0];
-        let admission = match self.allocation.state() {
-            Ok(state)
-                if state.logical_bytes != 0
-                    && state.logical_bytes % 4096 == 0
-                    && free <= state.logical_bytes / 4096 =>
-            {
-                self.allocation.admit(cleanup, free * 4096, state)
-            }
-            Ok(_) => Err(OverlayError::Invalid(
-                "committed database length/accounting",
-            )),
-            Err(error) => Err(error),
-        };
-        match admission {
-            Err(cause)
-                if !matches!(
-                    cause,
-                    OverlayError::Reservation { .. } | OverlayError::UnsupportedPlatform
-                ) =>
-            {
-                self.quarantined.set(true);
-                Err(OverlayError::Uncertain {
-                    cause: Box::new(cause),
-                    completion: None,
-                })
-            }
-            admission => admission,
-        }
     }
 }
 pub(crate) fn integer(value: u64) -> OverlayResult<i64> {

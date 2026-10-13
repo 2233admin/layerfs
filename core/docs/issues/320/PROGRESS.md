@@ -357,3 +357,20 @@ Later the same day the other worktree began its baseline build. From that
 point no build, test or sample of this run starts until its baseline is
 committed on `sdk-refactor`. Then, in order: rebase onto it, one sealed build,
 the six selected cases once, and the T1 stage end at that identity.
+
+## Issue 321 step 1: reservation removal (2026-10-13)
+
+Owner handoff selects #321 over the earlier T1 hold; base `06be791ea`, local only.
+The pre-code design is issue #321 comment 6138410697. Source audit: command
+mutations/lifetimes validate one route; each maintenance turn selects one namespace.
+Global resources is a read-only aggregate, to be routed across separate owners.
+This first patch deletes reservation primitives and the pre-write freelist/capacity
+check; physical observations remain diagnostic. Existing job SQL text is unchanged.
+Host startup/cost/resource tests: 12 passed. Initial transaction test run: 4 passed,
+2 failed on obsolete admission counters; corrected exact counters: all 6 passed.
+Host Overlay/Fuse all-target build, warning-denying Clippy, formatting, boundary
+scan (685 source files) and 50 guard self-tests passed. Bounded checks retained
+as reservation-* records; no performance sample. Linux/full-device/mounted proofs,
+I/O-error no-space classification, per-Workspace routing and shared budget are not
+run/completed yet. Exact-count cells remain unqualified until step 4.
+Durable: NOT_RUN — disabled by owner until explicit reauthorization.

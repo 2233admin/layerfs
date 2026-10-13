@@ -1,0 +1,117 @@
+//! Read-only physical observations of one disposable SQLite file.
+use crate::{OverlayError, OverlayResult};
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+use std::os::unix::fs::MetadataExt;
+use std::{
+    cell::Cell,
+    fs::File,
+    path::{Path, PathBuf},
+};
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct AllocationWork {
+    pub attempts: u64,
+    pub requested_bytes: u64,
+    pub admitted_jobs: u64,
+    pub refusals: u64,
+    /// Calls reading descriptor and path identity; each uses two metadata calls.
+    pub observations: u64,
+    /// Retained diagnostic field; reservation removal leaves this zero.
+    pub freelist_queries: u64,
+}
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct AllocationState {
+    pub logical_bytes: u64,
+    pub allocated_bytes: u64,
+    /// Largest allocation actually observed; not a phase-local residency peak.
+    pub high_water_allocated_bytes: u64,
+    pub reserved_tail_bytes: u64,
+    pub cleanup_headroom_bytes: u64,
+    pub work: AllocationWork,
+}
+pub(crate) struct Allocation {
+    file: File,
+    device: u64,
+    inode: u64,
+    path: PathBuf,
+    work: Cell<AllocationWork>,
+    high_water: Cell<u64>,
+}
+impl Allocation {
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    pub(crate) fn new(file: File, path: &Path) -> OverlayResult<Self> {
+        let meta = file.metadata()?;
+        if !meta.is_file() || meta.nlink() != 1 {
+            return Err(OverlayError::Invalid("allocation file identity"));
+        }
+        Ok(Self {
+            file,
+            device: meta.dev(),
+            inode: meta.ino(),
+            path: path.to_owned(),
+            work: Cell::new(AllocationWork::default()),
+            high_water: Cell::new(meta.blocks().saturating_mul(512)),
+        })
+    }
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    pub(crate) fn state(&self) -> OverlayResult<AllocationState> {
+        let mut work = self.work.get();
+        work.observations = work.observations.saturating_add(1);
+        self.work.set(work);
+        let meta = self.file.metadata()?;
+        let path = std::fs::symlink_metadata(&self.path)?;
+        if !path.is_file() || path.dev() != meta.dev() || path.ino() != meta.ino() {
+            return Err(OverlayError::Invalid("allocation path identity"));
+        }
+        if meta.dev() != self.device || meta.ino() != self.inode || meta.nlink() != 1 {
+            return Err(OverlayError::Invalid("allocation file identity"));
+        }
+        let allocated = meta
+            .blocks()
+            .checked_mul(512)
+            .ok_or(OverlayError::Invalid("allocation size"))?;
+        self.high_water.set(self.high_water.get().max(allocated));
+        Ok(AllocationState {
+            logical_bytes: meta.len(),
+            allocated_bytes: allocated,
+            high_water_allocated_bytes: self.high_water.get(),
+            reserved_tail_bytes: 0,
+            cleanup_headroom_bytes: 0,
+            work: self.work.get(),
+        })
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    pub(crate) fn new(_file: File, _path: &Path) -> OverlayResult<Self> {
+        Err(OverlayError::UnsupportedPlatform)
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    pub(crate) fn state(&self) -> OverlayResult<AllocationState> {
+        Err(OverlayError::UnsupportedPlatform)
+    }
+    pub(crate) fn work(&self) -> AllocationWork {
+        self.work.get()
+    }
+}
+
+impl AllocationWork {
+    /// Cumulative observations since a prior snapshot of the same owner.
+    pub fn since(self, before: Self) -> Self {
+        Self {
+            attempts: self.attempts.saturating_sub(before.attempts),
+            requested_bytes: self.requested_bytes.saturating_sub(before.requested_bytes),
+            admitted_jobs: self.admitted_jobs.saturating_sub(before.admitted_jobs),
+            refusals: self.refusals.saturating_sub(before.refusals),
+            observations: self.observations.saturating_sub(before.observations),
+            freelist_queries: self
+                .freelist_queries
+                .saturating_sub(before.freelist_queries),
+        }
+    }
+    pub fn accumulate(&mut self, delta: Self) {
+        self.attempts = self.attempts.saturating_add(delta.attempts);
+        self.requested_bytes = self.requested_bytes.saturating_add(delta.requested_bytes);
+        self.admitted_jobs = self.admitted_jobs.saturating_add(delta.admitted_jobs);
+        self.refusals = self.refusals.saturating_add(delta.refusals);
+        self.observations = self.observations.saturating_add(delta.observations);
+        self.freelist_queries = self.freelist_queries.saturating_add(delta.freelist_queries);
+    }
+}

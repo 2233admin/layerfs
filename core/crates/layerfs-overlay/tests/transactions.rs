@@ -150,15 +150,14 @@ fn reads_then_writes_are_one_transaction_begun_at_the_first_write() {
     assert_eq!(executions(StatementKind::Begin), 1);
     assert_eq!(executions(StatementKind::Commit), 1);
     assert_eq!(executions(StatementKind::Rollback), 0);
-    // The freelist cookie of the one admission.
-    assert_eq!(executions(StatementKind::Startup), 1);
+    // Ordinary writes perform no capacity statement.
+    assert_eq!(executions(StatementKind::Startup), 0);
     let admission = db.allocation_work().since(physical);
-    assert_eq!(admission.freelist_queries, 1);
-    assert_eq!(admission.admitted_jobs, 1);
+    assert_eq!(admission.freelist_queries, 0);
+    assert_eq!(admission.admitted_jobs, 0);
     assert_eq!(admission.refusals, 0);
     assert!(admission.attempts <= 1);
-    // One observation admits; an allocation adds its own readback.
-    assert_eq!(admission.observations, 1 + admission.attempts);
+    assert_eq!(admission.observations, 0);
     assert_eq!(
         db.indexed_operation_record_get(scope, key(1)).unwrap(),
         Some(b"two".to_vec())
@@ -210,9 +209,9 @@ fn a_failure_after_the_first_write_rolls_back_and_one_before_it_has_nothing_to_r
     assert_eq!(executions(StatementKind::Commit), 0);
     assert!(work.total().rows_changed > 0);
     let admission = db.allocation_work().since(physical);
-    assert_eq!(admission.admitted_jobs, 1);
-    // Admission, an allocation's readback, and the one after the rollback.
-    assert_eq!(admission.observations, 2 + admission.attempts);
+    assert_eq!(admission.admitted_jobs, 0);
+    // Only failure completion observes physical state.
+    assert_eq!(admission.observations, 1);
     // Neither the inode nor the frontier advance survived, and the ticket
     // the failed job issued in memory went with them: only the earlier
     // publication is still owed.
@@ -288,7 +287,7 @@ fn a_failure_after_the_first_write_rolls_back_and_one_before_it_has_nothing_to_r
 }
 
 #[test]
-fn consecutive_writes_that_do_not_grow_the_file_allocate_at_most_once() {
+fn consecutive_writes_do_no_capacity_observation_or_reservation() {
     let temp = Temp::new();
     let db = temp.db();
     let scope = scope(&db, 7);
@@ -296,22 +295,19 @@ fn consecutive_writes_that_do_not_grow_the_file_allocate_at_most_once() {
     let length = db.allocation().unwrap().logical_bytes;
     let physical = db.allocation_work();
     applied(&db, scope, &[change(1, Some(b"one"), Some(b"two"))]);
-    let first = db.allocation_work().since(physical);
+    assert_eq!(
+        db.allocation_work().since(physical),
+        AllocationWork::default()
+    );
     applied(&db, scope, &[change(1, Some(b"two"), Some(b"six"))]);
-    let both = db.allocation_work().since(physical);
-    assert_eq!(both.admitted_jobs, 2);
-    assert_eq!(both.freelist_queries, 2);
-    assert_eq!(both.refusals, 0);
-    // The file had grown into the startup range, so the first admission may
-    // establish the range again. The second finds it whole.
-    assert!(both.attempts <= 1, "{both:?}");
-    assert_eq!(both.attempts, first.attempts);
-    assert_eq!(both.observations, 2 + both.attempts);
+    assert_eq!(
+        db.allocation_work().since(physical),
+        AllocationWork::default()
+    );
     let after = db.allocation().unwrap();
     assert_eq!(after.logical_bytes, length);
-    // The guarantee itself: reusable pages plus the reserved tail cover a job.
-    let (_, free) = db.pages().unwrap();
-    assert!(after.reserved_tail_bytes + free * 4096 >= MUTATION_GROWTH + CLEANUP_HEADROOM);
+    assert_eq!(after.reserved_tail_bytes, 0);
+    assert_eq!(after.cleanup_headroom_bytes, 0);
 }
 
 #[test]

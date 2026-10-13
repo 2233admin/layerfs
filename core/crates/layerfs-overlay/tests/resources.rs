@@ -2,7 +2,7 @@ mod payload_support;
 use layerfs_overlay::*;
 use payload_support::*;
 #[test]
-fn physical_reserve_counts_allocation_separately_from_logical_rows_and_reusable_pages() {
+fn physical_observation_counts_logical_rows_and_reusable_pages_without_reserve() {
     let temp = Temp::new();
     let db = temp.db();
     let route = db.open_workspace([151; 32], [152; 32]).unwrap();
@@ -14,7 +14,8 @@ fn physical_reserve_counts_allocation_separately_from_logical_rows_and_reusable_
     // Four rows of 32 KiB.
     assert_eq!(r.counts.payload_cells, 4);
     assert_eq!(r.counts.payload_bytes, 131072);
-    assert!(r.allocation.allocated_bytes > r.allocation.logical_bytes + CLEANUP_HEADROOM);
+    assert_eq!(r.allocation.reserved_tail_bytes, 0);
+    assert_eq!(r.allocation.cleanup_headroom_bytes, 0);
     assert_eq!(r.counts.reply_tickets, 0);
     assert_eq!(r.counts.source_rows, 1);
     let global = db.resources(None).unwrap();
@@ -210,15 +211,7 @@ fn lost_backing_path_quarantines_without_sql_or_releasing_published_capture() {
     let bytes = std::fs::read(&path).unwrap();
     let retained = temp.0.join("retained.sqlite");
     std::fs::rename(&path, &retained).unwrap();
-    let error = db
-        .apply(
-            source,
-            &Changes {
-                inodes: vec![f.inode(20)],
-                ..Changes::default()
-            },
-        )
-        .unwrap_err();
+    let error = db.allocation().unwrap_err();
     assert!(
         matches!(&error,OverlayError::Uncertain {cause,completion:None} if matches!(cause.as_ref(),OverlayError::Io(e) if e.kind()==std::io::ErrorKind::NotFound)),
         "{error:?}"

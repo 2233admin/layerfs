@@ -7,11 +7,18 @@ use std::{fs::OpenOptions, path::PathBuf, sync::Arc};
 #[test]
 #[ignore = "requires exclusively owned Linux ext4 loop fixture; use device_fixture.sh"]
 #[cfg(target_os = "linux")]
-fn real_device_enospc_refuses_before_sql_and_retains_cleanup_headroom() {
+fn real_device_full_rolls_back_write_and_preserves_capture() {
     let root =
         PathBuf::from(std::env::var_os("LAYERFS_PROOF_DEVICE_ROOT").expect("owned proof root"));
     let path = root.join("overlay.sqlite");
-    let db = Overlay::create(&path, ProfileConfig::default()).unwrap();
+    let db = Overlay::create(
+        &path,
+        ProfileConfig {
+            pager_kib: 4,
+            max_pages: None,
+        },
+    )
+    .unwrap();
     let a = db.open_workspace([171; 32], [172; 32]).unwrap();
     let b = db.open_workspace([173; 32], [172; 32]).unwrap();
     let source = db.acquire_base_source(a, 1).unwrap();
@@ -62,42 +69,16 @@ fn real_device_enospc_refuses_before_sql_and_retains_cleanup_headroom() {
             ..Changes::default()
         },
     );
-    // Depending on whether the already-owned reserve covers this growth window,
-    // exactly one bounded write may be accepted. The following new distinct
-    // window then needs replenishment and must refuse without entering SQL.
-    if let Ok(publication) = result {
-        db.reply_attempted(publication).unwrap();
-        inode = f.inode(393216);
-        let work = db.diagnostics();
-        let prior = db.state(a).unwrap();
-        let error = db
-            .apply(
-                source,
-                &Changes {
-                    inodes: vec![inode],
-                    write: Some(PayloadWrite {
-                        serial: 7,
-                        offset: 262144,
-                        data: Arc::from(pattern(131072, 7)),
-                    }),
-                    ..Changes::default()
-                },
-            )
-            .unwrap_err();
-        reservation_enospc(&error);
-        assert_eq!(db.state(a).unwrap(), prior);
-        assert_eq!(
-            db.diagnostics().statements[StatementKind::Begin as usize].executions,
-            work.statements[StatementKind::Begin as usize].executions
-        );
-    } else {
-        reservation_enospc(&result.unwrap_err());
-        assert_eq!(db.state(a).unwrap(), before);
-        assert_eq!(
-            db.diagnostics().statements[StatementKind::Begin as usize].executions,
-            work.statements[StatementKind::Begin as usize].executions
-        );
-    }
+    let error = result.unwrap_err();
+    assert!(
+        error.is_sqlite_full(),
+        "original SQLite Full after rollback: {error:?}"
+    );
+    assert_eq!(db.state(a).unwrap(), before);
+    assert_eq!(
+        db.diagnostics().statements[StatementKind::Begin as usize].executions,
+        work.statements[StatementKind::Begin as usize].executions + 1
+    );
     assert_eq!(db.state(b).unwrap(), other);
     assert_eq!(db.retained_capture(a).unwrap(), Some(capture));
     assert_eq!(
@@ -123,18 +104,10 @@ fn real_device_enospc_refuses_before_sql_and_retains_cleanup_headroom() {
     assert_eq!(db.state(b).unwrap(), other);
     let after = db.resources(None).unwrap();
     assert!(after.free_pages > physical.free_pages);
-    assert!(after.allocation.reserved_tail_bytes >= CLEANUP_HEADROOM);
-    println!("S6_DEVICE_ENOSPC fixture_requested_bytes={free} before={physical:?} after={after:?} unrelated_namespace_unchanged=true cleanup_headroom=true");
+    assert_eq!(after.allocation.reserved_tail_bytes, 0);
+    println!("S6_DEVICE_ENOSPC fixture_requested_bytes={free} before={physical:?} after={after:?} unrelated_namespace_unchanged=true write_rolled_back=true no_reservation=true");
     drop(filler);
     drop(db);
     std::fs::remove_file(root.join("fixture-fill")).unwrap();
     std::fs::remove_file(path).unwrap();
-}
-
-fn reservation_enospc(error: &OverlayError) {
-    assert!(
-        matches!(error, OverlayError::Reservation { cause, .. }
-        if matches!(cause.as_ref(), OverlayError::Io(io) if io.raw_os_error()==Some(28))),
-        "original allocation ENOSPC: {error:?}"
-    );
 }

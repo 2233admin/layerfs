@@ -5,7 +5,7 @@ use crate::{
     ports::{BaseDemandFailed, Fenced, RequestServices, ServiceError, ServiceReply},
     NextTurn,
 };
-use layerfs_overlay::{NativeMount, OpenFile, OverlayError, Publication};
+use layerfs_overlay::{NativeMount, OpenFile, Publication};
 use layerfs_workspace::{
     JobOutcome, NativeMutationOutcome, NativeVisitRequest, Refusal, Time, ViewStat, VisitFacts,
     WorkspaceError,
@@ -270,11 +270,6 @@ impl Custody {
                 }
                 Ok(JobOutcome::Refused(refusal)) => return Ok(Err(Declined::Refused(*refusal))),
                 Ok(JobOutcome::Needs(needs)) if !needs.is_empty() => needs,
-                // The engine's reservation refuses before any statement of
-                // the transaction: a definite answer with no effect.
-                Err(WorkspaceError::Overlay(OverlayError::Reservation { .. })) => {
-                    return Ok(Err(Declined::NoSpace))
-                }
                 // Only the atomic visit's direct, known rollback qualifies.
                 // Keep its original completion until the one ENOSPC reply and
                 // normal release. Uncertain wrappers/provider ambiguity remain

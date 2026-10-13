@@ -99,15 +99,8 @@ pub(crate) fn create(path: &Path, config: ProfileConfig) -> Creation {
             #[allow(clippy::unnecessary_cast)]
             let linux_magic = filesystem.filesystem_type().0 as i64;
             work.linux_filesystem_type = Some(linux_magic);
-            // E04 receipt 75: this host share adds blocks for the same successful
-            // KEEP_SIZE range. Refuse before bulk reservation; do not reuse a
-            // range or infer its position from block totals to evade S6 admission.
-            if linux_magic == 0x6a656a63 {
-                return Err(crate::OverlayError::UnsupportedFilesystem { linux_magic });
-            }
         }
-        let physical = allocation.insert(super::allocation::Allocation::new(file, path)?);
-        physical.admit(false, 0, physical.state()?)?;
+        allocation = Some(super::physical::Allocation::new(file, path)?);
         work.sqlite_open_calls = 1;
         let connection = Connection::open_with_flags(
             path,
