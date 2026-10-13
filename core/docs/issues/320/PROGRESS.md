@@ -597,3 +597,74 @@ maintenance-idle fences, and apply the owning resource profile, retaining
 maximum-window/record-page/admission observations. This checkpoint claims no
 aggregate physical bound or cache-build selection. Step 1 remains INCOMPLETE;
 step 2 is not started. Durable remains NOT_RUN.
+
+## Issue 321 step 1: shared notification work model (2026-10-13)
+
+Source audit at `878af2cea` finds each completed Credit calls the same daemon
+notification table twice: Budget::release, then Shared::admission. For any
+active registration each call visits the default 288 slots with 289 mutex
+turns, including its length query. A native create/append/read cycle has
+12 completions: up to 6,936 table-lock turns per file in these two paths,
+independent of SQL work. The cost is outside measured owner service; it can
+add shared CPU/locking pressure but retained timings do not isolate it.
+
+Selected correction: publish local slot release before returning common byte
+credit and notify once after both, including a dead Weak local owner. Move
+wakers through 16-element stack windows while keeping callback/drop outside
+locks and visiting all slots. Prediction: default active completion release
+578 -> 19 table-lock turns; cycle 6,936 -> 228. SQL/request/job counts and
+filesystem state do not change. Proof selection: admission_future, owner,
+completion_ownership/storage, workspace_databases and install_slots. No new
+public operation, resource cap, heap-sized waker list or failed-op replay.
+The subsequent sealed step-end diagnostic judges time; no speed claim here.
+
+The first notification proof invocation passed 6 admission tests and FAILED
+the worker-loss test's obsolete direct-root `WorkerPanicked` shape. Source
+diagnosis: the per-Workspace roster's existing retire/fail path wraps the leaf
+worker's original join error in `Retained`; this completion callback is outside
+the changed notification-table code. Restage the assertion to require that
+exact retained scope and the unchanged original panic payload. Retain this
+failure; the other five selected binaries did not start in that invocation.
+
+The corrected admission suite passed 7/7, then completion ownership passed
+1/3 and FAILED two checks. Saturation arithmetic omitted the now-reserved
+pager allowance; subtract the exact shared readback without weakening the
+last-credit/lifecycle assertions. Original-receipt equality found an actual
+missing Open receipt observation: the root aggregate counted its closed
+template identity check, but the original Open receipt carried only the copy
+connection's work. Carry that exact bind observation into the original job
+receipt, without adding it to the leaf aggregate again. SQL/physical work is
+unchanged; no equality oracle is relaxed. Later selected binaries had not run.
+This accounting correction is a separately reviewable product change.
+
+After the receipt/arithmetic corrections, admission 7, completion ownership 3,
+completion storage 1 and install slots 1 passed. Owner passed 11/12 and FAILED
+the old row-reclaim `closed_namespaces=1` expectation. That daemon diagnostic
+was deliberately changed in `f898edb1f` to successful file deletion; raw Close
+here proves row retirement while the private connection/file remain owned.
+Require exact zero file deletions, the still-owned backing file and empty
+namespace/inode rows; keep the original ticket fence/automatic-row cleanup
+assertions. Physical terminal deletion remains covered by workspace_databases.
+This retained failure is not attributed to notification timing.
+
+The first additional empty-row assertion used a retired route and correctly
+received Stale. Correct that new test observation to the existing route-free
+global resource port; retain the failed invocation. The independent Workspace
+file/budget/deletion-custody binary then passed all 3 tests unchanged.
+
+At the corrected source window the selected Linux disabled-memory-management
+arm passed 27/27 tests: admission 7, owner 12, completion ownership 3,
+completion storage 1, Workspace backing/custody 3 and install slots 1. Its
+separate no-run build passed; the test command finished in 3.1 s inside 90 s.
+Host and Linux daemon all-target warning-denying Clippy passed. Formatting,
+boundary scan (688 production files) and 50 boundary self-tests passed.
+Linux owned containers were removed. Retained labels are
+`notification-accounting-linux-off-*`, `notification-final-guards` and the
+host source-window labels above. These checks do not qualify mounted workload
+timing or aggregate physical memory.
+
+The owning core manifest, lock and complete authorized fuser package provenance
+check passed (`notification-fuser-owning-scope`). The broader repository scan
+again refuses the unchanged passthrough benchmark's local fuser lock/patch;
+retain `notification-fuser-integrity` as FAIL, rather than report a broad PASS.
+That unrelated harness is not modified by this correction.

@@ -380,12 +380,15 @@ fn worker_loss_fences_admission_and_retains_the_original_join_failure() {
         }
         _ => panic!("lost owner changed the original command"),
     }
-    let Err(OwnerError::WorkerPanicked(payload)) = fixture.owner.take().unwrap().stop() else {
-        panic!("original worker panic was lost");
+    // The daemon roster retains the failed Workspace owner and its original
+    // join cause; the root does not unwrap that scoped retained custody.
+    let Err(OwnerError::Retained(cause)) = fixture.owner.take().unwrap().stop() else {
+        panic!("failed Workspace custody was not retained");
     };
-    let payload = payload
-        .into_inner()
-        .unwrap_or_else(|error| error.into_inner());
+    let OwnerError::WorkerPanicked(payload) = cause.as_ref() else {
+        panic!("original worker panic was lost: {cause:?}");
+    };
+    let payload = payload.lock().unwrap_or_else(|error| error.into_inner());
     assert_eq!(
         payload.downcast_ref::<&str>(),
         Some(&"caller task panicked during completion notification")

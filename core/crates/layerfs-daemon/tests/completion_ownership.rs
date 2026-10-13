@@ -596,7 +596,10 @@ fn every_configured_lifecycle_slot_is_admitted_while_ordinary_credit_is_saturate
     assert!(slots * lifecycle_charge <= config.lifecycle_reserve);
 
     // Saturate ordinary bytes with held results owning real input capacity.
-    let ordinary_limit = config.bytes - scheduler - config.lifecycle_reserve;
+    let budget = client.budget_work();
+    assert_eq!(budget.limit_bytes, config.bytes);
+    assert_eq!(budget.fixed_bytes, scheduler);
+    let ordinary_limit = config.bytes - scheduler - budget.pager_bytes - config.lifecycle_reserve;
     let mut ordinary = Vec::new();
     let mut capacity = 60_000;
     let mut turn = 0;
@@ -649,7 +652,7 @@ fn every_configured_lifecycle_slot_is_admitted_while_ordinary_credit_is_saturate
         full.credited_bytes,
         saturated.credited_bytes + slots * lifecycle_charge
     );
-    assert!(full.peak_credited_bytes <= config.bytes - scheduler);
+    assert!(full.peak_credited_bytes <= config.bytes - scheduler - budget.pager_bytes);
     assert_eq!(full.receipt_overruns, 0);
     // The slot count itself still refuses a third job in one namespace.
     assert!(matches!(

@@ -1019,7 +1019,24 @@ fn a_closed_workspace_is_reclaimed_only_after_the_settling_job_of_its_last_reply
         );
         std::thread::yield_now();
     }
-    assert_eq!(client.diagnostics().unwrap().closed_namespaces, 1);
+    // This raw Close proof establishes row retirement, not the terminal
+    // control's checked close and last-owner file deletion. The daemon's
+    // counter now records successful file deletion only.
+    assert_eq!(client.diagnostics().unwrap().closed_namespaces, 0);
+    assert!(temp
+        .0
+        .join(format!("{}.sqlite", route.namespace()))
+        .is_file());
+    let resources = submit(&client, None, Command::Resources { global: true })
+        .wait()
+        .unwrap();
+    match resources.result() {
+        Ok(Response::Resources(resources)) => {
+            assert_eq!(resources.counts.namespaces, 0);
+            assert_eq!(resources.counts.inode_rows, 0);
+        }
+        other => panic!("closed resource state: {other:?}"),
+    }
     assert!(client.maintenance_failure().unwrap().is_none());
     stop_bounded(owner);
 }

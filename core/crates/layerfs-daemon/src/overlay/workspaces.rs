@@ -168,18 +168,21 @@ impl Workspaces {
         }
         OwnerError::Retained(cause)
     }
-    fn open(self: &Arc<Self>, incarnation: [u8; 32]) -> Result<OwnerClient, OwnerError> {
+    fn open(
+        self: &Arc<Self>,
+        incarnation: [u8; 32],
+    ) -> Result<(OwnerClient, layerfs_overlay::AllocationWork), OwnerError> {
         if incarnation == [0; 32] {
             return Err(OwnerError::Overlay(layerfs_overlay::OverlayError::Invalid(
                 "zero incarnation",
             )));
         }
-        let physical = self
-            .template_file
-            .lock()
-            .map_err(|_| OwnerError::Stopped)?
-            .allocation()
-            .map_err(OwnerError::Overlay)?;
+        let (physical, observation) = {
+            let file = self.template_file.lock().map_err(|_| OwnerError::Stopped)?;
+            let before = file.allocation_work();
+            let physical = file.allocation().map_err(OwnerError::Overlay)?;
+            (physical, file.allocation_work().since(before))
+        };
         if physical.logical_bytes != self.template_resources.allocation.logical_bytes {
             return Err(OwnerError::Overlay(layerfs_overlay::OverlayError::Invalid(
                 "template size",
@@ -274,7 +277,7 @@ impl Workspaces {
                     incarnation,
                 },
             );
-        Ok(client)
+        Ok((client, observation))
     }
     pub fn submit(
         self: &Arc<Self>,
@@ -298,7 +301,9 @@ impl Workspaces {
                     Err(cause) => return Err((cause, command)),
                 };
                 match self.open(*incarnation) {
-                    Ok(client) => client.submit_leaf(None, command, Some(permit)),
+                    Ok((client, observation)) => {
+                        client.submit_leaf(None, command, Some(permit), observation)
+                    }
                     Err(cause) => Err((cause, command)),
                 }
             }

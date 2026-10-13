@@ -319,13 +319,19 @@ impl OwnerClient {
         if let Some(pool) = &self.pool {
             return pool.submit(self, route, command);
         }
-        self.submit_leaf(route, command, None)
+        self.submit_leaf(
+            route,
+            command,
+            None,
+            layerfs_overlay::AllocationWork::default(),
+        )
     }
     pub(super) fn submit_leaf(
         &self,
         route: Option<Route>,
         command: Command,
         permit: Option<super::budget::JobPermit>,
+        opening: layerfs_overlay::AllocationWork,
     ) -> Result<Pending, (OwnerError, Command)> {
         if (route.is_none()
             && !matches!(
@@ -413,7 +419,13 @@ impl OwnerClient {
             admitted: Instant::now(),
             blocked: false,
             wait_consolidation: false,
-            work: crate::JobWork::default(),
+            work: crate::JobWork {
+                // The root aggregate already observes the closed template's
+                // counter. Carry its bind work in the original Open receipt,
+                // without counting it again in the leaf connection aggregate.
+                allocation: opening,
+                ..crate::JobWork::default()
+            },
         }));
         state.queued();
         state.work.credited_bytes += bytes;
