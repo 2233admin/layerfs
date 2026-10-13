@@ -41,12 +41,12 @@ source/build pins. Steps proceed in order: 1, A, B, C, D, E.
 
 | Checklist item | Disposition | Source/evidence |
 | --- | --- | --- |
-| one lock around connection and open state; caller runs the job | NOT_RUN |  |
-| remove owner thread, queue, admission, credits, ledger, completion tracking | NOT_RUN |  |
-| plain workers per mount replace the daemon-wide dispatcher; threads reported | NOT_RUN |  |
-| separate SQLite page caches | NOT_RUN |  |
-| idle and loaded memory at 1, 4 and 16 Workspaces | NOT_RUN |  |
-| service-time cause re-measured | NOT_RUN |  |
+| one lock around connection and open state; caller runs the job | COMPLETE B | overlay/owner.rs, state.rs, workspaces.rs; finite-frontier wait is a reported deviation |
+| remove owner thread, queue, admission, credits, ledger, completion tracking | COMPLETE B | deleted modules and their tests; 83,709 -> 81,584 |
+| plain workers per mount replace the daemon-wide dispatcher; threads reported | COMPLETE B; two workers kept by a declared experiment | fuse dispatch/requests.rs; arms 1/2/4, write and read treatments; per mount: two receive workers, mount, fence |
+| separate SQLite page caches | COMPLETE B | `.cargo/config.toml`; paired tier 1: command -0.5%, Commit -2.7% against one shared cache |
+| idle and loaded memory at 1, 4 and 16 Workspaces | MEASURED; diagnostic scope | threads 6/18/66; idle 12,088/28,480/36,648 KiB; loaded 13,780/32,248/48,676 KiB; higher lifetime peak across sequential mounts recorded, cause not fully established |
+| service-time cause re-measured | MEASURED; diagnostic scope | Mutation hold 26 -> 44 us from one to four Workspaces without CPU limit (A service 30 -> 46): the growth is not caused by the queue or owner thread |
 
 ## Step C — table revision of what remains
 
@@ -179,3 +179,26 @@ sealed twelve-cell sample NOT_RUN. Broad failures retain original verdicts.
 Production LOC: 83,704 -> 83,709 (delta +5) for the correction; net A 84,220 ->
 83,709 (delta -511), exact archive counter and reference-absent scope. B begins
 next; C/D/E NOT_RUN. Guides and contracts remain unchanged until E.
+
+
+2026-10-14 finished Step B: source `1c706e5ff`, worker-count arms `471727dce`
+and `8ff367775`, selection `be19ede68` / `i321-b-qualify-2`, tooling
+`f401de237`; sealed build PASS (58 s). One lock per Workspace with the calling
+thread running each job; owner thread, queue, admission, credits, budget,
+completion handles and the daemon-wide dispatcher are removed with their tests
+(1,527 -> 1,463 test functions). Required selections, one sample each: both
+exec diagnostics and the 850-Commit session exit 0 with cleanup complete;
+tier 1 INELIGIBLE with functional/proof PASS and Gone (26,078 requests /
+93,601 jobs / 563,061 statements; command 6,744,599,380 ns, Commit
+1,871,598,207 ns); four Workspaces INELIGIBLE with functional/proof PASS and
+Gone (104,312 / 372,109 / 2,247,402; external wall 11,733,759,958 ns).
+Recorded against B: tier-1 daemon lifetime peak 89,866,240 B (A 74,285,056)
+and session plateau 115.9 MB (A 103.7 MB), reached while a second mount reads
+the tree, not during the measured interval; one worker per mount is faster for
+same-Workspace writers but slower for cold reads; the A+B estimate was not
+reached (81,584). Retained failures and intermittent mounted cases are listed
+in the [#320 ledger](../320/PROGRESS.md#issue-321-step-b--one-lock-per-workspace-2026-10-14).
+Production LOC: 83,709 -> 81,584 (delta -2,125) for B; net A+B 84,220 ->
+81,584 (delta -2,636), exact archive counter and reference-absent scope.
+Twelve-cell exact accounting stays failing/expected to fail until E; guides
+and contracts are unchanged until E. C begins next; D/E NOT_RUN.

@@ -1131,3 +1131,291 @@ Pinned counter on each exact first-parent/final staged archive:
 `c0fe7f36a0d4144bbd2b61c272c7579cc0d56ffe23f9588287ea30e793624adb`.
 Reference absent (retired R9c; last counted 65,417 at tree 498dd1917812).
 The A+B estimate 77,500–79,500 remains pending B; this is not an A-only target.
+
+
+## Issue 321 Step B — one lock per Workspace (2026-10-14)
+
+**Owner must know:**
+
+- Step B is finished in its scoped sense: implementation committed, sealed, the
+  five required selections run once each. No selection is an eligible speed
+  claim (tier 1 and four-Workspace stay cache-INELIGIBLE; the others are
+  diagnostics).
+- Daemon peak resident memory is higher in two selections: tier 1 lifetime peak
+  89,866,240 B against 74,285,056 B in A, and the 16-session plateau
+  115.9 MB against 103.7 MB. It is not live Workspace state (details below);
+  the cause is established only as far as stated there.
+- Two receive workers per mount is kept, but one worker is faster when several
+  processes write in the same Workspace (678 against 854 us per file). Two is
+  kept because one worker slows cold reads by 28% and makes every request of
+  the Workspace wait for one Store read.
+- The A+B source estimate (77,500 to 79,500) was not met: 81,584.
+- Reclamation now runs on the calling thread before its call returns; a
+  request of the same Workspace can join a drain in progress.
+- Twelve-cell exact counts are still expected to fail until E.
+
+### What changed
+
+One mutex and condition variable per Workspace guard its SQLite connection and
+in-memory open state. The thread that needs a job takes the lock, runs the job
+and releases it. Removed: owner thread, queue, admission slots, byte credits
+and budget, ledger, completion and pending handles, the transport enums, the
+daemon-wide fuse dispatcher with its lanes and task phases. Each mount has two
+plain receive workers; a worker serves its request and its Store read itself.
+The lock is not held across a Store read, a whole command or a whole Commit.
+
+Threads observed in the pinned image: per mount `fuser-0`, `fuser-1`, one mount
+thread and one fence thread; per daemon two. A had per mount one receive loop,
+one owner thread, mount and fence, and per daemon two plus four dispatchers.
+
+Deviation from the plan, reported: a waiting capture or known install holds a
+finite frontier. Mutations (for a capture) or source acquisitions (for an
+install) that arrive later wait behind it before any effect, so sustained
+traffic cannot keep extending what the waiter awaits. No other ordering was
+added: the Commit-beside-writers evidence below did not show a need.
+
+Accounting decisions:
+
+- A job records class, statements, lock wait and hold time. Hold time excludes
+  condition waits. A readiness check that had to wait is a job of the same
+  class; the receipt of the call reports it with its final job.
+- Maintenance steps count only in the maintenance totals.
+- An observation and a reply attempt run no SQL and are no job. They are
+  counted in new diagnostics row 35 `[observations, reply_attempts,
+  reply_hold_ns]`.
+- A call refused before any effect records no job.
+- The checked close runs no counted statement; its Lifecycle job has zero
+  statements and its real hold time.
+- A panic, an unknown outcome or a failed checked close keeps that Workspace's
+  connection, open state and cause. Nothing is replayed or deleted by guess.
+  With one Workspace failed or quarantined, the aggregate resource observation
+  fails and new mounts are refused; Workspaces already bound keep working
+  (asserted in `mount_debt`).
+
+Diagnostics rows: row 1 is 24 values (jobs, maintenance, then jobs, lock wait
+and hold by class); rows 11 (dispatcher) and 31 (byte budget) are gone; row 33
+marks the schema and the SQLite cache option; row 34 is the observer's job
+count; row 35 as above. Wire versions LFSA 2 and LFSD 3. Historical receipts
+decode as before.
+
+Production fixes made on the way, each found by a mounted or host test:
+forced cleanup observes a retired Workspace through the roster (a by-route
+question was Stale); a revoked mount can be replaced by a new attach while old
+tokens stay Stale; a quarantined engine is recorded as stopped maintenance so
+`mount:debt` is refused again without an owner thread; teardown observes
+running requests before joining the loops.
+
+### Tests
+
+Test functions 1,527 -> 1,463; test files 368 -> 361. Deleted because their
+subject no longer exists (owner direction 2026-10-14): `admission_future`,
+`completion_future`, `completion_storage`, `finite_service`, `install_slots`,
+`mounted_parking` (daemon); `dispatch`, `fence` and their support module
+(fuse); the `engine_finite` example; and single tests staged on held credits,
+full lanes or parked turns in `fp21`, `fp27`, `fp29`, `fp31`, `fp32`, `fp34`,
+`fp9`, `mounted_drain`, F4 and F6. Kept and converted: bytes, permissions,
+stale tokens, request/open/lookup ownership, drain, rollback, close, failure
+custody, file isolation, statement and job counts.
+
+Stale Step A pins found and re-pinned (the exported A tree `02aa9e4e2` fails
+them with the same numbers, so they are not B changes):
+`commit_record_anatomy` (Workspace/Lease statements 287/85 -> 284/83, 735/235
+-> 732/233, 10,079/1,993 -> 10,076/1,991), `request_path_anatomy` (it traced
+the template file; C01 statements 36,003 -> 22,003, C03 82,200 -> 51,072, C04
+36,073 -> 20,623, C06 7,710 -> 7,185, C10 12,348 -> 11,291; requests and owner
+jobs unchanged) and `read_cost`.
+
+Results at the final source, single test thread in the pinned image:
+
+- Linux: all 43 Linux-only mounted binaries and five partly gated ones passed
+  in the last full pass; after the last edits the nine affected binaries were
+  rerun and passed.
+- Host: all 135 test binaries of the daemon, overlay, fuse, bridge, workspace
+  and SDK crates ran; after the last edits the fourteen affected ones were
+  rerun and passed.
+- Host and Linux Clippy with warnings denied (affected crates), format check
+  and the product boundary guard (689 files) pass.
+
+Failures retained:
+
+- `mounted_install`, live-writer case: FAILED in three runs because its second
+  Commit returned inside one writer iteration (18 logged before, 19 at return,
+  19 captured). The assertion now requires a later write only when the Commit
+  spanned more than one iteration; the first Commit must still show writes
+  landing while it runs (5 -> 17..19 across 37 to 46 samples).
+- `mounted_cycles`, blocked-pipe case: final unmount kernel Busy, FAILED twice,
+  passed twice; not changed.
+- `fp31` reached the 30 s ceiling once (a wait condition that the new request
+  accounting can never meet); diagnosed from source and corrected.
+- Pre-existing, identical on the exported A tree, not fixed: overlay
+  `reply_tickets` (two tests) and `transactions` (one test).
+- Environment-dependent, not run to a verdict: `complete_installed_roots`
+  (prepared input), `host_handoff` (Linux binary), harness
+  `test_context_controller` (one error, missing variable).
+- Whole-workspace Clippy cannot compile the `layerfs-project` example
+  `benchmark_history` (missing harness file); unrelated and unchanged.
+- Harness `test_overlay_storage`: 17 errors from source pins that predate
+  Step A; Step C renames the schema again, so the pins are reconciled once in E.
+- One aggregate harness discovery command reached its 60 s limit; the files
+  were then run singly (cells 308, evidence 137, registration 54, growth 12).
+
+### Worker count per mount (declared experiment)
+
+Declared before its data: arms 1, 2, 4; one Workspace, four writers of 1,000
+files each, no CPU limit, one sample per arm; keep the smallest count within 7%
+of the best. A second treatment was declared after those numbers and before its
+own: four readers of the mounted prepared tree in one Workspace (4,984 files).
+
+| Arm | create / append / read, us per file | sum | lock wait us per job (Read / Mutation / Lifecycle) | read treatment, mean ms |
+| --- | ---: | ---: | ---: | ---: |
+| 1 worker | 352.8 / 160.1 / 165.1 | 678.0 | 0 / 0 / 0 | 1,051.2 |
+| 2 workers | 422.2 / 207.6 / 223.8 | 853.6 | 15 / 19 / 12 | 817.8 |
+| 4 workers | 509.1 / 232.1 / 307.0 | 1,048.2 | 39 / 54 / 57 | 918.6 |
+| A (1 loop, 4 dispatchers, owner thread) | 533.8 / 172.7 / 186.4 | 892.9 | queue | 837.0 |
+
+On the first treatment alone the rule selects one worker. Two is kept: it is
+the only arm not slower than A on either treatment. Its cost, lock contention
+between the two workers under same-Workspace writers, is Step D work (fewer
+jobs per file). Arms are commits `8ff367775` (1) and `471727dce` (4); the
+selection is `be19ede68`.
+
+### Memory and threads at 1, 4 and 16 Workspaces
+
+One writer per Workspace, 1,000 files each, no CPU limit, `workspace_load.py`.
+RSS is the daemon's point value in KiB; "loaded" is after the load with every
+Workspace still mounted.
+
+| Workspaces | Build | Threads | Idle RSS | Loaded RSS | create / append / read us per file | Mutation hold us |
+| ---: | --- | ---: | ---: | ---: | ---: | ---: |
+| 1 | A | 10 | 12,388 | 14,156 | 245.4 / 119.4 / 184.9 | 26 |
+| 1 | B | 6 | 12,088 | 13,780 | 242.5 / 120.9 / 189.6 | 25 |
+| 4 | A | 22 | 29,356 | 33,504 | 351.0 / 184.8 / 249.7 | 43 |
+| 4 | B | 18 | 28,480 | 32,248 | 359.4 / 175.0 / 266.4 | 43 |
+| 16 | A | 70 | 35,692 | 43,632 | 737.2 / 280.4 / 336.8 | 155 |
+| 16 | B | 66 | 36,648 | 48,676 | 764.9 / 214.5 / 147.0 | 227 |
+
+RSS does not fall after the last cleanup in either build: the allocator keeps
+freed memory. B rows are at `1c706e5ff` (same production code as the final
+seal apart from one comment).
+
+### SQLite page-cache option (5 to 7% condition)
+
+Paired tier-1 samples at the final source, one each:
+
+| Build | command ns | Commit ns | complete wall ns | peak B |
+| --- | ---: | ---: | ---: | ---: |
+| separate caches (selected) | 6,744,599,380 | 1,871,598,207 | 9,033,879,459 | 89,866,240 |
+| one shared cache | 6,780,103,960 | 1,924,251,042 | 9,093,071,057 | 88,096,768 |
+
+One Workspace alone is not slower with separate caches (command -0.5%, Commit
+-2.7%), so the option stays. It is now set in `.cargo/config.toml`.
+
+### Required selections
+
+Sealed build `2026-10-14-issue321-b-qualify-2-build` at `be19ede68` (PASS,
+58 s), construction workers 1, pinned image, one sample each. The tier-1 arm
+with the shared cache ran at `f401de237` (tooling-only successor, same
+compilation inputs).
+
+| Selection | Outcome | Run identity |
+| --- | --- | --- |
+| exec, 2 CPUs | exit 0; all phases returned; cleanup complete; diagnostic | `2026-10-14-issue321-b4-exec-2cpu` |
+| exec, unlimited CPUs | exit 0; all phases returned; cleanup complete; diagnostic | `2026-10-14-issue321-b4-exec-unlimited` |
+| 16 x 50 plus new evicted-Store daemon x 50 | both exits 0; 850 Commits / 17 sessions; eviction exit 0; cleanup complete; diagnostic | `2026-10-14-issue321-b4-session` |
+| tier 1 / mixed 100 MB, 5,000, k100 | INELIGIBLE; functional PASS, proof PASS, cleanup Gone; 26,078 requests, 93,601 jobs, 563,061 statements | `2026-10-14-issue321-b4-tier1` |
+| four Workspaces / 100 MB, 5,000, k100 | INELIGIBLE; functional PASS, proof PASS, cleanup Gone; 104,312 requests, 372,109 jobs, 2,247,402 statements | `2026-10-14-issue321-b4-four` |
+
+Raw comparison with A; cache-ineligible on both sides, single observations:
+
+| Field | A | B | Signed raw delta |
+| --- | ---: | ---: | ---: |
+| tier 1 command ns | 7,041,905,044 | 6,744,599,380 | -297,305,664 |
+| tier 1 Commit ns | 1,930,366,501 | 1,871,598,207 | -58,768,294 |
+| tier 1 mount ns | 9,130,708 | 8,636,584 | -494,124 |
+| tier 1 unmount ns | 3,802,375 | 5,404,833 | +1,602,458 |
+| tier 1 complete wall ns | 9,277,185,038 | 9,033,879,459 | -243,305,579 |
+| tier 1 owner jobs | 93,702 | 93,601 | -101 |
+| tier 1 statements | 562,975 | 563,061 | +86 |
+| tier 1 Store logical / allocated B | 114,532,352 / 114,536,448 | 114,556,928 / 114,556,928 | +24,576 / +20,480 |
+| tier 1 overlay logical B (template after cleanup) | 135,168 | 135,168 | 0 |
+| tier 1 daemon peak B | 74,285,056 | 89,866,240 | +15,581,184 |
+| four: external wall ns | 12,878,231,333 | 11,733,759,958 | -1,144,471,375 |
+| four: summed command ns | 27,659,994,971 | 28,505,567,660 | +845,572,689 |
+| four: summed Commit ns | 19,831,966,880 | 14,460,393,006 | -5,371,573,874 |
+| four: owner jobs | 374,519 | 372,109 | -2,410 |
+| four: statements | 2,248,448 | 2,247,402 | -1,046 |
+| four: Store logical B | 138,600,448 | 130,613,248 | -7,987,200 |
+| four: daemon peak B | 129,806,336 | 128,122,880 | -1,683,456 |
+| session: summed Commit ms (17 sessions) | 11,638.9 | 11,457.4 | -181.5 |
+| session: summed command ms | 37,753.6 | 37,977.8 | +224.2 |
+| session: final Store logical B | 119,607,296 | 119,480,320 | -126,976 |
+| session: daemon peak plateau B | 103.7 MB | 115.9 MB | +12.2 MB |
+
+The four-Workspace Store difference is recorded, not explained; it is not
+described as a storage saving. Tier 1's -101 jobs are Read jobs.
+
+Exec diagnostic, create / append / read us per file (A in parentheses):
+
+- 2 CPUs: one writer 248.5 / 124.4 / 194.9 (270.5 / 125.4 / 192.6); four
+  writers 583.9 / 336.5 / 428.6 (636.2 / 325.4 / 420.5); Mutation hold 27 -> 46
+  us (A service 30 -> 62); Commit beside three writers 1,166.0 ms (1,182.6).
+- Unlimited: one writer 252.0 / 122.5 / 191.4 (272.5 / 128.0 / 179.2); four
+  writers 353.6 / 175.8 / 265.3 (354.0 / 163.1 / 249.6); Mutation hold 26 -> 44
+  us (A 30 -> 46); Commit beside three writers 702.4 ms (672.7).
+
+Multi-Workspace write service time is therefore unchanged from A within these
+single observations: the growth of Mutation hold time with four concurrent
+Workspaces remains, with no queue or owner thread left to cause it.
+
+### Peak memory: what is and is not established
+
+- Tier 1 keeps two external snapshots. At the end of the measured commands and
+  Commits, with the Workspace mounted, B's daemon RSS is 47,452 KiB against
+  51,836 KiB in A. After the harness then verifies the result by reading the
+  whole tree through a second mount and unmounts it, B is at 87,760 KiB and A
+  at 72,544 KiB. The lifetime peak is reached in that verification read.
+- The same full-tree read on a fresh daemon and a single mount needs less in B:
+  39,280 KiB against 42,836 KiB, and is faster (1,790 against 2,020 ms).
+- RSS never falls after cleanup in either build, so these numbers are allocator
+  high-water marks, not live state. In the session selection both builds reach
+  a plateau.
+- Not established: why the second mount's read does not reuse the memory the
+  first mount's exited worker threads freed. Per-mount worker threads replacing
+  long-lived shared dispatchers is the suspected cause. Returning freed memory
+  at terminal unmount is a candidate change; it is not made here.
+
+### Maintenance on the calling thread
+
+With no owner thread, live reclamation runs on the thread whose job left work,
+in short lock holds, before that call returns. In tier 1 it is 2,779 steps and
+111.8 ms inside the interval (A: 2,379 steps, 136.1 ms, after the calls).
+Consequences seen in receipts: the stored-row counts of the resource
+observation are zero at every control call, and cleanup debt is zero at return.
+A request of the same Workspace that finishes a job while a drain is in
+progress joins it. No selection showed a cost; it is listed for Step D.
+
+### Tools and harness
+
+`workspace_load.py` (new, `core/docs/issues/321/tools/`): W Workspaces with P
+writers or readers each, thread names, point and sampled memory, lock wait and
+hold by class. `receipt_metrics.py`, the cells decoder, the fs-bench-pro engine
+and `exec_concurrency.py` read both the old and the new rows. The
+`engine-finite` registration fixture now hashes a retained source file; the
+frozen registry is unchanged.
+
+Payload rule: the three harness samples' exported copies were removed after a
+PASS sealed-manifest check (450.1 + 450.1 + 514.0 MB); receipts and prepared
+originals remain.
+
+### Source size
+
+`1c706e5ff` 83,709 -> 81,584 (-2,125); `471727dce`, `8ff367775`, `be19ede68`
+and `f401de237` each 81,584 -> 81,584 (+0). Net B: 83,709 -> 81,584 (-2,125).
+Net A+B: 84,220 -> 81,584 (-2,636); the earlier estimate of 77,500 to 79,500
+was not reached. Pinned counter on each exact first-parent and final staged
+archive: `c0fe7f36a0d4144bbd2b61c272c7579cc0d56ffe23f9588287ea30e793624adb`.
+Reference absent (retired R9c; last counted 65,417 at tree 498dd1917812).
+
+Durable execution: NOT_RUN — disabled by owner until explicit reauthorization.
+C, D and E remain NOT_RUN. Guides, contracts and the twelve-cell pins are
+unchanged until E.
