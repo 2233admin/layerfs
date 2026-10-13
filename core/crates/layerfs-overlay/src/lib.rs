@@ -11,6 +11,7 @@ mod diagnostics;
 mod lifetime;
 mod maintenance;
 mod namespace;
+mod open;
 mod payload;
 pub(crate) use contract::error;
 pub(crate) use database::connection as db;
@@ -25,7 +26,7 @@ pub(crate) use diagnostics::metrics;
 pub(crate) use contract::types;
 pub(crate) use database::profile;
 pub(crate) use database::statements as sql;
-pub(crate) use maintenance::reclaim;
+pub(crate) use maintenance::work as reclaim;
 
 pub use close::CleanupState;
 pub use compound::SourceRows;
@@ -50,6 +51,7 @@ pub use error::{CloseFailure, OverlayError, OverlayResult};
 pub use lifetime::tickets::{ReplyTickets, Settled};
 pub use maintenance::{MaintenanceCursor, MaintenanceStep};
 pub use metrics::{DatabaseWork, StatementKind, StatementWork};
+pub use open::{OpenDisposals, OpenStateCounts};
 pub use payload::captured_types::{
     CapturedGap, CapturedRunCursor, CapturedRunReply, CapturedRunStep, CapturedRunWork,
 };

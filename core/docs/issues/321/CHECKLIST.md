@@ -31,11 +31,11 @@ source/build pins. Steps proceed in order: 1, A, B, C, D, E.
 
 | Checklist item | Disposition | Source/evidence |
 | --- | --- | --- |
-| trace the eleven tables; move the ones that hold | NOT_RUN |  |
-| one in-memory open-state structure per Workspace | NOT_RUN |  |
-| remove moved tables, statements, triggers, cleanup jobs, plan diagnostics, typed jobs | NOT_RUN |  |
-| remove `reclaim` and terminal row cleanup | NOT_RUN |  |
-| bytes per kernel-reference entry; map size after the tier-1 walk | NOT_RUN |  |
+| trace the eleven tables; move the ones that hold | IN_SOURCE; qualification owed | [pre-change trace](STEP-A-TRACE.md); all eleven moved |
+| one in-memory open-state structure per Workspace | IN_SOURCE; qualification owed | open/ next to Overlay connection; touched-entry undo |
+| remove moved tables, statements, triggers, cleanup jobs, plan diagnostics, typed jobs | IN_SOURCE; final removal audit owed | SQL/schema/accounting and dedicated native/cookie retirement deleted; real filesystem jobs still use the owner until B |
+| remove `reclaim` and terminal row cleanup | IN_SOURCE; mounted disposal qualification owed | raw close retains rows; control closes/deletes whole file |
+| bytes per kernel-reference entry; map size after the tier-1 walk | DIAGNOSTIC ONLY; walk NOT_RUN | 854,848 requested Rust B / 5,000 = 170.9696 B/entry, kernel+custody maps/journals; no RSS/SQLite C-heap bound |
 
 ## Step B — one lock per Workspace
 
@@ -90,3 +90,29 @@ SDK baseline observed at takeover: `9fe542e3b340f4b5daa17636880afd6b1b32c290`.
 Revalidate before private rebase. Source counter SHA-256:
 `c0fe7f36a0d4144bbd2b61c272c7579cc0d56ffe23f9588287ea30e793624adb`.
 Reference absent (retired R9c; last counted 65,417 at tree 498dd1917812).
+
+
+## Takeover checkpoint, 2026-10-13
+
+Step 1 remains INCOMPLETE. Retained selections at sealed product `20f237499`:
+2-CPU and unlimited-CPU diagnostics reused (exit 0; no oracle/proof); 16 × 50
+plus a new evicted-Store daemon × 50 session exit 0 (diagnostic only); tier 1
+INELIGIBLE with receipt proof PASS and cleanup Gone; four-Workspace FAIL, proof
+NOT_RUN and cleanup UNAVAILABLE. The latter's own resources were explicitly
+removed after retained identity/log checks. That does not change its verdict.
+See [takeover and A checkpoint](../320/PROGRESS.md#issue-321-takeover-retained-step-1-selections-2026-10-13).
+
+Step A is not finished: sealed build, Linux mounted/byte proofs, actual tier-1
+walk and all four required selections at its new pin remain owed. Broad host
+check failures, including the 120 s hang, remain retained. Five host replay
+count checks FAIL before comparison; the twelve sealed cells are not yet run.
+No count pin or guide has changed. B/C/D/E remain NOT_RUN. No checkpoint has
+been posted as a finished Step A.
+
+
+A source seal: local tag `i321-a-source-1`; Production LOC: 84,220 -> 83,704
+(delta -516), exact first-parent/final staged archives with the pinned counter.
+Reference absent (retired R9c; last counted 65,417 at tree 498dd1917812).
+This is a source checkpoint, not finished-Step qualification. The A+B estimate
+remains pending B. Final targeted Workspace native checks and 24 host Fuse
+checks passed; the broader failed receipts retain their original dispositions.

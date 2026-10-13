@@ -484,7 +484,7 @@ impl OwnerClient {
     }
     /// Records one reply attempt of a publication from the replying thread,
     /// with no owner turn. `Watched` says an owner job waited for it: the
-    /// caller then owes one `Command::ReplySettled`.
+    /// owner wakes that before-effect waiter without a SQL job.
     pub fn reply_attempted(
         &self,
         publication: layerfs_overlay::Publication,
@@ -494,13 +494,19 @@ impl OwnerClient {
                 .client(publication.route().namespace())?
                 .reply_attempted(publication);
         }
-        self.shared
+        let settled = self
+            .shared
             .tickets
             .get()
             .ok_or(OwnerError::Stopped)?
             .attempted(publication)
-            .map_err(OwnerError::Overlay)
+            .map_err(OwnerError::Overlay)?;
+        if settled == layerfs_overlay::Settled::Watched {
+            self.shared.replies_settled();
+        }
+        Ok(settled)
     }
+
     pub fn diagnostics(&self) -> Result<OwnerWork, OwnerError> {
         if let Some(pool) = &self.pool {
             return pool.diagnostics();
@@ -588,17 +594,24 @@ const COMBINED: usize = 1;
 /// kept for `Owner::stop`. The submitter's own result reads disconnected.
 fn serve_submitted(shared: &Shared, job: Box<Job>) {
     let served = catch_unwind(AssertUnwindSafe(|| {
-        let connection = shared.connection();
-        let Some(db) = connection.as_deref() else {
-            job.refuse(OwnerError::Stopped);
-            shared.idle(false, false);
-            return;
-        };
         let mut job = job;
         let mut combined = 0;
         loop {
-            serve(shared, db, job);
-            match shared.pass(db.maintenance_pending(), combined < COMBINED) {
+            let (next, disposals) = {
+                let connection = shared.connection();
+                let Some(db) = connection.as_deref() else {
+                    job.refuse(OwnerError::Stopped);
+                    shared.idle(false, false);
+                    return;
+                };
+                serve(shared, db, job);
+                let next = shared.pass(db.maintenance_pending(), combined < COMBINED);
+                (next, db.take_open_disposals())
+            };
+            // A directory may have arbitrarily many accepted-name pages.
+            // Their destruction holds no connection lock.
+            drop(disposals);
+            match next {
                 Some(next) => job = next,
                 None => return,
             }
@@ -662,14 +675,12 @@ fn serve(shared: &Shared, db: &Overlay, mut job: Box<Job>) {
     publisher.publish(Box::new(Outcome { result, work }));
 }
 fn run(shared: &Shared) {
-    let mut cursor = 0_u64;
     let mut maintenance_failed = false;
     let mut live_cursor = layerfs_overlay::MaintenanceCursor::default();
-    let mut live_turn = true;
     while let Some((job, event, due)) = shared.poll() {
         let mut maintained = false;
         let idle = job.is_none();
-        {
+        let disposals = {
             let connection = shared.connection();
             let Some(db) = connection.as_deref() else {
                 drop(connection);
@@ -682,12 +693,11 @@ fn run(shared: &Shared) {
             if !maintenance_failed && due {
                 let turn = Turn::begin(db);
                 let start = Instant::now();
-                let maintenance =
-                    maintenance_turn(db, &mut live_cursor, &mut cursor, &mut live_turn);
+                let maintenance = maintenance_turn(db, &mut live_cursor);
                 turn.settle(shared, None);
                 match maintenance {
-                    Ok(Some((step, closed))) => {
-                        shared.maintenance(step, closed, elapsed(start));
+                    Ok(Some(step)) => {
+                        shared.maintenance(step, elapsed(start));
                         maintained = true;
                     }
                     Ok(None) => {}
@@ -700,8 +710,10 @@ fn run(shared: &Shared) {
             if let Some(job) = job {
                 serve(shared, db, job);
             }
-        }
+            db.take_open_disposals()
+        };
         shared.idle(false, true);
+        drop(disposals);
         if idle && !maintained {
             shared.wait(event);
         }
@@ -710,22 +722,11 @@ fn run(shared: &Shared) {
 
 fn maintenance_turn(
     db: &Overlay,
-    live: &mut layerfs_overlay::MaintenanceCursor,
-    closed: &mut u64,
-    live_turn: &mut bool,
-) -> Result<Option<(layerfs_overlay::ReclaimStep, bool)>, OverlayError> {
-    let first = *live_turn;
-    *live_turn = !*live_turn;
-    for use_live in [first, !first] {
-        if use_live {
-            if let Some(step) = db.maintain(*live)? {
-                *live = step.cursor;
-                return Ok(Some((step.work, false)));
-            }
-        } else if let Some(step) = db.reclaim_closed(*closed)? {
-            *closed = step.namespace;
-            return Ok(Some((step, true)));
-        }
-    }
-    Ok(None)
+    cursor: &mut layerfs_overlay::MaintenanceCursor,
+) -> Result<Option<layerfs_overlay::ReclaimStep>, OverlayError> {
+    let step = db.maintain(*cursor)?;
+    Ok(step.map(|step| {
+        *cursor = step.cursor;
+        step.work
+    }))
 }

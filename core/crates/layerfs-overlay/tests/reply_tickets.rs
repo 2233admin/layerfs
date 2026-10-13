@@ -81,13 +81,8 @@ fn fails_after_frontier_advance(db: &Overlay, mount: NativeMount, request: u64, 
         0
     );
 }
-fn reclaimed(db: &Overlay, route: Route) {
-    for _ in 0..1000 {
-        if db.reclaim_closed(0).unwrap().is_none() {
-            break;
-        }
-    }
-    assert_eq!(db.cleanup_state(route).unwrap(), CleanupState::Gone);
+fn ready_for_file_disposal(db: &Overlay, route: Route) {
+    assert_eq!(db.cleanup_state(route).unwrap(), CleanupState::Queued);
 }
 
 #[test]
@@ -315,7 +310,6 @@ fn concurrent_attempts_return_every_ticket_once_and_one_of_them_settles_the_name
     assert!(pending(&db, route).is_empty());
     assert_eq!(counted(&db, route), (0, 0));
     assert!(db.capture_ready(route).unwrap());
-    db.reply_settled(route).unwrap();
     db.capture(route).unwrap();
 }
 
@@ -381,7 +375,6 @@ fn a_waiting_capture_is_owed_the_last_attempt_and_no_waiter_means_last() {
     // The owed owner turn has nothing to queue for a live Workspace and
     // writes nothing; the capture is ready.
     let sql = db.diagnostics();
-    db.reply_settled(route).unwrap();
     let work = db.diagnostics().since(&sql).total();
     assert_eq!(work.rows_changed + work.direct_rows_changed, 0);
     assert_eq!(db.cleanup_state(route).unwrap(), CleanupState::Live);
@@ -435,7 +428,7 @@ fn tickets_of_one_namespace_never_affect_another() {
     db.release_closed_capture(sealed).unwrap();
     assert_eq!(db.cleanup_state(b).unwrap(), CleanupState::Queued);
     assert_eq!(db.cleanup_state(a).unwrap(), CleanupState::Live);
-    reclaimed(&db, b);
+    ready_for_file_disposal(&db, b);
     // A's ticket and its waiter outlive B's whole namespace.
     assert_eq!(pending(&db, a), vec![in_a]);
     assert_eq!(counted(&db, a), (1, 1));
@@ -455,7 +448,6 @@ fn a_closed_workspace_with_a_pending_ticket_is_queued_only_by_the_settling_owner
     let only = publish(&db, route, 2);
     db.close(route).unwrap();
     assert_eq!(db.cleanup_state(route).unwrap(), CleanupState::Held);
-    assert!(db.reclaim_closed(0).unwrap().is_none());
     // A stale attempt neither returns the ticket nor queues the cleanup:
     // the same revision under a generation this namespace never had.
     let mut other = only;
@@ -475,7 +467,7 @@ fn a_closed_workspace_with_a_pending_ticket_is_queued_only_by_the_settling_owner
     assert_eq!(db.cleanup_state(route).unwrap(), CleanupState::Held);
     db.reply_attempted(only).unwrap();
     assert_eq!(db.cleanup_state(route).unwrap(), CleanupState::Queued);
-    reclaimed(&db, route);
+    ready_for_file_disposal(&db, route);
 
     // The replying-thread form: the attempts are recorded without a turn,
     // and only the last one, which the close observed pending, owes it.
@@ -486,20 +478,14 @@ fn a_closed_workspace_with_a_pending_ticket_is_queued_only_by_the_settling_owner
     assert_eq!(db.cleanup_state(route).unwrap(), CleanupState::Held);
     assert_eq!(attempt(&tickets, first), Some(Settled::Pending));
     // An owner turn before the last attempt queues nothing.
-    db.reply_settled(route).unwrap();
     assert_eq!(db.cleanup_state(route).unwrap(), CleanupState::Held);
     assert_eq!(attempt(&tickets, second), Some(Settled::Watched));
-    // The attempt itself is no owner turn: nothing is queued by it.
-    assert_eq!(db.cleanup_state(route).unwrap(), CleanupState::Held);
-    assert!(db.reclaim_closed(0).unwrap().is_none());
-    db.reply_settled(route).unwrap();
+    assert_eq!(db.cleanup_state(route).unwrap(), CleanupState::Queued);
     assert_eq!(db.cleanup_state(route).unwrap(), CleanupState::Queued);
     // The turn is idempotent.
-    db.reply_settled(route).unwrap();
     assert_eq!(db.cleanup_state(route).unwrap(), CleanupState::Queued);
-    reclaimed(&db, route);
-    assert!(db.pending_publications(route, 0).is_err());
-    assert!(db.reply_settled(route).is_err());
+    ready_for_file_disposal(&db, route);
+    assert!(db.pending_publications(route, 0).unwrap().is_empty());
 }
 
 #[test]
@@ -545,8 +531,6 @@ fn a_failed_attempt_and_release_gives_the_ticket_back_with_its_waiter() {
     assert_eq!(db.cleanup_state(route).unwrap(), CleanupState::Held);
     assert_eq!(pending(&db, route), vec![ticket]);
     assert_eq!(attempt(&tickets, ticket), Some(Settled::Watched));
-    assert_eq!(db.cleanup_state(route).unwrap(), CleanupState::Held);
-    db.reply_settled(route).unwrap();
     assert_eq!(db.cleanup_state(route).unwrap(), CleanupState::Queued);
 
     // The successful call is the attempt and the release in one turn: a
@@ -668,10 +652,6 @@ fn the_owner_turn_form_refuses_a_publication_of_another_engine() {
     // they touch the record, and change nothing.
     assert!(matches!(
         second.reply_attempted(foreign),
-        Err(OverlayError::Stale)
-    ));
-    assert!(matches!(
-        second.reply_settled(route_a),
         Err(OverlayError::Stale)
     ));
     assert!(matches!(

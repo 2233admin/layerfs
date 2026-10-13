@@ -200,7 +200,6 @@ pub enum Command {
     ReplyAttempted(Publication),
     /// The owner turn owed after a namespace's last watched reply attempt,
     /// which a replying thread recorded without one.
-    ReplySettled,
     Capture,
     /// Caller has established definite nonpublication and fenced the exact
     /// capture's external work. Unknown history must retain that capture.
@@ -316,7 +315,6 @@ impl Command {
             | Self::ReleaseClosedCapture(_)
             | Self::ResolveFailed(_)
             | Self::ReplyAttempted(_)
-            | Self::ReplySettled
             | Self::Acquire(_)
             | Self::Release(_) => ServiceClass::Lifecycle,
             Self::Inode(_)
@@ -800,7 +798,6 @@ impl Command {
                 }
                 db.reply_attempted(publication).map(|_| Response::Done)
             }
-            Self::ReplySettled => db.reply_settled(route).map(|_| Response::Done),
             Self::Capture => db.capture(route).map(Response::Captured),
             Self::ResolveFailed(capture) => {
                 if capture.route() != route {

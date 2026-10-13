@@ -52,7 +52,7 @@ fn actual_default_startup_records_then_stops_without_creating_a_route() {
     assert_eq!(startup.lines().count(), 1);
     assert!(startup.contains("\"creation_reported\":true"));
     assert!(startup.contains("\"status\":\"READY\""));
-    assert!(startup.contains("\"cleanup_headroom_bytes\":134217728"));
+    assert!(startup.contains("\"cleanup_headroom_bytes\":0"));
     assert!(startup.contains("daemon-startup-lifetime-observed-allocation"));
     assert_eq!(probes.lines().count(), 2);
     assert!(probes.contains("\"admitted\":0"));

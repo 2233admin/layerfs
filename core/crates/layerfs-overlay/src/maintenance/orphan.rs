@@ -194,12 +194,18 @@ impl Overlay {
     }
     /// The custody row of a file nothing references.
     pub(crate) fn drop_custody(&self, ns: i64, serial: i64) -> OverlayResult<()> {
-        self.execute(
-            StatementKind::Lease,
-            "DELETE FROM file_custody WHERE ns=?1 AND serial=?2 AND opens+lookups+readers=0",
-            &[&ns, &serial],
-            16,
-        )?;
+        let mut state = self.open.borrow_mut();
+        let key = (ns, serial);
+        if state
+            .custody
+            .rows
+            .get(&key)
+            .is_some_and(|refs| refs.total() == 0)
+        {
+            state.custody.remove(key);
+            state.count(ns, 5, false);
+            state.remove_parent((ns, serial as u64));
+        }
         Ok(())
     }
     pub(crate) fn maintain_orphan(
@@ -240,12 +246,12 @@ impl Overlay {
                 if state.captured.is_some_and(|g| g.0 == lower.gen)
                     || self.generation_held(ns, lower.gen)?
                 {
-                    self.execute(
-                        StatementKind::Lease,
-                        "INSERT INTO orphan_wait VALUES(?1,?2,?3) ON CONFLICT DO NOTHING",
-                        &[&ns, &lower.gen, &serial],
-                        24,
-                    )?;
+                    let mut state = self.open.borrow_mut();
+                    let key = (ns, lower.gen, serial);
+                    if !state.waits.rows.contains_key(&key) {
+                        state.waits.put(key, ());
+                        state.count(ns, 7, true);
+                    }
                     return Ok(step(0, 0, Next::Held));
                 }
                 let upper = self.orphan_layer(ns, serial)?;
@@ -275,12 +281,14 @@ impl Overlay {
                     ..step(1, 0, Next::From(0, -1))
                 });
             }
-            self.execute(
-                StatementKind::Lease,
-                "UPDATE orphan SET lower_top=lower_floor WHERE ns=?1 AND serial=?2",
-                &[&ns, &serial],
-                16,
-            )?;
+            let mut state = self.open.borrow_mut();
+            state.orphans.put(
+                (ns, serial),
+                Orphan {
+                    top: orphan.floor,
+                    ..orphan
+                },
+            );
         }
         Ok(step(0, 0, Next::Held))
     }
@@ -364,12 +372,11 @@ impl Overlay {
             &[&ns, &serial],
             16,
         )?;
-        self.execute(
-            StatementKind::Reclaim,
-            "DELETE FROM orphan WHERE ns=?1 AND serial=?2",
-            &[&ns, &serial],
-            16,
-        )?;
+        {
+            let mut state = self.open.borrow_mut();
+            state.orphans.remove((ns, serial));
+            state.count(ns, 6, false);
+        }
         self.orphans_deleted()?;
         self.drop_custody(ns, serial)?;
         Ok(step(3, 0, Next::Done))

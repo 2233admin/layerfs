@@ -70,18 +70,20 @@ fn name(serial: u64) -> Vec<u8> {
     format!("f{serial}").into_bytes()
 }
 /// What a release left: whether the owner has a ready turn, and the counts.
-type Left = (bool, StoredCounts);
+type Left = (bool, StoredCounts, layerfs_overlay::OpenStateCounts);
 impl World {
     fn seat(&self, authority: u8) -> Seat {
         let route = self.db.open_workspace([authority; 32], [32; 32]).unwrap();
         let mount = self.db.create_native_mount(route, 1).unwrap();
         Seat { route, mount }
     }
-    fn counts(&self, seat: Seat) -> StoredCounts {
-        self.db.resources(Some(seat.route)).unwrap().counts
-    }
     fn left(&self, seat: Seat) -> Left {
-        (self.db.maintenance_pending(), self.counts(seat))
+        let resources = self.db.resources(Some(seat.route)).unwrap();
+        (
+            self.db.maintenance_pending(),
+            resources.counts,
+            resources.open,
+        )
     }
     /// Statements of the fence family, of the custody family, and write
     /// transactions begun so far.
@@ -248,7 +250,7 @@ fn a_refused_forget_is_refused_by_one_statement_and_writes_nothing() {
     world.db.close(seat.route).unwrap();
     let (result, work) = attempt(seat.mount, 50, 1);
     assert!(result.is_ok(), "{result:?}");
-    assert_eq!((work.0, work.2), (1, 1));
+    assert_eq!((work.0, work.2), (1, 0));
     let (result, _) = attempt(seat.mount, 50, 1);
     assert!(matches!(result, Err(OverlayError::Stale)), "{result:?}");
     assert_eq!(
@@ -304,11 +306,11 @@ fn a_release_leaves_the_rows_the_step_by_step_reads_left() {
             own.0,
             own.1.payload_cells,
             own.1.inode_rows,
-            own.1.orphan_rows,
+            own.2.orphan_files,
             own.1.maintenance_targets,
             end.1.payload_cells,
             end.1.inode_rows,
-            end.1.orphan_rows,
+            end.2.orphan_files,
             end.1.maintenance_targets,
             end.1.owner_details
         );
@@ -317,7 +319,7 @@ fn a_release_leaves_the_rows_the_step_by_step_reads_left() {
         // job's step, and the owner gets the ready items of what is left.
         assert_eq!(own.1.payload_cells, rows.saturating_sub(14), "{rows}");
         assert_eq!(own.0, rows >= 14, "{rows}");
-        assert_eq!(own.1.orphan_rows, u64::from(rows >= 14), "{rows}");
+        assert_eq!(own.2.orphan_files, u64::from(rows >= 14), "{rows}");
         assert_eq!(turns, wanted, "{rows}");
         // In the end: no cell, no orphan, nothing queued. The root's row
         // and the file's tombstone stay, because the active generation is
@@ -326,7 +328,7 @@ fn a_release_leaves_the_rows_the_step_by_step_reads_left() {
             (
                 end.1.payload_cells,
                 end.1.payload_bytes,
-                end.1.orphan_rows,
+                end.2.orphan_files,
                 end.1.maintenance_targets,
                 end.1.inode_rows
             ),
@@ -355,7 +357,7 @@ fn an_installed_layer_loses_its_row_when_its_last_reference_goes() {
         assert_eq!(
             (
                 end.1.payload_cells,
-                end.1.orphan_rows,
+                end.2.orphan_files,
                 end.1.maintenance_targets
             ),
             (0, 0, 0),

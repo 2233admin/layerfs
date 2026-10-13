@@ -38,12 +38,10 @@ fn physical_observation_counts_logical_rows_and_reusable_pages_without_reserve()
     println!("S6_RESOURCES before={r:?} pending={pending:?} after={cleaned:?}");
     db.release_base_source(source).unwrap();
     db.close(route).unwrap();
-    for _ in 0..1000 {
-        if db.reclaim_closed(0).unwrap().unwrap().done {
-            break;
-        }
-    }
-    assert_eq!(db.resources(None).unwrap().counts, StoredCounts::default());
+    assert_eq!(db.cleanup_state(route).unwrap(), CleanupState::Queued);
+    let retained = db.resources(None).unwrap().counts;
+    assert_eq!(retained.namespaces, 1);
+    assert_eq!(retained.payload_cells, cleaned.counts.payload_cells);
     let plan = db.explain_accounting().unwrap();
     assert!(plan
         .iter()
@@ -89,7 +87,7 @@ fn retained_snapshot_parks_orphan_migration_then_rows_move_without_payload_dupli
     // Rows of 32 KiB: 64 hold the 2 MiB.
     assert_eq!(held.counts.payload_cells, 64);
     assert_eq!(held.counts.payload_bytes, 2 << 20);
-    assert_eq!(held.counts.wait_refs, 1);
+    assert_eq!(held.open.generation_waits, 1);
     db.resolve_failed_capture(capture).unwrap();
     db.release_captured_reader(reader).unwrap();
     for turn in 0..2000 {
@@ -106,7 +104,7 @@ fn retained_snapshot_parks_orphan_migration_then_rows_move_without_payload_dupli
     let moved = db.resources(Some(route)).unwrap();
     assert_eq!(moved.counts.payload_cells, 64);
     assert_eq!(moved.counts.payload_bytes, 2 << 20);
-    assert_eq!(moved.counts.wait_refs, 0);
+    assert_eq!(moved.open.generation_waits, 0);
     let read = db.acquire_file_read(source, open, 1).unwrap();
     for at in (0..2 << 20).step_by(131072) {
         assert_eq!(

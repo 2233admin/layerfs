@@ -2,7 +2,6 @@
 use crate::{db::unsigned, AllocationState, Overlay, OverlayResult, Route, StatementKind};
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct StoredCounts {
-    pub wait_refs: u64,
     pub namespaces: u64,
     pub inode_rows: u64,
     pub directory_entry_rows: u64,
@@ -13,27 +12,26 @@ pub struct StoredCounts {
     pub reference_rows: u64,
     pub operation_record_rows: u64,
     pub operation_record_bytes: u64,
-    pub orphan_rows: u64,
     pub owner_rows: u64,
     pub source_rows: u64,
     pub owner_details: u64,
     /// Pending reply tickets, held in the engine's memory.
     pub reply_tickets: u64,
-    pub retire_targets: u64,
     pub maintenance_targets: u64,
     pub ready_targets: u64,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Resources {
     pub counts: StoredCounts,
+    pub open: crate::OpenStateCounts,
     pub allocation: AllocationState,
     pub database_pages: u64,
     pub free_pages: u64,
     /// Declared logical bytes/metadata upper bound, not exclusive physical debt.
     pub debt_upper_bytes: u64,
 }
-const COUNTS: &str = "SELECT namespaces,inode_rows,directory_entry_rows,payload_cells,payload_bytes,shrink_rows,operation_record_rows,operation_record_bytes,orphan_rows,owner_rows,source_rows,owner_details,retire_targets,maintenance_targets,ready_targets,wait_refs,reference_rows FROM accounting WHERE ns=?1";
-const TOTALS: &str = "SELECT ifnull(sum(namespaces),0),ifnull(sum(inode_rows),0),ifnull(sum(directory_entry_rows),0),ifnull(sum(payload_cells),0),ifnull(sum(payload_bytes),0),ifnull(sum(shrink_rows),0),ifnull(sum(operation_record_rows),0),ifnull(sum(operation_record_bytes),0),ifnull(sum(orphan_rows),0),ifnull(sum(owner_rows),0),ifnull(sum(source_rows),0),ifnull(sum(owner_details),0),ifnull(sum(retire_targets),0),ifnull(sum(maintenance_targets),0),ifnull(sum(ready_targets),0),ifnull(sum(wait_refs),0),ifnull(sum(reference_rows),0) FROM accounting WHERE ns>?1";
+const COUNTS: &str = "SELECT namespaces,inode_rows,directory_entry_rows,payload_cells,payload_bytes,shrink_rows,operation_record_rows,operation_record_bytes,owner_rows,source_rows,owner_details,maintenance_targets,ready_targets,reference_rows FROM accounting WHERE ns=?1";
+const TOTALS: &str = "SELECT ifnull(sum(namespaces),0),ifnull(sum(inode_rows),0),ifnull(sum(directory_entry_rows),0),ifnull(sum(payload_cells),0),ifnull(sum(payload_bytes),0),ifnull(sum(shrink_rows),0),ifnull(sum(operation_record_rows),0),ifnull(sum(operation_record_bytes),0),ifnull(sum(owner_rows),0),ifnull(sum(source_rows),0),ifnull(sum(owner_details),0),ifnull(sum(maintenance_targets),0),ifnull(sum(ready_targets),0),ifnull(sum(reference_rows),0) FROM accounting WHERE ns>?1";
 impl Overlay {
     /// None is the daemon aggregate; a route reads one namespace's exact counts.
     /// Page/file observations remain shared and never imply exclusive attribution.
@@ -55,24 +53,21 @@ impl Overlay {
                 8,
                 |r| {
                     Ok(StoredCounts {
-                        wait_refs: unsigned(r, 15)?,
                         namespaces: unsigned(r, 0)?,
                         inode_rows: unsigned(r, 1)?,
                         directory_entry_rows: unsigned(r, 2)?,
                         payload_cells: unsigned(r, 3)?,
                         payload_bytes: unsigned(r, 4)?,
                         shrink_rows: unsigned(r, 5)?,
-                        reference_rows: unsigned(r, 16)?,
+                        reference_rows: unsigned(r, 13)?,
                         operation_record_rows: unsigned(r, 6)?,
                         operation_record_bytes: unsigned(r, 7)?,
-                        orphan_rows: unsigned(r, 8)?,
-                        owner_rows: unsigned(r, 9)?,
-                        source_rows: unsigned(r, 10)?,
-                        owner_details: unsigned(r, 11)?,
+                        owner_rows: unsigned(r, 8)?,
+                        source_rows: unsigned(r, 9)?,
+                        owner_details: unsigned(r, 10)?,
                         reply_tickets: 0,
-                        retire_targets: unsigned(r, 12)?,
-                        maintenance_targets: unsigned(r, 13)?,
-                        ready_targets: unsigned(r, 14)?,
+                        maintenance_targets: unsigned(r, 11)?,
+                        ready_targets: unsigned(r, 12)?,
                     })
                 },
             )?
@@ -92,15 +87,12 @@ impl Overlay {
             .saturating_add(counts.shrink_rows)
             .saturating_add(counts.reference_rows)
             .saturating_add(counts.operation_record_rows)
-            .saturating_add(counts.orphan_rows)
             .saturating_add(counts.owner_rows)
             .saturating_add(counts.source_rows)
             .saturating_add(counts.owner_details)
-            .saturating_add(counts.wait_refs)
             .saturating_add(counts.reply_tickets)
-            .saturating_add(counts.retire_targets)
             .saturating_add(counts.maintenance_targets);
-        let debt_upper_bytes = if counts.maintenance_targets + counts.retire_targets == 0 {
+        let debt_upper_bytes = if counts.maintenance_targets == 0 {
             0
         } else {
             counts
@@ -110,6 +102,10 @@ impl Overlay {
         };
         Ok(Resources {
             counts,
+            open: self
+                .open
+                .borrow()
+                .snapshot(route.map(|route| route.namespace())),
             allocation: self.allocation()?,
             database_pages,
             free_pages,
@@ -135,7 +131,7 @@ impl Resources {
     /// Adds disjoint connection snapshots. It is an aggregate observation,
     /// not an atomic cross-Workspace snapshot or exclusive freed-page claim.
     pub fn accumulate(&mut self, next: &Self) {
-        self.counts.wait_refs = self.counts.wait_refs.saturating_add(next.counts.wait_refs);
+        self.open.accumulate(next.open);
         self.counts.namespaces = self
             .counts
             .namespaces
@@ -172,10 +168,6 @@ impl Resources {
             .counts
             .operation_record_bytes
             .saturating_add(next.counts.operation_record_bytes);
-        self.counts.orphan_rows = self
-            .counts
-            .orphan_rows
-            .saturating_add(next.counts.orphan_rows);
         self.counts.owner_rows = self
             .counts
             .owner_rows
@@ -192,10 +184,6 @@ impl Resources {
             .counts
             .reply_tickets
             .saturating_add(next.counts.reply_tickets);
-        self.counts.retire_targets = self
-            .counts
-            .retire_targets
-            .saturating_add(next.counts.retire_targets);
         self.counts.maintenance_targets = self
             .counts
             .maintenance_targets

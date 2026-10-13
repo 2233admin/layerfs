@@ -7,12 +7,17 @@ use std::{fmt, io, mem::ManuallyDrop, sync::Mutex};
 pub struct CloseFailure {
     pub cause: rusqlite::Error,
     _connection: Mutex<ManuallyDrop<rusqlite::Connection>>,
+    _open: Mutex<ManuallyDrop<crate::open::OpenState>>,
 }
-impl From<(rusqlite::Connection, rusqlite::Error)> for CloseFailure {
-    fn from((connection, cause): (rusqlite::Connection, rusqlite::Error)) -> Self {
+impl CloseFailure {
+    pub(crate) fn retain(
+        (connection, cause): (rusqlite::Connection, rusqlite::Error),
+        open: crate::open::OpenState,
+    ) -> Self {
         Self {
             cause,
             _connection: Mutex::new(ManuallyDrop::new(connection)),
+            _open: Mutex::new(ManuallyDrop::new(open)),
         }
     }
 }

@@ -250,15 +250,8 @@ pub fn run(directory: &Path, receipts: &Path, mut phase: impl FnMut(&str)) {
         ));
     }
     phase("idle");
-    // Observation only: no SQL job or wake is used to obtain this progress.
-    let deadline = Instant::now() + Duration::from_secs(2);
-    while client.diagnostics().unwrap().closed_namespaces < 4 {
-        assert!(
-            Instant::now() < deadline,
-            "terminal namespace cleanup did not finish while idle"
-        );
-        std::thread::yield_now();
-    }
+    // Logical close does no row sweep. Only terminal control owns file disposal.
+    assert_eq!(client.diagnostics().unwrap().closed_namespaces, 0);
     for (ws, bound) in workspaces.iter().enumerate() {
         let done = call(
             &client,
@@ -271,7 +264,9 @@ pub fn run(directory: &Path, receipts: &Path, mut phase: impl FnMut(&str)) {
         );
         assert!(matches!(
             done.result(),
-            Ok(Response::CleanupState(layerfs_overlay::CleanupState::Gone))
+            Ok(Response::CleanupState(
+                layerfs_overlay::CleanupState::Queued
+            ))
         ));
         println!("ENGINE_CLOSE workspace={ws} original={:?}", done.result());
     }
@@ -279,7 +274,7 @@ pub fn run(directory: &Path, receipts: &Path, mut phase: impl FnMut(&str)) {
     let work = client.diagnostics().unwrap();
     rec.reconcile(work);
     rec.finish(work);
-    println!("ENGINE_FINITE jobs={} wave_counts={:?} peak_queued={} peak_credit={} maintenance_rows={} record_cleanup_bytes={} closed_namespaces={} physical_cleanup=gone",rec.jobs,rec.wave_classes,work.peak_queued,work.peak_credited_bytes,work.maintenance_rows,work.maintenance_data_bytes,work.closed_namespaces);
+    println!("ENGINE_FINITE jobs={} wave_counts={:?} peak_queued={} peak_credit={} maintenance_rows={} record_cleanup_bytes={} closed_namespaces={} physical_cleanup=eligible",rec.jobs,rec.wave_classes,work.peak_queued,work.peak_credited_bytes,work.maintenance_rows,work.maintenance_data_bytes,work.closed_namespaces);
     phase("stop");
     owner.stop().unwrap();
     phase("finished");

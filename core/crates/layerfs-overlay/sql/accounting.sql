@@ -1,10 +1,8 @@
 -- Exact backed counts, one row per namespace, each written by the triggers
 -- of that namespace's own rows. The daemon aggregate is their sum, taken
--- where it is read. Namespace zero holds one maintained count, orphan_rows
--- of the whole engine, which a job reads in one row after it deletes orphans.
+-- where it is read. Open-state cardinalities are maintained in memory.
 CREATE TABLE accounting (
     ns INTEGER PRIMARY KEY CHECK(ns>=0),
-    wait_refs INTEGER NOT NULL DEFAULT 0 CHECK(wait_refs>=0),
     namespaces INTEGER NOT NULL DEFAULT 0 CHECK(namespaces>=0),
     inode_rows INTEGER NOT NULL DEFAULT 0 CHECK(inode_rows>=0),
     directory_entry_rows INTEGER NOT NULL DEFAULT 0 CHECK(directory_entry_rows>=0),
@@ -13,16 +11,13 @@ CREATE TABLE accounting (
     shrink_rows INTEGER NOT NULL DEFAULT 0 CHECK(shrink_rows>=0),
     operation_record_rows INTEGER NOT NULL DEFAULT 0 CHECK(operation_record_rows>=0),
     operation_record_bytes INTEGER NOT NULL DEFAULT 0 CHECK(operation_record_bytes>=0),
-    orphan_rows INTEGER NOT NULL DEFAULT 0 CHECK(orphan_rows>=0),
     owner_rows INTEGER NOT NULL DEFAULT 0 CHECK(owner_rows>=0),
     source_rows INTEGER NOT NULL DEFAULT 0 CHECK(source_rows>=0),
     owner_details INTEGER NOT NULL DEFAULT 0 CHECK(owner_details>=0),
-    retire_targets INTEGER NOT NULL DEFAULT 0 CHECK(retire_targets>=0),
     maintenance_targets INTEGER NOT NULL DEFAULT 0 CHECK(maintenance_targets>=0),
     ready_targets INTEGER NOT NULL DEFAULT 0 CHECK(ready_targets>=0),
     reference_rows INTEGER NOT NULL DEFAULT 0 CHECK(reference_rows>=0)
 ) STRICT;
-INSERT INTO accounting(ns) VALUES(0);
 CREATE TRIGGER workspace_account_insert AFTER INSERT ON workspace BEGIN
     INSERT INTO accounting(ns,namespaces) VALUES(NEW.ns,1);
 END;
@@ -79,14 +74,6 @@ END;
 CREATE TRIGGER indexed_operation_record_account_delete AFTER DELETE ON indexed_operation_record BEGIN
     UPDATE accounting SET operation_record_rows=operation_record_rows-1,operation_record_bytes=operation_record_bytes-length(OLD.value) WHERE ns=OLD.ns;
 END;
-CREATE TRIGGER orphan_account_insert AFTER INSERT ON orphan BEGIN
-    UPDATE accounting SET orphan_rows=orphan_rows+1 WHERE ns=0;
-    UPDATE accounting SET orphan_rows=orphan_rows+1 WHERE ns=NEW.ns;
-END;
-CREATE TRIGGER orphan_account_delete AFTER DELETE ON orphan BEGIN
-    UPDATE accounting SET orphan_rows=orphan_rows-1 WHERE ns=0;
-    UPDATE accounting SET orphan_rows=orphan_rows-1 WHERE ns=OLD.ns;
-END;
 CREATE TRIGGER lease_account_insert AFTER INSERT ON lease BEGIN
     UPDATE accounting SET owner_rows=owner_rows+1 WHERE ns=NEW.ns;
 END;
@@ -99,18 +86,6 @@ END;
 CREATE TRIGGER base_source_account_delete AFTER DELETE ON base_source BEGIN
     UPDATE accounting SET source_rows=source_rows-1 WHERE ns=OLD.ns;
 END;
-CREATE TRIGGER file_handle_account_insert AFTER INSERT ON file_handle BEGIN
-    UPDATE accounting SET owner_details=owner_details+1 WHERE ns=NEW.ns;
-END;
-CREATE TRIGGER file_handle_account_delete AFTER DELETE ON file_handle BEGIN
-    UPDATE accounting SET owner_details=owner_details-1 WHERE ns=OLD.ns;
-END;
-CREATE TRIGGER file_read_account_insert AFTER INSERT ON file_read BEGIN
-    UPDATE accounting SET owner_details=owner_details+1 WHERE ns=NEW.ns;
-END;
-CREATE TRIGGER file_read_account_delete AFTER DELETE ON file_read BEGIN
-    UPDATE accounting SET owner_details=owner_details-1 WHERE ns=OLD.ns;
-END;
 CREATE TRIGGER captured_reader_account_insert AFTER INSERT ON captured_reader BEGIN
     UPDATE accounting SET owner_details=owner_details+1 WHERE ns=NEW.ns;
 END;
@@ -122,18 +97,6 @@ CREATE TRIGGER operation_owner_account_insert AFTER INSERT ON operation_owner BE
 END;
 CREATE TRIGGER operation_owner_account_delete AFTER DELETE ON operation_owner BEGIN
     UPDATE accounting SET owner_details=owner_details-1 WHERE ns=OLD.ns;
-END;
-CREATE TRIGGER lookup_owner_account_insert AFTER INSERT ON lookup_owner BEGIN
-    UPDATE accounting SET owner_details=owner_details+1 WHERE ns=NEW.ns;
-END;
-CREATE TRIGGER lookup_owner_account_delete AFTER DELETE ON lookup_owner BEGIN
-    UPDATE accounting SET owner_details=owner_details-1 WHERE ns=OLD.ns;
-END;
-CREATE TRIGGER reclaim_account_insert AFTER INSERT ON reclaim BEGIN
-    UPDATE accounting SET retire_targets=retire_targets+1 WHERE ns=NEW.ns;
-END;
-CREATE TRIGGER reclaim_account_delete AFTER DELETE ON reclaim BEGIN
-    UPDATE accounting SET retire_targets=retire_targets-1 WHERE ns=OLD.ns;
 END;
 CREATE TRIGGER maintenance_account_insert AFTER INSERT ON maintenance BEGIN
     UPDATE accounting SET maintenance_targets=maintenance_targets+1,ready_targets=ready_targets+NEW.ready WHERE ns=NEW.ns;
@@ -155,51 +118,4 @@ CREATE TRIGGER indexed_operation_record_account_update AFTER UPDATE ON indexed_o
 END;
 CREATE TRIGGER maintenance_account_update AFTER UPDATE ON maintenance BEGIN
     UPDATE accounting SET ready_targets=ready_targets-(OLD.ready)+(NEW.ready) WHERE ns=NEW.ns;
-END;
-CREATE TRIGGER orphan_wait_account_insert AFTER INSERT ON orphan_wait BEGIN
-    UPDATE accounting SET wait_refs=wait_refs+1 WHERE ns=NEW.ns;
-END;
-CREATE TRIGGER orphan_wait_account_delete AFTER DELETE ON orphan_wait BEGIN
-    UPDATE accounting SET wait_refs=wait_refs-1 WHERE ns=OLD.ns;
-END;
-CREATE TRIGGER file_custody_account_insert AFTER INSERT ON file_custody BEGIN
-    UPDATE accounting SET owner_details=owner_details+1 WHERE ns=NEW.ns;
-END;
-CREATE TRIGGER file_custody_account_delete AFTER DELETE ON file_custody BEGIN
-    UPDATE accounting SET owner_details=owner_details-1 WHERE ns=OLD.ns;
-END;
-
-CREATE TRIGGER native_mount_account_insert AFTER INSERT ON native_mount BEGIN
-    UPDATE accounting SET owner_details=owner_details+1 WHERE ns=NEW.ns;
-END;
-CREATE TRIGGER native_mount_account_delete AFTER DELETE ON native_mount BEGIN
-    UPDATE accounting SET owner_details=owner_details-1 WHERE ns=OLD.ns;
-END;
-
-CREATE TRIGGER native_lookup_account_insert AFTER INSERT ON native_lookup BEGIN
-    UPDATE accounting SET owner_details=owner_details+1 WHERE ns=NEW.ns;
-END;
-CREATE TRIGGER native_lookup_account_delete AFTER DELETE ON native_lookup BEGIN
-    UPDATE accounting SET owner_details=owner_details-1 WHERE ns=OLD.ns;
-END;
-
-CREATE TRIGGER native_parent_account_insert AFTER INSERT ON native_parent BEGIN
-    UPDATE accounting SET owner_details=owner_details+1 WHERE ns=NEW.ns;
-END;
-CREATE TRIGGER native_parent_account_delete AFTER DELETE ON native_parent BEGIN
-    UPDATE accounting SET owner_details=owner_details-1 WHERE ns=OLD.ns;
-END;
-
-CREATE TRIGGER native_directory_account_insert AFTER INSERT ON native_directory BEGIN
-    UPDATE accounting SET owner_details=owner_details+1 WHERE ns=NEW.ns;
-END;
-CREATE TRIGGER native_directory_account_delete AFTER DELETE ON native_directory BEGIN
-    UPDATE accounting SET owner_details=owner_details-1 WHERE ns=OLD.ns;
-END;
-
-CREATE TRIGGER native_cookie_account_insert AFTER INSERT ON native_cookie BEGIN
-    UPDATE accounting SET owner_details=owner_details+1 WHERE ns=NEW.ns;
-END;
-CREATE TRIGGER native_cookie_account_delete AFTER DELETE ON native_cookie BEGIN
-    UPDATE accounting SET owner_details=owner_details-1 WHERE ns=OLD.ns;
 END;

@@ -680,17 +680,14 @@ fn a_job_submitted_before_the_stop_is_awaited_to_its_original_result() {
 
     // The owed reply attempt is a disposal call: it runs after the stop.
     // The attempt itself is recorded with no owner job; because the parked
-    // capture observed this last ticket pending, it owes the owner exactly
-    // one settling job. The capture then completes and the held-back job
+    // capture observed this last ticket pending, it wakes that existing
+    // job without new admission. The capture completes and the held-back job
     // runs to its own result.
     let lifecycle = rig.owner_work().completed[ServiceClass::Lifecycle as usize];
     wait(first.replied()).unwrap();
     let work = rig.owner_work();
-    assert_eq!(work.admitted, admitted + 1);
-    assert_eq!(
-        work.completed[ServiceClass::Lifecycle as usize],
-        lifecycle + 1
-    );
+    assert_eq!(work.admitted, admitted);
+    assert_eq!(work.completed[ServiceClass::Lifecycle as usize], lifecycle);
     let captured = wait(capture).unwrap();
     assert!(matches!(captured.result(), Ok(Response::Captured(_))));
     assert!(captured.work().parked_turns >= 1);
@@ -704,11 +701,8 @@ fn a_job_submitted_before_the_stop_is_awaited_to_its_original_result() {
     // Nothing waits for the second publication's ticket: no owner job.
     wait(second.replied()).unwrap();
     let work = rig.owner_work();
-    assert_eq!(work.admitted, admitted + 1);
-    assert_eq!(
-        work.completed[ServiceClass::Lifecycle as usize],
-        lifecycle + 1
-    );
+    assert_eq!(work.admitted, admitted);
+    assert_eq!(work.completed[ServiceClass::Lifecycle as usize], lifecycle);
     assert_eq!(fence.terminal_replies(), 0);
 
     // Read back through a fence that was never stopped: the second directory

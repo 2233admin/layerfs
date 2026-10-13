@@ -325,7 +325,7 @@ fn an_unlinked_open_file_keeps_its_pieces_until_its_last_owner() {
     db.release_file_read(read).unwrap();
     maintain(&db, || {});
     assert_eq!(rows(&db, route), (0, 0));
-    assert_eq!(db.resources(Some(route)).unwrap().counts.orphan_rows, 0);
+    assert_eq!(db.resources(Some(route)).unwrap().open.orphan_files, 0);
 }
 
 #[test]
@@ -353,7 +353,7 @@ fn an_unlinked_file_nothing_holds_retires_its_pieces() {
 }
 
 #[test]
-fn a_closed_workspace_reclaims_its_pieces_in_pages_beside_a_live_one() {
+fn a_closed_workspace_retains_its_pieces_until_file_disposal_beside_a_live_one() {
     let temp = Temp::new();
     let db = temp.db();
     let content = noise(2 << 20, 81);
@@ -368,25 +368,19 @@ fn a_closed_workspace_reclaims_its_pieces_in_pages_beside_a_live_one() {
     let (live, _, kept) = build(83);
     db.close(closed).unwrap();
     db.release_base_source(closed_source).unwrap();
-    let mut pages = 0;
-    loop {
-        let step = db.reclaim_closed(0).unwrap().unwrap();
-        assert!(step.rows <= 64);
-        pages += 1;
-        if step.done {
-            break;
-        }
-        assert!(pages < 100);
-    }
-    // 150 pieces are three pages; the inode row and the end are two more.
-    assert!(pages >= 5, "{pages}");
-    assert!(db.state(closed).is_err());
+    assert_eq!(db.cleanup_state(closed).unwrap(), CleanupState::Queued);
+    assert_eq!(
+        rows(&db, closed).0,
+        150,
+        "closed file is retained until disposal"
+    );
     assert_eq!(rows(&db, live).0, 150);
-    assert_eq!(db.resources(None).unwrap().counts.reference_rows, 150);
+    assert_eq!(db.resources(None).unwrap().counts.reference_rows, 300);
     kept.check();
-    for plan in db.explain_closed_reclaim().unwrap() {
+    for plan in db.explain_close_held().unwrap() {
         assert!(
-            !plan.contains("SCAN") && !plan.contains("TEMP B-TREE"),
+            (!plan.contains("SCAN") || plan == "SCAN CONSTANT ROW")
+                && !plan.contains("TEMP B-TREE"),
             "{plan}"
         );
     }

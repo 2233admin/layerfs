@@ -149,24 +149,8 @@ fn native_lookup_uses_actual_owner_and_preserves_original_receipt_until_disposal
         other => panic!("{other:?}"),
     };
     assert_eq!(stat.logical_len, support::bytes(0).len() as u64);
-    assert_eq!(
-        receipt
-            .work()
-            .sql
-            .family(StatementKind::Begin)
-            .unwrap()
-            .executions,
-        1
-    );
-    assert_eq!(
-        receipt
-            .work()
-            .sql
-            .family(StatementKind::Commit)
-            .unwrap()
-            .executions,
-        1
-    );
+    assert!(receipt.work().sql.family(StatementKind::Begin).is_none());
+    assert!(receipt.work().sql.family(StatementKind::Commit).is_none());
     assert!(client.diagnostics().unwrap().credited_bytes > 0);
     let serial = stat.serial;
     drop((original, receipt));
@@ -187,24 +171,8 @@ fn native_lookup_uses_actual_owner_and_preserves_original_receipt_until_disposal
     });
     let file = original.open_candidate.unwrap();
     assert!(!file.writable());
-    assert_eq!(
-        receipt
-            .work()
-            .sql
-            .family(StatementKind::Begin)
-            .unwrap()
-            .executions,
-        1
-    );
-    assert_eq!(
-        receipt
-            .work()
-            .sql
-            .family(StatementKind::Commit)
-            .unwrap()
-            .executions,
-        1
-    );
+    assert!(receipt.work().sql.family(StatementKind::Begin).is_none());
+    assert!(receipt.work().sql.family(StatementKind::Commit).is_none());
     let done = job(
         &client,
         route,
@@ -328,15 +296,20 @@ fn native_lookup_uses_actual_owner_and_preserves_original_receipt_until_disposal
     let deadline = Instant::now() + Duration::from_secs(3);
     loop {
         let work = client.diagnostics().unwrap();
-        if work.closed_namespaces == 1 && work.outstanding == 0 {
+        if work.closed_namespaces == 0 && work.outstanding == 0 {
             break;
         }
-        assert!(
-            Instant::now() < deadline,
-            "automatic native/namespace retirement deadline"
-        );
+        assert!(Instant::now() < deadline, "native result disposal deadline");
         std::thread::yield_now();
     }
+    let observed = job(&client, route, Command::CleanupState);
+    assert!(matches!(
+        observed.result(),
+        Ok(Response::CleanupState(
+            layerfs_overlay::CleanupState::Queued
+        ))
+    ));
+    drop(observed);
     assert!(client.maintenance_failure().unwrap().is_none());
     assert_eq!(client.diagnostics().unwrap().receipt_overruns, 0);
     drop((base, operation, bound, store));

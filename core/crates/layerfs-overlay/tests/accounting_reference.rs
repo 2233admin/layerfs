@@ -116,21 +116,8 @@ fn reference(raw: &rusqlite::Connection) -> StoredCounts {
         "owned_operation_record",
         "indexed_operation_record",
     ];
-    let details = [
-        "file_handle",
-        "file_read",
-        "captured_reader",
-        "operation_owner",
-        "lookup_owner",
-        "file_custody",
-        "native_mount",
-        "native_lookup",
-        "native_parent",
-        "native_directory",
-        "native_cookie",
-    ];
+    let details = ["captured_reader", "operation_owner"];
     StoredCounts {
-        wait_refs: rows("orphan_wait"),
         namespaces: rows("workspace"),
         inode_rows: rows("inode"),
         directory_entry_rows: rows("directory_entry"),
@@ -151,12 +138,10 @@ fn reference(raw: &rusqlite::Connection) -> StoredCounts {
                 )
             })
             .sum(),
-        orphan_rows: rows("orphan"),
         owner_rows: rows("lease"),
         source_rows: rows("base_source"),
         owner_details: details.iter().map(|table| rows(table)).sum(),
         reply_tickets: 0,
-        retire_targets: rows("reclaim"),
         maintenance_targets: rows("maintenance"),
         ready_targets: counted(raw, "SELECT ifnull(sum(ready),0) FROM maintenance"),
     }
@@ -188,18 +173,11 @@ fn the_aggregate_equals_the_stored_rows_at_one_three_and_eight_namespaces() {
             }
             if stage == 2 {
                 for _ in 0..7 {
-                    db.reclaim_closed(0).unwrap();
                     db.maintain(MaintenanceCursor::default()).unwrap();
                 }
             }
             if stage == 3 {
                 maintain(&db);
-                for turn in 0..20_000 {
-                    if db.reclaim_closed(0).unwrap().is_none() {
-                        break;
-                    }
-                    assert!(turn < 19_999);
-                }
             }
             let total = db.resources(None).unwrap().counts;
             // The aggregate is also the sum of the live namespaces' own rows
@@ -212,7 +190,6 @@ fn the_aggregate_equals_the_stored_rows_at_one_three_and_eight_namespaces() {
                     sum.inode_rows += own.inode_rows;
                     sum.payload_cells += own.payload_cells;
                     sum.payload_bytes += own.payload_bytes;
-                    sum.orphan_rows += own.orphan_rows;
                     sum.owner_details += own.owner_details;
                 }
                 assert_eq!(
@@ -221,7 +198,6 @@ fn the_aggregate_equals_the_stored_rows_at_one_three_and_eight_namespaces() {
                         sum.inode_rows,
                         sum.payload_cells,
                         sum.payload_bytes,
-                        sum.orphan_rows,
                         sum.owner_details
                     ),
                     (
@@ -229,35 +205,27 @@ fn the_aggregate_equals_the_stored_rows_at_one_three_and_eight_namespaces() {
                         total.inode_rows,
                         total.payload_cells,
                         total.payload_bytes,
-                        total.orphan_rows,
                         total.owner_details
                     )
                 );
                 assert_eq!(total.namespaces, u64::from(namespaces));
-                assert_eq!(total.orphan_rows, u64::from(namespaces));
             }
             if stage == 3 {
-                assert_eq!(total, StoredCounts::default());
+                assert_eq!(total.namespaces, u64::from(namespaces));
+                assert_eq!(db.resources(None).unwrap().open, OpenStateCounts::default());
             }
             drop(held);
-            drop(db);
+            db.close_database().unwrap();
             let raw = rusqlite::Connection::open(temp.0.join("overlay.sqlite")).unwrap();
             assert_eq!(
                 total,
                 reference(&raw),
                 "{namespaces} namespaces, stage {stage}"
             );
-            // Namespace zero keeps the engine's orphan count and nothing else.
-            let zero: (i64, i64, i64) = raw
-                .query_row(
-                    "SELECT orphan_rows,inode_rows+payload_cells+owner_details+namespaces,
-                    (SELECT count(*) FROM accounting) FROM accounting WHERE ns=0",
-                    [],
-                    |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
-                )
+            let accounting_rows: i64 = raw
+                .query_row("SELECT count(*) FROM accounting", [], |r| r.get(0))
                 .unwrap();
-            assert_eq!((zero.0 as u64, zero.1), (total.orphan_rows, 0));
-            assert_eq!(zero.2 as u64, 1 + total.namespaces);
+            assert_eq!(accounting_rows as u64, total.namespaces);
             seen.push((namespaces, stage, total));
         }
     }

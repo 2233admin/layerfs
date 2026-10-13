@@ -701,3 +701,148 @@ Consequences for this ledger:
   the kernel remembers; the revised guide wording is a draft, not applied.
 
 Durable: NOT_RUN — disabled by owner until explicit reauthorization.
+
+
+## Issue 321 takeover: retained Step-1 selections (2026-10-13)
+
+**Owner must know:** Step 1 remains INCOMPLETE. The four-Workspace sample
+FAILED; no row is promoted to PASS. The required missing selections ran once
+on the existing sealed product `20f23749950a64692d4d59876726725af909a847`,
+selected build `2026-10-13-issue320-i321-s1-selected-build`. The first takeover
+operation fast-forwarded `issue321-direct-overlay` to its unchanged docs head
+`464b121b9`; no product/source build was substituted. Separate-cache build
+flag: `-USQLITE_ENABLE_MEMORY_MANAGEMENT`. Retained protected services shared the
+Docker VM; this is declared interference, not an isolation claim.
+
+| Selection | Original outcome and scope | Retained identity |
+| --- | --- | --- |
+| exec concurrency, 2 CPUs | exit 0, cleanup complete; diagnostic only, no oracle/proof or eligible timing; earlier same-product observation reused, not rerun | `2026-10-13-issue320-i321-s1-selected-exec-2cpu` |
+| exec concurrency, unlimited CPUs | exit 0, cleanup complete; same diagnostic limitations; earlier same-product observation reused | `2026-10-13-issue320-i321-s1-selected-exec-unlimited` |
+| branch session, 16 × 50 then a new cold daemon × 50 | both runtime exits 0; 850 Commits across 17 sessions, no early stop; exact Store/WAL eviction observations were zero resident pages; cleanup complete; exit-code/Commit-kind diagnostic, no independent oracle | `2026-10-13-issue321-takeover-s1-session` |
+| tier 1, mixed development 100 MB / 5,000 / k100 | INELIGIBLE cache classification; receipt functional/proof status PASS, native and persisted selective oracles PASS, cleanup Gone; 26,078 requests, 93,702 jobs, 645,242 statements | `2026-10-13-issue321-takeover-s1-tier1` |
+| four Workspaces, 100 MB / 5,000 / k100 | FAIL; proof NOT_RUN, aggregate counts unavailable, cleanup UNAVAILABLE; control EOF at call 5 / Workspace 4 | `2026-10-13-issue321-takeover-s1-four` |
+
+Tier-1 raw spans: command 6,986,988,251 ns, Commit 1,834,896,674 ns,
+mount 9,114,000 ns, unmount 4,903,333 ns. Persisted Store size 110,485,504 B;
+persisted verifier covered 89,358,592 bytes and 5,048 paths, within its original
+selective scope. These are ineligible raw observations, not a speed claim.
+The session wrapper completed in about 58 s inside 120 s. Its result retains
+the diagnostic's existing `source_commit: null` field; the selected build and
+original invocation establish the pin above, rather than rewriting the receipt.
+
+Four-Workspace retained logs show an unavailable section-28 observation and
+section-30 `[0,0]`, meaning the Resources observer was not admitted. The original
+control failure is UnexpectedEof, followed by the original close failure; no OOM
+was recorded. Source routes concurrent global observations through a root lane
+with two lifecycle slots. AdmissionFull is a plausible explanation, not an
+observed serialized cause. That machinery is removed in Step B; it was not tuned.
+The other three roles completed their hundred Commits. The failed sample's own
+container/volume were positively tied to its clone, their logs and identities
+retained, and explicitly disposed. That external disposal does not repair the
+receipt's cleanup verdict. The native/persisted proof was not run for this arm.
+
+Before another payload copy, the two takeover samples' sealed manifests were
+checked and their own exported payload copies removed using the existing
+`drop_test_copy` mechanism, scoped to those samples only. Both checks were PASS;
+the tier-1 deletion record covers 450.0 MB of exports. Receipts and original
+verdicts remain. No prepared original or protected service was removed.
+
+## Issue 321 Step A source checkpoint (2026-10-13; qualification incomplete)
+
+**Owner must know:** all eleven selected tables and `reclaim` are removed in
+source, but Step A is not finished. Linux mounted proofs, the actual tier-1 walk
+population and the four required sealed-build selections are NOT_RUN at this
+new source identity. B/C/D/E are NOT_RUN. No guide wording or frozen pin changed.
+The historical pre-change trace is [Step-A trace](../321/STEP-A-TRACE.md).
+
+One open-state structure sits beside the connection. It holds descriptors,
+request associations, independent read consumers, lookup custody, orphan
+root/top/floor, generation waits, mounts, kernel references and directory parents,
+and accepted-name cookie pages. Changes journal only touched entries; known
+whole-job rollback restores memory, while unknown SQL completion retains and
+quarantines original custody. SQL accounting and memory ownership counts are
+separate. All moved SQL, accounting triggers, table-specific plan probes,
+native/cookie retirement jobs and terminal sweeps are deleted. Live payload,
+generation and operation-record reclamation remain bounded. Terminal Close
+establishes disposal eligibility; the existing control owner drains, checked
+closes and identity-checks deletion of the whole Workspace file. Raw Close no
+longer claims Gone or zero SQL rows. The obsolete ReplySettled SQL job is removed;
+a last watched reply wakes only the already-admitted before-effect capture.
+
+A foreign-cookie regression found that separate engines could mint identical
+opaque offsets. A process-wide atomic runtime-identity cursor now keeps them
+distinct without a cache, credit or shared memory allowance. Canonical object
+identities are unchanged. Private test-daemon directories also replace several
+fixtures that otherwise collided on their independently created `1.sqlite`.
+
+Host evidence is retained under `core/target/issue321/step-a-*` (diagnostic/check
+artifacts, not sealed performance receipts):
+
+- Overlay functional targets passed after removing obsolete SQL/terminal
+  assertions; exact request retention, stale tokens, underflow, lost replies,
+  known rollback and byte oracles remain. The 65,536-write fragmentation oracle
+  and real SQLITE_FULL rollback passed. An orphan pressure rollback also checks
+  exact memory counts, not SQL counts alone.
+- Workspace targets passed except the last recorded OPEN test's scope assertion;
+  the subsequent Workspace-specific memory observation passed its final six
+  native-visit checks (`step-a-final-workspace-tests`).
+- Affected daemon directory/native/fence/finite-arrival/indexed-record and bind
+  proofs passed. Directory oracles cover both 10 and 4,000 names, repeated
+  rewind, partial offsets and foreign-Workspace rejection. The bind proof
+  retains the exact unattempted command and duplicate-incarnation cause.
+- Warning-denying scoped all-target Clippy passed (`step-a-clippy-v3`), format
+  check passed, boundary guard passed, and its 50 self-tests passed. Full fuser
+  provenance still FAILS on the retained historical passthrough override; the
+  active core owner, lock and authorized patch checks passed separately.
+- The broad daemon test command hit 120 s at `product_commit_history_cost` and
+  was killed: FAILED as a hang, not a passing suite. Completed binary durations
+  sum to 52.270 s; the last completed producer test took 4.21 s. Its twelve-Commit
+  history target printed no completed Commit before the kill. No unchanged
+  rerun of that target has occurred. Broad-run missing fixture/binary inputs,
+  obsolete reservation/terminal checks and frozen count failures remain retained;
+  only diagnosed, affected checks were repaired and rerun.
+- The five host replay count tests FAIL at their thread-local tracing ownership
+  precondition, before exact comparisons. They are not PASS and do not establish
+  the twelve mounted cells' counts. The twelve-cell sealed check is still owed;
+  no count pin, trace expectation, contract or oracle was relaxed.
+
+A single host allocation diagnostic added 5,000 remembered regular files and
+observed 854,848 requested Rust bytes, or `854848 / 5000 = 170.9696 B/entry`.
+Its scope includes the kernel-reference and companion inode-custody maps and
+retained journal capacity. It excludes SQLite's C heap, allocator rounding,
+process RSS and kernel caches. It is neither a heap bound nor the actual mounted
+tier-1 walk measurement, and is not a sealed performance qualification. The
+public diagnostic reported 5,001 kernel/custody entries including the root.
+Idle/loaded 1/4/16-Workspace memory and service-time remeasurement remain Step B.
+
+Production LOC comparison will use the exact first-parent and final staged
+archives and be recorded in the source commit; the worktree diagnostic currently
+reports 83,704. This is not a committed count. The A+B target 77,500–79,500 is
+still an estimate; Step B has not run. Speed/storage comparisons for A are
+NOT_RUN; the Step-1 raw baseline above retains its eligibility limitations.
+
+Durable: NOT_RUN — disabled by owner until explicit reauthorization.
+
+
+Final host source-check follow-up before the A source seal: 37 selected Overlay
+checks passed (kernel memory 1, directory 5, lookup 10, revocation 1, native
+fences 9, orphans 11), six Workspace native-visit checks passed, and 23 daemon
+checks passed after moving cookie destruction outside the connection mutex
+(directory 4, owner 12, visit port 4, independent Workspace files 3). These
+receipts have their own invocation scope; they do not repair the broad hang
+or establish Linux mounted or sealed-sample qualification. A remains unfinished.
+
+
+A source seal (`i321-a-source-1`, local only; qualification still incomplete):
+Production LOC: 84,220 -> 83,704 (delta -516).
+Scope: first-party `core/crates` production Rust and shipped SQL; tests, examples,
+harnesses, tools, docs, third-party and generated code excluded. New `open/` and
+`maintenance/work.rs` are product code and included. Method: identical pinned
+`tools/production_loc.py` (SHA-256
+`c0fe7f36a0d4144bbd2b61c272c7579cc0d56ffe23f9588287ea30e793624adb`) on
+first-parent `464b121b9` and final staged-tree Git archives. Reference absent
+(retired R9c; last counted 65,417 at tree 498dd1917812). This is source-size
+comparison, not a timing/storage qualification or an A+B estimate. Cookie
+allocations are detached under the turn and destroyed after releasing the
+connection mutex. Final host Fuse all-target tests passed: 24 tests. Linux,
+actual mounted walk and A's four sealed selections remain NOT_RUN at this seal.

@@ -105,14 +105,8 @@ fn independent_orphan_survives_many_installs_and_failures_and_last_read_owner() 
     assert_eq!(bytes(&db, read, &file.base), expect);
     db.release_file_read(read).unwrap();
     maintain(&db);
-    for turn in 0..1000 {
-        let step = db.reclaim_closed(0).unwrap().unwrap();
-        if step.done {
-            assert!(db.state(route).is_err());
-            return;
-        }
-        assert!(turn < 999);
-    }
+    assert_eq!(db.cleanup_state(route).unwrap(), CleanupState::Queued);
+    db.close_database().unwrap();
 }
 #[test]
 fn captured_reader_preserves_sealed_bytes_across_install_and_blocks_failed_fold() {
@@ -204,12 +198,8 @@ fn operation_custody_never_reuses_an_exposed_owner_and_cleanup_cannot_delete_new
     assert!(db.put_owned_operation_record(second, &record).is_err());
     db.release_operation(second).unwrap();
     maintain(&db);
-    for _ in 0..1000 {
-        if db.reclaim_closed(0).unwrap().unwrap().done {
-            return;
-        }
-    }
-    panic!("terminal cleanup stalled");
+    assert_eq!(db.cleanup_state(route).unwrap(), CleanupState::Queued);
+    db.close_database().unwrap();
 }
 
 #[test]
@@ -344,12 +334,8 @@ fn logical_close_refuses_new_captured_owners_and_keeps_existing_consumers() {
     db.release_closed_capture(capture).unwrap();
     assert_eq!(db.cleanup_state(route).unwrap(), CleanupState::Held);
     db.release_captured_reader(reader).unwrap();
-    for _ in 0..1000 {
-        if db.reclaim_closed(0).unwrap().unwrap().done {
-            return;
-        }
-    }
-    panic!("terminal cleanup stalled");
+    assert_eq!(db.cleanup_state(route).unwrap(), CleanupState::Queued);
+    db.close_database().unwrap();
 }
 
 #[test]
@@ -446,7 +432,10 @@ fn a_last_release_under_a_generation_hold_parks_the_layer_for_the_queue() {
     let counts = || db.resources(None).unwrap().counts;
     let (cells, queued) = (counts().payload_cells, counts().maintenance_targets);
     // Two whole cells in one row and the tail in another.
-    assert_eq!((counts().orphan_rows, cells, queued), (1, 2, 1));
+    assert_eq!(
+        (db.resources(None).unwrap().open.orphan_files, cells, queued),
+        (1, 2, 1)
+    );
 
     // The last reference leaves with no owner step in between. Its job
     // releases both lower layers and deletes the orphan and its queued
@@ -455,7 +444,7 @@ fn a_last_release_under_a_generation_hold_parks_the_layer_for_the_queue() {
     let after = counts();
     assert_eq!(
         (
-            after.orphan_rows,
+            db.resources(None).unwrap().open.orphan_files,
             after.payload_cells,
             after.maintenance_targets,
             after.ready_targets
@@ -569,14 +558,14 @@ fn inode_reads_probe_the_orphan_domain_only_while_an_orphan_exists() {
     unlink(&also);
     db.close_file(open).unwrap();
     maintain(&db);
-    assert_eq!(db.resources(None).unwrap().counts.orphan_rows, 1);
+    assert_eq!(db.resources(None).unwrap().open.orphan_files, 1);
     assert_eq!(read(source, 9), (None, 2));
     assert_eq!(read(elsewhere, 7), (None, 2));
     // The engine's last orphan is reclaimed: the probe stops in every
     // namespace, one seek per inode.
     db.close_file(held).unwrap();
     maintain(&db);
-    assert_eq!(db.resources(None).unwrap().counts.orphan_rows, 0);
+    assert_eq!(db.resources(None).unwrap().open.orphan_files, 0);
     assert_eq!(read(source, 7).1, 1);
     assert_eq!(read(source, 9), (None, 1));
     assert_eq!(read(elsewhere, 7), (None, 1));
@@ -624,19 +613,14 @@ fn a_closed_namespace_that_takes_the_last_orphan_stops_the_probe() {
     db.close(route).unwrap();
     db.release_base_source(source).unwrap();
     db.close_file(open).unwrap();
-    assert_eq!(db.resources(None).unwrap().counts.orphan_rows, 1);
-    for turn in 0..1000 {
-        let step = db.reclaim_closed(0).unwrap().unwrap();
-        if db.resources(None).unwrap().counts.orphan_rows != 0 {
-            assert_eq!(attempts(), 2);
-        }
-        if step.done {
-            break;
-        }
-        assert!(turn < 999);
-    }
-    assert_eq!(db.resources(None).unwrap().counts.orphan_rows, 0);
-    assert_eq!(attempts(), 1);
+    assert_eq!(db.resources(None).unwrap().open.orphan_files, 1);
+    assert_eq!(db.cleanup_state(route).unwrap(), CleanupState::Queued);
+    assert_eq!(
+        attempts(),
+        2,
+        "terminal close does not probe or delete orphan payload"
+    );
+    db.close_database().unwrap();
 }
 
 fn full(result: OverlayResult<()>) -> bool {
@@ -693,7 +677,7 @@ fn put(
 /// queue's last leaves are filled by the same kind of row until one more
 /// needs a page the quota does not have.
 #[test]
-fn a_release_that_fails_leaves_the_last_orphan_as_it_was_and_the_queue_reclaims_it_later() {
+fn a_failed_release_keeps_exact_custody_until_terminal_file_disposal() {
     const ORPHAN: u64 = 1 << 20;
     const SIZE: u64 = 8199;
     let temp = Temp::new();
@@ -706,8 +690,8 @@ fn a_release_that_fails_leaves_the_last_orphan_as_it_was_and_the_queue_reclaims_
     )
     .unwrap();
     let route = db.open_workspace([153; 32], [154; 32]).unwrap();
-    // A second Workspace whose terminal reclamation frees pages later
-    // without adding a row.
+    // A second Workspace provides independent retained SQL state. Terminal
+    // close leaves its rows for whole-file disposal.
     let spare = db.open_workspace([155; 32], [156; 32]).unwrap();
     let held = db.acquire_base_source(spare, 1).unwrap();
     put(
@@ -780,12 +764,16 @@ fn a_release_that_fails_leaves_the_last_orphan_as_it_was_and_the_queue_reclaims_
             all.database_pages,
             all.free_pages,
             db.state(route).unwrap(),
+            all.open,
         )
     };
     assert_eq!(probes(&db), 2);
     assert!(view(&db) == file.expect);
     let before = observed(&db);
-    assert_eq!((before.0.orphan_rows, before.2), (1, 0));
+    assert_eq!(
+        (db.resources(None).unwrap().open.orphan_files, before.2),
+        (1, 0)
+    );
     let pending = db.maintenance_pending();
 
     // The last reference leaves. Its job deletes the engine's only orphan,
@@ -814,46 +802,18 @@ fn a_release_that_fails_leaves_the_last_orphan_as_it_was_and_the_queue_reclaims_
         .unwrap();
     assert_eq!(sealed.data, file.expect);
 
-    // Pages return and the queue runs: the orphan's own item is the one the
-    // failed job would have deleted, and it steps the held orphan.
-    db.close(spare).unwrap();
-    for turn in 0..1000 {
-        if db.reclaim_closed(0).unwrap().unwrap().done {
-            break;
-        }
-        assert!(turn < 999);
-    }
-    let run = |db: &Overlay| {
-        let mut cursor = MaintenanceCursor::default();
-        for _ in 0..20_000 {
-            let Some(step) = db.maintain(cursor).unwrap() else {
-                return;
-            };
-            cursor = step.cursor;
-        }
-        panic!("maintenance deadline");
-    };
-    run(&db);
-    assert_eq!(db.resources(None).unwrap().counts.orphan_rows, 1);
     assert_eq!(view(&db), file.expect);
-
-    // The same release succeeds, and the capture's release wakes the layer
-    // it parked: the queue reclaims the orphan's cells.
-    let cells = db.resources(None).unwrap().counts.payload_cells;
-    db.close_file(open).unwrap();
-    assert!(db.check_file(open, false).is_err());
-    let after = db.resources(None).unwrap().counts;
-    assert_eq!((after.orphan_rows, after.payload_cells), (0, cells));
-    assert_eq!(probes(&db), 1);
-    db.resolve_failed_capture(capture).unwrap();
-    db.release_captured_reader(reader).unwrap();
-    run(&db);
-    let end = db.resources(None).unwrap().counts;
-    assert_eq!((end.orphan_rows, end.payload_cells), (0, cells - 2));
-    assert_eq!((end.maintenance_targets, end.ready_targets), (0, 0));
-    assert_eq!(db.inode(route, ORPHAN).unwrap().unwrap().nlink, 0);
-    println!(
-        "R7_RELEASE_ROLLBACK payload_writes={filled} rows={rows} removals={} failed={reclaim:?}",
-        removed - 2000
+    db.close(route).unwrap();
+    db.close(spare).unwrap();
+    assert!(
+        db.check_file(open, false).is_ok(),
+        "failed release keeps its exact descriptor"
     );
+    println!(
+        "R7_RELEASE_ROLLBACK payload_writes={filled} rows={rows} removals={} failed={reclaim:?} terminal_row_sweep=false replay=false",
+        removed - 2000,
+    );
+    // The caller fences these local consumers before checked file disposal;
+    // no failed release is retried or replayed.
+    db.close_database().unwrap();
 }

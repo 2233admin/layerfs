@@ -10,8 +10,6 @@ pub(crate) const RETIRE: i64 = 3;
 pub(crate) const STALE: i64 = 4;
 pub(crate) const STEPS: i64 = 5;
 pub(crate) const OPERATION_RECORD: i64 = 6;
-pub(crate) const NATIVE: i64 = 10;
-pub(crate) const NATIVE_DIRECTORY: i64 = 11;
 /// Stale reference pieces of one layer after a shrink.
 pub(crate) const STALE_PIECES: i64 = 12;
 const READY: &str = "SELECT ns,kind,resource,target,phase,cursor,aux,name FROM maintenance
@@ -225,8 +223,6 @@ impl Overlay {
                     ORPHAN => self.maintain_orphan(&item, PAGE)?,
                     WAKE_ORPHAN => self.wake_orphan_step(&item)?,
                     WAKE_GENERATION => self.wake_generation_step(&item)?,
-                    NATIVE => self.retire_native(&item)?,
-                    NATIVE_DIRECTORY => self.retire_native_directory(&item)?,
                     SERIAL_RETIRE => self.retire_serial(&item, PAGE)?,
                     STALE | STEPS | OPERATION_RECORD => self.clean_live_item(&item)?,
                     STALE_PIECES => self.clean_pieces(&item)?,

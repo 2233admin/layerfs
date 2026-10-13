@@ -105,63 +105,69 @@ impl Overlay {
         row: bool,
     ) -> OverlayResult<(WorkspaceState, i64, Option<LocalRow>)> {
         self.check_route(mount.route)?;
-        let (owner, key) = (integer(mount.owner)?, integer(serial)?);
-        let incarnation = mount.route.incarnation.as_slice();
-        let decode = |r: &rusqlite::Row<'_>| {
-            let local = match row && r.get::<_, Option<i64>>(15)?.is_some() {
-                true => Some(inode::local_row_at(r, 15)?),
-                false => None,
-            };
-            Ok((
-                crate::lifetime::workspace::decode(r)?,
-                r.get::<_, Option<i64>>(11)?,
-                r.get::<_, Option<i64>>(12)?,
-                r.get::<_, Option<bool>>(13)?,
-                r.get::<_, Option<i64>>(14)?,
-                local,
-            ))
-        };
-        let found = match held {
-            Held::Lookup => self.query(
+        let key = integer(serial)?;
+        let params: [&dyn rusqlite::ToSql; 3] =
+            [&mount.route.ns, &mount.route.incarnation.as_slice(), &key];
+        let (state, local) = self
+            .query(
                 StatementKind::Workspace,
-                match row {
-                    true => crate::sql::FENCE_LOOKUP_ROW,
-                    false => crate::sql::FENCE_LOOKUP,
+                if row {
+                    crate::sql::FENCE_LOOKUP_ROW
+                } else {
+                    crate::sql::FENCE_LOOKUP
                 },
-                &[&mount.route.ns, &incarnation, &owner, &key],
-                56,
-                decode,
-            ),
-            Held::File(handle) | Held::Handle(handle) | Held::Directory(handle) => self.query(
-                StatementKind::Workspace,
-                match (held, row) {
-                    (Held::File(_), true) => crate::sql::FENCE_FILE_ROW,
-                    (Held::File(_), false) => crate::sql::FENCE_FILE,
-                    (Held::Directory(_), _) => crate::sql::FENCE_DIRECTORY,
-                    (_, true) => crate::sql::FENCE_HANDLE_ROW,
-                    (_, false) => crate::sql::FENCE_HANDLE,
+                if row { &params[..] } else { &params[..2] },
+                if row { 48 } else { 40 },
+                |r| {
+                    let local = if row && r.get::<_, Option<i64>>(11)?.is_some() {
+                        Some(inode::local_row_at(r, 11)?)
+                    } else {
+                        None
+                    };
+                    Ok((crate::lifetime::workspace::decode(r)?, local))
                 },
-                &[
-                    &mount.route.ns,
-                    &incarnation,
-                    &owner,
-                    &key,
-                    &integer(handle)?,
-                ],
-                64,
-                decode,
-            ),
-        }?
-        .pop();
-        let (state, attached, root, revoked, held, local) = found.ok_or(OverlayError::Stale)?;
+            )?
+            .pop()
+            .ok_or(OverlayError::Stale)?;
         if live && state.closed {
             return Err(OverlayError::Closed);
         }
-        if attached != Some(owner) || root != Some(integer(mount.root)?) || revoked != Some(false) {
+        let open = self.open.borrow();
+        if open.mounts.rows.get(&mount.route.ns) != Some(&(mount, false)) {
             return Err(OverlayError::Stale);
         }
-        Ok((state, held.ok_or(OverlayError::Stale)?, local))
+        let file = |handle| {
+            open.files
+                .rows
+                .get(&(mount.route.ns, handle))
+                .filter(|held| held.mount == mount.owner && held.file.serial == serial)
+        };
+        let directory = |handle| {
+            open.directories
+                .rows
+                .get(&(mount.route.ns, handle))
+                .filter(|held| held.directory.mount == mount && held.directory.serial == serial)
+        };
+        let value = match held {
+            Held::Lookup => open
+                .kernel
+                .rows
+                .get(&(mount.route.ns, mount.owner, serial))
+                .map(|_| 1),
+            Held::File(handle) => file(handle).map(|held| i64::from(held.file.writable)),
+            Held::Handle(handle) => {
+                if file(handle).is_some() || directory(handle).is_some() {
+                    Some(1)
+                } else {
+                    None
+                }
+            }
+            Held::Directory(handle) => directory(handle).map(|held| held.floor as i64),
+        }
+        .ok_or(OverlayError::Stale)?;
+        Ok((state, value, local))
     }
+
     /// LOOKUP or GETATTR in one visit. The callback is one bounded semantic
     /// decision over current rows and base facts it holds or reads from
     /// memory; it performs no provider I/O. A decision that still needs a
@@ -369,40 +375,23 @@ impl Overlay {
     /// the VM program of the created-and-opened file's one custody write.
     pub fn explain_native_visit(&self, mount: NativeMount) -> OverlayResult<Vec<String>> {
         self.state(mount.route)?;
-        let (ns, owner, one) = (mount.route.ns, integer(mount.owner)?, 1_i64);
+        let ns = mount.route.ns;
         let incarnation = mount.route.incarnation.as_slice();
-        let fence: [&dyn rusqlite::ToSql; 5] = [&ns, &incarnation, &owner, &one, &one];
-        let custody: [&dyn rusqlite::ToSql; 2] = [&ns, &one];
+        let one = 1_i64;
+        let params: [&dyn rusqlite::ToSql; 3] = [&ns, &incarnation, &one];
         let mut plans = Vec::new();
-        for (label, statement, params) in [
-            ("fence-lookup", crate::sql::FENCE_LOOKUP, &fence[..4]),
-            ("fence-file", crate::sql::FENCE_FILE, &fence[..]),
-            ("fence-handle", crate::sql::FENCE_HANDLE, &fence[..]),
-            ("fence-directory", crate::sql::FENCE_DIRECTORY, &fence[..]),
-            (
-                "fence-row-lookup",
-                crate::sql::FENCE_LOOKUP_ROW,
-                &fence[..4],
-            ),
-            ("fence-row-file", crate::sql::FENCE_FILE_ROW, &fence[..]),
-            ("fence-row-handle", crate::sql::FENCE_HANDLE_ROW, &fence[..]),
-            ("drop-open", crate::sql::FILE_OPENS_DROP, &custody[..]),
-            ("drop-lookup", crate::sql::FILE_LOOKUPS_DROP, &custody[..]),
-            ("drop-reader", crate::sql::FILE_READERS_DROP, &custody[..]),
+        for (label, statement, bound) in [
+            ("workspace", crate::sql::FENCE_LOOKUP, 2),
+            ("workspace-inode", crate::sql::FENCE_LOOKUP_ROW, 3),
         ] {
             plans.extend(self.query(
                 StatementKind::Explain,
                 &format!("EXPLAIN QUERY PLAN {statement}"),
-                params,
-                64,
-                |row| Ok(format!("{label}: {}", row.get::<_, String>(3)?)),
+                &params[..bound],
+                48,
+                |r| Ok(format!("{label}: {}", r.get::<_, String>(3)?)),
             )?);
         }
-        plans.push(self.explain_program(
-            "open-and-lookup",
-            crate::sql::FILE_OPEN_LOOKUP_ADD,
-            &custody,
-        )?);
         Ok(plans)
     }
 }

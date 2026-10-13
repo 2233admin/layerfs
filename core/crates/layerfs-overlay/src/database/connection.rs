@@ -15,6 +15,7 @@ use std::{
 pub struct Overlay {
     pub(crate) identity: u64,
     pub(crate) connection: Connection,
+    pub(crate) open: RefCell<crate::open::OpenState>,
     pub(crate) work: RefCell<DatabaseWork>,
     pub(crate) payload_work: Cell<crate::PayloadWork>,
     pub(crate) quarantined: Cell<bool>,
@@ -22,10 +23,9 @@ pub struct Overlay {
     /// established only by an exact empty ready query; enqueue/release marks
     /// possible work. A rolled-back enqueue can leave only a false positive.
     pub(crate) maintenance_ready: Cell<bool>,
-    pub(crate) closed_ready: Cell<bool>,
-    /// Whether any namespace of this engine holds an orphan row. Set before
-    /// the only statement that inserts one, cleared by the transaction that
-    /// deletes the last one, and restored when a job fails, so it is exact:
+    /// Whether any namespace of this engine holds an orphan. Set when one
+    /// is inserted, cleared by the job deleting the last one, and restored
+    /// when a job fails, so it is exact:
     /// while false no orphan row and no orphan-domain inode row exists.
     pub(crate) orphan_seen: Cell<bool>,
     /// Whether this engine has ever written a reference piece. Set before
@@ -40,9 +40,6 @@ pub struct Overlay {
     pub(crate) release_step: Cell<bool>,
     /// What the running atomic job has asked of this connection.
     pub(super) transaction: Cell<Transaction>,
-    /// Next owner identity of this engine. The database is created by this
-    /// connection and never reopened, so the counter needs no stored row.
-    pub(crate) next_owner: Cell<u64>,
     /// Reply tickets of this engine's publications, shared with the threads
     /// that attempt replies.
     pub(crate) tickets: Arc<crate::ReplyTickets>,
@@ -94,10 +91,13 @@ impl Overlay {
     /// template observed after readiness. The returned handle has no connection.
     pub fn close_database_file(self) -> OverlayResult<crate::ClosedFile> {
         self.connection.flush_prepared_statement_cache();
+        let open = self.open.into_inner();
         self.connection
             .close()
             .map_err(|refused| OverlayError::Uncertain {
-                cause: Box::new(OverlayError::Close(Box::new(refused.into()))),
+                cause: Box::new(OverlayError::Close(Box::new(crate::CloseFailure::retain(
+                    refused, open,
+                )))),
                 completion: None,
             })?;
         Ok(crate::ClosedFile {
@@ -114,10 +114,10 @@ impl Overlay {
         *self.work.borrow()
     }
     /// Whether a maintenance turn may find work: the connection-local hints
-    /// that `maintain` and `reclaim_closed` consult. False is exact; true can
+    /// that live `maintain` consults. False is exact; true can
     /// be a false positive that the next turn clears.
     pub fn maintenance_pending(&self) -> bool {
-        self.maintenance_ready.get() || self.closed_ready.get()
+        self.maintenance_ready.get()
     }
     /// Codec/composed-window copies from the same exclusive owner scope.
     pub fn payload_work(&self) -> crate::PayloadWork {
@@ -298,6 +298,7 @@ impl Overlay {
             Ok(value) if begun => match self.execute(StatementKind::Commit, "COMMIT", &[], 0) {
                 Ok(_) => {
                     self.transaction.set(Transaction::None);
+                    self.open.borrow_mut().commit();
                     return Ok(value);
                 }
                 Err(cause) if cause.is_sqlite_full() || cause.capacity_io() => cause,
@@ -312,6 +313,7 @@ impl Overlay {
             },
             Ok(value) => {
                 self.transaction.set(Transaction::None);
+                self.open.borrow_mut().commit();
                 return Ok(value);
             }
             Err(cause) => self.failed(cause),
@@ -335,6 +337,7 @@ impl Overlay {
         // including a capacity failure at COMMIT, never on an unknown outcome.
         self.orphan_seen.set(orphans);
         self.pieces_seen.set(pieces);
+        self.open.borrow_mut().rollback();
         for (ns, revision) in issued {
             self.tickets.withdraw(ns, revision);
         }

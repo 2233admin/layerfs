@@ -2,7 +2,7 @@
 //! connection with its kernel lookup counts each hold it alone, with no
 //! `lease` row standing for them, until the last one is released; nothing
 //! held queues its cleanup at Close; and rows of another Workspace never
-//! hold it. The owner test reaches every custody table by its key.
+//! hold it. SQL custody uses an indexed lease probe; open custody is in memory.
 use layerfs_overlay::{
     CleanupState, Inode, InodeKind, MaintenanceCursor, NativeMountState, Overlay, ProfileConfig,
     Route,
@@ -70,11 +70,13 @@ fn each_kind_of_custody_alone_holds_a_closed_workspace_and_another_workspace_nev
     let kept_lookup = db.acquire_lookup(source, 2, &base(8), 1).unwrap();
     db.release_base_source(source).unwrap();
     let kept_mount = db.create_native_mount(bystander, 1).unwrap();
-    let counts = db.resources(Some(bystander)).unwrap().counts;
+    let resources = db.resources(Some(bystander)).unwrap();
+    let counts = resources.counts;
     // No `lease` row stands for a descriptor or a lookup reference: the
-    // rows are the handle, the lookup owner, the mount and its root count,
-    // the root's parent and the custody rows of the three inodes.
-    assert_eq!((counts.owner_rows, counts.owner_details), (0, 8));
+    // memory has the handle, lookup owner, mount and root count, root parent,
+    // and three inode custody entries. SQL has no rows for these owners.
+    assert_eq!((counts.owner_rows, counts.owner_details), (0, 0));
+    assert_eq!(resources.open.values(), [1, 1, 1, 0, 1, 3, 0, 0, 1, 0, 0]);
 
     // Nothing held: Close queues the cleanup itself.
     let none = workspace(2);
@@ -107,7 +109,7 @@ fn each_kind_of_custody_alone_holds_a_closed_workspace_and_another_workspace_nev
     db.close(route).unwrap();
     assert_eq!(state(&db, route), CleanupState::Held);
     db.revoke_native_mount(mount).unwrap();
-    assert_eq!(state(&db, route), CleanupState::Held);
+    assert_eq!(state(&db, route), CleanupState::Queued);
     maintain(&db);
     assert_eq!(state(&db, route), CleanupState::Queued);
 
@@ -120,6 +122,7 @@ fn each_kind_of_custody_alone_holds_a_closed_workspace_and_another_workspace_nev
         NativeMountState::Live
     );
     assert_eq!(db.resources(Some(bystander)).unwrap().counts, counts);
+    assert_eq!(db.resources(Some(bystander)).unwrap().open, resources.open);
 
     // Closed, it is held until the last of its owners is released.
     db.close(bystander).unwrap();
@@ -136,25 +139,14 @@ fn each_kind_of_custody_alone_holds_a_closed_workspace_and_another_workspace_nev
 }
 
 #[test]
-fn the_owner_test_of_a_closed_workspace_reaches_every_custody_table_by_key() {
+fn the_remaining_sql_custody_probe_is_indexed_and_open_custody_is_memory() {
     let (_temp, db) = engine();
     let plans = db.explain_close_held().unwrap();
     println!("CLOSE_HELD_PLANS {plans:#?}");
-    for table in [
-        "lease",
-        "file_handle",
-        "lookup_owner",
-        "native_lookup",
-        "native_mount",
-        "native_directory",
-    ] {
-        assert!(
-            plans
-                .iter()
-                .any(|plan| plan.starts_with(&format!("SEARCH {table} "))),
-            "{table}: {plans:?}"
-        );
-    }
+    assert!(
+        plans.iter().any(|plan| plan.starts_with("SEARCH lease ")),
+        "{plans:?}"
+    );
     // The statement selects from no table: its one outer row is constant.
     assert!(
         plans.iter().all(|plan| {

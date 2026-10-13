@@ -34,7 +34,6 @@ impl Overlay {
             &excluded_root.as_slice(),
         ];
         let operation_params: [&dyn rusqlite::ToSql; 2] = [&ns, &operation];
-        let namespace_params: [&dyn rusqlite::ToSql; 1] = [&ns];
         let mut plans = Vec::new();
         for (label, statement, params, bytes) in [
             (
@@ -80,20 +79,8 @@ impl Overlay {
                 16,
             ),
             (
-                "namespace-cleanup",
-                sql::INDEXED_OPERATION_RECORD_RECLAIM_NAMESPACE,
-                namespace_params.as_slice(),
-                8,
-            ),
-            (
                 "operation-cleanup-delete",
                 sql::INDEXED_OPERATION_RECORD_DELETE_OPERATION,
-                point.as_slice(),
-                64,
-            ),
-            (
-                "namespace-cleanup-delete",
-                sql::INDEXED_OPERATION_RECORD_DELETE_NAMESPACE,
                 point.as_slice(),
                 64,
             ),

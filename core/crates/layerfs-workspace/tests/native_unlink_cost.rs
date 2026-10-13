@@ -226,7 +226,7 @@ impl Mounted<'_> {
         let overlay = &self.b.overlay;
         let stored = || overlay.resources(None).unwrap().counts.payload_cells;
         let base = stored();
-        let orphans = overlay.resources(None).unwrap().counts.orphan_rows;
+        let orphans = overlay.resources(None).unwrap().open.orphan_files;
         let queued = overlay.resources(None).unwrap().counts.maintenance_targets;
         let serial = self.workspace.next_serial(&self.b.allocator).unwrap();
         let mut request = self.mutation(1, None, NativeInput::Named(create(1, child)));
@@ -297,7 +297,13 @@ impl Mounted<'_> {
         let pending = overlay.maintenance_pending();
         let (steps, rows, _) = self.drain();
         let counts = overlay.resources(None).unwrap().counts;
-        assert_eq!((counts.orphan_rows, counts.payload_cells), (orphans, base));
+        assert_eq!(
+            (
+                overlay.resources(None).unwrap().open.orphan_files,
+                counts.payload_cells
+            ),
+            (orphans, base)
+        );
         // No item of the file is left, parked or ready.
         assert_eq!(counts.maintenance_targets, queued);
         Special {
@@ -416,7 +422,7 @@ impl Mounted<'_> {
         (steps, rows) = (steps + s, rows + r);
         maintenance.accumulate(work);
         // The orphan is gone from this engine.
-        assert_eq!(overlay.resources(None).unwrap().counts.orphan_rows, 0);
+        assert_eq!(overlay.resources(None).unwrap().open.orphan_files, 0);
 
         let inode = jobs
             .iter()
@@ -504,7 +510,7 @@ fn one_removed_file_costs_exactly_this_beside_any_files_and_after_any_orphans() 
     // The second Workspace keeps an orphan under its lookup while the first
     // Workspace's releases reclaim: its rows are another namespace's.
     let parked = two.parked("p");
-    let orphans = || b.overlay.resources(None).unwrap().counts.orphan_rows;
+    let orphans = || b.overlay.resources(None).unwrap().open.orphan_files;
     assert_eq!((orphans(), b.overlay.maintenance_pending()), (1, false));
     // While the engine holds that orphan, a live file's last reference
     // probes for its own orphan row and nothing more.
@@ -525,16 +531,7 @@ fn one_removed_file_costs_exactly_this_beside_any_files_and_after_any_orphans() 
         after: (false, 0, 0),
     };
     assert_eq!(live, [done(&LIVE_FORGET), done(&LIVE_RELEASE)]);
-    let probed = |live: &Live| Live {
-        job: (live.job.iter())
-            .map(|&(family, attempts, executions)| match family {
-                "Lease" => (family, attempts + 1, executions + 1),
-                _ => (family, attempts, executions),
-            })
-            .collect(),
-        after: live.after,
-    };
-    assert_eq!(beside, [probed(&live[0]), probed(&live[1])]);
+    assert_eq!(beside, live, "memory orphan lookup adds no SQL probe");
     // Four times as many kept files beside it: nothing changes.
     assert_eq!(sized[0], sized[1]);
     let (late, early) = &sized[0];
@@ -591,117 +588,56 @@ const INODE: u64 = 9;
 /// Workspace's, and the name's rows, read once for both of its evaluations.
 const LOOKUP: [(&str, u64, u64); 2] = [("Workspace", 1, 1), ("DirectoryEntry", 1, 1)];
 /// CREATE, WRITE and RELEASE as `native_visit_cost` explains them.
-const CREATE: [(&str, u64, u64); 7] = [
-    ("Startup", 1, 1),
+const CREATE: [(&str, u64, u64); 5] = [
     ("Begin", 1, 1),
     ("Commit", 1, 1),
     ("Workspace", 2, 2),
     ("Inode", 2, 3),
     ("DirectoryEntry", 2, 3),
-    ("Lease", 3, 6),
 ];
-const WRITE: [(&str, u64, u64); 6] = [
-    ("Startup", 1, 1),
+const WRITE: [(&str, u64, u64); 5] = [
     ("Begin", 1, 1),
     ("Commit", 1, 1),
     ("Workspace", 2, 2),
     ("Inode", 1, 1),
     ("Payload", 2, 3),
 ];
-const RELEASE: [(&str, u64, u64); 5] = [
-    ("Startup", 1, 1),
-    ("Begin", 1, 1),
-    ("Commit", 1, 1),
-    ("Workspace", 1, 1),
-    ("Lease", 2, 3),
-];
-/// UNLINK under the kernel's lookup reference, in order. Reads: the fence,
-/// with the directory's row [Workspace]; the name's rows and the file's row,
-/// each once for every evaluation [Inode, DirectoryEntry].
-/// Then one transaction: the file's tombstone and the directory's time and
-/// entry counts, each an update over the row the job read [2 Inode]; the
-/// binding's removal, decided by the name's rows the job read
-/// [DirectoryEntry, with its trigger]; the file's references [Lease]; the
-/// orphan's row, inserted without a probe while the engine holds no orphan
-/// (one more [Lease] read when it holds one) [Lease, with its trigger] and its
-/// orphan-domain inode row [Inode, with its count trigger]; the frontier
-/// [Workspace]. Nothing is queued: only the kernel's lookup holds the file.
-const UNLINK: [(&str, u64, u64); 7] = [
-    ("Startup", 1, 1),
+const RELEASE: [(&str, u64, u64); 1] = [("Workspace", 1, 1)];
+/// UNLINK publishes SQL tombstones and orphan-domain metadata. Reference
+/// and orphan ownership checks are memory lookups in the same atomic job.
+const UNLINK: [(&str, u64, u64); 5] = [
     ("Begin", 1, 1),
     ("Commit", 1, 1),
     ("Workspace", 2, 2),
     ("Inode", 4, 5),
     ("DirectoryEntry", 2, 3),
-    ("Lease", 2, 3),
 ];
-/// FORGET of the last kernel reference, which reclaims the one-cell file
-/// in its own job and writes no queue item. Its own part: one fence reads
-/// the Workspace's row, kept for the pending-close decision, the mount's
-/// and the lookup's [Workspace]; the lookup's deletion [Lease, with its
-/// trigger]; the file reference dropped by a statement
-/// that returns what remains [Lease]; the orphan's row [Lease]. Then the
-/// four steps the owner ran, without their items. The orphan releases its
-/// lower layer: that layer's row, the wait row's deletion, the orphan's
-/// update [Inode, 2 Lease]. The layer's retirement: its generation's
-/// holders, its cells and the cell's drop [Lease, 2 Reclaim]. The orphan
-/// ends: its own cells and shrink rows, none; its inode row, its row, the
-/// engine's count of orphan rows and the custody row [5 Reclaim, Lease];
-/// the item an earlier descriptor or reader may have queued, deleted
-/// [Reclaim]. The retirement ends with what the job already knows, no
-/// holder and no cell left of a page it emptied: its shrink rows, none,
-/// and one statement for the Workspace's frontier and the file's later
-/// rows, where the tombstone stays [Reclaim, Inode].
-const FORGET: [(&str, u64, u64); 7] = [
-    ("Startup", 1, 1),
+/// The last kernel reference invokes one bounded live payload retirement.
+/// The remaining Lease probe protects retained immutable generations.
+const FORGET: [(&str, u64, u64); 6] = [
     ("Begin", 1, 1),
     ("Commit", 1, 1),
     ("Workspace", 1, 1),
     ("Inode", 2, 2),
-    ("Lease", 7, 10),
-    ("Reclaim", 9, 12),
+    ("Lease", 1, 1),
+    ("Reclaim", 7, 9),
 ];
-/// FORGET of a file of four pages: the orphan releases its lower layer and
-/// that layer's retirement drops one page of 14 cells; then the orphan's
-/// item and the layer's are queued, ready [4 Reclaim].
-const FORGET_PAGE: [(&str, u64, u64); 7] = [
-    ("Startup", 1, 1),
+/// A large file retires one bounded page now and the rest in live maintenance.
+const FORGET_PAGE: [(&str, u64, u64); 6] = [
     ("Begin", 1, 1),
     ("Commit", 1, 1),
     ("Workspace", 1, 1),
     ("Inode", 1, 1),
-    ("Lease", 6, 7),
+    ("Lease", 1, 1),
     ("Reclaim", 19, 37),
 ];
-/// FORGET of a file whose cell the owner had migrated while it was open:
-/// the orphan drops that cell, then deletes its rows and its parked item.
-const FORGET_MIGRATED: [(&str, u64, u64); 6] = [
-    ("Startup", 1, 1),
+/// An already migrated cell ends its orphan and pending live-maintenance item.
+const FORGET_MIGRATED: [(&str, u64, u64); 4] = [
     ("Begin", 1, 1),
     ("Commit", 1, 1),
     ("Workspace", 1, 1),
-    ("Lease", 4, 7),
-    ("Reclaim", 8, 12),
+    ("Reclaim", 6, 9),
 ];
-/// FORGET as the last reference of a file that keeps its name: one fence
-/// for the Workspace's row, the mount's and the lookup's [Workspace]; the
-/// lookup's deletion [Lease]; the file reference dropped by a statement that
-/// returns what remains [Lease]; the custody row, deleted [Lease, with its
-/// trigger]. Nothing is queued.
-const LIVE_FORGET: [(&str, u64, u64); 5] = [
-    ("Startup", 1, 1),
-    ("Begin", 1, 1),
-    ("Commit", 1, 1),
-    ("Workspace", 1, 1),
-    ("Lease", 3, 6),
-];
-/// RELEASE as the last reference of such a file: the fence [Workspace]; the
-/// descriptor's row and the file reference [2 Lease]; the custody row,
-/// deleted [Lease, with its trigger]. Nothing is queued.
-const LIVE_RELEASE: [(&str, u64, u64); 5] = [
-    ("Startup", 1, 1),
-    ("Begin", 1, 1),
-    ("Commit", 1, 1),
-    ("Workspace", 1, 1),
-    ("Lease", 3, 6),
-];
+/// Linked files release kernel/descriptor custody in memory, behind one fence.
+const LIVE_FORGET: [(&str, u64, u64); 1] = [("Workspace", 1, 1)];
+const LIVE_RELEASE: [(&str, u64, u64); 1] = [("Workspace", 1, 1)];

@@ -333,7 +333,7 @@ fn released_indexed_rows_reclaim_automatically_and_close_preserves_actual_owner(
     );
     let deadline = Instant::now() + Duration::from_secs(3);
     loop {
-        let resources = submit(&client, Some(other), Command::Resources { global: true });
+        let resources = submit(&client, Some(route), Command::Resources { global: false });
         if matches!(resources.result(), Ok(Response::Resources(r)) if r.counts.operation_record_rows == 0 && r.counts.namespaces == 1)
         {
             break;
@@ -345,6 +345,11 @@ fn released_indexed_rows_reclaim_automatically_and_close_preserves_actual_owner(
         drop(resources);
         std::thread::yield_now();
     }
+    let peer = submit(&client, Some(other), Command::Resources { global: false });
+    assert!(
+        matches!(peer.result(), Ok(Response::Resources(r)) if r.counts.namespaces == 1 && r.counts.operation_record_rows == 0)
+    );
+    drop(peer);
     assert!(client.diagnostics().unwrap().maintenance_data_bytes >= 72 * 6000);
     assert!(client.maintenance_failure().unwrap().is_none());
     owner.stop().unwrap();

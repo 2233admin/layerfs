@@ -466,7 +466,6 @@ impl RequestServices for FilesystemPort {
             Err(OwnerError::Overlay(layerfs_overlay::OverlayError::Stale))
         };
         match settled {
-            Ok(layerfs_overlay::Settled::Watched) => self.dispose(Command::ReplySettled, done),
             Ok(_) => Box::pin(std::future::ready(Ok(ServiceReply::new((), ())))),
             Err(error) => Box::pin(std::future::ready(Err(Box::new(error) as ServiceError))),
         }
@@ -483,9 +482,6 @@ fn writer_contended(error: &WorkspaceError) -> bool {
             .map(Arc::as_ref),
         Some(crate::store::PortError::History(HistoryError::Busy))
     )
-}
-fn done(response: &Response) -> Option<()> {
-    matches!(response, Response::Done).then_some(())
 }
 fn directory_done(response: &Response) -> Option<()> {
     matches!(

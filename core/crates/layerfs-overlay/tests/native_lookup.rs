@@ -301,61 +301,36 @@ fn foreign_engine_or_mount_cannot_consume_ownership() {
 }
 
 #[test]
-fn revoked_lookup_retirement_is_bounded_indexed_and_allows_closed_cleanup() {
+fn drained_revocation_releases_kernel_ownership_without_a_row_sweep() {
     let f = Fixture::new();
     for serial in 2..=131 {
         f.lookup(serial);
     }
-    let plans = f.db.explain_native(f.mount).unwrap();
-    assert!(
-        plans.iter().all(|plan| plan.contains("SEARCH")),
-        "{plans:?}"
-    );
-    assert!(plans
-        .iter()
-        .any(|plan| plan.contains("native_lookup") && plan.contains("serial>?")));
-    println!("NATIVE_PLANS {plans:?}");
+    assert_eq!(f.db.resources(None).unwrap().open.kernel_entries, 131);
     f.db.close(f.mount.route()).unwrap();
     assert_eq!(
         f.db.cleanup_state(f.mount.route()).unwrap(),
         CleanupState::Held
     );
+    let before = f.db.diagnostics();
     f.db.revoke_native_mount(f.mount).unwrap();
-    let start = f.db.diagnostics();
-    let mut cursor = MaintenanceCursor::default();
-    let mut maximum_rows = 0;
-    for _ in 0..1000 {
-        match f.db.maintain(cursor).unwrap() {
-            Some(step) => {
-                cursor = step.cursor;
-                maximum_rows = maximum_rows.max(step.work.rows);
-            }
-            None => break,
-        }
-    }
-    assert!(maximum_rows <= 64);
+    let work = f.db.diagnostics().since(&before);
+    assert_eq!(work.total().attempts, 1);
+    assert_eq!(work.total().rows_changed, 0);
     assert_eq!(
         f.db.native_mount_state(f.mount).unwrap(),
-        NativeMountState::Gone
+        NativeMountState::Revoked
     );
     assert_eq!(
         f.db.cleanup_state(f.mount.route()).unwrap(),
         CleanupState::Queued
     );
-    for _ in 0..1000 {
-        if f.db.reclaim_closed(0).unwrap().is_none() {
-            break;
-        }
-    }
-    assert_eq!(
-        f.db.cleanup_state(f.mount.route()).unwrap(),
-        CleanupState::Gone
-    );
-    assert_eq!(f.db.resources(None).unwrap().counts, Default::default());
-    println!(
-        "NATIVE_RETIRE lookups=131 maximum_window={maximum_rows} work={:?}",
-        f.db.diagnostics().since(&start)
-    );
+    assert!(f
+        .db
+        .maintain(MaintenanceCursor::default())
+        .unwrap()
+        .is_none());
+    f.db.close_database().unwrap();
 }
 
 /// What one owner visit may leave behind: transaction statements, ownership
@@ -363,13 +338,16 @@ fn revoked_lookup_retirement_is_bounded_indexed_and_allows_closed_cleanup() {
 struct Before {
     work: DatabaseWork,
     counts: StoredCounts,
+    open: layerfs_overlay::OpenStateCounts,
     revision: i64,
 }
 impl Fixture {
     fn before(&self) -> Before {
         let route = self.mount.route();
+        let resources = self.db.resources(Some(route)).unwrap();
         Before {
-            counts: self.db.resources(Some(route)).unwrap().counts,
+            counts: resources.counts,
+            open: resources.open,
             revision: self.db.state(route).unwrap().revision,
             work: self.db.diagnostics(),
         }
@@ -392,6 +370,7 @@ impl Fixture {
             self.db.resources(Some(route)).unwrap().counts,
             before.counts
         );
+        assert_eq!(self.db.resources(Some(route)).unwrap().open, before.open);
         let state = self.db.state(route).unwrap();
         assert_eq!((state.revision, state.base_readers), (before.revision, 0));
     }
@@ -483,13 +462,17 @@ fn a_read_visit_records_no_source_and_writes_only_a_positive_lookup_reference() 
         });
         assert_eq!(found.decision, Some(9));
         assert!(matches!(found.result, Ok(None)));
-        assert_eq!(f.transactions(&before), (1, 1, 0));
+        assert_eq!(f.transactions(&before), (0, 0, 0));
         assert_eq!(f.db.native_lookup_count(f.mount, 9).unwrap(), Some(held));
         let counts = f.db.resources(Some(route)).unwrap().counts;
         assert_eq!(counts.source_rows, before.counts.source_rows);
         assert_eq!(counts.reply_tickets, 0);
         // Only the first reference adds its ownership rows.
-        assert_eq!(counts == before.counts, held == 2);
+        assert_eq!(counts, before.counts);
+        assert_eq!(
+            f.db.resources(Some(route)).unwrap().open == before.open,
+            held == 2
+        );
         assert_eq!(f.db.state(route).unwrap().base_readers, 0);
     }
 

@@ -355,15 +355,11 @@ fn non_file_lookup_custody_survives_real_owner_installs_and_a_last_consumer() {
         b"../.git/index"
     );
     service.job(Command::ReleaseFileRead(read), |_| ());
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
-    while !service.job(Command::CleanupState, |r| {
+    assert!(service.job(Command::CleanupState, |r| {
         matches!(
             r,
-            Response::CleanupState(layerfs_overlay::CleanupState::Gone)
+            Response::CleanupState(layerfs_overlay::CleanupState::Queued)
         )
-    }) {
-        assert!(std::time::Instant::now() < deadline);
-        thread::yield_now();
-    }
-    println!("S6_NONFILE_OWNER captures=12 success=6 failures=6 directory_metadata=true inherited_symlink_bytes=true lookup_release_before_last_request=true idle_terminal_cleanup=true");
+    }));
+    println!("S6_NONFILE_OWNER captures=12 success=6 failures=6 directory_metadata=true inherited_symlink_bytes=true lookup_release_before_last_request=true whole_file_disposal_eligible=true");
 }

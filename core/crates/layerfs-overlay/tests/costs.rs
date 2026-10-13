@@ -25,9 +25,8 @@ fn complete_mutation_reports_triggers_blob_delivery_without_reservation() {
     assert_eq!(copies.cell_copy_bytes, 0);
     assert_eq!(copies.cell_zeroed_bytes, 0);
     // File::write includes the mutation and its reply attempt. Only the
-    // mutation writes: the attempt returns a ticket held in the engine's
-    // memory, and its owner turn finds a live Workspace with nothing to
-    // queue, so it begins no transaction and pays no admission.
+    // mutation writes: the attempt returns a ticket held in memory and
+    // performs no database job.
     // Count-trigger changes of the mutation remain visible.
     assert_eq!(admission.freelist_queries, 0);
     assert_eq!(admission.admitted_jobs, 0);
@@ -71,15 +70,17 @@ fn complete_mutation_reports_triggers_blob_delivery_without_reservation() {
 #[test]
 fn failed_atomic_job_retains_attempted_cost_and_rolls_back_logical_counts() {
     let temp = Temp::new();
+    let probe = Overlay::create(&temp.0.join("schema.sqlite"), ProfileConfig::default()).unwrap();
+    let schema_pages = probe.allocation().unwrap().logical_bytes / 4096;
+    probe.close_database().unwrap();
     let db = Overlay::create(
         &temp.0.join("overlay.sqlite"),
         ProfileConfig {
             pager_kib: 4,
-            // Schema 28 is 63 pages and the 128 KiB mutation needs 32 more
-            // (four rows of 32 KiB), so it fits in 95. This leaves room for
-            // the schema and setup and fewer pages than the mutation needs:
-            // it must fail in DML.
-            max_pages: Some(80),
+            // Setup fits in eight pages beyond the current schema. A 128 KiB
+            // mutation needs at least 32 payload pages, so DML must fail after
+            // making counted changes. Removing tables cannot erase the fault.
+            max_pages: Some(u32::try_from(schema_pages + 8).unwrap()),
         },
     )
     .unwrap();
@@ -177,7 +178,7 @@ fn one_write_window_costs_the_same_statements_at_either_file_size_and_beside_ano
     // An overwrite writes the four rows where they lie: one shape read,
     // no row changed, no trigger; it was (4, 4, 0, 14), and (32, 64, 96, 42)
     // before rows of several cells.
-    let (first, fresh, over) = ((5, 9, 8, 15), (5, 9, 8, 14), (1, 1, 0, 10));
+    let (first, fresh, over) = ((5, 9, 8, 14), (5, 9, 8, 13), (1, 1, 0, 9));
     assert_eq!((seen[0].0, seen[0].1, seen[0].2), (first, over, over));
     assert_eq!((seen[1].0, seen[1].1, seen[1].2), (fresh, over, over));
     // Stored rows of the file and of the two files beside it.

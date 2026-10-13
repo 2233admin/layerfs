@@ -224,12 +224,15 @@ impl Overlay {
             }
         }
         if let Some((serial, parent)) = moved_directory {
-            self.execute(
-                StatementKind::Lease,
-                "UPDATE native_parent SET parent=?3 WHERE ns=?1 AND serial=?2 AND serial<>parent",
-                &[&route.ns, &serial, &parent],
-                24,
-            )?;
+            let key = (route.ns, *serial as u64);
+            let held = self.open.borrow().parents.rows.get(&key).copied();
+            if let Some((mount, old)) = held {
+                if old != *serial as u64 {
+                    self.open
+                        .borrow_mut()
+                        .put_parent(key, (mount, *parent as u64));
+                }
+            }
         }
         if let Some((serial, cell)) = &changes.cell {
             self.put_cell(route, integer(*serial)?, layer(*serial)?, cell)?;

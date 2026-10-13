@@ -701,7 +701,13 @@ fn actual_provider_wait_allows_shared_progress_and_actor_install_pairs_the_selec
     let base = BaseView::open(client, f.root, f.scope).unwrap();
     let path =
         std::env::temp_dir().join(format!("layerfs-actor-view-{}.sqlite", std::process::id()));
-    let owner = Owner::start(&path, ProfileConfig::default(), OwnerConfig::default()).unwrap();
+    std::fs::create_dir(&path).unwrap();
+    let owner = Owner::start(
+        &path.join("template.sqlite"),
+        ProfileConfig::default(),
+        OwnerConfig::default(),
+    )
+    .unwrap();
     let service = owner.client();
     let opened = actor_submit(
         &service,
@@ -904,7 +910,7 @@ fn actual_provider_wait_allows_shared_progress_and_actor_install_pairs_the_selec
         .unwrap();
     assert_eq!(output, bytes);
     owner.stop().unwrap();
-    std::fs::remove_file(path).unwrap();
+    std::fs::remove_dir_all(path).unwrap();
 }
 
 struct Refused;
@@ -927,7 +933,13 @@ fn source_errors_and_unattempted_actor_install_preserve_exact_custody() {
     let base = BaseView::open(client, f.root, f.scope).unwrap();
     let path =
         std::env::temp_dir().join(format!("layerfs-view-cancel-{}.sqlite", std::process::id()));
-    let owner = Owner::start(&path, ProfileConfig::default(), OwnerConfig::default()).unwrap();
+    std::fs::create_dir(&path).unwrap();
+    let owner = Owner::start(
+        &path.join("template.sqlite"),
+        ProfileConfig::default(),
+        OwnerConfig::default(),
+    )
+    .unwrap();
     let service = owner.client();
     let done = actor_submit(
         &service,
@@ -982,7 +994,7 @@ fn source_errors_and_unattempted_actor_install_preserve_exact_custody() {
     );
     assert_eq!(ws.base().unwrap().identity(), f.root);
     drop(done);
-    std::fs::remove_file(path).unwrap();
+    std::fs::remove_dir_all(path).unwrap();
     // The source error remains a source failure, never logical absence or fallback.
     let client = Arc::new(CanonicalClient::new(Arc::new(Refused), 0));
     assert!(matches!(

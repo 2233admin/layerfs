@@ -105,12 +105,6 @@ impl Overlay {
             // An engine that never wrote a piece has none to retire.
             4 if self.pieces_seen.get() => self.retire_pieces(item, 4)?,
             _ => {
-                self.execute(
-                    StatementKind::Reclaim,
-                    "DELETE FROM reclaim WHERE ns=?1 AND queue_key=?2",
-                    &[&ns, &gen],
-                    16,
-                )?;
                 self.finish_item(item)?;
                 return Ok((0, 0, true));
             }
@@ -180,8 +174,7 @@ impl Overlay {
     }
     fn clean_operation_record(&self, item: &Item) -> OverlayResult<(u64, u64, bool)> {
         if item.target == 2 {
-            let (count, bytes) =
-                self.delete_indexed_operation_record(item.ns, Some(item.resource))?;
+            let (count, bytes) = self.delete_indexed_operation_record(item.ns, item.resource)?;
             if count == 0 {
                 self.finish_item(item)?;
             }

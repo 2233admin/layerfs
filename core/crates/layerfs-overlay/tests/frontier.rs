@@ -114,7 +114,6 @@ fn frozen_capture_and_tickets_reject_changed_identity_and_survive_close() {
     assert_eq!(db.state(route).unwrap(), closed);
     assert_eq!(db.retained_capture(route).unwrap(), Some(capture));
     assert_eq!(db.captured_cell(capture, 2, 0).unwrap(), Some(cell(17)));
-    assert!(db.reclaim_closed(0).unwrap().is_none());
     db.release_closed_capture(capture).unwrap();
     assert_eq!(db.retained_capture(route).unwrap(), None);
     assert!(matches!(
@@ -123,18 +122,10 @@ fn frozen_capture_and_tickets_reject_changed_identity_and_survive_close() {
     ));
     assert_eq!(db.cleanup_state(route).unwrap(), CleanupState::Held);
     db.reply_attempted(later).unwrap();
-    while db.reclaim_closed(0).unwrap().is_some() {}
-    let replacement = db.open_workspace([1; 32], [7; 32]).unwrap();
-    assert_ne!(replacement.namespace(), route.namespace());
-    assert!(matches!(
-        db.retained_capture(route),
-        Err(OverlayError::Stale)
-    ));
-    assert!(matches!(
-        db.pending_publications(route, 0),
-        Err(OverlayError::Stale)
-    ));
-    assert_eq!(db.retained_capture(replacement).unwrap(), None);
+    assert_eq!(db.cleanup_state(route).unwrap(), CleanupState::Queued);
+    assert_eq!(db.retained_capture(route).unwrap(), None);
+    assert!(db.pending_publications(route, 0).unwrap().is_empty());
+    db.close_database().unwrap();
 }
 
 #[test]

@@ -9,26 +9,9 @@ impl Overlay {
     /// Static opcodes are strategy evidence; diagnostics() observes actual work.
     pub fn explain_install(&self, capture: Capture, root: [u8; 32]) -> OverlayResult<Vec<String>> {
         self.checked_capture(capture)?;
-        let mut plan = self.query(StatementKind::Explain,
+        let plan = self.query(StatementKind::Explain,
             "EXPLAIN QUERY PLAN UPDATE workspace SET base_root=?2,installed=?3,captured=NULL,captured_revision=NULL WHERE ns=?1",
             &[&capture.route.ns,&root.as_slice(),&capture.generation.0],48,|row|row.get(3))?;
-        let vm = self.query(
-            StatementKind::Explain,
-            "EXPLAIN INSERT INTO reclaim(ns,queue_key,target,cursor) VALUES(?1,?2,?2,0)",
-            &[&capture.route.ns, &capture.generation.0],
-            16,
-            |row| {
-                Ok(format!(
-                    "{} {} {} {} {}",
-                    row.get::<_, i64>(0)?,
-                    row.get::<_, String>(1)?,
-                    row.get::<_, i64>(2)?,
-                    row.get::<_, i64>(3)?,
-                    row.get::<_, i64>(4)?
-                ))
-            },
-        )?;
-        plan.extend(vm);
         Ok(plan)
     }
     /// Advances a capture after known history success. The trusted caller must
@@ -44,15 +27,9 @@ impl Overlay {
                 &[&capture.route.ns, &root.as_slice(), &capture.generation.0],
                 48,
             )?;
-            self.execute(
-                StatementKind::Capture,
-                "INSERT INTO reclaim(ns,queue_key,target,cursor) VALUES(?1,?2,?2,0)",
-                &[&capture.route.ns, &capture.generation.0],
-                16,
-            )?;
             self.enqueue(capture.route.ns,crate::maintenance::RETIRE,0,capture.generation.0)?;
             self.wake_orphan_sources(capture.route.ns,capture.generation.0)?;
-            self.queue_closed(capture.route())
+            Ok(())
         })
     }
     /// Readiness before the one known-install attempt. The daemon fences later
@@ -131,16 +108,11 @@ impl Overlay {
     /// Records a send attempt, including a lost reply, on the owner's turn.
     /// It never removes published inode/name/byte state and never claims
     /// kernel delivery. A replying thread records its attempt through
-    /// `reply_tickets` instead and owes `reply_settled` only when told so.
+    /// `reply_tickets` instead; its last attempt wakes capture readiness.
     pub fn reply_attempted(&self, publication: Publication) -> OverlayResult<()> {
         self.state(publication.route)?;
         self.tickets.attempted(publication)?;
-        self.reply_settled(publication.route)
-    }
-    /// The owner turn owed after a namespace's last watched reply attempt:
-    /// a terminal cleanup that waited for it is queued.
-    pub fn reply_settled(&self, route: Route) -> OverlayResult<()> {
-        self.atomic_cleanup(|| self.queue_closed(route))
+        Ok(())
     }
     /// The reply attempt and the release of the same request's processing
     /// source, in one transaction: both are recorded or neither is, so a

@@ -50,9 +50,8 @@ fn open(client: &OwnerClient, tag: u8) -> Route {
 }
 
 #[test]
-fn last_release_starts_automatic_cleanup_during_idle_and_unrelated_live_work() {
+fn last_release_makes_the_file_disposable_without_a_terminal_row_sweep() {
     use layerfs_overlay::{CleanupState, Lease, LeaseKind};
-    use std::time::{Duration, Instant};
     let temp = Temp::new();
     let owner = Owner::start(
         &temp.0.join("db"),
@@ -103,40 +102,24 @@ fn last_release_starts_automatic_cleanup_during_idle_and_unrelated_live_work() {
         .unwrap()
         .result()
         .is_ok());
-    // Verification stop fence only. Status is observation; no explicit reclaim command exists.
-    let stop = Instant::now() + Duration::from_secs(2);
-    let mut progress = 0;
-    loop {
-        assert!(Instant::now() < stop, "automatic cleanup did not progress");
-        let state = submit(&client, Some(target), Command::CleanupState)
-            .wait()
-            .unwrap();
-        if matches!(
-            state.result(),
-            Ok(Response::CleanupState(CleanupState::Gone))
-        ) {
-            break;
-        }
-        drop(state);
-        assert!(submit(&client, Some(other), Command::State)
-            .wait()
-            .unwrap()
-            .result()
-            .is_ok());
-        progress += 1;
-    }
-    assert!(client.diagnostics().unwrap().maintenance_rows >= 512);
+    assert_eq!(cleanup_state(&client, target), CleanupState::Queued);
+    let rows_before = client.diagnostics().unwrap().maintenance_rows;
+    assert!(temp
+        .0
+        .join(format!("{}.sqlite", target.namespace()))
+        .is_file());
+    assert!(submit(&client, Some(other), Command::State)
+        .wait()
+        .unwrap()
+        .result()
+        .is_ok());
+    assert_eq!(client.diagnostics().unwrap().maintenance_rows, rows_before);
     assert!(client.maintenance_failure().unwrap().is_none());
-    println!(
-        "AUTOMATIC_CLOSE unrelated_progress={progress} work={:?}",
-        client.diagnostics().unwrap()
-    );
     owner.stop().unwrap();
 }
 
 #[test]
-fn idle_cleanup_runs_without_an_explicit_reclaim_or_status_job() {
-    use std::time::{Duration, Instant};
+fn terminal_close_does_no_row_maintenance_before_control_disposal() {
     let temp = Temp::new();
     let owner = Owner::start(
         &temp.0.join("db"),
@@ -166,19 +149,15 @@ fn idle_cleanup_runs_without_an_explicit_reclaim_or_status_job() {
         .unwrap()
         .result()
         .is_ok());
-    let stop = Instant::now() + Duration::from_secs(2);
-    // Fixed memory diagnostics do not admit a database/service job or wake it.
-    while client.diagnostics().unwrap().maintenance_rows < 130 {
-        assert!(Instant::now() < stop, "idle maintenance did not finish");
-        std::thread::yield_now();
-    }
-    assert!(matches!(
-        submit(&client, Some(route), Command::CleanupState)
-            .wait()
-            .unwrap()
-            .result(),
-        Ok(Response::CleanupState(layerfs_overlay::CleanupState::Gone))
-    ));
+    assert_eq!(
+        cleanup_state(&client, route),
+        layerfs_overlay::CleanupState::Queued
+    );
+    assert_eq!(client.diagnostics().unwrap().maintenance_rows, 0);
+    assert!(temp
+        .0
+        .join(format!("{}.sqlite", route.namespace()))
+        .is_file());
     assert!(client.maintenance_failure().unwrap().is_none());
     owner.stop().unwrap();
 }
@@ -859,7 +838,7 @@ fn stop_bounded(owner: Owner) {
 }
 
 #[test]
-fn a_reply_attempt_is_recorded_without_an_owner_job_and_a_parked_capture_is_owed_one() {
+fn a_reply_attempt_wakes_a_parked_capture_without_admitting_a_settling_job() {
     use layerfs_daemon::ServiceClass;
     use layerfs_overlay::{OverlayError, Settled};
     let temp = Temp::new();
@@ -933,22 +912,10 @@ fn a_reply_attempt_is_recorded_without_an_owner_job_and_a_parked_capture_is_owed
     assert_eq!(client.reply_attempted(unrelated).unwrap(), Settled::Last);
     assert!(capture.try_complete().unwrap().is_none());
 
-    // The last attempt is told that an owner job waited. Recording it is
-    // still no owner job, so the capture stays parked until the one
-    // settling job the caller now owes has run.
+    // The last attempt wakes the already admitted capture. It has no SQL
+    // settling job, no additional admission and no replayed mutation.
     let parked = settled(&client, 1);
     assert_eq!(client.reply_attempted(second).unwrap(), Settled::Watched);
-    let work = client.diagnostics().unwrap();
-    assert_eq!(
-        (work.admitted, work.completed, work.queued),
-        (parked.admitted, parked.completed, 1)
-    );
-    assert!(capture.try_complete().unwrap().is_none());
-    let settling = run(&client, a, Command::ReplySettled, "reply settled");
-    assert!(matches!(settling.result(), Ok(Response::Done)));
-    // A live Workspace has nothing to queue: the job wrote nothing.
-    assert_eq!(settling.work().sql.total().rows_changed, 0);
-    drop(settling);
     let captured = done(&capture, "parked capture");
     let sealed = match captured.result() {
         Ok(Response::Captured(capture)) => *capture,
@@ -960,17 +927,16 @@ fn a_reply_attempt_is_recorded_without_an_owner_job_and_a_parked_capture_is_owed
     drop((captured, capture));
     let work = settled(&client, 0);
     let mut completed = parked.completed;
-    completed[ServiceClass::Lifecycle as usize] += 1;
     completed[ServiceClass::Capture as usize] += 1;
     assert_eq!(
         (work.admitted, work.completed, work.queued),
-        (parked.admitted + 1, completed, 0)
+        (parked.admitted, completed, 0)
     );
     stop_bounded(owner);
 }
 
 #[test]
-fn a_closed_workspace_is_reclaimed_only_after_the_settling_job_of_its_last_reply_attempt() {
+fn a_closed_workspace_becomes_disposable_after_its_last_reply_attempt() {
     use layerfs_overlay::{CleanupState, Settled};
     let temp = Temp::new();
     let owner = Owner::start(
@@ -994,34 +960,12 @@ fn a_closed_workspace_is_reclaimed_only_after_the_settling_job_of_its_last_reply
         assert_eq!(cleanup_state(&client, route), CleanupState::Held);
     }
     assert_eq!(client.diagnostics().unwrap().closed_namespaces, 0);
-    // The close observed the ticket pending, so its attempt owes a turn.
-    assert_eq!(client.reply_attempted(ticket).unwrap(), Settled::Watched);
-    // The attempt alone queued nothing.
+    // Observation is read-only; the last reply releases its exact ticket
+    // without a database turn. Rows remain until checked file disposal.
+    assert_eq!(client.reply_attempted(ticket).unwrap(), Settled::Last);
     for _ in 0..16 {
-        assert_eq!(cleanup_state(&client, route), CleanupState::Held);
+        assert_eq!(cleanup_state(&client, route), CleanupState::Queued);
     }
-    assert_eq!(client.diagnostics().unwrap().closed_namespaces, 0);
-    assert!(matches!(
-        run(&client, route, Command::ReplySettled, "reply settled").result(),
-        Ok(Response::Done)
-    ));
-    // Queued by the settling job, then reclaimed by automatic maintenance.
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
-    loop {
-        match cleanup_state(&client, route) {
-            CleanupState::Gone => break,
-            CleanupState::Queued => {}
-            state => panic!("after the settling job: {state:?}"),
-        }
-        assert!(
-            std::time::Instant::now() < deadline,
-            "automatic cleanup did not finish"
-        );
-        std::thread::yield_now();
-    }
-    // This raw Close proof establishes row retirement, not the terminal
-    // control's checked close and last-owner file deletion. The daemon's
-    // counter now records successful file deletion only.
     assert_eq!(client.diagnostics().unwrap().closed_namespaces, 0);
     assert!(temp
         .0
@@ -1032,8 +976,8 @@ fn a_closed_workspace_is_reclaimed_only_after_the_settling_job_of_its_last_reply
         .unwrap();
     match resources.result() {
         Ok(Response::Resources(resources)) => {
-            assert_eq!(resources.counts.namespaces, 0);
-            assert_eq!(resources.counts.inode_rows, 0);
+            assert_eq!(resources.counts.namespaces, 1);
+            assert_eq!(resources.counts.inode_rows, 1);
         }
         other => panic!("closed resource state: {other:?}"),
     }

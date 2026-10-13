@@ -210,7 +210,14 @@ fn bounded_bind_batches_lengths_cache_and_original_failure() {
             .err()
             .unwrap();
         assert_eq!(duplicate.phase, BindPhase::Open);
-        assert!(matches!(duplicate.error, BindError::Completion(_)));
+        assert!(
+            matches!(&duplicate.error,
+                BindError::Owner(layerfs_daemon::OwnerError::Unattempted { cause, command })
+                    if matches!(cause.as_ref(), layerfs_daemon::OwnerError::Overlay(layerfs_overlay::OverlayError::Invalid("duplicate incarnation")))
+                    && matches!(command.as_ref(), Command::Open { incarnation, .. } if *incarnation == first.identity().to_bytes())
+            ),
+            "{duplicate:?}"
+        );
         drop(duplicate);
         read(&first, 0);
         println!("DIRECT_STORE count={} cold_bind_batches={cold} warm_bind_batches=0 fixed_read_handles={} adapter={:?} cache={:?}", fixture.count, store.read_handles(), store.work(), store.cache_work().unwrap());

@@ -125,22 +125,13 @@ fn capacity(pager_kib: u32, at_commit: bool) {
     db.release_base_source(source).unwrap();
     db.close(a).unwrap();
     db.release_closed_capture(capture).unwrap();
-    for turn in 0..2000 {
-        let step = db.reclaim_closed(0).unwrap().unwrap();
-        if step.done {
-            break;
-        }
-        assert!(turn < 1999);
-    }
-    assert_eq!(db.cleanup_state(a).unwrap(), CleanupState::Gone);
+    assert_eq!(db.cleanup_state(a).unwrap(), CleanupState::Queued);
     assert_eq!(other_db.state(b).unwrap(), other);
-    let after = db.resources(None).unwrap();
-    assert!(after.free_pages > physical.free_pages);
-    assert_eq!(after.allocation.reserved_tail_bytes, 0);
-    println!("S6_DEVICE_ENOSPC at_commit={at_commit} error={error:?} fixture_requested_bytes={free} before={physical:?} after={after:?} unrelated_namespace_unchanged=true write_rolled_back=true no_reservation=true");
-    drop(filler);
+    assert_eq!(db.allocation().unwrap().reserved_tail_bytes, 0);
     db.close_database().unwrap();
+    assert_eq!(other_db.state(b).unwrap(), other);
     other_db.close_database().unwrap();
+    drop(filler);
     std::fs::remove_file(root.join("fixture-fill")).unwrap();
     std::fs::remove_file(path).unwrap();
     std::fs::remove_file(other_path).unwrap();

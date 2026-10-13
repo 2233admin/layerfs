@@ -65,7 +65,6 @@ fn source_retains_selected_base_and_exact_close_custody_without_a_generation_pin
     ));
     db.release_closed_capture(capture).unwrap();
     assert_eq!(db.cleanup_state(route).unwrap(), CleanupState::Held);
-    assert!(db.reclaim_closed(0).unwrap().is_none());
     assert_eq!(db.source_inode(source, 2).unwrap(), Some(inode()));
     db.release_base_source(source).unwrap();
     assert_eq!(db.state(route).unwrap().base_readers, 0);
@@ -74,8 +73,8 @@ fn source_retains_selected_base_and_exact_close_custody_without_a_generation_pin
         db.release_base_source(source),
         Err(OverlayError::Stale)
     ));
-    while db.reclaim_closed(0).unwrap().is_some() {}
-    assert_eq!(db.cleanup_state(route).unwrap(), CleanupState::Gone);
+    assert_eq!(db.cleanup_state(route).unwrap(), CleanupState::Queued);
+    db.close_database().unwrap();
 }
 #[test]
 fn reply_attempt_and_source_release_are_one_transaction_or_nothing() {

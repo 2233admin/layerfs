@@ -91,7 +91,13 @@ impl Case {
             std::process::id(),
             NEXT.fetch_add(1, Ordering::Relaxed)
         ));
-        let owner = Owner::start(&path, ProfileConfig::default(), OwnerConfig::default()).unwrap();
+        std::fs::create_dir(&path).unwrap();
+        let owner = Owner::start(
+            &path.join("template.sqlite"),
+            ProfileConfig::default(),
+            OwnerConfig::default(),
+        )
+        .unwrap();
         let client = owner.client();
         let opened = job(
             &client,
@@ -272,7 +278,7 @@ impl Drop for Case {
         if let Some(owner) = self.owner.take() {
             owner.stop().unwrap();
         }
-        let _ = std::fs::remove_file(&self.path);
+        let _ = std::fs::remove_dir_all(&self.path);
     }
 }
 pub fn job(client: &OwnerClient, route: Option<Route>, command: Command) -> Completion {

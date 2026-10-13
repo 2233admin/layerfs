@@ -6,8 +6,6 @@ impl Overlay {
         self.state(route)?;
         let mut plans = Vec::new();
         for (label, statement) in [
-            ("orphan", sql::ORPHAN_LOOKUP),
-            ("file-owners", sql::FILE_REFS),
             ("operation", sql::OPERATION_CUSTODY),
             ("generation-held", sql::GENERATION_HELD),
         ] {

@@ -467,7 +467,7 @@ fn a_create_is_one_mutation_job_and_its_reply_attempt_is_no_owner_job() {
 }
 
 #[test]
-fn a_capture_parked_behind_the_ticket_is_owed_exactly_one_settling_job() {
+fn the_last_reply_attempt_wakes_capture_without_a_settling_job() {
     let rig = Rig::new("visit-port-settled", 164);
     let (mount, route) = (rig.mount, rig.bound.route());
     let warm = rig.lookup(1, "absent-warm");
@@ -527,8 +527,7 @@ fn a_capture_parked_behind_the_ticket_is_owed_exactly_one_settling_job() {
     );
     assert!(stepper.poll(capture.as_mut()).is_pending());
 
-    // The last one is what the capture waited for: exactly one settling
-    // job of class Lifecycle, after which the capture runs and completes.
+    // The last attempt wakes the existing capture without another job.
     wait(second.replied()).unwrap();
     let captured = stepper.finish(capture.as_mut(), "parked capture").unwrap();
     let sealed = match captured.result() {
@@ -543,11 +542,10 @@ fn a_capture_parked_behind_the_ticket_is_owed_exactly_one_settling_job() {
     });
     let work = rig.client.diagnostics().unwrap();
     let mut completed = parked.completed;
-    completed[ServiceClass::Lifecycle as usize] += 1;
     completed[ServiceClass::Capture as usize] += 1;
     assert_eq!(
         (work.admitted, work.completed, work.queued),
-        (parked.admitted + 1, completed, 0)
+        (parked.admitted, completed, 0)
     );
     // It sealed both publications, and no ticket is owed.
     assert_eq!(sealed.revision, revision);
@@ -571,7 +569,7 @@ fn a_capture_parked_behind_the_ticket_is_owed_exactly_one_settling_job() {
     assert!(rig.pending_publications().is_empty());
 
     println!(
-        "VISIT-SETTLED parked_capture=(2 tickets owed) first_attempt=(0 jobs, capture parked) last_attempt=(1 Lifecycle ReplySettled, capture completes) later_attempt=(0 jobs)"
+        "VISIT-SETTLED parked_capture=(2 tickets owed) first_attempt=(0 jobs, capture parked) last_attempt=(0 settling jobs, capture completes) later_attempt=(0 jobs)"
     );
     for serial in made.into_iter().chain([last]) {
         drop(wait(rig.services.forget(mount, serial, 1)).unwrap());

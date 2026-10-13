@@ -61,7 +61,7 @@ struct Service {
 impl Drop for Service {
     fn drop(&mut self) {
         drop(self.owner.take());
-        let _ = std::fs::remove_file(&self.path);
+        let _ = std::fs::remove_dir_all(&self.path);
     }
 }
 impl Service {
@@ -91,7 +91,13 @@ impl Service {
             "layerfs-namespace-daemon-{tag}-{}.sqlite",
             std::process::id()
         ));
-        let owner = Owner::start(&path, ProfileConfig::default(), OwnerConfig::default()).unwrap();
+        std::fs::create_dir(&path).unwrap();
+        let owner = Owner::start(
+            &path.join("template.sqlite"),
+            ProfileConfig::default(),
+            OwnerConfig::default(),
+        )
+        .unwrap();
         let client = owner.client();
         let opened = client
             .try_submit(

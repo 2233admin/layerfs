@@ -43,11 +43,19 @@ fn lookup(parent: u64, child: &str) -> NativeReadOperation {
 }
 /// Everything a visit could leave behind: the Workspace row, the ownership
 /// rows and the transactions begun so far.
-fn snapshot(b: &Bench) -> (WorkspaceState, StoredCounts, u64) {
+fn snapshot(
+    b: &Bench,
+) -> (
+    WorkspaceState,
+    StoredCounts,
+    u64,
+    layerfs_overlay::OpenStateCounts,
+) {
     (
         b.overlay.state(b.route()).unwrap(),
         b.overlay.resources(Some(b.route())).unwrap().counts,
         b.overlay.diagnostics().statements[StatementKind::Begin as usize].executions,
+        b.overlay.resources(Some(b.route())).unwrap().open,
     )
 }
 #[derive(Debug, Eq, PartialEq)]
@@ -248,7 +256,8 @@ fn a_read_visit_decides_in_one_job_from_resident_objects_or_names_the_facts_it_n
     assert_eq!((found.serial, found.kind), (4, InodeKind::Directory));
     assert_eq!(b.overlay.native_lookup_count(mount, 4).unwrap(), Some(1));
     let after = snapshot(&b);
-    assert_eq!(after.2, before.2 + 1);
+    assert_eq!(after.2, before.2);
+    assert_eq!(after.3.kernel_entries, before.3.kernel_entries + 1);
     assert_eq!((after.0.base_readers, after.1.source_rows), (0, 0));
 
     // The same objects are now resident: another request decides in its one
@@ -437,8 +446,10 @@ fn an_open_visit_decides_a_regular_file_and_records_its_descriptor_alone() {
             after.1.source_rows,
             after.0.base_readers
         ),
-        (before.1.owner_rows, before.1.owner_details + 1, 0, 0)
+        (before.1.owner_rows, before.1.owner_details, 0, 0)
     );
+
+    assert_eq!(after.3.file_handles, before.3.file_handles + 1);
 
     // The file's objects and its length are resident now: another OPEN is
     // decided by its one visit with no facts and no provider demand.
@@ -449,7 +460,7 @@ fn an_open_visit_decides_a_regular_file_and_records_its_descriptor_alone() {
     };
     assert_eq!(again, file);
     assert!(second.writable() && second.owner_id() != first.owner_id());
-    assert_eq!(snapshot(&b).2, begun + 1);
+    assert_eq!(snapshot(&b).2, begun);
 
     // A directory and a symbolic link are refused by kind and open nothing.
     let held = snapshot(&b);
@@ -512,11 +523,15 @@ fn an_open_visit_decides_a_regular_file_and_records_its_descriptor_alone() {
     }
     // What remains beyond the start is the created file's kernel reference:
     // its lookup row and its custody row.
-    let left = snapshot(&b).1;
+    let remaining = snapshot(&b);
+    let left = remaining.1;
     assert_eq!(
         (left.owner_rows, left.owner_details),
-        (before.1.owner_rows, before.1.owner_details + 2)
+        (before.1.owner_rows, before.1.owner_details)
     );
+    assert_eq!(remaining.3.kernel_entries, before.3.kernel_entries + 1);
+    assert_eq!(remaining.3.file_custody, before.3.file_custody + 1);
+    assert_eq!(remaining.3.file_handles, before.3.file_handles);
     b.overlay.revoke_native_mount(mount).unwrap();
 }
 

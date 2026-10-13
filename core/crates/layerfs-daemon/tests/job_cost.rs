@@ -51,7 +51,7 @@ fn completion_cost_matches_exclusive_owner_aggregate_and_retained_credit() {
             .allocation_foreground
             .since(before.allocation_foreground)
     );
-    assert_eq!(done.work().allocation.freelist_queries, 1);
+    assert_eq!(done.work().allocation.freelist_queries, 0);
     assert_eq!(done.work().parked_turns, 0);
     assert_eq!(after.outstanding, 1);
     assert!(

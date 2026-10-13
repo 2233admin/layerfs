@@ -142,26 +142,6 @@ pub(crate) const SOURCE_NAMES_KINDS: &str =
     WHERE i.ns=e.ns AND i.serial=e.serial AND i.gen<=?5 AND i.gen>?6 ORDER BY i.gen DESC LIMIT 1)
     FROM directory_entry e INDEXED BY directory_entry_capture
     WHERE e.ns=?1 AND e.gen=?2 AND e.parent=?3 AND e.name>?4 ORDER BY e.name LIMIT 64";
-/// The published reply that holds one cookie of an open directory, at or
-/// above the handle's floor.
-pub(crate) const COOKIE_PAGE: &str = "SELECT first_cookie,names FROM native_cookie
-    WHERE ns=?1 AND owner=?2 AND first_cookie<=?3 AND first_cookie>=?4
-    ORDER BY first_cookie DESC LIMIT 1";
-/// The latest published reply of an open directory listed after one name,
-/// at or above the handle's floor.
-pub(crate) const COOKIE_PAGE_AFTER: &str = "SELECT first_cookie,names FROM native_cookie
-    INDEXED BY native_cookie_after WHERE ns=?1 AND owner=?2 AND after=?3 AND first_cookie>=?4
-    ORDER BY first_cookie DESC LIMIT 1";
-/// One bounded window of an open directory's replies below its floor: the
-/// lowest `?4 + 1` of them, found by one seek and that many index steps.
-pub(crate) const COOKIE_RETIRE: &str = "DELETE FROM native_cookie
-    WHERE ns=?1 AND owner=?2 AND first_cookie<?3 AND first_cookie<=ifnull((SELECT first_cookie
-    FROM native_cookie WHERE ns=?1 AND owner=?2 AND first_cookie<?3
-    ORDER BY first_cookie LIMIT 1 OFFSET ?4),?3)";
-/// At most one more than the replies a RELEASEDIR deletes in its own job:
-/// the LIMIT is `lifetime::INLINE_PAGES + 1`, kept equal by hand.
-pub(crate) const COOKIE_PAGES: &str = "SELECT first_cookie,length(names) FROM native_cookie
-    WHERE ns=?1 AND owner=?2 AND first_cookie>?3 ORDER BY first_cookie LIMIT 9";
 pub(crate) const CAPTURED_DIRECTORY_ENTRY: &str =
     "SELECT serial,inherited FROM directory_entry WHERE ns=?1 AND parent=?2 AND name=?3 AND gen=?4";
 pub(crate) const OPERATION_RECORD_PAGE: &str = "SELECT kind,key,value FROM operation_record
@@ -184,34 +164,6 @@ pub(crate) const DIRECTORY_ENTRY_DROP: &str =
     "DELETE FROM directory_entry WHERE ns=?1 AND parent=?2 AND name=?3 AND gen=?4";
 pub(crate) const FRONTIER_ADVANCE: &str = "UPDATE workspace SET revision=?2,
     dirty_inodes=dirty_inodes+?3,dirty_directory_entries=dirty_directory_entries+?4 WHERE ns=?1";
-
-pub(crate) const ORPHAN_LOOKUP: &str =
-    "SELECT base_root,lower_top,lower_floor FROM orphan WHERE ns=?1 AND serial=?2";
-
-pub(crate) const FILE_REFS: &str =
-    "SELECT opens+lookups+readers FROM file_custody WHERE ns=?1 AND serial=?2";
-
-pub(crate) const FILE_OPENS_ADD: &str = "INSERT INTO file_custody(ns,serial,opens) VALUES(?1,?2,1)
-    ON CONFLICT(ns,serial) DO UPDATE SET opens=opens+1";
-/// Every decrement returns the references that remain, so the last one is
-/// known without a second read.
-pub(crate) const FILE_OPENS_DROP: &str = "UPDATE file_custody SET opens=opens-1
-    WHERE ns=?1 AND serial=?2 AND opens>0 RETURNING opens+lookups+readers";
-/// The descriptor and the kernel lookup reference of one created-and-opened
-/// file, as one row write.
-pub(crate) const FILE_OPEN_LOOKUP_ADD: &str =
-    "INSERT INTO file_custody(ns,serial,opens,lookups) VALUES(?1,?2,1,1)
-    ON CONFLICT(ns,serial) DO UPDATE SET opens=opens+1,lookups=lookups+1";
-pub(crate) const FILE_LOOKUPS_ADD: &str =
-    "INSERT INTO file_custody(ns,serial,lookups) VALUES(?1,?2,1)
-    ON CONFLICT(ns,serial) DO UPDATE SET lookups=lookups+1";
-pub(crate) const FILE_LOOKUPS_DROP: &str = "UPDATE file_custody SET lookups=lookups-1
-    WHERE ns=?1 AND serial=?2 AND lookups>0 RETURNING opens+lookups+readers";
-pub(crate) const FILE_READERS_ADD: &str =
-    "INSERT INTO file_custody(ns,serial,readers) VALUES(?1,?2,1)
-    ON CONFLICT(ns,serial) DO UPDATE SET readers=readers+1";
-pub(crate) const FILE_READERS_DROP: &str = "UPDATE file_custody SET readers=readers-1
-    WHERE ns=?1 AND serial=?2 AND readers>0 RETURNING opens+lookups+readers";
 
 pub(crate) const OPERATION_RECORD_DELETE: &str =
     "DELETE FROM operation_record WHERE ns=?1 AND operation=?2 AND kind=?3 AND key=?4";
@@ -250,99 +202,27 @@ pub(crate) const INDEXED_OPERATION_RECORD_DELETE_OPERATION: &str =
     "DELETE FROM indexed_operation_record
     WHERE ns=?1 AND operation=?2 AND (file_scope,kind,key)<=(?3,?4,?5)";
 /// Every record of one namespace up to one key, in one statement.
-pub(crate) const INDEXED_OPERATION_RECORD_DELETE_NAMESPACE: &str =
-    "DELETE FROM indexed_operation_record
-    WHERE ns=?1 AND (operation,file_scope,kind,key)<=(?2,?3,?4,?5)";
 pub(crate) const INDEXED_OPERATION_RECORD_RECLAIM_OPERATION: &str =
     "SELECT file_scope,kind,key,length(value)
     FROM indexed_operation_record WHERE ns=?1 AND operation=?2 ORDER BY file_scope,kind,key LIMIT 64";
-pub(crate) const INDEXED_OPERATION_RECORD_RECLAIM_NAMESPACE: &str =
-    "SELECT operation,file_scope,kind,key,length(value)
-    FROM indexed_operation_record WHERE ns=?1 ORDER BY operation,file_scope,kind,key LIMIT 64";
 
 pub(crate) const GENERATION_HELD: &str = "SELECT 1 FROM lease INDEXED BY lease_resource
             WHERE ns=?1 AND kind IN(1,6) AND resource=?2 LIMIT 1";
 
-/// The fence of one native visit: the Workspace row, its native connection
-/// and the kernel's own reference on the inode the request names, in one
-/// statement. Column 14 is NULL when that reference is not held.
-macro_rules! fence {
-    ($held:expr) => {
-        concat!(
-            "SELECT w.active,w.captured,w.revision,w.base_root,w.dirty_inodes,",
-            "w.dirty_directory_entries,w.lifecycle,w.installed,w.captured_revision,",
-            "w.base_readers,w.consolidating,m.owner,m.root,m.revoked,(",
-            $held,
-            ") FROM workspace w LEFT JOIN native_mount m ON m.ns=w.ns ",
-            "WHERE w.ns=?1 AND w.incarnation=?2"
-        )
-    };
-}
-/// The same fence, and after its columns the latest local row of the inode
-/// the request names within the view the Workspace row gives, in the column
-/// order of `INODE_LOOKUP`: NULLs when the inode has no local row. A visit
-/// that decides over that inode reads its row here, by the same key and
-/// bounds as `INODE_LOOKUP`, in the one statement it runs anyway.
-macro_rules! fence_row {
-    ($held:expr) => {
-        concat!(
-            "SELECT w.active,w.captured,w.revision,w.base_root,w.dirty_inodes,",
-            "w.dirty_directory_entries,w.lifecycle,w.installed,w.captured_revision,",
-            "w.base_readers,w.consolidating,m.owner,m.root,m.revoked,(",
-            $held,
-            "),i.serial,i.kind,i.mode,i.mtime_seconds,i.mtime_nanoseconds,i.nlink,i.size,",
-            "i.inherited_cutoff,i.born,i.entries,i.subdirs,i.gen,i.epoch,i.height,",
-            "i.referenced,i.sequence ",
-            "FROM workspace w LEFT JOIN native_mount m ON m.ns=w.ns ",
-            "LEFT JOIN inode i ON i.ns=w.ns AND i.serial=?4 AND i.gen<=w.active ",
-            "AND i.gen>w.installed WHERE w.ns=?1 AND w.incarnation=?2 ",
-            "ORDER BY i.gen DESC LIMIT 1"
-        )
-    };
-}
-/// A kernel lookup count on the inode.
-macro_rules! held_lookup {
-    () => {
-        "SELECT 1 FROM native_lookup l WHERE l.ns=w.ns AND l.mount=?3 AND l.serial=?4"
-    };
-}
-/// An open regular-file descriptor of the inode; the column is its access mode.
-macro_rules! held_file {
-    () => {
-        "SELECT f.writable FROM file_handle f WHERE f.ns=w.ns AND f.owner=?5 AND f.mount=?3 AND f.serial=?4"
-    };
-}
-/// An open file or directory descriptor of the inode.
-macro_rules! held_handle {
-    () => {
-        "CASE WHEN EXISTS(SELECT 1 FROM file_handle f WHERE f.ns=w.ns AND f.owner=?5 AND f.mount=?3 AND f.serial=?4) OR EXISTS(SELECT 1 FROM native_directory d WHERE d.ns=w.ns AND d.owner=?5 AND d.mount=?3 AND d.serial=?4 AND d.closed=0) THEN 1 END"
-    };
-}
-pub(crate) const FENCE_LOOKUP: &str = fence!(held_lookup!());
-pub(crate) const FENCE_FILE: &str = fence!(held_file!());
-pub(crate) const FENCE_HANDLE: &str = fence!(held_handle!());
-/// FORGET's fence: the Workspace row, its native connection and the whole
-/// lookup row the request names, whose columns are NULL when the kernel
-/// holds no lookup count on the inode.
-pub(crate) const FENCE_FORGET: &str = concat!(
-    "SELECT w.active,w.captured,w.revision,w.base_root,w.dirty_inodes,",
-    "w.dirty_directory_entries,w.lifecycle,w.installed,w.captured_revision,",
-    "w.base_readers,w.consolidating,m.owner,m.root,m.revoked,l.owner,l.nlookup,",
-    "l.implicit FROM workspace w LEFT JOIN native_mount m ON m.ns=w.ns ",
-    "LEFT JOIN native_lookup l ON l.ns=w.ns AND l.mount=?3 AND l.serial=?4 ",
-    "WHERE w.ns=?1 AND w.incarnation=?2"
-);
+/// Workspace metadata read alongside in-memory request custody in one owner turn.
+pub(crate) const FENCE_LOOKUP: &str = "SELECT active,captured,revision,base_root,dirty_inodes,
+    dirty_directory_entries,lifecycle,installed,captured_revision,base_readers,consolidating
+    FROM workspace WHERE ns=?1 AND incarnation=?2";
 /// Whether the row of layer ?3 of serial ?2 may be deleted once the layer
 /// is empty: it is installed, or a later row of the view supersedes it. No
 /// row when the namespace is gone.
 pub(crate) const LAYER_SUPERSEDED: &str = "SELECT ?3<=w.installed OR EXISTS(SELECT 1
     FROM inode i WHERE i.ns=w.ns AND i.serial=?2 AND i.gen<=w.active
     AND i.gen>max(?3,w.installed)) FROM workspace w WHERE w.ns=?1";
-/// The three fences of a visit that decides over the inode it names.
-pub(crate) const FENCE_LOOKUP_ROW: &str = fence_row!(held_lookup!());
-pub(crate) const FENCE_FILE_ROW: &str = fence_row!(held_file!());
-pub(crate) const FENCE_HANDLE_ROW: &str = fence_row!(held_handle!());
-/// An open directory descriptor of the inode; the column is its floor.
-pub(crate) const FENCE_DIRECTORY: &str = fence!(
-    "SELECT d.floor FROM native_directory d WHERE d.ns=w.ns AND d.owner=?5 AND d.mount=?3 AND d.serial=?4 AND d.closed=0"
-);
+/// The same Workspace point and the inode that the deciding visit names.
+pub(crate) const FENCE_LOOKUP_ROW: &str = "SELECT w.active,w.captured,w.revision,w.base_root,w.dirty_inodes,
+    w.dirty_directory_entries,w.lifecycle,w.installed,w.captured_revision,w.base_readers,w.consolidating,
+    i.serial,i.kind,i.mode,i.mtime_seconds,i.mtime_nanoseconds,i.nlink,i.size,
+    i.inherited_cutoff,i.born,i.entries,i.subdirs,i.gen,i.epoch,i.height,i.referenced,i.sequence
+    FROM workspace w LEFT JOIN inode i ON i.ns=w.ns AND i.serial=?3 AND i.gen<=w.active AND i.gen>w.installed
+    WHERE w.ns=?1 AND w.incarnation=?2 ORDER BY i.gen DESC LIMIT 1";

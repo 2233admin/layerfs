@@ -143,20 +143,13 @@ fn each_job_refuses_a_stale_route_then_a_closed_write_then_a_released_owner() {
         ["stale", "stale", "stale", "closed", "stale", "stale", "stale"]
     );
 
-    // The Workspace row itself gone: stale for every job, the write included.
-    let mut reclaimed = false;
-    for _ in 0..200 {
-        match db.reclaim_closed(0).unwrap() {
-            Some(step) if step.done => {
-                reclaimed = true;
-                break;
-            }
-            Some(_) => {}
-            None => break,
-        }
-    }
-    assert!(reclaimed, "bounded terminal reclamation did not finish");
-    assert_eq!(refusals(&db, held, 600), ["stale"; 7]);
+    // Connection disposal consumes the complete Workspace file instead of
+    // deleting its row and continuing to run commands through this engine.
+    assert_eq!(
+        db.cleanup_state(held.owner.route()).unwrap(),
+        CleanupState::Queued
+    );
+    db.close_database().unwrap();
 }
 
 #[test]
@@ -175,7 +168,7 @@ fn each_job_executes_a_fixed_number_of_fence_statements() {
         ("get", [1, 0, 1, 0, 0, 0]),
         // Two keys: one fence, one read for each key.
         ("get_many", [1, 0, 2, 0, 0, 0]),
-        ("apply", [1, 0, 2, 1, 1, 1]),
+        ("apply", [1, 0, 2, 1, 1, 0]),
         ("first_keys", [1, 0, 1, 0, 0, 0]),
         ("first_keys_all", [1, 0, 1, 0, 0, 0]),
         ("keys_after", [1, 0, 1, 0, 0, 0]),

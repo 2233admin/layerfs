@@ -171,7 +171,7 @@ impl Overlay {
                 32,
             )?;
             self.wake_generation(c.route.ns, c.generation.0 as u64)?;
-            self.queue_closed(c.route)
+            Ok(())
         })
     }
     /// One immutable captured byte window, independent of current installed floor.

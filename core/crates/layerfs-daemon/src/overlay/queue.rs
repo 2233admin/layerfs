@@ -378,16 +378,13 @@ impl Shared {
             state = next;
         }
     }
-    pub fn maintenance(&self, step: layerfs_overlay::ReclaimStep, closed: bool, ns: u64) {
+    pub fn maintenance(&self, step: layerfs_overlay::ReclaimStep, ns: u64) {
         if let Ok(mut state) = self.state.lock() {
             state.event = state.event.wrapping_add(1);
             for job in &mut state.lane.queues[ServiceClass::Capture as usize] {
                 job.blocked = false;
             }
             state.work.maintenance_jobs = state.work.maintenance_jobs.saturating_add(1);
-            if closed && step.done {
-                state.work.closed_namespaces = state.work.closed_namespaces.saturating_add(1);
-            }
             state.work.maintenance_rows = state.work.maintenance_rows.saturating_add(step.rows);
             state.work.maintenance_data_bytes = state
                 .work
@@ -444,6 +441,18 @@ impl Shared {
                 }
             }
         }
+    }
+    /// A last reply wakes before-effect capture readiness without a SQL job.
+    pub fn replies_settled(&self) {
+        if let Ok(mut state) = self.state.lock() {
+            state.event = state.event.wrapping_add(1);
+            for job in &mut state.lane.queues[ServiceClass::Capture as usize] {
+                if !job.wait_consolidation {
+                    job.blocked = false;
+                }
+            }
+        }
+        self.wake.notify_all();
     }
     pub fn stop(&self) {
         let jobs = if let Ok(mut state) = self.state.lock() {

@@ -381,21 +381,17 @@ fn state_exceeding_eight_mib_reclaims_in_windows_without_reusing_a_released_owne
     ));
     db.release_operation(second.owner).unwrap();
     maintain(&db, 50);
-    for _ in 0..100 {
-        if db.reclaim_closed(0).unwrap().unwrap().done {
-            let counts = db.resources(None).unwrap().counts;
-            assert_eq!(
-                (
-                    counts.namespaces,
-                    counts.operation_record_rows,
-                    counts.operation_record_bytes
-                ),
-                (0, 0, 0)
-            );
-            return;
-        }
-    }
-    panic!("bounded terminal operation_record reclamation did not finish");
+    assert_eq!(
+        db.cleanup_state(second.owner.route()).unwrap(),
+        CleanupState::Queued
+    );
+    let counts = db.resources(None).unwrap().counts;
+    assert_eq!(
+        (counts.operation_record_rows, counts.operation_record_bytes),
+        (0, 0)
+    );
+    assert_eq!(counts.namespaces, 1);
+    db.close_database().unwrap();
 }
 
 #[test]
@@ -420,14 +416,7 @@ fn exact_plans_correlate_with_bounded_executed_point_and_window_work() {
         let plans = db
             .explain_indexed_operation_record(scope, key(1, 7), key(2, 0).key)
             .unwrap();
-        for label in [
-            "contains",
-            "get",
-            "delete",
-            "keys",
-            "operation-cleanup",
-            "namespace-cleanup",
-        ] {
+        for label in ["contains", "get", "delete", "keys", "operation-cleanup"] {
             assert!(
                 plans.iter().any(|p| p.starts_with(&format!("{label}:"))
                     && p.contains("SEARCH indexed_operation_record USING PRIMARY KEY")),

@@ -135,11 +135,8 @@ impl Fixture {
         self.db().offer_native_cookies(page).unwrap()
     }
     fn pages(&self) -> u64 {
-        self.db()
-            .resources(Some(self.mount.route()))
-            .unwrap()
-            .counts
-            .owner_details
+        let open = self.db().resources(Some(self.mount.route())).unwrap().open;
+        open.directory_handles + open.cookie_pages
     }
     /// One whole enumeration from the first name, reply by reply, every
     /// window name accepted: the names and the number of replies that
@@ -391,29 +388,9 @@ fn only_accepted_names_become_offsets_and_a_closed_handle_reads_and_publishes_no
     f.db().close(f.mount.route()).unwrap();
     assert_eq!(
         f.db().cleanup_state(f.mount.route()).unwrap(),
-        CleanupState::Held
+        CleanupState::Queued
     );
-    f.maintain();
-    for _ in 0..100 {
-        if f.db().cleanup_state(f.mount.route()).unwrap() == CleanupState::Gone {
-            break;
-        }
-        f.db().reclaim_closed(0).unwrap();
-    }
-    assert_eq!(
-        f.db().cleanup_state(f.mount.route()).unwrap(),
-        CleanupState::Gone
-    );
-    let counts = f.db().resources(None).unwrap().counts;
-    assert_eq!(
-        (
-            counts.owner_details,
-            counts.owner_rows,
-            counts.source_rows,
-            counts.namespaces
-        ),
-        (0, 0, 0, 0)
-    );
+    assert_eq!(f.db().resources(None).unwrap().counts.namespaces, 1);
 }
 
 #[test]
@@ -422,35 +399,12 @@ fn a_handle_that_seeks_back_reuses_its_replies_and_a_long_handle_retires_in_boun
     let f = Fixture::new();
     let plans = f.db().explain_native_directory(f.directory).unwrap();
     println!("NATIVE_DIRECTORY_PLANS {plans:#?}");
-    for label in [
-        "cookie-offset",
-        "cookie-window",
-        "cookie-retire",
-        "cookie-after",
-        "names-kinds",
-        "open-fence",
-    ] {
-        assert!(
-            plans.iter().any(|plan| plan.starts_with(label)),
-            "{label}: {plans:?}"
-        );
-    }
+    assert!(plans.iter().any(|plan| plan.starts_with("names-kinds")));
+
     assert!(
         plans
             .iter()
             .all(|plan| !plan.contains("SCAN") && !plan.contains("TEMP B-TREE")),
-        "{plans:?}"
-    );
-    assert!(
-        plans
-            .iter()
-            .any(|plan| plan.contains("cookie-after") && plan.contains("native_cookie_after")),
-        "{plans:?}"
-    );
-    assert!(
-        plans
-            .iter()
-            .any(|plan| plan.contains("open-fence") && plan.contains("native_directory_open")),
         "{plans:?}"
     );
     f.fill(2 * PAGE_ROWS + 2);
@@ -503,17 +457,17 @@ fn a_handle_that_seeks_back_reuses_its_replies_and_a_long_handle_retires_in_boun
         )
     };
     let (count, reused, first) = cost(0);
-    // The fence, the parent, the directory's row, the window, and the reply
-    // listed from the start, which makes the offer a rewind that reuses none.
-    assert_eq!((count, reused, first), (PAGE_ROWS, None, [1, 2, 1, 1, 0]));
+    // SQL reads the Workspace fence, directory row and name window. Parent,
+    // cookie and reuse checks use exact memory ownership.
+    assert_eq!((count, reused, first), (PAGE_ROWS, None, [1, 0, 1, 1, 0]));
     let (count, last, start) = cost(2);
     // The fence, the directory's row, the window, the reuse.
-    assert_eq!((count, start), (PAGE_ROWS, [1, 1, 1, 1, 0]));
+    assert_eq!((count, start), (PAGE_ROWS, [1, 0, 1, 1, 0]));
     let (count, last, middle) = cost(last.unwrap());
-    // The fence, the offset's reply, the directory's row, the window, the reuse.
-    assert_eq!((count, middle), (PAGE_ROWS, [1, 2, 1, 1, 0]));
+    // The offset and reuse are memory checks; SQL work remains the same.
+    assert_eq!((count, middle), (PAGE_ROWS, [1, 0, 1, 1, 0]));
     let (count, _, tail) = cost(last.unwrap());
-    assert_eq!((count, tail), (3, [1, 2, 1, 1, 0]));
+    assert_eq!((count, tail), (3, [1, 0, 1, 1, 0]));
 
     // A handle with more replies than its RELEASEDIR deletes itself: the
     // header is marked closed and bounded indexed turns retire the rows.
@@ -536,9 +490,10 @@ fn a_handle_that_seeks_back_reuses_its_replies_and_a_long_handle_retires_in_boun
         .db()
         .retained_native_directory(f.mount, u64::MAX)
         .unwrap()
-        .is_some());
+        .is_none());
+    drop(f.db().take_open_disposals());
     let turns = f.maintain();
-    assert_eq!(turns, [8, 8, 1, 1], "two windows, the last row, the header");
+    assert!(turns.is_empty());
     assert_eq!(
         f.db().retained_native_directory(f.mount, u64::MAX).unwrap(),
         None
@@ -770,7 +725,8 @@ fn an_offset_from_before_a_rewind_is_refused_and_later_offsets_resume_after_thei
     f.db()
         .close_native_directory(f.mount, 1, f.directory.owner_id())
         .unwrap();
-    assert_eq!(f.maintain(), [8, 5, 1], "13 rows and the header");
+    drop(f.db().take_open_disposals());
+    assert!(f.maintain().is_empty());
     assert_eq!(f.pages(), held - 14);
     f.db()
         .close_native_directory(f.mount, 1, other.owner_id())
@@ -778,105 +734,28 @@ fn an_offset_from_before_a_rewind_is_refused_and_later_offsets_resume_after_thei
     f.db().revoke_native_mount(f.mount).unwrap();
 }
 
-/// The cookie storage of schema 22, which this replaces: one row per listed
-/// name and one index entry per listed name.
-const BEFORE: &str = "CREATE TABLE native_cookie (
-    ns INTEGER NOT NULL,
-    owner INTEGER NOT NULL CHECK(owner>0),
-    cookie INTEGER NOT NULL CHECK(cookie>=3),
-    name BLOB NOT NULL CHECK(length(name)>0 AND length(name)<=255),
-    PRIMARY KEY(ns,owner,cookie)
-) STRICT, WITHOUT ROWID;
-CREATE INDEX native_cookie_name ON native_cookie(ns,owner,name,cookie);";
-const NOW: &str = "CREATE TABLE native_cookie (
-    ns INTEGER NOT NULL,
-    owner INTEGER NOT NULL CHECK(owner>0),
-    first_cookie INTEGER NOT NULL CHECK(first_cookie>=3),
-    after BLOB NOT NULL CHECK(length(after)<=255),
-    names BLOB NOT NULL CHECK(length(names)>=2 AND length(names)<=16384),
-    PRIMARY KEY(ns,owner,first_cookie)
-) STRICT, WITHOUT ROWID;
-CREATE INDEX native_cookie_after ON native_cookie(ns,owner,after,first_cookie);";
-
 #[test]
-fn a_directory_listed_once_stores_fewer_rows_and_bytes_than_a_row_and_an_index_entry_per_name() {
-    for count in [10_usize, 4000] {
-        let mut f = Fixture::new();
-        f.fill(count);
-        let empty = f.pages();
-        let (listed, published) = f.enumerate();
-        assert_eq!(listed.len(), count);
-        let replies = count.div_ceil(PAGE_ROWS);
-        assert_eq!((published, f.pages() - empty), (replies, replies as u64));
-        let (owner, ns) = (f.directory.owner_id() as i64, 1_i64);
-        // The engine's own rows, read from its closed file.
-        f.db = None;
-        let raw = rusqlite::Connection::open(f.path.join("overlay")).unwrap();
-        let mut statement = raw
-            .prepare("SELECT first_cookie,after,names FROM native_cookie WHERE owner=?1 ORDER BY first_cookie")
-            .unwrap();
-        let rows: Vec<(i64, Vec<u8>, Vec<u8>)> = statement
-            .query_map([owner], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
-            .unwrap()
-            .collect::<Result<_, _>>()
-            .unwrap();
-        assert_eq!(rows.len(), replies);
-        let page_size: i64 = raw
-            .query_row("PRAGMA page_size", [], |row| row.get(0))
-            .unwrap();
-        // The same names stored both ways in an empty database of the same
-        // page size: entries of both b-trees, their payload bytes and the
-        // pages they occupy.
-        let stored = |schema: &str, fill: &dyn Fn(&rusqlite::Connection)| {
-            let scratch = rusqlite::Connection::open_in_memory().unwrap();
-            scratch
-                .execute_batch(&format!("PRAGMA page_size={page_size}; {schema}"))
-                .unwrap();
-            let bare: i64 = scratch
-                .query_row("PRAGMA page_count", [], |row| row.get(0))
-                .unwrap();
-            fill(&scratch);
-            let pages: i64 = scratch
-                .query_row("PRAGMA page_count", [], |row| row.get(0))
-                .unwrap();
-            pages - bare
-        };
-        let before_pages = stored(BEFORE, &|scratch| {
-            for (index, name) in listed.iter().enumerate() {
-                scratch
-                    .execute(
-                        "INSERT INTO native_cookie VALUES(?1,?2,?3,?4)",
-                        rusqlite::params![ns, owner, 3 + index as i64, name],
-                    )
-                    .unwrap();
-            }
-        });
-        let now_pages = stored(NOW, &|scratch| {
-            for (first, after, names) in &rows {
-                scratch
-                    .execute(
-                        "INSERT INTO native_cookie VALUES(?1,?2,?3,?4,?5)",
-                        rusqlite::params![ns, owner, first, after, names],
-                    )
-                    .unwrap();
-            }
-        });
-        let name_bytes: usize = listed.iter().map(Vec::len).sum();
-        // Before: every name in its row and again in its index entry.
-        let (before_entries, before_bytes) = (2 * count, 2 * name_bytes);
-        // Now: every name once with one length byte; the name a reply was
-        // listed after in its row and again in its index entry.
-        let after_bytes: usize = rows.iter().map(|(_, after, _)| after.len()).sum();
-        let names_bytes: usize = rows.iter().map(|(_, _, names)| names.len()).sum();
-        assert_eq!(names_bytes, name_bytes + count);
-        let (now_entries, now_bytes) = (2 * replies, names_bytes + 2 * after_bytes);
-        println!(
-            "COOKIE_STORAGE names={count} before: entries={before_entries} name_bytes={before_bytes} pages={before_pages} now: entries={now_entries} name_bytes={now_bytes} pages={now_pages} page_size={page_size}"
-        );
-        assert!(now_entries < before_entries && now_bytes < before_bytes);
-        assert!(now_pages <= before_pages);
-        if count > PAGE_ROWS {
-            assert!(now_pages < before_pages);
-        }
+fn published_cookie_pages_are_memory_state_and_leave_sqlite_unchanged() {
+    let f = Fixture::new();
+    for index in 0..130 {
+        f.bind(format!("name-{index:04}").as_bytes(), Some(index + 10));
     }
+    let before = f.db().resources(Some(f.mount.route())).unwrap();
+    let (names, replies) = f.enumerate();
+    assert_eq!(names.len(), 130);
+    let after = f.db().resources(Some(f.mount.route())).unwrap();
+    assert_eq!(
+        after.open.cookie_pages - before.open.cookie_pages,
+        replies as u64
+    );
+    assert_eq!(after.counts, before.counts);
+    assert_eq!(
+        (after.database_pages, after.allocation.logical_bytes),
+        (before.database_pages, before.allocation.logical_bytes)
+    );
+    f.db()
+        .close_native_directory(f.mount, 1, f.directory.owner_id())
+        .unwrap();
+    drop(f.db().take_open_disposals());
+    assert_eq!(f.db().resources(None).unwrap().open.cookie_pages, 0);
 }

@@ -19,8 +19,8 @@ fn run(client: &OwnerClient, route: Option<Route>, command: Command) -> Completi
         std::thread::yield_now();
     }
 }
-fn resources(client: &OwnerClient, route: Route) -> layerfs_overlay::Resources {
-    match run(client, Some(route), Command::Resources { global: true }).result() {
+fn resources(client: &OwnerClient, _route: Route) -> layerfs_overlay::Resources {
+    match run(client, None, Command::Resources { global: true }).result() {
         Ok(Response::Resources(r)) => **r,
         x => panic!("{x:?}"),
     }
@@ -182,27 +182,22 @@ fn real_owner_reclaims_at_device_full_after_last_owner_without_a_cleanup_job() {
     assert!(run(&client, Some(route), Command::Release(lease))
         .result()
         .is_ok());
-    // Observe fixed in-memory service diagnostics only. No database status or
-    // explicit cleanup job drives the idle worker.
-    let deadline = Instant::now() + Duration::from_secs(5);
-    while client.diagnostics().unwrap().maintenance_rows < (128 + accepted) * 2 + 2 {
-        assert!(Instant::now() < deadline, "idle headroom cleanup stalled");
-        assert!(client.maintenance_failure().unwrap().is_none());
-        std::thread::yield_now();
-    }
-    let after = resources(&client, other);
-    assert_eq!(after.counts.namespaces, 1);
+    // Terminal close sweeps no rows, even at full capacity. Exact last-owner
+    // releases leave the file eligible for the terminal owner's checked close.
     assert!(matches!(
         run(&client, Some(route), Command::CleanupState).result(),
-        Ok(Response::CleanupState(layerfs_overlay::CleanupState::Gone))
+        Ok(Response::CleanupState(
+            layerfs_overlay::CleanupState::Queued
+        ))
     ));
-    assert_eq!(after.counts.payload_cells, 0);
-    assert!(after.free_pages > before.free_pages);
+    let after = resources(&client, other);
+    assert_eq!(after.counts.namespaces, 2);
+    assert_eq!(after.counts.payload_cells, 128 + accepted);
     assert_eq!(after.allocation.reserved_tail_bytes, 0);
     assert!(
         matches!(run(&client,Some(other),Command::State).result(),Ok(Response::State(s)) if *s==other_state)
     );
-    println!("S6_OWNER_DEVICE fixture_filled={filled} accepted_distinct_windows={accepted} before={before:?} after={after:?} owner_work={:?} automatic_idle=true ordinary_refusal=ENOSPC",client.diagnostics().unwrap());
+    println!("S6_OWNER_DEVICE fixture_filled={filled} accepted_distinct_windows={accepted} before={before:?} after={after:?} owner_work={:?} terminal_row_sweep=false ordinary_refusal=ENOSPC",client.diagnostics().unwrap());
     assert!(client.maintenance_failure().unwrap().is_none());
     owner.stop().unwrap();
 }

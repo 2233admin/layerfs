@@ -87,7 +87,7 @@ fn inode(serial: u64, kind: InodeKind) -> Inode {
 }
 
 #[test]
-fn revocation_retires_unreleased_handles_in_bounded_indexed_turns() {
+fn drained_revocation_fences_all_handles_without_a_cleanup_job() {
     const HANDLES: u64 = 70;
     let f = Fixture::new();
     f.lookup(2);
@@ -95,79 +95,45 @@ fn revocation_retires_unreleased_handles_in_bounded_indexed_turns() {
         f.open_file(100 + index, 2);
         f.open_directory(1000 + index);
     }
-    let plans = f.db.explain_native(f.mount).unwrap();
-    assert!(
-        plans.iter().all(|plan| plan.contains("SEARCH")),
-        "{plans:?}"
-    );
-    assert!(plans.iter().any(|plan| plan.starts_with("retire-files")));
-    assert!(plans.iter().any(
-        |plan| plan.starts_with("retire-directories") && plan.contains("native_directory_open")
-    ));
-    // An open handle does not fence the mark.
+    let before = f.db.resources(Some(f.mount.route())).unwrap().open;
     assert_eq!(
-        f.db.native_mount_state(f.mount).unwrap(),
-        NativeMountState::Live
+        (before.file_handles, before.directory_handles),
+        (HANDLES, HANDLES)
     );
-    let before = f.db.diagnostics();
+    let start = f.db.diagnostics();
     f.db.revoke_native_mount(f.mount).unwrap();
-    let mark = f.db.diagnostics().since(&before);
-    // The mark waits for no row: it reads the Workspace and the mount, then
-    // writes the mark and its retirement entry. No request row is probed.
+    let work = f.db.diagnostics().since(&start).total();
     assert_eq!(
-        (mark.total().attempts, mark.total().executions),
-        (7, 8),
-        "{mark:?}"
+        (work.attempts, work.executions, work.direct_rows_changed),
+        (1, 1, 0)
     );
     assert_eq!(
         f.db.native_mount_state(f.mount).unwrap(),
         NativeMountState::Revoked
     );
-    f.db.close(f.mount.route()).unwrap();
-    assert_eq!(
-        f.db.cleanup_state(f.mount.route()).unwrap(),
-        CleanupState::Held,
-        "unretired native ownership keeps namespace deletion held"
-    );
-    let mut cursor = MaintenanceCursor::default();
-    let (mut turns, mut maximum_rows, mut rows) = (0_u64, 0, 0);
-    for _ in 0..1000 {
-        match f.db.maintain(cursor).unwrap() {
-            Some(step) => {
-                cursor = step.cursor;
-                turns += 1;
-                rows += step.work.rows;
-                maximum_rows = maximum_rows.max(step.work.rows);
-            }
-            None => break,
-        }
+    for request in 0..HANDLES {
+        assert!(matches!(
+            f.db.retained_native_file(f.mount, 100 + request),
+            Err(layerfs_overlay::OverlayError::Stale)
+        ));
+        assert!(matches!(
+            f.db.retained_native_directory(f.mount, 1000 + request),
+            Err(layerfs_overlay::OverlayError::Stale)
+        ));
     }
-    assert!(maximum_rows <= 64, "{maximum_rows}");
-    assert!(rows >= 2 * HANDLES, "{rows}");
-    assert!(turns >= 4, "{turns}");
-    assert_eq!(
-        f.db.native_mount_state(f.mount).unwrap(),
-        NativeMountState::Gone
-    );
+    assert!(f
+        .db
+        .maintain(MaintenanceCursor::default())
+        .unwrap()
+        .is_none());
+    f.db.close(f.mount.route()).unwrap();
     assert_eq!(
         f.db.cleanup_state(f.mount.route()).unwrap(),
         CleanupState::Queued
     );
-    for _ in 0..1000 {
-        if f.db.reclaim_closed(0).unwrap().is_none() {
-            break;
-        }
-    }
     assert_eq!(
-        f.db.cleanup_state(f.mount.route()).unwrap(),
-        CleanupState::Gone
-    );
-    assert_eq!(f.db.resources(None).unwrap().counts, Default::default());
-    let work = f.db.diagnostics().since(&before);
-    assert_eq!(work.total().fullscan_steps, 0);
-    assert_eq!(work.total().sorts, 0);
-    println!(
-        "NATIVE_HANDLE_RETIRE handles={} turns={turns} rows={rows} maximum_window={maximum_rows} mark={mark:?} work={work:?}",
-        2 * HANDLES
+        f.db.resources(Some(f.mount.route())).unwrap().open,
+        before,
+        "detached allocations live until checked file close; they are not consumers"
     );
 }

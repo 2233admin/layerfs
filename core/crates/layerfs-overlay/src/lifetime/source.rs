@@ -143,7 +143,7 @@ impl Overlay {
             &[&source.route.ns],
             8,
         )?;
-        self.queue_closed(source.route)
+        Ok(())
     }
     /// Production-template plan for one source-owner point observation.
     pub fn explain_base_source(&self, route: Route, owner: u64) -> OverlayResult<Vec<String>> {

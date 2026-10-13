@@ -366,11 +366,7 @@ fn the_fences_that_read_a_row_are_indexed_seeks_in_generation_order() {
     let seat = world.seat(56);
     let plans = world.db.explain_native_visit(seat.mount).unwrap();
     println!("NATIVE_VISIT_ROW_PLANS {plans:#?}");
-    for (label, seeks) in [
-        ("fence-row-lookup", 4),
-        ("fence-row-file", 4),
-        ("fence-row-handle", 5),
-    ] {
+    for (label, seeks) in [("workspace-inode", 2)] {
         let rows: Vec<&String> = plans
             .iter()
             .filter(|plan| plan.starts_with(label))

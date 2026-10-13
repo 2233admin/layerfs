@@ -19,7 +19,7 @@ pub enum Settled {
     /// The namespace's last ticket, and no owner job waited for it.
     Last,
     /// The namespace's last ticket, and an owner job observed it pending:
-    /// one owner turn is owed (`Overlay::reply_settled`).
+    /// the serving owner wakes before-effect capture readiness.
     Watched,
 }
 #[derive(Default)]

@@ -83,7 +83,10 @@ fn a_request_owns_one_descriptor_of_its_mount_and_no_other_row_answers_for_it() 
     let (_temp, db) = engine();
     let (route, mount) = mounted(&db, 1);
     let (other_route, other_mount) = mounted(&db, 2);
-    let rows = |route| db.resources(Some(route)).unwrap().counts;
+    let rows = |route| {
+        let r = db.resources(Some(route)).unwrap();
+        (r.counts, r.open)
+    };
 
     let before = rows(route);
     let first = open(&db, mount, 10).unwrap();
@@ -92,8 +95,8 @@ fn a_request_owns_one_descriptor_of_its_mount_and_no_other_row_answers_for_it() 
     // already stood for the kernel's lookup count.
     assert_eq!(
         (
-            held.owner_rows - before.owner_rows,
-            held.owner_details - before.owner_details
+            held.0.owner_rows - before.0.owner_rows,
+            held.1.file_handles - before.1.file_handles
         ),
         (0, 1)
     );
@@ -101,7 +104,10 @@ fn a_request_owns_one_descriptor_of_its_mount_and_no_other_row_answers_for_it() 
 
     // The same request identity again: refused whole, nothing written.
     let again = open(&db, mount, 10);
-    assert!(matches!(again, Err(OverlayError::Sql(_))), "{again:?}");
+    assert!(
+        matches!(again, Err(OverlayError::Invalid("duplicate open request"))),
+        "{again:?}"
+    );
     assert_eq!(rows(route), held);
     assert_eq!(db.retained_native_file(mount, 10).unwrap(), Some(first));
     db.check_file(first, false).unwrap();
@@ -137,7 +143,10 @@ fn a_request_owns_one_descriptor_of_its_mount_and_no_other_row_answers_for_it() 
     assert_eq!(db.retained_native_file(mount, 10).unwrap(), Some(first));
     let repeated = plain(&db, route, 10);
     assert!(
-        matches!(repeated, Err(OverlayError::Sql(_))),
+        matches!(
+            repeated,
+            Err(OverlayError::Invalid("duplicate open request"))
+        ),
         "{repeated:?}"
     );
     assert_eq!(db.retained_file(other_route, 10).unwrap(), None);
@@ -151,15 +160,15 @@ fn a_request_owns_one_descriptor_of_its_mount_and_no_other_row_answers_for_it() 
     assert_eq!(db.retained_native_file(mount, 10).unwrap(), None);
     assert_eq!(db.retained_file(route, 10).unwrap(), Some(caller));
     assert_eq!(
-        rows(route).owner_details - before.owner_details,
+        rows(route).1.file_handles - before.1.file_handles,
         2,
         "the second native descriptor and the caller's"
     );
-    assert_eq!(rows(other_route).owner_details - before.owner_details, 1);
+    assert_eq!(rows(other_route).1.file_handles - before.1.file_handles, 1);
 }
 
 #[test]
-fn retiring_a_mount_reads_its_own_descriptors_however_many_others_exist() {
+fn drained_revocation_fences_its_descriptors_without_visiting_other_owners() {
     const OWN: u64 = 3;
     let retire = |others: u64| {
         let (_temp, db) = engine();
@@ -187,7 +196,7 @@ fn retiring_a_mount_reads_its_own_descriptors_however_many_others_exist() {
         let work = db.diagnostics().since(&before).total();
         assert_eq!(
             db.native_mount_state(mount).unwrap(),
-            NativeMountState::Gone
+            NativeMountState::Revoked
         );
         // Its own descriptors are gone; every other one is untouched.
         for file in own {

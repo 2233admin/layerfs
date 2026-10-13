@@ -1,12 +1,11 @@
-//! The cookies of published READDIR replies: one row per reply, holding
+//! The cookies of published READDIR replies: one memory page per reply, holding
 //! exactly the names its buffer accepted.
 use super::native_directory_read::decode_names;
 use super::INLINE_PAGES;
 use crate::{
-    contract::native_directory::Published,
-    db::{integer, unsigned},
-    sql, NativeCookieOffer, NativeDirectoryCursor, NativeDirectoryPage, Overlay, OverlayError,
-    OverlayResult, StatementKind, PAGE_ROWS,
+    contract::native_directory::Published, db::integer, sql, NativeCookieOffer,
+    NativeDirectoryCursor, NativeDirectoryPage, Overlay, OverlayError, OverlayResult,
+    StatementKind, PAGE_ROWS,
 };
 impl Overlay {
     /// Inside the reading visit's job, for a window that may list a name:
@@ -23,21 +22,25 @@ impl Overlay {
         page: &NativeDirectoryPage,
     ) -> OverlayResult<NativeCookieOffer> {
         let directory = page.directory;
+        self.check_route(directory.mount.route)?;
         let after = page.cursor.after_name().unwrap_or(&[]).to_vec();
-        let existing = self
-            .query(
-                StatementKind::Lease,
-                sql::COOKIE_PAGE_AFTER,
-                &[
-                    &directory.mount.route.ns,
-                    &integer(directory.owner)?,
-                    &after.as_slice(),
-                    &integer(page.floor)?,
-                ],
-                32 + after.len() as u64,
-                |r| Ok((unsigned(r, 0)?, r.get::<_, Vec<u8>>(1)?)),
-            )?
-            .pop();
+        let existing = {
+            let state = self.open.borrow();
+            let store = state
+                .cookies
+                .get(&(directory.mount.route.ns, directory.owner))
+                .ok_or(OverlayError::Stale)?;
+            store
+                .after
+                .range((after.clone(), page.floor)..=(after.clone(), u64::MAX))
+                .next_back()
+                .and_then(|((_, first), _)| {
+                    store
+                        .offsets
+                        .get(first)
+                        .map(|page| (*first, page.names.clone()))
+                })
+        };
         let published = match existing {
             None => Published::None,
             Some(_) if page.cursor == NativeDirectoryCursor::Start => Published::Rewind,
@@ -59,7 +62,7 @@ impl Overlay {
     }
     /// READDIR's publishing visit, before the reply is sent: the names the
     /// reply buffer accepted become the offsets `first..first+names.len()`
-    /// of the offer's fresh range, as one row, in one transaction behind the
+    /// of the offer's fresh range, as one page, in one atomic memory job behind the
     /// fence on the still open descriptor. A closed or released handle, a
     /// revoked mount and a closed Workspace publish nothing. An unavailable
     /// send outcome keeps the row; a second publication of one offer fails
@@ -96,7 +99,7 @@ impl Overlay {
             return Err(OverlayError::Invalid("native cookie names"));
         }
         let directory = offer.directory;
-        let (ns, owner) = (directory.mount.route.ns, integer(directory.owner)?);
+        let ns = directory.mount.route.ns;
         self.atomic(|| {
             let (_, mut floor) =
                 self.directory_fence(directory.mount, directory.serial, directory.owner, true)?;
@@ -105,35 +108,34 @@ impl Overlay {
             }
             if offer.rewinds() {
                 floor = offer.first;
-                self.execute(
-                    StatementKind::Lease,
-                    "UPDATE native_directory SET floor=?3 WHERE ns=?1 AND owner=?2",
-                    &[&ns, &owner, &integer(floor)?],
-                    24,
-                )?;
+                let mut state = self.open.borrow_mut();
+                let key = (ns, directory.owner);
+                let mut held = state
+                    .directories
+                    .rows
+                    .get(&key)
+                    .copied()
+                    .ok_or(OverlayError::Stale)?;
+                held.floor = floor;
+                state.directories.put(key, held);
             }
             if floor != 0 {
-                self.execute(
-                    StatementKind::Lease,
-                    sql::COOKIE_RETIRE,
-                    &[&ns, &owner, &integer(floor)?, &(INLINE_PAGES as i64 - 1)],
-                    32,
+                self.open.borrow_mut().retire_cookies(
+                    (ns, directory.owner),
+                    floor,
+                    INLINE_PAGES,
                 )?;
             }
             if names.is_empty() {
                 return Ok(());
             }
-            self.execute(
-                StatementKind::Lease,
-                "INSERT INTO native_cookie VALUES(?1,?2,?3,?4,?5)",
-                &[
-                    &ns,
-                    &owner,
-                    &integer(offer.first)?,
-                    &offer.after.as_slice(),
-                    &blob.as_slice(),
-                ],
-                40 + (offer.after.len() + blob.len()) as u64,
+            self.open.borrow_mut().put_cookie(
+                (ns, directory.owner),
+                offer.first,
+                crate::open::CookiePage {
+                    after: offer.after.clone(),
+                    names: blob,
+                },
             )?;
             Ok(())
         })
@@ -143,34 +145,8 @@ impl Overlay {
         directory: crate::NativeDirectory,
     ) -> OverlayResult<Vec<String>> {
         self.state(directory.mount.route)?;
-        let (ns, owner) = (directory.mount.route.ns, integer(directory.owner)?);
+        let ns = directory.mount.route.ns;
         let mut plans = Vec::new();
-        plans.extend(self.query(
-            StatementKind::Explain,
-            &format!("EXPLAIN QUERY PLAN {}", sql::COOKIE_PAGES),
-            &[&ns, &owner, &0_i64],
-            24,
-            |r| Ok(format!("cookie-window: {}", r.get::<_, String>(3)?)),
-        )?);
-        for (label, statement) in [
-            ("cookie-offset", sql::COOKIE_PAGE),
-            ("cookie-retire", sql::COOKIE_RETIRE),
-        ] {
-            plans.extend(self.query(
-                StatementKind::Explain,
-                &format!("EXPLAIN QUERY PLAN {statement}"),
-                &[&ns, &owner, &0_i64, &0_i64],
-                32,
-                |r| Ok(format!("{label}: {}", r.get::<_, String>(3)?)),
-            )?);
-        }
-        plans.extend(self.query(
-            StatementKind::Explain,
-            &format!("EXPLAIN QUERY PLAN {}", sql::COOKIE_PAGE_AFTER),
-            &[&ns, &owner, &b"x".as_slice(), &0_i64],
-            25,
-            |r| Ok(format!("cookie-after: {}", r.get::<_, String>(3)?)),
-        )?);
         plans.extend(self.query(
             StatementKind::Explain,
             &format!("EXPLAIN QUERY PLAN {}", sql::SOURCE_NAMES_KINDS),
@@ -185,10 +161,6 @@ impl Overlay {
             40,
             |r| Ok(format!("names-kinds: {}", r.get::<_, String>(3)?)),
         )?);
-        plans.extend(self.query(StatementKind::Explain,
-            "EXPLAIN QUERY PLAN SELECT owner FROM native_directory WHERE ns=?1 AND mount=?2 AND closed=0 LIMIT 1",
-            &[&ns, &integer(directory.mount.owner)?], 16,
-            |r| Ok(format!("open-fence: {}", r.get::<_, String>(3)?)))?);
         Ok(plans)
     }
 }

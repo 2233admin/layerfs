@@ -80,7 +80,7 @@ impl Overlay {
                     -2,
                 )?;
             }
-            self.queue_closed(route)
+            Ok(())
         })
     }
     pub(crate) fn operation(&self, route: Route, owner: u64) -> OverlayResult<()> {

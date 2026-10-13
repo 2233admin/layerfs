@@ -111,15 +111,9 @@ CREATE TABLE operation_record (
     value BLOB NOT NULL CHECK(length(value)<=65536),
     PRIMARY KEY(ns,operation,kind,key)
 ) STRICT, WITHOUT ROWID;
-CREATE TABLE reclaim (
-    ns INTEGER NOT NULL REFERENCES workspace(ns),
-    queue_key INTEGER NOT NULL CHECK(queue_key>0),
-    target INTEGER NOT NULL CHECK(target>0),
-    cursor INTEGER NOT NULL CHECK(cursor>=0),
-    PRIMARY KEY(ns,queue_key)
-) STRICT, WITHOUT ROWID;
+
 PRAGMA application_id=1279676210;
-CREATE INDEX reclaim_ready ON reclaim(queue_key,ns);
+
 CREATE INDEX lease_resource ON lease(ns,kind,resource,owner);
 CREATE TABLE maintenance (
     ns INTEGER NOT NULL REFERENCES workspace(ns),
@@ -136,34 +130,6 @@ CREATE TABLE maintenance (
 CREATE INDEX maintenance_ready ON maintenance(ready,ns,kind,resource,target);
 CREATE INDEX maintenance_generation ON maintenance(ns,target,kind,resource);
 
-
-CREATE TABLE file_custody (
-    ns INTEGER NOT NULL REFERENCES workspace(ns),
-    serial INTEGER NOT NULL CHECK(serial>0),
-    opens INTEGER NOT NULL DEFAULT 0 CHECK(opens>=0),
-    lookups INTEGER NOT NULL DEFAULT 0 CHECK(lookups>=0),
-    readers INTEGER NOT NULL DEFAULT 0 CHECK(readers>=0),
-    PRIMARY KEY(ns,serial)
-) STRICT, WITHOUT ROWID;
--- One open regular-file descriptor. A native descriptor names its mount and
--- the kernel request that received it (any 64 bits); any other has mount 0
--- and names its caller's request.
-CREATE TABLE file_handle (
-    ns INTEGER NOT NULL REFERENCES workspace(ns),
-    mount INTEGER NOT NULL CHECK(mount>=0),
-    request INTEGER NOT NULL CHECK(mount>0 OR request>0),
-    owner INTEGER NOT NULL CHECK(owner>0),
-    serial INTEGER NOT NULL CHECK(serial>0),
-    writable INTEGER NOT NULL CHECK(writable IN(0,1)),
-    PRIMARY KEY(ns,owner), UNIQUE(ns,mount,request)
-) STRICT, WITHOUT ROWID;
-CREATE TABLE file_read (
-    ns INTEGER NOT NULL REFERENCES workspace(ns),
-    request INTEGER NOT NULL CHECK(request<>0),
-    owner INTEGER NOT NULL CHECK(owner>0),
-    serial INTEGER NOT NULL CHECK(serial>0),
-    PRIMARY KEY(ns,owner), UNIQUE(ns,request)
-) STRICT, WITHOUT ROWID;
 CREATE TABLE captured_reader (
     ns INTEGER NOT NULL REFERENCES workspace(ns),
     request INTEGER NOT NULL CHECK(request>0),
@@ -173,14 +139,6 @@ CREATE TABLE captured_reader (
     base_root BLOB NOT NULL CHECK(length(base_root)=32),
     installed INTEGER NOT NULL CHECK(installed>=0),
     PRIMARY KEY(ns,owner), UNIQUE(ns,request)
-) STRICT, WITHOUT ROWID;
-CREATE TABLE orphan (
-    ns INTEGER NOT NULL REFERENCES workspace(ns),
-    serial INTEGER NOT NULL CHECK(serial>0),
-    base_root BLOB NOT NULL CHECK(length(base_root)=32),
-    lower_top INTEGER NOT NULL CHECK(lower_top>=0),
-    lower_floor INTEGER NOT NULL CHECK(lower_floor>=0 AND lower_floor<=lower_top),
-    PRIMARY KEY(ns,serial)
 ) STRICT, WITHOUT ROWID;
 
 CREATE TABLE operation_owner (
@@ -206,70 +164,5 @@ CREATE TABLE indexed_operation_record (
     value BLOB NOT NULL CHECK(length(value)<=65536),
     PRIMARY KEY(ns,operation,file_scope,kind,key)
 ) STRICT, WITHOUT ROWID;
-CREATE TABLE lookup_owner (
-    ns INTEGER NOT NULL REFERENCES workspace(ns),
-    request INTEGER NOT NULL CHECK(request>0),
-    owner INTEGER NOT NULL CHECK(owner>0),
-    serial INTEGER NOT NULL CHECK(serial>0),
-    PRIMARY KEY(ns,owner), UNIQUE(ns,request)
-) STRICT, WITHOUT ROWID;
-CREATE TABLE orphan_wait (
-    ns INTEGER NOT NULL REFERENCES workspace(ns),
-    gen INTEGER NOT NULL CHECK(gen>0),
-    serial INTEGER NOT NULL CHECK(serial>0),
-    PRIMARY KEY(ns,gen,serial)
-) STRICT, WITHOUT ROWID;
-CREATE TABLE native_mount (
-    ns INTEGER PRIMARY KEY REFERENCES workspace(ns),
-    owner INTEGER NOT NULL CHECK(owner>0),
-    root INTEGER NOT NULL CHECK(root>0),
-    revoked INTEGER NOT NULL CHECK(revoked IN(0,1)),
-    UNIQUE(ns,owner)
-) STRICT;
-CREATE TABLE native_lookup (
-    ns INTEGER NOT NULL REFERENCES workspace(ns),
-    mount INTEGER NOT NULL CHECK(mount>0),
-    serial INTEGER NOT NULL CHECK(serial>0),
-    owner INTEGER NOT NULL CHECK(owner>0),
-    nlookup INTEGER NOT NULL CHECK(nlookup>=0),
-    implicit INTEGER NOT NULL CHECK(implicit IN(0,1)),
-    CHECK(nlookup>0 OR implicit=1),
-    PRIMARY KEY(ns,mount,serial), UNIQUE(ns,owner)
-) STRICT, WITHOUT ROWID;
-CREATE TABLE native_parent (
-    ns INTEGER NOT NULL,
-    mount INTEGER NOT NULL CHECK(mount>0),
-    serial INTEGER NOT NULL CHECK(serial>0),
-    parent INTEGER NOT NULL CHECK(parent>0),
-    PRIMARY KEY(ns,serial),
-    FOREIGN KEY(ns,serial) REFERENCES file_custody(ns,serial) ON DELETE CASCADE
-) STRICT, WITHOUT ROWID;
-CREATE TABLE native_directory (
-    ns INTEGER NOT NULL REFERENCES workspace(ns),
-    mount INTEGER NOT NULL CHECK(mount>0),
-    owner INTEGER NOT NULL CHECK(owner>0),
-    serial INTEGER NOT NULL CHECK(serial>0),
-    request BLOB NOT NULL CHECK(length(request)=8),
-    closed INTEGER NOT NULL DEFAULT 0 CHECK(closed IN(0,1)),
-    -- The first cookie of the reply that last listed this handle from
-    -- offset 0 over published replies; 0 until then. A reply row below it
-    -- is retired and none of its cookies is an offset.
-    floor INTEGER NOT NULL DEFAULT 0 CHECK(floor>=0),
-    PRIMARY KEY(ns,owner), UNIQUE(ns,mount,request)
-) STRICT, WITHOUT ROWID;
-CREATE INDEX native_directory_open ON native_directory(ns,mount,owner) WHERE closed=0;
--- One row per published READDIR reply of one open directory: the names the
--- reply buffer accepted, each one byte of length and its bytes, in order.
--- Cookie first_cookie+i resumes strictly after the i-th name. `after` is
--- the name the reply was listed after (empty at the start).
-CREATE TABLE native_cookie (
-    ns INTEGER NOT NULL,
-    owner INTEGER NOT NULL CHECK(owner>0),
-    first_cookie INTEGER NOT NULL CHECK(first_cookie>=3),
-    after BLOB NOT NULL CHECK(length(after)<=255),
-    names BLOB NOT NULL CHECK(length(names)>=2 AND length(names)<=16384),
-    PRIMARY KEY(ns,owner,first_cookie),
-    FOREIGN KEY(ns,owner) REFERENCES native_directory(ns,owner)
-) STRICT, WITHOUT ROWID;
-CREATE INDEX native_cookie_after ON native_cookie(ns,owner,after,first_cookie);
+
 PRAGMA user_version=33;
