@@ -135,13 +135,11 @@ impl Harness {
     }
     /// Daemon-wide maintained engine counts, observed through a live route.
     pub fn engine(&self, through: WorkspaceToken) -> layerfs_overlay::StoredCounts {
-        let operation = self.service.operation(through).unwrap();
-        let done = operation
-            .overlay()
-            .try_submit(
-                Some(operation.workspace().route()),
-                Command::Resources { global: true },
-            )
+        let _operation = self.service.operation(through).unwrap();
+        let done = self
+            .owner
+            .client()
+            .try_submit(None, Command::Resources { global: true })
             .unwrap()
             .wait()
             .unwrap();

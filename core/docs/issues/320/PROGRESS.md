@@ -402,3 +402,15 @@ All-target Daemon Clippy passed after removing one pre-existing redundant cast
 in its Commit count test; boundary scanned 688 files. No sample or step completion
 claim. Linux mounted/device proofs, I/O-error capacity handling, memory/page-cache
 selection and five step-end selections remain owed; cells stay unqualified.
+
+## Issue 321 step 1: Linux lifecycle observation correction (2026-10-13)
+
+At `f6e001554`, Linux build passed and mounted concurrency passed all five tests.
+The mounted-cycle suite FAILED at its 90-second wall limit during the sibling
+writer plateau test (the preceding full-pipe caller test passed). Source diagnosis:
+pool diagnostics still counted row reclamation, which need not run before private
+connection shutdown; proof aggregate queries used a route-specific connection.
+Count terminal reclamation only on successful last-owner file unlink; aggregate
+proof observations now use the daemon owner, retaining all plateau/isolation
+assertions. The corrected Linux test binaries compile. No performance sample or
+step completion; the failed run remains retained and the affected proofs are owed.

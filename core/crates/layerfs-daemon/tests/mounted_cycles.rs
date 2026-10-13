@@ -133,10 +133,15 @@ fn quiet(rig: &Rig, token: WorkspaceToken) -> bool {
 /// that route's own namespace.
 fn resources(rig: &Rig, through: WorkspaceToken, global: bool) -> Resources {
     let operation = rig.harness.service.operation(through).unwrap();
-    let done = operation
-        .overlay()
+    let daemon = rig.harness.owner.client();
+    let client = if global { &daemon } else { operation.overlay() };
+    let done = client
         .try_submit(
-            Some(operation.workspace().route()),
+            if global {
+                None
+            } else {
+                Some(operation.workspace().route())
+            },
             Command::Resources { global },
         )
         .unwrap()

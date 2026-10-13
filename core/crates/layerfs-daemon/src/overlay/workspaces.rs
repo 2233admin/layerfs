@@ -479,7 +479,11 @@ impl Workspaces {
                 .work,
         );
         for client in self.clients()? {
-            total.accumulate(&client.diagnostics()?);
+            let mut work = client.diagnostics()?;
+            // The pool's terminal count is the successful file deletion, not
+            // reclamation of a namespace row inside a private connection.
+            work.closed_namespaces = 0;
+            total.accumulate(&work);
         }
         let budget = self.shared.budget.diagnostics();
         total.outstanding = budget.outstanding;
@@ -539,6 +543,7 @@ impl Workspaces {
         observed.credited_bytes = 0;
         observed.queued = 0;
         observed.scheduler_bytes = 0;
+        observed.closed_namespaces = 0;
         self.state
             .lock()
             .map_err(|_| OwnerError::Stopped)?
@@ -554,6 +559,8 @@ impl Workspaces {
             match result {
                 Ok(()) => {
                     state.slots.remove(&namespace);
+                    state.retired.closed_namespaces =
+                        state.retired.closed_namespaces.saturating_add(1);
                 }
                 Err(cause) => {
                     state.slots.insert(
