@@ -135,19 +135,33 @@ impl Harness {
     }
     /// Daemon-wide maintained engine counts, observed through a live route.
     pub fn engine(&self, through: WorkspaceToken) -> layerfs_overlay::StoredCounts {
+        self.engine_resources(through).counts
+    }
+    /// SQL and memory remain distinct observations of the original job.
+    pub fn engine_resources(&self, through: WorkspaceToken) -> layerfs_overlay::Resources {
         let _operation = self.service.operation(through).unwrap();
-        let done = self
+        let pending = self
             .owner
             .client()
             .try_submit(None, Command::Resources { global: true })
-            .unwrap()
-            .wait()
             .unwrap();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        let done = loop {
+            if let Some(done) = pending.try_complete().unwrap() {
+                break done;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "resource observation deadline"
+            );
+            std::thread::yield_now();
+        };
         match done.result() {
-            Ok(Response::Resources(resources)) => resources.counts,
+            Ok(Response::Resources(resources)) => **resources,
             other => panic!("{other:?}"),
         }
     }
+
     pub fn stop(self) {
         let work = self.serving.work().unwrap();
         assert_eq!(work.mounts, 0, "{work:?}");

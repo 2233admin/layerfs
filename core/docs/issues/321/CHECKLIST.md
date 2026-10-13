@@ -116,3 +116,12 @@ Reference absent (retired R9c; last counted 65,417 at tree 498dd1917812).
 This is a source checkpoint, not finished-Step qualification. The A+B estimate
 remains pending B. Final targeted Workspace native checks and 24 host Fuse
 checks passed; the broader failed receipts retain their original dispositions.
+
+
+2026-10-14 proof follow-up: 29 selected Linux checks passed, with original
+failed runs retained; the external drain/capacity fixtures were repaired for
+memory ownership, physical file disposal and the smaller schema. Local
+`i321-a-proofs-2` changes tests/docs only; Production LOC: 83,704 -> 83,704
+(delta +0), same archive counter. No final count pin changed. The actual tier-1
+walk, mandatory A selections and physical-device-full variants remain owed.
+A is IN_PROGRESS; B/C/D/E remain NOT_RUN.

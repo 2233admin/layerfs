@@ -846,3 +846,47 @@ comparison, not a timing/storage qualification or an A+B estimate. Cookie
 allocations are detached under the turn and destroyed after releasing the
 connection mutex. Final host Fuse all-target tests passed: 24 tests. Linux,
 actual mounted walk and A's four sealed selections remain NOT_RUN at this seal.
+
+
+## Issue 321 Step A mounted-proof follow-up (2026-10-14)
+
+**Owner must know:** Linux data/ownership proofs now pass in the selected scope;
+A's mandatory samples and the actual tier-1 walk are still NOT_RUN. This fixes
+external proof observations, not product code or count pins. Source seal
+`b43cf2a1a` / `i321-a-source-1` produced a PASS release build in 71 s, with
+`-USQLITE_ENABLE_MEMORY_MANAGEMENT`, construction workers 1 and identical clean
+source before/after. Its Linux mounted test build passed separately in 65 s.
+
+At that product pin, concurrency 5 (including same-Workspace Commit beside 20
+writers), mounted Commit 7, cycles 4, links 1, rewind 1, native jobs 1 and
+independent Workspace-file proofs 3 passed. The follow-up retained FAILs for
+four drain checks still using SQL ownership counts and two SQLITE_FULL fixtures
+whose old 80-page ceiling no longer forced exhaustion after table removal.
+
+The affected external proofs now observe SQL and memory separately. FP-21 keeps
+all detach/join/request/custody assertions. FP-31 keeps exact partial decrement,
+batched frames, hard-link units, reacquisition and stale ownership assertions;
+its removed terminal-row-retirement assertions are replaced by exact no-SQL-
+cleanup and checked whole-file disposal/baseline memory observations. Physical
+Gone is observed through the daemon roster with the original namespace and
+Workspace identity, because the connection itself is already gone. The capacity
+fixture derives its ceiling from schema pages plus eight, so the same 128 KiB
+request must fail after real partial DML; the byte/rollback/ENOSPC/original-
+result/drain assertions are unchanged. No workload sample, timeout or frozen
+count pin was changed to make a result pass.
+
+The first repaired drain run passed 3/5 and both SQLITE_FULL checks, retaining
+2/5 FAILs at the obsolete connection-routed post-unmount observer. After the
+roster observation correction, the two affected checks each passed separately
+(0.32 s and 4.61 s). No unchanged passing test was resampled. The two physical-
+device-full mounted variants are ignored in this ordinary run and NOT_RUN here.
+Linux warning-denying Clippy for the changed proofs passed after removing the
+deleted sampling helper's imports and one redundant borrow. All earlier FAILs
+and the broad host hang remain retained. This is 29 selected Linux functional
+checks, not a claim that every final-E mounted binary ran.
+
+The local proof-only seal `i321-a-proofs-2` keeps production code unchanged:
+Production LOC: 83,704 -> 83,704 (delta +0). The pinned counter on exact first-
+parent/final staged archives owns the comparison. Reference absent (retired R9c;
+last counted 65,417 at tree 498dd1917812). The source seal does not finish Step A.
+Durable: NOT_RUN — disabled by owner until explicit reauthorization.

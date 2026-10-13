@@ -1,7 +1,7 @@
 //! Real kernel mounts: what a terminal unmount waits for and what it retires
 //! afterwards (FP-21), a processing read that spans the release of a sibling
 //! handle and the removal of its name (FP-29), and exact FORGET decrements
-//! with bounded retirement of lookups still outstanding at detach (FP-31).
+//! with whole-file disposal of lookups still outstanding at detach (FP-31).
 //!
 //! Staging, hook-free, through `support/holds.rs`:
 //!
@@ -55,9 +55,7 @@ use layerfs_daemon::{
     OwnerWork, Response,
 };
 use layerfs_fuse::request::Opcode;
-use layerfs_overlay::{
-    CleanupState, NativeMount, NativeMountState, Route, StatementKind, StoredCounts,
-};
+use layerfs_overlay::{CleanupState, NativeMount, NativeMountState, Route, StoredCounts};
 use mounted::{mount_entry, COMMAND};
 use nix::{errno::Errno, libc};
 use rig::{bash_in, passed, pattern, root, stamp_tree, Rig};
@@ -72,7 +70,6 @@ use std::{
     path::{Path, PathBuf},
     process::Command as Process,
     sync::{
-        atomic::{AtomicBool, Ordering},
         mpsc::{self, Receiver},
         Arc,
     },
@@ -93,11 +90,27 @@ const RECLAIM: Duration = Duration::from_secs(40);
 /// completed while a hold was in place.
 const HELD: Duration = Duration::from_secs(3);
 /// Rows one maintenance turn may retire.
-const WINDOW: u64 = 64;
 /// Engine rows that hold the kernel's lookup custody of `inodes` inodes, of
 /// which `directories` are directories: each inode has its lookup row and
 /// its file-custody row, and a directory its retained parent row. No `lease`
 /// row stands for a lookup reference or a descriptor.
+#[derive(Debug, Eq, PartialEq)]
+struct Owners {
+    sql: StoredCounts,
+    memory: layerfs_overlay::OpenStateCounts,
+}
+impl Owners {
+    fn entries(&self) -> u64 {
+        self.memory.values().into_iter().sum()
+    }
+}
+fn owners(rig: &Rig, helper: WorkspaceToken) -> Owners {
+    let resources = rig.harness.engine_resources(helper);
+    Owners {
+        sql: resources.counts,
+        memory: resources.open,
+    }
+}
 const fn custody(inodes: u64, directories: u64) -> u64 {
     2 * inodes + directories
 }
@@ -226,8 +239,26 @@ fn mount_state(client: &OwnerClient, route: Route, mount: NativeMount) -> Native
     }
 }
 /// One maintained point observation of the namespace's close and cleanup.
-fn cleanup(client: &OwnerClient, route: Route) -> CleanupState {
-    let done = job(client, route, Command::CleanupState);
+fn cleanup(client: &OwnerClient, route: Route, incarnation: [u8; 32]) -> CleanupState {
+    // The Workspace file can already be gone. Observe through the daemon
+    // roster, which authenticates the original namespace and incarnation.
+    let pending = client
+        .try_submit(
+            None,
+            Command::ObserveCleanup {
+                namespace: route.namespace(),
+                incarnation,
+            },
+        )
+        .unwrap();
+    let deadline = Instant::now() + WAIT;
+    let done = loop {
+        if let Some(done) = pending.try_complete().unwrap() {
+            break done;
+        }
+        assert!(Instant::now() < deadline, "cleanup observation deadline");
+        thread::yield_now();
+    };
     match done.result() {
         Ok(Response::CleanupState(state)) => *state,
         other => panic!("{other:?}"),
@@ -318,7 +349,7 @@ struct Parked {
     route: Route,
     mount: NativeMount,
     /// Daemon-wide counts with only the helper bound.
-    empty: StoredCounts,
+    empty: Owners,
     start: OwnerWork,
     parked: NativeWork,
     client: OwnerClient,
@@ -332,7 +363,7 @@ impl Parked {
         within("the owner is idle after the bind", || {
             client.diagnostics().unwrap().outstanding == 0
         });
-        let empty = rig.harness.engine(helper);
+        let empty = owners(&rig, helper);
         let start = client.diagnostics().unwrap();
         let ready = rig.mount(2);
         let guard = Mounted(ready.directory.clone());
@@ -345,10 +376,10 @@ impl Parked {
         quiet(&rig, token);
         let mount = engine_mount(&client, route).expect("attached engine mount");
         assert_eq!(mount_state(&client, route, mount), NativeMountState::Live);
-        assert_eq!(cleanup(&client, route), CleanupState::Live);
-        let mounted = rig.harness.engine(helper);
-        assert_eq!(mounted.namespaces, empty.namespaces + 1);
-        assert!(mounted.owner_details > empty.owner_details, "{mounted:?}");
+        assert_eq!(cleanup(&client, route, [2; 32]), CleanupState::Live);
+        let mounted = owners(&rig, helper);
+        assert_eq!(mounted.sql.namespaces, empty.sql.namespaces + 1);
+        assert!(mounted.entries() > empty.entries(), "{mounted:?}");
         quiet(&rig, token);
         let before = work(&rig, token);
         let credits = holds::Credits::lifecycle(&client, route, 2, WAIT);
@@ -372,7 +403,7 @@ impl Parked {
             (1, 1, 0)
         );
         println!(
-            "FP-21 staged: lifecycle_credits_held={} owner_outstanding={} release(handoffs={}->{} admitted={} parked={} completed={}) engine(namespaces={} owner_details={}) mount_state=Live cleanup=Live",
+            "FP-21 staged: lifecycle_credits_held={} owner_outstanding={} release(handoffs={}->{} admitted={} parked={} completed={}) engine(namespaces={} memory_entries={}) mount_state=Live cleanup=Live",
             credits.count(),
             client.diagnostics().unwrap().outstanding,
             before.handoffs,
@@ -380,8 +411,8 @@ impl Parked {
             parked.admitted,
             parked.parked,
             parked.completed,
-            mounted.namespaces,
-            mounted.owner_details
+            mounted.sql.namespaces,
+            mounted.entries()
         );
         Self {
             credits,
@@ -447,9 +478,9 @@ fn fp21_a_parked_release_keeps_unmount_draining_until_its_credits_return_inside_
             "{now:?}"
         );
         if round % 10 == 0 {
-            let counts = rig.harness.engine(helper);
-            assert_eq!(counts.namespaces, empty.namespaces + 1);
-            assert!(counts.owner_details > empty.owner_details, "{counts:?}");
+            let counts = owners(&rig, helper);
+            assert_eq!(counts.sql.namespaces, empty.sql.namespaces + 1);
+            assert!(counts.entries() > empty.entries(), "{counts:?}");
         }
         steady += 1;
         thread::sleep(Duration::from_millis(2));
@@ -508,15 +539,15 @@ fn fp21_a_parked_release_keeps_unmount_draining_until_its_credits_return_inside_
     // The complete drain: bounded indexed retirement until Gone.
     let mut states = Vec::new();
     before("cleanup state Gone", LONG, || {
-        let state = cleanup(&client, route);
+        let state = cleanup(&client, route, [2; 32]);
         if states.last() != Some(&state) {
             states.push(state);
         }
         state == CleanupState::Gone
     });
-    let mut last = rig.harness.engine(helper);
+    let mut last = owners(&rig, helper);
     before("engine counts returned to their baseline", LONG, || {
-        last = rig.harness.engine(helper);
+        last = owners(&rig, helper);
         last == empty
     });
     let end = client.diagnostics().unwrap();
@@ -623,9 +654,9 @@ fn fp21_credits_held_past_the_window_leave_unmount_retained_at_requests_with_a_l
     }
     // The namespace is not closed and nothing of it was retired, observed
     // while the credits are still held.
-    let held = rig.harness.engine(helper);
-    assert_eq!(held.namespaces, empty.namespaces + 1);
-    assert!(held.owner_details > empty.owner_details, "{held:?}");
+    let held = owners(&rig, helper);
+    assert_eq!(held.sql.namespaces, empty.sql.namespaces + 1);
+    assert!(held.entries() > empty.entries(), "{held:?}");
     // Observation: the custody's counters are read from the retained
     // connection at each reply, not stored at the stop. The test's own owner
     // job above released a credit, which wakes the parked request for one
@@ -691,7 +722,7 @@ fn fp21_credits_held_past_the_window_leave_unmount_retained_at_requests_with_a_l
         "the engine mount is neither revoked nor replaced"
     );
     assert_eq!(mount_state(&client, route, mount), NativeMountState::Live);
-    assert_eq!(cleanup(&client, route), CleanupState::Live);
+    assert_eq!(cleanup(&client, route, [2; 32]), CleanupState::Live);
     assert_eq!(rig.harness.phase(token), NativePhase::Retained);
     match rig.harness.try_unmount(token) {
         Err(Failure::Retained(again)) => {
@@ -702,16 +733,16 @@ fn fp21_credits_held_past_the_window_leave_unmount_retained_at_requests_with_a_l
         }
         other => panic!("{other:?}"),
     }
-    let last = rig.harness.engine(helper);
+    let last = owners(&rig, helper);
     let end = client.diagnostics().unwrap();
-    assert_eq!(last.namespaces, empty.namespaces + 1);
+    assert_eq!(last.sql.namespaces, empty.sql.namespaces + 1);
     assert_eq!(end.closed_namespaces, start.closed_namespaces);
     assert_eq!(rig.harness.serving.work().unwrap().mounts, 1);
     println!(
-        "FP-21 retained: stage=Requests detached=true loops_joined=1 admitted_at_stop=1 mount_row=None phase=Retained activity=Closing engine_mount=Live cleanup=Live namespaces={}(baseline {}) owner_details={} closed_namespaces={}->{} after_release(completed={}->{} phase=Retained lane_kept=1) store_consumer_half=NOT_STAGED",
-        last.namespaces,
-        empty.namespaces,
-        last.owner_details,
+        "FP-21 retained: stage=Requests detached=true loops_joined=1 admitted_at_stop=1 mount_row=None phase=Retained activity=Closing engine_mount=Live cleanup=Live namespaces={}(baseline {}) memory_entries={} closed_namespaces={}->{} after_release(completed={}->{} phase=Retained lane_kept=1) store_consumer_half=NOT_STAGED",
+        last.sql.namespaces,
+        empty.sql.namespaces,
+        last.entries(),
         start.closed_namespaces,
         end.closed_namespaces,
         parked.completed,
@@ -789,7 +820,7 @@ fn fp29_a_parked_read_spans_the_release_of_a_sibling_handle_and_the_removal_of_i
     );
     let sibling = File::open(&path).unwrap();
     quiet(&rig, token);
-    let opened = rig.harness.engine(helper);
+    let opened = owners(&rig, helper);
     let quiescent = work(&rig, token);
     let mut checks = Checks::default();
     let leases = holds::Leases::all(&rig.store, WAIT);
@@ -825,7 +856,7 @@ fn fp29_a_parked_read_spans_the_release_of_a_sibling_handle_and_the_removal_of_i
     // The sibling handle is released while the read is being processed.
     drop(sibling);
     let released = settled(&rig, token, |now| now.completed > parked.completed);
-    let closed = rig.harness.engine(helper);
+    let closed = owners(&rig, helper);
     checks.that(
         released.handoffs == parked.handoffs + 1
             && released.completed == parked.completed + 1
@@ -847,7 +878,7 @@ fn fp29_a_parked_read_spans_the_release_of_a_sibling_handle_and_the_removal_of_i
     let admission = rig.store.read_work();
     let unread = matches!(read.try_recv(), Err(mpsc::TryRecvError::Empty));
     println!(
-        "FP-29 hold: leases_held={} read(handoffs={}->{} parked=1 read_admissions_waiting=1) sibling_release(handoffs={}->{} completed={}->{}) engine_owner_details(two_handles_quiescent={} one_handle_and_parked_read={}) unlink_while_held={removed:?} after_unlink(handoffs={} completed={} parked={} admitted={}) read_still_parked={unread} read_admissions_waiting={} reader_grants={}->{}",
+        "FP-29 hold: leases_held={} read(handoffs={}->{} parked=1 read_admissions_waiting=1) sibling_release(handoffs={}->{} completed={}->{}) engine_memory_entries(two_handles_quiescent={} one_handle_and_parked_read={}) unlink_while_held={removed:?} after_unlink(handoffs={} completed={} parked={} admitted={}) read_still_parked={unread} read_admissions_waiting={} reader_grants={}->{}",
         leases.count(),
         quiescent.handoffs,
         parked.handoffs,
@@ -855,8 +886,8 @@ fn fp29_a_parked_read_spans_the_release_of_a_sibling_handle_and_the_removal_of_i
         released.handoffs,
         parked.completed,
         released.completed,
-        opened.owner_details,
-        closed.owner_details,
+        opened.entries(),
+        closed.entries(),
         after.handoffs,
         after.completed,
         after.parked,
@@ -995,14 +1026,14 @@ fn returned(
     loop {
         requests += 1;
         reclaim.request();
-        let (now, counts) = (work(rig, token), rig.harness.engine(helper));
-        if now.received == 0 && now.admitted == 0 && counts.owner_details == rows {
+        let (now, counts) = (work(rig, token), owners(rig, helper));
+        if now.received == 0 && now.admitted == 0 && counts.entries() == rows {
             return requests;
         }
         assert!(
             Instant::now() < deadline,
-            "bounded observation expired: {what}: reclaim_requests={requests} owner_details={} wanted={rows} {now:?} {counts:?}",
-            counts.owner_details
+            "bounded observation expired: {what}: reclaim_requests={requests} memory_entries={} wanted={rows} {now:?} {counts:?}",
+            counts.entries()
         );
         thread::sleep(Duration::from_millis(2));
     }
@@ -1035,14 +1066,14 @@ fn fp31_a_forget_unit_smaller_than_the_held_count_leaves_the_exact_remainder() {
     let token = ready.token;
     let route = holds::route(&rig.harness.service, token);
     quiet(&rig, token);
-    let baseline = rig.harness.engine(helper);
+    let baseline = owners(&rig, helper);
     assert_eq!(work(&rig, token).forget_units, 0);
     let path = root(&ready).join("single");
     let inode = fs::symlink_metadata(&path).unwrap().ino();
     quiet(&rig, token);
-    let looked = rig.harness.engine(helper);
+    let looked = owners(&rig, helper);
     assert_eq!(
-        looked.owner_details - baseline.owner_details,
+        looked.entries() - baseline.entries(),
         custody(1, 0),
         "the lookup row and the custody row of the one kernel inode"
     );
@@ -1060,8 +1091,8 @@ fn fp31_a_forget_unit_smaller_than_the_held_count_leaves_the_exact_remainder() {
     let parked = work(&rig, token);
     assert_eq!((parked.admitted, parked.received), (1, 0), "{parked:?}");
     assert_eq!(
-        rig.harness.engine(helper).owner_details,
-        looked.owner_details,
+        owners(&rig, helper).entries(),
+        looked.entries(),
         "nothing is decremented while the unit is parked"
     );
 
@@ -1080,17 +1111,17 @@ fn fp31_a_forget_unit_smaller_than_the_held_count_leaves_the_exact_remainder() {
     let second = settled(&rig, token, |now| {
         now.completed == parked.completed + 1 && now.parked == 1 && now.queued == 0
     });
-    let both = rig.harness.engine(helper);
+    let both = owners(&rig, helper);
     println!(
-        "FP-31 partial hold: reclaim_requests={first_requests} forget_units={} parked_forget=1 second_lookup={again:?} handoffs={}->{} parked={} admitted={} owner_details(baseline={} looked={} while_parked={})",
+        "FP-31 partial hold: reclaim_requests={first_requests} forget_units={} parked_forget=1 second_lookup={again:?} handoffs={}->{} parked={} admitted={} memory_entries(baseline={} looked={} while_parked={})",
         parked.forget_units,
         parked.handoffs,
         second.handoffs,
         second.parked,
         second.admitted,
-        baseline.owner_details,
-        looked.owner_details,
-        both.owner_details
+        baseline.entries(),
+        looked.entries(),
+        both.entries()
     );
     checks.that(again == Some(Ok(inode)), || {
         format!("FP-31: the second LOOKUP did not return the same inode while the FORGET was parked: {again:?} {second:?}")
@@ -1103,7 +1134,7 @@ fn fp31_a_forget_unit_smaller_than_the_held_count_leaves_the_exact_remainder() {
             && second.forget_units == 1
             && (second.parked, second.admitted) == (1, 1)
             && second.completed == parked.completed + 1
-            && both.owner_details == looked.owner_details,
+            && both.entries() == looked.entries(),
         || format!("FP-31: not exactly one more request, completed, beside the parked unit: {parked:?} -> {second:?}, {both:?}"),
     );
 
@@ -1115,17 +1146,17 @@ fn fp31_a_forget_unit_smaller_than_the_held_count_leaves_the_exact_remainder() {
     looking.join().unwrap();
     quiet(&rig, token);
     let after = work(&rig, token);
-    let partial = rig.harness.engine(helper);
+    let partial = owners(&rig, helper);
     assert_eq!(after.forget_units, 1);
     assert_eq!(
         (after.retained, after.unadmitted, after.terminal),
         (0, 0, 0),
         "{after:?}"
     );
-    checks.that(partial.owner_details == looked.owner_details, || {
+    checks.that(partial.entries() == looked.entries(), || {
         format!(
-            "FP-31: a unit of 1 against a count of 2 did not leave the lookup row: owner_details {} (looked {}, baseline {})",
-            partial.owner_details, looked.owner_details, baseline.owner_details
+            "FP-31: a unit of 1 against a count of 2 did not leave the lookup row: memory_entries {} (looked {}, baseline {})",
+            partial.entries(), looked.entries(), baseline.entries()
         )
     });
 
@@ -1135,7 +1166,7 @@ fn fp31_a_forget_unit_smaller_than_the_held_count_leaves_the_exact_remainder() {
         &rig,
         token,
         helper,
-        baseline.owner_details,
+        baseline.entries(),
         "the remaining reference is returned",
     );
     quiet(&rig, token);
@@ -1143,21 +1174,21 @@ fn fp31_a_forget_unit_smaller_than_the_held_count_leaves_the_exact_remainder() {
     reclaim.request();
     quiet(&rig, token);
     let last = work(&rig, token);
-    let returned = rig.harness.engine(helper);
+    let returned = owners(&rig, helper);
     assert_eq!(last.forget_units, 2, "two units of one each");
     assert_eq!(
         (last.retained, last.unadmitted, last.terminal),
         (0, 0, 0),
         "an underflow would be retained: {last:?}"
     );
-    assert_eq!(returned.owner_details, baseline.owner_details);
+    assert_eq!(returned.entries(), baseline.entries());
     assert_eq!(rig.harness.phase(token), NativePhase::Ready);
     let receipt = rig.unmount(&ready);
     let counts = opcodes(&receipt);
     println!(
-        "FP-31 partial: count 1 -> 2 (second lookup) -> 1 (unit of 1, row kept: owner_details={}) -> 0 (unit of 1, row returned: owner_details={}) forget_units={} reclaim_requests={first_requests}+{second_requests}+1 retained=0 receipt_opcodes(lookup={} forget_frames={} batch_frames={})",
-        partial.owner_details,
-        returned.owner_details,
+        "FP-31 partial: count 1 -> 2 (second lookup) -> 1 (unit of 1, row kept: memory_entries={}) -> 0 (unit of 1, row returned: memory_entries={}) forget_units={} reclaim_requests={first_requests}+{second_requests}+1 retained=0 receipt_opcodes(lookup={} forget_frames={} batch_frames={})",
+        partial.entries(),
+        returned.entries(),
         last.forget_units,
         counts[Opcode::Lookup as usize],
         counts[Opcode::Forget as usize],
@@ -1213,57 +1244,14 @@ fn walk(mount: &Path, directories: usize) -> (u64, BTreeSet<u64>) {
     look("tree/d-00/alias");
     (names, inodes)
 }
-/// Owner maintenance counters whenever they change, on a second thread that
-/// ends when stopped, dropped or after a minute.
-struct Turns {
-    stop: Arc<AtomicBool>,
-    thread: Option<JoinHandle<Vec<(u64, u64)>>>,
-}
-impl Turns {
-    fn start(client: OwnerClient) -> Self {
-        let stop = Arc::new(AtomicBool::new(false));
-        let stopped = stop.clone();
-        let thread = thread::spawn(move || {
-            let deadline = Instant::now() + Duration::from_secs(60);
-            let mut seen: Vec<(u64, u64)> = Vec::new();
-            while !stopped.load(Ordering::SeqCst) && Instant::now() < deadline {
-                if let Ok(work) = client.diagnostics() {
-                    let now = (work.maintenance_jobs, work.maintenance_rows);
-                    if seen.last() != Some(&now) {
-                        seen.push(now);
-                    }
-                }
-                thread::yield_now();
-            }
-            seen
-        });
-        Self {
-            stop,
-            thread: Some(thread),
-        }
-    }
-    fn finish(mut self) -> Vec<(u64, u64)> {
-        self.stop.store(true, Ordering::SeqCst);
-        let thread = self.thread.take().unwrap();
-        within("the sampling thread ended", || thread.is_finished());
-        thread.join().unwrap()
-    }
-}
-impl Drop for Turns {
-    fn drop(&mut self) {
-        self.stop.store(true, Ordering::SeqCst);
-    }
-}
-
 /// FP-31, mounted halves at about two thousand lookups. Reclaim with fifty
 /// files kept referenced returns exactly the other inodes, one FORGET unit
 /// each (the hard-linked inode's two references in one unit), in batched
 /// frames; releasing the references returns the rest. A detach with 1,011
-/// lookups outstanding then retires them in maintenance turns of at most 64
-/// rows with no full-scan step in the retirement's statement family, until
-/// the namespace is gone and the engine's counts are what they were.
+/// lookups outstanding then disposes them with its checked-closed file,
+/// without terminal SQL jobs, until physical Gone and exact baseline counts.
 #[test]
-fn fp31_batched_forget_is_exact_and_outstanding_lookups_retire_in_bounded_turns_after_detach() {
+fn fp31_batched_forget_is_exact_and_detach_disposes_outstanding_lookup_memory() {
     let reclaim = Reclaim::own();
     let rig = Rig::built("fp31-wide", |source| {
         for d in 0..DIRECTORIES {
@@ -1280,14 +1268,14 @@ fn fp31_batched_forget_is_exact_and_outstanding_lookups_retire_in_bounded_turns_
     within("the owner is idle after the bind", || {
         client.diagnostics().unwrap().outstanding == 0
     });
-    let empty = rig.harness.engine(helper);
+    let empty = owners(&rig, helper);
     let ready = rig.mount(2);
     let guard = Mounted(ready.directory.clone());
     let token = ready.token;
     let route = holds::route(&rig.harness.service, token);
     let mount = root(&ready).to_owned();
     quiet(&rig, token);
-    let baseline = rig.harness.engine(helper);
+    let baseline = owners(&rig, helper);
     assert_eq!(work(&rig, token).forget_units, 0);
 
     // References with kernel lookup custody only, then every name once.
@@ -1297,9 +1285,9 @@ fn fp31_batched_forget_is_exact_and_outstanding_lookups_retire_in_bounded_turns_
     let (names, inodes) = walk(&mount, DIRECTORIES);
     assert_eq!((names, inodes.len() as u64), (NAMES, INODES));
     quiet(&rig, token);
-    let looked = rig.harness.engine(helper);
+    let looked = owners(&rig, helper);
     assert_eq!(
-        looked.owner_details - baseline.owner_details,
+        looked.entries() - baseline.entries(),
         custody(INODES, 1 + DIRECTORIES as u64),
         "one indexed lookup owner per live kernel inode: {baseline:?} {looked:?}"
     );
@@ -1310,21 +1298,21 @@ fn fp31_batched_forget_is_exact_and_outstanding_lookups_retire_in_bounded_turns_
         &rig,
         token,
         helper,
-        baseline.owner_details + custody(KEPT, 2),
+        baseline.entries() + custody(KEPT, 2),
         "every unreferenced inode returned by FORGET",
     );
     quiet(&rig, token);
     reclaim.request();
     quiet(&rig, token);
     let partial = work(&rig, token);
-    let kept = rig.harness.engine(helper);
+    let kept = owners(&rig, helper);
     println!(
-        "FP-31 wide: names={names} inodes={INODES} pinned_files={PINNED} reclaim_requests={first_requests}+1 forget_units={} owner_details(baseline={} looked={} after_reclaim={}) engine_decrement={}",
+        "FP-31 wide: names={names} inodes={INODES} pinned_files={PINNED} reclaim_requests={first_requests}+1 forget_units={} memory_entries(baseline={} looked={} after_reclaim={}) engine_decrement={}",
         partial.forget_units,
-        baseline.owner_details,
-        looked.owner_details,
-        kept.owner_details,
-        looked.owner_details - kept.owner_details
+        baseline.entries(),
+        looked.entries(),
+        kept.entries(),
+        looked.entries() - kept.entries()
     );
     assert_eq!(
         partial.forget_units,
@@ -1333,14 +1321,11 @@ fn fp31_batched_forget_is_exact_and_outstanding_lookups_retire_in_bounded_turns_
     );
     // Every directory but `tree` and the pinned files' own was returned.
     assert_eq!(
-        looked.owner_details - kept.owner_details,
+        looked.entries() - kept.entries(),
         custody(partial.forget_units, DIRECTORIES as u64 - 1),
         "the engine's decrement is the units received"
     );
-    assert_eq!(
-        kept.owner_details - baseline.owner_details,
-        custody(KEPT, 2)
-    );
+    assert_eq!(kept.entries() - baseline.entries(), custody(KEPT, 2));
     assert_eq!(
         (partial.retained, partial.unadmitted, partial.terminal),
         (0, 0, 0),
@@ -1354,7 +1339,7 @@ fn fp31_batched_forget_is_exact_and_outstanding_lookups_retire_in_bounded_turns_
         &rig,
         token,
         helper,
-        baseline.owner_details,
+        baseline.entries(),
         "every lookup owner returned by FORGET",
     );
     quiet(&rig, token);
@@ -1368,29 +1353,27 @@ fn fp31_batched_forget_is_exact_and_outstanding_lookups_retire_in_bounded_turns_
     assert_eq!(again_inodes.len() as u64, OUTSTANDING);
     assert!(again_inodes.is_subset(&inodes), "the same inodes again");
     quiet(&rig, token);
-    let outstanding = rig.harness.engine(helper);
+    let outstanding = owners(&rig, helper);
     assert_eq!(
-        outstanding.owner_details - baseline.owner_details,
+        outstanding.entries() - baseline.entries(),
         custody(OUTSTANDING, 1 + AGAIN as u64),
         "reacquired after FORGET"
     );
     let start = client.diagnostics().unwrap();
-    let turns = Turns::start(client.clone());
     let receipt = rig.unmount(&ready);
     let mut states = Vec::new();
     before("cleanup state Gone", LONG, || {
-        let state = cleanup(&client, route);
+        let state = cleanup(&client, route, [2; 32]);
         if states.last() != Some(&state) {
             states.push(state);
         }
         state == CleanupState::Gone
     });
-    let mut last = rig.harness.engine(helper);
+    let mut last = owners(&rig, helper);
     before("engine counts returned to their baseline", LONG, || {
-        last = rig.harness.engine(helper);
+        last = owners(&rig, helper);
         last == empty
     });
-    let seen = turns.finish();
     let end = client.diagnostics().unwrap();
 
     // The receipt: FORGET frames, batched frames and units of the connection.
@@ -1411,71 +1394,13 @@ fn fp31_batched_forget_is_exact_and_outstanding_lookups_retire_in_bounded_turns_
         "batched delivery: {frames} frames, {batched} with several units, {units} units"
     );
 
-    // Retirement of the outstanding lookups, by the owner's own counters.
-    let (jobs, rows) = (
-        end.maintenance_jobs - start.maintenance_jobs,
-        end.maintenance_rows - start.maintenance_rows,
-    );
-    let mut previous = (start.maintenance_jobs, start.maintenance_rows);
-    let (mut single, mut largest, mut over) = (0, 0, Vec::new());
-    for now in seen.iter().copied() {
-        if now.0 < previous.0 {
-            continue;
-        }
-        let (turns, retired) = (now.0 - previous.0, now.1 - previous.1);
-        if retired > WINDOW * turns && over.len() < 8 {
-            over.push((previous, now));
-        }
-        if turns == 1 {
-            single += 1;
-            largest = largest.max(retired);
-        }
-        previous = now;
-    }
-    let lease = |work: &OwnerWork| work.sql_maintenance.statements[StatementKind::Lease as usize];
-    let scans = |work: &OwnerWork| -> u64 {
-        work.sql_maintenance
-            .statements
-            .iter()
-            .map(|statement| statement.fullscan_steps)
-            .sum()
-    };
-    let (lease_start, lease_end) = (lease(&start), lease(&end));
-    println!(
-        "FP-31 retire: outstanding_rows={OUTSTANDING} maintenance_jobs={jobs} maintenance_rows={rows} samples={} single_turn_samples={single} largest_single_turn_rows={largest} intervals_over_{WINDOW}_per_turn={} lease_statements(executions={} rows_returned={} rows_changed={} vm_steps={} fullscan_steps={}) all_maintenance_fullscan_steps={} cleanup_states={states:?} closed_namespaces={}->{} counts_equal_baseline=true",
-        seen.len(),
-        over.len(),
-        lease_end.executions - lease_start.executions,
-        lease_end.rows_returned - lease_start.rows_returned,
-        lease_end.rows_changed - lease_start.rows_changed,
-        lease_end.vm_steps - lease_start.vm_steps,
-        lease_end.fullscan_steps - lease_start.fullscan_steps,
-        scans(&end) - scans(&start),
-        start.closed_namespaces,
-        end.closed_namespaces
-    );
-    assert!(rows >= OUTSTANDING, "{rows} rows for {OUTSTANDING} lookups");
-    assert!(
-        jobs >= OUTSTANDING.div_ceil(WINDOW),
-        "{jobs} turns for {OUTSTANDING} lookups"
-    );
-    assert!(
-        rows <= WINDOW * jobs,
-        "{rows} rows in {jobs} turns exceeds {WINDOW} per turn"
-    );
-    assert!(
-        over.is_empty(),
-        "more than {WINDOW} rows per turn: {over:?}"
-    );
-    assert!(
-        largest <= WINDOW && single > 0,
-        "{single} single turns, largest {largest}"
-    );
-    assert_eq!(
-        lease_end.fullscan_steps - lease_start.fullscan_steps,
-        0,
-        "no scan in the retirement's statements"
-    );
+    // Drained references and cookie allocations go with checked file disposal.
+    // No per-row retirement job or SQL work is manufactured for them.
+    assert_eq!(end.maintenance_jobs, start.maintenance_jobs);
+    assert_eq!(end.maintenance_rows, start.maintenance_rows);
+    assert_eq!(end.sql_maintenance, start.sql_maintenance);
+    assert_eq!(last.memory, empty.memory);
+    println!("FP-31 disposal: outstanding_entries={OUTSTANDING} row_cleanup_jobs=absent cleanup_states={states:?} counts_equal_baseline=true");
     assert_eq!(end.closed_namespaces, start.closed_namespaces + 1);
     assert!(client.maintenance_failure().unwrap().is_none());
     assert_eq!(last, empty);

@@ -178,11 +178,23 @@ fn run(forced: bool, device: bool) {
         .as_ref()
         .unwrap_or(&fixture.directory)
         .join("overlay.sqlite");
+    let quota = if device {
+        None
+    } else {
+        let path = fixture.directory.join("quota-schema.sqlite");
+        let probe = layerfs_overlay::Overlay::create(&path, ProfileConfig::default()).unwrap();
+        let pages = probe.pages().unwrap().0;
+        probe.close_database().unwrap();
+        fs::remove_file(path).unwrap();
+        // Enough room for setup, less than the 32 payload pages the request
+        // needs. Derive from schema size so table removal preserves the fault.
+        Some(u32::try_from(pages + 8).unwrap())
+    };
     let owner = Owner::start(
         &overlay,
         ProfileConfig {
             pager_kib: 4,
-            max_pages: if device { None } else { Some(80) },
+            max_pages: quota,
         },
         OwnerConfig::default(),
     )
