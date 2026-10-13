@@ -31,10 +31,10 @@ source/build pins. Steps proceed in order: 1, A, B, C, D, E.
 
 | Checklist item | Disposition | Source/evidence |
 | --- | --- | --- |
-| trace the eleven tables; move the ones that hold | IN_SOURCE; qualification owed | [pre-change trace](STEP-A-TRACE.md); all eleven moved |
-| one in-memory open-state structure per Workspace | IN_SOURCE; qualification owed | open/ next to Overlay connection; touched-entry undo |
-| remove moved tables, statements, triggers, cleanup jobs, plan diagnostics, typed jobs | IN_SOURCE; final removal audit owed | SQL/schema/accounting and dedicated native/cookie retirement deleted; real filesystem jobs still use the owner until B |
-| remove `reclaim` and terminal row cleanup | IN_SOURCE; mounted disposal qualification owed | raw close retains rows; control closes/deletes whole file |
+| trace the eleven tables; move the ones that hold | COMPLETE A | [pre-change trace](STEP-A-TRACE.md); all eleven moved |
+| one in-memory open-state structure per Workspace | COMPLETE A | open/ next to Overlay connection; touched-entry undo |
+| remove moved tables, statements, triggers, cleanup jobs, plan diagnostics, typed jobs | COMPLETE A | SQL/schema/accounting and dedicated native/cookie retirement deleted; real filesystem jobs still use the owner until B |
+| remove `reclaim` and terminal row cleanup | COMPLETE A | raw close retains rows; control closes/deletes whole file |
 | bytes per kernel-reference entry; map size after the tier-1 walk | MEASURED; diagnostic scope | 854,848 requested Rust B / 5,000 = 170.9696 B/entry; actual walk 5,048 kernel / 64 parent entries, unchanged SQL/pages/files; whole-daemon point RSS 23,056 KiB; no hard bound |
 
 ## Step B — one lock per Workspace
@@ -160,3 +160,22 @@ proofs. A narrow route-free Read-slot mismatch is corrected without changing
 configured capacities. A new seal and one affected four-Workspace selection
 are pending. Earlier passing treatments are reused at exact pins; no final
 cell pin, guide or contract is weakened. A remains IN_PROGRESS; B NOT_RUN.
+
+
+2026-10-14 finished Step A: `0bebde083` / `i321-a-qualify-5` sealed build PASS
+(58.917 s wrapper), narrow Read-slot correction. The affected four-Workspace
+selection completed 400 Commits: INELIGIBLE overall, functional PASS, proof PASS,
+cleanup Gone. 104,311 requests / 374,519 jobs / 2,248,448 statements;
+performance external wall 12,878,231,333 ns (15 s bound), proof 18,993,699,459 ns
+(60 s bound). No comparable successful Step-1 four result exists; its failures
+remain FAIL. Existing A3 exec/session/tier-1 selections and A4 walk are reused
+at their exact pins. Their complete dispositions are in the #320 ledger.
+All 1,361 sealed sample files were hash-verified before scoped payload removal
+(546.1 MB); prepared originals remain. No unchanged passing treatment reran.
+A is COMPLETE in its scoped implementation/qualification sense; no eligible
+speed claim or final twelve-cell count qualification is made. Twelve-cell exact
+accounting stays failing/expected to fail until E: retained host checks FAIL,
+sealed twelve-cell sample NOT_RUN. Broad failures retain original verdicts.
+Production LOC: 83,704 -> 83,709 (delta +5) for the correction; net A 84,220 ->
+83,709 (delta -511), exact archive counter and reference-absent scope. B begins
+next; C/D/E NOT_RUN. Guides and contracts remain unchanged until E.

@@ -1057,3 +1057,77 @@ frozen cells have not been re-pinned; retained host count checks FAIL and the
 sealed twelve-cell selection is NOT_RUN. Durable is NOT_RUN — disabled by
 owner until explicit reauthorization. A's final four-Workspace selection,
 new build seal and finished-step disposition are pending.
+
+
+## Issue 321 Step A finished checkpoint (2026-10-14)
+
+The owner must know: Step A is complete with the scoped proofs and required
+selections below. The four-Workspace blocker is resolved at the new source;
+its old failed receipts remain FAIL. Performance rows remain cache INELIGIBLE;
+no eligible speedup is claimed. Step B is next. Final E count pins, all-mounted
+campaign, contracts/guides and SDK rebase remain NOT_RUN. Durable remains
+NOT_RUN — disabled by owner until explicit reauthorization.
+
+Correction seal `0bebde083` / `i321-a-qualify-5`, tree
+`966d47370740961cd803e47fa317f54add7d671e`: clean locked build PASS, wrapper
+58.917 s, construction workers 1, existing separate-cache SQLite build flag,
+pinned Linux image. No tracked edit overlapped build/sample. It corrects the
+route-free Read/Lifecycle slot mismatch, not the configured capacities. The
+focused regression and complete four-Workspace sample now pass their functional
+requirements. The exact admission cause of the old socket failure was not
+serialized; source mismatch and new regression establish the correction,
+without inventing a more precise historical cause.
+
+| Required A selection | Exact source/build scope | Verdict |
+| --- | --- | --- |
+| exec at 2 CPUs | A3 `d5c6d2678`; retained original run | exits 0 / cleanup complete; diagnostic only, no oracle/proof |
+| exec unlimited | A3 `d5c6d2678`; retained original run | exits 0 / cleanup complete; diagnostic only, no oracle/proof |
+| 16 × 50, new evicted Store daemon × 50 | A3 `d5c6d2678`; retained original run | 850 Commits / 17 sessions, exits 0 / eviction 0 / cleanup complete; diagnostic only |
+| tier 1 mixed 100 MB, 5,000, k100 | A3 `d5c6d2678`; retained original run | INELIGIBLE; receipt functional PASS / proof PASS / cleanup Gone |
+| four Workspaces 100 MB, 5,000, k100 | A5 `0bebde083`, new affected selection | INELIGIBLE; receipt functional PASS / proof PASS / cleanup Gone; 400 acknowledged Commits |
+
+Four's external performance wall is 12,878,231,333 ns / 15 s bound. Separate
+proof is 18,993,699,459 ns / 60 s bound; receipt complete wall is 47,491,961,851 ns.
+Wrapper wall is 43.521 s; these scopes differ and are not summed. Raw cumulative
+phase ns: command 27,659,994,971; Commit 19,831,966,880; mount 25,281,334;
+unmount 18,378,707. Concurrent phase totals overlap and exceed the performance
+external wall. Exact requests/jobs/statements: 104,311 / 374,519 / 2,248,448.
+The old Step-1 and A3 four samples failed, so successful speed/storage deltas
+against them are UNAVAILABLE, not invented zeros. Tier-1's raw comparison and
+both exec diagnostics' raw deltas/scopes remain in the preceding A3 entry.
+
+Four's terminal template overlay endpoint logical/allocated is 135,168 B;
+Store endpoint including observed sidecars is 138,600,448 B logical/allocated.
+The closed exported main Store is 134,373,376 B. This endpoint is not peak
+active-overlay storage. Original own resource guards report no OOM or swap,
+and main Store is below the unchanged 4 GiB bound. VmHWM 129,806,336 B is a
+whole-daemon lifetime peak, not a phase or per-Workspace measurement. The A4
+actual walk and requested allocation-per-kernel-entry results in the preceding
+entry satisfy A's memory selection; idle/loaded 1/4/16 memory is B work.
+The 1,361-file sealed manifest passed a full hash check before this sample's
+546.1 MB exported/normalized payload copies were removed. Receipt and all
+numeric/proof evidence remain; originals were not removed.
+
+A removed all eleven SQL ownership tables, their accounting/triggers/plan
+queries and dedicated retirement modules, plus `reclaim` and terminal row
+sweeps. One touched-entry-journaled open state sits next to each connection.
+Known rollback restores SQL/memory together; exact uncertain custody is retained.
+All six device arms, 29 selected Linux functional checks, targeted host/Fuse
+checks and the observation decoder/runner suite retain their exact own pins.
+Whole-file disposal, request drain, last-owner release, exact path identity and
+peer isolation are covered by focused external/control/mounted proofs. Counts
+for memory and SQL remain distinct. No test-only compatibility production path
+was introduced. Final SQL removal scan is clear; live payload/generation
+maintenance remains. The changed history phase proof passed all twelve original
+Storage assertions; the older 120 s aggregate hang remains FAILED, unknown
+cause. Other earlier failures and unrun selections retain their dispositions.
+Twelve-cell accounting remains failing/expected to fail until E: retained host
+checks FAIL; the twelve sealed mounted cells are NOT_RUN, never described PASS.
+
+Exact per-commit source size: `b43cf2a1a` 84,220 -> 83,704 (-516);
+`61a07b225`, `d5c6d2678` and `a533c6b71` each 83,704 -> 83,704 (+0);
+`0bebde083` 83,704 -> 83,709 (+5). Net A: 84,220 -> 83,709 (-511).
+Pinned counter on each exact first-parent/final staged archive:
+`c0fe7f36a0d4144bbd2b61c272c7579cc0d56ffe23f9588287ea30e793624adb`.
+Reference absent (retired R9c; last counted 65,417 at tree 498dd1917812).
+The A+B estimate 77,500–79,500 remains pending B; this is not an A-only target.
