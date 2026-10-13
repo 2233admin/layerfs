@@ -147,3 +147,17 @@ Operator page-count observations use a fresh statement once: its SQLite Expire
 program must not remain cached and induce automatic reprepare. Nonexpiring
 freelist admission remains cached. Preparation and execution stay in recorded
 diagnostics; eight repeated public snapshots have zero reprepare.
+
+## Closed template engine seam (issue 321 step 1)
+
+`Overlay::copy_template_observed` makes an independent streaming byte copy into
+a `create_new`, mode-0600 file, opens one connection, configures and verifies its
+profile/schema, and seeds the existing Workspace AUTOINCREMENT allocator with
+an ordinary positive daemon-assigned namespace. It executes no schema DDL.
+`Overlay::close_database` consumes and checks the sole connection close, without
+sync or deletion. Copy/open/close failures retain their original artifact and
+cause. `CreationWork` records copy calls and copied bytes separately from file
+creation and SQL startup. The daemon must protect a closed, empty template and
+fence all live owners before terminal close. The external template tests prove
+independent routes 1/2, unchanged template bytes, existing-file refusal and no
+sidecars. Daemon lifetime integration is still pending at this seam.

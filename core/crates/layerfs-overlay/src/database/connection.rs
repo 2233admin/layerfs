@@ -72,6 +72,31 @@ impl Overlay {
     pub fn create_observed(path: &Path, config: ProfileConfig) -> crate::Creation {
         crate::database::startup::create(path, config)
     }
+    /// Copies a closed empty template into a fresh owned file and opens it.
+    /// Schema DDL is paid by template creation; settings and identities are
+    /// verified on each connection. A failed copy/open retains its artifact.
+    pub fn copy_template_observed(
+        path: &Path,
+        config: ProfileConfig,
+        template: &Path,
+        namespace: i64,
+    ) -> crate::Creation {
+        crate::database::startup::copy_template(path, config, template, namespace)
+    }
+
+    /// Checked close of the sole disposable connection. It performs no sync.
+    /// Callers establish all request/capture/handle fences before consuming it.
+    /// The path is retained on failure; close never authorizes an implicit replay.
+    pub fn close_database(self) -> OverlayResult<()> {
+        self.connection.flush_prepared_statement_cache();
+        self.connection
+            .close()
+            .map_err(|(_, cause)| OverlayError::Uncertain {
+                cause: Box::new(OverlayError::Sql(cause)),
+                completion: None,
+            })
+    }
+
     /// Selected settings actually read back from this initialized connection.
     pub fn profile(&self) -> &DatabaseProfile {
         &self.profile

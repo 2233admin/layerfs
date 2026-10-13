@@ -23,6 +23,9 @@ pub struct Creation {
 #[derive(Debug, Default)]
 pub struct CreationWork {
     pub file_create_calls: u64,
+    /// Independent byte copies of the closed empty template; no reflink/hardlink.
+    pub file_copy_calls: u64,
+    pub copied_bytes: u64,
     /// Actual Linux read-only O_NOFOLLOW opens of the newly created file for
     /// filesystem identification. Zero on other platforms or creation failure.
     pub filesystem_open_calls: u64,
@@ -50,6 +53,19 @@ pub struct CreationWork {
 }
 
 pub(crate) fn create(path: &Path, config: ProfileConfig) -> Creation {
+    initialize(path, config, None)
+}
+
+pub(crate) fn copy_template(
+    path: &Path,
+    config: ProfileConfig,
+    template: &Path,
+    namespace: i64,
+) -> Creation {
+    initialize(path, config, Some((template, namespace)))
+}
+
+fn initialize(path: &Path, config: ProfileConfig, template: Option<(&Path, i64)>) -> Creation {
     let start = Instant::now();
     let sql = RefCell::new(DatabaseWork::default());
     let mut work = CreationWork::default();
@@ -66,7 +82,15 @@ pub(crate) fn create(path: &Path, config: ProfileConfig) -> Creation {
             options.mode(0o600);
         }
         work.file_create_calls = 1;
-        let file = options.open(path)?;
+        let mut file = options.open(path)?;
+        if let Some((template, namespace)) = template {
+            if namespace <= 0 {
+                return Err(crate::OverlayError::Invalid("Workspace namespace"));
+            }
+            let mut source = std::fs::File::open(template)?;
+            work.file_copy_calls = 1;
+            work.copied_bytes = std::io::copy(&mut source, &mut file)?;
+        }
         #[cfg(target_os = "linux")]
         {
             use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
@@ -112,22 +136,37 @@ pub(crate) fn create(path: &Path, config: ProfileConfig) -> Creation {
             &sql,
             &mut work.connection_configuration_calls,
         )?;
-        crate::diagnostics::startup::batch(
-            &connection,
-            &sql,
-            include_str!("../../sql/schema.sql"),
-        )?;
-        crate::diagnostics::startup::batch(
-            &connection,
-            &sql,
-            include_str!("../../sql/accounting.sql"),
-        )?;
+        if template.is_none() {
+            crate::diagnostics::startup::batch(
+                &connection,
+                &sql,
+                include_str!("../../sql/schema.sql"),
+            )?;
+            crate::diagnostics::startup::batch(
+                &connection,
+                &sql,
+                include_str!("../../sql/accounting.sql"),
+            )?;
+        }
         profile.schema_version =
             super::profile::readback(&connection, &sql, "PRAGMA user_version", |row| row.get(0))?;
         let application: i64 =
             super::profile::readback(&connection, &sql, "PRAGMA application_id", |row| row.get(0))?;
         if profile.schema_version != 33 || application != 1279676210 {
             return Err(crate::OverlayError::Invalid("overlay schema readback"));
+        }
+        if let Some((_, namespace)) = template {
+            // The existing INSERT/RETURNING job remains unchanged. Seed its
+            // ordinary AUTOINCREMENT allocator with the daemon's next identity.
+            // The copy is still private and has no Workspace row or owner.
+            crate::diagnostics::startup::batch(
+                &connection,
+                &sql,
+                &format!(
+                    "INSERT INTO sqlite_sequence(name,seq) VALUES('workspace',{})",
+                    namespace - 1
+                ),
+            )?;
         }
         work.cache_configuration_calls = 1;
         // The capacity covers the engine's fixed statement set, about 224

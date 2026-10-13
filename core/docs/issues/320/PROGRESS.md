@@ -374,3 +374,15 @@ as reservation-* records; no performance sample. Linux/full-device/mounted proof
 I/O-error no-space classification, per-Workspace routing and shared budget are not
 run/completed yet. Exact-count cells remain unqualified until step 4.
 Durable: NOT_RUN — disabled by owner until explicit reauthorization.
+
+## Issue 321 step 1: template engine seam (2026-10-13)
+
+Built the independent copy/open and checked-close ports over schema 33, keeping
+all existing job statement text and canonical formats. Two template tests passed:
+ordinary namespaces 1/2 and engine isolation, unchanged closed template bytes,
+existing-copy refusal and no sidecars. Locked host test build and warning-denying
+Overlay Clippy passed; no measurement or daemon integration completion is claimed.
+The reservation patch is `1bf04d038`, production LOC 83,042 -> 82,884 (-158).
+The next patch supplies daemon template ownership, per-Workspace routing/threads,
+shared credits/pager allowance and last-owner deletion. Linux device I/O-error
+proof and all step-end selections remain owed. Durable execution is NOT_RUN.
