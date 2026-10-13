@@ -1,6 +1,6 @@
 """Issue 320: one labelled mounted diagnostic of short Workspaces on a growing branch.
 
-usage: branch_session.py <build-folder> <prepared-original-folder> <out-folder> <sessions> <commits> [<budget-seconds> [<observe-every> [<cold-sessions> <cold-commits>]]]
+usage: branch_session.py <build-folder> <prepared-original-folder> <out-folder> <sessions> <commits> [<budget-seconds> [<observe-every> [<cold-sessions> <cold-commits> [evict]]]]
 
 The usage this measures: a Workspace is mounted on a branch, runs <commits>
 steps (one ordinary command, then one Commit), and is unmounted for good. The
@@ -13,7 +13,11 @@ the same Store volume, and <cold-sessions> more Workspaces of <cold-commits>
 steps run in it: a daemon that has never seen the branch (empty object cache,
 new read handles, new producer) on the long history the first one left. The
 operating system's page cache is not dropped, so this is a cold daemon on warm
-files, not a cold disk.
+files, not a cold disk. With `evict`, a helper container first syncs and gives
+the kernel one DONTNEED hint for the Store file and its log, then counts the
+pages still resident (the harness's own residency helper); the counts are
+recorded, and only they say how cold the files were. Nothing system-wide is
+dropped, and kernel metadata caches are not touched.
 
 It uses the product the way a sample does: an independent byte copy of the
 prepared original's sealed Store, the sealed runtime and daemon of the build,
@@ -86,6 +90,7 @@ def main():
     budget = float(sys.argv[6]) if len(sys.argv) > 6 else 100.0
     observe_every = int(sys.argv[7]) if len(sys.argv) > 7 else 1
     cold_sessions, cold_commits = (int(sys.argv[8]), int(sys.argv[9])) if len(sys.argv) > 9 else (0, 0)
+    evict = len(sys.argv) > 10 and sys.argv[10] == "evict"
     started = time.monotonic()
     lock = (ROOT / "core/target/issue320/measurement.lock").open("a")
     fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -120,6 +125,17 @@ def main():
     try:
         for label, planned, per_session in plans:
             if label != "runtime":
+                if evict:
+                    helper = ROOT / "core/benchmark/cluster-two/cache/residency.py"
+                    hint = subprocess.run(
+                        [*docker, "run", "--rm", "--network", "none", "-v", clone["volume"] + ":/v",
+                         "-v", str(helper) + ":/residency.py:ro", fixtures.identity.IMAGE, "/bin/bash", "-c",
+                         "sync; ls -l /v/global; for f in /v/global/store.sqlite /v/global/store.sqlite-wal; do "
+                         "test -e $f && python3 /residency.py --class A --file $f; done"],
+                        capture_output=True, text=True, timeout=60)
+                    (out / "eviction.stdout").write_text(hint.stdout)
+                    (out / "eviction.stderr").write_text(hint.stderr)
+                    result["eviction_exit"] = hint.returncode
                 argv[argv.index("--receipt") + 1] = str(out / (label + ".events.jsonl"))
                 argv[argv.index("--observation-scope") + 1] = secrets.token_hex(32)
             runtime = cell_runner.EventProcess(argv, out, label)
