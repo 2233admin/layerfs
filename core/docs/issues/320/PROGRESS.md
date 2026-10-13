@@ -440,3 +440,12 @@ case FAILED: original IOERR_WRITE was quarantined because `blocks_free` included
 Correct the witness to available capacity (`f_bavail`); retain all original proof
 oracles and the failed outcome. Production LOC for that patch: 84,020 -> 84,071
 (+51). No timing/storage performance result or step completion is claimed.
+
+At `8a22fc9ba` the available-block witness compiled and both external I/O-error
+device proofs passed separately (statement spill and COMMIT). Each retained
+IOERR_WRITE/778 inside NoSpace, kept state/capture bytes/the independent Workspace,
+and completed exact releases/reclamation. Owned loop fixtures were torn down;
+the preceding I/O-error failure remains. Add mounted device variants of the
+unchanged no-space syscall/drain proof: select actual device exhaustion or the
+existing page limit; the transparent observer requires the exact selected
+SQLite cause. Linux binaries compile; mounted device runs remain pending.

@@ -41,16 +41,19 @@ const COMMAND: u32 = 65534;
 struct ObserveMount {
     bound: Arc<BoundWorkspace>,
     full: Arc<AtomicU64>,
+    io_full: bool,
 }
 struct ObserveRequest {
     inner: Arc<dyn RequestServices>,
     full: Arc<AtomicU64>,
+    io_full: bool,
 }
 impl MountServices for ObserveMount {
     fn request(&self, fence: &Fence) -> Result<Arc<dyn RequestServices>, ServiceError> {
         Ok(Arc::new(ObserveRequest {
             inner: self.bound.request(fence)?,
             full: self.full.clone(),
+            io_full: self.io_full,
         }))
     }
 }
@@ -89,13 +92,22 @@ impl RequestServices for ObserveRequest {
     ) -> ServiceFuture<'_, ServiceReply<Arc<NativeMutationOutcome>>> {
         Box::pin(async move {
             let reply = self.inner.mutate_visit(request).await?;
-            if let Err(WorkspaceError::Overlay(OverlayError::Sql(error))) = &reply.get().result {
-                // SQLite's actual owning result, not an errno guessed from a
-                // string or a synthetic fault: SQLITE_FULL is code 13.
-                if error
-                    .sqlite_error()
-                    .is_some_and(|error| error.extended_code == 13)
-                {
+            if let Err(WorkspaceError::Overlay(error)) = &reply.get().result {
+                // Count only the exact actual owning result selected by this
+                // proof: direct Full, or a known rollback retaining IOERR_WRITE.
+                let original = match error {
+                    OverlayError::Sql(error) if !self.io_full => Some((error, 13)),
+                    OverlayError::NoSpace { cause } if self.io_full => match cause.as_ref() {
+                        OverlayError::Sql(error) => Some((error, 778)),
+                        _ => None,
+                    },
+                    _ => None,
+                };
+                if original.is_some_and(|(error, expected)| {
+                    error
+                        .sqlite_error()
+                        .is_some_and(|code| code.extended_code == expected)
+                }) {
                     self.full.fetch_add(1, Ordering::Relaxed);
                 }
             }
@@ -128,7 +140,7 @@ fn resources(client: &OwnerClient, route: layerfs_overlay::Route) -> layerfs_ove
         other => panic!("{other:?}"),
     }
 }
-fn run(forced: bool) {
+fn run(forced: bool, device: bool) {
     fusectl::mount();
     let fixture = installed::Fixture::built(
         if forced {
@@ -156,11 +168,21 @@ fn run(forced: bool) {
         .branch_snapshot(fixture.branch)
         .unwrap()
         .unwrap();
+    let device_root = device.then(|| {
+        std::path::PathBuf::from(
+            std::env::var_os("LAYERFS_PROOF_DEVICE_ROOT").expect("owned device fixture"),
+        )
+    });
+    let io_full = device && std::env::var_os("LAYERFS_PROOF_TRANSLATE_ENOSPC").is_some();
+    let overlay = device_root
+        .as_ref()
+        .unwrap_or(&fixture.directory)
+        .join("overlay.sqlite");
     let owner = Owner::start(
-        &fixture.directory.join("overlay.sqlite"),
+        &overlay,
         ProfileConfig {
             pager_kib: 4,
-            max_pages: Some(80),
+            max_pages: if device { None } else { Some(80) },
         },
         OwnerConfig::default(),
     )
@@ -213,6 +235,7 @@ fn run(forced: bool) {
         Arc::new(ObserveMount {
             bound: bound.clone(),
             full: full.clone(),
+            io_full,
         }),
         Identity {
             root,
@@ -221,6 +244,32 @@ fn run(forced: bool) {
         },
     )
     .unwrap();
+    let _filler = device_root.as_ref().map(|root| {
+        let filler = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(root.join("native-fill"))
+            .unwrap();
+        let filesystem = nix::sys::statvfs::statvfs(root.as_path()).unwrap();
+        let bytes = filesystem.blocks_free() * filesystem.fragment_size();
+        let fill = nix::fcntl::fallocate(
+            &filler,
+            nix::fcntl::FallocateFlags::empty(),
+            0,
+            i64::try_from(bytes).unwrap(),
+        );
+        if let Err(error) = fill {
+            assert_eq!(error, nix::errno::Errno::ENOSPC);
+        }
+        let full = nix::sys::statvfs::statvfs(root.as_path()).unwrap();
+        assert_eq!(full.blocks_available(), 0, "actual owned device exhaustion");
+        println!(
+            "SQLITE_FULL_DEVICE fill={fill:?} free_blocks={} available_blocks={} io_full={io_full}",
+            full.blocks_free(),
+            full.blocks_available()
+        );
+        filler
+    });
     let initial = state(&client, route);
     let initial_resources = resources(&client, route);
     let before = client.diagnostics().unwrap();
@@ -285,7 +334,7 @@ assert open('prior.dat','rb').read() == bytes([17])*4096
         .unwrap()
         .unwrap();
     let remaining = queue.work().unwrap();
-    println!("SQLITE_FULL_NATIVE known_full={known_full} reservation_refusals={reservation_refusals} sql={work:?} initial={initial:?} final={final_state:?} dispatch={remaining:?}");
+    println!("SQLITE_FULL_NATIVE device={device} io_full={io_full} known_full={known_full} reservation_refusals={reservation_refusals} sql={work:?} initial={initial:?} final={final_state:?} dispatch={remaining:?}");
     // On the old implementation the real failed completion is retained.
     // Inspect it without taking, releasing, or replacing its owner.
     for slot in 0..HANDOFFS {
@@ -376,9 +425,20 @@ assert open('prior.dat','rb').read() == bytes([17])*4096
 }
 #[test]
 fn known_sqlite_full_is_enospc_and_normal_drain_completes() {
-    run(false);
+    run(false, false);
 }
 #[test]
 fn known_sqlite_full_is_enospc_and_forced_drain_completes() {
-    run(true);
+    run(true, false);
+}
+
+#[test]
+#[ignore = "requires exclusively owned ext4 device; device_fixture.sh mounted"]
+fn real_device_full_reports_enospc_and_normal_drain_completes() {
+    run(false, true);
+}
+#[test]
+#[ignore = "requires exclusively owned ext4 device; device_fixture.sh mounted"]
+fn real_device_full_reports_enospc_and_forced_drain_completes() {
+    run(true, true);
 }
