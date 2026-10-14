@@ -1,7 +1,9 @@
-//! One anchored Commit page through the original authenticated Sandbox control owner.
+//! `branch.list_commits`, and the typed anchored page through the Sandbox
+//! control owner.
+use crate::base::sdk::{call, SdkResult};
 use crate::project::ProjectApi;
 use crate::{base::failure::exchange, internal::Control, OperationFailure};
-use layerfs_bridge::control::{Reply, Request};
+use layerfs_bridge::control::{Reply, Request, SdkValue};
 use layerfs_history::{CommitHistoryRequest, CommitRecord, PageResult};
 
 #[cfg(unix)]
@@ -12,10 +14,11 @@ impl ProjectApi {
         sandbox: &mut crate::ManagedSandbox,
         request: CommitHistoryRequest,
     ) -> Result<PageResult<CommitRecord>, Box<OperationFailure>> {
-        commits(&mut sandbox.control, request)
+        commit_page(&mut sandbox.control, request)
     }
 }
-pub(crate) fn commits(
+
+pub(crate) fn commit_page(
     control: &mut Control,
     request: CommitHistoryRequest,
 ) -> Result<PageResult<CommitRecord>, Box<OperationFailure>> {
@@ -24,4 +27,9 @@ pub(crate) fn commits(
         Reply::History(page) => Ok(page),
         reply => Err(OperationFailure::unexpected(request, reply)),
     }
+}
+
+/// `list_commits({ branch, cursor? })`: one page, newest first.
+pub fn list_commits(control: &mut Control, args: SdkValue) -> SdkResult {
+    call(control, "branch.list_commits", args)
 }

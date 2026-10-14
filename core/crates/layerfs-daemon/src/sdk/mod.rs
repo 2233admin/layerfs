@@ -10,7 +10,6 @@ mod files;
 mod inspect;
 mod reads;
 mod snapshot;
-pub(crate) mod values;
 
 pub(crate) use args::hex;
 pub(crate) use inspect::{snapshot as inspect, WorkspaceView};

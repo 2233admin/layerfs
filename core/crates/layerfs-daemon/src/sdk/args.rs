@@ -13,6 +13,10 @@ use layerfs_history::{
 };
 use std::sync::Arc;
 
+pub(crate) use layerfs_bridge::sdk_values::{
+    commit_value, hex, layer_value, node_text, short, unhex, via,
+};
+
 /// Pages one name search may read.
 const MAXIMUM_NAME_PAGES: usize = 1024;
 
@@ -71,42 +75,6 @@ pub(crate) fn content(error: ContentError) -> SdkRefusal {
 /// Any other failure as a refusal with its own description.
 pub(crate) fn failed(error: impl std::fmt::Display) -> SdkRefusal {
     refuse("Failed", error.to_string(), SdkValue::Null)
-}
-
-/// Lowercase hex of bytes.
-pub(crate) fn hex(bytes: &[u8]) -> String {
-    const DIGITS: &[u8; 16] = b"0123456789abcdef";
-    bytes
-        .iter()
-        .flat_map(|byte| {
-            [
-                DIGITS[usize::from(byte >> 4)],
-                DIGITS[usize::from(byte & 15)],
-            ]
-        })
-        .map(char::from)
-        .collect()
-}
-
-/// Bytes of lowercase or uppercase hex.
-pub(crate) fn unhex(text: &str) -> Option<Vec<u8>> {
-    if text.len() % 2 != 0 {
-        return None;
-    }
-    (0..text.len())
-        .step_by(2)
-        .map(|at| u8::from_str_radix(text.get(at..at + 2)?, 16).ok())
-        .collect()
-}
-
-/// A node's identity as text.
-pub(crate) fn node_text(node: NodeId) -> String {
-    hex(node.as_slice())
-}
-
-/// A short label for marker lines: the first six bytes after the tag.
-pub(crate) fn short(node: NodeId) -> String {
-    hex(&node.as_slice()[1..7])
 }
 
 /// A Commit or Layer named by its identity text.
@@ -223,57 +191,4 @@ pub(crate) fn root(store: &Arc<Store>, node: NodeId) -> Result<ObjectId, SdkRefu
         NodeId::Commit(id) => commit(store, id)?.root,
         NodeId::Layer(id) => layer(store, id)?.root,
     })
-}
-
-/// How a Commit was made, as the SDK names it.
-pub(crate) fn via(via: layerfs_history::CommitVia) -> &'static str {
-    match via {
-        layerfs_history::CommitVia::Workspace => "exec",
-        layerfs_history::CommitVia::Files => "fs",
-        layerfs_history::CommitVia::Merge => "merge",
-    }
-}
-
-/// A Commit as the SDK shows it.
-pub(crate) fn commit_value(record: &CommitRecord, branch: Option<&str>) -> SdkValue {
-    let meta = &record.meta;
-    SdkValue::map([
-        ("id", SdkValue::text(hex(record.id.as_slice()))),
-        ("branch", SdkValue::opt_text(branch)),
-        (
-            "parent",
-            SdkValue::opt_text(record.parent.map(|id| hex(id.as_slice()))),
-        ),
-        (
-            "secondParent",
-            SdkValue::opt_text(record.second_parent.map(node_text)),
-        ),
-        ("base", SdkValue::text(hex(record.base_layer.as_slice()))),
-        ("root", SdkValue::text(hex(record.root.as_bytes()))),
-        ("via", SdkValue::text(via(meta.via))),
-        ("agent", SdkValue::opt_text(meta.agent.clone())),
-        ("call", SdkValue::opt_text(meta.call.clone())),
-        (
-            "mergedFrom",
-            SdkValue::opt_text(meta.merged_from.map(|id| hex(id.as_slice()))),
-        ),
-        ("time", SdkValue::Int(meta.time_ms)),
-    ])
-}
-
-/// A Layer as the SDK shows it.
-pub(crate) fn layer_value(record: &LayerRecord, source_branch: Option<&str>) -> SdkValue {
-    SdkValue::map([
-        ("id", SdkValue::text(hex(record.id.as_slice()))),
-        (
-            "parent",
-            SdkValue::opt_text(record.parent.map(|id| hex(id.as_slice()))),
-        ),
-        ("root", SdkValue::text(hex(record.root.as_bytes()))),
-        ("sourceBranch", SdkValue::opt_text(source_branch)),
-        (
-            "sourceCommit",
-            SdkValue::opt_text(record.source_commit.map(|id| hex(id.as_slice()))),
-        ),
-    ])
 }

@@ -61,6 +61,42 @@ pub struct MountFailure {
     pub failure: Box<OperationFailure>,
 }
 impl WorkspaceApi<'_> {
+    /// `sandbox.mount(sandbox, { branch })`: mounts the named Branch of the
+    /// project as `workspace`. The Branch is found by name first.
+    pub fn mount_branch(
+        &mut self,
+        project: &str,
+        branch: &str,
+        workspace: WorkspaceId,
+    ) -> Result<MountedWorkspace, crate::SdkError> {
+        let listed = crate::project::list_branches(
+            self.control,
+            layerfs_bridge::control::SdkValue::map([(
+                "project",
+                layerfs_bridge::control::SdkValue::text(project),
+            )]),
+        )?;
+        let id = match listed.get("items") {
+            Some(layerfs_bridge::control::SdkValue::List(items)) => items
+                .iter()
+                .find(|item| item.get_text("name") == Some(branch))
+                .and_then(|item| item.get_text("id"))
+                .and_then(layerfs_bridge::sdk_values::unhex)
+                .and_then(|bytes| bytes.try_into().ok())
+                .and_then(|bytes| BranchId::from_bytes(bytes).ok()),
+            _ => None,
+        };
+        let Some(id) = id else {
+            return Err(crate::SdkError::Refused(
+                layerfs_bridge::control::SdkRefusal {
+                    code: "NoSuchBranch".to_owned(),
+                    message: format!("Branch {branch} does not exist or is main"),
+                    detail: layerfs_bridge::control::SdkValue::Null,
+                },
+            ));
+        };
+        self.mount(workspace, id).map_err(crate::SdkError::Mount)
+    }
     /// Two separately acknowledged attempts: bind, then attach. Each keeps its
     /// own original failure; a failed attach leaves the Workspace bound.
     pub fn mount(

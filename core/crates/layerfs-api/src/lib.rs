@@ -6,9 +6,12 @@ mod base;
 #[doc(hidden)]
 pub use base::internal;
 pub mod branch;
+pub mod fs;
+pub mod inspect;
 pub mod project;
 pub mod sandbox;
 pub use base::failure::{OperationCause, OperationFailure};
+pub use base::sdk::{call, SdkError, SdkResult};
 pub use project::{
     InitError, InitFailure, InitRequest, InstallError, InstallFailure, InstallWork, Installed,
     ProjectApi, SealedProject,

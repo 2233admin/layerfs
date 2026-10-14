@@ -1,7 +1,9 @@
-//! One bounded Branch page through the original authenticated Sandbox control owner.
+//! `project.list_branches`, and the typed bounded Branch page through the
+//! Sandbox control owner.
 use super::ProjectApi;
+use crate::base::sdk::{call, SdkResult};
 use crate::{base::failure::exchange, internal::Control, OperationFailure};
-use layerfs_bridge::control::{Reply, Request};
+use layerfs_bridge::control::{Reply, Request, SdkValue};
 use layerfs_history::{BranchRecord, LayerStackId, Page, PageResult};
 
 #[cfg(unix)]
@@ -13,10 +15,11 @@ impl ProjectApi {
         stack: LayerStackId,
         page: Page,
     ) -> Result<PageResult<BranchRecord>, Box<OperationFailure>> {
-        branches(&mut sandbox.control, stack, page)
+        branch_page(&mut sandbox.control, stack, page)
     }
 }
-pub(crate) fn branches(
+
+pub(crate) fn branch_page(
     control: &mut Control,
     stack: LayerStackId,
     page: Page,
@@ -26,4 +29,9 @@ pub(crate) fn branches(
         Reply::Branches(page) => Ok(page),
         reply => Err(OperationFailure::unexpected(request, reply)),
     }
+}
+
+/// `list_branches()`: every Branch with its id, base and head, main first.
+pub fn list_branches(control: &mut Control, args: SdkValue) -> SdkResult {
+    call(control, "project.list_branches", args)
 }

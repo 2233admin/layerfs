@@ -6,3 +6,4 @@ pub(crate) mod install_types;
 #[doc(hidden)]
 pub mod internal;
 mod recovery;
+pub(crate) mod sdk;

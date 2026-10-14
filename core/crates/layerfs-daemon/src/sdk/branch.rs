@@ -56,12 +56,14 @@ pub(crate) fn list(store: &Arc<Store>, args: &SdkValue) -> Answer {
     let stack = args::project(store, args)?;
     let mut items = vec![SdkValue::map([
         ("name", SdkValue::text(MAIN)),
+        ("id", SdkValue::Null),
         ("base", SdkValue::text(hex(stack.head_layer.as_slice()))),
         ("head", SdkValue::Null),
     ])];
     for branch in args::branches(store, &stack)? {
         items.push(SdkValue::map([
             ("name", SdkValue::text(branch.name.as_str())),
+            ("id", SdkValue::text(hex(branch.id.as_slice()))),
             ("base", SdkValue::text(hex(branch.base_layer.as_slice()))),
             (
                 "head",
@@ -286,7 +288,7 @@ pub(crate) fn merge(store: &Arc<Store>, args: &SdkValue) -> Answer {
         merge_roots(&save, &mut save.sink(), &input, &mut fresh, timing)
     });
     let merged = merged.map_err(args::content)?;
-    let lww = super::values::lww(&merged.lww);
+    let lww = layerfs_bridge::sdk_values::lww(&merged.lww);
     if !merged.clean() {
         // Nothing is created: the unfinished Save is dropped.
         drop(save);
@@ -299,7 +301,10 @@ pub(crate) fn merge(store: &Arc<Store>, args: &SdkValue) -> Answer {
             SdkValue::map([
                 ("sources", sources),
                 ("mergeBase", SdkValue::text(node_text(base_node))),
-                ("conflicts", super::values::conflicts(&merged.conflicts)),
+                (
+                    "conflicts",
+                    layerfs_bridge::sdk_values::conflicts(&merged.conflicts),
+                ),
                 ("lww", lww),
             ]),
         ));

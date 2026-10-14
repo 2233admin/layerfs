@@ -18,6 +18,10 @@ control record (`u16::MAX - 16` bytes), so a large result is windowed by its
 method. A refusal's `code` is stable and alone decides; the message is for
 people.
 
+[`sdk_values.rs`](../../crates/layerfs-bridge/src/sdk_values.rs) encodes
+Commits, Layers, conflicts and `.lww` decisions as values, once, for both the
+daemon's SDK calls and the internal API's Workspace answers.
+
 ## Names and identities
 
 A project is named by its stack name. A Branch is named by its name; `main` is
@@ -33,7 +37,7 @@ serves today.
 
 | Method | Arguments | Result | Refusals |
 | --- | --- | --- | --- |
-| `project.list_branches` | `project` | `items[]`: name, base, head (main first) | `NoSuchProject` |
+| `project.list_branches` | `project` | `items[]`: name, id, base, head (main first; main has no id) | `NoSuchProject` |
 | `branch.fork` | `project, name, from?` (Branch, `main`, or a Commit or Layer id) | `Forked` | `ReservedName`, `NameTaken`, `NoSuchBranch` |
 | `branch.list_commits` | `project, branch, cursor?` | `items[]` (newest first), `nextCursor` | `NoSuchBranch` |
 | `branch.merge` | `project, branch, with, name, agent?` | `Merged` with `fastForward`, `head`, `root`, `sources`, `mergeBase`, `lww` | `Conflict` (detail: sources, mergeBase, conflicts with hunks, lww), `NameTaken`, `ReservedName`, `HeadMoved` |
@@ -147,3 +151,22 @@ the daemon serving it, so a caller with several Sandboxes asks each one.
   terminal admission; a write that lands after it is closed with the
   Workspace. With `discard` the Workspace is closed as before. `Busy` keeps
   its meaning: an operation in progress or a kernel holder.
+
+## Internal Rust library
+
+[`layerfs-api`](../../crates/layerfs-api/src/lib.rs) is the internal library
+the JavaScript SDK's native binding calls; it is never published. It is laid
+out `{group}/{method}`, one function per JavaScript method:
+
+- `fs/`, `branch/`, `inspect/` and `project::list_branches` are each one
+  `call(control, "<group>.<method>", args)`: plain arguments in, a value or an
+  `SdkError::Refused` with its stable code out.
+- `sandbox/` keeps the typed Workspace control operations. `mount_branch`
+  mounts a Branch by name (found with `project.list_branches`), `commit_with`
+  carries force and attribution, and `unmount_checked` carries discard.
+  [`sandbox::values`](../../crates/layerfs-api/src/sandbox/values.rs) gives
+  their answers the SDK's value shapes and turns a Commit conflict, a Dirty
+  unmount and a daemon control refusal (for example `Busy`) into refusals
+  with stable codes.
+- The typed history pages (`ProjectApi::fork`, `commits`, `branches`) stay for
+  internal callers; the JavaScript methods use the SDK channel.
