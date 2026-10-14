@@ -104,7 +104,11 @@ Only tests call these, but removing them would delete whole suites or a custody 
 4. **Store read pool.**
    - `store/read_service.rs`, `read_state.rs` and `read_handle.rs` (about 600 lines) are fair admission to shared Store readers: per-Workspace lanes, FIFO rotation and a 17 Workspaces × 18 requests quota.
    - With one Store reader per Workspace there is nothing to arbitrate, and it matches the owner's rule that each Workspace's memory is independent.
-   - **Ask the owner before you implement this.** It reverses part of the #308/#314 decision of one shared pager. First measure one reader's resident memory with the read-only sampler in `core/docs/issues/321/tools/daemon_memory_sampler.py`, and present that number.
+   - **Owner decision (2026-10-14): approved, with conditions.** This reverses part of the #308/#314 decision of one shared pager. The conditions:
+     - **Bound each connection's page cache** to a few MiB. The OS page cache sits underneath, and an unbounded cache per Workspace would eat into the per-Workspace memory budget.
+     - **Keep read transactions short**, one per request or step. A snapshot held open blocks WAL checkpoints of the shared Store while Commits publish.
+     - **Open the reader at mount and close it at unmount.** Never open one lazily in the middle of a request.
+     - **Accept only on measurement.** Use the 4.4 subset: `exec_concurrency.py` at 1 and 4 Workspaces plus cell C06, before and after. Record peak memory with `core/docs/issues/321/tools/daemon_memory_sampler.py`. Keep the pool if time at 4 Workspaces worsens or the peak leaves the per-Workspace budget, and record why.
 5. **Continue the reachability passes.**
    - After each structural cut, re-run the dead-code and test-only reachability pass.
    - The method is in `253291435`'s message: product `src/` only, with trait methods and functions the benchmark harnesses call counted as live.
@@ -132,11 +136,11 @@ Production LOC expected from 4.2. These are estimates from file sizes at `253291
 | Overlay `Route` parameter and checks | 80–150 |
 | Constant namespaces, `ServiceClass` | 30–60 |
 | Job/receipt layer: the four `*_operations.rs` (789), `results.rs`, `receipt.rs`, `job_sql.rs`, `owner_work.rs`, part of `owner.rs` and the ports | 400–700 net |
-| Store read pool (639 in the four `read_*` files) → per-Workspace reader | 450–550 net, if the owner approves |
+| Store read pool (639 in the four `read_*` files) → per-Workspace reader | 450–550 net, if it passes the 4.2.4 conditions |
 | Further reachability passes | 0–200 |
 | Rename | 0 |
 
-That is about 1,000–1,700 lines, or 1.3–2.1% of 79,447. The optimizations in 4.5 will probably add code (daemon-owned permission checks, write gathering). Report that growth honestly.
+That is about 1,000–1,700 lines, or 1.3–2.1% of 79,447. The optimizations in 4.5 may add code (memory-served GETATTR, write gathering). Report that growth honestly.
 
 Expected speed, based on the #321 record in `core/docs/issues/320/PROGRESS.md`:
 - In the twelve cells at Step E, statements fell 25–57% while command time stayed flat. Owner jobs now equal kernel requests. So command time is set by kernel round trips per request, not by SQL or the job layer.
@@ -147,7 +151,7 @@ Expected speed, based on the #321 record in `core/docs/issues/320/PROGRESS.md`:
 | --- | --- |
 | 4.2 removals and the rename | about 0 on command and Commit (a few % CPU at most) |
 | Per-Workspace readers | less waiting only when several Workspaces read the Store at once |
-| GETATTR | 22% of requests in the tier-1 sample, each cheap: perhaps 5–15% of command time, unmeasured |
+| GETATTR | 22% of requests in the tier-1 sample. At C01's ~68 µs per request (339 ms / 5,002), 5,766 GETATTRs are roughly 0.2–0.4 s of the 6.7 s command, about 3–6%. Arithmetic, not a measurement; memory-served GETATTR saves only the daemon's share of that |
 | Commit step sizes | perhaps 10–30% of Commit time, unmeasured |
 | Write gathering | small for command time, since statements are not the bottleneck; measure before designing further |
 
@@ -166,7 +170,11 @@ Priority from the owner (2026-10-13): exec under concurrent Workspaces first, th
 2. **Kernel round trips.**
    - GETATTR was 5,766 of 26,078 requests in the Step C tier-1 sample.
    - The 6.12 kernel invalidates a parent directory's attributes on every create, unlink or rename, and `default_permissions` then asks again. A longer attribute timeout can't prevent it.
-   - The fix is mounting without `default_permissions` and having the daemon check permissions itself. That moves permission ownership: measure the request mix on a test mount, then **ask the owner**.
+   - **Owner decision (2026-10-14): keep `default_permissions`; the daemon does not take over permission checks.** A FUSE request carries only uid, gid and pid, not supplementary groups. Reading them from `/proc/<pid>` is racy, and copying root, sticky-bit and setgid rules adds security-sensitive code against the permission-preservation contract. The estimated gain (about 3–6%, see 4.4) does not justify it.
+   - Instead:
+     1. Measure GETATTR's real time share in the tier-1 sample, using the existing request counters.
+     2. Make GETATTR as cheap as possible: answer from attributes already held in memory, with no SQL statement and no job beyond the lock. This saves daemon work, not the kernel round trip.
+     3. Bring daemon-owned checks back to the owner only if the measured share is well above about 5%.
 3. **Statements per write.**
    - Each FUSE WRITE is a 7-statement transaction, and a created file is 18 statements.
    - Gathering a file's writes in memory and writing them in one transaction (on release, before a Commit captures, or at a size bound) would cut statements for files written in many pieces.
