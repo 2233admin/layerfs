@@ -402,7 +402,7 @@ Failure isolation gets simpler: a database or lock judged unsafe affects one Wor
 
 ## 11. Proposed guide wording
 
-Draft for the owner to approve; not applied. It replaces the draft of the first round.
+Draft of 2026-10-13; it replaces the draft of the first round. Applied to both guides in Step E (2026-10-14, `21a789a14`) under the owner's decisions of 2026-10-13, including the open-state sentence of the fourth row; see the [checklist](CHECKLIST.md#step-e--re-qualify-once).
 
 | Today | Proposed |
 | --- | --- |

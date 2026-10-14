@@ -70,13 +70,13 @@ source/build pins. Steps proceed in order: 1, A, B, C, D, E.
 
 | Checklist item | Disposition | Source/evidence |
 | --- | --- | --- |
-| twelve exact-count pins | NOT_RUN |  |
-| all Linux mounted proof binaries | NOT_RUN |  |
-| harness schema/profile/receipt-field compatibility | NOT_RUN |  |
-| contracts/cache/architecture/guides | NOT_RUN |  |
-| selected/held-out samples | NOT_RUN |  |
-| rebase SDK baseline/recompute LOC | NOT_RUN |  |
-| ledger results | IN_PROGRESS |  |
+| twelve exact-count pins | COMPLETE E | five host replays restaged and 5/5; cell gate restaged from the final-source request model (REQUEST-PATH section 10): ten exact, C03 a range in steps of two, C12 a labelled estimate; all twelve cells reproduce at `2c11fe8aa`; the twelve samples taken before the restage are retained FAIL |
+| all Linux mounted proof binaries | COMPLETE E; 7 tests NOT_RUN | 43 of 43 binaries exit 0 at `21a789a14`, 106 tests pass, 0 fail; 7 ignored tests need an owned device or filesystem fixture and keep their own pins |
+| harness schema/profile/receipt-field compatibility | COMPLETE E; 6 unit tests NOT_RUN | storage oracle for one file per Workspace (ran PASS in the footprint sample); overlay bytes sum every overlay file; retired scheduler/credit observations exact; cells suite 315 pass; six engine/families unit tests need native build inputs absent here; shared-input order dependency of the rebased harness worked around, not fixed |
+| contracts/cache/architecture/guides | COMPLETE E | root guide carries PLAN section 11; core guide, owner and overlay architecture guides, #303 engine/FUSE/index contracts and the general cache, view and queue guides state the implemented model and label the superseded text; queue-scheduling guide archived |
+| selected/held-out samples | COMPLETE E; all INELIGIBLE | twelve cells, six selected and six unselected cases, one sample each at `2c11fe8aa`: every functional and proof PASS, every cleanup known, every timing INELIGIBLE; exec diagnostics and session exit 0 |
+| rebase SDK baseline/recompute LOC | COMPLETE E | `sdk-refactor` revalidated at `9fe542e3b`; 87 commits rebased without conflict, product source identical; staged-tree lines rewritten and checked; LOC 82,762 (base) -> 81,054 (tip) |
+| ledger results | COMPLETE E | [#320 ledger, Step E](../320/PROGRESS.md#issue-321-step-e--re-qualify-once-2026-10-14) |
 
 ## Required selections
 
@@ -237,3 +237,30 @@ in the
 [#320 ledger](../320/PROGRESS.md#issue-321-step-d--fewer-statements-and-round-trips-2026-10-14).
 No test is removed in D. Twelve-cell exact accounting, the `request_path`
 pins and the harness storage oracle stay for E. E begins next.
+
+## Step E finished, 2026-10-14
+
+Rebased onto `sdk-refactor` `9fe542e3b` (measured pre-rebase commits kept at
+`i321-pre-rebase` and the `i321-a-*` to `i321-d-*` tags). No product source
+changed in E; Production LOC 81,054 at every E commit, 82,762 at the rebased
+base. Sealed build `2026-10-14-issue321-e-source-2-build` at `2c11fe8aa`.
+
+One sample each: twelve cells INELIGIBLE with proof PASS, the restaged count
+gate PASS and cleanup Gone; six selected and six unselected cases INELIGIBLE
+with functional and proof PASS and cleanup known. Against the SDK-refactor
+baseline statements fall 12% to 61% and owner jobs fall in every mounted case;
+requests and owner jobs of the twelve cells are equal. Tier 1: command 7,478.2
+-> 6,712.3 ms, Commit 3,646.6 -> 1,708.2 ms. Four Workspaces: summed command
+39,190.7 -> 28,991.4 ms, summed Commit 67,434.5 -> 13,389.4 ms.
+
+Recorded against E and not attributed: dense rewrite 500 Commit 8,292.1 ->
+12,026.4 ms (+45.0%), a case first sampled in E; local snapshot command
++19.2% with Commit -47.4%; six cells' command time above the baseline, the
+largest C03 +67.0 ms; Store logical bytes up in six cases and down in six.
+Retained: the twelve cell samples FAIL at the old gate before the restage; one
+session-tool failure before any work; two preparation failures from the
+rebased harness's shared-input order dependency. NOT_RUN: seven Linux tests
+that need a device fixture, six harness unit tests that need native build
+inputs, host suites and Clippy at the rebased commits (no product change since
+D), Durable execution (disabled by owner until explicit reauthorization). No
+timing is eligible. No push, pull request or issue closure.

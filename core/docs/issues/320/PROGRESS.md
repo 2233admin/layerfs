@@ -1773,3 +1773,234 @@ first-parent and committed-tree Git archives; committed tree
 `a9f816ce61a144dc175f4c64c638e65d34e798e1` equals the counted tree. Reference
 absent (retired R9c; last counted 65,417 at tree
 498dd1917812). Net A+B+C+D: 84,220 -> 81,054 (delta -3,166).
+
+## Issue 321 Step E — re-qualify once (2026-10-14)
+
+No product source changes in E: `core/crates` production code at the tip is
+byte-identical to the Step D source. E restages count pins, reconciles the
+harness, states the final model in the guides, rebases, and samples once.
+Timing is diagnostic everywhere: every performance row is INELIGIBLE (cache
+state not enforced, shared machine, no cross-worktree isolation). Durable
+execution: NOT_RUN — disabled by owner until explicit reauthorization.
+
+### Rebase
+
+`sdk-refactor` was revalidated at `9fe542e3b340f4b5daa17636880afd6b1b32c290`,
+unchanged from the takeover observation; it is 12 commits past the old merge
+base `95477b127`, all harness and documentation. `git rebase sdk-refactor`
+applied the branch's 87 commits without a conflict, and
+`git diff i321-pre-rebase HEAD -- core/crates` was empty. Each rebased commit
+has a new tree, so the "Staged tree" line of all 87 messages was rewritten to
+that commit's own tree and checked 87 of 87; the LOC lines are unchanged
+because no production line moved. The local ref `i321-pre-rebase` and the tags
+`i321-a-*` to `i321-d-*` stay on the measured pre-rebase commits.
+
+| Step record | Measured (pre-rebase) | Rebased |
+| --- | --- | --- |
+| A source / finished | `b43cf2a1a` / `02aa9e4e2` | `1ad1e90f4` / `0292c6cc9` |
+| B source / finished | `1c706e5ff` / `19061375e` | `a2d0640fd` / `856a9900c` |
+| C source / finished | `c8a7bcd1d` / `1d8583471` | `7e4c2a16d` / `c486133bf` |
+| D source / finished | `a6d1ef177` / `f130db4af` | `63d666a7d` / `41a6a61ce` |
+| E pins and harness / cell pins | — | `21a789a14` / `2c11fe8aa` |
+
+Production LOC recomputed with the pinned counter on Git archives of
+`core/crates`: `sdk-refactor` 82,762; before Step C 81,584; Step C 81,006;
+Step D and every E commit 81,054. The branch against its rebased base is
+82,762 -> 81,054 (delta -1,708), of which #320 is +1,458 and #321 steps A to D
+-3,166. Reference absent (retired R9c; last counted 65,417 at tree
+498dd1917812).
+
+### Count pins
+
+- **Host replays.** `request_path_anatomy` (C01, C03, C04, C06, C10) restaged
+  from its own report: requests, jobs and transactions unchanged; statements
+  22,003 -> 21,002, 51,072 -> 49,037, 20,623 -> 19,612, 7,185 -> 7,183,
+  11,291 -> 10,775. 5 of 5 pass.
+- **Twelve cells.** The gate's table is restaged from a per-request model of
+  the final source, [REQUEST-PATH section 10](REQUEST-PATH.md#10-twelve-cell-expectations-at-the-final-source-of-issue-321):
+  ten exact pins, C03 as 49,038 + 2P in steps of two, C12 as a labelled
+  estimate range. Requests and owner jobs keep their frozen values. A unit test
+  rebuilds the ten exact pins from the per-kind numbers.
+- **First twelve samples, retained as FAIL.** At sealed build
+  `2026-10-14-issue321-e-source-1-build` (`21a789a14`), before the cell pins
+  were changed, each cell was sampled once: FAIL at the old gate in all twelve
+  ("exact request/owner-job/statement counts differ"), proof PASS and cleanup
+  Gone in all twelve; statements 21,002 / 22,002 / 49,460 / 19,612 / 20,269 /
+  7,183 / 17,440 / 7,185 / 517 / 10,773 / 7,174 / 10,977. They equal the model
+  in the ten exact cells.
+
+### Harness
+
+- **Storage oracle.** One file per Workspace: the exported template must be
+  schema 34 and hold no row; the overlay directory is archived and may contain
+  only the template and numbered Workspace files; a Workspace file left after
+  stop fails cleanup and is counted. It ran in the store footprint sample and
+  its exact-file cleanup check is PASS.
+- **Overlay bytes.** The runtime snapshot lists every overlay file and the
+  receipt sums them. A snapshot after terminal unmount reads the template alone
+  (122,880 B); the four-Workspace and branch snapshots, taken with four
+  Workspaces mounted, read 634,880 B. Before this the column read only the
+  template whatever was mounted.
+- **Retired observations.** Scheduler and credit bytes are not applicable with
+  one exact reason; they are never read from the positions that now hold other
+  counters, and a resource PASS still needs every remaining observation.
+- **Session tool.** `branch_session.py` follows the original's recorded source
+  pointer, because the rebased harness keeps an original's initial tree in a
+  shared closed input. Its first invocation stopped on the missing file before
+  it created an output folder or a container; that is retained as a tool
+  failure, not a sample.
+- **Baseline harness defect, worked around, not fixed.** The rebased harness
+  shares one closed initial tree between cases. When the ordinary writer makes
+  it first (tier 1), the context preparation of the four-Workspace case fails
+  with `KeyError: 'recipe_sha256'`; made by the context writer first, both
+  work. The tier-1 sample had already been taken. This run removed its own
+  shared input and its own tier-1 original, prepared the four-Workspace case
+  first, and prepared tier 1 again for the diagnostics. One intermediate
+  four-Workspace preparation also failed ("shared initial input pointer
+  changed") while the stale tier-1 original still existed. No sample was
+  affected; the order dependency remains in the harness.
+- **Unit suites.** Cells 315 pass. Engine 357 run, 3 errors; families 87 run,
+  2 errors and 1 failure: all six need native build inputs named by
+  environment variables this session does not have (`FSB_CONTEXT_NATIVE`,
+  `LAYERFS_EDIT_WRITER_BUILD`, `WORKSPACE_RECIPE_TEST_WRITER`,
+  `LAYERFS_ALIAS_FIXTURE`, a sealed build path). NOT_RUN, unchanged by E.
+  One of three runs of the families suite also reported an error in
+  `test_branch_development…native_scope_dispatch`; the test passed alone and in
+  the next full run. Recorded as an unstable harness unit test, not diagnosed.
+
+### Checks at the final identity
+
+| Check | Result |
+| --- | --- |
+| Linux mounted and proof binaries, `21a789a14`, pinned image, one bounded invocation each | 43 of 43 exit 0; 106 tests pass, 0 fail, 7 ignored |
+| The 7 ignored Linux tests (daemon `device_capacity` 1, `mounted_sqlite_full` 2, `r5_6_failure_matrix` 1; overlay `allocation_filesystem` 1, `device_capacity` 2) | NOT_RUN: each needs an exclusively owned device or filesystem fixture; their retained results keep their own pins |
+| `request_path_anatomy`, host | 5 of 5 |
+| Host test binaries other than that one | not rerun in E: product source and every other test file equal Step D, where 40 of 41 overlay binaries and the other 96 passed except the retained failures listed there (`reply_tickets` x2, `complete_installed_roots::huge_native…`, `host_handoff`) |
+| Host and Linux Clippy | not rerun in E for the same reason; clean at Step D |
+| `cargo fmt --check`, product boundary guard, fuser integrity | pass |
+| 999-line and 200-line ceilings | unchanged from Step D (no production file changed) |
+
+### Twelve cells at the final identity
+
+Sealed build `2026-10-14-issue321-e-source-2-build`, source `2c11fe8aa`,
+daemon `49a0f534d35d…`; one sample each, one command each. Baseline in
+parentheses is the SDK-refactor baseline of
+[#319](../319/baseline-sdk-refactor/README.md) at `587e9a8be`, one sample, a
+different day. "Gate" is the restaged exact-count check.
+
+| Cell | Status | Proof | Gate | Requests | Owner jobs | Statements (baseline) | Command ms (baseline) | Peak memory B | Cleanup |
+| --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | --- |
+| C01 | INELIGIBLE | PASS | PASS | 5,002 | 5,002 | 21,002 (44,004, -52.3%) | 339.2 (336.1) | 30,261,248 | Gone |
+| C02 | INELIGIBLE | PASS | PASS | 6,002 | 6,002 | 22,002 (46,004, -52.2%) | 897.2 (1,076.6) | 30,339,072 | Gone |
+| C03 | INELIGIBLE | PASS | PASS | 9,022 | 9,038 | 49,594 (102,540, -51.6%) | 578.8 (511.8) | 30,412,800 | Gone |
+| C04 | INELIGIBLE | PASS | PASS | 5,342 | 5,342 | 19,612 (42,644, -54.0%) | 769.8 (790.1) | 30,216,192 | Gone |
+| C05 | INELIGIBLE | PASS | PASS | 5,890 | 6,000 | 20,269 (46,637, -56.5%) | 821.3 (832.0) | 30,236,672 | Gone |
+| C06 | INELIGIBLE | PASS | PASS | 518 | 518 | 7,183 (9,766, -26.4%) | 166.1 (146.6) | 31,895,552 | Gone |
+| C07 | INELIGIBLE | PASS | PASS | 1,551 | 1,550 | 17,440 (23,133, -24.6%) | 305.7 (348.9) | 31,830,016 | Gone |
+| C08 | INELIGIBLE | PASS | PASS | 521 | 521 | 7,185 (9,783, -26.6%) | 175.9 (128.6) | 32,124,928 | Gone |
+| C09 | INELIGIBLE | PASS | PASS | 517 | 517 | 517 (1,055, -51.0%) | 103.0 (83.2) | 31,944,704 | Gone |
+| C10 | INELIGIBLE | PASS | PASS | 1,547 | 1,546 | 10,773 (14,406, -25.2%) | 206.4 (175.1) | 33,628,160 | Gone |
+| C11 | INELIGIBLE | PASS | PASS | 517 | 517 | 7,174 (9,760, -26.5%) | 155.9 (125.7) | 34,566,144 | Gone |
+| C12 | INELIGIBLE | PASS | PASS | 3,436 | 3,439 | 10,979 (24,146, -54.5%) | 248.3 (251.1) | 30,277,632 | Gone |
+
+Requests and owner jobs equal the baseline in all twelve. Command time is
+lower in C02, C04, C05, C07 and C12 and higher in C01, C03, C06 and C08 to
+C11; the largest rises are C03 +67.0 ms, C08 +47.3 ms, C10 +31.3 ms and C11
++30.2 ms. C06 and C08 to C11 write or read one 64 MiB file. The first E sample
+of C03, C06 and C08 to C11 was also above the baseline (604.3, 158.7, 172.6,
+91.7, 206.8, 164.3 ms). Not attributed, not resampled.
+
+### Selected and unselected cases at the final identity
+
+The first six rows are the selected cases of #320, the last six the fixed
+unselected sample. Same build, one sample each.
+
+| Case | Status | Functional / proof | Requests | Owner jobs (baseline) | Statements (baseline) | Command ms (baseline) | Commit ms (baseline) | Store logical B (baseline, difference) | Overlay B at snapshot | Peak memory B | Cleanup |
+| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| Tier 1 mixed development | INELIGIBLE | PASS / PASS | 26,078 | 88,818 (201,510) | 461,964 (1,084,524, -57.4%) | 6,712.3 (7,478.2, -10.2%) | 1,708.2 (3,646.6, -53.2%) | 114,511,872 (114,434,048, +77,824) | 122,880 | 89,034,752 | Gone |
+| Four Workspaces | INELIGIBLE | PASS / PASS | 104,312 | 353,016 (803,660) | 1,843,823 (4,354,121, -57.7%) | 28,991.4 (39,190.7, -26.0%) | 13,389.4 (67,434.5, -80.1%) | 130,318,336 (133,046,272, -2,727,936) | 634,880 | 126,750,720 | Gone |
+| History hotset 100 | INELIGIBLE | PASS / PASS | 741 | 7,581 (9,473) | 18,397 (44,236, -58.4%) | 4,038.1 (3,882.9, +4.0%) | 645.3 (799.2, -19.3%) | 5,541,344 (6,069,776, -528,432) | 122,880 | 70,537,216 | Gone |
+| Prepend on 500 MiB | INELIGIBLE | PASS / PASS | 16,011 | 16,194 (16,212) | 176,435 (200,970, -12.2%) | 4,001.7 (6,360.7, -37.1%) | 12.3 (20.8, -41.0%) | 530,883,624 (530,900,008, -16,384) | 122,880 | 112,943,104 | Gone |
+| Namespace 100,000 | INELIGIBLE | PASS / PASS | — | — (—) | — (—, —) | 6,637.2 (7,268.5, -8.7%) | — (—, —) | 520,298,496 (516,476,928, +3,821,568) | — | — | SEALED_CLOSED; no mount |
+| Local snapshot 25,000 | INELIGIBLE | PASS / PASS | 177,581 | 857,173 (1,403,960) | 3,006,571 (6,747,991, -55.4%) | 11,469.8 (9,619.8, +19.2%) | 4,581.8 (8,704.0, -47.4%) | 934,120 (925,832, +8,288) | 122,880 | 65,118,208 | Gone |
+| Small-file delta 10x30 | INELIGIBLE | PASS / PASS | 402 | 2,339 (2,919) | 5,778 (14,049, -58.9%) | 1,210.0 (1,208.5, +0.1%) | 179.7 (211.4, -15.0%) | 1,975,952 (2,474,448, -498,496) | 122,880 | 52,350,976 | Gone |
+| Branch development | INELIGIBLE | PASS / PASS | 54,851 | 186,372 (422,821) | 969,992 (2,282,262, -57.5%) | 13,780.4 (18,779.1, -26.6%) | 4,334.0 (16,849.0, -74.3%) | 122,634,240 (122,331,136, +303,104) | 634,880 | 96,759,808 | Gone |
+| Insert in 100 MiB | INELIGIBLE | PASS / PASS | 1,611 | 1,908 (1,926) | 18,468 (21,675, -14.8%) | 418.8 (521.9, -19.8%) | 13.9 (11.1, +25.2%) | 106,464,296 (106,488,944, -24,648) | 122,880 | 104,554,496 | Gone |
+| Store footprint 100,000 | INELIGIBLE | PASS / PASS | 12 | 77 (95) | 174 (443, -60.7%) | 14,296.6 (14,730.9, -2.9%) | 14.1 (96.5, -85.4%) | 556,614,456 (556,192,592, +421,864) | 122,880 | 52,936,704 | Gone |
+| Dense rewrite 500 | INELIGIBLE | PASS / PASS | 33,359 | 134,879 (222,679) | 530,261 (1,154,213, -54.1%) | 2,739.3 (3,154.3, -13.2%) | 12,026.4 (8,292.1, +45.0%) | 1,066,889,216 (1,066,643,456, +245,760) | 122,880 | 151,957,504 | Gone |
+| Boundary exact | INELIGIBLE | PASS / PASS | 14 | 225 (261) | 615 (1,323, -53.5%) | 82.3 (84.0, -2.0%) | 12.7 (13.4, -4.5%) | 492,488 (537,712, -45,224) | 122,880 | 51,924,992 | Gone |
+
+Every case: functional PASS, proof PASS, cleanup known, timing INELIGIBLE.
+Statements fall 12% to 61% and owner jobs fall in every mounted case.
+
+Against the baseline, unfavourable and recorded as such:
+
+- **Dense rewrite 500, Commit +3,734.3 ms (+45.0%).** Command time fell 415.0
+  ms; command and Commit together rose from 11,446.4 to 14,765.7 ms. This case
+  was never sampled during #320 or #321 A to D. From the receipt's own
+  counters: over the daemon's whole life the overlay lock was held 4,192 ms in
+  all classes (1,138.5 ms in the 65,445 operation-record jobs) and waited for
+  14.5 ms, so at least 7.8 s of the 12.0 s Commit ran outside the overlay
+  lock, in construction and Store writes. That locates the time; it does not
+  attribute the rise, which one sample on a shared machine cannot do.
+- **Local snapshot 25,000, command +1,850.0 ms (+19.2%).** Commit fell 4,122.2
+  ms; together they fell from 18,323.8 to 16,051.6 ms.
+- **History hotset 100, command +155.2 ms (+4.0%)**; Commit fell 153.9 ms.
+- **Insert in 100 MiB, Commit +2.8 ms** on 11.1 ms; command fell 103.1 ms.
+- **Store logical bytes** rose in six cases: tier 1 +77,824, namespace
+  +3,821,568 (+0.74%), local snapshot +8,288, branch +303,104, footprint
+  +421,864, dense rewrite +245,760; and fell in six. Namespace Init runs no
+  daemon and no overlay; its Store difference is not from #321's overlay work
+  and was not diagnosed.
+
+Against Step D (pre-rebase source `a6d1ef177`, same product code), tier 1:
+command 6,935.5 -> 6,712.3 ms, Commit 1,739.0 -> 1,708.2 ms, counts 26,078 /
+88,818 / 461,908 -> 26,078 / 88,818 / 461,964, Store 114,606,080 ->
+114,511,872 B, peak 87,035,904 -> 89,034,752 B. Four Workspaces: summed
+command 28,455.5 -> 28,991.4 ms, summed Commit 13,647.1 -> 13,389.4 ms, counts
+104,310 / 353,058 / 1,843,807 -> 104,312 / 353,016 / 1,843,823, Store
+132,026,368 -> 130,318,336 B, peak 130,838,528 -> 126,750,720 B.
+
+### Diagnostics at the final identity
+
+Not harness cases: no oracle, no proof, exit codes only.
+
+| Diagnostic | Result |
+| --- | --- |
+| concurrent exec, 2 CPUs | exit 0; per file µs create / append / read: 1 writer 302.3 / 143.9 / 225.8, 2 writers 302.0 / 157.1 / 245.9, 3 writers 380.3 / 215.1 / 289.9, 4 writers 679.0 / 383.2 / 499.2; three writers with a Commit 582.8 / 252.0 / 289.0, Commit 837.9 ms |
+| concurrent exec, no CPU limit | exit 0; 1 writer 301.3 / 145.0 / 240.4, 2 writers 294.5 / 154.7 / 235.7, 3 writers 329.1 / 160.6 / 263.0, 4 writers 422.9 / 213.1 / 373.9; with a Commit 398.3 / 190.8 / 300.4, Commit 600.2 ms |
+| session, 16 x 50 Commits then a new daemon on an evicted Store x 50 | exits 0 / 0, eviction 0; summed Commit 10,934.8 ms over 17 sessions (Step D 10,924.7); Commit median first / sixteenth / cold 11.17 / 13.39 / 14.16 ms; final Store 119,504,896 B (119,533,568); daemon VmHWM 116,432 KiB (113,060); 56.1 s wall |
+| session, first invocation | tool failure before any work, see Harness |
+
+Lock wait stays 0 to 1 µs per job in every exec row; the four-writer rows at
+2 CPUs are CPU-bound.
+
+### Storage and cleanup
+
+Free space was checked before the large preparations (354 GiB, then 347 GiB
+after). Each sample's test copy was removed after its sealed manifest was
+verified; 7.0 GB of copies in all. Originals stay, one per payload. No
+container of this run remains. Docker volumes that predate this session,
+including 15 sample volumes dated 2026-10-12, were not touched: their owner
+was not established here.
+
+### Not done or not established in E
+
+- Timing eligibility: none; no cold-cache or cross-worktree qualification.
+- The six harness unit tests and seven Linux tests listed above: NOT_RUN.
+- Host suites and Clippy were not rerun at the rebased commits (no product or
+  other test change since D).
+- C12's pin is an estimate, not a model result.
+- The dense-rewrite Commit rise and the 64 MiB cells' command rise are
+  recorded without a cause.
+- The harness's shared-input order dependency is worked around, not fixed.
+- No push, pull request or issue closure.
+
+### Source size
+
+`21a789a14` and `2c11fe8aa`: Production LOC 81,054 -> 81,054 (delta +0) each;
+scope first-party `core/crates` production code including shipped SQL; pinned
+`tools/production_loc.py`
+(`c0fe7f36a0d4144bbd2b61c272c7579cc0d56ffe23f9588287ea30e793624adb`) on the
+first-parent and committed-tree Git archives. Reference absent (retired R9c;
+last counted 65,417 at tree 498dd1917812).

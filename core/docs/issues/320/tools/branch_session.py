@@ -97,7 +97,12 @@ def main():
     build = json.loads((build_folder / "build.json").read_text())
     prepared = json.loads((original / "prepared.json").read_text())
     docker = ["docker", "--host", "unix://" + build["socket"]]
-    rows = [row for row in (line.split("\t") for line in (original / "source.manifest.tsv").read_text().splitlines())
+    # An original prepared by the harness of the SDK refactor keeps its initial tree in a shared
+    # closed input and records where; an earlier one holds the manifest itself.
+    manifest = original / "source.manifest.tsv"
+    if not manifest.exists():
+        manifest = Path(prepared["source"]).with_suffix(".manifest.tsv")
+    rows = [row for row in (line.split("\t") for line in manifest.read_text().splitlines())
             if len(row) > 1]
     files = [row[0] for row in rows if row[1] == "file"]
     directories = [row[0] for row in rows if row[1] == "directory" and row[0] != "."]
