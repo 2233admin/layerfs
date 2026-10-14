@@ -239,15 +239,6 @@ impl OwnerClient {
             }
         })
     }
-    pub fn database_work(&self, route: Option<Route>) -> Result<JobReceipt, OwnerError> {
-        self.overlay_job(route, ServiceClass::Lifecycle, None, move |db, route| {
-            let route = route.ok_or(OverlayError::Invalid("missing route"))?;
-            {
-                db.state(route)?;
-                Ok(Response::DatabaseWork(Box::new(db.diagnostics())))
-            }
-        })
-    }
     pub fn maintenance_idle(&self, route: Option<Route>) -> Result<JobReceipt, OwnerError> {
         self.overlay_job(route, ServiceClass::Lifecycle, None, move |db, route| {
             let route = route.ok_or(OverlayError::Invalid("missing route"))?;

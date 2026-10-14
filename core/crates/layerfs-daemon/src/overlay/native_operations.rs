@@ -159,22 +159,6 @@ impl OwnerClient {
             (db.revoke_native_mount(mount).map(|()| NativeReply::Done)).map(Response::Native)
         })
     }
-    pub fn native_directory_retained(
-        &self,
-        route: Option<Route>,
-        mount: NativeMount,
-        request: u64,
-    ) -> Result<JobReceipt, OwnerError> {
-        self.overlay_job(route, ServiceClass::Lifecycle, None, move |db, route| {
-            let route = route.ok_or(OverlayError::Invalid("missing route"))?;
-            if mount.route() != route {
-                return Err(OverlayError::Stale);
-            }
-            (db.retained_native_directory(mount, request)
-                .map(NativeDirectoryReply::Retained))
-            .map(|value| Response::Native(NativeReply::Directory(value)))
-        })
-    }
     pub fn native_directory_visit(
         &self,
         route: Option<Route>,

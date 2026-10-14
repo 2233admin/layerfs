@@ -95,15 +95,6 @@ impl Overlay {
         };
         self.cleanup_state(route)
     }
-    pub fn explain_cleanup_observation(&self) -> OverlayResult<Vec<String>> {
-        self.query(
-            StatementKind::Explain,
-            &format!("EXPLAIN QUERY PLAN {OBSERVE}"),
-            &[&1_i64],
-            8,
-            |r| r.get(3),
-        )
-    }
     /// The actual remaining SQL custody probe. Open state is checked in memory.
     pub fn explain_close_held(&self) -> OverlayResult<Vec<String>> {
         self.query(
