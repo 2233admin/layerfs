@@ -4076,3 +4076,28 @@ per-opcode time, so request share is not a measured wall-time share.
 default_permissions remains enabled. Final subset measurements are blocked
 by the specifically approval-gated original preparation. Eligible performance
 qualification remains incomplete; no unchanged treatments were rerun.
+
+
+### Phase 2: initial all-target compilation
+
+The prescribed cargo +1.85.1 test --workspace --no-run --keep-going invocation
+refused --keep-going before compilation: that Cargo test subcommand does not
+support the flag. No test ran and no target compiled in that attempt. The locked
+1.85.1 toolchain remains mandatory. Inspecting its supported build options
+selects the equivalent all-target build for keep-going test compilation below.
+
+Host all-target compilation completed: 138 failing files / 2382 diagnostics.
+Linux all-target compilation hit its explicit 120 s build stop and its container
+was removed: 3249 reported diagnostics, 178 failing target files in the union.
+No tests executed. This is an incomplete build, not a hung test; unvisited Linux
+targets remain a compile gap. Recorded per-file host/Linux counts and decisions
+in TEST-TRIAGE-20261014.md. Subsequent builds follow changed test sources and
+are split as needed; no unchanged test is retried.
+
+First triage cut deletes 54 mechanism/duplicate test files, individually named
+with reasons in the ledger and commit message. Coverage intentionally given up:
+private wire snapshots/setup shape, shared scheduler fairness/rotation/leases,
+job/receipt envelopes, SQL/statement/row counts, publication ticket bookkeeping
+and cache/timing anatomy. Required mounted behavior, custody, Commit boundaries
+and reclamation proofs remain. New reader lifecycle qualification is pending.
+No product implementation is changed or moved by these test deletions.
