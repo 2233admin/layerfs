@@ -19,17 +19,22 @@ commit_ms = receipt["phases"]["commit_ns"] / 1e6
 cmds = [e for e in ev if e["event"] == "command"]
 command_end = cmds[-1]["at_ns"] / 1e9
 unmount = next(e for e in ev if e["event"] == "unmount" and e["at_ns"] / 1e9 > command_end)["at_ns"] / 1e9
-# The sampled container: the new cgroup with the largest memory.
-peak = {}
-for r in rows:
-    for k, c in r["cgroups"].items():
-        if c["memory_current"]: peak[k] = max(peak.get(k, 0), c["memory_current"])
-main = max(peak, key=peak.get)
-series = [(r["wall"], r["cgroups"][main]) for r in rows if main in r["cgroups"] and r["cgroups"][main]["memory"]]
-drop = max(range(1, len(series)), key=lambda i: series[i - 1][1]["memory"]["file"] - series[i][1]["memory"]["file"])
-offset = series[drop][0] - unmount  # observer wall at runtime t=0
+# The sampled container: the new cgroup whose file pages fall most in one step (an unmount
+# deletes the Workspace's overlay file). Other containers, such as a declared load, never do.
+def drops(name):
+    series = [(r["wall"], r["cgroups"][name]["memory"]["file"]) for r in rows if name in r["cgroups"] and r["cgroups"][name]["memory"]]
+    return [(series[i][0], series[i - 1][1] - series[i][1]) for i in range(1, len(series))]
+names = {name for r in rows for name in r["cgroups"]}
+main = max(names, key=lambda name: max([size for _, size in drops(name)] or [0]))
+# Each unmount is one large drop, but a drop can also be missing or extra. Take the clock offset
+# that the most (drop, unmount) pairs agree on within 0.3 s, using the measured unmount as anchor.
+unmounts = [e["at_ns"] / 1e9 for e in ev if e["event"] == "unmount"]
+large = [wall for wall, size in drops(main) if size > 300 * 2**20]
+def agreement(offset):
+    return sum(any(abs(wall - (offset + at)) < 0.3 for wall in large) for at in unmounts)
+offset = max((wall - unmount for wall in large), key=agreement)  # observer wall at runtime t=0
 start, end = offset + command_end, offset + command_end + commit_ms / 1e3
-win = [r for r in rows if start <= r["wall"] <= end]
+win = [r for r in rows if start <= r["wall"] <= end and main in r["cgroups"]]
 first, last = win[0], win[-1]
 def d(path):
     a, b = first, last
@@ -39,7 +44,7 @@ c0, c1 = first["cgroups"][main], last["cgroups"][main]
 mib = lambda pages: round(pages * 4 / 1024, 1)
 out = {
     "sample": sample.parent.name[-60:], "commit_ms": round(commit_ms, 1), "rows": len(win),
-    "file_drop_at_unmount_MiB": round((series[drop - 1][1]["memory"]["file"] - series[drop][1]["memory"]["file"]) / 2**20, 1),
+    "unmounts_matched": f"{agreement(offset)} of {len(unmounts)}",
     "vm_free_MiB_start_min": (mib(first["vm"]["nr_free_pages"]), mib(min(r["vm"]["nr_free_pages"] for r in win))),
     "vm_dirty_max_MiB": mib(max(r["vm"]["nr_dirty"] for r in win)), "vm_writeback_max_MiB": mib(max(r["vm"]["nr_writeback"] for r in win)),
     "vm_dirty_plus_wb_max_MiB": mib(max(r["vm"]["nr_dirty"] + r["vm"]["nr_writeback"] for r in win)),
