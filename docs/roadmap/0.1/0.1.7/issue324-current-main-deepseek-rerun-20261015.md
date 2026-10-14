@@ -80,3 +80,17 @@ is for structural tradeoffs, not permission to regress correctness or claim an
 unqualified speed improvement. Record exact production LOC in every commit.
 Exec and Init are part of this full rerun, but implementation optimization now
 focuses only on Commit until its justified candidates are exhausted.
+
+## Diagnosed preparation correction — v2
+
+The first attempt completed Init/install/mount but native-clone exited1 before
+any workload/Commit. The reproduction omitted the original separate operator
+install-directory step on the empty volume. The recovered historical command
+creates native-run owned by501:20 without reading or copying Store payload.
+Restore that exact infrastructure prerequisite in fresh full-2/new volume,
+keeping all workload/oracle hashes and limits. Retain failed container/volume
+and all successful prefix receipts; no uncertain/failed product owner is replayed.
+The successful Init prefix must repeat to exercise the corrected full functional
+driver; it is diagnostic duplicate coverage, not a second accepted Init sample
+or a best-of selection. All timing rows remain INELIGIBLE. No measured workload
+ran in full-1. Keep both complete-driver outcomes independently.
