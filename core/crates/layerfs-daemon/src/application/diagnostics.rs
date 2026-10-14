@@ -319,5 +319,6 @@ fn operation_code(operation: &Request) -> u64 {
         Request::ForceUnmount { .. } => 11,
         Request::Observed { .. } => 12,
         Request::Cleanup(_) => 13,
+        Request::Sdk(_) => 15,
     }
 }

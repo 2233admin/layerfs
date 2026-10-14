@@ -14,6 +14,7 @@ mod control_merge;
 mod control_mount;
 mod control_reply;
 mod control_request;
+mod control_sdk;
 mod control_types;
 
 pub mod daemon_setup;

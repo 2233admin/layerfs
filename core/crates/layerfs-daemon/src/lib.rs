@@ -12,6 +12,7 @@ pub mod install;
 mod install_file;
 pub mod install_types;
 mod overlay;
+mod sdk;
 mod service;
 pub mod store;
 pub(crate) use overlay::owner;

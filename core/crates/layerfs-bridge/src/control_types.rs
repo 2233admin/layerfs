@@ -40,6 +40,8 @@ pub enum Request {
         /// Selected Branch.
         branch: BranchId,
     },
+    /// One SDK call answered by a value or a typed SDK refusal.
+    Sdk(crate::control_sdk::SdkCall),
     /// Capture the published frontier, construct it in the daemon, merge it
     /// with a moved head unless forced, Save and publish.
     Commit(crate::control_merge::CommitControl),
@@ -215,6 +217,10 @@ pub enum Reply {
     Committed(CommitOutcome),
     /// A Commit published after merging with a moved head.
     MergeCommitted(Box<crate::control_merge::MergedCommit>),
+    /// The value an SDK call returned.
+    Sdk(crate::control_sdk::SdkValue),
+    /// A refused SDK call.
+    SdkRefused(crate::control_sdk::SdkRefusal),
     /// A Commit refused for conflicts: nothing was published.
     Conflict(Box<crate::control_merge::ConflictReport>),
     /// Bounded local observation with explicit owner scopes.

@@ -173,6 +173,9 @@ pub use crate::control_mount::{
     MountPhase, MountReceipt, MountStatus, MountWork, ReadyMount, TeardownCustody, TeardownStage,
     MOUNT_DIRECTORY_LIMIT,
 };
+pub use crate::control_sdk::{
+    SdkCall, SdkRefusal, SdkValue, MAXIMUM_NAME_BYTES, MAXIMUM_VALUE_DEPTH,
+};
 pub use crate::control_types::{
     Activity, Answer, Call, CleanupObservation, ControlCode, ControlRefusal, LocalObservation,
     Reply, Request, WorkspaceStatus, WorkspaceToken, HISTORY_WINDOW,

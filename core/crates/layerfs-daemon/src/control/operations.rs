@@ -75,6 +75,12 @@ impl Service {
                 "observed control requires application diagnostic owner",
             )),
             Request::EndSession => Ok(Success::reply(Reply::SessionEnded)),
+            Request::Sdk(call) => Ok(Success::reply(
+                match crate::sdk::dispatch(&self.store, call) {
+                    Ok(value) => Reply::Sdk(value),
+                    Err(refusal) => Reply::SdkRefused(refusal),
+                },
+            )),
             Request::Hello(_) => Err(Failure::Rejected(
                 ControlCode::Invalid,
                 "daemon Hello requires application startup owner",

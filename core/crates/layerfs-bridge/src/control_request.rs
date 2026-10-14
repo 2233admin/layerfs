@@ -38,6 +38,10 @@ impl Call {
                 out.put(&workspace.to_bytes())?;
                 out.put(&branch.to_bytes())?;
             }
+            Request::Sdk(value) => {
+                out.byte(20)?;
+                crate::control_sdk::put_call(&mut out, value)?;
+            }
             Request::Commit(value) => {
                 out.byte(2)?;
                 crate::control_merge::put_commit_control(&mut out, value)?;
@@ -147,6 +151,7 @@ impl Call {
                 branch: history(BranchId::from_bytes(input.array()?))?,
             },
             2 => Request::Commit(crate::control_merge::commit_control(&mut input)?),
+            20 => Request::Sdk(crate::control_sdk::call(&mut input)?),
             3 => Request::Status(token(&mut input)?),
             4 => Request::Unmount(token(&mut input)?),
             9 => Request::Attach(token(&mut input)?),

@@ -261,6 +261,20 @@ macro_rules! authority_identity {
 }
 
 authority_identity!(BranchId, BRANCH_BYTES, BRANCH_TAG);
+
+impl BranchId {
+    /// The identity the SDK gives a Branch it creates by name. Branch names
+    /// are unique in their stack and are never reused, so the name decides.
+    pub fn named(stack: LayerStackId, name: &HistoryName) -> Self {
+        let mut hasher = blake3::Hasher::new();
+        hasher.update(b"layerfs/sdk-branch/v1\0");
+        hasher.update(stack.as_slice());
+        hasher.update(name.as_str().as_bytes());
+        let mut body = [0u8; 16];
+        body.copy_from_slice(&hasher.finalize().as_bytes()[..16]);
+        Self::from_authority(body)
+    }
+}
 authority_identity!(LayerStackId, LAYER_STACK_BYTES, LAYER_STACK_TAG);
 
 impl CommitId {

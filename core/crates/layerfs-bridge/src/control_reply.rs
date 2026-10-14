@@ -48,6 +48,14 @@ impl Answer {
                 out.byte(18)?;
                 crate::control_merge::put_merged(&mut out, value)?;
             }
+            Reply::Sdk(value) => {
+                out.byte(20)?;
+                crate::control_sdk::put_value(&mut out, value, 0)?;
+            }
+            Reply::SdkRefused(value) => {
+                out.byte(21)?;
+                crate::control_sdk::put_refusal(&mut out, value)?;
+            }
             Reply::Conflict(value) => {
                 out.byte(19)?;
                 crate::control_merge::put_report(&mut out, value)?;
@@ -165,6 +173,8 @@ impl Answer {
             2 => Reply::Committed(outcome(&mut input)?),
             18 => Reply::MergeCommitted(Box::new(crate::control_merge::merged(&mut input)?)),
             19 => Reply::Conflict(Box::new(crate::control_merge::report(&mut input)?)),
+            20 => Reply::Sdk(crate::control_sdk::value(&mut input, 0)?),
+            21 => Reply::SdkRefused(crate::control_sdk::refusal(&mut input)?),
             3 => Reply::Status(Box::new(status(&mut input)?)),
             13 => {
                 let mut value = status(&mut input)?;
