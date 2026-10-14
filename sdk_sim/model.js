@@ -365,7 +365,7 @@
 
     // -- fs mutation shared by write/edit/mkdir/remove/cp/mv/apply. Allowed
     // while mounted: it advances the head, so live mounts become stale.
-    mutate(branchName, changes, via) {
+    mutate(branchName, changes, via, agent) {
       const b = this.branch(branchName);
       const capturedHead = b.head;
       const currentRoot = this.branchRoot(b);
@@ -374,7 +374,7 @@
       if (root === currentRoot)
         return { kind: "UpToDate", branch: b.name, head: b.head, root, capturedHead, displacedHead: null };
       const id = "C" + ++this.s.seq.commit;
-      this.s.commits[id] = { id, parent: capturedHead, root, base: b.base, branch: b.name, slot: this.slot(), by: "fs", via, time: this.tick() };
+      this.s.commits[id] = { id, parent: capturedHead, root, base: b.base, branch: b.name, slot: this.slot(), by: "fs", via, time: this.tick(), ...(agent ? { agent } : {}) };
       b.head = id;
       return { kind: "Committed", branch: b.name, head: id, root, capturedHead, displacedHead: null };
     }
@@ -540,7 +540,7 @@
       const root = this.intern(m.tree);
       const id = "C" + ++this.s.seq.commit;
       this.s.commits[id] = { id, parent: this.s.commits[ln] ? ln : null, root, base, branch: a.name, slot: this.slot(), by: "merge", via: `merge ${left} + ${right}`,
-        mergedFrom: rn, mergeBase: mb, lww: m.lww, time: this.tick() };
+        mergedFrom: rn, mergeBase: mb, lww: m.lww, time: this.tick(), ...(a.agent ? { agent: a.agent } : {}) };
       b.head = id;
       return { kind: "Merged", branch: a.name, head: id, root, sources, mergeBase: mb, conflicts: [], lww: m.lww };
     },
@@ -592,13 +592,13 @@
     },
 
     // ---------------------------------------------------------- fs writes
-    "fs.write"(a) { return this.mutate(a.branch, [{ kind: "write", path: a.path, content: a.content }], "fs.write"); },
-    "fs.edit"(a) { return this.mutate(a.branch, [{ kind: "edit", path: a.path, oldText: a.oldText, newText: a.newText, all: a.all }], "fs.edit"); },
-    "fs.mkdir"(a) { return this.mutate(a.branch, [{ kind: "mkdir", path: a.path, recursive: a.recursive }], "fs.mkdir"); },
-    "fs.remove"(a) { return this.mutate(a.branch, [{ kind: "remove", path: a.path, recursive: a.recursive }], "fs.remove"); },
-    "fs.cp"(a) { return this.mutate(a.branch, [{ kind: "cp", from: a.from, to: a.to, recursive: a.recursive }], "fs.cp"); },
-    "fs.mv"(a) { return this.mutate(a.branch, [{ kind: "mv", from: a.from, to: a.to }], "fs.mv"); },
-    "fs.apply"(a) { return this.mutate(a.branch, a.changes, "fs.apply"); },
+    "fs.write"(a) { return this.mutate(a.branch, [{ kind: "write", path: a.path, content: a.content }], "fs.write", a.agent); },
+    "fs.edit"(a) { return this.mutate(a.branch, [{ kind: "edit", path: a.path, oldText: a.oldText, newText: a.newText, all: a.all }], "fs.edit", a.agent); },
+    "fs.mkdir"(a) { return this.mutate(a.branch, [{ kind: "mkdir", path: a.path, recursive: a.recursive }], "fs.mkdir", a.agent); },
+    "fs.remove"(a) { return this.mutate(a.branch, [{ kind: "remove", path: a.path, recursive: a.recursive }], "fs.remove", a.agent); },
+    "fs.cp"(a) { return this.mutate(a.branch, [{ kind: "cp", from: a.from, to: a.to, recursive: a.recursive }], "fs.cp", a.agent); },
+    "fs.mv"(a) { return this.mutate(a.branch, [{ kind: "mv", from: a.from, to: a.to }], "fs.mv", a.agent); },
+    "fs.apply"(a) { return this.mutate(a.branch, a.changes, "fs.apply", a.agent); },
 
     // ---------------------------------------------------------- sandbox
     "sandbox.create"() {
@@ -715,7 +715,7 @@
       const id = "C" + ++this.s.seq.commit;
       const displacedHead = stale && a.force ? b.head : null;
       this.s.commits[id] = { id, parent: a.force ? capturedHead : b.head, root, base: b.base, branch: b.name, slot: this.slot(), by: "workspace", via: `${a.sandbox}:${a.path}`,
-        time: this.tick(), ...(merged ? { merged } : {}) };
+        time: this.tick(), ...(merged ? { merged } : {}), ...(a.agent ? { agent: a.agent } : {}), ...(a.call ? { call: a.call } : {}) };
       if (displacedHead) this.s.commits[displacedHead].displacedBy = id;
       b.head = id;
       ws.baseCommit = id; ws.baseLayer = b.base; ws.baseRoot = root;

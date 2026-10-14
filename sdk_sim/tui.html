@@ -161,6 +161,16 @@ body.nosel, body.nosel * { user-select: none !important; -webkit-user-select: no
 
 .gridwrap { flex: 1; min-width: 0; position: relative; }
 #grid { position: absolute; inset: 0; display: flex; }
+.gridwrap.benched #grid { bottom: 58px; }
+#bench { display: none; position: absolute; left: 0; right: 0; bottom: 0; height: 52px; border-radius: 8px; background: var(--term-head); box-shadow: 0 0 0 1px var(--term-border); align-items: center; gap: 6px; padding: 0 10px; overflow: hidden; }
+.gridwrap.benched #bench { display: flex; }
+#bench .lbl { font: 600 10px var(--mono); color: var(--term-dim); letter-spacing: .04em; margin-right: 6px; white-space: nowrap; }
+#bench .seat { display: flex; align-items: center; flex: 0 1 230px; min-width: 104px; height: 40px; padding-left: 48px; position: relative; }
+#bench .seat > div { min-width: 0; overflow: hidden; }
+#bench .seat small { overflow: hidden; text-overflow: ellipsis; }
+#bench .seat b { font-size: 12px; color: var(--ac); display: block; }
+#bench .seat small { font: 10.5px var(--mono); color: var(--term-dim); display: block; white-space: nowrap; }
+.ctl { font: 700 10.5px var(--font); color: #fff; background: var(--ac); border-radius: 4px; padding: 1px 6px; flex: none; }
 .split { display: flex; flex: 1; min-width: 0; min-height: 0; }
 .split.row { flex-direction: row; } .split.column { flex-direction: column; }
 .cell { display: flex; min-width: 0; min-height: 0; }
@@ -279,6 +289,62 @@ body.nosel, body.nosel * { user-select: none !important; -webkit-user-select: no
 .player .cap .res { font: 600 11px var(--mono); margin-left: 6px; padding: 1px 6px; border-radius: 4px; }
 .player .cap .res.good { background: var(--green-bg); color: var(--green); }
 .player .cap .res.bad { background: var(--red-bg); color: var(--red); }
+.player .cap .live { margin-top: 6px; padding: 5px 8px; border-radius: 6px; background: var(--well); font: 11.5px/1.55 var(--mono); }
+.player .cap .live .good { color: var(--t-green); } .player .cap .live .bad { color: var(--t-red); }
+/* agents and their mascots */
+.kind.agent { background: color-mix(in srgb, var(--ac) 16%, transparent); color: var(--ac); }
+.term.agentpane .inrow { padding-right: 58px; }
+#crabs { position: fixed; inset: 0; pointer-events: none; z-index: 40; }
+#crabs .crab { position: absolute; left: 0; top: 0; width: 42px; height: 33px; transition: transform .5s ease-in-out; }
+#crabs .crab[hidden] { display: none; }
+.crab.small svg { transform: scale(.8); transform-origin: bottom left; }
+.crab.clone svg { opacity: .55; filter: drop-shadow(0 0 3px currentColor); animation: float 1.8s ease-in-out infinite !important; }
+.crab.clone .hem.b { visibility: hidden; } .crab.clone .hem { animation: hem .5s steps(1) infinite; } .crab.clone .hem.b { animation-name: hem-b; }
+@keyframes float { 50% { transform: translateY(-3px); } }
+@keyframes hem { 50% { visibility: hidden; } } @keyframes hem-b { 50% { visibility: visible; } }
+.crab.walk .leg { animation: claw .14s steps(2) infinite; } .crab.walk .leg.b { animation-delay: .07s; }
+.crab svg { width: 42px; height: 33px; display: block; overflow: visible; shape-rendering: crispEdges; }
+.crab .claw, .crab .leg { transform-box: fill-box; }
+.crab.idle svg { animation: bob 2.4s steps(2) infinite; }
+.crab.busy .claw { animation: claw .24s steps(2) infinite; } .crab.busy .claw.r { animation-delay: .12s; }
+.crab .sweat, .crab .bang, .crab .lamp { display: none; }
+.crab.sweat .sweat, .crab.sweat .bang { display: inline; }
+.crab.lamp .lamp { display: inline; animation: blink 1s steps(2) infinite; }
+.crab.think::after { content: "·"; position: absolute; left: 30px; top: -16px; min-width: 22px; padding: 0 5px; border-radius: 9px; background: var(--card); color: var(--text-2);
+  border: 1px solid var(--sep-strong); font: 700 12px/15px var(--font); text-align: left; animation: dots 1.2s steps(1) infinite; }
+@keyframes dots { 0% { content: "·"; } 33% { content: "··"; } 66% { content: "···"; } }
+.ln.c-run { color: var(--term-dim); } .ln.c-run::before { content: "⠋ "; display: inline-block; width: 1.4em; animation: spin .8s steps(1) infinite; }
+@keyframes spin { 0% { content: "⠋"; } 17% { content: "⠙"; } 33% { content: "⠹"; } 50% { content: "⠸"; } 67% { content: "⠼"; } 83% { content: "⠴"; } }
+.tab .bd.pct { background: linear-gradient(90deg, var(--green-bg) var(--p), transparent var(--p)); color: var(--t-green); border: 1px solid var(--green-bg); }
+#fx .mcard { position: absolute; transform: translate(-50%, -50%); min-width: 300px; max-width: 420px; padding: 14px 18px; border-radius: 12px; background: var(--card);
+  border: 1px solid var(--sep-strong); box-shadow: 0 12px 40px rgba(0,0,0,.25); font: 13px var(--font); color: var(--text); }
+#fx .mcard > div { display: flex; justify-content: space-between; align-items: baseline; font-size: 16px; }
+#fx .mcard b { color: var(--bc); } #fx .mcard span { font-weight: 700; font-variant-numeric: tabular-nums; }
+#fx .mcard i { display: block; height: 6px; margin: 9px 0 8px; border-radius: 3px; background: var(--well); overflow: hidden; }
+#fx .mcard em { display: block; height: 100%; background: var(--bc); transition: width .9s ease-out; }
+#fx .mcard small { color: var(--text-2); }
+@keyframes bob { 50% { transform: translateY(-1.5px); } }
+@keyframes claw { 50% { transform: translateY(-2px); } }
+@keyframes blink { 50% { opacity: .25; } }
+#fx { position: fixed; inset: 0; pointer-events: none; z-index: 70; overflow: hidden; }
+#fx .flyer { position: absolute; left: 0; top: 0; width: 42px; height: 33px; }
+#fx .flyer svg { width: 42px; height: 33px; display: block; overflow: visible; shape-rendering: crispEdges; }
+#fx .box { position: absolute; left: 14px; top: -8px; width: 13px; height: 11px; border-radius: 2px; background: var(--ac); box-shadow: inset 0 0 0 1.5px rgba(255,255,255,.75); }
+#fx .bubble { position: absolute; transform: translate(-50%, -100%); font: 600 11px var(--font); white-space: nowrap; padding: 2px 7px; border-radius: 9px;
+  background: var(--term); color: var(--term-text); box-shadow: 0 0 0 1px var(--term-border), 0 4px 12px rgba(0,0,0,.15); }
+#fx .bubble.bad { background: var(--red); color: #fff; } #fx .bubble.good { background: var(--green-bg); color: var(--t-green); }
+.tab .bd.new { background: var(--accent); color: #fff; animation: pulse .9s ease-out 2; }
+#hist-svg .ini { font: 700 8px var(--font); fill: #fff; pointer-events: none; }
+.player .row:has(.dots.acts) { flex-wrap: wrap; }
+.player .dots.acts { flex-basis: 100%; order: 10; margin-top: 7px; gap: 4px; }
+.player .dots .act { position: relative; height: 18px; min-width: 38px; border-radius: 4px; background: var(--sep-strong); overflow: hidden; cursor: pointer; min-width: 0; }
+.player .dots .act .fill { position: absolute; left: 0; top: 0; bottom: 0; background: var(--accent); opacity: .85; transition: width .3s; }
+.player .dots .act b { position: relative; display: block; padding: 0 5px; font: 600 10px/18px var(--font); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text); }
+.player .dots .act.now { box-shadow: 0 0 0 1.5px var(--orange); }
+.player .dots .act[style*="--bc"] { container-type: inline-size; border-left: 3px solid var(--bc); min-width: 32px; }
+.player .dots .act[style*="--bc"] b { padding: 0 3px; text-overflow: clip; }
+.player .dots .act[style*="--bc"] .fill { background: var(--bc); }
+@container (max-width: 80px) { .player .dots .act .nm { display: none; } }
 .demo-hl { outline: 2.5px solid var(--orange) !important; outline-offset: 2px; border-radius: 6px; animation: pulse .9s ease-out 2; }
 @keyframes grow { from { transform: scale(.96); opacity: 0; } to { transform: none; opacity: 1; } }
 @keyframes shrink { to { transform: scale(.94); opacity: 0; } }
@@ -307,13 +373,14 @@ body.nosel, body.nosel * { user-select: none !important; -webkit-user-select: no
     <button class="ib primary" id="new-sb" title="New Sandbox terminal: mounts a new Workspace (⌘T)"><svg viewBox="0 0 16 16"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg><span class="lbl">Sandbox</span><span class="kbd">⌘T</span></button>
     <button class="ib" id="tog-fs" title="fs terminal (⌘1)"><svg viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M6 2.5v11" stroke="currentColor" stroke-width="1.3"/></svg></button>
     <button class="ib" id="tog-h" title="History panel (⌘2)"><svg viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M10 2.5v11" stroke="currentColor" stroke-width="1.3"/></svg></button>
+    <button class="ib" id="tog-crab" title="Agent mascots on/off"><svg viewBox="0 0 14 11" style="width:17px;height:14px;shape-rendering:crispEdges"><rect x="2" y="2" width="10" height="6" fill="#d97757"/><rect x="0" y="4" width="2" height="2" fill="#d97757"/><rect x="12" y="4" width="2" height="2" fill="#d97757"/><rect x="4" y="3" width="1" height="2" fill="#1d1d1f"/><rect x="9" y="3" width="1" height="2" fill="#1d1d1f"/><rect x="3" y="8" width="1" height="2" fill="#d97757"/><rect x="5" y="8" width="1" height="2" fill="#d97757"/><rect x="8" y="8" width="1" height="2" fill="#d97757"/><rect x="10" y="8" width="1" height="2" fill="#d97757"/></svg></button>
     <button class="ib" id="reset" title="Reset the project"><svg viewBox="0 0 16 16"><path d="M3 8a5 5 0 1 0 1.5-3.5M3 2.5v2.8h2.8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
     <button class="ib" id="theme" title="Appearance"></button>
   </div>
   <div class="work" id="work">
     <section class="dock term" id="fsdock" aria-label="fs terminal"></section>
     <div class="vh" id="vh-fs" role="separator" aria-label="Resize fs terminal"></div>
-    <div class="gridwrap" id="gridwrap"><div id="grid"></div></div>
+    <div class="gridwrap" id="gridwrap"><div id="grid"></div><div id="bench" aria-label="Agents"></div></div>
     <div class="vh" id="vh-h" role="separator" aria-label="Resize the right panel"></div>
     <div class="right" id="right">
     <section class="dock term fpane" id="filesdock" aria-label="Files"></section>
@@ -331,6 +398,8 @@ body.nosel, body.nosel * { user-select: none !important; -webkit-user-select: no
 <div class="pop" id="pop" role="menu"></div>
 <div class="toast" id="toast" role="status"></div>
 <div class="hcard" id="hcard" role="tooltip"></div>
+<div id="crabs" aria-hidden="true"></div>
+<div id="fx" aria-hidden="true"></div>
 <div class="player" id="player" role="region" aria-label="Demo player">
   <div class="row">
     <button class="ib" id="d-restart" title="Restart from step 1"><svg viewBox="0 0 16 16"><path d="M3.5 3v10M13 3L6 8l7 5z" fill="currentColor" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg></button>
@@ -366,7 +435,9 @@ function fresh(bare) {
   sim.run("project.init", { name: "website", files: WEBSITE });
   eng = new LayerTerm.Engine(sim, "website");
   S = { world: sim.s, active: "main", focus: "fs", seq: 1, tabs: [{ branch: "main", layout: null, focus: null, zoom: null }],
-    panes: {}, detached: {}, fs: {}, hist: { lines: [], hist: [] }, docks: { fs: true, h: true, files: false }, files: {} };
+    panes: {}, detached: {}, fs: {}, hist: { lines: [], hist: [] }, docks: { fs: true, h: true, files: false }, files: {},
+    agents: {}, roster: null, seen: {}, crabs: S ? S.crabs !== false : true, branchSandbox: {} };
+  eng.branchSandbox = S.branchSandbox;
   S.hist.lines.push(out("History · project-wide · type help", "dim"));
   if (!bare) runHistory("fork feature-home");
 }
@@ -374,6 +445,10 @@ function load() {
   const saved = store.get(KEY, null);
   if (!saved) return fresh();
   S = saved; sim = new LayerSim.Sim(); sim.s = S.world; eng = new LayerTerm.Engine(sim, "website");
+  S.agents ||= {}; S.seen ||= {}; S.branchSandbox ||= {}; if (S.crabs === undefined) S.crabs = true;
+  eng.branchSandbox = S.branchSandbox;
+  for (const a of Object.values(S.agents)) a.open = null;
+  if (S.roster) eng.actor = "lead";
 }
 const save = () => { S.world = sim.s; store.set(KEY, S); };
 const out = (t, c = "") => ({ k: "out", t, c });
@@ -406,6 +481,7 @@ const fsPc = (prompt) => (prompt.startsWith("fs:main") ? "pr-ro" : prompt.starts
 function runFs(b, line) {
   const f = fsOf(b), prompt = eng.fsPrompt(b, f.state), rec = eng.fs(b, line, f.state);
   record(f.lines, prompt, fsPc(prompt), line, rec);
+  leadFx(rec);
   if (line.trim() && !f.state.heredoc) f.hist.push(line);
   if (rec.files) f.lines.push({ k: "link", t: "open in the Files pane (Blame)", files: rec.files });
   if (rec.open) showInFiles(rec.open);
@@ -413,6 +489,7 @@ function runFs(b, line) {
 function runHistory(line) {
   const rec = eng.history(line);
   record(S.hist.lines, "history> ", "pr-h", line, rec);
+  leadFx(rec);
   if (line.trim()) S.hist.hist.push(line);
   S.hl = rec.diff ? [rec.diff.from, rec.diff.to] : null;
   if (rec.diff) S.hist.lines.push({ k: "link", t: "open in the Files pane (Diff)", files: { subject: rec.diff.to, base: rec.diff.from, mode: "diff", path: null } });
@@ -425,9 +502,252 @@ function runSandbox(id, line) {
   if (rec.closed) { closePane(id, true); toast(`${wsKey(p)} unmounted · terminal closed`); }
 }
 
+// ---------------------------------------------------------------- agents
+// Agents own no window. Each tool call mounts a Workspace in its Branch's
+// shared Sandbox: a window opens on mount and closes on unmount. An agent
+// may control several windows (a dev server plus a call) or none.
+const rosterOf = (n) => (S.roster && S.roster[n]) || { name: n, initial: n[0].toUpperCase(), color: "#8e8e93" };
+const paneOfBinding = (b) => b && Object.keys(S.panes).find((k) => S.panes[k].sandbox === b.sandbox && S.panes[k].path === b.path);
+const windowsOf = (n) => Object.values(S.panes).filter((p) => p.agent === n && !p.closing); // a finished call's window is closing
+function seatAgents(branch, names) {
+  openTab(branch);
+  for (const n of names) S.agents[n] ||= { name: n, branch, open: null, sticky: null, server: null };
+  render();
+}
+function openWindow(n, b) {
+  const branch = sim.s.sandboxes[b.sandbox].workspaces[b.path].branch;
+  if (!tab(branch)) { S.tabs.push({ branch, layout: null, focus: null, zoom: null }); S.seen[branch] = commitCount(branch); }
+  const t = tab(branch), id = "p" + S.seq++;
+  S.panes[id] = { id, branch, sandbox: b.sandbox, path: b.path, agent: n, lines: [], hist: [] };
+  t.layout = t.layout ? equalize(splitAt(t.layout, leaves(t.layout).slice(-1)[0], id, "bottom")) : { kind: "pane", id };
+  S.enter = id;
+  return id;
+}
+function closeWindowSoon(id) {
+  if (!S.panes[id]) return;
+  S.panes[id].closing = true;
+  if (D.instant || reduced) { closePane(id, true); return; }
+  setTimeout(() => { if (S.panes[id]) closePane(id, true); }, 1100 / fxSpeed());
+}
+// The phases of one tool call, as the demo plays them.
+function agentMountUI(n, on) {
+  const rec = eng.agentMount(S.agents[n], on);
+  let id = paneOfBinding(rec.binding);
+  if (rec.binding && !id) id = openWindow(n, rec.binding);
+  const p = S.panes[id];
+  if (p) { p.agent = n; record(p.lines, "", "pr-dim", `# ${rosterOf(n).name}'s tool call`, rec); }
+  return id;
+}
+function agentExecUI(n, line) {
+  const st = S.agents[n], id = paneOfBinding(st.open), p = S.panes[id];
+  if (!p) return { code: "none" };
+  const rec = eng.agentExec(st, line);
+  record(p.lines, eng.sandboxPrompt(p), "pr-sb", line, rec);
+  p.cmdAt = p.lines.length - rec.lines.length - 1; p.hist.push(line);
+  // The command runs for a while: its output and outcome show when it ends.
+  p.pending = { lines: p.lines.splice(p.cmdAt + 1), event: rec.event };
+  p.lines.push(out("running…", "run"));
+  return rec;
+}
+function agentDoneUI(n, id) {
+  const p = S.panes[id]; if (!p || !p.pending) return;
+  p.lines = p.lines.filter((l) => l.c !== "run");
+  p.lines.push(...p.pending.lines);
+  if (p.pending.event) queueFx(n, p.pending.event);
+  p.pending = null;
+}
+function agentFinishUI(n) {
+  const st = S.agents[n];
+  if (!st.open) return null;
+  const id = paneOfBinding(st.open), p = S.panes[id], rec = eng.agentFinish(st);
+  if (p) {
+    const cmd = p.lines[p.cmdAt];
+    if (cmd && cmd.calls) cmd.calls.push(...rec.calls.map((c) => ({ call: c.call, code: c.outcome.code, script: c.script })));
+    for (const l of rec.lines) p.lines.push(out(l.t, l.c));
+  }
+  if (rec.event) queueFx(n, rec.event);
+  if (rec.unmounted && id) closeWindowSoon(id);
+  return rec;
+}
+function agentStopUI(n) {
+  const rec = eng.agentStop(S.agents[n]), id = paneOfBinding(rec.unmounted), p = S.panes[id];
+  if (p) for (const l of rec.lines) p.lines.push(out(l.t, l.c));
+  if (rec.event) queueFx(n, rec.event);
+  if (id) closeWindowSoon(id);
+  return rec;
+}
+// Lead (History and fs terminals in the agents story): its results show too.
+function leadFx(rec) {
+  if (!S.roster) return;
+  const o = [...rec.calls].reverse().map((c) => c.outcome).find((x) => ["Committed", "Merged", "Added", "Conflict"].includes(x.code));
+  if (!o) return;
+  if (o.code === "Conflict") queueFx("lead", { kind: "refused" });
+  else queueFx("lead", { kind: "commit", head: o.code === "Added" ? o.result.publishedLayer.id : o.result.head });
+}
+
+// ---------------------------------------------------------------- mascots
+// A small pixel critter per agent, drawn after the Claude mascot, in the agent's colour.
+// A clone is its ghost: see-through, hollow eyes and a wavy hem instead of legs.
+function mascot(n, ghost) {
+  const r = rosterOf(n), O = r.color, K = "#1d1d1f", px = (x, y, w, h, f, c = "") => `<rect${c ? ` class="${c}"` : ""} x="${x}" y="${y}" width="${w}" height="${h}" fill="${f}"/>`;
+  return `<svg viewBox="0 -2 14 11" aria-hidden="true">${r.crown ? px(4, 0, 6, 1, "#f2c94c") + px(4, -1, 1, 1, "#f2c94c") + px(6.5, -1, 1, 1, "#f2c94c") + px(9, -1, 1, 1, "#f2c94c") : ""}
+    ${px(2, 1, 10, 6, O)}<g class="claw l">${px(0, 3, 2, 2, O)}</g><g class="claw r">${px(12, 3, 2, 2, O)}</g>
+    ${ghost ? px(3.5, 2, 2, 2, "#fff") + px(8.5, 2, 2, 2, "#fff") + px(4.5, 3, 1, 1, K) + px(9.5, 3, 1, 1, K)
+      + `<g class="hem a">${px(2, 7, 2, 1, O)}${px(6, 7, 2, 1, O)}${px(10, 7, 2, 1, O)}</g><g class="hem b">${px(4, 7, 2, 1, O)}${px(8, 7, 2, 1, O)}</g>`
+    : px(4, 2, 1, 2, K) + px(9, 2, 1, 2, K) + px(2, 5, 10, 1, "rgba(0,0,0,.28)")
+      + px(3, 7, 1, 2, O, "leg a") + px(5, 7, 1, 2, O, "leg b") + px(8, 7, 1, 2, O, "leg a") + px(10, 7, 1, 2, O, "leg b")}
+    <g class="sweat">${px(1, 0, 1, 2, "#6cc4ff")}</g><g class="bang">${px(13, -2, 1, 2, "#e5484d")}${px(13, 1, 1, 1, "#e5484d")}</g><g class="lamp">${px(14.5, 1, 1.5, 2, "#ffd54a")}</g></svg>`;
+}
+// Each mascot operates its terminal: while its agent types or a call runs it
+// stands at the cursor; when idle it walks back to the lower-right corner.
+// Clicks never move it. Mascots live on their own layer, so re-rendering a
+// pane does not interrupt a walk.
+const typing = {}; // agent -> input owner while its command is being typed
+function crabEl(key, n = key) {
+  let el = $("crabs").querySelector(`[data-crab="${key}"]`);
+  if (!el) {
+    el = document.createElement("div");
+    el.dataset.crab = key; el.title = rosterOf(n).name + (key === n ? "" : " (clone)"); el.innerHTML = mascot(n, key !== n); el.style.color = rosterOf(n).color; el.fresh = true;
+    $("crabs").appendChild(el);
+  }
+  return el;
+}
+const crabOf = (n) => { const el = $("crabs").querySelector(`[data-crab="${n}"]`); return el && !el.hidden ? el : null; };
+// Where an agent is working: the input it types into, and the window around it.
+const hostOf = (owner) => (owner === "fs" ? $("fsdock") : owner === "hist" ? $("histdock") : document.querySelector(`[data-pane="${owner}"]`));
+const shown = (host) => host && !host.hidden && host.getBoundingClientRect().width;
+function workOf(n) {
+  const st = S.agents[n] || {}, owner = typing[n] || paneOfBinding(st.open), host = owner && hostOf(owner);
+  return shown(host) ? { owner, host } : null;
+}
+function restSpot(n) {
+  if (n === "lead") { const h = $("histdock"); if (h && !h.hidden && h.getBoundingClientRect().width) return homeSpot(h); return null; }
+  const seat = document.querySelector(`[data-seat="${n}"]`); if (!seat) return null;
+  const r = seat.getBoundingClientRect(); return { x: r.left + 2, y: r.top + (r.height - 33) / 2 };
+}
+const measure = document.createElement("canvas").getContext("2d");
+function caretSpot(owner) {
+  const inp = document.querySelector(`[data-in="${owner}"]`), r = inp && inp.getBoundingClientRect();
+  if (!r || !r.width) return null;
+  measure.font = getComputedStyle(inp).font;
+  return { x: Math.min(r.right - 36, r.left + measure.measureText(inp.value).width + 6), y: r.bottom - 25 };
+}
+function homeSpot(host) { const r = host.getBoundingClientRect(); return { x: r.right - 54, y: r.bottom - (host.id === "histdock" ? 68 : 38) }; }
+// One mascot per window. The agent itself stands in its current call's
+// window, or between calls in the first window it still holds (a dev server,
+// or a Workspace kept after a conflict), else on the bench. Every further
+// window it holds gets a clone: spawned from the agent, gone when it closes.
+function placeCrabs() {
+  const layer = $("crabs"); if (!layer) return;
+  const names = S.crabs && S.roster ? Object.keys(S.roster).filter((n) => n === "lead" || S.agents[n]) : [], want = [];
+  for (const n of names) {
+    const st = S.agents[n] || {}, work = workOf(n), held = windowsOf(n).filter((p) => shown(hostOf(p.id)));
+    const moodOf = (p) => (st.server && paneOfBinding(st.server) === p.id ? "lamp idle" : st.sticky && paneOfBinding(st.sticky) === p.id ? "sweat idle" : "idle");
+    const at = work ? work.owner : held[0] && held[0].id, caret = work && caretSpot(work.owner);
+    const mood = thinking[n] && !work ? "think idle" : work ? "busy" : at ? moodOf(S.panes[at]) : st.sticky ? "sweat idle" : st.server ? "lamp idle" : "idle";
+    const main = crabEl(n), from = main.home;
+    want.push(n);
+    put(main, caret || (at && homeSpot(hostOf(at))) || restSpot(n), mood + (caret ? " small" : ""));
+    for (const p of held) if (p.id !== at) {
+      const key = `${n}@${p.id}`, fresh = !layer.querySelector(`[data-crab="${key}"]`), el = crabEl(key, n);
+      want.push(key);
+      if (fresh && from && !D.instant && !reduced) { // hop out of the agent, walk to the window
+        el.fresh = false; el.className = "crab idle clone"; el.style.transition = "none"; el.style.transform = `translate(${from.x}px,${from.y}px)`; el.home = from;
+        bubble(from.x + 21, from.y - 2, `⧉ ${rosterOf(n).name} clone`);
+        requestAnimationFrame(() => requestAnimationFrame(() => { el.style.transition = ""; placeCrabs(); }));
+        continue;
+      }
+      put(el, homeSpot(hostOf(p.id)), moodOf(p) + " clone");
+    }
+  }
+  for (const el of [...layer.children]) if (!want.includes(el.dataset.crab) && !el.gone) {
+    el.gone = true; const clone = el.dataset.crab.includes("@"); el.dataset.crab = "";
+    if (clone && !D.instant && !reduced) el.animate([{ opacity: 1 }, { opacity: 0, scale: .4 }], { duration: 350 }).finished.then(() => el.remove());
+    else el.remove();
+  }
+}
+function put(el, spot, mood) {
+  if (!spot) { el.hidden = true; el.fresh = true; return; }
+  el.hidden = false;
+  el.className = `crab ${mood}${el.classList.contains("walk") ? " walk" : ""}`;
+  const key = `${Math.round(spot.x)},${Math.round(spot.y)}`;
+  if (el.dataset.at === key) return;
+  if (el.fresh) { el.style.transition = "none"; el.fresh = false; requestAnimationFrame(() => requestAnimationFrame(() => (el.style.transition = ""))); }
+  else { el.classList.add("walk"); clearTimeout(el.walkT); el.walkT = setTimeout(() => el.classList.remove("walk"), 520); }
+  el.dataset.at = key; el.home = spot;
+  el.style.transform = `translate(${spot.x}px,${spot.y}px)`;
+}
+setInterval(() => { if (S && S.roster) placeCrabs(); }, 400);
+addEventListener("resize", () => placeCrabs());
+// Manual typing moves the mascot that operates the terminal.
+document.addEventListener("input", (e) => {
+  const owner = e.target.dataset && e.target.dataset.in; if (!owner || !S.roster) return;
+  const n = S.panes[owner] ? S.panes[owner].agent : owner === "fs" || owner === "hist" ? "lead" : null; if (!n) return;
+  if (e.target.value) typing[n] = owner; else delete typing[n];
+  placeCrabs();
+});
+let fxQueue = [];
+function queueFx(n, ev) { if (S.crabs) fxQueue.push({ n, ev }); }
+const fxSpeed = () => (D.playing || D.busy ? D.speed : 1);
+const fxWait = (ms) => new Promise((r) => setTimeout(r, ms / fxSpeed()));
+function bubble(x, y, text, cls = "") {
+  if (D.instant) return;
+  const b = document.createElement("div");
+  b.className = "bubble " + cls; b.textContent = text; b.style.left = x + "px"; b.style.top = y + "px";
+  $("fx").appendChild(b);
+  b.animate([{ opacity: 0, translate: "0 4px" }, { opacity: 1, translate: "0 0", offset: .15 }, { opacity: 1, offset: .8 }, { opacity: 0 }], { duration: 1500 / fxSpeed() }).finished.then(() => b.remove());
+}
+function bubbleOn(n, text, cls) { const el = crabOf(n); if (!el) return; const r = el.getBoundingClientRect(); bubble(r.left + r.width / 2, r.top - 2, text, cls); }
+// Hop a mascot to a target rect (another mascot, a tab chip, or its own spot),
+// show a bubble there, and come back to where it stands.
+async function fly(n, to, { say, cls, hold = 380, apex = 70 } = {}) {
+  const el = crabOf(n), home = el && el.home;
+  if (!el || !home || !to || !to.width || reduced || D.instant) { if (say) bubbleOn(n, say, cls); return; }
+  const tx = Math.max(4, Math.min(innerWidth - 46, to.left + to.width / 2 - 21)), ty = to.crab ? to.top : Math.max(30, to.top - 30);
+  const p = (x, y) => ({ transform: `translate(${x}px,${y}px)` }), mid = (home.x + tx) / 2, top = Math.min(home.y, ty) - apex;
+  const travel = 560, dur = (2 * travel + hold) / fxSpeed(), f = travel / (2 * travel + hold);
+  el.classList.add("walk");
+  const a = el.animate([p(home.x, home.y), { ...p(mid, top), offset: f / 2 }, { ...p(tx, ty), offset: f }, { ...p(tx, ty), offset: 1 - f }, { ...p(mid, top), offset: 1 - f / 2 }, p(home.x, home.y)],
+    { duration: dur, easing: "ease-in-out" });
+  if (say) setTimeout(() => bubble(tx + 21, ty - 2, say, cls), dur * f);
+  await a.finished.catch(() => {});
+  el.classList.remove("walk");
+}
+function hopInPlace(n, say, cls) {
+  const el = crabOf(n); if (!el || !el.home) return;
+  fly(n, { left: el.home.x, top: el.home.y, width: 42, height: 33, crab: true }, { say, cls, hold: 120, apex: 22 });
+}
+// Where another agent is: its mascot when on screen, else its tab chip.
+function spotOf(n) {
+  const el = crabOf(n);
+  if (el) { const r = el.getBoundingClientRect(); return { left: r.left - 30, top: r.top, width: r.width, height: r.height, crab: true }; }
+  const chip = S.agents[n] && document.querySelector(`.tab[data-tab="${S.agents[n].branch}"]`);
+  return chip ? chip.getBoundingClientRect() : null;
+}
+// Outcomes are about the Commit history, never about another agent.
+function flushFx() {
+  const q = fxQueue; fxQueue = [];
+  for (const { n, ev } of q) {
+    if (ev.kind === "conflict") bubbleOn(n, ev.with ? `✕ conflicts with history · ${ev.with}` : "✕ markers still in the files", "bad");
+    else if (ev.kind === "refused") bubbleOn(n, "✕ conflict · nothing created", "bad");
+    else if (ev.kind === "server") bubbleOn(n, "● serving");
+    else if (ev.kind === "stopped") bubbleOn(n, "■ stopped");
+    else if (ev.kind === "merged") hopInPlace(n, `⇣ merged with history · ${ev.head}`, "good");
+    else if (ev.kind === "lww") hopInPlace(n, `⇄ newer write wins · ${ev.head}`, "good");
+    else if (ev.head) hopInPlace(n, `✓ ${ev.head}`);
+  }
+}
+// A step's mascot hop: to another agent's crab or to a tab chip.
+async function jumpFx([n, target, say]) {
+  const [kind, name] = target.split(":");
+  const el = kind === "agent" ? null : document.querySelector(`.tab[data-tab="${name}"]`);
+  await fly(n, kind === "agent" ? spotOf(name) : el && el.getBoundingClientRect(), { say: say || (kind === "tab" ? name : ""), hold: 520 });
+}
+
 // ---------------------------------------------------------------- tabs & panes
+const commitCount = (b) => (b === "main" ? Object.keys(sim.s.layers).length : Object.values(sim.s.commits).filter((c) => c.branch === b).length);
 function openTab(branch) {
-  if (!tab(branch)) { S.tabs.push({ branch, layout: null, focus: null, zoom: null }); S.enterTab = branch; }
+  if (!tab(branch)) { S.tabs.push({ branch, layout: null, focus: null, zoom: null }); S.enterTab = branch; S.seen[branch] = commitCount(branch); }
   S.active = branch; S.focus = S.focus === "hist" ? "hist" : "fs";
 }
 function closeTab(branch) {
@@ -465,7 +785,7 @@ function closePane(id, unmounted) {
     render();
   };
   const el = document.querySelector(`[data-pane="${id}"]`);
-  if (el && !reduced) { el.classList.add("leave"); setTimeout(finish, 260); } else finish();
+  if (el && !reduced && !D.instant) { el.classList.add("leave"); setTimeout(finish, 260); } else finish();
 }
 function detach(id, quiet) {
   const p = S.panes[id]; if (!p) return;
@@ -528,6 +848,8 @@ function render() {
   const kept = keepInputs();
   renderTabs(); renderFs(); renderGrid(); renderRight(); renderFiles(); renderHistory(); renderStatus();
   restoreInputs(kept); applyFocus(); save();
+  placeCrabs();
+  if (fxQueue.length) requestAnimationFrame(flushFx);
 }
 function renderRight() {
   const f = S.docks.files, h = S.docks.h;
@@ -537,12 +859,15 @@ function renderRight() {
 }
 function renderTabs() {
   $("tabs").innerHTML = S.tabs.map((t) => {
-    const m = t.branch === "main" ? 0 : mountsOf(t.branch).length;
+    const m = t.branch === "main" ? 0 : mountsOf(t.branch).length, cnt = commitCount(t.branch);
+    if (t.branch === S.active || S.seen[t.branch] === undefined) S.seen[t.branch] = cnt;
+    const nw = cnt - S.seen[t.branch];
     return `<div class="tab${t.branch === "main" ? " main" : ""}${S.enterTab === t.branch ? " enter" : ""}" role="tab" tabindex="0" data-tab="${esc(t.branch)}" aria-selected="${t.branch === S.active}">
-      <span class="ico"${t.branch === "main" ? "" : ` style="--bc:${branchColor(t.branch)}"`}>${t.branch === "main" ? "◆" : "⎇"}</span><span>${esc(t.branch)}</span><span class="bd">${headOf(t.branch)}</span>${m ? `<span class="bd m" title="mounted by ${m} Workspace(s)">⛓${m}</span>` : ""}${t.branch === "main" ? "" : `<span class="x" data-closetab="${esc(t.branch)}" title="Close tab">✕</span>`}</div>`;
+      <span class="ico"${t.branch === "main" ? "" : ` style="--bc:${branchColor(t.branch)}"`}>${t.branch === "main" ? "◆" : "⎇"}</span><span>${esc(t.branch)}</span><span class="bd">${headOf(t.branch)}</span>${S.progress && S.progress[t.branch] ? `<span class="bd pct" title="feature progress" style="--p:${S.progress[t.branch]}%">${S.progress[t.branch]}%</span>` : ""}${m ? `<span class="bd m" title="mounted by ${m} Workspace(s)">⛓${m}</span>` : ""}${nw > 0 ? `<span class="bd new" title="${nw} new since you last looked">+${nw}</span>` : ""}${t.branch === "main" ? "" : `<span class="x" data-closetab="${esc(t.branch)}" title="Close tab">✕</span>`}</div>`;
   }).join("") + `<button class="ib" id="new-tab" title="Fork a new Branch (opens a tab)"><svg viewBox="0 0 16 16"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button>`;
   S.enterTab = null;
   $("new-sb").disabled = S.active === "main";
+  $("tog-crab").classList.toggle("on", S.crabs);
   $("tog-fs").classList.toggle("on", S.docks.fs); $("tog-h").classList.toggle("on", S.docks.h); $("tog-files").classList.toggle("on", S.docks.files);
 }
 function renderFs() {
@@ -570,8 +895,8 @@ function paneHtml(id) {
   if (others.length) pills.push(`<span class="pill lock" title="Also mounted at ${esc(others.join(", "))}: whichever commits first makes the others stale">⛓ shared</span>`);
   const prompt = eng.sandboxPrompt(p);
   return `<section class="term pane${S.focus === id ? " focused" : ""}${S.enter === id ? " enter" : ""}" data-pane="${id}" aria-label="Sandbox terminal ${esc(wsKey(p))}">
-    <div class="thead"><span class="grip" data-grip="${id}" title="Drag to move">${ICON.grip}</span><span class="kind sandbox">SANDBOX</span><span class="ttl">${esc(p.sandbox)}:${esc(p.path)}</span><span class="pills">${pills.join("")}</span>
-      <button class="pbtn hide-narrow" data-act="right" title="New Workspace to the right (⌘D)">${ICON.right}</button><button class="pbtn hide-narrow" data-act="down" title="New Workspace below (⌘⇧D)">${ICON.down}</button>
+    <div class="thead"><span class="grip" data-grip="${id}" title="Drag to move">${ICON.grip}</span><span class="kind sandbox">${p.agent ? "WORKSPACE" : "SANDBOX"}</span>${p.agent ? `<span class="ctl" style="--ac:${rosterOf(p.agent).color}" title="Controlled by ${esc(rosterOf(p.agent).name)}">${esc(rosterOf(p.agent).name)}</span>` : ""}<span class="ttl">${esc(p.sandbox)}:${esc(p.path)}</span><span class="pills">${pills.join("")}</span>
+      ${p.agent ? "" : `<button class="pbtn hide-narrow" data-act="right" title="New Workspace to the right (⌘D)">${ICON.right}</button><button class="pbtn hide-narrow" data-act="down" title="New Workspace below (⌘⇧D)">${ICON.down}</button>`}
       <button class="pbtn" data-act="zoom" title="Zoom (⌘⇧↩)">${ICON.zoom}</button><button class="pbtn" data-act="close" title="Close terminal (the Workspace stays mounted)">${ICON.close}</button></div>
     <div class="tbody">${transcript(p.lines)}${inputRow(id, prompt, "pr-sb")}</div></section>`;
 }
@@ -579,10 +904,29 @@ function nodeHtml(n, path) {
   if (n.kind === "pane") return paneHtml(n.id);
   return `<div class="split ${n.dir}"><div class="cell" style="flex:${n.ratio} 1 0">${nodeHtml(n.a, path + "a")}</div><div class="divider" data-path="${path}" role="separator"></div><div class="cell" style="flex:${1 - n.ratio} 1 0">${nodeHtml(n.b, path + "b")}</div></div>`;
 }
+function renderBench() {
+  const on = !!S.roster;
+  $("gridwrap").classList.toggle("benched", on);
+  if (!on) { $("bench").innerHTML = ""; return; }
+  const here = Object.values(S.agents).filter((a) => a.name !== "lead" && a.branch === S.active);
+  const status = (a) => {
+    const w = windowsOf(a.name);
+    if (thinking[a.name]) return `thinking…${w.length ? ` · ${w.length} window${w.length === 1 ? "" : "s"}` : ""}`;
+    if (a.sticky) return "✕ conflict · Workspace kept";
+    if (!w.length) return "idle · no window";
+    return `controls ${w.length} window${w.length === 1 ? "" : "s"}${a.server ? " · ● server" : ""}`;
+  };
+  $("bench").innerHTML = `<span class="lbl">AGENTS ON ${esc(S.active.toUpperCase())}</span>` + (here.length ? here.map((a) => `<div class="seat" data-seat="${a.name}" style="--ac:${rosterOf(a.name).color}"><div><b>${esc(rosterOf(a.name).name)}</b><small>${esc(status(a))}</small></div></div>`).join("") : `<small style="color:var(--term-dim)">none</small>`);
+}
 function renderGrid() {
+  renderBench();
   const t = tab(), grid = $("grid");
   if (!t.layout && S.active === "main") {
     grid.innerHTML = `<div class="launcher"><div><h2>main is read-only</h2><p>main changes only through <b>publish</b>. To work, fork a Branch in History; it opens in its own tab.</p><button class="ib primary" data-prefill="fork ">Fork a Branch</button> <button class="ib" data-newfiles>Browse files</button></div></div>`;
+    return;
+  }
+  if (!t.layout && S.roster) {
+    grid.innerHTML = `<div class="launcher"><div><h2>No Workspace mounted on ${esc(S.active)}</h2><p>Each agent tool call mounts a Workspace: a window opens on mount and closes on unmount.</p></div></div>`;
     return;
   }
   if (!t.layout) {
@@ -844,7 +1188,7 @@ function renderHistory() {
   };
   for (const l of Object.values(s.layers)) { const p = L.pos[l.id]; g += `<g class="node layer${cls(l.id)}" data-pick="${l.id}"><rect class="shape" x="${p.x - 8}" y="${p.y - 8}" width="16" height="16" rx="4"/><text class="lbl" x="${p.x}" y="${p.y + 21}" text-anchor="middle">${l.id}</text></g>`; }
   for (const name of s.branchOrder) { const p = L.pos["fork:" + name]; g += `<g class="node fork${cls("fork:" + name)}" style="--bc:${branchColor(name)}" data-pick="${esc(name)}" data-card="fork:${esc(name)}"><circle class="shape" cx="${p.x}" cy="${p.y}" r="4.5"/>${badge(name, "fork:" + name, p)}</g>`; }
-  for (const c of Object.values(s.commits)) { const p = L.pos[c.id]; g += `<g class="node commit ${c.by}${cls(c.id)}" style="--bc:${branchColor(c.branch)}" data-pick="${c.id}"><circle class="shape" cx="${p.x}" cy="${p.y}" r="7.5"/>${c.mergedFrom ? `<circle class="inner" cx="${p.x}" cy="${p.y}" r="2.8"/>` : ""}<text class="lbl" x="${p.x}" y="${p.y + 20}" text-anchor="middle">${c.id}</text>${badge(c.branch, c.id, p)}</g>`; }
+  for (const c of Object.values(s.commits)) { const p = L.pos[c.id]; g += `<g class="node commit ${c.by}${cls(c.id)}" style="--bc:${branchColor(c.branch)}" data-pick="${c.id}"><circle class="shape" cx="${p.x}" cy="${p.y}" r="7.5"/>${c.mergedFrom ? `<circle class="inner" cx="${p.x}" cy="${p.y}" r="2.8"/>` : c.agent && S.roster && S.roster[c.agent] ? `<text class="ini" x="${p.x}" y="${p.y + 3}" text-anchor="middle">${rosterOf(c.agent).initial}</text>` : ""}<text class="lbl" x="${p.x}" y="${p.y + 20}" text-anchor="middle">${c.id}</text>${badge(c.branch, c.id, p)}</g>`; }
   svg.innerHTML = g + `<g id="hlabels">${lab}</g>`;
   if (knownNodes && [...ids].some((id) => !knownNodes.has(id))) wrap.scrollLeft = wrap.scrollWidth;
   knownNodes = ids;
@@ -885,7 +1229,7 @@ function cardHtml(id) {
     const mrg = c.mergedFrom ? `<div class="sec">Merge</div><div class="meta">merged from ${owner(c.mergedFrom)} into ${c.parent ? owner(c.parent) : "main " + c.base}<br>merge base ${c.mergeBase}${lww(c.lww)}</div>`
       : c.merged ? `<div class="sec">Merged on commit</div><div class="meta">the Workspace was on ${c.merged.from}; merged with head ${c.merged.head}${lww(c.merged.lww)}</div>` : "";
     return `<div class="h"><b>${c.id}</b>${esc(c.branch)}${b.head === id ? head : ""}</div>
-      <div class="meta">parent ${c.parent || "Branch base"} · root ${c.root}<br>by ${esc(c.by === "fs" ? c.via || "fs" : c.by === "merge" ? c.via : short(c.via))}</div>${mrg}${jump}${after}${wsRows(c.branch, id)}${hint(id)}`;
+      <div class="meta">parent ${c.parent || "Branch base"} · root ${c.root}<br>by ${c.agent ? `<b>${esc(rosterOf(c.agent).name)}</b> · ` : ""}${esc(c.call ? c.call : c.by === "fs" ? c.via || "fs" : c.by === "merge" ? c.via : short(c.via))}</div>${mrg}${jump}${after}${wsRows(c.branch, id)}${hint(id)}`;
   }
   const name = id.slice(5), b = s.branches[name];
   return `<div class="h"><b>${esc(name)}</b>fork point${b.head ? "" : head}</div><div class="meta">forked from ${b.from}${b.head ? "" : " · no Commits yet"}</div>${wsRows(name, id)}${hint(name, id)}`;
@@ -959,7 +1303,7 @@ document.addEventListener("keydown", (e) => {
   if (k === "o" || k === "3") return run(() => toggleDock("files"));
   if (k === "1") return run(() => { S.docks.fs = true; S.focus = "fs"; render(); });
   if (k === "2") return run(() => toggleDock("h"));
-  if (k === "d" && S.panes[S.focus]) return run(() => newSandboxTerminal(S.panes[S.focus].sandbox, S.focus, e.shiftKey ? "bottom" : "right"));
+  if (k === "d" && S.panes[S.focus] && !S.panes[S.focus].agent) return run(() => newSandboxTerminal(S.panes[S.focus].sandbox, S.focus, e.shiftKey ? "bottom" : "right"));
   if (k === "w" && S.panes[S.focus]) return run(() => closePane(S.focus));
   if (k === "enter" && e.shiftKey && S.panes[S.focus]) return run(() => { t.zoom = t.zoom === S.focus ? null : S.focus; render(); });
   const arrows = { arrowleft: [-1, 0], arrowright: [1, 0], arrowup: [0, -1], arrowdown: [0, 1] };
@@ -1146,6 +1490,7 @@ addEventListener("resize", () => { document.querySelectorAll(".pane").forEach((p
 // ---------------------------------------------------------------- theme
 const THEMES = ["auto", "light", "dark"];
 function applyTheme(t) { if (t === "auto") document.documentElement.removeAttribute("data-theme"); else document.documentElement.setAttribute("data-theme", t); $("theme").innerHTML = ICON[t === "auto" ? "auto" : t === "light" ? "sun" : "moon"]; $("theme").title = "Appearance: " + t; }
+$("tog-crab").onclick = () => { S.crabs = !S.crabs; render(); toast(S.crabs ? "Mascots on" : "Mascots off"); };
 $("theme").onclick = () => { const t = THEMES[(THEMES.indexOf(store.get("lfs.theme3", "auto")) + 1) % 3]; store.set("lfs.theme3", t); applyTheme(t); };
 applyTheme(store.get("lfs.theme3", "auto"));
 // ---------------------------------------------------------------- demo player
@@ -1154,17 +1499,37 @@ let story = STORIES[new URLSearchParams(location.search).get("demo")] ? new URLS
 let DEMO = STORIES[story].steps;
 $("d-story").innerHTML = Object.entries(STORIES).map(([k, v]) => `<option value="${k}"${k === story ? " selected" : ""}>${esc(v.title)} · ${v.steps.length}</option>`).join("");
 $("d-story").onchange = (e) => { story = e.target.value; DEMO = STORIES[story].steps; demoRestart(true); };
-const D = { i: 0, playing: false, speed: 1, token: 0, panes: {}, busy: false };
+const D = { i: 0, playing: false, speed: 1, token: 0, panes: {}, busy: false, instant: false, live: [] };
 const PLAY = '<svg viewBox="0 0 16 16"><path d="M4.5 2.8v10.4L13 8z" fill="currentColor"/></svg>', PAUSE = '<svg viewBox="0 0 16 16"><path d="M4 3h3v10H4zM9 3h3v10H9z" fill="currentColor"/></svg>';
-const wait = (ms) => new Promise((r) => setTimeout(r, reduced ? 0 : ms / D.speed));
+const wait = (ms) => (D.instant ? Promise.resolve() : new Promise((r) => setTimeout(r, reduced ? 0 : ms / D.speed)));
+// Stories with acts show chapters instead of one dot per step; steps without
+// a note keep the last beat's caption.
+function actsOf() {
+  const acts = [];
+  DEMO.forEach((s, k) => { if (s.act || k === 0) acts.push({ title: s.act || "Start", start: k }); });
+  acts.forEach((a, j) => (a.end = j + 1 < acts.length ? acts[j + 1].start : DEMO.length));
+  return acts;
+}
 function renderPlayer(result) {
   $("d-play").innerHTML = D.playing ? PAUSE : PLAY;
+  $("d-speed").textContent = D.speed + "×";
   $("d-count").textContent = `${Math.min(D.i + (D.busy ? 1 : 0), DEMO.length)} / ${DEMO.length}`;
-  $("d-dots").innerHTML = DEMO.map((st, k) => `<i class="${k < D.i ? "done" : k === D.i && D.busy ? "now" : ""}" title="${k + 1}. ${esc(st.note)}" data-dstep="${k}"></i>`).join("");
-  const st = DEMO[Math.min(D.busy ? D.i : D.i - 1, DEMO.length - 1)];
+  $("d-dots").classList.toggle("acts", DEMO.some((s) => s.act));
+  if (DEMO.some((s) => s.act)) {
+    $("d-dots").innerHTML = actsOf().map((a) => {
+      const done = Math.max(0, Math.min(a.end, D.i) - a.start) / (a.end - a.start);
+      // "checkout 25%": the Branch name drops out when the chapter is narrow.
+      const m = /^(\S+) (\d+%)$/.exec(a.title), label = m ? `<span class="nm">${esc(m[1])} </span>${m[2]}` : esc(a.title);
+      return `<span class="act${D.i >= a.start && D.i < a.end ? " now" : ""}" style="flex:${a.end - a.start} 1 0${m ? `;--bc:${branchColor(m[1])}` : ""}" data-dseek="${a.start}" title="${esc(a.title)} · steps ${a.start + 1}–${a.end}"><span class="fill" style="width:${done * 100}%"></span><b>${label}</b></span>`;
+    }).join("");
+  } else $("d-dots").innerHTML = DEMO.map((st, k) => `<i class="${k < D.i ? "done" : k === D.i && D.busy ? "now" : ""}" title="${k + 1}. ${esc(st.note)}" data-dseek="${k}"></i>`).join("");
+  const cur = Math.min(D.busy ? D.i : D.i - 1, DEMO.length - 1);
+  let k = cur; while (k > 0 && !DEMO[k].note) k--;
+  const st = DEMO[k];
   if (D.i >= DEMO.length && !D.busy) $("d-cap").innerHTML = `Done: ${DEMO.length} steps. Restart to replay, or keep typing in any terminal.`;
-  else if (st && (D.busy || D.i > 0)) $("d-cap").innerHTML = esc(st.note) + (result ? `<span class="res ${result === st.expect && !/Busy|Conflict|Dirty|exit:1/.test(result) ? "good" : "bad"}">${esc(result)}</span>` : "");
+  else if (st && (D.busy || D.i > 0)) $("d-cap").innerHTML = esc(st.note || "") + (result && k === cur ? `<span class="res ${result === st.expect && !/Busy|Conflict|Dirty|exit:1/.test(result) ? "good" : "bad"}">${esc(result)}</span>` : "");
   else $("d-cap").textContent = "Press play. Each step types a real command into a terminal.";
+  if (D.live && D.live.length && D.i < DEMO.length) $("d-cap").innerHTML += `<div class="live">${D.live.map((x) => `<div class="${x.cls}"><b style="color:${rosterOf(x.n).color}">${esc(rosterOf(x.n).name)}</b> ${esc(x.text)}</div>`).join("")}</div>`;
 }
 function lastCode(before) {
   // the outcome of the newest SDK call recorded in any transcript since `before`
@@ -1173,28 +1538,120 @@ function lastCode(before) {
   cmds.sort((a, b) => a.at - b.at);
   const c = cmds.pop(); return c ? c.calls[c.calls.length - 1].code : "";
 }
-async function hl(el, ms = 700) { if (!el) return; el.classList.add("demo-hl"); await wait(ms); el.classList.remove("demo-hl"); }
-async function typeLine(owner, line, tok) {
+async function hl(el, ms = 700) { if (!el || D.instant) return; el.classList.add("demo-hl"); await wait(ms); el.classList.remove("demo-hl"); }
+async function typeLine(owner, line, tok, fast) {
   if (owner === "fs") S.docks.fs = true; if (owner === "hist") S.docks.h = true;
   setFocus(owner); render();
   const inp = () => document.querySelector(`[data-in="${owner}"]`);
-  for (let k = 1; k <= line.length; k++) {
-    if (tok !== D.token) return false;
-    inp().value = line.slice(0, k);
-    if (!reduced) await wait(line.length > 40 ? 14 : 26);
-  }
-  await wait(220);
-  if (tok !== D.token) return false;
+  if (!(await typeInto(owner, line, tok, fast))) return false;
+  inp().value = line;
   inp().dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
   return true;
 }
+// Types into an input without submitting; fast types several characters per tick.
+async function typeInto(owner, line, tok, fast) {
+  const inp = () => document.querySelector(`[data-in="${owner}"]`);
+  const n = S.panes[owner] ? S.panes[owner].agent : S.roster && (owner === "fs" || owner === "hist") ? "lead" : null;
+  if (n) typing[n] = owner;
+  try { return await typeChars(owner, inp, line, tok, fast, n); } finally { if (n) delete typing[n]; }
+}
+async function typeChars(owner, inp, line, tok, fast, n) {
+  if (!D.instant && !reduced) {
+    const step = fast ? 3 : 1, per = fast ? 9 : line.length > 40 ? 14 : 26;
+    for (let k = step; k < line.length + step; k += step) {
+      if (tok !== D.token) return false;
+      const i = inp(); if (i) i.value = line.slice(0, k);
+      if (n) placeCrabs();
+      await wait(per);
+    }
+    await wait(fast ? 90 : 220);
+  }
+  if (tok !== D.token) return false;
+  const i = inp(); if (i) i.value = "";
+  return true;
+}
+// Plays a step's tool calls on their timeline (demo.js schedule): each agent
+// thinks at the bench, mounts (a window opens), types, runs, then commits and
+// unmounts (it closes). Burst calls overlap and commit in the order they finish.
+// Several agents at once play slower, and each commit holds for a moment, so
+// the order, any conflict with history and the growing graph can be followed;
+// the player lists every mount and outcome of the step as it happens.
+const thinking = {}, typers = {}, BURST_SLOW = 2.4, COMMIT_HOLD = 1100;
+async function playCalls(st, tok) {
+  let at = 0, result = "";
+  const ids = {}, slow = st.burst ? BURST_SLOW : 1;
+  for (const ev of STORIES.schedule(st)) {
+    await wait((ev.t - at) * slow); at = ev.t;
+    if (tok !== D.token) return false;
+    const n = ev.who;
+    if (ev.phase === "think") thinking[n] = true;
+    else if (ev.phase === "stop") { delete thinking[n]; result = agentStopUI(n).code; }
+    else if (ev.phase === "mount") {
+      delete thinking[n]; ids[ev.k] = agentMountUI(n, st.on);
+      if (ids[ev.k]) typeFor(ids[ev.k], n, ev.line, ev.type * slow, tok);
+      const b = S.agents[n].open, w = b && sim.s.sandboxes[b.sandbox].workspaces[b.path];
+      if (st.burst && w) liveLog(n, `mounts ${w.branch} @ ${w.baseCommit || w.baseLayer}`);
+    } else if (ev.phase === "exec") { endTyping(ids[ev.k], n); result = agentExecUI(n, ev.line).code; }
+    else if (ev.phase === "done") {
+      agentDoneUI(n, ids[ev.k]); const f = agentFinishUI(n); if (f) result = f.code;
+      if (st.burst && f && f.event) { liveLog(n, outcomeText(f.event), f.event.kind === "conflict" ? "bad" : f.event.kind === "uptodate" ? "" : "good"); render(); await wait(COMMIT_HOLD); if (tok !== D.token) return false; }
+    }
+    render();
+  }
+  return result;
+}
+function outcomeText(ev) {
+  if (ev.kind === "conflict") return ev.with ? `✕ was on ${ev.from} · conflicts with ${ev.with} · nothing committed, markers in its Workspace` : "✕ markers still in the files";
+  if (ev.kind === "merged") return `⇣ was on ${ev.from} · merged with ${ev.with} → ${ev.head}`;
+  if (ev.kind === "lww") return `⇄ was on ${ev.from} · merged with ${ev.with}, newer build output wins → ${ev.head}`;
+  if (ev.kind === "uptodate") return "= nothing to commit";
+  return `✓ commits ${ev.head}`;
+}
+function liveLog(n, text, cls = "") { if (D.instant) return; D.live.push({ n, text, cls }); renderPlayer(); }
+// Types a line into a window over about ms, until its run starts.
+async function typeFor(owner, n, line, ms, tok) {
+  const job = {}, span = Math.max(ms - 120, 60), step = Math.max(1, Math.ceil((line.length * 18) / span)), per = span / Math.ceil(line.length / step);
+  typers[owner] = job; typing[n] = owner;
+  for (let k = step; k < line.length + step && !D.instant && !reduced; k += step) {
+    if (tok !== D.token || typers[owner] !== job) return;
+    const i = document.querySelector(`[data-in="${owner}"]`); if (i) i.value = line.slice(0, k);
+    placeCrabs(); await wait(per);
+  }
+}
+function endTyping(owner, n) {
+  delete typers[owner]; if (typing[n] === owner) delete typing[n];
+  const i = document.querySelector(`[data-in="${owner}"]`); if (i) i.value = "";
+}
+// A short card between Branch segments: the Branch and how far it is.
+async function milestone(st, tok) {
+  S.progress[st.milestone] = st.pct; render();
+  if (D.instant || reduced) return;
+  const g = $("gridwrap").getBoundingClientRect(), c = document.createElement("div");
+  c.className = "mcard"; c.style.left = g.left + g.width / 2 + "px"; c.style.top = g.top + g.height / 2 + "px"; c.style.setProperty("--bc", branchColor(st.milestone));
+  c.innerHTML = `<div><b>⎇ ${esc(st.milestone)}</b><span>${st.pct}%</span></div><i><em style="width:${st.pct - 25}%"></em></i><small>${esc(st.caption)}</small>`;
+  $("fx").appendChild(c);
+  requestAnimationFrame(() => (c.querySelector("em").style.width = st.pct + "%"));
+  const hold = 2800 / D.speed;
+  c.animate([{ opacity: 0, scale: .92 }, { opacity: 1, scale: 1, offset: .12 }, { opacity: 1, offset: .85 }, { opacity: 0 }], { duration: hold, easing: "ease-out" }).finished.then(() => c.remove());
+  await wait(2800);
+}
 async function demoStep() {
   if (D.busy || D.i >= DEMO.length) return;
-  const tok = D.token, st = DEMO[D.i], t0 = stamp;
+  const tok = D.token, st = DEMO[D.i], t0 = stamp, agentStory = !!STORIES[story].roster, fast = agentStory && !st.beat;
   let result = "";
-  D.busy = true; renderPlayer();
-  if (st.branch && S.active !== st.branch) { openTab(st.branch); render(); await wait(500); if (tok !== D.token) return; }
-  if (st.ui === "open") {
+  D.busy = true; D.live = []; if (!D.instant) renderPlayer();
+  if (st.branch && S.active !== st.branch) { openTab(st.branch); render(); await wait(fast ? 220 : 500); if (tok !== D.token) return; }
+  if (st.jump && S.crabs) { await jumpFx(st.jump); if (tok !== D.token) return; }
+  if (st.ui === "agents") {
+    seatAgents(st.branch, st.agents); result = "ok";
+  } else if (st.milestone) {
+    await milestone(st, tok); result = "ok";
+  } else if (st.agent || st.burst) {
+    if (agentStory) S.docks.fs = false;
+    const r = await playCalls(st, tok);
+    if (r === false) return;
+    result = r;
+  } else if (st.ui === "open") {
     S.active = S.active === "main" ? S.tabs[S.tabs.length - 1].branch : S.active; render();
     await hl($("new-sb"));
     if (tok !== D.token) return;
@@ -1216,13 +1673,13 @@ async function demoStep() {
     if (btn) { const [sb, pid] = btn.dataset.stop.split("|"); result = stopProcess(sb, pid); }
   } else {
     const owner = st.term === "history" ? "hist" : st.term === "fs" ? "fs" : D.panes[st.term];
-    for (const [n, line] of st.lines.entries()) { if (n) await wait(260); if (!(await typeLine(owner, line, tok))) return; }
+    for (const [n, line] of st.lines.entries()) { if (n) await wait(260); if (!(await typeLine(owner, line, tok, fast))) return; }
   }
   if (tok !== D.token) return;
   D.busy = false; D.i++;
   D.last = result || lastCode(t0) || "no SDK call";
-  renderPlayer(D.last);
-  await wait(st.lines && st.lines.length > 2 ? 1500 : 1300);
+  if (!D.instant) renderPlayer(D.last);
+  await wait(agentStory ? (st.beat ? 2600 : 520) : st.lines && st.lines.length > 2 ? 1500 : 1300);
 }
 async function demoLoop() {
   const tok = D.token;
@@ -1230,12 +1687,28 @@ async function demoLoop() {
   if (tok === D.token) { D.playing = false; renderPlayer(D.last); }
 }
 function demoRestart(autoplay) {
-  D.token++; D.i = 0; D.busy = false; D.panes = {}; D.playing = false; D.last = "";
+  D.token++; D.i = 0; D.busy = false; D.panes = {}; D.playing = false; D.last = ""; D.instant = false;
   try { localStorage.removeItem(KEY); } catch {}
-  knownNodes = null; fresh(true); S.focus = "hist"; render();
+  fxQueue = []; $("fx").innerHTML = ""; $("crabs").innerHTML = ""; for (const m of [typing, thinking, typers]) for (const k of Object.keys(m)) delete m[k];
+  knownNodes = null; fresh(true); S.focus = "hist"; S.progress = {};
+  const sto = STORIES[story];
+  D.speed = sto.speed || 1;
+  if (sto.roster) { S.roster = sto.roster; eng.actor = "lead"; S.docks.fs = false; S.docks.files = false; S.docks.h = true; }
+  render();
   $("player").classList.add("open"); renderPlayer();
   if (autoplay) { D.playing = true; renderPlayer(); demoLoop(); }
 }
+// Jump to a step: replay everything before it instantly, then play on.
+async function demoSeek(k) {
+  demoRestart(false);
+  const tok = D.token;
+  D.instant = true;
+  while (D.i < k && tok === D.token) await demoStep();
+  D.instant = false;
+  if (tok !== D.token) return;
+  fxQueue = []; render(); D.playing = true; renderPlayer(D.last); demoLoop();
+}
+$("d-dots").addEventListener("click", (e) => { const t = e.target.closest("[data-dseek]"); if (t) demoSeek(+t.dataset.dseek); });
 $("demo").onclick = () => demoRestart(true);
 $("d-restart").onclick = () => demoRestart(true);
 $("d-play").onclick = () => { if (D.i >= DEMO.length) return demoRestart(true); D.playing = !D.playing; renderPlayer(D.last); if (D.playing) demoLoop(); };

@@ -47,6 +47,7 @@
   const rel = (p) => p.replace(/^\//, "") || ".";
   const L = (t, c = "") => ({ t, c });
   const refusal = (o) => L(`✕ ${o.code}  ${o.refusal.message}`, "err");
+  const short = (b) => `${b.sandbox}:ws/${b.path.split("/").pop()}`;
 
   function diffLines(items, max = 40) {
     const out = items.slice(0, max).map((d) => L(`${d.kind[0]} ${d.path}${d.type === "dir" ? "/" : ""}${d.kind === "Modified" && !d.content && d.identity ? "  (identity only)" : ""}`, d.kind === "Added" ? "add" : d.kind === "Removed" ? "del" : "mod"));
@@ -77,6 +78,8 @@
   class Engine {
     constructor(sim, project) { this.sim = sim; this.project = project; }
     call(rec, name, args) {
+      // actor: who is typing (a demo label); agent calls pass their own.
+      if (this.actor && args.agent === undefined && /^(fs\.(write|edit|mkdir|remove|cp|mv|apply)|branch\.merge)$/.test(name)) args = { ...args, agent: this.actor };
       const outcome = this.sim.run(name, args);
       rec.calls.push({ call: name, args, outcome, script: M.scriptFor({ call: name, args }, this.project) });
       return outcome;
@@ -163,8 +166,10 @@
           const b = F.blame(this.sim, at2, path);
           if (!b) { rec.lines.push(L(`✕ NoSuchPath  ${path} does not exist at ${at2}`, "err")); return rec; }
           let last = null;
+          const who = (id) => (this.sim.s.commits[id] && this.sim.s.commits[id].agent) || "";
+          const agents = b.lines.some((ln) => who(ln.origin.id));
           for (const ln of b.lines) {
-            const id = ln.origin.id, chip = id === last ? "  ·" : id.padEnd(3);
+            const id = ln.origin.id, chip = id === last ? "  ·" + (agents ? "     " : "") : id.padEnd(3) + (agents ? " " + who(id).padEnd(4) : "");
             last = id;
             rec.lines.push(L(`${chip}  ${String(ln.n).padStart(3)} │ ${ln.text}`));
           }
@@ -268,7 +273,7 @@
       rec.lines.push(L("type shell commands (each runs via sandbox.exec) · commit · unmount", "dim"));
       return { rec, binding: { sandbox: sb, path: m.result.path } };
     }
-    sandboxPrompt(b) { return `${b.sandbox}:${b.path.replace("/workspaces/", "ws/")} $ `; }
+    sandboxPrompt(b) { return `${b.agent ? b.agent + " · " : ""}${b.sandbox}:${b.path.replace("/workspaces/", "ws/")} $ `; }
     sandbox(b, line) {
       const rec = this.newRec();
       const t = line.trim();
@@ -328,6 +333,116 @@
       else if (o.result.process) rec.lines.push(L(`● running in background as ${o.result.process}`, "info"));
       else rec.lines.push(L(`[exit ${o.result.exitCode}]`, o.result.exitCode ? "warn" : "ok"));
       return rec;
+    }
+
+    // ------------------------------------------------------------ agents
+    // Agents own no Sandbox and no Workspace. Each Branch has one shared
+    // Sandbox (its execution environment, with one localhost), and every tool
+    // call mounts a Workspace of its own in it:
+    //   mount  -> run the command -> commit -> unmount.
+    // The phases are separate calls so overlapping tool calls really overlap.
+    // st: { name, branch, open, sticky, server }   (bindings { sandbox, path })
+    //   open:   the Workspace of the call in progress
+    //   sticky: a Workspace kept after a Conflict; the next call runs in it
+    //   server: a Workspace kept for a background process (`cmd &`)
+    sandboxFor(rec, branch) {
+      this.branchSandbox ||= {};
+      const known = this.branchSandbox[branch], sb = known && this.sim.s.sandboxes[known];
+      if (sb && !sb.closed) return known;
+      const o = this.call(rec, "sandbox.create", {});
+      return (this.branchSandbox[branch] = o.result.id);
+    }
+    agentMount(st, branch) {
+      const rec = this.newRec(), s = this.sim.s;
+      if (st.open) { rec.lines.push(L("✕ the previous call has not finished", "err")); rec.code = "busy"; return rec; }
+      if (st.sticky) {
+        const b = st.sticky, w = s.sandboxes[b.sandbox].workspaces[b.path];
+        rec.lines.push(L(`⟳ ${short(b)} · kept after the conflict · on ${w.baseCommit || w.baseLayer}`, "warn"));
+        st.open = { ...b }; rec.binding = b; rec.reused = true; rec.code = "Reused";
+        return rec;
+      }
+      const target = branch || st.branch, sandbox = this.sandboxFor(rec, target);
+      const m = this.call(rec, "sandbox.mount", { sandbox, branch: target });
+      if (!m.ok) { rec.lines.push(refusal(m)); rec.code = m.code; return rec; }
+      const b = { sandbox, path: m.result.path };
+      rec.lines.push(L(`⟳ mount ${m.result.branch} @ ${m.result.base} → ${short(b)}`, "dim"));
+      st.open = { ...b }; rec.binding = b; rec.code = m.code;
+      return rec;
+    }
+    agentExec(st, line) {
+      const rec = this.newRec(), t = line.trim(), s = this.sim.s, b = st.open;
+      if (!b) { rec.code = "none"; return rec; }
+      const ws = s.sandboxes[b.sandbox].workspaces[b.path];
+      const sh = simulateShell(t, ws, s.sandboxes[b.sandbox]);
+      st.open.command = t;
+      if (sh.refuse) { rec.lines.push(...sh.out); rec.code = "refused"; return rec; }
+      const o = this.call(rec, "sandbox.exec", { sandbox: b.sandbox, path: b.path, command: t, writes: sh.writes, output: sh.out.map((x) => x.t).join("\n"), exitCode: sh.code, background: sh.background || undefined });
+      rec.lines.push(...sh.out);
+      if (o.ok && o.result.process) {
+        rec.lines.push(L(`● ${o.result.process} running · ${short(b)} stays mounted while it runs`, "info"));
+        st.server = { sandbox: b.sandbox, path: b.path }; st.open = null;
+        rec.code = "running"; rec.event = { kind: "server" }; rec.done = true;
+        return rec;
+      }
+      rec.lines.push(L(`[exit ${o.result.exitCode}]`, o.result.exitCode ? "warn" : "ok"));
+      rec.code = o.code;
+      return rec;
+    }
+    // Stops the agent's background process and releases its Workspace.
+    agentStop(st) {
+      const rec = this.newRec(), s = this.sim.s, b = st.server;
+      if (!b) { rec.lines.push(L("no background process to stop", "dim")); rec.code = "none"; rec.done = true; return rec; }
+      const sb = s.sandboxes[b.sandbox];
+      for (const pid of sb.procOrder) if (sb.processes[pid].path === b.path && sb.processes[pid].status === "running") this.call(rec, "process.cancel", { sandbox: b.sandbox, process: pid });
+      const o = this.call(rec, "sandbox.unmount", { sandbox: b.sandbox, path: b.path, discard: true });
+      const d = o.ok ? o.result.discardedUncommitted.length : 0;
+      rec.lines.push(L(`■ stopped · unmounted${d ? ` · discarded ${d} uncommitted (dev cache)` : ""}`, "info"));
+      st.server = null; rec.code = o.code; rec.event = { kind: "stopped" }; rec.done = true; rec.unmounted = b;
+      return rec;
+    }
+    // Mount and run (or stop) in one go: used by bursts and tests.
+    agentStart(st, line, branch) {
+      if (line.trim() === "stop") return this.agentStop(st);
+      const m = this.agentMount(st, branch);
+      if (!st.open) return { ...m, done: true };
+      const x = this.agentExec(st, line);
+      return { ...x, lines: [...m.lines, ...x.lines], calls: [...m.calls, ...x.calls], binding: m.binding };
+    }
+    agentFinish(st) {
+      const rec = this.newRec(), b = st.open;
+      if (!b) { rec.code = "none"; return rec; }
+      st.open = null;
+      rec.binding = { sandbox: b.sandbox, path: b.path };
+      const o = this.call(rec, "sandbox.commit", { sandbox: b.sandbox, path: b.path, agent: st.name, call: b.command });
+      rec.code = o.code;
+      if (!o.ok) {
+        rec.lines.push(refusal(o));
+        if (o.code === "Conflict") {
+          const r = o.refusal;
+          rec.lines.push(...conflictLines(r.conflicts));
+          const applied = (r.written || []).filter((p) => !r.conflicts.some((c) => c.path === p));
+          if (applied.length) rec.lines.push(L(`  ↻ applied from ${r.head}: ${applied.map(rel).join(", ")}`, "dim"));
+          rec.lines.push(L(r.markers ? "  remove every <<<<<<< ======= >>>>>>> block, then commit" : `  nothing committed · this Workspace is kept on ${r.head} with markers · the next call runs in it`, "dim"));
+        }
+        st.sticky = rec.binding; rec.event = { kind: "conflict", with: o.refusal.markers ? null : o.refusal.head, from: o.refusal.base };
+        return rec;
+      }
+      const r = o.result;
+      const u = this.call(rec, "sandbox.unmount", { sandbox: b.sandbox, path: b.path });
+      if (r.kind === "UpToDate") rec.lines.push(L(`= nothing to commit${u.ok ? " · unmounted" : ""}`, "dim"));
+      else rec.lines.push(L(`✓ commit ${r.head}${r.merged ? ` · was stale on ${r.merged.from}, merged with ${r.merged.head}` : ""}${u.ok ? " · unmounted" : ""}`, "ok"));
+      if (r.merged) rec.lines.push(...lwwLines(r.merged.lww));
+      st.sticky = null;
+      if (u.ok) rec.unmounted = rec.binding;
+      rec.event = { kind: r.kind !== "Committed" ? "uptodate" : r.merged && r.merged.lww.length ? "lww" : r.merged ? "merged" : "commit", head: r.head, with: r.merged ? r.merged.head : null, from: r.merged ? r.merged.from : null };
+      return rec;
+    }
+    // A whole tool call: start, then finish.
+    agentCall(st, line, branch) {
+      const a = this.agentStart(st, line, branch);
+      if (a.done || !st.open) return a;
+      const f = this.agentFinish(st);
+      return { lines: [...a.lines, ...f.lines], calls: [...a.calls, ...f.calls], code: f.code, event: f.event, exit: a.code };
     }
 
     // ------------------------------------------------------------ history
@@ -462,10 +577,12 @@
     const writes = [], out = [];
     let code = 0;
     const procs = Object.values(sb.processes).filter((p) => p.path === ws.path && p.status === "running");
+    // localhost is the Sandbox's: curl reaches a server from any of its Workspaces
+    const sbProcs = Object.values(sb.processes).filter((p) => p.status === "running");
     for (const pipeline of segments) {
       let input = null, last = null;
       for (const [k, cmdToks] of pipeline.entries()) {
-        const r = runOne(cmdToks, tree, input, { ws, procs, background: background && segments.indexOf(pipeline) === segments.length - 1 && k === pipeline.length - 1 });
+        const r = runOne(cmdToks, tree, input, { ws, procs, sbProcs, background: background && segments.indexOf(pipeline) === segments.length - 1 && k === pipeline.length - 1 });
         if (r.refuse) return { refuse: true, out: r.out };
         if (r.writes && r.writes.length) {
           try { tree = M.applyChanges(tree, r.writes, fakeInode); writes.push(...r.writes); }
@@ -582,7 +699,7 @@
         const url = args.find((x) => x.startsWith("http"));
         if (!url) { res = err("curl: no URL"); break; }
         const route = url.replace(/^https?:\/\/[^/]+/, "") || "/";
-        const server = ctx.procs.find((p) => /npm (run )?(start|dev)/.test(p.command));
+        const server = (ctx.sbProcs || ctx.procs).find((p) => /npm (run )?(start|dev)/.test(p.command));
         if (!server) { res = err("curl: (7) Failed to connect to localhost port 3000: Connection refused", 7); break; }
         const dev = /dev/.test(server.command);
         const name = route === "/" ? "index" : route.replace(/^\//, "");
@@ -633,7 +750,7 @@
           if (m) return err(`Failed to compile.\n\n.${p}\n${i + 1}:${lines[i].indexOf(m[1]) + 1}  Error: \`'\` can be escaped with \`&apos;\`.  react/no-unescaped-entities`);
         }
       }
-      const writes = [{ kind: "mkdir", path: "/.next/server/app", recursive: true }, { kind: "write", path: "/.next/BUILD_ID", content: "b" + pages.length + Object.keys(tree).length }];
+      const writes = [{ kind: "mkdir", path: "/.next/server/app", recursive: true }, { kind: "write", path: "/.next/BUILD_ID", content: "b" + pages.length + Object.keys(tree).length + "-" + ctx.ws.sandbox.slice(3) + ctx.ws.path.split("/").pop() }];
       for (const p of pages) {
         const h = tree[p].content.match(/<h1>(.*?)<\/h1>/);
         const name = p === "/app/page.tsx" ? "index" : p.slice(5, -9);
@@ -647,7 +764,15 @@
       const writes = sub === "dev" ? [{ kind: "mkdir", path: "/.next/cache", recursive: true }, { kind: "write", path: "/.next/cache/dev.json", content: "{}" }] : [];
       return ok([`▲ Next.js 15.0.3${sub === "dev" ? " (dev)" : ""}`, "- Local: http://localhost:3000", "✓ Ready"], writes);
     }
-    if (sub === "test") return ok(["PASS  app/page.test.tsx", "Tests: 1 passed"]);
+    if (sub === "test") {
+      // every "@/x" import must resolve to /x.ts or /x.tsx
+      for (const p of Object.keys(tree).sort()) {
+        if (tree[p].type !== "file" || !/\.tsx?$/.test(p) || p.startsWith("/node_modules")) continue;
+        for (const m of tree[p].content.matchAll(/from "@\/([^"]+)"/g))
+          if (!tree[`/${m[1]}.ts`] && !tree[`/${m[1]}.tsx`]) return err(`FAIL  .${p}\n  Cannot find module '@/${m[1]}'\nTests: 1 failed`);
+      }
+      return ok(["PASS  app/page.test.tsx", "Tests: 1 passed"]);
+    }
     return err(`npm error Missing script: "${sub}"`);
   }
 
