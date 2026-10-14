@@ -1419,3 +1419,171 @@ Reference absent (retired R9c; last counted 65,417 at tree 498dd1917812).
 Durable execution: NOT_RUN — disabled by owner until explicit reauthorization.
 C, D and E remain NOT_RUN. Guides, contracts and the twelve-cell pins are
 unchanged until E.
+
+## Issue 321 Step C — table revision (2026-10-14)
+
+Source commit `c8a7bcd1d` (tag `i321-c-source-1`), first parent `19061375e`.
+Sealed build `2026-10-14-issue321-c-source-1-build`, the same
+`LIBSQLITE3_FLAGS=-USQLITE_ENABLE_MEMORY_MANAGEMENT` and
+`LAYERFS_CONSTRUCTION_WORKERS=1` as Step B. Disposable Store / WAL /
+synchronous=OFF. Durable execution: NOT_RUN — disabled by owner until explicit
+reauthorization. One sample per case; shared machine; the two harness cases
+are INELIGIBLE on cache state as before, so no time here is a claim.
+
+### What changed
+
+- No row carries a Workspace key. `ns`, its foreign key and its leading place
+  in every primary key and index are removed from every table except the
+  `workspace` row; every statement loses that predicate and bound value. The
+  `ns`/`route` parameters that only fed it are removed through their call
+  chains. The engine keeps the namespace of its one Workspace in memory and
+  refuses a second `open_workspace` (`Invalid("database already holds a
+  Workspace")`); the `INSERT ... RETURNING ns` text is unchanged.
+- Names: `inode` → `fs_inode`, `directory_entry` → `fs_entry`, `payload` →
+  `fs_data`, `payload_reference` → `fs_data_ref`, `shrink` → `fs_truncate`,
+  `operation_owner` → `commit_run`, `captured_reader` → `commit_reader`,
+  `base_source` → `commit_base_pin`, `lease` → `commit_pin`, `maintenance` →
+  `cleanup_task`, `indexed_operation_record` → `commit_record`; indexes follow
+  their tables. Columns `serial` → `inode`, `gen` → `generation`, `owner` →
+  `holder`. Rust types, methods and counter names are unchanged; nothing
+  "native" was renamed.
+- Record tables: **not merged; two removed.** Trace: `commit_record`
+  (indexed) is keyed (operation, 8-byte file scope, kind, 32-byte key) and is
+  the only one the Commit path writes. `operation_record` and
+  `owned_operation_record` were keyed (owner, kind, integer key) and had no
+  production writer — only tests and plan diagnostics called their methods.
+  One shape cannot hold both identities without an untyped key, and a
+  caller-chosen and an engine-minted operation number could collide in one
+  relation. The two tables, their methods, statements, six triggers, plan
+  diagnostics and the daemon wrappers are removed.
+- `accounting` is one row with the constant key `id=1`. A trigger `UPDATE`
+  without a key compiled to scan opcodes (seen in the insert programs' plan
+  diagnostics), so each trigger seeks `WHERE id=1`. The daemon aggregate is
+  still the sum over its Workspace files.
+- The maintenance cursor is (kind, resource, target).
+- The schema is 30 pages (33 before). The smallest accepted page quota moves
+  from 32 to 24 so that it stays a real creation failure, which three tests
+  stage; no other limit changed.
+- `PRAGMA user_version` 33 → 34. No migration: the file is created fresh and
+  never reopened.
+
+### Tests
+
+Tests of what is gone are dropped; no test was restaged to keep a retired
+mechanism alive.
+
+| Dropped | Reason |
+| --- | --- |
+| overlay `engine::terminal_close_keeps_other_namespaces_unchanged_before_file_disposal` | two Workspaces in one database |
+| overlay `engine::backed_owner_and_operation_record_pages_have_no_total_record_limit` | removed record methods |
+| overlay `cleanup_observation::fixed_point_work_is_equal_beside_two_unrelated_population_sizes` | population of other Workspaces in one database |
+| overlay `reply_tickets::tickets_of_one_namespace_never_affect_another` | two Workspaces in one database |
+| overlay `transactions::owner_identities_are_unique_and_increasing_across_namespaces` | two Workspaces in one database (failed identically before) |
+
+Converted, same subject: 30 overlay tests and 6 daemon/workspace tests now use
+one Workspace per database — the second Workspace's assertions are removed, a
+second database is opened where two Workspaces are compared, or the unrelated
+population is moved into the same Workspace under other serials, owners or a
+second directory (which is the stronger statement). `close_custody` is split
+into one database per kind of custody. A new assertion covers the refusal of
+a second Workspace. The staged `a_failed_release_keeps_exact_custody_...`
+test depended on which queue index filled its last leaf first; it now fills
+the leaves beside the parked row in every index before the quota is reached.
+
+Results at `c8a7bcd1d` (each binary one invocation, 30 s wall limit):
+
+| Scope | Result |
+| --- | --- |
+| host + Linux all-targets check, Clippy `-D warnings` | clean |
+| `cargo fmt --check`, product boundary guard, 999/200-line ceilings | PASS |
+| overlay, 41 host binaries | PASS except `reply_tickets` ×2 (`Some(Last)` where `Some(Watched)` is expected) — FAIL identically at Step A and B |
+| daemon/fuse/bridge/workspace/sdk, 96 host binaries | PASS except `complete_installed_roots::huge_native...` and `host_handoff` (need prepared inputs, as before) and `request_path_anatomy` ×5 (statement-text pins; Step E) |
+| Linux mounted/proof binaries, 42 | PASS (40 daemon/fuse binaries, 2 overlay) |
+| static SQL check (`c_verify.py`, scratch tool) | 135 statement texts prepare against schema 34; bound counts match |
+
+Not run in C: the twelve exact-count cells (Step E), the Python harness unit
+suites (unchanged sources), `_overlay_storage_source` in the harness oracle
+(stale since Step A; Step E).
+
+### Required selections
+
+Before = Step B at `be19ede68`, after = Step C at `c8a7bcd1d`.
+
+| Field | B | C | Signed raw delta |
+| --- | ---: | ---: | ---: |
+| tier 1 status | INELIGIBLE; PASS/PASS; Gone | INELIGIBLE; PASS/PASS; Gone | |
+| tier 1 command ms | 6,744.6 | 6,725.2 | -19.4 |
+| tier 1 Commit ms | 1,871.6 | 1,824.2 | -47.4 |
+| tier 1 mount / unmount ms | 8.6 / 5.4 | 7.8 / 5.4 | -0.8 / 0.0 |
+| tier 1 requests / owner jobs | 26,078 / 93,601 | 26,078 / 93,601 | 0 / 0 |
+| tier 1 statements | 563,061 | 562,849 | -212 |
+| tier 1 VM steps | 17,658,273 | 16,177,323 | -1,480,950 |
+| tier 1 lock hold / lock wait ms | 1,170.9 / 84.2 | 1,130.0 / 79.5 | -40.9 / -4.7 |
+| tier 1 maintenance jobs / rows | 2,779 / 39,886 | 2,679 / 39,886 | -100 / 0 |
+| tier 1 Store logical = allocated B | 114,556,928 | 114,528,256 | -28,672 |
+| tier 1 overlay logical B (template after cleanup) | 135,168 | 122,880 | -12,288 |
+| tier 1 daemon peak B | 89,866,240 | 88,813,568 | -1,052,672 |
+| four: status | INELIGIBLE; PASS/PASS; Gone | INELIGIBLE; PASS/PASS; Gone | |
+| four: external wall ms | 11,733.8 | 11,496.9 | -236.9 |
+| four: summed command ms | 28,505.6 | 28,077.6 | -428.0 |
+| four: summed Commit ms | 14,460.4 | 14,188.4 | -272.0 |
+| four: requests / owner jobs | 104,312 / 372,109 | 104,311 / 372,337 | -1 / +228 |
+| four: statements | 2,247,402 | 2,246,971 | -431 |
+| four: VM steps | 70,571,026 | 64,598,945 | -5,972,081 |
+| four: lock hold / lock wait ms | 8,018.1 / 872.4 | 8,076.7 / 659.6 | +58.6 / -212.8 |
+| four: Store logical = allocated B | 130,613,248 | 133,865,472 | +3,252,224 |
+| four: overlay logical B | 135,168 | 122,880 | -12,288 |
+| four: daemon peak B | 128,122,880 | 134,938,624 | +6,815,744 |
+| session: exits (16 × 50 Commits, then fresh daemon on evicted Store × 50) | 0 / 0 / 0 | 0 / 0 / 0 | |
+| session: summed Commit ms (17 sessions) | 11,457.4 | 11,529.0 | +71.6 |
+| session: Commit median, first / sixteenth / cold session ms | 11.89 / 13.95 / 15.11 | 11.91 / 13.72 / 15.18 | |
+| session: final Store logical B | 119,480,320 | 119,603,200 | +122,880 |
+| session: daemon VmHWM at the last runtime snapshot KiB | 113,196 | 112,808 | -388 |
+
+Concurrent exec diagnostic (2,000 files per writer; per file µs:
+create / append / read; the Commit is of the three-writer run):
+
+| Run | B, 2 CPUs | C, 2 CPUs | B, no CPU limit | C, no CPU limit |
+| --- | ---: | ---: | ---: | ---: |
+| 1 writer | 248.5 / 124.4 / 194.9 | 244.2 / 122.2 / 188.8 | 252.0 / 122.5 / 191.4 | 239.9 / 119.8 / 187.2 |
+| 2 writers | 256.7 / 128.6 / 210.6 | 246.9 / 129.0 / 204.9 | 251.9 / 127.2 / 206.7 | 245.1 / 126.8 / 202.6 |
+| 3 writers | 358.5 / 211.4 / 267.0 | 356.8 / 288.0 / 273.8 | 305.3 / 158.1 / 237.3 | 299.3 / 172.3 / 236.4 |
+| 4 writers | 583.9 / 336.5 / 428.6 | 665.8 / 335.9 / 414.8 | 353.6 / 175.8 / 265.3 | 354.7 / 174.2 / 265.1 |
+| 3 writers + Commit | 596.0 / 222.4 / 289.3 | 583.0 / 212.9 / 258.7 | 353.3 / 158.1 / 301.1 | 353.4 / 154.6 / 233.0 |
+| that Commit ms | 1,166.0 | 1,084.0 | 702.4 | 699.9 |
+
+Reading, with the limits of one shared-machine sample each:
+
+- The schema revision removes work per statement, not statements: VM steps
+  fall 8.4% (tier 1) and 8.5% (four), statements by 0.04% (the per-Workspace
+  startup statements of two tables and six triggers). Times move by about
+  1 to 3%, inside what one sample can show; no speed claim is made.
+- Storage: the empty overlay template is three pages smaller. The tier-1
+  Store is 28,672 B smaller and the session Store 122,880 B larger; the Store
+  format did not change in C, so neither is attributed to it. The
+  four-Workspace Store has been 130.6 to 138.6 MB across the A, B and C
+  samples of identical content, which follows the order in which concurrent
+  Commits publish; +3.25 MB here is recorded, not explained further.
+- Memory: tier-1 peak -1.05 MB, session -388 KiB, four-Workspace peak
+  +6.8 MB (128.1 → 134.9 MB). The four-Workspace peak is a lifetime high-water
+  mark of four concurrent Commits and has not been stable across samples
+  (A 129.8 MB); nothing in C allocates per row or per Workspace beyond one
+  integer. Recorded as an unexplained single observation.
+- 2 CPUs with three and four writers shows one slower cell each way
+  (append 211 → 288 µs at three writers, create 584 → 666 µs at four); the
+  unlimited runs do not repeat it. CPU-limited contention on a shared host;
+  not attributed.
+
+Test copies of the two harness samples were removed after their receipts were
+read (450.0 MB and 527.5 MB); the originals stay.
+
+### Source size
+
+Production LOC: 81,584 -> 81,006 (delta -578), `core/crates` product source,
+pinned `tools/production_loc.py`
+(`c0fe7f36a0d4144bbd2b61c272c7579cc0d56ffe23f9588287ea30e793624adb`) on the
+first-parent and committed-tree Git archives; committed tree
+`343b75f73312f82050021149f06cec16838190e1` equals the counted tree. Reference
+absent (retired R9c; last counted 65,417 at tree 498dd1917812). Net A+B+C:
+84,220 -> 81,006 (delta -3,214).
+

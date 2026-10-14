@@ -52,10 +52,10 @@ source/build pins. Steps proceed in order: 1, A, B, C, D, E.
 
 | Checklist item | Disposition | Source/evidence |
 | --- | --- | --- |
-| remove Workspace columns | NOT_RUN |  |
-| selected table names | NOT_RUN |  |
-| trace/apply the record-table merge | NOT_RUN |  |
-| schema bump/no migration | NOT_RUN |  |
+| remove Workspace columns | COMPLETE C | `c8a7bcd1d`; no `ns` outside the `workspace` row; a second Workspace per database is refused; `ns`/`route` plumbing removed |
+| selected table names | COMPLETE C | eleven tables, their indexes and three columns renamed; Rust names unchanged; [terminology](../../architecture/64-overlay-terminology.md) |
+| trace/apply the record-table merge | COMPLETE C; not merged, reason recorded | one shape cannot serve integer and (scope, kind, 32-byte) keys; the two integer-keyed tables had no production writer and are removed; `commit_record` remains |
+| schema bump/no migration | COMPLETE C | `user_version` 34; created fresh, never reopened; quota floor 32 -> 24 because the schema is 30 pages |
 
 ## Step D — fewer statements and round trips
 
@@ -202,3 +202,20 @@ Production LOC: 83,709 -> 81,584 (delta -2,125) for B; net A+B 84,220 ->
 81,584 (delta -2,636), exact archive counter and reference-absent scope.
 Twelve-cell exact accounting stays failing/expected to fail until E; guides
 and contracts are unchanged until E. C begins next; D/E NOT_RUN.
+
+Step C finished 2026-10-14 at `c8a7bcd1d` (LOC 81,584 -> 81,006, delta -578).
+Selections, one sample each on build `2026-10-14-issue321-c-source-1-build`:
+exec at 2 CPUs and without a CPU limit exit 0; session 16 x 50 Commits plus a
+fresh daemon on the evicted Store exit 0 (summed Commit 11,529.0 ms; B
+11,457.4); tier 1 INELIGIBLE with functional/proof PASS and Gone (26,078 /
+93,601 / 562,849; command 6,725.2 ms, Commit 1,824.2 ms; VM steps -8.4%);
+four Workspaces INELIGIBLE with functional/proof PASS and Gone (104,311 /
+372,337 / 2,246,971; external wall 11,496.9 ms; VM steps -8.5%). Recorded
+against C: four-Workspace daemon peak 134,938,624 B (B 128,122,880) and
+four-Workspace Store +3,252,224 B, both single observations of a quantity that
+varied across the A/B/C samples; two CPU-limited exec cells slower. Five
+overlay tests of two Workspaces in one database or of the removed record
+methods are dropped; the rest are converted. Details and retained failures:
+[#320 ledger](../320/PROGRESS.md#issue-321-step-c--table-revision-2026-10-14).
+Twelve-cell exact accounting and the harness storage oracle stay for E.
+D begins next; E NOT_RUN.
