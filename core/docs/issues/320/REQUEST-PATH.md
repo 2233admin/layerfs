@@ -541,3 +541,99 @@ Predicted, from the per-request tables; none of it is built.
    check when the reservation already covers the budget: C01 -1,000, C03
    -2,000.
 5. **Accounting once per transaction** of 7.3: executions only.
+
+## 10. Twelve-cell expectations at the final source of issue 321
+
+Written 2026-10-14 for [#321](../321/CHECKLIST.md) Step E, product source of
+`63d666a7d` (tests and harness at `21a789a14` and later). Sections 1 to 9 keep
+their #320 pins and are history for these numbers. Requests and owner jobs do
+not change: #321 adds, removes or splits no request and no job. Statements are
+executions of the foreground families.
+
+### 10.1 The model
+
+Executions per request. "Measured" is the host replay of
+`layerfs-daemon/tests/request_path_anatomy.rs`, whose five pins were restaged
+from its own report and pass; "derived" is a measured kind with one named
+difference. The middle column is section 6.1's "after".
+
+| Request | #320 -> #321 | Basis |
+| --- | --- | --- |
+| state job of the status call | 1 -> 0 | measured; the row is remembered |
+| GETATTR | 1 -> 1 | measured |
+| LOOKUP, absent name | 2 -> 2 | measured (C01, C04) |
+| LOOKUP of a base file, one visit | 11 -> 3 | derived: the replay's two-visit 5 less the second visit's fence and name read; no lookup or custody row is written, that state is memory |
+| OPEN | 7 -> 1 | measured (C10) |
+| READ | 2 -> 1 | measured (C10) |
+| CREATE | 17 -> 10, the first in a mount 18 -> 11 | measured |
+| WRITE inside one cell | 9 -> 8 | measured (C01) |
+| WRITE of 64 KiB, new rows | 11 -> 10 | measured (C10) |
+| WRITE of 128 KiB, new rows | 15 -> 14 | measured (C06) |
+| first WRITE of 128 KiB into a base file | 16 -> 15 | derived: the same with the inode's first local row inserted |
+| OPENDIR | 8 -> 1 | measured (C03, C04) |
+| READDIR | 2 | measured (C03: 17 requests, 34) |
+| UNLINK of a last link, no orphan held | 16 -> 12 | measured (C03) |
+| FORGET that releases a removed one-cell file | 28 -> 14 | measured (C03) |
+| RELEASE, RELEASEDIR | 7 -> 0 | measured; open state is memory |
+| FLUSH, refused COPY_FILE_RANGE, STATFS | no job, no statement | |
+
+### 10.2 The table
+
+"Sampled" is one mounted sample of each cell at sealed build
+`2026-10-14-issue321-e-source-1-build`, taken before these pins were written
+and therefore FAIL at the old gate; it is shown as the check of the model, not
+as its source. Requests and owner jobs equalled the frozen counts in all twelve.
+
+| Cell | Requests | Owner jobs | #320 expected | Model at #321 | Sampled | Exact |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| C01 | 5,002 | 5,002 | 36,003 | **21,002** | 21,002 | yes |
+| C02 | 6,002 | 6,002 | 37,003 | **22,002** | 22,002 | yes |
+| C03 | 9,022 | 9,038 | 82,201 + 2P | **49,038 + 2P** | 49,460 (P = 211) | no, 10.3 |
+| C04 | 5,342 | 5,342 | 36,073 | **19,612** | 19,612 | yes |
+| C05 | 5,890 | 6,000 | 39,853 | **20,269** | 20,269 | yes |
+| C06 | 518 | 518 | 7,710 | **7,183** | 7,183 | yes |
+| C07 | 1,551 | 1,550 | 19,018 | **17,440** | 17,440 | yes |
+| C08 | 521 | 521 | 7,725 | **7,185** | 7,185 | yes |
+| C09 | 517 | 517 | 1,051 | **517** | 517 | yes |
+| C10 | 1,547 | 1,546 | 12,345 | **10,773** | 10,773 | yes |
+| C11 | 517 | 517 | 7,708 | **7,174** | 7,174 | yes |
+| C12 | 3,436 | 3,439 | about 19,920 | not modelled | 10,977 | no, 10.4 |
+
+The sums, with the mixes of section 6.2:
+
+- **C01, C04, C06**: the replay's measured number. C01 is 1,000 absent LOOKUP,
+  1,001 GETATTR, 1,000 CREATE and 1,000 WRITE: 2,000 + 1,001 + 10,001 + 8,000.
+  C06 is 2 + 2 + 11 + 512 x 14.
+- **C02** = C01 and 1,000 GETATTR.
+- **C05** = C04 and `find`: 101 GETATTR, 112 OPENDIR, 222 READDIR:
+  19,612 + 101 + 112 + 444.
+- **C07** = C06 and `cp`: two absent LOOKUP, two GETATTR, one OPEN, one CREATE,
+  1,024 WRITE of 64 KiB: 7,183 + 4 + 2 + 1 + 10 + 10,240.
+- **C08** = C06 and `cat`: one GETATTR and one OPEN.
+- **C09**: one GETATTR, the base file's LOOKUP, one OPEN, 512 READ:
+  1 + 3 + 1 + 512.
+- **C10**: two GETATTR, the base file's LOOKUP, two absent LOOKUP, one OPEN, the
+  first CREATE, 512 READ, 1,024 WRITE of 64 KiB: 2 + 3 + 4 + 1 + 11 + 512 +
+  10,240. The replay counts 10,775 for its own mix (one GETATTR, 513 READ, a
+  two-visit LOOKUP of 5).
+- **C11**: one GETATTR, the base file's LOOKUP, one OPEN, 512 WRITE of 128 KiB
+  of which the first inserts the inode's local row: 1 + 3 + 1 + 7,169.
+
+### 10.3 C03
+
+Unchanged in kind from 6.3: while a removed file waits for its FORGET the engine
+holds an orphan, the fence keeps no row, and each inode read of a visit pays
+the orphan probe and its row read. Without a late FORGET the count is the
+replay's 49,037 and the mount's one more GETATTR: 49,038. Each such read adds
+two, so a run is 49,038 + 2P with P at most 4,000, and P can be read back from
+its receipt. The pin is that range in steps of two.
+
+### 10.4 C12
+
+Not a model result. The kinds the replays measure give 7,801 of its statements
+(865 GETATTR, 5 SETATTR, 97 MKDIR, 106 UNLINK, 8 FORGET, 229 OPEN, 110 READ,
+235 WRITE, 5 OPENDIR, 11 READDIR, 231 CREATE); its 957 LOOKUP are between
+1,914 and 2,871 by how many names exist; its 102 LINK, 8 RENAME and one
+SYMLINK are measured by no replay, and it has C03's timing term. The one count
+observed at this source is 10,977. The pin is 10,937 to 11,017, the same forty
+either side as section 6.4, and is recorded as an estimate.

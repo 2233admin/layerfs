@@ -21,23 +21,25 @@ BASELINE_SHA256 = "a6ada570050f14bb6ff5bd61c74c0d0fda439f323f695fdea1212b26b590d
 # the frozen sample's own warm-up mount of the same command and frozen C09 on the
 # same file both count 512. One READ is one request, one owner job and two
 # statements. The baseline file itself stays unchanged.
-# Issue 320: the request path runs fewer statements for the same requests and owner
-# jobs (core/docs/issues/320/REQUEST-PATH.md section 6). Each statement count below is
-# the per-request model applied to the cell's frozen request mix; the same model first
-# reproduces the frozen count. C10 keeps its phase 14 request and owner-job correction.
+# Issue 320 lowered statements for the same requests and owner jobs; issue 321 (one
+# file and one lock per Workspace, open state in memory, remembered fence rows) lowers
+# them again. Each statement count below is the per-request model of the final #321
+# source (core/docs/issues/320/REQUEST-PATH.md section 10) applied to the cell's frozen
+# request mix. C10 keeps its phase 14 request and owner-job correction.
 CELL_COUNT_CORRECTIONS = {
-    "C01": {"statements": 36003}, "C02": {"statements": 37003}, "C04": {"statements": 36073},
-    "C05": {"statements": 39853}, "C06": {"statements": 7710}, "C07": {"statements": 19018},
-    "C08": {"statements": 7725}, "C09": {"statements": 1051},
-    "C10": {"requests": 1547, "owner_jobs": 1546, "statements": 12345}, "C11": {"statements": 7708}}
+    "C01": {"statements": 21002}, "C02": {"statements": 22002}, "C04": {"statements": 19612},
+    "C05": {"statements": 20269}, "C06": {"statements": 7183}, "C07": {"statements": 17440},
+    "C08": {"statements": 7185}, "C09": {"statements": 517},
+    "C10": {"requests": 1547, "owner_jobs": 1546, "statements": 10773}, "C11": {"statements": 7174}}
 # Two cells cannot be one number: a request that runs while a removed file still waits
-# for the kernel's FORGET costs more. C03 is 82,201 + 2P, P the inode reads made in such
+# for the kernel's FORGET costs more. C03 is 49,038 + 2P, P the inode reads made in such
 # windows (at most one for each of 2,000 GETATTRs and two for each of 1,000 UNLINKs).
-# C12 runs git, whose LINK, RENAME and SYMLINK requests the model does not cover: an
-# estimate of 19,920 with a few statements of slack per assumption. Requests and owner
-# jobs of both stay exact.
-CELL_STATEMENT_RANGES = {"C03": {"low": 82201, "high": 82201 + 2 * 4000, "step": 2},
-                         "C12": {"low": 19900, "high": 19980, "step": 1}}
+# C12 runs git, whose LINK, RENAME and SYMLINK requests no replay measures and whose
+# LOOKUPs split between absent and present names: 10,977 is the one count observed at
+# the final source, kept with the same forty statements either side as before. It is
+# an estimate, not a model result. Requests and owner jobs of both stay exact.
+CELL_STATEMENT_RANGES = {"C03": {"low": 49038, "high": 49038 + 2 * 4000, "step": 2},
+                         "C12": {"low": 10937, "high": 11017, "step": 1}}
 
 
 def cell_expected_counts(cell, names):

@@ -126,12 +126,31 @@ class LargeRootProofs(unittest.TestCase):
 
 
 class CellCountPins(unittest.TestCase):
-    """Phase 14 corrected C10 by one READ; issue 320 lowers statements only; the baseline file is unchanged."""
+    """Phase 14 corrected C10 by one READ; issues 320 and 321 lower statements only; the baseline file is unchanged."""
     NAMES = ('requests', 'owner_jobs', 'statements')
-    # Statements after the request-path changes of issue 320 (REQUEST-PATH.md section 6), frozen before.
-    STATEMENTS = {'C01': (44004, 36003), 'C02': (46004, 37003), 'C04': (42644, 36073), 'C05': (46637, 39853),
-                  'C06': (9766, 7710), 'C07': (23133, 19018), 'C08': (9783, 7725), 'C09': (1055, 1051),
-                  'C10': (14408, 12345), 'C11': (9760, 7708)}
+    # Statements at the final source of issue 321 (REQUEST-PATH.md section 10), frozen before.
+    STATEMENTS = {'C01': (44004, 21002), 'C02': (46004, 22002), 'C04': (42644, 19612), 'C05': (46637, 20269),
+                  'C06': (9766, 7183), 'C07': (23133, 17440), 'C08': (9783, 7185), 'C09': (1055, 517),
+                  'C10': (14408, 10773), 'C11': (9760, 7174)}
+    # Executions of one request at that source, as the five host replays pin them.
+    GETATTR, LOOKUP_ABSENT, LOOKUP_BASE, OPEN, READ, READDIR, CREATE, WRITE_CELL, WRITE_64K, WRITE_128K = 1, 2, 3, 1, 1, 2, 10, 8, 10, 14
+
+    def test_the_exact_cells_are_sums_of_the_per_request_model(self):
+        first = self.CREATE + 1  # the first CREATE of a mount inserts the root's local row
+        c01 = 1000 * self.LOOKUP_ABSENT + 1001 * self.GETATTR + 999 * self.CREATE + first + 1000 * self.WRITE_CELL
+        c06 = self.LOOKUP_ABSENT + 2 * self.GETATTR + first + 512 * self.WRITE_128K
+        model = {'C01': c01, 'C02': c01 + 1000 * self.GETATTR,
+                 # C04 is the host replay's own count; find adds 101 GETATTR, 112 OPENDIR of one statement and 222 READDIR.
+                 'C04': 19612, 'C05': 19612 + 101 * self.GETATTR + 112 + 222 * self.READDIR,
+                 'C06': c06,
+                 'C07': c06 + 2 * self.LOOKUP_ABSENT + 2 * self.GETATTR + self.OPEN + self.CREATE + 1024 * self.WRITE_64K,
+                 'C08': c06 + self.GETATTR + self.OPEN,
+                 'C09': self.GETATTR + self.LOOKUP_BASE + self.OPEN + 512 * self.READ,
+                 'C10': 2 * self.GETATTR + self.LOOKUP_BASE + 2 * self.LOOKUP_ABSENT + self.OPEN + first + 512 * self.READ + 1024 * self.WRITE_64K,
+                 # The first WRITE into a base file inserts that inode's local row.
+                 'C11': self.GETATTR + self.LOOKUP_BASE + self.OPEN + 512 * self.WRITE_128K + 1}
+        self.assertEqual(model, {cell: after for cell, (_, after) in self.STATEMENTS.items()})
+        self.assertEqual({cell: row['statements'] for cell, row in workspace.CELL_COUNT_CORRECTIONS.items()}, model)
 
     def test_baseline_file_is_the_pinned_frozen_source(self):
         self.assertEqual(workspace.identity.sha256(workspace.BASELINE), workspace.BASELINE_SHA256)
@@ -156,16 +175,21 @@ class CellCountPins(unittest.TestCase):
 
     def test_a_ranged_cell_keeps_requests_and_owner_jobs_exact(self):
         expected, _ = workspace.cell_expected_counts('C03', self.NAMES)
-        good = {**expected, 'statements': 82873}
+        good = {**expected, 'statements': 49460}
         self.assertTrue(workspace.cell_counts_reproduced('C03', good, expected))
-        for wrong in ({**good, 'statements': 82874}, {**good, 'statements': 82199}, {**good, 'statements': 90203},
+        self.assertTrue(workspace.cell_counts_reproduced('C03', {**good, 'statements': 49038}, expected))
+        for wrong in ({**good, 'statements': 49461}, {**good, 'statements': 49036}, {**good, 'statements': 57040},
+                      {**good, 'statements': 82873},
                       {**good, 'requests': good['requests'] + 1}, {**good, 'owner_jobs': good['owner_jobs'] - 1}):
             self.assertFalse(workspace.cell_counts_reproduced('C03', wrong, expected))
         expected, _ = workspace.cell_expected_counts('C12', self.NAMES)
-        self.assertTrue(workspace.cell_counts_reproduced('C12', {**expected, 'statements': 19920}, expected))
-        self.assertFalse(workspace.cell_counts_reproduced('C12', {**expected, 'statements': 24146}, expected))
+        self.assertTrue(workspace.cell_counts_reproduced('C12', {**expected, 'statements': 10977}, expected))
+        for other in (10936, 11018, 19920, 24146):
+            self.assertFalse(workspace.cell_counts_reproduced('C12', {**expected, 'statements': other}, expected))
         exact, _ = workspace.cell_expected_counts('C01', self.NAMES)
-        self.assertFalse(workspace.cell_counts_reproduced('C01', {**exact, 'statements': 36004}, exact))
+        self.assertTrue(workspace.cell_counts_reproduced('C01', exact, exact))
+        for other in (21001, 21003, 36003):
+            self.assertFalse(workspace.cell_counts_reproduced('C01', {**exact, 'statements': other}, exact))
 
     def test_source_model_read_count_matches_the_plain_read_cell(self):
         # 64 MiB in 128 KiB read windows; frozen C09 reads the same file in 512 READs and 5 other requests.
