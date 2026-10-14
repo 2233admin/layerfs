@@ -176,7 +176,21 @@ impl Application {
         // One explicitly charged read-only observer call. It transfers its typed
         // value before the snapshot. This observation never replaces the
         // original outcome.
-        let resources = resources::ResourceObservation::acquire(&self.owner.client());
+        let token = match &outcome {
+            Ok(success) => crate::control::reply_token(&success.reply),
+            Err(_) => None,
+        }
+        .or_else(|| crate::control::request_token(operation));
+        let resources = match (token, &service) {
+            (Some(token), Some(service)) => match service.observed_overlay(token) {
+                Ok(client) => resources::ResourceObservation::acquire(&client),
+                Err(Failure::Rejected(ControlCode::Missing, _)) => {
+                    resources::ResourceObservation::unavailable()
+                }
+                Err(cause) => resources::ResourceObservation::selection_failed(cause),
+            },
+            _ => resources::ResourceObservation::unavailable(),
+        };
         let store = service.as_ref().map(|service| service.observed_store());
         let result = (|| {
             let mut rows = Records::new(
@@ -187,11 +201,6 @@ impl Application {
                 &self.instance,
                 slot,
             );
-            let token = match &outcome {
-                Ok(success) => crate::control::reply_token(&success.reply),
-                Err(_) => None,
-            }
-            .or_else(|| crate::control::request_token(operation));
             rows.row(
                 0,
                 token.map_or(0, |token| token.namespace),
@@ -201,6 +210,7 @@ impl Application {
                     self.setup.limits.cache_bytes,
                 ]),
             )?;
+            rows.row(38, 0, Some(&[1]))?;
             resources::emit(&mut rows, &resources)?;
             schema::owner(&mut rows, self.owner.client().diagnostics().ok())?;
             rows.row(

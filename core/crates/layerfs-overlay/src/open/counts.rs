@@ -32,28 +32,6 @@ impl OpenStateCounts {
             self.cookie_pages,
         ]
     }
-    pub fn accumulate(&mut self, next: Self) {
-        let mut values = self.values();
-        for (value, added) in values.iter_mut().zip(next.values()) {
-            *value += added;
-        }
-        *self = Self::from_values(values);
-    }
-    fn from_values(values: [u64; 11]) -> Self {
-        Self {
-            kernel_entries: values[0],
-            directory_parents: values[1],
-            file_handles: values[2],
-            file_reads: values[3],
-            lookup_owners: values[4],
-            file_custody: values[5],
-            orphan_files: values[6],
-            generation_waits: values[7],
-            mounts: values[8],
-            directory_handles: values[9],
-            cookie_pages: values[10],
-        }
-    }
 }
 impl OpenState {
     /// Each count is its map's length; the maps roll back with the turn.

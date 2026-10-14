@@ -5,11 +5,11 @@ use super::{
     state::Shared,
 };
 use crate::OwnerWork;
-use layerfs_overlay::{Overlay, ProfileConfig, Resources};
+use layerfs_overlay::{Overlay, ProfileConfig};
 use std::{
     collections::BTreeMap,
     path::{Path, PathBuf},
-    sync::{Arc, Mutex, Weak},
+    sync::{Arc, Mutex},
     time::Instant,
 };
 
@@ -20,7 +20,6 @@ enum Slot {
         incarnation: [u8; 32],
     },
     Retiring {
-        backing: Weak<Backing>,
         incarnation: [u8; 32],
     },
     Failed {
@@ -44,7 +43,7 @@ pub(crate) struct Workspaces {
     template: PathBuf,
     profile: ProfileConfig,
     config: OwnerConfig,
-    template_resources: Resources,
+    template_bytes: u64,
     template_file: Mutex<layerfs_overlay::ClosedFile>,
     template_origin: layerfs_overlay::AllocationWork,
     state: Mutex<State>,
@@ -63,18 +62,18 @@ pub(super) fn start(path: &Path, profile: ProfileConfig, config: OwnerConfig) ->
         reported = true;
         let db = created.result.map_err(OwnerError::Overlay)?;
         let actual = db.profile().clone();
-        let resources = db.resources().map_err(OwnerError::Overlay)?;
+        let allocation = db.allocation().map_err(OwnerError::Overlay)?;
         let receipt = Arc::get_mut(&mut startup).expect("unshared startup receipt");
         receipt.sql = db.diagnostics();
         receipt.allocation = db.allocation_work();
-        receipt.allocation_state = Some(Ok(resources.allocation));
+        receipt.allocation_state = Some(Ok(allocation));
         let template_file = db.close_database_file().map_err(OwnerError::Overlay)?;
         let template_origin = template_file.allocation_work();
         let pool = Arc::new(Workspaces {
             template: path.to_owned(),
             profile,
             config,
-            template_resources: resources,
+            template_bytes: allocation.logical_bytes,
             template_file: Mutex::new(template_file),
             template_origin,
             state: Mutex::new(State {
@@ -100,12 +99,6 @@ pub(super) fn start(path: &Path, profile: ProfileConfig, config: OwnerConfig) ->
 }
 
 impl Workspaces {
-    pub fn stopped(&self) -> Result<bool, OwnerError> {
-        self.state
-            .lock()
-            .map(|state| state.stopping)
-            .map_err(|_| OwnerError::Stopped)
-    }
     pub fn configuration(&self) -> OwnerConfig {
         self.config
     }
@@ -157,7 +150,7 @@ impl Workspaces {
             .map_err(|_| OwnerError::Stopped)?
             .allocation()
             .map_err(OwnerError::Overlay)?;
-        if physical.logical_bytes != self.template_resources.allocation.logical_bytes {
+        if physical.logical_bytes != self.template_bytes {
             return Err(OwnerError::Overlay(layerfs_overlay::OverlayError::Invalid(
                 "template size",
             )));
@@ -280,71 +273,6 @@ impl Workspaces {
             })
             .collect()
     }
-    pub(super) fn resources(&self, work: &mut crate::JobWork) -> Result<Resources, OwnerError> {
-        {
-            let state = self.state.lock().map_err(|_| OwnerError::Stopped)?;
-            if let Some(cause) = state.slots.values().find_map(|slot| match slot {
-                Slot::Failed { cause, .. } => Some(cause.clone()),
-                _ => None,
-            }) {
-                return Err(OwnerError::Retained(cause));
-            }
-        }
-        let mut resources = self.template_resources;
-        {
-            let file = self.template_file.lock().map_err(|_| OwnerError::Stopped)?;
-            let before = file.allocation_work();
-            let physical = file.allocation();
-            work.allocation
-                .accumulate(file.allocation_work().since(before));
-            resources.allocation = physical.map_err(OwnerError::Overlay)?;
-            if resources.allocation.logical_bytes
-                != self.template_resources.allocation.logical_bytes
-            {
-                return Err(OwnerError::Overlay(layerfs_overlay::OverlayError::Invalid(
-                    "template size",
-                )));
-            }
-        }
-        for client in self.clients()? {
-            let (next, observed) = client.resources_observed(None, true)?;
-            work.jobs = work.jobs.saturating_add(observed.jobs);
-            work.sql.accumulate(observed.sql);
-            work.allocation.accumulate(observed.allocation);
-            work.payload.accumulate(observed.payload);
-            resources.accumulate(&next);
-        }
-        let retired = {
-            let state = self.state.lock().map_err(|_| OwnerError::Stopped)?;
-            state
-                .slots
-                .values()
-                .filter_map(|slot| match slot {
-                    Slot::Retiring { backing, .. } => backing.upgrade(),
-                    _ => None,
-                })
-                .collect::<Vec<_>>()
-        };
-        for backing in retired {
-            let metadata = std::fs::symlink_metadata(&backing.path).map_err(OwnerError::Io)?;
-            resources.allocation.logical_bytes = resources
-                .allocation
-                .logical_bytes
-                .saturating_add(metadata.len());
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::MetadataExt;
-                resources.allocation.allocated_bytes = resources
-                    .allocation
-                    .allocated_bytes
-                    .saturating_add(metadata.blocks().saturating_mul(512));
-            }
-            resources.database_pages = resources
-                .database_pages
-                .saturating_add(metadata.len() / 4096);
-        }
-        Ok(resources)
-    }
     pub fn diagnostics(&self) -> Result<OwnerWork, OwnerError> {
         let mut total = self.state.lock().map_err(|_| OwnerError::Stopped)?.retired;
         for client in self.clients()? {
@@ -404,7 +332,6 @@ impl Workspaces {
             state.slots.insert(
                 namespace,
                 Slot::Retiring {
-                    backing: Arc::downgrade(&backing),
                     incarnation,
                 },
             );

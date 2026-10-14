@@ -3726,3 +3726,31 @@ lib/bins/examples, with explicit 120 s stops. Tests: not yet updated. Source
 pins advance; engine/families/cluster-two suites remain deferred to Phase 2
 under the product-first boundary. No speed/storage acceptance is claimed.
 Durable: NOT_RUN — disabled by owner until explicit reauthorization.
+
+
+### Phase 1: Resources belongs to one Workspace
+
+Removed the daemon-wide Resources job, template/retiring-file aggregation,
+Resources::accumulate and its now unused OpenStateCounts summation/decoder.
+The closed template keeps its immutable logical size; startup observes its
+physical allocation directly without querying logical rows. Template identity
+checks, allocation counters and exact failed-deletion custody remain.
+
+The Application selects the original call's live Workspace and observes it
+once. Section 38 records per-Workspace scope; the receipt reader distinguishes
+retained daemon-wide records. Calls with no live binding, including known
+terminal removal, emit unavailable resource fields and no attempted observer.
+Actual selection, admission and attempted observation failures retain their
+original cause and any work/backing separately from the control outcome/output
+failure. Terminal reclamation remains checked through Cleanup/Gone and the
+mounted/file custody proofs, not a fabricated empty resource array.
+
+The first host product check passed with two newly unreachable members:
+Workspaces::stopped and the retiring slot's unused Weak<Backing>. Both were
+removed. The retiring marker and its incarnation remain until the exact
+last-owner deletion callback; the weak observer never owned or released custody.
+Final host/Linux product check and Clippy cover lib/bins/examples; tests are
+not yet updated, with no further test file opened, edited or run. Source pins
+advance; pinned engine suite is deferred to Phase 2. No runtime sample or
+performance acceptance is claimed. Durable: NOT_RUN — disabled by owner until
+explicit reauthorization.

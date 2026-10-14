@@ -37,26 +37,17 @@ impl OwnerClient {
         })
         .map(|(route, _)| route)
     }
-    pub fn resources(&self, route: Option<Route>, global: bool) -> Result<Resources, OwnerError> {
-        self.resources_observed(route, global)
-            .map(|(value, _)| value)
+    pub fn resources(&self) -> Result<Resources, OwnerError> {
+        self.resources_observed().map(|(value, _)| value)
     }
-    pub(crate) fn resources_observed(
-        &self,
-        route: Option<Route>,
-        global: bool,
-    ) -> Result<(Resources, JobWork), OwnerError> {
-        if let (Some(pool), None, true) = (self.roster(), route, global) {
-            if pool.stopped()? {
-                return Err(OwnerError::Unattempted {
-                    cause: Box::new(OwnerError::Stopped),
-                    input: OriginalInput::new((route, global)),
-                });
-            }
-            let mut work = JobWork::default();
-            return pool.resources(&mut work).map(|value| (value, work));
-        }
-        self.call_observed(route, ServiceClass::General, None, move |db, _| {
+    pub(crate) fn resources_observed(&self) -> Result<(Resources, JobWork), OwnerError> {
+        let route = self
+            .bound_route()
+            .map_err(|cause| OwnerError::Unattempted {
+                cause: Box::new(cause),
+                input: OriginalInput::new(()),
+            })?;
+        self.call_observed(Some(route), ServiceClass::General, None, move |db, _| {
             db.resources().map_err(OwnerError::Overlay)
         })
     }

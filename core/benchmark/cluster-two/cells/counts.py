@@ -151,6 +151,9 @@ def decode(group):
         if all(values is not None for values in families):
             result[key] = [names(values, STATEMENT) for values in families]
         result["field_availability"][key] = "AVAILABLE" if key in result else "UNAVAILABLE"
+    resource_marker = row(group, 38)
+    require(resource_marker is None or resource_marker == [1], "Workspace resource scope marker")
+    result["resource_scope"] = "workspace" if resource_marker is not None else "daemon"
     values, open_values = row(group, 28), row(group, 32)
     result["field_availability"]["open_state"] = "AVAILABLE" if open_values is not None else "UNAVAILABLE"
     if open_values is not None:

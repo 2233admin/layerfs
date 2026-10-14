@@ -131,3 +131,12 @@ path remains as a historical link to the current operation-record description.
 file planning, exact SQL equivalence under names/version substitutions, runtime
 checks, failures and source/LOC identities. This is a naming change and supplies
 no new storage-layout, performance, FUSE or complete Commit qualification.
+
+
+Resources is now observed on one bound Workspace handle. The daemon-wide
+Resources job, disjoint snapshot summation and retiring-file aggregation are
+removed. The closed template retains only its original logical size and
+allocation identity; startup and template copying do not query logical row
+counts. Allocation observations remain in exact roster work counters. Section
+38 identifies the per-Workspace resource scope; missing live bindings produce
+unavailable values, never successful zeros or a roster substitute.

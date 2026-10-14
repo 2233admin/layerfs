@@ -1,6 +1,5 @@
 //! Transient observations of already-owned service state; no ownership job.
 use super::Service;
-#[cfg(target_os = "linux")]
 use super::{registry::bound, Failure};
 use layerfs_bridge::control::{Reply, Request, WorkspaceToken};
 use std::sync::Arc;
@@ -8,6 +7,17 @@ use std::sync::Arc;
 impl Service {
     pub(crate) fn observed_store(&self) -> Arc<crate::store::Store> {
         self.store.clone()
+    }
+    pub(crate) fn observed_overlay(
+        &self,
+        token: WorkspaceToken,
+    ) -> Result<crate::OwnerClient, Failure> {
+        let entries = self.entries.lock().map_err(|_| Failure::Poisoned)?;
+        let workspace = &bound(&entries, token)?.workspace;
+        workspace
+            .operation()
+            .map(|operation| operation.overlay().clone())
+            .map_err(Failure::Workspace)
     }
     #[cfg(target_os = "linux")]
     pub(crate) fn observed_native(

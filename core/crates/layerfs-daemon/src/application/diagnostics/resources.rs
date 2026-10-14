@@ -1,4 +1,4 @@
-//! One original route-free Resources job, explicitly charged to observation.
+//! One Workspace resource observation, explicitly charged to its call.
 use super::Records;
 use crate::{OwnerClient, OwnerError};
 use std::{
@@ -7,7 +7,7 @@ use std::{
     sync::Mutex,
 };
 
-/// One original global-resource observation with fixed copied counters and exact failure custody.
+/// One original Workspace resource observation with fixed copied counters and exact failure custody.
 pub struct ResourceObservation {
     resources: Option<layerfs_overlay::Resources>,
     attempted: bool,
@@ -16,6 +16,8 @@ pub struct ResourceObservation {
 }
 /// Exact original resource-observer failure, separate from the control result.
 pub enum ResourceFailure {
+    /// Exact failure to select the live Workspace observer.
+    Selection(Mutex<crate::control::Failure>),
     /// The original operation was refused before any observer attempt.
     BeforeEffect(OwnerError),
     /// The exact attempted result and its statement/allocation work.
@@ -33,6 +35,7 @@ pub struct ResourceDiagnosticError {
 impl fmt::Debug for ResourceFailure {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(match self {
+            Self::Selection(_) => "original resource selection failure",
             Self::BeforeEffect(_) => "original resource refusal",
             Self::Result(_) => "original resource result retained",
         })
@@ -60,6 +63,22 @@ impl std::error::Error for ResourceDiagnosticError {
     }
 }
 impl ResourceObservation {
+    pub(super) fn unavailable() -> Self {
+        Self {
+            resources: None,
+            attempted: false,
+            work: None,
+            failure: None,
+        }
+    }
+    pub(super) fn selection_failed(cause: crate::control::Failure) -> Self {
+        Self {
+            resources: None,
+            attempted: false,
+            work: None,
+            failure: Some(ResourceFailure::Selection(Mutex::new(cause))),
+        }
+    }
     /// Transfers the original observer failure and independent output failure to
     /// diagnostic I/O custody; it changes no outcome and performs no replay.
     pub fn into_diagnostic_error(self, output: Option<io::Error>) -> Option<io::Error> {
@@ -93,11 +112,9 @@ impl From<&crate::JobWork> for Work {
     }
 }
 impl ResourceObservation {
-    /// Attempts one existing route-free global Resources job through an operator
-    /// owner. It waits only for that original attempted completion, never retries,
-    /// and retains exact admission, completion or execution failure.
+    /// One typed call on a bound Workspace handle; no roster scan or retry.
     pub fn acquire(owner: &OwnerClient) -> Self {
-        let (resources, observed, failure) = match owner.resources_observed(None, true) {
+        let (resources, observed, failure) = match owner.resources_observed() {
             Ok((value, work)) => (Some(value), Some(work), None),
             Err(cause) => {
                 let work = match &cause {

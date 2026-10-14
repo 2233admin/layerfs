@@ -165,11 +165,12 @@ array; it is never a successful zero-valued snapshot.
 | 25 | 0 | Native MountWork, all 13 source fields |
 | 26 | 0 | All 39 OpcodeWork opcode counts in Opcode declaration order, then handoffs, inline, refused, terminal, unadmitted, forget_units, store_units |
 | 27 | 0 | Attempted abort disposition and value: (1,1) Written, (2,count) Short, (3,errno) Failed; no attempted abort is unavailable |
-| 28 | 0 | Global Resources: 17 StoredCounts fields in declaration order, five AllocationState scalar fields, six AllocationWork fields, then database_pages, free_pages, debt_upper_bytes |
+| 28 | 0 | Workspace Resources (section 38); historical global Resources: 17 StoredCounts fields in declaration order, five AllocationState scalar fields, six AllocationWork fields, then database_pages, free_pages, debt_upper_bytes |
 | 29 | Reader index | That existing Store reader's 42 Storage Diagnostics fields, in the same order as section 16; unavailable while leased or when the pool observation lock is unavailable |
 | 30 | 0 | Resource-observer admitted and completion_available bits; when completed, its actual StatementWork total (17 fields), PayloadWork (7), AllocationWork (6), parked_turns, queue_wait_ns and service_ns follow |
 | 31 | 0 | Common overlay budget limit, aggregate pager allowance, fixed bytes, job bytes, peak job bytes and outstanding jobs; actual template SQLite ENABLE_MEMORY_MANAGEMENT readback bit |
 | 99 | 0 | Number of preceding completed records, their values-array number count, their unavailable section count |
+| 38 | 0 | Resource scope: 1 means the identified Workspace; absent in historical daemon-wide observations |
 | 36 | 0 | SQL statement-family cardinality: 12 after Workspace/Lease removal; absent in historical 14-family receipts |
 | 37 | 0 | Frontier class cardinality: 3; absent in historical six-class receipts |
 
@@ -181,7 +182,11 @@ whole-daemon snapshot or exclusive per-Workspace work under concurrency.
 Lifetime peak values do not establish phase-local continuous peaks. Counter
 sampling and stderr backpressure are explicit instrumentation cost.
 
-An observed call explicitly charges Resources work before the owner snapshot.
+An observed call with a live Workspace explicitly charges that Workspace's
+Resources work before the owner snapshot. It never scans other Workspaces or
+adds the closed template. A call with no live Workspace, including known
+terminal removal, emits unavailable Resources with no observer attempt.
+A failed live-Workspace selection or attempted observation retains its cause.
 Resources computes counts on demand rather than reading the removed accounting
 row. Section 30 reports the actual statement/payload/allocation/lock work and
 section 34 the number of lock holds. Typed calls transfer owned values directly;
@@ -202,7 +207,7 @@ the existing `ConnectionFailure.diagnostic_error` I/O-error owner, preserving an
 independent numeric-output failure alongside it. The public
 `ResourceDiagnosticError` downcast owns `Mutex<ResourceFailure>` and the optional
 output error. `ResourceFailure` distinguishes the original unattempted command
-and admission cause, admitted wait cause, and original Completion. Borrowed
+and admission cause, Workspace selection failure, and attempted typed error. Borrowed
 inspection uses the mutex's ordinary poison outcome; it does not clone errors,
 erase a cause, resolve uncertainty or authorize replay. The mutex owns only this
 bounded original error payload, with no new service slots, fields, caches or
@@ -212,7 +217,7 @@ The operation outcome and its one original reply attempt remain independent of
 observer and output failures. Both errors survive in the existing retained
 connection slot; neither replaces the other. External owning proofs use a real
 stopped Owner and a real backing-file identity mismatch, combined with an actual
-`/dev/full` error, to inspect both original causes and held completion credit.
+`/dev/full` error, to inspect both original causes and retained failure backing.
 An actual binary proof checks that such two failures still deliver the original
 Status reply and leave the ordinary live state observable. No product fault
 injection or test-only API is involved.
