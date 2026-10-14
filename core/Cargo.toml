@@ -18,7 +18,7 @@ members = [
     "crates/layerfs-overlay",
     "crates/layerfs-workspace",
     "crates/layerfs-daemon",
-    "crates/layerfs-api/sdk",
+    "crates/layerfs-api",
     "crates/layerfs-bridge",
     "crates/layerfs-sandbox",
     "crates/layerfs-fuse",

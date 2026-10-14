@@ -1,5 +1,6 @@
 //! Current public SDK Init and an independent, separate-process read proof.
 use crate::{args::Args, events::Events, Result};
+use layerfs_api::{InitRequest, ProjectApi};
 use layerfs_bridge::{duplex, provision::StoreManifest};
 use layerfs_content::{
     file::FileView,
@@ -11,7 +12,6 @@ use layerfs_content::{
 };
 use layerfs_history::{BranchId, HistoryCatalog, HistoryCatalogConfig, HistoryName, LayerStackId};
 use layerfs_persistence::{Handles, PersistenceConfig, SqlitePersistenceProfile};
-use layerfs_sdk::{InitRequest, ProjectApi};
 use layerfs_storage::{Storage, StoragePolicy};
 use layerfs_telemetry::timer::Timing;
 use std::{
@@ -118,7 +118,7 @@ pub fn import_counts(case: &str) -> Result<Option<ImportCounts>> {
 
 /// Validate the actual Init acknowledgement; it is not inferred from native
 /// fixture counts or a guessed successful close.
-pub fn validate_import_ack(plan: ImportCounts, project: &layerfs_sdk::SealedProject) -> Result<()> {
+pub fn validate_import_ack(plan: ImportCounts, project: &layerfs_api::SealedProject) -> Result<()> {
     use layerfs_bridge::provision::{ProviderKind, StoreProfile};
     let initialized = &project.initialized;
     let branch = &project.branch;
@@ -158,7 +158,7 @@ pub fn initialize(args: &Args, events: &mut Events) -> Result<()> {
 }
 
 /// The exact public closed result stays alive across the host-controlled hold.
-pub fn initialize_sealed(args: &Args, events: &mut Events) -> Result<layerfs_sdk::SealedProject> {
+pub fn initialize_sealed(args: &Args, events: &mut Events) -> Result<layerfs_api::SealedProject> {
     let source = args
         .source
         .as_ref()
@@ -354,7 +354,7 @@ pub fn install_output(args: &Args) -> Result<PathBuf> {
     Ok(output)
 }
 
-pub fn install_ready(project: &layerfs_sdk::SealedProject) -> Result<()> {
+pub fn install_ready(project: &layerfs_api::SealedProject) -> Result<()> {
     use layerfs_bridge::provision::StoreProfile;
     if project.manifest.profile != StoreProfile::Disposable
         || project.store.profile != SqlitePersistenceProfile::Disposable
@@ -372,7 +372,7 @@ pub fn initialize_install_with<R: AsRawFd>(
     args: &Args,
     events: &mut Events,
     input: &mut R,
-    installer: impl FnOnce(&Args, &layerfs_sdk::SealedProject, &Path, &mut Events) -> Result<()>,
+    installer: impl FnOnce(&Args, &layerfs_api::SealedProject, &Path, &mut Events) -> Result<()>,
 ) -> Result<()> {
     let output = install_output(args)?;
     let project = initialize_sealed(args, events)?;

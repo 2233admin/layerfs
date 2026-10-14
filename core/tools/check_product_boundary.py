@@ -23,7 +23,7 @@ UNSAFE_AUDITED_MODULE = {
     "layerfs-storage": "src/encoding/codec.rs",
     "layerfs-persistence": "src/backend/sqlite/file_control.rs",
 }
-UNSAFE_FREE_CRATES = ("layerfs-content", "layerfs-telemetry", "layerfs-project", "layerfs-overlay", "layerfs-workspace", "layerfs-fuse", "layerfs-daemon", "layerfs-sdk", "layerfs-bridge", "layerfs-sandbox")
+UNSAFE_FREE_CRATES = ("layerfs-content", "layerfs-telemetry", "layerfs-project", "layerfs-overlay", "layerfs-workspace", "layerfs-fuse", "layerfs-daemon", "layerfs-api", "layerfs-bridge", "layerfs-sandbox")
 UNSAFE_ROOT_ATTR = {
     "layerfs-storage": "#![deny(unsafe_code)]",
     "layerfs-content": "#![forbid(unsafe_code)]",
@@ -34,7 +34,7 @@ UNSAFE_ROOT_ATTR = {
     "layerfs-workspace": "#![forbid(unsafe_code)]",
     "layerfs-fuse": "#![forbid(unsafe_code)]",
     "layerfs-daemon": "#![forbid(unsafe_code)]",
-    "layerfs-sdk": "#![forbid(unsafe_code)]",
+    "layerfs-api": "#![forbid(unsafe_code)]",
     "layerfs-bridge": "#![forbid(unsafe_code)]",
     "layerfs-sandbox": "#![forbid(unsafe_code)]",
 }
@@ -55,7 +55,7 @@ ALLOWED_DEPENDENCIES = {
     # Concrete Store open/install belongs to application composition. The
     # provider-independent daemon store/ subtree has a narrower source boundary.
     "layerfs-daemon": {"layerfs-overlay", "layerfs-workspace", "layerfs-fuse", "layerfs-bridge", "layerfs-content", "layerfs-storage", "layerfs-history", "layerfs-persistence"},
-    "layerfs-sdk": {"layerfs-content", "layerfs-storage", "layerfs-history", "layerfs-persistence", "layerfs-telemetry", "layerfs-bridge", "layerfs-project", "layerfs-sandbox"},
+    "layerfs-api": {"layerfs-content", "layerfs-storage", "layerfs-history", "layerfs-persistence", "layerfs-telemetry", "layerfs-bridge", "layerfs-project", "layerfs-sandbox"},
     "layerfs-bridge": {"layerfs-content", "layerfs-history"},
     "layerfs-sandbox": set(),
 }
@@ -63,7 +63,7 @@ DOMAIN_CRATES = {"layerfs-content", "layerfs-storage", "layerfs-history", "layer
 ENGINES_AND_CLUSTER2 = {
     "layerfs-s3", "layerfs-metadata", "layerfs-persistence", "layerfs-overlay", "layerfs-workspace",
     "layerfs-fuse", "layerfs-daemon", "layerfs-bridge", "layerfs-sandbox",
-    "layerfs-server", "layerfs-sdk", "layerfs-api-core",
+    "layerfs-server", "layerfs-sdk", "layerfs-api", "layerfs-api-core",
 }
 
 
@@ -112,7 +112,7 @@ def component_violations(path, source):
     if name in RETIRED_PACKAGES:
         return [(1, f"{RETIRED_PACKAGE}: {name}")]
     retired = {
-        "layerfs-sdk": ("/src/client/", "/src/runtime/"),
+        "layerfs-api": ("/src/client/", "/src/runtime/"),
         "layerfs-daemon": ("/src/upstream/",),
         "layerfs-bridge": ("/src/codec/", "/src/contract/", "/src/native/framing.rs"),
         "layerfs-api-core": ("/src/",),
@@ -123,7 +123,7 @@ def component_violations(path, source):
         return []
     found = []
     if name == "layerfs-daemon" and "/src/store/" in path.as_posix():
-        concrete = r"\b(?:layerfs_persistence|layerfs_sdk|layerfs_bridge|rusqlite|sqlite)\s*::|\b(?:Path|PathBuf)\b"
+        concrete = r"\b(?:layerfs_persistence|layerfs_api|layerfs_bridge|rusqlite|sqlite)\s*::|\b(?:Path|PathBuf)\b"
         for match in re.finditer(concrete, source):
             found.append((source.count("\n", 0, match.start()) + 1,
                           "concrete provider/transport/path in daemon store/; use opened Storage/History ports"))
@@ -146,8 +146,8 @@ def crate_name(path):
     parts = path.parts
     for index, part in enumerate(parts):
         if part == "crates" and index + 1 < len(parts):
-            if parts[index + 1] == "layerfs-api" and index + 2 < len(parts):
-                return {"sdk": "layerfs-sdk", "core": "layerfs-api-core"}.get(parts[index + 2], "layerfs-api")
+            if parts[index + 1] == "layerfs-api" and index + 2 < len(parts) and parts[index + 2] == "core":
+                return "layerfs-api-core"
             return parts[index + 1]
     return None
 
@@ -229,11 +229,9 @@ def production_files(core):
     for package in (core / "crates").glob("*"):
         if not package.is_dir():
             continue
-        packages = (package / "core", package / "sdk") if package.name == "layerfs-api" else (package,)
-        for member in packages:
-            files.update(path for path in (member / "src").rglob("*")
-                         if path.is_file() and path.suffix in (".rs", ".sql"))
-            files.update(path for path in (member / "sql").rglob("*.sql") if path.is_file())
+        files.update(path for path in (package / "src").rglob("*")
+                     if path.is_file() and path.suffix in (".rs", ".sql"))
+        files.update(path for path in (package / "sql").rglob("*.sql") if path.is_file())
     return sorted(files)
 
 
@@ -250,7 +248,6 @@ def main():
             print(f"crates/{name}: {RETIRED_PACKAGE}")
             failures += 1
     manifests = set((core / "crates").glob("*/Cargo.toml"))
-    manifests.update((core / "crates" / "layerfs-api").glob("*/Cargo.toml"))
     for manifest in sorted(manifests):
         for line, reason in dependency_violations(manifest.read_text()):
             print(f"{manifest.relative_to(core)}:{line}: {reason}")

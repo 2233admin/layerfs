@@ -9,12 +9,12 @@ mod role;
 #[allow(dead_code)]
 #[path = "support/host_install.rs"]
 mod support;
+use layerfs_api::internal::Control;
 use layerfs_bridge::control::{Reply, Request, WorkspaceToken};
 use layerfs_daemon::{install::receive_install, install_types::StoreSettings};
 use layerfs_history::{
     BranchId, CommitStagedOutcome, ForkRequest, ForkSource, HistoryName, WorkspaceId,
 };
-use layerfs_sdk::internal::Control;
 use std::{fs, path::PathBuf, thread};
 fn identity(tag: u8) -> WorkspaceId {
     WorkspaceId::from_authority([tag; 32]).unwrap()
@@ -71,7 +71,7 @@ fn overlapping_saves_ordered_overwrites_and_killed_daemon_preserve_the_shared_st
     let (mut channel, installer) = support::pair(move |connection| {
         receive_install(connection, &destination, StoreSettings::default())
     });
-    let installed = layerfs_sdk::internal::install(&source.project, &mut channel).unwrap();
+    let installed = layerfs_api::internal::install(&source.project, &mut channel).unwrap();
     drop(installer.join().unwrap());
     drop(channel);
     let manifest = shared.join("manifest.bin");

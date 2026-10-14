@@ -3,6 +3,7 @@
 #[allow(dead_code)]
 #[path = "support/host_install.rs"]
 mod support;
+use layerfs_api::internal::Control;
 #[cfg(target_os = "linux")]
 use layerfs_bridge::control::{CleanupObservation, ControlCode};
 use layerfs_bridge::{
@@ -12,7 +13,6 @@ use layerfs_bridge::{
     provision::StoreManifest,
 };
 use layerfs_history::WorkspaceId;
-use layerfs_sdk::internal::Control;
 use std::{
     collections::BTreeSet,
     fs::{self, File},
@@ -129,7 +129,7 @@ fn start_with(
     let manifest = match deployment.existing_store {
         Some(manifest) => manifest,
         None => {
-            layerfs_sdk::internal::install(&f.project, &mut connection)
+            layerfs_api::internal::install(&f.project, &mut connection)
                 .unwrap()
                 .manifest
         }
@@ -232,7 +232,7 @@ fn equal_calls_and_reused_slot_have_distinct_public_observation_identity() {
     let f = support::Fixture::new("observed-correlation", None);
     let log = f.directory.join("stderr.log");
     let (process, address, mut initial) = start(&f, File::create(&log).unwrap());
-    let bound = layerfs_sdk::internal::workspace(&mut initial)
+    let bound = layerfs_api::internal::workspace(&mut initial)
         .bind(
             WorkspaceId::from_authority([111; 32]).unwrap(),
             f.project.branch.branch.id,
@@ -247,7 +247,7 @@ fn equal_calls_and_reused_slot_have_distinct_public_observation_identity() {
     let mut second = Control::new(connect(address));
     for (channel, scope) in [(&mut first, [7; 32]), (&mut second, [8; 32])] {
         assert_eq!(
-            layerfs_sdk::internal::with_observations(channel, &scope)
+            layerfs_api::internal::with_observations(channel, &scope)
                 .status(bound.token)
                 .unwrap()
                 .token,
@@ -271,7 +271,7 @@ fn equal_calls_and_reused_slot_have_distinct_public_observation_identity() {
     }
     let mut later = Control::new(connect(address));
     assert_eq!(
-        layerfs_sdk::internal::with_observations(&mut later, &[9; 32])
+        layerfs_api::internal::with_observations(&mut later, &[9; 32])
             .status(bound.token)
             .unwrap()
             .token,
@@ -317,7 +317,7 @@ fn equal_calls_and_reused_slot_have_distinct_public_observation_identity() {
         later.call(Request::EndSession).unwrap(),
         Reply::SessionEnded
     );
-    layerfs_sdk::internal::workspace(&mut initial)
+    layerfs_api::internal::workspace(&mut initial)
         .unmount(bound.token, false)
         .unwrap();
     assert_eq!(
@@ -333,14 +333,14 @@ fn diagnostic_sink_failure_does_not_repeat_or_hide_successful_bind() {
     let (process, address, mut control) =
         start(&f, File::options().write(true).open("/dev/full").unwrap());
     let workspace = WorkspaceId::from_authority([99; 32]).unwrap();
-    let bound = layerfs_sdk::internal::with_observations(&mut control, &[7; 32])
+    let bound = layerfs_api::internal::with_observations(&mut control, &[7; 32])
         .bind(workspace, f.project.branch.branch.id)
         .unwrap();
     // A fresh authenticated observer establishes existing state; it neither
     // replays the bind nor settles a previously unknown reply.
     let mut observer = Control::new(connect(address));
     assert_eq!(
-        layerfs_sdk::internal::workspace(&mut observer)
+        layerfs_api::internal::workspace(&mut observer)
             .status(bound.token)
             .unwrap()
             .token,
@@ -351,12 +351,12 @@ fn diagnostic_sink_failure_does_not_repeat_or_hide_successful_bind() {
         Reply::Refused(refusal) if refusal.code == ControlCode::Busy)
     );
     assert_eq!(
-        layerfs_sdk::internal::workspace(&mut observer)
+        layerfs_api::internal::workspace(&mut observer)
             .cleanup(bound.token)
             .unwrap(),
         CleanupObservation::Live
     );
-    layerfs_sdk::internal::workspace(&mut observer)
+    layerfs_api::internal::workspace(&mut observer)
         .unmount(bound.token, false)
         .unwrap();
     assert_eq!(
@@ -371,7 +371,7 @@ fn resource_and_output_failure_preserve_original_status_reply() {
     let f = support::Fixture::new("observed-resource-and-sink", None);
     let (process, address, mut control) =
         start(&f, File::options().write(true).open("/dev/full").unwrap());
-    let bound = layerfs_sdk::internal::workspace(&mut control)
+    let bound = layerfs_api::internal::workspace(&mut control)
         .bind(
             WorkspaceId::from_authority([123; 32]).unwrap(),
             f.project.branch.branch.id,
@@ -380,7 +380,7 @@ fn resource_and_output_failure_preserve_original_status_reply() {
     let backing = f.directory.join("overlay.sqlite");
     fs::rename(&backing, f.directory.join("original-overlay.sqlite")).unwrap();
     fs::write(&backing, b"external physical identity change").unwrap();
-    let original = layerfs_sdk::internal::with_observations(&mut control, &[17; 32])
+    let original = layerfs_api::internal::with_observations(&mut control, &[17; 32])
         .status(bound.token)
         .unwrap();
     assert_eq!(original.token, bound.token);
@@ -390,7 +390,7 @@ fn resource_and_output_failure_preserve_original_status_reply() {
     // the original live state and does not repeat any mutation or binding.
     let mut observer = Control::new(connect(address));
     assert_eq!(
-        layerfs_sdk::internal::workspace(&mut observer)
+        layerfs_api::internal::workspace(&mut observer)
             .status(bound.token)
             .unwrap()
             .token,
@@ -478,18 +478,18 @@ fn configured_serial_low_water_reaches_a_mounted_create_on_both_startup_routes()
         assert_eq!(manifest.is_some(), route == "existing");
         assert!(served.daemon_sqlite.is_some());
         manifest = Some(served);
-        let bound = layerfs_sdk::internal::workspace(&mut control)
+        let bound = layerfs_api::internal::workspace(&mut control)
             .bind(
                 WorkspaceId::from_authority([140 + run; 32]).unwrap(),
                 f.project.branch.branch.id,
             )
             .unwrap();
-        let ready = layerfs_sdk::internal::workspace(&mut control)
+        let ready = layerfs_api::internal::workspace(&mut control)
             .attach(bound.token)
             .unwrap();
         let guard = MountGuard(ready.directory.clone());
         let observe = |control: &mut Control| {
-            layerfs_sdk::internal::with_observations(control, &[21; 32])
+            layerfs_api::internal::with_observations(control, &[21; 32])
                 .status(bound.token)
                 .unwrap();
             serial_reservations(&log)
@@ -525,7 +525,7 @@ fn configured_serial_low_water_reaches_a_mounted_create_on_both_startup_routes()
         let deadline = std::time::Instant::now() + Duration::from_secs(8);
         let mut last = None;
         loop {
-            let work = layerfs_sdk::internal::workspace(&mut control)
+            let work = layerfs_api::internal::workspace(&mut control)
                 .status(bound.token)
                 .unwrap()
                 .kernel
@@ -543,7 +543,7 @@ fn configured_serial_low_water_reaches_a_mounted_create_on_both_startup_routes()
             );
             thread::sleep(Duration::from_millis(2));
         }
-        layerfs_sdk::internal::workspace(&mut control)
+        layerfs_api::internal::workspace(&mut control)
             .unmount(bound.token, false)
             .unwrap();
         drop(guard);

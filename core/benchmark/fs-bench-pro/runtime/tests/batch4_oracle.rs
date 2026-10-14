@@ -31,6 +31,7 @@ mod one_mib_alloc;
 #[path = "../src/workspace_oracle.rs"]
 pub(crate) mod workspace_oracle;
 
+use layerfs_api::{InitRequest, ProjectApi};
 use layerfs_content::{
     file::{mapping, FileView},
     filesystem::{
@@ -50,7 +51,6 @@ use layerfs_history::{
     StageRequest, WorkspaceId,
 };
 use layerfs_persistence::{Handles, PersistenceConfig, SqlitePersistenceProfile};
-use layerfs_sdk::{InitRequest, ProjectApi};
 use layerfs_storage::{Storage, StoragePolicy};
 use layerfs_telemetry::timer::Timing;
 use reference::workspace_common::{Content, Entry, EntryKind};

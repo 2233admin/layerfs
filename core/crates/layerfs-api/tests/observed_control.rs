@@ -1,13 +1,13 @@
 //! Normal and observed facades use one authenticated lifecycle with exact tokens.
+use layerfs_api::{
+    internal::{Control, ControlPhase},
+    WorkspaceApi,
+};
 use layerfs_bridge::{
     control::{Answer, Call, CleanupObservation, Reply, Request, WorkspaceToken},
     duplex,
 };
 use layerfs_history::WorkspaceId;
-use layerfs_sdk::{
-    internal::{Control, ControlPhase},
-    WorkspaceApi,
-};
 use std::{
     net::{TcpListener, TcpStream},
     thread,
@@ -68,19 +68,19 @@ fn facade_observation_is_explicit_and_does_not_persist_on_channel() {
         }
     });
     assert_eq!(
-        layerfs_sdk::internal::workspace(&mut control)
+        layerfs_api::internal::workspace(&mut control)
             .cleanup(token())
             .unwrap(),
         CleanupObservation::Gone
     );
     assert_eq!(
-        layerfs_sdk::internal::with_observations(&mut control, &[7; 32])
+        layerfs_api::internal::with_observations(&mut control, &[7; 32])
             .cleanup(token())
             .unwrap(),
         CleanupObservation::Gone
     );
     assert_eq!(
-        layerfs_sdk::internal::workspace(&mut control)
+        layerfs_api::internal::workspace(&mut control)
             .cleanup(token())
             .unwrap(),
         CleanupObservation::Gone
@@ -153,16 +153,16 @@ fn unmount_force_selects_one_original_request_without_unknown_relinquishment() {
         }
     });
     assert_eq!(
-        layerfs_sdk::internal::workspace(&mut control)
+        layerfs_api::internal::workspace(&mut control)
             .unmount(token(), false)
             .unwrap(),
         None
     );
-    let failure = layerfs_sdk::internal::workspace(&mut control)
+    let failure = layerfs_api::internal::workspace(&mut control)
         .unmount(token(), true)
         .unwrap_err();
     assert!(
-        matches!(failure.cause, layerfs_sdk::OperationCause::Remote(ref cause) if cause.code == ControlCode::Busy && cause.phase == "force:admission")
+        matches!(failure.cause, layerfs_api::OperationCause::Remote(ref cause) if cause.code == ControlCode::Busy && cause.phase == "force:admission")
     );
     worker.join().unwrap();
 }
@@ -207,7 +207,7 @@ fn branches_keeps_one_original_request_and_exact_authenticated_continuation_per_
             channel.send.send(&answer.encode().unwrap()).unwrap();
         }
     });
-    let first = layerfs_sdk::internal::branches(
+    let first = layerfs_api::internal::branches(
         &mut control,
         stack,
         Page {
@@ -217,7 +217,7 @@ fn branches_keeps_one_original_request_and_exact_authenticated_continuation_per_
     )
     .unwrap();
     assert_eq!(first.records, [branch_record(stack)]);
-    let second = layerfs_sdk::internal::branches(
+    let second = layerfs_api::internal::branches(
         &mut control,
         stack,
         Page {
@@ -252,7 +252,7 @@ fn branches_wrong_stack_retains_original_reply_and_quarantines_the_attempted_own
             )
             .unwrap();
     });
-    let error = layerfs_sdk::internal::branches(
+    let error = layerfs_api::internal::branches(
         &mut control,
         stack,
         Page {
@@ -261,7 +261,7 @@ fn branches_wrong_stack_retains_original_reply_and_quarantines_the_attempted_own
         },
     )
     .unwrap_err();
-    let layerfs_sdk::OperationCause::Exchange(cause) = error.cause else {
+    let layerfs_api::OperationCause::Exchange(cause) = error.cause else {
         panic!("original exchange failure required")
     };
     assert_eq!(cause.phase, ControlPhase::Validate);

@@ -412,6 +412,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "layerfs-api"
+version = "0.1.6"
+dependencies = [
+ "layerfs-bridge",
+ "layerfs-content",
+ "layerfs-history",
+ "layerfs-persistence",
+ "layerfs-project",
+ "layerfs-sandbox",
+ "layerfs-storage",
+ "layerfs-telemetry",
+]
+
+[[package]]
 name = "layerfs-bridge"
 version = "0.1.6"
 dependencies = [
@@ -461,12 +475,12 @@ dependencies = [
 name = "layerfs-r7-runtime"
 version = "0.1.0"
 dependencies = [
+ "layerfs-api",
  "layerfs-bridge",
  "layerfs-content",
  "layerfs-history",
  "layerfs-persistence",
  "layerfs-sandbox",
- "layerfs-sdk",
  "layerfs-storage",
  "layerfs-telemetry",
 ]
@@ -476,20 +490,6 @@ name = "layerfs-sandbox"
 version = "0.1.6"
 dependencies = [
  "nix",
-]
-
-[[package]]
-name = "layerfs-sdk"
-version = "0.1.6"
-dependencies = [
- "layerfs-bridge",
- "layerfs-content",
- "layerfs-history",
- "layerfs-persistence",
- "layerfs-project",
- "layerfs-sandbox",
- "layerfs-storage",
- "layerfs-telemetry",
 ]
 
 [[package]]

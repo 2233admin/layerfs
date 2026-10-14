@@ -20,6 +20,6 @@ layerfs-persistence = { path = "../layerfs-persistence" }
 nix = { version = "=0.31.3", features = ["fs", "user", "process"] }
 
 [dev-dependencies]
-layerfs-sdk = { path = "../layerfs-api/sdk" }
+layerfs-api = { path = "../layerfs-api" }
 layerfs-project = { path = "../layerfs-project" }
 layerfs-telemetry = { path = "../layerfs-telemetry" }

@@ -9,7 +9,7 @@ publish = false
 [workspace]
 
 [dependencies]
-layerfs-sdk = { path = "../../../crates/layerfs-api/sdk" }
+layerfs-api = { path = "../../../crates/layerfs-api" }
 layerfs-bridge = { path = "../../../crates/layerfs-bridge" }
 layerfs-history = { path = "../../../crates/layerfs-history" }
 layerfs-persistence = { path = "../../../crates/layerfs-persistence" }

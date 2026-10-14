@@ -3,6 +3,10 @@
 //! its Sandbox; ordinary nonroot commands launched by the runtime, never
 //! registered with the daemon, read the complete root and mutate it through
 //! plain syscalls.
+use layerfs_api::{
+    InitRequest, ManagedSandbox, MountedWorkspace, OperationCause, ProjectApi, SandboxApi,
+    SandboxCreate, WorkspaceApi,
+};
 use layerfs_bridge::{
     control::{ControlCode, DaemonPhase, MountPhase, Reply, Request},
     daemon_setup::{DaemonLimits, DaemonSetup},
@@ -11,10 +15,6 @@ use layerfs_bridge::{
 use layerfs_history::{BranchId, HistoryCatalogConfig, HistoryName, LayerStackId, WorkspaceId};
 use layerfs_persistence::{PersistenceConfig, SqlitePersistenceProfile};
 use layerfs_sandbox::backend::docker::{Docker, SandboxRequest};
-use layerfs_sdk::{
-    InitRequest, ManagedSandbox, MountedWorkspace, OperationCause, ProjectApi, SandboxApi,
-    SandboxCreate, WorkspaceApi,
-};
 use layerfs_storage::StoragePolicy;
 use layerfs_telemetry::timer::Timing;
 use std::{
@@ -116,7 +116,7 @@ fn start(
     let arguments = vec!["bash".into(), "-c".into(), script.into()];
     let created = match directory {
         Directory::Mounted(mounted) => WorkspaceApi::exec(owner, mounted, arguments, vec![], false),
-        Directory::Kernel(directory) => layerfs_sdk::internal::exec(
+        Directory::Kernel(directory) => layerfs_api::internal::exec(
             &owner.runtime,
             layerfs_sandbox::CommandIdentity { uid: 501, gid: 20 },
             arguments,
@@ -213,7 +213,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     assert_eq!(owner.startup.phase, DaemonPhase::ControlReady);
     let installed = owner.installed.take().expect("installed");
     assert_eq!(
-        layerfs_sdk::internal::sandbox_status(&mut owner, true)?.phase,
+        layerfs_api::internal::sandbox_status(&mut owner, true)?.phase,
         DaemonPhase::ControlReady
     );
     println!(
@@ -369,7 +369,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         &format!("set -e; test ! -e {root}; ! grep -q ' {root} ' /proc/self/mountinfo"),
         Directory::Kernel("/"),
     )?;
-    let gone = layerfs_sdk::internal::workspace(layerfs_sdk::internal::control(&mut owner))
+    let gone = layerfs_api::internal::workspace(layerfs_api::internal::control(&mut owner))
         .locate(workspace)
         .unwrap_err();
     assert!(
@@ -399,7 +399,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     println!("FRESH_MOUNTS count=3 each_ready_read_unmounted=true");
     mark("fresh_mounts");
     assert!(matches!(
-        layerfs_sdk::internal::control(&mut owner)
+        layerfs_api::internal::control(&mut owner)
             .call(Request::EndSession)
             .map_err(|f| format!("end {f:?}"))?,
         Reply::SessionEnded

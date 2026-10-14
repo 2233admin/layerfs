@@ -6,13 +6,13 @@ mod held_writer;
 #[allow(dead_code)]
 #[path = "support/host_install.rs"]
 mod support;
+use layerfs_api::{internal::Control, OperationCause};
 use layerfs_bridge::control::{Activity, ControlCode, Reply, Request, WorkspaceToken};
 use layerfs_daemon::control::Service;
 use layerfs_history::{
     BranchId, CommitHistoryRequest, CommitStagedOutcome, ForkRequest, ForkSource, HistoryName,
     Page, WorkspaceId,
 };
-use layerfs_sdk::{internal::Control, OperationCause};
 use std::sync::{
     atomic::{AtomicU8, Ordering},
     mpsc, Arc,
@@ -26,13 +26,13 @@ fn mount(
     workspace: WorkspaceId,
     branch: BranchId,
 ) -> (WorkspaceToken, layerfs_history::BranchSnapshot) {
-    let bound = layerfs_sdk::internal::workspace(client)
+    let bound = layerfs_api::internal::workspace(client)
         .bind(workspace, branch)
         .unwrap();
     (bound.token, bound.binding)
 }
 fn committed(client: &mut Control, token: WorkspaceToken) -> layerfs_history::CommitRecord {
-    match layerfs_sdk::internal::workspace(client)
+    match layerfs_api::internal::workspace(client)
         .commit(token)
         .unwrap()
     {
@@ -41,12 +41,12 @@ fn committed(client: &mut Control, token: WorkspaceToken) -> layerfs_history::Co
     }
 }
 fn status(client: &mut Control, token: WorkspaceToken) -> layerfs_bridge::control::WorkspaceStatus {
-    layerfs_sdk::internal::workspace(client)
+    layerfs_api::internal::workspace(client)
         .status(token)
         .unwrap()
 }
 fn close(client: &mut Control, token: WorkspaceToken) {
-    layerfs_sdk::internal::workspace(client)
+    layerfs_api::internal::workspace(client)
         .unmount(token, false)
         .unwrap();
 }
@@ -116,7 +116,7 @@ fn kernel_mount_commit_status_fork_history_and_terminal_unmount() {
     fixture::write(&f.service, b, b'B');
     let first = committed(&mut client, a);
     assert!(
-        matches!(layerfs_sdk::internal::workspace(&mut client).commit(a).unwrap(),CommitStagedOutcome::UpToDate{head:Some(head),root} if head==first.id&&root==first.root)
+        matches!(layerfs_api::internal::workspace(&mut client).commit(a).unwrap(),CommitStagedOutcome::UpToDate{head:Some(head),root} if head==first.id&&root==first.root)
     );
     let sql = f.statements();
     let stale = status(&mut client, b);
@@ -131,7 +131,7 @@ fn kernel_mount_commit_status_fork_history_and_terminal_unmount() {
     assert_eq!(overwritten.parent, original.branch.head_commit);
     assert_ne!(overwritten.root, first.root);
     let fork = BranchId::from_authority([75; 16]);
-    let forked = layerfs_sdk::internal::fork(
+    let forked = layerfs_api::internal::fork(
         &mut client,
         ForkRequest {
             stack: original.branch.stack,
@@ -145,7 +145,7 @@ fn kernel_mount_commit_status_fork_history_and_terminal_unmount() {
     )
     .unwrap();
     assert_eq!(forked.effective_root, overwritten.root);
-    let first_page = layerfs_sdk::internal::branches(
+    let first_page = layerfs_api::internal::branches(
         &mut client,
         original.branch.stack,
         Page {
@@ -155,7 +155,7 @@ fn kernel_mount_commit_status_fork_history_and_terminal_unmount() {
     )
     .unwrap();
     assert_eq!(first_page.records, [forked.branch.clone()]);
-    let second_page = layerfs_sdk::internal::branches(
+    let second_page = layerfs_api::internal::branches(
         &mut client,
         original.branch.stack,
         Page {
@@ -173,7 +173,7 @@ fn kernel_mount_commit_status_fork_history_and_terminal_unmount() {
     tag.store(b'C', Ordering::Release);
     let second = committed(&mut client, a);
     assert_eq!(second.parent, Some(first.id));
-    let page = layerfs_sdk::internal::commits(
+    let page = layerfs_api::internal::commits(
         &mut client,
         CommitHistoryRequest {
             branch,
@@ -189,7 +189,7 @@ fn kernel_mount_commit_status_fork_history_and_terminal_unmount() {
     tag.store(b'D', Ordering::Release);
     let third = committed(&mut client, a);
     assert_eq!(third.parent, Some(second.id));
-    let page = layerfs_sdk::internal::commits(
+    let page = layerfs_api::internal::commits(
         &mut client,
         CommitHistoryRequest {
             branch,
@@ -238,7 +238,7 @@ fn control_busy_keeps_the_channel_healthy_for_a_later_explicit_call() {
     let writer =
         held_writer::HeldWriter::acquire(&std::path::PathBuf::from(&f.installed.manifest.locator));
     assert!(
-        matches!(layerfs_sdk::internal::workspace(&mut client).commit(token).unwrap_err().cause, OperationCause::Remote(value) if value.code==ControlCode::Busy)
+        matches!(layerfs_api::internal::workspace(&mut client).commit(token).unwrap_err().cause, OperationCause::Remote(value) if value.code==ControlCode::Busy)
     );
     writer.release();
     let observed = status(&mut client, token);
@@ -277,7 +277,7 @@ fn original_lost_control_reply_is_not_replayed_or_settled_by_an_observer() {
     fixture::write(&f.service, token, b'L');
     let server_fence = fence.recv_timeout(Duration::from_secs(3)).unwrap();
     let calling =
-        std::thread::spawn(move || layerfs_sdk::internal::workspace(&mut client).commit(token));
+        std::thread::spawn(move || layerfs_api::internal::workspace(&mut client).commit(token));
     entered.recv_timeout(Duration::from_secs(3)).unwrap();
     server_fence.close().unwrap();
     send_release.send(()).unwrap();
@@ -645,7 +645,7 @@ fn forced_unmount_refuses_a_workspace_without_a_connection_before_any_effect() {
     }
     // The SDK operation carries the same refusal.
     assert!(
-        matches!(layerfs_sdk::internal::workspace(&mut client).unmount(token, true).unwrap_err().cause, OperationCause::Remote(value) if value.code == ControlCode::Invalid && value.phase == "force:admission")
+        matches!(layerfs_api::internal::workspace(&mut client).unmount(token, true).unwrap_err().cause, OperationCause::Remote(value) if value.code == ControlCode::Invalid && value.phase == "force:admission")
     );
     // At the control owner: the original typed failure, and the ordinary
     // token refusals ahead of it.

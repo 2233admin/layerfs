@@ -1,4 +1,5 @@
 use crate::{args::Args, events::Events, Result};
+use layerfs_api::{ManagedSandbox, MountedWorkspace, SandboxApi, SandboxCreate, WorkspaceApi};
 use layerfs_bridge::{
     daemon_setup::{DaemonLimits, DaemonSetup},
     duplex,
@@ -8,7 +9,6 @@ use layerfs_sandbox::{
     backend::docker::{Docker, ExecRequest},
     CommandIdentity,
 };
-use layerfs_sdk::{ManagedSandbox, MountedWorkspace, SandboxApi, SandboxCreate, WorkspaceApi};
 use std::{
     fs,
     net::{SocketAddr, TcpStream},
@@ -19,7 +19,7 @@ use std::{
 
 pub fn start(
     args: &Args,
-    project: &layerfs_sdk::SealedProject,
+    project: &layerfs_api::SealedProject,
     events: &mut Events,
 ) -> Result<ManagedSandbox> {
     Ok(start_inner(args, None, Some(project), events)?.0)
@@ -42,7 +42,7 @@ pub fn start_with_keys(
 fn start_inner(
     args: &Args,
     manifest: Option<StoreManifest>,
-    project: Option<&layerfs_sdk::SealedProject>,
+    project: Option<&layerfs_api::SealedProject>,
     events: &mut Events,
 ) -> Result<(ManagedSandbox, RuntimeKeys)> {
     let controller = duplex::generate_keypair()?;
@@ -85,7 +85,7 @@ fn start_inner(
     };
     let owner = match project {
         Some(project) => api.create(request, project),
-        None => layerfs_sdk::internal::start(&api, request),
+        None => layerfs_api::internal::start(&api, request),
     }.map_err(|error| format!("sandbox original failure phase={:?} cause={:?} acknowledged_container={}; private request omitted",error.phase,error.cause,error.sandbox.as_ref().map(|runtime|runtime.identity().to_string()).unwrap_or_else(||"UNAVAILABLE".into())))?;
     let elapsed = events.span(begun);
     let instance = crate::hex(&owner.startup.instance);
@@ -116,7 +116,7 @@ fn start_inner(
 pub fn extra_control(
     owner: &mut ManagedSandbox,
     keys: &mut RuntimeKeys,
-) -> Result<layerfs_sdk::internal::Control> {
+) -> Result<layerfs_api::internal::Control> {
     let endpoint = match keys.endpoint {
         Some(value) => value,
         None => {
@@ -134,10 +134,10 @@ pub fn extra_control(
     stream.set_write_timeout(Some(wait))?;
     let connection = duplex::initiate(stream, &keys.controller_private, keys.daemon_peer)?;
     connection.clear_io_waits()?;
-    let mut control = layerfs_sdk::internal::Control::new(connection);
-    std::mem::swap(layerfs_sdk::internal::control(owner), &mut control);
-    let hello = layerfs_sdk::internal::sandbox_status(owner, true);
-    std::mem::swap(layerfs_sdk::internal::control(owner), &mut control);
+    let mut control = layerfs_api::internal::Control::new(connection);
+    std::mem::swap(layerfs_api::internal::control(owner), &mut control);
+    let hello = layerfs_api::internal::sandbox_status(owner, true);
+    std::mem::swap(layerfs_api::internal::control(owner), &mut control);
     let status = hello.map_err(|failure| format!("extra channel original Hello {failure:?}"))?;
     if status.instance != owner.startup.instance || status.phase != owner.startup.phase {
         return Err("extra channel same daemon incarnation/phase required".into());
@@ -185,7 +185,7 @@ pub fn command(
                     Directory::Mounted(workspace) => {
                         WorkspaceApi::exec(owner, workspace, arguments, environment.to_vec(), false)
                     }
-                    Directory::Host(directory, identity) => layerfs_sdk::internal::exec(
+                    Directory::Host(directory, identity) => layerfs_api::internal::exec(
                         &owner.runtime,
                         identity,
                         arguments,
@@ -222,7 +222,7 @@ pub fn concurrent_command(
         false,
         environment,
         |arguments| {
-            layerfs_sdk::internal::exec(
+            layerfs_api::internal::exec(
                 sandbox,
                 identity,
                 arguments,

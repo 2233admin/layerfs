@@ -1,5 +1,6 @@
 //! Kernel source creation and authenticated installation, retaining failures.
 use super::{bytes, support};
+use layerfs_api::{InitRequest, ProjectApi};
 use layerfs_content::filesystem::attributes::PortableMetadata;
 use layerfs_daemon::{
     bootstrap::{open_store_observed, OpenedStore},
@@ -8,7 +9,6 @@ use layerfs_daemon::{
 };
 use layerfs_history::{BranchId, HistoryCatalogConfig, HistoryName, LayerStackId};
 use layerfs_persistence::{PersistenceConfig, SqlitePersistenceProfile};
-use layerfs_sdk::{InitRequest, ProjectApi};
 use layerfs_storage::StoragePolicy;
 use layerfs_telemetry::timer::Timing;
 use std::{
@@ -242,7 +242,7 @@ impl Fixture {
         let (mut channel, worker) = support::pair(move |channel| {
             receive_install(channel, &destination, StoreSettings::default())
         });
-        let ack = layerfs_sdk::internal::install(&project, &mut channel).unwrap();
+        let ack = layerfs_api::internal::install(&project, &mut channel).unwrap();
         let installed = worker.join().unwrap();
         fs::remove_file(project.store.path).unwrap();
         println!(

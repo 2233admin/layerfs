@@ -5,17 +5,16 @@
 mod base;
 #[doc(hidden)]
 pub use base::internal;
+pub mod branch;
 pub mod project;
-#[cfg(unix)]
 pub mod sandbox;
-pub mod workspace;
 pub use base::failure::{OperationCause, OperationFailure};
 pub use project::{
     InitError, InitFailure, InitRequest, InstallError, InstallFailure, InstallWork, Installed,
     ProjectApi, SealedProject,
 };
+pub use sandbox::{BoundWorkspace, MountFailure, MountedWorkspace, WorkspaceApi};
 #[cfg(unix)]
 pub use sandbox::{
     ManagedSandbox, SandboxApi, SandboxCause, SandboxCreate, SandboxFailure, SandboxPhase,
 };
-pub use workspace::{BoundWorkspace, MountFailure, MountedWorkspace, WorkspaceApi};

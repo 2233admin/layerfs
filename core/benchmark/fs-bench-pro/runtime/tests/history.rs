@@ -2,6 +2,7 @@
 #[allow(dead_code)]
 #[path = "../../engine/recipes/namespace.rs"]
 mod namespace;
+use layerfs_api::{InitRequest, ProjectApi};
 use layerfs_content::{
     filesystem::{
         attributes::{
@@ -20,7 +21,6 @@ use layerfs_history::{
     StageRequest, WorkspaceId,
 };
 use layerfs_persistence::{Handles, PersistenceConfig, SqlitePersistenceProfile};
-use layerfs_sdk::{InitRequest, ProjectApi};
 use layerfs_storage::{Storage, StoragePolicy};
 use layerfs_telemetry::timer::Timing;
 use namespace::reference;

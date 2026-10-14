@@ -1,11 +1,11 @@
 use crate::{args::Args, events::Events, runtime, Result};
+use layerfs_api::{InitRequest, ProjectApi};
 use layerfs_bridge::{
     control::{Reply, Request},
     duplex,
 };
 use layerfs_history::{BranchId, HistoryCatalogConfig, HistoryName, LayerStackId};
 use layerfs_persistence::{PersistenceConfig, SqlitePersistenceProfile};
-use layerfs_sdk::{InitRequest, ProjectApi};
 use layerfs_storage::StoragePolicy;
 use layerfs_telemetry::timer::Timing;
 use std::{
@@ -74,7 +74,7 @@ pub fn provision(args: &Args, events: &mut Events) -> Result<()> {
 /// original setup snapshot, EndSession and known container Stop.
 pub fn install_sealed(
     args: &Args,
-    project: &layerfs_sdk::SealedProject,
+    project: &layerfs_api::SealedProject,
     manifest_path: &Path,
     events: &mut Events,
 ) -> Result<()> {
@@ -124,7 +124,7 @@ pub fn install_sealed(
         )?;
     }
     runtime::snapshot(&owner, &args.socket, events)?;
-    if layerfs_sdk::internal::control(&mut owner).call(Request::EndSession)? != Reply::SessionEnded
+    if layerfs_api::internal::control(&mut owner).call(Request::EndSession)? != Reply::SessionEnded
     {
         return Err("unexpected original EndSession acknowledgement".into());
     }

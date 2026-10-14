@@ -1,7 +1,7 @@
 //! Bounded ownership of an actual daemon subprocess in this proof's kernel.
 use super::support;
+use layerfs_api::internal::Control;
 use layerfs_bridge::duplex;
-use layerfs_sdk::internal::Control;
 use std::{
     io::{BufRead, BufReader, Write},
     net::{SocketAddr, TcpStream},

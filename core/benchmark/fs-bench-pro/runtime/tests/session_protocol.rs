@@ -32,13 +32,13 @@ mod session;
 #[path = "../src/workspace_oracle.rs"]
 mod workspace_oracle;
 
+use layerfs_api::{BoundWorkspace, MountedWorkspace};
 use layerfs_bridge::control::{NativeReceipt, ReadyMount, WorkspaceToken};
 use layerfs_content::ObjectId;
 use layerfs_history::{
     BranchId, BranchRecord, BranchSnapshot, CommitId, ForkSource, HistoryName, LayerId,
     LayerStackId, WorkspaceId,
 };
-use layerfs_sdk::{BoundWorkspace, MountedWorkspace};
 use std::{
     collections::BTreeMap,
     fs,

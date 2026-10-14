@@ -122,14 +122,14 @@ pub fn fork(
     control: &mut Control,
     request: layerfs_history::ForkRequest,
 ) -> Result<layerfs_history::BranchSnapshot, Box<OperationFailure>> {
-    crate::project::fork::fork(control, request)
+    crate::branch::fork::fork(control, request)
 }
 /// Original ancestry exchange for component proofs with an existing control owner.
 pub fn commits(
     control: &mut Control,
     request: layerfs_history::CommitHistoryRequest,
 ) -> Result<layerfs_history::PageResult<layerfs_history::CommitRecord>, Box<OperationFailure>> {
-    crate::project::commits::commits(control, request)
+    crate::branch::list_commits::commits(control, request)
 }
 /// One Branch page on a proof's existing original control owner.
 pub fn branches(
@@ -137,7 +137,7 @@ pub fn branches(
     stack: layerfs_history::LayerStackId,
     page: layerfs_history::Page,
 ) -> Result<layerfs_history::PageResult<layerfs_history::BranchRecord>, Box<OperationFailure>> {
-    crate::project::branches::branches(control, stack, page)
+    crate::project::list_branches::branches(control, stack, page)
 }
 
 /// The same ordinary launcher for external host commands and disjoint concurrent proof borrows.
@@ -153,5 +153,5 @@ pub fn exec(
     layerfs_sandbox::backend::docker::ExecCreated,
     Box<layerfs_sandbox::backend::docker::ExecCreateFailure>,
 > {
-    crate::workspace::exec::launch(sandbox, identity, arguments, environment, directory, stdin)
+    crate::sandbox::exec::launch(sandbox, identity, arguments, environment, directory, stdin)
 }

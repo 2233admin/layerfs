@@ -140,7 +140,7 @@ phase, the Ready record, whether detach is known and `NativeWork` counters copie
 from maintained state. Status performs no syscall and one existing engine
 observation; it never settles an unknown.
 
-The [SDK mount](../../crates/layerfs-api/sdk/src/workspace/mount.rs) exposes the
+The [SDK mount](../../crates/layerfs-api/src/sandbox/mount.rs) exposes the
 two-acknowledgement mount without a Project argument. Bind/attach and lost-reply
 locate are available only in the hidden component-proof/recovery module. If the
 second acknowledgement fails, MountFailure retains the already bound Workspace;

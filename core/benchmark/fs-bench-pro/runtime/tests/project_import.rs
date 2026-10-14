@@ -30,11 +30,11 @@ pub(crate) mod runtime;
 #[path = "../src/workspace_oracle.rs"]
 pub(crate) mod workspace_oracle;
 
+use layerfs_api::{InitRequest, ProjectApi};
 use layerfs_bridge::provision::StoreProfile;
 use layerfs_content::ObjectId;
 use layerfs_history::{BranchId, HistoryCatalogConfig, HistoryName, LayerStackId};
 use layerfs_persistence::{PersistenceConfig, SqlitePersistenceProfile};
-use layerfs_sdk::{InitRequest, ProjectApi};
 use layerfs_storage::StoragePolicy;
 use layerfs_telemetry::timer::Timing;
 use std::{

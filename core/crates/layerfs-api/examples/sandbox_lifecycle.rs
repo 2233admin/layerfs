@@ -1,5 +1,6 @@
 //! Positive-path host Init -> protected owned Sandbox -> direct shared Store control proof.
 //! Typed failure custody is covered separately by public adapter tests; this example reports failures in stderr.
+use layerfs_api::{InitRequest, ManagedSandbox, ProjectApi, SandboxApi, SandboxCreate};
 use layerfs_bridge::{
     control::{DaemonPhase, Reply, Request},
     daemon_setup::{DaemonLimits, DaemonSetup},
@@ -8,7 +9,6 @@ use layerfs_bridge::{
 use layerfs_history::{BranchId, HistoryCatalogConfig, HistoryName, LayerStackId, WorkspaceId};
 use layerfs_persistence::{PersistenceConfig, SqlitePersistenceProfile};
 use layerfs_sandbox::backend::docker::{Docker, SandboxRequest};
-use layerfs_sdk::{InitRequest, ManagedSandbox, ProjectApi, SandboxApi, SandboxCreate};
 use layerfs_storage::StoragePolicy;
 use layerfs_telemetry::timer::Timing;
 use std::{
@@ -40,7 +40,7 @@ fn setup(private: [u8; 32], peer: [u8; 32]) -> DaemonSetup {
 }
 fn ordinary(owner: &ManagedSandbox) -> Result<(), Box<dyn std::error::Error>> {
     let command="set -e; test \"$(id -u)\" = 501; test \"$(id -g)\" = 20; test \"$(id -G)\" = 20; grep -q '^CapEff:[[:space:]]*0000000000000000$' /proc/self/status; grep -q '^CapAmb:[[:space:]]*0000000000000000$' /proc/self/status; grep -q '^NoNewPrivs:[[:space:]]*1$' /proc/self/status; for p in /layerfs-local/config/daemon.setup /layerfs-local/overlay/overlay.sqlite /layerfs-store/global/store.sqlite /proc/1/root/layerfs-local/config/daemon.setup /proc/1/root/layerfs-store/global/store.sqlite /proc/1/environ /proc/1/fd; do test ! -r \"$p\"; done; test ! -w /dev/fuse; test ! -w /sys/fs/fuse/connections; printf 'ORDINARY_ACCESS uid=501 gid=20 groups=20 CapEff=0 CapAmb=0 NoNewPrivs=1 private_backing_denied proc_aliases_denied fuse_control_denied\\n'";
-    let created = layerfs_sdk::internal::exec(
+    let created = layerfs_api::internal::exec(
         &owner.runtime,
         layerfs_sandbox::CommandIdentity { uid: 501, gid: 20 },
         vec!["bash".into(), "-c".into(), command.into()],
@@ -119,7 +119,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     std::io::stdout().flush()?;
     assert_eq!(first.startup.phase, DaemonPhase::ControlReady);
     let installed = first.installed.take().expect("installed");
-    let ready = layerfs_sdk::internal::sandbox_status(&mut first, true)?;
+    let ready = layerfs_api::internal::sandbox_status(&mut first, true)?;
     assert_eq!(ready.phase, DaemonPhase::ControlReady);
     println!(
         "DIRECT_STORE host_sqlite={} daemon_sqlite={:?} incarnation={:?} profile=Disposable",
@@ -141,12 +141,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     for (n, mut owner) in [(1, first), (2, second)] {
         ordinary(&owner)?;
         let mut workspace =
-            layerfs_sdk::internal::workspace(layerfs_sdk::internal::control(&mut owner));
+            layerfs_api::internal::workspace(layerfs_api::internal::control(&mut owner));
         let bound = workspace.bind(WorkspaceId::from_authority([40 + n; 32])?, branch)?;
         assert_eq!(bound.binding.effective_root, project.initialized.root);
         workspace.unmount(bound.token, false)?;
         assert!(matches!(
-            layerfs_sdk::internal::control(&mut owner)
+            layerfs_api::internal::control(&mut owner)
                 .call(Request::EndSession)
                 .map_err(|f| format!("end {f:?}"))?,
             Reply::SessionEnded
@@ -166,12 +166,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         reopened.startup.phase
     );
     let mut workspace =
-        layerfs_sdk::internal::workspace(layerfs_sdk::internal::control(&mut reopened));
+        layerfs_api::internal::workspace(layerfs_api::internal::control(&mut reopened));
     let bound = workspace.bind(WorkspaceId::from_authority([43; 32])?, branch)?;
     assert_eq!(bound.binding.effective_root, project.initialized.root);
     workspace.unmount(bound.token, false)?;
     assert!(matches!(
-        layerfs_sdk::internal::control(&mut reopened)
+        layerfs_api::internal::control(&mut reopened)
             .call(Request::EndSession)
             .map_err(|f| format!("end {f:?}"))?,
         Reply::SessionEnded

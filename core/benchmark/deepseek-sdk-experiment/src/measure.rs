@@ -1,4 +1,8 @@
 //! Issue 323: first-party public SDK functional driver, no direct runtime/control operations.
+use layerfs_api::{
+    InitRequest, ManagedSandbox, MountedWorkspace, ProjectApi, SandboxApi, SandboxCreate,
+    WorkspaceApi,
+};
 use layerfs_bridge::{
     daemon_setup::{DaemonLimits, DaemonSetup},
     duplex,
@@ -9,10 +13,6 @@ use layerfs_history::{
 };
 use layerfs_persistence::{PersistenceConfig, SqlitePersistenceProfile};
 use layerfs_sandbox::backend::docker::{Docker, SandboxRequest};
-use layerfs_sdk::{
-    InitRequest, ManagedSandbox, MountedWorkspace, ProjectApi, SandboxApi, SandboxCreate,
-    WorkspaceApi,
-};
 use layerfs_storage::StoragePolicy;
 use layerfs_telemetry::timer::Timing;
 use std::{

@@ -1,16 +1,16 @@
 //! Bounded original Engine/control peers qualify SDK close custody and ordinary exec routing.
 #![cfg(unix)]
 #[allow(dead_code)]
-#[path = "../../../layerfs-sandbox/tests/support/engine.rs"]
+#[path = "../../layerfs-sandbox/tests/support/engine.rs"]
 mod engine;
 use engine::{fixed, frame, Peer};
+use layerfs_api::{
+    ManagedSandbox, SandboxApi, SandboxCause, SandboxCreate, SandboxPhase, WorkspaceApi,
+};
 use layerfs_bridge::{
     control::{Answer, Call, DaemonPhase, DaemonStatus, Reply, Request},
     daemon_setup::{DaemonLimits, DaemonSetup},
     duplex,
-};
-use layerfs_sdk::{
-    ManagedSandbox, SandboxApi, SandboxCause, SandboxCreate, SandboxPhase, WorkspaceApi,
 };
 use std::{
     fs,
@@ -60,7 +60,7 @@ impl Fixture {
     fn new(tail: Vec<Vec<u8>>) -> Self {
         Self::new_for(None, tail)
     }
-    fn new_for(project: Option<&layerfs_sdk::SealedProject>, tail: Vec<Vec<u8>>) -> Self {
+    fn new_for(project: Option<&layerfs_api::SealedProject>, tail: Vec<Vec<u8>>) -> Self {
         let existing = project.is_some();
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let port = listener.local_addr().unwrap().port();
@@ -159,7 +159,7 @@ impl Fixture {
         };
         fixture.owner = Some(match project {
             Some(project) => fixture.api.create(request, project).unwrap(),
-            None => layerfs_sdk::internal::start(&fixture.api, request).unwrap(),
+            None => layerfs_api::internal::start(&fixture.api, request).unwrap(),
         });
         fixture
     }
@@ -194,7 +194,7 @@ fn close_stops_then_deletes_the_original_owner_without_deleting_its_borrowed_vol
 fn failed_stop_preserves_original_owner_channel_inputs_and_attempt_without_delete() {
     let mut fixture = Fixture::new(vec![fixed(409, b"original stop refusal")]);
     let mut owner = fixture.owner.take().unwrap();
-    let work = layerfs_sdk::internal::control(&mut owner).channel_work();
+    let work = layerfs_api::internal::control(&mut owner).channel_work();
     let handshake = owner.handshake;
     let failure = fixture.api.close(owner).unwrap_err();
     assert_eq!(failure.phase, SandboxPhase::Stop);
@@ -237,7 +237,7 @@ fn failed_delete_retains_acknowledged_stop_and_exact_delete_failure() {
     assert_eq!(fixture.calls().len(), 8);
 }
 
-fn mounted() -> layerfs_sdk::MountedWorkspace {
+fn mounted() -> layerfs_api::MountedWorkspace {
     use layerfs_bridge::control::{MountReceipt, ReadyMount, WorkspaceToken};
     use layerfs_content::ObjectId;
     use layerfs_history::{
@@ -248,8 +248,8 @@ fn mounted() -> layerfs_sdk::MountedWorkspace {
         namespace: 7,
     };
     let root = ObjectId::for_bytes(b"SDK exec mount fixture");
-    layerfs_sdk::MountedWorkspace {
-        bound: layerfs_sdk::BoundWorkspace {
+    layerfs_api::MountedWorkspace {
+        bound: layerfs_api::BoundWorkspace {
             token,
             binding: BranchSnapshot {
                 branch: BranchRecord {
@@ -298,7 +298,7 @@ fn workspace_exec_returns_original_runtime_owner_at_the_mount_with_no_daemon_reg
         fixed(204, b""),
         fixed(204, b""),
     ]);
-    let before = layerfs_sdk::internal::control(fixture.owner.as_mut().unwrap()).channel_work();
+    let before = layerfs_api::internal::control(fixture.owner.as_mut().unwrap()).channel_work();
     let created = WorkspaceApi::exec(
         fixture.owner.as_ref().unwrap(),
         &mounted(),
@@ -315,7 +315,7 @@ fn workspace_exec_returns_original_runtime_owner_at_the_mount_with_no_daemon_reg
         layerfs_sandbox::CommandIdentity { uid: 501, gid: 20 }
     );
     assert_eq!(
-        layerfs_sdk::internal::control(fixture.owner.as_mut().unwrap()).channel_work(),
+        layerfs_api::internal::control(fixture.owner.as_mut().unwrap()).channel_work(),
         before
     );
     fixture.api.close(fixture.owner.take().unwrap()).unwrap();
@@ -355,7 +355,7 @@ fn workspace_exec_failure_keeps_exact_original_request_and_container() {
 
 struct ProjectFixture {
     directory: PathBuf,
-    project: layerfs_sdk::SealedProject,
+    project: layerfs_api::SealedProject,
 }
 impl ProjectFixture {
     fn new() -> Self {
@@ -370,7 +370,7 @@ impl ProjectFixture {
         let source = directory.join("source");
         fs::create_dir(&source).unwrap();
         fs::write(source.join("payload"), b"original complete project").unwrap();
-        let request = layerfs_sdk::InitRequest {
+        let request = layerfs_api::InitRequest {
             source,
             store: PersistenceConfig::sqlite(directory.join("store.sqlite"))
                 .with_sqlite_profile(SqlitePersistenceProfile::Disposable),
@@ -389,7 +389,7 @@ impl ProjectFixture {
             deadline: Instant::now() + Duration::from_secs(10),
         };
         let project = layerfs_telemetry::timer::Timing::disabled("sdk.existing.project", |timer| {
-            layerfs_sdk::ProjectApi::new().init(request, timer)
+            layerfs_api::ProjectApi::new().init(request, timer)
         })
         .0
         .unwrap();
@@ -412,7 +412,7 @@ fn create_matching_existing_project_keeps_one_original_hello_and_does_not_reinst
     assert_eq!(owner.startup.phase, DaemonPhase::ControlReady);
     assert!(owner.installed.is_none());
     assert_eq!(
-        layerfs_sdk::internal::control(owner)
+        layerfs_api::internal::control(owner)
             .channel_work()
             .0
             .records,

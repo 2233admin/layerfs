@@ -29,6 +29,7 @@ mod repository_history;
 #[path = "../src/workspace_oracle.rs"]
 pub(crate) mod workspace_oracle;
 
+use layerfs_api::{InitRequest, ProjectApi};
 use layerfs_content::{
     filesystem::{
         attributes::{
@@ -47,7 +48,6 @@ use layerfs_history::{
     StageRequest, WorkspaceId,
 };
 use layerfs_persistence::{Handles, PersistenceConfig, SqlitePersistenceProfile};
-use layerfs_sdk::{InitRequest, ProjectApi};
 use layerfs_storage::{Storage, StoragePolicy};
 use layerfs_telemetry::timer::Timing;
 use reference::workspace_common::{Content, Entry, EntryKind};

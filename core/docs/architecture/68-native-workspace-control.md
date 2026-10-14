@@ -196,7 +196,7 @@ LayerStackId, the existing optional authenticated cursor and a limit of 1 to 32.
 The reply carries bounded BranchRecords and continuation. Its one dispatch arm
 calls the existing HistoryCatalog::branches port in name order, without a hidden
 scan or Branch refresh. All original control records and golden vectors remain.
-The [SDK branches method](../../crates/layerfs-api/sdk/src/project/branches.rs)
+The [SDK branches method](../../crates/layerfs-api/src/project/list_branches.rs)
 checks stack identity, ordering, page size and continuation shape on the original
 sequential channel. These source changes establish no performance qualification.
 

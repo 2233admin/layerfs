@@ -1,4 +1,5 @@
 use crate::{args::Args, events::Events, runtime, Result};
+use layerfs_api::{internal::Control, MountedWorkspace, ProjectApi};
 use layerfs_bridge::{
     control::{Reply, Request},
     provision::StoreManifest,
@@ -7,7 +8,6 @@ use layerfs_history::{
     BranchId, CommitHistoryRequest, CommitId, CommitStagedOutcome, ForkRequest, ForkSource,
     HistoryName, LayerId, LayerStackId, WorkspaceId,
 };
-use layerfs_sdk::{internal::Control, MountedWorkspace, ProjectApi};
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
@@ -323,7 +323,7 @@ fn commit_ack(
 ) -> Result<()> {
     let before = control.channel_work();
     let begun = Instant::now();
-    let outcome = layerfs_sdk::internal::with_observations(control, scope).commit(token)?;
+    let outcome = layerfs_api::internal::with_observations(control, scope).commit(token)?;
     let span = events.span(begun);
     let after = control.channel_work();
     let (kind, root) = match &outcome {
@@ -534,7 +534,7 @@ pub fn serve(args: &Args, events: &mut Events) -> Result<()> {
     let mut mounts = BTreeMap::new();
     let mut closed = BTreeMap::new();
     let mut used_keys = BTreeSet::new();
-    let origin = layerfs_sdk::internal::control(&mut owner)
+    let origin = layerfs_api::internal::control(&mut owner)
         .channel_work()
         .0
         .records;
@@ -552,7 +552,7 @@ pub fn serve(args: &Args, events: &mut Events) -> Result<()> {
             ("control_send_records", origin),
             (
                 "control_receive_records",
-                layerfs_sdk::internal::control(&mut owner)
+                layerfs_api::internal::control(&mut owner)
                     .channel_work()
                     .1
                     .records,
@@ -577,11 +577,11 @@ pub fn serve(args: &Args, events: &mut Events) -> Result<()> {
                     base_layer,
                     &branches,
                 )?;
-                let before = layerfs_sdk::internal::control(&mut owner).channel_work();
+                let before = layerfs_api::internal::control(&mut owner).channel_work();
                 let begun = Instant::now();
                 let snapshot = ProjectApi::new().fork(&mut owner, request)?;
                 let span = events.span(begun);
-                let after = layerfs_sdk::internal::control(&mut owner).channel_work();
+                let after = layerfs_api::internal::control(&mut owner).channel_work();
                 events.numeric_fields(
                     "fork",
                     Some(span),
@@ -623,11 +623,11 @@ pub fn serve(args: &Args, events: &mut Events) -> Result<()> {
                     &fs::read_to_string(fields.get(2).ok_or("history body file required")?)?,
                     branch,
                 )?;
-                let before = layerfs_sdk::internal::control(&mut owner).channel_work();
+                let before = layerfs_api::internal::control(&mut owner).channel_work();
                 let begun = Instant::now();
                 let page = ProjectApi::new().commits(&mut owner, request)?;
                 let span = events.span(begun);
-                let after = layerfs_sdk::internal::control(&mut owner).channel_work();
+                let after = layerfs_api::internal::control(&mut owner).channel_work();
                 for record in &page.records {
                     events.fields(
                         "history_record",
@@ -679,7 +679,7 @@ pub fn serve(args: &Args, events: &mut Events) -> Result<()> {
                     &mounts,
                     &progress,
                 )?;
-                let (runtime, control) = layerfs_sdk::internal::parts(&mut owner);
+                let (runtime, control) = layerfs_api::internal::parts(&mut owner);
                 execute_round(
                     args,
                     runtime,
@@ -754,7 +754,7 @@ pub fn serve(args: &Args, events: &mut Events) -> Result<()> {
                     )?;
                 }
                 let control = channel_control(
-                    layerfs_sdk::internal::control(&mut owner),
+                    layerfs_api::internal::control(&mut owner),
                     &mut extras,
                     channel,
                 )?;
@@ -765,7 +765,7 @@ pub fn serve(args: &Args, events: &mut Events) -> Result<()> {
                 let before = control.channel_work().0.records;
                 let receive_before = control.channel_work().1.records;
                 let begun = Instant::now();
-                let mounted = layerfs_sdk::internal::with_observations(control, &scopes[channel])
+                let mounted = layerfs_api::internal::with_observations(control, &scopes[channel])
                     .mount(id, branch)
                     .map_err(|failure| format!("mount original failure {failure:?}"))?;
                 let elapsed = events.span(begun);
@@ -847,7 +847,7 @@ pub fn serve(args: &Args, events: &mut Events) -> Result<()> {
                     selected(&mounts, key)?.channel
                 };
                 let work = channel_control(
-                    layerfs_sdk::internal::control(&mut owner),
+                    layerfs_api::internal::control(&mut owner),
                     &mut extras,
                     channel,
                 )?
@@ -887,7 +887,7 @@ pub fn serve(args: &Args, events: &mut Events) -> Result<()> {
             "commit" => {
                 let channel = selected(&mounts, key)?.channel;
                 let control = channel_control(
-                    layerfs_sdk::internal::control(&mut owner),
+                    layerfs_api::internal::control(&mut owner),
                     &mut extras,
                     channel,
                 )?;
@@ -895,7 +895,7 @@ pub fn serve(args: &Args, events: &mut Events) -> Result<()> {
                 let before = control.channel_work().0.records;
                 let receive_before = control.channel_work().1.records;
                 let begun = Instant::now();
-                let outcome = layerfs_sdk::internal::with_observations(control, &scopes[channel])
+                let outcome = layerfs_api::internal::with_observations(control, &scopes[channel])
                     .commit(token)?;
                 let elapsed = events.span(begun);
                 let after = control.channel_work().0.records;
@@ -945,14 +945,14 @@ pub fn serve(args: &Args, events: &mut Events) -> Result<()> {
             "snapshot" => {
                 let channel = selected(&mounts, key)?.channel;
                 let control = channel_control(
-                    layerfs_sdk::internal::control(&mut owner),
+                    layerfs_api::internal::control(&mut owner),
                     &mut extras,
                     channel,
                 )?;
                 let token = selected(&mounts, key)?.mounted.bound.token;
                 let before = control.channel_work().0.records;
                 let receive_before = control.channel_work().1.records;
-                let observed = layerfs_sdk::internal::with_observations(control, &scopes[channel])
+                let observed = layerfs_api::internal::with_observations(control, &scopes[channel])
                     .status(token)?;
                 let after = control.channel_work().0.records;
                 let receive_after = control.channel_work().1.records;
@@ -986,7 +986,7 @@ pub fn serve(args: &Args, events: &mut Events) -> Result<()> {
             "unmount" => {
                 let channel = selected(&mounts, key)?.channel;
                 let control = channel_control(
-                    layerfs_sdk::internal::control(&mut owner),
+                    layerfs_api::internal::control(&mut owner),
                     &mut extras,
                     channel,
                 )?;
@@ -994,7 +994,7 @@ pub fn serve(args: &Args, events: &mut Events) -> Result<()> {
                 let before = control.channel_work().0.records;
                 let receive_before = control.channel_work().1.records;
                 let begun = Instant::now();
-                layerfs_sdk::internal::with_observations(control, &scopes[channel])
+                layerfs_api::internal::with_observations(control, &scopes[channel])
                     .unmount(token, false)?;
                 let elapsed = events.span(begun);
                 let after = control.channel_work().0.records;
@@ -1008,14 +1008,14 @@ pub fn serve(args: &Args, events: &mut Events) -> Result<()> {
                     .get(key)
                     .ok_or("unknown original closed Workspace key")?;
                 let control = channel_control(
-                    layerfs_sdk::internal::control(&mut owner),
+                    layerfs_api::internal::control(&mut owner),
                     &mut extras,
                     channel,
                 )?;
                 let before = control.channel_work().0.records;
                 let receive_before = control.channel_work().1.records;
                 let begun = Instant::now();
-                let state = layerfs_sdk::internal::with_observations(control, &scopes[channel])
+                let state = layerfs_api::internal::with_observations(control, &scopes[channel])
                     .cleanup(token)?;
                 let span = events.span(begun);
                 let after = control.channel_work().0.records;
@@ -1052,7 +1052,7 @@ pub fn serve(args: &Args, events: &mut Events) -> Result<()> {
                 }
                 for channel in 0..=extras.len() {
                     let control = channel_control(
-                        layerfs_sdk::internal::control(&mut owner),
+                        layerfs_api::internal::control(&mut owner),
                         &mut extras,
                         channel,
                     )?;

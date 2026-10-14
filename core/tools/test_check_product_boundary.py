@@ -13,7 +13,7 @@ class ProductBoundaryTests(unittest.TestCase):
                        "use layerfs_content::filesystem::PathName;"]:
             self.assertFalse(violations(path, source))
         for source in ["use layerfs_daemon::Pending;", "use layerfs_persistence::Handles;",
-                       "use layerfs_sdk::WorkspaceApi;"]:
+                       "use layerfs_api::WorkspaceApi;"]:
             self.assertTrue(violations(path, source))
         self.assertTrue(unsafe_violations(path, "unsafe fn syscall() {}"))
         root = Path("core/crates/layerfs-fuse/src/lib.rs")
@@ -56,7 +56,7 @@ class ProductBoundaryTests(unittest.TestCase):
         self.assertTrue(unsafe_violations(base / "lib.rs", "pub mod store;"))
 
     def test_retired_transport_paths_cannot_return(self):
-        for relative in ("layerfs-api/sdk/src/client/call.rs", "layerfs-api/sdk/src/runtime/owner.rs",
+        for relative in ("layerfs-api/src/client/call.rs", "layerfs-api/src/runtime/owner.rs",
                          "layerfs-daemon/src/upstream/owner.rs", "layerfs-bridge/src/codec/frame.rs",
                          "layerfs-bridge/src/contract/frame.rs", "layerfs-bridge/src/native/framing.rs",
                          "layerfs-api/core/src/lib.rs"):
@@ -75,11 +75,11 @@ class ProductBoundaryTests(unittest.TestCase):
             self.assertTrue(dependency_violations(f'[package]\nname="{name}"\n'), name)
 
     def test_sdk_source_edges_and_unsafe_boundary(self):
-        path = Path("core/crates/layerfs-api/sdk/src/init.rs")
+        path = Path("core/crates/layerfs-api/src/project/init.rs")
         self.assertFalse(violations(path, "use layerfs_persistence::Handles;"))
         self.assertTrue(violations(path, "use layerfs_server::Server;"))
         self.assertTrue(unsafe_violations(path, "unsafe fn extend_lifetime() {}"))
-        root = Path("core/crates/layerfs-api/sdk/src/lib.rs")
+        root = Path("core/crates/layerfs-api/src/lib.rs")
         self.assertTrue(unsafe_violations(root, "mod init;"))
         self.assertFalse(unsafe_violations(root, "#![forbid(unsafe_code)]\nmod init;"))
 
@@ -88,7 +88,7 @@ class ProductBoundaryTests(unittest.TestCase):
         self.assertTrue(unsafe_violations(path,"unsafe fn signal_pid() {}"))
         self.assertFalse(unsafe_violations(Path("core/crates/layerfs-sandbox/src/lib.rs"),"#![forbid(unsafe_code)]"))
         prefix='[package]\nname="layerfs-sandbox"\n[dependencies]\n'
-        for dependency in ("layerfs-api-core","layerfs-server","layerfs-daemon","layerfs-persistence","layerfs-sdk"):
+        for dependency in ("layerfs-api-core","layerfs-server","layerfs-daemon","layerfs-persistence","layerfs-api"):
             self.assertTrue(dependency_violations(prefix+f'{dependency}={{path="../{dependency}"}}'))
         self.assertTrue(dependency_violations('[package]\nname="layerfs-sandbox-legacy"\n[dependencies]\nlayerfs-api-core={path="../layerfs-api/core"}'))
 
@@ -96,11 +96,11 @@ class ProductBoundaryTests(unittest.TestCase):
         prefix = '[package]\nname="layerfs-bridge"\n[dependencies]\n'
         for dependency in ("layerfs-content", "layerfs-history"):
             self.assertFalse(dependency_violations(prefix + f'{dependency}={{path="../{dependency}"}}'))
-        for dependency in ("layerfs-persistence", "layerfs-sdk", "layerfs-daemon", "layerfs-overlay"):
+        for dependency in ("layerfs-persistence", "layerfs-api", "layerfs-daemon", "layerfs-overlay"):
             self.assertTrue(dependency_violations(prefix + f'{dependency}={{path="../{dependency}"}}'))
 
     def test_sdk_dependency_edges(self):
-        prefix = '[package]\nname="layerfs-sdk"\n[dependencies]\n'
+        prefix = '[package]\nname="layerfs-api"\n[dependencies]\n'
         self.assertFalse(dependency_violations(prefix + 'layerfs-persistence={path="../../layerfs-persistence"}'))
         self.assertTrue(dependency_violations(prefix + 'layerfs-server={path="../../layerfs-server"}'))
         self.assertFalse(dependency_violations(prefix + 'layerfs-project={path="../../layerfs-project"}'))
@@ -115,26 +115,26 @@ class ProductBoundaryTests(unittest.TestCase):
                 self.assertFalse(dependency_violations(prefix + f'{dependency}={{path="../{dependency}"}}'))
                 self.assertFalse(violations(path, f'use {dependency.replace("-", "_")}::PublicType;'))
         self.assertTrue(dependency_violations(prefix + 'layerfs-server={path="../layerfs-server"}'))
-        self.assertTrue(dependency_violations(prefix + 'layerfs-sdk={path="../layerfs-api/sdk"}'))
-        self.assertTrue(violations(path, 'use layerfs_sdk::Runtime;'))
-        sdk = '[package]\nname="layerfs-sdk"\n[dependencies]\n'
+        self.assertTrue(dependency_violations(prefix + 'layerfs-api={path="../layerfs-api"}'))
+        self.assertTrue(violations(path, 'use layerfs_api::Runtime;'))
+        sdk = '[package]\nname="layerfs-api"\n[dependencies]\n'
         self.assertTrue(dependency_violations(sdk + 'layerfs-daemon={path="../../layerfs-daemon"}'))
-        self.assertTrue(violations(Path("core/crates/layerfs-api/sdk/src/init.rs"),
+        self.assertTrue(violations(Path("core/crates/layerfs-api/src/project/init.rs"),
                                    'use layerfs_daemon::Owner;'))
 
     def test_workspace_composition_edges_preserve_domain_and_reverse_boundaries(self):
-        for package in ("layerfs-sdk", "layerfs-daemon"):
+        for package in ("layerfs-api", "layerfs-daemon"):
             source=f'[package]\nname="{package}"\n[dependencies]\nlayerfs-workspace={{path="../layerfs-workspace"}}\n'
-            self.assertEqual(bool(dependency_violations(source)), package == "layerfs-sdk")
-            path=Path("core/crates/layerfs-api/sdk/src/init.rs") if package=="layerfs-sdk" else Path("core/crates/layerfs-daemon/src/commands.rs")
-            self.assertEqual(bool(violations(path,"use layerfs_workspace::Workspace;")), package == "layerfs-sdk")
+            self.assertEqual(bool(dependency_violations(source)), package == "layerfs-api")
+            path=Path("core/crates/layerfs-api/src/project/init.rs") if package=="layerfs-api" else Path("core/crates/layerfs-daemon/src/commands.rs")
+            self.assertEqual(bool(violations(path,"use layerfs_workspace::Workspace;")), package == "layerfs-api")
             self.assertTrue(violations(path,"use layerfs_server::Server;"))
         self.assertTrue(dependency_violations('[package]\nname="layerfs-workspace"\n[dependencies]\nlayerfs-daemon={path="../layerfs-daemon"}\n'))
         self.assertTrue(dependency_violations('[package]\nname="layerfs-content"\n[dependencies]\nlayerfs-workspace={path="../layerfs-workspace"}\n'))
 
     def test_cluster1_dependency_edges(self):
         for package in ("layerfs-storage", "layerfs-history", "layerfs-project", "layerfs-content"):
-            for dependency in ("layerfs-s3", "layerfs-metadata", "layerfs-workspace", "layerfs-sdk"):
+            for dependency in ("layerfs-s3", "layerfs-metadata", "layerfs-workspace", "layerfs-api"):
                 for table in ("dependencies", "build-dependencies", "target.'cfg(unix)'.dependencies"):
                     source = f'[package]\nname="{package}"\n[{table}]\nrenamed={{package="{dependency}",path="../{dependency}"}}\n'
                     self.assertTrue(dependency_violations(source))
@@ -266,17 +266,16 @@ class ProductBoundaryTests(unittest.TestCase):
                               for p in production_files(core)],
                              ["sql/schema.sql", "src/lib.rs", "src/sql/query.sql"])
 
-    def test_nested_api_product_scope(self):
+    def test_flat_api_product_scope(self):
         with TemporaryDirectory() as directory:
             core = Path(directory)
-            for name in ("core/src/lib.rs", "sdk/src/client.rs", "sdk/tests/route.rs",
-                         "mcp/src/lib.rs", "cli/src/main.rs"):
+            for name in ("src/lib.rs", "src/fs/read.rs", "tests/route.rs", "examples/demo.rs"):
                 path = core / "crates/layerfs-api" / name
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text("")
             self.assertEqual([str(p.relative_to(core / "crates/layerfs-api"))
                               for p in production_files(core)],
-                             ["core/src/lib.rs", "sdk/src/client.rs"])
+                             ["src/fs/read.rs", "src/lib.rs"])
 
 
 if __name__ == "__main__":
