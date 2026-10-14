@@ -2561,3 +2561,91 @@ handoff or Init.
 Production LOC 81,054 -> 81,054 (delta +0); the change is one test file and
 documentation. Scope and counter are as in the previous section. Reference
 absent (retired R9c; last counted 65,417 at tree 498dd1917812).
+
+## Issue 321 follow-up — automatic I/O-stall label (2026-10-14)
+
+The two stall investigations above found the cause by hand. fs-bench-pro now
+records it for every sample. No product source changed. Durable execution:
+NOT_RUN — disabled by owner until explicit reauthorization.
+
+### What changed
+
+- `61ec6f181`: [`tools/store_writer_split.py`](tools/store_writer_split.py)
+  also prints `commit_without_writer_step_ms`, the Commit without the writer's
+  whole step (section 13 index 32, already printed as `writer_step_ms`).
+  Existing fields are unchanged. On the retained receipts it gives 5,337.7 ms
+  for S3 and 6,432.3 ms for S1, as in the table above.
+- `73a49c01f`: `bench.py run` starts
+  [`tools/cgroup_observer.py`](tools/cgroup_observer.py) beside each case
+  (fs-bench-pro `engine/io_observer.py`) and keeps its rows in
+  `<sample>/io-observer/`. Each receipt declares it in the interference line
+  and gains `io_observer`: per Commit, the counts of
+  [`tools/commit_kernel_window.py`](tools/commit_kernel_window.py), and a
+  label. The tool is now importable; its command-line output is byte-identical
+  on the three retained g-stall samples.
+- The harness aligns the clocks directly, not on unmount drops: the runtime's
+  origin is the host birth time of `runtime.events.jsonl`, and VM wall minus
+  host wall is bounded by the smallest arrival delay of the observer's rows.
+  It needs no large unmount, so it also works for small cases.
+
+### The label
+
+`IO_STALLED` when the container's I/O "some" pressure exceeds 20% of the
+observed Commit interval, else `NOT_STALLED`; `NO_COMMIT` and `UNAVAILABLE`
+give a reason. It is diagnostic: no status, verdict or limit depends on it, and
+`report` appends it to the row's tag.
+
+| Sample | Container I/O wait, ms | Commit, ms | Fraction |
+| --- | ---: | ---: | ---: |
+| Diag-1 (unstalled) | 8.2 | 6,077.4 | 0.1% |
+| S1 filled (unstalled) | 657.0 | 7,757.6 | 8.5% |
+| S3 dirty (stalled) | 4,483.3 | 11,805.2 | 38.0% |
+| S2 load (stalled) | 5,319.5 | 12,168.8 | 43.7% |
+
+20% is more than twice the highest unstalled fraction and about half the
+lowest stalled one. It separates four samples of one case; it is not a
+qualified bound.
+
+### Checks and the labelled sample
+
+- Harness suites, native inputs from sealed build `g-stall-3`:
+  - `tests/engine`: 384 run, OK, 3 skipped (25.0 s);
+  - `tests/families`: 90 run, OK (47.3 s);
+  - `core/benchmark/cluster-two/tests`: 281 run, OK (86.4 s).
+  Each ran once under a 120 s limit.
+  - They ran at a temporary local commit, `60c24df49`. It holds `73a49c01f`
+    plus `core/crates/layerfs-overlay/tests/reply_tickets.rs` at g-stall-3's
+    version, because a sealed build loads only when compiled inputs match.
+    That file is a test, so no binary contains it.
+  - The commit is kept on local branch `fsb-io-stall-sample-identity` and is
+    not on this branch.
+- One labelled sample at that identity:
+  - case `workspace_change_locality:workspace-dense-rewrite-100-mixed-v4`;
+  - original prepared fresh (13 s);
+  - result INELIGIBLE, proof PASS, cleanup Gone;
+  - counts 12,545 / 49,076 / 185,921;
+  - Commit 1,596.6 ms over 17 observer rows;
+  - container I/O wait 0.0 ms, so label `NOT_STALLED`;
+  - container dirty peak 207.0 MiB;
+  - VM dirty plus write-back peak 214.0 MiB, against limits of 665.7 MiB hard
+    and 332.4 MiB background;
+  - pgscan 0 in the container and the VM;
+  - host minus VM clock 5.6 ms.
+- Check of the alignment: all three unmounts fall within 10 to 40 ms of a 102
+  to 206 MiB drop in the container's file pages, one row apart at most.
+- Evidence:
+  - `benchmark-results/fs-bench-pro/2026-10-14-io-stall-flag-label-1-workspace_change_locality/`
+    (receipt `20ab691f`, 123 observer rows `22728269`);
+  - the sample container and volume were removed (PASS);
+  - the prepared original `…-io-stall-flag-prepared-dense-rewrite-100` stays.
+- Not done: no sample under a declared load, so the label has not yet been seen
+  to say `IO_STALLED` on a live run. The unit test covers that branch with
+  synthetic rows.
+
+### Source size
+
+Production LOC 81,054 -> 81,054 (delta +0) for `61ec6f181`, `73a49c01f` and
+this record. Scope and counter are as in the earlier sections: pinned
+`tools/production_loc.py` (`c0fe7f36…`) on Git archives of the first parent
+and the staged tree. Reference absent (retired R9c; last counted 65,417 at
+tree 498dd1917812).
