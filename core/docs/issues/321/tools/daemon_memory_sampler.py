@@ -2,7 +2,8 @@
 
 usage (host):  daemon_memory_sampler.py <out.jsonl> <seconds>
 
-Waits up to 30 s for the first running container that mounts a
+Waits up to 90 s (cloning a large original comes first) for the first running
+daemon container (`/usr/local/bin/layerfs-daemon`) that mounts a
 `layerfs-fsb-sample-*` volume, then starts a read-only observer container
 from the pinned image in that container's PID namespace. The observer reads
 the daemon's `/proc/1/status` and `/proc/1/task/*/comm`; it writes nothing
@@ -48,11 +49,12 @@ while time.monotonic() < end:
 
 def sample_container(deadline):
     while time.monotonic() < deadline:
-        listed = subprocess.run(["docker", "ps", "--format", "{{.ID}} {{.Mounts}}"],
+        listed = subprocess.run(["docker", "ps", "--no-trunc", "--format",
+                                 "{{.ID}}\t{{.Command}}\t{{.Mounts}}"],
                                 capture_output=True, text=True, timeout=10).stdout
         for line in listed.splitlines():
-            ident, _, mounts = line.partition(" ")
-            if "layerfs-fsb-sample-" in mounts:
+            ident, command, mounts = (line.split("\t") + ["", ""])[:3]
+            if "layerfs-daemon" in command and "layerfs-fsb-sample-" in mounts:
                 return ident
         time.sleep(0.1)
     return None
@@ -61,9 +63,9 @@ def sample_container(deadline):
 def main():
     out, seconds = sys.argv[1], float(sys.argv[2])
     started = time.monotonic()
-    ident = sample_container(started + 30)
+    ident = sample_container(started + 90)
     if ident is None:
-        raise SystemExit("no sample container within 30 s")
+        raise SystemExit("no sample daemon container within 90 s")
     left = max(1.0, seconds - (time.monotonic() - started))
     with open(out, "x") as rows:
         rows.write(json.dumps({"container": ident, "image": IMAGE, "fields": FIELDS}) + "\n")
