@@ -98,7 +98,7 @@ class StoreFixture:
 class CommitCensus(unittest.TestCase):
     def test_all_six_current_schemas_and_streaming_eof_preserve_source(self):
         with tempfile.TemporaryDirectory(prefix="fsb-census-test-") as temporary:
-            for version in range(7,13):
+            for version in (7, 8, 9, 13, 14, 15):
                 home=Path(temporary)/str(version);home.mkdir()
                 fixture=StoreFixture(home,version,commits=130 if version==9 else 3)
                 before=oracle.file_sha(fixture.path)

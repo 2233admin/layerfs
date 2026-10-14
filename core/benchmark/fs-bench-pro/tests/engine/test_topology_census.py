@@ -53,7 +53,7 @@ class GraphFixture(fixture_module.StoreFixture):
 class TopologyCensus(unittest.TestCase):
     def test_identical_acknowledgements_collapse_only_full_tuples_and_keep_unused_initial_branch(self):
         with tempfile.TemporaryDirectory() as temporary:
-            for version in range(7,13):
+            for version in (7, 8, 9, 13, 14, 15):
                 home=Path(temporary)/str(version); home.mkdir()
                 fixture=GraphFixture(home,version)
                 before=oracle.file_sha(fixture.path)

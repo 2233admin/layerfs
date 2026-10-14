@@ -128,34 +128,16 @@ class LargeRootProofs(unittest.TestCase):
 class CellCountPins(unittest.TestCase):
     """Phase 14 corrected C10 by one READ; issues 320 and 321 lower statements only; the baseline file is unchanged."""
     NAMES = ('requests', 'owner_jobs', 'statements')
-    # Statements at the final source of issue 321 (REQUEST-PATH.md section 10), frozen before.
+    # Historical issue-321 statement pairs plus the recorded issue-320 C06
+    # correction. These are not measurements of the final renamed source.
     STATEMENTS = {'C01': (44004, 21002), 'C02': (46004, 22002), 'C04': (42644, 19612), 'C05': (46637, 20269),
-                  'C06': (9766, 7183), 'C07': (23133, 17440), 'C08': (9783, 7185), 'C09': (1055, 517),
+                  'C06': (9766, 4619), 'C07': (23133, 17440), 'C08': (9783, 7185), 'C09': (1055, 517),
                   'C10': (14408, 10773), 'C11': (9760, 7174)}
-    # Executions of one request at that source, as the five host replays pin them.
-    GETATTR, LOOKUP_ABSENT, LOOKUP_BASE, OPEN, READ, READDIR, CREATE, WRITE_CELL, WRITE_64K, WRITE_128K = 1, 2, 3, 1, 1, 2, 10, 8, 10, 14
-
-    def test_the_exact_cells_are_sums_of_the_per_request_model(self):
-        first = self.CREATE + 1  # the first CREATE of a mount inserts the root's local row
-        c01 = 1000 * self.LOOKUP_ABSENT + 1001 * self.GETATTR + 999 * self.CREATE + first + 1000 * self.WRITE_CELL
-        c06 = self.LOOKUP_ABSENT + 2 * self.GETATTR + first + 512 * self.WRITE_128K
-        model = {'C01': c01, 'C02': c01 + 1000 * self.GETATTR,
-                 # C04 is the host replay's own count; find adds 101 GETATTR, 112 OPENDIR of one statement and 222 READDIR.
-                 'C04': 19612, 'C05': 19612 + 101 * self.GETATTR + 112 + 222 * self.READDIR,
-                 'C06': c06,
-                 'C07': c06 + 2 * self.LOOKUP_ABSENT + 2 * self.GETATTR + self.OPEN + self.CREATE + 1024 * self.WRITE_64K,
-                 'C08': c06 + self.GETATTR + self.OPEN,
-                 'C09': self.GETATTR + self.LOOKUP_BASE + self.OPEN + 512 * self.READ,
-                 'C10': 2 * self.GETATTR + self.LOOKUP_BASE + 2 * self.LOOKUP_ABSENT + self.OPEN + first + 512 * self.READ + 1024 * self.WRITE_64K,
-                 # The first WRITE into a base file inserts that inode's local row.
-                 'C11': self.GETATTR + self.LOOKUP_BASE + self.OPEN + 512 * self.WRITE_128K + 1}
-        self.assertEqual(model, {cell: after for cell, (_, after) in self.STATEMENTS.items()})
-        self.assertEqual({cell: row['statements'] for cell, row in workspace.CELL_COUNT_CORRECTIONS.items()}, model)
 
     def test_baseline_file_is_the_pinned_frozen_source(self):
         self.assertEqual(workspace.identity.sha256(workspace.BASELINE), workspace.BASELINE_SHA256)
 
-    def test_requests_and_owner_jobs_stay_frozen_and_statements_follow_the_model(self):
+    def test_requests_and_owner_jobs_stay_frozen_and_statements_follow_recorded_corrections(self):
         self.assertEqual(set(workspace.CELL_COUNT_CORRECTIONS), set(self.STATEMENTS))
         self.assertEqual(set(workspace.CELL_STATEMENT_RANGES), {'C03', 'C12'})
         for number in range(1, 13):

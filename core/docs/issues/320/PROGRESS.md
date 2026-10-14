@@ -4183,3 +4183,81 @@ All four in-provider normal/forced read drain cases pass. FP31 absent/underflow 
 While the external busy gate held, simplify the observer correction further: keep the single original failure in OnceLock outside the provider mutex, rather than duplicating it with an atomic quarantine latch. Work/explicit failure observations no longer wait on in-flight provider I/O; poison latches one original cause, unknown still returns the identical Arc. This replaces the uncommitted atomic prototype, reduces code and preserves exact custody. New affected checks follow; old atomic-prototype checks retain that identity.
 
 Final product/test checkpoint: host and Linux all-target Clippy -D warnings pass. OnceLock transition first missed the old close-field reference (host compiler refused), fixed directly; Linux Clippy then found one now-unused helper binding, removed. Formatting initially omitted --all for the virtual workspace and was refused before formatting; corrected invocation passed. Five final reader lifecycle cases pass, including exact unknown/poison failure identity, stopped bind race, healthy failed-bind close and stale clients. Ten affected mounted reader/drain/FORGET cases pass at final implementation. Across the40 Linux targets99 retained executed cases pass with unaffected earlier evidence reused; three existing ignored cases remain. The old diagnostic cardinality case is deleted, not converted. Host install handoff now passes with the current build-listed Linux role binary, eliminating that prerequisite gap. Huge installed namespace remains NOT_RUN: prepared schema10 input requires owner authorization to regenerate for schema13. No test command timed out, no waits/limits widened. Final source checksum list retained as terminal-final-check-sources.sha256. Tool50 passes reused, boundary guard current pass.
+
+Sealed release build at eaaf0de48 completed102.8s (115s command limit), pinned Linux image378b799...d2cd6; build manifest in 2026-10-15-issue321-terminal-final-build. Engine attempt384 cases failed:4 failures/5 errors across seven methods (three skipped), all old fixture assumptions: versions10–12, Overlay34 and removed workspace/commit_run/accounting-trigger/table pin, and stale C06 arithmetic. Preserve failure receipt. Families90/90 pass (35.6s), cluster-two281/281 pass (87.6s), each one invocation120s limit. Engine fixtures updated; obsolete per-request arithmetic case removed with coverage recorded; six changed failing methods only will rerun. Product/build inputs unchanged, so sealed native binaries and unaffected proof receipts are reused, no dirty build seal or prepared-original regeneration.
+
+### Terminal result, 2026-10-15
+
+Implementation and available terminal functional checks pass. Engine380 passes/
+three skips: reuse374 unaffected initial passes and run six changed methods,
+with one obsolete private statement-arithmetic case deleted. Families90 and
+cluster-two281 pass once each with sealed eaaf0de48 release binaries. The final
+Python fixture changes do not change product, compilation, image or native
+binary identities; sealed build reuse is explicit. Original engine384-case
+failure receipt remains unchanged. No suite timeout.
+
+Host:236 initial binaries,1021 initial passes/16 failures/four ignored/two
+prerequisite skips; six obsolete files deleted, four retained failed cases fixed,
+five reader lifecycle proofs passed again for the affected final failure
+implementation, and host/Linux install handoff passed with its actual Linux
+role binary. Unchanged passes reused. Huge installed namespace remains NOT_RUN.
+Linux:40 selected targets,99 retained executed cases pass, three ignored;
+old diagnostic cardinality case deleted and one stale-Revoke fixture renamed.
+Final affected reader/drain/FORGET subset10/10 passes. Host/Linux all-target
+Clippy -D warnings pass; fmt/whitespace and boundary guard pass (677 production
+Rust/SQL files). Tool selftests50 passes reused. native/Native word and filename
+scans under core/crates are empty. No unsafe/dependency/third-party changes.
+
+Test pass deleted87 target/helper files across306a49cd7,2170e1897 and eaaf0de48;
+individual reasons and relinquished coverage are in TEST-TRIAGE and commit
+messages. It also drops the named obsolete individual mechanism cases. No
+production implementation moved into tests/tools. The six-table goal retains
+one explicit backed cleanup-debt exception: seven tables, zero triggers, no SQL
+custody roster. CLEANUP-MEMORY-DESIGN records why an in-memory debt list would
+lose bounded-memory behavior. default_permissions remains.
+
+Production at253291435 was79,447; final product is77,547, delta-1,900 (-2.39%).
+This is source size, not performance. Store schema13–15 host acquisition replaces
+10–12; old prepared benchmark originals were inspected read-only and preserved.
+New C01/C03/C06, one-/four-Workspace time/RSS and tier1 command/Commit measurements
+remain NOT_RUN pending specifically authorized original regeneration. Eligible
+performance qualification is INCOMPLETE. No GETATTR cache/write-gathering or
+step-size optimization is claimed without those measurements. Durable execution
+is NOT_RUN—disabled by owner until explicit reauthorization. No new push, merge
+or issue post performed; local branch remains unpushed beyond its earlier
+explicitly authorized landing. Main and the other owner's worktree untouched.
+
+Exact counted commits since253291435 (same pinned counter on first-parent/staged archives; reference absent, retired R9c, last65,417 at tree498dd1917812):
+
+| Commit | Change | Production LOC |
+| --- | --- | --- |
+| `346cc9d5a` | Record the open-state cuts and hand off the simplification plan | 79,447 -> 79,447 (delta +0) |
+| `c41bc35da` | Add LOC and speed expectations and the measurement subset to the handoff | 79,447 -> 79,447 (delta +0) |
+| `87361bfcc` | Record owner decisions on Store readers and permission checks in the handoff | 79,447 -> 79,447 (delta +0) |
+| `e50c01063` | Plan the aggressive simplification sweep and the drop-first test pass | 79,447 -> 79,447 (delta +0) |
+| `d4b0c6808` | Record passing pre-landing suites for the open-state cuts | 79,447 -> 79,447 (delta +0) |
+| `562c06d9d` | Select explicit exec concurrency phases for the small baseline | 79,447 -> 79,447 (delta +0) |
+| `22ff7b300` | Accept empty recipe metadata in the exec concurrency diagnostic | 79,447 -> 79,447 (delta +0) |
+| `8bf5727aa` | Drop the constant namespace from Workspace reply tickets | 79,447 -> 79,429 (delta -18) |
+| `6eb0ad13e` | Use one mount slot and remove unused generic leases | 79,429 -> 79,315 (delta -114) |
+| `beb2b0732` | Remove overlay accounting table and its 27 triggers | 79,315 -> 79,226 (delta -89) |
+| `afc4accd9` | Journal Workspace runtime state in memory and remove its SQL row | 79,226 -> 79,110 (delta -116) |
+| `f2960b0bb` | Move Commit and base custody into journaled owner maps | 79,110 -> 78,971 (delta -139) |
+| `e84b7b292` | Remove Overlay routing baggage and keep exact engine ownership | 78,971 -> 78,715 (delta -256) |
+| `73984c104` | refactor(daemon): return typed Workspace values without job receipts | 78,715 -> 78,086 (delta -629) |
+| `e7e65dab9` | refactor(daemon): observe Resources on the bound Workspace | 78,086 -> 77,931 (delta -155) |
+| `9b9964673` | refactor(store): open one reader per mounted Workspace | 77,931 -> 77,752 (delta -179) |
+| `baec62058` | fix(receipts): subtract observers using the declared frontier classes | 77,752 -> 77,752 (delta +0) |
+| `1d7fd30c9` | fix(receipts): price current Status and no-attempt observations | 77,752 -> 77,752 (delta +0) |
+| `6e467dc6f` | revert(store): retain the pool after the reader candidate misses acceptance | 77,752 -> 77,931 (delta +179) |
+| `313ed6020` | refactor(daemon): remove 24 unused typed forwarding methods | 77,931 -> 77,703 (delta -228) |
+| `b65f012ed` | refactor(kernel): name kernel-facing ownership and operations explicitly | 77,703 -> 77,703 (delta +0) |
+| `9c958f31a` | refactor(store): reintroduce Workspace-owned readers under revised allowances | 77,703 -> 77,533 (delta -170) |
+| `ed9540778` | refactor(storage): call the payload record lane chunk | 77,533 -> 77,533 (delta +0) |
+| `bd2204a67` | refactor(bridge): name mount records and duplex authentication explicitly | 77,533 -> 77,537 (delta +4) |
+| `b2114c83b` | refactor(telemetry): use platform and host terminology | 77,537 -> 77,537 (delta +0) |
+| `437cfd4aa` | refactor(project): name host acquisition and version its Store schema | 77,537 -> 77,531 (delta -6) |
+| `306a49cd7` | test: delete obsolete mechanism and duplicate ownership proofs | 77,531 -> 77,531 (delta +0) |
+| `2170e1897` | test: retain behavior proofs and bind Store ports to their opened reader | 77,531 -> 77,548 (delta +17) |
+| `eaaf0de48` | fix: observe reader failure custody without blocking provider demands | 77,548 -> 77,547 (delta -1) |
+| Terminal test/docs follow-through (this commit) | Current schema fixtures and terminal record | 77,547 -> 77,547 (delta +0) |

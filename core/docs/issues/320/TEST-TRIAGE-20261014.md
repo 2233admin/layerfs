@@ -1,6 +1,8 @@
 # Separate test pass — issue #320
 
-Status: in progress. Product source is 437cfd4aa. The prescribed Cargo 1.85.1
+Status: terminal functional checks pass with explicit prerequisite and performance gaps.
+Product source is eaaf0de48; build inputs are unchanged by the final Python test fixes.
+The original compile triage below used 437cfd4aa. The prescribed Cargo 1.85.1
 test --no-run --keep-going rejected its unsupported flag before compilation.
 Equivalent build --all-targets --profile test --keep-going compiles test harnesses
 without execution. Host completed in about 30 s; Linux hit its explicit 120 s
@@ -374,3 +376,5 @@ Branch/byte oracles, kernel observations and cleanup outcomes remain.
 - `installed_store.rs`: assert exact original BindRequest at earlier stopped reader admission, then verify first binding remains readable.
 
 Linux runtime: delete observed_application::observer_reads_are_charged_and_cardinality_does_not_follow_unrelated_workspaces. Old shared-reader diagnostic row cardinality and statement-charge mechanism; five other operator/control cases retain their passes. No mounted semantic proof file deleted. Resource helpers now observe the target Workspace, then check sibling isolation separately after target Gone.
+
+Engine follow-through: remove only CellCountPins::test_the_exact_cells_are_sums_of_the_per_request_model, obsolete issue321 private statement arithmetic. Frozen baseline hash and exact request/job guards survive; recorded C06 statement pair is4619, its prior diagnostic correction. This does not qualify other final-source cell statement counts. Mandatory engine suite stays. Census fixtures use independently listed Store versions7/8/9/13/14/15; overlay empty-template/refusal fixtures use schema37, actual remaining rows and unexpected-trigger/source-pin tampering.

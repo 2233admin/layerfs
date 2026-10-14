@@ -86,3 +86,28 @@ failed bind, reader unknown/poison custody and a bind racing Store shutdown.
 Mounted request draining and sustained concurrent calls/Commits remain in the
 surviving Linux proofs. No new performance sample was run; specifically gated
 benchmark-original preparation and eligible performance qualification remain pending.
+
+## Terminal qualification, 2026-10-15
+
+Product source eaaf0de48, one sealed release build, Disposable only. Functional
+proofs cover the final ownership and failure-observation implementation.
+
+| Structural tradeoff | Qualification | Limit |
+| --- | --- | --- |
+| Frequent fresh mounts pay connection opening | Fresh mounts open and healthy Close disposes each connection; stale ports never borrow a replacement. Failed bind closes its healthy reader. | Bootstrap latency and final peak RSS are not measured. |
+| Same-mount demands serialize | Real held OPEN/READDIR/READ demands, concurrent calls/writers and Commit capture/install proofs pass; provider calls finish before drain/Revoke/Close. | No eligible final demand latency comparison. |
+| Connections scale with mounted Workspaces | Four-Workspace direct-read proof and multi-mount/cycle/isolation proofs pass; the immutable cache stays Store-owned. Cache configuration stays2MiB and mmap-off. | Cache configuration does not prove total RSS; final matched RSS/time qualification is incomplete. |
+| Normal/forced unmount, failed bind, shutdown and retained custody | Five lifecycle cases and ten final affected mounted cases pass; the broader99 Linux cases retain covering passes. Original unknown/poison causes are stable, and the original session closes despite stale diagnostic/client references. | Three existing Linux cases ignored; huge prepared namespace remains unavailable. |
+
+The final reader holds its original session identity. Its one original failure
+lives in OnceLock outside the provider mutex: work and failure observations do
+not wait on an in-flight demand. This replaces a redundant atomic quarantine
+prototype. No automatic reopen, retry, replay or guessed cleanup is added.
+
+Owner allowance remains independent:1552.4ms*1.10=1707.64ms and
+36044KiB*1.10=39648.4KiB. Prior candidate1575.4ms/39556KiB falls inside both;
+exactly10% is allowed. Those prior diagnostic samples remain INELIGIBLE and
+neither the original rejection nor restoration is relabeled. Reintroduction is
+authorized; final performance qualification remains incomplete. New schema13
+measurements require specifically authorized regeneration of prepared schema10
+benchmark originals. None was regenerated.

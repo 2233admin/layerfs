@@ -5,6 +5,18 @@
 > `/Users/yifanxu/Ephemeral-AI-Lab/layerfs-perf-run`, unpushed. Tracked in
 > issue #320 (the per-Workspace overlay work was #321, closed).
 
+Current continuation (2026-10-15): product sweep and separate test pass are
+complete at product source `eaaf0de48`. Terminal functional checks pass with
+explicit prerequisite/performance gaps in [PROGRESS](PROGRESS.md). The owner
+superseded the earlier reader rejection condition: prefer per-Workspace readers
+with independent <=10% wall-time and observed peak RSS allowances. The prior
+samples remain INELIGIBLE; the shared-pool restoration below is historical.
+Per-Workspace readers are reintroduced and functionally verified. See the
+[reader design](WORKSPACE-READER-DESIGN-20261014.md) and
+[test triage](TEST-TRIAGE-20261014.md). Do not repeat passing unchanged treatments
+or regenerate benchmark originals without the specifically required approval.
+No further outward action is authorized by this continuation.
+
 ## 1. What the owner asked
 
 In the owner's words:

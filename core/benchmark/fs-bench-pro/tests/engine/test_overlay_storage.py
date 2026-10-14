@@ -105,7 +105,7 @@ class ClosedOverlayStorage(unittest.TestCase):
             result = fixture.run()
             owner = result['owners'][0]
             self.assertEqual(result['schema'], 'fs-bench-pro-closed-storage-observation-v2')
-            self.assertEqual(result['schema_version'], 34)
+            self.assertEqual(result['schema_version'], 37)
             self.assertEqual(owner['state'], 'GONE')
             self.assertEqual(owner['workspace_file'], '/layerfs-local/overlay/1.sqlite')
             self.assertIsNone(owner['workspace_file_bytes_after_stop'])
@@ -147,8 +147,8 @@ class ClosedOverlayStorage(unittest.TestCase):
 
     def test_a_template_that_holds_a_row_is_refused(self):
         for sql, params in (
-                ('INSERT INTO workspace(incarnation,base_root,active) VALUES(?,?,1)', (bytes([1]) * 32, bytes(32))),
-                ('INSERT INTO commit_run VALUES(7,9)', ())):
+                ('INSERT INTO fs_truncate(inode,generation,depth,cell_offset,epoch) VALUES(1,1,1,0,1)', ()),
+                ('INSERT INTO cleanup_task(kind,resource,target) VALUES(1,0,1)', ())):
             with self.subTest(sql=sql), tempfile.TemporaryDirectory(prefix='fsb-overlay-test-') as temp:
                 fixture = OverlayFixture(Path(temp)); fixture.mutate(sql, params)
                 with self.assertRaisesRegex(ValueError, 'template holds rows'):
@@ -198,7 +198,7 @@ class ClosedOverlayStorage(unittest.TestCase):
                                               owners=[{**fixture.owner, 'incarnation': 'ff' * 32}])
 
     def test_canonical_schema_trigger_membership_version_and_source_pins(self):
-        for sql in ('CREATE TABLE extra(a INTEGER)', 'DROP TRIGGER fs_data_account_insert', 'PRAGMA user_version=33'):
+        for sql in ('CREATE TABLE extra(a INTEGER)', 'CREATE TRIGGER extra AFTER INSERT ON fs_truncate BEGIN SELECT 1; END', 'PRAGMA user_version=33'):
             with self.subTest(sql=sql), tempfile.TemporaryDirectory(prefix='fsb-overlay-test-') as temp:
                 fixture = OverlayFixture(Path(temp)); fixture.mutate(sql)
                 with self.assertRaisesRegex(ValueError, 'schema'):
@@ -206,7 +206,7 @@ class ClosedOverlayStorage(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix='fsb-overlay-test-') as temp:
             fixture = OverlayFixture(Path(temp))
             actual_sha = oracle.file_sha
-            with patch.object(oracle, 'file_sha', side_effect=lambda path: 'bad' if str(path).endswith('/sql/accounting.sql') else actual_sha(path)):
+            with patch.object(oracle, 'file_sha', side_effect=lambda path: 'bad' if str(path).endswith('/layerfs-overlay/sql/schema.sql') else actual_sha(path)):
                 with self.assertRaisesRegex(ValueError, 'source pin'):
                     fixture.run()
 
