@@ -56,7 +56,7 @@ impl PackDomain {
         use crate::pack::layout::PackLane;
         match lane {
             PackLane::Ordinary => Self::Metadata,
-            PackLane::Native | PackLane::WholeFile | PackLane::Singleton => Self::Payload,
+            PackLane::Chunk | PackLane::WholeFile | PackLane::Singleton => Self::Payload,
         }
     }
 }

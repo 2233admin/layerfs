@@ -97,7 +97,7 @@ impl Packer {
         let rows = pending.members.len();
         let queueable = matches!(
             lane,
-            PackLane::Ordinary | PackLane::Native | PackLane::WholeFile
+            PackLane::Ordinary | PackLane::Chunk | PackLane::WholeFile
         ) && bytes <= PACK_LIMIT
             && rows <= BATCH_OBJECT_LIMIT;
         // Independent lanes share the original single queue's byte/row budget.

@@ -104,7 +104,7 @@ pub struct CodecProfile {
 
 impl CodecProfile {
     /// Chunk payloads: 32 KiB raw limit, window log 20.
-    pub const fn native() -> Self {
+    pub const fn chunk() -> Self {
         Self {
             raw_limit: CHUNK_RAW_LIMIT,
             frame_limit: CHUNK_FRAME_LIMIT,

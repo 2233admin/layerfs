@@ -18,7 +18,7 @@ use crate::policy::RECORD_COUNT_LIMIT;
 /// Read tag of a record stored without a delta base.
 pub const FULL_TAG: u8 = 0;
 
-/// Frames `records` into one group body for the ordinary or native lane.
+/// Frames `records` into one group body for the ordinary or chunk lane.
 pub fn frame_group(records: &[Vec<u8>]) -> StorageResult<Vec<u8>> {
     frame_group_bounded(records, GROUP_LIMIT)
 }
@@ -26,7 +26,7 @@ pub fn frame_group(records: &[Vec<u8>]) -> StorageResult<Vec<u8>> {
 /// Frames `records` into one group body bounded by `limit`.
 ///
 /// The singleton lane needs the same grammar with its own, larger body bound; the
-/// ordinary and native lanes keep the group ceiling.
+/// ordinary and chunk lanes keep the group ceiling.
 pub fn frame_group_bounded(records: &[Vec<u8>], limit: usize) -> StorageResult<Vec<u8>> {
     if records.is_empty() || records.len() > RECORD_COUNT_LIMIT {
         return Err(StorageError::Integrity("group record count"));
@@ -86,7 +86,7 @@ pub const WHOLE_FILE_GROUP_BODY_LIMIT: usize =
 
 /// Frames `records` into one compact whole-file group body.
 ///
-/// The grammar is the native lane's - one record count, one end offset per record,
+/// The grammar is the chunk lane's - one record count, one end offset per record,
 /// then the records - and the records inside it are the compact ones: each
 /// contributes its tag, its optional base identity and its frame, with the two
 /// little-endian length fields dropped, because the group's own end offsets say
@@ -174,7 +174,7 @@ pub fn framed_length(records: &[Vec<u8>]) -> StorageResult<usize> {
 
 /// Builds the placement-ready group for `lane` from already-framed records.
 ///
-/// The ordinary lane may retain a compressed body; the native and whole-file
+/// The ordinary lane may retain a compressed body; the chunk and whole-file
 /// lanes store raw bodies, matching their grammars.
 pub fn build_group(
     lane: PackLane,
@@ -191,7 +191,7 @@ pub fn build_group(
                 codec: GroupCodec::Raw,
             })
         }
-        PackLane::Native => Ok(EncodedGroup {
+        PackLane::Chunk => Ok(EncodedGroup {
             decoded_length: framed_length(records)?,
             bytes: frame_group(records)?,
             records: records.len(),
@@ -321,7 +321,7 @@ pub fn directory_entries(
                     .checked_add(group.bytes.len())
                     .ok_or(StorageError::Integrity("pack size"))?;
             }
-            PackLane::Ordinary | PackLane::Native | PackLane::Singleton => {
+            PackLane::Ordinary | PackLane::Chunk | PackLane::Singleton => {
                 bytes.extend_from_slice(
                     &u32::try_from(offset)
                         .map_err(|_| StorageError::Integrity("group start"))?

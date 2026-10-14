@@ -3983,3 +3983,16 @@ Reintroduced-reader product verification: host and pinned Linux checks and
 warning-denying Clippy passed for lib/bins/examples. Formatting and whitespace
 passed. Oracle pins match final formatted sources. No tests or new measurements
 were run during Phase 1; the listed final qualifications remain pending.
+
+
+### Phase 1: storage chunk lane terminology
+
+Renamed PackLane::Native to Chunk, VERSION_NATIVE constants (including stored
+and tight variants) to VERSION_CHUNK, CodecProfile::native to chunk and the
+chunk-record parser accordingly. Lane comments/errors follow their meaning.
+Stored version numbers and encoding/decoding are unchanged. Acquisition APIs
+remain for the separate host-file group. Tests: not yet updated. The host
+product check passed; other checks are appended at completion.
+
+Chunk rename verification: host/Linux product check and warning-denying
+Clippy passed; formatting and whitespace passed. No tests run in Phase 1.

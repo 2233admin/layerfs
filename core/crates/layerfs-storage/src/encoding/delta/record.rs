@@ -1,4 +1,4 @@
-//! Delta record framing for the compact whole-file and native chunk lanes.
+//! Delta record framing for the compact whole-file and chunk chunk lanes.
 //!
 //! A record is either FULL (no base) or PREFIX (exactly one direct base). The
 //! base identity is part of the record, and therefore part of its cost, so a
@@ -53,14 +53,14 @@ pub struct ParsedRecord<'a> {
 pub fn record_width(lane: PackLane, base: Option<ObjectId>, frame_length: usize) -> usize {
     match lane {
         PackLane::WholeFile => 1 + 8 + usize::from(base.is_some()) * ID_BYTES + frame_length,
-        PackLane::Native => 1 + 4 + usize::from(base.is_some()) * ID_BYTES + frame_length,
+        PackLane::Chunk => 1 + 4 + usize::from(base.is_some()) * ID_BYTES + frame_length,
         PackLane::Ordinary | PackLane::Singleton => {
             1 + 8 + usize::from(base.is_some()) * ID_BYTES + frame_length
         }
     }
 }
 
-/// Encodes one whole-file or native lane record.
+/// Encodes one whole-file or chunk lane record.
 pub fn encode(
     lane: PackLane,
     raw_length: usize,
@@ -85,7 +85,7 @@ pub fn encode_stored(lane: PackLane, raw_length: usize, payload: &[u8]) -> Stora
     encode_tagged(lane, STORED_TAG, raw_length, None, payload)
 }
 
-/// Encodes one whole-file or native lane record under an explicit tag.
+/// Encodes one whole-file or chunk lane record under an explicit tag.
 pub fn encode_tagged(
     lane: PackLane,
     tag: u8,
@@ -120,7 +120,7 @@ pub fn encode_tagged(
                     .to_le_bytes(),
             );
         }
-        PackLane::Native => {
+        PackLane::Chunk => {
             record.extend_from_slice(
                 &u32::try_from(raw_length)
                     .map_err(|_| StorageError::Integrity("record raw length"))?
@@ -146,7 +146,7 @@ pub fn parse(
 ) -> StorageResult<ParsedRecord<'_>> {
     match lane {
         PackLane::WholeFile => parse_compact(record, canonical_length),
-        PackLane::Native => parse_native(record),
+        PackLane::Chunk => parse_chunk(record),
         PackLane::Ordinary => parse_ordinary(record),
         PackLane::Singleton => parse_framed(record),
     }
@@ -201,15 +201,15 @@ fn parse_compact(record: &[u8], canonical_length: usize) -> StorageResult<Parsed
     })
 }
 
-/// Parses a native chunk record.
-pub fn parse_native(record: &[u8]) -> StorageResult<ParsedRecord<'_>> {
+/// Parses a chunk chunk record.
+pub fn parse_chunk(record: &[u8]) -> StorageResult<ParsedRecord<'_>> {
     if record.len() < 5 {
-        return Err(StorageError::Integrity("native record framing"));
+        return Err(StorageError::Integrity("chunk record framing"));
     }
     let raw_length = u32::from_le_bytes(
         record[1..5]
             .try_into()
-            .map_err(|_| StorageError::Integrity("native raw length"))?,
+            .map_err(|_| StorageError::Integrity("chunk raw length"))?,
     ) as usize;
     let (base, start) = match record[0] {
         FULL_TAG | STORED_TAG => (None, 5),
@@ -217,17 +217,17 @@ pub fn parse_native(record: &[u8]) -> StorageResult<ParsedRecord<'_>> {
             Some(ObjectId::from_bytes(
                 record
                     .get(5..5 + ID_BYTES)
-                    .ok_or(StorageError::Integrity("native base identity"))?,
+                    .ok_or(StorageError::Integrity("chunk base identity"))?,
             )?),
             5 + ID_BYTES,
         ),
-        _ => return Err(StorageError::Integrity("native record tag")),
+        _ => return Err(StorageError::Integrity("chunk record tag")),
     };
     let frame = record
         .get(start..)
-        .ok_or(StorageError::Integrity("native record frame"))?;
+        .ok_or(StorageError::Integrity("chunk record frame"))?;
     if frame.is_empty() || raw_length == 0 {
-        return Err(StorageError::Integrity("native record framing"));
+        return Err(StorageError::Integrity("chunk record framing"));
     }
     Ok(ParsedRecord {
         tag: record[0],

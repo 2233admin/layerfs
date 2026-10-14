@@ -169,14 +169,14 @@ pub(crate) fn decode_selected_group(
             }
             Ok(canonical)
         }
-        PackLane::Native => {
+        PackLane::Chunk => {
             if view.codec != GroupCodec::Raw {
-                return Err(StorageError::Integrity("native group codec"));
+                return Err(StorageError::Integrity("chunk group codec"));
             }
             let bytes = framed_record(selected, location.record_number)?;
-            let parsed = record::parse_native(bytes)?;
+            let parsed = record::parse_chunk(bytes)?;
             let raw = decode_payload(
-                PackLane::Native,
+                PackLane::Chunk,
                 parsed.tag,
                 parsed.raw_length,
                 parsed.frame,
@@ -186,7 +186,7 @@ pub(crate) fn decode_selected_group(
             )?;
             let canonical = encode_chunk_object(&raw)?;
             if canonical.len() != canonical_length {
-                return Err(StorageError::Integrity("native record length"));
+                return Err(StorageError::Integrity("chunk record length"));
             }
             Ok(canonical)
         }
@@ -195,7 +195,7 @@ pub(crate) fn decode_selected_group(
                 return Err(StorageError::Integrity("compact group codec"));
             }
             // The group's own directory carries the record boundaries, so the
-            // record is extracted exactly as a native group's is. The compact
+            // record is extracted exactly as a chunk group's is. The compact
             // record inside has no length fields of its own; `parse` re-derives
             // the raw length from the canonical length the locator records.
             let bytes = framed_record(selected, location.record_number)?;
@@ -266,7 +266,7 @@ fn decode_payload(
         return Ok(frame.to_vec());
     }
     let profile = match lane {
-        PackLane::Native => CodecProfile::native(),
+        PackLane::Chunk => CodecProfile::chunk(),
         _ => CodecProfile::whole_file(capacities),
     };
     match (tag == record::PREFIX_TAG, base) {

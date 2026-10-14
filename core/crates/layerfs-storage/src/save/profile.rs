@@ -9,7 +9,7 @@ pub struct SaveProfile {
     pub delta_ns: u64,
     /// Group codec/framing wall, including pooled value-group compression.
     pub group_ns: u64,
-    /// Non-native records selected.
+    /// Non-chunk records selected.
     pub stored_records: u64,
     /// Dependency selection work.
     pub resolve: ResolveProfile,

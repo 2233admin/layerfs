@@ -1,7 +1,7 @@
 //! Pack grammars, framing lanes and exact fit arithmetic.
 //!
 //! A pack is a control area, a **reserved directory region** and group bodies.
-//! Five framings are implemented: v9 ordinary groups, v10 native chunk records,
+//! Five framings are implemented: v9 ordinary groups, v10 chunk chunk records,
 //! v11 compact whole-file records, v12 pooled metadata groups and v13 singleton
 //! packs. A lane is a framing, not a worker or a second store, and existing
 //! locators stay stable when a pack's directory grows.
@@ -48,7 +48,7 @@ pub const HEADER_LEN: usize = 24;
 pub const GROUP_COUNT_OFFSET: usize = 12;
 /// Offset of the pack's assembled length inside the control area.
 pub const USED_OFFSET: usize = 16;
-/// Directory entry width of the ordinary and native framings.
+/// Directory entry width of the ordinary and chunk framings.
 pub const DIRECTORY_ENTRY_LEN: usize = 16;
 /// Directory entry width of the compact whole-file framing.
 pub const WHOLE_FILE_ENTRY_LEN: usize = 4;
@@ -58,27 +58,27 @@ pub const WHOLE_FILE_COMPACT_DROP: usize = 8;
 /// Ordinary framing version: canonical objects in multi-record groups.
 /// Still read; new packs use [`VERSION_ORDINARY_TIGHT`].
 pub const VERSION_ORDINARY: u32 = 9;
-/// Native framing version: one chunk record per group entry.
+/// Chunk framing version: one chunk record per group entry.
 ///
-/// Still read, and no longer written: a native pack may carry a payload record
-/// stored verbatim, which this version predates. See [`VERSION_NATIVE_STORED`].
-pub const VERSION_NATIVE: u32 = 10;
+/// Still read, and no longer written: a chunk pack may carry a payload record
+/// stored verbatim, which this version predates. See [`VERSION_CHUNK_STORED`].
+pub const VERSION_CHUNK: u32 = 10;
 /// Compact whole-file framing version.
 ///
-/// Still read, and no longer written, for the same reason as [`VERSION_NATIVE`].
+/// Still read, and no longer written, for the same reason as [`VERSION_CHUNK`].
 pub const VERSION_WHOLE_FILE: u32 = 11;
 /// Singleton framing version: one oversized record in one pack.
 ///
-/// Still read, and no longer written, for the same reason as [`VERSION_NATIVE`].
+/// Still read, and no longer written, for the same reason as [`VERSION_CHUNK`].
 pub const VERSION_SINGLETON: u32 = 13;
-/// Native framing that may carry a payload stored verbatim.
+/// Chunk framing that may carry a payload stored verbatim.
 ///
 /// The three payload lanes moved because a record's grammar gained a tag value:
 /// a reader that predates it must refuse the pack by version rather than meet an
 /// unknown tag in the middle of a decode, and a reader that has it reads both
 /// versions of every payload lane. The ordinary and pooled lanes carry no payload
 /// frame, so their grammar is unchanged and their versions stay where they were.
-pub const VERSION_NATIVE_STORED: u32 = 15;
+pub const VERSION_CHUNK_STORED: u32 = 15;
 /// Compact whole-file framing that may carry a payload stored verbatim.
 ///
 /// Still read, and no longer written: this version's whole-file groups hold
@@ -88,7 +88,7 @@ pub const VERSION_WHOLE_FILE_STORED: u32 = 14;
 ///
 /// The group body gains the one thing the single-record form derived from the
 /// group's own extent: the record boundaries. They are the same four-byte end
-/// offsets the native lane's groups already carry, so the compact record form
+/// offsets the chunk lane's groups already carry, so the compact record form
 /// itself - the tag, an optional base identity and the frame - is unchanged, and
 /// so is this lane's starts-only directory.
 pub const VERSION_WHOLE_FILE_GROUPED: u32 = 17;
@@ -97,8 +97,8 @@ pub const VERSION_WHOLE_FILE_GROUPED: u32 = 17;
 pub const VERSION_WHOLE_FILE_TIGHT: u32 = 18;
 /// Ordinary groups with sixteen reserved directory slots instead of 256.
 pub const VERSION_ORDINARY_TIGHT: u32 = 19;
-/// Native groups with sixteen reserved directory slots instead of 256.
-pub const VERSION_NATIVE_TIGHT: u32 = 20;
+/// Chunk groups with sixteen reserved directory slots instead of 256.
+pub const VERSION_CHUNK_TIGHT: u32 = 20;
 /// Maximum groups the tight directories can describe.
 pub const TIGHT_GROUPS: usize = 16;
 /// Singleton framing that may carry a payload stored verbatim.
@@ -110,7 +110,7 @@ pub enum PackLane {
     /// Mapping nodes and file states.
     Ordinary,
     /// Chunk payload records.
-    Native,
+    Chunk,
     /// Whole-file payload records.
     WholeFile,
     /// One oversized record alone in its pack.
@@ -121,7 +121,7 @@ impl PackLane {
     /// Every lane, in deterministic order.
     pub const ALL: [Self; 4] = [
         Self::Ordinary,
-        Self::Native,
+        Self::Chunk,
         Self::WholeFile,
         Self::Singleton,
     ];
@@ -134,7 +134,7 @@ impl PackLane {
     pub const fn version(self) -> u32 {
         match self {
             Self::Ordinary => VERSION_ORDINARY_TIGHT,
-            Self::Native => VERSION_NATIVE_TIGHT,
+            Self::Chunk => VERSION_CHUNK_TIGHT,
             Self::WholeFile => VERSION_WHOLE_FILE_TIGHT,
             Self::Singleton => VERSION_SINGLETON_STORED,
         }
@@ -144,7 +144,7 @@ impl PackLane {
     pub const fn index(self) -> usize {
         match self {
             Self::Ordinary => 0,
-            Self::Native => 1,
+            Self::Chunk => 1,
             Self::WholeFile => 2,
             Self::Singleton => 3,
         }
@@ -154,7 +154,7 @@ impl PackLane {
     pub const fn for_role(role: ObjectRole) -> Self {
         match role {
             ObjectRole::WholeFile => Self::WholeFile,
-            ObjectRole::Chunk => Self::Native,
+            ObjectRole::Chunk => Self::Chunk,
             ObjectRole::ExtentLeaf
             | ObjectRole::ExtentBranch
             | ObjectRole::FileState
@@ -173,7 +173,7 @@ impl PackLane {
     pub const fn pack_limit(self) -> usize {
         match self {
             Self::Singleton => SINGLETON_PACK_LIMIT,
-            Self::Ordinary | Self::Native | Self::WholeFile => PACK_LIMIT,
+            Self::Ordinary | Self::Chunk | Self::WholeFile => PACK_LIMIT,
         }
     }
 
@@ -187,7 +187,7 @@ impl PackLane {
         match self {
             Self::Singleton => SINGLETON_PACK_LIMIT,
             Self::WholeFile => PACK_LIMIT,
-            Self::Ordinary | Self::Native => GROUP_LIMIT,
+            Self::Ordinary | Self::Chunk => GROUP_LIMIT,
         }
     }
 
@@ -195,7 +195,7 @@ impl PackLane {
     pub const fn group_count_limit(self) -> usize {
         match self {
             Self::Singleton => 1,
-            Self::Ordinary | Self::Native | Self::WholeFile => TIGHT_GROUPS,
+            Self::Ordinary | Self::Chunk | Self::WholeFile => TIGHT_GROUPS,
         }
     }
 }
@@ -256,7 +256,7 @@ pub const fn body_area_offset(lane: PackLane) -> usize {
 pub const fn directory_entry_len(lane: PackLane) -> usize {
     match lane {
         PackLane::WholeFile => WHOLE_FILE_ENTRY_LEN,
-        PackLane::Ordinary | PackLane::Native | PackLane::Singleton => DIRECTORY_ENTRY_LEN,
+        PackLane::Ordinary | PackLane::Chunk | PackLane::Singleton => DIRECTORY_ENTRY_LEN,
     }
 }
 
@@ -373,7 +373,7 @@ pub fn parse_control_header(bytes: &[u8], total_length: usize) -> StorageResult<
     );
     let lane = match version {
         VERSION_ORDINARY | VERSION_ORDINARY_TIGHT => PackLane::Ordinary,
-        VERSION_NATIVE | VERSION_NATIVE_STORED | VERSION_NATIVE_TIGHT => PackLane::Native,
+        VERSION_CHUNK | VERSION_CHUNK_STORED | VERSION_CHUNK_TIGHT => PackLane::Chunk,
         VERSION_WHOLE_FILE
         | VERSION_WHOLE_FILE_STORED
         | VERSION_WHOLE_FILE_GROUPED
@@ -391,7 +391,7 @@ pub fn parse_control_header(bytes: &[u8], total_length: usize) -> StorageResult<
             .map_err(|_| StorageError::Integrity("pack group count"))?,
     ) as usize;
     let slots = match version {
-        VERSION_ORDINARY_TIGHT | VERSION_NATIVE_TIGHT | VERSION_WHOLE_FILE_TIGHT => TIGHT_GROUPS,
+        VERSION_ORDINARY_TIGHT | VERSION_CHUNK_TIGHT | VERSION_WHOLE_FILE_TIGHT => TIGHT_GROUPS,
         VERSION_SINGLETON | VERSION_SINGLETON_STORED => 1,
         _ => GROUP_COUNT_LIMIT,
     };
@@ -424,13 +424,13 @@ pub fn parse_control_header(bytes: &[u8], total_length: usize) -> StorageResult<
     if lane == PackLane::Singleton && group_count != 1 {
         return Err(StorageError::Integrity("singleton pack group count"));
     }
-    if lane == PackLane::Native
+    if lane == PackLane::Chunk
         && !matches!(
             version,
-            VERSION_NATIVE | VERSION_NATIVE_STORED | VERSION_NATIVE_TIGHT
+            VERSION_CHUNK | VERSION_CHUNK_STORED | VERSION_CHUNK_TIGHT
         )
     {
-        return Err(StorageError::Integrity("native framing version"));
+        return Err(StorageError::Integrity("chunk framing version"));
     }
     Ok(PackHeader {
         lane,
@@ -561,7 +561,7 @@ fn ordinary_directory(
             1 if encoded <= decoded && decoded <= header.lane.body_limit() => GroupCodec::Zstandard,
             _ => return Err(StorageError::Integrity("group codec")),
         };
-        if matches!(header.lane, PackLane::Native | PackLane::Singleton) && codec != GroupCodec::Raw
+        if matches!(header.lane, PackLane::Chunk | PackLane::Singleton) && codec != GroupCodec::Raw
         {
             return Err(StorageError::Integrity("lane group codec"));
         }

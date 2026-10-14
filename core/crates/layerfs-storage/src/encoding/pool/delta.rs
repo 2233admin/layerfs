@@ -121,7 +121,7 @@ pub fn apply(
 ///
 /// `remaining` is the byte budget of this single trial. A budget-exhausted or
 /// instruction-exhausted trial returns `None`; the caller keeps whatever FULL
-/// alternative it already holds.
+/// alterchunk it already holds.
 pub fn build(
     base_id: ObjectId,
     base: &[u8],

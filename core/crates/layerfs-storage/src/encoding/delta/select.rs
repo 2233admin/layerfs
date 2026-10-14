@@ -1,11 +1,11 @@
 //! Candidate eligibility, one prefix trial and complete-cost selection.
 //!
-//! A missing object starts from a prepared compressed FULL alternative. A PREFIX
+//! A missing object starts from a prepared compressed FULL alterchunk. A PREFIX
 //! trial happens only when exactly one eligible candidate is acquired under the
 //! role's depth, work and memory policy, and the selection compares the complete
 //! framed record cost including the base identity. A candidate that is absent or
 //! ineligible selects FULL by policy; a codec, allocation or read failure is
-//! returned as a failure and never becomes an alternative representation.
+//! returned as a failure and never becomes an alterchunk representation.
 
 use std::collections::BTreeMap;
 
@@ -31,7 +31,7 @@ const DEPTH_CACHE_ENTRIES: usize = 4_096;
 /// What selection actually did for one object.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct DeltaCounters {
-    /// Objects whose FULL alternative was prepared.
+    /// Objects whose FULL alterchunk was prepared.
     pub prepared_full: u64,
     /// PREFIX trials attempted.
     pub trials: u64,

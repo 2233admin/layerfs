@@ -49,7 +49,7 @@ impl EncodedRecord {
     pub fn is_stored(&self) -> bool {
         matches!(
             self.lane,
-            PackLane::WholeFile | PackLane::Native | PackLane::Singleton
+            PackLane::WholeFile | PackLane::Chunk | PackLane::Singleton
         ) && self
             .record
             .first()
@@ -152,11 +152,11 @@ fn encode_representation(
                 base: None,
             })
         }
-        PackLane::WholeFile | PackLane::Native => {
+        PackLane::WholeFile | PackLane::Chunk => {
             let raw = raw_payload(canonical, role)?;
             let profile = match PackLane::for_role(role) {
                 PackLane::WholeFile => CodecProfile::whole_file(capacities),
-                _ => CodecProfile::native(),
+                _ => CodecProfile::chunk(),
             };
             if raw.is_empty() || raw.len() > profile.raw_limit() {
                 return Err(StorageError::CapacityExceeded {
@@ -292,7 +292,7 @@ fn plan_lane(
 pub fn lane_body_limit(lane: PackLane, capacities: &StorageCapacities) -> usize {
     match lane {
         PackLane::WholeFile => capacities.pack_limit,
-        PackLane::Native => capacities.group_limit,
+        PackLane::Chunk => capacities.group_limit,
         PackLane::Ordinary => capacities.group_limit,
         PackLane::Singleton => capacities.singleton_pack_limit,
     }

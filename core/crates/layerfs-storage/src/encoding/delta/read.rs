@@ -459,10 +459,10 @@ pub fn stored_base(
                 location.role,
             )
         }
-        PackLane::Native => {
+        PackLane::Chunk => {
             let record = crate::encoding::decode::framed_record(selected, location.record_number)?;
             crate::encoding::delta::record::stored_base(
-                PackLane::Native,
+                PackLane::Chunk,
                 record,
                 location.canonical_length,
                 location.role,

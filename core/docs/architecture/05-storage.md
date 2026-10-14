@@ -1576,3 +1576,13 @@ added; the actual extra SQL instructions remain paid. An explicit monotonic batc
 floor advance may conservatively overcharge the retained counter; it cannot
 undercount or widen the active suffix. Format, allocator/tail rules and canonical
 point reads are unchanged.
+
+
+## Chunk lane terminology (2026-10-14, #320)
+
+The payload-record lane is `PackLane::Chunk`. Its framing constants, codec
+profile and record parser use `CHUNK` / `chunk` names. The rename changes Rust
+names and diagnostics only; every stored version number, tag, framing and
+legacy decoding rule remains unchanged. Acquisition of host files is a separate
+port and receives its own host terminology. Historical format evidence keeps
+its original labels.

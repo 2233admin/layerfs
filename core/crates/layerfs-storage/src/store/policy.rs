@@ -16,7 +16,7 @@ pub const FORMAT_PROFILE: u8 = 1;
 
 /// Declared bounds shared by placement, transactions and reads.
 pub const GROUP_LIMIT: usize = 65_536;
-/// Target framed size of one ordinary or native group.
+/// Target framed size of one ordinary or chunk group.
 ///
 /// The owner seals a group once the framed length the *next* record would produce
 /// passes this target, so the target is compared against the group's own framing
@@ -24,7 +24,7 @@ pub const GROUP_LIMIT: usize = 65_536;
 /// per-record framed lengths, which would count the shared count and end offsets
 /// once per record.
 pub const GROUP_TARGET: usize = 48 * 1024;
-/// Largest assembled pack BLOB for the ordinary and native lanes.
+/// Largest assembled pack BLOB for the ordinary and chunk lanes.
 pub const PACK_LIMIT: usize = 256 * 1024;
 /// Largest group count in one pack.
 pub const GROUP_COUNT_LIMIT: usize = 256;
@@ -272,7 +272,7 @@ pub struct StorageCapacities {
     pub whole_file_frame_limit: usize,
     /// Whole-file codec window log.
     pub whole_file_window_log: i32,
-    /// Largest assembled ordinary, native, compact or pooled pack.
+    /// Largest assembled ordinary, chunk, compact or pooled pack.
     pub pack_limit: usize,
     /// Largest assembled singleton pack.
     pub singleton_pack_limit: usize,
