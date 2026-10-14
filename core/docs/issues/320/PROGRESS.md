@@ -3015,3 +3015,57 @@ Durable execution: NOT_RUN — disabled by owner until explicit reauthorization.
 Production LOC 81,054 -> 81,018 (delta -36) across the landing; this record
 is documentation only. Reference absent (retired R9c; last counted 65,417 at
 tree 498dd1917812).
+
+## Issue 321 follow-up — source-size cut, first pass (2026-10-14)
+
+The owner asked to cut production source aggressively. This pass runs on
+branch `issue321-loc-cut` from `main` (`b0d5ec78d`). Each slice is one
+counted commit with its checks; the branch is not pushed.
+
+| Commit | Slice | Production LOC |
+| --- | --- | --- |
+| `4bcb9fb8b` | Daemon overlay jobs require the route: 72 wrappers lose `Option<Route>` and 69 run-time "missing route" refusals. Only `open`, `resources` and `observe_cleanup` keep an optional route. | 81,018 -> 80,826 (-192) |
+| `b4f49c225` | Functions that nothing calls (workspace, tests, examples, benchmarks), including the whole storage `pack::placement` module | 80,826 -> 80,476 (-350) |
+
+Total -542. Reference absent (retired R9c; last counted 65,417 at tree
+498dd1917812).
+
+Checks per slice:
+- **Required route:** fmt; guard; tool tests; host and Linux Clippy
+  `-D warnings` with 0 errors; 127 host test binaries (371 tests) pass, with
+  the 2 known environmental failures of `9c783fbd7`; 43 Linux test binaries
+  pass; the daemon device-full proof passes.
+- **Unreferenced code:** fmt; guard (688 files); host and Linux workspace
+  Clippy with 0 errors; 75 content and storage binaries (525 tests) pass.
+- Durable execution: NOT_RUN — disabled by owner until explicit
+  reauthorization. No timing was taken.
+
+### Looked at and not cut, with reasons
+
+- **`take_connection_failure`** has no caller, but it is the documented
+  operator transfer of retained connection custody. Removing it leaves the
+  retained failure unreadable, so it stays.
+- **Typed job results (dropping the `Response` enum).** `JobReceipt` is the
+  custody object: it keeps the Workspace backing alive and travels in six
+  error types and in `ServiceReply`. Typing it means redesigning that
+  custody. It would touch 474 test match sites to save about 100–200
+  lines. Not done without an owner decision.
+- **Namespace key in open-state maps.** Each `Overlay` holds one Workspace,
+  so the `i64` in every key is constant. Dropping it is 181 edits for about
+  20–40 lines. Deferred.
+- **Shared owner table for the three in-memory owner maps** (files, reads,
+  lookups): about 40–60 lines.
+- **SQL-backed owners** (operation, captured reader, base source) use three
+  different schemas, so sharing their code needs a schema change.
+- **Test-only entry points.** About 700 lines of product functions are called
+  only by tests:
+  - query-plan `explain_*` helpers, which validate index use;
+  - lost-reply `retained_*` queries, which are a contract capability;
+  - `build_filesystem`/`update_filesystem` variants, called by more than 150
+    test sites.
+  Removing them deletes validation or capability. Moving them into tests is
+  the relocation the counting rule forbids.
+
+Tooling (scratch, not committed): a name-based scan for unreferenced
+functions, items and re-exports, and an approximate closure over test-only
+entry points.
