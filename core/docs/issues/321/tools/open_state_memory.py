@@ -19,8 +19,8 @@ every 0.2 s and tags each row with the current phase.
               keeps the handle open
   E4 mutated  rewrite every 10th file, open 1,000 files and keep them open, unlink
               them, unlink every 20th other file, rename the 100 directories
-  E2 pressure a filler in the sandbox touches anonymous memory until the cgroup
-              is 96 MiB below its limit, holds 2 s and exits
+  E2 pressure a filler in the sandbox touches anonymous memory until the cgroup's
+              anonymous memory is 64 MiB below its limit, holds 2 s and exits
      commit   Commit of every Workspace, one after another (the control channel is
               serial); the sampler covers them
      released the held directory and file handles are closed
@@ -112,18 +112,24 @@ for fd in held:
 FILL = r"""
 import time
 limit = int(open("/sys/fs/cgroup/memory.max").read())
+def stat(name):
+    for line in open("/sys/fs/cgroup/memory.stat"):
+        key, value = line.split()
+        if key == name:
+            return int(value)
 blocks, peak = [], 0
-while True:
-    current = int(open("/sys/fs/cgroup/memory.current").read())
-    peak = max(peak, current)
-    if current >= limit - 96 * 2**20 or len(blocks) >= 4096:
-        break
+# Anonymous memory cannot be reclaimed without swap, so growing it toward the
+# limit makes the kernel reclaim the cgroup's page cache and slab (dentries and
+# FUSE inodes) first. Stop 64 MiB short; the OOM killer picks the largest.
+while stat("anon") < limit - 64 * 2**20 and len(blocks) < 4096:
     block = bytearray(16 * 2**20)
     for offset in range(0, len(block), 4096):
         block[offset] = 1
     blocks.append(block)
+    peak = max(peak, int(open("/sys/fs/cgroup/memory.current").read()))
 time.sleep(2)
-print(len(blocks) * 16, "MiB filled; cgroup peak seen", peak)
+print(len(blocks) * 16, "MiB filled; cgroup peak seen", peak, "; anon", stat("anon"), "; slab", stat("slab"),
+      "; file", stat("file"), "; pgscan", stat("pgscan"))
 """
 LARGE = "set -eu; head -c {mib}M /dev/urandom > x321-large; stat -c %s x321-large"
 
