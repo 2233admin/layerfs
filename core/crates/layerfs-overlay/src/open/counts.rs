@@ -67,7 +67,7 @@ impl OpenState {
             file_custody: self.custody.rows.len() as u64,
             orphan_files: self.orphans.rows.len() as u64,
             generation_waits: self.waits.rows.len() as u64,
-            mounts: self.mounts.rows.len() as u64,
+            mounts: self.mount.is_some() as u64,
             directory_handles: self.directories.len() as u64,
             cookie_pages: self.cookies.values().map(|s| s.offsets.len() as u64).sum(),
         }

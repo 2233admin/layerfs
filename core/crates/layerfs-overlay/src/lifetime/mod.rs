@@ -5,7 +5,6 @@ pub(crate) mod composition;
 pub(crate) mod file_owners;
 pub(crate) mod frontier;
 pub(crate) mod generation;
-pub(crate) mod operation_record;
 pub(crate) mod orphan;
 pub(crate) mod source;
 pub(crate) mod tickets;

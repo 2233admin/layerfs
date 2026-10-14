@@ -350,7 +350,11 @@ impl Overlay {
         }
         self.transaction.set(Transaction::Wanted);
         self.release_step.set(true);
-        let (orphans, pieces) = (self.orphan_seen.get(), self.pieces_seen.get());
+        let (orphans, pieces, mount) = (
+            self.orphan_seen.get(),
+            self.pieces_seen.get(),
+            self.open.borrow().mount,
+        );
         let result = job();
         let issued = std::mem::take(&mut *self.issued.borrow_mut());
         let begun = self.transaction.get() == Transaction::Begun;
@@ -403,6 +407,7 @@ impl Overlay {
         self.orphan_seen.set(orphans);
         self.pieces_seen.set(pieces);
         self.open.borrow_mut().rollback();
+        self.open.borrow_mut().mount = mount;
         for revision in issued {
             self.tickets.withdraw(revision);
         }

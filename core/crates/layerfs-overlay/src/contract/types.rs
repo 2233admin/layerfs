@@ -310,20 +310,9 @@ impl BaseSource {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(i64)]
 pub enum LeaseKind {
-    Reader = 1,
-    Open = 2,
-    Lookup = 3,
-    Operation = 4,
     FileReader = 5,
     CapturedReader = 6,
     FileHandle = 7,
     Processing = 8,
     LookupOwner = 9,
-}
-/// One exact owner/resource reference, not a retry token.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct Lease {
-    pub kind: LeaseKind,
-    pub owner: u64,
-    pub resource: u64,
 }

@@ -133,7 +133,7 @@ impl Overlay {
             return Err(OverlayError::Closed);
         }
         let open = self.open.borrow();
-        if open.mounts.rows.get(&mount.route.ns) != Some(&(mount, false)) {
+        if open.mount != Some((mount, false)) {
             return Err(OverlayError::Stale);
         }
         let file = |handle| {

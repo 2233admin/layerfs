@@ -16,20 +16,12 @@ const OBSERVE: &str = "SELECT w.incarnation,w.lifecycle,
     (SELECT seq FROM sqlite_sequence WHERE name='workspace')
     FROM (SELECT ?1 AS ns) AS selected LEFT JOIN workspace w ON w.ns=selected.ns";
 impl Overlay {
-    fn terminal_state(
-        &self,
-        route: Route,
-        state: &crate::WorkspaceState,
-    ) -> OverlayResult<CleanupState> {
+    fn terminal_state(&self, state: &crate::WorkspaceState) -> OverlayResult<CleanupState> {
         if !state.closed {
             return Ok(CleanupState::Live);
         }
         let open = self.open.borrow();
-        let native = open
-            .mounts
-            .rows
-            .get(&route.ns)
-            .is_some_and(|(_, revoked)| !revoked);
+        let native = open.mount.is_some_and(|(_, revoked)| !revoked);
         let files = open.files.any_request((0, i64::MIN)..=(0, i64::MAX));
         let readers = open.reads.len() != 0;
         let lookups = open.lookups.len() != 0;
@@ -53,7 +45,7 @@ impl Overlay {
     /// Read-only exact route observation; it runs no cleanup and proves no unlink.
     pub fn cleanup_state(&self, route: Route) -> OverlayResult<CleanupState> {
         let state = self.state(route)?;
-        self.terminal_state(route, &state)
+        self.terminal_state(&state)
     }
     pub fn observe_cleanup(
         &self,

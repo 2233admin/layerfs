@@ -3499,3 +3499,37 @@ step. Engine suite rerun after pin updates is deferred to Phase 2, following
 the owner's explicit product-only Phase 1 gates. No removed observer, failure
 custody entrypoint or retained keep-list function is lost. Durable remains
 NOT_RUN — disabled by owner until explicit reauthorization.
+
+### Phase 1: fixed mount slot and generic lease removal
+
+The one-entry namespace-keyed mount map is now an optional attached/revoked
+mount slot. An atomic job snapshots that fixed value once; known whole-job
+failure restores it after SQL rollback, while an unknown result retains exact
+attempted state with the quarantined connection. Existing lookup/file/directory
+journals, minted mount identity and mounted revocation/refusal checks remain.
+The terminal-state helper's unused route parameter is removed.
+
+Removed the generic `Lease` value, kinds Reader/Open/Lookup/Operation (1–4),
+Overlay acquire/release implementation file and both daemon forwarding jobs.
+The product sweep confirms these producers have no product caller. Remaining
+minted CapturedReader (6) is the only generation hold in `GENERATION_HELD`;
+file handles/readers, lookup owners and processing custody still exist. No
+code is moved to tests/tools. The close oracle pin and architecture docs advance.
+
+**Failures, retained as they happened.** Initial fmt failed because a mechanical
+module-line removal left doubled `pub(crate)` before `mod orphan`. The first
+host check failed from that parse error (47 cascading errors). After correcting
+the module declaration, the second host check found one multiline mount-map
+access in descriptor validation; it was changed to the same exact slot check.
+No SQL or runtime operation was retried. Final host check and Clippy and Linux
+check and Clippy, workspace lib/bins/examples, pass under 120 s stops. Logs:
+`simplify-mount-lease-host-check{,-fixed,-final}`,
+`simplify-mount-lease-host-clippy` and issue320/logs
+`simplify-mount-lease-linux-{check,clippy}`. Formatting and whitespace pass.
+
+Tests: not yet updated; no test opened/edited/run in this product step.
+Generic-lease callers will be triaged in Phase 2 under the keep list and default
+deletion rule. Runtime proofs/engine pin checks remain deferred to that pass;
+this commit claims product-target compilation only, not runtime qualification.
+All owner-listed custody/operator capabilities remain. Durable: NOT_RUN —
+disabled by owner until explicit reauthorization.

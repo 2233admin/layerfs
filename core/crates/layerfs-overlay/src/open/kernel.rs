@@ -23,7 +23,8 @@ pub(crate) struct OpenState {
     pub custody: JournalMap<i64, FileReferences>,
     pub orphans: JournalMap<i64, Orphan>,
     pub waits: JournalMap<(i64, i64), ()>,
-    pub mounts: JournalMap<i64, (NativeMount, bool)>,
+    /// One attached/revoked mount, restored by whole-job rollback.
+    pub mount: Option<(NativeMount, bool)>,
     /// Directory handles by owner; requests are (native mount owner, request).
     pub directories: OwnerTable<(u64, u64), DirectoryState>,
     pub cookies: BTreeMap<u64, CookieStore>,
@@ -40,7 +41,6 @@ impl OpenState {
         self.custody.commit();
         self.orphans.commit();
         self.waits.commit();
-        self.mounts.commit();
         self.directories.commit();
         self.commit_cookies();
     }
@@ -53,7 +53,6 @@ impl OpenState {
         self.custody.rollback();
         self.orphans.rollback();
         self.waits.rollback();
-        self.mounts.rollback();
         self.directories.rollback();
         self.rollback_cookies();
     }

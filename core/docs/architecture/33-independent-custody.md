@@ -93,3 +93,15 @@ atomic lookup/count/read observations and bounded revoked-lookup retirement.
 See [native read custody](73-native-read-custody.md). Native handles/directories,
 kernel service and full R2 acceptance remain unfinished; earlier receipts above
 retain their source/schema identities.
+
+## Owner-directed generic lease removal (2026-10-14)
+
+The unused caller-minted `Lease` API and `Overlay::acquire`/`release`, with
+their daemon forwarding jobs, are removed in the #320 product sweep. Kinds
+Reader/Open/Lookup/Operation (1–4) have no product producer. Generation hold
+checks now consider only the minted CapturedReader pin (kind 6). File handles,
+lookup owners, file readers and processing owners retain their exact identity,
+last-owner release and original failure custody. This supersedes primitive
+lease prose above; it changes no mounted filesystem semantics. The remaining
+`LeaseKind` name is transitional until the runtime pin rows move to memory.
+Tests are intentionally deferred to the owner's separate Phase 2 pass.

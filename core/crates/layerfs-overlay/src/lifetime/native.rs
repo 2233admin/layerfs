@@ -14,7 +14,7 @@ impl Overlay {
         integer(root)?;
         self.atomic(|| {
             self.live(route)?;
-            let held = self.open.borrow().mounts.rows.get(&route.ns).copied();
+            let held = self.open.borrow().mount;
             match held {
                 Some((_, false)) => return Err(OverlayError::Invalid("duplicate native mount")),
                 Some((revoked, true)) => self.retire_revoked_mount(revoked)?,
@@ -22,7 +22,7 @@ impl Overlay {
             }
             let owner = self.mint_owner()?;
             let mount = NativeMount { route, owner, root };
-            self.open.borrow_mut().mounts.put(route.ns, (mount, false));
+            self.open.borrow_mut().mount = Some((mount, false));
             self.insert_native_lookup(mount, root, true, 0)?;
             self.set_native_parent(mount, root, root)?;
             Ok(mount)
@@ -62,17 +62,11 @@ impl Overlay {
     /// Observes the original connection, without adopting or replaying attach.
     pub fn retained_native_mount(&self, route: Route) -> OverlayResult<Option<NativeMount>> {
         self.state(route)?;
-        Ok(self
-            .open
-            .borrow()
-            .mounts
-            .rows
-            .get(&route.ns)
-            .map(|(mount, _)| *mount))
+        Ok(self.open.borrow().mount.map(|(mount, _)| mount))
     }
     pub fn native_mount_state(&self, mount: NativeMount) -> OverlayResult<NativeMountState> {
         self.check_route(mount.route)?;
-        match self.open.borrow().mounts.rows.get(&mount.route.ns) {
+        match self.open.borrow().mount.as_ref() {
             None => Ok(NativeMountState::Gone),
             Some((held, revoked)) if *held == mount => Ok(if *revoked {
                 NativeMountState::Revoked
@@ -253,10 +247,7 @@ impl Overlay {
     pub fn revoke_native_mount(&self, mount: NativeMount) -> OverlayResult<()> {
         self.atomic_cleanup(|| {
             self.check_native_attached(mount)?;
-            self.open
-                .borrow_mut()
-                .mounts
-                .put(mount.route.ns, (mount, true));
+            self.open.borrow_mut().mount = Some((mount, true));
             Ok(())
         })
     }

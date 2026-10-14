@@ -194,7 +194,7 @@ pub(crate) const INDEXED_OPERATION_RECORD_RECLAIM_OPERATION: &str =
     FROM commit_record WHERE operation=?1 ORDER BY file_scope,kind,key LIMIT 64";
 
 pub(crate) const GENERATION_HELD: &str = "SELECT 1 FROM commit_pin INDEXED BY commit_pin_resource
-            WHERE kind IN(1,6) AND resource=?1 LIMIT 1";
+            WHERE kind=6 AND resource=?1 LIMIT 1";
 
 /// Workspace metadata read alongside in-memory request custody in one owner turn.
 pub(crate) const FENCE_LOOKUP: &str = "SELECT active,captured,revision,base_root,dirty_inodes,

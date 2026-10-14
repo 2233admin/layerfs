@@ -33,11 +33,7 @@ impl Overlay {
     ) -> OverlayResult<()> {
         if !matches!(
             kind,
-            LeaseKind::Open
-                | LeaseKind::FileHandle
-                | LeaseKind::Lookup
-                | LeaseKind::LookupOwner
-                | LeaseKind::FileReader
+            LeaseKind::FileHandle | LeaseKind::LookupOwner | LeaseKind::FileReader
         ) {
             return Ok(());
         }
@@ -52,9 +48,7 @@ impl Overlay {
         refs.change(kind, add)?;
         self.open.borrow_mut().custody.put(serial, refs);
         if add {
-            if !matches!(kind, LeaseKind::Lookup | LeaseKind::LookupOwner)
-                && self.orphan(serial)?.is_some()
-            {
+            if !matches!(kind, LeaseKind::LookupOwner) && self.orphan(serial)?.is_some() {
                 self.enqueue(crate::maintenance::ORPHAN, serial, -1)?;
             }
         } else if refs.total() == 0 {
@@ -178,9 +172,7 @@ impl Overlay {
             }
             if mount != 0
                 && !open
-                    .mounts
-                    .rows
-                    .get(&file.route.ns)
+                    .mount
                     .is_some_and(|(held, revoked)| held.owner == mount && !revoked)
             {
                 return Err(OverlayError::Stale);

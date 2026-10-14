@@ -13,8 +13,8 @@ impl FileReferences {
     }
     pub fn change(&mut self, kind: LeaseKind, add: bool) -> OverlayResult<()> {
         let value = match kind {
-            LeaseKind::Open | LeaseKind::FileHandle => &mut self.opens,
-            LeaseKind::Lookup | LeaseKind::LookupOwner => &mut self.lookups,
+            LeaseKind::FileHandle => &mut self.opens,
+            LeaseKind::LookupOwner => &mut self.lookups,
             LeaseKind::FileReader => &mut self.readers,
             _ => return Ok(()),
         };

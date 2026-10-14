@@ -3,7 +3,7 @@ use crate::overlay::owner::Readiness;
 use crate::service::receipt::JobReceipt;
 use crate::{OwnerClient, OwnerError, Response, ServiceClass};
 use layerfs_overlay::{
-    BaseSource, Capture, CapturedReader, Cell, DirectoryEntry, FileRead, Inode, Lease, LookupOwner,
+    BaseSource, Capture, CapturedReader, Cell, DirectoryEntry, FileRead, Inode, LookupOwner,
     OpenFile, OperationOwner, OverlayError, Route,
 };
 impl OwnerClient {
@@ -308,16 +308,6 @@ impl OwnerClient {
                     .map(|(parent, name)| (*parent, name.as_slice())),
             )
             .map(Response::DirectoryEntries)
-        })
-    }
-    pub fn acquire(&self, route: Route, lease: Lease) -> Result<JobReceipt, OwnerError> {
-        self.overlay_job(route, ServiceClass::Lifecycle, None, move |db, route| {
-            db.acquire(route, lease).map(|_| Response::Done)
-        })
-    }
-    pub fn release(&self, route: Route, lease: Lease) -> Result<JobReceipt, OwnerError> {
-        self.overlay_job(route, ServiceClass::Lifecycle, None, move |db, route| {
-            db.release(route, lease).map(|_| Response::Done)
         })
     }
     pub fn namespace(

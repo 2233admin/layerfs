@@ -36,6 +36,10 @@ Measured outcomes are in the [#320 ledger](../issues/320/PROGRESS.md), not here.
   known install waiting for earlier base sources each own a finite frontier:
   a later mutation waits behind a waiting Capture, a later source acquisition
   behind a waiting install. Everything else runs in lock order.
+- **Mount slot.** One attached/revoked mount is a fixed optional value, not
+  a namespace map. Each atomic job retains the prior slot; only known whole-job
+  failure restores it. Unknown outcomes retain the attempted state with the
+  quarantined connection. Lookup/file/directory owners keep their own journals.
 - **Memory.** Each connection has its own pager allowance; it is a SQLite
   suggestion, not a resident bound. Open-file, directory-position and
   kernel-reference state is resident and grows with open files and with the
