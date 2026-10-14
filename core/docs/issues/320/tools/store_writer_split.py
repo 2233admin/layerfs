@@ -6,11 +6,13 @@ Reads each folder's receipt.json and prints, for the one control call that ran
 the Commit, the change in the global writer's counters (numeric schema section
 13) between the snapshot before that call and the snapshot at it: statements,
 write transactions, sealed pack bytes, the wall of the `COMMIT` statement's
-step, and the Commit wall with and without that step. It also prints the
-construction record jobs, the overlay operation-record jobs with their lock or
-service wall, the reclamation counted between the measured mount and the
-Commit's reply, and how many pages of the Store file were not resident when the
-harness looked.
+step, the writer's whole step time over all its statements (index 32), and the
+Commit wall without the `COMMIT` step and without the whole step. A stall of the
+writer's buffered writes can land in any statement's step, so compare the Commit
+without the whole step. It also prints the construction record jobs, the
+overlay operation-record jobs with their lock or service wall, the reclamation
+counted between the measured mount and the Commit's reply, and how many pages of
+the Store file were not resident when the harness looked.
 
 It reads retained receipts only. A wall here is one sample's diagnostic value;
 it qualifies nothing.
@@ -83,6 +85,7 @@ for folder in sys.argv[1:]:
         "writer_step_ms": round(writer[STEP_NS] / 1e6, 1),
         "writer_commit_step_ms": round(writer[COMMIT_STEP_NS] / 1e6, 1),
         "commit_without_commit_step_ms": round((commit - writer[COMMIT_STEP_NS]) / 1e6, 1),
+        "commit_without_writer_step_ms": round((commit - writer[STEP_NS]) / 1e6, 1),
         "construction_record_jobs": receipt["observations"]["construction_work"]["value"]["snapshots"][0]["values"][RECORD_JOBS],
         "operation_record_jobs": jobs, "operation_record_" + kind.replace(" ", "_") + "_ms": round(wall / 1e6, 1),
         "reclaim_jobs_in_command_and_commit": reclaim_jobs, "reclaim_bytes_in_command_and_commit": reclaim_bytes,
