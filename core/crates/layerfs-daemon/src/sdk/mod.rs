@@ -7,9 +7,13 @@ mod blame;
 mod branch;
 mod compare;
 mod files;
+mod inspect;
 mod reads;
 mod snapshot;
 pub(crate) mod values;
+
+pub(crate) use args::hex;
+pub(crate) use inspect::{snapshot as inspect, WorkspaceView};
 
 use crate::store::Store;
 use layerfs_bridge::control::{SdkCall, SdkRefusal, SdkValue};

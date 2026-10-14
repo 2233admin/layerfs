@@ -17,3 +17,4 @@ pub use create::{SandboxCause, SandboxCreate, SandboxFailure, SandboxPhase};
 pub use mount::BoundWorkspace;
 pub use mount::WorkspaceApi;
 pub use mount::{MountFailure, MountedWorkspace};
+pub use unmount::Unmounted;

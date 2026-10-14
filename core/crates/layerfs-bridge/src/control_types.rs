@@ -47,8 +47,9 @@ pub enum Request {
     Commit(crate::control_merge::CommitControl),
     /// Observe maintained local state without reading or refreshing the Store.
     Status(WorkspaceToken),
-    /// Terminally close a quiescent local binding and transfer cleanup to the owner.
-    Unmount(WorkspaceToken),
+    /// Terminally close a quiescent local binding and transfer cleanup to the
+    /// owner; uncommitted changes refuse it unless discarded.
+    Unmount(crate::control_unmount::UnmountControl),
     /// Create a Branch through the daemon's direct History port.
     Fork(ForkRequest),
     /// Read one bounded anchored ancestry page through the daemon.
@@ -153,6 +154,10 @@ pub struct WorkspaceStatus {
     pub epoch_saturated: bool,
     /// Known publication retained after a local failure, when available.
     pub published: Option<CommitOutcome>,
+    /// The Branch's head read at this observation: `None` when the read
+    /// failed, `Some(None)` for a Branch without Commits. It differs from the
+    /// binding's head when another Workspace committed since the binding.
+    pub current_head: Option<Option<layerfs_history::CommitId>>,
     /// Separately scoped indexed engine observation taken after the control copy.
     pub local: Option<LocalObservation>,
     /// Original engine observation refusal when local fields are unavailable.
@@ -227,6 +232,8 @@ pub enum Reply {
     Status(Box<WorkspaceStatus>),
     /// Logical terminal close acknowledged; physical cleanup remains owner-driven.
     Unmounted(WorkspaceToken),
+    /// Unmount refused for uncommitted changes: nothing was closed.
+    Dirty(Box<crate::control_unmount::DirtyReport>),
     /// Original acknowledged new Branch.
     Forked(BranchSnapshot),
     /// Bounded immutable ancestry page and authenticated continuation.

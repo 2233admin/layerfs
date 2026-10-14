@@ -5,7 +5,7 @@ use super::{
     Failure, KernelEvidence, Service, Success,
 };
 use crate::store::BoundWorkspace;
-use layerfs_bridge::control::{Activity, ForcedFacts, Reply, WorkspaceToken};
+use layerfs_bridge::control::{Activity, ForcedFacts, Reply, UnmountControl, WorkspaceToken};
 use std::sync::Arc;
 
 /// Original kernel connection receipt carried to Close.
@@ -19,7 +19,14 @@ pub(super) enum Departure {
     Session(Box<super::serving::Attached>),
 }
 impl Service {
-    pub(super) fn unmount(&self, token: WorkspaceToken) -> Result<Success, Failure> {
+    /// Refuses uncommitted changes with their paths unless `discard`.
+    pub(super) fn unmount(&self, control: UnmountControl) -> Result<Success, Failure> {
+        let token = control.token;
+        if !control.discard {
+            if let Some(report) = self.dirty(token)? {
+                return Ok(Success::reply(Reply::Dirty(Box::new(report))));
+            }
+        }
         let (workspace, departure) = self.admit_unmount(token)?;
         match departure {
             Departure::Unattached => {}

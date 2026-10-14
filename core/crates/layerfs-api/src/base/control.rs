@@ -198,15 +198,17 @@ fn matches_reply(request: &Request, reply: &Reply) -> bool {
             Reply::Committed(_) | Reply::MergeCommitted(_) | Reply::Conflict(_),
         ) => true,
         (Request::Status(token), Reply::Status(status)) => *token == status.token,
-        (Request::Unmount(token), Reply::Unmounted(closed)) => token == closed,
+        (Request::Unmount(control), Reply::Unmounted(closed)) => control.token == *closed,
+        (Request::Unmount(control), Reply::Dirty(report)) => control.token == report.token,
         (Request::Attach(token), Reply::Ready(ready)) => *token == ready.token,
         (Request::ForceUnmount { token, .. }, Reply::ForceUnmounted(closed)) => {
             *token == closed.token
         }
         (
-            Request::Attach(token) | Request::Unmount(token) | Request::ForceUnmount { token, .. },
+            Request::Attach(token) | Request::ForceUnmount { token, .. },
             Reply::Retained(custody),
         ) => *token == custody.token,
+        (Request::Unmount(control), Reply::Retained(custody)) => control.token == custody.token,
         (Request::Locate(workspace), Reply::Located(status)) => {
             *workspace == status.token.workspace
         }

@@ -49,20 +49,7 @@ impl Overlay {
             sql::DIRECTORY_ENTRY_CAPTURE,
             &[&capture.generation.0, &integer(parent)?, &name],
             24 + name.len() as u64,
-            |row| {
-                Ok(crate::DirectoryEntry {
-                    inherited: row.get(3)?,
-                    parent: crate::db::unsigned(row, 0)?,
-                    name: row.get(1)?,
-                    serial: row
-                        .get::<_, Option<i64>>(2)?
-                        .map(|v| {
-                            u64::try_from(v)
-                                .map_err(|_| rusqlite::Error::IntegralValueOutOfRange(2, v))
-                        })
-                        .transpose()?,
-                })
-            },
+            entry,
         )
     }
     /// Readiness observation before a capture attempt. Waiting callers retain
@@ -134,6 +121,38 @@ impl Overlay {
             inode::decode,
         )
     }
+    /// Changed inodes of the active generation after `after`, from the same
+    /// indexed window a capture reads. A diagnostic observation: membership
+    /// may change between windows.
+    pub fn active_inodes(&self, after: u64) -> OverlayResult<Vec<Inode>> {
+        let state = self.live()?;
+        self.query(
+            StatementKind::Capture,
+            sql::INODE_CAPTURE,
+            &[&state.active.0, &integer(after)?],
+            24,
+            inode::decode,
+        )
+    }
+    /// Changed name bindings of the active generation after `(parent, name)`,
+    /// as [`Self::active_inodes`] observes inodes.
+    pub fn active_directory_entries(
+        &self,
+        after: Option<(u64, &[u8])>,
+    ) -> OverlayResult<Vec<crate::DirectoryEntry>> {
+        let state = self.live()?;
+        let (parent, name) = after.unwrap_or((0, &[]));
+        if name.len() > 255 {
+            return Err(OverlayError::Invalid("active name cursor"));
+        }
+        self.query(
+            StatementKind::Capture,
+            sql::DIRECTORY_ENTRY_CAPTURE,
+            &[&state.active.0, &integer(parent)?, &name],
+            24 + name.len() as u64,
+            entry,
+        )
+    }
     pub(crate) fn checked_capture(&self, capture: Capture) -> OverlayResult<()> {
         let state = self.state()?;
         if capture.engine != self.identity
@@ -145,4 +164,17 @@ impl Overlay {
         }
         Ok(())
     }
+}
+
+/// One captured or active name binding row.
+fn entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<crate::DirectoryEntry> {
+    Ok(crate::DirectoryEntry {
+        inherited: row.get(3)?,
+        parent: crate::db::unsigned(row, 0)?,
+        name: row.get(1)?,
+        serial: row
+            .get::<_, Option<i64>>(2)?
+            .map(|v| u64::try_from(v).map_err(|_| rusqlite::Error::IntegralValueOutOfRange(2, v)))
+            .transpose()?,
+    })
 }

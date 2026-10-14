@@ -13,7 +13,7 @@ pub use project::{
     InitError, InitFailure, InitRequest, InstallError, InstallFailure, InstallWork, Installed,
     ProjectApi, SealedProject,
 };
-pub use sandbox::{BoundWorkspace, MountFailure, MountedWorkspace, WorkspaceApi};
+pub use sandbox::{BoundWorkspace, MountFailure, MountedWorkspace, Unmounted, WorkspaceApi};
 #[cfg(unix)]
 pub use sandbox::{
     ManagedSandbox, SandboxApi, SandboxCause, SandboxCreate, SandboxFailure, SandboxPhase,

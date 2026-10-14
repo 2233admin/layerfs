@@ -183,7 +183,7 @@ const KINDS: [ConflictKind; 7] = [
     ConflictKind::Markers,
 ];
 
-fn put_lines(out: &mut Writer, lines: &[String]) -> Result<bool, ControlError> {
+pub(crate) fn put_lines(out: &mut Writer, lines: &[String]) -> Result<bool, ControlError> {
     let kept = lines
         .iter()
         .scan(0usize, |size, line| {
@@ -199,7 +199,7 @@ fn put_lines(out: &mut Writer, lines: &[String]) -> Result<bool, ControlError> {
     Ok(kept < lines.len())
 }
 
-fn lines(input: &mut Reader<'_>) -> Result<Vec<String>, ControlError> {
+pub(crate) fn lines(input: &mut Reader<'_>) -> Result<Vec<String>, ControlError> {
     let count = u16::from_be_bytes(input.array()?);
     (0..count).map(|_| input.text(TEXT_FIELD_LIMIT)).collect()
 }

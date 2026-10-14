@@ -52,6 +52,7 @@ serves today.
 | `fs.blame` | `project, branch` or `commit, path, fromLine?` | `versions`, `lines[]`: n, text, commit, agent, clipped; `origins[]`, `nextLine` | `NotText` |
 | `branch.diff_commits` | `project, from, to` (Commit ids) | `from, to, items[]` (changes), `nextCursor`, `truncated` | `InvalidInput` |
 | `branch.diff_branches` | `project, from, to` (Branches or `main`) | as `diff_commits` | `InvalidInput` |
+| `inspect.snapshot` | `project, since?` | `version`, `branches[]`, `commits[]`, `more`, `layers[]`, `moreLayers`, `workspaces[]`; or `unchanged` | `NoSuchProject` |
 
 ### Branch merge
 
@@ -114,3 +115,35 @@ owned by the oldest version from which it is unchanged, found with the same
 line matching as the difference. The chain is at most 1,024 versions, and the
 oldest owns the lines still open. A version whose file has the same content
 identity is passed without reading it.
+
+### Inspect
+
+`inspect.snapshot` is the operator read model, not an agent method. It returns
+the project's Branches (main first), its newest Commits (deduplicated across
+Branches, newest first per Branch) and Layers (from main's head), and this
+daemon's bound Workspaces on the project, within one control record. `more`
+holds the `branch.list_commits` cursor for each Branch that has older Commits;
+`moreLayers` says older Layers were left out. Each Workspace has its id and
+namespace, Branch, base Commit, base Layer and root, activity, whether it is
+mounted and where, `headMovedSinceMount`, its uncaptured change counts and
+`pendingMerge`. `version` is a digest of everything else in the answer, so
+`since: version` answers `unchanged` until a Commit, merge, publish, fork,
+mount, unmount or Workspace write changes what the answer shows. A Sandbox is
+the daemon serving it, so a caller with several Sandboxes asks each one.
+
+## Workspace control changes
+
+- **Status** carries `current_head`: the Branch's head read at the
+  observation, unknown when that read fails. It differs from the binding's
+  head when another Workspace committed since this one was bound or last
+  committed; the SDK reports that as `headMovedSinceMount`.
+- **Unmount** carries `discard`. Without it, a Workspace with uncommitted
+  changes is refused with `Reply::Dirty` and nothing is closed. A Workspace is
+  dirty when its active generation holds changed inodes or names, a capture is
+  in flight, or its local base differs from the history binding (an
+  unpublished conflicted merge). The report names the changed paths, at most
+  256, from the same indexed windows a capture reads: active bindings first,
+  then a bounded walk of the local base. The check is an observation before
+  terminal admission; a write that lands after it is closed with the
+  Workspace. With `discard` the Workspace is closed as before. `Busy` keeps
+  its meaning: an operation in progress or a kernel holder.

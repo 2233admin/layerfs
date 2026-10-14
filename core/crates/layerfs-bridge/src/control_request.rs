@@ -50,9 +50,9 @@ impl Call {
                 out.byte(3)?;
                 put_token(&mut out, *token)?;
             }
-            Request::Unmount(token) => {
+            Request::Unmount(value) => {
                 out.byte(4)?;
-                put_token(&mut out, *token)?;
+                crate::control_unmount::put_unmount(&mut out, value)?;
             }
             Request::Fork(value) => {
                 out.byte(5)?;
@@ -153,7 +153,7 @@ impl Call {
             2 => Request::Commit(crate::control_merge::commit_control(&mut input)?),
             20 => Request::Sdk(crate::control_sdk::call(&mut input)?),
             3 => Request::Status(token(&mut input)?),
-            4 => Request::Unmount(token(&mut input)?),
+            4 => Request::Unmount(crate::control_unmount::unmount(&mut input)?),
             9 => Request::Attach(token(&mut input)?),
             10 => Request::Locate(history(WorkspaceId::from_authority(input.array()?))?),
             11 => Request::ForceUnmount {

@@ -16,6 +16,7 @@ mod control_reply;
 mod control_request;
 mod control_sdk;
 mod control_types;
+mod control_unmount;
 
 pub mod daemon_setup;
 mod daemon_types;

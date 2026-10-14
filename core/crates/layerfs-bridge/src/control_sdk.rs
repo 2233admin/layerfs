@@ -18,7 +18,7 @@ pub const MAXIMUM_VALUE_DEPTH: usize = 16;
 pub const MAXIMUM_NAME_BYTES: usize = 64;
 
 /// One self-describing value.
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Eq, Hash, PartialEq)]
 pub enum SdkValue {
     /// No value.
     #[default]

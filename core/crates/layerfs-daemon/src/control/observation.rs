@@ -39,8 +39,8 @@ impl Service {
 pub(crate) fn request_token(request: &Request) -> Option<WorkspaceToken> {
     match request {
         Request::Commit(control) => Some(control.token),
+        Request::Unmount(control) => Some(control.token),
         Request::Status(token)
-        | Request::Unmount(token)
         | Request::Attach(token)
         | Request::Cleanup(token)
         | Request::ForceUnmount { token, .. } => Some(*token),
@@ -56,6 +56,7 @@ pub(crate) fn reply_token(reply: &Reply) -> Option<WorkspaceToken> {
         Reply::Ready(value) => Some(value.token),
         Reply::Retained(value) => Some(value.token),
         Reply::ForceUnmounted(value) => Some(value.token),
+        Reply::Dirty(value) => Some(value.token),
         _ => None,
     }
 }

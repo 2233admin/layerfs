@@ -40,6 +40,26 @@ impl OwnerClient {
     pub fn state(&self, route: Route) -> Result<layerfs_overlay::WorkspaceState, OwnerError> {
         self.call(route, ServiceClass::General, None, move |db| db.state())
     }
+    /// One window of the active generation's changed inodes.
+    pub fn active_inodes(
+        &self,
+        route: Route,
+        after: u64,
+    ) -> Result<Vec<layerfs_overlay::Inode>, OwnerError> {
+        self.call(route, ServiceClass::General, None, move |db| {
+            db.active_inodes(after)
+        })
+    }
+    /// One window of the active generation's changed name bindings.
+    pub fn active_directory_entries(
+        &self,
+        route: Route,
+        after: Option<(u64, Vec<u8>)>,
+    ) -> Result<Vec<layerfs_overlay::DirectoryEntry>, OwnerError> {
+        self.call(route, ServiceClass::General, None, move |db| {
+            db.active_directory_entries(after.as_ref().map(|(p, n)| (*p, n.as_slice())))
+        })
+    }
     pub fn release_base_source(&self, route: Route, source: BaseSource) -> Result<(), OwnerError> {
         self.call(route, ServiceClass::General, None, move |db| {
             db.release_base_source(source)

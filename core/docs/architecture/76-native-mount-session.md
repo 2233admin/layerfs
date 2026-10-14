@@ -172,8 +172,10 @@ within a daemon, so neither is a directory or an engine mount incarnation.
 
 ## Normal unmount
 
-[Unmount](../../crates/layerfs-daemon/src/control/detach.rs) keeps its existing
-Commit-custody admission and then, for an attached Workspace:
+[Unmount](../../crates/layerfs-daemon/src/control/detach.rs) first refuses
+uncommitted changes with `Dirty` unless the request discards them
+([architecture 82](82-sdk-call-channel.md#workspace-control-changes)). It keeps
+its existing Commit-custody admission and then, for an attached Workspace:
 
 1. **Probe.** One plain `umount2(path, 0)` while ordinary request service
    continues. `EBUSY` is the kernel's reversible answer for any retained

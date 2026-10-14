@@ -40,6 +40,16 @@ impl BoundWorkspace {
             .map_or(snapshot.effective_root, |pending| pending.local_root))
     }
 
+    /// Paths of an installed conflicted merge that is not yet committed.
+    pub fn pending_conflicts(&self) -> Result<Option<Vec<String>>, WorkspaceError> {
+        Ok(self
+            .pending
+            .lock()
+            .map_err(|_| WorkspaceError::BindingPoisoned)?
+            .as_ref()
+            .map(|pending| pending.conflicted.clone()))
+    }
+
     /// Refuses a candidate whose previously conflicted files still hold a
     /// complete marker block.
     pub(super) fn refuse_markers(

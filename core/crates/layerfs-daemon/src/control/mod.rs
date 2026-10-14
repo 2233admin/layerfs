@@ -4,8 +4,10 @@ mod attach;
 mod cleanup;
 #[cfg(target_os = "linux")]
 mod detach;
+mod dirty;
 mod failure;
 mod force;
+mod inspect;
 mod kernel;
 mod observation;
 mod operations;

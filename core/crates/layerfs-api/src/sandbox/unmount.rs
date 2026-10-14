@@ -1,10 +1,22 @@
 //! Logical terminal control through the existing daemon lifetime owner.
 use super::WorkspaceApi;
 use crate::OperationFailure;
-use layerfs_bridge::control::{ForcedOutcome, Reply, Request, WorkspaceToken};
+use layerfs_bridge::control::{
+    DirtyReport, ForcedOutcome, Reply, Request, UnmountControl, WorkspaceToken,
+};
+
+/// The answer to a normal unmount.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum Unmounted {
+    /// Closed.
+    Closed,
+    /// Refused for uncommitted changes; nothing was closed.
+    Dirty(Box<DirtyReport>),
+}
 
 impl WorkspaceApi<'_> {
-    /// Requests one explicit normal terminal unmount. The daemon probes the
+    /// Requests one explicit normal terminal unmount that discards any
+    /// uncommitted changes. The daemon probes the
     /// kernel reversibly: Busy leaves the Workspace Ready and usable. Success is
     /// acknowledged only after detach, every loop join, daemon-work drain,
     /// kernel-owner revocation and logical Close. Retained custody is returned
@@ -17,9 +29,22 @@ impl WorkspaceApi<'_> {
         if force {
             return self.force_unmount(token, false).map(Some);
         }
-        let request = Request::Unmount(token);
+        match self.unmount_checked(token, true)? {
+            Unmounted::Closed => Ok(None),
+            Unmounted::Dirty(_) => unreachable!("a discarding unmount is never Dirty"),
+        }
+    }
+    /// One normal terminal unmount that refuses uncommitted changes, with
+    /// their paths, unless `discard`.
+    pub fn unmount_checked(
+        &mut self,
+        token: WorkspaceToken,
+        discard: bool,
+    ) -> Result<Unmounted, Box<OperationFailure>> {
+        let request = Request::Unmount(UnmountControl { token, discard });
         match self.exchange(request.clone())? {
-            Reply::Unmounted(_) => Ok(None),
+            Reply::Unmounted(_) => Ok(Unmounted::Closed),
+            Reply::Dirty(report) if !discard => Ok(Unmounted::Dirty(report)),
             reply => Err(OperationFailure::unexpected(request, reply)),
         }
     }

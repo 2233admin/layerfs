@@ -73,6 +73,10 @@ impl Answer {
                 out.byte(4)?;
                 put_token(&mut out, *token)?;
             }
+            Reply::Dirty(value) => {
+                out.byte(22)?;
+                crate::control_unmount::put_dirty(&mut out, value)?;
+            }
             Reply::Forked(value) => {
                 out.byte(5)?;
                 put_binding(&mut out, value)?;
@@ -182,6 +186,7 @@ impl Answer {
                 Reply::Status(Box::new(value))
             }
             4 => Reply::Unmounted(token(&mut input)?),
+            22 => Reply::Dirty(Box::new(crate::control_unmount::dirty(&mut input)?)),
             5 => Reply::Forked(binding(&mut input)?),
             6 => {
                 let count = u16::from_be_bytes(input.array()?);
@@ -285,6 +290,14 @@ fn put_status(out: &mut Writer, value: &WorkspaceStatus) -> Result<(), ControlEr
     out.put(&value.epoch.to_be_bytes())?;
     out.byte(u8::from(value.epoch_saturated))?;
     put_publication(out, &value.published)?;
+    out.byte(match value.current_head {
+        None => 0,
+        Some(None) => 1,
+        Some(Some(_)) => 2,
+    })?;
+    if let Some(Some(id)) = value.current_head {
+        out.put(&id.to_bytes())?;
+    }
     if value.local.is_some() == value.local_failure.is_some() {
         return Err(ControlError("engine observation disposition"));
     }
@@ -321,6 +334,15 @@ fn status(input: &mut Reader<'_>) -> Result<WorkspaceStatus, ControlError> {
     let epoch = u64::from_be_bytes(input.array()?);
     let epoch_saturated = boolean(input)?;
     let published = publication(input)?;
+    let current_head = match input.byte()? {
+        0 => None,
+        1 => Some(None),
+        2 => Some(Some(
+            layerfs_history::CommitId::from_bytes(input.array()?)
+                .map_err(|_| ControlError("current head"))?,
+        )),
+        _ => return Err(ControlError("current head")),
+    };
     let (local, local_failure) = if boolean(input)? {
         (
             Some(LocalObservation {
@@ -346,6 +368,7 @@ fn status(input: &mut Reader<'_>) -> Result<WorkspaceStatus, ControlError> {
         epoch,
         epoch_saturated,
         published,
+        current_head,
         local,
         local_failure,
         kernel: None,
