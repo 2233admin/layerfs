@@ -4,6 +4,7 @@
 //! Entry module: declarations and the method table.
 mod args;
 mod branch;
+mod files;
 pub(crate) mod values;
 
 use crate::store::Store;
@@ -19,6 +20,13 @@ pub(crate) fn dispatch(store: &Arc<Store>, call: &SdkCall) -> Result<SdkValue, S
         "branch.list_commits" => branch::list_commits(store, args),
         "branch.merge" => branch::merge(store, args),
         "branch.publish" => branch::publish(store, args),
+        "fs.write" => files::single(store, "write", args),
+        "fs.edit" => files::single(store, "edit", args),
+        "fs.mkdir" => files::single(store, "mkdir", args),
+        "fs.remove" => files::single(store, "remove", args),
+        "fs.cp" => files::single(store, "cp", args),
+        "fs.mv" => files::single(store, "mv", args),
+        "fs.apply" => files::apply(store, args),
         other => Err(args::refuse(
             "UnknownMethod",
             format!("the daemon has no SDK method {other}"),

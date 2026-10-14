@@ -38,6 +38,11 @@ serves today.
 | `branch.list_commits` | `project, branch, cursor?` | `items[]` (newest first), `nextCursor` | `NoSuchBranch` |
 | `branch.merge` | `project, branch, with, name, agent?` | `Merged` with `fastForward`, `head`, `root`, `sources`, `mergeBase`, `lww` | `Conflict` (detail: sources, mergeBase, conflicts with hunks, lww), `NameTaken`, `ReservedName`, `HeadMoved` |
 | `branch.publish` | `project, branch, commit?` | `Added` with `overwrote[]`, `UpToDate`, `NoChanges` | `NoCommit`, `HeadMoved` |
+| `fs.write` | `project, branch, path, content` or `bytes`, `agent?, call?` | `Committed` or `UpToDate` | `NoSuchPath`, `IsDirectory`, `ReadOnly` (main), `HeadMoved` |
+| `fs.edit` | `project, branch, path, oldText, newText, all?` | as `fs.write` | `NoMatch`, `AmbiguousMatch` (with `matches`), `NotText`, `TooLarge` |
+| `fs.mkdir`, `fs.remove` | `project, branch, path, recursive?` | as `fs.write` | `Exists`, `NotDirectory`, `NotEmpty` |
+| `fs.cp`, `fs.mv` | `project, branch, from, to, recursive?` | as `fs.write` | `Exists`, `InvalidMove`, `IsDirectory` |
+| `fs.apply` | `project, branch, changes[]` (each with `kind`) | one Commit for all changes | the first invalid change |
 
 ### Branch merge
 
@@ -50,3 +55,24 @@ clean result becomes one Commit (`via: merge`) whose parent is the left head
 main's head when main is a side, else the left Branch's base. A conflict drops
 the unfinished Save and creates nothing. Both sides must still be at the merged
 nodes when the Branch is created (`HeadMoved` otherwise, one attempt).
+
+### Direct Branch writes
+
+Every `fs` write is one Commit with `via: fs` on the named Branch.
+[`paths/`](../../crates/layerfs-content/src/paths/mod.rs) in Content applies
+the ordered changes to the head's root. It follows the simulator's
+`applyChanges` rules and refusal codes, and the first invalid change refuses
+the whole list. Only the touched paths are kept, keyed by their current path;
+every other path resolves through its parent into the base tree. The result is
+built by one `update_filesystem` call in one Save:
+
+- A written file keeps its serial and mode and gets the new modification time.
+- A new file (`0o644`) or directory (`0o755`) gets a fresh serial from the
+  Store's allocator.
+- A copy gets fresh serials and the source values.
+- A move keeps serials.
+
+The Commit is published against the head it was built on, in one attempt.
+`main` is refused (`ReadOnly`); it changes only by `branch.publish`. Edits read
+a file as text within 1 MiB (`TooLarge` above it). A call's bytes are bounded
+by one control record, and one change list may draft at most 65,536 paths.

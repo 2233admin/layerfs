@@ -5,11 +5,7 @@ use crate::{
 };
 use layerfs_content::{
     filesystem::{
-        attributes::{
-            apply_patches, build_attribute_tree, emit_value, keys::PORTABLE_KEYS, AttributeEntry,
-            AttributeKey, AttributePatch, PortableMetadata,
-        },
-        limits::PORTABLE_ATTRIBUTE_DOMAIN,
+        attributes::{portable_root, PortableMetadata},
         symlink::emit_symlink,
         FilesystemObjects, SymlinkTarget,
     },
@@ -40,19 +36,6 @@ fn canonical(kind: InodeKind) -> CanonicalKind {
         InodeKind::Directory => CanonicalKind::Directory,
         InodeKind::Symlink => CanonicalKind::Symlink,
     }
-}
-/// The mode and mtime keys from Content's own export of its portable grammar,
-/// confirmed by its predicates: this adapter spells no attribute name itself.
-fn portable_keys() -> ContentResult<(AttributeKey, AttributeKey)> {
-    let [mode, mtime] = PORTABLE_KEYS;
-    let key = |name: &[u8]| AttributeKey::new(PORTABLE_ATTRIBUTE_DOMAIN.to_owned(), name.to_vec());
-    let (mode, mtime) = (key(mode)?, key(mtime)?);
-    if !mode.is_mode() || !mtime.is_mtime() {
-        return Err(ContentError::InvalidRecord(
-            "captured portable attribute keys",
-        ));
-    }
-    Ok((mode, mtime))
 }
 impl<P: OverlayCapturedNamespace + OverlayOperationRecords + ?Sized> Builder<'_, '_, P> {
     /// `stored` is the immutable base record of a live base inode and None for
@@ -184,37 +167,8 @@ impl<P: OverlayCapturedNamespace + OverlayOperationRecords + ?Sized> Builder<'_,
             mtime_seconds: inode.mtime_seconds,
             mtime_nanoseconds: inode.mtime_nanoseconds,
         };
-        let (mode, mtime) = (value.mode_bytes(kind)?, value.mtime_bytes()?);
-        let (mode_key, mtime_key) = portable_keys()?;
         let mut objects = FilesystemObjects::new(self.objects, consumer);
-        let root = match stored {
-            Some(stored) => {
-                let patches = [
-                    AttributePatch::Set {
-                        key: mode_key,
-                        value: mode.to_vec(),
-                    },
-                    AttributePatch::Set {
-                        key: mtime_key,
-                        value: mtime.to_vec(),
-                    },
-                ];
-                apply_patches(self.objects, &mut objects, stored, &patches)?.0
-            }
-            None => {
-                let entries = [
-                    AttributeEntry {
-                        key: mode_key,
-                        value_root: emit_value(&mut objects, &mode)?,
-                    },
-                    AttributeEntry {
-                        key: mtime_key,
-                        value_root: emit_value(&mut objects, &mtime)?,
-                    },
-                ];
-                build_attribute_tree(&mut objects, entries.into_iter().map(Ok))?.0
-            }
-        };
+        let root = portable_root(self.objects, &mut objects, kind, value, stored)?;
         let mut owner = self.shared.borrow_mut();
         add(
             if stored.is_some() {
