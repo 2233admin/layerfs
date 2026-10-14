@@ -426,12 +426,13 @@ fn a_closed_workspace_with_a_pending_ticket_is_queued_only_by_the_settling_owner
 }
 
 #[test]
-fn a_closed_workspace_is_queued_by_the_watched_last_attempt_of_a_replying_thread() {
+fn a_closed_workspace_is_queued_once_its_last_ticket_is_attempted() {
     let temp = Temp::new();
     let db = temp.db();
     let tickets = db.reply_tickets();
-    // The replying-thread form: the attempts are recorded without a turn,
-    // and only the last one, which the close observed pending, owes it.
+    // The replying-thread form: the attempts are recorded without a turn.
+    // A close does not watch tickets; the terminal state is read again after
+    // each attempt, so the last attempt is `Last` and frees the Workspace.
     let route = db.open_workspace([23; 32], [24; 32]).unwrap();
     let first = publish(&db, route, 2);
     let second = publish(&db, route, 3);
@@ -440,7 +441,7 @@ fn a_closed_workspace_is_queued_by_the_watched_last_attempt_of_a_replying_thread
     assert_eq!(attempt(&tickets, first), Some(Settled::Pending));
     // An owner turn before the last attempt queues nothing.
     assert_eq!(db.cleanup_state(route).unwrap(), CleanupState::Held);
-    assert_eq!(attempt(&tickets, second), Some(Settled::Watched));
+    assert_eq!(attempt(&tickets, second), Some(Settled::Last));
     assert_eq!(db.cleanup_state(route).unwrap(), CleanupState::Queued);
     assert_eq!(db.cleanup_state(route).unwrap(), CleanupState::Queued);
     // The turn is idempotent.
@@ -479,9 +480,8 @@ fn a_failed_attempt_and_release_gives_the_ticket_back_with_its_waiter() {
     assert_eq!(attempt(&tickets, ticket), Some(Settled::Watched));
     assert!(db.capture_ready(route).unwrap());
 
-    // A terminal cleanup waiting for the ticket: after the failed call the
-    // Workspace is still held, and the ticket's one attempt still owes the
-    // owner turn that queues it.
+    // A closed Workspace held by the ticket: after the failed call it is still
+    // held, and the ticket's one attempt, unwatched by the close, frees it.
     let ticket = publish(&db, route, 4);
     db.close(route).unwrap();
     assert_eq!(db.cleanup_state(route).unwrap(), CleanupState::Held);
@@ -491,11 +491,15 @@ fn a_failed_attempt_and_release_gives_the_ticket_back_with_its_waiter() {
     ));
     assert_eq!(db.cleanup_state(route).unwrap(), CleanupState::Held);
     assert_eq!(pending(&db, route), vec![ticket]);
-    assert_eq!(attempt(&tickets, ticket), Some(Settled::Watched));
+    assert_eq!(attempt(&tickets, ticket), Some(Settled::Last));
     assert_eq!(db.cleanup_state(route).unwrap(), CleanupState::Queued);
 
     // The successful call is the attempt and the release in one turn: a
-    // closed Workspace held by both is queued by it.
+    // closed Workspace held by both is queued by it. A database holds one
+    // Workspace, so this one has its own.
+    let temp = Temp::new();
+    let db = temp.db();
+    let tickets = db.reply_tickets();
     let route = db.open_workspace([27; 32], [26; 32]).unwrap();
     let source = db.acquire_base_source(route, 1).unwrap();
     let ticket = publish(&db, route, 2);

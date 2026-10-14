@@ -2464,3 +2464,100 @@ including shipped SQL. Counter: pinned `tools/production_loc.py`
 the first-parent and committed-tree Git archives. Reference absent (retired
 R9c; last counted 65,417 at tree 498dd1917812). The tool is under `core/docs`,
 outside the count.
+
+## Issue 321 pre-merge checks and owner decisions (2026-10-14)
+
+Checks owed at the rebased identity, run once at `3316a4547` (product tree
+equal to Step D and E) before #321 merges into `main`. No product source
+changed. Durable execution: NOT_RUN — disabled by owner until explicit
+reauthorization.
+
+### Owner decisions, 2026-10-14
+
+- Root `AGENTS.md` wording for the per-Workspace overlay (PLAN section 11, as
+  applied in Step E): approved as written.
+- Step B's finite-frontier deviation is accepted: a waiting capture or known
+  install holds a finite frontier, and later mutations or acquisitions wait
+  behind it.
+- The rows Step E left unexplained are accepted as recorded:
+  - local snapshot command +19.2% (with its Commit, 2.3 s faster in total);
+  - Store logical bytes up in six cases and down in six.
+- Landing: merge into `main` and push after these checks, then close #321.
+
+### Results
+
+| Check | Command or route | Result |
+| --- | --- | --- |
+| Formatting | `cargo +1.85.1 fmt --all -- --check` | PASS |
+| Product boundary guard | `core/tools/check_product_boundary.py` | PASS, 689 files |
+| Tool unit tests | `unittest discover -s core/tools` | PASS, 50 |
+| Host Clippy, all core targets, `-D warnings` | `check.py m-clippy-01`, 9.8 s | PASS, except 2 errors in `layerfs-project` examples `benchmark_history` and `verify_history`: they include `core/benchmark/fs-bench-pro-storage-content/…`, which the reorganisation `13f9dec38` (already on `main`) moved. Not from #321; unchanged since Step A. |
+| Linux Clippy, all core targets, `-D warnings` | `linux_step.py m-linux-clippy-01`, 24 s | the same 2 errors only |
+| Host tests, every test binary of the core workspace | build `--tests --lib --no-run` 32.7 s; each binary run alone with a 30 s limit | 315 binaries, 1,320 tests pass, 4 fail (see below); none reached its limit; longest 12.6 s |
+| Linux mounted and proof binaries with FUSE | `lbatch.sh m-lx` | 43 of 43 exit 0; 106 pass, 0 fail, 6 ignored |
+| Device-full proofs on an owned ext4 loop device | `linux_device_pinned.py`, fixture `device_fixture.sh` | 4 of 4 PASS, each with owned teardown (unmounted, loop detached, artifacts removed): overlay `real_device_full_at_commit_rolls_back_write_and_preserves_capture`; daemon `real_owner_reclaims_at_device_full_after_last_owner_without_a_cleanup_job`; mounted `real_device_full_reports_enospc_and_normal_drain_completes` and `…forced_drain_completes` |
+| Harness engine suite, native inputs from sealed build `g-stall-3` | `unittest discover tests/engine` | 379 run, OK, 3 skipped |
+| Harness families suite, same inputs | `unittest discover tests/families` | 90 run, OK |
+| Cluster-two harness suite | `unittest discover core/benchmark/cluster-two/tests` | 281 run, OK, 87.4 s |
+
+Notes on the results:
+
+- **Device-full fixture.** The fixture's default overlay test name is stale
+  and would match no test under `--exact`, so every test name was passed
+  explicitly.
+- **Native inputs for the harness suites.** The workspace-writer,
+  workload-host and edit-host binaries of build `g-stall-3` (`5e2b3504b`),
+  plus the repository's own `lstat_counter.c` built as a dylib. They are named
+  by `FSB_CONTEXT_NATIVE`, `WORKSPACE_RECIPE_TEST_WRITER`,
+  `M1_WORKLOAD_TEST_WRITER`, `LAYERFS_ALIAS_*`, `LAYERFS_EDIT_WRITER_BUILD`,
+  `LAYERFS_LOCAL_SNAPSHOT_BUILD`, `LAYERFS_SMALL_DELTA_BUILD`,
+  `FS_BENCH_TEST_BUILD` and `FSBP_LSTAT_COUNTER`.
+- **Clean tree for the sealed build.** The suites ran at the clean tree
+  `3316a4547`, with the test change below stashed: a sealed build loads only
+  when compiled inputs match. That change touches a test file, which no
+  binary contains.
+- **Previously NOT_RUN.** The six harness tests now pass, and so do the five
+  families tests that used to skip.
+- **Engine skips.** The three remaining skips need fixtures that no #321 item
+  names: a public census output, a compiler-only CLI and a staging socket.
+
+### Host failures
+
+- **`layerfs-overlay` `reply_tickets`, two tests: fixed, test-only.** The
+  ledger called these "pre-existing", but that was wrong. On `sdk-refactor`
+  all 11 tests of the file pass (built from an export of `9fe542e3b`). #321
+  rewrote the file in Step A and C, and the two failures follow from that
+  rewrite.
+  - Before #321, a closed Workspace's terminal queue called `watch()` on its
+    pending tickets, so the last reply attempt returned `Watched`. Step A
+    removed that queue: the terminal state is now read again on each look,
+    and the last attempt returns `Last`. The daemon ignores the distinction:
+    `reply_attempted` wakes every waiter of the Workspace after each attempt.
+  - The tests still expected `Watched`. One also opened a second Workspace in
+    the same database, which a per-Workspace file refuses.
+  - Following the owner's rule for retired-model tests, they now assert the
+    surviving behaviour:
+    - the last attempt is `Last`;
+    - the cleanup state goes from Held to Queued;
+    - the second Workspace gets its own database.
+  - All 11 pass.
+- **`complete_installed_roots::huge_native_namespace_is_complete_after_install`:
+  NOT_RUN.** It needs an explicit closed preparation (`LAYERFS_Q1_PREPARED`).
+- **`host_handoff::macos_init_handoff_to_linux_daemon_has_no_host_data_path`:
+  NOT_RUN.** It needs a build-listed Linux daemon test binary
+  (`LAYERFS_INSTALL_DAEMON_BINARY`).
+
+Both are environmental, as at every earlier step; #321 does not touch host
+handoff or Init.
+
+### Still ignored by their own declaration
+
+- `r5_6_a_reported_…`: a reported gap, ignored by design.
+- External daemon and subprocess roles that their parent proofs invoke.
+- `prepare_huge_native_namespace`: a sealed preparation, not a proof.
+
+### Source size
+
+Production LOC 81,054 -> 81,054 (delta +0); the change is one test file and
+documentation. Scope and counter are as in the previous section. Reference
+absent (retired R9c; last counted 65,417 at tree 498dd1917812).

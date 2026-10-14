@@ -264,3 +264,33 @@ that need a device fixture, six harness unit tests that need native build
 inputs, host suites and Clippy at the rebased commits (no product change since
 D), Durable execution (disabled by owner until explicit reauthorization). No
 timing is eligible. No push, pull request or issue closure.
+
+## Pre-merge checks and closure, 2026-10-14
+
+Owner decisions:
+- Root guide wording approved.
+- Finite-frontier deviation accepted.
+- The unexplained Step E rows accepted as recorded.
+- Merge into `main`, push, and close.
+
+Checks owed at the rebased identity, run at `3316a4547`:
+- formatting, guard, tool tests;
+- host and Linux Clippy, clean except two `layerfs-project` example includes
+  broken on `main` by `13f9dec38`;
+- 315 host binaries;
+- 43 Linux binaries;
+- the four device-full proofs on an owned loop device;
+- the engine, families and cluster-two harness suites with native inputs.
+
+The six harness unit tests and the device-full tests NOT_RUN at E now pass.
+
+Two `reply_tickets` tests were wrongly recorded as pre-existing failures: they
+pass on `sdk-refactor`. They asserted the terminal queue that Step A retired,
+and were converted to the surviving behaviour (test-only).
+
+Remaining NOT_RUN, environmental: `complete_installed_roots::huge_native…`
+(closed preparation) and `host_handoff` (Linux role binary).
+
+Not done and left unchecked on the issue: removing the repeated attribute
+requests (NOT_DONE D, kernel-issued; it needs the daemon to own permission
+checks). Details: [#320 ledger](../320/PROGRESS.md#issue-321-pre-merge-checks-and-owner-decisions-2026-10-14).
