@@ -56,7 +56,7 @@ is no migration, conversion or retry.
 ## Runtime Workspace state and remembered SQL custody
 
 Schema 36 removes `workspace` and its AUTOINCREMENT allocator. The engine owns
-one fixed runtime value: incarnation, base root, active/captured/installed
+one fixed runtime value: base root, active/captured/installed
 frontiers, captured revision, current revision, lifecycle, dirty counts,
 base-reader count and consolidation frontier. It is authoritative state, not
 an evictable SQL cache. `Overlay::state` reads it under the Workspace job lock.

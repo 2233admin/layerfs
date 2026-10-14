@@ -56,19 +56,9 @@ impl Overlay {
             (true, Some(writable)) => {
                 // One custody row write covers the lookup and the descriptor.
                 self.insert_native_lookup_row(mount, serial, false, 1)?;
-                let file = self.retain_file_row(mount.route, native, key, serial, writable)?;
-                self.file_ref(
-                    mount.route.ns,
-                    integer(serial)?,
-                    crate::ReferenceKind::Lookup,
-                    true,
-                )?;
-                self.file_ref(
-                    mount.route.ns,
-                    integer(serial)?,
-                    crate::ReferenceKind::File,
-                    true,
-                )?;
+                let file = self.retain_file_row(native, key, serial, writable)?;
+                self.file_ref(integer(serial)?, crate::ReferenceKind::Lookup, true)?;
+                self.file_ref(integer(serial)?, crate::ReferenceKind::File, true)?;
                 Some(file)
             }
             (true, None) => {
@@ -77,7 +67,7 @@ impl Overlay {
             }
             (false, open) => {
                 self.add_native_lookup(mount, serial)?;
-                open.map(|writable| self.retain_file(mount.route, native, key, serial, writable))
+                open.map(|writable| self.retain_file(native, key, serial, writable))
                     .transpose()?
             }
         };

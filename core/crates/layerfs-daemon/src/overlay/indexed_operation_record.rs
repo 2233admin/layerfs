@@ -1,7 +1,7 @@
 //! Short raw-record jobs, with no Content algorithm or provider I/O.
 use layerfs_overlay::{
     IndexedOperationRecordApply, IndexedOperationRecordChange, IndexedOperationRecordKey,
-    IndexedOperationRecordScope, Overlay, OverlayError, OverlayResult, Route,
+    IndexedOperationRecordScope, Overlay, OverlayResult,
 };
 
 /// Complete bounded inputs for the existing OperationRecord service class.
@@ -51,11 +51,7 @@ pub enum IndexedOperationRecordReply {
 }
 
 impl IndexedOperationRecordJob {
-    pub(crate) fn perform(
-        self,
-        db: &Overlay,
-        route: Route,
-    ) -> OverlayResult<IndexedOperationRecordReply> {
+    pub(crate) fn perform(self, db: &Overlay) -> OverlayResult<IndexedOperationRecordReply> {
         let scope = match &self {
             Self::Contains { scope, .. }
             | Self::Get { scope, .. }
@@ -65,9 +61,7 @@ impl IndexedOperationRecordJob {
             | Self::FirstKeysAll { scope, .. }
             | Self::KeysAfter { scope, .. } => *scope,
         };
-        if scope.owner.route() != route {
-            return Err(OverlayError::Stale);
-        }
+
         match self {
             Self::Contains { key, .. } => db
                 .indexed_operation_record_contains(scope, key)

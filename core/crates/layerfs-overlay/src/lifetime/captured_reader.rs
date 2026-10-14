@@ -1,7 +1,7 @@
 //! Fixed captured input remains independently owned across install and failure.
 use crate::{
     db::{integer, unsigned},
-    Capture, CapturedReader, Overlay, OverlayError, OverlayResult, Route, StatementKind,
+    Capture, CapturedReader, Overlay, OverlayError, OverlayResult, StatementKind,
 };
 impl Overlay {
     /// Acquire before construction/read passes. The exact captured root/floor
@@ -17,7 +17,7 @@ impl Overlay {
         }
         self.atomic(|| {
             self.checked_capture(capture)?;
-            let state = self.state(capture.route)?;
+            let state = self.state()?;
             if state.closed {
                 return Err(OverlayError::Closed);
             }
@@ -38,16 +38,12 @@ impl Overlay {
         })
     }
     /// Coherent original custody; absence is not permission to repeat acquisition.
-    pub fn retained_captured_reader(
-        &self,
-        route: Route,
-        request: u64,
-    ) -> OverlayResult<Option<CapturedReader>> {
-        self.state(route)?;
+    pub fn retained_captured_reader(&self, request: u64) -> OverlayResult<Option<CapturedReader>> {
+        self.state()?;
         Ok(self.open.borrow().captured.retained(integer(request)?))
     }
     pub(crate) fn check_captured_reader(&self, reader: CapturedReader) -> OverlayResult<()> {
-        self.state(reader.capture.route)?;
+        self.state()?;
         if self
             .open
             .borrow()

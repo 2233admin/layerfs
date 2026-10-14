@@ -75,15 +75,9 @@ impl Overlay {
     /// step's page. What is left is queued as the owner's own step leaves
     /// it: ready, or parked under its hold. `orphan` is the row this job
     /// read after the reference count reached zero.
-    pub(crate) fn finish_release(
-        &self,
-        ns: i64,
-        serial: i64,
-        mut orphan: Orphan,
-    ) -> OverlayResult<()> {
+    pub(crate) fn finish_release(&self, serial: i64, mut orphan: Orphan) -> OverlayResult<()> {
         let ready = self.maintenance_ready.get();
         let item = |kind, target| Item {
-            ns,
             kind,
             resource: serial,
             target,
@@ -127,7 +121,7 @@ impl Overlay {
                         break 'rounds;
                     }
                     calls += 1;
-                    let step = self.retire_layer(ns, serial, *gen, Some(orphan), page, known)?;
+                    let step = self.retire_layer(serial, *gen, Some(orphan), page, known)?;
                     charge(&mut page, &step);
                     *next = step.next;
                     unfinished |= !matches!(next, Next::Done);
@@ -211,14 +205,14 @@ impl Overlay {
         item: &Item,
         page: Page,
     ) -> OverlayResult<(u64, u64, bool)> {
-        let (ns, serial) = (item.ns, item.resource);
+        let serial = item.resource;
         let Some(mut orphan) = self.orphan(serial)? else {
             self.drop_custody(serial)?;
             self.finish_item(item)?;
             return Ok((0, 0, true));
         };
         let step = if self.file_refs(serial)? != 0 {
-            self.migrate_orphan(ns, serial, orphan, (item.phase, item.aux))?
+            self.migrate_orphan(serial, orphan, (item.phase, item.aux))?
         } else {
             self.reclaim_orphan(serial, &mut orphan, page)?
         };
@@ -229,7 +223,6 @@ impl Overlay {
     /// layer is released. `cursor` is the layer and the last cell moved.
     fn migrate_orphan(
         &self,
-        ns: i64,
         serial: i64,
         orphan: Orphan,
         cursor: (i64, i64),
@@ -240,7 +233,7 @@ impl Overlay {
                 .first()
                 .copied();
             if let Some(lower) = lower {
-                let state = self.state(self.route_for_ns(ns)?)?;
+                let state = self.state()?;
                 if state.captured.is_some_and(|g| g.0 == lower.gen)
                     || self.generation_held(lower.gen)?
                 {
@@ -365,8 +358,7 @@ impl Overlay {
     }
     pub(crate) fn retire_serial(&self, item: &Item, page: Page) -> OverlayResult<(u64, u64, bool)> {
         let mut known = Retiring::default();
-        let step =
-            self.retire_layer(item.ns, item.resource, item.target, None, page, &mut known)?;
+        let step = self.retire_layer(item.resource, item.target, None, page, &mut known)?;
         self.settle_item(item, step)
     }
     /// One step of retiring layer `gen` of a serial: held by a generation
@@ -377,7 +369,6 @@ impl Overlay {
     /// fact it holds is not read again.
     fn retire_layer(
         &self,
-        ns: i64,
         serial: i64,
         gen: i64,
         orphan: Option<Orphan>,
@@ -448,7 +439,7 @@ impl Overlay {
         // a row at or below the install frontier, or one a later row of the
         // view supersedes. The fixed runtime frontier and this serial's
         // indexed later rows decide the same predicate.
-        let state = self.state(self.route_for_ns(ns)?)?;
+        let state = self.state()?;
         let removable = self
             .query(
                 StatementKind::Inode,

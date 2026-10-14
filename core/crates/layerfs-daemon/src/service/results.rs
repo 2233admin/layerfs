@@ -6,8 +6,9 @@ use std::sync::Arc;
 // Job classes are observations only; results retain their concrete payloads.
 use layerfs_overlay::{
     BaseSource, Capture, CapturedReader, Cell, DirectoryEntry, DirectoryEntryWindow, FileRead,
-    Inode, LookupOwner, OpenFile, OperationOwner, Publication, Route, WorkspaceState,
+    Inode, LookupOwner, OpenFile, OperationOwner, Publication, WorkspaceState,
 };
+use layerfs_workspace::Route;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(usize)]
 pub enum ServiceClass {

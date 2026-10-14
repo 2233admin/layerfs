@@ -3636,3 +3636,49 @@ Tests: not yet updated; no test opened/edited/run in Phase 1. Capture/install/
 open-reader, lost-reply, exact-refusal and last-owner proofs remain required
 in Phase 2; no runtime qualification or speed/storage claim is made here.
 Durable: NOT_RUN — disabled by owner until explicit reauthorization.
+
+### Phase 1: Overlay Route/ns removal and cleanup-placement exception
+
+Overlay APIs no longer accept Route; their handles carry small nonrecycled
+engine identities instead of namespace/incarnation routing payload. Exact
+map/capture/source/ticket identity checks remain. The Route type belongs to
+Workspace composition, used by the daemon to select and validate its bound
+handle once before a job effect. Refused routing/connection admission retains
+original input. The Overlay namespace field, maintenance Item.ns/ReclaimStep
+namespace field, route-for-namespace helper and copied-template namespace
+argument are removed. Reply tickets are local revision -> generation.
+
+Removed unused route forwarding and the raw OwnerClient::job entrypoint.
+Bound constructor ports use their owning Workspace client, without searching
+the roster by a token. Owned record jobs and run cursors retain their inputs
+on a missing binding. Kernel mount/fence thread names now use the kernel
+mount owner ID; sampler guidance states the receipt identity needed for
+alignment. No runtime sample, protocol recovery or permission change occurs.
+
+**Cleanup exception.** The source-backed
+[cleanup memory-placement review](CLEANUP-MEMORY-DESIGN-20261014.md) finds
+that failed maintenance latches its original error while foreground mutations
+may enqueue independent per-inode debt. No fixed resident bound is established
+for that backlog. A plain memory list would introduce unbounded heap growth
+or a new refusal cap. Under the handoff's trace-and-leave rule, cleanup_task
+stays backed, with bounded indexed turns and exact stop/unknown custody.
+The six-table target has a recorded one-table gap; schema 37 remains seven
+product tables, zero triggers and zero SQL custody rows. This declined move
+claims no reduction or speed benefit.
+
+**Compile failures and gating.** Initial Overlay compile had 37 expected
+route/field/signature errors; subsequent host checks found the external read
+trait's still-required source arguments, an example's old call signatures and
+eight forwarding errors. These were repaired from source/compiler output.
+The first Linux check failed on a second mount-monitor thread label using the
+removed ns variable; both thread labels now use owner ID. Each failed output
+is retained under simplify-route labels. Busy gates also declined checks while
+unrelated Docker/probe work was active; no other process/container was touched.
+
+Final host/Linux warning-denying Clippy on workspace lib/bins/examples pass;
+final product check labels are simplify-route-{host,linux}-check-final.
+Fmt/whitespace and cleanup-review source links pass. Accounting/close/daemon
+roster oracle pins advance. Tests: not yet updated; no test file was opened,
+edited or run in this Phase 1 step. Root/owner/source/capture and mounted
+coverage remain required in Phase 2. No runtime or speed qualification is
+claimed. Durable: NOT_RUN — disabled by owner until explicit reauthorization.

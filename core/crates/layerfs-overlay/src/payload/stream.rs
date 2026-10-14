@@ -228,7 +228,7 @@ impl Overlay {
         length: u32,
     ) -> OverlayResult<Option<LocalRead>> {
         self.checked_capture(capture)?;
-        let installed = self.state(capture.route())?.installed;
+        let installed = self.state()?.installed;
         self.read_layers(serial, capture.generation.0, installed, offset, length)
     }
     pub(crate) fn read_layers(

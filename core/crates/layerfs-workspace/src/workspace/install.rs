@@ -27,7 +27,7 @@ impl Workspace {
         capture: Capture,
         root: FilesystemRootId,
     ) -> WorkspaceResult<PreparedBase> {
-        if capture.route() != self.route() {
+        if capture.engine() != self.route().engine() {
             return Err(OverlayError::Stale.into());
         }
         let base = self.base()?;
@@ -55,7 +55,7 @@ impl Workspace {
         overlay: &Overlay,
         prepared: PreparedBase,
     ) -> Result<(), (WorkspaceError, PreparedBase)> {
-        if prepared.capture.route() != self.route() {
+        if prepared.capture.engine() != self.route().engine() {
             return Err((OverlayError::Stale.into(), prepared));
         }
         let mut base = match self.base.write() {

@@ -1,11 +1,11 @@
 //! Engine-minted, independently releasable filesystem processing custody.
-use crate::{BaseSource, Capture, Route};
+use crate::{BaseSource, Capture};
 
 /// One actual open descriptor. Cloning a token does not acquire another owner;
 /// use and release validate its exact nonrecycled SQL owner identity.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct OpenFile {
-    pub(crate) route: Route,
+    pub(crate) engine: u64,
     pub(crate) owner: u64,
     pub(crate) serial: u64,
     pub(crate) writable: bool,
@@ -16,8 +16,8 @@ impl OpenFile {
     pub const fn owner_id(self) -> u64 {
         self.owner
     }
-    pub const fn route(self) -> Route {
-        self.route
+    pub const fn engine(self) -> u64 {
+        self.engine
     }
     pub const fn serial(self) -> u64 {
         self.serial
@@ -77,25 +77,25 @@ impl CapturedReader {
 /// Its backed operation_record remains in cleanup custody after exact release.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct OperationOwner {
-    pub(crate) route: Route,
+    pub(crate) engine: u64,
     pub(crate) owner: u64,
 }
 impl OperationOwner {
-    pub const fn route(self) -> Route {
-        self.route
+    pub const fn engine(self) -> u64 {
+        self.engine
     }
 }
 
 /// One actual lookup reference, independently retained until exact FORGET/release.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct LookupOwner {
-    pub(crate) route: Route,
+    pub(crate) engine: u64,
     pub(crate) owner: u64,
     pub(crate) serial: u64,
 }
 impl LookupOwner {
-    pub const fn route(self) -> Route {
-        self.route
+    pub const fn engine(self) -> u64 {
+        self.engine
     }
     pub const fn serial(self) -> u64 {
         self.serial

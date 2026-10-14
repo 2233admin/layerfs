@@ -1,7 +1,7 @@
 //! Exact open and read-processing owners; no descriptor pins a generation chain.
 use crate::{
     db::integer, inode, BaseSource, FileRead, Inode, InodeKind, OpenFile, Overlay, OverlayError,
-    OverlayResult, ReferenceKind, Route, WorkspaceState,
+    OverlayResult, ReferenceKind, WorkspaceState,
 };
 
 // Native cookies are opaque u64 values on the wire. Process-wide allocation
@@ -26,7 +26,6 @@ impl Overlay {
     }
     pub(crate) fn file_ref(
         &self,
-        ns: i64,
         serial: i64,
         kind: ReferenceKind,
         add: bool,
@@ -49,7 +48,7 @@ impl Overlay {
             match self.orphan(serial)? {
                 None => self.drop_custody(serial)?,
                 Some(orphan) if self.release_step.replace(false) => {
-                    self.finish_release(ns, serial, orphan)?
+                    self.finish_release(serial, orphan)?
                 }
                 Some(_) => {
                     self.enqueue(crate::maintenance::ORPHAN, serial, -1)?;
@@ -97,7 +96,7 @@ impl Overlay {
             if current.kind != InodeKind::File || current.nlink == 0 {
                 return Err(OverlayError::Missing);
             }
-            self.retain_file(source.route, None, request, current.serial, writable)
+            self.retain_file(None, request, current.serial, writable)
         })
     }
     /// The enclosing owner transaction has already validated current metadata.
@@ -105,14 +104,13 @@ impl Overlay {
     /// receives the descriptor; without one, `request` is the caller's own.
     pub(crate) fn retain_file(
         &self,
-        route: Route,
         mount: Option<u64>,
         request: i64,
         serial: u64,
         writable: bool,
     ) -> OverlayResult<OpenFile> {
-        let file = self.retain_file_row(route, mount, request, serial, writable)?;
-        self.file_ref(route.ns, integer(serial)?, ReferenceKind::File, true)?;
+        let file = self.retain_file_row(mount, request, serial, writable)?;
+        self.file_ref(integer(serial)?, ReferenceKind::File, true)?;
         Ok(file)
     }
     /// The descriptor's row without its file reference, which the caller
@@ -120,7 +118,6 @@ impl Overlay {
     /// custody: no `lease` row stands for it.
     pub(crate) fn retain_file_row(
         &self,
-        route: Route,
         mount: Option<u64>,
         request: i64,
         serial: u64,
@@ -131,7 +128,7 @@ impl Overlay {
         let mount = mount.unwrap_or(0);
         integer(mount)?;
         let file = OpenFile {
-            route,
+            engine: self.identity,
             owner,
             serial,
             writable,
@@ -146,8 +143,8 @@ impl Overlay {
     }
 
     /// Original open custody, queried by its caller-known request identity.
-    pub fn retained_file(&self, route: Route, request: u64) -> OverlayResult<Option<OpenFile>> {
-        self.state(route)?;
+    pub fn retained_file(&self, request: u64) -> OverlayResult<Option<OpenFile>> {
+        self.state()?;
         let request = integer(request)?;
         Ok(self.open.borrow().files.retained((0, request)))
     }
@@ -157,7 +154,7 @@ impl Overlay {
     }
     /// The same check, returning the Workspace row it read.
     fn checked_file(&self, file: OpenFile, write: bool) -> OverlayResult<WorkspaceState> {
-        let state = self.state(file.route)?;
+        let state = self.state()?;
         {
             let open = self.open.borrow();
             let (held, (mount, _)) = open.files.get(file.owner).ok_or(OverlayError::Stale)?;
@@ -192,12 +189,7 @@ impl Overlay {
             .borrow_mut()
             .files
             .remove(file.owner, |held| *held == file)?;
-        self.file_ref(
-            file.route.ns,
-            integer(file.serial)?,
-            ReferenceKind::File,
-            false,
-        )?;
+        self.file_ref(integer(file.serial)?, ReferenceKind::File, false)?;
         Ok(())
     }
 
@@ -218,7 +210,7 @@ impl Overlay {
             if state.closed {
                 return Err(OverlayError::Closed);
             }
-            if file.route != source.route {
+            if file.engine != source.engine {
                 return Err(OverlayError::Stale);
             }
             self.check_file(file, false)?;
@@ -246,16 +238,12 @@ impl Overlay {
             .reads
             .insert(owner, request, read, "duplicate read request")?;
         self.insert_source(read.source)?;
-        self.source_count(source.route, true)?;
-        self.file_ref(source.route.ns, serial, ReferenceKind::Reader, true)?;
+        self.source_count(true)?;
+        self.file_ref(serial, ReferenceKind::Reader, true)?;
         Ok(read)
     }
-    pub fn retained_file_read(
-        &self,
-        route: Route,
-        request: u64,
-    ) -> OverlayResult<Option<FileRead>> {
-        self.state(route)?;
+    pub fn retained_file_read(&self, request: u64) -> OverlayResult<Option<FileRead>> {
+        self.state()?;
         let request = integer(request)?;
         Ok(self.open.borrow().reads.retained(request))
     }
@@ -277,13 +265,12 @@ impl Overlay {
     pub fn release_file_read(&self, read: FileRead) -> OverlayResult<()> {
         self.atomic_cleanup(|| {
             self.check_file_read(read)?;
-            let ns = read.source.route.ns;
             let serial = integer(read.serial)?;
             self.open
                 .borrow_mut()
                 .reads
                 .remove(read.source.owner, |held| *held == read)?;
-            self.file_ref(ns, serial, ReferenceKind::Reader, false)?;
+            self.file_ref(serial, ReferenceKind::Reader, false)?;
             self.release_source_inner(read.source)
         })
     }

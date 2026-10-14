@@ -13,10 +13,10 @@ impl Overlay {
     pub fn resolve_failed_capture(&self, capture: Capture) -> OverlayResult<()> {
         self.atomic_cleanup(|| {
             self.checked_capture(capture)?;
-            if self.state(capture.route)?.closed {
+            if self.state()?.closed {
                 return Err(OverlayError::Closed);
             };
-            self.change_state(capture.route, |state| {
+            self.change_state(|state| {
                 state.consolidating = state.captured;
                 state.captured = None;
                 state.captured_revision = None;
@@ -27,8 +27,7 @@ impl Overlay {
         })
     }
     pub(crate) fn fold_namespace(&self, item: &Item) -> OverlayResult<(u64, u64, bool)> {
-        let route = self.route_for_ns(item.ns)?;
-        let state = self.state(route)?;
+        let state = self.state()?;
         if state.closed {
             self.hold_item(item)?;
             return Ok((0, 0, false));
@@ -85,7 +84,7 @@ impl Overlay {
                     0
                 };
                 if delta != 0 {
-                    self.dirty_counts(route, 0, delta)?;
+                    self.dirty_counts(0, delta)?;
                 }
                 self.execute(
                     StatementKind::Reclaim,
@@ -104,7 +103,7 @@ impl Overlay {
              FROM fs_inode INDEXED BY fs_inode_capture WHERE generation=?1 AND inode>=?2 ORDER BY inode LIMIT 1",
             &[&item.target,&item.cursor],24,inode::decode)?.pop();
         let Some(lower) = lower else {
-            self.change_state(route, |state| {
+            self.change_state(|state| {
                 state.consolidating = None;
                 Ok(())
             })?;
@@ -122,14 +121,14 @@ impl Overlay {
                     .is_empty()
             {
                 self.put_inode(&state, &lower)?;
-                self.dirty_counts(route, 1, 0)?;
+                self.dirty_counts(1, 0)?;
             }
             if let Some(next) = serial.checked_add(1) {
                 self.advance_item(item, 1, next, -1, &[])?;
                 return Ok((1, 0, false));
             }
             // The maximum representable serial is already the last key.
-            self.change_state(route, |state| {
+            self.change_state(|state| {
                 state.consolidating = None;
                 Ok(())
             })?;
@@ -146,7 +145,7 @@ impl Overlay {
             Some(layer) => *layer,
             None => {
                 let (_, layer) = self.put_inode(&state, &lower)?;
-                self.dirty_counts(route, 1, 0)?;
+                self.dirty_counts(1, 0)?;
                 layer
             }
         };

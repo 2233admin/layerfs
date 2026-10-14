@@ -1,7 +1,7 @@
 //! Reply tickets of published jobs in one Workspace's engine. A publishing job
 //! issues a ticket; its request's one reply attempt settles it without an owner
 //! turn. Capture and terminal cleanup wait for this engine's pending tickets.
-use crate::{Generation, OverlayError, OverlayResult, Publication, Route};
+use crate::{Generation, OverlayError, OverlayResult, Publication};
 use std::{
     collections::BTreeMap,
     ops::Bound,
@@ -21,9 +21,9 @@ pub enum Settled {
 }
 #[derive(Default)]
 struct Tickets {
-    /// Revision to the incarnation and generation published into, bounded by
+    /// Revision to the generation published into, bounded by
     /// publications whose replies are in flight.
-    pending: BTreeMap<i64, ([u8; 32], i64)>,
+    pending: BTreeMap<i64, i64>,
     watched: bool,
 }
 /// Shared with replying threads; short critical sections never wait for SQL.
@@ -42,10 +42,9 @@ impl ReplyTickets {
         self.state.lock().unwrap_or_else(|p| p.into_inner())
     }
     pub(crate) fn issue(&self, publication: Publication) {
-        self.state().pending.insert(
-            publication.revision,
-            (publication.route.incarnation, publication.generation.0),
-        );
+        self.state()
+            .pending
+            .insert(publication.revision, publication.generation.0);
     }
     /// Takes back a ticket whose publishing transaction did not commit.
     pub(crate) fn withdraw(&self, revision: i64) {
@@ -68,14 +67,13 @@ impl ReplyTickets {
     pub(crate) fn count(&self) -> u64 {
         self.state().pending.len() as u64
     }
-    pub(crate) fn page(&self, route: Route, after: i64, limit: usize) -> Vec<Publication> {
+    pub(crate) fn page(&self, after: i64, limit: usize) -> Vec<Publication> {
         self.state()
             .pending
             .range((Bound::Excluded(after), Bound::Unbounded))
             .take(limit)
-            .filter(|(_, (incarnation, _))| *incarnation == route.incarnation)
-            .map(|(revision, (_, generation))| Publication {
-                route,
+            .map(|(revision, generation)| Publication {
+                engine: self.engine,
                 revision: *revision,
                 generation: Generation(*generation),
             })
@@ -84,9 +82,9 @@ impl ReplyTickets {
     /// Records a send attempt, including a lost reply, from any thread. Never
     /// removes published state or claims delivery; an unheld ticket is Stale.
     pub fn attempted(&self, publication: Publication) -> OverlayResult<Settled> {
-        let held = (publication.route.incarnation, publication.generation.0);
+        let held = publication.generation.0;
         let mut state = self.state();
-        if publication.route.engine != self.engine
+        if publication.engine != self.engine
             || state.pending.get(&publication.revision) != Some(&held)
         {
             return Err(OverlayError::Stale);

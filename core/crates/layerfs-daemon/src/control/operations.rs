@@ -250,10 +250,10 @@ impl Service {
     }
     pub(super) fn job(
         &self,
-        route: layerfs_overlay::Route,
+        route: layerfs_workspace::Route,
         command: impl FnOnce(
                 &crate::OwnerClient,
-                layerfs_overlay::Route,
+                layerfs_workspace::Route,
             ) -> Result<crate::JobReceipt, crate::OwnerError>
             + Send,
     ) -> Result<crate::JobReceipt, Failure> {

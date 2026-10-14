@@ -166,7 +166,8 @@ impl Workspace {
         facts: Arc<VisitFacts>,
     ) -> WorkspaceResult<NativeReadVisit> {
         let base = self.base()?;
-        if mount.route() != self.route() || mount.root_serial() != base.root().root_inode().serial()
+        if mount.engine() != self.route().engine()
+            || mount.root_serial() != base.root().root_inode().serial()
         {
             return Err(OverlayError::Stale.into());
         }
@@ -223,7 +224,8 @@ impl Workspace {
         facts: Arc<VisitFacts>,
     ) -> WorkspaceResult<NativeReadVisit> {
         let base = self.base()?;
-        if mount.route() != self.route() || mount.root_serial() != base.root().root_inode().serial()
+        if mount.engine() != self.route().engine()
+            || mount.root_serial() != base.root().root_inode().serial()
         {
             return Err(OverlayError::Stale.into());
         }
@@ -244,7 +246,7 @@ impl Workspace {
     ) -> WorkspaceResult<NativeMutationVisit> {
         let base = self.base()?;
         let root = base.root().root_inode().serial();
-        if request.mount.route() != self.route() || request.mount.root_serial() != root {
+        if request.mount.engine() != self.route().engine() || request.mount.root_serial() != root {
             return Err(OverlayError::Stale.into());
         }
         if request.input.creates() != request.fresh.is_some()

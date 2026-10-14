@@ -166,7 +166,7 @@ impl BoundWorkspace {
         &self,
         command: impl FnOnce(
                 &crate::OwnerClient,
-                layerfs_overlay::Route,
+                layerfs_workspace::Route,
             ) -> Result<crate::JobReceipt, crate::OwnerError>
             + Send,
         take: impl FnOnce(&Response) -> Option<T>,
@@ -211,7 +211,7 @@ impl BoundWorkspace {
         &self,
         command: impl FnOnce(
                 &crate::OwnerClient,
-                layerfs_overlay::Route,
+                layerfs_workspace::Route,
             ) -> Result<crate::JobReceipt, crate::OwnerError>
             + Send,
         held: &mut CapturedConstruction,

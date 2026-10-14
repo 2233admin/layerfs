@@ -1,44 +1,37 @@
 //! Exact short base-source custody, with provider IO outside the SQL owner.
-use crate::{
-    db::integer, BaseSource, Inode, Overlay, OverlayError, OverlayResult, Route, WorkspaceState,
-};
+use crate::{db::integer, BaseSource, Inode, Overlay, OverlayError, OverlayResult, WorkspaceState};
 
 impl Overlay {
     /// Acquires the current base for one bounded request window. Duplicate
     /// operation IDs fail atomically. Native service fences later acquisitions
     /// behind known install readiness, without attempting/retrying install.
-    pub fn acquire_base_source(&self, route: Route, owner: u64) -> OverlayResult<BaseSource> {
+    pub fn acquire_base_source(&self, owner: u64) -> OverlayResult<BaseSource> {
         let key = integer(owner)?;
         if key == 0 {
             return Err(OverlayError::Invalid("zero base-source owner"));
         }
         self.atomic(|| {
-            let state = self.live(route)?;
+            let state = self.live()?;
             let source = BaseSource {
-                route,
+                engine: self.identity,
                 owner,
                 class: 0,
                 root: state.base_root,
                 installed: state.installed,
             };
             self.insert_source(source)?;
-            self.source_count(route, true)?;
+            self.source_count(true)?;
             Ok(source)
         })
     }
     /// Bounded observation of original custody after a lost completion. Missing
     /// is absence, never authority to replay an acquisition or infer its fence.
-    pub fn retained_base_source(
-        &self,
-        route: Route,
-        owner: u64,
-    ) -> OverlayResult<Option<BaseSource>> {
-        let installed = self.state(route)?.installed;
-        self.base_source_by_owner(route, owner, installed, 0)
+    pub fn retained_base_source(&self, owner: u64) -> OverlayResult<Option<BaseSource>> {
+        let installed = self.state()?.installed;
+        self.base_source_by_owner(owner, installed, 0)
     }
     fn base_source_by_owner(
         &self,
-        route: Route,
         owner: u64,
         installed: i64,
         class: i64,
@@ -51,7 +44,7 @@ impl Overlay {
             .rows
             .get(&(owner, class))
             .copied()
-            .filter(|source| source.route == route && source.installed == installed))
+            .filter(|source| source.installed == installed))
     }
     pub(crate) fn insert_source(&self, source: BaseSource) -> OverlayResult<()> {
         let key = (source.owner, source.class);
@@ -63,7 +56,7 @@ impl Overlay {
         Ok(())
     }
     pub(crate) fn source_state(&self, source: BaseSource) -> OverlayResult<WorkspaceState> {
-        let state = self.state(source.route)?;
+        let state = self.state()?;
         self.source_held(source, state)
     }
     /// The same check against runtime Workspace state this job already read.
@@ -72,6 +65,9 @@ impl Overlay {
         source: BaseSource,
         state: WorkspaceState,
     ) -> OverlayResult<WorkspaceState> {
+        if source.engine != self.identity {
+            return Err(OverlayError::Stale);
+        }
         // A visit's own source names no row: it is the current base itself.
         if source.class == 3 {
             return if state.base_root == source.root && state.installed == source.installed {
@@ -81,12 +77,8 @@ impl Overlay {
             };
         }
         if state.base_root != source.root
-            || self.base_source_by_owner(
-                source.route,
-                source.owner,
-                state.installed,
-                source.class,
-            )? != Some(source)
+            || self.base_source_by_owner(source.owner, state.installed, source.class)?
+                != Some(source)
         {
             return Err(OverlayError::Stale);
         }
@@ -118,7 +110,7 @@ impl Overlay {
             .borrow_mut()
             .sources
             .remove((source.owner, source.class));
-        self.source_count(source.route, false)?;
+        self.source_count(false)?;
         Ok(())
     }
 }

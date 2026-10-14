@@ -22,7 +22,7 @@ impl Workspace {
         operation: Operation,
         now: Time,
     ) -> WorkspaceResult<Outcome> {
-        if view.source().route() != self.route() {
+        if view.source().engine() != self.route().engine() {
             return Err(OverlayError::Stale.into());
         }
         let serial = if operation.creates() {

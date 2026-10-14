@@ -61,7 +61,7 @@ impl Workspace {
     /// Retains the selected binding for the owner-issued source. The source must
     /// stay owned until this bounded processing window ends. No provider I/O here.
     pub fn view_for_source(&self, source: BaseSource) -> WorkspaceResult<SourceView> {
-        if source.route() != self.route() {
+        if source.engine() != self.route().engine() {
             return Err(layerfs_overlay::OverlayError::Stale.into());
         }
         let base = self.base()?;

@@ -74,3 +74,5 @@ pub use port::{
 pub use serials::{InodeSerials, SERIAL_REFILL};
 pub use view::{SourceView, ViewStat};
 pub use workspace::{Workspace, WorkspaceError, WorkspaceResult};
+
+pub use workspace::Route;

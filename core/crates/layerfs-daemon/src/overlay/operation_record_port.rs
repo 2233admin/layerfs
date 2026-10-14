@@ -14,13 +14,21 @@ use layerfs_workspace::{
 
 fn original_job(
     client: &OwnerClient,
-    scope: IndexedOperationRecordScope,
     job: IndexedOperationRecordJob,
 ) -> WorkspaceResult<JobReceipt> {
-    let command = |job_client: &crate::OwnerClient, route| {
-        job_client.indexed_operation_record(route, Box::new(job))
+    let route = match client.bound_route() {
+        Ok(route) => route,
+        Err(cause) => {
+            return Err(WorkspaceError::Service(Box::new(
+                crate::OwnerError::Unattempted {
+                    cause: Box::new(cause),
+                    input: crate::overlay::owner::OriginalInput::new(job),
+                },
+            )))
+        }
     };
-    let pending = command(client, scope.owner.route())
+    let pending = client
+        .indexed_operation_record(route, Box::new(job))
         .map_err(|cause| WorkspaceError::Service(Box::new(cause)))?;
     Ok(pending)
 }
@@ -37,11 +45,7 @@ impl OverlayOperationRecords for OwnerClient {
         scope: IndexedOperationRecordScope,
         key: IndexedOperationRecordKey,
     ) -> WorkspaceResult<OperationRecordReply<bool>> {
-        let done = original_job(
-            self,
-            scope,
-            IndexedOperationRecordJob::Contains { scope, key },
-        )?;
+        let done = original_job(self, IndexedOperationRecordJob::Contains { scope, key })?;
         match done.result() {
             Ok(Response::IndexedOperationRecord(IndexedOperationRecordReply::Contains(value))) => {
                 Ok(OperationRecordReply::owned(*value))
@@ -54,7 +58,7 @@ impl OverlayOperationRecords for OwnerClient {
         scope: IndexedOperationRecordScope,
         key: IndexedOperationRecordKey,
     ) -> WorkspaceResult<OperationRecordReply<Option<Vec<u8>>>> {
-        let done = original_job(self, scope, IndexedOperationRecordJob::Get { scope, key })?;
+        let done = original_job(self, IndexedOperationRecordJob::Get { scope, key })?;
         match done.result() {
             Ok(Response::IndexedOperationRecord(IndexedOperationRecordReply::Value(value))) => {
                 let value = value.clone();
@@ -75,7 +79,7 @@ impl OverlayOperationRecords for OwnerClient {
             scope,
             keys: keys.to_vec(),
         };
-        let done = original_job(self, scope, job)?;
+        let done = original_job(self, job)?;
         match done.result() {
             Ok(Response::IndexedOperationRecord(IndexedOperationRecordReply::Values(values))) => {
                 let value = values.clone();
@@ -99,11 +103,7 @@ impl OverlayOperationRecords for OwnerClient {
         scope: IndexedOperationRecordScope,
         changes: Vec<IndexedOperationRecordChange>,
     ) -> WorkspaceResult<OperationRecordReply<OperationRecordApply>> {
-        let done = original_job(
-            self,
-            scope,
-            IndexedOperationRecordJob::Apply { scope, changes },
-        )?;
+        let done = original_job(self, IndexedOperationRecordJob::Apply { scope, changes })?;
         match done.result() {
             Ok(Response::IndexedOperationRecord(IndexedOperationRecordReply::Applied(
                 IndexedOperationRecordApply::Applied,
@@ -144,7 +144,7 @@ impl OverlayOperationRecords for OwnerClient {
             },
             None => IndexedOperationRecordJob::FirstKeysAll { scope, kind },
         };
-        let done = original_job(self, scope, job)?;
+        let done = original_job(self, job)?;
         match done.result() {
             Ok(Response::IndexedOperationRecord(IndexedOperationRecordReply::Keys(value))) => {
                 let value = value.clone();
@@ -162,7 +162,6 @@ impl OverlayOperationRecords for OwnerClient {
     ) -> WorkspaceResult<OperationRecordReply<Vec<[u8; 32]>>> {
         let done = original_job(
             self,
-            scope,
             IndexedOperationRecordJob::KeysAfter { scope, kind, after },
         )?;
         match done.result() {

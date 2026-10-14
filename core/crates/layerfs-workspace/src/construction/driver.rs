@@ -3,6 +3,7 @@ use super::namespace::{
     begin, names, seal, values, Backing, Builder, Cursor, Facts, Shared, State,
 };
 use super::outcome::{CapturedNamespaceAttempt, CapturedNamespaceCustody, CapturedNamespaceWork};
+use crate::Route;
 use crate::{
     BaseView, IndexedConstructionRecords, OverlayCapturedNamespace, OverlayOperationRecords,
     Workspace, WorkspaceResult,
@@ -15,9 +16,7 @@ use layerfs_content::{
     AuthenticatedObjects, ConstructionCapacities, ConstructionPolicy, ContentError, ContentResult,
     FilesystemResult, FinalizedConsumer, ObjectId,
 };
-use layerfs_overlay::{
-    CapturedReader, IndexedOperationRecordScope, OperationOwner, OverlayError, Route,
-};
+use layerfs_overlay::{CapturedReader, IndexedOperationRecordScope, OperationOwner, OverlayError};
 use layerfs_telemetry::timer::{Active, Timing, TimingScope};
 
 /// One complete canonical filesystem root from one exact captured reader.
@@ -150,7 +149,9 @@ impl<P: OverlayCapturedNamespace + OverlayOperationRecords + ?Sized> CapturedNam
 impl<P: OverlayCapturedNamespace + OverlayOperationRecords + ?Sized> Attempt<'_, '_, P> {
     /// The reader's exact root, never the Workspace's possibly later binding.
     fn bind(&self, base: WorkspaceResult<BaseView>) -> ContentResult<BaseView> {
-        if self.route != self.reader.capture().route() || self.operation.route() != self.route {
+        if self.route.engine() != self.reader.capture().engine()
+            || self.operation.engine() != self.route.engine()
+        {
             return Err(self
                 .shared
                 .borrow_mut()

@@ -8,8 +8,10 @@ daemon container (`/usr/local/bin/layerfs-daemon`) that mounts a
 from the pinned image in that container's PID namespace. The observer reads
 the daemon's `/proc/1/status` and `/proc/1/task/*/comm`; it writes nothing
 into the sample, mounts nothing and evicts no cache. Rows carry the Docker
-VM's CLOCK_MONOTONIC. Per-mount thread names (`layerfs-mount-…`) appear and
-disappear with each mount, which aligns rows with the harness's events.
+VM's CLOCK_MONOTONIC. Per-mount thread names (`layerfs-mount-…`) appear and disappear with each
+mount. Before the #320 Route cut their suffix was the Workspace namespace;
+after it the suffix is the exact kernel mount owner ID from mount receipts.
+Use the receipt's identity when aligning sampler rows with harness events.
 """
 import json
 import subprocess

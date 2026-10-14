@@ -1,7 +1,8 @@
 //! Roster composition outside connection locks, and direct Workspace binding.
 use super::{owner::OriginalInput, workspaces::CleanupTarget};
 use crate::{JobReceipt, JobWork, OwnerClient, OwnerError, Response, ServiceClass};
-use layerfs_overlay::{CleanupState, OverlayError, Route};
+use layerfs_overlay::CleanupState;
+use layerfs_workspace::Route;
 impl OwnerClient {
     pub fn open(
         &self,
@@ -26,10 +27,12 @@ impl OwnerClient {
             done.add_allocation(observed);
             return Ok(done);
         }
+        let namespace = self.connection()?.namespace;
         self.owner_job(route, ServiceClass::Lifecycle, None, move |db, _| {
-            db.open_workspace(incarnation, base_root)
-                .map(Response::Opened)
-                .map_err(OwnerError::Overlay)
+            let route =
+                Route::new(namespace, db.engine(), incarnation).map_err(OwnerError::Overlay)?;
+            db.open_workspace(base_root).map_err(OwnerError::Overlay)?;
+            Ok(Response::Opened(route))
         })
     }
     pub fn resources(&self, route: Option<Route>, global: bool) -> Result<JobReceipt, OwnerError> {
@@ -48,16 +51,10 @@ impl OwnerClient {
             // account their own SQL/hold once; this receipt retains their work.
             return Ok(JobReceipt::new(result, work, None));
         }
-        self.owner_job(route, ServiceClass::Read, None, move |db, route| {
-            match route {
-                Some(route) => db
-                    .state(route)
-                    .and_then(|_| db.resources((!global).then_some(route))),
-                None if global => db.resources(None),
-                None => Err(OverlayError::Invalid("missing route")),
-            }
-            .map(|value| Response::Resources(Box::new(value)))
-            .map_err(OwnerError::Overlay)
+        self.owner_job(route, ServiceClass::Read, None, move |db, _| {
+            db.resources()
+                .map(|value| Response::Resources(Box::new(value)))
+                .map_err(OwnerError::Overlay)
         })
     }
     pub fn observe_cleanup(
@@ -88,7 +85,7 @@ impl OwnerClient {
             }
         }
         self.owner_job(route, ServiceClass::Lifecycle, None, move |db, _| {
-            db.observe_cleanup(namespace, incarnation)
+            db.cleanup_state()
                 .map(Response::CleanupState)
                 .map_err(OwnerError::Overlay)
         })

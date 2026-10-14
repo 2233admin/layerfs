@@ -33,13 +33,9 @@ impl Overlay {
     /// The current base as this job's own source. It names no row and is
     /// accepted only while the Workspace still has this base and install
     /// frontier, which holds for the whole job that made it.
-    pub(crate) fn visit_source(
-        &self,
-        mount: NativeMount,
-        state: WorkspaceState,
-    ) -> OverlayResult<BaseSource> {
+    pub(crate) fn visit_source(&self, state: WorkspaceState) -> OverlayResult<BaseSource> {
         Ok(BaseSource {
-            route: mount.route,
+            engine: self.identity,
             owner: self.mint_owner()?,
             class: 3,
             root: state.base_root,
@@ -104,9 +100,9 @@ impl Overlay {
         live: bool,
         row: bool,
     ) -> OverlayResult<(WorkspaceState, i64, Option<LocalRow>)> {
-        self.check_route(mount.route)?;
+        self.available()?;
         let key = integer(serial)?;
-        let state = self.state(mount.route)?;
+        let state = self.state()?;
         let local = if row {
             self.local_row(key, state.active, state.installed)?
         } else {
@@ -213,7 +209,7 @@ impl Overlay {
                 // The job's rounds read each inode row once, and the row
                 // of the inode it names with its fence.
                 let (state, _, seen) = self.visit_fence(mount, serial, held)?;
-                let source = self.visit_source(mount, state)?;
+                let source = self.visit_source(state)?;
                 let rows = self.source_rows_at(source, state, Some(&seen));
                 let inode = match decide(rows, source)? {
                     NativeDecision::Needs(value) => {
@@ -259,13 +255,8 @@ impl Overlay {
                 // The descriptor's row names the mount and the kernel
                 // request that receives it.
                 let key = super::native_file::native_request(request);
-                open_candidate = Some(self.retain_file(
-                    mount.route,
-                    Some(mount.owner),
-                    key,
-                    serial,
-                    writable,
-                )?);
+                open_candidate =
+                    Some(self.retain_file(Some(mount.owner), key, serial, writable)?);
                 Ok(())
             })
             .map(|()| None);
@@ -330,12 +321,12 @@ impl Overlay {
             // the fence read the row of the inode the request names.
             let (state, writable, seen) = self.visit_fence(mount, serial, held)?;
             let file = handle.map(|owner| OpenFile {
-                route: mount.route,
+                engine: self.identity,
                 owner,
                 serial,
                 writable,
             });
-            let source = self.visit_source(mount, state)?;
+            let source = self.visit_source(state)?;
             let rows = self.source_rows_at(source, state, Some(&seen));
             let Some((changes, effect)) = decide(rows, file)? else {
                 return Ok(None);

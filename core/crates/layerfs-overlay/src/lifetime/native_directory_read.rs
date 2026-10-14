@@ -83,7 +83,7 @@ impl Overlay {
             serial,
         };
         let cursor = self.native_directory_cursor(directory, offset, floor)?;
-        let source = self.visit_source(mount, state)?;
+        let source = self.visit_source(state)?;
         if cursor == NativeDirectoryCursor::Rewound {
             return Ok(NativeDirectoryPage {
                 directory,

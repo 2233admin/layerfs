@@ -41,7 +41,7 @@ impl BoundWorkspace {
     pub const fn identity(&self) -> WorkspaceId {
         self.identity
     }
-    pub fn route(&self) -> layerfs_overlay::Route {
+    pub fn route(&self) -> layerfs_workspace::Route {
         self.workspace.route()
     }
 }

@@ -1,7 +1,7 @@
 //! Fixed captured membership and publication/reply-attempt ordering primitives.
 use crate::{
     db::integer, inode, sql, Capture, Inode, Overlay, OverlayError, OverlayResult, Publication,
-    Route, StatementKind,
+    StatementKind,
 };
 
 impl Overlay {
@@ -14,7 +14,7 @@ impl Overlay {
             if !self.install_ready(capture)? {
                 return Err(OverlayError::BaseSourcesPending);
             }
-            self.change_state(capture.route, |state| {
+            self.change_state(|state| {
                 state.base_root = root;
                 state.installed = capture.generation.0;
                 state.captured = None;
@@ -30,7 +30,7 @@ impl Overlay {
     /// source acquisitions and parks the original job until exact releases.
     pub fn install_ready(&self, capture: Capture) -> OverlayResult<bool> {
         self.checked_capture(capture)?;
-        Ok(self.state(capture.route())?.base_readers == 0)
+        Ok(self.state()?.base_readers == 0)
     }
     /// Final captured name bindings, indexed by their sealed generation. The
     /// resume key is (parent,binary name); no OFFSET or active-domain filtering.
@@ -67,8 +67,8 @@ impl Overlay {
     }
     /// Readiness observation before a capture attempt. Waiting callers retain
     /// their original operation and wake on reply-attempt progress, without retry.
-    pub fn capture_ready(&self, route: Route) -> OverlayResult<bool> {
-        let state = self.live(route)?;
+    pub fn capture_ready(&self) -> OverlayResult<bool> {
+        let state = self.live()?;
         if state.captured.is_some() {
             return Err(OverlayError::CaptureInFlight);
         }
@@ -83,15 +83,15 @@ impl Overlay {
     /// kernel delivery. A replying thread records its attempt through
     /// `reply_tickets` instead; its last attempt wakes capture readiness.
     pub fn reply_attempted(&self, publication: Publication) -> OverlayResult<()> {
-        self.state(publication.route)?;
+        self.state()?;
         self.tickets.attempted(publication)?;
         Ok(())
     }
     /// Seals existing rows without copying them. The daemon parks capture until
     /// earlier reply attempts settle; this method does not block a SQL owner.
-    pub fn capture(&self, route: Route) -> OverlayResult<Capture> {
+    pub fn capture(&self) -> OverlayResult<Capture> {
         self.atomic_cleanup(|| {
-            let state = self.live(route)?;
+            let state = self.live()?;
             if state.captured.is_some() {
                 return Err(OverlayError::CaptureInFlight);
             }
@@ -106,7 +106,7 @@ impl Overlay {
                 .0
                 .checked_add(1)
                 .ok_or(OverlayError::Invalid("generation exhausted"))?;
-            self.change_state(route, |current| {
+            self.change_state(|current| {
                 current.captured = Some(state.active);
                 current.captured_revision = Some(state.revision);
                 current.active = crate::Generation(next);
@@ -115,7 +115,7 @@ impl Overlay {
                 Ok(())
             })?;
             Ok(Capture {
-                route,
+                engine: self.identity,
                 generation: state.active,
                 revision: state.revision,
                 base_root: state.base_root,
@@ -135,8 +135,9 @@ impl Overlay {
         )
     }
     pub(crate) fn checked_capture(&self, capture: Capture) -> OverlayResult<()> {
-        let state = self.state(capture.route)?;
-        if state.captured != Some(capture.generation)
+        let state = self.state()?;
+        if capture.engine != self.identity
+            || state.captured != Some(capture.generation)
             || state.captured_revision != Some(capture.revision)
             || state.base_root != capture.base_root
         {

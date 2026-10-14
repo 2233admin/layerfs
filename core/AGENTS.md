@@ -168,7 +168,10 @@ Workspace/allocator SQL rows and generic caller-minted leases. Workspace
 lifecycle/frontier/dirty/base-reader counters are one journaled runtime value,
 restored only after known whole-job rollback; unknown outcomes retain custody.
 Commit runs/readers/base pins are journaled owner maps; captured generation
-holds use a count index. Resources computes row/length totals on demand and
+holds use a count index. Daemon-bound routing is checked once per call; Overlay
+accepts no Route and stores no namespace. Cleanup debt remains SQL-backed after
+the [memory-placement review](docs/issues/320/CLEANUP-MEMORY-DESIGN-20261014.md).
+Resources computes row/length totals on demand and
 retains exact owner counts from memory. See the current
 [runtime state](docs/architecture/64-overlay-terminology.md#runtime-workspace-state-and-remembered-sql-custody).
 

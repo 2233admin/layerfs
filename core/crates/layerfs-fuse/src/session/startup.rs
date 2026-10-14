@@ -96,9 +96,9 @@ impl NativeSession {
         let runner = native.into_runner();
         let monitor = runner.monitor();
         session.monitor = Some(monitor.clone());
-        let ns = session.mount.route().namespace();
+        let owner_id = session.mount.owner_id();
         match thread::Builder::new()
-            .name(format!("layerfs-mount-{ns}"))
+            .name(format!("layerfs-mount-{owner_id}"))
             .spawn(move || runner.run())
         {
             Ok(owner) => session.owner = Some(owner),
@@ -111,7 +111,7 @@ impl NativeSession {
         let fence = session.queue.clone();
         let watched = monitor.clone();
         match thread::Builder::new()
-            .name(format!("layerfs-fence-{ns}"))
+            .name(format!("layerfs-fence-{owner_id}"))
             .spawn(move || fence_first_exit(watched, fence))
         {
             Ok(watcher) => session.watcher = Some(watcher),

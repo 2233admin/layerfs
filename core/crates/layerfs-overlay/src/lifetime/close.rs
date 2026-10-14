@@ -1,5 +1,5 @@
 //! Logical terminal close; physical disposal belongs to the Workspace file owner.
-use crate::{Capture, Overlay, OverlayError, OverlayResult, Route};
+use crate::{Capture, Overlay, OverlayError, OverlayResult};
 
 /// Whether a Workspace is serving, retained by a consumer, ready for checked
 /// connection close, or physically absent from its owner. Only the daemon's
@@ -38,36 +38,16 @@ impl Overlay {
         })
     }
     /// Read-only exact route observation; it runs no cleanup and proves no unlink.
-    pub fn cleanup_state(&self, route: Route) -> OverlayResult<CleanupState> {
-        let state = self.state(route)?;
+    pub fn cleanup_state(&self) -> OverlayResult<CleanupState> {
+        let state = self.state()?;
         self.terminal_state(&state)
-    }
-    pub fn observe_cleanup(
-        &self,
-        namespace: i64,
-        incarnation: [u8; 32],
-    ) -> OverlayResult<CleanupState> {
-        self.available()?;
-        if namespace <= 0 || incarnation == [0; 32] {
-            return Err(OverlayError::Stale);
-        }
-        let (stored, _) = self.workspace.get().ok_or(OverlayError::Stale)?;
-        if namespace != self.namespace.get() || stored != incarnation {
-            return Err(OverlayError::Stale);
-        }
-        let route = Route {
-            engine: self.identity,
-            ns: namespace,
-            incarnation,
-        };
-        self.cleanup_state(route)
     }
     /// Closes mutation/acquisition admission. Existing exact consumers keep their
     /// original custody until fenced; no namespace row or payload is swept here.
-    pub fn close(&self, route: Route) -> OverlayResult<()> {
+    pub fn close(&self) -> OverlayResult<()> {
         self.atomic_cleanup(|| {
-            self.live(route)?;
-            self.change_state(route, |state| {
+            self.live()?;
+            self.change_state(|state| {
                 state.closed = true;
                 Ok(())
             })?;
@@ -77,12 +57,12 @@ impl Overlay {
     /// Exact capture relinquishment after its consumer and publication fences.
     pub fn release_closed_capture(&self, capture: Capture) -> OverlayResult<()> {
         self.atomic_cleanup(|| {
-            let state = self.state(capture.route())?;
+            let state = self.state()?;
             self.checked_capture(capture)?;
             if !state.closed {
                 return Err(OverlayError::Stale);
             }
-            self.change_state(capture.route(), |state| {
+            self.change_state(|state| {
                 state.captured = None;
                 state.captured_revision = None;
                 Ok(())

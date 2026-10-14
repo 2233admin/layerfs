@@ -1,5 +1,5 @@
 //! On-demand logical counts and real shared allocation observations.
-use crate::{db::unsigned, AllocationState, Overlay, OverlayResult, Route, StatementKind};
+use crate::{db::unsigned, AllocationState, Overlay, OverlayResult, StatementKind};
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct StoredCounts {
     pub namespaces: u64,
@@ -48,11 +48,8 @@ const COUNTS: &str = "SELECT
 impl Overlay {
     /// The exact counts of this database's Workspace; a route also checks it.
     /// Page/file observations remain shared and never imply exclusive attribution.
-    pub fn resources(&self, route: Option<Route>) -> OverlayResult<Resources> {
+    pub fn resources(&self) -> OverlayResult<Resources> {
         self.available()?;
-        if let Some(route) = route {
-            self.state(route)?;
-        }
         // This explicit diagnostic visits rows on demand and projects lengths,
         // never payload values. Ordinary mutations maintain no accounting row.
         // The daemon sums separate Workspace observations where requested.

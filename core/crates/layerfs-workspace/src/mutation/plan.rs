@@ -40,7 +40,7 @@ impl Workspace {
         now: Time,
         serial: Option<u64>,
     ) -> Result<MutationPlan, Box<MutationInputFailure>> {
-        let error = if view.source().route() != self.route() {
+        let error = if view.source().engine() != self.route().engine() {
             Some(OverlayError::Stale.into())
         } else if operation.creates() != serial.is_some()
             || serial.is_some_and(|serial| serial == 0 || serial > MAXIMUM_INODE_SERIAL)

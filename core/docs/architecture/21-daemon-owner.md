@@ -21,6 +21,10 @@ Measured outcomes are in the [#320 ledger](../issues/320/PROGRESS.md), not here.
   MEMORY journal, synchronous OFF, EXCLUSIVE locking, `temp_store=MEMORY`,
   mmap off, zero busy timeout and the configured pager allowance. The roster
   (`overlay/workspaces.rs`) admits the configured number of mounted Workspaces.
+- **Routing.** Daemon routing metadata selects the bound Workspace handle and
+  is validated once before a job effect. Overlay has no Route arguments or
+  namespace field. Token/map/capture validation retains exact engine/holder
+  identity; stale route admission retains original input.
 - **One lock.** `overlay/state.rs` holds the connection, the Workspace's open
   state, its lifecycle and its counted work behind one `Mutex` with one
   `Condvar`. The calling thread takes the lock, runs one short atomic job and
@@ -30,7 +34,7 @@ Measured outcomes are in the [#320 ledger](../issues/320/PROGRESS.md), not here.
   overlays.
 - **Reply frontier.** Each Workspace engine keys pending replies by its local
   publication revision, with one watched-frontier flag. Tickets still validate
-  their engine, incarnation and generation; known rollback withdraws only the
+  their engine and generation; known rollback withdraws only the
   revisions issued by that job. No namespace tree or filtered count is needed.
 - **Ordering that remains.** A Capture waiting for earlier reply attempts and a
   known install waiting for earlier base sources each own a finite frontier:

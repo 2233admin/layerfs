@@ -19,16 +19,13 @@ pub struct Overlay {
     pub(crate) work: RefCell<DatabaseWork>,
     pub(crate) payload_work: Cell<crate::PayloadWork>,
     pub(crate) quarantined: Cell<bool>,
-    /// The namespace of this database's one Workspace; zero until it is
-    /// opened. A database is created empty and is never reopened.
-    pub(crate) namespace: Cell<i64>,
     /// Connection-local readiness hints, never namespace/owner data. False is
     /// established only by an exact empty ready query; enqueue/release marks
     /// possible work. A rolled-back enqueue can leave only a false positive.
     pub(crate) maintenance_ready: Cell<bool>,
     /// Runtime state of the one bound Workspace. Atomic jobs snapshot this fixed
     /// value; known rollback restores it and unknown outcomes retain custody.
-    pub(crate) workspace: Cell<Option<([u8; 32], crate::WorkspaceState)>>,
+    pub(crate) workspace: Cell<Option<crate::WorkspaceState>>,
     /// Whether any namespace of this engine holds an orphan. Set when one
     /// is inserted, cleared by the job deleting the last one, and restored
     /// when a job fails, so it is exact:
@@ -82,9 +79,8 @@ impl Overlay {
         path: &Path,
         config: ProfileConfig,
         template: &Path,
-        namespace: i64,
     ) -> crate::Creation {
-        crate::database::startup::copy_template(path, config, template, namespace)
+        crate::database::startup::copy_template(path, config, template)
     }
 
     /// Checked close of the sole disposable connection. It performs no sync.
@@ -163,12 +159,9 @@ impl Overlay {
             Ok(())
         }
     }
-    pub(crate) fn check_route(&self, route: crate::Route) -> OverlayResult<()> {
-        self.available()?;
-        if route.engine != self.identity {
-            return Err(OverlayError::Stale);
-        }
-        Ok(())
+    /// Nonrecycled identity for exact typed token validation, not routing.
+    pub const fn engine(&self) -> u64 {
+        self.identity
     }
     pub(crate) fn query<T>(
         &self,

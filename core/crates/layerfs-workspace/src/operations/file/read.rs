@@ -46,7 +46,7 @@ impl SourceView {
         length: u32,
         sink: &mut dyn Write,
     ) -> WorkspaceResult<u64> {
-        if read.source().route() != self.source.route() {
+        if read.source().engine() != self.source.engine() {
             return Err(layerfs_overlay::OverlayError::Stale.into());
         }
         let local = overlay.file_read(read, offset, length)?;
@@ -63,7 +63,7 @@ impl SourceView {
         local: Option<LocalRead>,
         sink: &mut dyn Write,
     ) -> WorkspaceResult<u64> {
-        if read.source().route() != self.source.route() {
+        if read.source().engine() != self.source.engine() {
             return Err(layerfs_overlay::OverlayError::Stale.into());
         }
         self.emit_local(
@@ -85,7 +85,7 @@ impl SourceView {
         length: u32,
         sink: &mut dyn Write,
     ) -> WorkspaceResult<u64> {
-        if reader.capture().route() != self.source.route() {
+        if reader.capture().engine() != self.source.engine() {
             return Err(layerfs_overlay::OverlayError::Stale.into());
         }
         let local = overlay.captured_read(reader, serial, offset, length)?;

@@ -11,19 +11,18 @@ fn error(error: OwnerError) -> WorkspaceError {
 impl OwnerClient {
     pub(crate) fn read_job(
         &self,
-        source: BaseSource,
         command: impl FnOnce(
                 &crate::OwnerClient,
-                layerfs_overlay::Route,
+                layerfs_workspace::Route,
             ) -> Result<crate::JobReceipt, crate::OwnerError>
             + Send,
     ) -> Result<crate::JobReceipt, WorkspaceError> {
-        command(self, source.route()).map_err(error)
+        command(self, self.bound_route().map_err(error)?).map_err(error)
     }
 }
 impl OverlayRead for OwnerClient {
     fn inode(&self, source: BaseSource, serial: u64) -> WorkspaceResult<Option<Inode>> {
-        let done = self.read_job(source, |job_client: &crate::OwnerClient, route| {
+        let done = self.read_job(|job_client: &crate::OwnerClient, route| {
             job_client.source_inode(route, source, serial)
         })?;
         match done.result() {
@@ -40,7 +39,7 @@ impl OverlayRead for OwnerClient {
         if name.is_empty() || name.len() > 255 {
             return Err(layerfs_overlay::OverlayError::Invalid("source name window").into());
         }
-        let done = self.read_job(source, |job_client: &crate::OwnerClient, route| {
+        let done = self.read_job(|job_client: &crate::OwnerClient, route| {
             job_client.source_directory_entry(route, source, parent, name.to_vec())
         })?;
         match done.result() {
@@ -57,7 +56,7 @@ impl OverlayRead for OwnerClient {
         if after.is_some_and(|key| key.len() > 255) {
             return Err(layerfs_overlay::OverlayError::Invalid("source name cursor").into());
         }
-        let done = self.read_job(source, |job_client: &crate::OwnerClient, route| {
+        let done = self.read_job(|job_client: &crate::OwnerClient, route| {
             job_client.source_directory_entries(route, source, parent, after.map(<[u8]>::to_vec))
         })?;
         match done.result() {
@@ -75,7 +74,7 @@ impl OverlayRead for OwnerClient {
         if length as usize > layerfs_overlay::READ_WINDOW {
             return Err(layerfs_overlay::OverlayError::Invalid("read window").into());
         }
-        let done = self.read_job(source, |job_client: &crate::OwnerClient, route| {
+        let done = self.read_job(|job_client: &crate::OwnerClient, route| {
             job_client.source_read(route, source, serial, offset, length)
         })?;
         match done.result() {
@@ -90,7 +89,7 @@ impl OverlayRead for OwnerClient {
         generation: u64,
         offset: u64,
     ) -> WorkspaceResult<Option<Cell>> {
-        let done = self.read_job(source, |job_client: &crate::OwnerClient, route| {
+        let done = self.read_job(|job_client: &crate::OwnerClient, route| {
             job_client.source_cell(route, source, serial, generation, offset)
         })?;
         match done.result() {
@@ -103,7 +102,7 @@ impl OverlayJobs for OwnerClient {
     /// One owner round. An unadmitted job returns its exact refusal and the
     /// original command; an attempted job's error is its exact outcome.
     fn namespace(&self, job: &NamespaceJob) -> WorkspaceResult<JobOutcome> {
-        let done = self.read_job(job.source(), |job_client: &crate::OwnerClient, route| {
+        let done = self.read_job(|job_client: &crate::OwnerClient, route| {
             job_client.namespace(route, Box::new(job.clone()))
         })?;
         match done.result() {

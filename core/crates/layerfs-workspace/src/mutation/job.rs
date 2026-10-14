@@ -72,7 +72,7 @@ impl NamespaceJob {
             return Ok(Decided::Final(JobOutcome::Refused(Refusal::Invalid)));
         }
         if let Some(file) = self.operation.file() {
-            if file.route() != self.source.route() {
+            if file.engine() != self.source.engine() {
                 return Err(layerfs_overlay::OverlayError::Stale.into());
             }
             db.check_file(file, true)?;
@@ -92,7 +92,7 @@ impl NamespaceJob {
             return Ok(Decided::Final(JobOutcome::Refused(Refusal::Invalid)));
         }
         if let Some(file) = self.operation.file() {
-            if file.route() != self.source.route() {
+            if file.engine() != self.source.engine() {
                 return Err(layerfs_overlay::OverlayError::Stale.into());
             }
             if !file.writable() {

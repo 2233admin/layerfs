@@ -1,7 +1,7 @@
 //! Raw single-cell access: namespace-qualified rows of an exact generation.
 use crate::{
     db::integer, layers::Layer, Capture, Cell, Generation, Overlay, OverlayError, OverlayResult,
-    Route, CELL_BYTES,
+    CELL_BYTES,
 };
 
 pub(crate) fn check(cell: &Cell) -> OverlayResult<()> {
@@ -50,12 +50,11 @@ impl Overlay {
     /// a shrink and base fall-through belong to `source_read`.
     pub fn cell(
         &self,
-        route: Route,
         serial: u64,
         generation: Generation,
         offset: u64,
     ) -> OverlayResult<Option<Cell>> {
-        let state = self.live(route)?;
+        let state = self.live()?;
         if generation != state.active && Some(generation) != state.captured {
             return Err(OverlayError::Stale);
         }

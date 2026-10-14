@@ -38,8 +38,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         "artifact={path:?} population={population} profile={:?}",
         db.profile()
     );
-    let route = db.open_workspace([11; 32], [12; 32])?;
-    let owner = db.acquire_operation(route, 1)?;
+    db.open_workspace([12; 32])?;
+    let owner = db.acquire_operation(1)?;
     let scope = IndexedOperationRecordScope {
         owner,
         file_scope: 1,
@@ -106,7 +106,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         IndexedOperationRecordApply::Applied
     );
     println!("UPDATE {:?}", db.diagnostics().since(&before));
-    println!("RESOURCES_BEFORE_RELEASE {:?}", db.resources(Some(route))?);
+    println!("RESOURCES_BEFORE_RELEASE {:?}", db.resources()?);
     let before = db.diagnostics();
     db.release_operation(owner)?;
     println!("RELEASE {:?}", db.diagnostics().since(&before));
@@ -126,7 +126,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         cursor = step.cursor;
     }
     assert!(done, "declared cleanup turn count exhausted");
-    println!("RESOURCES_AFTER_RELEASE {:?}", db.resources(Some(route))?);
+    println!("RESOURCES_AFTER_RELEASE {:?}", db.resources()?);
     println!("LIMITS indexed visited-row counter unavailable; returned rows/bytes and executed VM are observed; logical operation_record bytes exclude pager/journal/OS cache residency; no exclusive CPU or timing claim");
     Ok(())
 }

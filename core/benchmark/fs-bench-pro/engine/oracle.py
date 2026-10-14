@@ -796,10 +796,10 @@ def _overlay_storage_source():
     """
     pins = {
         'core/crates/layerfs-overlay/sql/schema.sql': 'f2e86b2eed8118842c7c48da17398dc96a842ef4a8259a620822f8250b1ae7a2',
-        'core/crates/layerfs-overlay/src/database/accounting.rs': 'ab03be57dd089cbdb528993c46e645e1cfc5567b0dfbe290e642a3a62e6cb421',
+        'core/crates/layerfs-overlay/src/database/accounting.rs': '6d4356a44487a22dda79de458585513f6fc3342b43d3190663fe270b51718dc9',
         'core/crates/layerfs-overlay/src/database/physical.rs': '90bc4c7bdc3a597b927d2e2255b614e7da32f264e9b5d34fbce616a653c6f9de',
-        'core/crates/layerfs-overlay/src/lifetime/close.rs': '7f3850de1dcc84e680d1d540cea249f214edc05589d4da3e79f234e16a03c536',
-        'core/crates/layerfs-daemon/src/overlay/workspaces.rs': '7037616a53cc5246b48ec9a77246173c6988739b165888ee63b428ee7f3bdebb',
+        'core/crates/layerfs-overlay/src/lifetime/close.rs': '0b41b6d071fb0e407cb95c1f485a640b680a0e4752415dafcc412d183559f255',
+        'core/crates/layerfs-daemon/src/overlay/workspaces.rs': 'f418657d72cf7ea127e29b2cf905118724566d8a99f01fe33b1edf5e016caf8b',
         'core/crates/layerfs-bridge/src/control_types.rs': '1047a09284a17bc49ebe31da53ddb60445b3e68375d06736680b3c7e8b2a0bc9',
     }
     if ROOT is None or any(file_sha(ROOT / name) != digest for name, digest in pins.items()):

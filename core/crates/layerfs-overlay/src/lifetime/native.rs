@@ -1,19 +1,19 @@
 //! Indexed native connection and kernel lookup ownership.
 use crate::{
     db::integer, NativeMount, NativeMountState, Overlay, OverlayError, OverlayResult,
-    ReferenceKind, Route, WorkspaceState,
+    ReferenceKind, WorkspaceState,
 };
 
 impl Overlay {
     /// The caller supplies the authenticated bound root serial. Its implicit
     /// connection reference is separate from explicit kernel lookup counts.
-    pub fn create_native_mount(&self, route: Route, root: u64) -> OverlayResult<NativeMount> {
+    pub fn create_native_mount(&self, root: u64) -> OverlayResult<NativeMount> {
         if root == 0 {
             return Err(OverlayError::Invalid("zero native root"));
         }
         integer(root)?;
         self.atomic(|| {
-            self.live(route)?;
+            self.live()?;
             let held = self.open.borrow().mount;
             match held {
                 Some((_, false)) => return Err(OverlayError::Invalid("duplicate native mount")),
@@ -21,7 +21,11 @@ impl Overlay {
                 None => {}
             }
             let owner = self.mint_owner()?;
-            let mount = NativeMount { route, owner, root };
+            let mount = NativeMount {
+                engine: self.identity,
+                owner,
+                root,
+            };
             self.open.borrow_mut().mount = Some((mount, false));
             self.insert_native_lookup(mount, root, true, 0)?;
             self.set_native_parent(mount, root, root)?;
@@ -32,7 +36,6 @@ impl Overlay {
     /// kernel references and parents leave with it when the Workspace is
     /// attached again.
     fn retire_revoked_mount(&self, revoked: NativeMount) -> OverlayResult<()> {
-        let ns = revoked.route.ns;
         let (references, parents) = {
             let state = self.open.borrow();
             let references = state
@@ -52,7 +55,7 @@ impl Overlay {
         };
         for key in references {
             self.open.borrow_mut().kernel.remove(key);
-            self.file_ref(ns, integer(key.1)?, ReferenceKind::Lookup, false)?;
+            self.file_ref(integer(key.1)?, ReferenceKind::Lookup, false)?;
         }
         for key in parents {
             self.open.borrow_mut().parents.remove(key);
@@ -60,12 +63,15 @@ impl Overlay {
         Ok(())
     }
     /// Observes the original connection, without adopting or replaying attach.
-    pub fn retained_native_mount(&self, route: Route) -> OverlayResult<Option<NativeMount>> {
-        self.state(route)?;
+    pub fn retained_native_mount(&self) -> OverlayResult<Option<NativeMount>> {
+        self.state()?;
         Ok(self.open.borrow().mount.map(|(mount, _)| mount))
     }
     pub fn native_mount_state(&self, mount: NativeMount) -> OverlayResult<NativeMountState> {
-        self.check_route(mount.route)?;
+        self.available()?;
+        if mount.engine != self.identity {
+            return Err(OverlayError::Stale);
+        }
         match self.open.borrow().mount.as_ref() {
             None => Ok(NativeMountState::Gone),
             Some((held, revoked)) if *held == mount => Ok(if *revoked {
@@ -82,7 +88,7 @@ impl Overlay {
         &self,
         mount: NativeMount,
     ) -> OverlayResult<WorkspaceState> {
-        let state = self.state(mount.route)?;
+        let state = self.state()?;
         self.require_native_live(mount)?;
         Ok(state)
     }
@@ -115,12 +121,7 @@ impl Overlay {
         count: u64,
     ) -> OverlayResult<()> {
         self.insert_native_lookup_row(mount, serial, implicit, count)?;
-        self.file_ref(
-            mount.route.ns,
-            integer(serial)?,
-            ReferenceKind::Lookup,
-            true,
-        )
+        self.file_ref(integer(serial)?, ReferenceKind::Lookup, true)
     }
     /// The lookup row without its file reference, which the caller takes in
     /// the same transaction. A row that already exists is a failure. The
@@ -191,12 +192,7 @@ impl Overlay {
             return Err(OverlayError::Stale);
         }
         self.open.borrow_mut().kernel.remove(key);
-        self.file_ref(
-            mount.route.ns,
-            integer(serial)?,
-            ReferenceKind::Lookup,
-            false,
-        )
+        self.file_ref(integer(serial)?, ReferenceKind::Lookup, false)
     }
     /// FORGET's fence in one statement: the Workspace row, closed or not,
     /// this mount attached and not revoked, and the lookup row the request

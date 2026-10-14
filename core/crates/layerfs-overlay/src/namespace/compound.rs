@@ -166,9 +166,8 @@ impl Overlay {
         if state.closed {
             return Err(OverlayError::Closed);
         }
-        let route = source.route;
         if let Some(file) = changes.open {
-            if file.route() != route
+            if file.engine() != source.engine
                 || changes.inodes.len() != 1
                 || changes.inodes[0].serial != file.serial()
                 || !changes.directory_entries.is_empty()
@@ -249,7 +248,7 @@ impl Overlay {
                 self.detach_orphan(&state, inode)?;
             }
         }
-        self.settle(route, &state, inodes, directory_entries)
+        self.settle(&state, inodes, directory_entries)
     }
 }
 impl SourceRows<'_> {

@@ -56,16 +56,11 @@ pub(crate) fn create(path: &Path, config: ProfileConfig) -> Creation {
     initialize(path, config, None)
 }
 
-pub(crate) fn copy_template(
-    path: &Path,
-    config: ProfileConfig,
-    template: &Path,
-    namespace: i64,
-) -> Creation {
-    initialize(path, config, Some((template, namespace)))
+pub(crate) fn copy_template(path: &Path, config: ProfileConfig, template: &Path) -> Creation {
+    initialize(path, config, Some(template))
 }
 
-fn initialize(path: &Path, config: ProfileConfig, template: Option<(&Path, i64)>) -> Creation {
+fn initialize(path: &Path, config: ProfileConfig, template: Option<&Path>) -> Creation {
     let start = Instant::now();
     let sql = RefCell::new(DatabaseWork::default());
     let mut work = CreationWork::default();
@@ -83,10 +78,7 @@ fn initialize(path: &Path, config: ProfileConfig, template: Option<(&Path, i64)>
         }
         work.file_create_calls = 1;
         let mut file = options.open(path)?;
-        if let Some((template, namespace)) = template {
-            if namespace <= 0 {
-                return Err(crate::OverlayError::Invalid("Workspace namespace"));
-            }
+        if let Some(template) = template {
             let mut source = std::fs::File::open(template)?;
             work.file_copy_calls = 1;
             work.copied_bytes = std::io::copy(&mut source, &mut file)?;
@@ -182,11 +174,6 @@ fn initialize(path: &Path, config: ProfileConfig, template: Option<(&Path, i64)>
             work: RefCell::new(*sql.borrow()),
             payload_work: Cell::new(crate::PayloadWork::default()),
             quarantined: Cell::new(false),
-            namespace: Cell::new(match template {
-                Some((_, namespace)) => namespace,
-                None => i64::try_from(identity)
-                    .map_err(|_| crate::OverlayError::Invalid("engine identity exhausted"))?,
-            }),
             workspace: Cell::new(None),
             maintenance_ready: Cell::new(false),
             orphan_seen: Cell::new(false),

@@ -64,7 +64,8 @@ impl Workspace {
         length: u32,
     ) -> WorkspaceResult<NativeDataVisit> {
         let base = self.base()?;
-        if mount.route() != self.route() || mount.root_serial() != base.root().root_inode().serial()
+        if mount.engine() != self.route().engine()
+            || mount.root_serial() != base.root().root_inode().serial()
         {
             return Err(OverlayError::Stale.into());
         }

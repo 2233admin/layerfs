@@ -202,7 +202,7 @@ pub(crate) fn context(facts: Facts, totals: Totals, sealed: bool) -> Vec<u8> {
     let mut value = Vec::with_capacity(170);
     value.extend_from_slice(&[1, u8::from(sealed)]);
     for number in [
-        facts.reader.capture().route().namespace() as u64,
+        facts.reader.capture().engine(),
         facts.reader.owner_id(),
         facts.reader.installed_floor(),
         facts.reader.capture().generation.number() as u64,

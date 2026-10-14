@@ -63,7 +63,7 @@ pub(super) fn start(path: &Path, profile: ProfileConfig, config: OwnerConfig) ->
         reported = true;
         let db = created.result.map_err(OwnerError::Overlay)?;
         let actual = db.profile().clone();
-        let resources = db.resources(None).map_err(OwnerError::Overlay)?;
+        let resources = db.resources().map_err(OwnerError::Overlay)?;
         let receipt = Arc::get_mut(&mut startup).expect("unshared startup receipt");
         receipt.sql = db.diagnostics();
         receipt.allocation = db.allocation_work();
@@ -204,19 +204,12 @@ impl Workspaces {
             .parent()
             .unwrap_or_else(|| Path::new("."))
             .join(format!("{namespace}.sqlite"));
-        let shared = Arc::new(Shared::new());
-        let owner = match Owner::start_copy(
-            &path,
-            &self.template,
-            namespace,
-            self.profile,
-            shared.clone(),
-        )
-        .result
-        {
-            Ok(owner) => owner,
-            Err(cause) => return Err(self.fail(namespace, cause)),
-        };
+        let shared = Arc::new(Shared::new(namespace));
+        let owner =
+            match Owner::start_copy(&path, &self.template, self.profile, shared.clone()).result {
+                Ok(owner) => owner,
+                Err(cause) => return Err(self.fail(namespace, cause)),
+            };
         let backing = match Backing::new(path, namespace, incarnation, Arc::downgrade(self)) {
             Ok(backing) => Arc::new(backing),
             Err(cause) => return Err(self.fail(namespace, OwnerError::Io(cause))),

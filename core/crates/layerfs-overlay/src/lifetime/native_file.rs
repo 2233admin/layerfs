@@ -52,7 +52,7 @@ impl Overlay {
                 false,
             )?;
             let file = OpenFile {
-                route: mount.route,
+                engine: self.identity,
                 owner: handle,
                 serial,
                 writable,

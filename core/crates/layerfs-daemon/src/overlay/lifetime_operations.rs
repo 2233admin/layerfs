@@ -4,8 +4,9 @@ use crate::service::receipt::JobReceipt;
 use crate::{OwnerClient, OwnerError, Response, ServiceClass};
 use layerfs_overlay::{
     BaseSource, Capture, CapturedReader, Cell, DirectoryEntry, FileRead, Inode, LookupOwner,
-    OpenFile, OperationOwner, OverlayError, Route,
+    OpenFile, OperationOwner, OverlayError,
 };
+use layerfs_workspace::Route;
 impl OwnerClient {
     pub fn acquire_lookup(
         &self,
@@ -15,17 +16,14 @@ impl OwnerClient {
         base: Inode,
         root: u64,
     ) -> Result<JobReceipt, OwnerError> {
-        self.overlay_job(route, ServiceClass::Lifecycle, None, move |db, route| {
-            if source.route() != route {
-                return Err(layerfs_overlay::OverlayError::Stale);
-            }
+        self.overlay_job(route, ServiceClass::Lifecycle, None, move |db| {
             db.acquire_lookup(source, request, &base, root)
                 .map(|l| Response::Lookup(Some(l)))
         })
     }
     pub fn retained_lookup(&self, route: Route, request: u64) -> Result<JobReceipt, OwnerError> {
-        self.overlay_job(route, ServiceClass::Lifecycle, None, move |db, route| {
-            db.retained_lookup(route, request).map(Response::Lookup)
+        self.overlay_job(route, ServiceClass::Lifecycle, None, move |db| {
+            db.retained_lookup(request).map(Response::Lookup)
         })
     }
     pub fn release_lookup(
@@ -33,10 +31,7 @@ impl OwnerClient {
         route: Route,
         lookup: LookupOwner,
     ) -> Result<JobReceipt, OwnerError> {
-        self.overlay_job(route, ServiceClass::Lifecycle, None, move |db, route| {
-            if lookup.route() != route {
-                return Err(layerfs_overlay::OverlayError::Stale);
-            }
+        self.overlay_job(route, ServiceClass::Lifecycle, None, move |db| {
             db.release_lookup(lookup).map(|_| Response::Done)
         })
     }
@@ -47,24 +42,20 @@ impl OwnerClient {
         lookup: LookupOwner,
         request: u64,
     ) -> Result<JobReceipt, OwnerError> {
-        self.overlay_job(route, ServiceClass::Lifecycle, None, move |db, route| {
-            if source.route() != route {
-                return Err(layerfs_overlay::OverlayError::Stale);
-            }
+        self.overlay_job(route, ServiceClass::Lifecycle, None, move |db| {
             db.acquire_lookup_read(source, lookup, request)
                 .map(|r| Response::FileReader(Some(r)))
         })
     }
     pub fn acquire_operation(&self, route: Route, request: u64) -> Result<JobReceipt, OwnerError> {
-        self.overlay_job(route, ServiceClass::Lifecycle, None, move |db, route| {
-            db.acquire_operation(route, request)
+        self.overlay_job(route, ServiceClass::Lifecycle, None, move |db| {
+            db.acquire_operation(request)
                 .map(|o| Response::Operation(Some(o)))
         })
     }
     pub fn retained_operation(&self, route: Route, request: u64) -> Result<JobReceipt, OwnerError> {
-        self.overlay_job(route, ServiceClass::Lifecycle, None, move |db, route| {
-            db.retained_operation(route, request)
-                .map(Response::Operation)
+        self.overlay_job(route, ServiceClass::Lifecycle, None, move |db| {
+            db.retained_operation(request).map(Response::Operation)
         })
     }
     pub fn release_operation(
@@ -72,22 +63,18 @@ impl OwnerClient {
         route: Route,
         owner: OperationOwner,
     ) -> Result<JobReceipt, OwnerError> {
-        self.overlay_job(route, ServiceClass::Lifecycle, None, move |db, route| {
-            if owner.route() != route {
-                return Err(layerfs_overlay::OverlayError::Stale);
-            }
+        self.overlay_job(route, ServiceClass::Lifecycle, None, move |db| {
             db.release_operation(owner).map(|_| Response::Done)
         })
     }
     pub fn retained_file(&self, route: Route, request: u64) -> Result<JobReceipt, OwnerError> {
-        self.overlay_job(route, ServiceClass::Lifecycle, None, move |db, route| {
-            db.retained_file(route, request).map(Response::File)
+        self.overlay_job(route, ServiceClass::Lifecycle, None, move |db| {
+            db.retained_file(request).map(Response::File)
         })
     }
     pub fn retained_file_read(&self, route: Route, request: u64) -> Result<JobReceipt, OwnerError> {
-        self.overlay_job(route, ServiceClass::Lifecycle, None, move |db, route| {
-            db.retained_file_read(route, request)
-                .map(Response::FileReader)
+        self.overlay_job(route, ServiceClass::Lifecycle, None, move |db| {
+            db.retained_file_read(request).map(Response::FileReader)
         })
     }
     pub fn retained_captured_reader(
@@ -95,8 +82,8 @@ impl OwnerClient {
         route: Route,
         request: u64,
     ) -> Result<JobReceipt, OwnerError> {
-        self.overlay_job(route, ServiceClass::Lifecycle, None, move |db, route| {
-            db.retained_captured_reader(route, request)
+        self.overlay_job(route, ServiceClass::Lifecycle, None, move |db| {
+            db.retained_captured_reader(request)
                 .map(Response::CapturedReader)
         })
     }
@@ -108,19 +95,13 @@ impl OwnerClient {
         base: Inode,
         writable: bool,
     ) -> Result<JobReceipt, OwnerError> {
-        self.overlay_job(route, ServiceClass::Lifecycle, None, move |db, route| {
-            if source.route() != route {
-                return Err(layerfs_overlay::OverlayError::Stale);
-            }
+        self.overlay_job(route, ServiceClass::Lifecycle, None, move |db| {
             db.open_file(source, request, &base, writable)
                 .map(|value| Response::File(Some(value)))
         })
     }
     pub fn close_file(&self, route: Route, file: OpenFile) -> Result<JobReceipt, OwnerError> {
-        self.overlay_job(route, ServiceClass::Lifecycle, None, move |db, route| {
-            if file.route() != route {
-                return Err(layerfs_overlay::OverlayError::Stale);
-            }
+        self.overlay_job(route, ServiceClass::Lifecycle, None, move |db| {
             db.close_file(file).map(|_| Response::Done)
         })
     }
@@ -131,10 +112,7 @@ impl OwnerClient {
         file: OpenFile,
         request: u64,
     ) -> Result<JobReceipt, OwnerError> {
-        self.overlay_job(route, ServiceClass::Lifecycle, None, move |db, route| {
-            if source.route() != route {
-                return Err(layerfs_overlay::OverlayError::Stale);
-            }
+        self.overlay_job(route, ServiceClass::Lifecycle, None, move |db| {
             db.acquire_file_read(source, file, request)
                 .map(|value| Response::FileReader(Some(value)))
         })
@@ -144,10 +122,7 @@ impl OwnerClient {
         route: Route,
         read: FileRead,
     ) -> Result<JobReceipt, OwnerError> {
-        self.overlay_job(route, ServiceClass::Lifecycle, None, move |db, route| {
-            if read.source().route() != route {
-                return Err(layerfs_overlay::OverlayError::Stale);
-            }
+        self.overlay_job(route, ServiceClass::Lifecycle, None, move |db| {
             db.release_file_read(read).map(|_| Response::Done)
         })
     }
@@ -157,10 +132,7 @@ impl OwnerClient {
         capture: Capture,
         request: u64,
     ) -> Result<JobReceipt, OwnerError> {
-        self.overlay_job(route, ServiceClass::Lifecycle, None, move |db, route| {
-            if capture.route() != route {
-                return Err(layerfs_overlay::OverlayError::Stale);
-            }
+        self.overlay_job(route, ServiceClass::Lifecycle, None, move |db| {
             db.acquire_captured_reader(capture, request)
                 .map(|value| Response::CapturedReader(Some(value)))
         })
@@ -170,31 +142,28 @@ impl OwnerClient {
         route: Route,
         reader: CapturedReader,
     ) -> Result<JobReceipt, OwnerError> {
-        self.overlay_job(route, ServiceClass::Lifecycle, None, move |db, route| {
-            if reader.capture().route() != route {
-                return Err(layerfs_overlay::OverlayError::Stale);
-            }
+        self.overlay_job(route, ServiceClass::Lifecycle, None, move |db| {
             db.release_captured_reader(reader).map(|_| Response::Done)
         })
     }
     pub fn maintenance_idle(&self, route: Route) -> Result<JobReceipt, OwnerError> {
-        self.overlay_job(route, ServiceClass::Lifecycle, None, move |db, route| {
-            db.maintenance_idle(route).map(Response::MaintenanceIdle)
+        self.overlay_job(route, ServiceClass::Lifecycle, None, move |db| {
+            db.maintenance_idle().map(Response::MaintenanceIdle)
         })
     }
     pub fn state(&self, route: Route) -> Result<JobReceipt, OwnerError> {
-        self.overlay_job(route, ServiceClass::Lifecycle, None, move |db, route| {
-            db.state(route).map(Response::State)
+        self.overlay_job(route, ServiceClass::Lifecycle, None, move |db| {
+            db.state().map(Response::State)
         })
     }
     pub fn retained_capture(&self, route: Route) -> Result<JobReceipt, OwnerError> {
-        self.overlay_job(route, ServiceClass::Lifecycle, None, move |db, route| {
-            db.retained_capture(route).map(Response::RetainedCapture)
+        self.overlay_job(route, ServiceClass::Lifecycle, None, move |db| {
+            db.retained_capture().map(Response::RetainedCapture)
         })
     }
     pub fn retained_base_source(&self, route: Route, owner: u64) -> Result<JobReceipt, OwnerError> {
-        self.overlay_job(route, ServiceClass::Lifecycle, None, move |db, route| {
-            db.retained_base_source(route, owner)
+        self.overlay_job(route, ServiceClass::Lifecycle, None, move |db| {
+            db.retained_base_source(owner)
                 .map(Response::RetainedBaseSource)
         })
     }
@@ -203,21 +172,18 @@ impl OwnerClient {
         route: Route,
         source: BaseSource,
     ) -> Result<JobReceipt, OwnerError> {
-        self.overlay_job(route, ServiceClass::Lifecycle, None, move |db, route| {
-            if source.route() != route {
-                return Err(layerfs_overlay::OverlayError::Stale);
-            }
+        self.overlay_job(route, ServiceClass::Lifecycle, None, move |db| {
             db.release_base_source(source).map(|_| Response::Done)
         })
     }
     pub fn cleanup_state(&self, route: Route) -> Result<JobReceipt, OwnerError> {
-        self.overlay_job(route, ServiceClass::Lifecycle, None, move |db, route| {
-            db.cleanup_state(route).map(Response::CleanupState)
+        self.overlay_job(route, ServiceClass::Lifecycle, None, move |db| {
+            db.cleanup_state().map(Response::CleanupState)
         })
     }
     pub fn close(&self, route: Route) -> Result<JobReceipt, OwnerError> {
-        self.overlay_job(route, ServiceClass::Lifecycle, None, move |db, route| {
-            db.close(route).map(|_| Response::Done)
+        self.overlay_job(route, ServiceClass::Lifecycle, None, move |db| {
+            db.close().map(|_| Response::Done)
         })
     }
     pub fn release_closed_capture(
@@ -225,10 +191,7 @@ impl OwnerClient {
         route: Route,
         capture: Capture,
     ) -> Result<JobReceipt, OwnerError> {
-        self.overlay_job(route, ServiceClass::Lifecycle, None, move |db, route| {
-            if capture.route() != route {
-                return Err(layerfs_overlay::OverlayError::Stale);
-            }
+        self.overlay_job(route, ServiceClass::Lifecycle, None, move |db| {
             db.release_closed_capture(capture).map(|_| Response::Done)
         })
     }
@@ -239,8 +202,8 @@ impl OwnerClient {
         name: Option<DirectoryEntry>,
         cell: Option<Cell>,
     ) -> Result<JobReceipt, OwnerError> {
-        self.overlay_job(route, ServiceClass::Mutation, None, move |db, route| {
-            db.publish(route, &inode, name.as_ref(), cell.as_ref())
+        self.overlay_job(route, ServiceClass::Mutation, None, move |db| {
+            db.publish(&inode, name.as_ref(), cell.as_ref())
                 .map(Response::Published)
         })
     }
@@ -249,14 +212,11 @@ impl OwnerClient {
             route,
             ServiceClass::Capture,
             Some(Readiness::Capture),
-            move |db, route| db.capture(route).map(Response::Captured),
+            move |db| db.capture().map(Response::Captured),
         )
     }
     pub fn resolve_failed(&self, route: Route, capture: Capture) -> Result<JobReceipt, OwnerError> {
-        self.overlay_job(route, ServiceClass::Lifecycle, None, move |db, route| {
-            if capture.route() != route {
-                return Err(layerfs_overlay::OverlayError::Stale);
-            }
+        self.overlay_job(route, ServiceClass::Lifecycle, None, move |db| {
             db.resolve_failed_capture(capture).map(|_| Response::Done)
         })
     }
@@ -270,12 +230,7 @@ impl OwnerClient {
             route,
             ServiceClass::Capture,
             Some(Readiness::Install(capture)),
-            move |db, route| {
-                if capture.route() != route {
-                    return Err(layerfs_overlay::OverlayError::Stale);
-                }
-                db.install(capture, root).map(|_| Response::Done)
-            },
+            move |db| db.install(capture, root).map(|_| Response::Done),
         )
     }
     pub fn captured_inodes(
@@ -284,10 +239,7 @@ impl OwnerClient {
         capture: Capture,
         after: u64,
     ) -> Result<JobReceipt, OwnerError> {
-        self.overlay_job(route, ServiceClass::Capture, None, move |db, route| {
-            if capture.route() != route {
-                return Err(layerfs_overlay::OverlayError::Stale);
-            }
+        self.overlay_job(route, ServiceClass::Capture, None, move |db| {
             db.captured_inodes(capture, after).map(Response::Inodes)
         })
     }
@@ -297,10 +249,7 @@ impl OwnerClient {
         capture: Capture,
         after: Option<(u64, Vec<u8>)>,
     ) -> Result<JobReceipt, OwnerError> {
-        self.overlay_job(route, ServiceClass::Capture, None, move |db, route| {
-            if capture.route() != route {
-                return Err(layerfs_overlay::OverlayError::Stale);
-            }
+        self.overlay_job(route, ServiceClass::Capture, None, move |db| {
             db.captured_directory_entries(
                 capture,
                 after
@@ -316,7 +265,7 @@ impl OwnerClient {
         job: Box<layerfs_workspace::NamespaceJob>,
     ) -> Result<JobReceipt, OwnerError> {
         self.owner_job(Some(route), ServiceClass::Mutation, None, move |db, _| {
-            if route != job.source().route() {
+            if route.engine() != job.source().engine() {
                 return Err(OwnerError::Overlay(OverlayError::Stale));
             }
             job.perform(db)

@@ -5,8 +5,9 @@ use layerfs_content::{filesystem::FilesystemUpdateCounters, ContentError};
 use layerfs_history::{
     BranchSnapshot, CommitStagedOutcome, HistoryError, StageRequest, WorkspaceId,
 };
-use layerfs_overlay::{Capture, CapturedReader, OperationOwner, Route};
+use layerfs_overlay::{Capture, CapturedReader, OperationOwner};
 use layerfs_storage::{Diagnostics, StorageError, WriteOutcome};
+use layerfs_workspace::Route;
 use layerfs_workspace::{
     CapturedNamespaceCustody, CapturedNamespaceWork, PreparedBase, WorkspaceError,
 };

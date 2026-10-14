@@ -4,3 +4,5 @@ pub(crate) mod serials;
 pub(crate) mod state;
 pub(crate) mod view;
 pub use state::{Workspace, WorkspaceError, WorkspaceResult};
+mod route;
+pub use route::Route;

@@ -1,7 +1,7 @@
 //! Exact lookup ownership, including non-file metadata after removal.
 use crate::{
     db::integer, inode, BaseSource, Inode, InodeKind, LookupOwner, Overlay, OverlayError,
-    OverlayResult, ReferenceKind, Route,
+    OverlayResult, ReferenceKind,
 };
 impl Overlay {
     /// The authenticated root serial distinguishes its canonical zero count
@@ -35,7 +35,7 @@ impl Overlay {
             let owner = self.mint_owner()?;
             let serial = integer(current.serial)?;
             let lookup = LookupOwner {
-                route: source.route,
+                engine: self.identity,
                 owner,
                 serial: current.serial,
             };
@@ -45,9 +45,9 @@ impl Overlay {
                 lookup,
                 "duplicate lookup request",
             )?;
-            self.file_ref(source.route.ns, serial, ReferenceKind::Lookup, true)?;
+            self.file_ref(serial, ReferenceKind::Lookup, true)?;
             Ok(LookupOwner {
-                route: source.route,
+                engine: self.identity,
                 owner,
                 serial: current.serial,
             })
@@ -69,24 +69,20 @@ impl Overlay {
             if state.closed {
                 return Err(OverlayError::Closed);
             }
-            if lookup.route != source.route {
+            if lookup.engine != source.engine {
                 return Err(OverlayError::Stale);
             }
             self.check_lookup(lookup)?;
             self.retain_serial_read(source, lookup.serial, request)
         })
     }
-    pub fn retained_lookup(
-        &self,
-        route: Route,
-        request: u64,
-    ) -> OverlayResult<Option<LookupOwner>> {
-        self.state(route)?;
+    pub fn retained_lookup(&self, request: u64) -> OverlayResult<Option<LookupOwner>> {
+        self.state()?;
         let request = integer(request)?;
         Ok(self.open.borrow().lookups.retained(request))
     }
     pub fn check_lookup(&self, lookup: LookupOwner) -> OverlayResult<()> {
-        self.state(lookup.route)?;
+        self.state()?;
         if self
             .open
             .borrow()
@@ -107,12 +103,7 @@ impl Overlay {
                 .borrow_mut()
                 .lookups
                 .remove(lookup.owner, |held| *held == lookup)?;
-            self.file_ref(
-                lookup.route.ns,
-                integer(lookup.serial)?,
-                ReferenceKind::Lookup,
-                false,
-            )?;
+            self.file_ref(integer(lookup.serial)?, ReferenceKind::Lookup, false)?;
             Ok(())
         })
     }

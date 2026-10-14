@@ -10,7 +10,9 @@ schema16. Earlier algorithm and proof pins retain their original scope; see
 
 Current #320 placement update (2026-10-14, schema 37): the older SQL custody
 relations below are replaced by journaled resident owner tables and base-source
-maps. Exact retained request lookup, nonrecycled holder identity, captured
+maps. Overlay Route fields/parameters are removed; small engine identities and
+exact holder/map checks establish token ownership. Exact retained request
+lookup, nonrecycled holder identity, captured
 root/floor and generation hold/release remain. Known whole-job failure restores
 maps with SQL; unknown outcomes retain them. Processing records remain backed
 SQL and transfer to bounded automatic cleanup after exact release. No process

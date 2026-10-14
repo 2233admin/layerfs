@@ -8,7 +8,7 @@
 //! recognizer's whole allowance and never grows; the least recently used
 //! file makes room, and a file without a slot starts over, which only costs
 //! a missed claim.
-use layerfs_overlay::Route;
+use layerfs_workspace::Route;
 use layerfs_workspace::{RecognizeWork, WriteRun};
 use std::sync::{Mutex, MutexGuard};
 

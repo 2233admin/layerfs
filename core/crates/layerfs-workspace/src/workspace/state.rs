@@ -1,10 +1,11 @@
 //! Logical Workspace binding. SQL/physical state remains in the overlay crate.
+use crate::Route;
 use crate::{serials::Serials, BaseView, CanonicalClient, Refusal};
 use layerfs_content::{
     filesystem::{FilesystemRootId, InodeScope},
     ContentError,
 };
-use layerfs_overlay::{Overlay, OverlayError, Route};
+use layerfs_overlay::{Overlay, OverlayError};
 use std::{
     fmt,
     sync::{Arc, Mutex, RwLock},
@@ -66,7 +67,10 @@ impl Workspace {
         incarnation: [u8; 32],
     ) -> WorkspaceResult<Self> {
         let base = BaseView::open(client, root, scope)?;
-        let route = overlay.open_workspace(incarnation, root.0.to_bytes())?;
+        let namespace = i64::try_from(overlay.engine())
+            .map_err(|_| OverlayError::Invalid("engine identity exhausted"))?;
+        let route = Route::new(namespace, overlay.engine(), incarnation)?;
+        overlay.open_workspace(root.0.to_bytes())?;
         Ok(Self::bind(route, base))
     }
     /// Binds a checked root to an already-open owner route. The source-read

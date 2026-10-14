@@ -4,7 +4,7 @@ use crate::namespace::job_rows::{JobRows, LocalRow};
 use crate::{
     db::{integer, unsigned},
     sql, Cell, DirectoryEntry, Generation, Inode, InodeKind, NameLayers, Overlay, OverlayError,
-    OverlayResult, Publication, Route, StatementKind, WorkspaceState,
+    OverlayResult, Publication, StatementKind, WorkspaceState,
 };
 
 pub(crate) fn decode(row: &rusqlite::Row<'_>) -> rusqlite::Result<Inode> {
@@ -84,8 +84,8 @@ pub(crate) fn check_name(parent: u64, name: &[u8]) -> OverlayResult<i64> {
 }
 impl Overlay {
     /// Latest local inode at the current view; None delegates to immutable base.
-    pub fn inode(&self, route: Route, serial: u64) -> OverlayResult<Option<Inode>> {
-        let state = self.live(route)?;
+    pub fn inode(&self, serial: u64) -> OverlayResult<Option<Inode>> {
+        let state = self.live()?;
         self.inode_at(serial, state.active, state.installed)
     }
     pub(crate) fn inode_at(
@@ -365,7 +365,6 @@ impl Overlay {
     /// One reply-attempt ticket and revision for a whole atomic job.
     pub(crate) fn settle(
         &self,
-        route: Route,
         state: &WorkspaceState,
         inodes: i64,
         directory_entries: i64,
@@ -374,13 +373,13 @@ impl Overlay {
             .revision
             .checked_add(1)
             .ok_or(OverlayError::Invalid("revision exhausted"))?;
-        self.dirty_counts(route, inodes, directory_entries)?;
-        self.change_state(route, |state| {
+        self.dirty_counts(inodes, directory_entries)?;
+        self.change_state(|state| {
             state.revision = revision;
             Ok(())
         })?;
         let publication = Publication {
-            route,
+            engine: self.identity,
             revision,
             generation: state.active,
         };
@@ -392,7 +391,6 @@ impl Overlay {
     /// operations with several affected inodes use the compound job instead.
     pub fn publish(
         &self,
-        route: Route,
         inode: &Inode,
         name: Option<&DirectoryEntry>,
         cell: Option<&Cell>,
@@ -413,7 +411,7 @@ impl Overlay {
             crate::payload::check(cell)?;
         }
         self.atomic(|| {
-            let state = self.live(route)?;
+            let state = self.live()?;
             let (added, layer) = self.put_inode(&state, inode)?;
             let mut directory_entries = 0;
             if let (Some(name), Some((parent, target))) = (name, key) {
@@ -431,17 +429,16 @@ impl Overlay {
             if inode.kind == InodeKind::File {
                 self.detach_orphan(&state, inode)?;
             }
-            self.settle(route, &state, i64::from(added), directory_entries)
+            self.settle(&state, i64::from(added), directory_entries)
         })
     }
     /// Final local name row, with a whiteout distinguishable from no overlay row.
     pub fn directory_entry(
         &self,
-        route: Route,
         parent: u64,
         name: &[u8],
     ) -> OverlayResult<Option<DirectoryEntry>> {
-        let state = self.live(route)?;
+        let state = self.live()?;
         let parent = integer(parent)?;
         Ok(self
             .query(

@@ -20,7 +20,7 @@ pub(super) fn encode(facts: Facts, count: usize, sealed: Option<bool>) -> Conten
         u8::from(sealed == Some(true)),
     ]);
     for number in [
-        facts.reader.capture().route().namespace() as u64,
+        facts.reader.capture().engine(),
         facts.reader.owner_id(),
         facts.reader.installed_floor(),
         facts.reader.capture().generation.number() as u64,

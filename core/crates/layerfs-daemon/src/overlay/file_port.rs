@@ -9,7 +9,7 @@ impl OverlayFileRead for OwnerClient {
         offset: u64,
         length: u32,
     ) -> WorkspaceResult<Option<LocalRead>> {
-        let done = self.read_job(read.source(), |job_client: &crate::OwnerClient, route| {
+        let done = self.read_job(|job_client: &crate::OwnerClient, route| {
             job_client.file_read(route, read, offset, length)
         })?;
         match done.result() {
@@ -28,7 +28,14 @@ impl OverlayFileRead for OwnerClient {
             return Err(layerfs_overlay::OverlayError::Invalid("read window").into());
         }
         let pending = self
-            .captured_read(reader.capture().route(), reader, serial, offset, length)
+            .captured_read(
+                self.bound_route()
+                    .map_err(|cause| WorkspaceError::Service(Box::new(cause)))?,
+                reader,
+                serial,
+                offset,
+                length,
+            )
             .map_err(|cause| WorkspaceError::Service(Box::new(cause)))?;
         let done = pending;
         match done.result() {

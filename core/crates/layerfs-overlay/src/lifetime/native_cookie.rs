@@ -21,7 +21,7 @@ impl Overlay {
         page: &NativeDirectoryPage,
     ) -> OverlayResult<NativeCookieOffer> {
         let directory = page.directory;
-        self.check_route(directory.mount.route)?;
+        self.available()?;
         let after = page.cursor.after_name().unwrap_or(&[]).to_vec();
         let existing = {
             let state = self.open.borrow();

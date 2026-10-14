@@ -28,19 +28,6 @@ pub const COMPOUND_INODES: usize = 4;
 /// Maximum changed name bindings in one compound namespace job.
 pub const COMPOUND_DIRECTORY_ENTRIES: usize = 2;
 
-/// Incarnation-qualified routing capability issued by this daemon engine.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct Route {
-    pub(crate) engine: u64,
-    pub(crate) ns: i64,
-    pub(crate) incarnation: [u8; 32],
-}
-impl Route {
-    /// Namespace identifier for attributed diagnostics; not standalone authority.
-    pub const fn namespace(self) -> i64 {
-        self.ns
-    }
-}
 /// One checked positive generation identity.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Generation(pub(crate) i64);
@@ -221,14 +208,14 @@ pub struct Cell {
 /// Local publication requiring exactly one later reply-send-attempt release.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Publication {
-    pub(crate) route: Route,
+    pub(crate) engine: u64,
     pub(crate) revision: i64,
     pub generation: Generation,
 }
 impl Publication {
-    /// Incarnation whose published mutation awaits its reply-send attempt.
-    pub const fn route(self) -> Route {
-        self.route
+    /// Exact engine whose mutation awaits its reply-send attempt.
+    pub const fn engine(self) -> u64 {
+        self.engine
     }
     /// Locally published revision; reply delivery is not implied.
     pub const fn revision(self) -> i64 {
@@ -238,15 +225,15 @@ impl Publication {
 /// Fixed captured domain. Identity is allocated by the engine, not a timestamp.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Capture {
-    pub(crate) route: Route,
+    pub(crate) engine: u64,
     pub generation: Generation,
     pub revision: i64,
     pub base_root: [u8; 32],
 }
 impl Capture {
-    /// Namespace/incarnation owning this fixed captured domain.
-    pub const fn route(self) -> Route {
-        self.route
+    /// Exact engine owning this fixed captured domain.
+    pub const fn engine(self) -> u64 {
+        self.engine
     }
 }
 /// Bounded read-only installed state; no namespace counting or payload acquisition.
@@ -274,7 +261,7 @@ pub struct WorkspaceState {
 /// request completion/fencing; open-file and command lifetime are independent.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct BaseSource {
-    pub(crate) route: Route,
+    pub(crate) engine: u64,
     pub(crate) owner: u64,
     pub(crate) class: i64,
     pub(crate) root: [u8; 32],
@@ -291,8 +278,8 @@ pub struct DirectoryEntryWindow {
     pub captured: Vec<DirectoryEntry>,
 }
 impl BaseSource {
-    pub const fn route(self) -> Route {
-        self.route
+    pub const fn engine(self) -> u64 {
+        self.engine
     }
     pub const fn owner(self) -> u64 {
         self.owner

@@ -161,8 +161,8 @@ impl<'a, P: OverlayCapturedRuns + OverlayOperationRecords + ?Sized> CapturedFile
         workspace: &Workspace,
         records_scope: IndexedOperationRecordScope,
     ) -> Result<Facts, WorkspaceError> {
-        if workspace.route() != self.reader.capture().route()
-            || records_scope.owner.route() != workspace.route()
+        if workspace.route().engine() != self.reader.capture().engine()
+            || records_scope.owner.engine() != workspace.route().engine()
         {
             return Err(OverlayError::Stale.into());
         }

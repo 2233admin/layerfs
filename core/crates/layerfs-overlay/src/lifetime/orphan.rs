@@ -38,8 +38,8 @@ impl Overlay {
             FROM fs_inode WHERE inode=?1 AND generation=-1",&[&serial],16,inode::decode).map(|mut rows|rows.pop())
     }
     /// After a transaction deleted orphan rows: the engine's exact count of
-    /// them, kept by the orphan triggers in accounting namespace zero. At
-    /// zero no namespace holds an orphan row, and each orphan-domain inode
+    /// them, held by the journaled orphan map. At
+    /// zero this Workspace holds no orphan owner, and each orphan-domain inode
     /// row was deleted before its orphan row, so inode reads stop probing.
     pub(crate) fn orphans_deleted(&self) -> OverlayResult<()> {
         self.orphan_seen

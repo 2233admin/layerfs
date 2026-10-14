@@ -61,7 +61,6 @@ pub struct MaintenanceStep {
     pub work: ReclaimStep,
 }
 pub(crate) struct Item {
-    pub ns: i64,
     pub kind: i64,
     pub resource: i64,
     pub target: i64,
@@ -71,10 +70,9 @@ pub(crate) struct Item {
     pub name: Vec<u8>,
 }
 impl Item {
-    /// One queue row of the Workspace `ns` that owns this database.
-    fn decode(ns: i64, r: &rusqlite::Row<'_>) -> rusqlite::Result<Self> {
+    /// One cleanup row in this Workspace database.
+    fn decode(r: &rusqlite::Row<'_>) -> rusqlite::Result<Self> {
         Ok(Self {
-            ns,
             kind: r.get(0)?,
             resource: r.get(1)?,
             target: r.get(2)?,
@@ -91,8 +89,8 @@ impl Item {
 impl Overlay {
     /// Bounded read-only observation of pending namespace maintenance. Held
     /// items are pending, not silently reclaimed. This never drives cleanup.
-    pub fn maintenance_idle(&self, route: crate::Route) -> OverlayResult<bool> {
-        self.state(route)?;
+    pub fn maintenance_idle(&self) -> OverlayResult<bool> {
+        self.state()?;
         Ok(self
             .query(
                 StatementKind::Reclaim,
@@ -179,14 +177,13 @@ impl Overlay {
         self.atomic_cleanup(|| {
             // A step is already one bounded page: a release inside it queues.
             self.release_step.set(false);
-            let ns = self.namespace.get();
             let mut item = self
                 .query(
                     StatementKind::Reclaim,
                     READY,
                     &[&after.0[0], &after.0[1], &after.0[2]],
                     32,
-                    |r| Item::decode(ns, r),
+                    Item::decode,
                 )?
                 .pop();
             if item.is_none() && after != MaintenanceCursor::default() {
@@ -196,7 +193,7 @@ impl Overlay {
                         READY,
                         &[&0_i64, &0_i64, &0_i64],
                         32,
-                        |r| Item::decode(ns, r),
+                        Item::decode,
                     )?
                     .pop();
             }
@@ -224,7 +221,6 @@ impl Overlay {
             Ok(Some(MaintenanceStep {
                 cursor: item.key(),
                 work: ReclaimStep {
-                    namespace: item.ns as u64,
                     rows,
                     data_bytes: bytes,
                     done,

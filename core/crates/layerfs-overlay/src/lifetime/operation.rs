@@ -1,16 +1,19 @@
 //! Engine-minted operation ownership and independent bounded operation_record custody.
-use crate::{db::integer, OperationOwner, Overlay, OverlayError, OverlayResult, Route};
+use crate::{db::integer, OperationOwner, Overlay, OverlayError, OverlayResult};
 impl Overlay {
     /// One acquisition attempt. Query retained custody by request after a lost reply.
-    pub fn acquire_operation(&self, route: Route, request: u64) -> OverlayResult<OperationOwner> {
+    pub fn acquire_operation(&self, request: u64) -> OverlayResult<OperationOwner> {
         let request = integer(request)?;
         if request == 0 {
             return Err(OverlayError::Invalid("zero operation request"));
         }
         self.atomic(|| {
-            self.live(route)?;
+            self.live()?;
             let owner = self.mint_owner()?;
-            let value = OperationOwner { route, owner };
+            let value = OperationOwner {
+                engine: self.identity,
+                owner,
+            };
             self.open.borrow_mut().operations.insert(
                 owner,
                 request,
@@ -20,16 +23,12 @@ impl Overlay {
             Ok(value)
         })
     }
-    pub fn retained_operation(
-        &self,
-        route: Route,
-        request: u64,
-    ) -> OverlayResult<Option<OperationOwner>> {
-        self.state(route)?;
+    pub fn retained_operation(&self, request: u64) -> OverlayResult<Option<OperationOwner>> {
+        self.state()?;
         Ok(self.open.borrow().operations.retained(integer(request)?))
     }
     pub(crate) fn check_operation(&self, owner: OperationOwner) -> OverlayResult<()> {
-        self.state(owner.route)?;
+        self.state()?;
         self.operation_custody(owner)
     }
     /// The owner half of `check_operation`.
@@ -52,7 +51,7 @@ impl Overlay {
     /// stale route first, then a closed Workspace when the job writes, then a
     /// released owner. Existing custody stays readable after logical close.
     pub(crate) fn fence_operation(&self, owner: OperationOwner, write: bool) -> OverlayResult<()> {
-        if write && self.state(owner.route)?.closed {
+        if write && self.state()?.closed {
             return Err(OverlayError::Closed);
         }
         self.check_operation(owner)

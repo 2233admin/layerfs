@@ -24,10 +24,14 @@ operation nor releases a ticket or infers upstream history disposition. A caller
 must retain exact uncertainty and settle only the actual reply-attempt/fenced
 operation it owns. There is no automatic recovery, rollback or resend.
 
-Each minted Route also contains a process-local monotonically allocated engine
-identity. All route entry checks refuse another owner even if local SQL keys match.
-This local capability is not a remote authenticator; native control/runtime must
-still validate their authenticated daemon/Workspace incarnations and authority.
+Routing now belongs to the daemon's bound Workspace handle. One job-entry
+check selects the handle and rejects stale daemon routing metadata before any
+effect, retaining its original input. Overlay APIs accept no Route. Tokens
+carry only an exact nonrecycled engine identity where ownership needs it;
+map/reader/capture/ticket checks retain full original identity. Reply tickets
+are revision -> generation within that engine, with no namespace/incarnation
+filter. This local identity is not a remote authenticator: control still
+validates authenticated Workspace incarnations and authority.
 
 Captured cell reads validate the exact retained capture, so construction with
 existing custody can read bytes during logical close. Current live reads still

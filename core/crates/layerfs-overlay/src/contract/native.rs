@@ -1,16 +1,16 @@
 //! Native connection identity and one atomic semantic observation's custody.
-use crate::{FileRead, Inode, NativeDirectory, OpenFile, OverlayResult, Publication, Route};
+use crate::{FileRead, Inode, NativeDirectory, OpenFile, OverlayResult, Publication};
 
 /// One engine-minted native connection. Copying the token acquires no owner.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct NativeMount {
-    pub(crate) route: Route,
+    pub(crate) engine: u64,
     pub(crate) owner: u64,
     pub(crate) root: u64,
 }
 impl NativeMount {
-    pub const fn route(self) -> Route {
-        self.route
+    pub const fn engine(self) -> u64 {
+        self.engine
     }
     pub const fn owner_id(self) -> u64 {
         self.owner

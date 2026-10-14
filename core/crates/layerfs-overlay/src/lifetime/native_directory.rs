@@ -56,7 +56,7 @@ impl Overlay {
                 .insert(owner, request, held, "duplicate directory request")?;
             state.open_cookies(owner)?;
         }
-        self.file_ref(mount.route.ns, integer(serial)?, ReferenceKind::File, true)?;
+        self.file_ref(integer(serial)?, ReferenceKind::File, true)?;
         Ok(directory)
     }
     /// RELEASEDIR in one visit: the fence reads the Workspace and checks the
@@ -88,14 +88,14 @@ impl Overlay {
         &self,
         directory: NativeDirectory,
     ) -> OverlayResult<()> {
-        let (ns, owner) = (directory.mount.route.ns, directory.owner);
+        let owner = directory.owner;
         {
             let mut state = self.open.borrow_mut();
             let exact = |held: &crate::open::DirectoryState| held.directory == directory;
             state.directories.remove(owner, exact)?;
             state.close_cookies(owner)?;
         }
-        self.file_ref(ns, integer(directory.serial)?, ReferenceKind::File, false)
+        self.file_ref(integer(directory.serial)?, ReferenceKind::File, false)
     }
 }
 /// Published replies one RELEASEDIR deletes in its own job, one maintenance

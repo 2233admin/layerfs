@@ -73,7 +73,7 @@ impl FilesystemPort {
         &self,
         command: impl FnOnce(
                 &crate::OwnerClient,
-                layerfs_overlay::Route,
+                layerfs_workspace::Route,
             ) -> Result<crate::JobReceipt, crate::OwnerError>
             + Send
             + 'static,
@@ -90,7 +90,7 @@ impl FilesystemPort {
         &self,
         command: impl FnOnce(
                 &crate::OwnerClient,
-                layerfs_overlay::Route,
+                layerfs_workspace::Route,
             ) -> Result<crate::JobReceipt, crate::OwnerError>
             + Send
             + 'static,
@@ -152,7 +152,7 @@ impl FilesystemPort {
         &self,
         command: impl FnOnce(
                 &crate::OwnerClient,
-                layerfs_overlay::Route,
+                layerfs_workspace::Route,
             ) -> Result<crate::JobReceipt, crate::OwnerError>
             + Send
             + 'static,
@@ -165,7 +165,7 @@ impl FilesystemPort {
         &self,
         command: impl FnOnce(
                 &crate::OwnerClient,
-                layerfs_overlay::Route,
+                layerfs_workspace::Route,
             ) -> Result<crate::JobReceipt, crate::OwnerError>
             + Send
             + 'static,
@@ -464,7 +464,7 @@ impl RequestServices for FilesystemPort {
     /// The attempt is one short job of this thread with no SQL; the last
     /// attempt wakes a Capture waiting on the same Workspace lock.
     fn reply_attempted(&self, publication: Publication) -> ServiceFuture<'_, ServiceReply<()>> {
-        let settled = if publication.route() == self.0.workspace().route() {
+        let settled = if publication.engine() == self.0.workspace().route().engine() {
             self.0.overlay().reply_attempted(publication)
         } else {
             Err(OwnerError::Overlay(layerfs_overlay::OverlayError::Stale))

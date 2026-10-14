@@ -1,7 +1,8 @@
 //! Calling-thread jobs under one Workspace connection lock.
 use super::state::{elapsed, Shared};
 use crate::{service::receipt::JobReceipt, JobWork, OwnerWork, Response, ServiceClass};
-use layerfs_overlay::{DatabaseProfile, Overlay, OverlayError, ProfileConfig, Route};
+use layerfs_overlay::{DatabaseProfile, Overlay, OverlayError, ProfileConfig};
+use layerfs_workspace::Route;
 use std::{
     fmt, io,
     panic::{catch_unwind, AssertUnwindSafe},
@@ -130,12 +131,11 @@ impl Owner {
     pub(super) fn start_copy(
         path: &Path,
         template: &Path,
-        namespace: i64,
         profile: ProfileConfig,
         shared: Arc<Shared>,
     ) -> crate::OwnerStart {
         let started = Instant::now();
-        let created = Overlay::copy_template_observed(path, profile, template, namespace);
+        let created = Overlay::copy_template_observed(path, profile, template);
         let startup = Arc::new(created.work);
         let result = created.result.map_err(OwnerError::Overlay).map(|db| {
             let profile = db.profile().clone();
@@ -200,17 +200,6 @@ impl OwnerClient {
         }
     }
 
-    pub fn job<F>(
-        &self,
-        route: Route,
-        class: ServiceClass,
-        action: F,
-    ) -> Result<JobReceipt, OwnerError>
-    where
-        F: FnOnce(&Overlay, Route) -> layerfs_overlay::OverlayResult<Response> + Send + 'static,
-    {
-        self.overlay_job(route, class, None, action)
-    }
     /// One short operation; the closure performs at most one transaction and
     /// does no provider I/O. Before-effect failure retains the original input.
     pub(crate) fn overlay_job<F>(
@@ -221,10 +210,10 @@ impl OwnerClient {
         action: F,
     ) -> Result<JobReceipt, OwnerError>
     where
-        F: FnOnce(&Overlay, Route) -> layerfs_overlay::OverlayResult<Response> + Send + 'static,
+        F: FnOnce(&Overlay) -> layerfs_overlay::OverlayResult<Response> + Send + 'static,
     {
         self.owner_job(Some(route), class, ready, move |db, _| {
-            action(db, route).map_err(OwnerError::Overlay)
+            action(db).map_err(OwnerError::Overlay)
         })
     }
     pub(crate) fn owner_job<F>(
@@ -253,7 +242,13 @@ impl OwnerClient {
             cause: Box::new(cause),
             input: OriginalInput::new(action),
         };
-        let shared = self.connection()?;
+        let shared = match self.connection() {
+            Ok(shared) => shared,
+            Err(cause) => return Err(refuse(cause, action)),
+        };
+        if route.is_some_and(|route| shared.route.get() != Some(&route)) {
+            return Err(refuse(OwnerError::Overlay(OverlayError::Stale), action));
+        }
         let requested = Instant::now();
         let mut state = match shared.state.lock() {
             Ok(state) => state,
@@ -296,25 +291,18 @@ impl OwnerClient {
             let payload = db.payload_work();
             let observed_ready = match ready {
                 Some(Readiness::Capture) => {
-                    route.map_or(Err(OverlayError::Invalid("missing route")), |route| {
-                        // Composition of an earlier capture is not a frontier
-                        // that later mutations could extend: they keep running.
-                        db.capture_ready(route).and_then(|ready| {
-                            Ok(if ready {
-                                Ok(())
-                            } else {
-                                Err(db.state(route)?.consolidating.is_none())
-                            })
+                    // Composition does not fence later mutations.
+                    db.capture_ready().and_then(|ready| {
+                        Ok(if ready {
+                            Ok(())
+                        } else {
+                            Err(db.state()?.consolidating.is_none())
                         })
                     })
                 }
                 Some(Readiness::Install(capture)) => {
-                    if route != Some(capture.route()) {
-                        Err(OverlayError::Stale)
-                    } else {
-                        db.install_ready(capture)
-                            .map(|ready| if ready { Ok(()) } else { Err(true) })
-                    }
+                    db.install_ready(capture)
+                        .map(|ready| if ready { Ok(()) } else { Err(true) })
                 }
                 None => Ok(Ok(())),
             };
@@ -383,7 +371,12 @@ impl OwnerClient {
             work.allocation.accumulate(initial.allocation);
         }
         let result = match performed {
-            Ok(result) => result,
+            Ok(result) => {
+                if let Ok(Response::Opened(route)) = &result {
+                    let _ = shared.route.set(*route);
+                }
+                result
+            }
             Err(panic) => {
                 let cause = retain_panic(&mut state, panic);
                 Err(OwnerError::Retained(cause))
@@ -507,6 +500,13 @@ impl OwnerClient {
         shared.changed.notify_all();
         result
     }
+    pub(crate) fn bound_route(&self) -> Result<Route, OwnerError> {
+        self.connection()?
+            .route
+            .get()
+            .copied()
+            .ok_or(OwnerError::InvalidAdmission)
+    }
     pub fn workspace_client(&self, route: Route) -> Result<Self, OwnerError> {
         match self.roster() {
             Some(pool) => pool.client(route.namespace()),
@@ -525,7 +525,7 @@ impl OwnerClient {
         &self,
         publication: layerfs_overlay::Publication,
     ) -> Result<JobReceipt, OwnerError> {
-        let client = self.workspace_client(publication.route())?;
+        let client = self.clone();
         let shared = client.connection()?;
         let mut state = shared.state.lock().map_err(|_| OwnerError::Stopped)?;
         let start = Instant::now();

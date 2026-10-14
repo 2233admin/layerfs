@@ -2,7 +2,7 @@
 use super::{backing::Backing, owner::OwnerError};
 use crate::{JobWork, OwnerWork, ServiceClass};
 use layerfs_overlay::{Overlay, OverlayError};
-use std::sync::{Arc, Condvar, Mutex};
+use std::sync::{Arc, Condvar, Mutex, OnceLock};
 use std::time::Instant;
 
 pub(crate) struct State {
@@ -20,12 +20,16 @@ pub(crate) struct State {
     pub installs_waiting: u32,
 }
 pub(crate) struct Shared {
+    pub namespace: i64,
+    pub route: OnceLock<layerfs_workspace::Route>,
     pub state: Mutex<State>,
     pub changed: Condvar,
 }
 impl Shared {
-    pub fn new() -> Self {
+    pub fn new(namespace: i64) -> Self {
         Self {
+            namespace,
+            route: OnceLock::new(),
             state: Mutex::new(State {
                 db: None,
                 work: OwnerWork::default(),
