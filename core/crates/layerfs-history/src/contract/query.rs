@@ -43,8 +43,6 @@ pub enum Range {
     CommitAncestry = 3,
     /// Layers of one stack in publication order.
     LayerChain = 4,
-    /// Stages of one Branch in token order.
-    StageTokens = 5,
 }
 
 /// The request context a cursor is only valid inside.

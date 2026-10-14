@@ -2,9 +2,7 @@
 use super::PortError;
 use crate::OwnerError;
 use layerfs_content::{filesystem::FilesystemUpdateCounters, ContentError};
-use layerfs_history::{
-    BranchSnapshot, CommitStagedOutcome, HistoryError, StageRequest, WorkspaceId,
-};
+use layerfs_history::{BranchSnapshot, CommitOutcome, CommitRequest, HistoryError, WorkspaceId};
 use layerfs_overlay::{Capture, CapturedReader, OperationOwner};
 use layerfs_storage::{Diagnostics, StorageError, WriteOutcome};
 use layerfs_workspace::Route;
@@ -75,7 +73,7 @@ impl CapturedConstruction {
 /// Known history publication followed by a known paired local base install.
 #[derive(Debug)]
 pub struct CommitSuccess {
-    pub history: CommitStagedOutcome,
+    pub history: CommitOutcome,
     pub saved: WriteOutcome,
     pub storage: Diagnostics,
     pub capture: Capture,
@@ -90,13 +88,13 @@ pub struct CommitFailure {
     pub binding: Option<BranchSnapshot>,
     pub phase: CommitPhase,
     pub error: CommitError,
-    pub intent: Option<StageRequest>,
+    pub intent: Option<CommitRequest>,
     pub capture: Option<Capture>,
     pub prepared: Option<PreparedBase>,
     pub saved: Option<WriteOutcome>,
     pub storage: Option<Diagnostics>,
     /// Some means publication is known even if local install failed.
-    pub published: Option<CommitStagedOutcome>,
+    pub published: Option<CommitOutcome>,
     pub local_error: Option<OwnerError>,
     /// False means capture/unknown custody remains; another Commit is refused.
     pub locally_settled: bool,

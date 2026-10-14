@@ -4,8 +4,8 @@ use crate::backend::records::{FromValue, Record as Row};
 use layerfs_content::ObjectId;
 use layerfs_history::{
     error::{HistoryError, HistoryResult},
-    identity::{BranchId, CommitId, HistoryName, LayerId, LayerStackId, StageToken, WorkspaceId},
-    records::{BranchRecord, CommitRecord, LayerRecord, LayerStackRecord, StageRecord},
+    identity::{BranchId, CommitId, HistoryName, LayerId, LayerStackId},
+    records::{BranchRecord, CommitRecord, LayerRecord, LayerStackRecord},
 };
 /// Reads one column through the engine's own conversion, typed on failure.
 pub(crate) fn cell<T: FromValue>(row: &Row, index: usize) -> HistoryResult<T> {
@@ -40,21 +40,6 @@ identity_column!(stack_column, LayerStackId);
 
 pub(crate) fn required<T>(value: Option<T>, what: &'static str) -> HistoryResult<T> {
     value.ok_or(HistoryError::Integrity(what))
-}
-
-/// Reads one required Workspace incarnation column.
-pub(crate) fn workspace_column(row: &Row, index: usize) -> HistoryResult<WorkspaceId> {
-    let bytes: Vec<u8> = cell(row, index)?;
-    WorkspaceId::from_slice(&bytes)
-}
-
-/// Reads one required stage token column.
-pub(crate) fn token_column(row: &Row, index: usize) -> HistoryResult<StageToken> {
-    let token: i64 = cell(row, index)?;
-    if token <= 0 {
-        return Err(HistoryError::Integrity("stage token"));
-    }
-    StageToken::new(token as u64)
 }
 
 /// Reads one required history name column.
@@ -105,27 +90,6 @@ pub(crate) fn layer_row(row: &Row) -> HistoryResult<LayerRecord> {
         root: object(row, 3)?,
         source_branch: branch_column(row, 4)?,
         source_commit: commit_column(row, 5)?,
-    })
-}
-
-/// Decodes one stage row, in the catalog's column order.
-pub(crate) fn stage_row(row: &Row) -> HistoryResult<StageRecord> {
-    let generation: i64 = cell(row, 12)?;
-    Ok(StageRecord {
-        workspace: workspace_column(row, 0)?,
-        token: token_column(row, 1)?,
-        stack: required(stack_column(row, 2)?, "LayerStack identity")?,
-        branch: required(branch_column(row, 3)?, "Branch identity")?,
-        expected_head: commit_column(row, 4)?,
-        expected_base: required(layer_column(row, 5)?, "Layer identity")?,
-        expected_root: object(row, 6)?,
-        construction_base_root: object(row, 7)?,
-        intended_commit_base: required(layer_column(row, 8)?, "Layer identity")?,
-        candidate_root: object(row, 9)?,
-        profile: object(row, 10)?,
-        scope: object(row, 11)?,
-        generation: u64::try_from(generation)
-            .map_err(|_| HistoryError::Integrity("stage generation"))?,
     })
 }
 

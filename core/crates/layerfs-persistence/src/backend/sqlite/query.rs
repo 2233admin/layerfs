@@ -35,9 +35,6 @@ pub(crate) fn history(key: &str) -> Result<&'static str, BackendError> {
         "commit_commit_by_id" => Ok(include_str!(
             "../../../sql/sqlite/queries/history/commit_commit_by_id.sql"
         )),
-        "commit_delete_stage" => Ok(include_str!(
-            "../../../sql/sqlite/queries/history/commit_delete_stage.sql"
-        )),
         "commit_insert_commit" => Ok(include_str!(
             "../../../sql/sqlite/queries/history/commit_insert_commit.sql"
         )),
@@ -73,27 +70,6 @@ pub(crate) fn history(key: &str) -> Result<&'static str, BackendError> {
         )),
         "layerstack_stack_next_page" => Ok(include_str!(
             "../../../sql/sqlite/queries/history/layerstack_stack_next_page.sql"
-        )),
-        "staging_bump_token" => Ok(include_str!(
-            "../../../sql/sqlite/queries/history/staging_bump_token.sql"
-        )),
-        "staging_delete_stage" => Ok(include_str!(
-            "../../../sql/sqlite/queries/history/staging_delete_stage.sql"
-        )),
-        "staging_insert_stage" => Ok(include_str!(
-            "../../../sql/sqlite/queries/history/staging_insert_stage.sql"
-        )),
-        "staging_next_token" => Ok(include_str!(
-            "../../../sql/sqlite/queries/history/staging_next_token.sql"
-        )),
-        "staging_stage_by_workspace" => Ok(include_str!(
-            "../../../sql/sqlite/queries/history/staging_stage_by_workspace.sql"
-        )),
-        "staging_stage_first_page" => Ok(include_str!(
-            "../../../sql/sqlite/queries/history/staging_stage_first_page.sql"
-        )),
-        "staging_stage_next_page" => Ok(include_str!(
-            "../../../sql/sqlite/queries/history/staging_stage_next_page.sql"
         )),
         _ => Err(BackendError::Integrity),
     }

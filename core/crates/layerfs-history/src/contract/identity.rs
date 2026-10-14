@@ -122,8 +122,7 @@ tagged_id!(
 /// One Workspace producer incarnation.
 ///
 /// The value is an opaque namespace supplied by the application authority. It
-/// carries no live handle and no connection state, which is what lets a stage be
-/// inspected, committed or discarded from a different connection.
+/// carries no live handle and no connection state.
 #[derive(Clone, Copy, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct WorkspaceId([u8; WORKSPACE_BYTES]);
 
@@ -206,28 +205,6 @@ impl std::fmt::Debug for CatalogId {
         formatter.write_str("CatalogId(")?;
         write_hex(&self.0, formatter)?;
         formatter.write_str(")")
-    }
-}
-
-/// One exact Workspace stage token, drawn from the catalog counter.
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct StageToken(u64);
-
-impl StageToken {
-    /// Largest representable token; the counter refuses to exceed it.
-    pub const MAXIMUM: u64 = i64::MAX as u64;
-
-    /// Wraps one checked token.
-    pub fn new(value: u64) -> HistoryResult<Self> {
-        if value == 0 || value > Self::MAXIMUM {
-            return Err(HistoryError::InvalidInput("stage token"));
-        }
-        Ok(Self(value))
-    }
-
-    /// The token value.
-    pub const fn value(self) -> u64 {
-        self.0
     }
 }
 

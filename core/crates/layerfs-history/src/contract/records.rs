@@ -7,9 +7,7 @@
 //! service thread or a future Workspace.
 
 use crate::error::{HistoryError, HistoryResult};
-use crate::identity::{
-    BranchId, CommitId, HistoryName, LayerId, LayerStackId, StageToken, WorkspaceId,
-};
+use crate::identity::{BranchId, CommitId, HistoryName, LayerId, LayerStackId};
 use layerfs_content::ObjectId;
 
 /// Default and maximum records one bounded page returns.
@@ -102,37 +100,6 @@ pub struct LayerRecord {
     pub source_branch: Option<BranchId>,
     /// Commit whose root was published; absent only for genesis.
     pub source_commit: Option<CommitId>,
-}
-
-/// One frozen Workspace stage: a saved candidate plus immutable expectations.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct StageRecord {
-    /// Producer incarnation that owns this stage.
-    pub workspace: WorkspaceId,
-    /// Exact token drawn from the catalog counter when the stage was inserted.
-    pub token: StageToken,
-    /// Stack the stage was captured against.
-    pub stack: LayerStackId,
-    /// Branch the stage was captured against.
-    pub branch: BranchId,
-    /// Captured head: provenance and the new Commit parent, not a head CAS.
-    pub expected_head: Option<CommitId>,
-    /// Base Layer the Branch held when the stage was captured.
-    pub expected_base: LayerId,
-    /// Effective root the Branch held when the stage was captured.
-    pub expected_root: ObjectId,
-    /// Root the candidate was constructed from.
-    pub construction_base_root: ObjectId,
-    /// Base Layer the Commit would record.
-    pub intended_commit_base: LayerId,
-    /// Saved root of the staged candidate.
-    pub candidate_root: ObjectId,
-    /// Filesystem profile of the captured Branch.
-    pub profile: ObjectId,
-    /// Allocation scope of the captured Branch.
-    pub scope: ObjectId,
-    /// Producer generation this candidate was built from.
-    pub generation: u64,
 }
 
 /// One consumed half-open inode reservation.
@@ -237,49 +204,32 @@ pub struct ForkRequest {
     pub source: ForkSource,
 }
 
-/// Stage insertion request: one saved candidate with its frozen expectations.
+/// One Commit publication against an expected Branch head, in one transaction.
+///
+/// Without `force` the Branch must still hold `expected_head` and
+/// `expected_base`; otherwise the request is refused with `HeadMoved` and
+/// nothing changes. With `force` the candidate overwrites whatever head the
+/// Branch holds, keeps `expected_head` as its parent and reports the head it
+/// displaced. There is no stage row and no token: the expected head is the
+/// only precondition, carried by the request itself.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct StageRequest {
-    /// Producer incarnation that will own the stage.
-    pub workspace: WorkspaceId,
-    /// Branch the candidate was constructed against.
+pub struct CommitRequest {
+    /// Branch the candidate was constructed for.
     pub branch: BranchId,
-    /// Captured head: provenance and the new Commit parent, not a head CAS.
+    /// Head the Branch must hold; also the new Commit's parent.
     pub expected_head: Option<CommitId>,
-    /// Base Layer captured before construction.
+    /// Base Layer the Branch must hold; also the new Commit's base.
     pub expected_base: LayerId,
-    /// Effective Branch root captured before construction.
+    /// Effective root of `expected_head` (or of the base Layer without one).
     pub expected_root: ObjectId,
-    /// Root C1 actually constructed from.
-    pub construction_base_root: ObjectId,
-    /// Base Layer the Commit would record.
-    pub intended_commit_base: LayerId,
     /// Saved root of the candidate.
     pub candidate_root: ObjectId,
     /// Filesystem profile the candidate was constructed under.
     pub profile: ObjectId,
     /// Allocation scope the candidate was constructed under.
     pub scope: ObjectId,
-    /// Producer generation this candidate was built from.
-    pub generation: u64,
-}
-
-/// Commit request naming one exact stage token.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct CommitStagedRequest {
-    /// Producer incarnation that owns the stage.
-    pub workspace: WorkspaceId,
-    /// Exact token the caller believes it holds.
-    pub token: StageToken,
-}
-
-/// Stage removal request naming one exact stage token.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct DiscardRequest {
-    /// Producer incarnation that owns the stage.
-    pub workspace: WorkspaceId,
-    /// Exact token the caller believes it holds.
-    pub token: StageToken,
+    /// Overwrite a head that moved instead of refusing.
+    pub force: bool,
 }
 
 /// Layer publication request.
@@ -332,11 +282,16 @@ pub struct LayerHistoryRequest {
     pub limit: u16,
 }
 
-/// Successful result of committing one exact stage.
+/// Successful result of one Commit publication.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum CommitStagedOutcome {
+pub enum CommitOutcome {
     /// A new immutable Commit was inserted and the Branch advanced.
-    Committed(CommitRecord),
+    Committed {
+        /// The Commit the Branch now holds.
+        record: CommitRecord,
+        /// Head a forced publication overwrote, when it was not the parent.
+        displaced: Option<CommitId>,
+    },
     /// The candidate root and intended base already describe the Branch.
     UpToDate {
         /// Head Commit the Branch holds, absent when it has none yet.
@@ -361,15 +316,6 @@ pub enum AddLayerOutcome {
         /// Stack head, unchanged.
         head: LayerId,
     },
-}
-
-/// Successful result of an exact stage removal.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum DiscardOutcome {
-    /// The exact stage existed and was removed.
-    Removed,
-    /// No stage exists for that Workspace incarnation.
-    Absent,
 }
 
 /// Kind of one manifest entry.
@@ -430,4 +376,3 @@ encoded_width!(LayerStackRecord, 179);
 encoded_width!(BranchRecord, 166);
 encoded_width!(CommitRecord, 149);
 encoded_width!(LayerRecord, 168);
-encoded_width!(StageRecord, 342);

@@ -1,8 +1,8 @@
 //! Immutable history metadata for LayerFS (C5).
 //!
 //! C5 owns history identities and records, LayerStack and Branch metadata,
-//! immutable Commits and Layers, exact-token Workspace stages, scope-wide inode
-//! reservations and atomic conditional history transitions with bounded queries.
+//! immutable Commits and Layers published against an expected head, scope-wide
+//! inode reservations and atomic conditional history transitions with bounded queries.
 //! It opens no content object, reads no pack and never interprets a physical
 //! save, locator or publication field: those remain C2's private ownership, and
 //! C2 and C5 retain separate semantic transaction boundaries in the adapter.
@@ -27,12 +27,11 @@ pub use contract::records;
 pub use catalog::{HistoryCatalog, HistoryCatalogConfig};
 pub use error::{HistoryError, HistoryResult};
 pub use identity::{
-    BranchId, CatalogId, CommitId, HistoryName, LayerId, LayerStackId, StageToken, WorkspaceId,
+    BranchId, CatalogId, CommitId, HistoryName, LayerId, LayerStackId, WorkspaceId,
 };
 pub use records::{
     AddLayerOutcome, AddLayerRequest, BranchRecord, BranchSnapshot, CommitHistoryRequest,
-    CommitRecord, CommitStagedOutcome, CommitStagedRequest, DiscardOutcome, DiscardRequest,
-    ForkRequest, ForkSource, LayerHistoryRequest, LayerRecord, LayerStackRecord, Page, PageResult,
-    RecordKind, Reservation, ReserveRequest, StackInitialization, StageRecord, StageRequest,
-    MAXIMUM_PAGE_RECORDS,
+    CommitOutcome, CommitRecord, CommitRequest, ForkRequest, ForkSource, LayerHistoryRequest,
+    LayerRecord, LayerStackRecord, Page, PageResult, RecordKind, Reservation, ReserveRequest,
+    StackInitialization, MAXIMUM_PAGE_RECORDS,
 };

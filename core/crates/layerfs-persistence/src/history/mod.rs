@@ -7,7 +7,6 @@ mod commit;
 mod layerstack;
 mod provider;
 mod rows;
-mod staging;
 mod transaction;
 pub use provider::HistoryProvider;
 

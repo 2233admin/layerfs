@@ -1,5 +1,5 @@
 //! shared backend history catalog contract delegation.
-use super::{allocation, branch, commit, layerstack, provider::HistoryProvider, staging};
+use super::{allocation, branch, commit, layerstack, provider::HistoryProvider};
 use layerfs_history::*;
 impl HistoryCatalog for HistoryProvider {
     fn catalog_id(&self) -> CatalogId {
@@ -59,23 +59,6 @@ impl HistoryCatalog for HistoryProvider {
         self.read(|tx| layerstack::layer(tx, id))
     }
 
-    fn stage(&self, workspace: WorkspaceId) -> HistoryResult<Option<StageRecord>> {
-        self.read(|tx| staging::stage(tx, workspace))
-    }
-
-    fn stages(&self, branch: BranchId, page: &Page) -> HistoryResult<PageResult<StageRecord>> {
-        self.read(|tx| {
-            staging::stages(
-                tx,
-                self.catalog_id,
-                self.incarnation,
-                &self.cursor_key,
-                branch,
-                page,
-            )
-        })
-    }
-
     fn commit_history(
         &self,
         request: &CommitHistoryRequest,
@@ -117,38 +100,12 @@ impl HistoryCatalog for HistoryProvider {
         self.write(|tx| branch::fork(tx, request))
     }
 
-    fn stage_changes(&self, request: &StageRequest) -> HistoryResult<StageRecord> {
-        self.write(|tx| staging::stage_changes(tx, request))
-    }
-
-    fn commit_staged(&self, request: &CommitStagedRequest) -> HistoryResult<CommitStagedOutcome> {
-        let mut observed = None;
-        self.write(|tx| commit::commit_staged(tx, request, &mut observed))
-            .map_err(|error| error.with_observed_stage(request.workspace, observed))
-    }
-
-    fn stage_and_commit(&self, request: &StageRequest) -> HistoryResult<CommitStagedOutcome> {
-        self.write(|tx| {
-            let stage = staging::stage_changes(tx, request)?;
-            commit::commit_staged(
-                tx,
-                &CommitStagedRequest {
-                    workspace: stage.workspace,
-                    token: stage.token,
-                },
-                &mut None,
-            )
-        })
+    fn commit_branch(&self, request: &CommitRequest) -> HistoryResult<CommitOutcome> {
+        self.write(|tx| commit::commit_branch(tx, request))
     }
 
     fn add_layer(&self, request: &AddLayerRequest) -> HistoryResult<AddLayerOutcome> {
         self.write(|tx| layerstack::add_layer(tx, request))
-    }
-
-    fn discard_stage(&self, request: &DiscardRequest) -> HistoryResult<DiscardOutcome> {
-        let mut observed = None;
-        self.write(|tx| staging::discard_stage(tx, request, &mut observed))
-            .map_err(|error| error.with_observed_stage(request.workspace, observed))
     }
 
     fn reserve_inodes(&self, request: &ReserveRequest) -> HistoryResult<Reservation> {

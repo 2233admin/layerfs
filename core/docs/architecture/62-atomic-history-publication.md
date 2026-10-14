@@ -5,6 +5,14 @@
 > local install are separate operations; their integrated Store-half proof is
 > [recorded separately](65-store-commit-composition.md).
 
+> **Staging removed, 2026-10-15 ([#327](https://github.com/Ephemeral-AI-Lab/layerfs/issues/327)):**
+> the `workspace_stage` table, stage tokens and the stage API (`stage_changes`,
+> `commit_staged`, `stages`, `discard_stage`, `stage_and_commit`) are removed.
+> `HistoryCatalog::commit_branch(CommitRequest)` publishes a saved candidate in one
+> write transaction against an expected head: a moved head is `HeadMoved`, or with
+> `force` an overwrite that keeps the captured parent and reports the displaced
+> head. The text below keeps its original source pin.
+
 HistoryCatalog::stage_and_commit takes the existing complete StageRequest and
 returns CommitStagedOutcome. Persistence performs exactly one write transaction:
 validate context, insert the temporary stage with its token, validate captured

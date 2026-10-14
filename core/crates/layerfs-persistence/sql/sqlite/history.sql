@@ -7,9 +7,7 @@ CREATE TABLE history_meta (
     identity_format INTEGER NOT NULL CHECK (identity_format = 1),
     schema_version INTEGER NOT NULL CHECK(schema_version=1),
     schema_source TEXT NOT NULL,
-    schema_definition TEXT NOT NULL,
-    next_stage_token INTEGER NOT NULL
-        CHECK (next_stage_token BETWEEN 1 AND 9223372036854775807)
+    schema_definition TEXT NOT NULL
 ) STRICT;
 
 CREATE TABLE layer_stack (
@@ -110,39 +108,6 @@ CREATE TABLE branch (
         REFERENCES "commit"(layer_stack_id, commit_id) DEFERRABLE INITIALLY DEFERRED
 ) STRICT, WITHOUT ROWID;
 
-CREATE TABLE workspace_stage (
-    workspace_id BLOB PRIMARY KEY CHECK (length(workspace_id) = 32),
-    stage_token INTEGER NOT NULL
-        CHECK (stage_token BETWEEN 1 AND 9223372036854775807),
-    layer_stack_id BLOB NOT NULL
-        CHECK (length(layer_stack_id) = 17 AND substr(layer_stack_id, 1, 1) = X'31'),
-    branch_id BLOB NOT NULL
-        CHECK (length(branch_id) = 17 AND substr(branch_id, 1, 1) = X'11'),
-    expected_head_commit_id BLOB
-        CHECK (
-            expected_head_commit_id IS NULL
-            OR (length(expected_head_commit_id) = 33 AND substr(expected_head_commit_id, 1, 1) = X'12')
-        ),
-    expected_base_layer_id BLOB NOT NULL
-        CHECK (length(expected_base_layer_id) = 33 AND substr(expected_base_layer_id, 1, 1) = X'32'),
-    expected_root_id BLOB NOT NULL CHECK (length(expected_root_id) = 32),
-    construction_base_root_id BLOB NOT NULL CHECK (length(construction_base_root_id) = 32),
-    intended_commit_base_layer_id BLOB NOT NULL
-        CHECK (length(intended_commit_base_layer_id) = 33 AND substr(intended_commit_base_layer_id, 1, 1) = X'32'),
-    candidate_root_id BLOB NOT NULL CHECK (length(candidate_root_id) = 32),
-    profile_id BLOB NOT NULL CHECK (length(profile_id) = 32),
-    scope_id BLOB NOT NULL CHECK (length(scope_id) = 32),
-    input_generation INTEGER NOT NULL CHECK (input_generation >= 0),
-    FOREIGN KEY (layer_stack_id, branch_id)
-        REFERENCES branch(layer_stack_id, branch_id) DEFERRABLE INITIALLY DEFERRED,
-    FOREIGN KEY (layer_stack_id, expected_base_layer_id)
-        REFERENCES layer(layer_stack_id, layer_id) DEFERRABLE INITIALLY DEFERRED,
-    FOREIGN KEY (layer_stack_id, intended_commit_base_layer_id)
-        REFERENCES layer(layer_stack_id, layer_id) DEFERRABLE INITIALLY DEFERRED,
-    FOREIGN KEY (layer_stack_id, expected_head_commit_id)
-        REFERENCES "commit"(layer_stack_id, commit_id) DEFERRABLE INITIALLY DEFERRED
-) STRICT, WITHOUT ROWID;
-
 CREATE TABLE scope_allocator (
     scope_id BLOB PRIMARY KEY CHECK (length(scope_id) = 32),
     highwater INTEGER NOT NULL CHECK (highwater BETWEEN 0 AND 9223372036854775807),
@@ -159,5 +124,3 @@ CREATE UNIQUE INDEX layers_source ON layer(source_branch_id, source_commit_id)
 CREATE UNIQUE INDEX commit_identity ON "commit"(layer_stack_id, commit_id);
 CREATE UNIQUE INDEX branch_identity ON branch(layer_stack_id, branch_id);
 CREATE UNIQUE INDEX branch_names ON branch(layer_stack_id, name);
-CREATE UNIQUE INDEX stage_tokens ON workspace_stage(stage_token);
-CREATE INDEX stage_branches ON workspace_stage(layer_stack_id, branch_id, stage_token);

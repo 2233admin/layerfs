@@ -5,7 +5,7 @@ use crate::{
     control_mount::{put_work, work, MountWork},
     wire::{Reader, Writer},
 };
-use layerfs_history::CommitStagedOutcome;
+use layerfs_history::CommitOutcome;
 /// Result of the one abort write on the connection's own control.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u8)]
@@ -36,7 +36,7 @@ pub enum CommitKnowledge {
     /// No Commit custody was retained; this is not a not-published verdict.
     Absent,
     /// Original known publication, kept even when local installation failed.
-    Published(CommitStagedOutcome),
+    Published(CommitOutcome),
     /// Original unknown custody, explicitly relinquished and still unknown.
     Unknown,
 }

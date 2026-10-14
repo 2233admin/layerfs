@@ -6,8 +6,7 @@
 //! admission contention and never a semantic conflict; `UnknownOutcome` states
 //! that persistence did not answer and therefore proves nothing about rollback.
 
-use crate::identity::{CommitId, LayerId, StageToken, WorkspaceId};
-use crate::records::StageRecord;
+use crate::identity::{CommitId, LayerId};
 
 /// A related record kind, used for a typed absence.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -20,8 +19,6 @@ pub enum Missing {
     Commit,
     /// No Layer with that identity.
     Layer,
-    /// No Workspace stage for that incarnation.
-    Stage,
     /// No allocator row for that scope.
     Scope,
     /// No history metadata row: an empty or foreign database.
@@ -44,27 +41,9 @@ pub struct MovedState {
     pub actual_base: LayerId,
 }
 
-/// Exact stage observation at a failed transition boundary.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum StageDisposition {
-    /// The deciding transaction observed no stage for this producer.
-    Absent(WorkspaceId),
-    /// Definite refusal retained this complete immutable stage.
-    Retained(Box<StageRecord>),
-    /// This stage was acknowledged, but its final disposition is not known.
-    AcknowledgedUnknown(Box<StageRecord>),
-}
-
 /// Every failure a history operation can report.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum HistoryError {
-    /// A failure with a stage observation from the deciding transaction.
-    WithStage {
-        /// Original typed failure.
-        cause: Box<HistoryError>,
-        /// Exact known stage disposition, never reconstructed by a reread.
-        stage: StageDisposition,
-    },
     /// A checked input is structurally unusable.
     InvalidInput(&'static str),
     /// A named record does not exist.
@@ -101,13 +80,6 @@ pub enum HistoryError {
         /// Layer the catalog holds as the stack head.
         actual: LayerId,
     },
-    /// The exact stage token does not match the stage that is present.
-    StageChanged {
-        /// Token the request named.
-        expected: StageToken,
-        /// Token the catalog holds for that incarnation, when a stage exists.
-        actual: Option<StageToken>,
-    },
     /// Writable authority was not established by this process.
     ContinuityUnavailable,
     /// Persistence did not answer; the outcome of the attempted statement set
@@ -121,39 +93,15 @@ impl HistoryError {
         matches!(self.cause(), Self::UnknownOutcome)
     }
 
-    /// The typed failure independent of its stage observation.
+    /// The typed failure itself; kept for callers that match through it.
     pub fn cause(&self) -> &Self {
-        match self {
-            Self::WithStage { cause, .. } => cause.cause(),
-            error => error,
-        }
-    }
-
-    /// Attaches the stage observed inside a provider transaction to its failure.
-    pub fn with_observed_stage(
-        self,
-        workspace: WorkspaceId,
-        observed: Option<Option<StageRecord>>,
-    ) -> Self {
-        let stage = match observed {
-            Some(Some(record)) if self.unknown() => {
-                StageDisposition::AcknowledgedUnknown(Box::new(record))
-            }
-            Some(Some(record)) => StageDisposition::Retained(Box::new(record)),
-            Some(None) if !self.unknown() => StageDisposition::Absent(workspace),
-            _ => return self,
-        };
-        Self::WithStage {
-            cause: Box::new(self),
-            stage,
-        }
+        self
     }
 }
 
 impl std::fmt::Display for HistoryError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::WithStage { cause, stage } => write!(formatter, "{cause}; stage={stage:?}"),
             Self::InvalidInput(what) => write!(formatter, "invalid input: {what}"),
             Self::Missing(what) => write!(formatter, "missing {what:?}"),
             Self::Unsupported(what) => write!(formatter, "unsupported: {what}"),
@@ -169,9 +117,6 @@ impl std::fmt::Display for HistoryError {
             Self::NotInHistory(what) => write!(formatter, "not in history: {what}"),
             Self::StackMoved { expected, actual } => {
                 write!(formatter, "stack moved: {expected} -> {actual}")
-            }
-            Self::StageChanged { expected, actual } => {
-                write!(formatter, "stage changed: {expected:?} -> {actual:?}")
             }
             Self::ContinuityUnavailable => formatter.write_str("continuity unavailable"),
             Self::UnknownOutcome => formatter.write_str("unknown outcome"),

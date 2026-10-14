@@ -8,7 +8,7 @@ use crate::{
     Owner, OwnerClient,
 };
 use layerfs_bridge::control::{Activity, ControlCode, WorkspaceToken};
-use layerfs_history::{BranchSnapshot, CommitStagedOutcome, WorkspaceId};
+use layerfs_history::{BranchSnapshot, CommitOutcome, WorkspaceId};
 use std::{
     collections::BTreeMap,
     sync::{Arc, Mutex},
@@ -19,7 +19,7 @@ pub(super) struct Binding {
     pub snapshot: BranchSnapshot,
     pub activity: Activity,
     pub epoch: u64,
-    pub published: Option<CommitStagedOutcome>,
+    pub published: Option<CommitOutcome>,
 }
 pub(super) enum Entry {
     Binding,

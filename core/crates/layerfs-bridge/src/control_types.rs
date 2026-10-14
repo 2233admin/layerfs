@@ -1,7 +1,7 @@
 //! Public mount-control vocabulary; no immutable-content data service.
 use layerfs_history::{
-    error::MovedState, BranchId, BranchRecord, BranchSnapshot, CommitHistoryRequest, CommitRecord,
-    CommitStagedOutcome, ForkRequest, LayerStackId, Page, PageResult, WorkspaceId,
+    error::MovedState, BranchId, BranchRecord, BranchSnapshot, CommitHistoryRequest, CommitOutcome,
+    CommitRecord, ForkRequest, LayerStackId, Page, PageResult, WorkspaceId,
 };
 /// History processing window; authenticated continuation covers arbitrarily many pages.
 pub const HISTORY_WINDOW: u16 = 32;
@@ -149,7 +149,7 @@ pub struct WorkspaceStatus {
     /// True when the diagnostic epoch can no longer increase.
     pub epoch_saturated: bool,
     /// Known publication retained after a local failure, when available.
-    pub published: Option<CommitStagedOutcome>,
+    pub published: Option<CommitOutcome>,
     /// Separately scoped indexed engine observation taken after the control copy.
     pub local: Option<LocalObservation>,
     /// Original engine observation refusal when local fields are unavailable.
@@ -185,7 +185,7 @@ pub struct ControlRefusal {
     /// Exact expected/actual Branch state for HeadMoved.
     pub moved: Option<MovedState>,
     /// Original known publication, including when local install failed.
-    pub published: Option<CommitStagedOutcome>,
+    pub published: Option<CommitOutcome>,
     /// Original bounded cause description; never parsed to infer the category.
     pub detail: String,
 }
@@ -211,7 +211,7 @@ pub enum Reply {
         binding: BranchSnapshot,
     },
     /// Original known history outcome after paired local installation.
-    Committed(CommitStagedOutcome),
+    Committed(CommitOutcome),
     /// Bounded local observation with explicit owner scopes.
     Status(Box<WorkspaceStatus>),
     /// Logical terminal close acknowledged; physical cleanup remains owner-driven.

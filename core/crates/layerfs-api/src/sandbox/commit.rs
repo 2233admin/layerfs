@@ -2,7 +2,7 @@
 use super::WorkspaceApi;
 use crate::OperationFailure;
 use layerfs_bridge::control::{Reply, Request, WorkspaceToken};
-use layerfs_history::CommitStagedOutcome;
+use layerfs_history::CommitOutcome;
 
 impl WorkspaceApi<'_> {
     /// Requests one Commit and returns its original known publication/install result.
@@ -11,7 +11,7 @@ impl WorkspaceApi<'_> {
     pub fn commit(
         &mut self,
         token: WorkspaceToken,
-    ) -> Result<CommitStagedOutcome, Box<OperationFailure>> {
+    ) -> Result<CommitOutcome, Box<OperationFailure>> {
         let request = Request::Commit(token);
         match self.exchange(request.clone())? {
             Reply::Committed(outcome) => Ok(outcome),

@@ -17,12 +17,11 @@
 //!   semantic conflict and not a silent retry.
 
 use crate::error::HistoryResult;
-use crate::identity::{BranchId, CatalogId, CommitId, LayerId, LayerStackId, WorkspaceId};
+use crate::identity::{BranchId, CatalogId, CommitId, LayerId, LayerStackId};
 use crate::records::{
     AddLayerOutcome, AddLayerRequest, BranchRecord, BranchSnapshot, CommitHistoryRequest,
-    CommitRecord, CommitStagedOutcome, CommitStagedRequest, DiscardOutcome, DiscardRequest,
-    ForkRequest, LayerHistoryRequest, LayerRecord, LayerStackRecord, Page, PageResult, Reservation,
-    ReserveRequest, StackInitialization, StageRecord, StageRequest,
+    CommitOutcome, CommitRecord, CommitRequest, ForkRequest, LayerHistoryRequest, LayerRecord,
+    LayerStackRecord, Page, PageResult, Reservation, ReserveRequest, StackInitialization,
 };
 /// Checked inputs that establish one catalog binding.
 #[derive(Clone, Eq, PartialEq)]
@@ -86,12 +85,6 @@ pub trait HistoryCatalog: Send + Sync {
     /// One Layer by identity.
     fn layer(&self, id: LayerId) -> HistoryResult<Option<LayerRecord>>;
 
-    /// One stage by producer incarnation.
-    fn stage(&self, workspace: WorkspaceId) -> HistoryResult<Option<StageRecord>>;
-
-    /// Stages of one Branch in token order.
-    fn stages(&self, branch: BranchId, page: &Page) -> HistoryResult<PageResult<StageRecord>>;
-
     /// Ancestry walk of one Branch, newest first, bounded by
     /// [`crate::records::MAXIMUM_LINEAGE_ROWS`].
     fn commit_history(
@@ -115,24 +108,14 @@ pub trait HistoryCatalog: Send + Sync {
     /// Creates one Branch sharing the selected ancestry.
     fn fork(&self, request: &ForkRequest) -> HistoryResult<BranchSnapshot>;
 
-    /// Inserts one frozen stage with its own freshly allocated token.
-    fn stage_changes(&self, request: &StageRequest) -> HistoryResult<StageRecord>;
-
-    /// Publishes one exact stage, overwriting the Branch head atomically.
-    /// The Commit keeps its captured parent. UpToDate compares the current root.
-    fn commit_staged(&self, request: &CommitStagedRequest) -> HistoryResult<CommitStagedOutcome>;
-
-    /// Stages a saved candidate and atomically overwrites its Branch in one write
-    /// transaction. A definite refusal leaves no stage created by this attempt;
-    /// a preexisting stage is never removed. Unknown retains the original intent
-    /// and permits no assumed stage disposition, reread-based success or replay.
-    fn stage_and_commit(&self, request: &StageRequest) -> HistoryResult<CommitStagedOutcome>;
+    /// Publishes one saved candidate as a Commit against the expected Branch
+    /// head in one write transaction. A moved head is `HeadMoved` unless the
+    /// request forces an overwrite. UpToDate compares the current root.
+    /// Unknown retains the original request; nothing is reread or replayed.
+    fn commit_branch(&self, request: &CommitRequest) -> HistoryResult<CommitOutcome>;
 
     /// Publishes one Commit root as a new Layer against the expected stack head.
     fn add_layer(&self, request: &AddLayerRequest) -> HistoryResult<AddLayerOutcome>;
-
-    /// Removes exactly one stage by token.
-    fn discard_stage(&self, request: &DiscardRequest) -> HistoryResult<DiscardOutcome>;
 
     /// Consumes one checked half-open inode range for a scope.
     fn reserve_inodes(&self, request: &ReserveRequest) -> HistoryResult<Reservation>;

@@ -5,8 +5,8 @@ use crate::{
 };
 use layerfs_content::ObjectId;
 use layerfs_history::{
-    error::MovedState, BranchId, BranchRecord, BranchSnapshot, CommitId, CommitRecord,
-    CommitStagedOutcome, HistoryName, LayerId, LayerStackId, WorkspaceId,
+    error::MovedState, BranchId, BranchRecord, BranchSnapshot, CommitId, CommitOutcome,
+    CommitRecord, HistoryName, LayerId, LayerStackId, WorkspaceId,
 };
 pub(crate) fn history<T>(value: layerfs_history::HistoryResult<T>) -> Result<T, ControlError> {
     value.map_err(|_| ControlError("history control value"))
@@ -152,26 +152,27 @@ pub(crate) fn commit(input: &mut Reader<'_>) -> Result<CommitRecord, ControlErro
         base_layer: history(LayerId::from_bytes(input.array()?))?,
     })
 }
-pub(crate) fn put_outcome(
-    out: &mut Writer,
-    value: &CommitStagedOutcome,
-) -> Result<(), ControlError> {
+pub(crate) fn put_outcome(out: &mut Writer, value: &CommitOutcome) -> Result<(), ControlError> {
     match value {
-        CommitStagedOutcome::Committed(value) => {
+        CommitOutcome::Committed { record, displaced } => {
             out.byte(1)?;
-            put_commit(out, value)
+            put_commit(out, record)?;
+            put_head(out, *displaced)
         }
-        CommitStagedOutcome::UpToDate { head, root } => {
+        CommitOutcome::UpToDate { head, root } => {
             out.byte(2)?;
             put_head(out, *head)?;
             out.put(&root.to_bytes())
         }
     }
 }
-pub(crate) fn outcome(input: &mut Reader<'_>) -> Result<CommitStagedOutcome, ControlError> {
+pub(crate) fn outcome(input: &mut Reader<'_>) -> Result<CommitOutcome, ControlError> {
     match input.byte()? {
-        1 => Ok(CommitStagedOutcome::Committed(commit(input)?)),
-        2 => Ok(CommitStagedOutcome::UpToDate {
+        1 => Ok(CommitOutcome::Committed {
+            record: commit(input)?,
+            displaced: head(input)?,
+        }),
+        2 => Ok(CommitOutcome::UpToDate {
             head: head(input)?,
             root: object(input)?,
         }),
@@ -180,7 +181,7 @@ pub(crate) fn outcome(input: &mut Reader<'_>) -> Result<CommitStagedOutcome, Con
 }
 pub(crate) fn put_publication(
     out: &mut Writer,
-    value: &Option<CommitStagedOutcome>,
+    value: &Option<CommitOutcome>,
 ) -> Result<(), ControlError> {
     out.byte(u8::from(value.is_some()))?;
     if let Some(value) = value {
@@ -188,9 +189,7 @@ pub(crate) fn put_publication(
     }
     Ok(())
 }
-pub(crate) fn publication(
-    input: &mut Reader<'_>,
-) -> Result<Option<CommitStagedOutcome>, ControlError> {
+pub(crate) fn publication(input: &mut Reader<'_>) -> Result<Option<CommitOutcome>, ControlError> {
     if boolean(input)? {
         Ok(Some(outcome(input)?))
     } else {

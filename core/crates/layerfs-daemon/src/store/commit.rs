@@ -3,7 +3,7 @@ use super::{
     bind::checked_base, BoundWorkspace, CommitError, CommitFailure, CommitPhase, CommitSuccess,
 };
 use layerfs_content::filesystem::FilesystemRootId;
-use layerfs_history::{BranchSnapshot, CommitStagedOutcome, StageRequest};
+use layerfs_history::{BranchSnapshot, CommitOutcome, CommitRequest};
 use layerfs_overlay::Capture;
 use layerfs_storage::Save;
 use layerfs_workspace::WorkspaceError;
@@ -124,18 +124,15 @@ impl BoundWorkspace {
             retained.storage = Some(super::producer::since(storage.diagnostics(), before));
             let candidate = built?;
             producer = Some(storage);
-            retained.intent = Some(StageRequest {
-                workspace: self.identity,
+            retained.intent = Some(CommitRequest {
                 branch: snapshot.branch.id,
                 expected_head: snapshot.branch.head_commit,
                 expected_base: snapshot.branch.base_layer,
                 expected_root: snapshot.effective_root,
-                construction_base_root: snapshot.effective_root,
-                intended_commit_base: snapshot.branch.base_layer,
                 candidate_root: candidate.0,
                 profile: snapshot.profile,
                 scope: snapshot.scope,
-                generation: capture.generation.number() as u64,
+                force: false,
             });
             retained.phase = CommitPhase::Validate;
             let ports = self.store.ports(snapshot.scope);
@@ -167,11 +164,11 @@ impl BoundWorkspace {
             let outcome = self
                 .store
                 .history
-                .stage_and_commit(retained.intent.as_ref().expect("checked intent"))
+                .commit_branch(retained.intent.as_ref().expect("checked intent"))
                 .map_err(CommitError::History)?;
             let (head, root) = match &outcome {
-                CommitStagedOutcome::Committed(record) => (Some(record.id), record.root),
-                CommitStagedOutcome::UpToDate { head, root } => (*head, *root),
+                CommitOutcome::Committed { record, .. } => (Some(record.id), record.root),
+                CommitOutcome::UpToDate { head, root } => (*head, *root),
             };
             retained.published = Some(outcome);
             if root != candidate.0 {

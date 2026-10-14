@@ -3,6 +3,14 @@
 > **Status:** Implemented Store-half composition after `01e60021a`. S10 live
 > namespace normalization and S8 FUSE/Exec are separate work.
 
+> **Staging removed, 2026-10-15 ([#327](https://github.com/Ephemeral-AI-Lab/layerfs/issues/327)):**
+> the `workspace_stage` table, stage tokens and the stage API (`stage_changes`,
+> `commit_staged`, `stages`, `discard_stage`, `stage_and_commit`) are removed.
+> `HistoryCatalog::commit_branch(CommitRequest)` publishes a saved candidate in one
+> write transaction against an expected head: a moved head is `HeadMoved`, or with
+> `force` an overwrite that keeps the captured parent and reports the displaced
+> head. The text below keeps its original source pin.
+
 BoundWorkspace::commit admits one active lifecycle for that Workspace, captures
 once through the existing overlay owner, creates independently owned Storage/Save
 state and invokes one synchronous Content producer with the exact capture and

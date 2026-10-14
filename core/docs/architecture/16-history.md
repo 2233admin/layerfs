@@ -10,6 +10,14 @@
 > text below keeps its original source pin and scope. See the
 > [coverage audit](../issues/307/checks/r7-retire-20261010/10-layerfs-server.md).
 
+> **Staging removed, 2026-10-15 ([#327](https://github.com/Ephemeral-AI-Lab/layerfs/issues/327)):**
+> the `workspace_stage` table, stage tokens and the stage API (`stage_changes`,
+> `commit_staged`, `stages`, `discard_stage`, `stage_and_commit`) are removed.
+> `HistoryCatalog::commit_branch(CommitRequest)` publishes a saved candidate in one
+> write transaction against an expected head: a moved head is `HeadMoved`, or with
+> `force` an overwrite that keeps the captured parent and reports the displaced
+> head. The text below keeps its original source pin.
+
 **Atomic publication update,2026-10-07 (parent `e2f2e62c7`):** current
 HistoryCatalog adds one required `stage_and_commit` operation. The combined
 Persistence provider stages and publishes in one short transaction; a definite

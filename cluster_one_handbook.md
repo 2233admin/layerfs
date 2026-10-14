@@ -56,7 +56,7 @@ The active Core workspace contains six crates:
 | --- | --- | --- |
 | `layerfs-content` | Canonical identity, file construction/editing, filesystem trees, logical reads | Turn bytes/edits/namespace rows into canonical objects; read logical data |
 | `layerfs-storage` | Reuse, physical encoding, delta selection, packing, bounded Save and Reader | Store canonical objects and acquire authenticated canonical bytes |
-| `layerfs-history` | Typed history records and `HistoryCatalog` semantic operations | Inode reservation, genesis, branches, stages, Commits, Layers |
+| `layerfs-history` | Typed history records and `HistoryCatalog` semantic operations | Inode reservation, genesis, branches, Commits, Layers |
 | `layerfs-persistence` | Shared SQLite provider for storage and history on macOS/Linux | Create/open the Store and execute provider-owned transactions |
 | `layerfs-project` | Native namespace Init orchestration | Import a regular directory and publish its genesis LayerStack |
 | `layerfs-telemetry` | Explicit timing scopes and reports | Observe the same production operations with timing enabled/disabled |
@@ -149,8 +149,8 @@ Sources: [workspace](core/Cargo.toml),
 - Commit: immutable history record referring to a filesystem root and ancestry/base.
 - Layer: a published filesystem state in a LayerStack; Commit publication and
   Layer publication are separate operations.
-- Stage token: exact identity of one saved candidate stage. It is not a generic
-  permission to commit whatever stage happens to be current.
+- Expected head: the Branch head a Commit request was built against. It is the
+  publication precondition (or, with `force`, the parent of an overwrite).
 
 Carry roots with their semantic type/context. A valid object ID alone does not
 prove that it represents the file, filesystem, or authority the caller intends.
@@ -342,7 +342,7 @@ let candidate_root = fs.root.0;
 drop(objects);
 drop(sink);
 let outcome = save.finish()?;
-// Only now stage candidate_root for a logical Commit.
+// Only now publish candidate_root as a logical Commit.
 ```
 
 This is a call-sequence illustration: `rows`, `backing`, existing `save`, and error
@@ -364,6 +364,8 @@ across Saves. See [allocation semantics](core/docs/architecture/63-save-reservat
 
 ### 4.3 Saved candidate to logical Commit
 
+Staging was removed on 2026-10-15 (issue #327); there is no stage row or token.
+
 ```text
   coherent BranchSnapshot captured by caller
                     |
@@ -373,41 +375,33 @@ across Saves. See [allocation semantics](core/docs/architecture/63-save-reservat
                     |
              candidate filesystem root
                     |
-        stage_and_commit(request)
+        commit_branch(CommitRequest)
        one history write transaction
                     |
-          +---------+-------------------+
-          |                             |
-       Committed                    UpToDate
-   immutable Commit                existing root/head
-   Branch advances                 explicit no-op success
+       +------------+-------------+----------------+
+       |                          |                |
+    Committed                 UpToDate         HeadMoved
+ immutable Commit          existing root      refusal; nothing
+ Branch advances           explicit no-op     changed
 ```
 
 History transactions remain short and do not span source reads, construction,
-uploads, or Save completion. Populate `StageRequest` from the captured state:
+uploads, or Save completion. Populate `CommitRequest` from the captured state:
 
 | Field | Meaning |
 | --- | --- |
-| `workspace`, `branch` | Explicit producer incarnation and target Branch |
-| `expected_head`, `expected_base`, `expected_root` | Captured provenance; head supplies the new Commit parent, not a CAS predicate |
-| `construction_base_root` | Root actually used by construction |
-| `intended_commit_base` | Base Layer intended for the resulting Commit |
+| `branch` | Target Branch |
+| `expected_head`, `expected_base` | Head and base the Branch must still hold; the head is the new Commit's parent |
+| `expected_root` | Effective root at `expected_head`, checked inside the transaction |
 | `candidate_root` | Successfully saved filesystem root |
 | `profile`, `scope` | Filesystem profile and inode allocation scope |
-| `generation` | Caller-supplied generation represented by the candidate |
+| `force` | Overwrite a moved head instead of refusing; reports the displaced head |
 
-`stage_and_commit` creates and consumes its stage in one atomic Branch overwrite
-transaction. The last successful database effect determines the head, while each
-candidate keeps its captured parent. UpToDate compares the current Branch root.
-A stale unchanged capture can overwrite a different current root. No merge,
-rebase, refresh or replay occurs. A definite validation refusal leaves no newly created stage or token
-advance; Busy is before effect. Unknown preserves the original request and proves
-no stage disposition. Match both successful outcomes: `Committed(CommitRecord)`
-and `UpToDate { head, root }`; refusals and errors are not no-op success.
-The earlier separately acknowledged `stage_changes`/`commit_staged` API remains
-for existing exact-token consumers. Only that route uses an acknowledged token
-and `discard_stage` for its exact known ownership. Never compose those two calls
-to emulate the new atomic method.
+A moved head or base is a definite `HeadMoved` refusal unless `force` is set.
+UpToDate compares the current Branch root. No merge, rebase, refresh or replay
+occurs inside History. Busy is before effect. Unknown preserves the original
+request. Match both successful outcomes: `Committed { record, displaced }` and
+`UpToDate { head, root }`; refusals and errors are not no-op success.
 `add_layer` is a separate conditional operation when a workflow explicitly
 publishes the Commit as a Layer. Inode reservations are consumed even if unused;
 do not recycle serials after an aborted construction.
