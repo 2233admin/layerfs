@@ -13,6 +13,8 @@ pub struct BoundWorkspace {
     pub(super) workspace: Arc<Workspace>,
     pub(super) committing: AtomicBool,
     pub(super) producer: super::producer::Producer,
+    /// A conflicted merge installed locally and not yet committed.
+    pub(super) pending: Mutex<Option<super::commit_merge::PendingMerge>>,
 }
 pub struct StoreOperation {
     workspace: Workspace,

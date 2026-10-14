@@ -44,6 +44,14 @@ impl Answer {
                 out.byte(2)?;
                 put_outcome(&mut out, value)?;
             }
+            Reply::MergeCommitted(value) => {
+                out.byte(18)?;
+                crate::control_merge::put_merged(&mut out, value)?;
+            }
+            Reply::Conflict(value) => {
+                out.byte(19)?;
+                crate::control_merge::put_report(&mut out, value)?;
+            }
             Reply::Status(value) => {
                 // The original record keeps its tag and bytes; a mount block
                 // travels under its own tag, so no prefix of it is a valid record.
@@ -155,6 +163,8 @@ impl Answer {
                 binding: binding(&mut input)?,
             },
             2 => Reply::Committed(outcome(&mut input)?),
+            18 => Reply::MergeCommitted(Box::new(crate::control_merge::merged(&mut input)?)),
+            19 => Reply::Conflict(Box::new(crate::control_merge::report(&mut input)?)),
             3 => Reply::Status(Box::new(status(&mut input)?)),
             13 => {
                 let mut value = status(&mut input)?;

@@ -1,6 +1,7 @@
 //! One synchronous Content/Save/history producer and exact paired local install.
 use super::{
     bind::checked_base, BoundWorkspace, CommitError, CommitFailure, CommitPhase, CommitSuccess,
+    MergeReport,
 };
 use layerfs_content::filesystem::FilesystemRootId;
 use layerfs_history::{BranchSnapshot, CommitOutcome, CommitRequest};
@@ -40,7 +41,7 @@ impl BoundWorkspace {
         ) -> Result<FilesystemRootId, CommitError>,
     ) -> Result<CommitSuccess, Box<CommitFailure>> {
         let mut admission = self.admit_commit()?;
-        let result = self.commit_admitted(construct, || ());
+        let result = self.commit_admitted(construct, || (), false);
         admission.released = match &result {
             Ok(_) => true,
             Err(failure) => failure.locally_settled,
@@ -64,8 +65,14 @@ impl BoundWorkspace {
     }
     /// The admitted invocation owns the flag through any wrapper's releases.
     /// `published` runs once, only after History answered this publication
-    /// with the saved candidate root; a failed or unknown publication, and
+    /// with the saved root; a failed, unknown or conflicted publication, and
     /// every earlier failure, never runs it.
+    ///
+    /// When the Branch head moved since the Workspace bound, the candidate is
+    /// merged into the head in the same Save unless `force`. A clean merge is
+    /// published against that head and installed as the new base. A conflict
+    /// publishes nothing: the merge, with marker blocks, is installed as the
+    /// Workspace's local base and its history binding moves to the head.
     pub(super) fn commit_admitted(
         &self,
         construct: impl FnOnce(
@@ -74,6 +81,7 @@ impl BoundWorkspace {
             &BranchSnapshot,
         ) -> Result<FilesystemRootId, CommitError>,
         published: impl FnOnce(),
+        force: bool,
     ) -> Result<CommitSuccess, Box<CommitFailure>> {
         let mut retained = CommitFailure::new(
             CommitError::Context("incomplete Commit"),
@@ -81,18 +89,18 @@ impl BoundWorkspace {
             self.route(),
         );
         let mut producer = None;
+        let mut merge = None;
         let result = (|| {
             let snapshot = self.snapshot().map_err(CommitError::Workspace)?;
             retained.binding = Some(snapshot.clone());
+            let local = self.local_root(&snapshot)?;
             let original_base = self.workspace.base().map_err(CommitError::Workspace)?;
             retained.phase = CommitPhase::Capture;
             let capture = self
                 .job(|job_client: &crate::OwnerClient, job_route| job_client.capture(job_route))
                 .map_err(CommitError::Owner)?;
             retained.capture = Some(capture);
-            if capture.base_root != snapshot.effective_root.to_bytes()
-                || original_base.identity().0 != snapshot.effective_root
-            {
+            if capture.base_root != local.to_bytes() || original_base.identity().0 != local {
                 return Err(CommitError::Context(
                     "capture differs from bound history root",
                 ));
@@ -117,28 +125,53 @@ impl BoundWorkspace {
                         })
                     }
                 };
+                self.refuse_markers(&save, candidate)?;
+                let current = self
+                    .store
+                    .history
+                    .branch_snapshot(snapshot.branch.id)
+                    .map_err(CommitError::History)?
+                    .ok_or(CommitError::Context("bound Branch is absent"))?;
+                let moved = current.branch.head_commit != snapshot.branch.head_commit
+                    || current.branch.base_layer != snapshot.branch.base_layer;
+                let root = if moved && !force {
+                    let (root, report) =
+                        self.merge_candidate(&save, &snapshot, &current, candidate)?;
+                    merge = Some(report);
+                    root
+                } else {
+                    candidate
+                };
                 retained.phase = CommitPhase::Finish;
                 retained.saved = Some(save.finish().map_err(CommitError::Storage)?);
-                Ok(candidate)
+                Ok((root, current, moved))
             })();
             retained.storage = Some(super::producer::since(storage.diagnostics(), before));
-            let candidate = built?;
+            let (candidate, current, moved) = built?;
             producer = Some(storage);
-            retained.intent = Some(CommitRequest {
-                branch: snapshot.branch.id,
-                expected_head: snapshot.branch.head_commit,
-                expected_base: snapshot.branch.base_layer,
-                expected_root: snapshot.effective_root,
-                candidate_root: candidate.0,
-                profile: snapshot.profile,
-                scope: snapshot.scope,
-                second_parent: None,
-                force: false,
-            });
+            let conflicted = merge
+                .as_ref()
+                .is_some_and(|report: &MergeReport| !report.conflicts.is_empty());
+            // A merge is published against the head it merged with; a forced
+            // or unmoved Commit against the head the Workspace bound.
+            let target = if merge.is_some() { &current } else { &snapshot };
+            if !conflicted {
+                retained.intent = Some(CommitRequest {
+                    branch: snapshot.branch.id,
+                    expected_head: target.branch.head_commit,
+                    expected_base: target.branch.base_layer,
+                    expected_root: target.effective_root,
+                    candidate_root: candidate.0,
+                    profile: snapshot.profile,
+                    scope: snapshot.scope,
+                    second_parent: None,
+                    force: force && moved,
+                });
+            }
             retained.phase = CommitPhase::Validate;
             let ports = self.store.ports(snapshot.scope);
             let client = ports.client();
-            let mut next = snapshot.clone();
+            let mut next = target.clone();
             next.effective_root = candidate.0;
             let checked =
                 checked_base(client.clone(), &next).map_err(|error| CommitError::Content {
@@ -161,25 +194,39 @@ impl BoundWorkspace {
                     .prepare_base_install(capture, candidate)
                     .map_err(CommitError::Workspace)?,
             );
-            retained.phase = CommitPhase::Publish;
-            let outcome = self
-                .store
-                .history
-                .commit_branch(retained.intent.as_ref().expect("checked intent"))
-                .map_err(CommitError::History)?;
-            let (head, root) = match &outcome {
-                CommitOutcome::Committed { record, .. } => (Some(record.id), record.root),
-                CommitOutcome::UpToDate { head, root } => (*head, *root),
+            let pending = if conflicted {
+                // Nothing is published: the history binding follows the head
+                // merged with, and the merge stays the local base.
+                next = current.clone();
+                Some(super::commit_merge::PendingMerge {
+                    local_root: candidate.0,
+                    conflicted: merge
+                        .as_ref()
+                        .map(|report| report.conflicts.iter().map(|c| c.path.clone()).collect())
+                        .unwrap_or_default(),
+                })
+            } else {
+                retained.phase = CommitPhase::Publish;
+                let outcome = self
+                    .store
+                    .history
+                    .commit_branch(retained.intent.as_ref().expect("checked intent"))
+                    .map_err(CommitError::History)?;
+                let (head, root) = match &outcome {
+                    CommitOutcome::Committed { record, .. } => (Some(record.id), record.root),
+                    CommitOutcome::UpToDate { head, root } => (*head, *root),
+                };
+                retained.published = Some(outcome);
+                if root != candidate.0 {
+                    return Err(CommitError::Context(
+                        "publication differs from saved candidate",
+                    ));
+                }
+                published();
+                next.branch.head_commit = head;
+                next.head_root = head.map(|_| root);
+                None
             };
-            retained.published = Some(outcome);
-            if root != candidate.0 {
-                return Err(CommitError::Context(
-                    "publication differs from saved candidate",
-                ));
-            }
-            published();
-            next.branch.head_commit = head;
-            next.head_root = head.map(|_| root);
             retained.phase = CommitPhase::Install;
             self.job(|job_client: &crate::OwnerClient, route| {
                 job_client.install_prepared(
@@ -193,6 +240,10 @@ impl BoundWorkspace {
                 .snapshot
                 .lock()
                 .map_err(|_| CommitError::Workspace(WorkspaceError::BindingPoisoned))? = next;
+            *self
+                .pending
+                .lock()
+                .map_err(|_| CommitError::Workspace(WorkspaceError::BindingPoisoned))? = pending;
             Ok(())
         })();
         if let Err(error) = result {
@@ -203,7 +254,8 @@ impl BoundWorkspace {
             self.producer.keep(storage);
         }
         Ok(CommitSuccess {
-            history: retained.published.expect("known publication"),
+            history: retained.published,
+            merge,
             saved: retained.saved.expect("known Save"),
             storage: retained.storage.expect("producer observations"),
             capture: retained.capture.expect("known capture"),

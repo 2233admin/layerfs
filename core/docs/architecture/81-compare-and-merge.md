@@ -1,7 +1,7 @@
 # Compare and merge of immutable roots
 
-> **Status:** Implemented in Content for #327 (step 4). The daemon does not call
-> it yet: merge-on-commit, Branch merge, diffs and blame wire it in later steps.
+> **Status:** Content modules implemented for #327 step 4; merge-on-commit wired
+> in the daemon in step 6. Branch merge, diffs and blame wire it in later steps.
 > No timing, storage or resident-memory claim has been measured.
 
 Content owns two modules over checked immutable filesystem roots:
@@ -83,3 +83,48 @@ paths are text files that still hold a complete marker block (an opening
 - A hard-linked file changed in place is located at its first path only.
 - Merged text and marker files take the kind and metadata of the side they
   came from. Directory metadata follows theirs.
+
+## Merge-on-commit
+
+[`store/commit.rs`](../../crates/layerfs-daemon/src/store/commit.rs) and
+[`store/commit_merge.rs`](../../crates/layerfs-daemon/src/store/commit_merge.rs)
+run it inside the Commit's one Save, after the captured candidate is built.
+
+1. A Workspace with a pending conflict is refused while any file that
+   conflicted still holds a complete marker block. The reply is `Conflict` with
+   `markers: true`. Nothing is published, and the failed capture is resolved as
+   for any definite nonpublication.
+2. The Branch snapshot is read again. If neither its head nor its base Layer
+   moved, or `force` is set, the candidate is published as before. A forced
+   Commit over a moved head keeps the captured parent and reports the displaced
+   head.
+3. Otherwise `merge_roots` merges ours (the candidate) into theirs (the current
+   head's root). The base is the history root the Workspace is bound to. Theirs'
+   `/.lww` applies, and the labels are `workspace` and `<branch>@<head>`.
+   Serials come from the Store's allocator in reservations of 64.
+4. **Clean:** the merged root is published against the head it merged with and
+   installed as the Workspace's base. The reply is `MergeCommitted` with
+   `from`, `head` and the `lww` decisions. If the head moved again in between,
+   the publication is `HeadMoved` and nothing merges again.
+5. **Conflict:** nothing is published. The merged root, with its marker files,
+   is installed as the Workspace's *local* base, and the Workspace's history
+   binding moves to the head. The conflicted paths are kept with it. The reply
+   is `Conflict` with `head`, `base`, the conflicts with their hunks, the `lww`
+   decisions and the paths the merge changed in the Workspace (at most 4096).
+   The next Commit merges against the head it now follows.
+
+The SPEC asks for the merge to be written into the Workspace overlay. This
+implementation instead installs the merged root as the local base, which
+retires the captured rows and keeps later rows on top. The Workspace view is
+the same. The difference is that `status` reports the merged root as the local
+base while the binding names the head.
+
+### Control wire
+
+`Request::Commit` carries `CommitControl { token, force }`. The new replies are
+`MergeCommitted(MergedCommit)` and `Conflict(ConflictReport)`. A control record
+may now fill one Noise transport plaintext (`u16::MAX - 16` bytes, up from
+8192). A conflict report writes conflicts, hunk lines, decisions and written
+paths while they fit, and sets `truncated` when it leaves some out. Paths and
+lines longer than 4096 bytes are clipped at a character boundary.
+

@@ -38,8 +38,8 @@ impl Service {
 
 pub(crate) fn request_token(request: &Request) -> Option<WorkspaceToken> {
     match request {
-        Request::Commit(token)
-        | Request::Status(token)
+        Request::Commit(control) => Some(control.token),
+        Request::Status(token)
         | Request::Unmount(token)
         | Request::Attach(token)
         | Request::Cleanup(token)

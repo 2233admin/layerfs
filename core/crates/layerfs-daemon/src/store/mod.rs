@@ -2,6 +2,7 @@
 mod bind;
 mod captured;
 mod commit;
+mod commit_merge;
 mod commit_types;
 mod open;
 mod operation;
@@ -15,7 +16,8 @@ mod types;
 pub(crate) use bind::checked_base;
 
 pub use commit_types::{
-    CapturedConstruction, CommitError, CommitFailure, CommitPhase, CommitSuccess, ReleasedOwner,
+    CapturedConstruction, CommitError, CommitFailure, CommitPhase, CommitSuccess, MergeReport,
+    ReleasedOwner,
 };
 pub use open::{Store, StoreWork};
 pub use operation::{BoundWorkspace, StoreOperation};

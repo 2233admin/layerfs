@@ -9,13 +9,42 @@ use crate::store::{
     CommitSuccess,
 };
 use layerfs_bridge::control::{
-    Activity, ControlCode, Reply, Request, WorkspaceToken, HISTORY_WINDOW,
+    Activity, ConflictReport, ControlCode, MergedCommit, Reply, Request, WorkspaceToken,
+    HISTORY_WINDOW,
 };
 use layerfs_content::filesystem::FilesystemRootId;
+use layerfs_content::merge::{Conflict, ConflictKind};
 use layerfs_history::{BranchId, BranchSnapshot, WorkspaceId};
 use layerfs_overlay::Capture;
 use layerfs_storage::Save;
 use std::sync::Arc;
+/// The reply of a Commit with a known result.
+fn committed(commit: &CommitSuccess) -> Reply {
+    match (&commit.history, &commit.merge) {
+        (Some(outcome), None) => Reply::Committed(outcome.clone()),
+        (Some(outcome), Some(merge)) => Reply::MergeCommitted(Box::new(MergedCommit {
+            outcome: outcome.clone(),
+            from: merge.from,
+            head: merge.head,
+            lww: merge.lww.clone(),
+        })),
+        (None, merge) => Reply::Conflict(Box::new(ConflictReport {
+            head: merge.as_ref().and_then(|merge| merge.head),
+            base: merge.as_ref().and_then(|merge| merge.from),
+            markers: false,
+            conflicts: merge
+                .as_ref()
+                .map(|m| m.conflicts.clone())
+                .unwrap_or_default(),
+            lww: merge.as_ref().map(|m| m.lww.clone()).unwrap_or_default(),
+            written: merge
+                .as_ref()
+                .map(|m| m.written.clone())
+                .unwrap_or_default(),
+            truncated: false,
+        })),
+    }
+}
 impl Service {
     /// Runs one explicit command with a caller-owned Content producer for
     /// Commit, over the original capture. The product route is
@@ -30,7 +59,9 @@ impl Service {
         ) -> Result<FilesystemRootId, CommitError>,
     ) -> Result<Success, Failure> {
         match request {
-            Request::Commit(token) => self.commit(*token, |workspace| workspace.commit(construct)),
+            Request::Commit(control) => {
+                self.commit(control.token, |workspace| workspace.commit(construct))
+            }
             other => self.execute_control(other),
         }
     }
@@ -51,7 +82,9 @@ impl Service {
             Request::Mount { workspace, branch } => self.mount(*workspace, *branch),
             Request::Status(token) => self.status(*token),
             Request::Cleanup(token) => self.cleanup(*token),
-            Request::Commit(token) => self.commit(*token, BoundWorkspace::commit_captured),
+            Request::Commit(control) => self.commit(control.token, |workspace| {
+                workspace.commit_captured(control.force)
+            }),
             Request::Unmount(token) => self.unmount(*token),
             Request::ForceUnmount {
                 token,
@@ -206,7 +239,11 @@ impl Service {
                     } else {
                         Activity::Idle
                     };
-                    binding.published = unreleased.then(|| commit.history.clone());
+                    binding.published = if unreleased {
+                        commit.history.clone()
+                    } else {
+                        None
+                    };
                 }
                 Err(failed) => {
                     binding.published = failed.published.clone();
@@ -223,7 +260,7 @@ impl Service {
         })();
         match result {
             Ok(commit) => {
-                let mut success = Success::reply(Reply::Committed(commit.history.clone()));
+                let mut success = Success::reply(committed(&commit));
                 success.commit = Some(commit);
                 if let Err(cause) = update {
                     return Err(Failure::After {
@@ -242,7 +279,29 @@ impl Service {
                 }
                 Ok(success)
             }
-            Err(failed) => Err(Failure::Commit(failed)),
+            Err(failed) => match (&failed.error, failed.locally_settled, update) {
+                // A definite refusal for unresolved markers is this Commit's
+                // answer, not a failure: nothing was published.
+                (CommitError::Markers(paths), true, Ok(())) => {
+                    Ok(Success::reply(Reply::Conflict(Box::new(ConflictReport {
+                        head: failed.binding.as_ref().and_then(|b| b.branch.head_commit),
+                        base: failed.binding.as_ref().and_then(|b| b.branch.head_commit),
+                        markers: true,
+                        conflicts: paths
+                            .iter()
+                            .map(|path| Conflict {
+                                path: path.clone(),
+                                kind: ConflictKind::Markers,
+                                hunks: Vec::new(),
+                            })
+                            .collect(),
+                        lww: Vec::new(),
+                        written: Vec::new(),
+                        truncated: false,
+                    }))))
+                }
+                _ => Err(Failure::Commit(failed)),
+            },
         }
     }
     pub(super) fn job<T>(

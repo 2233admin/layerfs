@@ -1,6 +1,8 @@
 //! Checked fields for a single bounded control record.
 use crate::control::ControlError;
-pub(crate) const LIMIT: usize = 8192;
+/// One control record fills at most one Noise transport message's plaintext
+/// (`u16::MAX - 16`). Larger results are windowed or reported truncated.
+pub(crate) const LIMIT: usize = u16::MAX as usize - 16;
 pub(crate) struct Writer(pub Vec<u8>);
 impl Writer {
     pub fn new(magic: &[u8]) -> Self {

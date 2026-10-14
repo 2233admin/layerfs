@@ -10,6 +10,7 @@ mod wire;
 
 mod control_forced;
 mod control_history;
+mod control_merge;
 mod control_mount;
 mod control_reply;
 mod control_request;

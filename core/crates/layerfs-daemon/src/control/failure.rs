@@ -129,7 +129,7 @@ impl Failure {
                 refusal.published = original
                     .commit
                     .as_ref()
-                    .map(|commit| commit.history.clone())
+                    .and_then(|commit| commit.history.clone())
                     .or(refusal.published);
                 return refusal;
             }
@@ -210,6 +210,7 @@ fn commit(error: &CommitError) -> (ControlCode, Option<MovedState>, String) {
         CommitError::InFlight => "Commit already active".into(),
         CommitError::Context(reason) => (*reason).into(),
         CommitError::History(error) => error.to_string(),
+        CommitError::Markers(paths) => format!("{} files still hold conflict markers", paths.len()),
     };
     (code, None, detail)
 }

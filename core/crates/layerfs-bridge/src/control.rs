@@ -168,6 +168,7 @@ pub use crate::control_forced::{
     AbortDisposition, CommitKnowledge, DetachDisposition, ForceUnmounted, ForcedCleanup,
     ForcedFacts, ForcedOutcome,
 };
+pub use crate::control_merge::{CommitControl, ConflictReport, MergedCommit, TEXT_FIELD_LIMIT};
 pub use crate::control_mount::{
     MountPhase, MountReceipt, MountStatus, MountWork, ReadyMount, TeardownCustody, TeardownStage,
     MOUNT_DIRECTORY_LIMIT,

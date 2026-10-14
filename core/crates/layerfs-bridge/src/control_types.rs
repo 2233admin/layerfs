@@ -40,8 +40,9 @@ pub enum Request {
         /// Selected Branch.
         branch: BranchId,
     },
-    /// Capture the published frontier, construct it in the daemon, Save and publish.
-    Commit(WorkspaceToken),
+    /// Capture the published frontier, construct it in the daemon, merge it
+    /// with a moved head unless forced, Save and publish.
+    Commit(crate::control_merge::CommitControl),
     /// Observe maintained local state without reading or refreshing the Store.
     Status(WorkspaceToken),
     /// Terminally close a quiescent local binding and transfer cleanup to the owner.
@@ -212,6 +213,10 @@ pub enum Reply {
     },
     /// Original known history outcome after paired local installation.
     Committed(CommitOutcome),
+    /// A Commit published after merging with a moved head.
+    MergeCommitted(Box<crate::control_merge::MergedCommit>),
+    /// A Commit refused for conflicts: nothing was published.
+    Conflict(Box<crate::control_merge::ConflictReport>),
     /// Bounded local observation with explicit owner scopes.
     Status(Box<WorkspaceStatus>),
     /// Logical terminal close acknowledged; physical cleanup remains owner-driven.

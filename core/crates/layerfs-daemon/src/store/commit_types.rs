@@ -1,8 +1,14 @@
 //! Original Commit knowledge, publication outcome and local ownership receipts.
 use super::PortError;
 use crate::OwnerError;
-use layerfs_content::{filesystem::FilesystemUpdateCounters, ContentError};
-use layerfs_history::{BranchSnapshot, CommitOutcome, CommitRequest, HistoryError, WorkspaceId};
+use layerfs_content::{
+    filesystem::FilesystemUpdateCounters,
+    merge::{Conflict, LwwDecision},
+    ContentError,
+};
+use layerfs_history::{
+    BranchSnapshot, CommitId, CommitOutcome, CommitRequest, HistoryError, WorkspaceId,
+};
 use layerfs_overlay::{Capture, CapturedReader, OperationOwner};
 use layerfs_storage::{Diagnostics, StorageError, WriteOutcome};
 use layerfs_workspace::Route;
@@ -38,6 +44,9 @@ pub enum CommitError {
     History(HistoryError),
     Workspace(WorkspaceError),
     Owner(OwnerError),
+    /// Previously conflicted files still hold marker blocks; nothing is
+    /// published.
+    Markers(Vec<String>),
 }
 /// What the product constructor's one namespace attempt acquired, counted and
 /// released. A named reader or owner here was acquired and is not known
@@ -70,10 +79,28 @@ impl CapturedConstruction {
         self.reader.is_some() || self.operation.is_some()
     }
 }
-/// Known history publication followed by a known paired local base install.
+/// A Commit merged with a Branch head that moved since the Workspace bound.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MergeReport {
+    /// Head the Workspace was bound to.
+    pub from: Option<CommitId>,
+    /// Head it merged with.
+    pub head: Option<CommitId>,
+    /// Conflicting paths; empty for a clean merge.
+    pub conflicts: Vec<Conflict>,
+    /// `.lww` decisions.
+    pub lww: Vec<LwwDecision>,
+    /// Paths a conflicted merge changed in the Workspace view, bounded.
+    pub written: Vec<String>,
+}
+/// Known history publication followed by a known paired local base install,
+/// or a conflicted merge installed locally with nothing published.
 #[derive(Debug)]
 pub struct CommitSuccess {
-    pub history: CommitOutcome,
+    /// The publication; `None` when the merge conflicted.
+    pub history: Option<CommitOutcome>,
+    /// The merge with a moved head, when one ran.
+    pub merge: Option<MergeReport>,
     pub saved: WriteOutcome,
     pub storage: Diagnostics,
     pub capture: Capture,

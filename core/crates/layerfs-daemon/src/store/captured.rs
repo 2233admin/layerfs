@@ -38,7 +38,7 @@ impl BoundWorkspace {
     /// whichever process made it. One attempt; this thread runs the
     /// synchronous captured ports, so it is never a kernel receive or
     /// request-service worker.
-    pub fn commit_captured(&self) -> Result<CommitSuccess, Box<CommitFailure>> {
+    pub fn commit_captured(&self, force: bool) -> Result<CommitSuccess, Box<CommitFailure>> {
         let mut admission = self.admit_commit()?;
         let held = RefCell::new(None);
         // What construction staged for the shared cache. It is placed there
@@ -63,6 +63,7 @@ impl BoundWorkspace {
                     let _ = self.store.cache.admit_constructed(staged);
                 }
             },
+            force,
         );
         let mut held = held.into_inner();
         match result {

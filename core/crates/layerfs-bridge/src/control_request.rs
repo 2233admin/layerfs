@@ -38,9 +38,9 @@ impl Call {
                 out.put(&workspace.to_bytes())?;
                 out.put(&branch.to_bytes())?;
             }
-            Request::Commit(token) => {
+            Request::Commit(value) => {
                 out.byte(2)?;
-                put_token(&mut out, *token)?;
+                crate::control_merge::put_commit_control(&mut out, value)?;
             }
             Request::Status(token) => {
                 out.byte(3)?;
@@ -146,7 +146,7 @@ impl Call {
                 workspace: history(WorkspaceId::from_authority(input.array()?))?,
                 branch: history(BranchId::from_bytes(input.array()?))?,
             },
-            2 => Request::Commit(token(&mut input)?),
+            2 => Request::Commit(crate::control_merge::commit_control(&mut input)?),
             3 => Request::Status(token(&mut input)?),
             4 => Request::Unmount(token(&mut input)?),
             9 => Request::Attach(token(&mut input)?),

@@ -65,6 +65,7 @@ impl Store {
                     workspace: Arc::new(Workspace::bind(route, base)),
                     committing: std::sync::atomic::AtomicBool::new(false),
                     producer: Default::default(),
+                    pending: std::sync::Mutex::new(None),
                 },
             })
         })();

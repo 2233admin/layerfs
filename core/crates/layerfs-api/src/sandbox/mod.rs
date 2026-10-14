@@ -9,6 +9,7 @@ pub(crate) mod exec;
 mod mount;
 mod status;
 mod unmount;
+pub use commit::CommitReply;
 #[cfg(unix)]
 pub use create::{ManagedSandbox, SandboxApi};
 #[cfg(unix)]

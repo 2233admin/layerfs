@@ -11,6 +11,13 @@
 > `force` an overwrite that keeps the captured parent and reports the displaced
 > head. The text below keeps its original source pin.
 
+> **Merge-on-commit, 2026-10-15 (#327 step 6):** when the Branch head moved
+> since the Workspace bound, the Commit merges its candidate into the head in
+> the same Save unless `force`. A clean merge is published against that head and
+> installed as the new base; a conflict publishes nothing and installs the merge
+> with marker blocks as the Workspace's local base. See
+> [architecture 81](81-compare-and-merge.md#merge-on-commit).
+
 BoundWorkspace::commit admits one active lifecycle for that Workspace, captures
 once through the existing overlay owner, creates independently owned Storage/Save
 state and invokes one synchronous Content producer with the exact capture and

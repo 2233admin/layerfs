@@ -193,7 +193,10 @@ fn matches_reply(request: &Request, reply: &Reply) -> bool {
         (Request::Mount { workspace, branch }, Reply::Bound { token, binding }) => {
             token.workspace == *workspace && binding.branch.id == *branch
         }
-        (Request::Commit(_), Reply::Committed(_)) => true,
+        (
+            Request::Commit(_),
+            Reply::Committed(_) | Reply::MergeCommitted(_) | Reply::Conflict(_),
+        ) => true,
         (Request::Status(token), Reply::Status(status)) => *token == status.token,
         (Request::Unmount(token), Reply::Unmounted(closed)) => token == closed,
         (Request::Attach(token), Reply::Ready(ready)) => *token == ready.token,
