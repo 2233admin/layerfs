@@ -3,10 +3,9 @@
 #[path = "support/control_fixture.rs"]
 mod fixture;
 #[allow(dead_code)]
-#[path = "support/native_install.rs"]
+#[path = "support/host_install.rs"]
 mod support;
 use layerfs_bridge::control::{CleanupObservation, Reply, Request, WorkspaceToken};
-use layerfs_daemon::Response;
 use layerfs_history::{BranchId, WorkspaceId};
 
 fn token(reply: &Reply) -> WorkspaceToken {
@@ -19,8 +18,8 @@ fn token(reply: &Reply) -> WorkspaceToken {
 #[test]
 fn terminal_unmount_deletes_only_its_file_after_retained_completions_release() {
     let f = fixture::Fixture::new("issue321-files");
-    let branch = BranchId::from_bytes(f.native.project.manifest.branch).unwrap();
-    let template = f.native.directory.join("overlay.sqlite");
+    let branch = BranchId::from_bytes(f.host.project.manifest.branch).unwrap();
+    let template = f.host.directory.join("overlay.sqlite");
     let pristine = std::fs::read(&template).unwrap();
     let mount = |tag| {
         f.service
@@ -34,8 +33,8 @@ fn terminal_unmount_deletes_only_its_file_after_retained_completions_release() {
     let b = mount(112);
     let (a_token, b_token) = (token(&a.reply), token(&b.reply));
     assert_eq!((a_token.namespace, b_token.namespace), (1, 2));
-    let a_file = f.native.directory.join("1.sqlite");
-    let b_file = f.native.directory.join("2.sqlite");
+    let a_file = f.host.directory.join("1.sqlite");
+    let b_file = f.host.directory.join("2.sqlite");
     assert!(a_file.is_file() && b_file.is_file());
     fixture::write(&f.service, a_token, 87);
     fixture::write(&f.service, b_token, 88);
@@ -58,21 +57,7 @@ fn terminal_unmount_deletes_only_its_file_after_retained_completions_release() {
         }
     );
     drop(queued);
-    let observed = f.owner.client().resources(None, true).unwrap();
-    match observed.result() {
-        Ok(Response::Resources(resources)) => {
-            assert_eq!(resources.counts.namespaces, 1);
-            assert_eq!(
-                resources.allocation.logical_bytes,
-                std::fs::metadata(&template).unwrap().len()
-                    + std::fs::metadata(&a_file).unwrap().len()
-                    + std::fs::metadata(&b_file).unwrap().len()
-            );
-            assert_eq!(resources.allocation.reserved_tail_bytes, 0);
-        }
-        other => panic!("{other:?}"),
-    }
-    drop(observed);
+
     drop(a);
     assert!(!a_file.exists(), "last completion releases the closed file");
     assert!(b_file.exists());
@@ -94,14 +79,14 @@ fn terminal_unmount_deletes_only_its_file_after_retained_completions_release() {
     );
     drop(c);
     assert!(!b_file.exists());
-    assert!(!f.native.directory.join("3.sqlite").exists());
+    assert!(!f.host.directory.join("3.sqlite").exists());
     f.cleanup();
 }
 
 #[test]
 fn a_replaced_terminal_path_is_retained_and_never_deleted_on_a_guess() {
     let f = fixture::Fixture::new("issue321-delete-custody");
-    let branch = BranchId::from_bytes(f.native.project.manifest.branch).unwrap();
+    let branch = BranchId::from_bytes(f.host.project.manifest.branch).unwrap();
     let bound = f
         .service
         .execute_control(&Request::Mount {
@@ -110,14 +95,14 @@ fn a_replaced_terminal_path_is_retained_and_never_deleted_on_a_guess() {
         })
         .unwrap();
     let selected = token(&bound.reply);
-    let path = f.native.directory.join("1.sqlite");
+    let path = f.host.directory.join("1.sqlite");
     drop(
         f.service
             .execute_control(&Request::Unmount(selected))
             .unwrap(),
     );
     let original = std::fs::read(&path).unwrap();
-    let retained = f.native.directory.join("retained.sqlite");
+    let retained = f.host.directory.join("retained.sqlite");
     std::fs::rename(&path, &retained).unwrap();
     std::fs::write(&path, b"replacement custody").unwrap();
     drop(bound);

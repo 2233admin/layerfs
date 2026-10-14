@@ -45,7 +45,7 @@ mod mounted;
 #[allow(dead_code)]
 #[path = "support/mounted_commit.rs"]
 mod rig;
-use layerfs_bridge::control::{NativePhase, NativeWork, WorkspaceToken};
+use layerfs_bridge::control::{MountPhase, MountWork, WorkspaceToken};
 use mounted::{mount_entry, COMMAND};
 use rig::{bash_in, passed, pattern, root, stamp_tree, Rig};
 use std::{
@@ -88,8 +88,8 @@ impl Drop for Mounted {
     }
 }
 
-fn work(rig: &Rig, token: WorkspaceToken) -> NativeWork {
-    rig.harness.status(token).native.unwrap().work.unwrap()
+fn work(rig: &Rig, token: WorkspaceToken) -> MountWork {
+    rig.harness.status(token).kernel.unwrap().work.unwrap()
 }
 /// Two consecutive observations with nothing received or admitted and no
 /// request completed in between.
@@ -168,9 +168,9 @@ fn fp2_the_own_connection_agrees_with_the_ready_receipt_and_its_abort_control_is
             (1, 1),
             "the negotiated profile"
         );
-        let native = rig.harness.status(ready.token).native.unwrap();
-        assert_eq!(native.phase, NativePhase::Ready);
-        assert_eq!(native.ready.as_ref(), Some(ready), "the same receipt");
+        let kernel = rig.harness.status(ready.token).kernel.unwrap();
+        assert_eq!(kernel.phase, MountPhase::Ready);
+        assert_eq!(kernel.ready.as_ref(), Some(ready), "the same receipt");
         quiet(&rig, ready.token);
         println!(
             "FP-2 fusectl: mount={} device={}:{} abort_bound={} receipt(max_background={} congestion_threshold={}) fusectl(max_background={background} congestion_threshold={congestion} waiting={})",

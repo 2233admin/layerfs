@@ -158,7 +158,7 @@ fn reachable(store: &TreeStore, root: ObjectId) -> Vec<(ObjectId, u8, u8, u64)> 
     output
 }
 
-/// Native inputs for one sealed case.
+/// Kernel inputs for one sealed case.
 struct Case<'a> {
     manifest: &'a manifest::FixtureCase,
 }

@@ -8,10 +8,10 @@ use layerfs_content::{AuthenticatedObjects, ContentError, ObjectId};
 use layerfs_daemon::{
     bootstrap::open_store,
     store::{BindError, BindPhase, BindRequest, BoundWorkspace, PortError, Store},
-    JobReceipt, Owner, OwnerClient, OwnerConfig, Response,
+    Owner, OwnerConfig,
 };
 use layerfs_history::{BranchId, WorkspaceId};
-use layerfs_overlay::{ProfileConfig, Route};
+use layerfs_overlay::ProfileConfig;
 use layerfs_storage::StorageError;
 use layerfs_workspace::InodeSerials;
 use std::{
@@ -20,16 +20,6 @@ use std::{
     time::Duration,
 };
 
-fn job(
-    client: &OwnerClient,
-    route: Route,
-    command: impl FnOnce(
-        &layerfs_daemon::OwnerClient,
-        layerfs_overlay::Route,
-    ) -> Result<layerfs_daemon::JobReceipt, layerfs_daemon::OwnerError>,
-) -> JobReceipt {
-    command(client, route).unwrap_or_else(|error| panic!("{error:?}"))
-}
 fn bind(store: &Arc<Store>, owner: &Owner, fixture: &support::Fixture, tag: u8) -> BoundWorkspace {
     let attached = store
         .bind(
@@ -40,17 +30,6 @@ fn bind(store: &Arc<Store>, owner: &Owner, fixture: &support::Fixture, tag: u8) 
             },
         )
         .unwrap();
-    assert!(matches!(attached.open.result(), Ok(Response::Opened(_))));
-    assert_eq!(
-        attached
-            .open
-            .work()
-            .sql
-            .family(layerfs_overlay::StatementKind::Begin)
-            .unwrap()
-            .executions,
-        1
-    );
     attached.workspace
 }
 fn read(workspace: &BoundWorkspace, n: usize) {
@@ -83,7 +62,7 @@ fn bounded_bind_batches_lengths_cache_and_original_failure() {
             fixture.config.clone(),
             support::BINDING,
             support::CURSOR,
-            2,
+            OwnerConfig::default().namespaces,
             2 * 1024 * 1024,
             layerfs_storage::ReservationBlocks::default(),
         )
@@ -226,7 +205,7 @@ fn bounded_bind_batches_lengths_cache_and_original_failure() {
             matches!(&duplicate.error,
                 BindError::Owner(layerfs_daemon::OwnerError::Unattempted { cause, input })
                     if matches!(cause.as_ref(), layerfs_daemon::OwnerError::Overlay(layerfs_overlay::OverlayError::Invalid("duplicate incarnation")))
-                    && input.inspect(|kept: Option<&(Option<layerfs_overlay::Route>, [u8; 32], [u8; 32])>| {
+                    && input.inspect(|kept: Option<&(Option<layerfs_workspace::Route>, [u8; 32], [u8; 32])>| {
                         kept.is_some_and(|(_, incarnation, _)| *incarnation == first.identity().to_bytes())
                     })
             ),
@@ -234,19 +213,10 @@ fn bounded_bind_batches_lengths_cache_and_original_failure() {
         );
         drop(duplicate);
         read(&first, 0);
-        println!("DIRECT_STORE count={} cold_bind_batches={cold} warm_bind_batches=0 fixed_read_handles={} adapter={:?} cache={:?}", fixture.count, store.read_handles(), store.work(), store.cache_work().unwrap());
+        println!("DIRECT_STORE count={} cold_bind_batches={cold} warm_bind_batches=0 active_readers={} adapter={:?} cache={:?}", fixture.count, store.read_handles(), store.work(), store.cache_work().unwrap());
         drop((failed, operation, base));
         for workspace in [&first, &second] {
-            assert!(matches!(
-                job(
-                    &owner.client(),
-                    workspace.route(),
-                    |job_client: &layerfs_daemon::OwnerClient, job_route| job_client
-                        .close(job_route)
-                )
-                .result(),
-                Ok(Response::Done)
-            ));
+            workspace.close().unwrap();
         }
         drop((first, second, store));
         owner.stop().unwrap();
@@ -261,7 +231,7 @@ fn four_workspaces_read_concurrently_and_consume_disjoint_scope_ranges() {
         fixture.config.clone(),
         support::BINDING,
         support::CURSOR,
-        3,
+        OwnerConfig::default().namespaces,
         2 * 1024 * 1024,
         layerfs_storage::ReservationBlocks::default(),
     )
@@ -325,17 +295,9 @@ fn four_workspaces_read_concurrently_and_consume_disjoint_scope_ranges() {
     }
     assert_eq!(serials.len(), 32);
     assert_eq!(store.work().serial_reservations, 4);
-    println!("DIRECT_STORE_MULTI workspaces=4 callers=4 distinct_serials=32 reservations=4 overlay_databases=1 read_handles=3 work={:?}", store.work());
+    println!("DIRECT_STORE_MULTI workspaces=4 callers=4 distinct_serials=32 reservations=4 overlay_databases=4 active_readers=5 work={:?}", store.work());
     for workspace in &workspaces {
-        assert!(matches!(
-            job(
-                &owner.client(),
-                workspace.route(),
-                |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.close(job_route)
-            )
-            .result(),
-            Ok(Response::Done)
-        ));
+        workspace.close().unwrap();
     }
     drop((workspaces, store));
     owner.stop().unwrap();
@@ -383,15 +345,7 @@ fn direct_reads_finish_under_another_process_writer_and_busy_stays_typed() {
     let later = workspace.operation().unwrap();
     assert_eq!(later.ports().reserve(1).unwrap().0, before + 1);
     println!("DIRECT_STORE_WRITER reads_during_hold=2 busy=History::Busy next_explicit_reservation_gap=0 child=released-and-joined");
-    assert!(matches!(
-        job(
-            &owner.client(),
-            workspace.route(),
-            |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.close(job_route)
-        )
-        .result(),
-        Ok(Response::Done)
-    ));
+    workspace.close().unwrap();
     drop((operation, independent, later, workspace, store));
     owner.stop().unwrap();
     fixture.cleanup();

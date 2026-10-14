@@ -36,14 +36,14 @@ mod mutating;
 #[path = "support/mounted_commit.rs"]
 mod rig;
 #[allow(dead_code)]
-#[path = "support/native_install.rs"]
+#[path = "support/host_install.rs"]
 mod support;
 use layerfs_bridge::control::{Activity, WorkspaceToken};
 use layerfs_fuse::request::Opcode;
 use model::{assert_same, Flat, FILE};
 use mounted::{until, COMMAND};
 use mutating::{counter, direct, frames, opcodes, Mapping};
-use rig::{assert_kernel, bash_in, kernel, native, passed, pattern, root, Rig};
+use rig::{assert_kernel, bash_in, host, kernel, passed, pattern, root, Rig};
 use std::{
     fs::{self, OpenOptions},
     os::unix::fs::FileExt,
@@ -142,7 +142,7 @@ fn r5_9_a_still_dirty_mapped_page_is_outside_the_commit_and_in_the_next_after_ms
     same_bytes(&map.load(0, length), &old[..length], "mapped read");
 
     // The model of the published frontier, read before the store.
-    let frontier = native(mount);
+    let frontier = host(mount);
     same_bytes(file(&frontier, APP), &old, "model before the store");
     assert_eq!(
         file(&frontier, "beside.txt"),
@@ -244,7 +244,7 @@ fn r5_9_a_still_dirty_mapped_page_is_outside_the_commit_and_in_the_next_after_ms
         "msync sent nothing: {returned} -> {synced}"
     );
     same_bytes(&direct(&app), &new, "daemon read after msync");
-    let expected = native(mount);
+    let expected = host(mount);
     same_bytes(file(&expected, APP), &new, "model after msync");
     assert_ne!(expected, frontier);
 
@@ -259,7 +259,7 @@ fn r5_9_a_still_dirty_mapped_page_is_outside_the_commit_and_in_the_next_after_ms
         &new,
         "second published bytes of the mapped file",
     );
-    assert_same(&expected, &native(mount), "the same mount after install");
+    assert_same(&expected, &host(mount), "the same mount after install");
     same_bytes(
         &map.load(0, length),
         &new[..length],
@@ -285,7 +285,7 @@ fn r5_9_a_still_dirty_mapped_page_is_outside_the_commit_and_in_the_next_after_ms
     );
     same_bytes(&fs::read(again.join(APP)).unwrap(), &new, "fresh mount");
     same_bytes(&direct(&again.join(APP)), &new, "fresh mount, daemon read");
-    assert_same(&expected, &native(again), "the fresh mount");
+    assert_same(&expected, &host(again), "the fresh mount");
     assert_kernel(&expected, &kernel(again), "R5-9-DIRTY fresh mount");
     println!(
         "R5-9-DIRTY established=true frames(recorded={recorded} after_first_commit={returned} after_msync={synced}) first_commit=old_bytes second_commit=stored_bytes parent=first store_units={stores} write_frames={} paths={}",

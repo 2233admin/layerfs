@@ -1,4 +1,4 @@
-#![cfg(feature = "native")]
+#![cfg(feature = "platform")]
 use layerfs_telemetry::{
     operation::OperationRecorder,
     output::{Output, OutputConfig, OutputMode},
@@ -38,5 +38,5 @@ fn actual_enospc_preserves_the_original_result() {
     output.shutdown(Duration::from_secs(2));
     assert_eq!(result, Err(42));
     assert_eq!(output.loss().failed, 1);
-    println!("filesystem_bytes={filesystem_bytes} filler_bytes={} native_error=ENOSPC output_failures={} original_result=Err(42)",filler.metadata().unwrap().len(),output.loss().failed);
+    println!("filesystem_bytes={filesystem_bytes} filler_bytes={} platform_error=ENOSPC output_failures={} original_result=Err(42)",filler.metadata().unwrap().len(),output.loss().failed);
 }

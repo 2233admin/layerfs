@@ -1,4 +1,4 @@
-//! Native full-root acquisition over public constructors and real host storage.
+//! Host full-root acquisition over public constructors and real host storage.
 #![cfg(unix)]
 mod support;
 use layerfs_content::object::inode_leaf::InodeKind;
@@ -46,11 +46,11 @@ fn acquire_and_verify(
         ("ignored.bin", vec![0, 255, 1, 0, 127]),
     ]);
     for (path, body) in &files {
-        let native = fixture.source.join(path);
-        fs::create_dir_all(native.parent().unwrap()).unwrap();
-        fs::write(native, body).unwrap();
+        let host = fixture.source.join(path);
+        fs::create_dir_all(host.parent().unwrap()).unwrap();
+        fs::write(host, body).unwrap();
     }
-    // Native identity, rather than equal bytes, defines hard-link aliases.
+    // Host identity, rather than equal bytes, defines hard-link aliases.
     fs::hard_link(
         fixture.source.join(".git/index"),
         fixture.source.join(".cache/index-alias"),
@@ -84,7 +84,7 @@ fn acquire_and_verify(
     let initialized = fixture.run_with(store, history, acquisition);
     assert_eq!(initialized.namespace_work.regular_aliases, 1);
     assert_eq!(initialized.namespace_work.unique_files, files.len() - 1);
-    // All later reads use the published complete root, with no native fallback.
+    // All later reads use the published complete root, with no host fallback.
     fs::remove_dir_all(&fixture.source).unwrap();
     let reader = store.reader().unwrap();
     let mut view = FilesystemRead::new(
@@ -186,7 +186,7 @@ fn acquire_and_verify(
 }
 
 #[test]
-fn native_import_keeps_ignored_git_dependencies_outputs_and_exact_link_targets() {
+fn host_import_keeps_ignored_git_dependencies_outputs_and_exact_link_targets() {
     let fixture = Fixture::new(0);
     let store = support::storage(Arc::new(MemoryMetadata::default()));
     let acquisition = MemoryAcquisition::default();

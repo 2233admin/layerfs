@@ -1,4 +1,4 @@
-//! Native updates: create, replace, remove and content/metadata-only changes.
+//! Kernel updates: create, replace, remove and content/metadata-only changes.
 //!
 //! These exercise the operation through its own inputs, not through the sealed
 //! reference cases: what changes, what must not change, and what the rooted result

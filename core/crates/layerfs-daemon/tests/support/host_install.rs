@@ -24,7 +24,7 @@ pub struct Fixture {
 impl Fixture {
     pub fn new(label: &str, locator: Option<&str>) -> Self {
         let directory = std::env::temp_dir().join(format!(
-            "layerfs-native-install-{}-{label}",
+            "layerfs-kernel-install-{}-{label}",
             std::process::id()
         ));
         fs::create_dir(&directory).unwrap();
@@ -44,7 +44,7 @@ impl Fixture {
             source.join(".git/link"),
         )
         .unwrap();
-        let project = Timing::disabled("native.install.init", |timer| {
+        let project = Timing::disabled("kernel.install.init", |timer| {
             ProjectApi::new().init(
                 InitRequest {
                     source,
@@ -55,7 +55,7 @@ impl Fixture {
                         .unwrap_or_else(|| directory.join("store.sqlite").to_str().unwrap().into()),
                     policy: StoragePolicy::frozen_default(),
                     catalog: HistoryCatalogConfig {
-                        binding_key: b"native-install".to_vec(),
+                        binding_key: b"kernel-install".to_vec(),
                         cursor_key: [53; 32],
                         incarnation: 1,
                     },
@@ -71,7 +71,7 @@ impl Fixture {
         })
         .0
         .unwrap();
-        // Native source is absent for every daemon oracle, even on the same host.
+        // Kernel source is absent for every daemon oracle, even on the same host.
         fs::remove_dir_all(directory.join("source")).unwrap();
         Self { directory, project }
     }

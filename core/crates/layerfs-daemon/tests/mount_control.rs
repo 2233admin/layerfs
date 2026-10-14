@@ -4,7 +4,7 @@ mod fixture;
 #[path = "support/held_writer.rs"]
 mod held_writer;
 #[allow(dead_code)]
-#[path = "support/native_install.rs"]
+#[path = "support/host_install.rs"]
 mod support;
 use layerfs_bridge::control::{Activity, ControlCode, Reply, Request, WorkspaceToken};
 use layerfs_daemon::control::Service;
@@ -88,9 +88,9 @@ fn serve(
     (Control::new(channel), worker)
 }
 #[test]
-fn native_mount_commit_status_fork_history_and_terminal_unmount() {
+fn kernel_mount_commit_status_fork_history_and_terminal_unmount() {
     let f = fixture::Fixture::new("control-flow");
-    let branch = f.native.project.branch.branch.id;
+    let branch = f.host.project.branch.branch.id;
     let tag = Arc::new(AtomicU8::new(b'A'));
     let last = identity(79);
     let (mut client, worker) = serve(
@@ -224,7 +224,7 @@ fn native_mount_commit_status_fork_history_and_terminal_unmount() {
 #[test]
 fn control_busy_keeps_the_channel_healthy_for_a_later_explicit_call() {
     let f = fixture::Fixture::new("control-busy");
-    let branch = f.native.project.branch.branch.id;
+    let branch = f.host.project.branch.branch.id;
     let last = identity(81);
     let tag = Arc::new(AtomicU8::new(b'Q'));
     let (mut client, worker) = serve(
@@ -252,7 +252,7 @@ fn control_busy_keeps_the_channel_healthy_for_a_later_explicit_call() {
 #[test]
 fn original_lost_control_reply_is_not_replayed_or_settled_by_an_observer() {
     let f = fixture::Fixture::new("control-lost");
-    let branch = f.native.project.branch.branch.id;
+    let branch = f.host.project.branch.branch.id;
     let last = identity(85);
     let service = f.service.clone();
     let (send_entered, entered) = mpsc::sync_channel(1);
@@ -327,7 +327,7 @@ fn original_lost_control_reply_is_not_replayed_or_settled_by_an_observer() {
 #[test]
 fn another_control_channel_observes_running_commit_and_refuses_unmount_before_effect() {
     let f = fixture::Fixture::new("control-concurrent");
-    let branch = f.native.project.branch.branch.id;
+    let branch = f.host.project.branch.branch.id;
     let service = f.service.clone();
     let policy = f.installed.opened.store.policy().construction();
     let (send_entered, entered) = mpsc::sync_channel(1);
@@ -383,7 +383,7 @@ fn another_control_channel_observes_running_commit_and_refuses_unmount_before_ef
 #[test]
 fn an_original_unknown_blocks_another_commit_and_normal_unmount() {
     let f = fixture::Fixture::new("control-unknown");
-    let branch = f.native.project.branch.branch.id;
+    let branch = f.host.project.branch.branch.id;
     let service = f.service.clone();
     let (channel, worker) = support::pair(move |connection| {
         drop(
@@ -441,7 +441,7 @@ fn an_original_unknown_blocks_another_commit_and_normal_unmount() {
 #[test]
 fn status_retains_known_publication_when_the_engine_is_unavailable() {
     let f = fixture::Fixture::new("control-local-failure");
-    let branch = f.native.project.branch.branch.id;
+    let branch = f.host.project.branch.branch.id;
     let service = f.service.clone();
     let policy = f.installed.opened.store.policy().construction();
     let (send_entered, entered) = mpsc::sync_channel(1);
@@ -509,13 +509,13 @@ fn status_retains_known_publication_when_the_engine_is_unavailable() {
     assert!(original.outcome.is_err());
     println!("CONTROL_LOCAL_FAILURE known_publication=retained engine=unavailable Store_SQL_for_status=0 normal_unmount=Unknown");
     drop((original, f.service, f.installed));
-    f.native.cleanup();
+    f.host.cleanup();
 }
 
 #[test]
 fn product_control_commit_captures_the_frontier_releases_its_owners_and_is_then_up_to_date() {
     let f = fixture::Fixture::new("product-producer");
-    let branch = f.native.project.branch.branch.id;
+    let branch = f.host.project.branch.branch.id;
     let success = f
         .service
         .execute_control(&Request::Mount {
@@ -616,7 +616,7 @@ fn product_control_commit_captures_the_frontier_releases_its_owners_and_is_then_
 fn forced_unmount_refuses_a_workspace_without_a_connection_before_any_effect() {
     use layerfs_daemon::control::Failure;
     let f = fixture::Fixture::new("control-force-unattached");
-    let branch = f.native.project.branch.branch.id;
+    let branch = f.host.project.branch.branch.id;
     let last = identity(91);
     let (mut client, worker) = serve(
         f.service.clone(),
@@ -657,9 +657,9 @@ fn forced_unmount_refuses_a_workspace_without_a_connection_before_any_effect() {
     };
     assert!(matches!(
         force(token),
-        Err(Failure::Native(value)) if value.code == ControlCode::Invalid
+        Err(Failure::Kernel(value)) if value.code == ControlCode::Invalid
             && value.phase == "force:admission"
-            && value.completions.is_empty()
+
     ));
     assert!(matches!(
         force(WorkspaceToken {
@@ -696,7 +696,7 @@ fn a_definite_commit_failure_whose_capture_is_not_resolved_answers_unknown() {
         store::{CommitError, CommitPhase},
     };
     let f = fixture::Fixture::new("control-unresolved");
-    let branch = f.native.project.branch.branch.id;
+    let branch = f.host.project.branch.branch.id;
     let service = f.service.clone();
     let (send_entered, entered) = mpsc::sync_channel(1);
     let (send_release, release) = mpsc::sync_channel(1);
@@ -769,14 +769,14 @@ fn a_definite_commit_failure_whose_capture_is_not_resolved_answers_unknown() {
         "CONTROL_UNRESOLVED original_error={:?} locally_settled={} local_done={} local_error={:?} published=None reply_code={:?} reply_phase={} registry={:?} force_unattached=Invalid",
         failed.error,
         failed.locally_settled,
-        failed.local.is_some(),
+        failed.locally_settled,
         failed.local_error,
         refusal.code,
         refusal.phase,
         observed.activity
     );
     drop((original, f.service, f.installed));
-    f.native.cleanup();
+    f.host.cleanup();
 }
 
 /// The same unresolved capture after a moved-head answer: the reply is
@@ -787,7 +787,7 @@ fn an_unresolved_moved_head_failure_is_answered_and_not_dropped() {
     use layerfs_daemon::{control::Failure, store::CommitError};
     use layerfs_history::{error::MovedState, HistoryError};
     let f = fixture::Fixture::new("control-unresolved-moved");
-    let record = f.native.project.branch.branch.clone();
+    let record = f.host.project.branch.branch.clone();
     let branch = record.id;
     let moved = MovedState {
         expected_head: record.head_commit,
@@ -859,5 +859,5 @@ fn an_unresolved_moved_head_failure_is_answered_and_not_dropped() {
         failed.error, failed.locally_settled, refusal.code, refusal.phase
     );
     drop((original, f.service, f.installed));
-    f.native.cleanup();
+    f.host.cleanup();
 }

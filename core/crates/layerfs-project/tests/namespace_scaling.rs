@@ -21,7 +21,7 @@ fn backed_counts_grow_while_resident_buffers_stay_fixed() {
         assert_eq!(w.frontier, 10);
         assert_eq!(w.wide_directories, if count == 6000 { 10 } else { 0 });
         assert!(w.read_units > 0 && w.write_units > 0 && w.discard_units > 0);
-        // Every entry and every native identity is one working row.
+        // Every entry and every host identity is one working row.
         assert_eq!(w.backing_rows, 2 * count as u64 + 11);
         windows.push((w.child_window_rows, w.read_window_rows, w.write_window_rows));
         backing.push(w.backing_bytes);

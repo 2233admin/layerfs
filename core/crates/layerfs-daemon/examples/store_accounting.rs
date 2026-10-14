@@ -16,7 +16,7 @@ mod produce;
 #[path = "store_accounting/records.rs"]
 mod records;
 #[allow(dead_code)]
-#[path = "../tests/support/native_install.rs"]
+#[path = "../tests/support/host_install.rs"]
 mod support;
 use layerfs_content::filesystem::{FilesystemRootId, PathName};
 use layerfs_daemon::{store::BindRequest, Owner, OwnerConfig};

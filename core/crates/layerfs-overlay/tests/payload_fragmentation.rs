@@ -7,8 +7,8 @@ use payload_support::*;
 fn dense_fragmentation_does_not_enlarge_a_later_request() {
     let temp = Temp::new();
     let db = temp.db();
-    let route = db.open_workspace([3; 32], [4; 32]).unwrap();
-    let source = db.acquire_base_source(route, 1).unwrap();
+    db.open_workspace([4; 32]).unwrap();
+    let source = db.acquire_base_source(1).unwrap();
     let window = pattern(WRITE_WINDOW, 5);
     // A never-fragmented file, then a file of 65,536 alternating one-byte
     // writes over an inherited 128 KiB range: every other byte is a base byte.

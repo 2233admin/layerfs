@@ -7,7 +7,7 @@ mod process;
 #[path = "support/shared_role.rs"]
 mod role;
 #[allow(dead_code)]
-#[path = "support/native_install.rs"]
+#[path = "support/host_install.rs"]
 mod support;
 use layerfs_bridge::control::{Reply, Request, WorkspaceToken};
 use layerfs_daemon::{install::receive_install, install_types::StoreSettings};

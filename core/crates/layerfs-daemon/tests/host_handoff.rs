@@ -3,23 +3,23 @@
 #[path = "support/install_docker.rs"]
 mod docker;
 #[allow(dead_code)]
-#[path = "support/native_install.rs"]
+#[path = "support/host_install.rs"]
 mod support;
 
 #[cfg(target_os = "macos")]
 #[test]
 fn macos_init_handoff_to_linux_daemon_has_no_host_data_path() {
-    use layerfs_bridge::native;
+    use layerfs_bridge::duplex;
     use std::{fs, net::TcpStream, time::Duration};
     let fixture = support::Fixture::new("docker", Some("/store/store.sqlite"));
     let mut daemon = docker::Daemon::start();
     let stream = support::socket(
         TcpStream::connect_timeout(&daemon.address(), Duration::from_secs(3)).unwrap(),
     );
-    let mut connection = native::initiate(
+    let mut connection = duplex::initiate(
         stream,
         &support::CLIENT_PRIVATE,
-        native::public_key(&support::SERVER_PRIVATE).unwrap(),
+        duplex::public_key(&support::SERVER_PRIVATE).unwrap(),
     )
     .unwrap();
     let ack = layerfs_sdk::internal::install(&fixture.project, &mut connection).unwrap();
@@ -58,7 +58,7 @@ fn macos_init_handoff_to_linux_daemon_has_no_host_data_path() {
 #[test]
 #[ignore = "external daemon role; invoked explicitly by the macOS handoff proof"]
 fn linux_daemon_install_role() {
-    use layerfs_bridge::native;
+    use layerfs_bridge::duplex;
     use layerfs_daemon::{install::receive_install, install_types::StoreSettings};
     use std::{io::Write, net::TcpListener, path::Path};
     assert_eq!(std::env::var("LAYERFS_INSTALL_CHILD").as_deref(), Ok("1"));
@@ -68,10 +68,10 @@ fn linux_daemon_install_role() {
     // This entire child is additionally bounded by an eight-second external
     // process stop. Parent panic stops its exact owned container.
     let (socket, _) = listener.accept().unwrap();
-    let mut channel = native::accept(
+    let mut channel = duplex::accept(
         support::socket(socket),
         &support::SERVER_PRIVATE,
-        native::public_key(&support::CLIENT_PRIVATE).unwrap(),
+        duplex::public_key(&support::CLIENT_PRIVATE).unwrap(),
     )
     .unwrap();
     let installed = receive_install(

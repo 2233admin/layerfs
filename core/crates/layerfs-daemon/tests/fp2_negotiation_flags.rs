@@ -57,7 +57,7 @@ mod mounted;
 #[allow(dead_code)]
 #[path = "support/mounted_commit.rs"]
 mod rig;
-use layerfs_bridge::control::{NativePhase, Reply};
+use layerfs_bridge::control::{MountPhase, Reply};
 use layerfs_fuse::request::Opcode;
 use mounted::{mount_entry, until};
 use nix::{
@@ -405,9 +405,9 @@ fn fp2_the_ready_receipt_is_exactly_the_section_8_1_profile_with_every_forbidden
     // Loops: section 8.1's one, in the receipt, control Status and the
     // kernel's thread table.
     let status = rig.harness.status(ready.token);
-    let native = status.native.unwrap();
-    assert_eq!(native.phase, NativePhase::Ready);
-    let work = native.work.unwrap();
+    let kernel = status.kernel.unwrap();
+    assert_eq!(kernel.phase, MountPhase::Ready);
+    let work = kernel.work.unwrap();
     let threads = loop_threads();
     println!(
         "FP-2 loops: declared receive workers; receipt.loops={} status(loops_configured={} loops_entered={}) receive-loop threads in /proc/self/task={threads}",
@@ -500,7 +500,7 @@ fn fp2_the_kernel_sends_the_requests_of_a_connection_without_four_forbidden_capa
     let work = rig
         .harness
         .status(ready.token)
-        .native
+        .kernel
         .unwrap()
         .work
         .unwrap();

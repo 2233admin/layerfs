@@ -11,7 +11,7 @@
 //!   Commit thread on a chosen side of the real `stage_and_commit`.
 //! - Unknown History custody: `support/history_boundary.rs`
 //!   `LostAcknowledgement`, as case F3 of `mounted_commit_failures.rs`.
-//!   External catalog boundary scope; not a native SQLite I/O failure.
+//!   External catalog boundary scope; not a kernel SQLite I/O failure.
 //! - A known publication with an unattempted install: after the real
 //!   publication a catalog wrapper reserves every free admission registration
 //!   of the local owner and submits nothing, as case F4.
@@ -66,14 +66,13 @@ use history_boundary::{Boundary, ObservedHistory};
 use history_gate::Point;
 use layerfs_bridge::control::{
     AbortDisposition, Activity, CommitKnowledge, ControlCode, DetachDisposition, ForcedCleanup,
-    ForcedOutcome, NativePhase, NativeWork, Reply, Request, TeardownCustody, WorkspaceToken,
+    ForcedOutcome, MountPhase, MountWork, Reply, Request, TeardownCustody, WorkspaceToken,
 };
 use layerfs_content::{filesystem::FilesystemRootId, ObjectId};
 use layerfs_daemon::{
     bootstrap::open_store,
     control::{Failure, Service, Success},
-    store::{CommitError, CommitPhase, ReadLimits, ReleasedOwner, Store, StoreReader},
-    Response,
+    store::{CommitError, CommitPhase, ReleasedOwner, Store, StoreReader},
 };
 use layerfs_history::{CommitStagedOutcome, HistoryCatalog, HistoryError, WorkspaceId};
 use layerfs_overlay::CleanupState;
@@ -81,7 +80,7 @@ use layerfs_persistence::Handles;
 use layerfs_storage::{port::PackPersistence, ReservationBlocks, Storage};
 use model::{assert_same, Flat, Model};
 use mounted::{mount_entry, Harness, COMMAND};
-use rig::{base_tree, bash_in, native, passed, root};
+use rig::{base_tree, bash_in, host, passed, root};
 use std::{
     cell::Cell,
     fmt::Debug,
@@ -233,7 +232,7 @@ fn row(directory: &str) -> Option<String> {
 }
 
 /// One installed Disposable Store, opened once and kept open, and one real
-/// native serving assembly over it: `Harness::new`, as `rig::Rig` uses it.
+/// kernel serving assembly over it: `Harness::new`, as `rig::Rig` uses it.
 struct Fx {
     fixture: installed::Fixture,
     store: Arc<Store>,
@@ -244,7 +243,7 @@ impl Fx {
     fn fixture(label: &str) -> installed::Fixture {
         installed::Fixture::built(label, |source| {
             base_tree(source);
-            Model::native(source).1
+            Model::host(source).1
         })
     }
     fn over(fixture: installed::Fixture, store: Arc<Store>) -> Self {
@@ -284,28 +283,36 @@ impl Fx {
         );
         let writer: Arc<dyn PackPersistence> = handles.storage.clone();
         let history = history(handles, &fixture.config.path);
-        let readers = (0..2)
-            .map(|_| {
-                let read = Handles::open_read_only(config(), installed::BINDING, installed::CURSOR)
-                    .unwrap();
-                StoreReader::new(Storage::new(read.storage).unwrap(), Arc::new(read.history))
-            })
-            .collect();
+        let reader_config = fixture.config.clone();
+        let factory: layerfs_daemon::store::ReaderFactory = Arc::new(move |_| {
+            let read = Handles::open_read_only(
+                reader_config.clone(),
+                installed::BINDING,
+                installed::CURSOR,
+            )
+            .unwrap();
+            Ok(StoreReader::new(
+                Storage::new(read.storage).unwrap(),
+                Arc::new(read.history),
+            ))
+        });
+        let control = factory(0).unwrap();
         let store = Arc::new(
             Store::new(
                 writer,
                 history,
-                readers,
+                control,
+                factory,
                 2 * 1024 * 1024,
                 ReservationBlocks::default(),
-                ReadLimits::default(),
+                16,
             )
             .unwrap(),
         );
         Self::over(fixture, store)
     }
-    fn status_work(&self, token: WorkspaceToken) -> NativeWork {
-        self.harness.status(token).native.unwrap().work.unwrap()
+    fn status_work(&self, token: WorkspaceToken) -> MountWork {
+        self.harness.status(token).kernel.unwrap().work.unwrap()
     }
     /// Two consecutive observations with nothing received or admitted and no
     /// request completed in between. A readiness wait before one attempt.
@@ -427,12 +434,7 @@ fn forced(
     match force(harness, token, relinquish_unknown) {
         Ended::Unmounted(outcome, done) => {
             println!("{name} outcome={outcome:?}");
-            println!(
-                "{name} receipt={} close={} cleanup_observation_failure={:?}",
-                brief(&done.native),
-                done.completion.is_some(),
-                done.observation_failure
-            );
+
             (*outcome, done)
         }
         Ended::Retained(custody) => panic!("{name}: the forced unmount stopped: {custody:?}"),
@@ -442,11 +444,7 @@ fn forced(
 /// no connection evidence, so no engine job and no connection step was made.
 fn refused(result: Result<Success, Failure>, what: &str) -> (ControlCode, &'static str, bool) {
     match result {
-        Err(Failure::Native(refusal)) => (
-            refusal.code,
-            refusal.phase,
-            refusal.completions.is_empty() && refusal.evidence.is_none(),
-        ),
+        Err(Failure::Kernel(refusal)) => (refusal.code, refusal.phase, refusal.evidence.is_none()),
         other => panic!("{what}: {}", brief(&other)),
     }
 }
@@ -457,7 +455,6 @@ fn completed(outcome: &ForcedOutcome, done: &Success) -> bool {
         && outcome.facts.detach == DetachDisposition::Detached
         && outcome.cleanup != ForcedCleanup::Unobserved
         && done.observation_failure.is_none()
-        && done.completion.is_some()
         && (work.active, work.retained) == (0, 0)
         && work.loops_joined == work.loops_configured
 }
@@ -617,7 +614,7 @@ fn commit(
                             && namespace.released
                                 == [ReleasedOwner::Reader, ReleasedOwner::Operation]
                             && namespace.release_error.is_none()
-                            && namespace.release_failure.is_none()
+                            && namespace.release_error.is_none()
                             && namespace.custody.is_none()
                     }),
             },
@@ -668,7 +665,7 @@ fn busy_while_a_commit_is_held(name: &'static str, label: &str, point: Option<Po
             &bash_in(COMMAND, &mount, CHANGES),
             "changes by externally launched bash",
         );
-        native(&mount)
+        host(&mount)
     });
     let readme = fs::read(mount.join("README.md")).unwrap();
     fx.quiet(token);
@@ -695,15 +692,15 @@ fn busy_while_a_commit_is_held(name: &'static str, label: &str, point: Option<Po
     // No effect: the same serving connection, activity and epoch, the same
     // mount row and the test's own connection entry.
     let after = fx.harness.status(token);
-    let native_block = after.native.as_ref().unwrap();
+    let kernel_block = after.kernel.as_ref().unwrap();
     let after_row = row(&ready.directory);
     checks.that(
         during.activity == Activity::Committing
             && after.activity == Activity::Committing
             && after.epoch == during.epoch
-            && native_block.phase == NativePhase::Ready
-            && !native_block.detached
-            && native_block.work.is_some_and(|work| work.terminal == 0)
+            && kernel_block.phase == MountPhase::Ready
+            && !kernel_block.detached
+            && kernel_block.work.is_some_and(|work| work.terminal == 0)
             && after_row.as_deref() == Some(before_row.as_str())
             && connection.exists(),
         || {
@@ -713,7 +710,7 @@ fn busy_while_a_commit_is_held(name: &'static str, label: &str, point: Option<Po
                 after.activity,
                 during.epoch,
                 after.epoch,
-                native_block.phase,
+                kernel_block.phase,
                 connection.exists()
             )
         },
@@ -727,10 +724,10 @@ fn busy_while_a_commit_is_held(name: &'static str, label: &str, point: Option<Po
         format!("{name}: the Commit was not held throughout")
     });
     println!(
-        "{name} held: activity={:?} force_refusals={refusals:?} epoch_unchanged={} native_phase={:?} mount_row=unchanged:{} own_connection={} minor={} mount_serves={served:?} commit_still_held={held}",
+        "{name} held: activity={:?} force_refusals={refusals:?} epoch_unchanged={} kernel_phase={:?} mount_row=unchanged:{} own_connection={} minor={} mount_serves={served:?} commit_still_held={held}",
         after.activity,
         after.epoch == during.epoch,
-        native_block.phase,
+        kernel_block.phase,
         after_row.as_deref() == Some(before_row.as_str()),
         connection.exists(),
         connection.minor
@@ -889,14 +886,10 @@ impl Custody {
     /// The closed namespace's cleanup state, asked of the engine by the test.
     fn cleanup(&self) -> String {
         let client = self.fx.harness.owner.client();
-        match client
+        let state = client
             .observe_cleanup(None, self.token.namespace, self.token.workspace.to_bytes())
-            .unwrap_or_else(|error| panic!("{error:?}"))
-            .result()
-        {
-            Ok(Response::CleanupState(state)) => format!("{state:?}"),
-            other => brief(&other),
-        }
+            .unwrap();
+        format!("{state:?}")
     }
 }
 
@@ -950,7 +943,7 @@ fn fp32_unknown_commit_custody_is_forced_only_when_relinquished_and_stays_unknow
     // Without the flag: refused before any effect.
     let refusal = refused(fx.harness.try_force(token, false), name);
     let after = fx.harness.status(token);
-    let native_block = after.native.as_ref().unwrap();
+    let kernel_block = after.kernel.as_ref().unwrap();
     let after_row = row(&case.directory);
     checks.that(
         refusal == (ControlCode::Unknown, "force:custody", true),
@@ -960,14 +953,14 @@ fn fp32_unknown_commit_custody_is_forced_only_when_relinquished_and_stays_unknow
         after.activity == Activity::Uncertain
             && after.epoch == kept.epoch
             && after.published.is_none()
-            && native_block.phase == NativePhase::Ready
-            && !native_block.detached
+            && kernel_block.phase == MountPhase::Ready
+            && !kernel_block.detached
             && after_row.as_deref() == Some(kept_row.as_str())
             && case.connection.exists(),
         || {
             format!(
                 "{name}: the refused Force had an effect: activity {:?}, epoch {} -> {}, phase {:?}, row {after_row:?}",
-                after.activity, kept.epoch, after.epoch, native_block.phase
+                after.activity, kept.epoch, after.epoch, kernel_block.phase
             )
         },
     );
@@ -980,10 +973,10 @@ fn fp32_unknown_commit_custody_is_forced_only_when_relinquished_and_stays_unknow
         format!("{name}: the mount did not serve after the refusal: {served:?}")
     });
     println!(
-        "{name} without_flag: refusal={refusal:?} activity={:?} epoch_unchanged={} native_phase={:?} mount_row=unchanged:{} own_connection={} mount_serves={served:?}",
+        "{name} without_flag: refusal={refusal:?} activity={:?} epoch_unchanged={} kernel_phase={:?} mount_row=unchanged:{} own_connection={} mount_serves={served:?}",
         after.activity,
         after.epoch == kept.epoch,
-        native_block.phase,
+        kernel_block.phase,
         after_row.as_deref() == Some(kept_row.as_str()),
         case.connection.exists()
     );

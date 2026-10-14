@@ -6,10 +6,8 @@ use layerfs_content::{
     apply_edits, read_all, AuthenticatedObjects, ConstructionPolicy, ContentError, ContentResult,
     Edit, EditRequest, EditSequence, EditSource, ObjectId,
 };
-use layerfs_daemon::{JobReceipt, Owner, OwnerClient, OwnerConfig, Response};
-use layerfs_overlay::{
-    CapturedReader, IndexedOperationRecordScope, OperationOwner, ProfileConfig, Route,
-};
+use layerfs_daemon::{Owner, OwnerClient, OwnerConfig};
+use layerfs_overlay::{CapturedReader, IndexedOperationRecordScope, OperationOwner, ProfileConfig};
 use layerfs_telemetry::timer::Timing;
 use layerfs_workspace::{
     BaseView, CanonicalClient, CapturedFileAttempt, CapturedFileCustody, CapturedFileEdits,
@@ -101,11 +99,8 @@ impl Case {
         let opened = client
             .open(None, [91; 32], f.root.0.to_bytes())
             .unwrap_or_else(|error| panic!("{error:?}"));
-        let route = match opened.result() {
-            Ok(Response::Opened(route)) => *route,
-            other => panic!("{other:?}"),
-        };
-        drop(opened);
+        let route = opened;
+        let client = client.workspace_client(route).unwrap();
         Self {
             owner: Some(owner),
             client,
@@ -124,24 +119,20 @@ impl Case {
         self.next.set(value);
         value
     }
-    pub fn job(
+    pub fn job<T>(
         &self,
         command: impl FnOnce(
             &layerfs_daemon::OwnerClient,
-            layerfs_overlay::Route,
-        ) -> Result<layerfs_daemon::JobReceipt, layerfs_daemon::OwnerError>,
-    ) -> JobReceipt {
+            layerfs_workspace::Route,
+        ) -> Result<T, layerfs_daemon::OwnerError>,
+    ) -> T {
         job(&self.client, self.route, command)
     }
     pub fn mutate(&self, operation: Operation) -> Option<layerfs_workspace::ViewStat> {
         let acquired = self.job(|job_client: &layerfs_daemon::OwnerClient, job_route| {
             job_client.acquire_base_source(job_route, self.request())
         });
-        let source = match acquired.result() {
-            Ok(Response::BaseSource(source)) => *source,
-            other => panic!("{other:?}"),
-        };
-        drop(acquired);
+        let source = acquired;
         let view = self.workspace.view_for_source(source).unwrap();
         let outcome = self
             .workspace
@@ -149,22 +140,16 @@ impl Case {
             .unwrap();
         let result = match outcome {
             Outcome::Applied { publication, stat } => {
-                assert!(self
-                    .job(|job_client: &layerfs_daemon::OwnerClient, _| job_client
-                        .reply_attempted(publication))
-                    .result()
-                    .is_ok());
+                self.job(|job_client: &layerfs_daemon::OwnerClient, _| {
+                    job_client.reply_attempted(publication)
+                });
                 stat
             }
             Outcome::Unchanged { stat } => stat,
         };
-        assert!(self
-            .job(
-                |job_client: &layerfs_daemon::OwnerClient, job_route| job_client
-                    .release_base_source(job_route, source)
-            )
-            .result()
-            .is_ok());
+        self.job(|job_client: &layerfs_daemon::OwnerClient, job_route| {
+            job_client.release_base_source(job_route, source)
+        });
         result
     }
     pub fn write(&self, serial: u64, at: u64, bytes: &[u8]) {
@@ -186,27 +171,15 @@ impl Case {
         let captured = self.job(|job_client: &layerfs_daemon::OwnerClient, job_route| {
             job_client.capture(job_route)
         });
-        let capture = match captured.result() {
-            Ok(Response::Captured(capture)) => *capture,
-            other => panic!("{other:?}"),
-        };
-        drop(captured);
+        let capture = captured;
         let acquired = self.job(|job_client: &layerfs_daemon::OwnerClient, job_route| {
             job_client.acquire_captured_reader(job_route, capture, self.request())
         });
-        let reader = match acquired.result() {
-            Ok(Response::CapturedReader(Some(reader))) => *reader,
-            other => panic!("{other:?}"),
-        };
-        drop(acquired);
+        let reader = acquired;
         let acquired = self.job(|job_client: &layerfs_daemon::OwnerClient, job_route| {
             job_client.acquire_operation(job_route, self.request())
         });
-        let owner = match acquired.result() {
-            Ok(Response::Operation(Some(owner))) => *owner,
-            other => panic!("{other:?}"),
-        };
-        drop(acquired);
+        let owner = acquired;
         (reader, IndexedOperationRecordScope { owner, file_scope })
     }
     pub fn construct(
@@ -235,13 +208,9 @@ impl Case {
         let operation = custody.records.scope.owner;
         drop(custody); // First drop original credited outcomes, not their engine owners.
         if !reader_released {
-            assert!(self
-                .job(
-                    |job_client: &layerfs_daemon::OwnerClient, job_route| job_client
-                        .release_captured_reader(job_route, reader)
-                )
-                .result()
-                .is_ok());
+            self.job(|job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.release_captured_reader(job_route, reader)
+            });
         }
         release_operation(self, operation);
     }
@@ -289,24 +258,20 @@ impl Drop for Case {
         let _ = std::fs::remove_dir_all(&self.path);
     }
 }
-pub fn job(
+pub fn job<T>(
     client: &OwnerClient,
     route: Route,
     command: impl FnOnce(
         &layerfs_daemon::OwnerClient,
-        layerfs_overlay::Route,
-    ) -> Result<layerfs_daemon::JobReceipt, layerfs_daemon::OwnerError>,
-) -> JobReceipt {
+        layerfs_workspace::Route,
+    ) -> Result<T, layerfs_daemon::OwnerError>,
+) -> T {
     command(client, route).unwrap_or_else(|error| panic!("{error:?}"))
 }
 pub fn release_operation(case: &Case, owner: OperationOwner) {
-    assert!(case
-        .job(
-            |job_client: &layerfs_daemon::OwnerClient, job_route| job_client
-                .release_operation(job_route, owner)
-        )
-        .result()
-        .is_ok());
+    case.job(|job_client: &layerfs_daemon::OwnerClient, job_route| {
+        job_client.release_operation(job_route, owner)
+    });
 }
 pub struct Model {
     pub root: ObjectId,
@@ -343,3 +308,5 @@ impl EditSource for Model {
         Ok(count)
     }
 }
+
+use layerfs_workspace::Route;

@@ -1,6 +1,6 @@
 //! The actual `layerfs-daemon` executable through a changed Commit (the note
 //! of row R5-1 and row R2-STEP-3): protected configuration, direct Store
-//! installation, a logical bind, a native Attach, a change made by an
+//! installation, a logical bind, a kernel Attach, a change made by an
 //! ordinary external bash process of the command identity in the reported
 //! mount, one control Commit over the authenticated connection, the terminal
 //! Unmount, and then a fresh Workspace of the same Branch attached and
@@ -9,7 +9,7 @@
 //! Nothing here composes a product `Service` inside the test process: every
 //! product step is the executable's own, reached over its control endpoint.
 //!
-//! The oracle is a native replay. A plain directory outside the daemon holds
+//! The oracle is a kernel replay. A plain directory outside the daemon holds
 //! the same base tree the fixture initialized the Store from, and the same
 //! script is run in it by the same kind of process. The mounted tree must
 //! equal it in names, kinds, permission bits, link counts, alias classes,
@@ -31,12 +31,12 @@ mod mounted;
 #[path = "support/mounted_commit.rs"]
 mod rig;
 #[allow(dead_code)]
-#[path = "support/native_install.rs"]
+#[path = "support/host_install.rs"]
 mod support;
 use layerfs_bridge::{
     control::{Activity, DaemonPhase, HelloRequest, ReadyMount, Reply, Request, WorkspaceToken},
     daemon_setup::{DaemonLimits, DaemonSetup},
-    native,
+    duplex,
 };
 use layerfs_history::{
     BranchId, CommitHistoryRequest, CommitRecord, CommitStagedOutcome, WorkspaceId,
@@ -44,7 +44,7 @@ use layerfs_history::{
 use layerfs_sdk::internal::Control;
 use model::{assert_same, Flat};
 use mounted::COMMAND;
-use rig::{assert_kernel, bash_in, clock_masked, clocked, kernel, native as tree, passed};
+use rig::{assert_kernel, bash_in, clock_masked, clocked, host as tree, kernel, passed};
 use std::{
     ffi::OsStr,
     fs::{self, File},
@@ -92,11 +92,11 @@ fn mounted_at(directory: &str) -> bool {
         .lines()
         .any(|line| line.split(' ').nth(4) == Some(directory))
 }
-fn connect(address: SocketAddr) -> native::Connection {
-    native::initiate(
+fn connect(address: SocketAddr) -> duplex::Connection {
+    duplex::initiate(
         support::socket(TcpStream::connect_timeout(&address, Duration::from_secs(2)).unwrap()),
         &support::CLIENT_PRIVATE,
-        native::public_key(&support::SERVER_PRIVATE).unwrap(),
+        duplex::public_key(&support::SERVER_PRIVATE).unwrap(),
     )
     .unwrap()
 }
@@ -107,7 +107,7 @@ fn start(f: &support::Fixture, mounts: &Path) -> (Process, SocketAddr) {
     let setup = DaemonSetup {
         listen: "127.0.0.1:0".into(),
         private_key: support::SERVER_PRIVATE,
-        control_peer: native::public_key(&support::CLIENT_PRIVATE).unwrap(),
+        control_peer: duplex::public_key(&support::CLIENT_PRIVATE).unwrap(),
         store: f.project.manifest.locator.clone(),
         overlay: f.directory.join("overlay.sqlite").to_str().unwrap().into(),
         mounts: mounts.to_str().unwrap().into(),
@@ -115,7 +115,6 @@ fn start(f: &support::Fixture, mounts: &Path) -> (Process, SocketAddr) {
         command_gid: COMMAND,
         limits: DaemonLimits {
             connections: 4,
-            read_handles: 2,
             handshake_ms: 3000,
             cache_bytes: 64 * 1024,
             namespaces: 8,
@@ -163,7 +162,7 @@ fn start(f: &support::Fixture, mounts: &Path) -> (Process, SocketAddr) {
         .unwrap();
     (process, address)
 }
-/// The fixture's base tree again, as a plain native directory of the command
+/// The fixture's base tree again, as a plain kernel directory of the command
 /// identity. `support::Fixture::new` builds exactly these five names.
 fn replay(root: &Path) {
     fs::create_dir(root).unwrap();
@@ -208,7 +207,7 @@ fn quiet(control: &mut Control, token: WorkspaceToken) {
         let work = layerfs_sdk::internal::workspace(control)
             .status(token)
             .unwrap()
-            .native
+            .kernel
             .unwrap()
             .work
             .unwrap();
@@ -296,7 +295,7 @@ fn r5_1_the_actual_daemon_commits_a_change_by_external_bash_and_a_fresh_mount_is
     assert_eq!(hello.store_sqlite, installed.manifest.daemon_sqlite);
     let branch = f.project.branch.branch.id;
 
-    // Logical bind, then the native Attach.
+    // Logical bind, then the kernel Attach.
     let bound = layerfs_sdk::internal::workspace(&mut control)
         .bind(WorkspaceId::from_authority([150; 32]).unwrap(), branch)
         .unwrap();
@@ -428,7 +427,7 @@ fn r5_1_the_actual_daemon_commits_a_change_by_external_bash_and_a_fresh_mount_is
     assert_kernel(&expected, &kernel(mount), "R5-1-BINARY fresh mount");
     let explicit = expected.len() - clocked(&expected, started);
     println!(
-        "{name} FRESH_MOUNT workspace=new root=committed oracle=native_replay names_kinds_modes_links_aliases_bytes=exact explicit_times={explicit} clock_times={} kernel_table=owner,nlink,size,inode_sharing paths={}",
+        "{name} FRESH_MOUNT workspace=new root=committed oracle=kernel_replay names_kinds_modes_links_aliases_bytes=exact explicit_times={explicit} clock_times={} kernel_table=owner,nlink,size,inode_sharing paths={}",
         clocked(&expected, started),
         expected.len()
     );

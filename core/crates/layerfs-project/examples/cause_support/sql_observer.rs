@@ -1,5 +1,5 @@
 //! Diagnostic-only public SQLite trace API. VM status is reset by this observer;
-//! native SqlWork.vm_steps is therefore NOT qualified in this diagnostic.
+//! host SqlWork.vm_steps is therefore NOT qualified in this diagnostic.
 //! No SQL state, VFS, profile, statement or algorithm is replaced.
 use std::{
     collections::BTreeMap,

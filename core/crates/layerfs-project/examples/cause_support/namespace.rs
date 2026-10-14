@@ -41,7 +41,7 @@ use std::{
 
 static NEXT_ORDERING_DIRECTORY: AtomicU64 = AtomicU64::new(0);
 
-/// One bounded progress byte on a long native import, separate from result data.
+/// One bounded progress byte on a long host import, separate from result data.
 pub(crate) struct ImportProgress {
     deadline: Instant,
     pub(crate) work: crate::NamespaceWork,

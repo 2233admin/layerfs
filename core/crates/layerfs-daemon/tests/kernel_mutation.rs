@@ -14,7 +14,7 @@ mod mounted;
 #[path = "support/mutating.rs"]
 mod mutating;
 #[allow(dead_code)]
-#[path = "support/native_install.rs"]
+#[path = "support/host_install.rs"]
 mod support;
 use mounted::COMMAND;
 use mutating::{direct, errno, harness, quiet, shell, unmounted};
@@ -59,15 +59,15 @@ fn write_append_and_truncate_are_exact_in_cache_and_daemon() {
         .unwrap();
     assert_eq!(file.metadata().unwrap().len(), 0);
     assert_eq!(file.metadata().unwrap().mode() & 0o7777, 0o640);
-    file.write_all(b"hello native").unwrap();
+    file.write_all(b"hello kernel").unwrap();
     let mut cached = [0; 12];
     file.read_exact_at(&mut cached, 0).unwrap();
-    assert_eq!(&cached, b"hello native");
-    agree(&path, b"hello native", "create and write");
+    assert_eq!(&cached, b"hello kernel");
+    agree(&path, b"hello kernel", "create and write");
     // An overwrite inside the file and a write past its end with a hole.
     file.write_all_at(b"HELLO", 0).unwrap();
     file.write_all_at(b"tail", 20).unwrap();
-    let mut expected = b"HELLO native".to_vec();
+    let mut expected = b"HELLO kernel".to_vec();
     expected.resize(20, 0);
     expected.extend_from_slice(b"tail");
     agree(&path, &expected, "overwrite and sparse extension");
@@ -147,9 +147,9 @@ fn write_append_and_truncate_are_exact_in_cache_and_daemon() {
     drop((truncated, file));
 
     quiet(&h, ready.token);
-    let work = h.status(ready.token).native.unwrap().work.unwrap();
+    let work = h.status(ready.token).kernel.unwrap().work.unwrap();
     assert_eq!((work.retained, work.terminal), (0, 0));
-    println!("NATIVE_WRITE work={work:?}");
+    println!("KERNEL_WRITE work={work:?}");
     unmounted(&h, &ready);
     h.stop();
     f.cleanup();
@@ -409,9 +409,9 @@ fn namespace_mutations_are_visible_at_once_and_refusals_stay_refused() {
     assert_eq!(direct(&root.join("cmddir/in")), b"da");
 
     quiet(&h, ready.token);
-    let work = h.status(ready.token).native.unwrap().work.unwrap();
+    let work = h.status(ready.token).kernel.unwrap().work.unwrap();
     assert_eq!((work.retained, work.terminal), (0, 0));
-    println!("NATIVE_NAMES work={work:?}");
+    println!("KERNEL_NAMES work={work:?}");
     unmounted(&h, &ready);
     h.stop();
     f.cleanup();

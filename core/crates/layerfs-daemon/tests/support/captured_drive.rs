@@ -11,11 +11,12 @@ use layerfs_content::{
 use layerfs_daemon::{
     bootstrap::open_store,
     store::{BindRequest, BoundWorkspace, Store, StoreOperation},
-    JobReceipt, Owner, OwnerClient, OwnerConfig, Response,
+    Owner, OwnerClient, OwnerConfig,
 };
 use layerfs_history::WorkspaceId;
-use layerfs_overlay::{ProfileConfig, Route};
+use layerfs_overlay::ProfileConfig;
 use layerfs_storage::ReservationBlocks;
+use layerfs_workspace::Route;
 use layerfs_workspace::{Operation, Outcome, Position, SourceView, Time, ViewStat};
 use std::{
     path::Path,
@@ -32,17 +33,14 @@ pub fn evidence(line: std::fmt::Arguments<'_>) {
     use std::io::Write;
     writeln!(std::io::stdout().lock(), "{line}").unwrap();
 }
-pub fn job(
+pub fn job<T>(
     owner: &OwnerClient,
     route: Route,
-    command: impl FnOnce(
-        &layerfs_daemon::OwnerClient,
-        layerfs_overlay::Route,
-    ) -> Result<layerfs_daemon::JobReceipt, layerfs_daemon::OwnerError>,
-) -> JobReceipt {
+    command: impl FnOnce(&OwnerClient, Route) -> Result<T, layerfs_daemon::OwnerError>,
+) -> T {
     command(owner, route).unwrap_or_else(|error| panic!("{error:?}"))
 }
-/// A sealed, installed Disposable Store whose base is the model of the native
+/// A sealed, installed Disposable Store whose base is the model of the kernel
 /// source it was initialized from, plus one local owner.
 pub struct Rig {
     pub f: support::Fixture,
@@ -55,7 +53,7 @@ impl Rig {
         let mut base = None;
         let f = support::Fixture::built(label, |source| {
             build(source);
-            let (model, names) = Model::native(source);
+            let (model, names) = Model::host(source);
             base = Some(model);
             names
         });
@@ -96,15 +94,7 @@ impl Rig {
         )
     }
     pub fn close(&self, workspace: &BoundWorkspace) {
-        assert!(matches!(
-            job(
-                &self.owner.client(),
-                workspace.route(),
-                |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.close(job_route)
-            )
-            .result(),
-            Ok(Response::Done)
-        ));
+        workspace.close().unwrap();
     }
     pub fn finish(self) {
         drop(self.store);
@@ -127,22 +117,17 @@ pub fn window<T>(
             job_client.acquire_base_source(job_route, NEXT.fetch_add(1, Ordering::Relaxed))
         },
     );
-    let source = match acquired.result() {
-        Ok(Response::BaseSource(source)) => *source,
-        other => panic!("{other:?}"),
-    };
-    drop(acquired);
+    let source = acquired;
     let view = operation.workspace().view_for_source(source).unwrap();
     let value = f(&operation, &view);
     drop(view);
-    assert!(job(
+    job(
         operation.overlay(),
         workspace.route(),
-        |job_client: &layerfs_daemon::OwnerClient, job_route| job_client
-            .release_base_source(job_route, source)
-    )
-    .result()
-    .is_ok());
+        |job_client: &layerfs_daemon::OwnerClient, job_route| {
+            job_client.release_base_source(job_route, source)
+        },
+    );
     value
 }
 
@@ -342,14 +327,13 @@ impl<'a> Session<'a> {
                             publication.revision(),
                         );
                     }
-                    assert!(job(
+                    job(
                         operation.overlay(),
                         self.workspace.route(),
-                        |job_client: &layerfs_daemon::OwnerClient, _| job_client
-                            .reply_attempted(publication)
-                    )
-                    .result()
-                    .is_ok());
+                        |job_client: &layerfs_daemon::OwnerClient, _| {
+                            job_client.reply_attempted(publication)
+                        },
+                    );
                     true
                 }
                 Outcome::Unchanged { .. } => false,

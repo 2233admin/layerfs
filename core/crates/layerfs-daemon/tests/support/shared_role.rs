@@ -2,7 +2,7 @@
 use super::{fixture, support};
 use layerfs_bridge::{
     control::{Reply, Request, WorkspaceToken},
-    native,
+    duplex,
     provision::{StoreManifest, StoreProfile},
 };
 use layerfs_daemon::{bootstrap::open_store_observed, control::Service, Owner, OwnerConfig};
@@ -87,10 +87,10 @@ pub fn run() {
     socket
         .set_write_timeout(Some(Duration::from_secs(10)))
         .unwrap();
-    let mut connection = native::accept(
+    let mut connection = duplex::accept(
         socket,
         &support::SERVER_PRIVATE,
-        native::public_key(&support::CLIENT_PRIVATE).unwrap(),
+        duplex::public_key(&support::CLIENT_PRIVATE).unwrap(),
     )
     .unwrap();
     let mut attempts = 0;

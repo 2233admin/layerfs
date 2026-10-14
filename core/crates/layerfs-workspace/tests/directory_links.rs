@@ -15,10 +15,10 @@ use layerfs_content::filesystem::{
 };
 use layerfs_content::object::inode_leaf::{InodeKind, InodeValue};
 use layerfs_content::{ContentError, FinalizedConsumer, ObjectId};
-use layerfs_overlay::{NativeMount, StatementKind, StoredCounts, WorkspaceState};
+use layerfs_overlay::{KernelMount, StatementKind, StoredCounts, WorkspaceState};
 use layerfs_workspace::{
-    CanonicalClient, JobOutcome, NativeInput, NativeReadDecision, NativeReadOperation,
-    NativeVisitRequest, Need, Operation, Refusal, ViewStat, VisitFacts, DIRECTORY_COUNT_CAPACITY,
+    CanonicalClient, JobOutcome, KernelInput, KernelReadDecision, KernelReadOperation,
+    KernelVisitRequest, Need, Operation, Refusal, ViewStat, VisitFacts, DIRECTORY_COUNT_CAPACITY,
 };
 use std::{collections::BTreeMap, sync::Arc};
 
@@ -260,7 +260,7 @@ fn a_base_directory_counts_its_child_directories_and_nothing_else() {
     assert_eq!(again.directory_count_scans, work.directory_count_scans);
     assert_eq!(again.directory_counts, work.directory_counts);
     for serial in [1, DIRS, MIXED, WIDE, EMPTY] {
-        assert_eq!(b.overlay.inode(b.route(), serial).unwrap(), None);
+        assert_eq!(b.overlay.inode(serial).unwrap(), None);
     }
 }
 
@@ -352,9 +352,9 @@ fn every_binding_change_moves_the_count_of_a_local_directory_exactly() {
 
     // The count is its own column: the reference count of a directory stays
     // one, and the root's zero, as the canonical grammar requires.
-    let row = b.overlay.inode(b.route(), other).unwrap().unwrap();
+    let row = b.overlay.inode(other).unwrap().unwrap();
     assert_eq!((row.nlink, row.entries, row.subdirs), (1, 3, 2));
-    let root = b.overlay.inode(b.route(), 1).unwrap().unwrap();
+    let root = b.overlay.inode(1).unwrap().unwrap();
     assert_eq!((root.nlink, root.entries, root.subdirs), (0, 8, 6));
 }
 
@@ -377,7 +377,7 @@ fn a_base_directory_with_children_keeps_its_count_exact_under_every_change() {
     // The first local row of a base directory starts from the base count,
     // which excludes its two file names and its symlink.
     let n = made(&b, mkdir(MIXED, "n")).serial;
-    let row = b.overlay.inode(b.route(), MIXED).unwrap().unwrap();
+    let row = b.overlay.inode(MIXED).unwrap().unwrap();
     assert_eq!((row.entries, row.subdirs, row.born), (6, 3, 0));
     all(3, 3, 0, WIDE_DIRECTORIES, 4);
     made(&b, create(MIXED, "g"));
@@ -420,7 +420,7 @@ fn a_base_directory_with_children_keeps_its_count_exact_under_every_change() {
     // A directory wider than one listing window: its first local row holds
     // the count of all its windows.
     b.applied(rmdir(WIDE, "d000"), T2);
-    let row = b.overlay.inode(b.route(), WIDE).unwrap().unwrap();
+    let row = b.overlay.inode(WIDE).unwrap().unwrap();
     assert_eq!(
         (row.entries, row.subdirs),
         (WIDE_DIRECTORIES + WIDE_FILES - 1, WIDE_DIRECTORIES - 1)
@@ -441,8 +441,8 @@ fn a_base_directory_with_children_keeps_its_count_exact_under_every_change() {
 /// rows and the transactions begun so far.
 fn snapshot(b: &Bench) -> (WorkspaceState, StoredCounts, u64) {
     (
-        b.overlay.state(b.route()).unwrap(),
-        b.overlay.resources(Some(b.route())).unwrap().counts,
+        b.overlay.state().unwrap(),
+        b.overlay.resources().unwrap().counts,
         b.overlay.diagnostics().statements[StatementKind::Begin as usize].executions,
     )
 }
@@ -450,8 +450,8 @@ fn snapshot(b: &Bench) -> (WorkspaceState, StoredCounts, u64) {
 fn resident(b: &Bench) -> Arc<CanonicalClient> {
     Arc::new(CanonicalClient::resident(b.cache.clone()))
 }
-fn lookup(child: &str) -> NativeReadOperation {
-    NativeReadOperation::Lookup {
+fn lookup(child: &str) -> KernelReadOperation {
+    KernelReadOperation::Lookup {
         parent: 1,
         name: name(child),
     }
@@ -459,13 +459,13 @@ fn lookup(child: &str) -> NativeReadOperation {
 /// One LOOKUP in the root as one owner job, which asks the provider nothing.
 fn observe(
     b: &Bench,
-    mount: NativeMount,
+    mount: KernelMount,
     child: &str,
     facts: &VisitFacts,
-) -> Option<NativeReadDecision> {
+) -> Option<KernelReadDecision> {
     let visit = b
         .workspace
-        .native_read_visit(
+        .kernel_read_visit(
             resident(b),
             mount,
             1,
@@ -495,7 +495,7 @@ const NOT_REMEMBERED: ContentError = ContentError::ProviderFailure {
 #[test]
 fn a_visit_that_misses_the_count_is_undecided_writes_nothing_and_decides_once_supplied() {
     let b = Bench::over("links-visit", tree(), CACHE);
-    let mount = b.overlay.create_native_mount(b.route(), 1).unwrap();
+    let mount = b.overlay.create_kernel_mount(1).unwrap();
     let base = b.workspace.base().unwrap();
     // Every canonical object the lookup of `mixed` reads is made resident
     // through the base's ordinary reads, which derive no count.
@@ -525,7 +525,7 @@ fn a_visit_that_misses_the_count_is_undecided_writes_nothing_and_decides_once_su
     let wanted = vec![Need::Inode(1), Need::Name(1, name("mixed"))];
     let before = snapshot(&b);
     let quiet = b.demand();
-    let Some(NativeReadDecision::Needs(needs)) =
+    let Some(KernelReadDecision::Needs(needs)) =
         observe(&b, mount, "mixed", &VisitFacts::default())
     else {
         panic!("a visit decided without the root's child-directory count")
@@ -536,12 +536,12 @@ fn a_visit_that_misses_the_count_is_undecided_writes_nothing_and_decides_once_su
     assert_eq!((work.directory_counts, work.directory_count_scans), (0, 0));
     // The same holds for a mutation: no row, no reply ticket, no reference.
     let fresh = b.workspace.next_serial(&b.allocator).unwrap();
-    let making = |request, facts: &VisitFacts| NativeVisitRequest {
+    let making = |request, facts: &VisitFacts| KernelVisitRequest {
         mount,
         request,
         serial: 1,
         handle: None,
-        input: NativeInput::Named(mkdir(1, "made")),
+        input: KernelInput::Named(mkdir(1, "made")),
         open: None,
         now: T1,
         fresh: Some(fresh),
@@ -550,7 +550,7 @@ fn a_visit_that_misses_the_count_is_undecided_writes_nothing_and_decides_once_su
     let before = snapshot(&b);
     let undecided = b
         .workspace
-        .native_mutation_visit(resident(&b), making(7, &VisitFacts::default()))
+        .kernel_mutation_visit(resident(&b), making(7, &VisitFacts::default()))
         .unwrap()
         .perform(&b.overlay);
     assert!(
@@ -559,7 +559,7 @@ fn a_visit_that_misses_the_count_is_undecided_writes_nothing_and_decides_once_su
         "{undecided:?}"
     );
     assert_eq!(snapshot(&b), before);
-    assert_eq!(b.overlay.inode(b.route(), 1).unwrap(), None);
+    assert_eq!(b.overlay.inode(1).unwrap(), None);
     assert_eq!(b.demand(), quiet, "neither visit asked the provider");
 
     // The facts are read outside the owner: the two directories are listed
@@ -569,7 +569,7 @@ fn a_visit_that_misses_the_count_is_undecided_writes_nothing_and_decides_once_su
     let work = b.cache.diagnostics().unwrap();
     assert_eq!((work.directory_counts, work.directory_count_scans), (2, 2));
     // The next visit of the request decides from the facts it carries.
-    let Some(NativeReadDecision::Value(found)) = observe(&b, mount, "mixed", &facts) else {
+    let Some(KernelReadDecision::Value(found)) = observe(&b, mount, "mixed", &facts) else {
         panic!("the supplied facts did not decide the lookup")
     };
     assert_eq!(
@@ -578,7 +578,7 @@ fn a_visit_that_misses_the_count_is_undecided_writes_nothing_and_decides_once_su
     );
     // Another request, carrying nothing, decides in its one visit: the
     // memory-only path answers from the remembered counts.
-    let Some(NativeReadDecision::Value(again)) =
+    let Some(KernelReadDecision::Value(again)) =
         observe(&b, mount, "mixed", &VisitFacts::default())
     else {
         panic!("the remembered counts did not decide the lookup")
@@ -588,7 +588,7 @@ fn a_visit_that_misses_the_count_is_undecided_writes_nothing_and_decides_once_su
     // And the mutation publishes the root's first local row from them.
     let made = b
         .workspace
-        .native_mutation_visit(resident(&b), making(8, &VisitFacts::default()))
+        .kernel_mutation_visit(resident(&b), making(8, &VisitFacts::default()))
         .unwrap()
         .perform(&b.overlay);
     let Ok(JobOutcome::Applied {
@@ -600,12 +600,12 @@ fn a_visit_that_misses_the_count_is_undecided_writes_nothing_and_decides_once_su
     };
     assert_eq!((inode.serial, inode.subdirs), (fresh, 0));
     b.overlay.reply_attempted(publication).unwrap();
-    let row = b.overlay.inode(b.route(), 1).unwrap().unwrap();
+    let row = b.overlay.inode(1).unwrap().unwrap();
     assert_eq!((row.entries, row.subdirs, row.nlink), (7, 5, 0));
     counts(&b, &[(1, 5), (MIXED, 2)]);
-    b.overlay.forget_native(mount, MIXED, 2).unwrap();
-    b.overlay.forget_native(mount, fresh, 1).unwrap();
-    b.overlay.revoke_native_mount(mount).unwrap();
+    b.overlay.kernel_forget(mount, MIXED, 2).unwrap();
+    b.overlay.kernel_forget(mount, fresh, 1).unwrap();
+    b.overlay.revoke_kernel_mount(mount).unwrap();
 }
 
 /// A root of `count` non-empty directories `d00000..`, each with its own
@@ -639,7 +639,7 @@ fn remembered_counts_are_bounded_and_an_evicted_one_is_derived_again() {
     // Two more non-empty directories than the capacity, and the root.
     let directories = capacity + 2;
     let b = Bench::over("links-bound", many(directories), CACHE);
-    let mount = b.overlay.create_native_mount(b.route(), 1).unwrap();
+    let mount = b.overlay.create_kernel_mount(1).unwrap();
     let base = b.workspace.base().unwrap();
     let expected = |index: u64| if index % 1024 == 0 { 2 } else { 0 };
     let derive = |index: u64| {
@@ -652,7 +652,7 @@ fn remembered_counts_are_bounded_and_an_evicted_one_is_derived_again() {
     // The root and d00000 are listed and remembered; the root's 16,386
     // rows are 65 listing windows.
     let wanted = vec![Need::Inode(1), Need::Name(1, name("d00000"))];
-    let Some(NativeReadDecision::Needs(needs)) =
+    let Some(KernelReadDecision::Needs(needs)) =
         observe(&b, mount, "d00000", &VisitFacts::default())
     else {
         panic!("a cold visit decided")
@@ -683,7 +683,7 @@ fn remembered_counts_are_bounded_and_an_evicted_one_is_derived_again() {
     // The request carries its facts: the second visit decides without the
     // remembered counts, so an eviction between two visits cannot loop.
     let root = base.inode(1).unwrap().value;
-    let Some(NativeReadDecision::Value(found)) = observe(&b, mount, "d00000", &facts) else {
+    let Some(KernelReadDecision::Value(found)) = observe(&b, mount, "d00000", &facts) else {
         panic!("the carried facts did not decide the lookup")
     };
     assert_eq!((found.serial, found.entries, found.subdirs), (100, 3, 2));
@@ -706,6 +706,6 @@ fn remembered_counts_are_bounded_and_an_evicted_one_is_derived_again() {
         (work().directory_counts, work().directory_count_scans),
         (DIRECTORY_COUNT_CAPACITY, capacity + 5)
     );
-    b.overlay.forget_native(mount, 100, 1).unwrap();
-    b.overlay.revoke_native_mount(mount).unwrap();
+    b.overlay.kernel_forget(mount, 100, 1).unwrap();
+    b.overlay.revoke_kernel_mount(mount).unwrap();
 }

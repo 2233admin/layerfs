@@ -4,7 +4,7 @@ use layerfs_content::ContentError;
 use layerfs_history::HistoryError;
 use layerfs_storage::StorageError;
 use std::{fmt, io};
-/// The existing native import's per-file bound, unchanged.
+/// The existing host import's per-file bound, unchanged.
 #[cfg(unix)]
 pub(crate) const MAX_FILE: u64 = 4 * 1024 * 1024 * 1024;
 /// Result of a namespace initialization operation.
@@ -14,7 +14,7 @@ pub type ProjectResult<T> = Result<T, ProjectError>;
 pub enum ProjectError {
     /// The source or frozen file metadata is invalid.
     InvalidInput,
-    /// The source contains a kind the native importer cannot construct.
+    /// The source contains a kind the host importer cannot construct.
     Unsupported,
     /// A named construction/allocation bound was exceeded.
     Capacity,

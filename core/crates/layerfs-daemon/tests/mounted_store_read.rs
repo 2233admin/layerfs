@@ -1,9 +1,9 @@
 //! Real kernel mounts: a normal Unmount and a forced unmount with a READ
 //! INSIDE its Store read. A READ records nothing in the engine, so
-//! `revoke_native_mount` cannot see it; what keeps `Revoke` and Close behind
+//! `revoke_kernel_mount` cannot see it; what keeps `Revoke` and Close behind
 //! it is the kernel's busy answer while its caller lives and the lane's
 //! drain predicate afterwards
-//! ([native read custody](../../../docs/architecture/73-native-read-custody.md),
+//! ([kernel read custody](../../../docs/architecture/73-kernel-read-custody.md),
 //! [forced teardown](../../../docs/architecture/80-forced-teardown.md)).
 //!
 //! Staging, hook-free. The Store is composed from the public pieces
@@ -42,15 +42,15 @@ mod mounted;
 #[path = "support/store_gate.rs"]
 mod store_gate;
 use layerfs_bridge::control::{
-    AbortDisposition, Activity, ControlCode, DetachDisposition, ForcedOutcome, NativePhase,
-    NativeWork, ReadyMount, Reply, Request, TeardownCustody, TeardownStage, WorkspaceToken,
+    AbortDisposition, Activity, ControlCode, DetachDisposition, ForcedOutcome, MountPhase,
+    MountWork, ReadyMount, Reply, Request, TeardownCustody, TeardownStage, WorkspaceToken,
 };
 use layerfs_daemon::{
     control::Failure,
-    store::{ReadLimits, Store, StoreReader},
-    JobReceipt, NativeReply, OwnerClient, Response,
+    store::{Store, StoreReader},
+    OwnerClient,
 };
-use layerfs_overlay::{CleanupState, NativeMount, NativeMountState, Route, StoredCounts};
+use layerfs_overlay::{CleanupState, KernelMount, KernelMountState, StoredCounts};
 use layerfs_persistence::Handles;
 use layerfs_storage::{port::PackPersistence, ReservationBlocks, Storage};
 use mounted::{mount_entry, Harness, COMMAND};
@@ -276,53 +276,42 @@ impl Drop for Caller {
     }
 }
 
-fn job(
+fn job<T>(
     client: &OwnerClient,
     route: Route,
     command: impl FnOnce(
         &layerfs_daemon::OwnerClient,
-        layerfs_overlay::Route,
-    ) -> Result<layerfs_daemon::JobReceipt, layerfs_daemon::OwnerError>,
-) -> JobReceipt {
+        layerfs_workspace::Route,
+    ) -> Result<T, layerfs_daemon::OwnerError>,
+) -> T {
     command(client, route).unwrap_or_else(|error| panic!("{error:?}"))
 }
-/// The engine's retained native mount of this namespace, if one is attached.
-fn engine_mount(client: &OwnerClient, route: Route) -> Option<NativeMount> {
-    let done = job(
+/// The engine's retained kernel mount of this namespace, if one is attached.
+fn engine_mount(client: &OwnerClient, route: Route) -> Option<KernelMount> {
+    job(
         client,
         route,
         |job_client: &layerfs_daemon::OwnerClient, job_route| {
-            job_client.native_retained_mount(job_route)
+            job_client.kernel_retained_mount(job_route)
         },
-    );
-    match done.result() {
-        Ok(Response::Native(NativeReply::RetainedMount(mount))) => *mount,
-        other => panic!("{other:?}"),
-    }
+    )
 }
-fn mount_state(client: &OwnerClient, route: Route, mount: NativeMount) -> NativeMountState {
-    let done = job(
+fn mount_state(client: &OwnerClient, route: Route, mount: KernelMount) -> KernelMountState {
+    job(
         client,
         route,
         |job_client: &layerfs_daemon::OwnerClient, job_route| {
-            job_client.native_state(job_route, mount)
+            job_client.kernel_state(job_route, mount)
         },
-    );
-    match done.result() {
-        Ok(Response::Native(NativeReply::State(state))) => *state,
-        other => panic!("{other:?}"),
-    }
+    )
 }
 fn cleanup(client: &OwnerClient, token: WorkspaceToken) -> CleanupState {
     // The Workspace's own file can already be gone: the daemon roster
     // answers for the original namespace and incarnation.
-    let done = client
+
+    client
         .observe_cleanup(None, token.namespace, token.workspace.to_bytes())
-        .unwrap_or_else(|error| panic!("{error:?}"));
-    match done.result() {
-        Ok(Response::CleanupState(state)) => *state,
-        other => panic!("{other:?}"),
-    }
+        .unwrap_or_else(|error| panic!("{error:?}"))
 }
 
 /// Two consecutive observations with nothing received or admitted and no
@@ -330,7 +319,7 @@ fn cleanup(client: &OwnerClient, token: WorkspaceToken) -> CleanupState {
 fn quiet(harness: &Harness, token: WorkspaceToken) {
     let mut last = None;
     within("connection quiescent", || {
-        let now = harness.status(token).native.unwrap().work.unwrap();
+        let now = harness.status(token).kernel.unwrap().work.unwrap();
         let settled = now.active == 0 && last == Some(now.completed);
         last = Some(now.completed);
         thread::sleep(Duration::from_millis(10));
@@ -350,7 +339,7 @@ struct Staged {
     ready: ReadyMount,
     helper: WorkspaceToken,
     route: Route,
-    mount: NativeMount,
+    mount: KernelMount,
     /// Daemon-wide counts with only the helper bound.
     empty: StoredCounts,
     /// The same counts with the mount serving and the descriptor open.
@@ -375,25 +364,34 @@ impl Staged {
         let writer =
             Handles::open_writable(config(), installed::BINDING, installed::CURSOR).unwrap();
         let gate = Gate::new();
-        let readers = (0..2)
-            .map(|_| {
-                let read = Handles::open_read_only(config(), installed::BINDING, installed::CURSOR)
-                    .unwrap();
-                let provider: Arc<dyn PackPersistence> = Arc::new(Gated {
-                    inner: read.storage,
-                    gate: gate.clone(),
-                });
-                StoreReader::new(Storage::new(provider).unwrap(), Arc::new(read.history))
-            })
-            .collect();
+        let reader_config = fixture.config.clone();
+        let reader_gate = gate.clone();
+        let factory: layerfs_daemon::store::ReaderFactory = Arc::new(move |_| {
+            let read = Handles::open_read_only(
+                reader_config.clone(),
+                installed::BINDING,
+                installed::CURSOR,
+            )
+            .unwrap();
+            let provider: Arc<dyn PackPersistence> = Arc::new(Gated {
+                inner: read.storage,
+                gate: reader_gate.clone(),
+            });
+            Ok(StoreReader::new(
+                Storage::new(provider).unwrap(),
+                Arc::new(read.history),
+            ))
+        });
+        let control = factory(0).unwrap();
         let store = Arc::new(
             Store::new(
                 writer.storage,
                 Arc::new(writer.history),
-                readers,
+                control,
+                factory,
                 0,
                 ReservationBlocks::default(),
-                ReadLimits::default(),
+                16,
             )
             .unwrap(),
         );
@@ -432,35 +430,33 @@ impl Staged {
             fixture,
         }
     }
-    fn work(&self) -> NativeWork {
+    fn work(&self) -> MountWork {
         let status = self.harness.status(self.ready.token);
-        status.native.unwrap().work.unwrap()
+        status.kernel.unwrap().work.unwrap()
     }
     fn quiet(&self) {
         quiet(&self.harness, self.ready.token);
     }
     /// Arms the gate and has the caller read: returns once the READ is
     /// inside its Store read, holding one reader and nothing in the engine.
-    fn hold(&mut self, name: &str, checks: &mut Checks) -> NativeWork {
-        let grants = self.store.read_work().grants;
+    fn hold(&mut self, name: &str, checks: &mut Checks) -> MountWork {
+        let grants = self.store.read_work().requests;
         self.gate.arm();
         self.caller.read();
         within("the READ is inside its Store read", || {
             let now = self.work();
-            self.gate.observe().holding == 1
-                && now.active == 1
-                && self.store.read_work().outstanding == 1
+            self.gate.observe().holding == 1 && now.active == 1
         });
         let held = self.work();
         let rows = self.harness.engine(self.helper);
         let local = self.harness.status(self.ready.token).local;
         let readers = local.as_ref().map(|local| local.base_readers);
         println!(
-            "{name} held: active={} gate={:?} reader_grants={}->{} engine_rows(idle={:?} held={rows:?}) base_readers={readers:?}",
+            "{name} held: active={} gate={:?} reader_demands={}->{} engine_rows(idle={:?} held={rows:?}) base_readers={readers:?}",
             held.active,
             self.gate.observe(),
             grants,
-            self.store.read_work().grants,
+            self.store.read_work().requests,
             self.idle
         );
         checks.that(rows == self.idle && readers == Some(0), || {
@@ -474,7 +470,7 @@ impl Staged {
     /// The Workspace is neither revoked nor closed.
     fn live(&self) -> bool {
         engine_mount(&self.client, self.route) == Some(self.mount)
-            && mount_state(&self.client, self.route, self.mount) == NativeMountState::Live
+            && mount_state(&self.client, self.route, self.mount) == KernelMountState::Live
             && cleanup(&self.client, self.ready.token) == CleanupState::Live
             && self.harness.engine(self.helper).namespaces == self.empty.namespaces + 1
     }
@@ -499,12 +495,6 @@ impl Staged {
             format!(
                 "{name}: a Store read after the Workspace was closed: {calls:?} -> {:?}",
                 self.gate.observe()
-            )
-        });
-        checks.that(self.store.read_work().outstanding == 0, || {
-            format!(
-                "{name}: readers after the teardown: {:?}",
-                self.store.read_work()
             )
         });
     }
@@ -573,7 +563,7 @@ fn unmount_is_busy_beside_a_read_inside_its_store_read_and_completes_after_its_r
     // answer with no effect, and the READ is still inside its Store read.
     for round in 0..20 {
         match staged.harness.try_unmount(token) {
-            Err(Failure::Native(failure)) => checks.that(
+            Err(Failure::Kernel(failure)) => checks.that(
                 (failure.code, failure.phase) == (ControlCode::Busy, "unmount:kernel"),
                 || format!("{name}: Unmount beside the held READ: {failure:?}"),
             ),
@@ -583,7 +573,7 @@ fn unmount_is_busy_beside_a_read_inside_its_store_read_and_completes_after_its_r
         let now = staged.work();
         checks.that(
             status.activity == Activity::Idle
-                && staged.harness.phase(token) == NativePhase::Ready
+                && staged.harness.phase(token) == MountPhase::Ready
                 && (now.active, now.terminal) == (1, held.terminal)
                 && staged.gate.observe().holding == 1
                 && mount_entry(&staged.ready.directory).is_some()
@@ -629,7 +619,6 @@ fn unmount_is_busy_beside_a_read_inside_its_store_read_and_completes_after_its_r
 enum Left {
     Unmounted {
         exact: bool,
-        earlier: usize,
         closed: bool,
         receipt: String,
     },
@@ -645,9 +634,8 @@ fn unmount_apart(harness: &Harness, token: WorkspaceToken) -> (Receiver<Left>, J
         let left = match service.execute_control(&Request::Unmount(token)) {
             Ok(done) => Left::Unmounted {
                 exact: done.reply == Reply::Unmounted(token),
-                earlier: done.earlier.len(),
-                closed: done.completion.is_some(),
-                receipt: format!("{:?}", done.native),
+                closed: matches!(done.reply, Reply::Unmounted(_) | Reply::ForceUnmounted(_)),
+                receipt: format!("{:?}", done.kernel),
             },
             Err(Failure::Retained(custody)) => Left::Retained(custody),
             Err(other) => Left::Other(format!("{other:?}")),
@@ -689,10 +677,10 @@ fn a_detached_unmount_drains_behind_a_read_inside_its_store_read_before_it_revok
     let (left, worker) = unmount_apart(&staged.harness, token);
     // The loop serving the READ runs it itself, so it alone has not left.
     within("detach known and every other loop exited", || {
-        let native = staged.harness.status(token).native.unwrap();
-        let work = native.work.unwrap();
-        native.phase == NativePhase::Draining
-            && native.detached
+        let kernel = staged.harness.status(token).kernel.unwrap();
+        let work = kernel.work.unwrap();
+        kernel.phase == MountPhase::Draining
+            && kernel.detached
             && work.loops_exited + 1 == work.loops_configured
     });
     // Detach and the other loops' exit alone revoke nothing: at every one of fifty
@@ -700,10 +688,10 @@ fn a_detached_unmount_drains_behind_a_read_inside_its_store_read_before_it_revok
     // its Store read and the Workspace is live.
     for round in 0..50 {
         let status = staged.harness.status(token);
-        let native = status.native.unwrap();
-        let now = native.work.unwrap();
+        let kernel = status.kernel.unwrap();
+        let now = kernel.work.unwrap();
         assert_eq!(status.activity, Activity::Closing);
-        assert_eq!(native.phase, NativePhase::Draining, "{now:?}");
+        assert_eq!(kernel.phase, MountPhase::Draining, "{now:?}");
         assert_eq!(now.active, 1, "{now:?}");
         assert_eq!(staged.gate.observe().holding, 1);
         if round % 10 == 0 {
@@ -733,12 +721,10 @@ fn a_detached_unmount_drains_behind_a_read_inside_its_store_read_before_it_revok
     match done {
         Left::Unmounted {
             exact,
-            earlier,
             closed,
             receipt,
         } => {
             assert!(exact, "{name}: the reply is Unmounted of this token");
-            assert_eq!(earlier, 1, "native-owner revocation receipt");
             assert!(closed, "logical Close receipt");
             assert!(receipt.contains("Drained"), "{receipt}");
             println!("{name}: released: reply=Unmounted revocation_receipts=1 close_receipt=true receipt={}", brief(&receipt));
@@ -780,7 +766,7 @@ fn force_beside_a_read_inside_its_store_read_stops_at_requests_and_revokes_nothi
     let mut staged = Staged::new("store-read-force", "direct");
     let token = staged.ready.token;
     let held = staged.hold(name, &mut checks);
-    let grants = staged.store.read_work().grants;
+    let grants = staged.store.read_work().requests;
 
     // One Force, on this thread: it returns at the end of its drain window.
     let custody = match staged.harness.try_force(token, false) {
@@ -814,22 +800,19 @@ fn force_beside_a_read_inside_its_store_read_stops_at_requests_and_revokes_nothi
     // Still inside the Store read; the Workspace is neither revoked nor
     // closed, the aborted mount is still in the table, and no reader was
     // granted since.
-    checks.that(
-        staged.gate.observe().holding == 1 && staged.store.read_work().outstanding == 1,
-        || {
-            format!(
-                "{name}: the Store read after Force: {:?}",
-                staged.gate.observe()
-            )
-        },
-    );
+    checks.that(staged.gate.observe().holding == 1, || {
+        format!(
+            "{name}: the Store read after Force: {:?}",
+            staged.gate.observe()
+        )
+    });
     checks.that(staged.live(), || {
         format!("{name}: the Workspace was revoked or closed under the reader")
     });
     checks.that(mount_entry(&staged.ready.directory).is_some(), || {
         format!("{name}: a detach was made before the drain held")
     });
-    checks.that(staged.harness.phase(token) == NativePhase::Retained, || {
+    checks.that(staged.harness.phase(token) == MountPhase::Retained, || {
         format!("{name}: phase {:?}", staged.harness.phase(token))
     });
     // The blocked caller got the kernel's answer for an aborted connection.
@@ -855,13 +838,13 @@ fn force_beside_a_read_inside_its_store_read_stops_at_requests_and_revokes_nothi
     let after = staged.work();
     let calls = staged.gate.observe();
     println!(
-        "{name}: released: lane(admitted={} retained={} completed={}->{}) gate={calls:?} reader_grants={}->{}",
+        "{name}: released: lane(admitted={} retained={} completed={}->{}) gate={calls:?} reader_demands={}->{}",
         after.active,
         after.retained,
         held.completed,
         after.completed,
         grants,
-        staged.store.read_work().grants
+        staged.store.read_work().requests
     );
     checks.that(
         (after.active, after.retained) == (0, 0) && after.completed == held.completed + 1,
@@ -870,8 +853,7 @@ fn force_beside_a_read_inside_its_store_read_stops_at_requests_and_revokes_nothi
     checks.that(
         calls.entered == calls.returned
             && calls.expired == 0
-            && staged.store.read_work().grants == grants
-            && staged.store.read_work().outstanding == 0,
+            && staged.store.read_work().requests == grants,
         || {
             format!(
                 "{name}: Store use after the release: {calls:?} {:?}",
@@ -960,9 +942,10 @@ fn force_apart(harness: &Harness, token: WorkspaceToken) -> (Receiver<Forced>, J
         };
         let left = match service.execute_control(&request) {
             Ok(done) => match &done.reply {
-                Reply::ForceUnmounted(closed) if closed.token == token => {
-                    Forced::Unmounted(Box::new(closed.outcome.clone()), done.completion.is_some())
-                }
+                Reply::ForceUnmounted(closed) if closed.token == token => Forced::Unmounted(
+                    Box::new(closed.outcome.clone()),
+                    matches!(done.reply, Reply::Unmounted(_) | Reply::ForceUnmounted(_)),
+                ),
                 other => Forced::Other(format!("{other:?}")),
             },
             Err(Failure::Retained(custody)) => Forced::Retained(custody),
@@ -989,7 +972,7 @@ fn force_completes_when_the_read_inside_its_store_read_returns_inside_the_drain_
     let mut staged = Staged::new("store-read-force-released", "direct");
     let token = staged.ready.token;
     let held = staged.hold(name, &mut checks);
-    let grants = staged.store.read_work().grants;
+    let grants = staged.store.read_work().requests;
 
     let started = Instant::now();
     let (left, worker) = force_apart(&staged.harness, token);
@@ -1072,10 +1055,10 @@ fn force_completes_when_the_read_inside_its_store_read_returns_inside_the_drain_
         Err(Failure::Rejected(ControlCode::Missing, _))
     ));
     // The READ took no second reader, and the Workspace's rows retire.
-    checks.that(staged.store.read_work().grants == grants, || {
+    checks.that(staged.store.read_work().requests == grants, || {
         format!(
             "{name}: reader grants {grants} -> {}",
-            staged.store.read_work().grants
+            staged.store.read_work().requests
         )
     });
     staged.retired(name, &mut checks);
@@ -1083,3 +1066,5 @@ fn force_completes_when_the_read_inside_its_store_read_returns_inside_the_drain_
     staged.finish();
     checks.done(name);
 }
+
+use layerfs_workspace::Route;

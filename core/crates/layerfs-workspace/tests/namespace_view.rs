@@ -106,10 +106,7 @@ fn name_and_inode_counts_have_no_cap_and_every_window_stays_bounded() {
     b.applied(rmdir(1, "wide"), T2);
     assert_eq!(b.lookup(1, "wide"), None);
     // Removed inside their creating generation: no name row is left behind.
-    assert_eq!(
-        b.overlay.state(b.route()).unwrap().dirty_directory_entries,
-        0
-    );
+    assert_eq!(b.overlay.state().unwrap().dirty_directory_entries, 0);
 }
 
 #[test]
@@ -119,7 +116,7 @@ fn known_install_folds_a_capture_and_keeps_later_namespace_changes() {
     let built = b.applied(mkdir(1, "built"), T1).unwrap().serial;
     let object = b.applied(create(built, "out.o"), T1).unwrap().serial;
     b.applied(unlink(1, "alias"), T1);
-    let capture = b.overlay.capture(b.route()).unwrap();
+    let capture = b.overlay.capture().unwrap();
 
     // After the seal, the captured generation is immutable lower state.
     let quiet = b.demand();
@@ -249,8 +246,8 @@ fn a_rebound_name_between_owner_rounds_is_resolved_before_the_one_attempt() {
         vec![".git", "cache", "file", "node_modules", "output"]
     );
     // Two tickets were published and both reply attempts are settled.
-    assert_eq!(b.overlay.state(b.route()).unwrap().revision, 2);
-    assert!(b.overlay.capture_ready(b.route()).unwrap());
+    assert_eq!(b.overlay.state().unwrap().revision, 2);
+    assert!(b.overlay.capture_ready().unwrap());
 }
 
 #[test]
@@ -266,7 +263,7 @@ fn opposing_directory_moves_cannot_form_a_cycle_between_owner_rounds() {
         Err(WorkspaceError::Refused(Refusal::AncestryMismatch))
     ));
     // Only the interleaved move was published.
-    assert_eq!(b.overlay.state(b.route()).unwrap().revision, 1);
+    assert_eq!(b.overlay.state().unwrap().revision, 1);
     // With the destination's current path the move is the cycle it would be.
     assert_eq!(
         b.refused(rename((1, "cache"), (7, "c"), true, path(&["cache", "o"]))),

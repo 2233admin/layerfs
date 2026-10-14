@@ -1,14 +1,14 @@
 //! Authentic daemon observations preserve ordinary effects and fixed cardinality.
 #![cfg(target_os = "linux")]
 #[allow(dead_code)]
-#[path = "support/native_install.rs"]
+#[path = "support/host_install.rs"]
 mod support;
 #[cfg(target_os = "linux")]
 use layerfs_bridge::control::{CleanupObservation, ControlCode};
 use layerfs_bridge::{
     control::{Reply, Request},
     daemon_setup::{DaemonLimits, DaemonSetup},
-    native,
+    duplex,
     provision::StoreManifest,
 };
 use layerfs_history::WorkspaceId;
@@ -33,11 +33,11 @@ impl Drop for Process {
         let _ = self.0.wait();
     }
 }
-fn connect(address: SocketAddr) -> native::Connection {
-    native::initiate(
+fn connect(address: SocketAddr) -> duplex::Connection {
+    duplex::initiate(
         support::socket(TcpStream::connect_timeout(&address, Duration::from_secs(2)).unwrap()),
         &support::CLIENT_PRIVATE,
-        native::public_key(&support::SERVER_PRIVATE).unwrap(),
+        duplex::public_key(&support::SERVER_PRIVATE).unwrap(),
     )
     .unwrap()
 }
@@ -65,7 +65,7 @@ fn configure(f: &support::Fixture, deployment: &Deployment) -> PathBuf {
     let setup = DaemonSetup {
         listen: "127.0.0.1:0".into(),
         private_key: support::SERVER_PRIVATE,
-        control_peer: native::public_key(&support::CLIENT_PRIVATE).unwrap(),
+        control_peer: duplex::public_key(&support::CLIENT_PRIVATE).unwrap(),
         store: f.project.manifest.locator.clone(),
         overlay: deployment.overlay.to_str().unwrap().into(),
         mounts: deployment.mounts.to_str().unwrap().into(),
@@ -73,7 +73,6 @@ fn configure(f: &support::Fixture, deployment: &Deployment) -> PathBuf {
         command_gid: 65534,
         limits: DaemonLimits {
             connections: 4,
-            read_handles: 2,
             handshake_ms: 3000,
             cache_bytes: 64 * 1024,
             namespaces: 8,
@@ -634,7 +633,7 @@ fn configured_serial_low_water_reaches_a_mounted_create_on_both_startup_routes()
             let work = layerfs_sdk::internal::workspace(&mut control)
                 .status(bound.token)
                 .unwrap()
-                .native
+                .kernel
                 .unwrap()
                 .work
                 .unwrap();

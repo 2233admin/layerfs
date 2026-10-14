@@ -55,10 +55,9 @@ mod mounted;
 #[allow(dead_code)]
 #[path = "support/mounted_commit.rs"]
 mod rig;
-use layerfs_bridge::control::{NativeWork, Reply, WorkspaceToken};
+use layerfs_bridge::control::{MountWork, WorkspaceToken};
 use layerfs_content::ObjectId;
-use layerfs_daemon::store::{PortError, ReadLimits, Store, StoreReader};
-use layerfs_fuse::request::Opcode;
+use layerfs_daemon::store::{PortError, Store, StoreReader};
 use layerfs_persistence::{Handles, SqlitePersistenceProfile, StorageProvider};
 use layerfs_storage::{
     location::PackInfo,
@@ -69,12 +68,11 @@ use mounted::{mount_entry, Harness};
 use nix::{errno::Errno, libc};
 use rig::{pattern, root, stamp_tree};
 use std::{
-    fmt::Debug,
     fs::{self, File, OpenOptions},
     os::unix::fs::{FileExt, OpenOptionsExt, PermissionsExt},
     path::{Path, PathBuf},
     process::Command as Process,
-    sync::{mpsc, Arc},
+    sync::{mpsc, Arc, Mutex},
     thread,
     time::{Duration, Instant},
 };
@@ -95,37 +93,6 @@ fn expected(index: usize) -> Vec<u8> {
     pattern(COLD[index].1, COLD[index].2)
 }
 
-/// A bounded description of an original value for an evidence line.
-fn brief(value: &impl Debug) -> String {
-    let mut text = format!("{value:?}");
-    let mut end = text.len().min(600);
-    while !text.is_char_boundary(end) {
-        end -= 1;
-    }
-    text.truncate(end);
-    text
-}
-/// Product expectations that did not hold. Reported after teardown, so a
-/// deviation still leaves its whole evidence.
-#[derive(Default)]
-struct Checks(Vec<String>);
-impl Checks {
-    fn that(&mut self, holds: bool, what: impl FnOnce() -> String) {
-        if !holds {
-            let what = what();
-            println!("FP-27 DEVIATION {what}");
-            self.0.push(what);
-        }
-    }
-    fn done(self, name: &str) {
-        assert!(
-            self.0.is_empty(),
-            "{name}: {} product expectations did not hold: {:#?}",
-            self.0.len(),
-            self.0
-        );
-    }
-}
 /// Never leaves a kernel mount behind: if the test unwinds, or the product
 /// did not unmount, one lazy umount(8) launched and reaped by the test
 /// detaches what is still there.
@@ -155,8 +122,8 @@ fn eventually(mut condition: impl FnMut() -> bool) -> bool {
         thread::sleep(Duration::from_millis(2));
     }
 }
-fn work(harness: &Harness, token: WorkspaceToken) -> NativeWork {
-    harness.status(token).native.unwrap().work.unwrap()
+fn work(harness: &Harness, token: WorkspaceToken) -> MountWork {
+    harness.status(token).kernel.unwrap().work.unwrap()
 }
 /// Two consecutive observations of a connection with nothing received, no
 /// request admitted beyond those retained, and none completed in between.
@@ -171,32 +138,15 @@ fn quiet(harness: &Harness, token: WorkspaceToken) -> bool {
         settled
     })
 }
-/// Per-opcode frame counts out of a Debug-rendered drain receipt.
-fn opcodes(receipt: &str) -> Vec<u64> {
-    let key = "OpcodeWork { opcodes: [";
-    let at = receipt.find(key).unwrap_or_else(|| panic!("{receipt}")) + key.len();
-    let end = at + receipt[at..].find(']').unwrap();
-    receipt[at..end]
-        .split(", ")
-        .map(|count| count.parse().unwrap())
-        .collect()
-}
-/// The text of a Debug-rendered receipt from its failed-demand record on.
-fn failed_demands(receipt: &str) -> &str {
-    let at = receipt
-        .find("failed_demands: ")
-        .unwrap_or_else(|| panic!("{receipt}"));
-    &receipt[at..]
-}
 
 /// One installed Disposable Store, opened once and kept open, with no object
-/// cache, and one real native serving assembly over it. The test keeps the
+/// cache, and one real kernel serving assembly over it. The test keeps the
 /// provider of each read session.
 struct Fx {
     fixture: installed::Fixture,
     store: Arc<Store>,
     harness: Harness,
-    readers: Vec<Arc<StorageProvider>>,
+    readers: Arc<Mutex<Vec<Arc<StorageProvider>>>>,
 }
 impl Fx {
     fn new(label: &str) -> Self {
@@ -222,24 +172,33 @@ impl Fx {
         let config = || fixture.config.clone();
         let writer =
             Handles::open_writable(config(), installed::BINDING, installed::CURSOR).unwrap();
-        let mut readers = Vec::new();
-        let sessions = (0..2)
-            .map(|_| {
-                let read = Handles::open_read_only(config(), installed::BINDING, installed::CURSOR)
-                    .unwrap();
-                readers.push(read.storage.clone());
-                StoreReader::new(Storage::new(read.storage).unwrap(), Arc::new(read.history))
-            })
-            .collect();
+        let readers = Arc::new(Mutex::new(Vec::new()));
+        let reader_config = fixture.config.clone();
+        let observed_readers = readers.clone();
+        let factory: layerfs_daemon::store::ReaderFactory = Arc::new(move |_| {
+            let read = Handles::open_read_only(
+                reader_config.clone(),
+                installed::BINDING,
+                installed::CURSOR,
+            )
+            .unwrap();
+            observed_readers.lock().unwrap().push(read.storage.clone());
+            Ok(StoreReader::new(
+                Storage::new(read.storage).unwrap(),
+                Arc::new(read.history),
+            ))
+        });
+        let control = factory(0).unwrap();
         let pack: Arc<dyn PackPersistence> = writer.storage;
         let store = Arc::new(
             Store::new(
                 pack,
                 Arc::new(writer.history),
-                sessions,
+                control,
+                factory,
                 0,
                 ReservationBlocks::default(),
-                ReadLimits::default(),
+                16,
             )
             .unwrap(),
         );
@@ -324,7 +283,7 @@ fn read_apart(path: PathBuf) -> mpsc::Receiver<Answer> {
 // ------------------------------------------------- marker at the READ step
 
 /// The read session the test puts out of service.
-const QUARANTINED: usize = 0;
+const QUARANTINED: usize = 1;
 struct Uncertain;
 impl PackReadPlan for Uncertain {
     fn select(&mut self, _: PackInfo, _: &[u8]) -> Result<PackReadChoice, PersistenceError> {
@@ -348,13 +307,12 @@ fn quarantine(provider: &StorageProvider, root: ObjectId) {
 /// one with that original cause; nothing is retained and the mount keeps
 /// serving, with no further demand on the quarantined reader.
 #[test]
-fn fp27_a_read_whose_own_demand_observes_the_quarantined_reader_fails_alone_with_eio() {
-    let fx = Fx::new("fp27-read");
+fn fp27_a_quarantined_workspace_reader_is_never_reopened_or_borrowed_by_its_sibling() {
+    let fx = Fx::new("fp27-owned-reader");
     let ready = fx.harness.mount(1);
     let mounted = Mounted(ready.directory.clone());
-    let mount = root(&ready).to_path_buf();
-    let token = ready.token;
-    let mut checks = Checks::default();
+    let sibling = fx.harness.mount(2);
+    let sibling_mounted = Mounted(sibling.directory.clone());
     let base = fx
         .store
         .history()
@@ -362,173 +320,54 @@ fn fp27_a_read_whose_own_demand_observes_the_quarantined_reader_fails_alone_with
         .unwrap()
         .unwrap()
         .effective_root;
-    let statements = |fx: &Fx| {
-        fx.readers[QUARANTINED]
-            .diagnostics()
-            .map(|work| work.statements)
-    };
-
-    // Looked up and opened while both readers are healthy.
-    let file = Arc::new(direct(&mount.join(COLD[0].0)));
-    assert!(quiet(&fx.harness, token), "the open is answered");
-    let opened = work(&fx.harness, token);
-    let idle = fx.store.read_work();
-    assert_eq!(
-        (idle.readers, idle.quarantined, idle.outstanding),
-        (2, 0, 0),
-        "{idle:?}"
-    );
-    // The test takes the other read session, so the next demand of the
-    // mount can only be given the one put out of service.
-    let first = fx.store.read_ticket(None).unwrap().wait().unwrap();
-    let healthy = if first.index() == QUARANTINED {
-        let second = fx.store.read_ticket(None).unwrap().wait().unwrap();
-        drop(first);
-        second
-    } else {
-        first
-    };
-    assert_eq!(healthy.index(), 1 - QUARANTINED);
-    let before_staging = statements(&fx).unwrap();
-    quarantine(&fx.readers[QUARANTINED], base);
-    let staged = statements(&fx).unwrap();
-    let grants = fx.store.read_work().grants;
-
-    // The observing request: one READ. It is answered while the test still
-    // holds the healthy reader, so it had no second reader to ask.
-    let observed = pread_apart(file.clone()).recv_timeout(WAIT).ok();
-    let pool = fx.store.read_work();
-    let at_failure = statements(&fx);
-    drop(healthy);
-    let quiet_after = quiet(&fx.harness, token);
-    let failed = work(&fx.harness, token);
+    let file = Arc::new(direct(&root(&ready).join(COLD[0].0)));
+    assert!(quiet(&fx.harness, ready.token));
+    assert_eq!(fx.store.read_work().readers, 3); // control and two mounted readers
+    quarantine(&fx.readers.lock().unwrap()[QUARANTINED], base);
+    let observed = pread_apart(file.clone()).recv_timeout(WAIT).unwrap();
+    assert_eq!(observed, Err(Some(Errno::EIO)));
     let failures = fx.store.reader_failures();
-    println!(
-        "FP-27 read: reader={QUARANTINED} statements(before_staging={before_staging} staged={staged} at_failure={at_failure:?}) observing READ={} pool={pool:?} reader_grants={grants}->{}",
-        match &observed {
-            Some(Ok(bytes)) => format!("Ok({} bytes)", bytes.len()),
-            other => format!("{other:?}"),
-        },
-        pool.grants
+    assert_eq!(failures.len(), 1);
+    let first = failures[0].1.clone();
+    assert_eq!(failures[0].0, QUARANTINED);
+    assert!(matches!(first.as_ref(), PortError::Storage(error) if error.is_unknown_outcome()));
+    let stopped_at = fx.readers.lock().unwrap()[QUARANTINED]
+        .diagnostics()
+        .unwrap()
+        .statements;
+    assert_eq!(
+        pread_apart(file.clone()).recv_timeout(WAIT).unwrap(),
+        Err(Some(Errno::EIO))
     );
-    println!(
-        "FP-27 read: native work {opened:?} -> {failed:?} reader_failures={}",
-        brief(&failures)
-    );
-    checks.that(observed == Some(Err(Some(Errno::EIO))), || {
-        format!(
-            "the READ whose demand observed the quarantined reader was not answered EIO: {}",
-            brief(&observed)
-        )
-    });
-    checks.that(pool.quarantined == 1 && pool.grants == grants + 1, || {
-        format!("one reader granted to the READ and quarantined by it: {grants} -> {pool:?}")
-    });
-    checks.that(
-        failures.len() == 1
-            && failures[0].0 == QUARANTINED
-            && matches!(failures[0].1.as_ref(), PortError::Storage(error) if error.is_unknown_outcome()),
-        || format!("the retired reader and its original cause: {}", brief(&failures)),
-    );
-    // One request since the open, completed, with nothing retained.
-    checks.that(
-        quiet_after
-            && failed.served == opened.served + 1
-            && failed.completed == opened.completed + 1
-            && (failed.retained, failed.terminal, failed.active) == (0, 0, 0),
-        || format!("the failed READ did not end by itself: {opened:?} -> {failed:?}"),
-    );
-
-    // A later read on the same descriptor is exact.
-    let again = pread_apart(file.clone()).recv_timeout(WAIT).ok();
-    checks.that(again.as_ref() == Some(&Ok(expected(0))), || {
-        format!(
-            "the later READ on the same descriptor was not exact: {}",
-            match &again {
-                Some(Ok(bytes)) => format!("Ok({} bytes)", bytes.len()),
-                other => format!("{other:?}"),
-            }
-        )
-    });
-    // The mount keeps serving: every other cold file, by ordinary reads.
-    let mut exact = 0;
-    for (index, (name, _, _)) in COLD.iter().enumerate().skip(1) {
-        let answer = read_apart(mount.join(name)).recv_timeout(WAIT).ok();
-        if answer.as_ref() == Some(&Ok(expected(index))) {
-            exact += 1;
-        } else {
-            checks.that(false, || {
-                format!("a later read of {name} was not exact: {}", brief(&answer))
-            });
-            break;
-        }
+    for (index, (name, _, _)) in COLD.iter().enumerate() {
+        assert_eq!(
+            read_apart(root(&sibling).join(name))
+                .recv_timeout(WAIT)
+                .unwrap(),
+            Ok(expected(index))
+        );
     }
-    let at_end = statements(&fx);
-    let end_pool = fx.store.read_work();
-    let quiet_end = quiet(&fx.harness, token);
-    let served = work(&fx.harness, token);
-    println!(
-        "FP-27 read: later READ on the same descriptor exact={} other cold files exact={exact} of {} quarantined reader statements {at_failure:?} -> {at_end:?} pool={end_pool:?} native work={served:?}",
-        again.as_ref() == Some(&Ok(expected(0))),
-        COLD.len() - 1
+    assert_eq!(
+        fx.readers.lock().unwrap()[QUARANTINED]
+            .diagnostics()
+            .unwrap()
+            .statements,
+        stopped_at
     );
-    checks.that(
-        matches!((&at_failure, &at_end), (Ok(then), Ok(now)) if then == now),
-        || format!("the quarantined reader got a further demand: {at_failure:?} -> {at_end:?}"),
-    );
-    checks.that(
-        end_pool.quarantined == 1 && end_pool.readers == 2 && end_pool.outstanding == 0,
-        || format!("the read pool at the end: {end_pool:?}"),
-    );
-    checks.that(
-        quiet_end && (served.retained, served.terminal) == (0, 0),
-        || format!("the mount retained or ended a request: {served:?}"),
-    );
-
-    // The drain receipt carries the one failed demand and its cause.
+    assert!(Arc::ptr_eq(&fx.store.reader_failures()[0].1, &first));
     drop(file);
-    let quiet_last = quiet(&fx.harness, token);
-    let closed = fx.harness.try_unmount(token);
-    let clean = matches!(&closed, Ok(done) if done.reply == Reply::Unmounted(token));
-    let receipt = match &closed {
-        Ok(done) => format!("{:?}", done.native),
-        Err(failure) => brief(failure),
-    };
-    println!(
-        "FP-27 read: unmount quiet_before={quiet_last} unmounted={clean} {}",
-        if clean {
-            failed_demands(&receipt).to_owned()
-        } else {
-            receipt.clone()
-        }
-    );
-    checks.that(clean, || format!("the Unmount answered {receipt}"));
-    if clean {
-        let record = failed_demands(&receipt);
-        let cause = failures
-            .first()
-            .map(|(_, cause)| format!("{cause:?}"))
-            .unwrap_or_default();
-        checks.that(
-            record.starts_with("failed_demands: FailedDemands { count: 1, first: Some("),
-            || format!("the drain receipt does not count one failed demand: {record}"),
-        );
-        checks.that(!cause.is_empty() && record.contains(&cause), || {
-            format!("the drain receipt does not carry the original cause {cause}: {record}")
-        });
-        let frames = opcodes(&receipt);
-        println!(
-            "FP-27 read: receipt_opcodes(lookup={} open={} read={} release={})",
-            frames[Opcode::Lookup as usize],
-            frames[Opcode::Open as usize],
-            frames[Opcode::Read as usize],
-            frames[Opcode::Release as usize]
-        );
-    }
-    drop(closed);
-    drop(mounted);
-    fx.finish(clean);
-    checks.done("FP-27 marker at the READ step");
+    assert!(quiet(&fx.harness, ready.token));
+    fx.harness.unmount(&sibling);
+    drop(sibling_mounted);
+    let failed_close = fx.harness.try_unmount(ready.token);
+    assert!(matches!(
+        failed_close,
+        Err(layerfs_daemon::control::Failure::Retained(_))
+    ));
+    assert!(mount_entry(&ready.directory).is_none()); // known detach, unknown reader retained
+    assert!(Arc::ptr_eq(&fx.store.reader_failures()[0].1, &first));
+    drop((failed_close, first, failures, mounted));
+    fx.finish(false);
 }
 
 // ------------------------------------------------------- Capacity retained

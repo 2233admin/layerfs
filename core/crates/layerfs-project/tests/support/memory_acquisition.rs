@@ -8,7 +8,7 @@ use layerfs_content::{inode_leaf::InodeKind, ObjectId};
 use layerfs_storage::port::{
     acquisition::{
         Abandoned, Acquisition, AcquisitionError, AcquisitionResult, AcquisitionWork, Begin,
-        Directory, Discarded, Entry, EntryKey, FileRoot, Job, Limits, NativeIdentity, NewEntry,
+        Directory, Discarded, Entry, EntryKey, FileRoot, HostIdentity, Job, Limits, NewEntry,
         Owner, Phase, Placed, Unplaced, WRITE_ROW_BYTES, WRITE_WINDOW_BYTES, WRITE_WINDOW_ROWS,
     },
     PersistenceError,
@@ -31,14 +31,14 @@ struct Row {
     canonical: Option<u64>,
     metadata_root: ObjectId,
     content_root: Option<ObjectId>,
-    native_path: Option<Vec<u8>>,
-    native: Option<NativeIdentity>,
+    host_path: Option<Vec<u8>>,
+    host: Option<HostIdentity>,
     bytes: u64,
 }
 
 #[derive(Clone)]
-struct Native {
-    identity: NativeIdentity,
+struct Host {
+    identity: HostIdentity,
     path: Vec<u8>,
     aliases: u64,
     root: Option<ObjectId>,
@@ -51,7 +51,7 @@ struct Operation {
     entries: BTreeMap<(i64, Vec<u8>), Row>,
     /// Key of each positioned directory, by position.
     directories: BTreeMap<u64, (i64, Vec<u8>)>,
-    natives: BTreeMap<u64, Native>,
+    host_files: BTreeMap<u64, Host>,
     identities: BTreeMap<(u64, u64), u64>,
     work: AcquisitionWork,
 }
@@ -64,15 +64,10 @@ impl Operation {
         work.peak_bytes = work.peak_bytes.max(work.held_bytes);
     }
     /// Binds one positioned path; a different evidence changes nothing.
-    fn bind(
-        &mut self,
-        position: u64,
-        native: &NativeIdentity,
-        path: &[u8],
-    ) -> AcquisitionResult<u64> {
-        if let Some(first) = self.identities.get(&(native.device, native.inode)) {
-            let held = self.natives.get_mut(first).expect("identity row");
-            if held.identity.evidence != native.evidence {
+    fn bind(&mut self, position: u64, host: &HostIdentity, path: &[u8]) -> AcquisitionResult<u64> {
+        if let Some(first) = self.identities.get(&(host.device, host.inode)) {
+            let held = self.host_files.get_mut(first).expect("identity row");
+            if held.identity.evidence != host.evidence {
                 return Err(AcquisitionError::Changed { position });
             }
             held.aliases += 1;
@@ -82,12 +77,11 @@ impl Operation {
             return Err(AcquisitionError::Bounds);
         }
         let bytes = path.len() as u64 + 60;
-        self.identities
-            .insert((native.device, native.inode), position);
-        self.natives.insert(
+        self.identities.insert((host.device, host.inode), position);
+        self.host_files.insert(
             position,
-            Native {
-                identity: *native,
+            Host {
+                identity: *host,
                 path: path.to_vec(),
                 aliases: 0,
                 root: None,
@@ -145,7 +139,7 @@ impl MemoryAcquisition {
     pub fn operations(&self) -> Vec<(u64, Phase, u64)> {
         let state = self.state.lock().unwrap();
         let held =
-            |operation: &Operation| (operation.entries.len() + operation.natives.len()) as u64;
+            |operation: &Operation| (operation.entries.len() + operation.host_files.len()) as u64;
         let listed = state.operations.iter();
         listed
             .map(|(id, operation)| (*id, operation.phase, held(operation)))
@@ -219,11 +213,11 @@ impl MemoryAcquisition {
 }
 
 fn well_formed(entry: &NewEntry) -> bool {
-    let path = entry.native_path.is_some();
+    let path = entry.host_path.is_some();
     let shape = match entry.kind {
-        InodeKind::Directory => path && entry.native.is_none(),
-        InodeKind::RegularFile => path && entry.native.is_some(),
-        InodeKind::Symlink => !path && entry.native.is_none(),
+        InodeKind::Directory => path && entry.host.is_none(),
+        InodeKind::RegularFile => path && entry.host.is_some(),
+        InodeKind::Symlink => !path && entry.host.is_none(),
     };
     let child = entry.key.parent.is_some();
     shape
@@ -249,7 +243,7 @@ impl Acquisition for MemoryAcquisition {
                 phase: Phase::Scanning,
                 entries: BTreeMap::new(),
                 directories: BTreeMap::new(),
-                natives: BTreeMap::new(),
+                host_files: BTreeMap::new(),
                 identities: BTreeMap::new(),
                 work: AcquisitionWork::default(),
             },
@@ -266,7 +260,7 @@ impl Acquisition for MemoryAcquisition {
 
     fn put_entries(&self, owner: Owner, entries: &[NewEntry]) -> AcquisitionResult<Vec<u64>> {
         let bytes = entries.iter().map(|entry| {
-            entry.key.name.len() + entry.native_path.as_ref().map_or(0, Vec::len) + WRITE_ROW_BYTES
+            entry.key.name.len() + entry.host_path.as_ref().map_or(0, Vec::len) + WRITE_ROW_BYTES
         });
         self.written(entries.len(), bytes.sum())?;
         self.unit("put_entries", owner, |operation| {
@@ -279,11 +273,10 @@ impl Acquisition for MemoryAcquisition {
                 if operation.entries.contains_key(&key) {
                     return Err(PersistenceError::Malformed.into());
                 }
-                let path = entry.native_path.as_deref();
+                let path = entry.host_path.as_deref();
                 let mut first = None;
-                if let (Some(own), Some(native), Some(path)) = (entry.position, &entry.native, path)
-                {
-                    first = Some(operation.bind(own, native, path)?);
+                if let (Some(own), Some(host), Some(path)) = (entry.position, &entry.host, path) {
+                    first = Some(operation.bind(own, host, path)?);
                     canonical.extend(first);
                 }
                 let directory = entry.kind == InodeKind::Directory;
@@ -299,8 +292,8 @@ impl Acquisition for MemoryAcquisition {
                         canonical: first,
                         metadata_root: entry.metadata_root,
                         content_root: entry.target_root,
-                        native_path: entry.native_path.clone().filter(|_| directory),
-                        native: entry.native.filter(|_| entry.position.is_none()),
+                        host_path: entry.host_path.clone().filter(|_| directory),
+                        host: entry.host.filter(|_| entry.position.is_none()),
                         bytes,
                     },
                 );
@@ -329,7 +322,7 @@ impl Acquisition for MemoryAcquisition {
                 .map(|((_, name), row)| Unplaced {
                     name: name.clone(),
                     kind: row.kind,
-                    native: row.native,
+                    host: row.host,
                 })
                 .collect())
         })
@@ -343,7 +336,7 @@ impl Acquisition for MemoryAcquisition {
     ) -> AcquisitionResult<Vec<u64>> {
         let bytes = placed.iter().map(|child| {
             child.name.len()
-                + child.native.as_ref().map_or(0, |(_, path)| path.len())
+                + child.host.as_ref().map_or(0, |(_, path)| path.len())
                 + WRITE_ROW_BYTES
         });
         self.written(placed.len(), bytes.sum())?;
@@ -356,19 +349,19 @@ impl Acquisition for MemoryAcquisition {
                 let key = (parent as i64, child.name.clone());
                 let row = operation.entries.get(&key).ok_or(changed.clone())?;
                 let regular = row.kind == InodeKind::RegularFile;
-                if row.position.is_some() || regular != child.native.is_some() {
+                if row.position.is_some() || regular != child.host.is_some() {
                     return Err(changed);
                 }
                 let directory = row.kind == InodeKind::Directory;
                 let mut first = None;
-                if let Some((native, path)) = &child.native {
-                    first = Some(operation.bind(child.position, native, path)?);
+                if let Some((host, path)) = &child.host {
+                    first = Some(operation.bind(child.position, host, path)?);
                     canonical.extend(first);
                 }
                 let row = operation.entries.get_mut(&key).expect("checked above");
                 row.position = Some(child.position);
                 row.canonical = first;
-                row.native = None;
+                row.host = None;
                 if directory {
                     operation.directories.insert(child.position, key);
                 }
@@ -389,7 +382,7 @@ impl Acquisition for MemoryAcquisition {
             Ok(listed
                 .map(|(position, key)| Directory {
                     position: *position,
-                    native_path: operation.entries[key].native_path.clone().expect("path"),
+                    host_path: operation.entries[key].host_path.clone().expect("path"),
                 })
                 .collect())
         })
@@ -398,7 +391,7 @@ impl Acquisition for MemoryAcquisition {
     fn directory_path(&self, owner: Owner, position: u64) -> AcquisitionResult<Option<Vec<u8>>> {
         self.unit("directory_path", owner, |operation| {
             let key = operation.directories.get(&position);
-            Ok(key.and_then(|key| operation.entries[key].native_path.clone()))
+            Ok(key.and_then(|key| operation.entries[key].host_path.clone()))
         })
     }
 
@@ -410,12 +403,12 @@ impl Acquisition for MemoryAcquisition {
     ) -> AcquisitionResult<Vec<Job>> {
         self.read("jobs", owner, limits, |operation, rows| {
             let start = after.map_or(Unbounded, Excluded);
-            let listed = operation.natives.range((start, Unbounded)).take(rows);
+            let listed = operation.host_files.range((start, Unbounded)).take(rows);
             Ok(listed
-                .map(|(position, native)| Job {
+                .map(|(position, host)| Job {
                     position: *position,
-                    native: native.identity,
-                    native_path: native.path.clone(),
+                    host: host.identity,
+                    host_path: host.path.clone(),
                 })
                 .collect())
         })
@@ -423,10 +416,10 @@ impl Acquisition for MemoryAcquisition {
 
     fn job(&self, owner: Owner, position: u64) -> AcquisitionResult<Option<Job>> {
         self.unit("job", owner, |operation| {
-            Ok(operation.natives.get(&position).map(|native| Job {
+            Ok(operation.host_files.get(&position).map(|host| Job {
                 position,
-                native: native.identity,
-                native_path: native.path.clone(),
+                host: host.identity,
+                host_path: host.path.clone(),
             }))
         })
     }
@@ -435,13 +428,13 @@ impl Acquisition for MemoryAcquisition {
         self.written(roots.len(), roots.len() * 48)?;
         self.unit("complete_files", owner, |operation| {
             for (position, root) in roots {
-                let native = operation.natives.get_mut(position);
-                let native = native.filter(|native| native.root.is_none());
-                let native = native.ok_or(AcquisitionError::Changed {
+                let host = operation.host_files.get_mut(position);
+                let host = host.filter(|host| host.root.is_none());
+                let host = host.ok_or(AcquisitionError::Changed {
                     position: *position,
                 })?;
-                native.root = Some(*root);
-                native.bytes += 32;
+                host.root = Some(*root);
+                host.bytes += 32;
             }
             operation.charge(0, roots.len() as u64 * 32);
             Ok(())
@@ -456,12 +449,12 @@ impl Acquisition for MemoryAcquisition {
     ) -> AcquisitionResult<Vec<FileRoot>> {
         self.read("file_roots", owner, limits, |operation, rows| {
             let start = after.map_or(Unbounded, Excluded);
-            let listed = operation.natives.range((start, Unbounded)).take(rows);
+            let listed = operation.host_files.range((start, Unbounded)).take(rows);
             Ok(listed
-                .map(|(position, native)| FileRoot {
+                .map(|(position, host)| FileRoot {
                     position: *position,
-                    aliases: native.aliases,
-                    root: native.root,
+                    aliases: host.aliases,
+                    root: host.root,
                 })
                 .collect())
         })
@@ -537,15 +530,15 @@ impl Acquisition for MemoryAcquisition {
                 (removed, bytes, budget) = (removed + 1, bytes + row.bytes, budget - 1);
             }
             while budget > 0 {
-                let Some((_, native)) = operation.natives.pop_first() else {
+                let Some((_, host)) = operation.host_files.pop_first() else {
                     break;
                 };
-                (removed, bytes, budget) = (removed + 1, bytes + native.bytes, budget - 1);
+                (removed, bytes, budget) = (removed + 1, bytes + host.bytes, budget - 1);
             }
             if operation.entries.is_empty() {
                 operation.directories.clear();
             }
-            if operation.natives.is_empty() {
+            if operation.host_files.is_empty() {
                 operation.identities.clear();
             }
             let work = &mut operation.work;

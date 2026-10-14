@@ -300,8 +300,8 @@ pub fn claims(after: Option<i64>, ranges: &[(u64, u64, u64)]) -> WriteClaims {
     }
 }
 /// Reference rows and payload rows of one Workspace.
-pub fn rows(db: &Overlay, route: Route) -> (u64, u64) {
-    let counts = db.resources(Some(route)).unwrap().counts;
+pub fn rows(db: &Overlay, _route: ()) -> (u64, u64) {
+    let counts = db.resources().unwrap().counts;
     (counts.reference_rows, counts.payload_cells)
 }
 /// A file whose committed content is `content`, which is also what a piece

@@ -1,11 +1,11 @@
-//! One real native serving assembly over an installed Store, for mounted proofs.
+//! One real kernel serving assembly over an installed Store, for mounted proofs.
 use layerfs_bridge::control::{
-    NativePhase, ReadyMount, Reply, Request, WorkspaceStatus, WorkspaceToken,
+    MountPhase, ReadyMount, Reply, Request, WorkspaceStatus, WorkspaceToken,
 };
 use layerfs_daemon::{
-    control::{Failure, NativeConfig, NativeServing, Service, Success},
+    control::{Failure, KernelConfig, KernelServing, Service, Success},
     store::Store,
-    Owner, OwnerConfig, Response,
+    Owner, OwnerConfig,
 };
 use layerfs_history::{BranchId, WorkspaceId};
 use nix::unistd::{Gid, Uid};
@@ -22,7 +22,7 @@ pub const COMMAND: u32 = 65534;
 pub const READ_HANDLES: usize = 4;
 pub struct Harness {
     pub owner: Owner,
-    pub serving: Arc<NativeServing>,
+    pub serving: Arc<KernelServing>,
     pub service: Arc<Service>,
     pub mounts: PathBuf,
     pub branch: BranchId,
@@ -39,7 +39,7 @@ impl Harness {
         fs::create_dir(&mounts).unwrap();
         fs::set_permissions(&mounts, fs::Permissions::from_mode(0o755)).unwrap();
         let serving = Arc::new(
-            NativeServing::start(NativeConfig {
+            KernelServing::start(KernelConfig {
                 mounts: mounts.clone(),
                 owner_uid: Uid::effective().as_raw(),
                 owner_gid: Gid::effective().as_raw(),
@@ -50,7 +50,7 @@ impl Harness {
             })
             .unwrap(),
         );
-        let service = Arc::new(Service::with_native(store, &owner, serving.clone()));
+        let service = Arc::new(Service::with_kernel(store, &owner, serving.clone()));
         Self {
             owner,
             serving,
@@ -97,8 +97,8 @@ impl Harness {
             other => panic!("{other:?}"),
         }
     }
-    pub fn phase(&self, token: WorkspaceToken) -> NativePhase {
-        self.status(token).native.unwrap().phase
+    pub fn phase(&self, token: WorkspaceToken) -> MountPhase {
+        self.status(token).kernel.unwrap().phase
     }
     /// One product control Commit: the captured namespace producer through
     /// `execute_control`, attempted once on the caller's thread.
@@ -123,54 +123,29 @@ impl Harness {
     pub fn unmount(&self, ready: &ReadyMount) -> Success {
         let done = self.try_unmount(ready.token).unwrap();
         assert_eq!(done.reply, Reply::Unmounted(ready.token));
-        assert_eq!(done.earlier.len(), 1, "native-owner revocation receipt");
-        assert!(done.completion.is_some(), "logical Close receipt");
-        let receipt = format!("{:?}", done.native.as_ref().expect("drain receipt"));
+        let receipt = format!("{:?}", done.kernel.as_ref().expect("drain receipt"));
         assert!(receipt.contains("Drained"), "{receipt}");
         assert!(mount_entry(&ready.directory).is_none());
         assert!(!Path::new(&ready.directory).exists());
         done
     }
-    /// Daemon-wide maintained engine counts, observed through a live route.
+    /// Workspace maintained engine counts, observed through a live route.
     pub fn engine(&self, through: WorkspaceToken) -> layerfs_overlay::StoredCounts {
         self.engine_resources(through).counts
     }
     /// SQL and memory remain distinct observations of the original job.
     pub fn engine_resources(&self, through: WorkspaceToken) -> layerfs_overlay::Resources {
-        let _operation = self.service.operation(through).unwrap();
-        let pending = self.owner.client().resources(None, true).unwrap();
-        let done = pending;
-        match done.result() {
-            Ok(Response::Resources(resources)) => **resources,
-            other => panic!("{other:?}"),
-        }
+        let operation = self.service.operation(through).unwrap();
+        operation.overlay().resources().unwrap()
     }
 
-    /// Stops a daemon that keeps a failed Workspace. The aggregate resources
-    /// observation is refused with that original failure, and the stop
-    /// reports what it kept.
+    /// Stops a daemon that keeps a failed Workspace. The stop reports its original retained failure.
     pub fn stop_retained(self) {
-        let observed = self.owner.client().resources(None, true);
-        assert!(
-            !matches!(observed.as_ref().map(|done| done.result()), Ok(Ok(_))),
-            "{observed:?}"
-        );
-        drop(observed);
         drop(self.service);
         drop(self.serving);
         println!("HARNESS_STOP retained={:?}", self.owner.stop().err());
     }
     pub fn stop(self) {
-        let observed = self.owner.client().resources(None, true).unwrap();
-        match observed.result() {
-            // No mount and no open state is left; a Workspace that was only
-            // bound may remain.
-            Ok(Response::Resources(resources)) => {
-                assert_eq!(resources.open.values(), [0; 11], "{resources:?}");
-            }
-            other => panic!("{other:?}"),
-        }
-        drop(observed);
         drop(self.service);
         drop(self.serving);
         self.owner.stop().unwrap();

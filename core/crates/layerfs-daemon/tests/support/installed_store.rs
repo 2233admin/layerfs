@@ -31,7 +31,7 @@ impl Fixture {
             count
         })
     }
-    /// `build` fills the native source and returns its entry count below the
+    /// `build` fills the kernel source and returns its entry count below the
     /// root; it may read the finished tree before the source is removed.
     pub fn built(label: &str, build: impl FnOnce(&std::path::Path) -> usize) -> Self {
         let directory =

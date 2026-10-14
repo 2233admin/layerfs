@@ -1,4 +1,4 @@
-//! Native source creation and authenticated installation, retaining failures.
+//! Kernel source creation and authenticated installation, retaining failures.
 use super::{bytes, support};
 use layerfs_content::filesystem::attributes::PortableMetadata;
 use layerfs_daemon::{
@@ -89,7 +89,7 @@ pub fn name(n: usize) -> String {
     format!("entry-{n:06}")
 }
 pub fn body(n: usize) -> Vec<u8> {
-    format!("complete-native-entry:{n:06}\0").into_bytes()
+    format!("complete-kernel-entry:{n:06}\0").into_bytes()
 }
 fn fixed(file: &File) {
     file.set_permissions(fs::Permissions::from_mode(0o640))
@@ -179,7 +179,7 @@ impl Fixture {
                     assert!(allocated < 2 * 1024 * 1024);
                 }
                 println!(
-                    "Q1_NATIVE shape={shape:?} logical={} allocated={allocated}",
+                    "Q1_KERNEL shape={shape:?} logical={} allocated={allocated}",
                     m.len()
                 );
                 metadata(&source.join("file"))
@@ -317,7 +317,7 @@ impl Fixture {
             layerfs_storage::ReservationBlocks::default(),
         )
         .unwrap();
-        println!("Q1_CLONE setup=clone bytes={copied} provider=buffered_byte_copy window=131072 original_retained=true no_native_source=true prepared={}",prepared.display());
+        println!("Q1_CLONE setup=clone bytes={copied} provider=buffered_byte_copy window=131072 original_retained=true no_kernel_source=true prepared={}",prepared.display());
         Self {
             directory,
             opened,

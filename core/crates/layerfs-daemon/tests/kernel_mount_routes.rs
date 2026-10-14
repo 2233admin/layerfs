@@ -6,10 +6,10 @@
 #[path = "support/mounted.rs"]
 mod mounted;
 #[allow(dead_code)]
-#[path = "support/native_install.rs"]
+#[path = "support/host_install.rs"]
 mod support;
 use layerfs_bridge::control::{
-    Call, ControlCode, NativePhase, ReadyMount, Reply, Request, WorkspaceToken,
+    Call, ControlCode, MountPhase, ReadyMount, Reply, Request, WorkspaceToken,
 };
 use layerfs_daemon::{
     control::{Failure, Success},
@@ -33,16 +33,16 @@ use std::{
 
 const BYTES: usize = support::FILE_BYTES;
 fn installed(label: &str) -> (support::Fixture, InstalledStore, Harness) {
-    let native = support::Fixture::new(label, None);
-    let target = PathBuf::from(&native.project.manifest.locator);
+    let kernel = support::Fixture::new(label, None);
+    let target = PathBuf::from(&kernel.project.manifest.locator);
     let (mut client, worker) = support::pair(move |connection| {
         receive_install(connection, &target, StoreSettings::default())
     });
-    layerfs_sdk::internal::install(&native.project, &mut client).unwrap();
+    layerfs_sdk::internal::install(&kernel.project, &mut client).unwrap();
     let installed = worker.join().unwrap();
     let branch = BranchId::from_bytes(installed.manifest.branch).unwrap();
-    let harness = Harness::new(installed.opened.store.clone(), &native.directory, branch);
-    (native, installed, harness)
+    let harness = Harness::new(installed.opened.store.clone(), &kernel.directory, branch);
+    (kernel, installed, harness)
 }
 fn pattern(range: std::ops::Range<usize>) -> Vec<u8> {
     range.map(|n| (n % 251) as u8).collect()
@@ -170,7 +170,7 @@ fn refusal(
 
 #[test]
 fn lost_bind_and_attach_acknowledgements_are_located_without_replay() {
-    let (native, installed, h) = installed("routes");
+    let (kernel, installed, h) = installed("routes");
     let workspace = WorkspaceId::from_authority([7; 32]).unwrap();
     let (mut control, worker) = session(&h);
     let mut api = layerfs_sdk::internal::workspace(&mut control);
@@ -195,7 +195,7 @@ fn lost_bind_and_attach_acknowledgements_are_located_without_replay() {
     };
     let located = api.locate(workspace).unwrap();
     assert_eq!(located.token, bound);
-    assert_eq!(located.native.unwrap().phase, NativePhase::Unattached);
+    assert_eq!(located.kernel.unwrap().phase, MountPhase::Unattached);
     // Observation replayed nothing, and a guessed re-bind is refused.
     assert_eq!(refusal(api.bind(workspace, h.branch)).0, ControlCode::Busy);
     // The daemon attached; the caller never learned the mount directory.
@@ -203,8 +203,8 @@ fn lost_bind_and_attach_acknowledgements_are_located_without_replay() {
         Reply::Ready(ready) => *ready,
         other => panic!("{other:?}"),
     };
-    let located = api.locate(workspace).unwrap().native.unwrap();
-    assert_eq!(located.phase, NativePhase::Ready);
+    let located = api.locate(workspace).unwrap().kernel.unwrap();
+    assert_eq!(located.phase, MountPhase::Ready);
     assert_eq!(located.ready.as_ref(), Some(&ready));
     let root = PathBuf::from(&located.ready.unwrap().directory);
     whole_root(&root);
@@ -215,7 +215,7 @@ fn lost_bind_and_attach_acknowledgements_are_located_without_replay() {
         (ControlCode::Invalid, "attach:admission".into())
     );
     assert_eq!(
-        api.status(bound).unwrap().native.unwrap().ready,
+        api.status(bound).unwrap().kernel.unwrap().ready,
         Some(ready)
     );
     api.unmount(bound, false).unwrap();
@@ -242,7 +242,7 @@ fn lost_bind_and_attach_acknowledgements_are_located_without_replay() {
         (ControlCode::Failed, "attach:mount".into())
     );
     let located = api.locate(next.workspace).unwrap();
-    assert_eq!(located.native.unwrap().phase, NativePhase::Unattached);
+    assert_eq!(located.kernel.unwrap().phase, MountPhase::Unattached);
     fs::remove_dir(&occupied).unwrap();
     until("failed attach owner retired", || {
         h.engine(next).maintenance_targets == 0
@@ -255,15 +255,15 @@ fn lost_bind_and_attach_acknowledgements_are_located_without_replay() {
         control.call(Request::EndSession).unwrap(),
         Reply::SessionEnded
     );
-    println!("NATIVE_ROUTES served={}", worker.join());
+    println!("KERNEL_ROUTES served={}", worker.join());
     h.stop();
     drop(installed);
-    native.cleanup();
+    kernel.cleanup();
 }
 
 #[test]
 fn fresh_mounts_repeat_and_one_mount_sustains_uncached_work() {
-    let (native, installed, h) = installed("sustained");
+    let (kernel, installed, h) = installed("sustained");
     let helper = h.bind(1);
     let idle = h.engine(helper);
     // Frequent fresh mounts: each binds the complete root, serves it, and
@@ -299,7 +299,7 @@ fn fresh_mounts_repeat_and_one_mount_sustains_uncached_work() {
     assert_eq!(first.1, second.1);
     assert_ne!(first.0, second.0, "each mount is its own filesystem device");
     h.unmount(&other);
-    let before = h.status(ready.token).native.unwrap().work.unwrap();
+    let before = h.status(ready.token).kernel.unwrap().work.unwrap();
     let callers: Vec<_> = (0..2)
         .map(|caller| {
             let root = root.clone();
@@ -314,10 +314,10 @@ fn fresh_mounts_repeat_and_one_mount_sustains_uncached_work() {
         caller.join().unwrap();
     }
     until("asynchronous releases served", || {
-        let work = h.status(ready.token).native.unwrap().work.unwrap();
+        let work = h.status(ready.token).kernel.unwrap().work.unwrap();
         work.active == 0
     });
-    let after = h.status(ready.token).native.unwrap().work.unwrap();
+    let after = h.status(ready.token).kernel.unwrap().work.unwrap();
     // Per round: open, four windowed reads, two tail reads, opendir, at least
     // one readdir and both releases.
     assert!(
@@ -332,7 +332,7 @@ fn fresh_mounts_repeat_and_one_mount_sustains_uncached_work() {
     );
     whole_root(&root);
     println!(
-        "NATIVE_SUSTAINED fresh=8 rounds={} requests={} before={before:?} after={after:?}",
+        "KERNEL_SUSTAINED fresh=8 rounds={} requests={} before={before:?} after={after:?}",
         2 * ROUNDS,
         after.completed - before.completed
     );
@@ -340,5 +340,5 @@ fn fresh_mounts_repeat_and_one_mount_sustains_uncached_work() {
     h.try_unmount(helper).unwrap();
     h.stop();
     drop(installed);
-    native.cleanup();
+    kernel.cleanup();
 }

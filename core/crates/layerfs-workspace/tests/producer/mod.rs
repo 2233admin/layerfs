@@ -65,17 +65,14 @@ pub struct Taken {
     pub operation_request: u64,
 }
 pub fn take(b: &Bench) -> Taken {
-    let capture = b.overlay.capture(b.route()).unwrap();
+    let capture = b.overlay.capture().unwrap();
     let reader_request = request();
     let reader = b
         .overlay
         .acquire_captured_reader(capture, reader_request)
         .unwrap();
     let operation_request = request();
-    let operation = b
-        .overlay
-        .acquire_operation(b.route(), operation_request)
-        .unwrap();
+    let operation = b.overlay.acquire_operation(operation_request).unwrap();
     Taken {
         capture,
         reader,
@@ -109,14 +106,14 @@ pub fn construct<P: OverlayCapturedNamespace + OverlayOperationRecords + ?Sized>
 pub fn retained(b: &Bench, taken: &Taken) {
     assert_eq!(
         b.overlay
-            .retained_captured_reader(b.route(), taken.reader_request)
+            .retained_captured_reader(taken.reader_request)
             .unwrap(),
         Some(taken.reader),
         "the captured reader was released"
     );
     assert_eq!(
         b.overlay
-            .retained_operation(b.route(), taken.operation_request)
+            .retained_operation(taken.operation_request)
             .unwrap(),
         Some(taken.operation),
         "the operation owner was released"
@@ -151,7 +148,7 @@ pub fn release(b: &Bench, taken: Taken, custody: CapturedNamespaceCustody) {
 /// The current fact of one inode: its local row, or its base record restated
 /// the way the Workspace restates it before a first local row exists.
 pub fn fact(b: &Bench, serial: u64) -> Inode {
-    if let Some(local) = b.overlay.inode(b.route(), serial).unwrap() {
+    if let Some(local) = b.overlay.inode(serial).unwrap() {
         return local;
     }
     let stat = b.stat(serial).unwrap();

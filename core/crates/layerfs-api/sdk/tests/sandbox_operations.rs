@@ -7,7 +7,7 @@ use engine::{fixed, frame, Peer};
 use layerfs_bridge::{
     control::{Answer, Call, DaemonPhase, DaemonStatus, Reply, Request},
     daemon_setup::{DaemonLimits, DaemonSetup},
-    native,
+    duplex,
 };
 use layerfs_sdk::{
     ManagedSandbox, SandboxApi, SandboxCause, SandboxCreate, SandboxPhase, WorkspaceApi,
@@ -40,7 +40,6 @@ fn setup(private: [u8; 32], peer: [u8; 32]) -> DaemonSetup {
         limits: DaemonLimits {
             connections: 4,
             handshake_ms: 2000,
-            read_handles: 2,
             cache_bytes: 65536,
             namespaces: 8,
             pager_kib: 1024,
@@ -88,7 +87,7 @@ impl Fixture {
                 .set_write_timeout(Some(Duration::from_secs(2)))
                 .unwrap();
             let mut channel =
-                native::accept(socket, &[32; 32], native::public_key(&[31; 32]).unwrap()).unwrap();
+                duplex::accept(socket, &[32; 32], duplex::public_key(&[31; 32]).unwrap()).unwrap();
             let call = Call::decode(channel.receive.receive().unwrap()).unwrap();
             assert!(
                 matches!(call.request, Request::Hello(request) if request.wait_for_store == existing && request.expected_instance.is_none())
@@ -131,7 +130,7 @@ impl Fixture {
             NEXT.fetch_add(1, Ordering::Relaxed)
         ));
         fs::write(&binary, b"original executable input").unwrap();
-        let mut deployment_setup = setup([32; 32], native::public_key(&[31; 32]).unwrap());
+        let mut deployment_setup = setup([32; 32], duplex::public_key(&[31; 32]).unwrap());
         if let Some(project) = project {
             let mut manifest = project.manifest.clone();
             manifest.daemon_sqlite = Some("3.51.0".into());
@@ -146,7 +145,7 @@ impl Fixture {
             setup: deployment_setup,
             executable: binary.clone(),
             controller_private: [31; 32],
-            daemon_peer: native::public_key(&[32; 32]).unwrap(),
+            daemon_peer: duplex::public_key(&[32; 32]).unwrap(),
             startup_wait: Duration::from_secs(2),
         };
         // No Store is constructed or opened. This is the original InstallPending
@@ -239,7 +238,7 @@ fn failed_delete_retains_acknowledged_stop_and_exact_delete_failure() {
 }
 
 fn mounted() -> layerfs_sdk::MountedWorkspace {
-    use layerfs_bridge::control::{NativeReceipt, ReadyMount, WorkspaceToken};
+    use layerfs_bridge::control::{MountReceipt, ReadyMount, WorkspaceToken};
     use layerfs_content::ObjectId;
     use layerfs_history::{
         BranchId, BranchRecord, BranchSnapshot, HistoryName, LayerId, LayerStackId, WorkspaceId,
@@ -270,7 +269,7 @@ fn mounted() -> layerfs_sdk::MountedWorkspace {
         ready: ReadyMount {
             token,
             directory: "/workspaces/selected-mount".into(),
-            receipt: NativeReceipt {
+            receipt: MountReceipt {
                 mount: 0x0102,
                 root: 7,
                 mount_id: 911,
@@ -427,7 +426,7 @@ fn create_mismatched_existing_project_refuses_before_any_deployment_or_control_e
     let project = ProjectFixture::new();
     let (docker, peer) = Peer::new(vec![], 4096);
     let api = SandboxApi::new(docker);
-    let mut deployment_setup = setup([32; 32], native::public_key(&[31; 32]).unwrap());
+    let mut deployment_setup = setup([32; 32], duplex::public_key(&[31; 32]).unwrap());
     let mut manifest = project.project.manifest.clone();
     manifest.root[0] ^= 1;
     deployment_setup.existing_store = Some(manifest);
@@ -441,7 +440,7 @@ fn create_mismatched_existing_project_refuses_before_any_deployment_or_control_e
             setup: deployment_setup,
             executable: project.project.store.path.clone(),
             controller_private: [31; 32],
-            daemon_peer: native::public_key(&[32; 32]).unwrap(),
+            daemon_peer: duplex::public_key(&[32; 32]).unwrap(),
             startup_wait: Duration::from_secs(2),
         },
         &project.project,

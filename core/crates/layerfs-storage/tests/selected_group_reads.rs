@@ -282,7 +282,7 @@ fn a_sparse_prefix_target_reconstructs_its_required_base_exactly() {
     assert_eq!(storage.diagnostics().whole_due_density, 1);
 }
 
-fn native_fixture(packs: usize) -> (Arc<metadata::MemoryMetadata>, Vec<FinalizedObject>) {
+fn chunk_fixture(packs: usize) -> (Arc<metadata::MemoryMetadata>, Vec<FinalizedObject>) {
     use layerfs_storage::{
         encoding::{encode_full, CompressionWorkspace},
         policy::{StorageCapacities, StoragePolicy},
@@ -323,10 +323,10 @@ fn native_fixture(packs: usize) -> (Arc<metadata::MemoryMetadata>, Vec<Finalized
                     &mut profile,
                 )
                 .unwrap();
-                build_group(PackLane::Native, &[record.record], None).unwrap()
+                build_group(PackLane::Chunk, &[record.record], None).unwrap()
             })
             .collect::<Vec<_>>();
-        let body = assemble(PackLane::Native, &groups).unwrap();
+        let body = assemble(PackLane::Chunk, &groups).unwrap();
         published.push(PublishedPack {
             info: PackInfo {
                 pack_id: number as i64 + 1,
@@ -358,8 +358,8 @@ fn native_fixture(packs: usize) -> (Arc<metadata::MemoryMetadata>, Vec<Finalized
     (metadata, objects)
 }
 #[test]
-fn sparse_native_records_reconstruct_canonical_chunk_bytes() {
-    let (metadata, objects) = native_fixture(1);
+fn sparse_chunk_records_reconstruct_canonical_chunk_bytes() {
+    let (metadata, objects) = chunk_fixture(1);
     let storage = Storage::new(metadata).unwrap();
     assert_eq!(
         storage
@@ -375,7 +375,7 @@ fn sparse_native_records_reconstruct_canonical_chunk_bytes() {
 #[test]
 fn sparse_payload_siblings_survive_multiple_pack_pressure_without_whole_promotion() {
     let packs = 9;
-    let (metadata, objects) = native_fixture(packs);
+    let (metadata, objects) = chunk_fixture(packs);
     let storage = Storage::new(metadata).unwrap();
     let reader = storage.reader().unwrap();
     for group in [0, 7, 0] {
@@ -396,7 +396,7 @@ fn sparse_payload_siblings_survive_multiple_pack_pressure_without_whole_promotio
 
 #[test]
 fn dense_payload_coverage_promotes_once_and_then_reuses_sibling_groups() {
-    let (metadata, objects) = native_fixture(1);
+    let (metadata, objects) = chunk_fixture(1);
     let storage = Storage::new(metadata).unwrap();
     let reader = storage.reader().unwrap();
     for object in &objects {

@@ -16,8 +16,8 @@ const WINDOW: u64 = WRITE_WINDOW as u64;
 fn claimed_ranges_become_pieces_and_read_like_the_plain_write() {
     let temp = Temp::new();
     let db = temp.db();
-    let route = db.open_workspace([1; 32], [2; 32]).unwrap();
-    let source = db.acquire_base_source(route, 1).unwrap();
+    db.open_workspace([2; 32]).unwrap();
+    let source = db.acquire_base_source(1).unwrap();
     let content = noise(4 << 20, 5);
     let mut file = committed(&db, source, &content);
 
@@ -29,7 +29,7 @@ fn claimed_ranges_become_pieces_and_read_like_the_plain_write() {
         claims(None, &[(at, WINDOW, 0)]),
     );
     file.check();
-    assert_eq!(rows(&db, route), (1, 0));
+    assert_eq!(rows(&db, ()), (1, 0));
     // The next window continues the same content: the one row is extended.
     let next = at + WINDOW;
     file.write_claimed(
@@ -38,7 +38,7 @@ fn claimed_ranges_become_pieces_and_read_like_the_plain_write() {
         claims(None, &[(next, WINDOW, WINDOW)]),
     );
     file.check();
-    assert_eq!(rows(&db, route), (1, 0));
+    assert_eq!(rows(&db, ()), (1, 0));
 
     // A claim that is not cell-aligned: its whole cells are a piece and its
     // two ragged edges are stored bytes.
@@ -49,13 +49,13 @@ fn claimed_ranges_become_pieces_and_read_like_the_plain_write() {
         claims(None, &[(ragged, 3 * CELL, 5000)]),
     );
     file.check();
-    assert_eq!(rows(&db, route), (2, 2));
+    assert_eq!(rows(&db, ()), (2, 2));
 
     // Cells win inside a layer: an ordinary write inside a piece adds its
     // cell and changes no piece row.
     file.write(9 * CELL + 10, b"literal bytes inside a piece");
     file.check();
-    assert_eq!(rows(&db, route), (2, 3));
+    assert_eq!(rows(&db, ()), (2, 3));
     // A claim replaces cells: the cell is deleted, and the piece that
     // already names these bytes takes them without a new row.
     file.write_claimed(
@@ -64,7 +64,7 @@ fn claimed_ranges_become_pieces_and_read_like_the_plain_write() {
         claims(None, &[(9 * CELL, CELL, CELL)]),
     );
     file.check();
-    assert_eq!(rows(&db, route), (2, 2));
+    assert_eq!(rows(&db, ()), (2, 2));
 
     // Other content inside a piece splits it: before, the claim, after.
     file.write_claimed(
@@ -73,7 +73,7 @@ fn claimed_ranges_become_pieces_and_read_like_the_plain_write() {
         claims(None, &[(16 * CELL, 2 * CELL, 300 * CELL)]),
     );
     file.check();
-    assert_eq!(rows(&db, route), (4, 2));
+    assert_eq!(rows(&db, ()), (4, 2));
 
     // Two claims of one window with literal bytes between them.
     let mut data = part(&content, 50 * CELL, 2 * CELL).to_vec();
@@ -89,11 +89,11 @@ fn claimed_ranges_become_pieces_and_read_like_the_plain_write() {
         ),
     );
     file.check();
-    assert_eq!(rows(&db, route), (6, 3));
+    assert_eq!(rows(&db, ()), (6, 3));
 
     // A claim over a wide row of the layer keeps the row's cells outside it.
     file.write(232 * CELL, &noise(RUN_BYTES, 4));
-    assert_eq!(rows(&db, route), (6, 4));
+    assert_eq!(rows(&db, ()), (6, 4));
     let at = 234 * CELL;
     file.write_claimed(
         at,
@@ -101,15 +101,15 @@ fn claimed_ranges_become_pieces_and_read_like_the_plain_write() {
         claims(None, &[(at, 2 * CELL, 9 * CELL)]),
     );
     file.check();
-    assert_eq!(rows(&db, route), (7, 5));
+    assert_eq!(rows(&db, ()), (7, 5));
 }
 
 #[test]
 fn a_shrink_cuts_the_crossing_piece_and_regrown_bytes_read_zero() {
     let temp = Temp::new();
     let db = temp.db();
-    let route = db.open_workspace([3; 32], [4; 32]).unwrap();
-    let source = db.acquire_base_source(route, 1).unwrap();
+    db.open_workspace([4; 32]).unwrap();
+    let source = db.acquire_base_source(1).unwrap();
     let content = noise(4 << 20, 9);
     let mut file = committed(&db, source, &content);
     // One piece of 64 cells that names other bytes than the base holds there.
@@ -123,7 +123,7 @@ fn a_shrink_cuts_the_crossing_piece_and_regrown_bytes_read_zero() {
         );
     }
     file.check();
-    assert_eq!(rows(&db, route), (1, 0));
+    assert_eq!(rows(&db, ()), (1, 0));
 
     // A shrink inside a cell: the piece ends at the new size.
     file.resize(10 * CELL + 1000);
@@ -133,7 +133,7 @@ fn a_shrink_cuts_the_crossing_piece_and_regrown_bytes_read_zero() {
     // A write into the boundary cell beyond the cut.
     file.write(10 * CELL + 2000, b"x");
     file.check();
-    assert_eq!(rows(&db, route), (1, 1));
+    assert_eq!(rows(&db, ()), (1, 1));
 
     // A claim across the cut end: the older piece gives up the range and
     // the cell inside it is deleted.
@@ -143,7 +143,7 @@ fn a_shrink_cuts_the_crossing_piece_and_regrown_bytes_read_zero() {
         claims(None, &[(8 * CELL, 4 * CELL, 500 * CELL)]),
     );
     file.check();
-    assert_eq!(rows(&db, route), (2, 0));
+    assert_eq!(rows(&db, ()), (2, 0));
 
     // A shrink to a cell boundary, a regrow and a claim that starts there.
     file.resize(9 * CELL);
@@ -156,7 +156,7 @@ fn a_shrink_cuts_the_crossing_piece_and_regrown_bytes_read_zero() {
         claims(None, &[(9 * CELL, 2 * CELL, 9 * CELL)]),
     );
     file.check();
-    assert_eq!(rows(&db, route), (3, 0));
+    assert_eq!(rows(&db, ()), (3, 0));
 
     // Pieces beyond a shrink are stale: a regrow reads zero over them, an
     // ordinary write lands above them and a claim removes the ones it meets.
@@ -171,7 +171,7 @@ fn a_shrink_cuts_the_crossing_piece_and_regrown_bytes_read_zero() {
         claims(None, &[(8 * CELL, 2 * CELL, 0)]),
     );
     file.check();
-    assert_eq!(rows(&db, route), (2, 0));
+    assert_eq!(rows(&db, ()), (2, 0));
 
     file.resize(0);
     file.resize(5 * CELL);
@@ -183,8 +183,8 @@ fn a_shrink_cuts_the_crossing_piece_and_regrown_bytes_read_zero() {
 fn bytes_of_an_earlier_request_join_the_piece_only_while_the_sequence_holds() {
     let temp = Temp::new();
     let db = temp.db();
-    let route = db.open_workspace([5; 32], [6; 32]).unwrap();
-    let source = db.acquire_base_source(route, 1).unwrap();
+    db.open_workspace([6; 32]).unwrap();
+    let source = db.acquire_base_source(1).unwrap();
     let content = noise(1 << 20, 13);
     let mut file = committed(&db, source, &content);
     // The file is rewritten in place with its own committed bytes.
@@ -196,7 +196,7 @@ fn bytes_of_an_earlier_request_join_the_piece_only_while_the_sequence_holds() {
         claims(None, &[(0, 32_768, 0)]),
     );
     file.check();
-    assert_eq!(rows(&db, route), (1, 2));
+    assert_eq!(rows(&db, ()), (1, 2));
     // Request 2 completes the chunk. Its claim starts in the bytes request 1
     // stored, and nothing was published since: they join the piece.
     let after = file.revision;
@@ -206,7 +206,7 @@ fn bytes_of_an_earlier_request_join_the_piece_only_while_the_sequence_holds() {
         claims(Some(after), &[(32_768, 47_232, 32_768)]),
     );
     file.check();
-    assert_eq!(rows(&db, route), (1, 1));
+    assert_eq!(rows(&db, ()), (1, 1));
 
     // Another publication changes a byte request 2 stored. Request 3 still
     // names the earlier sequence, so its claim starts at its own window.
@@ -220,7 +220,7 @@ fn bytes_of_an_earlier_request_join_the_piece_only_while_the_sequence_holds() {
     file.check();
     assert_eq!(file.read(79_000, 1), [content[79_000] ^ 0xff]);
     // The piece of the window is a second row: 81920 is not where the first ends.
-    assert_eq!(rows(&db, route).0, 2);
+    assert_eq!(rows(&db, ()).0, 2);
 
     // A claim that names no sequence never takes earlier bytes.
     file.write_claimed(
@@ -229,15 +229,15 @@ fn bytes_of_an_earlier_request_join_the_piece_only_while_the_sequence_holds() {
         claims(None, &[(118_784, 21_216, 118_784)]),
     );
     file.check();
-    assert_eq!(rows(&db, route).0, 3);
+    assert_eq!(rows(&db, ()).0, 3);
 }
 
 #[test]
 fn bytes_of_an_earlier_request_after_the_window_join_the_piece_while_the_sequence_holds() {
     let temp = Temp::new();
     let db = temp.db();
-    let route = db.open_workspace([5; 32], [9; 32]).unwrap();
-    let source = db.acquire_base_source(route, 1).unwrap();
+    db.open_workspace([9; 32]).unwrap();
+    let source = db.acquire_base_source(1).unwrap();
     let content = noise(1 << 20, 13);
     let mut file = committed(&db, source, &content);
     // The file is rewritten in place from its end toward its start, as a
@@ -249,7 +249,7 @@ fn bytes_of_an_earlier_request_after_the_window_join_the_piece_while_the_sequenc
         claims(None, &[(98_304, 32_768, 98_304)]),
     );
     file.check();
-    assert_eq!(rows(&db, route).0, 1);
+    assert_eq!(rows(&db, ()).0, 1);
     // Request 2 lies below it and holds the beginning of that chunk. Its
     // claim ends in the bytes request 1 stored and nothing was published
     // since: they join, and the two pieces are one row.
@@ -260,7 +260,7 @@ fn bytes_of_an_earlier_request_after_the_window_join_the_piece_while_the_sequenc
         claims(Some(after), &[(65_536, 32_768, 65_536)]),
     );
     file.check();
-    assert_eq!(rows(&db, route).0, 1);
+    assert_eq!(rows(&db, ()).0, 1);
 
     // Another publication changes a byte request 2 stored below its piece.
     // Request 3 still names the earlier sequence: its claim ends with its
@@ -274,7 +274,7 @@ fn bytes_of_an_earlier_request_after_the_window_join_the_piece_while_the_sequenc
     );
     file.check();
     assert_eq!(file.read(60_000, 1), [content[60_000] ^ 0xff]);
-    assert_eq!(rows(&db, route).0, 2);
+    assert_eq!(rows(&db, ()).0, 2);
 
     // A claim that names no sequence never takes later bytes.
     file.write_claimed(
@@ -283,15 +283,15 @@ fn bytes_of_an_earlier_request_after_the_window_join_the_piece_while_the_sequenc
         claims(None, &[(0, 32_768, 0)]),
     );
     file.check();
-    assert_eq!(rows(&db, route).0, 3);
+    assert_eq!(rows(&db, ()).0, 3);
 }
 
 #[test]
 fn malformed_claims_are_refused_before_any_row_changes() {
     let temp = Temp::new();
     let db = temp.db();
-    let route = db.open_workspace([7; 32], [8; 32]).unwrap();
-    let source = db.acquire_base_source(route, 1).unwrap();
+    db.open_workspace([8; 32]).unwrap();
+    let source = db.acquire_base_source(1).unwrap();
     let content = noise(1 << 20, 17);
     let mut file = committed(&db, source, &content);
     file.write(0, b"a first local row");
@@ -306,7 +306,7 @@ fn malformed_claims_are_refused_before_any_row_changes() {
         claims: claims.map(Box::new),
         ..Changes::default()
     };
-    let before = db.resources(Some(route)).unwrap().counts;
+    let before = db.resources().unwrap().counts;
     let many: Vec<(u64, u64, u64)> = (0..WRITE_CLAIMS as u64 + 1)
         .map(|index| (at + index * 8, 4, 0))
         .collect();
@@ -344,7 +344,7 @@ fn malformed_claims_are_refused_before_any_row_changes() {
     }
     let result = db.apply(source, &job(Some(claims(None, &[(at, CELL, 0)])), false));
     assert!(matches!(result, Err(OverlayError::Invalid("write claims"))));
-    assert_eq!(db.resources(Some(route)).unwrap().counts, before);
+    assert_eq!(db.resources().unwrap().counts, before);
     file.check();
 }
 
@@ -352,8 +352,8 @@ fn malformed_claims_are_refused_before_any_row_changes() {
 fn claimed_and_plain_writes_match_a_reference_model_across_resizes_capture_and_install() {
     let temp = Temp::new();
     let db = temp.db();
-    let route = db.open_workspace([9; 32], [10; 32]).unwrap();
-    let mut source = db.acquire_base_source(route, 1).unwrap();
+    db.open_workspace([10; 32]).unwrap();
+    let mut source = db.acquire_base_source(1).unwrap();
     let mut random = Random(11);
     let content = noise(600_000, 3);
     let mut file = File::new(&db, source, 2, content.clone());
@@ -383,13 +383,13 @@ fn claimed_and_plain_writes_match_a_reference_model_across_resizes_capture_and_i
             }
         }
         file.check();
-        most = most.max(rows(&db, route).0);
+        most = most.max(rows(&db, ()).0);
         // Seal the generation. Its view stays exactly readable while the
         // next layer shrinks, regrows and claims above it.
         db.release_base_source(source).unwrap();
-        let capture = db.capture(route).unwrap();
+        let capture = db.capture().unwrap();
         let sealed = (file.expect.clone(), file.base.clone());
-        source = db.acquire_base_source(route, 100 + round as u64).unwrap();
+        source = db.acquire_base_source(100 + round as u64).unwrap();
         file.source = source;
         file.resize(file.expect.len() as u64 / 3);
         scattered(&mut file, &content, &mut random);
@@ -425,7 +425,7 @@ fn claimed_and_plain_writes_match_a_reference_model_across_resizes_capture_and_i
         // the layer above keep naming their own source.
         db.release_base_source(source).unwrap();
         db.install(capture, [round as u8 + 20; 32]).unwrap();
-        source = db.acquire_base_source(route, 200 + round as u64).unwrap();
+        source = db.acquire_base_source(200 + round as u64).unwrap();
         file.source = source;
         file.base = sealed.0;
         file.check();
@@ -437,8 +437,8 @@ fn claimed_and_plain_writes_match_a_reference_model_across_resizes_capture_and_i
 fn piece_statements_are_indexed_and_their_work_does_not_grow_with_the_piece() {
     let temp = Temp::new();
     let db = temp.db();
-    let route = db.open_workspace([11; 32], [12; 32]).unwrap();
-    let source = db.acquire_base_source(route, 1).unwrap();
+    db.open_workspace([12; 32]).unwrap();
+    let source = db.acquire_base_source(1).unwrap();
 
     // The runtime profile of the same statements: `work` fails on a full
     // scan step, a sort or an automatic index of any statement family.
@@ -463,7 +463,7 @@ fn piece_statements_are_indexed_and_their_work_does_not_grow_with_the_piece() {
     }
     let last = claim(&mut file, 48);
     let read_long = work(&db, || drop(file.read(40 * WINDOW + 5, READ_WINDOW as u32)));
-    assert_eq!(rows(&db, route), (1, 0));
+    assert_eq!(rows(&db, ()), (1, 0));
     println!(
         "PIECE_WORK first={first:?} second={second:?} last={last:?} read_short={read_short:?} \
          read_long={read_long:?}"
@@ -593,8 +593,8 @@ fn walk(
 fn captured_steps_report_a_piece_as_one_reference_and_equal_the_sealed_view() {
     let temp = Temp::new();
     let db = temp.db();
-    let route = db.open_workspace([13; 32], [14; 32]).unwrap();
-    let source = db.acquire_base_source(route, 1).unwrap();
+    db.open_workspace([14; 32]).unwrap();
+    let source = db.acquire_base_source(1).unwrap();
     let content = noise(4 << 20, 29);
     let mut file = committed(&db, source, &content);
     // A long piece with a masked cell and a dense row above it, a short
@@ -619,7 +619,7 @@ fn captured_steps_report_a_piece_as_one_reference_and_equal_the_sealed_view() {
     file.resize(310 * CELL + 17);
     file.check();
     db.release_base_source(source).unwrap();
-    let capture = db.capture(route).unwrap();
+    let capture = db.capture().unwrap();
     let reader = db.acquire_captured_reader(capture, 1).unwrap();
     let size = file.expect.len() as u64;
     let cursor = CapturedRunCursor::new(reader, 7, 0, size).unwrap();
@@ -675,11 +675,11 @@ fn captured_steps_do_not_grow_with_the_length_of_a_piece() {
     let content = noise(8 << 20, 33);
     // A file whose first `windows` windows are one piece with one written
     // cell in its second window; the rest is inherited.
-    let pass = |tag: u8, windows: u64| {
+    let pass = |_tag: u8, windows: u64| {
         let temp = Temp::new();
         let db = temp.db();
-        let route = db.open_workspace([tag; 32], [16; 32]).unwrap();
-        let source = db.acquire_base_source(route, 1).unwrap();
+        db.open_workspace([16; 32]).unwrap();
+        let source = db.acquire_base_source(1).unwrap();
         let mut file = committed(&db, source, &content);
         for window in 0..windows {
             let at = window * WINDOW;
@@ -690,9 +690,9 @@ fn captured_steps_do_not_grow_with_the_length_of_a_piece() {
             );
         }
         file.write(WINDOW, &noise(CELL_BYTES, 8));
-        assert_eq!(rows(&db, route), (1, 1));
+        assert_eq!(rows(&db, ()), (1, 1));
         db.release_base_source(source).unwrap();
-        let capture = db.capture(route).unwrap();
+        let capture = db.capture().unwrap();
         let reader = db.acquire_captured_reader(capture, 1).unwrap();
         let cursor = CapturedRunCursor::new(reader, 7, 0, file.expect.len() as u64).unwrap();
         let mut steps = Steps::default();

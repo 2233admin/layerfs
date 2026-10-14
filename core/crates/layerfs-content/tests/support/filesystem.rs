@@ -1,6 +1,6 @@
 //! Shared external helpers for the filesystem-tree test targets.
 //!
-//! Nothing here is product code: it builds native inputs, collects what the
+//! Nothing here is product code: it builds kernel inputs, collects what the
 //! operation emitted and walks the result back through the public API.
 
 #![allow(dead_code)]
@@ -169,7 +169,7 @@ impl DirectoryChange {
         self
     }
 
-    /// Sorts the bindings so the update satisfies the native input contract.
+    /// Sorts the bindings so the update satisfies the kernel input contract.
     pub fn sorted(mut self) -> Self {
         self.changes.sort_by(|left, right| left.0.cmp(&right.0));
         self

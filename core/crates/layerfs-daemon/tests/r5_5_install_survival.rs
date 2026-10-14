@@ -37,13 +37,13 @@ mod mutating;
 #[path = "support/mounted_commit.rs"]
 mod rig;
 #[allow(dead_code)]
-#[path = "support/native_install.rs"]
+#[path = "support/host_install.rs"]
 mod support;
 use model::{assert_same, Flat, Seen, FILE};
 use mounted::{mount_entry, until, COMMAND};
 use mutating::{c, direct, frames, Mapping};
 use nix::{errno::Errno, libc};
-use rig::{assert_kernel, bash_in, kernel, native, passed, pattern, root, Rig};
+use rig::{assert_kernel, bash_in, host, kernel, passed, pattern, root, Rig};
 use std::{
     collections::BTreeMap,
     ffi::OsStr,
@@ -246,12 +246,12 @@ fn r5_5_access_time_is_the_modification_time_and_unchanged_by_reads_and_two_inst
         entry.options.split(',').any(|option| option == "noatime"),
         "{entry:?}"
     );
-    let base = native(mount);
+    let base = host(mount);
     let (_, forced) = tables(mount, "the mounted base");
     times_of_the_model(&base, &forced, "the mounted base");
 
     passed(&bash_in(COMMAND, mount, FIRST), "first changes");
-    let expected = native(mount);
+    let expected = host(mount);
     assert_eq!(
         at(&expected, "node_modules/pkg/package.json").mtime,
         (1_000_000_000, 123_456_789)
@@ -274,7 +274,7 @@ fn r5_5_access_time_is_the_modification_time_and_unchanged_by_reads_and_two_inst
 
     // Reading every file, through the page cache and around it, changes no
     // access time in either table.
-    assert_same(&expected, &native(mount), "the same mount after install");
+    assert_same(&expected, &host(mount), "the same mount after install");
     let mut direct_bytes = 0;
     for (path, bytes) in files(&expected) {
         same_bytes(&direct(&mount.join(&path)), bytes, "daemon read");
@@ -286,7 +286,7 @@ fn r5_5_access_time_is_the_modification_time_and_unchanged_by_reads_and_two_inst
     assert_same(&expected, &rig.published(first.root), "the first root");
 
     passed(&bash_in(COMMAND, mount, SECOND), "second changes");
-    let later = native(mount);
+    let later = host(mount);
     assert_eq!(at(&later, "src/main.rs").mtime, (1_286_705_410, 1));
     let (before_cached, before_forced) = tables(mount, "before the second Commit");
     times_of_the_model(&later, &before_forced, "before the second Commit");
@@ -304,7 +304,7 @@ fn r5_5_access_time_is_the_modification_time_and_unchanged_by_reads_and_two_inst
 
     let fresh = rig.mount(2);
     let again = root(&fresh);
-    assert_same(&later, &native(again), "the fresh mount");
+    assert_same(&later, &host(again), "the fresh mount");
     let (fresh_cached, fresh_forced) = tables(again, "the fresh mount");
     times_of_the_model(&later, &fresh_forced, "the fresh mount");
     // The times a fresh mount reports are the times the first mount reported.
@@ -372,7 +372,7 @@ fn r5_5_every_model_file_reads_exactly_with_o_direct_after_install_with_no_kept_
     passed(&bash_in(COMMAND, mount, FIRST), "first changes");
     // The model reads every file once through the page cache, so the cache
     // holds the bytes of before the install.
-    let expected = native(mount);
+    let expected = host(mount);
     let mut guide = pattern(10, 5_000);
     guide[2_000..2_007].copy_from_slice(b"CHANGED");
     same_bytes(
@@ -395,7 +395,7 @@ fn r5_5_every_model_file_reads_exactly_with_o_direct_after_install_with_no_kept_
     assert_same(&expected, &rig.published(first.root), "the first root");
 
     passed(&bash_in(COMMAND, mount, SECOND), "second changes");
-    let later = native(mount);
+    let later = host(mount);
     guide.resize(70_000, 0);
     same_bytes(file(&later, "docs/guide.md"), &guide, "extended file");
     same_bytes(
@@ -413,7 +413,7 @@ fn r5_5_every_model_file_reads_exactly_with_o_direct_after_install_with_no_kept_
     assert_eq!(second.parent, Some(first.id));
     let two = every_file_direct(&rig, &ready, &later, "after the second install");
     assert_same(&later, &rig.published(second.root), "the second root");
-    assert_same(&later, &native(mount), "the same mount");
+    assert_same(&later, &host(mount), "the same mount");
     rig.unmount(&ready);
 
     let fresh = rig.mount(2);
@@ -422,7 +422,7 @@ fn r5_5_every_model_file_reads_exactly_with_o_direct_after_install_with_no_kept_
         second.root
     );
     let three = every_file_direct(&rig, &fresh, &later, "the fresh mount");
-    assert_same(&later, &native(root(&fresh)), "the fresh mount");
+    assert_same(&later, &host(root(&fresh)), "the fresh mount");
     println!(
         "R5-5-DIRECT kept_descriptors=0 after_first_install(files={} bytes={} requests={}) after_second_install(files={} bytes={} requests={}) fresh_mount(files={} bytes={} requests={})",
         one.0, one.1, one.2, two.0, two.1, two.2, three.0, three.1, three.2
@@ -521,7 +521,7 @@ fn r5_5_shared_mappings_held_across_two_installs_keep_exact_content_and_coherenc
     // Before the first install: a store, written back, and changes beside.
     stored.store(3 * PAGE + 17, b"stored-before-the-first-install");
     passed(&bash_in(COMMAND, mount, FIRST), "first changes");
-    let expected = native(mount);
+    let expected = host(mount);
     same_bytes(
         file(&expected, "target/debug/app"),
         &stored.bytes,
@@ -536,14 +536,14 @@ fn r5_5_shared_mappings_held_across_two_installs_keep_exact_content_and_coherenc
     untouched.coherent("after the first install");
     stored.coherent("after the first install");
     assert_same(&expected, &rig.published(first.root), "the first root");
-    assert_same(&expected, &native(mount), "the same mount, first install");
+    assert_same(&expected, &host(mount), "the same mount, first install");
 
     // The same mappings after the first install: a store across a page
     // boundary, written back, and more changes beside.
     stored.store(40 * PAGE - 4, b"stored-after-the-first-install");
     stored.coherent("a store after the first install");
     passed(&bash_in(COMMAND, mount, SECOND), "second changes");
-    let later = native(mount);
+    let later = host(mount);
     same_bytes(
         file(&later, "target/debug/app"),
         &stored.bytes,
@@ -566,14 +566,14 @@ fn r5_5_shared_mappings_held_across_two_installs_keep_exact_content_and_coherenc
         &untouched.bytes,
         "second published bytes of the untouched file",
     );
-    assert_same(&later, &native(mount), "the same mount, second install");
+    assert_same(&later, &host(mount), "the same mount, second install");
 
     // Still live after two installs: one more store reaches the daemon, and
     // the next Commit publishes it.
     stored.store(10 * PAGE, b"stored-after-the-second-install");
     stored.coherent("a store after the second install");
     untouched.coherent("at the end");
-    let last = native(mount);
+    let last = host(mount);
     let third = rig.committed(ready.token, "R5-5 map third");
     assert_eq!(third.parent, Some(second.id));
     assert_same(&last, &rig.published(third.root), "the third root");
@@ -599,7 +599,7 @@ fn r5_5_shared_mappings_held_across_two_installs_keep_exact_content_and_coherenc
 
     let fresh = rig.mount(2);
     let again = root(&fresh);
-    assert_same(&last, &native(again), "the fresh mount");
+    assert_same(&last, &host(again), "the fresh mount");
     same_bytes(
         &direct(&again.join("target/debug/app")),
         &stored_bytes,
@@ -788,7 +788,7 @@ fn r5_5_a_commit_at_each_parked_step_of_a_writer_is_exact_on_the_same_and_a_fres
             let what = format!("R5-5 step {step}{round}");
             writer.parked(&format!("{step}{round}"));
             // The tree at this position; the writer is blocked in `read`.
-            let expected = native(mount);
+            let expected = host(mount);
             let state = writer_state(&expected, &what);
             let wanted = match step {
                 // Created and still open in the writer, nothing written.
@@ -811,7 +811,7 @@ fn r5_5_a_commit_at_each_parked_step_of_a_writer_is_exact_on_the_same_and_a_fres
                 wanted,
                 "{what}: the captured position"
             );
-            assert_same(&expected, &native(mount), &format!("{what}: same mount"));
+            assert_same(&expected, &host(mount), &format!("{what}: same mount"));
             // A new Workspace of the Branch, mounted beside the first.
             let fresh = rig.mount(tag);
             tag += 1;
@@ -819,7 +819,7 @@ fn r5_5_a_commit_at_each_parked_step_of_a_writer_is_exact_on_the_same_and_a_fres
                 rig.harness.status(fresh.token).binding.effective_root,
                 record.root
             );
-            let again = native(root(&fresh));
+            let again = host(root(&fresh));
             assert_same(&expected, &again, &format!("{what}: fresh mount"));
             assert_eq!(writer_state(&again, &what), wanted);
             assert_kernel(&expected, &kernel(root(&fresh)), &what);

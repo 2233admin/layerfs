@@ -1,10 +1,10 @@
 //! Direct single-owner Workspace harness over the shared content-built root.
-//! Each helper is one bounded source window, like one native request.
+//! Each helper is one bounded source window, like one kernel request.
 #![allow(dead_code)]
 use crate::common::{fixture, name, Fixture};
 use layerfs_content::filesystem::PathName;
 use layerfs_content::ContentError;
-use layerfs_overlay::{Overlay, ProfileConfig, Route};
+use layerfs_overlay::{Overlay, ProfileConfig};
 use layerfs_workspace::{
     CanonicalCache, CanonicalClient, InodeSerials, JobOutcome, NamespaceJob, Operation, Outcome,
     OverlayJobs, OverlayRead, Refusal, SourceView, Time, ViewStat, Workspace, WorkspaceError,
@@ -164,10 +164,7 @@ impl Bench {
     /// One owned source window around `work`, released after it completes.
     pub fn window<T>(&self, work: impl FnOnce(&SourceView) -> T) -> T {
         self.owners.set(self.owners.get() + 1);
-        let source = self
-            .overlay
-            .acquire_base_source(self.route(), self.owners.get())
-            .unwrap();
+        let source = self.overlay.acquire_base_source(self.owners.get()).unwrap();
         let view = self.workspace.view_for_source(source).unwrap();
         let result = work(&view);
         self.overlay.release_base_source(source).unwrap();
@@ -191,13 +188,13 @@ impl Bench {
         }
     }
     pub fn refused(&self, operation: Operation) -> Refusal {
-        let before = self.overlay.state(self.route()).unwrap();
+        let before = self.overlay.state().unwrap();
         let refusal = match self.run(operation, T1) {
             Err(WorkspaceError::Refused(refusal)) => refusal,
             other => panic!("expected a refusal, got {other:?}"),
         };
         assert_eq!(
-            self.overlay.state(self.route()).unwrap(),
+            self.overlay.state().unwrap(),
             before,
             "a refusal publishes nothing"
         );
@@ -353,3 +350,5 @@ impl Bench {
         out
     }
 }
+
+use layerfs_workspace::Route;

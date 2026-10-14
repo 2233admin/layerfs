@@ -1,4 +1,4 @@
-//! Bounded authenticated metadata reuse within one native proof invocation.
+//! Bounded authenticated metadata reuse within one host proof invocation.
 //! Empty at proof start; direct directory/file reads and oracle comparisons bypass it.
 use layerfs_content::{AuthenticatedObjects, ContentError, ContentResult, ObjectId};
 use std::{cell::RefCell, collections::BTreeMap};

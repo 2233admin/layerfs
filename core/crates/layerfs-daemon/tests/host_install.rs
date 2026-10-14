@@ -1,9 +1,9 @@
-//! Native install uses the product SDK/channel/daemon path and real Store ports.
-#[path = "support/native_install.rs"]
+//! Kernel install uses the product SDK/channel/daemon path and real Store ports.
+#[path = "support/host_install.rs"]
 mod support;
 use layerfs_bridge::{
     control::{InstallPhase, InstallReply, RefusalKind},
-    native::MAX_PLAINTEXT_BYTES,
+    duplex::MAX_PLAINTEXT_BYTES,
 };
 use layerfs_daemon::{install::receive_install, install_types::StoreSettings};
 use std::{fs, path::PathBuf};

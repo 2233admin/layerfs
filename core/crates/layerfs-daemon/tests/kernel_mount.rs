@@ -14,9 +14,9 @@ mod mounted;
 #[path = "support/mutating.rs"]
 mod mutating;
 #[allow(dead_code)]
-#[path = "support/native_install.rs"]
+#[path = "support/host_install.rs"]
 mod support;
-use layerfs_bridge::control::{Activity, ControlCode, NativePhase, Reply, Request};
+use layerfs_bridge::control::{Activity, ControlCode, MountPhase, Reply, Request};
 use layerfs_daemon::control::{Failure, Service};
 use layerfs_history::BranchId;
 use mounted::{mount_entry, until, Harness, COMMAND};
@@ -45,7 +45,7 @@ fn harness(label: &str) -> (fixture::Fixture, Harness) {
 fn errno(error: &io::Error) -> Errno {
     Errno::from_raw(error.raw_os_error().unwrap())
 }
-/// Every path of the native source and nothing else, with exact metadata,
+/// Every path of the kernel source and nothing else, with exact metadata,
 /// bytes, raw link targets and identity. The oracle is the fixture's own
 /// record of what was initialized; the source tree itself no longer exists.
 fn complete_root(f: &fixture::Fixture, root: &Path) -> (usize, u64) {
@@ -112,7 +112,7 @@ fn complete_root(f: &fixture::Fixture, root: &Path) -> (usize, u64) {
     assert!(index.nlink() >= 2);
     assert_ne!(index.ino(), copy.ino());
     assert_eq!(fs::metadata(root).unwrap().ino(), 1);
-    // Outside-root native neighbours never entered the Workspace.
+    // Outside-root kernel neighbours never entered the Workspace.
     for absent in ["external", "outside-index", "missing"] {
         assert_eq!(
             errno(&fs::symlink_metadata(root.join(absent)).unwrap_err()),
@@ -143,7 +143,7 @@ fn ready_mount_serves_the_complete_root_to_unregistered_access_then_drains() {
     let (f, h) = harness("-ready");
     let helper = h.bind(1);
     let token = h.bind(2);
-    assert_eq!(h.phase(token), NativePhase::Unattached);
+    assert_eq!(h.phase(token), MountPhase::Unattached);
     let before = lookups(&h, helper);
     let ready = h.attach(token);
     let root = Path::new(&ready.directory);
@@ -181,10 +181,10 @@ fn ready_mount_serves_the_complete_root_to_unregistered_access_then_drains() {
     }
     let status = h.status(token);
     assert_eq!(status.activity, Activity::Idle);
-    let native = status.native.unwrap();
-    assert_eq!(native.phase, NativePhase::Ready);
-    assert_eq!(native.ready.as_ref(), Some(&ready));
-    let work = native.work.unwrap();
+    let kernel = status.kernel.unwrap();
+    assert_eq!(kernel.phase, MountPhase::Ready);
+    assert_eq!(kernel.ready.as_ref(), Some(&ready));
+    let work = kernel.work.unwrap();
     assert_eq!(
         (work.loops_configured, work.loops_entered, work.loops_exited),
         (LOOPS, LOOPS, 0)
@@ -213,21 +213,21 @@ fn ready_mount_serves_the_complete_root_to_unregistered_access_then_drains() {
     let backing = command(COMMAND, "cat", &f.directory.join("overlay.sqlite"));
     println!("BACKING_READ_BY_COMMAND status={:?}", backing.status.code());
 
-    let served = h.status(token).native.unwrap().work.unwrap();
+    let served = h.status(token).kernel.unwrap().work.unwrap();
     // FLUSH, FSYNC and FSYNCDIR are refused once each with ENOSYS, beside
     // the three refusals of `mutating::refusals`; none is an inline reply.
     assert!(served.served > 0 && served.refused >= 6, "{served:?}");
     assert_eq!((served.terminal, served.retained), (0, 0));
     assert!(lookups(&h, helper) > before);
     println!(
-        "NATIVE_READY paths={paths} regular_bytes={regular} receipt={receipt:?} entry={entry:?} served={served:?}"
+        "KERNEL_READY paths={paths} regular_bytes={regular} receipt={receipt:?} entry={entry:?} served={served:?}"
     );
 
     // Reversible probe: each retained reference makes the kernel answer Busy,
     // the Workspace stays Ready and no terminal error reaches any holder.
     let held = File::open(root.join(".git/index")).unwrap();
     let busy = |what: &str| match h.try_unmount(token) {
-        Err(Failure::Native(failure)) => {
+        Err(Failure::Kernel(failure)) => {
             assert_eq!(
                 (failure.code, failure.phase),
                 (ControlCode::Busy, "unmount:kernel"),
@@ -235,10 +235,10 @@ fn ready_mount_serves_the_complete_root_to_unregistered_access_then_drains() {
             );
             let status = h.status(token);
             assert_eq!(status.activity, Activity::Idle);
-            let native = status.native.unwrap();
-            assert_eq!(native.phase, NativePhase::Ready);
-            assert!(!native.detached);
-            assert_eq!(native.ready.unwrap().receipt, receipt, "same connection");
+            let kernel = status.kernel.unwrap();
+            assert_eq!(kernel.phase, MountPhase::Ready);
+            assert!(!kernel.detached);
+            assert_eq!(kernel.ready.unwrap().receipt, receipt, "same connection");
             assert_eq!(
                 fs::read(root.join("ignored.bin")).unwrap(),
                 fixture::FILES[6].1
@@ -276,8 +276,8 @@ fn ready_mount_serves_the_complete_root_to_unregistered_access_then_drains() {
     let held = lookups(&h, helper);
     let done = h.unmount(&ready);
     println!(
-        "NATIVE_UNMOUNT lookup_owner_details={held} receipt={:?}",
-        done.native
+        "KERNEL_UNMOUNT lookup_owner_details={held} receipt={:?}",
+        done.kernel
     );
     for request in [Request::Status(token), Request::Attach(token)] {
         assert!(matches!(
@@ -290,7 +290,7 @@ fn ready_mount_serves_the_complete_root_to_unregistered_access_then_drains() {
         Err(Failure::Rejected(ControlCode::Missing, _))
     ));
     // Indexed retirement and namespace deletion finish as bounded owner work.
-    until("native ownership retired", || {
+    until("kernel ownership retired", || {
         h.engine(helper).namespaces == 1 && lookups(&h, helper) <= before
     });
     assert!(matches!(
@@ -306,7 +306,7 @@ fn attach_refusals_have_no_effect_and_a_failed_attach_returns_to_unattached() {
     let (f, h) = harness("-refusal");
     let helper = h.bind(1);
     let token = h.bind(2);
-    // A control-only Service has no native half to report or attach.
+    // A control-only Service has no kernel half to report or attach.
     let plain = Service::new(f.opened.store.clone(), &h.owner);
     assert!(matches!(
         plain.execute_control(&Request::Attach(token)),
@@ -326,17 +326,13 @@ fn attach_refusals_have_no_effect_and_a_failed_attach_returns_to_unattached() {
     let directory = h.mounts.join(token.namespace.to_string());
     fs::create_dir(&directory).unwrap();
     match h.try_attach(token) {
-        Err(Failure::Native(failure)) => {
+        Err(Failure::Kernel(failure)) => {
             assert_eq!(
                 (failure.code, failure.phase),
                 (ControlCode::Failed, "attach:mount"),
                 "{failure:?}"
             );
-            assert_eq!(
-                failure.completions.len(),
-                2,
-                "engine owner then its release"
-            );
+
             let evidence = format!("{:?}", failure.evidence);
             assert!(evidence.contains("Directory") && evidence.contains("mounted: false"));
         }
@@ -346,7 +342,7 @@ fn attach_refusals_have_no_effect_and_a_failed_attach_returns_to_unattached() {
     assert!(directory.exists(), "a foreign directory is never removed");
     let status = h.status(token);
     assert_eq!(status.activity, Activity::Idle);
-    assert_eq!(status.native.unwrap().phase, NativePhase::Unattached);
+    assert_eq!(status.kernel.unwrap().phase, MountPhase::Unattached);
     fs::remove_dir(&directory).unwrap();
     // The released engine owner retires as bounded maintenance; a later
     // explicit Attach is a new operation with a new mount incarnation.
@@ -356,13 +352,13 @@ fn attach_refusals_have_no_effect_and_a_failed_attach_returns_to_unattached() {
     let ready = h.attach(token);
     assert_eq!(Path::new(&ready.directory), directory);
     match h.try_attach(token) {
-        Err(Failure::Native(failure)) => assert_eq!(
+        Err(Failure::Kernel(failure)) => assert_eq!(
             (failure.code, failure.phase),
             (ControlCode::Invalid, "attach:admission")
         ),
         other => panic!("{other:?}"),
     }
-    assert_eq!(h.status(token).native.unwrap().ready, Some(ready.clone()));
+    assert_eq!(h.status(token).kernel.unwrap().ready, Some(ready.clone()));
     assert_eq!(
         fs::read(directory.join("node_modules/pkg/index.js")).unwrap(),
         fixture::FILES[3].1
@@ -403,7 +399,7 @@ fn two_workspaces_mount_and_unmount_independently() {
     }
     // One mount's terminal drain leaves the other fully usable.
     h.unmount(&first);
-    assert_eq!(h.phase(second.token), NativePhase::Ready);
+    assert_eq!(h.phase(second.token), MountPhase::Ready);
     complete_root(&fixture, Path::new(&second.directory));
     h.unmount(&second);
     h.stop();

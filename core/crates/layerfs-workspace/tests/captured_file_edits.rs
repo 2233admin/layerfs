@@ -7,7 +7,7 @@ use layerfs_content::{
     construct_runs, ConstructionPolicy, ContentError, ContentResult, Edit, FileRun, FileRuns,
     FinalizedConsumer, FinalizedObject, ObjectRole,
 };
-use layerfs_daemon::{JobReceipt, OwnerClient};
+use layerfs_daemon::OwnerClient;
 use layerfs_overlay::{CapturedReader, IndexedOperationRecordScope};
 use layerfs_telemetry::timer::Timing;
 use layerfs_workspace::{
@@ -102,13 +102,9 @@ fn length_growth_and_true_new_file_do_not_use_a_fabricated_base() {
     assert_eq!(fresh_attempt.custody.work.classifications, 0);
     drop(attempt.custody);
     drop(fresh_attempt.custody);
-    assert!(case
-        .job(
-            |job_client: &layerfs_daemon::OwnerClient, job_route| job_client
-                .release_captured_reader(job_route, reader)
-        )
-        .result()
-        .is_ok());
+    case.job(|job_client: &layerfs_daemon::OwnerClient, job_route| {
+        job_client.release_captured_reader(job_route, reader)
+    });
     release_operation(&case, scope.owner);
 }
 
@@ -141,16 +137,15 @@ fn many_edits_use_numbered_records_after_install_and_reads_survive_close() {
     let (reader, scope) = case.captured(85);
     let prepared =
         CapturedFileEdits::prepare(&case.workspace, &case.client, reader, 8, scope).unwrap();
-    assert!(case
-        .job(
-            |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.install(
-                job_route,
-                reader.capture(),
-                reader.root()
-            )
+    case.job(|job_client: &layerfs_daemon::OwnerClient, job_route| {
+        job_client.install_prepared(
+            job_route,
+            case.workspace.clone(),
+            case.workspace
+                .prepare_base_install(reader.capture(), case.workspace.base().unwrap().identity())
+                .unwrap(),
         )
-        .result()
-        .is_ok());
+    });
     let policy = ConstructionPolicy::frozen_default();
     let attempt = Timing::disabled("retained", |timing| {
         Ok::<CapturedFileAttempt, ContentError>(prepared.construct(
@@ -206,10 +201,7 @@ fn many_edits_use_numbered_records_after_install_and_reads_survive_close() {
         after = keys.last().copied();
     }
     assert_eq!(count, 129);
-    assert!(case
-        .job(|job_client: &layerfs_daemon::OwnerClient, job_route| job_client.close(job_route))
-        .result()
-        .is_ok());
+    case.job(|job_client: &layerfs_daemon::OwnerClient, job_route| job_client.close(job_route));
     let reply = case
         .client
         .captured_run_step(layerfs_overlay::CapturedRunCursor::new(reader, 8, 0, 400000).unwrap())
@@ -326,57 +318,6 @@ fn first_provider_absence_denial_identity_and_length_mismatch_never_prove_newnes
     ));
     assert_eq!(custody.records.work.calls, 0);
     case.release(custody, false);
-}
-
-#[test]
-fn occupied_context_and_retired_reader_keep_original_completions_without_replay() {
-    let case = Case::new();
-    case.write(8, 17, b"different");
-    let (reader, scope) = case.captured(89);
-    let prepared =
-        CapturedFileEdits::prepare(&case.workspace, &case.client, reader, 8, scope).unwrap();
-    let custody = match CapturedFileEdits::prepare(&case.workspace, &case.client, reader, 8, scope)
-    {
-        Ok(_) => panic!("Missing context guard"),
-        Err(original) => original,
-    };
-    let Some(WorkspaceError::Service(original)) = &custody.records.failure else {
-        panic!("original deciding completion")
-    };
-    assert!(original.downcast_ref::<JobReceipt>().is_some());
-    assert_eq!(custody.work.normalization_steps, 0);
-    drop(custody);
-    assert!(case
-        .job(
-            |job_client: &layerfs_daemon::OwnerClient, job_route| job_client
-                .release_captured_reader(job_route, reader)
-        )
-        .result()
-        .is_ok());
-    let policy = ConstructionPolicy::frozen_default();
-    let attempt = Timing::disabled("retired", |timing| {
-        Ok::<CapturedFileAttempt, ContentError>(prepared.construct(
-            policy,
-            &policy.capacities(),
-            &mut case.store.clone(),
-            timing.child("construct"),
-        ))
-    })
-    .0
-    .unwrap();
-    assert!(attempt.result.is_err());
-    let Some(WorkspaceError::Service(original)) = &attempt.custody.failure else {
-        panic!("original captured failure")
-    };
-    let done = original.downcast_ref::<JobReceipt>().unwrap();
-    assert!(matches!(
-        done.result(),
-        Err(layerfs_daemon::OwnerError::Overlay(
-            layerfs_overlay::OverlayError::Stale
-        ))
-    ));
-    assert_eq!(attempt.custody.work.source_steps, 1);
-    case.release(attempt.custody, true);
 }
 
 struct RejectFinal {
@@ -619,41 +560,6 @@ fn inherited_gap_and_window_crossing_authenticated_eof_are_zero_without_base_fal
 }
 
 #[test]
-fn logical_close_allows_retained_reads_but_refuses_normalization_record_mutation() {
-    let case = Case::new();
-    case.write(8, 17, b"changed");
-    let (reader, scope) = case.captured(92);
-    assert!(case
-        .job(|job_client: &layerfs_daemon::OwnerClient, job_route| job_client.close(job_route))
-        .result()
-        .is_ok());
-    let read = case
-        .client
-        .captured_run_step(layerfs_overlay::CapturedRunCursor::new(reader, 8, 0, 400000).unwrap())
-        .unwrap();
-    assert!(
-        matches!(read.step,layerfs_overlay::CapturedRunStep::Window {read,..} if read.base_root==Some(reader.root()))
-    );
-    let custody = match CapturedFileEdits::prepare(&case.workspace, &case.client, reader, 8, scope)
-    {
-        Ok(_) => panic!("closed Workspace cannot acquire mutable normalization records"),
-        Err(original) => original,
-    };
-    let Some(WorkspaceError::Service(original)) = &custody.records.failure else {
-        panic!("original closed JobReceipt")
-    };
-    let done = original.downcast_ref::<JobReceipt>().unwrap();
-    assert!(matches!(
-        done.result(),
-        Err(layerfs_daemon::OwnerError::Overlay(
-            layerfs_overlay::OverlayError::Closed
-        ))
-    ));
-    assert_eq!(custody.work.normalization_steps, 0);
-    case.release(custody, false);
-}
-
-#[test]
 fn changed_context_or_missing_edit_is_terminal_before_consumer_acceptance() {
     for context_changed in [true, false] {
         let case = Case::new();
@@ -751,16 +657,9 @@ fn prepare_after_actual_binding_install_rebinds_only_the_retained_original_root(
         .workspace
         .prepare_base_install(reader.capture(), next)
         .unwrap();
-    assert!(case
-        .job(
-            |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.install_prepared(
-                job_route,
-                case.workspace.clone(),
-                input
-            )
-        )
-        .result()
-        .is_ok());
+    case.job(|job_client: &layerfs_daemon::OwnerClient, job_route| {
+        job_client.install_prepared(job_route, case.workspace.clone(), input)
+    });
     assert_eq!(case.workspace.base().unwrap().identity(), next);
     let attempt = case.construct(reader, scope, 8);
     assert_eq!(

@@ -103,7 +103,7 @@ pub fn init(
     })
 }
 
-/// Refuses native Init where the required Unix metadata contract is unavailable.
+/// Refuses host Init where the required Unix metadata contract is unavailable.
 #[cfg(not(unix))]
 pub fn init(
     _storage: &Storage,

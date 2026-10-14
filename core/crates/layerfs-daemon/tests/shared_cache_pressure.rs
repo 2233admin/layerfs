@@ -316,10 +316,7 @@ fn eviction_changes_no_byte_and_keeps_exact_accounts() {
     assert!(after.evictions > before.evictions);
     accounted(&daemon, 2, false);
     let readers = daemon.store.read_work();
-    assert_eq!(
-        (readers.outstanding, readers.waiting, readers.quarantined),
-        (0, 0, 0)
-    );
+    assert_eq!(readers.quarantined, 0);
     // Both readers walk the same order, so both often miss one object at
     // once: each fetches and authenticates it, and it is inserted once.
     let held = |work: &layerfs_workspace::ClientWork| {
@@ -331,15 +328,15 @@ fn eviction_changes_no_byte_and_keeps_exact_accounts() {
         + after.portable_metadata_reads
         - before.portable_metadata_reads;
     evidence(format_args!(
-        "concurrent: passes_a={} passes_b={} other_reader_progress_at_each_pass={seen:?} hits={} misses={} evictions={} fetched_while_another_reader_fetched_the_same={} reader_grants={} peak_outstanding={}",
+        "concurrent: passes_a={} passes_b={} other_reader_progress_at_each_pass={seen:?} hits={} misses={} evictions={} fetched_while_another_reader_fetched_the_same={} reader_demands={} retained_readers={}",
         seen[0].len(),
         seen[1].len(),
         after.cache_hits - before.cache_hits,
         after.cache_misses - before.cache_misses,
         after.evictions - before.evictions,
         fetched as i64 - inserted,
-        readers.grants,
-        readers.peak_outstanding,
+        readers.requests,
+        readers.readers,
     ));
 
     // The ordinary view serves the oversized file too, through the same cache.

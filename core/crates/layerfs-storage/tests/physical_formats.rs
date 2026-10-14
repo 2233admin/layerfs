@@ -8,8 +8,8 @@
 mod support;
 
 use layerfs_storage::pack::layout::{
-    body_area_offset, group_view, parse_header, PackLane, PACK_MAGIC, USED_OFFSET, VERSION_NATIVE,
-    VERSION_NATIVE_STORED, VERSION_NATIVE_TIGHT, VERSION_ORDINARY, VERSION_ORDINARY_TIGHT,
+    body_area_offset, group_view, parse_header, PackLane, PACK_MAGIC, USED_OFFSET, VERSION_CHUNK,
+    VERSION_CHUNK_STORED, VERSION_CHUNK_TIGHT, VERSION_ORDINARY, VERSION_ORDINARY_TIGHT,
     VERSION_SINGLETON, VERSION_SINGLETON_STORED, VERSION_WHOLE_FILE, VERSION_WHOLE_FILE_GROUPED,
     VERSION_WHOLE_FILE_STORED, VERSION_WHOLE_FILE_TIGHT,
 };
@@ -27,9 +27,9 @@ fn pack_of(lane: PackLane, version: u32, groups: u32, body: usize) -> Vec<u8> {
     let length = match (lane, version) {
         (PackLane::WholeFile, VERSION_WHOLE_FILE_TIGHT)
         | (PackLane::Ordinary, VERSION_ORDINARY_TIGHT)
-        | (PackLane::Native, VERSION_NATIVE_TIGHT) => body_area_offset(lane) + body,
+        | (PackLane::Chunk, VERSION_CHUNK_TIGHT) => body_area_offset(lane) + body,
         (PackLane::WholeFile, _) => 24 + 4 * 256 + body,
-        (PackLane::Ordinary | PackLane::Native, _) => 24 + 16 * 256 + body,
+        (PackLane::Ordinary | PackLane::Chunk, _) => 24 + 16 * 256 + body,
         _ => body_area_offset(lane) + body,
     };
     let mut bytes = Vec::new();
@@ -71,14 +71,10 @@ fn grouped_whole_file_versions_keep_their_own_body_offsets() {
 }
 
 #[test]
-fn ordinary_and_native_versions_keep_their_own_body_offsets() {
+fn ordinary_and_chunk_versions_keep_their_own_body_offsets() {
     for (lane, old, tight) in [
         (PackLane::Ordinary, VERSION_ORDINARY, VERSION_ORDINARY_TIGHT),
-        (
-            PackLane::Native,
-            VERSION_NATIVE_STORED,
-            VERSION_NATIVE_TIGHT,
-        ),
+        (PackLane::Chunk, VERSION_CHUNK_STORED, VERSION_CHUNK_TIGHT),
     ] {
         for (version, offset) in [(old, 24 + 16 * 256), (tight, 24 + 16 * 16)] {
             let mut pack = pack_of(lane, version, 1, 4);
@@ -124,9 +120,9 @@ fn every_implemented_framing_is_recognized_by_its_own_version() {
     for (version, lane) in [
         (VERSION_ORDINARY, PackLane::Ordinary),
         (VERSION_ORDINARY_TIGHT, PackLane::Ordinary),
-        (VERSION_NATIVE, PackLane::Native),
-        (VERSION_NATIVE_STORED, PackLane::Native),
-        (VERSION_NATIVE_TIGHT, PackLane::Native),
+        (VERSION_CHUNK, PackLane::Chunk),
+        (VERSION_CHUNK_STORED, PackLane::Chunk),
+        (VERSION_CHUNK_TIGHT, PackLane::Chunk),
         (VERSION_WHOLE_FILE, PackLane::WholeFile),
         (VERSION_WHOLE_FILE_STORED, PackLane::WholeFile),
         (VERSION_WHOLE_FILE_GROUPED, PackLane::WholeFile),
@@ -222,7 +218,7 @@ fn declared_pack_and_group_bounds_are_enforced_on_the_bytes() {
         Err(StorageError::Integrity("singleton pack group count"))
     ));
     // A zero group count is not a valid directory.
-    let empty = pack_of(PackLane::Native, VERSION_NATIVE, 0, 64);
+    let empty = pack_of(PackLane::Chunk, VERSION_CHUNK, 0, 64);
     assert!(matches!(
         parse_header(&empty),
         Err(StorageError::Integrity("pack group count"))
@@ -291,7 +287,7 @@ fn closing_a_pack_and_retaining_its_tail_assemble_the_same_bytes() {
     let mut workspace = CompressionWorkspace::new().expect("encode workspace");
     for lane in [
         PackLane::Ordinary,
-        PackLane::Native,
+        PackLane::Chunk,
         PackLane::WholeFile,
         PackLane::Singleton,
     ] {

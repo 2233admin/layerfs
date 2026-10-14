@@ -126,12 +126,12 @@ fn writes_change_only_their_window_and_never_read_the_inherited_payload() {
         b.refused(write(LARGE, 0, &vec![0; WRITE_WINDOW + 1])),
         Refusal::Invalid
     );
-    let state = b.overlay.state(b.route()).unwrap();
+    let state = b.overlay.state().unwrap();
     assert!(matches!(
         b.run(write(LARGE, 5, b""), T1).unwrap(),
         Outcome::Unchanged { .. }
     ));
-    assert_eq!(b.overlay.state(b.route()).unwrap(), state);
+    assert_eq!(b.overlay.state().unwrap(), state);
     assert!(matches!(
         b.window(|view| view.read(&b.overlay, 4, 0, 16, &mut Vec::new())),
         Err(WorkspaceError::Content(ContentError::WrongLogicalRole))
@@ -210,7 +210,7 @@ fn truncate_and_regrow_never_resurrect_bytes_across_capture_and_known_install() 
     assert_eq!(b.content(LARGE), expect);
 
     // Seal this view; the next layer cuts below sealed data and regrows.
-    let capture = b.overlay.capture(b.route()).unwrap();
+    let capture = b.overlay.capture().unwrap();
     let sealed = expect.clone();
     resized(&b, &mut expect, 500);
     resized(&b, &mut expect, 255_000);
@@ -285,12 +285,12 @@ fn truncate_and_regrow_never_resurrect_bytes_across_capture_and_known_install() 
     assert_eq!(b.refused(resize(3, 0)), Refusal::Invalid);
     assert_eq!(b.refused(resize(999, 0)), Refusal::Missing);
     assert_eq!(b.refused(resize(LARGE, u64::MAX)), Refusal::TooLarge);
-    let state = b.overlay.state(b.route()).unwrap();
+    let state = b.overlay.state().unwrap();
     assert!(matches!(
         b.run(resize(LARGE, 13), T2).unwrap(),
         Outcome::Unchanged { stat: Some(_) }
     ));
-    assert_eq!(b.overlay.state(b.route()).unwrap(), state);
+    assert_eq!(b.overlay.state().unwrap(), state);
     // A small inherited whole-file object composes the same way.
     b.applied(write(2, 3, b"GIN"), T1);
     assert_eq!(b.content(2), b"oriGINal\0\xff");
@@ -343,7 +343,7 @@ fn whole_windows_overwrites_and_cuts_inside_them_read_back_exactly() {
         assert_eq!(b.content(LARGE), expect);
     }
     // The same over a sealed generation.
-    let capture = b.overlay.capture(b.route()).unwrap();
+    let capture = b.overlay.capture().unwrap();
     let sealed = expect.clone();
     put_at(&b, &mut expect, 40_960, &noise(4_096, 7));
     put_at(&b, &mut expect, 70_001, &noise(40_000, 8));

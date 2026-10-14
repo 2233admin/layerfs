@@ -161,7 +161,7 @@ fn scoped_views_share_original_install_serials_and_keep_original_provider() {
     let original = b.workspace.base().unwrap();
     let retained = original.plan_read(2, 0, 32).unwrap();
     let changed: &[u8] = b"changed!!!";
-    let owned = b.overlay.acquire_base_source(b.route(), 901).unwrap();
+    let owned = b.overlay.acquire_base_source(901).unwrap();
     let view = scoped.view_for_source(owned).unwrap();
     let result = scoped
         .mutate(
@@ -185,7 +185,7 @@ fn scoped_views_share_original_install_serials_and_keep_original_provider() {
     b.overlay.reply_attempted(publication).unwrap();
     drop(view);
     b.overlay.release_base_source(owned).unwrap();
-    let capture = b.overlay.capture(b.route()).unwrap();
+    let capture = b.overlay.capture().unwrap();
     let mut value = original.inode(2).unwrap().value;
     value.content_root = file(store, changed);
     let updates = [InodeUpdate { serial: 2, value }];
@@ -210,10 +210,7 @@ fn scoped_views_share_original_install_serials_and_keep_original_provider() {
     operation_client.read_canonical(fail_id).unwrap_err();
     assert!(source.failed.load(Ordering::Relaxed));
     scoped.install_prepared_base(&b.overlay, prepared).unwrap();
-    assert_eq!(
-        b.overlay.state(b.route()).unwrap().base_root,
-        next.0.to_bytes()
-    );
+    assert_eq!(b.overlay.state().unwrap().base_root, next.0.to_bytes());
     for workspace in [&b.workspace, &other] {
         assert_eq!(workspace.base().unwrap().identity(), next);
         let mut output = Vec::new();

@@ -9,10 +9,10 @@ use common::name;
 use harness::{create, resize, write, Bench, T1};
 use layerfs_content::filesystem::SymlinkTarget;
 use layerfs_overlay::{
-    Inode, InodeKind, NativeDecision, NativeMount, StatementKind, StoredCounts, WorkspaceState,
+    Inode, InodeKind, KernelDecision, KernelMount, StatementKind, StoredCounts, WorkspaceState,
     READ_WINDOW,
 };
-use layerfs_workspace::{CanonicalCache, CanonicalClient, NativeWindow, Operation, Refusal};
+use layerfs_workspace::{CanonicalCache, CanonicalClient, KernelWindow, Operation, Refusal};
 use std::sync::Arc;
 
 const SMALL: &[u8] = b"original\0\xff";
@@ -32,13 +32,13 @@ fn resident(b: &Bench) -> Arc<CanonicalClient> {
 /// rows and the transactions begun so far.
 fn snapshot(b: &Bench) -> (WorkspaceState, StoredCounts, u64) {
     (
-        b.overlay.state(b.route()).unwrap(),
-        b.overlay.resources(Some(b.route())).unwrap().counts,
+        b.overlay.state().unwrap(),
+        b.overlay.resources().unwrap().counts,
         b.overlay.diagnostics().statements[StatementKind::Begin as usize].executions,
     )
 }
 /// One kernel lookup count on `serial`, as a LOOKUP reply leaves it.
-fn hold(b: &Bench, mount: NativeMount, serial: u64, kind: InodeKind) {
+fn hold(b: &Bench, mount: KernelMount, serial: u64, kind: InodeKind) {
     let inode = Inode {
         serial,
         kind,
@@ -57,8 +57,8 @@ fn hold(b: &Bench, mount: NativeMount, serial: u64, kind: InodeKind) {
         subdirs: 0,
     };
     b.overlay
-        .observe_native_visit(mount, 1, None, true, |_, _| {
-            Ok(NativeDecision::Finished {
+        .observe_kernel_visit(mount, 1, None, true, |_, _| {
+            Ok(KernelDecision::Finished {
                 inode: Some(inode),
                 value: (),
             })
@@ -71,14 +71,14 @@ fn hold(b: &Bench, mount: NativeMount, serial: u64, kind: InodeKind) {
 fn visit(
     b: &Bench,
     client: Arc<CanonicalClient>,
-    mount: NativeMount,
+    mount: KernelMount,
     serial: u64,
     offset: u64,
     length: u32,
-) -> NativeWindow {
+) -> KernelWindow {
     let visit = b
         .workspace
-        .native_data_visit(client, mount, serial, None, offset, length)
+        .kernel_data_visit(client, mount, serial, None, offset, length)
         .unwrap();
     assert_eq!(visit.mount(), mount);
     let (demand, before) = (b.demand(), snapshot(b));
@@ -92,7 +92,7 @@ fn visit(
 /// nothing. Returns the reply and whether the base was taken.
 fn reply(
     b: &Bench,
-    window: NativeWindow,
+    window: KernelWindow,
     serial: u64,
     offset: u64,
     length: u32,
@@ -117,8 +117,8 @@ fn reply(
 
 #[test]
 fn every_window_is_the_ordinary_read_and_takes_the_base_only_for_what_it_inherits() {
-    let b = Bench::new("native-data-windows");
-    let mount = b.overlay.create_native_mount(b.route(), 1).unwrap();
+    let b = Bench::new("kernel-data-windows");
+    let mount = b.overlay.create_kernel_mount(1).unwrap();
     let base = b.workspace.base().unwrap();
     let root = base.identity().0.to_bytes();
     for (serial, kind) in [
@@ -298,14 +298,14 @@ fn every_window_is_the_ordinary_read_and_takes_the_base_only_for_what_it_inherit
 
 #[test]
 fn a_visit_is_fenced_by_the_kernel_reference() {
-    let b = Bench::new("native-data-fence");
-    let mount = b.overlay.create_native_mount(b.route(), 1).unwrap();
+    let b = Bench::new("kernel-data-fence");
+    let mount = b.overlay.create_kernel_mount(1).unwrap();
     // The root is held by the mount itself; nothing else is yet.
     let window = visit(&b, empty(), mount, 1, 0, 4096);
     assert!(window.local.is_none() && window.base.is_none());
     let job = b
         .workspace
-        .native_data_visit(empty(), mount, 8, None, 0, 4096)
+        .kernel_data_visit(empty(), mount, 8, None, 0, 4096)
         .unwrap();
     assert!(matches!(
         job.perform(&b.overlay),
@@ -314,10 +314,10 @@ fn a_visit_is_fenced_by_the_kernel_reference() {
     // After revocation every visit of the mount is stale.
     hold(&b, mount, 8, InodeKind::File);
     visit(&b, empty(), mount, 8, 0, 4096);
-    b.overlay.revoke_native_mount(mount).unwrap();
+    b.overlay.revoke_kernel_mount(mount).unwrap();
     let job = b
         .workspace
-        .native_data_visit(empty(), mount, 8, None, 0, 4096)
+        .kernel_data_visit(empty(), mount, 8, None, 0, 4096)
         .unwrap();
     assert!(matches!(
         job.perform(&b.overlay),

@@ -29,10 +29,10 @@ mod mounted;
 #[allow(dead_code)]
 #[path = "support/mounted_commit.rs"]
 mod rig;
-use layerfs_bridge::control::{NativePhase, NativeWork, Reply, WorkspaceToken};
-use layerfs_daemon::{OwnerClient, Response};
+use layerfs_bridge::control::{MountPhase, MountWork, Reply, WorkspaceToken};
+use layerfs_daemon::OwnerClient;
 use layerfs_fuse::request::Opcode;
-use layerfs_overlay::{CleanupState, Route, StoredCounts};
+use layerfs_overlay::{CleanupState, StoredCounts};
 use mounted::mount_entry;
 use nix::libc;
 use rig::{root, stamp_tree, Rig};
@@ -111,8 +111,8 @@ impl Drop for Mounted {
     }
 }
 
-fn work(rig: &Rig, token: WorkspaceToken) -> NativeWork {
-    rig.harness.status(token).native.unwrap().work.unwrap()
+fn work(rig: &Rig, token: WorkspaceToken) -> MountWork {
+    rig.harness.status(token).kernel.unwrap().work.unwrap()
 }
 /// Two consecutive observations with nothing received or admitted and no
 /// request completed in between.
@@ -130,13 +130,10 @@ fn quiet(rig: &Rig, token: WorkspaceToken) {
 fn cleanup(client: &OwnerClient, route: Route, incarnation: [u8; 32]) -> CleanupState {
     // The Workspace file can already be gone. Observe through the daemon
     // roster, which authenticates the original namespace and incarnation.
-    let done = client
+
+    client
         .observe_cleanup(None, route.namespace(), incarnation)
-        .unwrap();
-    match done.result() {
-        Ok(Response::CleanupState(state)) => *state,
-        other => panic!("{other:?}"),
-    }
+        .unwrap()
 }
 /// Per-opcode frame counts out of a Debug-rendered drain receipt.
 fn opcodes(receipt: &str) -> Vec<u64> {
@@ -376,7 +373,7 @@ fn fp31_batched_forget_is_exact_and_detach_disposes_outstanding_lookup_memory() 
     let all = work(&rig, token);
     assert_eq!(all.forget_units, INODES, "one unit per inode in all");
     assert_eq!((all.retained, all.terminal), (0, 0));
-    assert_eq!(rig.harness.phase(token), NativePhase::Ready);
+    assert_eq!(rig.harness.phase(token), MountPhase::Ready);
 
     // Lookups still outstanding at the detach.
     let (again_names, again_inodes) = walk(&mount, AGAIN);
@@ -439,3 +436,5 @@ fn fp31_batched_forget_is_exact_and_detach_disposes_outstanding_lookup_memory() 
     drop(closed);
     rig.finish();
 }
+
+use layerfs_workspace::Route;

@@ -56,7 +56,7 @@ fn tables(path: &std::path::Path) -> (i64, Vec<String>) {
 
 const ACQUISITION_TABLES: [&str; 4] = [
     "init_entry",
-    "init_native_file",
+    "init_host_file",
     "init_operation",
     "sqlite_sequence",
 ];
@@ -178,7 +178,7 @@ fn a_read_only_store_refuses_to_begin() {
 #[test]
 fn a_changed_acquisition_definition_is_refused_at_open() {
     for change in [
-        "DROP INDEX init_native_file_identity",
+        "DROP INDEX init_host_file_identity",
         "CREATE TABLE init_extra (id INTEGER PRIMARY KEY) STRICT",
         "PRAGMA user_version=1",
     ] {

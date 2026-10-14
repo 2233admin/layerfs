@@ -1,10 +1,10 @@
-#![cfg(feature = "native")]
+#![cfg(feature = "platform")]
 use std::{
     process::{Command, Stdio},
     time::{Duration, Instant},
 };
 #[test]
-fn blocked_native_stderr_preserves_result_and_process_exit() {
+fn blocked_platform_stderr_preserves_result_and_process_exit() {
     let mut child = Command::new(std::env::current_exe().unwrap())
         .args([
             "--ignored",
@@ -33,7 +33,7 @@ fn blocked_native_stderr_preserves_result_and_process_exit() {
     assert!(String::from_utf8_lossy(&result.stdout).contains("product=Err(42), failed=1"));
 }
 #[test]
-#[ignore = "subprocess helper; invoked by blocked_native_stderr_preserves_result_and_process_exit"]
+#[ignore = "subprocess helper; invoked by blocked_platform_stderr_preserves_result_and_process_exit"]
 fn stalled_writer_child() {
     use layerfs_telemetry::output::{Output, OutputConfig};
     let mut config = OutputConfig::forward();

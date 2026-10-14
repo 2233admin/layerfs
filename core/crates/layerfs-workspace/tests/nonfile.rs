@@ -17,7 +17,7 @@ fn drain(b: &Bench) {
     panic!("maintenance stalled");
 }
 fn local(b: &Bench, serial: u64) -> Inode {
-    b.overlay.inode(b.route(), serial).unwrap().unwrap()
+    b.overlay.inode(serial).unwrap().unwrap()
 }
 #[test]
 fn linked_symlink_targets_follow_effective_layers_through_repeated_failed_captures() {
@@ -34,7 +34,7 @@ fn linked_symlink_targets_follow_effective_layers_through_repeated_failed_captur
         )
         .unwrap();
     for round in 0..20 {
-        let capture = b.overlay.capture(b.route()).unwrap();
+        let capture = b.overlay.capture().unwrap();
         let reader = b
             .overlay
             .acquire_captured_reader(capture, round + 1)
@@ -79,10 +79,7 @@ fn non_file_lookup_and_processing_owners_preserve_removed_metadata_and_target() 
             .unwrap();
         (lookup, dir, root)
     });
-    assert_eq!(
-        b.overlay.retained_lookup(b.route(), 1).unwrap(),
-        Some(lookup)
-    );
+    assert_eq!(b.overlay.retained_lookup(1).unwrap(), Some(lookup));
     b.applied(unlink(1, "retained-link"), T2);
     b.applied(rmdir(1, "retained-dir"), T2);
     drain(&b);
@@ -105,7 +102,7 @@ fn non_file_lookup_and_processing_owners_preserve_removed_metadata_and_target() 
         );
     });
     for _ in 0..12 {
-        let capture = b.overlay.capture(b.route()).unwrap();
+        let capture = b.overlay.capture().unwrap();
         b.overlay.resolve_failed_capture(capture).unwrap();
         drain(&b);
     }
@@ -117,13 +114,13 @@ fn non_file_lookup_and_processing_owners_preserve_removed_metadata_and_target() 
     b.overlay.release_lookup(lookup).unwrap();
     assert!(b.overlay.check_lookup(lookup).is_err());
     drain(&b);
-    b.overlay.close(b.route()).unwrap();
+    b.overlay.close().unwrap();
     b.overlay.release_file_read(read).unwrap();
     b.overlay.release_lookup(dir_lookup).unwrap();
     b.overlay.release_lookup(root_lookup).unwrap();
     drain(&b);
     assert_eq!(
-        b.overlay.cleanup_state(b.route()).unwrap(),
+        b.overlay.cleanup_state().unwrap(),
         layerfs_overlay::CleanupState::Queued,
     );
 }
@@ -132,40 +129,24 @@ fn non_file_lookup_and_processing_owners_preserve_removed_metadata_and_target() 
 fn failed_name_composition_drops_only_whiteouts_over_proven_absent_base_names() {
     let b = Bench::new("whiteout-fold");
     b.applied(create(1, "temporary"), T1);
-    let capture = b.overlay.capture(b.route()).unwrap();
+    let capture = b.overlay.capture().unwrap();
     b.applied(unlink(1, "temporary"), T2);
-    let row = b
-        .overlay
-        .directory_entry(b.route(), 1, b"temporary")
-        .unwrap()
-        .unwrap();
+    let row = b.overlay.directory_entry(1, b"temporary").unwrap().unwrap();
     assert_eq!((row.serial, row.inherited), (None, true));
     b.overlay.resolve_failed_capture(capture).unwrap();
     drain(&b);
-    assert_eq!(
-        b.overlay
-            .directory_entry(b.route(), 1, b"temporary")
-            .unwrap(),
-        None
-    );
-    assert_eq!(
-        b.overlay.state(b.route()).unwrap().dirty_directory_entries,
-        0
-    );
+    assert_eq!(b.overlay.directory_entry(1, b"temporary").unwrap(), None);
+    assert_eq!(b.overlay.state().unwrap().dirty_directory_entries, 0);
     assert_eq!(b.lookup(1, "temporary"), None);
     // A base alias still needs its whiteout after a locally recreated name is
     // removed from the upper domain and the captured domain is composed.
     b.applied(unlink(1, "alias"), T1);
-    let capture = b.overlay.capture(b.route()).unwrap();
+    let capture = b.overlay.capture().unwrap();
     b.applied(create(1, "alias"), T2);
     b.applied(unlink(1, "alias"), T2);
     b.overlay.resolve_failed_capture(capture).unwrap();
     drain(&b);
-    let row = b
-        .overlay
-        .directory_entry(b.route(), 1, b"alias")
-        .unwrap()
-        .unwrap();
+    let row = b.overlay.directory_entry(1, b"alias").unwrap().unwrap();
     assert_eq!((row.serial, row.inherited), (None, true));
     assert_eq!(b.lookup(1, "alias"), None);
     assert_eq!(b.lookup(1, "file").unwrap().namespace_refs, 1);

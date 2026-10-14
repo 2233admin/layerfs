@@ -46,8 +46,8 @@ fn root() -> NewEntry {
         kind: InodeKind::Directory,
         metadata_root: ObjectId::for_bytes(b"metadata"),
         target_root: None,
-        native_path: Some(b"/source".to_vec()),
-        native: None,
+        host_path: Some(b"/source".to_vec()),
+        host: None,
     }
 }
 
@@ -61,8 +61,8 @@ fn file(position: u64) -> NewEntry {
         kind: InodeKind::RegularFile,
         metadata_root: ObjectId::for_bytes(b"metadata"),
         target_root: None,
-        native_path: Some(format!("/source/f{position}").into_bytes()),
-        native: Some(NativeIdentity {
+        host_path: Some(format!("/source/f{position}").into_bytes()),
+        host: Some(HostIdentity {
             device: 1,
             inode: position,
             evidence: [7; EVIDENCE_BYTES],

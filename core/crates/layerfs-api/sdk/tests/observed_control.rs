@@ -1,7 +1,7 @@
 //! Normal and observed facades use one authenticated lifecycle with exact tokens.
 use layerfs_bridge::{
     control::{Answer, Call, CleanupObservation, Reply, Request, WorkspaceToken},
-    native,
+    duplex,
 };
 use layerfs_history::WorkspaceId;
 use layerfs_sdk::{
@@ -15,7 +15,7 @@ use std::{
 };
 
 fn pair(
-    run: impl FnOnce(native::Connection) + Send + 'static,
+    run: impl FnOnce(duplex::Connection) + Send + 'static,
 ) -> (Control, thread::JoinHandle<()>) {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let client =
@@ -31,10 +31,10 @@ fn pair(
             .unwrap();
     }
     let worker = thread::spawn(move || {
-        run(native::accept(server, &[52; 32], native::public_key(&[51; 32]).unwrap()).unwrap())
+        run(duplex::accept(server, &[52; 32], duplex::public_key(&[51; 32]).unwrap()).unwrap())
     });
     let connection =
-        native::initiate(client, &[51; 32], native::public_key(&[52; 32]).unwrap()).unwrap();
+        duplex::initiate(client, &[51; 32], duplex::public_key(&[52; 32]).unwrap()).unwrap();
     (Control::new(connection), worker)
 }
 fn token() -> WorkspaceToken {

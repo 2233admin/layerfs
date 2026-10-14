@@ -19,7 +19,7 @@ use layerfs_bridge::control::{Activity, Reply};
 use layerfs_daemon::{control::Failure, store::CommitError};
 use layerfs_history::CommitStagedOutcome;
 use mounted::COMMAND;
-use rig::{bash_in, native, passed, root, Rig};
+use rig::{bash_in, host, passed, root, Rig};
 use std::{
     io::{BufRead, BufReader, Write},
     process::{Child, Command, Stdio},
@@ -85,8 +85,8 @@ fn parallel_workspace_commits_keep_distinct_captures_and_one_admission_each() {
         &bash_in(COMMAND, root(&b), "timeout 2 sh -c 'printf bravo > only-b'"),
         "create B",
     );
-    let ea = native(root(&a));
-    let eb = native(root(&b));
+    let ea = host(root(&a));
+    let eb = host(root(&b));
     let holder = AdmissionHolder::acquire(rig.fixture.config.path.parent().unwrap());
     let (tx, rx) = mpsc::channel();
     let (ready_tx, ready_rx) = mpsc::channel();
@@ -172,8 +172,8 @@ fn parallel_workspace_commits_keep_distinct_captures_and_one_admission_each() {
             }
         }
     }
-    let live_a = native(root(&a));
-    let live_b = native(root(&b));
+    let live_a = host(root(&a));
+    let live_b = host(root(&b));
     rig.unmount(&a);
     rig.unmount(&b);
     rig.finish();

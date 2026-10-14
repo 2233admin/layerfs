@@ -11,17 +11,15 @@ use layerfs_content::{
 };
 use layerfs_daemon::{
     bootstrap::open_store,
-    store::{
-        BindRequest, BoundWorkspace, ReadLimits, Store, StoreOperation, StorePorts, StoreReader,
-    },
-    Owner, OwnerConfig, Response,
+    store::{BindRequest, BoundWorkspace, Store, StoreOperation, StorePorts},
+    Owner, OwnerConfig,
 };
 use layerfs_history::{
-    BranchId, BranchSnapshot, ForkRequest, ForkSource, HistoryCatalog, HistoryName, WorkspaceId,
+    BranchId, BranchSnapshot, ForkRequest, ForkSource, HistoryName, WorkspaceId,
 };
 use layerfs_overlay::ProfileConfig;
-use layerfs_persistence::Handles;
-use layerfs_storage::{ReservationBlocks, Storage};
+
+use layerfs_storage::ReservationBlocks;
 use layerfs_workspace::{
     CanonicalClient, ClientWork, Operation, Outcome, Position, SourceView, Time, ViewStat,
 };
@@ -93,59 +91,17 @@ impl Tree {
         tree
     }
     /// A daemon with an empty cache of `cache` bytes and `readers` sessions.
-    pub fn daemon(&self, readers: usize, cache: usize) -> Daemon {
+    pub fn daemon(&self, _readers: usize, cache: usize) -> Daemon {
         let number = self.daemons.fetch_add(1, Ordering::Relaxed);
         let store = open_store(
             self.fixture.config.clone(),
             support::BINDING,
             support::CURSOR,
-            readers,
+            OwnerConfig::default().namespaces,
             cache,
             ReservationBlocks::default(),
         )
         .unwrap();
-        // Each daemon keeps its Workspace files beside its own overlay path.
-        let local = self.fixture.directory.join(format!("overlay-{number}"));
-        std::fs::create_dir_all(&local).unwrap();
-        let owner = Owner::start(
-            &local.join("overlay.sqlite"),
-            ProfileConfig::default(),
-            OwnerConfig::default(),
-        )
-        .unwrap();
-        Daemon { store, owner }
-    }
-    /// The same daemon over a History catalog the test wraps around the real
-    /// writable one: external orchestration at a public port, no product hook.
-    pub fn daemon_over(
-        &self,
-        readers: usize,
-        cache: usize,
-        history: impl FnOnce(Arc<Handles>) -> Arc<dyn HistoryCatalog>,
-    ) -> Daemon {
-        let number = self.daemons.fetch_add(1, Ordering::Relaxed);
-        let config = || self.fixture.config.clone();
-        let handles =
-            Arc::new(Handles::open_writable(config(), support::BINDING, support::CURSOR).unwrap());
-        let writer = handles.storage.clone();
-        let readers = (0..readers)
-            .map(|_| {
-                let read =
-                    Handles::open_read_only(config(), support::BINDING, support::CURSOR).unwrap();
-                StoreReader::new(Storage::new(read.storage).unwrap(), Arc::new(read.history))
-            })
-            .collect();
-        let store = Arc::new(
-            Store::new(
-                writer,
-                history(handles),
-                readers,
-                cache,
-                ReservationBlocks::default(),
-                ReadLimits::default(),
-            )
-            .unwrap(),
-        );
         // Each daemon keeps its Workspace files beside its own overlay path.
         let local = self.fixture.directory.join(format!("overlay-{number}"));
         std::fs::create_dir_all(&local).unwrap();
@@ -207,15 +163,7 @@ impl Daemon {
         )
     }
     pub fn close(&self, workspace: &BoundWorkspace) {
-        assert!(matches!(
-            drive::job(
-                &self.owner.client(),
-                workspace.route(),
-                |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.close(job_route)
-            )
-            .result(),
-            Ok(Response::Done)
-        ));
+        workspace.close().unwrap();
     }
     /// Cumulative counters of the daemon's one shared cache.
     pub fn cache(&self) -> ClientWork {
@@ -405,14 +353,13 @@ pub fn apply(workspace: &BoundWorkspace, clock: &mut i64, step: Do<'_>) -> bool 
             .unwrap_or_else(|e| panic!("{step:?}: {e:?}"));
         match outcome {
             Outcome::Applied { publication, .. } => {
-                assert!(drive::job(
+                drive::job(
                     operation.overlay(),
                     workspace.route(),
-                    |job_client: &layerfs_daemon::OwnerClient, _| job_client
-                        .reply_attempted(publication)
-                )
-                .result()
-                .is_ok());
+                    |job_client: &layerfs_daemon::OwnerClient, _| {
+                        job_client.reply_attempted(publication)
+                    },
+                );
                 true
             }
             Outcome::Unchanged { .. } => false,

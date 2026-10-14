@@ -46,7 +46,7 @@ fn create_mkdir_symlink_and_link_publish_parent_and_reference_effects_atomically
     let root = b.stat(1).unwrap();
     assert_eq!(root.metadata.mtime_seconds, T1.seconds);
     assert_eq!(root.metadata.mode, 0o1777);
-    let state = b.overlay.state(b.route()).unwrap();
+    let state = b.overlay.state().unwrap();
     assert_eq!(
         (
             state.revision,
@@ -224,7 +224,7 @@ fn unlink_and_rmdir_remove_one_reference_and_keep_directory_counts_exact() {
 
     // Created and removed inside one generation: no name row remains, and a
     // new directory's count returns to empty so it can be removed.
-    let names = b.overlay.state(b.route()).unwrap().dirty_directory_entries;
+    let names = b.overlay.state().unwrap().dirty_directory_entries;
     let dir = b.applied(mkdir(1, "operation_record"), T1).unwrap();
     b.applied(create(dir.serial, "a"), T1);
     b.applied(create(dir.serial, "b"), T1);
@@ -232,14 +232,9 @@ fn unlink_and_rmdir_remove_one_reference_and_keep_directory_counts_exact() {
     b.applied(unlink(dir.serial, "a"), T1);
     b.applied(unlink(dir.serial, "b"), T1);
     b.applied(rmdir(1, "operation_record"), T1);
+    assert_eq!(b.overlay.state().unwrap().dirty_directory_entries, names);
     assert_eq!(
-        b.overlay.state(b.route()).unwrap().dirty_directory_entries,
-        names
-    );
-    assert_eq!(
-        b.overlay
-            .directory_entry(b.route(), 1, b"operation_record")
-            .unwrap(),
+        b.overlay.directory_entry(1, b"operation_record").unwrap(),
         None
     );
     assert_eq!(b.lookup(1, "operation_record"), None);
@@ -276,7 +271,7 @@ fn rename_moves_replaces_and_refuses_cycles_without_descendant_rows() {
     assert_eq!(b.lookup(1, "symlink").unwrap().serial, 2);
     assert_eq!(b.stat(3).unwrap().namespace_refs, 0);
     // Two names of one inode: success with no change and no ticket.
-    let before = b.overlay.state(b.route()).unwrap();
+    let before = b.overlay.state().unwrap();
     assert!(matches!(
         b.run(rename((1, "alias"), (1, "symlink"), true, None), T2)
             .unwrap(),
@@ -287,7 +282,7 @@ fn rename_moves_replaces_and_refuses_cycles_without_descendant_rows() {
             .unwrap(),
         Outcome::Unchanged { .. }
     ));
-    assert_eq!(b.overlay.state(b.route()).unwrap(), before);
+    assert_eq!(b.overlay.state().unwrap(), before);
     assert_eq!(b.lookup(1, "alias").unwrap().namespace_refs, 2);
 
     assert_eq!(
@@ -304,13 +299,13 @@ fn rename_moves_replaces_and_refuses_cycles_without_descendant_rows() {
     );
     // A directory replaces an empty directory; its children follow its serial.
     let empty = b.applied(mkdir(1, "empty"), T1).unwrap();
-    let rows = b.overlay.state(b.route()).unwrap();
+    let rows = b.overlay.state().unwrap();
     b.applied(rename((1, "cache"), (1, "empty"), true, None), T1);
     assert_eq!(b.lookup(1, "empty").unwrap().serial, 6);
     assert_eq!(b.lookup(1, "cache"), None);
     assert_eq!(b.stat(empty.serial).unwrap().namespace_refs, 0);
     assert_eq!(b.lookup(6, "state").unwrap().serial, 8);
-    let after = b.overlay.state(b.route()).unwrap();
+    let after = b.overlay.state().unwrap();
     // The rows written are the names, the parent and the replaced inode only.
     assert_eq!(after.dirty_inodes, rows.dirty_inodes);
     assert_eq!(
@@ -430,12 +425,12 @@ fn chmod_and_utimens_follow_the_portable_grammar_and_keep_one_mtime() {
         (0o1700, i64::MIN, 0)
     );
     assert_eq!(b.names(1).len(), 7);
-    let state = b.overlay.state(b.route()).unwrap();
+    let state = b.overlay.state().unwrap();
     assert!(matches!(
         b.run(set(1, Some(0o1700), Some(extreme)), T1).unwrap(),
         Outcome::Unchanged { stat: Some(_) }
     ));
-    assert_eq!(b.overlay.state(b.route()).unwrap(), state);
+    assert_eq!(b.overlay.state().unwrap(), state);
     assert_eq!(b.refused(set(2, Some(0o4755), None)), Refusal::NotPermitted);
     assert_eq!(b.refused(set(2, Some(0o1644), None)), Refusal::NotPermitted);
     assert_eq!(b.refused(set(3, Some(0o644), None)), Refusal::Unsupported);

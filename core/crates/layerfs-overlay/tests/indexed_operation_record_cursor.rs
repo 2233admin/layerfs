@@ -26,9 +26,9 @@ fn apply(
     );
 }
 fn scope(db: &Overlay, tag: u8) -> IndexedOperationRecordScope {
-    let route = db.open_workspace([tag; 32], [tag + 1; 32]).unwrap();
+    db.open_workspace([tag + 1; 32]).unwrap();
     IndexedOperationRecordScope {
-        owner: db.acquire_operation(route, 1).unwrap(),
+        owner: db.acquire_operation(1).unwrap(),
         file_scope: u64::MAX,
     }
 }
@@ -53,13 +53,13 @@ fn sealed_pass_preserves_all_records_across_windows_and_exact_prefixes() {
         ..scope
     };
     let other_owner = IndexedOperationRecordScope {
-        owner: db.acquire_operation(scope.owner.route(), 2).unwrap(),
+        owner: db.acquire_operation(2).unwrap(),
         ..scope
     };
     apply(&db, other_file, &[put(key(9, 0), vec![1])]);
     apply(&db, other_owner, &[put(key(9, 0), vec![2])]);
     apply(&db, scope, &[put(key(10, 0), vec![3])]);
-    let counts = db.resources(None).unwrap().counts;
+    let counts = db.resources().unwrap().counts;
     let plans = db
         .explain_indexed_operation_record(scope, key(9, 63), key(9, 63).key)
         .unwrap();
@@ -105,7 +105,7 @@ fn sealed_pass_preserves_all_records_across_windows_and_exact_prefixes() {
     expected.push(max.key);
     assert_eq!(seen, expected);
     assert_eq!(
-        db.resources(None).unwrap().counts,
+        db.resources().unwrap().counts,
         counts,
         "enumeration changes no record"
     );

@@ -400,7 +400,7 @@ fn a_released_reader_is_the_original_stale_refusal_of_the_engine() {
     assert_eq!(log.count(Call::InodePage) + log.count(Call::InodePoint), 0);
     assert_eq!(
         b.overlay
-            .retained_operation(b.route(), taken.operation_request)
+            .retained_operation(taken.operation_request)
             .unwrap(),
         Some(taken.operation)
     );

@@ -12,14 +12,14 @@ mod fixture;
 #[path = "support/mounted.rs"]
 mod mounted;
 #[allow(dead_code)]
-#[path = "support/native_install.rs"]
+#[path = "support/host_install.rs"]
 mod support;
 use layerfs_bridge::control::{
-    Activity, NativePhase, Reply, Request, TeardownStage, WorkspaceToken,
+    Activity, MountPhase, Reply, Request, TeardownStage, WorkspaceToken,
 };
-use layerfs_daemon::{control::Failure, JobReceipt, OwnerError, ServiceClass};
+use layerfs_daemon::{control::Failure, OwnerError};
 use layerfs_history::BranchId;
-use layerfs_overlay::Route;
+use layerfs_workspace::Route;
 use mounted::{mount_entry, until, Harness};
 use std::{
     collections::BTreeMap,
@@ -85,7 +85,7 @@ fn kernel_forget_arrives_on_a_live_connection_with_its_exact_decrement() {
     let ready = h.mount(2);
     let token = ready.token;
     let root = Path::new(&ready.directory);
-    let work = || h.status(token).native.unwrap().work.unwrap();
+    let work = || h.status(token).kernel.unwrap().work.unwrap();
     let quiet = || {
         let work = work();
         work.active == 0
@@ -129,7 +129,7 @@ fn kernel_forget_arrives_on_a_live_connection_with_its_exact_decrement() {
     let after = work();
     let returned = details(&h, helper);
     println!(
-        "NATIVE_FORGET names={names} inodes={inodes} reclaim_requests={requests} forget_units={} work={after:?} baseline={baseline:?} looked={looked:?} returned={returned:?}",
+        "KERNEL_FORGET names={names} inodes={inodes} reclaim_requests={requests} forget_units={} work={after:?} baseline={baseline:?} looked={looked:?} returned={returned:?}",
         after.forget_units
     );
     // Exactness: a short decrement leaves its row (the count above would not
@@ -137,7 +137,7 @@ fn kernel_forget_arrives_on_a_live_connection_with_its_exact_decrement() {
     assert_eq!(after.forget_units, inodes, "one unit per evicted inode");
     assert_eq!((after.retained, after.terminal), (0, 0));
     assert_eq!(returned, baseline);
-    assert_eq!(h.phase(token), NativePhase::Ready);
+    assert_eq!(h.phase(token), MountPhase::Ready);
     assert!(mount_entry(&ready.directory).is_some());
 
     // The connection is unchanged: the same names bind the same inodes again,
@@ -154,7 +154,7 @@ fn kernel_forget_arrives_on_a_live_connection_with_its_exact_decrement() {
         fixture::FILES[1].1
     );
     h.unmount(&ready);
-    until("native ownership retired", || {
+    until("kernel ownership retired", || {
         h.engine(helper).namespaces == 1 && details(&h, helper) <= baseline
     });
     assert!(matches!(
@@ -182,33 +182,26 @@ fn an_unmount_that_cannot_revoke_stops_retained_and_later_replies_repeat_it() {
     let open = details(&h, helper);
     drop(file);
     until("the read's RELEASE disposed", || {
-        let work = h.status(token).native.unwrap().work.unwrap();
+        let work = h.status(token).kernel.unwrap().work.unwrap();
         details(&h, helper) < open && work.active == 0
     });
     let route = route(&h, token);
-    // A failure outside the kernel connection: one owner job of the test's
-    // own panics and the Workspace keeps that original failure. Connection
-    // drain cannot see it; the unmount's revocation is refused with the
-    // retained cause and the unmount stops retained rather than guessing.
-    let staged = h
-        .owner
-        .client()
-        .job(route, ServiceClass::Lifecycle, |_, _| {
-            panic!("staged Workspace failure")
-        });
+    // Real backing identity loss outside the kernel connection. No arbitrary
+    // test job is injected, and no failed revocation is replayed.
+    let backing = f.directory.join(format!("{}.sqlite", token.namespace));
+    let moved = f.directory.join("retained-backing.sqlite");
+    fs::rename(&backing, &moved).unwrap();
+    let staged = h.owner.client().state(route);
     assert!(
-        matches!(
-            staged.as_ref().map(JobReceipt::result),
-            Ok(Err(OwnerError::Retained(_)))
-        ),
-        "{staged:?}"
+        staged.is_err(),
+        "backing identity loss must be refused: {staged:?}"
     );
 
     let custody = match h.try_unmount(token) {
         Err(Failure::Retained(custody)) => *custody,
         other => panic!("{other:?}"),
     };
-    println!("NATIVE_RETAINED custody={custody:?}");
+    println!("KERNEL_RETAINED custody={custody:?}");
     assert_eq!(custody.token, token);
     assert_eq!(custody.stage, TeardownStage::Revoke);
     assert!(custody.detached, "the kernel detach is known");
@@ -226,12 +219,12 @@ fn an_unmount_that_cannot_revoke_stops_retained_and_later_replies_repeat_it() {
     // Effects that happened stay happened; nothing is reported as unmounted.
     assert!(mount_entry(&ready.directory).is_none());
     let status = h.status(token);
-    let native = status.native.unwrap();
-    assert_eq!(native.phase, NativePhase::Retained);
-    assert!(native.detached);
-    assert_eq!(native.ready.as_ref(), Some(&ready));
+    let kernel = status.kernel.unwrap();
+    assert_eq!(kernel.phase, MountPhase::Retained);
+    assert!(kernel.detached);
+    assert_eq!(kernel.ready.as_ref(), Some(&ready));
     assert_eq!(status.activity, Activity::Closing);
-    let kept = h.service.retained_native(token).unwrap().expect("owner");
+    let kept = h.service.retained_kernel(token).unwrap().expect("owner");
     assert!(
         kept.contains("Revoke") && kept.contains("Drained"),
         "{kept}"
@@ -249,13 +242,13 @@ fn an_unmount_that_cannot_revoke_stops_retained_and_later_replies_repeat_it() {
         .is_ok());
     // Nothing settles by itself: no hidden retry runs, and the Workspace
     // still answers with its original failure.
-    let again = h.owner.client().native_retained_mount(route);
+    let again = h.owner.client().kernel_retained_mount(route);
     assert!(
         matches!(&again, Err(OwnerError::Unattempted { cause, .. })
             if matches!(**cause, OwnerError::Retained(_))),
         "{again:?}"
     );
-    assert_eq!(h.phase(token), NativePhase::Retained);
+    assert_eq!(h.phase(token), MountPhase::Retained);
     match h.try_unmount(token) {
         Err(Failure::Retained(again)) => assert_eq!(*again, custody),
         other => panic!("{other:?}"),

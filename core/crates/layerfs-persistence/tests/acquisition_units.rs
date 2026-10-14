@@ -9,8 +9,8 @@ use layerfs_persistence::{
 use layerfs_storage::{
     port::{
         acquisition::{
-            Acquisition, AcquisitionError, Begin, EntryKey, Limits, NativeIdentity, NewEntry,
-            Owner, Phase, Placed, EVIDENCE_BYTES, WRITE_WINDOW_ROWS,
+            Acquisition, AcquisitionError, Begin, EntryKey, HostIdentity, Limits, NewEntry, Owner,
+            Phase, Placed, EVIDENCE_BYTES, WRITE_WINDOW_ROWS,
         },
         PersistenceError,
     },
@@ -71,8 +71,8 @@ fn key(parent: Option<u64>, name: &str) -> EntryKey {
     }
 }
 
-fn native(device: u64, inode: u64, evidence: u8) -> NativeIdentity {
-    NativeIdentity {
+fn host(device: u64, inode: u64, evidence: u8) -> HostIdentity {
+    HostIdentity {
         device,
         inode,
         evidence: [evidence; EVIDENCE_BYTES],
@@ -86,8 +86,8 @@ fn directory(parent: Option<u64>, name: &str, position: Option<u64>, path: &str)
         kind: InodeKind::Directory,
         metadata_root: root("directory-attributes"),
         target_root: None,
-        native_path: Some(path.as_bytes().to_vec()),
-        native: None,
+        host_path: Some(path.as_bytes().to_vec()),
+        host: None,
     }
 }
 
@@ -96,7 +96,7 @@ fn regular(
     name: &str,
     position: Option<u64>,
     path: &str,
-    identity: NativeIdentity,
+    identity: HostIdentity,
 ) -> NewEntry {
     NewEntry {
         key: key(Some(parent), name),
@@ -104,8 +104,8 @@ fn regular(
         kind: InodeKind::RegularFile,
         metadata_root: root("file-attributes"),
         target_root: None,
-        native_path: Some(path.as_bytes().to_vec()),
-        native: Some(identity),
+        host_path: Some(path.as_bytes().to_vec()),
+        host: Some(identity),
     }
 }
 
@@ -116,8 +116,8 @@ fn symlink(parent: u64, name: &str, position: Option<u64>) -> NewEntry {
         kind: InodeKind::Symlink,
         metadata_root: root("link-attributes"),
         target_root: Some(root(name)),
-        native_path: None,
-        native: None,
+        host_path: None,
+        host: None,
     }
 }
 
@@ -126,8 +126,8 @@ fn stored(path: &Path, operation: u64) -> (u64, u64) {
     let db = rusqlite::Connection::open(path).unwrap();
     let entries: (i64, i64) = db
         .query_row(
-            "SELECT count(*),coalesce(sum(length(name)+coalesce(length(native_path),0)\
-             +coalesce(length(native),0)+length(metadata_root)+coalesce(length(content_root),0)),0)\
+            "SELECT count(*),coalesce(sum(length(name)+coalesce(length(host_path),0)\
+             +coalesce(length(host),0)+length(metadata_root)+coalesce(length(content_root),0)),0)\
              FROM init_entry WHERE operation_id=?1",
             [operation as i64],
             |row| Ok((row.get(0)?, row.get(1)?)),
@@ -135,9 +135,9 @@ fn stored(path: &Path, operation: u64) -> (u64, u64) {
         .unwrap();
     let files: (i64, i64) = db
         .query_row(
-            "SELECT count(*),coalesce(sum(length(native_path)+length(device)+length(inode)\
+            "SELECT count(*),coalesce(sum(length(host_path)+length(device)+length(inode)\
              +length(evidence)+coalesce(length(file_root),0)),0)\
-             FROM init_native_file WHERE operation_id=?1",
+             FROM init_host_file WHERE operation_id=?1",
             [operation as i64],
             |row| Ok((row.get(0)?, row.get(1)?)),
         )
@@ -170,8 +170,8 @@ fn tree_under(profile: SqlitePersistenceProfile) {
     let owner = begin(&handles);
     assert_eq!((owner.operation, owner.epoch), (1, 1));
 
-    let shared = native(u64::MAX, 7, 1);
-    let own = native(1, (1 << 63) + 5, 1);
+    let shared = host(u64::MAX, 7, 1);
+    let own = host(1, (1 << 63) + 5, 1);
     let bound = port
         .put_entries(
             owner,
@@ -197,7 +197,7 @@ fn tree_under(profile: SqlitePersistenceProfile) {
 
     // Different evidence for a known identity changes nothing at all.
     let before = (port.work(owner).unwrap(), stored(&path, 1));
-    let changed = regular(1, "z", Some(6), "/s/a/z", native(u64::MAX, 7, 2));
+    let changed = regular(1, "z", Some(6), "/s/a/z", host(u64::MAX, 7, 2));
     assert_eq!(
         port.put_entries(owner, &[symlink(1, "w", Some(7)), changed]),
         Err(AcquisitionError::Changed { position: 6 })
@@ -256,7 +256,7 @@ fn tree_under(profile: SqlitePersistenceProfile) {
     assert_eq!(
         directories
             .iter()
-            .map(|d| (d.position, d.native_path.as_slice()))
+            .map(|d| (d.position, d.host_path.as_slice()))
             .collect::<Vec<_>>(),
         [(0, b"/s".as_slice()), (1, b"/s/a".as_slice())]
     );
@@ -269,10 +269,10 @@ fn tree_under(profile: SqlitePersistenceProfile) {
 
     let jobs = port.jobs(owner, None, Limits::MAXIMUM).unwrap();
     assert_eq!(jobs.len(), 2);
-    assert_eq!((jobs[0].position, jobs[0].native), (2, shared));
-    assert_eq!(jobs[0].native_path, b"/s/b");
-    assert_eq!((jobs[1].position, jobs[1].native), (5, own));
-    assert_eq!(port.job(owner, 5).unwrap().unwrap().native_path, b"/s/a/y");
+    assert_eq!((jobs[0].position, jobs[0].host), (2, shared));
+    assert_eq!(jobs[0].host_path, b"/s/b");
+    assert_eq!((jobs[1].position, jobs[1].host), (5, own));
+    assert_eq!(port.job(owner, 5).unwrap().unwrap().host_path, b"/s/a/y");
     assert_eq!(port.job(owner, 4).unwrap(), None, "a later path is no job");
 
     let roots = port.file_roots(owner, None, Limits::MAXIMUM).unwrap();
@@ -305,7 +305,7 @@ fn tree_under(profile: SqlitePersistenceProfile) {
     // The charge equals what the engine itself sums for this operation.
     let work = port.work(owner).unwrap();
     assert_eq!((work.held_rows, work.held_bytes), stored(&path, 1));
-    assert_eq!(work.held_rows, 8, "six entries and two native identities");
+    assert_eq!(work.held_rows, 8, "six entries and two host identities");
     assert_eq!((work.peak_rows, work.peak_bytes), (8, work.held_bytes));
 
     assert_eq!(
@@ -360,10 +360,10 @@ fn a_wide_directory_is_placed_through_name_windows() {
     for n in (0..CHILDREN).rev() {
         let name = format!("n{n:05}");
         window.push(match n % 3 {
-            // Two names share one native identity; every other file is its own.
+            // Two names share one host identity; every other file is its own.
             0 => {
                 let inode = if n == 3 { 0 } else { n as u64 };
-                regular(1, &name, None, "unused", native(9, inode, 4))
+                regular(1, &name, None, "unused", host(9, inode, 4))
             }
             1 => symlink(1, &name, None),
             _ => directory(Some(1), &name, None, &format!("/s/w/{name}")),
@@ -393,7 +393,7 @@ fn a_wide_directory_is_placed_through_name_windows() {
                 position += 1;
                 let path = [b"/s/w/".as_slice(), &child.name].concat();
                 Placed {
-                    native: child.native.map(|identity| (identity, path)),
+                    host: child.host.map(|identity| (identity, path)),
                     name: child.name,
                     position: own,
                 }
@@ -418,7 +418,7 @@ fn a_wide_directory_is_placed_through_name_windows() {
             &[Placed {
                 name: b"absent".to_vec(),
                 position,
-                native: None
+                host: None
             }]
         ),
         Err(AcquisitionError::Changed { position })
@@ -447,13 +447,13 @@ fn a_wide_directory_is_placed_through_name_windows() {
     assert_eq!(
         placed.held_rows as usize,
         CHILDREN + 2 + CHILDREN / 3 - 1,
-        "one native row per identity"
+        "one host row per identity"
     );
     let directories = port.directories(owner, Some(1), limits).unwrap();
     assert_eq!(directories[0].position, 4);
-    assert_eq!(directories[0].native_path, b"/s/w/n00002");
+    assert_eq!(directories[0].host_path, b"/s/w/n00002");
     assert_eq!(
-        port.job(owner, 2).unwrap().unwrap().native_path,
+        port.job(owner, 2).unwrap().unwrap().host_path,
         b"/s/w/n00000"
     );
     let roots = port.file_roots(owner, None, Limits::MAXIMUM).unwrap();
@@ -486,8 +486,8 @@ fn windows_owners_and_abandoned_operations_are_fenced() {
         Err(AcquisitionError::Bounds)
     );
     // A regular file without its identity is malformed and changes nothing.
-    let mut malformed = regular(0, "f", Some(1), "/s/f", native(1, 1, 1));
-    malformed.native = None;
+    let mut malformed = regular(0, "f", Some(1), "/s/f", host(1, 1, 1));
+    malformed.host = None;
     assert_eq!(
         port.put_entries(owner, &[malformed]),
         Err(AcquisitionError::Bounds)
@@ -523,7 +523,7 @@ fn windows_owners_and_abandoned_operations_are_fenced() {
         owner,
         &[
             symlink(0, "a", Some(1)),
-            regular(0, "b", Some(2), "/s/b", native(1, 2, 3)),
+            regular(0, "b", Some(2), "/s/b", host(1, 2, 3)),
         ],
     )
     .unwrap();

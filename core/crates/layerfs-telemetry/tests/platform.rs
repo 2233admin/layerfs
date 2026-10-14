@@ -1,4 +1,4 @@
-#![cfg(feature = "native")]
+#![cfg(feature = "platform")]
 use layerfs_telemetry::{
     operation::{Diagnostic, OperationRecorder},
     output::{encode_operation, Collector, Identity, Output, OutputConfig, OutputMode},
@@ -22,7 +22,7 @@ fn directory() -> PathBuf {
     ))
 }
 #[test]
-fn native_monitor_retains_active_window_across_ring_wrap() {
+fn platform_monitor_retains_active_window_across_ring_wrap() {
     let monitor = Monitor::start(MonitorConfig {
         cpu: true,
         memory: true,
@@ -109,7 +109,7 @@ fn owned_retention_queue_and_producer_churn() {
     std::fs::remove_dir_all(root).unwrap();
 }
 #[test]
-fn disabled_runtime_ignores_invalid_native_configuration() {
+fn disabled_runtime_ignores_invalid_platform_configuration() {
     let path = directory();
     let mut output = OutputConfig::forward();
     output.directory = Some(path.clone());
@@ -195,7 +195,7 @@ fn output_failure_is_independent_and_encoding_is_valid() {
 
 #[cfg(target_os = "macos")]
 #[test]
-fn native_cpu_units_match_posix_process_counters() {
+fn platform_cpu_units_match_posix_process_counters() {
     use nix::sys::{
         resource::{getrusage, UsageWho},
         time::TimeValLike,
@@ -228,7 +228,7 @@ fn native_cpu_units_match_posix_process_counters() {
     let upper = after.user_time().num_microseconds() as u64 * 1000;
     assert!(
         sample.user_ns.unwrap() >= lower && sample.user_ns.unwrap() <= upper,
-        "native user_ns={:?}, POSIX bracket={lower}..={upper}",
+        "platform user_ns={:?}, POSIX bracket={lower}..={upper}",
         sample.user_ns
     );
 }

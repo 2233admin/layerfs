@@ -8,7 +8,7 @@ use layerfs_persistence::{
     RECLAMATION_PAGE_LIMIT,
 };
 use layerfs_storage::{
-    port::acquisition::{Acquisition, Begin, EntryKey, Limits, NativeIdentity, NewEntry, Owner},
+    port::acquisition::{Acquisition, Begin, EntryKey, HostIdentity, Limits, NewEntry, Owner},
     port::PersistenceError,
     StoragePolicy,
 };
@@ -47,8 +47,8 @@ fn file(position: u64, path_bytes: usize) -> NewEntry {
         kind: InodeKind::RegularFile,
         metadata_root: ObjectId::for_bytes(b"metadata"),
         target_root: None,
-        native_path: Some(vec![b'p'; path_bytes]),
-        native: Some(NativeIdentity {
+        host_path: Some(vec![b'p'; path_bytes]),
+        host: Some(HostIdentity {
             device: 1,
             inode: position,
             evidence: [0; 44],
@@ -214,7 +214,7 @@ fn path_windows_use_actual_lengths_without_exceeding_column_or_row_budgets() {
     assert_eq!(rows.len(), (256 * 1024) / (4096 + 68));
     assert!(
         rows.iter()
-            .map(|row| 68 + row.native_path.len())
+            .map(|row| 68 + row.host_path.len())
             .sum::<usize>()
             <= 256 * 1024
     );

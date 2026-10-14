@@ -26,7 +26,7 @@ mod mutating;
 #[path = "support/mounted_commit.rs"]
 mod rig;
 #[allow(dead_code)]
-#[path = "support/native_install.rs"]
+#[path = "support/host_install.rs"]
 mod support;
 use layerfs_bridge::control::Activity;
 use model::{assert_same, Flat, Seen, DIRECTORY, FILE, SYMLINK};
@@ -34,7 +34,7 @@ use mounted::{until, COMMAND};
 use mutating::{counter, direct, Mapping};
 use nix::libc;
 use rig::{
-    assert_kernel, bash, bash_in, clock_masked, clocked, kernel, native, passed, pattern, root,
+    assert_kernel, bash, bash_in, clock_masked, clocked, host, kernel, passed, pattern, root,
     Background, Rig,
 };
 use std::{
@@ -78,7 +78,7 @@ fn absent(flat: &Flat, paths: &[&str]) {
 
 /// Every kind of ordinary change, in the tree, inside `.git`, an ignored
 /// directory, the cache and the build output. Run with the tree as the
-/// working directory, once on the mount and once on a native copy.
+/// working directory, once on the mount and once on a kernel copy.
 const EVERY_KIND: &str = r#"
 set -euo pipefail
 umask 022
@@ -252,23 +252,23 @@ fn r5_1_external_bash_changes_of_every_kind_are_committed_and_read_back_on_a_fre
     let first = rig.mount(1);
     let mount = root(&first);
     let base_root = rig.harness.status(first.token).binding.effective_root;
-    assert_same(&rig.base, &native(mount), "the mounted base");
+    assert_same(&rig.base, &host(mount), "the mounted base");
 
     // The same script, by the same unregistered identity: on the mount, and
-    // on a native directory the same builder filled.
+    // on a kernel directory the same builder filled.
     passed(&bash_in(COMMAND, mount, EVERY_KIND), "script on the mount");
-    let expected = native(mount);
+    let expected = host(mount);
     every_kind_happened(&expected);
     let replay = rig.replay();
     passed(&bash_in(COMMAND, &replay, EVERY_KIND), "script on the copy");
-    let replayed = native(&replay);
+    let replayed = host(&replay);
     // Kind, mode, names per inode, bytes or target and alias classes of every
     // path, and every explicit time exactly; a time the clock chose must be
     // one the clock chose on both sides.
     assert_same(
         &clock_masked(&replayed, rig.started),
         &clock_masked(&expected, rig.started),
-        "the mount against the native replay",
+        "the mount against the kernel replay",
     );
     assert_eq!(
         clocked(&replayed, rig.started),
@@ -288,7 +288,7 @@ fn r5_1_external_bash_changes_of_every_kind_are_committed_and_read_back_on_a_fre
     assert_ne!(record.root, base_root);
     let published = rig.published(record.root);
     assert_same(&expected, &published, "the published root, fresh bind");
-    assert_same(&expected, &native(mount), "the same mount after install");
+    assert_same(&expected, &host(mount), "the same mount after install");
     let after = kernel(mount);
     let moved: Vec<String> = before
         .iter()
@@ -303,7 +303,7 @@ fn r5_1_external_bash_changes_of_every_kind_are_committed_and_read_back_on_a_fre
         rig.harness.status(fresh.token).binding.effective_root,
         record.root
     );
-    let again = native(root(&fresh));
+    let again = host(root(&fresh));
     assert_same(&expected, &again, "the fresh mount");
     let table = kernel(root(&fresh));
     assert_kernel(&expected, &table, "R5-1 fresh mount");
@@ -343,7 +343,7 @@ fn r5_2_unchanged_is_up_to_date_and_a_change_is_committed_once() {
     let history = rig.history();
 
     // Every name, attribute and byte read, and a command that changes nothing.
-    let base = native(mount);
+    let base = host(mount);
     passed(
         &bash_in(
             COMMAND,
@@ -370,14 +370,14 @@ fn r5_2_unchanged_is_up_to_date_and_a_change_is_committed_once() {
         ),
         (bound.branch.head_commit, bound.effective_root)
     );
-    assert_same(&base, &native(mount), "the mount after UpToDate");
+    assert_same(&base, &host(mount), "the mount after UpToDate");
 
     // Changed.
     passed(
         &bash_in(COMMAND, mount, "printf 'changed\\n' >> README.md"),
         "change",
     );
-    let expected = native(mount);
+    let expected = host(mount);
     assert_eq!(file(&expected, "README.md"), b"# base\nchanged\n");
     let record = rig.committed(ready.token, "R5-2 changed");
     assert_eq!(record.parent, bound.branch.head_commit);
@@ -461,7 +461,7 @@ fn r5_3_commit_captures_what_every_launch_published_whatever_became_of_the_proce
         format!("{}\n{}\n", log.display(), home.display())
     );
 
-    let expected = native(mount);
+    let expected = host(mount);
     assert_eq!(file(&expected, "a.txt"), b"from launch A\n");
     assert_eq!(file(&expected, ".git/a/note"), b"A in git\n");
     assert_eq!(file(&expected, "b.txt"), b"from launch B\n");
@@ -492,13 +492,13 @@ fn r5_3_commit_captures_what_every_launch_published_whatever_became_of_the_proce
         fs::read(&log).unwrap(),
         b"C before Commit\nC after Commit\n"
     );
-    let later = native(mount);
+    let later = host(mount);
     let second = rig.committed(ready.token, "R5-3 later write");
     assert_eq!(second.parent, Some(record.id));
     assert_same(&later, &rig.published(second.root), "the second root");
     rig.unmount(&ready);
     let fresh = rig.mount(2);
-    assert_same(&later, &native(root(&fresh)), "the fresh mount");
+    assert_same(&later, &host(root(&fresh)), "the fresh mount");
     assert_kernel(&later, &kernel(root(&fresh)), "R5-3 fresh mount");
     rig.unmount(&fresh);
     rig.finish();
@@ -570,12 +570,12 @@ fn r5_8_five_incremental_commits_on_one_mount_each_read_back_completely() {
     let ready = rig.mount(1);
     let mount = root(&ready);
     let mut parent = rig.harness.status(ready.token).binding.branch.head_commit;
-    let mut expected = native(mount);
+    let mut expected = host(mount);
     let mut records = Vec::new();
     for (round, script) in ROUNDS.iter().enumerate() {
         let what = format!("R5-8 round {}", round + 1);
         passed(&bash_in(COMMAND, mount, script), &what);
-        let changed = native(mount);
+        let changed = host(mount);
         assert!(changed != expected, "{what}: the round changed nothing");
         expected = changed;
         let record = rig.committed(ready.token, &what);
@@ -583,7 +583,7 @@ fn r5_8_five_incremental_commits_on_one_mount_each_read_back_completely() {
         let published = rig.published(record.root);
         assert_same(&expected, &published, &format!("{what}: published root"));
         // The mount is still mounted and serves the same tree after install.
-        assert_same(&expected, &native(mount), &format!("{what}: same mount"));
+        assert_same(&expected, &host(mount), &format!("{what}: same mount"));
         println!(
             "{what}: paths={} oracles=published,same_mount",
             published.len()
@@ -641,7 +641,7 @@ fn r5_8_five_incremental_commits_on_one_mount_each_read_back_completely() {
 
     let fresh = rig.mount(2);
     assert_eq!(rig.harness.status(fresh.token).binding.effective_root, last);
-    assert_same(&expected, &native(root(&fresh)), "the fresh mount");
+    assert_same(&expected, &host(root(&fresh)), "the fresh mount");
     assert_kernel(&expected, &kernel(root(&fresh)), "R5-8 fresh mount");
     println!(
         "R5-8 commits={} history_records={} final_paths={}",
@@ -703,7 +703,7 @@ fn r5_9_stores_through_shared_mappings_are_committed_once_written_back() {
     }
     map.sync();
     same_bytes(&direct(&app), &content, "daemon read after msync");
-    let expected = native(mount);
+    let expected = host(mount);
     same_bytes(file(&expected, "target/debug/app"), &content, "model");
     let first = rig.committed(ready.token, "R5-9 msync");
     let published = rig.published(first.root);
@@ -755,7 +755,7 @@ fn r5_9_stores_through_shared_mappings_are_committed_once_written_back() {
     until("the daemon has the exited child's store", || {
         direct(&mapped) == stored
     });
-    let expected = native(mount);
+    let expected = host(mount);
     same_bytes(file(&expected, "src/mapped.bin"), &stored, "model");
     same_bytes(file(&expected, "target/debug/app"), &content, "model");
     let second = rig.committed(ready.token, "R5-9 child store");
@@ -784,7 +784,7 @@ fn r5_9_stores_through_shared_mappings_are_committed_once_written_back() {
         same_bytes(&fs::read(again.join(path)).unwrap(), bytes, path);
         same_bytes(&direct(&again.join(path)), bytes, path);
     }
-    assert_same(&expected, &native(again), "the fresh mount");
+    assert_same(&expected, &host(again), "the fresh mount");
     println!(
         "R5-9 store_units={stores} msync_bytes={} child_bytes={} paths={}",
         content.len(),
@@ -797,10 +797,10 @@ fn r5_9_stores_through_shared_mappings_are_committed_once_written_back() {
 
 /// The rig's own claim that a replay starts from the mounted base.
 #[test]
-fn the_native_replay_starts_from_the_same_tree_as_the_mounted_base() {
+fn the_kernel_replay_starts_from_the_same_tree_as_the_mounted_base() {
     let rig = Rig::new("r5-rig");
     let replay = rig.replay();
-    assert_same(&rig.base, &native(&replay), "a replay before any script");
+    assert_same(&rig.base, &host(&replay), "a replay before any script");
     let table = kernel(&replay);
     assert!(table
         .values()

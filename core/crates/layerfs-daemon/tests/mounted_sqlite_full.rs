@@ -1,5 +1,5 @@
 //! Real known SQLite capacity exhaustion through ordinary mounted writes.
-//! A transparent observer records actual native owner outcomes; it injects no
+//! A transparent observer records actual kernel owner outcomes; it injects no
 //! fault, changes no input and retains no response or owner credit.
 #![cfg(target_os = "linux")]
 #[allow(dead_code)]
@@ -11,21 +11,21 @@ mod installed;
 use layerfs_daemon::{
     bootstrap::open_store,
     store::{BindRequest, BoundWorkspace},
-    NativeReply, Owner, OwnerClient, OwnerConfig, Response,
+    Owner, OwnerClient, OwnerConfig,
 };
 use layerfs_fuse::{
     attributes::Identity,
     mount::AbortWrite,
     ports::{Fence, MountServices, RequestServices, ServiceError, ServiceFuture, ServiceReply},
-    session::{Detach, NativeSession, SessionConfig},
+    session::{Detach, KernelSession, SessionConfig},
     MountRequests,
 };
 use layerfs_history::WorkspaceId;
-use layerfs_overlay::{NativeCookieOffer, NativeMount, OverlayError, ProfileConfig, Publication};
+use layerfs_overlay::{KernelCookieOffer, KernelMount, OverlayError, ProfileConfig, Publication};
 use layerfs_storage::ReservationBlocks;
 use layerfs_workspace::{
-    BaseView, NativeDirectoryWindow, NativeMutationOutcome, NativeReadOperation, NativeReadOutcome,
-    NativeVisitRequest, NativeWindow, VisitFacts, WorkspaceError, WriteData,
+    BaseView, KernelDirectoryWindow, KernelMutationOutcome, KernelReadOperation, KernelReadOutcome,
+    KernelVisitRequest, KernelWindow, VisitFacts, WorkspaceError, WriteData,
 };
 use std::{
     fs,
@@ -66,15 +66,15 @@ macro_rules! forward {
 }
 impl RequestServices for ObserveRequest {
     forward! {
-        directory_visit(mount:NativeMount,serial:u64,handle:u64,offset:u64,after:Option<Vec<u8>>) -> ServiceReply<Arc<NativeDirectoryWindow>>;
-        publish_cookies(offer:NativeCookieOffer,names:Vec<Vec<u8>>) -> ServiceReply<()>;
-        close_directory(mount:NativeMount,serial:u64,handle:u64) -> ServiceReply<()>;
-        read_visit(mount:NativeMount,serial:u64,handle:Option<u64>,offset:u64,length:u32) -> ServiceReply<Arc<NativeWindow>>;
-        close_file(mount:NativeMount,serial:u64,handle:u64) -> ServiceReply<()>;
-        observe_visit(mount:NativeMount,request:u64,serial:u64,handle:Option<u64>,operation:NativeReadOperation,facts:Arc<VisitFacts>) -> ServiceReply<Arc<NativeReadOutcome>>;
+        directory_visit(mount:KernelMount,serial:u64,handle:u64,offset:u64,after:Option<Vec<u8>>) -> ServiceReply<Arc<KernelDirectoryWindow>>;
+        publish_cookies(offer:KernelCookieOffer,names:Vec<Vec<u8>>) -> ServiceReply<()>;
+        close_directory(mount:KernelMount,serial:u64,handle:u64) -> ServiceReply<()>;
+        read_visit(mount:KernelMount,serial:u64,handle:Option<u64>,offset:u64,length:u32) -> ServiceReply<Arc<KernelWindow>>;
+        close_file(mount:KernelMount,serial:u64,handle:u64) -> ServiceReply<()>;
+        observe_visit(mount:KernelMount,request:u64,serial:u64,handle:Option<u64>,operation:KernelReadOperation,facts:Arc<VisitFacts>) -> ServiceReply<Arc<KernelReadOutcome>>;
         base() -> BaseView;
         recognize(serial:u64,offset:u64,data:WriteData) -> WriteData;
-        forget(mount:NativeMount,serial:u64,count:u64) -> ServiceReply<()>;
+        forget(mount:KernelMount,serial:u64,count:u64) -> ServiceReply<()>;
         reply_attempted(publication:Publication) -> ServiceReply<()>;
     }
     fn provider_failure(&self) -> Result<Option<ServiceError>, ServiceError> {
@@ -88,8 +88,8 @@ impl RequestServices for ObserveRequest {
     }
     fn mutate_visit(
         &self,
-        request: NativeVisitRequest,
-    ) -> ServiceFuture<'_, ServiceReply<Arc<NativeMutationOutcome>>> {
+        request: KernelVisitRequest,
+    ) -> ServiceFuture<'_, ServiceReply<Arc<KernelMutationOutcome>>> {
         Box::pin(async move {
             let reply = self.inner.mutate_visit(request).await?;
             if let Err(WorkspaceError::Overlay(error)) = &reply.get().result {
@@ -115,37 +115,28 @@ impl RequestServices for ObserveRequest {
         })
     }
 }
-fn job(
+fn job<T>(
     client: &OwnerClient,
-    route: layerfs_overlay::Route,
-    action: impl FnOnce(
-        &OwnerClient,
-        layerfs_overlay::Route,
-    ) -> Result<layerfs_daemon::JobReceipt, layerfs_daemon::OwnerError>,
-) -> layerfs_daemon::JobReceipt {
+    route: layerfs_workspace::Route,
+    action: impl FnOnce(&OwnerClient, layerfs_workspace::Route) -> Result<T, layerfs_daemon::OwnerError>,
+) -> T {
     action(client, route).unwrap()
 }
-fn state(client: &OwnerClient, route: layerfs_overlay::Route) -> layerfs_overlay::WorkspaceState {
-    let done = job(
+fn state(client: &OwnerClient, route: layerfs_workspace::Route) -> layerfs_overlay::WorkspaceState {
+    job(
         client,
         route,
         move |owner: &layerfs_daemon::OwnerClient, route| owner.state(route),
-    );
-    match done.result() {
-        Ok(Response::State(state)) => *state,
-        other => panic!("{other:?}"),
-    }
+    )
 }
-fn resources(client: &OwnerClient, route: layerfs_overlay::Route) -> layerfs_overlay::Resources {
-    let done = job(
+fn resources(client: &OwnerClient, route: layerfs_workspace::Route) -> layerfs_overlay::Resources {
+    job(
         client,
         route,
-        move |owner: &layerfs_daemon::OwnerClient, route| owner.resources(Some(route), false),
-    );
-    match done.result() {
-        Ok(Response::Resources(resources)) => **resources,
-        other => panic!("{other:?}"),
-    }
+        move |owner: &layerfs_daemon::OwnerClient, route| {
+            owner.workspace_client(route)?.resources()
+        },
+    )
 }
 fn run(forced: bool, device: bool) {
     fusectl::mount();
@@ -232,16 +223,12 @@ fn run(forced: bool, device: bool) {
     let done = job(
         &client,
         route,
-        move |owner: &layerfs_daemon::OwnerClient, route| owner.native_mount(route, root),
+        move |owner: &layerfs_daemon::OwnerClient, route| owner.kernel_mount(route, root),
     );
-    let mount = match done.result() {
-        Ok(Response::Native(NativeReply::Mount(mount))) => *mount,
-        other => panic!("{other:?}"),
-    };
-    drop(done);
+    let mount = done;
     let queue = MountRequests::new(mount);
     let full = Arc::new(AtomicU64::new(0));
-    let mut session = NativeSession::attach(
+    let mut session = KernelSession::attach(
         SessionConfig {
             directory: fixture.directory.join("mounted"),
             owner_uid: 0,
@@ -266,7 +253,7 @@ fn run(forced: bool, device: bool) {
         let filler = fs::OpenOptions::new()
             .write(true)
             .create_new(true)
-            .open(root.join("native-fill"))
+            .open(root.join("kernel-fill"))
             .unwrap();
         let filesystem = nix::sys::statvfs::statvfs(root.as_path()).unwrap();
         let bytes = filesystem.blocks_free() * filesystem.fragment_size();
@@ -335,7 +322,7 @@ assert open('prior.dat','rb').read() == bytes([17])*4096
     let output = child.wait_with_output().unwrap();
     let text = String::from_utf8(output.stdout).unwrap();
     println!(
-        "SQLITE_FULL_NATIVE forced={forced} output={} stderr={}",
+        "SQLITE_FULL_KERNEL forced={forced} output={} stderr={}",
         text.trim(),
         String::from_utf8_lossy(&output.stderr)
     );
@@ -352,7 +339,7 @@ assert open('prior.dat','rb').read() == bytes([17])*4096
         .unwrap()
         .unwrap();
     let remaining = queue.work().unwrap();
-    println!("SQLITE_FULL_NATIVE device={device} io_full={io_full} known_full={known_full} reservation_refusals={reservation_refusals} sql={work:?} initial={initial:?} final={final_state:?} requests={remaining:?}");
+    println!("SQLITE_FULL_KERNEL device={device} io_full={io_full} known_full={known_full} reservation_refusals={reservation_refusals} sql={work:?} initial={initial:?} final={final_state:?} requests={remaining:?}");
     // On the old implementation the real failed completion is retained.
     // Inspect it without taking, releasing, or replacing its owner.
     for slot in 0..remaining.retained {
@@ -360,7 +347,7 @@ assert open('prior.dat','rb').read() == bytes([17])*4096
             layerfs_fuse::FailureView::Request(error) => format!("{error:?}"),
             layerfs_fuse::FailureView::Panic(_) => "panic".to_owned(),
         }) {
-            println!("SQLITE_FULL_NATIVE retained={detail}");
+            println!("SQLITE_FULL_KERNEL retained={detail}");
         }
     }
     let drained = if remaining.retained != 0 || forced || timed_out {
@@ -376,32 +363,19 @@ assert open('prior.dat','rb').read() == bytes([17])*4096
     // exits. It is never called a clean drain or released through Drop.
     let clean = match drained {
         Ok(drained) => {
-            println!("SQLITE_FULL_NATIVE drained={drained:?}");
+            println!("SQLITE_FULL_KERNEL drained={drained:?}");
             true
         }
         Err(kept) => {
-            println!("SQLITE_FULL_NATIVE retained_drain={kept:?}");
+            println!("SQLITE_FULL_KERNEL retained_drain={kept:?}");
             false
         }
     };
     if clean {
-        let revoked = job(
-            &client,
-            route,
-            move |owner: &layerfs_daemon::OwnerClient, route| owner.native_revoke(route, mount),
-        );
-        assert!(matches!(
-            revoked.result(),
-            Ok(Response::Native(NativeReply::Done))
-        ));
-        drop(revoked);
-        assert!(job(
-            &client,
-            route,
-            move |owner: &layerfs_daemon::OwnerClient, route| owner.close(route),
-        )
-        .result()
-        .is_ok());
+        job(&client, route, move |owner, route| {
+            owner.kernel_revoke(route, mount)
+        });
+        bound.close().unwrap();
         drop(queue);
         drop(bound);
         drop(client);
@@ -447,7 +421,7 @@ assert open('prior.dat','rb').read() == bytes([17])*4096
     );
     assert!(
         clean,
-        "native drain completed without retained request custody"
+        "kernel drain completed without retained request custody"
     );
 }
 #[test]

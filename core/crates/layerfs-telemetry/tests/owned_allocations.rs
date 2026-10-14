@@ -1,5 +1,5 @@
-#![cfg(feature = "native")]
-//! Native heap observation, separate from process RSS, stacks and kernel buffers.
+#![cfg(feature = "platform")]
+//! Platform heap observation, separate from process RSS, stacks and kernel buffers.
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::sync::atomic::{AtomicBool, AtomicIsize, Ordering};
 static LIVE: AtomicIsize = AtomicIsize::new(0);
@@ -184,7 +184,7 @@ fn maximum_envelope_child() {
     let start = Barrier::new(9);
     let encoded_ready = Barrier::new(9);
     let release = Barrier::new(9);
-    let before = native_process();
+    let before = platform_process();
     let (encoded, observed, held) = std::thread::scope(|scope| {
         let mut jobs = Vec::new();
         for report in &reports {
@@ -209,7 +209,7 @@ fn maximum_envelope_child() {
         }
         start.wait();
         encoded_ready.wait();
-        let observed = native_process();
+        let observed = platform_process();
         let held = LIVE.load(Ordering::SeqCst) - baseline;
         println!("ENV05_SNAPSHOT heap_held={held} rss={} virtual={} threads={} before_encoder_threads={} closing_producers={}",observed.0,observed.1,observed.2,before.2,collector.occupied());
         // Always release the scoped children before making assertions.
@@ -286,7 +286,7 @@ fn resident_envelope(template: &[u8], capacity: usize) -> Vec<u8> {
 }
 
 #[cfg(target_os = "macos")]
-fn native_process() -> (u64, u64, u64) {
+fn platform_process() -> (u64, u64, u64) {
     let info =
         libproc::proc_pid::pidinfo::<libproc::task_info::TaskInfo>(std::process::id() as i32, 0)
             .unwrap();
@@ -297,7 +297,7 @@ fn native_process() -> (u64, u64, u64) {
     )
 }
 #[cfg(target_os = "linux")]
-fn native_process() -> (u64, u64, u64) {
+fn platform_process() -> (u64, u64, u64) {
     use std::io::Read;
     let mut text = String::new();
     std::fs::File::open("/proc/self/status")

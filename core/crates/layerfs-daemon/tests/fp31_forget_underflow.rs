@@ -8,7 +8,7 @@
 //! The kernel alone never forgets more than it was replied. The adversarial
 //! state is therefore made through the public owner port, and the request is
 //! the kernel's own: on a live mount a name is looked up, the engine's lookup
-//! count is reduced by `|job_client: &layerfs_daemon::OwnerClient, job_route| job_client.native_forget(job_route)` through the owner client, and the
+//! count is reduced by `|job_client: &layerfs_daemon::OwnerClient, job_route| job_client.kernel_forget(job_route)` through the owner client, and the
 //! kernel's FORGET is then asked for by reclaim of the test container's own
 //! memory cgroup (`memory.reclaim`; never a system-wide cache drop).
 //!
@@ -17,7 +17,7 @@
 //! - **Row too small, the literal underflow branch.** One inode with two
 //!   names, each looked up once: count 2, reduced by 1. The row is present
 //!   with count 1, and the kernel's one unit of 2 underflows it
-//!   (`layerfs-overlay` `lifetime/native.rs`, `checked_sub`).
+//!   (`layerfs-overlay` `lifetime/kernel.rs`, `checked_sub`).
 //!
 //! Two scopes, because of what each can observe:
 //!
@@ -29,7 +29,7 @@
 //!   original failure (`MountRequests::inspect_retained` has no caller in daemon
 //!   source), so the unit's original input cannot be read at this scope.
 //! - The three session tests attach the same real kernel mount through the
-//!   public pieces the Service composes (`Dispatch`, `NativeSession::attach`
+//!   public pieces the Service composes (`Dispatch`, `KernelSession::attach`
 //!   over the bound Workspace's own request services), keep the lane handle
 //!   and read each retained unit's original input and original cause through
 //!   `MountRequests::inspect_retained`. Each then makes the session's own detach
@@ -43,7 +43,7 @@
 //! retained unit fences its lane, so two inodes on one mount do not give
 //! two retained units.
 //!
-//! Caveat, stated as the audit stated it: this proves custody of a native
+//! Caveat, stated as the audit stated it: this proves custody of a kernel
 //! request against engine state made inconsistent through the engine's own
 //! public port. It is not a misbehaving kernel.
 //!
@@ -64,10 +64,10 @@ mod mounted;
 #[path = "support/mounted_commit.rs"]
 mod rig;
 use layerfs_bridge::control::{
-    Activity, NativePhase, NativeWork, Reply, Request, TeardownStage, WorkspaceToken,
+    Activity, MountPhase, MountWork, Reply, Request, TeardownStage, WorkspaceToken,
 };
-use layerfs_daemon::{control::Failure, JobReceipt, NativeReply, OwnerClient, Response};
-use layerfs_overlay::{CleanupState, NativeMount, NativeMountState, Route};
+use layerfs_daemon::{control::Failure, OwnerClient};
+use layerfs_overlay::{CleanupState, KernelMount, KernelMountState};
 use mounted::{mount_entry, Harness};
 use rig::{root, stamp_tree, Rig};
 use std::{
@@ -191,74 +191,59 @@ impl Reclaim {
 
 /// One owner job of the test, attempted once after a bounded wait for a free
 /// slot of its class, and awaited within the same bound.
-fn job(
+fn job<T>(
     client: &OwnerClient,
     route: Route,
     command: impl FnOnce(
         &layerfs_daemon::OwnerClient,
-        layerfs_overlay::Route,
-    ) -> Result<layerfs_daemon::JobReceipt, layerfs_daemon::OwnerError>,
-) -> JobReceipt {
+        layerfs_workspace::Route,
+    ) -> Result<T, layerfs_daemon::OwnerError>,
+) -> T {
     command(client, route).unwrap_or_else(|error| panic!("{error:?}"))
 }
-fn engine_mount(client: &OwnerClient, route: Route) -> Option<NativeMount> {
-    let done = job(
+fn engine_mount(client: &OwnerClient, route: Route) -> Option<KernelMount> {
+    job(
         client,
         route,
         |job_client: &layerfs_daemon::OwnerClient, job_route| {
-            job_client.native_retained_mount(job_route)
+            job_client.kernel_retained_mount(job_route)
         },
-    );
-    match done.result() {
-        Ok(Response::Native(NativeReply::RetainedMount(mount))) => *mount,
-        other => panic!("{other:?}"),
-    }
+    )
 }
-fn mount_state(client: &OwnerClient, route: Route, mount: NativeMount) -> NativeMountState {
-    let done = job(
+fn mount_state(client: &OwnerClient, route: Route, mount: KernelMount) -> KernelMountState {
+    job(
         client,
         route,
         |job_client: &layerfs_daemon::OwnerClient, job_route| {
-            job_client.native_state(job_route, mount)
+            job_client.kernel_state(job_route, mount)
         },
-    );
-    match done.result() {
-        Ok(Response::Native(NativeReply::State(state))) => *state,
-        other => panic!("{other:?}"),
-    }
+    )
 }
 fn cleanup(client: &OwnerClient, route: Route) -> CleanupState {
-    let done = job(
+    job(
         client,
         route,
         |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.cleanup_state(job_route),
-    );
-    match done.result() {
-        Ok(Response::CleanupState(state)) => *state,
-        other => panic!("{other:?}"),
-    }
+    )
 }
 /// One lookup decrement through the public owner port, as
-/// `native_jobs.rs` submits it: the engine's original answer as text, `Ok`
+/// `kernel_jobs.rs` submits it: the engine's original answer as text, `Ok`
 /// when the job succeeded.
 fn decrement(
     client: &OwnerClient,
     route: Route,
-    mount: NativeMount,
+    mount: KernelMount,
     serial: u64,
     count: u64,
 ) -> Result<(), String> {
-    let done = job(
+    job(
         client,
         route,
         |job_client: &layerfs_daemon::OwnerClient, job_route| {
-            job_client.native_forget(job_route, mount, serial, count)
+            job_client.kernel_forget(job_route, mount, serial, count)
         },
     );
-    match done.result() {
-        Ok(Response::Native(NativeReply::Done)) => Ok(()),
-        other => Err(format!("{other:?}")),
-    }
+    Ok(())
 }
 /// The engine serial of a kernel inode other than the root: the reversible
 /// offset of `layerfs-fuse` `attributes.rs` (`Identity::serial`).
@@ -291,8 +276,8 @@ fn seen(harness: &Harness, through: WorkspaceToken) -> Seen {
         owner_details: resources.open.kernel_entries + resources.open.file_custody,
     }
 }
-fn work(harness: &Harness, token: WorkspaceToken) -> NativeWork {
-    harness.status(token).native.unwrap().work.unwrap()
+fn work(harness: &Harness, token: WorkspaceToken) -> MountWork {
+    harness.status(token).kernel.unwrap().work.unwrap()
 }
 /// Two consecutive observations with nothing received or admitted and no
 /// request completed in between. A readiness wait before one attempt.
@@ -408,7 +393,7 @@ fn refused_at_the_service(reduced: Reduced) {
     observations += 3;
     let submitted = client.diagnostics().unwrap().jobs.iter().sum::<u64>() - jobs - observations;
     println!(
-        "{name}: reclaim_requests={requests} native work {staged:?} -> {refused:?} owner_jobs_since_staged={submitted} (beside the test's {observations} observations) engine_counts_equal_reduced={}",
+        "{name}: reclaim_requests={requests} kernel work {staged:?} -> {refused:?} owner_jobs_since_staged={submitted} (beside the test's {observations} observations) engine_counts_equal_reduced={}",
         after == stolen
     );
     // Refused and retained: the unit is kept with its failure, uncompleted,
@@ -460,7 +445,7 @@ fn refused_at_the_service(reduced: Reduced) {
     println!(
         "{name}: before the Unmount: activity={:?} phase={:?}",
         status.activity,
-        status.native.as_ref().map(|native| native.phase)
+        status.kernel.as_ref().map(|kernel| kernel.phase)
     );
 
     // The later Unmount: detach, then the drain finds the retained unit.
@@ -500,13 +485,13 @@ fn refused_at_the_service(reduced: Reduced) {
     assert!(mount_entry(&ready.directory).is_none());
     let status = h.status(token);
     assert_eq!(status.activity, Activity::Closing);
-    let native = status.native.unwrap();
-    assert_eq!(native.phase, NativePhase::Retained);
-    assert!(native.detached);
-    assert_eq!(native.ready.as_ref(), Some(&ready));
+    let kernel = status.kernel.unwrap();
+    assert_eq!(kernel.phase, MountPhase::Retained);
+    assert!(kernel.detached);
+    assert_eq!(kernel.ready.as_ref(), Some(&ready));
     let kept = h
         .service
-        .retained_native(token)
+        .retained_kernel(token)
         .unwrap()
         .expect("retained owner");
     assert!(kept.contains("stage: Requests"), "{kept}");
@@ -531,7 +516,7 @@ fn refused_at_the_service(reduced: Reduced) {
         "{name}: stage=Requests detached=true retained=1 later_replies_equal=2 engine_mount={state:?} cleanup={closing:?} namespaces={}(baseline {}) closed_namespaces={}->{}",
         last.namespaces, empty.namespaces, start.closed_namespaces, end.closed_namespaces
     );
-    assert_eq!(state, NativeMountState::Live);
+    assert_eq!(state, KernelMountState::Live);
     assert_eq!(closing, CleanupState::Live);
     assert_eq!(last.namespaces, empty.namespaces + 1);
     assert_eq!(end.closed_namespaces, start.closed_namespaces);
@@ -578,3 +563,5 @@ fn fp31_a_kernel_forget_of_two_against_a_row_of_one_underflows_and_the_row_keeps
 }
 
 // ------------------------------------------------------------ session scope
+
+use layerfs_workspace::Route;

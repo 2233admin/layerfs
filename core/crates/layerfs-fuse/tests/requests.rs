@@ -29,10 +29,8 @@ impl Fixture {
                 ProfileConfig::default(),
             )
             .unwrap();
-            let route = db.open_workspace([tag; 32], [8; 32]).unwrap();
-            mounts.push(MountRequests::new(
-                db.create_native_mount(route, 1).unwrap(),
-            ));
+            db.open_workspace([8; 32]).unwrap();
+            mounts.push(MountRequests::new(db.create_kernel_mount(1).unwrap()));
             dbs.push(db);
         }
         Self {

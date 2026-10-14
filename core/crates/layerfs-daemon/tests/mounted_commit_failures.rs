@@ -10,7 +10,7 @@
 //!   the Commit begins.
 //! - F2: the same real held writer, taken around the real `stage_and_commit`
 //!   by the external catalog wrapper of `support/history_boundary.rs`.
-//! - F3: external catalog boundary scope; not a native SQLite I/O failure. The
+//! - F3: external catalog boundary scope; not a kernel SQLite I/O failure. The
 //!   wrapper performs the real publication and reports an unknown outcome.
 //! - F4: external catalog boundary scope. The wrapper performs the real
 //!   publication and then reserves every free admission registration of the
@@ -59,18 +59,17 @@ mod mounted;
 mod rig;
 use history_boundary::{Boundary, ObservedHistory};
 use layerfs_bridge::control::{
-    Activity, ControlCode, ControlRefusal, NativePhase, ReadyMount, Reply, Request,
-    WorkspaceStatus, WorkspaceToken,
+    Activity, ControlCode, ControlRefusal, MountPhase, ReadyMount, Reply, Request, WorkspaceStatus,
+    WorkspaceToken,
 };
 use layerfs_content::{ContentError, ObjectId};
 use layerfs_daemon::{
     bootstrap::open_store,
     control::{Failure, Success},
     store::{
-        CapturedConstruction, CommitError, CommitFailure, CommitPhase, ReadLimits, ReleasedOwner,
-        Store, StoreReader,
+        CapturedConstruction, CommitError, CommitFailure, CommitPhase, ReleasedOwner, Store,
+        StoreReader,
     },
-    JobReceipt, Response,
 };
 use layerfs_history::{
     CommitId, CommitRecord, CommitStagedOutcome, HistoryCatalog, HistoryError, WorkspaceId,
@@ -80,7 +79,7 @@ use layerfs_persistence::{Handles, SqlitePersistenceProfile};
 use layerfs_storage::{port::PackPersistence, ReservationBlocks, Storage, StorageError};
 use model::{assert_same, Flat, Model, FILE};
 use mounted::{mount_entry, until, Harness, COMMAND};
-use rig::{base_tree, bash_in, native, passed, root};
+use rig::{base_tree, bash_in, host, passed, root};
 use std::{
     cell::Cell,
     fmt::Debug,
@@ -285,7 +284,7 @@ enum Kept {
     ResolutionRefused,
 }
 /// One installed Disposable Store, opened once and kept open, and one real
-/// native serving assembly over it: `Harness::new`, as `rig::Rig` uses it.
+/// kernel serving assembly over it: `Harness::new`, as `rig::Rig` uses it.
 struct Fx {
     fixture: installed::Fixture,
     store: Arc<Store>,
@@ -303,21 +302,26 @@ fn wrapped(
     let config = || fixture.config.clone();
     let (writer, history) =
         ports(Handles::open_writable(config(), installed::BINDING, installed::CURSOR).unwrap());
-    let readers = (0..2)
-        .map(|_| {
-            let read =
-                Handles::open_read_only(config(), installed::BINDING, installed::CURSOR).unwrap();
-            StoreReader::new(Storage::new(read.storage).unwrap(), Arc::new(read.history))
-        })
-        .collect();
+    let reader_config = fixture.config.clone();
+    let factory: layerfs_daemon::store::ReaderFactory = Arc::new(move |_| {
+        let read =
+            Handles::open_read_only(reader_config.clone(), installed::BINDING, installed::CURSOR)
+                .unwrap();
+        Ok(StoreReader::new(
+            Storage::new(read.storage).unwrap(),
+            Arc::new(read.history),
+        ))
+    });
+    let control = factory(0).unwrap();
     Arc::new(
         Store::new(
             writer,
             history,
-            readers,
+            control,
+            factory,
             2 * 1024 * 1024,
             ReservationBlocks::default(),
-            ReadLimits::default(),
+            16,
         )
         .unwrap(),
     )
@@ -326,7 +330,7 @@ impl Fx {
     fn new(label: &str, staging: Staging) -> Self {
         let fixture = installed::Fixture::built(label, |source| {
             base_tree(source);
-            Model::native(source).1
+            Model::host(source).1
         });
         assert!(
             matches!(
@@ -456,7 +460,7 @@ impl Fx {
 fn quiet(harness: &Harness, token: WorkspaceToken) {
     let mut last = None;
     until("connection quiescent", || {
-        let work = harness.status(token).native.unwrap().work.unwrap();
+        let work = harness.status(token).kernel.unwrap().work.unwrap();
         let now = (work.active, work.completed);
         let settled = work.active == 0 && last == Some(now);
         last = Some(now);
@@ -477,7 +481,7 @@ fn refused(result: Result<Success, Failure>, what: &str) -> ControlRefusal {
 fn still_serving(mount: &Path, before: &Flat, what: &str) -> Flat {
     assert_same(
         before,
-        &native(mount),
+        &host(mount),
         &format!("{what}: the live view after the failed Commit"),
     );
     passed(
@@ -490,7 +494,7 @@ fn still_serving(mount: &Path, before: &Flat, what: &str) -> Flat {
         ),
         what,
     );
-    let after = native(mount);
+    let after = host(mount);
     let made = after
         .get(AFTER.as_bytes())
         .unwrap_or_else(|| panic!("{what}: {AFTER} is not served"))
@@ -527,7 +531,6 @@ struct Owners {
     retained: bool,
     /// Releases known done, in attempt order.
     released: Vec<ReleasedOwner>,
-    release_failure: Option<String>,
     release_error: Option<String>,
     custody: bool,
     work: bool,
@@ -537,12 +540,11 @@ impl Debug for Owners {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "reader={} operation={} retained={} released={:?} release_failure={:?} release_error={:?} custody={} work={} counters={}",
+            "reader={} operation={} retained={} released={:?} release_error={:?} custody={} work={} counters={}",
             answer(&self.reader),
             answer(&self.operation),
             self.retained,
             self.released,
-            self.release_failure,
             self.release_error,
             self.custody,
             self.work,
@@ -557,7 +559,6 @@ impl Owners {
             operation: namespace.operation,
             retained: namespace.retained(),
             released: namespace.released.clone(),
-            release_failure: namespace.release_failure.as_ref().map(brief),
             release_error: namespace.release_error.as_ref().map(brief),
             custody: namespace.custody.is_some(),
             work: namespace.work.is_some(),
@@ -570,7 +571,6 @@ impl Owners {
             && self.reader.is_none()
             && self.operation.is_none()
             && self.released == [ReleasedOwner::Reader, ReleasedOwner::Operation]
-            && self.release_failure.is_none()
             && self.release_error.is_none()
             && !self.custody
     }
@@ -580,13 +580,10 @@ impl Owners {
             && self.reader.is_some()
             && self.operation.is_some()
             && self.released.is_empty()
-            && self.release_failure.is_none()
             && self.release_error.is_none()
     }
 }
-fn done(completion: &JobReceipt) -> bool {
-    matches!(completion.result(), Ok(Response::Done))
-}
+
 /// What one failed product Commit knew, copied out of the original failure.
 #[derive(Debug)]
 struct Left {
@@ -636,7 +633,7 @@ impl Case {
                 "changes by externally launched bash",
             );
         }
-        let before = native(mount);
+        let before = host(mount);
         let new = &before[b"made/new.txt".as_slice()];
         assert_eq!(
             (new.payload.as_slice(), new.links),
@@ -706,7 +703,7 @@ impl Case {
                 .capture
                 .unwrap_or_else(|| panic!("{name}: no capture: {}", brief(&failure))),
             candidate: failure.intent.as_ref().map(|intent| intent.candidate_root),
-            local: failure.local.as_ref().map(done),
+            local: failure.locally_settled.then_some(true),
             local_error: failure.local_error.as_ref().map(brief),
             namespace: failure.namespace.as_ref().map(Owners::of),
         };
@@ -725,32 +722,11 @@ impl Case {
         );
         (left, failure)
     }
-    /// What the engine itself holds for one request: the two public
-    /// `Retained*` owner jobs, each asked once on a quiet connection.
-    fn engine(&self, request: u64) -> (Option<CapturedReader>, Option<OperationOwner>) {
-        quiet(&self.fx.harness, self.token());
-        let operation = self.fx.harness.service.operation(self.token()).unwrap();
-        let route = operation.workspace().route();
-        let overlay = operation.overlay();
-        let reader = match overlay
-            .retained_captured_reader(route, request)
-            .unwrap()
-            .result()
-        {
-            Ok(Response::CapturedReader(kept)) => *kept,
-            other => panic!("{other:?}"),
-        };
-        let owner = match overlay.retained_operation(route, request).unwrap().result() {
-            Ok(Response::Operation(kept)) => *kept,
-            other => panic!("{other:?}"),
-        };
-        (reader, owner)
-    }
     /// A later explicit Commit, a new operation: it must publish exactly the
     /// tree the mount shows, read back from a fresh bind and the same mount.
     fn later_exact(&mut self, mount: &Path, parent: Option<CommitId>) -> Option<CommitRecord> {
         let name = self.name;
-        let expected = native(mount);
+        let expected = host(mount);
         let done = match self.commit() {
             Ok(done) => done,
             Err(failure) => {
@@ -775,7 +751,7 @@ impl Case {
             }
         };
         let commit = done.commit.as_ref().expect("Commit receipt");
-        let request = u64::try_from(commit.capture.generation.number()).unwrap();
+        let _request = u64::try_from(commit.capture.generation.number()).unwrap();
         let owners = commit.namespace.as_ref().map(Owners::of);
         drop(done);
         expect!(
@@ -789,12 +765,7 @@ impl Case {
             owners.as_ref().is_some_and(Owners::released),
             "{name}: the later Commit releases its reader, then its owner: {owners:?}"
         );
-        let engine = self.engine(request);
-        expect!(
-            self.checks,
-            engine == (None, None),
-            "{name}: the engine keeps owners of the later Commit: {engine:?}"
-        );
+
         let published = self.fx.published(record.root);
         assert_same(
             &expected,
@@ -803,7 +774,7 @@ impl Case {
         );
         assert_same(
             &expected,
-            &native(mount),
+            &host(mount),
             &format!("{name}: the same mount after the later install"),
         );
         let status = self.status();
@@ -818,14 +789,7 @@ impl Case {
             status.published,
             status.binding.effective_root
         );
-        println!(
-            "{name} LATER_COMMIT outcome=Committed parent={:?} request={request} paths={} oracles=published_fresh_bind,same_mount owners={owners:?} RetainedCapturedReader={} RetainedOperation={} activity={:?}",
-            record.parent,
-            published.len(),
-            answer(&engine.0),
-            answer(&engine.1),
-            status.activity
-        );
+
         Some(record)
     }
     /// Normal terminal unmount; true when the product unmounted.
@@ -836,18 +800,13 @@ impl Case {
         quiet(&self.fx.harness, token);
         match self.fx.harness.try_unmount(token) {
             Ok(done) => {
-                let receipt = format!("{:?}", done.native);
+                let receipt = format!("{:?}", done.kernel);
                 let gone = mount_entry(&directory).is_none() && !Path::new(&directory).exists();
                 expect!(
                     self.checks,
-                    done.reply == Reply::Unmounted(token)
-                        && done.earlier.len() == 1
-                        && done.completion.is_some()
-                        && receipt.contains("Drained")
-                        && gone,
-                    "{name}: normal unmount: reply={:?} earlier={} mount_gone={gone} receipt={}",
+                    done.reply == Reply::Unmounted(token) && receipt.contains("Drained") && gone,
+                    "{name}: normal unmount: reply={:?} mount_gone={gone} receipt={}",
                     done.reply,
-                    done.earlier.len(),
                     brief(&receipt)
                 );
                 println!(
@@ -872,7 +831,7 @@ impl Case {
     /// `constructed` says whether the product constructor ran.
     fn definite_tail(mut self, left: Left, constructed: bool) {
         let name = self.name;
-        let request = left.request();
+        let _request = left.request();
         expect!(
             self.checks,
             left.original,
@@ -917,23 +876,7 @@ impl Case {
             status.activity,
             status.published
         );
-        let engine = self.engine(request);
-        expect!(
-            self.checks,
-            engine == (None, None),
-            "{name}: the engine still holds owners of request {request}: RetainedCapturedReader={:?} RetainedOperation={:?}",
-            engine.0,
-            engine.1
-        );
-        println!(
-            "{name} REGISTRY activity={:?} published={:?} epoch={} local_captured={:?} | ENGINE request={request} RetainedCapturedReader={} RetainedOperation={}",
-            status.activity,
-            status.published,
-            status.epoch,
-            status.local.as_ref().map(|local| local.captured),
-            answer(&engine.0),
-            answer(&engine.1)
-        );
+
         let mount = root(&self.ready).to_path_buf();
         let after = still_serving(&mount, &self.before, name);
         println!(
@@ -942,12 +885,7 @@ impl Case {
         );
         let parent = self.bound.binding.branch.head_commit;
         let later = self.later_exact(&mount, parent);
-        let leftover = self.engine(request);
-        expect!(
-            self.checks,
-            leftover == (None, None),
-            "{name}: after the later Commit the engine still holds owners of the failed request {request}: {leftover:?}"
-        );
+
         let unmounted = self.unmount();
         let directory = self.ready.directory.clone();
         if mount_entry(&directory).is_some() {
@@ -991,7 +929,7 @@ impl Case {
     ) {
         let name = self.name;
         let token = self.token();
-        let request = left.request();
+        let _request = left.request();
         let directory = self.ready.directory.clone();
         let mount = root(&self.ready).to_path_buf();
         expect!(
@@ -1024,16 +962,11 @@ impl Case {
                 .is_some_and(CapturedConstruction::retained),
             "{name}: the original failure carries the retained owners"
         );
-        let kept = left
+        let _kept = left
             .namespace
             .as_ref()
             .map(|owners| (owners.reader, owners.operation));
-        let engine = self.engine(request);
-        expect!(
-            self.checks,
-            engine.0.is_some() && engine.1.is_some() && Some(engine) == kept,
-            "{name}: the engine answers the failure's reader and owner for request {request}: engine={engine:?} failure={kept:?}"
-        );
+
         let status = self.status();
         let captured = status.local.as_ref().and_then(|local| local.captured);
         expect!(
@@ -1045,15 +978,6 @@ impl Case {
             "{name}: registry after the failure: activity={:?} published={:?} captured={captured:?}",
             status.activity,
             status.published
-        );
-        println!(
-            "{name} REGISTRY activity={:?} published={} epoch={} local_captured={captured:?} | ENGINE request={request} RetainedCapturedReader={} RetainedOperation={} engine_equals_failure={}",
-            status.activity,
-            status.published.as_ref().map_or("None".into(), brief),
-            status.epoch,
-            answer(&engine.0),
-            answer(&engine.1),
-            Some(engine) == kept
         );
 
         let after = still_serving(&mount, &self.before, name);
@@ -1073,26 +997,17 @@ impl Case {
         };
         let before_commit = self.status();
         let commit = refused(self.fx.harness.try_commit(token), "a later Commit");
-        let after_commit = self.status();
+        let _after_commit = self.status();
         expect!(
             self.checks,
             commit.code == ControlCode::Unknown && commit.published == left.published,
             "{name}: a later Commit is refused Unknown with the known publication: {commit:?}"
         );
-        let engine_after_commit = self.engine(request);
-        expect!(
-            self.checks,
-            same(&before_commit, &after_commit) && engine_after_commit == engine,
-            "{name}: the refused Commit changed the registry or the engine: epoch {} -> {}, local {:?} -> {:?}",
-            before_commit.epoch,
-            after_commit.epoch,
-            before_commit.local,
-            after_commit.local
-        );
+
         // Normal unmount is refused the same way and detaches nothing.
         let unmount = refused(self.fx.harness.try_unmount(token), "normal unmount");
         let after_unmount = self.status();
-        let phase = after_unmount.native.as_ref().map(|native| native.phase);
+        let phase = after_unmount.kernel.as_ref().map(|kernel| kernel.phase);
         expect!(
             self.checks,
             unmount.code == ControlCode::Unknown && unmount.published == left.published,
@@ -1101,13 +1016,13 @@ impl Case {
         expect!(
             self.checks,
             same(&before_commit, &after_unmount)
-                && phase == Some(NativePhase::Ready)
+                && phase == Some(MountPhase::Ready)
                 && mount_entry(&directory).is_some(),
             "{name}: the refused unmount had an effect: phase={phase:?} mounted={}",
             mount_entry(&directory).is_some()
         );
         println!(
-            "{name} REFUSALS later_commit=code:{:?},phase:{},published:{} unmount=code:{:?},phase:{} epoch_unchanged={} captured_unchanged={} native_phase={phase:?} mount_table_entry=present",
+            "{name} REFUSALS later_commit=code:{:?},phase:{},published:{} unmount=code:{:?},phase:{} epoch_unchanged={} captured_unchanged={} kernel_phase={phase:?} mount_table_entry=present",
             commit.code,
             commit.phase,
             commit.published.is_some(),
@@ -1192,14 +1107,12 @@ impl Case {
         };
         // No observation settles the original failure.
         let observed_status = self.status();
-        let observed_engine = self.engine(request);
         expect!(
             self.checks,
             observed_status.activity == activity
                 && observed_status.published == left.published
                 && observed_status.binding == self.bound.binding
-                && observed_status.epoch == before_commit.epoch
-                && observed_engine == engine,
+                && observed_status.epoch == before_commit.epoch,
             "{name}: an observation settled the original failure: activity={:?} published={:?} epoch={}",
             observed_status.activity,
             observed_status.published,
@@ -1220,12 +1133,12 @@ impl Case {
         assert!(mount_entry(&directory).is_none());
         let deadline = Instant::now() + Duration::from_secs(3);
         let (loops, phase) = loop {
-            let native = self.fx.harness.status(token).native.unwrap();
-            let loops = native
+            let kernel = self.fx.harness.status(token).kernel.unwrap();
+            let loops = kernel
                 .work
                 .map_or((0, 0), |work| (work.loops_exited, work.loops_configured));
             if (loops.0 == loops.1 && loops.1 != 0) || Instant::now() >= deadline {
-                break (loops, native.phase);
+                break (loops, kernel.phase);
             }
             std::thread::sleep(Duration::from_millis(5));
         };
@@ -1305,13 +1218,13 @@ fn f2_store_busy_at_publication_is_settled_and_releases_both_owners() {
 }
 
 /// F3. Lost History acknowledgement. External catalog boundary scope; not a
-/// native SQLite I/O failure: the wrapper performs the real publication and
+/// kernel SQLite I/O failure: the wrapper performs the real publication and
 /// then reports an unknown outcome.
 #[test]
 fn f3_unknown_history_outcome_keeps_custody_and_the_mount_still_serves() {
     let mut case = Case::start(
         "F3",
-        "external catalog boundary scope; not a native SQLite I/O failure (support/history_boundary.rs Boundary::LostAcknowledgement: real publication, then UnknownOutcome)",
+        "external catalog boundary scope; not a kernel SQLite I/O failure (support/history_boundary.rs Boundary::LostAcknowledgement: real publication, then UnknownOutcome)",
         Staging::History(Boundary::LostAcknowledgement),
         &[CHANGES],
     );

@@ -26,7 +26,7 @@ mod mounted;
 mod rig;
 use layerfs_bridge::control::{
     AbortDisposition, Activity, CommitKnowledge, ControlCode, DetachDisposition, ForcedCleanup,
-    NativePhase, Reply, Request,
+    MountPhase, Reply, Request,
 };
 use layerfs_daemon::control::Failure;
 use mounted::{mount_entry, until, COMMAND};
@@ -49,14 +49,14 @@ fn an_idle_workspace_is_forced_with_one_abort_and_one_detach() {
     assert_eq!(fs::read(mount.join("smoke.txt")).unwrap(), b"forced\n");
     let before = rig.harness.status(ready.token);
     assert_eq!(before.activity, Activity::Idle);
-    let native = before.native.as_ref().unwrap();
-    assert_eq!(native.phase, NativePhase::Ready);
+    let kernel = before.kernel.as_ref().unwrap();
+    assert_eq!(kernel.phase, MountPhase::Ready);
     println!(
         "FORCED_SMOKE before: abort_bound={} minor={} waiting={} work={:?}",
         ready.receipt.abort_bound,
         connection.minor,
         connection.waiting(),
-        native.work
+        kernel.work
     );
     let done = rig
         .harness
@@ -71,13 +71,8 @@ fn an_idle_workspace_is_forced_with_one_abort_and_one_detach() {
     };
     println!("FORCED_SMOKE outcome={outcome:?}");
     // The drain receipt carries the loops' original exit and the one removal.
-    println!("FORCED_SMOKE receipt={:?}", done.native);
-    println!(
-        "FORCED_SMOKE completions: close={} earlier={} cleanup_observation_failure={:?}",
-        done.completion.is_some(),
-        done.earlier.len(),
-        done.observation_failure
-    );
+    println!("FORCED_SMOKE receipt={:?}", done.kernel);
+
     assert_eq!(outcome.facts.abort, AbortDisposition::Written);
     assert_eq!(outcome.facts.detach, DetachDisposition::Detached);
     assert_eq!(outcome.facts.commit, CommitKnowledge::Absent);
@@ -85,11 +80,11 @@ fn an_idle_workspace_is_forced_with_one_abort_and_one_detach() {
     // one observation was made is asserted.
     assert_ne!(outcome.cleanup, ForcedCleanup::Unobserved);
     assert!(done.observation_failure.is_none());
-    assert!(done.completion.is_some(), "logical Close receipt");
+
     let work = outcome.work;
     assert_eq!((work.active, work.retained), (0, 0));
     assert_eq!(work.loops_joined, work.loops_configured, "{work:?}");
-    let receipt = format!("{:?}", done.native.as_ref().expect("drain receipt"));
+    let receipt = format!("{:?}", done.kernel.as_ref().expect("drain receipt"));
     assert!(receipt.contains("Drained"), "{receipt}");
     // Independent kernel observations: no mount row, no directory, and the
     // test's own connection is gone from the control filesystem.

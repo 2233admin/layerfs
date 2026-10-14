@@ -146,7 +146,7 @@ fn replies_preserve_scoped_status_conflict_and_known_publication() {
                 base_readers: 1,
             }),
             local_failure: None,
-            native: None,
+            kernel: None,
         })),
         Reply::Unmounted(token),
         Reply::Forked(binding.clone()),
@@ -174,7 +174,7 @@ fn replies_preserve_scoped_status_conflict_and_known_publication() {
             detail: "known history, uncertain local completion".into(),
         }),
     ];
-    let replies = replies.into_iter().chain(native_replies(&binding, token));
+    let replies = replies.into_iter().chain(duplex_replies(&binding, token));
     for (index, reply) in replies.enumerate() {
         let answer = Answer {
             id: index as u64 + 1,
@@ -191,11 +191,11 @@ fn replies_preserve_scoped_status_conflict_and_known_publication() {
         assert!(Answer::decode(&extra).is_err());
     }
 }
-fn native_replies(binding: &BranchSnapshot, token: WorkspaceToken) -> Vec<Reply> {
+fn duplex_replies(binding: &BranchSnapshot, token: WorkspaceToken) -> Vec<Reply> {
     let ready = ReadyMount {
         token,
         directory: "/mnt/layerfs/".to_owned() + &"d".repeat(MOUNT_DIRECTORY_LIMIT - 13),
-        receipt: NativeReceipt {
+        receipt: MountReceipt {
             mount: u64::MAX,
             root: 7,
             mount_id: 911,
@@ -214,7 +214,7 @@ fn native_replies(binding: &BranchSnapshot, token: WorkspaceToken) -> Vec<Reply>
             abort_bound: true,
         },
     };
-    let work = NativeWork {
+    let work = MountWork {
         loops_configured: 2,
         loops_entered: 2,
         loops_exited: 1,
@@ -228,7 +228,7 @@ fn native_replies(binding: &BranchSnapshot, token: WorkspaceToken) -> Vec<Reply>
         terminal: 7,
         forget_units: 9,
     };
-    let status = |activity, native| WorkspaceStatus {
+    let status = |activity, kernel| WorkspaceStatus {
         token,
         binding: binding.clone(),
         activity,
@@ -243,9 +243,9 @@ fn native_replies(binding: &BranchSnapshot, token: WorkspaceToken) -> Vec<Reply>
             published: None,
             detail: "y".repeat(2048),
         }),
-        native,
+        kernel,
     };
-    let native = |phase, ready, detached, work| NativeStatus {
+    let kernel = |phase, ready, detached, work| MountStatus {
         phase,
         ready,
         detached,
@@ -255,12 +255,12 @@ fn native_replies(binding: &BranchSnapshot, token: WorkspaceToken) -> Vec<Reply>
         Reply::Ready(Box::new(ready.clone())),
         Reply::Status(Box::new(status(
             Activity::Attaching,
-            Some(native(NativePhase::Attaching, None, false, None)),
+            Some(kernel(MountPhase::Attaching, None, false, None)),
         ))),
         Reply::Status(Box::new(status(
             Activity::Idle,
-            Some(native(
-                NativePhase::Ready,
+            Some(kernel(
+                MountPhase::Ready,
                 Some(ready.clone()),
                 false,
                 Some(work),
@@ -269,7 +269,7 @@ fn native_replies(binding: &BranchSnapshot, token: WorkspaceToken) -> Vec<Reply>
         Reply::Located(Box::new(status(Activity::Idle, None))),
         Reply::Located(Box::new(status(
             Activity::Closing,
-            Some(native(NativePhase::Draining, Some(ready), true, Some(work))),
+            Some(kernel(MountPhase::Draining, Some(ready), true, Some(work))),
         ))),
         Reply::Retained(Box::new(TeardownCustody {
             token,
@@ -282,7 +282,7 @@ fn native_replies(binding: &BranchSnapshot, token: WorkspaceToken) -> Vec<Reply>
     ]
 }
 #[test]
-fn native_block_is_additive_and_bounded_fields_are_refused_before_send() {
+fn duplex_block_is_additive_and_bounded_fields_are_refused_before_send() {
     let binding = binding();
     let token = token();
     let plain = WorkspaceStatus {
@@ -304,7 +304,7 @@ fn native_block_is_additive_and_bounded_fields_are_refused_before_send() {
             base_readers: 0,
         }),
         local_failure: None,
-        native: None,
+        kernel: None,
     };
     let original = Answer {
         id: 9,
@@ -313,8 +313,8 @@ fn native_block_is_additive_and_bounded_fields_are_refused_before_send() {
     .encode()
     .unwrap();
     let mut extended = plain;
-    extended.native = Some(NativeStatus {
-        phase: NativePhase::Unattached,
+    extended.kernel = Some(MountStatus {
+        phase: MountPhase::Unattached,
         ready: None,
         detached: false,
         work: None,
@@ -333,7 +333,7 @@ fn native_block_is_additive_and_bounded_fields_are_refused_before_send() {
     assert_eq!(additive[tag], 13);
     assert_eq!(original[tag + 1..], additive[tag + 1..original.len()]);
     assert!(Answer::decode(&additive[..original.len()]).is_err());
-    let Reply::Ready(ready) = native_replies(&binding, token).remove(0) else {
+    let Reply::Ready(ready) = duplex_replies(&binding, token).remove(0) else {
         panic!("Ready fixture")
     };
     for invalid in [
@@ -346,7 +346,7 @@ fn native_block_is_additive_and_bounded_fields_are_refused_before_send() {
             ..(*ready).clone()
         },
         ReadyMount {
-            receipt: NativeReceipt {
+            receipt: MountReceipt {
                 mount: 0,
                 ..ready.receipt
             },

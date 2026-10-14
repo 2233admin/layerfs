@@ -29,7 +29,7 @@ mod mutating;
 #[path = "support/mounted_commit.rs"]
 mod rig;
 #[allow(dead_code)]
-#[path = "support/native_install.rs"]
+#[path = "support/host_install.rs"]
 mod support;
 use layerfs_bridge::control::{Activity, ReadyMount, Reply, Request, WorkspaceToken};
 use layerfs_content::ObjectId;
@@ -42,8 +42,8 @@ use mounted::{mount_entry, until, COMMAND};
 use mutating::{c, direct, frames, path_only};
 use nix::{errno::Errno, libc};
 use rig::{
-    assert_kernel, bash, bash_in, kernel, native, passed, pattern, receipt, root, Background,
-    Kernel, Rig, Stat,
+    assert_kernel, bash, bash_in, host, kernel, passed, pattern, receipt, root, Background, Kernel,
+    Rig, Stat,
 };
 use std::{
     collections::BTreeMap,
@@ -567,7 +567,7 @@ fn retained_descriptors_and_kernel_caches_are_unchanged_by_install() {
 
     // The tree before the Commit. Reading the model reads every file once
     // through the page cache.
-    let expected = native(mount);
+    let expected = host(mount);
     same_bytes(
         file(&expected, "docs/guide.md"),
         &kept[2].bytes,
@@ -654,7 +654,7 @@ fn retained_descriptors_and_kernel_caches_are_unchanged_by_install() {
         &removed,
         &forced_open(&reference),
     );
-    let same_mount = findings.flat("install: the same mount", &expected, &native(mount));
+    let same_mount = findings.flat("install: the same mount", &expected, &host(mount));
     let published = rig.published(record.root);
     let fresh_bind = findings.flat("the published root, fresh bind", &expected, &published);
     println!(
@@ -688,7 +688,7 @@ fn retained_descriptors_and_kernel_caches_are_unchanged_by_install() {
 
     // The next Commit captures the later writes, and installs again under
     // the same descriptors.
-    let later = native(mount);
+    let later = host(mount);
     for descriptor in kept.iter().filter(|descriptor| descriptor.linked) {
         findings.bytes(
             &format!("live view: {}", descriptor.what),
@@ -720,7 +720,7 @@ fn retained_descriptors_and_kernel_caches_are_unchanged_by_install() {
         descriptor.direct_reads(&mut findings, "after the second install");
         descriptor.stats(&mut findings, "after the second install");
     }
-    findings.flat("second install: the same mount", &later, &native(mount));
+    findings.flat("second install: the same mount", &later, &host(mount));
     let published = rig.published(second.root);
     findings.flat("the second published root, fresh bind", &later, &published);
     println!(
@@ -738,7 +738,7 @@ fn retained_descriptors_and_kernel_caches_are_unchanged_by_install() {
         rig.harness.status(fresh.token).binding.effective_root,
         second.root
     );
-    let again = native(root(&fresh));
+    let again = host(root(&fresh));
     findings.flat("the fresh mount", &later, &again);
     let table = kernel(root(&fresh));
     rig.unmount(&fresh);
@@ -854,8 +854,8 @@ fn stopped(
     let work = rig
         .harness
         .status(ready.token)
-        .native
-        .and_then(|native| native.work);
+        .kernel
+        .and_then(|kernel| kernel.work);
     println!("MOUNT STOPPED {when}: {error}");
     println!("MOUNT STOPPED work={work:?}");
     if let Some(mut writer) = writer {
@@ -864,12 +864,12 @@ fn stopped(
     }
     match rig.harness.try_unmount(ready.token) {
         Ok(done) => println!(
-            "MOUNT STOPPED unmount: {:?} native={:?}",
-            done.reply, done.native
+            "MOUNT STOPPED unmount: {:?} kernel={:?}",
+            done.reply, done.kernel
         ),
         Err(failure) => println!("MOUNT STOPPED unmount refused: {failure:?}"),
     }
-    match rig.harness.service.retained_native(ready.token) {
+    match rig.harness.service.retained_kernel(ready.token) {
         Ok(kept) => println!("MOUNT STOPPED retained owner: {kept:?}"),
         Err(failure) => println!("MOUNT STOPPED retained owner unavailable: {failure:?}"),
     }
@@ -1114,7 +1114,7 @@ fn live_writer(layout: Layout) {
     let mount = root(&ready);
     let bound = rig.harness.status(ready.token).binding;
     passed(&bash_in(COMMAND, mount, &layout.script(PREPARE)), "prepare");
-    let prepared = native(mount);
+    let prepared = host(mount);
     assert_eq!(
         prepared
             .keys()
@@ -1194,7 +1194,7 @@ fn live_writer(layout: Layout) {
             ),
         );
     }
-    let live = native(mount);
+    let live = host(mount);
     let n = sequence(&live, layout, "the mount");
     assert_eq!(log_lines(&live, "the mount"), n);
     absent(&live, &["work/next.tmp"]);
@@ -1266,11 +1266,7 @@ fn live_writer(layout: Layout) {
     assert!(n >= second.at_return);
     assert_eq!(log_lines(&all, "the last published root"), n);
     findings.flat("the last published root", &live, &all);
-    findings.flat(
-        "the same mount after the last install",
-        &live,
-        &native(mount),
-    );
+    findings.flat("the same mount after the last install", &live, &host(mount));
     println!(
         "{what} last commit files={n} paths={} lstat_changes={cached_changes} forced_stat_changes={forced_changes}",
         all.len()
@@ -1282,7 +1278,7 @@ fn live_writer(layout: Layout) {
         rig.harness.status(fresh.token).binding.effective_root,
         last.root
     );
-    findings.flat("the fresh mount", &live, &native(root(&fresh)));
+    findings.flat("the fresh mount", &live, &host(root(&fresh)));
     let table = kernel(root(&fresh));
     rig.unmount(&fresh);
     rig.finish();
@@ -1345,7 +1341,7 @@ fn a_later_commit_overwrites_the_branch_head_and_keeps_its_captured_parent() {
         &bash_in(COMMAND, root(&seed), "printf 'seeded\\n' > seed.txt"),
         "seed",
     );
-    let seeded = native(root(&seed));
+    let seeded = host(root(&seed));
     let h0 = rig.committed(seed.token, "R5-4 seed");
     rig.unmount(&seed);
     assert_eq!(head(&rig), (Some(h0.id), h0.root));
@@ -1371,14 +1367,14 @@ fn a_later_commit_overwrites_the_branch_head_and_keeps_its_captured_parent() {
         fs::metadata(mount_b).unwrap().dev(),
     );
     assert_ne!(device_a, device_b, "one kernel superblock each");
-    assert_same(&seeded, &native(mount_a), "A at the head");
-    assert_same(&seeded, &native(mount_b), "B at the head");
+    assert_same(&seeded, &host(mount_a), "A at the head");
+    assert_same(&seeded, &host(mount_b), "B at the head");
 
     // Each changed differently; neither sees the other's change.
     passed(&bash_in(COMMAND, mount_a, IN_A), "changes in A");
     passed(&bash_in(COMMAND, mount_b, IN_B), "changes in B");
-    let tree_a = native(mount_a);
-    let tree_b = native(mount_b);
+    let tree_a = host(mount_a);
+    let tree_b = host(mount_b);
     let isolated = |when: &str| {
         for (mount, missing) in [(mount_a, "only-b.txt"), (mount_b, "only-a.txt")] {
             assert_eq!(
@@ -1389,8 +1385,8 @@ fn a_later_commit_overwrites_the_branch_head_and_keeps_its_captured_parent() {
                 "{when}: {missing} under {mount:?}"
             );
         }
-        assert_same(&tree_a, &native(mount_a), &format!("{when}: mount A"));
-        assert_same(&tree_b, &native(mount_b), &format!("{when}: mount B"));
+        assert_same(&tree_a, &host(mount_a), &format!("{when}: mount A"));
+        assert_same(&tree_b, &host(mount_b), &format!("{when}: mount B"));
     };
     assert_eq!(file(&tree_a, "only-a.txt"), b"only in A\n");
     assert_eq!(file(&tree_b, "only-b.txt"), b"only in B\n");
@@ -1486,7 +1482,7 @@ fn a_later_commit_overwrites_the_branch_head_and_keeps_its_captured_parent() {
         (binding.branch.head_commit, binding.effective_root),
         (Some(record_b.id), record_b.root)
     );
-    assert_same(&tree_b, &native(mount_c), "the third mount");
+    assert_same(&tree_b, &host(mount_c), "the third mount");
     assert_kernel(&tree_b, &kernel(mount_c), "R5-4 third mount");
 
     // The stale unchanged candidate: A, installed at its own root, changes
@@ -1550,14 +1546,14 @@ fn a_later_commit_overwrites_the_branch_head_and_keeps_its_captured_parent() {
         );
     }
     isolated("after the stale unchanged Commit");
-    assert_same(&tree_b, &native(mount_c), "the third mount, still B's tree");
+    assert_same(&tree_b, &host(mount_c), "the third mount, still B's tree");
     // Immediately again, A describes the head.
     assert_eq!(
         rig.up_to_date(a.token, "R5-4 A again"),
         (Some(again.id), record_a.root)
     );
     let fourth = rig.mount(5);
-    assert_same(&tree_a, &native(root(&fourth)), "the fourth mount");
+    assert_same(&tree_a, &host(root(&fourth)), "the fourth mount");
     assert_kernel(&tree_a, &kernel(root(&fourth)), "R5-4 fourth mount");
     println!(
         "R5-4 head_after_stale_unchanged=a2 ancestry=[a2,a,h0] b_stored=true mounts_now={{a=A's tree, b=B's tree, third=B's tree, fourth=A's tree}} paths_a={} paths_b={}",

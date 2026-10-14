@@ -4101,3 +4101,65 @@ job/receipt envelopes, SQL/statement/row counts, publication ticket bookkeeping
 and cache/timing anatomy. Required mounted behavior, custody, Commit boundaries
 and reclamation proofs remain. New reader lifecycle qualification is pending.
 No product implementation is changed or moved by these test deletions.
+
+
+### Phase 2 follow-through (2026-10-15)
+
+A further 18 duplicate/obsolete targets and six raw-envelope/fence/base targets
+or exclusive helper files were removed, named with reasons in the triage ledger.
+Surviving tests adopt kernel/host/chunk/mount/duplex/platform terminology and final
+filenames. Shared fixtures return typed values and use paired Close; obsolete
+receipt assertions, global resource aggregation and unused reader constructors
+are removed. Required byte/tree/capture/sparse/identity models and mounted proofs
+remain. Two CapturedFileEdits cases requiring original JobReceipt downcasts are
+deleted; their direct closed-normalization write and receipt identity coverage
+is given up, while retained reads after Close stay covered by another case.
+
+The host type-repair builds followed changed test sources, without test execution.
+One compiler-suggested argument edit left an empty argument in a subsequently
+deleted duplicate base target. A broad text rename had also affected the word
+alternative in source comments; its wording is restored. These are recorded as
+mechanical repair mistakes, not architectural removals. The host is now at the
+last type/unused-binding cleanup checkpoint.
+
+Lifecycle review found a real reader identity gap: old request ports looked up
+a reader by Workspace ID on each demand and could borrow a replacement after
+Close/rebind of that ID. Ports now hold the original opened ReadSession; fresh
+operation custody clones its identity, healthy Close empties its connection,
+and whole-Store stopped admission remains explicit. No reopen or replay.
+New lifecycle tests compile for fresh mount/retained clients and diagnostics,
+failed bind, exact unknown/poison custody and shutdown/open races. Runtime proof
+execution and Linux adaptation remain pending; no performance result is claimed.
+
+Reader lifecycle runtime attempt: four tests passed (failed bind, unknown
+reader custody/no replay, poison custody and bind racing shutdown); the fresh
+mount test failed because one Owner deliberately refuses duplicate incarnations.
+The test setup is corrected to distinct fresh-mount IDs followed by a replacement
+Owner over the still-open Store for the stale-reader identity scenario. This
+preserves the original refusal and qualifies the actual possible replacement
+boundary. Only the changed failed case will run again; passing cases are reused.
+
+Final reader lifecycle checks: all five pass, retaining the four original
+passes and rerunning only the corrected fresh-mount/replacement-Owner case.
+Linux all-target type check passes. Mounted fixtures use mount-time factories;
+old pool-only force cases/helper code and receipt/custody observers are removed.
+FP-27 checks the owned-reader failure boundary: no healthy fallback/reopen in
+that Workspace, a healthy sibling still reads, original cause stays retained
+and unknown reader Close cannot claim a clean teardown. Kernel retained-custody
+proof uses real backing identity loss rather than the removed arbitrary raw-job
+panic hook. Runtime mounted verification remains pending.
+
+Terminal compile/lint checkpoint: host all-target compilation and pinned Linux
+all-target type check pass. Warning-denying Clippy passes on all targets on
+both platforms. Final formatting and whitespace checks follow. The test pass
+deleted 81 target/helper files in total (54 in 306a49cd7, 27 in this checkpoint),
+all named with reasons/coverage in the ledger and their commit messages.
+Mounted proofs remain; obsolete pool-only cases and observers are explicitly
+given up. Original runtime failures and build stops remain recorded.
+
+Reader ports hold the original session identity; healthy connections close
+even if clients remain. Five public lifecycle proofs pass, with the diagnosed
+duplicate-incarnation setup refusal preserved. No production implementation
+was relocated into tests/tools, and no raw job or scheduler API was restored.
+Benchmark-original regeneration remains specifically approval-gated; selected
+new measurements remain NOT_RUN. Durable remains owner-disabled.

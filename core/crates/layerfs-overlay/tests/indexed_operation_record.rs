@@ -26,9 +26,9 @@ fn apply(
     );
 }
 fn scope(db: &Overlay, tag: u8, request: u64, file_scope: u64) -> IndexedOperationRecordScope {
-    let route = db.open_workspace([tag; 32], [tag + 1; 32]).unwrap();
+    db.open_workspace([tag + 1; 32]).unwrap();
     IndexedOperationRecordScope {
-        owner: db.acquire_operation(route, request).unwrap(),
+        owner: db.acquire_operation(request).unwrap(),
         file_scope,
     }
 }
@@ -51,7 +51,7 @@ fn complete_keys_and_full_file_scopes_never_alias_other_custody() {
     let db = temp.db();
     let first = scope(&db, 201, 1, 0);
     let second = IndexedOperationRecordScope {
-        owner: db.acquire_operation(first.owner.route(), 2).unwrap(),
+        owner: db.acquire_operation(2).unwrap(),
         file_scope: 0,
     };
     let other_file = IndexedOperationRecordScope {
@@ -96,7 +96,7 @@ fn complete_keys_and_full_file_scopes_never_alias_other_custody() {
         foreign.indexed_operation_record_get(first, low),
         Err(OverlayError::Stale)
     ));
-    let counts = db.resources(None).unwrap().counts;
+    let counts = db.resources().unwrap().counts;
     assert_eq!(
         (counts.operation_record_rows, counts.operation_record_bytes),
         (4, 3)
@@ -224,7 +224,7 @@ fn guarded_batches_are_atomic_capacity_bounded_and_allow_a_128_child_node_shape(
             value: None,
         },
     ];
-    let before = db.resources(None).unwrap().counts;
+    let before = db.resources().unwrap().counts;
     assert_eq!(
         db.indexed_operation_record_apply(scope, &guarded).unwrap(),
         IndexedOperationRecordApply::NotApplied {
@@ -237,7 +237,7 @@ fn guarded_batches_are_atomic_capacity_bounded_and_allow_a_128_child_node_shape(
         db.indexed_operation_record_get(scope, key(1, 0)).unwrap(),
         Some(vec![1])
     );
-    assert_eq!(db.resources(None).unwrap().counts, before);
+    assert_eq!(db.resources().unwrap().counts, before);
     apply(
         &db,
         scope,
@@ -254,7 +254,7 @@ fn guarded_batches_are_atomic_capacity_bounded_and_allow_a_128_child_node_shape(
             },
         ],
     );
-    let counts = db.resources(None).unwrap().counts;
+    let counts = db.resources().unwrap().counts;
     assert_eq!(
         (counts.operation_record_rows, counts.operation_record_bytes),
         (257, 258)
@@ -327,13 +327,13 @@ fn state_exceeding_eight_mib_reclaims_in_windows_without_reusing_a_released_owne
     for number in 0..144 {
         apply(&db, first, &[put(key(1, number), vec![9; 60_000])]);
     }
-    let before = db.resources(None).unwrap().counts;
+    let before = db.resources().unwrap().counts;
     assert_eq!(before.operation_record_rows, 144);
     assert_eq!(before.operation_record_bytes, 144 * 60_000);
     assert!(before.operation_record_bytes > 8 * 1024 * 1024);
     db.release_operation(first.owner).unwrap();
     let second = IndexedOperationRecordScope {
-        owner: db.acquire_operation(first.owner.route(), 1).unwrap(),
+        owner: db.acquire_operation(1).unwrap(),
         ..first
     };
     assert_ne!(first.owner, second.owner);
@@ -344,7 +344,7 @@ fn state_exceeding_eight_mib_reclaims_in_windows_without_reusing_a_released_owne
     ));
     assert!(db.release_operation(first.owner).is_err());
     maintain(&db, 400);
-    let after = db.resources(None).unwrap().counts;
+    let after = db.resources().unwrap().counts;
     assert_eq!(
         (after.operation_record_rows, after.operation_record_bytes),
         (1, 7)
@@ -353,11 +353,8 @@ fn state_exceeding_eight_mib_reclaims_in_windows_without_reusing_a_released_owne
         db.indexed_operation_record_get(second, key(1, 0)).unwrap(),
         Some(vec![3; 7])
     );
-    db.close(second.owner.route()).unwrap();
-    assert_eq!(
-        db.cleanup_state(second.owner.route()).unwrap(),
-        CleanupState::Held
-    );
+    db.close().unwrap();
+    assert_eq!(db.cleanup_state().unwrap(), CleanupState::Held);
     assert!(db
         .indexed_operation_record_contains(second, key(1, 0))
         .unwrap());
@@ -367,11 +364,8 @@ fn state_exceeding_eight_mib_reclaims_in_windows_without_reusing_a_released_owne
     ));
     db.release_operation(second.owner).unwrap();
     maintain(&db, 50);
-    assert_eq!(
-        db.cleanup_state(second.owner.route()).unwrap(),
-        CleanupState::Queued
-    );
-    let counts = db.resources(None).unwrap().counts;
+    assert_eq!(db.cleanup_state().unwrap(), CleanupState::Queued);
+    let counts = db.resources().unwrap().counts;
     assert_eq!(
         (counts.operation_record_rows, counts.operation_record_bytes),
         (0, 0)

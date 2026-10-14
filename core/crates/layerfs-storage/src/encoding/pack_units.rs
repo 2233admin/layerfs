@@ -104,7 +104,7 @@ impl PackUnit {
         Ok(units)
     }
 }
-/// Physical input chosen by a Source before decoding; no error-driven alterchunk.
+/// Physical input chosen by a Source before decoding; no error-driven alternative.
 #[derive(Debug)]
 pub enum PackAcquisition {
     /// Complete immutable body; private sources may lack a persisted descriptor.

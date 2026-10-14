@@ -1,4 +1,4 @@
-//! Native requests served by owner visits that record no request source,
+//! Kernel requests served by owner visits that record no request source,
 //! over a real canonical namespace and Overlay. A visit decides from current
 //! rows, from the request's facts of the Workspace's present base, and from
 //! canonical objects already in memory; it never reaches the provider.
@@ -14,12 +14,12 @@ use layerfs_content::{
     AuthenticatedObjects, ContentError, ObjectId,
 };
 use layerfs_overlay::{
-    Inode, InodeKind, NativeMount, OpenFile, OverlayError, StatementKind, StoredCounts,
+    Inode, InodeKind, KernelMount, OpenFile, OverlayError, StatementKind, StoredCounts,
     WorkspaceState,
 };
 use layerfs_workspace::{
-    CanonicalCache, CanonicalClient, FileLengths, JobOutcome, NativeInput, NativeMutationOutcome,
-    NativeReadDecision, NativeReadOperation, NativeVisitRequest, Need, Operation, Refusal, Time,
+    CanonicalCache, CanonicalClient, FileLengths, JobOutcome, KernelInput, KernelMutationOutcome,
+    KernelReadDecision, KernelReadOperation, KernelVisitRequest, Need, Operation, Refusal, Time,
     VisitFacts, WorkspaceError,
 };
 use std::sync::Arc;
@@ -35,8 +35,8 @@ fn empty() -> Arc<CanonicalClient> {
 fn resident(b: &Bench) -> Arc<CanonicalClient> {
     Arc::new(CanonicalClient::resident(b.cache.clone()))
 }
-fn lookup(parent: u64, child: &str) -> NativeReadOperation {
-    NativeReadOperation::Lookup {
+fn lookup(parent: u64, child: &str) -> KernelReadOperation {
+    KernelReadOperation::Lookup {
         parent,
         name: name(child),
     }
@@ -52,10 +52,10 @@ fn snapshot(
     layerfs_overlay::OpenStateCounts,
 ) {
     (
-        b.overlay.state(b.route()).unwrap(),
-        b.overlay.resources(Some(b.route())).unwrap().counts,
+        b.overlay.state().unwrap(),
+        b.overlay.resources().unwrap().counts,
         b.overlay.diagnostics().statements[StatementKind::Begin as usize].executions,
-        b.overlay.resources(Some(b.route())).unwrap().open,
+        b.overlay.resources().unwrap().open,
     )
 }
 #[derive(Debug, Eq, PartialEq)]
@@ -68,14 +68,14 @@ enum Seen {
 fn observe(
     b: &Bench,
     client: Arc<CanonicalClient>,
-    mount: NativeMount,
+    mount: KernelMount,
     serial: u64,
-    operation: NativeReadOperation,
+    operation: KernelReadOperation,
     facts: &VisitFacts,
 ) -> Seen {
     let visit = b
         .workspace
-        .native_read_visit(
+        .kernel_read_visit(
             client,
             mount,
             serial,
@@ -92,9 +92,9 @@ fn observe(
     assert!(outcome.open_candidate.is_none());
     assert!(outcome.directory_candidate.is_none());
     match outcome.decision {
-        Some(NativeReadDecision::Needs(needs)) => Seen::Needs(needs),
-        Some(NativeReadDecision::Value(inode)) => Seen::Value(inode),
-        Some(NativeReadDecision::Refused(refusal)) => Seen::Refused(refusal),
+        Some(KernelReadDecision::Needs(needs)) => Seen::Needs(needs),
+        Some(KernelReadDecision::Value(inode)) => Seen::Value(inode),
+        Some(KernelReadDecision::Refused(refusal)) => Seen::Refused(refusal),
         other => panic!("undecided read visit: {other:?}"),
     }
 }
@@ -103,7 +103,7 @@ fn observe(
 fn open(
     b: &Bench,
     client: Arc<CanonicalClient>,
-    mount: NativeMount,
+    mount: KernelMount,
     request: u64,
     serial: u64,
     writable: bool,
@@ -111,7 +111,7 @@ fn open(
 ) -> (Seen, Option<OpenFile>) {
     let visit = b
         .workspace
-        .native_open_visit(
+        .kernel_open_visit(
             client,
             mount,
             request,
@@ -126,9 +126,9 @@ fn open(
     assert!(matches!(outcome.result, Ok(None)), "{:?}", outcome.result);
     assert!(outcome.directory_candidate.is_none());
     let seen = match outcome.decision {
-        Some(NativeReadDecision::Needs(needs)) => Seen::Needs(needs),
-        Some(NativeReadDecision::Value(inode)) => Seen::Value(inode),
-        Some(NativeReadDecision::Refused(refusal)) => Seen::Refused(refusal),
+        Some(KernelReadDecision::Needs(needs)) => Seen::Needs(needs),
+        Some(KernelReadDecision::Value(inode)) => Seen::Value(inode),
+        Some(KernelReadDecision::Refused(refusal)) => Seen::Refused(refusal),
         other => panic!("undecided open visit: {other:?}"),
     };
     assert_eq!(
@@ -140,7 +140,7 @@ fn open(
 }
 /// LOOKUP of a root name until it is decided, reading what each undecided
 /// visit asks for: the kernel's reference on the found inode.
-fn reference(b: &Bench, mount: NativeMount, child: &str) -> Inode {
+fn reference(b: &Bench, mount: KernelMount, child: &str) -> Inode {
     let mut facts = VisitFacts::default();
     for _ in 0..4 {
         match observe(b, empty(), mount, 1, lookup(1, child), &facts) {
@@ -154,19 +154,19 @@ fn reference(b: &Bench, mount: NativeMount, child: &str) -> Inode {
     panic!("lookup {child} was not decided in four visits")
 }
 fn named(
-    mount: NativeMount,
+    mount: KernelMount,
     request: u64,
     operation: Operation,
     fresh: Option<u64>,
     now: Time,
     facts: &VisitFacts,
-) -> NativeVisitRequest {
-    NativeVisitRequest {
+) -> KernelVisitRequest {
+    KernelVisitRequest {
         mount,
         request,
         serial: 1,
         handle: None,
-        input: NativeInput::Named(operation),
+        input: KernelInput::Named(operation),
         open: None,
         now,
         fresh,
@@ -178,10 +178,10 @@ fn named(
 fn mutate(
     b: &Bench,
     client: Arc<CanonicalClient>,
-    request: NativeVisitRequest,
-) -> NativeMutationOutcome {
+    request: KernelVisitRequest,
+) -> KernelMutationOutcome {
     let mount = request.mount;
-    let visit = b.workspace.native_mutation_visit(client, request).unwrap();
+    let visit = b.workspace.kernel_mutation_visit(client, request).unwrap();
     assert_eq!(visit.mount(), mount);
     let demand = b.demand();
     let outcome = visit.perform(&b.overlay);
@@ -210,7 +210,7 @@ fn install(b: &Bench, changes: Vec<(PathName, Option<u64>)>) {
     )
     .unwrap()
     .root;
-    let capture = b.overlay.capture(b.route()).unwrap();
+    let capture = b.overlay.capture().unwrap();
     let prepared = b.workspace.prepare_base_install(capture, next).unwrap();
     b.workspace
         .install_prepared_base(&b.overlay, prepared)
@@ -219,8 +219,8 @@ fn install(b: &Bench, changes: Vec<(PathName, Option<u64>)>) {
 
 #[test]
 fn a_read_visit_decides_in_one_job_from_resident_objects_or_names_the_facts_it_needs() {
-    let b = Bench::new("native-visit-read");
-    let mount = b.overlay.create_native_mount(b.route(), 1).unwrap();
+    let b = Bench::new("kernel-visit-read");
+    let mount = b.overlay.create_kernel_mount(1).unwrap();
     let base = b.workspace.base().unwrap();
     let wanted = vec![Need::Inode(1), Need::Name(1, name(".git"))];
 
@@ -293,7 +293,7 @@ fn a_read_visit_decides_in_one_job_from_resident_objects_or_names_the_facts_it_n
             resident(&b),
             mount,
             4,
-            NativeReadOperation::Getattr { serial: 4 },
+            KernelReadOperation::Getattr { serial: 4 },
             &VisitFacts::default(),
         ),
         Seen::Value(found)
@@ -344,21 +344,21 @@ fn a_read_visit_decides_in_one_job_from_resident_objects_or_names_the_facts_it_n
         (file.serial, file.kind, file.size),
         (2, InodeKind::File, 10)
     );
-    b.overlay.forget_native(mount, 2, 1).unwrap();
+    b.overlay.kernel_forget(mount, 2, 1).unwrap();
     let before = snapshot(&b);
 
     // This constructor serves LOOKUP and GETATTR alone (OPEN has its own);
     // the kernel's reference is required.
     for operation in [
-        NativeReadOperation::Data { serial: 4 },
-        NativeReadOperation::Opendir { serial: 4 },
-        NativeReadOperation::Open {
+        KernelReadOperation::Data { serial: 4 },
+        KernelReadOperation::Opendir { serial: 4 },
+        KernelReadOperation::Open {
             serial: 4,
             writable: false,
         },
     ] {
         assert!(matches!(
-            b.workspace.native_read_visit(
+            b.workspace.kernel_read_visit(
                 resident(&b),
                 mount,
                 4,
@@ -367,18 +367,18 @@ fn a_read_visit_decides_in_one_job_from_resident_objects_or_names_the_facts_it_n
                 Arc::new(VisitFacts::default()),
             ),
             Err(WorkspaceError::Content(ContentError::InvalidRecord(
-                "native visit operation"
+                "kernel visit operation"
             )))
         ));
     }
     let unreferenced = b
         .workspace
-        .native_read_visit(
+        .kernel_read_visit(
             resident(&b),
             mount,
             5,
             None,
-            NativeReadOperation::Getattr { serial: 5 },
+            KernelReadOperation::Getattr { serial: 5 },
             Arc::new(VisitFacts::default()),
         )
         .unwrap()
@@ -386,14 +386,14 @@ fn a_read_visit_decides_in_one_job_from_resident_objects_or_names_the_facts_it_n
     assert!(matches!(unreferenced.result, Err(OverlayError::Stale)));
     assert!(unreferenced.decision.is_none());
     assert_eq!(snapshot(&b), before);
-    b.overlay.forget_native(mount, 4, 2).unwrap();
-    b.overlay.revoke_native_mount(mount).unwrap();
+    b.overlay.kernel_forget(mount, 4, 2).unwrap();
+    b.overlay.revoke_kernel_mount(mount).unwrap();
 }
 
 #[test]
 fn an_open_visit_decides_a_regular_file_and_records_its_descriptor_alone() {
-    let b = Bench::new("native-visit-open");
-    let mount = b.overlay.create_native_mount(b.route(), 1).unwrap();
+    let b = Bench::new("kernel-visit-open");
+    let mount = b.overlay.create_kernel_mount(1).unwrap();
     let base = b.workspace.base().unwrap();
     let file = reference(&b, mount, "file");
     let directory = reference(&b, mount, ".git");
@@ -465,7 +465,7 @@ fn an_open_visit_decides_a_regular_file_and_records_its_descriptor_alone() {
     // An inode the kernel does not reference is stale before any decision.
     let unreferenced = b
         .workspace
-        .native_open_visit(resident(&b), mount, 34, 8, false, Arc::new(none.clone()))
+        .kernel_open_visit(resident(&b), mount, 34, 8, false, Arc::new(none.clone()))
         .unwrap()
         .perform(&b.overlay);
     assert!(matches!(unreferenced.result, Err(OverlayError::Stale)));
@@ -493,7 +493,7 @@ fn an_open_visit_decides_a_regular_file_and_records_its_descriptor_alone() {
     // Each descriptor is released by its own RELEASE and by nothing else.
     for descriptor in [first, second, third] {
         b.overlay
-            .close_native_file(mount, descriptor.serial(), descriptor.owner_id())
+            .kernel_close_file(mount, descriptor.serial(), descriptor.owner_id())
             .unwrap();
     }
     // What remains beyond the start is the created file's kernel reference:
@@ -507,13 +507,13 @@ fn an_open_visit_decides_a_regular_file_and_records_its_descriptor_alone() {
     assert_eq!(remaining.3.kernel_entries, before.3.kernel_entries + 1);
     assert_eq!(remaining.3.file_custody, before.3.file_custody + 1);
     assert_eq!(remaining.3.file_handles, before.3.file_handles);
-    b.overlay.revoke_native_mount(mount).unwrap();
+    b.overlay.revoke_kernel_mount(mount).unwrap();
 }
 
 #[test]
 fn facts_of_another_base_are_ignored_and_read_again_for_the_present_one() {
-    let b = Bench::new("native-visit-rebase");
-    let mount = b.overlay.create_native_mount(b.route(), 1).unwrap();
+    let b = Bench::new("kernel-visit-rebase");
+    let mount = b.overlay.create_kernel_mount(1).unwrap();
     let first = b.workspace.base().unwrap();
     let root = first.identity().0.to_bytes();
     let wanted = vec![Need::Inode(1), Need::Name(1, name("file"))];
@@ -555,7 +555,7 @@ fn facts_of_another_base_are_ignored_and_read_again_for_the_present_one() {
     // its objects, runs after an install whose base no longer binds the name.
     let made_before = b
         .workspace
-        .native_read_visit(
+        .kernel_read_visit(
             resident(&b),
             mount,
             1,
@@ -567,7 +567,7 @@ fn facts_of_another_base_are_ignored_and_read_again_for_the_present_one() {
     let serial = b.workspace.next_serial(&b.allocator).unwrap();
     let replacing = b
         .workspace
-        .native_mutation_visit(
+        .kernel_mutation_visit(
             resident(&b),
             named(mount, 20, mkdir(1, "file"), Some(serial), T1, &facts),
         )
@@ -585,7 +585,7 @@ fn facts_of_another_base_are_ignored_and_read_again_for_the_present_one() {
     assert!(matches!(outcome.result, Ok(None)));
     assert!(matches!(
         outcome.decision,
-        Some(NativeReadDecision::Needs(ref needs)) if *needs == wanted
+        Some(KernelReadDecision::Needs(ref needs)) if *needs == wanted
     ));
     let outcome = replacing.perform(&b.overlay);
     assert!(matches!(
@@ -645,15 +645,15 @@ fn facts_of_another_base_are_ignored_and_read_again_for_the_present_one() {
     assert_eq!((inode.serial, inode.kind), (serial, InodeKind::Directory));
     b.overlay.reply_attempted(publication).unwrap();
     assert_eq!(b.lookup(1, "file").unwrap().serial, serial);
-    b.overlay.forget_native(mount, serial, 1).unwrap();
-    b.overlay.revoke_native_mount(mount).unwrap();
+    b.overlay.kernel_forget(mount, serial, 1).unwrap();
+    b.overlay.revoke_kernel_mount(mount).unwrap();
 }
 
 #[test]
 fn a_mutation_visit_publishes_once_with_its_reply_custody_and_holds_no_source() {
-    let b = Bench::new("native-visit-mutation");
-    let route = b.route();
-    let mount = b.overlay.create_native_mount(route, 1).unwrap();
+    let b = Bench::new("kernel-visit-mutation");
+    b.route();
+    let mount = b.overlay.create_kernel_mount(1).unwrap();
     let directory = b.workspace.next_serial(&b.allocator).unwrap();
     let making = |facts: &VisitFacts| named(mount, 7, mkdir(1, "made"), Some(directory), T1, facts);
 
@@ -694,7 +694,7 @@ fn a_mutation_visit_publishes_once_with_its_reply_custody_and_holds_no_source() 
     );
     assert_eq!(after.1.reply_tickets, before.1.reply_tickets + 1);
     assert_eq!(
-        b.overlay.pending_publications(route, 0).unwrap(),
+        b.overlay.pending_publications(0).unwrap(),
         vec![publication]
     );
     b.overlay.reply_attempted(publication).unwrap();
@@ -728,7 +728,7 @@ fn a_mutation_visit_publishes_once_with_its_reply_custody_and_holds_no_source() 
     let outcome = mutate(
         &b,
         resident(&b),
-        NativeVisitRequest {
+        KernelVisitRequest {
             open: Some(true),
             ..named(
                 mount,
@@ -752,7 +752,7 @@ fn a_mutation_visit_publishes_once_with_its_reply_custody_and_holds_no_source() 
     assert_eq!((file.serial(), file.writable()), (serial, true));
     assert_eq!(
         b.overlay
-            .native_file(mount, serial, file.owner_id())
+            .kernel_file(mount, serial, file.owner_id())
             .unwrap(),
         file
     );
@@ -762,7 +762,7 @@ fn a_mutation_visit_publishes_once_with_its_reply_custody_and_holds_no_source() 
     b.overlay.reply_attempted(publication).unwrap();
 
     // A handle-addressed visit writes through that exact descriptor.
-    let through = |request, handle, input, fresh| NativeVisitRequest {
+    let through = |request, handle, input, fresh| KernelVisitRequest {
         mount,
         request,
         serial,
@@ -773,7 +773,7 @@ fn a_mutation_visit_publishes_once_with_its_reply_custody_and_holds_no_source() 
         fresh,
         facts: Arc::new(VisitFacts::default()),
     };
-    let write = || NativeInput::Write {
+    let write = || KernelInput::Write {
         offset: 0,
         data: b"visited".as_slice().into(),
         cached: false,
@@ -799,7 +799,7 @@ fn a_mutation_visit_publishes_once_with_its_reply_custody_and_holds_no_source() 
         through(
             12,
             Some(file.owner_id()),
-            NativeInput::Named(mkdir(1, "never")),
+            KernelInput::Named(mkdir(1, "never")),
             Some(other),
         ),
     ] {
@@ -827,7 +827,7 @@ fn a_mutation_visit_publishes_once_with_its_reply_custody_and_holds_no_source() 
         through(16, Some(file.owner_id()), write(), Some(other)),
     ] {
         assert!(matches!(
-            b.workspace.native_mutation_visit(resident(&b), request),
+            b.workspace.kernel_mutation_visit(resident(&b), request),
             Err(WorkspaceError::Content(ContentError::InvalidRecord(
                 "mutation reserved serial"
             )))
@@ -837,9 +837,9 @@ fn a_mutation_visit_publishes_once_with_its_reply_custody_and_holds_no_source() 
 
     // After revocation every visit is refused before its decision.
     b.overlay
-        .close_native_file(mount, serial, file.owner_id())
+        .kernel_close_file(mount, serial, file.owner_id())
         .unwrap();
-    b.overlay.revoke_native_mount(mount).unwrap();
+    b.overlay.revoke_kernel_mount(mount).unwrap();
     assert!(matches!(
         mutate(
             &b,
@@ -851,7 +851,7 @@ fn a_mutation_visit_publishes_once_with_its_reply_custody_and_holds_no_source() 
     ));
     let late = b
         .workspace
-        .native_read_visit(
+        .kernel_read_visit(
             resident(&b),
             mount,
             1,
@@ -867,8 +867,8 @@ fn a_mutation_visit_publishes_once_with_its_reply_custody_and_holds_no_source() 
 
 #[test]
 fn a_visit_through_a_read_only_descriptor_is_refused_and_changes_nothing() {
-    let b = Bench::new("native-visit-read-only");
-    let mount = b.overlay.create_native_mount(b.route(), 1).unwrap();
+    let b = Bench::new("kernel-visit-read-only");
+    let mount = b.overlay.create_kernel_mount(1).unwrap();
     // The root's objects become resident through the ordinary client.
     VisitFacts::default()
         .supply(
@@ -881,7 +881,7 @@ fn a_visit_through_a_read_only_descriptor_is_refused_and_changes_nothing() {
     let opened = mutate(
         &b,
         resident(&b),
-        NativeVisitRequest {
+        KernelVisitRequest {
             open: Some(false),
             ..named(
                 mount,
@@ -903,7 +903,7 @@ fn a_visit_through_a_read_only_descriptor_is_refused_and_changes_nothing() {
     // The visit's fence read this descriptor with its access mode. A write
     // or a truncation through it is refused before anything is evaluated or
     // written, exactly as the stored row refused it.
-    let through = |request, input| NativeVisitRequest {
+    let through = |request, input| KernelVisitRequest {
         mount,
         request,
         serial,
@@ -916,17 +916,17 @@ fn a_visit_through_a_read_only_descriptor_is_refused_and_changes_nothing() {
     };
     let before = snapshot(&b);
     for input in [
-        NativeInput::Write {
+        KernelInput::Write {
             offset: 0,
             data: b"refused".as_slice().into(),
             cached: false,
         },
-        NativeInput::Write {
+        KernelInput::Write {
             offset: 0,
             data: b"refused".as_slice().into(),
             cached: true,
         },
-        NativeInput::Attributes {
+        KernelInput::Attributes {
             mode: None,
             mtime: None,
             size: Some(3),
@@ -949,25 +949,25 @@ fn a_visit_through_a_read_only_descriptor_is_refused_and_changes_nothing() {
     // The descriptor still reads attributes and closes.
     let stat = b
         .workspace
-        .native_read_visit(
+        .kernel_read_visit(
             resident(&b),
             mount,
             serial,
             Some(file.owner_id()),
-            NativeReadOperation::Getattr { serial },
+            KernelReadOperation::Getattr { serial },
             Arc::new(VisitFacts::default()),
         )
         .unwrap()
         .perform(&b.overlay);
     assert!(matches!(
         stat.decision,
-        Some(NativeReadDecision::Value(ref inode)) if inode.serial == serial
+        Some(KernelReadDecision::Value(ref inode)) if inode.serial == serial
     ));
     b.overlay
-        .close_native_file(mount, serial, file.owner_id())
+        .kernel_close_file(mount, serial, file.owner_id())
         .unwrap();
-    b.overlay.forget_native(mount, serial, 1).unwrap();
-    b.overlay.revoke_native_mount(mount).unwrap();
+    b.overlay.kernel_forget(mount, serial, 1).unwrap();
+    b.overlay.revoke_kernel_mount(mount).unwrap();
 }
 
 #[test]

@@ -56,15 +56,15 @@ mod rig;
 #[path = "support/store_gate.rs"]
 mod store_gate;
 use layerfs_bridge::control::{
-    Activity, ControlCode, NativePhase, NativeWork, ReadyMount, Reply, WorkspaceToken,
+    Activity, ControlCode, MountPhase, MountWork, ReadyMount, Reply, WorkspaceToken,
 };
 use layerfs_daemon::{
     control::Failure,
-    store::{ReadLimits, Store, StoreReader},
-    JobReceipt, NativeReply, OwnerClient, Response,
+    store::{Store, StoreReader},
+    OwnerClient,
 };
 use layerfs_fuse::request::Opcode;
-use layerfs_overlay::{CleanupState, NativeMount, NativeMountState, Route, StoredCounts};
+use layerfs_overlay::{CleanupState, KernelMount, KernelMountState, StoredCounts};
 use layerfs_persistence::Handles;
 use layerfs_storage::{port::PackPersistence, ReservationBlocks, Storage};
 use mounted::{mount_entry, Harness, COMMAND};
@@ -155,8 +155,8 @@ fn engine_rows(harness: &Harness, through: WorkspaceToken) -> Rows {
     let resources = harness.engine_resources(through);
     (resources.counts, resources.open)
 }
-fn work(harness: &Harness, token: WorkspaceToken) -> NativeWork {
-    harness.status(token).native.unwrap().work.unwrap()
+fn work(harness: &Harness, token: WorkspaceToken) -> MountWork {
+    harness.status(token).kernel.unwrap().work.unwrap()
 }
 /// Two consecutive observations with nothing received or admitted and no
 /// request completed in between. A readiness wait before one attempt.
@@ -172,54 +172,43 @@ fn quiet(harness: &Harness, token: WorkspaceToken) {
 }
 /// One owner job of the test, attempted once after a bounded wait for a free
 /// slot of its class, and awaited within the same bound.
-fn job(
+fn job<T>(
     client: &OwnerClient,
     route: Route,
     command: impl FnOnce(
         &layerfs_daemon::OwnerClient,
-        layerfs_overlay::Route,
-    ) -> Result<layerfs_daemon::JobReceipt, layerfs_daemon::OwnerError>,
-) -> JobReceipt {
+        layerfs_workspace::Route,
+    ) -> Result<T, layerfs_daemon::OwnerError>,
+) -> T {
     command(client, route).unwrap_or_else(|error| panic!("{error:?}"))
 }
-/// The engine's retained native mount of this namespace, if one is attached.
-fn engine_mount(client: &OwnerClient, route: Route) -> Option<NativeMount> {
-    let done = job(
+/// The engine's retained kernel mount of this namespace, if one is attached.
+fn engine_mount(client: &OwnerClient, route: Route) -> Option<KernelMount> {
+    job(
         client,
         route,
         |job_client: &layerfs_daemon::OwnerClient, job_route| {
-            job_client.native_retained_mount(job_route)
+            job_client.kernel_retained_mount(job_route)
         },
-    );
-    match done.result() {
-        Ok(Response::Native(NativeReply::RetainedMount(mount))) => *mount,
-        other => panic!("{other:?}"),
-    }
+    )
 }
-fn mount_state(client: &OwnerClient, route: Route, mount: NativeMount) -> NativeMountState {
-    let done = job(
+fn mount_state(client: &OwnerClient, route: Route, mount: KernelMount) -> KernelMountState {
+    job(
         client,
         route,
         |job_client: &layerfs_daemon::OwnerClient, job_route| {
-            job_client.native_state(job_route, mount)
+            job_client.kernel_state(job_route, mount)
         },
-    );
-    match done.result() {
-        Ok(Response::Native(NativeReply::State(state))) => *state,
-        other => panic!("{other:?}"),
-    }
+    )
 }
 /// One maintained point observation of the namespace's close and cleanup.
 fn cleanup(client: &OwnerClient, token: WorkspaceToken) -> CleanupState {
     // The Workspace's own file can already be gone: the daemon roster
     // answers for the original namespace and incarnation.
-    let done = client
+
+    client
         .observe_cleanup(None, token.namespace, token.workspace.to_bytes())
-        .unwrap_or_else(|error| panic!("{error:?}"));
-    match done.result() {
-        Ok(Response::CleanupState(state)) => *state,
-        other => panic!("{other:?}"),
-    }
+        .unwrap_or_else(|error| panic!("{error:?}"))
 }
 /// Per-opcode frame counts out of a Debug-rendered drain receipt.
 fn opcodes(receipt: &str) -> Vec<u64> {
@@ -412,7 +401,7 @@ struct Staged {
     ready: ReadyMount,
     helper: WorkspaceToken,
     route: Route,
-    mount: NativeMount,
+    mount: KernelMount,
     /// Daemon-wide counts with only the helper bound.
     empty: StoredCounts,
     /// The same counts with the mount serving and the caller ready.
@@ -439,25 +428,34 @@ impl Staged {
         let writer =
             Handles::open_writable(config(), installed::BINDING, installed::CURSOR).unwrap();
         let gate = Gate::new();
-        let readers = (0..2)
-            .map(|_| {
-                let read = Handles::open_read_only(config(), installed::BINDING, installed::CURSOR)
-                    .unwrap();
-                let provider: Arc<dyn PackPersistence> = Arc::new(Gated {
-                    inner: read.storage,
-                    gate: gate.clone(),
-                });
-                StoreReader::new(Storage::new(provider).unwrap(), Arc::new(read.history))
-            })
-            .collect();
+        let reader_config = fixture.config.clone();
+        let reader_gate = gate.clone();
+        let factory: layerfs_daemon::store::ReaderFactory = Arc::new(move |_| {
+            let read = Handles::open_read_only(
+                reader_config.clone(),
+                installed::BINDING,
+                installed::CURSOR,
+            )
+            .unwrap();
+            let provider: Arc<dyn PackPersistence> = Arc::new(Gated {
+                inner: read.storage,
+                gate: reader_gate.clone(),
+            });
+            Ok(StoreReader::new(
+                Storage::new(provider).unwrap(),
+                Arc::new(read.history),
+            ))
+        });
+        let control = factory(0).unwrap();
         let store = Arc::new(
             Store::new(
                 writer.storage,
                 Arc::new(writer.history),
-                readers,
+                control,
+                factory,
                 0,
                 ReservationBlocks::default(),
-                ReadLimits::default(),
+                16,
             )
             .unwrap(),
         );
@@ -493,7 +491,7 @@ impl Staged {
             fixture,
         }
     }
-    fn work(&self) -> NativeWork {
+    fn work(&self) -> MountWork {
         work(&self.harness, self.ready.token)
     }
     fn caller(&mut self) -> &mut Caller {
@@ -502,7 +500,7 @@ impl Staged {
     /// The Workspace is neither revoked nor closed.
     fn live(&self) -> bool {
         engine_mount(&self.client, self.route) == Some(self.mount)
-            && mount_state(&self.client, self.route, self.mount) == NativeMountState::Live
+            && mount_state(&self.client, self.route, self.mount) == KernelMountState::Live
             && cleanup(&self.client, self.ready.token) == CleanupState::Live
             && self.harness.engine(self.helper).namespaces == self.empty.namespaces + 1
     }
@@ -527,12 +525,6 @@ impl Staged {
             format!(
                 "{name}: a Store read after the Workspace was closed: {calls:?} -> {:?}",
                 self.gate.observe()
-            )
-        });
-        checks.that(self.store.read_work().outstanding == 0, || {
-            format!(
-                "{name}: readers after the teardown: {:?}",
-                self.store.read_work()
             )
         });
     }
@@ -572,16 +564,14 @@ fn unmount_beside(held: Held) {
     );
     let token = staged.ready.token;
     let ready_work = staged.work();
-    let grants = staged.store.read_work().grants;
+    let grants = staged.store.read_work().requests;
 
     // The gate is armed, then the caller makes its one request.
     staged.gate.arm();
     staged.caller().send(held.mode());
     within("the request is inside its Store read", || {
         let now = staged.work();
-        staged.gate.observe().holding == 1
-            && now.active == 1
-            && staged.store.read_work().outstanding == 1
+        staged.gate.observe().holding == 1 && now.active == 1
     });
     let inside = staged.work();
     let rows = engine_rows(&staged.harness, staged.helper);
@@ -591,13 +581,13 @@ fn unmount_beside(held: Held) {
         .local
         .map(|local| local.base_readers);
     println!(
-        "{name} held: handoffs={}->{} active={} gate={:?} reader_grants={}->{} engine_rows(idle={:?} held={rows:?}) base_readers={readers:?}",
+        "{name} held: handoffs={}->{} active={} gate={:?} reader_demands={}->{} engine_rows(idle={:?} held={rows:?}) base_readers={readers:?}",
         ready_work.served,
         inside.served,
         inside.active,
         staged.gate.observe(),
         grants,
-        staged.store.read_work().grants,
+        staged.store.read_work().requests,
         staged.idle
     );
     assert_eq!(
@@ -619,7 +609,7 @@ fn unmount_beside(held: Held) {
     // system call: no effect, nothing revoked, closed or retired.
     for round in 0..10 {
         match staged.harness.try_unmount(token) {
-            Err(Failure::Native(failure)) => checks.that(
+            Err(Failure::Kernel(failure)) => checks.that(
                 (failure.code, failure.phase) == (ControlCode::Busy, "unmount:kernel"),
                 || format!("{name}: Unmount beside the held request: {failure:?}"),
             ),
@@ -628,7 +618,7 @@ fn unmount_beside(held: Held) {
         let status = staged.harness.status(token);
         let now = staged.work();
         let untouched = status.activity == Activity::Idle
-            && staged.harness.phase(token) == NativePhase::Ready
+            && staged.harness.phase(token) == MountPhase::Ready
             && (now.active, now.terminal, now.retained) == (1, inside.terminal, 0)
             && now.completed == inside.completed
             && staged.gate.observe().holding == 1
@@ -696,7 +686,7 @@ fn unmount_beside(held: Held) {
 
     // The same Unmount now completes, and the Workspace's rows retire.
     let done = staged.harness.unmount(&staged.ready);
-    let receipt = format!("{:?}", done.native);
+    let receipt = format!("{:?}", done.kernel);
     drop(done);
     let frames = opcodes(&receipt);
     let count = |opcode: Opcode| frames[opcode as usize];
@@ -745,3 +735,5 @@ fn fp21_unmount_beside_a_readdir_inside_its_store_read_retires_nothing_and_the_l
 }
 
 // ------------------------------------------------- FORGET behind credits
+
+use layerfs_workspace::Route;

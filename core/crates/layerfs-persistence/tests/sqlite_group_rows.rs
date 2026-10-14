@@ -147,7 +147,7 @@ fn complete_reads_reassemble_exact_bytes_and_digest_for_every_lane() {
     let h = create(&t.join("db"));
     for (n, lane) in [
         PackLane::Ordinary,
-        PackLane::Native,
+        PackLane::Chunk,
         PackLane::WholeFile,
         PackLane::Singleton,
     ]

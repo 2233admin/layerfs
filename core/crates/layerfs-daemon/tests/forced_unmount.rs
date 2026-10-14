@@ -31,9 +31,6 @@
 #[path = "support/fusectl.rs"]
 mod fusectl;
 #[allow(dead_code)]
-#[path = "support/holds.rs"]
-mod holds;
-#[allow(dead_code)]
 #[path = "support/installed_store.rs"]
 mod installed;
 #[allow(dead_code)]
@@ -47,21 +44,17 @@ mod mounted;
 mod rig;
 use layerfs_bridge::control::{
     AbortDisposition, Activity, CommitKnowledge, ControlCode, DetachDisposition, ForcedFacts,
-    ForcedOutcome, NativePhase, NativeWork, Reply, Request, TeardownCustody, TeardownStage,
+    ForcedOutcome, MountPhase, MountWork, Reply, Request, TeardownCustody, TeardownStage,
     WorkspaceToken,
 };
-use layerfs_daemon::control::{Failure, Success};
+use layerfs_daemon::control::Failure;
 use mounted::{mount_entry, Harness, COMMAND};
-use rig::{bash_in, passed, pattern, root, stamp_tree, Rig};
+use rig::{bash_in, passed, root, Rig};
 use std::{
-    collections::BTreeMap,
     fmt::Debug,
     fs,
     io::{BufRead, BufReader, Read, Write},
-    os::unix::{
-        fs::PermissionsExt,
-        process::{CommandExt, ExitStatusExt},
-    },
+    os::unix::process::{CommandExt, ExitStatusExt},
     path::Path,
     process::{Child, ChildStdin, Command as Process, ExitStatus, Stdio},
     sync::mpsc::{self, Receiver},
@@ -71,12 +64,7 @@ use std::{
 
 /// Every bounded readiness or completion observation of the test.
 const WAIT: Duration = Duration::from_secs(5);
-/// Cold base files, one per reader.
-const COLD: usize = 20;
-const COLD_BYTES: usize = 12_000;
-/// The kernel-facing bounds of one mount: handoff slots and receive units.
-const HANDOFFS: usize = 16;
-const RECEIVE_UNITS: usize = 1;
+
 /// The errnos Linux gives a caller of an aborted connection.
 const ABORTED: [&str; 2] = ["ENOTCONN", "ECONNABORTED"];
 
@@ -118,29 +106,6 @@ while True:
         break
 say("signals %d" % len(seen))
 sys.exit(0)
-"#;
-/// Opens with `O_DIRECT` and reads to the end. Reports the bytes read, or the
-/// errno of the call that failed and exit status 7, with the signals seen.
-const READER: &str = r#"
-import errno, os, signal, sys
-seen = []
-for number in (signal.SIGHUP, signal.SIGINT, signal.SIGQUIT, signal.SIGTERM,
-               signal.SIGUSR1, signal.SIGUSR2, signal.SIGALRM):
-    signal.signal(number, lambda n, frame: seen.append(n))
-try:
-    fd = os.open(sys.argv[1], os.O_RDONLY | os.O_DIRECT)
-    total = 0
-    while True:
-        part = os.read(fd, 16384)
-        if not part:
-            break
-        total += len(part)
-    os.close(fd)
-    os.write(1, ("read %d signals %d\n" % (total, len(seen))).encode())
-except OSError as error:
-    name = errno.errorcode.get(error.errno, "?")
-    os.write(1, ("errno %d %s signals %d\n" % (error.errno, name, len(seen))).encode())
-    sys.exit(7)
 "#;
 
 fn within(what: &str, mut condition: impl FnMut() -> bool) {
@@ -242,22 +207,14 @@ impl Proc {
             what: what.into(),
         }
     }
-    fn python(what: impl Into<String>, script: &str, argument: &Path) -> Self {
-        let mut command = Process::new("python3");
-        command.arg("-c").arg(script).arg(argument);
-        Self::start(what, command, Path::new("/"))
-    }
+
     /// `bash -c` with the given working directory.
     fn bash(what: impl Into<String>, directory: &Path, script: &str) -> Self {
         let mut command = Process::new("bash");
         command.arg("-c").arg(script);
         Self::start(what, command, directory)
     }
-    fn running(&mut self) -> bool {
-        self.child
-            .as_mut()
-            .is_some_and(|child| matches!(child.try_wait(), Ok(None)))
-    }
+
     /// Its exit status and whole standard output, or `None` if it has not
     /// exited within `wait`; it then stays owned and is reaped on drop.
     fn wait(&mut self, wait: Duration) -> Option<(ExitStatus, Vec<u8>)> {
@@ -384,8 +341,8 @@ fn row(directory: &str) -> Option<String> {
         })
         .map(str::to_owned)
 }
-fn work(rig: &Rig, token: WorkspaceToken) -> NativeWork {
-    rig.harness.status(token).native.unwrap().work.unwrap()
+fn work(rig: &Rig, token: WorkspaceToken) -> MountWork {
+    rig.harness.status(token).kernel.unwrap().work.unwrap()
 }
 /// Two consecutive observations with nothing received or admitted and no
 /// request completed in between. A readiness wait before one attempt.
@@ -401,7 +358,7 @@ fn quiet(rig: &Rig, token: WorkspaceToken) {
 }
 /// What one forced unmount ended as.
 enum Ended {
-    Unmounted(Box<ForcedOutcome>, Box<Success>),
+    Unmounted(Box<ForcedOutcome>),
     /// Stopped after an effect; the registry keeps the exact owner.
     Retained(Box<TeardownCustody>),
 }
@@ -411,7 +368,7 @@ fn force(harness: &Harness, token: WorkspaceToken) -> Ended {
         Ok(done) => match &done.reply {
             Reply::ForceUnmounted(closed) => {
                 assert_eq!(closed.token, token);
-                Ended::Unmounted(Box::new(closed.outcome.clone()), Box::new(done))
+                Ended::Unmounted(Box::new(closed.outcome.clone()))
             }
             other => panic!("forced unmount replied {other:?}"),
         },
@@ -539,20 +496,20 @@ fn held_reference(name: &'static str, label: &str, mode: &str) {
         ready.receipt.abort_bound,
         connection.minor,
         connection.exists(),
-        before.native.as_ref().unwrap().phase,
+        before.kernel.as_ref().unwrap().phase,
         before.epoch
     );
 
     let custody = match force(&rig.harness, token) {
         Ended::Retained(custody) => *custody,
-        Ended::Unmounted(outcome, _) => {
+        Ended::Unmounted(outcome) => {
             panic!("{name}: forced past a held {mode}: {outcome:?}")
         }
     };
     println!("{name} custody={custody:?}");
     println!(
         "{name} retained_owner={}",
-        brief(&rig.harness.service.retained_native(token))
+        brief(&rig.harness.service.retained_kernel(token))
     );
     checks.that(aborted_and_mounted(&custody, token), || {
         format!("{name}: not Retained at Detach with abort Written and detach Busy: {custody:?}")
@@ -578,15 +535,15 @@ fn held_reference(name: &'static str, label: &str, mode: &str) {
         format!("{name}: the mount row changed: {before_row:?} -> {after_row:?}")
     });
     let status = rig.harness.status(token);
-    let native = status.native.as_ref().unwrap();
+    let kernel = status.kernel.as_ref().unwrap();
     checks.that(
-        native.phase == NativePhase::Retained
-            && !native.detached
+        kernel.phase == MountPhase::Retained
+            && !kernel.detached
             && status.activity == Activity::Closing,
         || {
             format!(
                 "{name}: status after the stop: phase={:?} detached={} activity={:?}",
-                native.phase, native.detached, status.activity
+                kernel.phase, kernel.detached, status.activity
             )
         },
     );
@@ -607,7 +564,7 @@ fn held_reference(name: &'static str, label: &str, mode: &str) {
         custody.forced.as_ref().map(|facts| facts.fenced),
         after_row.as_deref() == Some(before_row.as_str()),
         connection.exists(),
-        native.phase,
+        kernel.phase,
         status.activity
     );
 
@@ -624,8 +581,8 @@ fn held_reference(name: &'static str, label: &str, mode: &str) {
     checks.that(
         repeated_row.as_deref() == Some(before_row.as_str())
             && repeated_status.epoch == status.epoch
-            && repeated_status.native.as_ref().map(|native| native.phase)
-                == Some(NativePhase::Retained),
+            && repeated_status.kernel.as_ref().map(|kernel| kernel.phase)
+                == Some(MountPhase::Retained),
         || {
             format!(
                 "{name}: a later call had an effect: row {repeated_row:?}, epoch {} -> {}",
@@ -674,7 +631,7 @@ fn held_reference(name: &'static str, label: &str, mode: &str) {
             .all(|(_, repeated)| stable(repeated) == stable(&custody)),
         gone_row.as_deref() == Some(before_row.as_str()),
         connection.exists(),
-        gone_status.native.as_ref().map(|native| native.phase)
+        gone_status.kernel.as_ref().map(|kernel| kernel.phase)
     );
 
     // Teardown by the test: the product never detaches this mount again.
@@ -702,18 +659,6 @@ fn fp33_a_held_descriptor_leaves_the_mount_aborted_and_retained() {
     held_reference("FP-33 descriptor", "fp33-descriptor", "descriptor");
 }
 
-/// A base of `COLD` files under `cold/`, each with its own bytes.
-fn cold_rig(label: &str) -> Rig {
-    Rig::built(label, |source| {
-        fs::create_dir(source.join("cold")).unwrap();
-        for n in 0..COLD {
-            let path = source.join(format!("cold/f-{n:02}"));
-            fs::write(&path, pattern(n as u8, COLD_BYTES)).unwrap();
-            fs::set_permissions(&path, fs::Permissions::from_mode(0o644)).unwrap();
-        }
-        stamp_tree(source);
-    })
-}
 /// `count` cold readers parked behind a fully leased read set, then Force.
 /// Each is parked in its first READ, after an OPEN that needed no reader.
 /// With more readers than handoff slots the mount is saturated: sixteen
@@ -724,361 +669,6 @@ fn cold_rig(label: &str) -> Rig {
 /// every reader's call, but a reader that has not yet dropped the path
 /// reference of that call when the product makes its one detach keeps the
 /// mount busy, and the teardown then stops `Retained` at `Detach`. Both ends
-/// are checked and the one observed is printed.
-fn parked_readers_are_ended(name: &'static str, label: &str, count: usize) {
-    fusectl::mount();
-    let rig = cold_rig(label);
-    let ready = rig.mount(1);
-    let _guard = Mounted(ready.directory.clone());
-    let token = ready.token;
-    let mut checks = Checks::default();
-    assert!(ready.receipt.abort_bound, "{:?}", ready.receipt);
-    let connection = fusectl::own(&ready);
-    let mount = root(&ready).to_owned();
-    // The names are looked up before the hold, so each reader's OPEN is
-    // decided by one owner visit from what the daemon remembers and
-    // completes. Its one request in flight is then its first READ, which
-    // needs base bytes and so a Store reader.
-    passed(
-        &bash_in(COMMAND, &mount, "stat cold/* > /dev/null"),
-        "before the hold",
-    );
-    quiet(&rig, token);
-    let admitted = count.min(HANDOFFS);
-    let received = (count - admitted).min(RECEIVE_UNITS);
-    // Declared before the leases: on any path the leases are returned first,
-    // so a process that is still parked can finish and be reaped.
-    let mut readers: Vec<Proc> = Vec::new();
-    let leases = holds::Leases::all(&rig.store, WAIT);
-    let (held, idle) = (rig.store.read_work(), work(&rig, token));
-    readers.extend((0..count).map(|n| {
-        Proc::python(
-            format!("cold reader {n}"),
-            READER,
-            &mount.join(format!("cold/f-{n:02}")),
-        )
-    }));
-    // Readiness of the staging: every reader is inside its call once the
-    // kernel holds one request of this connection for each of them. A reader
-    // that had not reached the mount yet would later open a path that no
-    // longer exists, which is not an answer of the aborted connection.
-    within("the readers' requests parked", || {
-        let now = work(&rig, token);
-        now.active == admitted as u32 && connection.waiting() == count as u64
-    });
-    let before = work(&rig, token);
-    let waiting = rig.store.read_work();
-    assert_eq!(
-        (waiting.leased, waiting.waiting, waiting.grants),
-        (leases.count(), admitted, held.grants),
-        "every admitted request waits for a reader: {waiting:?}"
-    );
-    // Every handed-off request is a parked READ or a completed OPEN: the
-    // OPEN of every reader that is parked, and of no more than every reader.
-    let opened = before.completed - idle.completed;
-    assert_eq!(
-        before.served - idle.served,
-        admitted as u64 + opened,
-        "every handed-off request is parked or completed: {before:?}"
-    );
-    assert!(
-        (admitted as u64..=count as u64).contains(&opened),
-        "completed OPENs: {opened}"
-    );
-    let blocked = readers
-        .iter_mut()
-        .map(|reader| usize::from(reader.running()))
-        .sum::<usize>();
-    assert_eq!(blocked, count, "every reader is blocked in its call");
-    println!(
-        "{name} before: readers={count} leases_held={} active={} terminal={} read_admissions_waiting={} kernel_waiting={} readers_blocked={blocked}",
-        leases.count(),
-        before.active,
-        before.terminal,
-        waiting.waiting,
-        connection.waiting()
-    );
-
-    let ended = force(&rig.harness, token);
-    // Force returned while the test still holds every reader of the Store:
-    // no reader was granted to anyone and every waiting admission is gone.
-    let after = rig.store.read_work();
-    checks.that(
-        (after.leased, after.waiting, after.grants) == (leases.count(), 0, held.grants),
-        || format!("{name}: the read set after Force, leases still held: {after:?}"),
-    );
-    // Every reader's call returned an error; each exits by its own status.
-    let mut answers = BTreeMap::<String, usize>::new();
-    for (n, reader) in readers.iter_mut().enumerate() {
-        let answer = match reader.wait(WAIT) {
-            Some((status, output)) => {
-                let text = String::from_utf8_lossy(&output).trim().to_owned();
-                let failed = errno(&text).is_some_and(|errno| ABORTED.contains(&errno));
-                checks.that(
-                    status.code() == Some(7)
-                        && status.signal().is_none()
-                        && failed
-                        && text.ends_with("signals 0"),
-                    || format!("{name}: cold reader {n} ended {status:?} with {text:?}"),
-                );
-                text
-            }
-            None => {
-                checks.that(false, || {
-                    format!("{name}: cold reader {n} was still blocked {WAIT:?} after Force")
-                });
-                "still blocked".to_owned()
-            }
-        };
-        *answers.entry(answer).or_default() += 1;
-    }
-    let still = rig.store.read_work();
-    println!(
-        "{name} readers: answers={answers:?} leases_still_held={} read_admissions_waiting={} reader_grants={}->{}",
-        still.leased, still.waiting, held.grants, still.grants
-    );
-
-    let (facts, last, done) = match ended {
-        Ended::Unmounted(outcome, done) => {
-            println!("{name} outcome={outcome:?}");
-            println!("{name} receipt={}", brief(&done.native));
-            checks.that(
-                outcome.facts.abort == AbortDisposition::Written
-                    && outcome.facts.detach == DetachDisposition::Detached
-                    && outcome.facts.commit == CommitKnowledge::Absent
-                    && done.completion.is_some(),
-                || format!("{name}: {outcome:?}"),
-            );
-            assert!(mount_entry(&ready.directory).is_none());
-            assert!(!mount.exists());
-            within("own connection directory removed", || !connection.exists());
-            for request in [Request::Status(token), Request::Unmount(token)] {
-                assert!(
-                    matches!(
-                        rig.harness.service.execute_control(&request),
-                        Err(Failure::Rejected(ControlCode::Missing, _))
-                    ),
-                    "{request:?}"
-                );
-            }
-            (outcome.facts.clone(), outcome.work, Some(done))
-        }
-        // The kernel kept the aborted mount for a reference a caller had not
-        // dropped yet when the one detach was made: the truthful stage.
-        Ended::Retained(custody) => {
-            println!("{name} custody={custody:?}");
-            checks.that(aborted_and_mounted(&custody, token), || {
-                format!("{name}: retained, but not aborted and mounted at Detach: {custody:?}")
-            });
-            (
-                custody.forced.clone().expect("forced facts"),
-                custody.work.expect("connection counters"),
-                None,
-            )
-        }
-    };
-    // One terminal reply for each admitted request that was fenced before
-    // its attempt, one error attempt for each callback that held a receive
-    // unit, and nothing left or retained.
-    checks.that(
-        facts.fenced == admitted as u64
-            && last.terminal - before.terminal == received as u64
-            && (last.active, last.retained) == (0, 0),
-        || {
-            format!(
-                "{name}: fenced={} (admitted {admitted}), terminal {} -> {} (received {received}), left {:?}",
-                facts.fenced, before.terminal, last.terminal, last
-            )
-        },
-    );
-    println!(
-        "{name} force: disposition={} abort={:?} detach={:?} fenced={} admitted_before={admitted} terminal={}->{} received_before={received} left=({},{}) completed={}->{} leases_held_through_force={}",
-        if done.is_some() { "ForceUnmounted" } else { "Retained" },
-        facts.abort,
-        facts.detach,
-        facts.fenced,
-        before.terminal,
-        last.terminal,
-        last.active,
-        last.retained,
-        before.completed,
-        last.completed,
-        leases.count()
-    );
-
-    leases.release();
-    let released = rig.store.read_work();
-    assert_eq!(
-        (released.leased, released.waiting, released.quarantined),
-        (0, 0, 0),
-        "{released:?}"
-    );
-    drop(readers);
-    match done {
-        Some(done) => {
-            drop(done);
-            rig.finish();
-        }
-        None => {
-            let detached = plain_umount(&ready.directory);
-            assert!(detached.success(), "{name}: umount: {detached:?}");
-            println!(
-                "{name} teardown: by_test=plain umount(8) status={:?}",
-                detached.code()
-            );
-            abandon(rig);
-        }
-    }
-    checks.done(name);
-}
-
-/// FP-19-FS, the unattempted half: one cold reader parked before its demand.
-#[test]
-fn fp19_force_releases_a_parked_cold_reader_while_the_read_set_stays_leased() {
-    parked_readers_are_ended("FP-19-FS", "fp19", 1);
-}
-
-/// What a terminal unmount accounts a READ by. A READ makes one owner visit
-/// that records nothing and may then wait for a Store reader. Here it is
-/// parked on reader admission behind a fully leased read set, through a
-/// descriptor an external process opened before the hold. The engine's
-/// maintained row counts are what they were with the descriptor idle (no
-/// source, reader or lease row of the request) and it counts no base
-/// reader. Normal Unmount is refused by the kernel's own reversible answer
-/// and changes nothing. Force then ends the request through the mount's
-/// fence: one terminal reply, nothing received, admitted or retained when
-/// the one detach is made, and no reader granted. The process keeps its
-/// descriptor, so the kernel keeps the aborted mount and the teardown stops
-/// `Retained` at `Detach`, as in FP-33.
-#[test]
-fn a_read_parked_after_its_visit_holds_no_engine_row_and_is_ended_by_the_fence() {
-    let name = "PARKED-READ";
-    fusectl::mount();
-    let rig = Rig::new("parked-read");
-    let helper = rig.harness.bind(1);
-    let ready = rig.mount(2);
-    let _guard = Mounted(ready.directory.clone());
-    let token = ready.token;
-    let mut checks = Checks::default();
-    assert!(ready.receipt.abort_bound, "{:?}", ready.receipt);
-    let mount = root(&ready).to_owned();
-    // The descriptor is opened and read once while readers are granted.
-    let mut holder = Holder::spawn("descriptor", &mount);
-    let served = holder.ask("probe");
-    assert!(
-        served.starts_with("ok "),
-        "{name}: before the hold: {served}"
-    );
-    quiet(&rig, token);
-    let idle_rows = rig.harness.engine(helper);
-    let leases = holds::Leases::all(&rig.store, WAIT);
-    let (held, idle) = (rig.store.read_work(), work(&rig, token));
-
-    // One READ through the held descriptor: its visit, then the reader wait.
-    writeln!(holder.input.as_mut().unwrap(), "probe").unwrap();
-    within("the READ is parked on reader admission", || {
-        let now = work(&rig, token);
-        now.active == 1 && rig.store.read_work().waiting == 1
-    });
-    let before = work(&rig, token);
-    assert_eq!(before.served - idle.served, 1, "one parked request");
-    let parked_rows = rig.harness.engine(helper);
-    let local = rig
-        .harness
-        .status(token)
-        .local
-        .expect("the engine is observed beside the parked READ");
-    println!(
-        "{name} parked: admitted={} parked={} read_admissions_waiting=1 engine_rows(idle={idle_rows:?} parked={parked_rows:?}) base_readers={}",
-        before.active, before.active, local.base_readers
-    );
-    checks.that(parked_rows == idle_rows && local.base_readers == 0, || {
-        format!(
-            "{name}: the parked READ holds engine rows: {idle_rows:?} -> {parked_rows:?}, base_readers={}",
-            local.base_readers
-        )
-    });
-
-    // Normal Unmount: the kernel counts the caller blocked in its READ.
-    match rig.harness.try_unmount(token) {
-        Err(Failure::Native(failure)) => checks.that(
-            (failure.code, failure.phase) == (ControlCode::Busy, "unmount:kernel"),
-            || format!("{name}: Unmount beside the parked READ: {failure:?}"),
-        ),
-        other => panic!("{name}: Unmount beside the parked READ: {}", brief(&other)),
-    }
-    let busy = work(&rig, token);
-    checks.that(
-        rig.harness.phase(token) == NativePhase::Ready
-            && (busy.active, busy.terminal) == (1, before.terminal)
-            && rig.store.read_work().waiting == 1,
-        || format!("{name}: the busy Unmount had an effect: {before:?} -> {busy:?}"),
-    );
-
-    let custody = match force(&rig.harness, token) {
-        Ended::Retained(custody) => *custody,
-        Ended::Unmounted(outcome, _) => {
-            panic!("{name}: forced past a held descriptor: {outcome:?}")
-        }
-    };
-    println!("{name} custody={custody:?}");
-    checks.that(aborted_and_mounted(&custody, token), || {
-        format!("{name}: not Retained at Detach with abort Written and detach Busy: {custody:?}")
-    });
-    // The fence ended the one admitted request before its demand, and the
-    // local drain held before the one detach.
-    checks.that(
-        custody
-            .forced
-            .as_ref()
-            .is_some_and(|facts| facts.fenced == 1)
-            && custody.work.is_some_and(|work| {
-                (work.active, work.retained) == (0, 0)
-                    && work.loops_joined == work.loops_configured
-                    && work.loops_configured != 0
-            }),
-        || {
-            format!(
-                "{name}: the parked READ was not ended by the fence before the detach: {:?} {:?}",
-                custody.forced, custody.work
-            )
-        },
-    );
-    let after = rig.store.read_work();
-    checks.that(
-        (after.leased, after.waiting, after.grants) == (leases.count(), 0, held.grants),
-        || format!("{name}: the read set after Force, leases still held: {after:?}"),
-    );
-    // The blocked caller got the kernel's answer for an aborted connection.
-    let answer = holder.line();
-    checks.that(
-        errno(&answer).is_some_and(|errno| ABORTED.contains(&errno)),
-        || format!("{name}: the parked READ answered {answer:?}, not one of {ABORTED:?}"),
-    );
-    println!(
-        "{name} force: fenced={:?} left={:?} reader_grants={}->{} read_admissions_waiting={} read_answer={answer:?}",
-        custody.forced.as_ref().map(|facts| facts.fenced),
-        custody
-            .work
-            .map(|work| (work.active, work.retained)),
-        held.grants,
-        after.grants,
-        after.waiting
-    );
-
-    leases.release();
-    let (signals, exit) = holder.leave();
-    checks.that(
-        exit.code() == Some(0) && exit.signal().is_none() && signals == "signals 0",
-        || format!("{name}: the holder ended {exit:?} after {signals:?}"),
-    );
-    let detached = plain_umount(&ready.directory);
-    assert!(detached.success(), "{name}: umount: {detached:?}");
-    assert!(mount_entry(&ready.directory).is_none());
-    abandon(rig);
-    checks.done(name);
-}
-
 /// FP-22-FS, in this container's single mount namespace: a reference in A
 /// gives the truthful normal Busy on A and never holds sibling B; Force on A
 /// leaves A aborted and mounted, the holder alive and B serving.
@@ -1113,33 +703,33 @@ fn fp22_a_reference_in_a_never_holds_b_and_force_on_a_signals_no_process() {
 
     // Normal Unmount of A: the kernel's reversible answer, nothing else.
     let busy = match rig.harness.try_unmount(a.token) {
-        Err(Failure::Native(refusal)) => (refusal.code, refusal.phase),
+        Err(Failure::Kernel(refusal)) => (refusal.code, refusal.phase),
         other => panic!("{name}: Unmount of A beside its holder: {}", brief(&other)),
     };
     let probed = rig.harness.status(a.token);
     let served = holder.ask("probe");
     checks.that(
         busy == (ControlCode::Busy, "unmount:kernel")
-            && probed.native.as_ref().map(|native| native.phase) == Some(NativePhase::Ready)
+            && probed.kernel.as_ref().map(|kernel| kernel.phase) == Some(MountPhase::Ready)
             && probed.activity == Activity::Idle
             && served == "errno 2 ENOENT",
         || {
             format!(
                 "{name}: normal Unmount of A: {busy:?}, then phase {:?}, activity {:?}, holder call {served:?}",
-                probed.native.as_ref().map(|native| native.phase),
+                probed.kernel.as_ref().map(|kernel| kernel.phase),
                 probed.activity
             )
         },
     );
     println!(
         "{name} normal_unmount_of_a={busy:?} a_phase_after={:?} holder_call={served:?}",
-        probed.native.as_ref().map(|native| native.phase)
+        probed.kernel.as_ref().map(|kernel| kernel.phase)
     );
 
     let b_before = work(&rig, b.token);
     let custody = match force(&rig.harness, a.token) {
         Ended::Retained(custody) => *custody,
-        Ended::Unmounted(outcome, _) => panic!("{name}: forced past A's holder: {outcome:?}"),
+        Ended::Unmounted(outcome) => panic!("{name}: forced past A's holder: {outcome:?}"),
     };
     println!("{name} custody_of_a={custody:?}");
     checks.that(aborted_and_mounted(&custody, a.token), || {
@@ -1171,13 +761,13 @@ fn fp22_a_reference_in_a_never_holds_b_and_force_on_a_signals_no_process() {
             .is_some_and(|(status, output)| status.success() && output == b"b\nafter\n")
             && b_after.completed > b_before.completed
             && b_after.terminal == 0
-            && b_status.native.as_ref().map(|native| native.phase) == Some(NativePhase::Ready)
+            && b_status.kernel.as_ref().map(|kernel| kernel.phase) == Some(MountPhase::Ready)
             && row(&b.directory).as_deref() == Some(b_row.as_str())
             && on_b.exists(),
         || {
             format!(
                 "{name}: B after Force on A: write {wrote:?}, {b_before:?} -> {b_after:?}, phase {:?}",
-                b_status.native.as_ref().map(|native| native.phase)
+                b_status.kernel.as_ref().map(|kernel| kernel.phase)
             )
         },
     );
@@ -1190,7 +780,7 @@ fn fp22_a_reference_in_a_never_holds_b_and_force_on_a_signals_no_process() {
         b_before.completed,
         b_after.completed,
         b_after.terminal,
-        b_status.native.as_ref().map(|native| native.phase),
+        b_status.kernel.as_ref().map(|kernel| kernel.phase),
         on_b.exists()
     );
     drop(writer);

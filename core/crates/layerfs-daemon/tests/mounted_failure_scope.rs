@@ -36,7 +36,7 @@ mod rig;
 use held_writer::HeldWriter;
 use layerfs_bridge::control::{Reply, WorkspaceToken};
 use layerfs_content::ObjectId;
-use layerfs_daemon::store::{PortError, ReadLimits, Store, StoreReader};
+use layerfs_daemon::store::{Store, StoreReader};
 use layerfs_history::HistoryCatalog;
 use layerfs_persistence::{Handles, SqlitePersistenceProfile, StorageProvider};
 use layerfs_storage::{
@@ -187,10 +187,6 @@ impl Drop for Mounted {
 /// request parked for the whole hold is reported and not outwaited.
 const HELD_WAIT: Duration = Duration::from_secs(2);
 
-/// A bounded observation loop that reports instead of unwinding.
-fn eventually(condition: impl FnMut() -> bool) -> bool {
-    within(WAIT, condition)
-}
 fn within(limit: Duration, mut condition: impl FnMut() -> bool) -> bool {
     let deadline = Instant::now() + limit;
     loop {
@@ -211,7 +207,7 @@ fn quiet(harness: &Harness, token: WorkspaceToken) -> bool {
 fn quiet_within(harness: &Harness, token: WorkspaceToken, limit: Duration) -> bool {
     let mut last = None;
     within(limit, || {
-        let work = harness.status(token).native.unwrap().work.unwrap();
+        let work = harness.status(token).kernel.unwrap().work.unwrap();
         let now = (work.active, work.completed);
         let settled = work.active == 0 && last == Some(now);
         last = Some(now);
@@ -242,7 +238,7 @@ fn cold_tree(source: &Path) {
 }
 
 /// One installed Disposable Store, opened once and kept open, and one real
-/// native serving assembly over it. The test keeps the writable session, the
+/// kernel serving assembly over it. The test keeps the writable session, the
 /// provider of each read session and the counted catalog.
 struct Fx {
     fixture: installed::Fixture,
@@ -250,13 +246,13 @@ struct Fx {
     harness: Harness,
     writer: Arc<Handles>,
     history: Arc<CountedHistory>,
-    readers: Vec<Arc<StorageProvider>>,
+    readers: Arc<Mutex<Vec<Arc<StorageProvider>>>>,
 }
 impl Fx {
     fn new(label: &str) -> Self {
         let fixture = installed::Fixture::built(label, |source| {
             cold_tree(source);
-            Model::native(source).1
+            Model::host(source).1
         });
         assert!(
             matches!(
@@ -273,25 +269,34 @@ impl Fx {
             handles: writer.clone(),
             attempts: Mutex::new(Vec::new()),
         });
-        let mut readers = Vec::new();
-        let sessions = (0..2)
-            .map(|_| {
-                let read = Handles::open_read_only(config(), installed::BINDING, installed::CURSOR)
-                    .unwrap();
-                readers.push(read.storage.clone());
-                StoreReader::new(Storage::new(read.storage).unwrap(), Arc::new(read.history))
-            })
-            .collect();
+        let readers = Arc::new(Mutex::new(Vec::new()));
+        let reader_config = fixture.config.clone();
+        let observed_readers = readers.clone();
+        let factory: layerfs_daemon::store::ReaderFactory = Arc::new(move |_| {
+            let read = Handles::open_read_only(
+                reader_config.clone(),
+                installed::BINDING,
+                installed::CURSOR,
+            )
+            .unwrap();
+            observed_readers.lock().unwrap().push(read.storage.clone());
+            Ok(StoreReader::new(
+                Storage::new(read.storage).unwrap(),
+                Arc::new(read.history),
+            ))
+        });
+        let control = factory(0).unwrap();
         let pack: Arc<dyn PackPersistence> = writer.storage.clone();
         let catalog: Arc<dyn HistoryCatalog> = history.clone();
         let store = Arc::new(
             Store::new(
                 pack,
                 catalog,
-                sessions,
+                control,
+                factory,
                 2 * 1024 * 1024,
                 ReservationBlocks::default(),
-                ReadLimits::default(),
+                16,
             )
             .unwrap(),
         );
@@ -364,7 +369,7 @@ impl Fx {
 // ---------------------------------------------------------------- FP-27
 
 /// The read session the test puts out of service.
-const QUARANTINED: usize = 0;
+const QUARANTINED: usize = 1;
 struct Uncertain;
 impl PackReadPlan for Uncertain {
     fn select(&mut self, _: PackInfo, _: &[u8]) -> Result<PackReadChoice, PersistenceError> {
@@ -425,16 +430,12 @@ fn seen(answer: Option<Answer>, expected: &[u8]) -> Seen {
 }
 
 #[test]
-fn a_quarantined_reader_gets_no_further_demand_and_one_cold_failure_fails_no_later_read() {
-    let fx = Fx::new("fp-27");
+fn a_quarantined_workspace_reader_keeps_its_failure_while_a_sibling_still_reads() {
+    let fx = Fx::new("p2-owned-reader");
     let ready = fx.harness.mount(1);
     let mounted = Mounted(ready.directory.clone());
-    let mount = root(&ready).to_path_buf();
-    let token = ready.token;
-    // A sibling Workspace of the same Branch, mounted before anything fails.
     let sibling = fx.harness.mount(2);
     let sibling_mounted = Mounted(sibling.directory.clone());
-    let mut checks = Checks::default();
     let base = fx
         .store
         .history()
@@ -442,220 +443,52 @@ fn a_quarantined_reader_gets_no_further_demand_and_one_cold_failure_fails_no_lat
         .unwrap()
         .unwrap()
         .effective_root;
-    let demand = |fx: &Fx| {
-        fx.readers[QUARANTINED]
-            .diagnostics()
-            .map(|work| work.statements)
-    };
-
-    // Nothing is in flight. The test takes the other read session, so the
-    // next demand of the mount can only be given the one put out of service.
-    assert!(quiet(&fx.harness, token), "the fresh mount is quiet");
-    assert!(quiet(&fx.harness, sibling.token), "the sibling is quiet");
-    let idle = fx.store.read_work();
-    assert_eq!(
-        (idle.readers, idle.quarantined, idle.outstanding),
-        (2, 0, 0),
-        "{idle:?}"
-    );
-    let first = fx.store.read_ticket(None).unwrap().wait().unwrap();
-    let healthy = if first.index() == QUARANTINED {
-        let second = fx.store.read_ticket(None).unwrap().wait().unwrap();
-        drop(first);
-        second
-    } else {
-        first
-    };
-    assert_eq!(healthy.index(), 1 - QUARANTINED);
-    let before_staging = demand(&fx).unwrap();
-    quarantine(&fx.readers[QUARANTINED], base);
-    let staged = demand(&fx).unwrap();
-    let demands_before = fx.store.work();
-
-    // The observing request: the first cold read through the mount.
+    quarantine(&fx.readers.lock().unwrap()[QUARANTINED], base);
     let expected = |index: usize| pattern(COLD[index].1, COLD[index].2);
-    let observing = reading(mount.join(COLD[0].0));
-    let retired = eventually(|| fx.store.read_work().quarantined == 1);
-    let at_retirement = demand(&fx);
-    let pool_at_retirement = fx.store.read_work();
-    drop(healthy);
-    let observed = seen(observing.recv_timeout(WAIT).ok(), &expected(0));
-    let failures = fx.store.reader_failures();
-    let work_after_first = fx
-        .harness
-        .status(token)
-        .native
-        .and_then(|native| native.work);
-    println!(
-        "FP_27 staged: reader={QUARANTINED} statements_before_staging={before_staging} after_staging={staged} | observing read of {}: {observed:?} | quarantined_observed={retired} pool={pool_at_retirement:?} reader_statements_at_retirement={at_retirement:?}",
-        COLD[0].0
+    let answer = seen(
+        reading(root(&ready).join(COLD[0].0))
+            .recv_timeout(WAIT)
+            .ok(),
+        &expected(0),
     );
-    println!(
-        "FP_27 reader_failures={} store_demands_before={demands_before:?} after={:?} native_work_after_observing_read={work_after_first:?}",
-        brief(&failures),
-        fx.store.work()
-    );
-    expect!(
-        checks,
-        retired,
-        "quarantined is {} after the observing read, not 1: {pool_at_retirement:?}",
-        pool_at_retirement.quarantined
-    );
-    expect!(
-        checks,
-        failures.len() == 1
-            && failures[0].0 == QUARANTINED
-            && matches!(failures[0].1.as_ref(), PortError::Storage(error) if error.is_unknown_outcome()),
-        "the retired reader and its original cause: {}",
-        brief(&failures)
-    );
-    expect!(
-        checks,
-        matches!(
-            observed,
-            Seen::Exact
-                | Seen::Failed {
-                    errno: Some(Errno::EIO),
-                    ..
-                }
-        ),
-        "the observing read neither succeeded nor failed with EIO: {observed:?}"
-    );
-
-    // Later requests: every other cold file, then the first one again.
-    let mut later = Vec::new();
-    for index in (1..COLD.len()).chain([0]) {
-        let answer = seen(
-            reading(mount.join(COLD[index].0)).recv_timeout(WAIT).ok(),
-            &expected(index),
-        );
-        let stop = answer == Seen::Unanswered;
-        later.push((COLD[index].0, answer));
-        if stop {
-            break;
+    assert!(matches!(
+        answer,
+        Seen::Failed {
+            errno: Some(Errno::EIO),
+            ..
         }
-    }
-    let exact = later
-        .iter()
-        .filter(|(_, answer)| *answer == Seen::Exact)
-        .count();
-    println!(
-        "FP_27 later reads: exact={exact} of {} attempted ({} planned): {later:?}",
-        later.len(),
-        COLD.len()
-    );
-    expect!(
-        checks,
-        later.len() == COLD.len() && exact == later.len(),
-        "{} of {} later reads were not exact: {:?}",
-        COLD.len() - exact,
-        COLD.len(),
-        later
-            .iter()
-            .filter(|(_, answer)| *answer != Seen::Exact)
-            .collect::<Vec<_>>()
-    );
-    let fenced = later.iter().any(|(_, answer)| {
-        matches!(
-            answer,
-            Seen::Failed {
-                errno: Some(Errno::ENOTCONN),
-                ..
-            }
-        )
-    });
-
-    // The same cold files through the sibling's mount: its own kernel cache
-    // holds none of them and no read of the first mount cached one.
-    let demands_before_sibling = fx.store.work();
-    let grants_before_sibling = fx.store.read_work().grants;
-    // The later reads on the first mount were real cold demands, served by
-    // the readers that are left.
-    expect!(
-        checks,
-        demands_before_sibling.object_batches > demands_before.object_batches,
-        "the later reads on the first mount made no Store object demand: {demands_before:?} then {demands_before_sibling:?}"
-    );
-    let mut beside = Vec::new();
+    ));
+    let first = fx.store.reader_failures()[0].1.clone();
+    let stopped_at = fx.readers.lock().unwrap()[QUARANTINED]
+        .diagnostics()
+        .unwrap()
+        .statements;
     for (index, (name, _, _)) in COLD.iter().enumerate() {
-        let answer = seen(
-            reading(root(&sibling).join(name)).recv_timeout(WAIT).ok(),
-            &expected(index),
+        assert_eq!(
+            seen(
+                reading(root(&sibling).join(name)).recv_timeout(WAIT).ok(),
+                &expected(index)
+            ),
+            Seen::Exact
         );
-        let stop = answer == Seen::Unanswered;
-        beside.push((*name, answer));
-        if stop {
-            break;
-        }
     }
-    let demands_after_sibling = fx.store.work();
-    let grants_after_sibling = fx.store.read_work().grants;
-    let exact_beside = beside
-        .iter()
-        .filter(|(_, answer)| *answer == Seen::Exact)
-        .count();
-    println!(
-        "FP_27 sibling mount: exact={exact_beside} of {} attempted ({} planned), Store object demands {} -> {}, length demands {} -> {}, reader grants {grants_before_sibling} -> {grants_after_sibling}, quarantined reader statements {:?}: {:?}",
-        beside.len(),
-        COLD.len(),
-        demands_before_sibling.object_batches,
-        demands_after_sibling.object_batches,
-        demands_before_sibling.length_batches,
-        demands_after_sibling.length_batches,
-        demand(&fx),
-        beside
-            .iter()
-            .filter(|(_, answer)| *answer != Seen::Exact)
-            .collect::<Vec<_>>()
+    assert_eq!(
+        fx.readers.lock().unwrap()[QUARANTINED]
+            .diagnostics()
+            .unwrap()
+            .statements,
+        stopped_at
     );
-    expect!(
-        checks,
-        beside.len() == COLD.len() && exact_beside == beside.len(),
-        "{} of {} reads through the sibling mount were not exact",
-        COLD.len() - exact_beside,
-        COLD.len()
-    );
-    // Since the first mount keeps serving after its one failed demand, its
-    // own later reads have already put these objects, and the lengths of
-    // these files, in the cache both Workspaces of the Branch share. Neither
-    // object nor length demands need rise for the sibling (`U-attempt8` is
-    // the receipt of the earlier object-only expectation failing, and
-    // `341-read-s2-linux-daemon` that of the length one). What its reads
-    // still take is a Store reader for every window of base bytes, from the
-    // readers that are left.
-    expect!(
-        checks,
-        grants_after_sibling - grants_before_sibling >= COLD.len() as u64,
-        "the sibling's {} reads took {} Store readers: {demands_before_sibling:?} then {demands_after_sibling:?}",
-        COLD.len(),
-        grants_after_sibling - grants_before_sibling
-    );
-    let at_end = demand(&fx);
-    let pool = fx.store.read_work();
-    let status = fx.harness.status(token);
-    let work = status.native.as_ref().and_then(|native| native.work);
-    println!(
-        "FP_27 end: reader_statements={at_end:?} (at retirement {at_retirement:?}) pool={pool:?} later_read_saw_ENOTCONN={fenced} activity={:?} phase={:?} native_work={work:?}",
-        status.activity,
-        status.native.as_ref().map(|native| native.phase)
-    );
-    expect!(
-        checks,
-        matches!((&at_retirement, &at_end), (Ok(then), Ok(now)) if then == now),
-        "the quarantined reader's statement count moved or could not be read: {at_retirement:?} then {at_end:?}"
-    );
-    expect!(
-        checks,
-        pool.quarantined == 1 && pool.readers == 2,
-        "the read pool at the end: {pool:?}"
-    );
-
-    let clean_sibling = fx.unmount(sibling.token, "FP-27 sibling");
+    assert!(Arc::ptr_eq(&fx.store.reader_failures()[0].1, &first));
+    assert!(fx.unmount(sibling.token, "healthy sibling"));
     drop(sibling_mounted);
-    let clean = fx.unmount(token, "FP-27");
-    drop(mounted);
-    fx.finish(clean && clean_sibling);
-    checks.done("FP-27 at mount scope");
+    assert!(matches!(
+        fx.harness.try_unmount(ready.token),
+        Err(layerfs_daemon::control::Failure::Retained(_))
+    ));
+    assert!(mounted::mount_entry(&ready.directory).is_none());
+    drop((first, mounted));
+    fx.finish(false);
 }
 
 // ---------------------------------------------------------------- P-1
@@ -695,7 +528,7 @@ fn a_create_with_no_serial_range_under_a_held_store_writer_is_eagain_with_no_eff
                 .local
                 .map(|local| (local.revision, local.dirty_inodes)),
             status.local_failure.map(|refusal| brief(&refusal)),
-            status.native.and_then(|native| native.work),
+            status.kernel.and_then(|kernel| kernel.work),
         )
     };
 
@@ -737,7 +570,7 @@ fn a_create_with_no_serial_range_under_a_held_store_writer_is_eagain_with_no_eff
     held.release();
     let stderr = String::from_utf8_lossy(&refused.stderr).into_owned();
     println!(
-        "P_1 held writer: touch status={:?} stderr={:?} | reservation attempts={attempts_held:?} store_serial_reservations={counted_held} | writer session statements {} -> {} write_transactions {} -> {} | name lookup={:?} names={names_held:?} | engine (revision, dirty_inodes) {revision_before:?} -> {revision_held:?} refusal={refusal_held:?} | quiet before={quiet_before} held={quiet_held} native_work={work_held:?}",
+        "P_1 held writer: touch status={:?} stderr={:?} | reservation attempts={attempts_held:?} store_serial_reservations={counted_held} | writer session statements {} -> {} write_transactions {} -> {} | name lookup={:?} names={names_held:?} | engine (revision, dirty_inodes) {revision_before:?} -> {revision_held:?} refusal={refusal_held:?} | quiet before={quiet_before} held={quiet_held} kernel_work={work_held:?}",
         refused.status.code(),
         stderr.trim(),
         sql_before.statements,

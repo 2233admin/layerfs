@@ -68,7 +68,7 @@ pub fn shell(identity: u32, script: &str) -> Output {
 /// Bounded wait for asynchronous RELEASE and post-reply releases to finish.
 pub fn quiet(h: &Harness, token: WorkspaceToken) {
     until("connection quiescent", || {
-        let work = h.status(token).native.unwrap().work.unwrap();
+        let work = h.status(token).kernel.unwrap().work.unwrap();
         work.active == 0
     });
 }
@@ -76,7 +76,7 @@ pub fn quiet(h: &Harness, token: WorkspaceToken) {
 pub fn unmounted(h: &Harness, ready: &ReadyMount) -> String {
     quiet(h, ready.token);
     let done: Success = h.unmount(ready);
-    format!("{:?}", done.native)
+    format!("{:?}", done.kernel)
 }
 /// One named counter out of a Debug-rendered receipt.
 pub fn counter(receipt: &str, name: &str) -> u64 {
@@ -255,7 +255,7 @@ pub fn bytes_of(length: usize, seed: u8) -> Vec<u8> {
 /// Requests the daemon has received on this mount so far, of every kind.
 pub fn frames(h: &Harness, token: WorkspaceToken) -> u64 {
     quiet(h, token);
-    let work = h.status(token).native.unwrap().work.unwrap();
+    let work = h.status(token).kernel.unwrap().work.unwrap();
     work.served + work.inline + work.refused
 }
 /// Per-opcode frame counts out of a Debug-rendered drain receipt.

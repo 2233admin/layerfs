@@ -1,4 +1,4 @@
-//! Q1 full native roots read through the installed daemon's direct Store ports.
+//! Q1 full kernel roots read through the installed daemon's direct Store ports.
 #[path = "support/complete_bytes.rs"]
 mod bytes;
 #[path = "support/complete_fixture.rs"]
@@ -6,9 +6,9 @@ mod fixture;
 #[path = "support/complete_oracle.rs"]
 mod oracle;
 #[allow(dead_code)]
-#[path = "support/native_install.rs"]
+#[path = "support/host_install.rs"]
 mod support;
-use layerfs_daemon::{store::BindRequest, Owner, OwnerConfig, Response};
+use layerfs_daemon::{store::BindRequest, Owner, OwnerConfig};
 use layerfs_history::WorkspaceId;
 fn proof(shape: fixture::Shape) {
     let f = fixture::Fixture::new(shape);
@@ -54,25 +54,18 @@ fn prove_fixture(f: fixture::Fixture) {
     println!("Q1_COUNTS shape={shape:?} post_install_mount_batches={post_install} warm_mount_batches=0 work={:?} cache={cache:?}",store.work());
     drop(operation);
     for bound in [&first, &second] {
-        assert!(matches!(
-            owner
-                .client()
-                .close(bound.workspace.route())
-                .unwrap()
-                .result(),
-            Ok(Response::Done)
-        ));
+        bound.workspace.close().unwrap();
     }
     drop((first, second));
     owner.stop().unwrap();
     f.cleanup();
 }
 #[test]
-fn all_supported_native_paths_survive_install_with_full_oracles() {
+fn all_supported_kernel_paths_survive_install_with_full_oracles() {
     proof(fixture::Shape::Mixed)
 }
 #[test]
-fn huge_native_namespace_is_complete_after_install() {
+fn huge_kernel_namespace_is_complete_after_install() {
     let prepared = std::env::var_os("LAYERFS_Q1_PREPARED")
         .expect("explicit closed preparation for clone setup");
     prove_fixture(fixture::Fixture::prepared_wide(std::path::Path::new(
@@ -80,17 +73,17 @@ fn huge_native_namespace_is_complete_after_install() {
     )));
 }
 #[test]
-fn dense_500000000_native_bytes_survive_install() {
+fn dense_500000000_kernel_bytes_survive_install() {
     proof(fixture::Shape::Dense)
 }
 #[test]
-fn sparse_native_bytes_and_holes_survive_install() {
+fn sparse_chunk_bytes_and_holes_survive_install() {
     proof(fixture::Shape::Sparse)
 }
 
 #[test]
 #[ignore = "explicit sealed preparation, not an independent proof or measurement"]
-fn prepare_huge_native_namespace() {
+fn prepare_huge_kernel_namespace() {
     let f = fixture::Fixture::new(fixture::Shape::Wide);
     println!("Q1_PREPARED {}", f.directory.display());
     drop(f);

@@ -285,8 +285,8 @@ fn answers(
 fn parent_cursor_and_name_point_answer_exactly_the_sealed_rows_of_each_parent() {
     let temp = Temp::new();
     let db = temp.db();
-    let route = db.open_workspace([201; 32], [202; 32]).unwrap();
-    let source = db.acquire_base_source(route, 1).unwrap();
+    db.open_workspace([202; 32]).unwrap();
+    let source = db.acquire_base_source(1).unwrap();
     let mut world = World::new(&db, source);
     // Parent 10 spans more than two full windows. Parents 9 and 11 hold names
     // sorting below, between and above them, so a parent-crossing cursor shows.
@@ -323,7 +323,7 @@ fn parent_cursor_and_name_point_answer_exactly_the_sealed_rows_of_each_parent() 
         );
     }
     db.release_base_source(source).unwrap();
-    let capture = db.capture(route).unwrap();
+    let capture = db.capture().unwrap();
     let reader = db.acquire_captured_reader(capture, 1).unwrap();
 
     let expected = check_names(&db, reader, &world);
@@ -443,7 +443,7 @@ fn parent_cursor_and_name_point_answer_exactly_the_sealed_rows_of_each_parent() 
         db.diagnostics().statements[StatementKind::Capture as usize].attempts,
         captured.attempts
     );
-    assert_eq!(db.retained_captured_reader(route, 1).unwrap(), Some(reader));
+    assert_eq!(db.retained_captured_reader(1).unwrap(), Some(reader));
     db.release_captured_reader(reader).unwrap();
 }
 
@@ -451,8 +451,8 @@ fn parent_cursor_and_name_point_answer_exactly_the_sealed_rows_of_each_parent() 
 fn later_active_rows_install_and_close_leave_reader_answers_until_exact_release() {
     let temp = Temp::new();
     let db = temp.db();
-    let route = db.open_workspace([203; 32], [204; 32]).unwrap();
-    let source = db.acquire_base_source(route, 1).unwrap();
+    db.open_workspace([204; 32]).unwrap();
+    let source = db.acquire_base_source(1).unwrap();
     let mut world = World::new(&db, source);
     for n in 0..150_u64 {
         world.name(10, format!("n{n:04}").as_bytes(), Some(1000 + n));
@@ -470,7 +470,7 @@ fn later_active_rows_install_and_close_leave_reader_answers_until_exact_release(
         Some(bytes_cell(b"abc")),
     );
     db.release_base_source(source).unwrap();
-    let capture = db.capture(route).unwrap();
+    let capture = db.capture().unwrap();
     let reader = db.acquire_captured_reader(capture, 1).unwrap();
     let sealed_names = check_names(&db, reader, &world);
 
@@ -494,7 +494,7 @@ fn later_active_rows_install_and_close_leave_reader_answers_until_exact_release(
 
     // Later active generation: added, changed and removed names interleaved
     // with the sealed ones, a changed and a removed symlink, and a fresh one.
-    let source = db.acquire_base_source(route, 2).unwrap();
+    let source = db.acquire_base_source(2).unwrap();
     let mut active = World::new(&db, source);
     for n in 0..150_u64 {
         active.name(10, format!("n{n:04}a").as_bytes(), Some(3000 + n));
@@ -530,22 +530,16 @@ fn later_active_rows_install_and_close_leave_reader_answers_until_exact_release(
     active.symlink(61, b"active/too");
     // The active view did change under the very keys the reader is asked for.
     assert_eq!(
-        db.directory_entry(route, 10, b"n0001")
-            .unwrap()
-            .unwrap()
-            .serial,
+        db.directory_entry(10, b"n0001").unwrap().unwrap().serial,
         None
     );
     assert_eq!(
-        db.directory_entry(route, 10, b"n0010")
-            .unwrap()
-            .unwrap()
-            .serial,
+        db.directory_entry(10, b"n0010").unwrap().unwrap().serial,
         Some(4010)
     );
-    assert!(db.directory_entry(route, 12, b"fresh").unwrap().is_some());
-    assert_eq!(db.inode(route, 52).unwrap().unwrap().nlink, 0);
-    assert_eq!(db.inode(route, 50).unwrap().unwrap().mtime_seconds, 77);
+    assert!(db.directory_entry(12, b"fresh").unwrap().is_some());
+    assert_eq!(db.inode(52).unwrap().unwrap().nlink, 0);
+    assert_eq!(db.inode(50).unwrap().unwrap().mtime_seconds, 77);
     assert_eq!(answers(&db, reader, &parents, &points, &links), sealed);
     assert_eq!(check_names(&db, reader, &world), sealed_names);
 
@@ -556,7 +550,7 @@ fn later_active_rows_install_and_close_leave_reader_answers_until_exact_release(
     assert_eq!(answers(&db, reader, &parents, &points, &links), sealed);
     drain(&db);
     assert_eq!(answers(&db, reader, &parents, &points, &links), sealed);
-    let source = db.acquire_base_source(route, 3).unwrap();
+    let source = db.acquire_base_source(3).unwrap();
     let mut after_install = World::new(&db, source);
     after_install.name(10, b"n0002", Some(5000));
     after_install.name(11, b"link", None);
@@ -564,7 +558,7 @@ fn later_active_rows_install_and_close_leave_reader_answers_until_exact_release(
     db.release_base_source(source).unwrap();
     drain(&db);
     assert_eq!(answers(&db, reader, &parents, &points, &links), sealed);
-    db.close(route).unwrap();
+    db.close().unwrap();
     drain(&db);
     assert_eq!(answers(&db, reader, &parents, &points, &links), sealed);
     assert_eq!(check_names(&db, reader, &world), sealed_names);
@@ -588,8 +582,8 @@ fn later_active_rows_install_and_close_leave_reader_answers_until_exact_release(
 fn inode_page_and_point_agree_and_a_folded_failed_capture_is_read_by_the_next_reader() {
     let temp = Temp::new();
     let db = temp.db();
-    let route = db.open_workspace([206; 32], [207; 32]).unwrap();
-    let source = db.acquire_base_source(route, 1).unwrap();
+    db.open_workspace([207; 32]).unwrap();
+    let source = db.acquire_base_source(1).unwrap();
     let mut world = World::new(&db, source);
     let first = world.born();
     // More than two inode windows: base files with a metadata row, fresh
@@ -622,7 +616,7 @@ fn inode_page_and_point_agree_and_a_folded_failed_capture_is_read_by_the_next_re
     }
     let open = db.open_file(source, 7, &world.inodes[&40], true).unwrap();
     db.release_base_source(source).unwrap();
-    let failed = db.capture(route).unwrap();
+    let failed = db.capture().unwrap();
     let reader = db.acquire_captured_reader(failed, 1).unwrap();
     let sealed = page_and_point(&db, reader, 1..=400);
     assert!(sealed.len() > 2 * PAGE_ROWS);
@@ -637,7 +631,7 @@ fn inode_page_and_point_agree_and_a_folded_failed_capture_is_read_by_the_next_re
 
     // The next generation changes, removes and adds inodes and names, some
     // over sealed rows and some beside them; most sealed rows stay untouched.
-    let source = db.acquire_base_source(route, 2).unwrap();
+    let source = db.acquire_base_source(2).unwrap();
     world.source = source;
     let second = world.born();
     assert!(second > first);
@@ -682,10 +676,7 @@ fn inode_page_and_point_agree_and_a_folded_failed_capture_is_read_by_the_next_re
     // reader keeps the exact sealed rows of all three jobs and both pages.
     db.resolve_failed_capture(failed).unwrap();
     drain(&db);
-    assert_eq!(
-        db.state(route).unwrap().consolidating,
-        Some(failed.generation)
-    );
+    assert_eq!(db.state().unwrap().consolidating, Some(failed.generation));
     assert_eq!(page_and_point(&db, reader, 1..=400), sealed);
     assert_eq!(check_names(&db, reader, &sealed_world), sealed_names);
     for serial in 300..=303_u64 {
@@ -700,10 +691,10 @@ fn inode_page_and_point_agree_and_a_folded_failed_capture_is_read_by_the_next_re
     ));
     db.release_captured_reader(reader).unwrap();
     drain(&db);
-    assert!(db.capture_ready(route).unwrap());
+    assert!(db.capture_ready().unwrap());
 
     // The next capture seals the folded generation: one row per touched key.
-    let capture = db.capture(route).unwrap();
+    let capture = db.capture().unwrap();
     let reader = db.acquire_captured_reader(capture, 2).unwrap();
     let folded = page_and_point(&db, reader, 1..=400);
     // The engine maintains the fall-through cutoff; every other field is the
@@ -748,8 +739,8 @@ fn inode_page_and_point_agree_and_a_folded_failed_capture_is_read_by_the_next_re
 fn symlink_target_is_the_exact_local_bytes_of_a_live_symlink_or_missing() {
     let temp = Temp::new();
     let db = temp.db();
-    let route = db.open_workspace([208; 32], [209; 32]).unwrap();
-    let source = db.acquire_base_source(route, 1).unwrap();
+    db.open_workspace([209; 32]).unwrap();
+    let source = db.acquire_base_source(1).unwrap();
     let mut world = World::new(&db, source);
     let born = world.born();
     let targets: [(u64, Vec<u8>); 5] = [
@@ -783,7 +774,7 @@ fn symlink_target_is_the_exact_local_bytes_of_a_live_symlink_or_missing() {
         Some(bytes_cell(&[b'z'; CELL_BYTES])),
     );
     db.release_base_source(source).unwrap();
-    let capture = db.capture(route).unwrap();
+    let capture = db.capture().unwrap();
     let reader = db.acquire_captured_reader(capture, 1).unwrap();
     for (serial, target) in &targets {
         assert_eq!(db.reader_symlink(reader, *serial).unwrap(), *target);
@@ -827,7 +818,7 @@ fn symlink_target_is_the_exact_local_bytes_of_a_live_symlink_or_missing() {
         Err(OverlayError::Invalid(_))
     ));
     // A refusal disposes nothing: the reader and its answers remain.
-    assert_eq!(db.retained_captured_reader(route, 1).unwrap(), Some(reader));
+    assert_eq!(db.retained_captured_reader(1).unwrap(), Some(reader));
     assert_eq!(db.reader_symlink(reader, 52).unwrap(), targets[2].1);
     db.release_captured_reader(reader).unwrap();
 }
@@ -836,18 +827,18 @@ fn symlink_target_is_the_exact_local_bytes_of_a_live_symlink_or_missing() {
 fn reader_name_and_symlink_jobs_seek_their_sealed_domain_while_the_active_generation_grows() {
     let temp = Temp::new();
     let db = temp.db();
-    let route = db.open_workspace([210; 32], [211; 32]).unwrap();
-    let source = db.acquire_base_source(route, 1).unwrap();
+    db.open_workspace([211; 32]).unwrap();
+    let source = db.acquire_base_source(1).unwrap();
     let mut world = World::new(&db, source);
     for n in 0..130_u64 {
         world.name(10, format!("n{n:04}").as_bytes(), Some(1000 + n));
     }
     world.symlink(50, b"sealed/target");
     db.release_base_source(source).unwrap();
-    let capture = db.capture(route).unwrap();
+    let capture = db.capture().unwrap();
     let reader = db.acquire_captured_reader(capture, 1).unwrap();
     let sealed = world.parent(10);
-    let source = db.acquire_base_source(route, 2).unwrap();
+    let source = db.acquire_base_source(2).unwrap();
     let mut active = World::new(&db, source);
     let born = active.born();
     // The probed keys themselves get later active rows before any counting.
@@ -955,7 +946,7 @@ fn reader_name_and_symlink_jobs_seek_their_sealed_domain_while_the_active_genera
             current.0, current.1, current.2, current.3, current.4, current.5, current.6
         ));
     }
-    assert_eq!(db.state(route).unwrap().dirty_inodes, 4097);
+    assert_eq!(db.state().unwrap().dirty_inodes, 4097);
     db.release_base_source(source).unwrap();
     db.release_captured_reader(reader).unwrap();
 }

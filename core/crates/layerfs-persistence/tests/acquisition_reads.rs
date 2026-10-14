@@ -8,7 +8,7 @@ use layerfs_persistence::{
 };
 use layerfs_storage::{
     port::acquisition::{
-        Acquisition, AcquisitionError, Begin, Binding, EntryKey, Limits, NativeIdentity, NewEntry,
+        Acquisition, AcquisitionError, Begin, Binding, EntryKey, HostIdentity, Limits, NewEntry,
         Owner,
     },
     StoragePolicy,
@@ -153,11 +153,11 @@ fn entry(parent: Option<u64>, name: Vec<u8>, position: u64, kind: InodeKind) -> 
         kind,
         metadata_root: ObjectId::for_bytes(&position.to_be_bytes()),
         target_root: (kind == InodeKind::Symlink).then(|| ObjectId::for_bytes(b"target")),
-        native_path: match kind {
+        host_path: match kind {
             InodeKind::Symlink => None,
             _ => Some(format!("/source/{position}").into_bytes()),
         },
-        native: (kind == InodeKind::RegularFile).then_some(NativeIdentity {
+        host: (kind == InodeKind::RegularFile).then_some(HostIdentity {
             device: u64::MAX,
             inode: position,
             evidence: [47; 44],
@@ -254,8 +254,8 @@ fn typed_reads_and_narrow_bindings_preserve_operation_isolation_order_and_bounds
         );
         let job = port.job(first, *position).unwrap().unwrap();
         assert_eq!(job.position, *position);
-        assert_eq!(job.native.device, u64::MAX);
-        assert_eq!(job.native.evidence, [47; 44]);
+        assert_eq!(job.host.device, u64::MAX);
+        assert_eq!(job.host.evidence, [47; 44]);
     }
     assert!(port
         .file_roots(first, Some(600), Limits::MAXIMUM)

@@ -43,7 +43,7 @@ mod mounted;
 mod rig;
 use held_writer::HeldWriter;
 use layerfs_bridge::control::{Reply, WorkspaceToken};
-use layerfs_daemon::store::{PortError, ReadLimits, Store, StoreReader};
+use layerfs_daemon::store::{PortError, Store, StoreReader};
 use layerfs_history::{HistoryCatalog, HistoryError};
 use layerfs_persistence::{Handles, SqlitePersistenceProfile};
 use layerfs_storage::{port::PackPersistence, ReservationBlocks, Storage};
@@ -208,7 +208,7 @@ fn within(limit: Duration, mut condition: impl FnMut() -> bool) -> bool {
 fn quiet_within(harness: &Harness, token: WorkspaceToken, limit: Duration) -> bool {
     let mut last = None;
     within(limit, || {
-        let work = harness.status(token).native.unwrap().work.unwrap();
+        let work = harness.status(token).kernel.unwrap().work.unwrap();
         let now = (work.active, work.completed);
         let settled = work.active == 0 && last == Some(now);
         last = Some(now);
@@ -224,14 +224,14 @@ fn engine(fx: &Fx, token: WorkspaceToken, limit: Duration) -> (bool, Option<i64>
         quiet,
         status.local.map(|local| local.revision),
         status
-            .native
-            .and_then(|native| native.work)
+            .kernel
+            .and_then(|kernel| kernel.work)
             .is_some_and(|work| work.retained == 0 && work.terminal == 0),
     )
 }
 
 /// One installed Disposable Store, opened once and kept open, with the given
-/// explicit serial low-water, and one real native serving assembly over it.
+/// explicit serial low-water, and one real kernel serving assembly over it.
 /// The test keeps the writable session and the counted catalog.
 struct Fx {
     fixture: installed::Fixture,
@@ -251,7 +251,7 @@ impl Fx {
             }
             fs::set_permissions(source.join("dir"), fs::Permissions::from_mode(0o755)).unwrap();
             stamp_tree(source);
-            Model::native(source).1
+            Model::host(source).1
         });
         assert!(
             matches!(
@@ -268,23 +268,31 @@ impl Fx {
             handles: writer.clone(),
             attempts: Mutex::new(Vec::new()),
         });
-        let sessions = (0..2)
-            .map(|_| {
-                let read = Handles::open_read_only(config(), installed::BINDING, installed::CURSOR)
-                    .unwrap();
-                StoreReader::new(Storage::new(read.storage).unwrap(), Arc::new(read.history))
-            })
-            .collect();
+        let reader_config = fixture.config.clone();
+        let factory: layerfs_daemon::store::ReaderFactory = Arc::new(move |_| {
+            let read = Handles::open_read_only(
+                reader_config.clone(),
+                installed::BINDING,
+                installed::CURSOR,
+            )
+            .unwrap();
+            Ok(StoreReader::new(
+                Storage::new(read.storage).unwrap(),
+                Arc::new(read.history),
+            ))
+        });
+        let control = factory(0).unwrap();
         let pack: Arc<dyn PackPersistence> = writer.storage.clone();
         let catalog: Arc<dyn HistoryCatalog> = history.clone();
         let store = Arc::new(
             Store::new(
                 pack,
                 catalog,
-                sessions,
+                control,
+                factory,
                 2 * 1024 * 1024,
                 ReservationBlocks::default(),
-                ReadLimits::default(),
+                16,
             )
             .unwrap(),
         );
@@ -548,7 +556,7 @@ fn an_early_attempt_refused_under_a_held_store_writer_leaves_the_create_successf
     let operation = fx.harness.service.operation(token).unwrap();
     let taken = operation.ports().take_serial(operation.workspace());
     let kept = operation.ports().failure().map(|kept| kept.is_some());
-    let admitted = operation.ports().read_ticket().is_ok();
+    let admitted = operation.ports().file_lengths(&[]).is_ok();
     let attempts_port = fx.attempts();
     // Control: the early attempt made on the operation's own custody
     // instead. Its refusal is retained and refuses the next demand.
@@ -558,7 +566,7 @@ fn an_early_attempt_refused_under_a_held_store_writer_leaves_the_create_successf
             .workspace()
             .next_serial_with_low_water(shared.ports(), shared.ports(), LOW);
     let shared_kept = shared.ports().failure().map(|kept| kept.is_some());
-    let shared_admitted = shared.ports().read_ticket().is_ok();
+    let shared_admitted = shared.ports().file_lengths(&[]).is_ok();
     drop((operation, shared));
     let attempts_held = fx.attempts();
     let counted_held = fx.store.work().serial_reservations;

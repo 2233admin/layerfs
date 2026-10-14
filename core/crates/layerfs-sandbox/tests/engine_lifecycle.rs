@@ -118,7 +118,7 @@ fn streamed_private_archive_exact_marker_endpoint_and_borrowed_cleanup() {
     assert!(std::str::from_utf8(&calls[7])
         .unwrap()
         .contains("force=false&v=false"));
-    // Native mounting is granted by exactly one capability and one device;
+    // Kernel mounting is granted by exactly one capability and one device;
     // the container itself stays unprivileged with no-new-privileges.
     let create = String::from_utf8_lossy(&calls[1]);
     for field in [
@@ -140,7 +140,7 @@ fn streamed_private_archive_exact_marker_endpoint_and_borrowed_cleanup() {
     fs::remove_file(path).unwrap();
 }
 #[test]
-fn widened_or_missing_native_access_is_never_reported_as_the_endpoint() {
+fn widened_or_missing_kernel_access_is_never_reported_as_the_endpoint() {
     let exact = String::from_utf8(endpoint()).unwrap();
     for (from, to) in [
         (r#""Privileged":false"#, r#""Privileged":true"#),

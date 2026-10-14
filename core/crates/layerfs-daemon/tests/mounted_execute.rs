@@ -14,7 +14,7 @@ mod mounted;
 #[path = "support/mutating.rs"]
 mod mutating;
 #[allow(dead_code)]
-#[path = "support/native_install.rs"]
+#[path = "support/host_install.rs"]
 mod support;
 use mounted::COMMAND;
 use mutating::{direct, errno, harness, shell, unmounted};

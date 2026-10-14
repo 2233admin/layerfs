@@ -47,15 +47,15 @@ mod mounted;
 #[path = "support/mounted_commit.rs"]
 mod rig;
 use layerfs_bridge::control::{
-    Activity, NativeWork, ReadyMount, Reply, Request, WorkspaceStatus, WorkspaceToken,
+    Activity, MountWork, ReadyMount, Reply, Request, WorkspaceStatus, WorkspaceToken,
 };
-use layerfs_daemon::{control::Service, OwnerClient, OwnerWork, Response, ServiceClass};
+use layerfs_daemon::{control::Service, OwnerClient, OwnerWork, ServiceClass};
 use layerfs_history::{CommitRecord, CommitStagedOutcome};
-use layerfs_overlay::Route;
+use layerfs_workspace::Route;
 use model::{assert_same, Flat, DIRECTORY, FILE};
 use mounted::{mount_entry, COMMAND};
 use nix::libc;
-use rig::{bash_in, native, passed, pattern, receipt, root, Rig};
+use rig::{bash_in, host, passed, pattern, receipt, root, Rig};
 use std::{
     fmt::Debug,
     fs::{self, OpenOptions},
@@ -406,13 +406,10 @@ fn status(service: &Service, token: WorkspaceToken) -> Option<WorkspaceStatus> {
 /// like any other job, on this thread; `None` when it is refused.
 fn engine(owner: &OwnerClient, route: Route) -> Option<(bool, [u8; 32])> {
     let done = owner.state(route).ok()?;
-    match done.result() {
-        Ok(Response::State(state)) => Some((state.captured.is_some(), state.base_root)),
-        _ => None,
-    }
+    Some((done.captured.is_some(), done.base_root))
 }
-fn work(rig: &Rig, token: WorkspaceToken) -> NativeWork {
-    rig.harness.status(token).native.unwrap().work.unwrap()
+fn work(rig: &Rig, token: WorkspaceToken) -> MountWork {
+    rig.harness.status(token).kernel.unwrap().work.unwrap()
 }
 fn completed(before: &OwnerWork, after: &OwnerWork) -> [u64; 6] {
     std::array::from_fn(|class| after.jobs[class] - before.jobs[class])
@@ -484,8 +481,8 @@ fn stalled(rig: &Rig, token: WorkspaceToken, what: &str) -> ! {
     thread::spawn(move || {
         let _ = sender.send(status(&service, token).map(|status| {
             format!(
-                "activity={:?} epoch={} local={:?} native={:?}",
-                status.activity, status.epoch, status.local, status.native
+                "activity={:?} epoch={} local={:?} kernel={:?}",
+                status.activity, status.epoch, status.local, status.kernel
             )
         }));
     });
@@ -646,7 +643,7 @@ fn r6_1_twenty_four_processes_read_and_write_through_three_commits() {
         let (current, peaks) = (current.clone(), peaks.clone());
         Sampler::start(Duration::from_millis(2), move || {
             let commit = current.load(Ordering::SeqCst);
-            let Some(now) = status(&service, token).and_then(|status| status.native?.work) else {
+            let Some(now) = status(&service, token).and_then(|status| status.kernel?.work) else {
                 return;
             };
             // Counted for a Commit only if it was still the current one
@@ -727,7 +724,7 @@ fn r6_1_twenty_four_processes_read_and_write_through_three_commits() {
     drop(processes);
     // What the processes left: every file each reports, whole, and the base
     // files they read, unchanged.
-    let live = native(mount);
+    let live = host(mount);
     for (process, (_, writes)) in reports.iter().enumerate() {
         let tag = tag(process);
         let made: Vec<_> = live
@@ -830,7 +827,7 @@ fn r6_2_a_commit_against_twenty_writers_holds_an_exact_prefix_of_each() {
         ),
         "prepare",
     );
-    let prepared = native(mount);
+    let prepared = host(mount);
     let made = || -> Vec<usize> {
         (0..WRITERS)
             .map(|writer| names(&mount.join("seq").join(tag(writer))))
@@ -997,7 +994,7 @@ fn r6_2_a_commit_against_twenty_writers_holds_an_exact_prefix_of_each() {
 
     // The committed root: an exact prefix of each writer's sequence.
     let first = rig.published(record.root);
-    let live = native(mount);
+    let live = host(mount);
     let mut captured = Vec::new();
     let mut pendings = [0usize; 3];
     for writer in 0..WRITERS {
@@ -1058,7 +1055,7 @@ fn r6_2_a_commit_against_twenty_writers_holds_an_exact_prefix_of_each() {
     assert_eq!(second.parent, Some(record.id));
     let all = rig.published(second.root);
     assert_same(&live, &all, "the next Commit's root");
-    assert_same(&live, &native(mount), "the same mount after both installs");
+    assert_same(&live, &host(mount), "the same mount after both installs");
     unmount(&rig, &ready);
 
     // Fresh-mount oracle.
@@ -1068,7 +1065,7 @@ fn r6_2_a_commit_against_twenty_writers_holds_an_exact_prefix_of_each() {
         rig.harness.status(fresh.token).binding.effective_root,
         second.root
     );
-    assert_same(&live, &native(root(&fresh)), "the fresh mount");
+    assert_same(&live, &host(root(&fresh)), "the fresh mount");
     println!(
         "{what}: commit_refused=false prefix_exact=true mount_shows_all={n} next_commit_holds_rest={} fresh_mount_equal=true paths={}",
         n - k,
@@ -1120,8 +1117,8 @@ fn r6_3_a_commit_on_one_workspace_while_its_sibling_writes() {
         ),
         "directories in B",
     );
-    let tree_a = native(mount_a);
-    let prepared_b = native(mount_b);
+    let tree_a = host(mount_a);
+    let prepared_b = host(mount_b);
     let made = || names(&mount_b.join("seq/b"));
 
     let armed = Arc::new(AtomicBool::new(false));
@@ -1142,7 +1139,7 @@ fn r6_3_a_commit_on_one_workspace_while_its_sibling_writes() {
             let Some(first) = committing(&service) else {
                 return;
             };
-            let Some(now) = status(&service, token_b).and_then(|status| status.native?.work) else {
+            let Some(now) = status(&service, token_b).and_then(|status| status.kernel?.work) else {
                 return;
             };
             let Some(second) = committing(&service) else {
@@ -1220,11 +1217,11 @@ fn r6_3_a_commit_on_one_workspace_while_its_sibling_writes() {
             .count(),
         BULK
     );
-    assert_same(&tree_a, &native(mount_a), "A's mount after its install");
+    assert_same(&tree_a, &host(mount_a), "A's mount after its install");
     // B is still bound at the earlier head and has none of A's names.
     let stale = rig.harness.status(b.token).binding;
     assert_eq!(stale.branch.head_commit, original);
-    let tree_b = native(mount_b);
+    let tree_b = host(mount_b);
     assert!(
         tree_b.keys().all(|path| !path.starts_with(b"bulk")),
         "{what}: one of A's names is in B's view"
@@ -1239,8 +1236,8 @@ fn r6_3_a_commit_on_one_workspace_while_its_sibling_writes() {
     assert_ne!(record_b.root, record_a.root);
     let root_b = rig.published(record_b.root);
     assert_same(&tree_b, &root_b, "B's published root");
-    assert_same(&tree_b, &native(mount_b), "B's mount after its install");
-    assert_same(&tree_a, &native(mount_a), "A's mount after B's Commit");
+    assert_same(&tree_b, &host(mount_b), "B's mount after its install");
+    assert_same(&tree_a, &host(mount_a), "A's mount after B's Commit");
     println!(
         "{what}: a_root_paths={} b_names_in_a_root=0 a_names_in_b_view=0 b_made={n} b_root_paths={} b_later_commit_exact=true",
         root_a.len(),
@@ -1290,7 +1287,7 @@ fn r6_6_finite_arrivals_on_two_workspaces_both_finish() {
         ),
         "directories in B",
     );
-    let prepared_b = native(mount_b);
+    let prepared_b = host(mount_b);
     let owner = rig.harness.owner.client();
     let argument = |mount: &Path, numbers: &[usize]| -> Vec<String> {
         std::iter::once(mount.to_str().unwrap().to_owned())
@@ -1323,7 +1320,7 @@ fn r6_6_finite_arrivals_on_two_workspaces_both_finish() {
         let service = rig.harness.service.clone();
         let (token_a, token_b, together) = (a.token, b.token, together.clone());
         Sampler::start(Duration::from_millis(1), move || {
-            let count = |token| Some(status(&service, token)?.native?.work?.completed);
+            let count = |token| Some(status(&service, token)?.kernel?.work?.completed);
             let (Some(a), Some(b)) = (count(token_a), count(token_b)) else {
                 return;
             };
@@ -1444,7 +1441,7 @@ fn r6_6_finite_arrivals_on_two_workspaces_both_finish() {
             expected.len()
         );
     }
-    let tree_b = native(mount_b);
+    let tree_b = host(mount_b);
     let mut expected_b = prepared_b.clone();
     for process in 0..SMALL_PROCESSES {
         for group in (0..OPERATIONS_EACH).step_by(5) {
@@ -1590,7 +1587,7 @@ fn readers_on_two_workspaces_read_exact_bytes_while_one_is_written() {
         let service = rig.harness.service.clone();
         let (token_a, token_b, together) = (a.token, b.token, together.clone());
         Sampler::start(Duration::from_millis(1), move || {
-            let count = |token| Some(status(&service, token)?.native?.work?.completed);
+            let count = |token| Some(status(&service, token)?.kernel?.work?.completed);
             let (Some(a), Some(b)) = (count(token_a), count(token_b)) else {
                 return;
             };

@@ -13,7 +13,7 @@ use layerfs_daemon::{
     install::receive_install,
     install_types::{InstalledStore, StoreSettings},
     store::CommitError,
-    Owner, OwnerConfig, Response,
+    Owner, OwnerConfig,
 };
 use layerfs_history::BranchSnapshot;
 use layerfs_storage::Save;
@@ -27,29 +27,29 @@ use std::{
     },
 };
 pub struct Fixture {
-    pub native: support::Fixture,
+    pub host: support::Fixture,
     pub installed: InstalledStore,
     pub owner: Owner,
     pub service: Arc<Service>,
 }
 impl Fixture {
     pub fn new(label: &str) -> Self {
-        let native = support::Fixture::new(label, None);
-        let target = PathBuf::from(&native.project.manifest.locator);
+        let host = support::Fixture::new(label, None);
+        let target = PathBuf::from(&host.project.manifest.locator);
         let (mut client, worker) = support::pair(move |connection| {
             receive_install(connection, &target, StoreSettings::default())
         });
-        layerfs_sdk::internal::install(&native.project, &mut client).unwrap();
+        layerfs_sdk::internal::install(&host.project, &mut client).unwrap();
         let installed = worker.join().unwrap();
         let owner = Owner::start(
-            &native.directory.join("overlay.sqlite"),
+            &host.directory.join("overlay.sqlite"),
             layerfs_overlay::ProfileConfig::default(),
             OwnerConfig::default(),
         )
         .unwrap();
         let service = Arc::new(Service::new(installed.opened.store.clone(), &owner));
         Self {
-            native,
+            host,
             installed,
             owner,
             service,
@@ -59,7 +59,7 @@ impl Fixture {
         drop(self.service);
         self.owner.stop().unwrap();
         drop(self.installed);
-        self.native.cleanup();
+        self.host.cleanup();
     }
     pub fn statements(&self) -> u64 {
         let work = self.installed.opened.diagnostics().unwrap();
@@ -122,11 +122,7 @@ pub fn write(service: &Service, token: WorkspaceToken, tag: u8) {
         .overlay()
         .acquire_base_source(route, NEXT.fetch_add(1, Ordering::Relaxed))
         .unwrap();
-    let source = match done.result() {
-        Ok(Response::BaseSource(source)) => *source,
-        other => panic!("{other:?}"),
-    };
-    drop(done);
+    let source = done;
     let view = operation.workspace().view_for_source(source).unwrap();
     let stat = view
         .lookup(
@@ -156,17 +152,10 @@ pub fn write(service: &Service, token: WorkspaceToken, tag: u8) {
         Outcome::Applied { publication, .. } => publication,
         other => panic!("{other:?}"),
     };
-    assert!(operation
-        .overlay()
-        .reply_attempted(publication)
-        .unwrap()
-        .result()
-        .is_ok());
+    operation.overlay().reply_attempted(publication).unwrap();
     drop(view);
-    assert!(operation
+    operation
         .overlay()
         .release_base_source(route, source)
-        .unwrap()
-        .result()
-        .is_ok());
+        .unwrap();
 }

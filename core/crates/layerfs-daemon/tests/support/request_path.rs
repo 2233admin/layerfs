@@ -14,21 +14,20 @@ use super::{
 use layerfs_content::filesystem::PathName;
 use layerfs_daemon::{
     bootstrap::open_store,
-    store::{BindRequest, BoundWorkspace, Store},
-    JobReceipt, NativeReply, Owner, OwnerClient, OwnerConfig, Response, ServiceClass,
+    store::{BindRequest, BoundWorkspace, Store}, KernelReply, Owner, OwnerClient, OwnerConfig, Response, ServiceClass,
 };
 use layerfs_fuse::{
     operations::{
         create::{create, mkdir},
         remove::unlink,
-        DirectoryStep, DirectoryStream, MutationInput, MutationRequest, NativeData, NativeMutation,
-        NativeRead, ReadDataInput,
+        DirectoryStep, DirectoryStream, MutationInput, MutationRequest, KernelData, KernelMutation,
+        KernelRead, ReadDataInput,
     },
     ports::{Fence, MountServices, RequestServices},
 };
 use layerfs_history::WorkspaceId;
-use layerfs_overlay::{DatabaseWork, NativeMount, ProfileConfig, StatementKind, StatementWork};
-use layerfs_workspace::{NativeReadOperation, Operation, Refusal, Time};
+use layerfs_overlay::{DatabaseWork, KernelMount, ProfileConfig, StatementKind, StatementWork};
+use layerfs_workspace::{KernelReadOperation, Operation, Refusal, Time};
 use std::{
     cell::{Cell, RefCell},
     collections::BTreeMap,
@@ -100,14 +99,14 @@ fn until(what: &str, mut condition: impl FnMut() -> bool) {
         std::thread::yield_now();
     }
 }
-fn finish(
+fn finish<T>(
     client: &OwnerClient,
-    route: layerfs_overlay::Route,
+    route: layerfs_workspace::Route,
     command: impl FnOnce(
         &layerfs_daemon::OwnerClient,
-        layerfs_overlay::Route,
-    ) -> Result<layerfs_daemon::JobReceipt, layerfs_daemon::OwnerError>,
-) -> JobReceipt {
+        layerfs_workspace::Route,
+    ) -> Result<T, layerfs_daemon::OwnerError>,
+) -> T {
     command(client, route).unwrap_or_else(|error| panic!("{error:?}"))
 }
 pub fn name(text: &str) -> PathName {
@@ -188,7 +187,7 @@ struct Snapshot {
     foreground: DatabaseWork,
 }
 
-/// One bound Workspace over a Store and a native mount group. No kernel
+/// One bound Workspace over a Store and a kernel mount group. No kernel
 /// connection and no dispatcher lane.
 pub struct Rig {
     fixture: support::Fixture,
@@ -197,7 +196,7 @@ pub struct Rig {
     client: OwnerClient,
     bound: BoundWorkspace,
     pub root: u64,
-    pub mount: NativeMount,
+    pub mount: KernelMount,
     next: Cell<u64>,
     trace: Arc<Trace>,
     table: RefCell<BTreeMap<Kind, Row>>,
@@ -252,13 +251,10 @@ impl Rig {
             &client,
             bound.route(),
             |job_client: &layerfs_daemon::OwnerClient, job_route| {
-                job_client.native_mount(job_route, root)
+                job_client.kernel_mount(job_route, root)
             },
         );
-        let mount = match done.result() {
-            Ok(Response::Native(NativeReply::Mount(mount))) => *mount,
-            other => panic!("mount: {other:?}"),
-        };
+        let mount = done;
         drop(done);
         let rig = Self {
             fixture,
@@ -366,11 +362,11 @@ impl Rig {
         kind: Kind,
         protected: u64,
         handle: Option<u64>,
-        operation: NativeReadOperation,
+        operation: KernelReadOperation,
     ) -> Result<(u64, Option<u64>, Option<u64>), Refusal> {
         self.observed(kind, || {
             let (services, request) = self.services();
-            let found = wait(NativeRead::prepare(
+            let found = wait(KernelRead::prepare(
                 services, self.mount, request, protected, handle, operation,
             ))
             .unwrap_or_else(|failure| panic!("{kind:?}: {failure:?}"));
@@ -387,7 +383,7 @@ impl Rig {
     }
     /// LOOKUP of a name that does not exist.
     pub fn lookup_miss(&self, parent: u64, child: &str) {
-        let operation = NativeReadOperation::Lookup {
+        let operation = KernelReadOperation::Lookup {
             parent,
             name: name(child),
         };
@@ -396,7 +392,7 @@ impl Rig {
     }
     /// LOOKUP of an existing name: the kernel takes one more reference.
     pub fn lookup(&self, parent: u64, child: &str) -> u64 {
-        let operation = NativeReadOperation::Lookup {
+        let operation = KernelReadOperation::Lookup {
             parent,
             name: name(child),
         };
@@ -405,19 +401,19 @@ impl Rig {
             .0
     }
     pub fn getattr(&self, serial: u64) {
-        let operation = NativeReadOperation::Getattr { serial };
+        let operation = KernelReadOperation::Getattr { serial };
         self.read_visit(Kind::Getattr, serial, None, operation)
             .unwrap_or_else(|refusal| panic!("getattr {serial}: {refusal:?}"));
     }
     pub fn open(&self, serial: u64, writable: bool) -> u64 {
-        let operation = NativeReadOperation::Open { serial, writable };
+        let operation = KernelReadOperation::Open { serial, writable };
         self.read_visit(Kind::Open, serial, None, operation)
             .unwrap_or_else(|refusal| panic!("open {serial}: {refusal:?}"))
             .1
             .expect("an opened file has a descriptor")
     }
     pub fn opendir(&self, serial: u64) -> u64 {
-        let operation = NativeReadOperation::Opendir { serial };
+        let operation = KernelReadOperation::Opendir { serial };
         self.read_visit(Kind::Opendir, serial, None, operation)
             .unwrap_or_else(|refusal| panic!("opendir {serial}: {refusal:?}"))
             .2
@@ -434,7 +430,7 @@ impl Rig {
     ) -> (Option<u64>, Option<u64>) {
         self.observed(kind, || {
             let (services, request) = self.services();
-            let done = wait(NativeMutation::perform(
+            let done = wait(KernelMutation::perform(
                 services,
                 MutationRequest {
                     mount: self.mount,
@@ -508,7 +504,7 @@ impl Rig {
         self.observed(Kind::Read, || {
             let (services, request) = self.services();
             let input = ReadDataInput::File { offset, length };
-            wait(NativeData::read(
+            wait(KernelData::read(
                 services,
                 self.mount,
                 request,
@@ -622,11 +618,11 @@ impl Rig {
             &client,
             bound.route(),
             |job_client: &layerfs_daemon::OwnerClient, job_route| {
-                job_client.native_revoke(job_route, mount)
+                job_client.kernel_revoke(job_route, mount)
             },
         );
         assert!(
-            matches!(done.result(), Ok(Response::Native(NativeReply::Done))),
+            matches!(done.result(), Ok(Response::Kernel(KernelReply::Done))),
             "revoke: {:?}",
             done.result()
         );
@@ -784,13 +780,13 @@ const NAMES: &[(&str, &str)] = &[
     ("SELECT ?3<=w.installed OR EXISTS", "LAYER_SUPERSEDED"),
     ("AND f.serial=?4),i.serial", "FENCE_FILE_ROW"),
     ("THEN 1 END),i.serial", "FENCE_HANDLE_ROW"),
-    ("(SELECT 1 FROM native_lookup l", "FENCE_LOOKUP"),
+    ("(SELECT 1 FROM kernel_lookup l", "FENCE_LOOKUP"),
     ("(SELECT f.writable FROM file_handle f", "FENCE_FILE"),
     (
         "(CASE WHEN EXISTS(SELECT 1 FROM file_handle f",
         "FENCE_HANDLE",
     ),
-    ("(SELECT d.floor FROM native_directory d", "FENCE_DIRECTORY"),
+    ("(SELECT d.floor FROM kernel_directory d", "FENCE_DIRECTORY"),
     (
         "SELECT active,captured,revision,base_root",
         "workspace-state",
@@ -881,35 +877,35 @@ const NAMES: &[(&str, &str)] = &[
     ("INSERT INTO file_handle", "file-handle-insert"),
     ("DELETE FROM file_handle", "file-handle-drop"),
     (
-        "SELECT owner,root,revoked FROM native_mount",
-        "native-mount-state",
+        "SELECT owner,root,revoked FROM kernel_mount",
+        "kernel-mount-state",
     ),
     (
-        "SELECT owner,nlookup,implicit FROM native_lookup",
-        "native-lookup-row",
+        "SELECT owner,nlookup,implicit FROM kernel_lookup",
+        "kernel-lookup-row",
     ),
-    ("INSERT INTO native_lookup", "native-lookup-insert"),
-    ("UPDATE native_lookup SET nlookup", "native-lookup-count"),
-    ("DELETE FROM native_lookup", "native-lookup-drop"),
-    ("SELECT parent FROM native_parent", "native-parent"),
-    ("INSERT INTO native_parent", "native-parent-put"),
-    ("INSERT INTO native_directory", "native-directory-insert"),
+    ("INSERT INTO kernel_lookup", "kernel-lookup-insert"),
+    ("UPDATE kernel_lookup SET nlookup", "kernel-lookup-count"),
+    ("DELETE FROM kernel_lookup", "kernel-lookup-drop"),
+    ("SELECT parent FROM kernel_parent", "kernel-parent"),
+    ("INSERT INTO kernel_parent", "kernel-parent-put"),
+    ("INSERT INTO kernel_directory", "kernel-directory-insert"),
     (
-        "UPDATE native_directory SET closed=1",
-        "native-directory-close",
+        "UPDATE kernel_directory SET closed=1",
+        "kernel-directory-close",
     ),
-    ("DELETE FROM native_directory", "native-directory-drop"),
-    ("INSERT INTO native_cookie", "native-cookie-insert"),
+    ("DELETE FROM kernel_directory", "kernel-directory-drop"),
+    ("INSERT INTO kernel_cookie", "kernel-cookie-insert"),
     (
-        "FROM native_cookie INDEXED BY native_cookie_after",
+        "FROM kernel_cookie INDEXED BY kernel_cookie_after",
         "COOKIE_PAGE_AFTER",
     ),
     (
-        "SELECT first_cookie,names FROM native_cookie",
+        "SELECT first_cookie,names FROM kernel_cookie",
         "COOKIE_PAGE",
     ),
     (
-        "SELECT first_cookie,length(names) FROM native_cookie",
+        "SELECT first_cookie,length(names) FROM kernel_cookie",
         "COOKIE_PAGES",
     ),
     (

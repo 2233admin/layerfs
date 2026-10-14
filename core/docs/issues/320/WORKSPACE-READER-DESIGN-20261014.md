@@ -68,3 +68,21 @@ bounds. Existing absolute limits and functional requirements remain binding.
 Reuse unaffected receipts; new measurements need an affected final implementation
 or newly scoped qualification, matched workload/count/cache/source/build/limits,
 and independent time/RSS comparisons. No unchanged resampling is authorized.
+
+
+## Final reader identity correction (2026-10-15)
+
+Phase 2 lifecycle review found that resolving a reader by Workspace ID on every
+demand could let a retained old client borrow a later bind's reader when that
+public ID was reused after Close. StorePorts now binds the already opened
+ReadSession once; fresh operation custody keeps that same session identity.
+Close clears its healthy connection even while clients retain the session.
+An old client cannot select the replacement reader. Each demand still checks
+whole-Store stopped admission before its short session lock; no connection opens
+or transaction survives that demand. One shared immutable cache remains Store-owned.
+
+New public lifecycle proofs cover fresh mounts with retained clients/diagnostics,
+failed bind, reader unknown/poison custody and a bind racing Store shutdown.
+Mounted request draining and sustained concurrent calls/Commits remain in the
+surviving Linux proofs. No new performance sample was run; specifically gated
+benchmark-original preparation and eligible performance qualification remain pending.

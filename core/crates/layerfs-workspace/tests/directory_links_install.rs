@@ -33,7 +33,7 @@ fn reported(b: &Bench, d: &Drive<'_>, paths: &[&str]) -> Vec<(u64, u64)> {
         .collect()
 }
 fn local(b: &Bench, serial: u64) -> Option<layerfs_overlay::Inode> {
-    b.overlay.inode(b.route(), serial).unwrap()
+    b.overlay.inode(serial).unwrap()
 }
 
 #[test]

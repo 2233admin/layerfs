@@ -17,7 +17,7 @@ mod produce;
 #[global_allocator]
 static ALLOCATOR: allocation::Observed = allocation::Observed;
 #[allow(dead_code)]
-#[path = "../tests/support/native_install.rs"]
+#[path = "../tests/support/host_install.rs"]
 mod support;
 use layerfs_daemon::{store::BindRequest, Owner, OwnerConfig};
 use layerfs_history::{BranchId, WorkspaceId};

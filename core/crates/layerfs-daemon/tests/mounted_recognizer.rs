@@ -1,7 +1,7 @@
 //! Real kernel mount: a process launched outside the daemon shifts the tail
 //! of two committed files with `dd`, `tail` and `truncate`. Its plain WRITE
 //! requests carry only bytes; the daemon recognizes committed chunks in them
-//! and stores reference pieces. The tree is compared with a native replay of
+//! and stores reference pieces. The tree is compared with a kernel replay of
 //! the same script, read again through daemon READs, committed, read from a
 //! fresh bind and through a fresh mount. Counts are printed; nothing is timed.
 #![cfg(target_os = "linux")]
@@ -20,7 +20,7 @@ mod rig;
 use model::assert_same;
 use mounted::COMMAND;
 use nix::libc;
-use rig::{bash_in, clock_masked, native, passed, root, stamp_tree, Rig};
+use rig::{bash_in, clock_masked, host, passed, root, stamp_tree, Rig};
 use std::{
     fs::{self, OpenOptions},
     io::Read,
@@ -101,11 +101,11 @@ fn an_outside_process_shifts_two_tails_and_its_writes_become_pieces() {
     let rig = Rig::built("mounted-recognizer", tree);
     let first = rig.mount(1);
     let mount = root(&first);
-    assert_same(&rig.base, &native(mount), "the mounted base");
+    assert_same(&rig.base, &host(mount), "the mounted base");
     assert_eq!(rig.harness.engine(first.token).reference_rows, 0);
 
     // The same script, by the same unregistered identity: on the mount, and
-    // on a native directory the same builder filled.
+    // on a kernel directory the same builder filled.
     passed(&bash_in(COMMAND, mount, SHIFT), "script on the mount");
     let work = rig.store.recognizer_work();
     let counts = rig.harness.engine(first.token);
@@ -115,11 +115,11 @@ fn an_outside_process_shifts_two_tails_and_its_writes_become_pieces() {
     );
     let replay = rig.replay();
     passed(&bash_in(COMMAND, &replay, SHIFT), "script on the copy");
-    let expected = native(mount);
+    let expected = host(mount);
     assert_same(
-        &clock_masked(&native(&replay), rig.started),
+        &clock_masked(&host(&replay), rig.started),
         &clock_masked(&expected, rig.started),
-        "the mount against the native replay",
+        "the mount against the kernel replay",
     );
     for name in ["big", "second", "third"] {
         let bytes = fs::read(replay.join(name)).unwrap();
@@ -143,7 +143,7 @@ fn an_outside_process_shifts_two_tails_and_its_writes_become_pieces() {
 
     let record = rig.committed(first.token, "mounted recognizer");
     assert_same(&expected, &rig.published(record.root), "the published root");
-    assert_same(&expected, &native(mount), "the same mount after install");
+    assert_same(&expected, &host(mount), "the same mount after install");
     rig.unmount(&first);
 
     let fresh = rig.mount(2);
@@ -151,7 +151,7 @@ fn an_outside_process_shifts_two_tails_and_its_writes_become_pieces() {
         rig.harness.status(fresh.token).binding.effective_root,
         record.root
     );
-    assert_same(&expected, &native(root(&fresh)), "the fresh mount");
+    assert_same(&expected, &host(root(&fresh)), "the fresh mount");
     rig.unmount(&fresh);
     rig.finish();
 }

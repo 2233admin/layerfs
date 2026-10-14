@@ -15,9 +15,9 @@ mod mounted;
 #[path = "support/mutating.rs"]
 mod mutating;
 #[allow(dead_code)]
-#[path = "support/native_install.rs"]
+#[path = "support/host_install.rs"]
 mod support;
-use layerfs_bridge::control::{Activity, ControlCode, NativePhase};
+use layerfs_bridge::control::{Activity, ControlCode, MountPhase};
 use layerfs_daemon::control::Failure;
 use layerfs_fuse::request::Opcode;
 use mounted::{until, COMMAND};
@@ -148,13 +148,13 @@ fn shared_mapping_stores_are_published_and_never_change_size() {
     agree(&path, &content, "map, close, store, exit");
 
     quiet(&h, ready.token);
-    let work = h.status(ready.token).native.unwrap().work.unwrap();
+    let work = h.status(ready.token).kernel.unwrap().work.unwrap();
     assert_eq!((work.retained, work.terminal), (0, 0));
     let receipt = unmounted(&h, &ready);
     let counts = opcodes(&receipt);
     let stores = mutating::counter(&receipt, "store_units");
     println!(
-        "NATIVE_MAPPED store_units={stores} write={} setattr={} release={} work={work:?}",
+        "KERNEL_MAPPED store_units={stores} write={} setattr={} release={} work={work:?}",
         counts[Opcode::Write as usize],
         counts[Opcode::Setattr as usize],
         counts[Opcode::Release as usize]
@@ -233,7 +233,7 @@ fn removed_references_keep_exact_state_without_open_custody() {
         same
     });
     let kept = forced(&reference).unwrap();
-    println!("NATIVE_REMOVED file={kept:?} engine={settled:?}");
+    println!("KERNEL_REMOVED file={kept:?} engine={settled:?}");
     assert_eq!(
         (kept.inode, kept.links, kept.size, kept.mode),
         (before.ino(), 0, 15, before.mode()),
@@ -336,17 +336,17 @@ fn removed_references_keep_exact_state_without_open_custody() {
             let mut bytes = Vec::new();
             again.read_to_end(&mut bytes).unwrap();
             assert_eq!(bytes, all);
-            println!("NATIVE_REOPEN_REMOVED opened");
+            println!("KERNEL_REOPEN_REMOVED opened");
         }
-        Err(error) => println!("NATIVE_REOPEN_REMOVED errno={:?}", errno(&error)),
+        Err(error) => println!("KERNEL_REOPEN_REMOVED errno={:?}", errno(&error)),
     }
     // fchmod names no handle to the daemon; the removed inode has no name.
     let mode = Errno::result(unsafe { libc::fchmod(old.as_raw_fd(), 0o600) });
-    println!("NATIVE_FCHMOD_REMOVED result={mode:?}");
+    println!("KERNEL_FCHMOD_REMOVED result={mode:?}");
 
     drop((reference, directory, replaced, alias, writer, fresh, old));
     quiet(&h, ready.token);
-    let work = h.status(ready.token).native.unwrap().work.unwrap();
+    let work = h.status(ready.token).kernel.unwrap().work.unwrap();
     assert_eq!((work.retained, work.terminal), (0, 0));
     unmounted(&h, &ready);
     h.stop();
@@ -427,8 +427,8 @@ fn a_lookup_racing_create_unlink_and_rename_never_binds_a_stale_inode() {
         empty.load(Ordering::Relaxed),
     );
     quiet(&h, ready.token);
-    let work = h.status(ready.token).native.unwrap().work.unwrap();
-    println!("NATIVE_LOOKUP_RACE rounds={ROUNDS} found_missed_empty={observed:?} work={work:?}");
+    let work = h.status(ready.token).kernel.unwrap().work.unwrap();
+    println!("KERNEL_LOOKUP_RACE rounds={ROUNDS} found_missed_empty={observed:?} work={work:?}");
     assert!(observed.0 > 0, "the readers observed nothing");
     assert_eq!((work.retained, work.terminal), (0, 0));
     unmounted(&h, &ready);
@@ -511,13 +511,13 @@ fn size_never_shrinks_under_concurrent_append_and_refusals_stay_refused() {
     assert_eq!(fs::metadata(&path).unwrap().len(), (all.len() + 400) as u64);
 
     quiet(&h, ready.token);
-    let work = h.status(ready.token).native.unwrap().work.unwrap();
+    let work = h.status(ready.token).kernel.unwrap().work.unwrap();
     assert_eq!((work.retained, work.terminal), (0, 0));
     let receipt = unmounted(&h, &ready);
     let counts = opcodes(&receipt);
     let count = |opcode: Opcode| counts[opcode as usize];
     println!(
-        "NATIVE_REFUSED write={} getxattr={} setxattr={} listxattr={} removexattr={} fallocate={} fsync={} samples={}",
+        "KERNEL_REFUSED write={} getxattr={} setxattr={} listxattr={} removexattr={} fallocate={} fsync={} samples={}",
         count(Opcode::Write),
         count(Opcode::Getxattr),
         count(Opcode::Setxattr),
@@ -603,16 +603,16 @@ fn mutations_racing_the_unmount_probe_keep_normal_results_and_persist() {
         for probe in 0..PROBES {
             let before = appended.load(Ordering::SeqCst);
             match h.try_unmount(token) {
-                Err(Failure::Native(failure)) => assert_eq!(
+                Err(Failure::Kernel(failure)) => assert_eq!(
                     (failure.code, failure.phase),
                     (ControlCode::Busy, "unmount:kernel"),
                     "probe {probe}"
                 ),
                 other => panic!("probe {probe}: {other:?}"),
             }
-            let native = h.status(token).native.unwrap();
-            assert_eq!(native.phase, NativePhase::Ready);
-            assert!(!native.detached);
+            let kernel = h.status(token).kernel.unwrap();
+            assert_eq!(kernel.phase, MountPhase::Ready);
+            assert!(!kernel.detached);
             // Requests keep being served after the refused probe.
             until("mutation continued after the probe", || {
                 appended.load(Ordering::SeqCst) > before || !failures.lock().unwrap().is_empty()
@@ -636,9 +636,9 @@ fn mutations_racing_the_unmount_probe_keep_normal_results_and_persist() {
         Activity::Idle,
         "control admission reopened"
     );
-    let work = status.native.unwrap().work.unwrap();
+    let work = status.kernel.unwrap().work.unwrap();
     assert_eq!((work.retained, work.terminal), (0, 0));
-    println!("NATIVE_PROBE_RACE probes={PROBES} records={records} work={work:?}");
+    println!("KERNEL_PROBE_RACE probes={PROBES} records={records} work={work:?}");
     assert!(resident.try_wait().unwrap().is_none());
     resident.kill().unwrap();
     resident.wait().unwrap();

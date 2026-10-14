@@ -126,7 +126,7 @@ fn backing_inside_source_is_refused_before_an_operation_begins() {
 
 #[test]
 fn a_failed_cleanup_reports_its_cause_and_the_rows_still_held() {
-    // 3011 entries and 3000 native identities: two removal jobs.
+    // 3011 entries and 3000 host identities: two removal jobs.
     let fixture = Fixture::new(3000);
     let history = MemoryHistory::default();
     let acquisition = MemoryAcquisition::default();
@@ -241,7 +241,7 @@ fn an_unknown_outcome_leaves_the_operation_untouched() {
     for unit in ["discard", "release", "advance", "work"] {
         assert_eq!(acquisition.calls(unit), 0, "{unit}");
     }
-    // 51 entries and 40 native identities, exactly as the failed unit left them.
+    // 51 entries and 40 host identities, exactly as the failed unit left them.
     assert_eq!(acquisition.operations(), [(1, Phase::Scanning, 91)]);
     assert!(history.layer_stack(stack()).unwrap().is_none());
 }

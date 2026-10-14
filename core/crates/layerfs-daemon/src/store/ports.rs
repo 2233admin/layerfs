@@ -1,5 +1,5 @@
 //! One operation's original failures over batched public Store demands.
-use super::{ReadAdmissionError, Store};
+use super::{read_handle::ReadSession, ReadAdmissionError, Store};
 use layerfs_content::{AuthenticatedObjects, ContentError, ContentResult, ObjectId};
 use layerfs_history::{HistoryError, ReserveRequest, WorkspaceId};
 use layerfs_storage::StorageError;
@@ -42,7 +42,7 @@ impl std::error::Error for PortError {
 pub struct StorePorts {
     store: Arc<Store>,
     scope: ObjectId,
-    workspace: Option<WorkspaceId>,
+    reader: Result<Arc<ReadSession>, ReadAdmissionError>,
     failure: Mutex<Option<Arc<PortError>>>,
     attempting: AtomicBool,
 }
@@ -61,7 +61,7 @@ impl Store {
         Arc::new(StorePorts {
             store: self.clone(),
             scope,
-            workspace,
+            reader: self.reader(workspace),
             failure: Mutex::new(None),
             attempting: AtomicBool::new(false),
         })
@@ -75,10 +75,16 @@ impl StorePorts {
     pub fn recognizer(&self) -> &super::Recognizer {
         &self.store.recognizer
     }
-    /// Fresh demand custody over the same scope and Workspace. A failure in
+    /// Fresh demand custody over the same scope and opened reader. A failure in
     /// it stays there and never becomes this operation's.
     pub fn fresh(&self) -> Arc<Self> {
-        self.store.ports_in(self.scope, self.workspace)
+        Arc::new(Self {
+            store: self.store.clone(),
+            scope: self.scope,
+            reader: self.reader.clone(),
+            failure: Mutex::new(None),
+            attempting: AtomicBool::new(false),
+        })
     }
     pub fn client(self: &Arc<Self>) -> Arc<CanonicalClient> {
         Arc::new(CanonicalClient::with_cache(
@@ -125,13 +131,19 @@ impl StorePorts {
         let low_water = self.store.serial_low_water.load(Ordering::Relaxed);
         workspace.next_serial_with_low_water(self, &EarlyRefill(self), low_water)
     }
+    fn reader(&self) -> Result<&Arc<ReadSession>, Arc<PortError>> {
+        self.store
+            .readers
+            .admit()
+            .map_err(|e| Arc::new(PortError::ReadAdmission(e)))?;
+        self.reader
+            .as_ref()
+            .map_err(|e| Arc::new(PortError::ReadAdmission(*e)))
+    }
     /// Bounded grouped metadata demand, with original cardinality/order.
     pub fn file_lengths(&self, ids: &[ObjectId]) -> Result<Vec<u64>, Arc<PortError>> {
         self.attempt(|| {
-            let reader = self
-                .store
-                .reader(self.workspace)
-                .map_err(|e| Arc::new(PortError::ReadAdmission(e)))?;
+            let reader = self.reader()?;
             reader.file_lengths(ids)
         })
     }
@@ -139,10 +151,7 @@ impl StorePorts {
 impl AuthenticatedObjects for StorePorts {
     fn read_canonical_batch(&self, ids: &[ObjectId]) -> ContentResult<Vec<Vec<u8>>> {
         self.attempt(|| {
-            let reader = self
-                .store
-                .reader(self.workspace)
-                .map_err(|e| Arc::new(PortError::ReadAdmission(e)))?;
+            let reader = self.reader()?;
             reader.objects(ids)
         })
         .map_err(|error| match error.as_ref() {
@@ -199,10 +208,7 @@ struct EarlyRefill<'a>(&'a StorePorts);
 impl InodeSerials for EarlyRefill<'_> {
     fn reserve(&self, count: u64) -> WorkspaceResult<(u64, u64)> {
         let ports = self.0;
-        ports
-            .store
-            .ports_in(ports.scope, ports.workspace)
-            .reserve(count)
+        ports.fresh().reserve(count)
     }
 }
 

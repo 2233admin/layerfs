@@ -98,8 +98,8 @@ fn sealed(db: &Overlay, capture: Capture, serial: u64, base: &[u8], size: usize)
 fn rows_of_several_cells_match_a_reference_model_through_every_writer_and_reader() {
     let temp = Temp::new();
     let db = temp.db();
-    let route = db.open_workspace([41; 32], [42; 32]).unwrap();
-    let mut source = db.acquire_base_source(route, 1).unwrap();
+    db.open_workspace([42; 32]).unwrap();
+    let mut source = db.acquire_base_source(1).unwrap();
     let base = noise(300_001, 1);
     let mut inherited = File::new(&db, source, 2, base.clone());
     let mut created = File::new(&db, source, 9, Vec::new());
@@ -163,12 +163,12 @@ fn rows_of_several_cells_match_a_reference_model_through_every_writer_and_reader
     for round in 0..4_u64 {
         // Seal the generation, then overwrite, shrink and regrow above it.
         db.release_base_source(source).unwrap();
-        let capture = db.capture(route).unwrap();
+        let capture = db.capture().unwrap();
         let views: Vec<(u64, Vec<u8>, Vec<u8>)> = [&inherited, &created]
             .iter()
             .map(|file| (file.serial, file.expect.clone(), file.base.clone()))
             .collect();
-        source = db.acquire_base_source(route, 100 + round).unwrap();
+        source = db.acquire_base_source(100 + round).unwrap();
         for file in [&mut inherited, &mut created] {
             file.source = source;
             file.write(40_960, &noise(CELL, seed + round));
@@ -190,8 +190,8 @@ fn rows_of_several_cells_match_a_reference_model_through_every_writer_and_reader
             // A failed capture folds the sealed rows into the active layer.
             db.resolve_failed_capture(capture).unwrap();
             maintain(&db);
-            assert!(db.capture_ready(route).unwrap());
-            source = db.acquire_base_source(route, 200 + round).unwrap();
+            assert!(db.capture_ready().unwrap());
+            source = db.acquire_base_source(200 + round).unwrap();
             for file in [&mut inherited, &mut created] {
                 file.source = source;
                 file.check();
@@ -200,7 +200,7 @@ fn rows_of_several_cells_match_a_reference_model_through_every_writer_and_reader
             // Known install: the next base is exactly the sealed view.
             db.install(capture, [round as u8 + 50; 32]).unwrap();
             maintain(&db);
-            source = db.acquire_base_source(route, 200 + round).unwrap();
+            source = db.acquire_base_source(200 + round).unwrap();
             for (file, (_, expect, _)) in [&mut inherited, &mut created].into_iter().zip(views) {
                 file.source = source;
                 file.base = expect;
@@ -217,7 +217,7 @@ fn rows_of_several_cells_match_a_reference_model_through_every_writer_and_reader
         }
         seed += 10;
     }
-    let state = db.resources(Some(route)).unwrap();
+    let state = db.resources().unwrap();
     println!(
         "R7_RUN_MODEL payload_rows={} payload_bytes={}",
         state.counts.payload_cells, state.counts.payload_bytes
@@ -253,8 +253,8 @@ fn an_orphan_keeps_every_byte_while_rows_of_several_cells_move_into_its_domain()
     for inherited in [false, true] {
         let temp = Temp::new();
         let db = temp.db();
-        let route = db.open_workspace([43; 32], [44; 32]).unwrap();
-        let source = db.acquire_base_source(route, 1).unwrap();
+        db.open_workspace([44; 32]).unwrap();
+        let source = db.acquire_base_source(1).unwrap();
         let base = if inherited {
             noise(300_001, 3)
         } else {
@@ -333,12 +333,12 @@ fn an_orphan_keeps_every_byte_while_rows_of_several_cells_move_into_its_domain()
         db.release_file_read(read).unwrap();
         db.close_file(open).unwrap();
         maintain(&db);
-        let left = db.resources(Some(route)).unwrap().counts;
+        let left = db.resources().unwrap().counts;
         assert_eq!(
             (
                 left.payload_cells,
                 left.payload_bytes,
-                db.resources(None).unwrap().open.orphan_files
+                db.resources().unwrap().open.orphan_files
             ),
             (0, 0, 0),
             "the last owner's release reclaims every row"
@@ -351,15 +351,15 @@ fn an_orphan_keeps_every_byte_while_rows_of_several_cells_move_into_its_domain()
 fn shape(build: impl FnOnce(&mut File<'_>)) -> (u64, u64, u64) {
     let temp = Temp::new();
     let db = temp.db();
-    let route = db.open_workspace([45; 32], [46; 32]).unwrap();
-    let source = db.acquire_base_source(route, 1).unwrap();
+    db.open_workspace([46; 32]).unwrap();
+    let source = db.acquire_base_source(1).unwrap();
     let (pages, free) = db.pages().unwrap();
     let mut file = File::new(&db, source, 7, Vec::new());
     build(&mut file);
     file.check();
     maintain(&db);
     file.check();
-    let counts = db.resources(Some(route)).unwrap().counts;
+    let counts = db.resources().unwrap().counts;
     let (after, after_free) = db.pages().unwrap();
     (
         counts.payload_cells,
@@ -445,8 +445,8 @@ fn a_maintenance_page_is_fourteen_cells_of_bytes_whatever_the_rows() {
     // owner: every step of the layer's retirement drops at most 14 cells.
     let temp = Temp::new();
     let db = temp.db();
-    let route = db.open_workspace([47; 32], [48; 32]).unwrap();
-    let source = db.acquire_base_source(route, 1).unwrap();
+    db.open_workspace([48; 32]).unwrap();
+    let source = db.acquire_base_source(1).unwrap();
     let mut file = File::new(&db, source, 7, Vec::new());
     file.write(0, &noise(WRITE_WINDOW, 12));
     for cell in 32..52 {
@@ -487,5 +487,5 @@ fn a_maintenance_page_is_fourteen_cells_of_bytes_whatever_the_rows() {
             (14, 14 * 4_096)
         ]
     );
-    assert_eq!(db.resources(Some(route)).unwrap().counts.payload_cells, 0);
+    assert_eq!(db.resources().unwrap().counts.payload_cells, 0);
 }

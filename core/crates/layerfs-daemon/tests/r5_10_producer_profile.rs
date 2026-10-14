@@ -42,12 +42,12 @@ mod mounted;
 #[path = "support/mounted_commit.rs"]
 mod rig;
 #[allow(dead_code)]
-#[path = "support/native_install.rs"]
+#[path = "support/host_install.rs"]
 mod support;
 use history_gate::Point;
 use layerfs_bridge::control::{Activity, Reply, Request, WorkspaceToken};
 use layerfs_content::ObjectId;
-use layerfs_daemon::store::{ReadLimits, Store, StoreReader};
+use layerfs_daemon::store::{Store, StoreReader};
 use layerfs_history::{CommitRecord, CommitStagedOutcome, HistoryCatalog, WorkspaceId};
 use layerfs_persistence::{Handles, SqlitePersistenceProfile};
 use layerfs_storage::{
@@ -60,7 +60,7 @@ use layerfs_storage::{
 };
 use model::{assert_same, Flat, Model};
 use mounted::{until, Harness, COMMAND};
-use rig::{base_tree, bash_in, native, passed, root};
+use rig::{base_tree, bash_in, host, passed, root};
 use std::{
     cell::Cell,
     collections::BTreeSet,
@@ -173,7 +173,7 @@ impl PackPersistence for Watch {
 fn quiet(harness: &Harness, token: WorkspaceToken) {
     let mut last = None;
     until("connection quiescent", || {
-        let work = harness.status(token).native.unwrap().work.unwrap();
+        let work = harness.status(token).kernel.unwrap().work.unwrap();
         let now = (work.active, work.completed);
         let settled = work.active == 0 && last == Some(now);
         last = Some(now);
@@ -255,7 +255,7 @@ fn r5_10_each_mounted_commit_has_one_producer_on_the_one_open_disposable_writer_
     let name = "R5-10";
     let fixture = installed::Fixture::built("r5-10-producer", |source| {
         base_tree(source);
-        Model::native(source).1
+        Model::host(source).1
     });
     // The profile is selected explicitly, and it is Disposable.
     assert_eq!(
@@ -298,21 +298,26 @@ fn r5_10_each_mounted_commit_has_one_producer_on_the_one_open_disposable_writer_
         history_gate::gated(handles.clone(), Point::BeforePublication, Duration::ZERO);
     hold.release();
     let history: Arc<dyn HistoryCatalog> = Arc::new(catalog);
-    let readers = (0..2)
-        .map(|_| {
-            let read =
-                Handles::open_read_only(config(), installed::BINDING, installed::CURSOR).unwrap();
-            StoreReader::new(Storage::new(read.storage).unwrap(), Arc::new(read.history))
-        })
-        .collect();
+    let reader_config = fixture.config.clone();
+    let factory: layerfs_daemon::store::ReaderFactory = Arc::new(move |_| {
+        let read =
+            Handles::open_read_only(reader_config.clone(), installed::BINDING, installed::CURSOR)
+                .unwrap();
+        Ok(StoreReader::new(
+            Storage::new(read.storage).unwrap(),
+            Arc::new(read.history),
+        ))
+    });
+    let control = factory(0).unwrap();
     let store = Arc::new(
         Store::new(
             watch.clone(),
             history,
-            readers,
+            control,
+            factory,
             2 * 1024 * 1024,
             ReservationBlocks::default(),
-            ReadLimits::default(),
+            16,
         )
         .unwrap(),
     );
@@ -347,7 +352,7 @@ fn r5_10_each_mounted_commit_has_one_producer_on_the_one_open_disposable_writer_
         }
         let token = ready.token;
         passed(&bash_in(COMMAND, &mount, script), "changes by bash");
-        let expected = native(&mount);
+        let expected = host(&mount);
         quiet(&harness, token);
         let bound = harness.status(token);
         assert_eq!(bound.activity, Activity::Idle);
@@ -447,7 +452,7 @@ fn r5_10_each_mounted_commit_has_one_producer_on_the_one_open_disposable_writer_
             &published(&harness, &fresh, record.root),
             "the published root",
         );
-        assert_same(&expected, &native(&mount), "the same mount after install");
+        assert_same(&expected, &host(&mount), "the same mount after install");
         // Reading the published root back used the read sessions only.
         assert!(watch.take().is_empty());
         println!(

@@ -2,7 +2,7 @@
 //! Rust allocation sizes include both kernel-reference and inode-custody maps
 //! and their touched-entry journals. SQLite's C heap, allocator rounding,
 //! process RSS and kernel caches are outside this measurement.
-use layerfs_overlay::{Inode, InodeKind, NativeDecision, Overlay, ProfileConfig};
+use layerfs_overlay::{Inode, InodeKind, KernelDecision, Overlay, ProfileConfig};
 use std::{
     alloc::{GlobalAlloc, Layout, System},
     sync::atomic::{AtomicIsize, Ordering},
@@ -33,11 +33,11 @@ fn remembered_regular_file_allocation_is_measured_without_a_population_cap() {
     let path = std::env::temp_dir().join(format!("layerfs-kernel-memory-{}", std::process::id()));
     std::fs::create_dir(&path).unwrap();
     let db = Overlay::create(&path.join("overlay.sqlite"), ProfileConfig::default()).unwrap();
-    let route = db.open_workspace([1; 32], [2; 32]).unwrap();
-    let mount = db.create_native_mount(route, 1).unwrap();
+    db.open_workspace([2; 32]).unwrap();
+    let mount = db.create_kernel_mount(1).unwrap();
     let lookup = |serial| {
-        let outcome = db.observe_native_visit(mount, 1, None, true, |_, _| {
-            Ok(NativeDecision::Finished {
+        let outcome = db.observe_kernel_visit(mount, 1, None, true, |_, _| {
+            Ok(KernelDecision::Finished {
                 inode: Some(Inode {
                     serial,
                     kind: InodeKind::File,
@@ -60,14 +60,14 @@ fn remembered_regular_file_allocation_is_measured_without_a_population_cap() {
     // Warm only fixed statement/journal setup for this allocation diagnostic.
     // This is not a cold phase or a timing/performance qualification.
     lookup(2);
-    db.forget_native(mount, 2, 1).unwrap();
-    let initial = db.resources(Some(route)).unwrap();
+    db.kernel_forget(mount, 2, 1).unwrap();
+    let initial = db.resources().unwrap();
     let bytes_before = LIVE.load(Ordering::Relaxed);
     for serial in 3..5003 {
         lookup(serial);
     }
     let bytes_after = LIVE.load(Ordering::Relaxed);
-    let held = db.resources(Some(route)).unwrap();
+    let held = db.resources().unwrap();
     assert_eq!(held.counts, initial.counts, "lookup changes no SQLite row");
     assert_eq!(held.open.kernel_entries, initial.open.kernel_entries + 5000);
     assert_eq!(held.open.file_custody, initial.open.file_custody + 5000);
@@ -82,9 +82,9 @@ fn remembered_regular_file_allocation_is_measured_without_a_population_cap() {
     );
     // A real FORGET ends exactly one of those references. No total-cap admission
     // substitutes for serving the last entry.
-    db.forget_native(mount, 5002, 1).unwrap();
-    db.revoke_native_mount(mount).unwrap();
-    db.close(route).unwrap();
+    db.kernel_forget(mount, 5002, 1).unwrap();
+    db.revoke_kernel_mount(mount).unwrap();
+    db.close().unwrap();
     db.close_database().unwrap();
     std::fs::remove_dir_all(path).unwrap();
 }

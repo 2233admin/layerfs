@@ -137,6 +137,17 @@ impl ReadSet {
             }
         }
     }
+    pub fn admit(&self) -> Result<(), ReadAdmissionError> {
+        let state = self
+            .state
+            .lock()
+            .map_err(|_| ReadAdmissionError::Poisoned)?;
+        if state.stopping {
+            Err(ReadAdmissionError::Stopped)
+        } else {
+            Ok(())
+        }
+    }
     pub fn session(
         &self,
         workspace: Option<WorkspaceId>,

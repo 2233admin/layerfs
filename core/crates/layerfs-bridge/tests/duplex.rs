@@ -1,6 +1,6 @@
-//! Owning native TCP/Noise proofs, through the public product API.
-#![cfg(feature = "native")]
-use layerfs_bridge::native::{
+//! Owning duplex TCP/Noise proofs, through the public product API.
+#![cfg(feature = "duplex")]
+use layerfs_bridge::duplex::{
     accept, accept_observed, initiate, initiate_observed, public_key, ChannelError, Connection,
     MAX_PLAINTEXT_BYTES, NOISE,
 };
@@ -70,7 +70,7 @@ fn pair_with_retained_sockets() -> (Connection, Connection, TcpStream, TcpStream
 }
 
 #[test]
-fn successful_native_channels_enable_nodelay_on_both_authenticated_sockets() {
+fn successful_duplex_channels_enable_nodelay_on_both_authenticated_sockets() {
     let (mut client, mut server, client_raw, server_raw) = pair_with_retained_sockets();
     assert!(client_raw.nodelay().unwrap());
     assert!(server_raw.nodelay().unwrap());
@@ -105,7 +105,7 @@ fn authenticated_duplex_records_stream_beyond_one_window_with_fixed_buffers() {
         assert_eq!(receive.sealed_capacity, u16::MAX as usize);
         assert_eq!(receive.plain_capacity, MAX_PLAINTEXT_BYTES);
         println!(
-            "NATIVE suite={NOISE} server_receive={receive:?} server_send={send:?} handshake={:?}",
+            "DUPLEX suite={NOISE} server_receive={receive:?} server_send={send:?} handshake={:?}",
             server.handshake_work
         );
     });
@@ -139,7 +139,7 @@ fn authenticated_duplex_records_stream_beyond_one_window_with_fixed_buffers() {
     assert_eq!(receive.zeroed_bytes, 262102);
     assert_eq!(receive.buffer_allocation_attempts, 2);
     println!(
-        "NATIVE client_send={send:?} client_receive={:?}",
+        "DUPLEX client_send={send:?} client_receive={:?}",
         client.receive.work()
     );
 }
@@ -243,18 +243,18 @@ fn terminal_reply_retains_eof_and_original_platform_fence_outcome() {
     assert_eq!(client.receive.receive().unwrap(), b"final acknowledgement");
     let worker = thread::spawn(move || {
         match server.receive.wait_peer_end() {
-            Ok(()) => println!("NATIVE_END peer_eof=true fence=OK"),
+            Ok(()) => println!("DUPLEX_END peer_eof=true fence=OK"),
             Err(failure) => {
                 assert!(
                     cfg!(target_os = "macos"),
                     "unexpected terminal failure: {failure:?}"
                 );
-                assert_eq!(failure.phase, layerfs_bridge::native::PeerEndPhase::Fence);
+                assert_eq!(failure.phase, layerfs_bridge::duplex::PeerEndPhase::Fence);
                 assert!(failure.fence_attempted && failure.received.is_none());
                 assert!(
                     matches!(&failure.cause,ChannelError::Io(error) if error.kind()==std::io::ErrorKind::NotConnected)
                 );
-                println!("NATIVE_END peer_eof=true original_fence_failure={failure:?}");
+                println!("DUPLEX_END peer_eof=true original_fence_failure={failure:?}");
             }
         }
         let work = server.receive.work();
@@ -278,7 +278,7 @@ fn terminal_trailing_input_keeps_original_byte_work_and_has_no_second_read() {
     raw.write_all(&[0x7f]).unwrap();
     let failure = server.receive.wait_peer_end().unwrap_err();
     assert_eq!(failure.received, Some(0x7f));
-    assert_eq!(failure.phase, layerfs_bridge::native::PeerEndPhase::Read);
+    assert_eq!(failure.phase, layerfs_bridge::duplex::PeerEndPhase::Read);
     assert!(failure.fence_attempted);
     assert!(matches!(failure.cause, ChannelError::Invalid(_)));
     assert_eq!(failure.work.io_attempts, 1);
@@ -286,7 +286,7 @@ fn terminal_trailing_input_keeps_original_byte_work_and_has_no_second_read() {
     let second = server.receive.wait_peer_end().unwrap_err();
     assert!(matches!(second.cause, ChannelError::Quarantined));
     assert_eq!(second.work.io_attempts, 1);
-    assert_eq!(second.phase, layerfs_bridge::native::PeerEndPhase::Admit);
+    assert_eq!(second.phase, layerfs_bridge::duplex::PeerEndPhase::Admit);
     assert!(!second.fence_attempted);
 }
 
@@ -297,7 +297,7 @@ fn terminal_read_error_keeps_phase_and_original_fence_attempt() {
         .set_read_timeout(Some(Duration::from_millis(100)))
         .unwrap();
     let failure = server.receive.wait_peer_end().unwrap_err();
-    assert_eq!(failure.phase, layerfs_bridge::native::PeerEndPhase::Read);
+    assert_eq!(failure.phase, layerfs_bridge::duplex::PeerEndPhase::Read);
     assert!(failure.fence_attempted);
     assert_eq!(failure.received, None);
     assert!(matches!(failure.cause, ChannelError::Io(_)));

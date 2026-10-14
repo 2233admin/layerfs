@@ -1,5 +1,5 @@
 //! Rig for mounted live Commit proofs: one sealed Disposable Store built from a
-//! native base tree, opened once and kept open, one real native serving
+//! kernel base tree, opened once and kept open, one real kernel serving
 //! assembly over it, commands launched outside the daemon, the product control
 //! Commit and three independent readings of a tree (ordinary syscalls, the
 //! published canonical root from a fresh bind, the kernel's stat table).
@@ -78,7 +78,7 @@ impl Rig {
     pub fn new(label: &str) -> Self {
         Self::built(label, base_tree)
     }
-    /// `build` fills an empty native directory. It runs once for the Store's
+    /// `build` fills an empty kernel directory. It runs once for the Store's
     /// base and once more for every `replay`, so it must be deterministic.
     pub fn built(label: &str, build: impl Fn(&Path) + 'static) -> Self {
         let started = SystemTime::now()
@@ -89,7 +89,7 @@ impl Rig {
         let mut base = None;
         let fixture = installed::Fixture::built(label, |source| {
             build(source);
-            let (model, names) = Model::native(source);
+            let (model, names) = Model::host(source);
             base = Some(model.flat());
             names
         });
@@ -196,7 +196,7 @@ impl Rig {
             other => panic!("{other:?}"),
         }
     }
-    /// A plain native copy of the base tree, made by running the builder
+    /// A plain kernel copy of the base tree, made by running the builder
     /// again, owned by the command identity. Never read by the daemon.
     pub fn replay(&self) -> PathBuf {
         let number = self.replays.get();
@@ -204,7 +204,7 @@ impl Rig {
         let root = self
             .fixture
             .directory
-            .join(format!("native-replay-{number}"));
+            .join(format!("kernel-replay-{number}"));
         fs::create_dir(&root).unwrap();
         (self.build)(&root);
         for (path, _) in walk(&root) {
@@ -219,13 +219,13 @@ impl Rig {
             let work = self
                 .harness
                 .status(ready.token)
-                .native
+                .kernel
                 .unwrap()
                 .work
                 .unwrap();
             work.active == 0
         });
-        format!("{:?}", self.harness.unmount(ready).native)
+        format!("{:?}", self.harness.unmount(ready).kernel)
     }
     /// Stops the serving assembly (no mount may remain), then drops the Store
     /// handle and removes every file of the test.
@@ -269,9 +269,7 @@ pub fn receipt<'a>(done: &'a Success, what: &str) -> &'a CapturedConstruction {
         "{what}: reader, then owner"
     );
     assert!(
-        namespace.release_error.is_none()
-            && namespace.release_failure.is_none()
-            && namespace.custody.is_none(),
+        namespace.release_error.is_none() && namespace.custody.is_none(),
         "{what}: {namespace:?}"
     );
     let outcome = match &commit.history {
@@ -361,11 +359,11 @@ impl Drop for Background {
     }
 }
 
-/// A native directory tree read through ordinary syscalls: kind, mode,
+/// A kernel directory tree read through ordinary syscalls: kind, mode,
 /// modification time, names per inode, whole bytes or symlink target, and
 /// hard-link alias classes. Works on a mount and on a plain directory alike.
-pub fn native(root: &Path) -> Flat {
-    Model::native(root).0.flat()
+pub fn host(root: &Path) -> Flat {
+    Model::host(root).0.flat()
 }
 /// One `lstat` of the kernel.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -469,7 +467,7 @@ pub fn assert_kernel(expected: &Flat, table: &Kernel, what: &str) {
                 directories += 1;
                 // R7 update, 2026-10-09: this pinned the projected 2 for
                 // every directory. The count is exact now: 2 plus the
-                // child directories, as a native filesystem reports it.
+                // child directories, as a kernel filesystem reports it.
                 let children = below.get(name).copied().unwrap_or(0);
                 assert_eq!(
                     stat.nlink,

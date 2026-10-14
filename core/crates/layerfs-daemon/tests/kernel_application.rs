@@ -1,12 +1,12 @@
 //! Actual Linux daemon binary, protected config and direct Store installation.
 #![cfg(target_os = "linux")]
 #[allow(dead_code)]
-#[path = "support/native_install.rs"]
+#[path = "support/host_install.rs"]
 mod support;
 use layerfs_bridge::{
     control::{ControlCode, DaemonPhase, HelloRequest, Reply, Request},
     daemon_setup::{DaemonLimits, DaemonSetup},
-    native,
+    duplex,
 };
 use layerfs_history::{CommitHistoryRequest, WorkspaceId};
 use layerfs_sdk::internal::Control;
@@ -27,11 +27,11 @@ impl Drop for Process {
         let _ = self.0.wait();
     }
 }
-fn connect(address: SocketAddr) -> native::Connection {
-    native::initiate(
+fn connect(address: SocketAddr) -> duplex::Connection {
+    duplex::initiate(
         support::socket(TcpStream::connect_timeout(&address, Duration::from_secs(2)).unwrap()),
         &support::CLIENT_PRIVATE,
-        native::public_key(&support::SERVER_PRIVATE).unwrap(),
+        duplex::public_key(&support::SERVER_PRIVATE).unwrap(),
     )
     .unwrap()
 }
@@ -42,7 +42,7 @@ fn actual_daemon_install_hello_bind_status_no_constructor_and_session_end() {
     let setup = DaemonSetup {
         listen: "127.0.0.1:0".into(),
         private_key: support::SERVER_PRIVATE,
-        control_peer: native::public_key(&support::CLIENT_PRIVATE).unwrap(),
+        control_peer: duplex::public_key(&support::CLIENT_PRIVATE).unwrap(),
         store: f.project.manifest.locator.clone(),
         overlay: f.directory.join("overlay.sqlite").to_str().unwrap().into(),
         mounts: f.directory.join("mounts").to_str().unwrap().into(),
@@ -50,7 +50,6 @@ fn actual_daemon_install_hello_bind_status_no_constructor_and_session_end() {
         command_gid: 65534,
         limits: DaemonLimits {
             connections: 2,
-            read_handles: 2,
             handshake_ms: 3000,
             cache_bytes: 64 * 1024,
             namespaces: 8,
@@ -172,9 +171,9 @@ fn actual_daemon_install_hello_bind_status_no_constructor_and_session_end() {
     let mut ended = layerfs_sdk::internal::into_connection(control);
     assert!(matches!(
         ended.send.send(b"cannot reset ended session"),
-        Err(native::ChannelError::Quarantined)
+        Err(duplex::ChannelError::Quarantined)
     ));
-    println!("DAEMON_APPLICATION direct_store=true overlay_sqlite={} store_sqlite={} logical_bind=true native_fuse_ready=false sealed_source_absent=true session_end=true", ready.overlay_sqlite.unwrap(), ready.store_sqlite.unwrap());
+    println!("DAEMON_APPLICATION direct_store=true overlay_sqlite={} store_sqlite={} logical_bind=true kernel_fuse_ready=false sealed_source_absent=true session_end=true", ready.overlay_sqlite.unwrap(), ready.store_sqlite.unwrap());
     // Explicit test process stop is crash scope; logical Workspace close was proved above.
     drop(child);
     f.cleanup();

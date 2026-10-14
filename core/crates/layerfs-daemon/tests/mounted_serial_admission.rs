@@ -94,7 +94,7 @@ fn two_ready_workspaces_create_with_no_store_write_demand() {
 }
 
 #[test]
-fn native_create_reservations_are_windows_not_per_file() {
+fn kernel_create_reservations_are_windows_not_per_file() {
     let rig = Rig::new("issue319-serial-counts");
     rig.store.set_serial_low_water(256);
     let ready = rig.mount(1);
@@ -156,7 +156,7 @@ fn serial_writer_hold_has_a_real_inclusive_upper_observation() {
 }
 
 #[test]
-fn busy_initial_reservation_has_no_native_mount_effect() {
+fn busy_initial_reservation_has_no_kernel_mount_effect() {
     use layerfs_history::HistoryError;
     let rig = Rig::new("issue319-attach-busy");
     let token = rig.harness.bind(1);
@@ -165,9 +165,9 @@ fn busy_initial_reservation_has_no_native_mount_effect() {
     let busy = matches!(&attach, Err(Failure::History(error)) if matches!(error.cause(),HistoryError::Busy));
     let status = rig.harness.status(token);
     let unattached = status
-        .native
+        .kernel
         .as_ref()
-        .is_some_and(|value| value.phase == layerfs_bridge::control::NativePhase::Unattached);
+        .is_some_and(|value| value.phase == layerfs_bridge::control::MountPhase::Unattached);
     held.release();
     drop(attach);
     rig.harness.try_unmount(token).unwrap();

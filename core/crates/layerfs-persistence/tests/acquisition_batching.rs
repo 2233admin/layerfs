@@ -47,8 +47,8 @@ fn directory(parent: Option<u64>, name: &[u8], position: u64) -> NewEntry {
         kind: InodeKind::Directory,
         metadata_root: object(b"metadata"),
         target_root: None,
-        native_path: Some(b"/source".to_vec()),
-        native: None,
+        host_path: Some(b"/source".to_vec()),
+        host: None,
     }
 }
 fn file(position: u64, identity: u64) -> NewEntry {
@@ -61,8 +61,8 @@ fn file(position: u64, identity: u64) -> NewEntry {
         kind: InodeKind::RegularFile,
         metadata_root: object(b"metadata"),
         target_root: None,
-        native_path: Some(format!("/source/f{position:04}").into_bytes()),
-        native: Some(NativeIdentity {
+        host_path: Some(format!("/source/f{position:04}").into_bytes()),
+        host: Some(HostIdentity {
             device: 1,
             inode: identity,
             evidence: [7; EVIDENCE_BYTES],
@@ -80,14 +80,14 @@ fn symlink(position: u64) -> NewEntry {
         kind: InodeKind::Symlink,
         metadata_root: object(b"link-metadata"),
         target_root: Some(object(b"opaque-link-target")),
-        native_path: None,
-        native: None,
+        host_path: None,
+        host: None,
     }
 }
 
 #[test]
-fn non_native_windows_skip_the_native_insert_without_losing_targets_or_charges() {
-    let temp = Temp::new("acquisition-non-native-window");
+fn non_host_windows_skip_the_host_insert_without_losing_targets_or_charges() {
+    let temp = Temp::new("acquisition-non-host-window");
     let handles = create(&temp, SqlitePersistenceProfile::Disposable);
     let port = &handles.acquisition;
     let owner = begin(&handles);
@@ -97,7 +97,7 @@ fn non_native_windows_skip_the_native_insert_without_losing_targets_or_charges()
     assert!(port.put_entries(owner, &links).unwrap().is_empty());
     let after = handles.diagnostics().unwrap();
     // Framing, owner, dependency check, entry insertion and accounting are the
-    // complete unit. No empty native-file INSERT is executed for this window.
+    // complete unit. No empty host-file INSERT is executed for this window.
     assert_eq!(after.statements - before.statements, 6);
     let rows = port.entries(owner, None, Limits::MAXIMUM).unwrap();
     assert_eq!(rows.len(), 33);
@@ -131,34 +131,34 @@ fn narrow_bindings_preserve_mixed_payloads_after_an_existing_alias_boundary() {
         entries.push(file(17, 1));
         let mut child_directory = directory(Some(0), b"d0018", 18);
         let directory_path = b"/source/\xffdirectory".to_vec();
-        child_directory.native_path = Some(directory_path.clone());
+        child_directory.host_path = Some(directory_path.clone());
         entries.push(child_directory);
         let mut unplaced = file(19, 19);
         unplaced.position = None;
-        let native = unplaced.native.unwrap();
-        let native_path = unplaced.native_path.clone().unwrap();
+        let host = unplaced.host.unwrap();
+        let host_path = unplaced.host_path.clone().unwrap();
         entries.push(unplaced);
         entries.push(symlink(20));
         // The existing alias truncates the independent prefix in the middle
-        // of one SQL input; directory/native detail fields then share a suffix.
+        // of one SQL input; directory/host detail fields then share a suffix.
         assert_eq!(port.put_entries(owner, &entries).unwrap(), vec![1]);
         let jobs = port.jobs(owner, None, Limits::MAXIMUM).unwrap();
         assert_eq!(jobs.len(), 1);
         assert_eq!(jobs[0].position, 1);
-        assert_eq!(jobs[0].native_path, b"/source/f0001");
+        assert_eq!(jobs[0].host_path, b"/source/f0001");
         assert_eq!(
             port.file_roots(owner, None, Limits::MAXIMUM).unwrap()[0].aliases,
             1
         );
         let directories = port.directories(owner, None, Limits::MAXIMUM).unwrap();
         assert_eq!(directories.len(), 2);
-        assert_eq!(directories[1].native_path, directory_path);
+        assert_eq!(directories[1].host_path, directory_path);
         let children = port
             .unplaced_children(owner, 0, None, Limits::MAXIMUM)
             .unwrap();
         assert_eq!(children.len(), 1);
         assert_eq!(children[0].name, b"f0019");
-        assert_eq!(children[0].native, Some(native));
+        assert_eq!(children[0].host, Some(host));
         let held = port.work(owner).unwrap();
         assert_eq!(held.held_rows, 22);
         assert_eq!(
@@ -168,7 +168,7 @@ fn narrow_bindings_preserve_mixed_payloads_after_an_existing_alias_boundary() {
                 &[Placed {
                     name: children[0].name.clone(),
                     position: 19,
-                    native: Some((native, native_path.clone())),
+                    host: Some((host, host_path.clone())),
                 }]
             )
             .unwrap(),
@@ -186,7 +186,7 @@ fn narrow_bindings_preserve_mixed_payloads_after_an_existing_alias_boundary() {
         assert_eq!(after_placement.held_rows, held.held_rows + 1);
         assert_eq!(
             after_placement.held_bytes,
-            held.held_bytes + native_path.len() as u64
+            held.held_bytes + host_path.len() as u64
         );
         let removed = port.discard(owner, 4096).unwrap();
         assert_eq!(
@@ -199,7 +199,7 @@ fn narrow_bindings_preserve_mixed_payloads_after_an_existing_alias_boundary() {
 }
 
 #[test]
-fn directory_uniqueness_and_native_evidence_keep_the_first_refusal_after_a_prefix() {
+fn directory_uniqueness_and_host_evidence_keep_the_first_refusal_after_a_prefix() {
     use layerfs_storage::port::PersistenceError;
     let temp = Temp::new("acquisition-mixed-refusal-order");
     let handles = create(&temp, SqlitePersistenceProfile::Disposable);
@@ -216,7 +216,7 @@ fn directory_uniqueness_and_native_evidence_keep_the_first_refusal_after_a_prefi
     .unwrap();
     let before = port.work(owner).unwrap();
     let mut changed = file(19, 2);
-    changed.native.as_mut().unwrap().evidence[0] ^= 1;
+    changed.host.as_mut().unwrap().evidence[0] ^= 1;
     let duplicate = directory(Some(0), b"another-name", 1);
     let malformed = AcquisitionError::Persistence(PersistenceError::Malformed);
     for (tail, expected) in [
@@ -492,7 +492,7 @@ fn entry_refusal_order_and_full_unit_rollback_survive_execution_windows() {
     let before = port.work(owner).unwrap();
     let prefix: Vec<_> = (2..=40).map(|n| file(n, n)).collect();
     let mut changed = file(41, 1);
-    changed.native.as_mut().unwrap().evidence[0] ^= 1;
+    changed.host.as_mut().unwrap().evidence[0] ^= 1;
     let mut invalid = file(42, 42);
     invalid.kind = InodeKind::Directory;
     let duplicate = file(1, 43);

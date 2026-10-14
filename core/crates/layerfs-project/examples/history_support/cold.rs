@@ -12,7 +12,7 @@ impl Boundary {
     pub fn new(files: Vec<PathBuf>, required: bool) -> Result<Self, Box<dyn std::error::Error>> {
         let helper = std::env::var_os("LAYERFS_HISTORY_COLD_HELPER").map(PathBuf::from);
         if required && helper.is_none() {
-            return Err("complete history requires sealed native cold helper".into());
+            return Err("complete history requires sealed host cold helper".into());
         }
         Ok(Self {
             helper,

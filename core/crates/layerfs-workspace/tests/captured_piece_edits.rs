@@ -6,7 +6,7 @@ mod captured_support;
 mod common;
 use captured_support::*;
 use layerfs_content::{Edit, ObjectId};
-use layerfs_daemon::Response;
+
 use layerfs_overlay::{CapturedReader, ClaimedRange, IndexedOperationRecordScope, WriteClaims};
 use layerfs_workspace::{
     CapturedFileWork, Operation, OverlayOperationRecords, Position, WriteData,
@@ -97,21 +97,13 @@ impl Run {
             .job(|job_client: &layerfs_daemon::OwnerClient, job_route| {
                 job_client.acquire_base_source(job_route, self.case.request())
             });
-        let source = match acquired.result() {
-            Ok(Response::BaseSource(source)) => *source,
-            other => panic!("{other:?}"),
-        };
-        drop(acquired);
+        let source = acquired;
         let view = self.case.workspace.view_for_source(source).unwrap();
         let value = read(&view);
-        assert!(self
-            .case
-            .job(
-                |job_client: &layerfs_daemon::OwnerClient, job_route| job_client
-                    .release_base_source(job_route, source)
-            )
-            .result()
-            .is_ok());
+        self.case
+            .job(|job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.release_base_source(job_route, source)
+            });
         value
     }
     /// The whole file through the live view, in read windows.

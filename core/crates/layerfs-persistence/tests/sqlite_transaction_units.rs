@@ -430,6 +430,6 @@ fn queued_chunk_groups_use_the_acknowledged_pack_tail() {
         .unwrap();
     assert_eq!(
         packs, 2,
-        "one initial pack and one tight-directory native pack"
+        "one initial pack and one tight-directory host pack"
     );
 }

@@ -31,14 +31,14 @@ fn bytes(db: &Overlay, read: FileRead, base: &[u8]) -> Vec<u8> {
 fn independent_orphan_survives_many_installs_and_failures_and_last_read_owner() {
     let temp = Temp::new();
     let db = temp.db();
-    let route = db.open_workspace([111; 32], [112; 32]).unwrap();
-    let mut source = db.acquire_base_source(route, 1).unwrap();
+    db.open_workspace([112; 32]).unwrap();
+    let mut source = db.acquire_base_source(1).unwrap();
     let mut file = File::new(&db, source, i64::MAX as u64, pattern(8199, 3));
     file.write(4000, b"before unlink");
     let open = db
         .open_file(source, 1, &file.inode(file.expect.len() as u64), true)
         .unwrap();
-    assert_eq!(db.retained_file(route, 1).unwrap(), Some(open));
+    assert_eq!(db.retained_file(1).unwrap(), Some(open));
     assert!(db.open_file(source, 1, &file.inode(8199), true).is_err());
     let mut removed = file.inode(file.expect.len() as u64);
     removed.nlink = 0;
@@ -56,10 +56,7 @@ fn independent_orphan_survives_many_installs_and_failures_and_last_read_owner() 
     for round in 0..20 {
         let read = db.acquire_file_read(source, open, 100 + round).unwrap();
         assert_eq!(bytes(&db, read, &file.base), expect);
-        assert_eq!(
-            db.retained_file_read(route, 100 + round).unwrap(),
-            Some(read)
-        );
+        assert_eq!(db.retained_file_read(100 + round).unwrap(), Some(read));
         db.release_file_read(read).unwrap();
         assert!(db.read_file(read, 0, 1).is_err());
         let mut inode = db.source_inode(source, i64::MAX as u64).unwrap().unwrap();
@@ -84,42 +81,42 @@ fn independent_orphan_survives_many_installs_and_failures_and_last_read_owner() 
         db.reply_attempted(p).unwrap();
         expect.extend(tail);
         db.release_base_source(source).unwrap();
-        let capture = db.capture(route).unwrap();
+        let capture = db.capture().unwrap();
         if round % 2 == 1 {
             db.install(capture, [round as u8; 32]).unwrap();
         } else {
             db.resolve_failed_capture(capture).unwrap();
         }
         maintain(&db);
-        assert!(db.capture_ready(route).unwrap());
-        source = db.acquire_base_source(route, round + 2).unwrap();
+        assert!(db.capture_ready().unwrap());
+        source = db.acquire_base_source(round + 2).unwrap();
     }
     let read = db.acquire_file_read(source, open, 999).unwrap();
     db.close_file(open).unwrap();
     assert!(db.check_file(open, false).is_err());
     maintain(&db);
     assert_eq!(bytes(&db, read, &file.base), expect);
-    db.close(route).unwrap();
+    db.close().unwrap();
     db.release_base_source(source).unwrap();
-    assert_eq!(db.cleanup_state(route).unwrap(), CleanupState::Held);
+    assert_eq!(db.cleanup_state().unwrap(), CleanupState::Held);
     assert_eq!(bytes(&db, read, &file.base), expect);
     db.release_file_read(read).unwrap();
     maintain(&db);
-    assert_eq!(db.cleanup_state(route).unwrap(), CleanupState::Queued);
+    assert_eq!(db.cleanup_state().unwrap(), CleanupState::Queued);
     db.close_database().unwrap();
 }
 #[test]
 fn captured_reader_preserves_sealed_bytes_across_install_and_blocks_failed_fold() {
     let temp = Temp::new();
     let db = temp.db();
-    let route = db.open_workspace([113; 32], [114; 32]).unwrap();
-    let source = db.acquire_base_source(route, 1).unwrap();
+    db.open_workspace([114; 32]).unwrap();
+    let source = db.acquire_base_source(1).unwrap();
     let mut f = File::new(&db, source, 9, Vec::new());
     f.write(0, b"sealed");
     db.release_base_source(source).unwrap();
-    let capture = db.capture(route).unwrap();
+    let capture = db.capture().unwrap();
     let reader = db.acquire_captured_reader(capture, 1).unwrap();
-    assert_eq!(db.retained_captured_reader(route, 1).unwrap(), Some(reader));
+    assert_eq!(db.retained_captured_reader(1).unwrap(), Some(reader));
     let sealed_rows = db.reader_inodes(reader, 0).unwrap();
     let sealed_names = db.reader_directory_entries(reader, None).unwrap();
     db.install(capture, [115; 32]).unwrap();
@@ -136,42 +133,42 @@ fn captured_reader_preserves_sealed_bytes_across_install_and_blocks_failed_fold(
     db.release_captured_reader(reader).unwrap();
     assert!(db.read_captured(reader, 9, 0, 32).is_err());
     maintain(&db);
-    let source = db.acquire_base_source(route, 2).unwrap();
+    let source = db.acquire_base_source(2).unwrap();
     f.source = source;
     f.write(0, b"second");
     db.release_base_source(source).unwrap();
-    let capture = db.capture(route).unwrap();
+    let capture = db.capture().unwrap();
     let reader = db.acquire_captured_reader(capture, 2).unwrap();
     db.resolve_failed_capture(capture).unwrap();
     maintain(&db);
-    assert!(!db.capture_ready(route).unwrap());
+    assert!(!db.capture_ready().unwrap());
     assert_eq!(
         db.read_captured(reader, 9, 0, 32).unwrap().unwrap().data,
         b"second"
     );
     db.release_captured_reader(reader).unwrap();
     maintain(&db);
-    assert!(db.capture_ready(route).unwrap());
+    assert!(db.capture_ready().unwrap());
 }
 
 #[test]
 fn operation_custody_never_reuses_an_exposed_owner() {
     let temp = Temp::new();
     let db = temp.db();
-    let route = db.open_workspace([121; 32], [122; 32]).unwrap();
-    let first = db.acquire_operation(route, 1).unwrap();
-    assert_eq!(db.retained_operation(route, 1).unwrap(), Some(first));
-    assert!(db.acquire_operation(route, 1).is_err());
+    db.open_workspace([122; 32]).unwrap();
+    let first = db.acquire_operation(1).unwrap();
+    assert_eq!(db.retained_operation(1).unwrap(), Some(first));
+    assert!(db.acquire_operation(1).is_err());
     db.release_operation(first).unwrap();
-    let second = db.acquire_operation(route, 1).unwrap();
+    let second = db.acquire_operation(1).unwrap();
     assert_ne!(first, second);
     assert!(db.release_operation(first).is_err());
     maintain(&db);
-    db.close(route).unwrap();
-    assert_eq!(db.cleanup_state(route).unwrap(), CleanupState::Held);
+    db.close().unwrap();
+    assert_eq!(db.cleanup_state().unwrap(), CleanupState::Held);
     db.release_operation(second).unwrap();
     maintain(&db);
-    assert_eq!(db.cleanup_state(route).unwrap(), CleanupState::Queued);
+    assert_eq!(db.cleanup_state().unwrap(), CleanupState::Queued);
     db.close_database().unwrap();
 }
 
@@ -179,8 +176,8 @@ fn operation_custody_never_reuses_an_exposed_owner() {
 fn unowned_unlinked_payload_is_reclaimed_live_but_its_namespace_tombstone_remains() {
     let temp = Temp::new();
     let db = temp.db();
-    let route = db.open_workspace([125; 32], [126; 32]).unwrap();
-    let source = db.acquire_base_source(route, 1).unwrap();
+    db.open_workspace([126; 32]).unwrap();
+    let source = db.acquire_base_source(1).unwrap();
     let mut f = File::new(&db, source, 4, Vec::new());
     f.write(0, &pattern(131072, 3));
     let allocated = db.pages().unwrap();
@@ -198,14 +195,14 @@ fn unowned_unlinked_payload_is_reclaimed_live_but_its_namespace_tombstone_remain
     db.reply_attempted(p).unwrap();
     maintain(&db);
     assert!(db.source_read(source, 4, 0, 1).is_err());
-    assert_eq!(db.inode(route, 4).unwrap().unwrap().nlink, 0);
+    assert_eq!(db.inode(4).unwrap().unwrap().nlink, 0);
     assert!(db.pages().unwrap().1 > allocated.1);
     db.release_base_source(source).unwrap();
-    let capture = db.capture(route).unwrap();
+    let capture = db.capture().unwrap();
     db.resolve_failed_capture(capture).unwrap();
     maintain(&db);
-    assert_eq!(db.inode(route, 4).unwrap().unwrap().nlink, 0);
-    let source = db.acquire_base_source(route, 2).unwrap();
+    assert_eq!(db.inode(4).unwrap().unwrap().nlink, 0);
+    let source = db.acquire_base_source(2).unwrap();
     assert!(db.source_read(source, 4, 0, 1).is_err());
 }
 
@@ -217,10 +214,10 @@ fn custody_and_orphan_jobs_keep_point_work_beside_unrelated_owners() {
         // Prior files would add a range-end index neighbor to the read program.
         let temp = Temp::new();
         let db = temp.db();
-        let route = db.open_workspace([131; 32], [132; 32]).unwrap();
-        let source = db.acquire_base_source(route, 1).unwrap();
+        db.open_workspace([132; 32]).unwrap();
+        let source = db.acquire_base_source(1).unwrap();
         for owner in 0..scale {
-            db.acquire_operation(route, owner + 10000).unwrap();
+            db.acquire_operation(owner + 10000).unwrap();
         }
         let serial = 17;
         let mut f = File::new(&db, source, serial, Vec::new());
@@ -288,14 +285,14 @@ fn custody_and_orphan_jobs_keep_point_work_beside_unrelated_owners() {
 fn logical_close_refuses_new_captured_owners_and_keeps_existing_consumers() {
     let temp = Temp::new();
     let db = temp.db();
-    let route = db.open_workspace([135; 32], [136; 32]).unwrap();
-    let source = db.acquire_base_source(route, 1).unwrap();
+    db.open_workspace([136; 32]).unwrap();
+    let source = db.acquire_base_source(1).unwrap();
     let mut f = File::new(&db, source, 4, Vec::new());
     f.write(0, b"sealed before close");
     db.release_base_source(source).unwrap();
-    let capture = db.capture(route).unwrap();
+    let capture = db.capture().unwrap();
     let reader = db.acquire_captured_reader(capture, 1).unwrap();
-    db.close(route).unwrap();
+    db.close().unwrap();
     assert!(matches!(
         db.acquire_captured_reader(capture, 2),
         Err(OverlayError::Closed)
@@ -305,9 +302,9 @@ fn logical_close_refuses_new_captured_owners_and_keeps_existing_consumers() {
         b"sealed before close"
     );
     db.release_closed_capture(capture).unwrap();
-    assert_eq!(db.cleanup_state(route).unwrap(), CleanupState::Held);
+    assert_eq!(db.cleanup_state().unwrap(), CleanupState::Held);
     db.release_captured_reader(reader).unwrap();
-    assert_eq!(db.cleanup_state(route).unwrap(), CleanupState::Queued);
+    assert_eq!(db.cleanup_state().unwrap(), CleanupState::Queued);
     db.close_database().unwrap();
 }
 
@@ -315,15 +312,15 @@ fn logical_close_refuses_new_captured_owners_and_keeps_existing_consumers() {
 fn three_layer_orphan_composition_preserves_cutoffs_and_an_independent_pre_unlink_reader() {
     let temp = Temp::new();
     let db = temp.db();
-    let route = db.open_workspace([141; 32], [142; 32]).unwrap();
-    let source = db.acquire_base_source(route, 1).unwrap();
+    db.open_workspace([142; 32]).unwrap();
+    let source = db.acquire_base_source(1).unwrap();
     let mut f = File::new(&db, source, 7, pattern(8199, 3));
     f.write(4000, b"sealed crossing");
     let sealed = f.expect.clone();
     db.release_base_source(source).unwrap();
-    let capture = db.capture(route).unwrap();
+    let capture = db.capture().unwrap();
     let reader = db.acquire_captured_reader(capture, 1).unwrap();
-    let source = db.acquire_base_source(route, 2).unwrap();
+    let source = db.acquire_base_source(2).unwrap();
     f.source = source;
     f.resize(5000);
     f.resize(9000);
@@ -352,7 +349,7 @@ fn three_layer_orphan_composition_preserves_cutoffs_and_an_independent_pre_unlin
         };
         cursor = step.cursor;
     }
-    assert!(!db.capture_ready(route).unwrap());
+    assert!(!db.capture_ready().unwrap());
     let p = db.read_captured(reader, 7, 0, 131072).unwrap().unwrap();
     let mut got = p.data;
     for (slot, byte) in got.iter_mut().enumerate() {
@@ -366,28 +363,28 @@ fn three_layer_orphan_composition_preserves_cutoffs_and_an_independent_pre_unlin
     assert_eq!(got, sealed);
     db.release_captured_reader(reader).unwrap();
     maintain(&db);
-    assert!(db.capture_ready(route).unwrap());
+    assert!(db.capture_ready().unwrap());
     assert_eq!(bytes(&db, read, &f.base), f.expect);
     db.close_file(open).unwrap();
     db.release_file_read(read).unwrap();
     maintain(&db);
-    assert_eq!(db.inode(route, 7).unwrap().unwrap().nlink, 0);
+    assert_eq!(db.inode(7).unwrap().unwrap().nlink, 0);
 }
 
 #[test]
 fn a_last_release_under_a_generation_hold_parks_the_layer_for_the_queue() {
     let temp = Temp::new();
     let db = temp.db();
-    let route = db.open_workspace([151; 32], [152; 32]).unwrap();
-    let source = db.acquire_base_source(route, 1).unwrap();
+    db.open_workspace([152; 32]).unwrap();
+    let source = db.acquire_base_source(1).unwrap();
     let mut f = File::new(&db, source, 7, Vec::new());
     f.write(0, &pattern(8199, 3));
     let sealed = f.expect.clone();
     db.release_base_source(source).unwrap();
     // The capture and its reader hold the generation the file was written in.
-    let capture = db.capture(route).unwrap();
+    let capture = db.capture().unwrap();
     let reader = db.acquire_captured_reader(capture, 1).unwrap();
-    let source = db.acquire_base_source(route, 2).unwrap();
+    let source = db.acquire_base_source(2).unwrap();
     f.source = source;
     let open = db.open_file(source, 1, &f.inode(8199), true).unwrap();
     let mut inode = f.inode(8199);
@@ -402,11 +399,11 @@ fn a_last_release_under_a_generation_hold_parks_the_layer_for_the_queue() {
         )
         .unwrap();
     db.reply_attempted(p).unwrap();
-    let counts = || db.resources(None).unwrap().counts;
+    let counts = || db.resources().unwrap().counts;
     let (cells, queued) = (counts().payload_cells, counts().maintenance_targets);
     // Two whole cells in one row and the tail in another.
     assert_eq!(
-        (db.resources(None).unwrap().open.orphan_files, cells, queued),
+        (db.resources().unwrap().open.orphan_files, cells, queued),
         (1, 2, 1)
     );
 
@@ -417,7 +414,7 @@ fn a_last_release_under_a_generation_hold_parks_the_layer_for_the_queue() {
     let after = counts();
     assert_eq!(
         (
-            db.resources(None).unwrap().open.orphan_files,
+            db.resources().unwrap().open.orphan_files,
             after.payload_cells,
             after.maintenance_targets,
             after.ready_targets
@@ -436,16 +433,16 @@ fn a_last_release_under_a_generation_hold_parks_the_layer_for_the_queue() {
     maintain(&db);
     let end = counts();
     assert_eq!((end.payload_cells, end.maintenance_targets), (0, 0));
-    assert!(db.capture_ready(route).unwrap());
-    assert_eq!(db.inode(route, 7).unwrap().unwrap().nlink, 0);
+    assert!(db.capture_ready().unwrap());
+    assert_eq!(db.inode(7).unwrap().unwrap().nlink, 0);
 }
 
 #[test]
 fn inode_reads_probe_the_orphan_domain_only_while_an_orphan_exists() {
     let temp = Temp::new();
     let db = temp.db();
-    let route = db.open_workspace([141; 32], [142; 32]).unwrap();
-    let source = db.acquire_base_source(route, 1).unwrap();
+    db.open_workspace([142; 32]).unwrap();
+    let source = db.acquire_base_source(1).unwrap();
     // One inode observation and the Inode-family statements it attempted.
     let read = |source: BaseSource, serial: u64| {
         let before = db.diagnostics();
@@ -527,13 +524,13 @@ fn inode_reads_probe_the_orphan_domain_only_while_an_orphan_exists() {
     unlink(&also);
     db.close_file(open).unwrap();
     maintain(&db);
-    assert_eq!(db.resources(None).unwrap().open.orphan_files, 1);
+    assert_eq!(db.resources().unwrap().open.orphan_files, 1);
     assert_eq!(read(source, 9), (None, 2));
     // The engine's last orphan is reclaimed: the probe stops in every
     // namespace, one seek per inode.
     db.close_file(held).unwrap();
     maintain(&db);
-    assert_eq!(db.resources(None).unwrap().open.orphan_files, 0);
+    assert_eq!(db.resources().unwrap().open.orphan_files, 0);
     assert_eq!(read(source, 7).1, 1);
     assert_eq!(read(source, 9), (None, 1));
 }
@@ -542,8 +539,8 @@ fn inode_reads_probe_the_orphan_domain_only_while_an_orphan_exists() {
 fn a_closed_workspace_keeps_its_last_orphan_for_file_disposal() {
     let temp = Temp::new();
     let db = temp.db();
-    let route = db.open_workspace([145; 32], [146; 32]).unwrap();
-    let source = db.acquire_base_source(route, 1).unwrap();
+    db.open_workspace([146; 32]).unwrap();
+    let source = db.acquire_base_source(1).unwrap();
     // More cells than the one page its last owner's release drops itself:
     // rows of eight and six cells are exactly that page, and one more row.
     const SIZE: u64 = 15 * 4096;
@@ -568,11 +565,11 @@ fn a_closed_workspace_keeps_its_last_orphan_for_file_disposal() {
     // maintenance turn in between. The release drops one page and leaves
     // the orphan: terminal reclamation deletes the orphan row, after the
     // namespace's inode rows.
-    db.close(route).unwrap();
+    db.close().unwrap();
     db.release_base_source(source).unwrap();
     db.close_file(open).unwrap();
-    assert_eq!(db.resources(None).unwrap().open.orphan_files, 1);
-    assert_eq!(db.cleanup_state(route).unwrap(), CleanupState::Queued);
+    assert_eq!(db.resources().unwrap().open.orphan_files, 1);
+    assert_eq!(db.cleanup_state().unwrap(), CleanupState::Queued);
     db.close_database().unwrap();
 }
 
@@ -642,8 +639,8 @@ fn a_failed_release_keeps_exact_custody_until_terminal_file_disposal() {
         },
     )
     .unwrap();
-    let route = db.open_workspace([153; 32], [154; 32]).unwrap();
-    let source = db.acquire_base_source(route, 1).unwrap();
+    db.open_workspace([154; 32]).unwrap();
+    let source = db.acquire_base_source(1).unwrap();
     let mut file = File::new(&db, source, ORPHAN, Vec::new());
     file.write(0, &pattern(SIZE as usize, 3));
     // Files removed with no owner in the generation the capture seals: their
@@ -653,9 +650,9 @@ fn a_failed_release_keeps_exact_custody_until_terminal_file_disposal() {
         put(&db, source, plain(serial, 0, 0), None).unwrap();
     }
     db.release_base_source(source).unwrap();
-    let capture = db.capture(route).unwrap();
+    let capture = db.capture().unwrap();
     let reader = db.acquire_captured_reader(capture, 1).unwrap();
-    let source = db.acquire_base_source(route, 2).unwrap();
+    let source = db.acquire_base_source(2).unwrap();
     file.source = source;
     let open = db.open_file(source, 1, &file.inode(SIZE), true).unwrap();
     put(&db, source, plain(ORPHAN, SIZE, 0), None).unwrap();
@@ -704,12 +701,12 @@ fn a_failed_release_keeps_exact_custody_until_terminal_file_disposal() {
         data
     };
     let observed = |db: &Overlay| {
-        let all = db.resources(None).unwrap();
+        let all = db.resources().unwrap();
         (
             all.counts,
             all.database_pages,
             all.free_pages,
-            db.state(route).unwrap(),
+            db.state().unwrap(),
             all.open,
         )
     };
@@ -717,7 +714,7 @@ fn a_failed_release_keeps_exact_custody_until_terminal_file_disposal() {
     assert!(view(&db) == file.expect);
     let before = observed(&db);
     assert_eq!(
-        (db.resources(None).unwrap().open.orphan_files, before.2),
+        (db.resources().unwrap().open.orphan_files, before.2),
         (1, 0)
     );
     let pending = db.maintenance_pending();
@@ -739,7 +736,7 @@ fn a_failed_release_keeps_exact_custody_until_terminal_file_disposal() {
     assert_eq!(observed(&db), before);
     assert_eq!(db.maintenance_pending(), pending);
     db.check_file(open, true).unwrap();
-    assert_eq!(db.retained_file(route, 1).unwrap(), Some(open));
+    assert_eq!(db.retained_file(1).unwrap(), Some(open));
     assert_eq!(probes(&db), 2);
     assert!(view(&db) == file.expect);
     let sealed = db
@@ -749,7 +746,7 @@ fn a_failed_release_keeps_exact_custody_until_terminal_file_disposal() {
     assert_eq!(sealed.data, file.expect);
 
     assert_eq!(view(&db), file.expect);
-    db.close(route).unwrap();
+    db.close().unwrap();
     assert!(
         db.check_file(open, false).is_ok(),
         "failed release keeps its exact descriptor"

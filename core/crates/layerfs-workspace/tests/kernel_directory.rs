@@ -8,10 +8,10 @@ use layerfs_content::{
     },
     object::inode_leaf::InodeKind,
 };
-use layerfs_overlay::{NativeDirectory, NativeMount, OverlayError};
+use layerfs_overlay::{KernelDirectory, KernelMount, OverlayError};
 use layerfs_workspace::{
-    CanonicalCache, CanonicalClient, NativeDirectoryBatch, NativeDirectoryWindow,
-    NativeReadDecision, NativeReadOperation, VisitFacts,
+    CanonicalCache, CanonicalClient, KernelDirectoryBatch, KernelDirectoryWindow,
+    KernelReadDecision, KernelReadOperation, VisitFacts,
 };
 use std::sync::Arc;
 /// A memory-only client over a cache that holds nothing.
@@ -22,22 +22,22 @@ fn empty() -> Arc<CanonicalClient> {
 }
 /// One opening or reading visit per turn until it decides, reading the facts
 /// an undecided visit names. A job itself asks the provider nothing.
-fn decide(b: &Bench, mount: NativeMount, request: u64, serial: u64) -> Option<NativeDirectory> {
+fn decide(b: &Bench, mount: KernelMount, request: u64, serial: u64) -> Option<KernelDirectory> {
     let mut facts = VisitFacts::default();
     for _ in 0..4 {
         let visit = match request {
-            0 => b.workspace.native_read_visit(
+            0 => b.workspace.kernel_read_visit(
                 empty(),
                 mount,
                 1,
                 None,
-                NativeReadOperation::Lookup {
+                KernelReadOperation::Lookup {
                     parent: 1,
                     name: common::name(["empty", "moving"][serial as usize]),
                 },
                 Arc::new(facts.clone()),
             ),
-            _ => b.workspace.native_opendir_visit(
+            _ => b.workspace.kernel_opendir_visit(
                 empty(),
                 mount,
                 request,
@@ -51,28 +51,28 @@ fn decide(b: &Bench, mount: NativeMount, request: u64, serial: u64) -> Option<Na
         assert_eq!(b.demand(), before, "owner made provider demand");
         assert!(matches!(outcome.result, Ok(None)), "{:?}", outcome.result);
         match outcome.decision {
-            Some(NativeReadDecision::Needs(needs)) => facts
+            Some(KernelReadDecision::Needs(needs)) => facts
                 .supply(&b.workspace.base().unwrap(), &needs, None)
                 .unwrap(),
-            Some(NativeReadDecision::Value(_)) => return outcome.directory_candidate,
+            Some(KernelReadDecision::Value(_)) => return outcome.directory_candidate,
             other => panic!("undecided visit: {other:?}"),
         }
     }
     panic!("directory decision did not finish its bounded fact rounds")
 }
-fn open(b: &Bench, mount: NativeMount, request: u64, serial: u64) -> NativeDirectory {
+fn open(b: &Bench, mount: KernelMount, request: u64, serial: u64) -> KernelDirectory {
     decide(b, mount, request, serial).expect("an open directory")
 }
 /// One READDIR reading visit as one owner job that asks the provider nothing.
 fn visit(
     b: &Bench,
-    directory: NativeDirectory,
+    directory: KernelDirectory,
     offset: u64,
     after: Option<Vec<u8>>,
-) -> Result<NativeDirectoryWindow, OverlayError> {
+) -> Result<KernelDirectoryWindow, OverlayError> {
     let visit = b
         .workspace
-        .native_directory_visit(
+        .kernel_directory_visit(
             empty(),
             directory.mount(),
             directory.serial(),
@@ -87,14 +87,14 @@ fn visit(
     window
 }
 /// The reply's entries, merged outside the owner when memory held too little.
-fn batch(b: &Bench, window: NativeDirectoryWindow) -> NativeDirectoryBatch {
+fn batch(b: &Bench, window: KernelDirectoryWindow) -> KernelDirectoryBatch {
     window.finish(Some(&b.workspace.base().unwrap())).unwrap()
 }
 #[test]
 fn empty_whiteout_pages_continue_and_only_accepted_names_become_resume_cookies() {
-    let b = Bench::with_cache("native-directory-whiteouts", 0);
+    let b = Bench::with_cache("kernel-directory-whiteouts", 0);
     // Fixture setup uses the actual canonical builder and installed-base port.
-    // This is no Commit construction or native mounted acceptance claim.
+    // This is no Commit construction or kernel mounted acceptance claim.
     let store = &b.fixture.store;
     let mut sink = store.clone();
     let mut objects = FilesystemObjects::new(store, &mut sink);
@@ -119,7 +119,7 @@ fn empty_whiteout_pages_continue_and_only_accepted_names_become_resume_cookies()
     )
     .unwrap()
     .root;
-    let capture = b.overlay.capture(b.route()).unwrap();
+    let capture = b.overlay.capture().unwrap();
     let prepared = b.workspace.prepare_base_install(capture, next).unwrap();
     b.workspace
         .install_prepared_base(&b.overlay, prepared)
@@ -128,7 +128,7 @@ fn empty_whiteout_pages_continue_and_only_accepted_names_become_resume_cookies()
         b.applied(unlink(1, &format!("!{n:03}")), T1);
     }
     let local = b.applied(create(1, "zz-local"), T2).unwrap().serial;
-    let mount = b.overlay.create_native_mount(b.route(), 1).unwrap();
+    let mount = b.overlay.create_kernel_mount(1).unwrap();
     let directory = open(&b, mount, 1, 1);
     // READDIR needs inode kinds, not file lengths or portable attributes.
     // Make the otherwise valid fixture's length provider unavailable here.
@@ -168,7 +168,7 @@ fn empty_whiteout_pages_continue_and_only_accepted_names_become_resume_cookies()
     let offer = listed.publish.expect("a fresh reply publishes its names");
     assert_eq!(offer.first(), listed.first);
     b.overlay
-        .publish_native_cookies(&offer, &names[..2])
+        .publish_kernel_cookies(&offer, &names[..2])
         .unwrap();
     let cookie = listed.first + 1;
     assert!(matches!(
@@ -201,25 +201,25 @@ fn empty_whiteout_pages_continue_and_only_accepted_names_become_resume_cookies()
         .iter()
         .all(|e| e.name.as_slice() > b"alias" && e.name != b"file"));
     b.overlay
-        .close_native_directory(directory.mount(), directory.serial(), directory.owner_id())
+        .close_kernel_directory(directory.mount(), directory.serial(), directory.owner_id())
         .unwrap();
     assert!(matches!(
         visit(&b, directory, 2, None),
         Err(OverlayError::Stale)
     ));
-    b.overlay.revoke_native_mount(mount).unwrap();
+    b.overlay.revoke_kernel_mount(mount).unwrap();
 }
 #[test]
 fn a_reply_listed_from_offset_0_again_is_published_afresh_and_earlier_offsets_list_nothing() {
-    let b = Bench::new("native-directory-rewind");
+    let b = Bench::new("kernel-directory-rewind");
     b.applied(create(1, "zz-local"), T1);
-    let mount = b.overlay.create_native_mount(b.route(), 1).unwrap();
+    let mount = b.overlay.create_kernel_mount(1).unwrap();
     let directory = open(&b, mount, 1, 1);
-    let publish = |listed: &NativeDirectoryBatch, accepted: usize| {
+    let publish = |listed: &KernelDirectoryBatch, accepted: usize| {
         let names: Vec<_> = listed.entries.iter().map(|e| e.name.clone()).collect();
         let offer = listed.publish.as_ref().expect("a reply to publish");
         b.overlay
-            .publish_native_cookies(offer, &names[..accepted])
+            .publish_kernel_cookies(offer, &names[..accepted])
             .unwrap();
     };
     // The first listing from offset 0 is an ordinary one.
@@ -259,19 +259,19 @@ fn a_reply_listed_from_offset_0_again_is_published_afresh_and_earlier_offsets_li
     let next = batch(&b, next);
     assert_eq!(next.entries[..], first.entries[2..]);
     b.overlay
-        .close_native_directory(directory.mount(), directory.serial(), directory.owner_id())
+        .close_kernel_directory(directory.mount(), directory.serial(), directory.owner_id())
         .unwrap();
-    b.overlay.revoke_native_mount(mount).unwrap();
+    b.overlay.revoke_kernel_mount(mount).unwrap();
 }
 
 #[test]
 fn opened_directory_retains_parent_and_metadata_after_forget_and_rmdir() {
-    let b = Bench::new("native-directory-removed");
+    let b = Bench::new("kernel-directory-removed");
     let serial = b.applied(mkdir(1, "empty"), T1).unwrap().serial;
-    let mount = b.overlay.create_native_mount(b.route(), 1).unwrap();
+    let mount = b.overlay.create_kernel_mount(1).unwrap();
     assert_eq!(decide(&b, mount, 0, 0), None);
     let directory = open(&b, mount, 2, serial);
-    b.overlay.forget_native(mount, serial, 1).unwrap();
+    b.overlay.kernel_forget(mount, serial, 1).unwrap();
     b.applied(rmdir(1, "empty"), T2);
     // The removed directory is still listed through its descriptor: its
     // parent as it was, and no name. The job decides that alone.
@@ -283,23 +283,23 @@ fn opened_directory_retains_parent_and_metadata_after_forget_and_rmdir() {
     assert!(listed.entries.is_empty() && listed.continuation.is_none());
     assert!(listed.publish.is_none());
     b.overlay
-        .close_native_directory(directory.mount(), directory.serial(), directory.owner_id())
+        .close_kernel_directory(directory.mount(), directory.serial(), directory.owner_id())
         .unwrap();
     assert!(matches!(
         visit(&b, directory, 0, None),
         Err(OverlayError::Stale)
     ));
-    b.overlay.revoke_native_mount(mount).unwrap();
+    b.overlay.revoke_kernel_mount(mount).unwrap();
 }
 
 #[test]
 fn next_directory_read_observes_parent_moved_by_the_atomic_namespace_job() {
-    let b = Bench::new("native-directory-moved");
+    let b = Bench::new("kernel-directory-moved");
     let serial = b.applied(mkdir(1, "moving"), T1).unwrap().serial;
-    let mount = b.overlay.create_native_mount(b.route(), 1).unwrap();
+    let mount = b.overlay.create_kernel_mount(1).unwrap();
     assert_eq!(decide(&b, mount, 0, 1), None);
     let directory = open(&b, mount, 2, serial);
-    b.overlay.forget_native(mount, serial, 1).unwrap();
+    b.overlay.kernel_forget(mount, serial, 1).unwrap();
     let before = visit(&b, directory, 0, None).unwrap();
     assert_eq!(before.page.parent(), Some(1));
     b.applied(
@@ -312,7 +312,7 @@ fn next_directory_read_observes_parent_moved_by_the_atomic_namespace_job() {
     assert_eq!(after.page.parent(), Some(7));
     assert_eq!(visit(&b, directory, 2, None).unwrap().page.parent(), None);
     b.overlay
-        .close_native_directory(directory.mount(), directory.serial(), directory.owner_id())
+        .close_kernel_directory(directory.mount(), directory.serial(), directory.owner_id())
         .unwrap();
-    b.overlay.revoke_native_mount(mount).unwrap();
+    b.overlay.revoke_kernel_mount(mount).unwrap();
 }

@@ -1,6 +1,6 @@
 //! Bounded ownership of an actual daemon subprocess in this proof's kernel.
 use super::support;
-use layerfs_bridge::native;
+use layerfs_bridge::duplex;
 use layerfs_sdk::internal::Control;
 use std::{
     io::{BufRead, BufReader, Write},
@@ -71,10 +71,10 @@ impl Daemon {
         socket
             .set_write_timeout(Some(Duration::from_secs(10)))
             .unwrap();
-        let connection = native::initiate(
+        let connection = duplex::initiate(
             socket,
             &support::CLIENT_PRIVATE,
-            native::public_key(&support::SERVER_PRIVATE).unwrap(),
+            duplex::public_key(&support::SERVER_PRIVATE).unwrap(),
         )
         .unwrap();
         (owned, Control::new(connection))

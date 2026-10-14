@@ -25,7 +25,7 @@ use support::{
 const WIDE: usize = 1300;
 
 /// Acquisition order the contract fixes: breadth first, children by name bytes,
-/// later paths of one native regular file sharing its first position.
+/// later paths of one host regular file sharing its first position.
 fn expected_positions(fixture: &Fixture) -> BTreeMap<String, u64> {
     let mut positions = BTreeMap::from([(String::new(), 0)]);
     let mut first = BTreeMap::new();
@@ -97,7 +97,7 @@ fn wide_nested_aliased_root_equals_the_whole_namespace_constructor() {
     assert_eq!(work.directory_bindings, expected.len() - 1);
     assert_eq!(work.wide_directories, 1);
     assert_eq!(work.child_window_rows, 512);
-    // One working row per entry and one per native identity, all removed.
+    // One working row per entry and one per host identity, all removed.
     assert_eq!(work.backing_rows, (expected.len() + WIDE + 2) as u64);
     assert!(work.backing_bytes > 0);
     let left: Vec<_> = fs::read_dir(&fixture.path)

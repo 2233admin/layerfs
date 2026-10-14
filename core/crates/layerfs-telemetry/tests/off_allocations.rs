@@ -1,4 +1,4 @@
-#![cfg(feature = "native")]
+#![cfg(feature = "platform")]
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 static TRACK: AtomicBool = AtomicBool::new(false);

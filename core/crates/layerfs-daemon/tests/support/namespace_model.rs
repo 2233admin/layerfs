@@ -116,9 +116,9 @@ impl Model {
             })],
         }
     }
-    /// The model of a native source tree, read through `std::fs` alone. Hard
+    /// The model of a kernel source tree, read through `std::fs` alone. Hard
     /// links are one node; a symlink's portable mode is 0777.
-    pub fn native(source: &Path) -> (Self, usize) {
+    pub fn host(source: &Path) -> (Self, usize) {
         let stamp = |m: &fs::Metadata| (m.mtime(), m.mtime_nsec() as u32);
         let root = fs::symlink_metadata(source).unwrap();
         let mut model = Self::new(root.mode() & 0o1777, stamp(&root));

@@ -16,7 +16,7 @@ mod mounted;
 #[path = "support/mutating.rs"]
 mod mutating;
 #[allow(dead_code)]
-#[path = "support/native_install.rs"]
+#[path = "support/host_install.rs"]
 mod support;
 use mutating::{harness, quiet, unmounted};
 use nix::{errno::Errno, libc};
@@ -145,7 +145,7 @@ fn rewinddir_retires_the_positions_telldir_gave_before_it() {
     drop(stream);
 
     quiet(&h, ready.token);
-    let work = h.status(ready.token).native.unwrap().work.unwrap();
+    let work = h.status(ready.token).kernel.unwrap().work.unwrap();
     assert_eq!((work.retained, work.terminal), (0, 0));
     println!("MOUNTED_REWIND names={NAMES} work={work:?}");
     unmounted(&h, &ready);

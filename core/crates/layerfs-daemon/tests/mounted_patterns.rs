@@ -2,7 +2,7 @@
 //! through a shared mapping, which the kernel writes back from its page cache
 //! as page-aligned WRITE requests, over a file that has reference pieces. The
 //! pieces come from a process launched outside the daemon that shifts the
-//! file's tail. The tree is compared with a native replay of the same writes,
+//! file's tail. The tree is compared with a kernel replay of the same writes,
 //! read again through daemon READs, committed, read from the published root
 //! and through a fresh mount. Counts are printed; nothing is timed.
 #![cfg(target_os = "linux")]
@@ -21,7 +21,7 @@ mod rig;
 use model::assert_same;
 use mounted::COMMAND;
 use nix::libc;
-use rig::{bash_in, clock_masked, native, passed, root, stamp_tree, Rig};
+use rig::{bash_in, clock_masked, host, passed, root, stamp_tree, Rig};
 use std::{
     fs::{self, File, OpenOptions},
     io::Read,
@@ -154,7 +154,7 @@ fn small_and_page_cache_writes_over_a_file_that_has_pieces() {
     let rig = Rig::built("mounted-patterns", tree);
     let first = rig.mount(1);
     let mount = root(&first);
-    assert_same(&rig.base, &native(mount), "the mounted base");
+    assert_same(&rig.base, &host(mount), "the mounted base");
 
     passed(&bash_in(COMMAND, mount, SHIFT), "shift on the mount");
     let shifted = rig.harness.engine(first.token);
@@ -203,7 +203,7 @@ fn small_and_page_cache_writes_over_a_file_that_has_pieces() {
     );
     assert_eq!(rig.store.recognizer_work().passes.failed, 0);
 
-    // The same writes on a native copy.
+    // The same writes on a kernel copy.
     let replay = rig.replay();
     passed(&bash_in(COMMAND, &replay, SHIFT), "shift on the copy");
     passed(
@@ -224,21 +224,21 @@ fn small_and_page_cache_writes_over_a_file_that_has_pieces() {
         fs::read(&path).unwrap() == expected_bytes,
         "big by cached reads"
     );
-    let expected = native(mount);
+    let expected = host(mount);
     assert_same(
-        &clock_masked(&native(&replay), rig.started),
+        &clock_masked(&host(&replay), rig.started),
         &clock_masked(&expected, rig.started),
-        "the mount against the native replay",
+        "the mount against the kernel replay",
     );
 
     let record = rig.committed(first.token, "mounted patterns");
     assert_same(&expected, &rig.published(record.root), "the published root");
-    assert_same(&expected, &native(mount), "the same mount after install");
+    assert_same(&expected, &host(mount), "the same mount after install");
     assert!(direct(&path) == expected_bytes, "big after install");
     rig.unmount(&first);
 
     let fresh = rig.mount(2);
-    assert_same(&expected, &native(root(&fresh)), "the fresh mount");
+    assert_same(&expected, &host(root(&fresh)), "the fresh mount");
     assert!(
         direct(&root(&fresh).join("big")) == expected_bytes,
         "big on the fresh mount"

@@ -1,5 +1,5 @@
 //! Real kernel mounts: a directory's `st_nlink` is two plus its child
-//! directories, as a native filesystem reports it. Inherited and local
+//! directories, as a kernel filesystem reports it. Inherited and local
 //! directories alike, after every mkdir, rmdir and rename, through ordinary
 //! syscalls of processes the daemon never registered.
 #![cfg(target_os = "linux")]
@@ -16,7 +16,7 @@ mod mounted;
 #[path = "support/mutating.rs"]
 mod mutating;
 #[allow(dead_code)]
-#[path = "support/native_install.rs"]
+#[path = "support/host_install.rs"]
 mod support;
 use mounted::COMMAND;
 use mutating::{forced, harness, path_only, quiet, shell, unmounted};
@@ -172,7 +172,7 @@ fn a_directory_reports_two_links_plus_its_child_directories() {
     assert_eq!(directories, 17);
 
     quiet(&h, ready.token);
-    let work = h.status(ready.token).native.unwrap().work.unwrap();
+    let work = h.status(ready.token).kernel.unwrap().work.unwrap();
     assert_eq!((work.retained, work.terminal), (0, 0));
     println!("MOUNTED_LINKS directories={directories} work={work:?}");
     unmounted(&h, &ready);

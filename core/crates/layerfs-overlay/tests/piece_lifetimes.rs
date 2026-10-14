@@ -39,15 +39,15 @@ fn scatter(file: &mut File, content: &[u8], pieces: u64) {
 fn stale_pieces_are_cleaned_in_pages_and_an_installed_generation_retires_its_pieces() {
     let temp = Temp::new();
     let db = temp.db();
-    let route = db.open_workspace([31; 32], [32; 32]).unwrap();
-    let mut source = db.acquire_base_source(route, 1).unwrap();
+    db.open_workspace([32; 32]).unwrap();
+    let mut source = db.acquire_base_source(1).unwrap();
     let content = noise(2 << 20, 31);
     let mut file = committed(&db, source, &content);
     scatter(&mut file, &content, 80);
-    assert_eq!(rows(&db, route).0, 80);
+    assert_eq!(rows(&db, ()).0, 80);
     // A shrink hides 69 of them. It deletes none: maintenance does, in pages.
     file.resize(20 * CELL + 5);
-    assert_eq!(rows(&db, route).0, 80);
+    assert_eq!(rows(&db, ()).0, 80);
     file.resize(200 * CELL);
     file.check();
     // A claim after the shrink replaces the stale piece it meets and stays.
@@ -56,16 +56,16 @@ fn stale_pieces_are_cleaned_in_pages_and_an_installed_generation_retires_its_pie
         part(&content, 0, CELL),
         claims(None, &[(100 * CELL, CELL, 0)]),
     );
-    assert_eq!(rows(&db, route).0, 80);
+    assert_eq!(rows(&db, ()).0, 80);
     assert!(maintain(&db, || {}) >= 2);
-    assert_eq!(rows(&db, route).0, 12);
+    assert_eq!(rows(&db, ()).0, 12);
     file.check();
 
     // Seal and install. The layer above keeps its own piece; the retired
     // generation's pieces are deleted with its other rows.
     db.release_base_source(source).unwrap();
-    let capture = db.capture(route).unwrap();
-    source = db.acquire_base_source(route, 2).unwrap();
+    let capture = db.capture().unwrap();
+    source = db.acquire_base_source(2).unwrap();
     file.source = source;
     let sealed = file.expect.clone();
     file.write_claimed(
@@ -74,24 +74,24 @@ fn stale_pieces_are_cleaned_in_pages_and_an_installed_generation_retires_its_pie
         claims(None, &[(4 * CELL, 2 * CELL, 9 * CELL)]),
     );
     file.check();
-    assert_eq!(rows(&db, route).0, 13);
+    assert_eq!(rows(&db, ()).0, 13);
     db.release_base_source(source).unwrap();
     db.install(capture, [33; 32]).unwrap();
     maintain(&db, || {});
-    source = db.acquire_base_source(route, 3).unwrap();
+    source = db.acquire_base_source(3).unwrap();
     file.source = source;
     file.base = sealed;
     file.check();
-    assert_eq!(rows(&db, route).0, 1);
-    assert_eq!(db.resources(Some(route)).unwrap().counts.inode_rows, 1);
+    assert_eq!(rows(&db, ()).0, 1);
+    assert_eq!(db.resources().unwrap().counts.inode_rows, 1);
 }
 
 #[test]
 fn a_failed_capture_folds_pieces_and_cells_below_the_active_layer() {
     let temp = Temp::new();
     let db = temp.db();
-    let route = db.open_workspace([41; 32], [42; 32]).unwrap();
-    let mut source = db.acquire_base_source(route, 1).unwrap();
+    db.open_workspace([42; 32]).unwrap();
+    let mut source = db.acquire_base_source(1).unwrap();
     let content = noise(4 << 20, 41);
     let mut first = committed(&db, source, &content);
     let mut second = File::new(&db, source, 8, pattern(70_000, 5));
@@ -119,8 +119,8 @@ fn a_failed_capture_folds_pieces_and_cells_below_the_active_layer() {
         claims(None, &[(0, 8 * CELL, 9 * CELL)]),
     );
     db.release_base_source(source).unwrap();
-    let capture = db.capture(route).unwrap();
-    source = db.acquire_base_source(route, 2).unwrap();
+    let capture = db.capture().unwrap();
+    source = db.acquire_base_source(2).unwrap();
     first.source = source;
     second.source = source;
     // The active generation above it: cells and a piece over the long
@@ -147,7 +147,7 @@ fn a_failed_capture_folds_pieces_and_cells_below_the_active_layer() {
     // time, and both files read the same bytes after every step.
     db.release_base_source(source).unwrap();
     db.resolve_failed_capture(capture).unwrap();
-    source = db.acquire_base_source(route, 3).unwrap();
+    source = db.acquire_base_source(3).unwrap();
     first.source = source;
     second.source = source;
     let steps = maintain(&db, || {
@@ -155,8 +155,8 @@ fn a_failed_capture_folds_pieces_and_cells_below_the_active_layer() {
         second.check();
     });
     assert!(steps > 10, "{steps}");
-    assert!(db.capture_ready(route).unwrap());
-    let counts = db.resources(Some(route)).unwrap().counts;
+    assert!(db.capture_ready().unwrap());
+    let counts = db.resources().unwrap().counts;
     assert_eq!(counts.inode_rows, 2);
     // The long piece is in two parts around the active piece over it, the
     // short one likewise; with the two active pieces and the second file's.
@@ -164,26 +164,26 @@ fn a_failed_capture_folds_pieces_and_cells_below_the_active_layer() {
 
     // The folded state seals and installs like any other.
     db.release_base_source(source).unwrap();
-    let capture = db.capture(route).unwrap();
+    let capture = db.capture().unwrap();
     let sealed = (first.expect.clone(), second.expect.clone());
     db.install(capture, [43; 32]).unwrap();
     maintain(&db, || {});
-    source = db.acquire_base_source(route, 4).unwrap();
+    source = db.acquire_base_source(4).unwrap();
     (first.source, second.source) = (source, source);
     (first.base, second.base) = sealed;
     // Nothing was written above the installed generation: no local row.
     (first.touched, second.touched) = (false, false);
     first.check();
     second.check();
-    assert_eq!(rows(&db, route), (0, 0));
+    assert_eq!(rows(&db, ()), (0, 0));
 }
 
 #[test]
 fn folds_and_installs_keep_a_reference_model_exact_under_random_claims() {
     let temp = Temp::new();
     let db = temp.db();
-    let route = db.open_workspace([51; 32], [52; 32]).unwrap();
-    let mut source = db.acquire_base_source(route, 1).unwrap();
+    db.open_workspace([52; 32]).unwrap();
+    let mut source = db.acquire_base_source(1).unwrap();
     let mut random = Random(23);
     let content = noise(500_000, 51);
     let mut file = File::new(&db, source, 2, content.clone());
@@ -209,9 +209,9 @@ fn folds_and_installs_keep_a_reference_model_exact_under_random_claims() {
     for round in 0..8_u64 {
         mutate(&mut file, &mut random, 30);
         db.release_base_source(source).unwrap();
-        let capture = db.capture(route).unwrap();
+        let capture = db.capture().unwrap();
         let sealed = file.expect.clone();
-        source = db.acquire_base_source(route, 100 + round).unwrap();
+        source = db.acquire_base_source(100 + round).unwrap();
         file.source = source;
         // The layer above the sealed one, before its fate is known.
         mutate(&mut file, &mut random, 15);
@@ -222,7 +222,7 @@ fn folds_and_installs_keep_a_reference_model_exact_under_random_claims() {
         } else {
             db.resolve_failed_capture(capture).unwrap();
         }
-        source = db.acquire_base_source(route, 200 + round).unwrap();
+        source = db.acquire_base_source(200 + round).unwrap();
         file.source = source;
         let mut step = 0;
         maintain(&db, || {
@@ -232,8 +232,8 @@ fn folds_and_installs_keep_a_reference_model_exact_under_random_claims() {
             }
         });
         file.check();
-        assert!(db.capture_ready(route).unwrap());
-        assert_eq!(db.resources(Some(route)).unwrap().counts.inode_rows, 1);
+        assert!(db.capture_ready().unwrap());
+        assert_eq!(db.resources().unwrap().counts.inode_rows, 1);
     }
 }
 
@@ -257,8 +257,8 @@ fn held(db: &Overlay, file: &File, read: FileRead, size: usize) -> Vec<u8> {
 fn an_unlinked_open_file_keeps_its_pieces_until_its_last_owner() {
     let temp = Temp::new();
     let db = temp.db();
-    let route = db.open_workspace([61; 32], [62; 32]).unwrap();
-    let mut source = db.acquire_base_source(route, 1).unwrap();
+    db.open_workspace([62; 32]).unwrap();
+    let mut source = db.acquire_base_source(1).unwrap();
     let content = noise(2 << 20, 61);
     let mut file = committed(&db, source, &content);
     scatter(&mut file, &content, 20);
@@ -305,40 +305,40 @@ fn an_unlinked_open_file_keeps_its_pieces_until_its_last_owner() {
         let publication = db.apply(source, &write).unwrap();
         db.reply_attempted(publication).unwrap();
         db.release_base_source(source).unwrap();
-        let capture = db.capture(route).unwrap();
+        let capture = db.capture().unwrap();
         if round % 2 == 1 {
             db.install(capture, [round as u8 + 70; 32]).unwrap();
         } else {
             db.resolve_failed_capture(capture).unwrap();
         }
         maintain(&db, || {});
-        source = db.acquire_base_source(route, 2 + round).unwrap();
+        source = db.acquire_base_source(2 + round).unwrap();
     }
     let read = db.acquire_file_read(source, open, 999).unwrap();
     assert!(held(&db, &file, read, size) == expect);
     // Every lower layer has migrated: the pieces are the orphan's own rows.
     // The six claimed cells are one run and took three of the scattered
     // pieces: 17 of those, the run and the long piece.
-    assert_eq!(rows(&db, route).0, 19);
+    assert_eq!(rows(&db, ()).0, 19);
     db.close_file(open).unwrap();
     assert!(held(&db, &file, read, size) == expect);
     db.release_file_read(read).unwrap();
     maintain(&db, || {});
-    assert_eq!(rows(&db, route), (0, 0));
-    assert_eq!(db.resources(Some(route)).unwrap().open.orphan_files, 0);
+    assert_eq!(rows(&db, ()), (0, 0));
+    assert_eq!(db.resources().unwrap().open.orphan_files, 0);
 }
 
 #[test]
 fn an_unlinked_file_nothing_holds_retires_its_pieces() {
     let temp = Temp::new();
     let db = temp.db();
-    let route = db.open_workspace([71; 32], [72; 32]).unwrap();
-    let source = db.acquire_base_source(route, 1).unwrap();
+    db.open_workspace([72; 32]).unwrap();
+    let source = db.acquire_base_source(1).unwrap();
     let content = noise(2 << 20, 71);
     let mut file = committed(&db, source, &content);
     scatter(&mut file, &content, 150);
     file.write(301 * CELL, &pattern(CELL_BYTES, 3));
-    assert_eq!(rows(&db, route), (150, 1));
+    assert_eq!(rows(&db, ()), (150, 1));
     let mut removed = file.inode(file.expect.len() as u64);
     removed.nlink = 0;
     let unlink = Changes {
@@ -349,7 +349,7 @@ fn an_unlinked_file_nothing_holds_retires_its_pieces() {
     db.reply_attempted(publication).unwrap();
     // Three pages of pieces, each one statement of one step.
     assert!(maintain(&db, || {}) >= 4);
-    assert_eq!(rows(&db, route), (0, 0));
+    assert_eq!(rows(&db, ()), (0, 0));
 }
 
 #[test]
@@ -357,17 +357,17 @@ fn a_closed_workspace_retains_its_pieces_until_file_disposal() {
     let temp = Temp::new();
     let db = temp.db();
     let content = noise(2 << 20, 81);
-    let closed = db.open_workspace([81; 32], [82; 32]).unwrap();
-    let closed_source = db.acquire_base_source(closed, 1).unwrap();
+    db.open_workspace([82; 32]).unwrap();
+    let closed_source = db.acquire_base_source(1).unwrap();
     let mut file = committed(&db, closed_source, &content);
     scatter(&mut file, &content, 150);
-    db.close(closed).unwrap();
+    db.close().unwrap();
     db.release_base_source(closed_source).unwrap();
-    assert_eq!(db.cleanup_state(closed).unwrap(), CleanupState::Queued);
+    assert_eq!(db.cleanup_state().unwrap(), CleanupState::Queued);
     assert_eq!(
-        rows(&db, closed).0,
+        rows(&db, ()).0,
         150,
         "closed file is retained until disposal"
     );
-    assert_eq!(db.resources(None).unwrap().counts.reference_rows, 150);
+    assert_eq!(db.resources().unwrap().counts.reference_rows, 150);
 }

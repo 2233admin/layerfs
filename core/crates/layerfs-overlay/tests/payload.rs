@@ -8,8 +8,8 @@ use std::sync::Arc;
 fn layered_reads_match_a_reference_model_across_writes_resizes_capture_and_install() {
     let temp = Temp::new();
     let db = temp.db();
-    let route = db.open_workspace([1; 32], [2; 32]).unwrap();
-    let mut source = db.acquire_base_source(route, 1).unwrap();
+    db.open_workspace([2; 32]).unwrap();
+    let mut source = db.acquire_base_source(1).unwrap();
     let mut random = Random(7);
     // An inherited 300,001-byte base file and a file created locally.
     let mut inherited = File::new(&db, source, 2, pattern(300_001, 3));
@@ -51,12 +51,12 @@ fn layered_reads_match_a_reference_model_across_writes_resizes_capture_and_insta
         // Seal the generation. The sealed view stays exactly readable while
         // the next layer shrinks, regrows and overwrites above it.
         db.release_base_source(source).unwrap();
-        let capture = db.capture(route).unwrap();
+        let capture = db.capture().unwrap();
         let sealed: Vec<(u64, Vec<u8>, Vec<u8>)> = [&inherited, &created]
             .iter()
             .map(|file| (file.serial, file.expect.clone(), file.base.clone()))
             .collect();
-        source = db.acquire_base_source(route, 100 + round).unwrap();
+        source = db.acquire_base_source(100 + round).unwrap();
         for file in [&mut inherited, &mut created] {
             file.source = source;
             let size = file.expect.len() as u64;
@@ -93,7 +93,7 @@ fn layered_reads_match_a_reference_model_across_writes_resizes_capture_and_insta
         if round % 2 == 1 {
             db.release_base_source(source).unwrap();
             db.install(capture, [round as u8 + 10; 32]).unwrap();
-            source = db.acquire_base_source(route, 200 + round).unwrap();
+            source = db.acquire_base_source(200 + round).unwrap();
             for (file, (_, expect, _)) in [&mut inherited, &mut created].into_iter().zip(sealed) {
                 file.source = source;
                 file.base = expect;
@@ -104,7 +104,7 @@ fn layered_reads_match_a_reference_model_across_writes_resizes_capture_and_insta
             // release. Keep the layer live by installing in the next round.
             db.release_base_source(source).unwrap();
             db.install(capture, [round as u8 + 10; 32]).unwrap();
-            source = db.acquire_base_source(route, 200 + round).unwrap();
+            source = db.acquire_base_source(200 + round).unwrap();
             for (file, (_, expect, _)) in [&mut inherited, &mut created].into_iter().zip(sealed) {
                 file.source = source;
                 file.base = expect;
@@ -118,8 +118,8 @@ fn layered_reads_match_a_reference_model_across_writes_resizes_capture_and_insta
 fn shrink_work_is_independent_of_discarded_data_and_regrow_reads_zero() {
     let temp = Temp::new();
     let db = temp.db();
-    let route = db.open_workspace([5; 32], [6; 32]).unwrap();
-    let source = db.acquire_base_source(route, 1).unwrap();
+    db.open_workspace([6; 32]).unwrap();
+    let source = db.acquire_base_source(1).unwrap();
     let window = pattern(WRITE_WINDOW, 1);
     let mut small = File::new(&db, source, 30, pattern(9_000, 2));
     small.write(0, &window[..6_000]);
@@ -170,8 +170,8 @@ fn shrink_work_is_independent_of_discarded_data_and_regrow_reads_zero() {
 fn a_tall_shrink_staircase_keeps_logarithmic_lookups_and_exact_bytes() {
     let temp = Temp::new();
     let db = temp.db();
-    let route = db.open_workspace([7; 32], [8; 32]).unwrap();
-    let source = db.acquire_base_source(route, 1).unwrap();
+    db.open_workspace([8; 32]).unwrap();
+    let source = db.acquire_base_source(1).unwrap();
     let mut file = File::new(&db, source, 40, Vec::new());
     const STEPS: u64 = 1_500;
     // Fill every cell, then repeatedly regrow one cell further and shrink back
@@ -243,8 +243,8 @@ fn a_tall_shrink_staircase_keeps_logarithmic_lookups_and_exact_bytes() {
 fn holes_cost_no_rows_and_tiny_and_dense_files_report_measured_pages() {
     let temp = Temp::new();
     let db = temp.db();
-    let route = db.open_workspace([9; 32], [10; 32]).unwrap();
-    let source = db.acquire_base_source(route, 1).unwrap();
+    db.open_workspace([10; 32]).unwrap();
+    let source = db.acquire_base_source(1).unwrap();
     // One byte at one tebibyte: the hole below it is no row at all.
     let (start, _) = db.pages().unwrap();
     let mut sparse = File::new(&db, source, 50, Vec::new());

@@ -15,12 +15,13 @@ use layerfs_content::{
 use layerfs_daemon::{
     bootstrap::open_store,
     store::{BindRequest, BoundWorkspace, CommitError, CommitPhase, Store},
-    JobReceipt, Owner, OwnerClient, OwnerConfig, Response,
+    Owner, OwnerClient, OwnerConfig,
 };
 use layerfs_history::{BranchSnapshot, CommitStagedOutcome, HistoryError, WorkspaceId};
-use layerfs_overlay::{ProfileConfig, Route};
+use layerfs_overlay::ProfileConfig;
 use layerfs_storage::{ReservationBlocks, Save, StorageError};
 use layerfs_telemetry::timer::Timing;
+use layerfs_workspace::Route;
 use layerfs_workspace::{Operation, Outcome, Position, Time};
 use std::{
     cell::Cell,
@@ -31,14 +32,14 @@ use std::{
     time::Duration,
 };
 
-fn job(
+fn job<T>(
     owner: &OwnerClient,
     route: Route,
     command: impl FnOnce(
         &layerfs_daemon::OwnerClient,
-        layerfs_overlay::Route,
-    ) -> Result<layerfs_daemon::JobReceipt, layerfs_daemon::OwnerError>,
-) -> JobReceipt {
+        layerfs_workspace::Route,
+    ) -> Result<T, layerfs_daemon::OwnerError>,
+) -> T {
     command(owner, route).unwrap_or_else(|error| panic!("{error:?}"))
 }
 fn bind(store: &Arc<Store>, owner: &Owner, f: &support::Fixture, tag: u8) -> Arc<BoundWorkspace> {
@@ -62,7 +63,7 @@ fn setup(label: &str) -> (support::Fixture, Arc<Store>, Owner) {
         f.config.clone(),
         support::BINDING,
         support::CURSOR,
-        2,
+        OwnerConfig::default().namespaces,
         2 * 1024 * 1024,
         ReservationBlocks::default(),
     )
@@ -93,22 +94,17 @@ fn window<T>(
             job_client.acquire_base_source(job_route, NEXT.fetch_add(1, Ordering::Relaxed))
         },
     );
-    let source = match acquired.result() {
-        Ok(Response::BaseSource(source)) => *source,
-        other => panic!("{other:?}"),
-    };
-    drop(acquired);
+    let source = acquired;
     let view = operation.workspace().view_for_source(source).unwrap();
     let value = f(&operation, &view);
     drop(view);
-    assert!(job(
+    job(
         operation.overlay(),
         workspace.route(),
-        |job_client: &layerfs_daemon::OwnerClient, job_route| job_client
-            .release_base_source(job_route, source)
-    )
-    .result()
-    .is_ok());
+        |job_client: &layerfs_daemon::OwnerClient, job_route| {
+            job_client.release_base_source(job_route, source)
+        },
+    );
     value
 }
 fn write(workspace: &BoundWorkspace, value: &[u8]) {
@@ -142,13 +138,11 @@ fn write(workspace: &BoundWorkspace, value: &[u8]) {
             Outcome::Applied { publication, .. } => publication,
             other => panic!("{other:?}"),
         };
-        assert!(job(
+        job(
             operation.overlay(),
             workspace.route(),
-            |job_client: &layerfs_daemon::OwnerClient, _| job_client.reply_attempted(publication)
-        )
-        .result()
-        .is_ok());
+            |job_client: &layerfs_daemon::OwnerClient, _| job_client.reply_attempted(publication),
+        );
     });
 }
 fn read(workspace: &BoundWorkspace) -> Vec<u8> {
@@ -203,16 +197,8 @@ fn construct(
     let mut objects = FilesystemObjects::new_with_accepted(save, &mut sink, save);
     Ok(layerfs_content::filesystem::update_filesystem(&mut objects, &input, None)?.root)
 }
-fn close(owner: &Owner, workspace: &BoundWorkspace) {
-    assert!(matches!(
-        job(
-            &owner.client(),
-            workspace.route(),
-            |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.close(job_route)
-        )
-        .result(),
-        Ok(Response::Done)
-    ));
+fn close(_owner: &Owner, workspace: &BoundWorkspace) {
+    workspace.close().unwrap();
 }
 
 #[test]
@@ -407,7 +393,7 @@ fn known_publication_survives_an_unattempted_local_install() {
         Some(CommitStagedOutcome::Committed(_))
     ));
     assert_eq!(workspace.snapshot().unwrap(), original);
-    assert!(failed.capture.is_some() && failed.captured.is_some());
+    assert!(failed.capture.is_some());
     assert!(matches!(
         workspace
             .commit(|_, _, _| unreachable!())
@@ -532,16 +518,15 @@ fn observed_store(
     let handles = Arc::new(
         Handles::open_writable(f.config.clone(), support::BINDING, support::CURSOR).unwrap(),
     );
-    let readers = (0..2)
-        .map(|_| {
-            let read = Handles::open_read_only(f.config.clone(), support::BINDING, support::CURSOR)
-                .unwrap();
-            layerfs_daemon::store::StoreReader::new(
-                layerfs_storage::Storage::new(read.storage).unwrap(),
-                Arc::new(read.history),
-            )
-        })
-        .collect();
+    let config = f.config.clone();
+    let factory: layerfs_daemon::store::ReaderFactory = Arc::new(move |_| {
+        let read = Handles::open_read_only(config.clone(), support::BINDING, support::CURSOR)?;
+        Ok(layerfs_daemon::store::StoreReader::new(
+            layerfs_storage::Storage::new(read.storage)?,
+            Arc::new(read.history),
+        ))
+    });
+    let control = factory(0).unwrap();
     let history = history_boundary::ObservedHistory {
         handles: handles.clone(),
         database: f.config.path.clone(),
@@ -551,10 +536,11 @@ fn observed_store(
     let store = Store::new(
         handles.storage.clone(),
         Arc::new(history),
-        readers,
+        control,
+        factory,
         2 * 1024 * 1024,
         ReservationBlocks::default(),
-        layerfs_daemon::store::ReadLimits::default(),
+        16,
     )
     .unwrap();
     (Arc::new(store), handles)
@@ -645,13 +631,8 @@ fn unknown_history_acknowledgement_retains_original_intent_and_capture() {
         failed.error,
         CommitError::History(HistoryError::UnknownOutcome)
     ));
-    assert!(
-        failed.capture.is_some()
-            && failed.captured.is_some()
-            && failed.intent.is_some()
-            && failed.prepared.is_some()
-    );
-    assert!(failed.published.is_none() && failed.local.is_none() && failed.local_error.is_none());
+    assert!(failed.capture.is_some() && failed.intent.is_some() && failed.prepared.is_some());
+    assert!(failed.published.is_none() && !failed.locally_settled && failed.local_error.is_none());
     assert_eq!(workspace.snapshot().unwrap(), original);
     assert!(matches!(
         workspace
@@ -715,7 +696,7 @@ fn nested_storage_unknown_keeps_original_capture_and_blocks_another_commit() {
             .commit(|_, _, _| Err(CommitError::Storage(error)))
             .unwrap_err();
         assert_eq!(failed.phase, CommitPhase::Construct);
-        assert!(failed.capture.is_some() && failed.captured.is_some());
+        assert!(failed.capture.is_some());
         assert!(failed.intent.is_none() && failed.published.is_none());
         assert!(matches!(
             &failed.error,
@@ -733,7 +714,7 @@ fn nested_storage_unknown_keeps_original_capture_and_blocks_another_commit() {
                 !failed.locally_settled,
                 "nested original unknown must not resolve capture: case {index}"
             );
-            assert!(failed.local.is_none() && failed.local_error.is_none());
+            assert!(!failed.locally_settled && failed.local_error.is_none());
             assert!(matches!(
                 workspace
                     .commit(|_, _, _| unreachable!())
@@ -743,7 +724,7 @@ fn nested_storage_unknown_keeps_original_capture_and_blocks_another_commit() {
             ));
             retained.push((workspace, failed));
         } else {
-            assert!(failed.locally_settled && failed.local.is_some());
+            assert!(failed.locally_settled);
             drop(failed);
             let later = workspace
                 .commit(|save, _, snapshot| {
@@ -757,7 +738,7 @@ fn nested_storage_unknown_keeps_original_capture_and_blocks_another_commit() {
     }
     println!("NESTED_UNKNOWN original_and_cleanup_and_nested=retained definite_control=resolved later_explicit_commit=passed no_stage=true terminal_unknowns=3");
     // These are deliberately supplied original producer outcomes. The proof
-    // does not execute a native SQLite I/O failure or settle the three unknowns.
+    // does not execute a kernel SQLite I/O failure or settle the three unknowns.
     owner.stop().unwrap();
     drop((retained, store));
     f.cleanup();

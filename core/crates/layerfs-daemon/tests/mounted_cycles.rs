@@ -30,10 +30,10 @@ mod mounted;
 #[path = "support/mounted_commit.rs"]
 mod rig;
 use layerfs_bridge::control::{
-    Activity, ControlCode, NativePhase, ReadyMount, Reply, Request, WorkspaceStatus, WorkspaceToken,
+    Activity, ControlCode, MountPhase, ReadyMount, Reply, Request, WorkspaceStatus, WorkspaceToken,
 };
 use layerfs_content::ObjectId;
-use layerfs_daemon::{control::Failure, OwnerWork, Response};
+use layerfs_daemon::{control::Failure, OwnerWork};
 use layerfs_history::{
     BranchId, BranchSnapshot, ForkRequest, ForkSource, HistoryName, WorkspaceId,
 };
@@ -41,7 +41,7 @@ use layerfs_overlay::{Resources, StoredCounts};
 use model::{assert_same, Flat, FILE};
 use mounted::{mount_entry, COMMAND};
 use nix::libc;
-use rig::{bash_in, native, passed, pattern, root, stamp_tree, Rig};
+use rig::{bash_in, host, passed, pattern, root, stamp_tree, Rig};
 use std::{
     fs,
     io::{self, BufRead, BufReader, Read, Write},
@@ -122,33 +122,17 @@ fn eventually(mut condition: impl FnMut() -> bool) -> bool {
 fn quiet(rig: &Rig, token: WorkspaceToken) -> bool {
     let mut last = None;
     eventually(|| {
-        let work = rig.harness.status(token).native.unwrap().work.unwrap();
+        let work = rig.harness.status(token).kernel.unwrap().work.unwrap();
         let now = (work.active, work.completed);
         let settled = work.active == 0 && last == Some(now);
         last = Some(now);
         settled
     })
 }
-/// One engine observation through a live route: the daemon aggregate, or
-/// that route's own namespace.
-fn resources(rig: &Rig, through: WorkspaceToken, global: bool) -> Resources {
+/// One engine observation through a live route: the that route's own Workspace.
+fn resources(rig: &Rig, through: WorkspaceToken, _global: bool) -> Resources {
     let operation = rig.harness.service.operation(through).unwrap();
-    let daemon = rig.harness.owner.client();
-    let client = if global { &daemon } else { operation.overlay() };
-    let done = client
-        .resources(
-            if global {
-                None
-            } else {
-                Some(operation.workspace().route())
-            },
-            global,
-        )
-        .unwrap();
-    match done.result() {
-        Ok(Response::Resources(resources)) => **resources,
-        other => panic!("{other:?}"),
-    }
+    operation.overlay().resources().unwrap()
 }
 
 // ---------------------------------------------------------------- R6-7
@@ -701,7 +685,7 @@ fn a_caller_blocked_on_a_full_pipe_neither_blocks_commit_nor_is_touched_by_unmou
     println!("R6_8 holder pid={pid} pipe_capacity={full} blocked={before_commit:?}");
 
     // A Commit completes and includes what the process wrote earlier.
-    let before = native(mount);
+    let before = host(mount);
     assert_eq!(
         at(&before, "work/earlier.txt"),
         b"written before the pipe filled\n"
@@ -727,7 +711,7 @@ fn a_caller_blocked_on_a_full_pipe_neither_blocks_commit_nor_is_touched_by_unmou
     // Normal Unmount: the kernel's reversible answer, and nothing else.
     let receipt = ready.receipt;
     match rig.harness.try_unmount(token) {
-        Err(Failure::Native(failure)) => {
+        Err(Failure::Kernel(failure)) => {
             assert_eq!(
                 (failure.code, failure.phase),
                 (ControlCode::Busy, "unmount:kernel"),
@@ -747,11 +731,11 @@ fn a_caller_blocked_on_a_full_pipe_neither_blocks_commit_nor_is_touched_by_unmou
     );
     let status = rig.harness.status(token);
     assert_eq!(status.activity, Activity::Idle);
-    let native_status = status.native.unwrap();
-    assert_eq!(native_status.phase, NativePhase::Ready);
-    assert!(!native_status.detached);
+    let kernel_status = status.kernel.unwrap();
+    assert_eq!(kernel_status.phase, MountPhase::Ready);
+    assert!(!kernel_status.detached);
     assert_eq!(
-        native_status.ready.unwrap().receipt,
+        kernel_status.ready.unwrap().receipt,
         receipt,
         "the same connection"
     );
@@ -761,7 +745,7 @@ fn a_caller_blocked_on_a_full_pipe_neither_blocks_commit_nor_is_touched_by_unmou
         b"written before the pipe filled\n",
         "the mount still serves"
     );
-    assert_same(&before, &native(mount), "R6-8: the view after Busy");
+    assert_same(&before, &host(mount), "R6-8: the view after Busy");
 
     // The pipe is read: the process finishes by itself.
     let (counted, total) = mpsc::channel();
@@ -798,7 +782,7 @@ fn a_caller_blocked_on_a_full_pipe_neither_blocks_commit_nor_is_touched_by_unmou
     assert_eq!((exit.code(), exit.signal()), (Some(0), None), "{rest:?}");
     assert!(rest.is_empty(), "{rest:?}");
     // Its mapping, descriptor and working directory worked after the Busy.
-    let after = native(mount);
+    let after = host(mount);
     assert_eq!(
         at(&after, "work/after.txt"),
         b"written after the pipe was read\n"
@@ -860,9 +844,9 @@ fn branch_now(rig: &Rig, branch: BranchId) -> BranchSnapshot {
         .expect("the Branch")
 }
 /// What a refused request must leave alone: the registry's epoch, activity,
-/// binding and retained publication, the engine row and the native phase.
+/// binding and retained publication, the engine row and the kernel phase.
 fn standing(status: &WorkspaceStatus) -> String {
-    let native = status.native.as_ref().unwrap();
+    let kernel = status.kernel.as_ref().unwrap();
     format!(
         "epoch={} saturated={} activity={:?} binding={:?} published={:?} local={:?} local_failure={:?} phase={:?} detached={}",
         status.epoch,
@@ -872,8 +856,8 @@ fn standing(status: &WorkspaceStatus) -> String {
         status.published,
         status.local,
         status.local_failure,
-        native.phase,
-        native.detached
+        kernel.phase,
+        kernel.detached
     )
 }
 fn write_same(ready: &ReadyMount, text: &str) {
@@ -897,7 +881,7 @@ fn simultaneous_mounts_over_related_roots_are_isolated_and_a_stale_token_never_r
     // A: a Workspace of the Branch, bound at its base before any Commit.
     let a = rig.mount(1);
     let guard_a = Mounted(a.directory.clone());
-    let base = native(root(&a));
+    let base = host(root(&a));
     let bound_a = rig.harness.status(a.token).binding;
     assert_eq!(
         (bound_a.branch.id, bound_a.branch.head_commit),
@@ -916,7 +900,7 @@ fn simultaneous_mounts_over_related_roots_are_isolated_and_a_stale_token_never_r
         ),
         "the first descendant",
     );
-    let tree_1 = native(root(&k));
+    let tree_1 = host(root(&k));
     let c1 = rig.committed(k.token, "FP-24 descendant 1");
     let fork = BranchId::from_authority([75; 16]);
     let forked = match rig
@@ -946,7 +930,7 @@ fn simultaneous_mounts_over_related_roots_are_isolated_and_a_stale_token_never_r
         ),
         "the second descendant",
     );
-    let tree_2 = native(root(&k));
+    let tree_2 = host(root(&k));
     let c2 = rig.committed(k.token, "FP-24 descendant 2");
     assert_eq!(c2.parent, Some(c1.id));
     rig.unmount(&k);
@@ -993,27 +977,23 @@ fn simultaneous_mounts_over_related_roots_are_isolated_and_a_stale_token_never_r
         namespaces[0], roots[0], namespaces[1], roots[1], namespaces[2], roots[2], k.token.namespace
     );
     // Each is routed to its own root.
-    assert_same(&base, &native(root(&a)), "A at the base");
-    assert_same(
-        &tree_1,
-        &native(root(&f)),
-        "the fork at the first descendant",
-    );
-    assert_same(&tree_2, &native(root(&d)), "D at the second descendant");
+    assert_same(&base, &host(root(&a)), "A at the base");
+    assert_same(&tree_1, &host(root(&f)), "the fork at the first descendant");
+    assert_same(&tree_2, &host(root(&d)), "D at the second descendant");
 
     // The same name, written differently in each.
     write_same(&a, "written in A");
     write_same(&f, "written in the fork");
     write_same(&d, "written on the descendant");
-    let (tree_a, tree_f, tree_d) = (native(root(&a)), native(root(&f)), native(root(&d)));
+    let (tree_a, tree_f, tree_d) = (host(root(&a)), host(root(&f)), host(root(&d)));
     let isolated = |when: &str| {
-        assert_same(&tree_a, &native(root(&a)), &format!("{when}: mount A"));
+        assert_same(&tree_a, &host(root(&a)), &format!("{when}: mount A"));
         assert_same(
             &tree_f,
-            &native(root(&f)),
+            &host(root(&f)),
             &format!("{when}: the fork's mount"),
         );
-        assert_same(&tree_d, &native(root(&d)), &format!("{when}: mount D"));
+        assert_same(&tree_d, &host(root(&d)), &format!("{when}: mount D"));
     };
     let own = |tree: &Flat, text: &str, what: &str| {
         assert_eq!(
