@@ -13,7 +13,7 @@ section is the current description and supersedes the owner thread, class
 queues, credits, common ledger and notification table described further down.
 Measured outcomes are in the [#320 ledger](../issues/320/PROGRESS.md), not here.
 
-- **Template.** Startup builds an empty schema 34 database at the configured
+- **Template.** Startup builds an empty schema 35 database at the configured
   overlay path, checks its close before readiness and keeps only its physical
   identity handle. It never holds a Workspace row.
 - **One file per mounted Workspace.** Mount copies the template to
@@ -45,6 +45,10 @@ Measured outcomes are in the [#320 ledger](../issues/320/PROGRESS.md), not here.
   kernel-reference state is resident and grows with open files and with the
   files the kernel currently references. The engine also remembers three fence
   rows; see [rows the engine remembers](64-overlay-terminology.md#rows-the-engine-remembers).
+- **Resources.** Schema 35 removes trigger-maintained accounting. The explicit
+  Resources observation counts current rows and sums stored lengths on demand;
+  its table visits are charged to that observer, not to each mutation. Ordinary
+  filesystem state and runtime custody remain independent of diagnostic counts.
 - **Counted work.** A job is one hold of the lock. Each hold records its lock
   wait, its hold time and its SQL, payload and physical work in its class;
   a maintenance step is counted only in the maintenance totals.

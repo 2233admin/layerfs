@@ -38,13 +38,17 @@ key and an (8-byte file scope, kind, 32-byte key) identity without an untyped
 key, a caller-chosen and an engine-minted operation number could collide in
 one relation, and neither integer-keyed relation had a production writer.
 
-`accounting` is one row with the constant key `id=1`; each trigger seeks it by
-that key. The daemon aggregate is the sum over its Workspace files. The
-maintenance cursor is (kind, resource, target). The smallest accepted page
-quota is 24 pages, below the 30 pages of the schema itself, so that quota is
-a real creation failure rather than a refused setting.
+Schema 35 removes the `accounting` table and all 27 accounting triggers.
+`Resources` computes identical row counts and byte sums on demand in one SQL
+observation, projecting lengths rather than payload values. The explicit observer
+pays for table visits; mutations, base reads and cleanup no longer maintain a
+diagnostic row. The daemon aggregate remains the sum over Workspace files. The
+maintenance cursor is (kind, resource, target). Configured page quotas remain
+physical limits: creation fails if its schema exceeds the chosen quota. The
+schema-34 30-page observation precedes accounting removal and is not a
+schema-35 size claim.
 
-`user_version` is 34. The file is created fresh and is never reopened: there
+`user_version` is 35. The file is created fresh and is never reopened: there
 is no migration, conversion or retry.
 
 ## Rows the engine remembers
@@ -59,8 +63,8 @@ its own statements. The engine keeps what it last read or wrote of each:
 | The operation owner last found in `commit_run` | `check_operation`, `fence_operation` | a writing statement whose text names `commit_run` |
 | The captured reader last found in `commit_reader` | `check_captured_reader` | a writing statement whose text names `commit_reader` |
 
-A statement cannot change a table that its text does not name; the triggers
-of this schema write `accounting` alone. Only statements of the Workspace,
+A statement cannot change a table that its text does not name; schema 35 has
+no triggers. Only statements of the Workspace,
 Capture and Lease families write these tables, so the text of any other
 writing statement is not searched (a debug assertion checks the rule). A job
 that began a transaction and failed forgets all three, because it may have

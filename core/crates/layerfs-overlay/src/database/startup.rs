@@ -142,17 +142,12 @@ fn initialize(path: &Path, config: ProfileConfig, template: Option<(&Path, i64)>
                 &sql,
                 include_str!("../../sql/schema.sql"),
             )?;
-            crate::diagnostics::startup::batch(
-                &connection,
-                &sql,
-                include_str!("../../sql/accounting.sql"),
-            )?;
         }
         profile.schema_version =
             super::profile::readback(&connection, &sql, "PRAGMA user_version", |row| row.get(0))?;
         let application: i64 =
             super::profile::readback(&connection, &sql, "PRAGMA application_id", |row| row.get(0))?;
-        if profile.schema_version != 34 || application != 1279676210 {
+        if profile.schema_version != 35 || application != 1279676210 {
             return Err(crate::OverlayError::Invalid("overlay schema readback"));
         }
         if let Some((_, namespace)) = template {

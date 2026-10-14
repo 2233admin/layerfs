@@ -138,4 +138,4 @@ CREATE TABLE commit_record (
     PRIMARY KEY(operation,file_scope,kind,key)
 ) STRICT, WITHOUT ROWID;
 
-PRAGMA user_version=34;
+PRAGMA user_version=35;

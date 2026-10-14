@@ -780,13 +780,13 @@ if __name__ == "__main__":
 
 
 # Closed accounting observation is separate from the existing content/census routes.
-OVERLAY_SCHEMA_VERSION = 34
+OVERLAY_SCHEMA_VERSION = 35
 OVERLAY_DIRECTORY = '/layerfs-local/overlay'
 OVERLAY_TEMPLATE = OVERLAY_DIRECTORY + '/overlay.sqlite'
 
 
 def _overlay_storage_source():
-    """Schema 34 (issue 321): one overlay file per mounted Workspace.
+    """Schema 35 (issue 320): one overlay file per mounted Workspace.
 
     The configured overlay path is the daemon's closed template: the empty
     schema, never a Workspace. Each mounted Workspace owns `<namespace>.sqlite`
@@ -795,9 +795,8 @@ def _overlay_storage_source():
     bind the reviewed schema, accounting and file-lifetime model.
     """
     pins = {
-        'core/crates/layerfs-overlay/sql/schema.sql': '5aa5c631219c2b50aa5d3145555f8e2d7436f300155de0c27b716611cfcea190',
-        'core/crates/layerfs-overlay/sql/accounting.sql': '33f9dc4e9641d0d198629c42892076becc79e7f9d4acee7e86698bedadbf5caa',
-        'core/crates/layerfs-overlay/src/database/accounting.rs': '1fcf51b0a6c18aa2ad2004b795b67106fef0264c3555d8348cb8b130750b4f53',
+        'core/crates/layerfs-overlay/sql/schema.sql': '0c35daf5726381a057fc6ad1c15c264661cb6b46c792ce18cbed01ee7b232612',
+        'core/crates/layerfs-overlay/src/database/accounting.rs': '6bc10d5187c613bf2a26e6e2eac6d1689a6acf511f250933895e34ae97c6e693',
         'core/crates/layerfs-overlay/src/database/physical.rs': '90bc4c7bdc3a597b927d2e2255b614e7da32f264e9b5d34fbce616a653c6f9de',
         'core/crates/layerfs-overlay/src/lifetime/close.rs': 'ba6210d91123913a08cab624ea7b953ac77ace56810d326ac3aa44dc492672f5',
         'core/crates/layerfs-daemon/src/overlay/workspaces.rs': '7037616a53cc5246b48ec9a77246173c6988739b165888ee63b428ee7f3bdebb',
@@ -805,7 +804,7 @@ def _overlay_storage_source():
     }
     if ROOT is None or any(file_sha(ROOT / name) != digest for name, digest in pins.items()):
         raise ValueError('closed overlay authoritative schema/accounting source pin changed')
-    source = ''.join((ROOT / name).read_text() for name in tuple(pins)[:2])
+    source = (ROOT / 'core/crates/layerfs-overlay/sql/schema.sql').read_text()
     with closing(sqlite3.connect(':memory:', isolation_level=None, timeout=0)) as database:
         database.execute('PRAGMA synchronous=OFF')
         database.executescript(source)

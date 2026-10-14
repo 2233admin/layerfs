@@ -1,4 +1,4 @@
-//! Backed logical counts and real shared allocation observations.
+//! On-demand logical counts and real shared allocation observations.
 use crate::{db::unsigned, AllocationState, Overlay, OverlayResult, Route, StatementKind};
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct StoredCounts {
@@ -30,7 +30,21 @@ pub struct Resources {
     /// Declared logical bytes/metadata upper bound, not exclusive physical debt.
     pub debt_upper_bytes: u64,
 }
-const COUNTS: &str = "SELECT namespaces,inode_rows,directory_entry_rows,payload_cells,payload_bytes,shrink_rows,operation_record_rows,operation_record_bytes,owner_rows,source_rows,owner_details,maintenance_targets,ready_targets,reference_rows FROM accounting WHERE id=1";
+const COUNTS: &str = "SELECT
+    (SELECT count(*) FROM workspace),
+    (SELECT count(*) FROM fs_inode),
+    (SELECT count(*) FROM fs_entry),
+    (SELECT count(*) FROM fs_data),
+    (SELECT coalesce(sum(length(data)+ifnull(length(validity),0)),0) FROM fs_data),
+    (SELECT count(*) FROM fs_truncate),
+    (SELECT count(*) FROM commit_record),
+    (SELECT coalesce(sum(length(value)),0) FROM commit_record),
+    (SELECT count(*) FROM commit_pin),
+    (SELECT count(*) FROM commit_base_pin),
+    (SELECT count(*) FROM commit_reader)+(SELECT count(*) FROM commit_run),
+    (SELECT count(*) FROM cleanup_task),
+    (SELECT coalesce(sum(ready),0) FROM cleanup_task),
+    (SELECT count(*) FROM fs_data_ref)";
 impl Overlay {
     /// The exact counts of this database's Workspace; a route also checks it.
     /// Page/file observations remain shared and never imply exclusive attribution.
@@ -39,8 +53,9 @@ impl Overlay {
         if let Some(route) = route {
             self.state(route)?;
         }
-        // The triggers write the one row of this database's Workspace; the
-        // daemon sums the rows of its Workspace files where it reads them.
+        // This explicit diagnostic visits rows on demand and projects lengths,
+        // never payload values. Ordinary mutations maintain no accounting row.
+        // The daemon sums separate Workspace observations where requested.
         let counts = self
             .query(StatementKind::Startup, COUNTS, &[], 8, |r| {
                 Ok(StoredCounts {

@@ -3533,3 +3533,30 @@ deletion rule. Runtime proofs/engine pin checks remain deferred to that pass;
 this commit claims product-target compilation only, not runtime qualification.
 All owner-listed custody/operator capabilities remain. Durable: NOT_RUN —
 disabled by owner until explicit reauthorization.
+
+### Phase 1: drop accounting table and all 27 triggers
+
+Schema 35 contains eleven product tables (plus SQLite's workspace allocator),
+zero triggers. `sql/accounting.sql` and its startup batch are removed.
+Resources now projects counts and length sums from current tables in one
+consistent diagnostic statement. Columns use the exact old trigger formulas:
+payload includes validity bytes; reader/run rows both contribute owner details;
+ready targets sum ready flags; empty sums are zero. Only explicit Resources
+observations pay the row visits; no mutation/read/cleanup writes a diagnostic
+row. This cost shift is disclosed, not called a constant-time observer or
+measured speedup. Open-state and ticket counts remain resident observations.
+
+The closed storage oracle derives canonical definitions from schema.sql alone,
+expects version 35 and advances schema/accounting source pins. Its full
+definition/table membership checks still reject unexpected tables or triggers.
+A Workspace file is created fresh; there is no migration or reopen. Prepared
+global Store originals are not changed by this overlay schema change.
+
+Host/Linux workspace check and Clippy -D warnings, lib/bins/examples, PASS
+under 120 s stops; fmt and whitespace PASS. Logs are
+`simplify-accounting-{host,linux}-{check,clippy}`. Tests: not yet updated.
+No tests opened/edited/run during Phase 1; engine verification and logical
+count/reclamation assertions are deferred to Phase 2. All historical schema
+size/count evidence keeps its source pin; no schema-35 storage or performance
+sample has run. Durable remains NOT_RUN — disabled by owner until explicit
+reauthorization.
