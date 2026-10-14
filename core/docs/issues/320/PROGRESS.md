@@ -2561,3 +2561,153 @@ handoff or Init.
 Production LOC 81,054 -> 81,054 (delta +0); the change is one test file and
 documentation. Scope and counter are as in the previous section. Reference
 absent (retired R9c; last counted 65,417 at tree 498dd1917812).
+
+## Issue 321 follow-up — source size against the plan's estimate (2026-10-14)
+
+**Question.** #321's plan (section 6.2) estimated the whole product at about
+77,500–79,500 production lines after steps A and B, from 84,220 at
+`20f237499`. Its targets section states this as a direction, not an
+acceptance threshold. The merged product is 81,054. This section traces where
+the excess sits and removes what nothing uses.
+
+**Result.** The excess is not dead code. Code that neither product nor tests
+use came to 36 lines, now removed: 81,054 -> 81,018. The rest has one of
+three reasons, and each larger cut is a decision listed below.
+
+### Where it sits
+
+Against `20f237499`, most of the excess is in two places:
+- **Daemon `overlay/`:** 4,042 -> 2,925, against an expected 1,600–2,000.
+  - The typed job list `commands.rs` (832 lines) was removed in Step B, but
+    its operations became wrapper methods with the same shape.
+  - The wrappers are `lifetime_operations`, `read_operations`,
+    `native_operations`, `record_operations`, `scopes` and the five `*_port`
+    files: 73 methods. Each takes `route: Option<Route>`, refuses a missing
+    route, checks the token's route and wraps its result in the 33-variant
+    `Response` enum (or `NativeReply`), which callers destructure again.
+  - That shape existed so a typed job could cross to the owner thread. With
+    the calling thread running the job, it is a leftover.
+- **Overlay `lifetime/`:** 3,682 -> 3,316, against an expected 2,100–2,500.
+  - Moving the open-state tables into memory (`open/`, 395 lines) replaced
+    SQL with maps, but the operations over that state stayed in `lifetime/`.
+    Examples are open/close, read sources, lookups, native mounts, visits and
+    cookies.
+  - `open/` holds the data structures and `lifetime/` the operations; they
+    are not duplicates. The estimate assumed more of `lifetime/` would leave
+    with the tables.
+
+Scope of the listing: working tree of this commit, pinned
+`tools/production_loc.py --files`, the three directories traced. Tests are
+under each crate's `tests/` and are not counted.
+
+```
+layerfs-daemon/src/
+  overlay/                            [2925]
+    backing.rs                           118
+    captured_namespace_port.rs            87   (wrapper shape)
+    captured_run_port.rs                  29   (wrapper shape)
+    file_port.rs                          44   (wrapper shape)
+    indexed_operation_record.rs           92
+    lifetime_operations.rs               459   (wrapper shape; -9 database_work)
+    mod.rs                                15
+    native_operations.rs                 208   (wrapper shape; -16 native_directory_retained)
+    operation_record_port.rs             174   (wrapper shape)
+    owner.rs                             585   (lock, readiness, frontier, accounting: needed)
+    read_operations.rs                   315   (wrapper shape)
+    read_port.rs                         110   (wrapper shape)
+    record_operations.rs                  22   (wrapper shape)
+    scopes.rs                             92   (wrapper shape)
+    state.rs                              89
+    workspaces.rs                        486   (roster, mount copy, close and delete: needed)
+  service/                             [699]
+    filesystem_port.rs                   449   (FUSE ports; destructures Response)
+    job_sql.rs                            56
+    mod.rs                                 7
+    observations.rs                       10
+    owner_work.rs                         51
+    receipt.rs                            47
+    results.rs                            71   (Response, NativeReply; -2 variants)
+    startup.rs                             8
+```
+
+```
+layerfs-overlay/src/
+  lifetime/                           [3316]
+    captured_reader.rs                   181
+    close.rs                             129   (-9 explain_cleanup_observation)
+    composition.rs                       237
+    file_owners.rs                       369
+    frontier.rs                           47
+    generation.rs                        165
+    indexed_operation_record.rs          199
+    lookup.rs                            131
+    mod.rs                                22
+    native.rs                            258
+    native_cookie.rs                     140
+    native_directory.rs                  126
+    native_directory_read.rs             161
+    native_file.rs                        67
+    native_mutation.rs                    88
+    native_visit.rs                      323
+    operation.rs                         101
+    operation_record.rs                   70
+    orphan.rs                            171
+    source.rs                            144
+    tickets.rs                           103
+    workspace.rs                          84
+```
+
+### Classification
+
+| Kind | Lines (counted or measured) | Disposition |
+| --- | ---: | --- |
+| Used by nothing, product or test: daemon `database_work` and `native_directory_retained` wrappers, `Response::DatabaseWork`, `NativeDirectoryReply::Retained`, overlay `explain_cleanup_observation` | 36 | **Removed in this commit** |
+| Daemon wrappers that only daemon tests call (28 methods, no product caller) | about 366 | Kept. Moving them into `tests/support` would be relocation of test drivers, not a simplification. |
+| Retained-by-request observations: overlay `retained_*` (10) and their daemon wrappers | 144 + 96 | Kept. No product caller, but documented custody capability (architecture 26, 33, 34: "observation of original retained custody after a lost reply"). Removing it changes a contract. |
+| Query-plan helpers `explain_*`, called only by plan-pin tests | small | Kept. They need the private SQL text, and the tests prove index use. |
+| Wrapper shape left from the typed job list | 67 missing-route lines, 68 bare-brace lines, 84 route-check lines, 103 result-wrapping lines; `Response` and `NativeReply` about 70; 43 `result()` destructuring sites | Kept. Removing it is a redesign: non-optional `Route` and typed receipts. |
+| `lifetime/` operations over in-memory open state | — | Needed; not a duplicate of `open/` |
+
+### Decisions for the owner
+
+1. **Typed receipts and a non-optional route in the daemon wrapper layer.**
+   - Change: replace `Response` with a typed `JobReceipt<T>`, make the route a
+     plain `Route`, and turn the route check into a one-line helper.
+   - Size: an estimate from the counts above, not a traced design, of about
+     300–400 lines.
+   - Cost: 30 product files and about 250 test references to `Response` or
+     `NativeReply` change. Behaviour and exact accounting stay as they are.
+   - This is the main real simplification available.
+2. **Retire the retained-by-request observations.**
+   - Size: about 240 lines, plus the tests that pin them.
+   - The daemon never uses them, but three architecture guides describe them
+     as the lost-reply custody observation, so it is a contract change.
+3. **Relocate the 28 test-only daemon wrappers** into `tests/support`.
+   - Size: about 366 lines out of the count.
+   - Allowed only if labelled as relocation; not recommended as a "cut".
+
+Even 1 and 2 together leave the product near 80,400–80,500, above the
+estimate. Reaching 79,500 would need `lifetime/` itself redesigned, which
+nothing traced here supports.
+
+### Checks
+
+- Host Clippy `-D warnings`, all targets of daemon, overlay, fuse, bridge,
+  workspace, sdk and sandbox: clean.
+- Formatting: clean.
+- 137 daemon and overlay test binaries, each with a 30 s limit:
+  - 350 tests pass;
+  - 2 fail, both environmental and NOT_RUN as before:
+    `complete_installed_roots::huge_native…` and `host_handoff`;
+  - the longest binary took 13.0 s.
+- No Linux check: no Linux-specific code changed.
+- Durable execution: NOT_RUN — disabled by owner until explicit
+  reauthorization.
+
+### Source size
+
+Production LOC 81,054 -> 81,018 (delta -36); scope first-party `core/crates`
+production code including shipped SQL; pinned `tools/production_loc.py`
+(`c0fe7f36…`). Reference absent (retired R9c; last counted 65,417 at tree
+498dd1917812). This is removal of unused code, not an algorithmic
+simplification.

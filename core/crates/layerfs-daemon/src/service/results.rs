@@ -1,4 +1,4 @@
-use layerfs_overlay::{NativeDirectory, NativeMount, NativeMountState};
+use layerfs_overlay::{NativeMount, NativeMountState};
 use layerfs_workspace::{
     NativeDirectoryWindow, NativeMutationOutcome, NativeReadOutcome, NativeWindow,
 };
@@ -31,7 +31,6 @@ pub enum Response {
     Resources(Box<layerfs_overlay::Resources>),
     Opened(Route),
     State(WorkspaceState),
-    DatabaseWork(Box<layerfs_overlay::DatabaseWork>),
     MaintenanceIdle(bool),
     PayloadPlans(Vec<String>),
     LifetimePlans(Vec<String>),
@@ -68,7 +67,6 @@ pub enum NativeReply {
 }
 #[derive(Debug)]
 pub enum NativeDirectoryReply {
-    Retained(Option<NativeDirectory>),
     Window(Arc<NativeDirectoryWindow>),
     Done,
 }
