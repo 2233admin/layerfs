@@ -8,7 +8,7 @@ use std::{fmt, io};
 
 /// Exact startup or original connection failure, never followed by a replay.
 pub enum ApplicationError {
-    /// Before-effect configuration/listener/native file error.
+    /// Before-effect configuration/listener/kernel file error.
     Io(io::Error),
     /// Original initialized Overlay owner failure.
     Owner(Box<crate::OwnerStart>),
@@ -21,7 +21,7 @@ pub enum ApplicationError {
     },
     /// Original direct existing-Store open failure.
     Store(layerfs_storage::StorageError),
-    /// Original authentication/native transport failure.
+    /// Original authentication/kernel transport failure.
     Channel(ChannelError),
     /// Original malformed request, with bounded bytes retained separately.
     Protocol(ControlError),
@@ -51,8 +51,8 @@ impl fmt::Display for ApplicationError {
             Self::Owner(e) => write!(f, "Overlay startup: {:?}", e.result.as_ref().err()),
             Self::AfterOverlay { cause, .. } => write!(f, "after Overlay startup: {cause}"),
             Self::Store(e) => write!(f, "Store open: {e}"),
-            Self::Channel(e) => write!(f, "native channel: {e}"),
-            Self::Protocol(e) => write!(f, "native request: {e}"),
+            Self::Channel(e) => write!(f, "kernel channel: {e}"),
+            Self::Protocol(e) => write!(f, "kernel request: {e}"),
             Self::Install(e) => write!(f, "installation: {e}"),
             Self::Control(e) => write!(f, "control: {e}"),
             Self::SessionEnd { ending, .. } => {

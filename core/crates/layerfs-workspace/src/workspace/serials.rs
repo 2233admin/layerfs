@@ -21,7 +21,7 @@ pub(crate) struct Serials {
     ranges: Vec<(u64, u64)>,
 }
 impl Workspace {
-    /// Prepare one initial range before exposing a newly attached native
+    /// Prepare one initial range before exposing a newly attached kernel
     /// Workspace. Existing unconsumed ranges are kept. The allocator is called
     /// once, outside every Workspace lock; refusal has no local effect and is
     /// returned unchanged. This does not consume a serial or change refill size.

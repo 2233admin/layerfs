@@ -15,7 +15,7 @@ pub fn changed_bytes() -> Vec<u8> {
     changed_bytes_with_tag(b'X')
 }
 pub fn changed_bytes_with_tag(tag: u8) -> Vec<u8> {
-    let mut bytes = b"complete-native-entry:000000\0".to_vec();
+    let mut bytes = b"complete-kernel-entry:000000\0".to_vec();
     bytes[0] = tag;
     bytes
 }

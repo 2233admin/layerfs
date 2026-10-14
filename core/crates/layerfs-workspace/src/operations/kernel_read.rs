@@ -1,14 +1,14 @@
-//! Resumable native stat/lookup decisions using the ordinary Workspace evaluator.
+//! Resumable kernel stat/lookup decisions using the ordinary Workspace evaluator.
 use crate::{eval::Eval, BaseFacts, Need, Refusal, ViewStat, WorkspaceError, WorkspaceResult};
 use layerfs_content::{filesystem::PathName, ContentError};
 use layerfs_overlay::{
-    Inode, InodeKind, NativeDecision, NativeDirectory, NativeMount, NativeObservation, OpenFile,
+    Inode, InodeKind, KernelDecision, KernelDirectory, KernelMount, KernelObservation, OpenFile,
     OverlayError, OverlayResult, SourceRows,
 };
 use std::{fmt, sync::Arc};
 
 #[derive(Clone, Debug)]
-pub enum NativeReadOperation {
+pub enum KernelReadOperation {
     Lookup {
         parent: u64,
         name: PathName,
@@ -30,54 +30,54 @@ pub enum NativeReadOperation {
     },
 }
 #[derive(Debug)]
-pub enum NativeReadDecision {
+pub enum KernelReadDecision {
     Needs(Vec<Need>),
     Value(Inode),
     Refused(Refusal),
     Failed(WorkspaceError),
 }
-pub type NativeReadOutcome = NativeObservation<NativeReadDecision>;
+pub type KernelReadOutcome = KernelObservation<KernelReadDecision>;
 
 #[derive(Debug)]
-pub struct NativeReadValue {
+pub struct KernelReadValue {
     pub stat: ViewStat,
     pub file: Option<OpenFile>,
-    pub directory: Option<NativeDirectory>,
-    pub original: Arc<NativeReadOutcome>,
+    pub directory: Option<KernelDirectory>,
+    pub original: Arc<KernelReadOutcome>,
 }
 #[derive(Debug)]
-pub struct NativeReadFailure {
+pub struct KernelReadFailure {
     pub reason: &'static str,
-    pub original: Arc<NativeReadOutcome>,
+    pub original: Arc<KernelReadOutcome>,
 }
-impl fmt::Display for NativeReadFailure {
+impl fmt::Display for KernelReadFailure {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}: {:?}", self.reason, self.original)
     }
 }
-impl std::error::Error for NativeReadFailure {
+impl std::error::Error for KernelReadFailure {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match (&self.original.result, &self.original.decision) {
             (Err(error), _) => Some(error),
-            (_, Some(NativeReadDecision::Failed(error))) => Some(error),
+            (_, Some(KernelReadDecision::Failed(error))) => Some(error),
             _ => None,
         }
     }
 }
-/// One evaluation of a native read over current rows and supplied facts.
+/// One evaluation of a kernel read over current rows and supplied facts.
 pub(crate) fn decide_read(
-    operation: &NativeReadOperation,
+    operation: &KernelReadOperation,
     facts: &BaseFacts,
-    mount: NativeMount,
+    mount: KernelMount,
     rows: SourceRows<'_>,
     protected: u64,
-) -> OverlayResult<NativeDecision<NativeReadDecision>> {
+) -> OverlayResult<KernelDecision<KernelReadDecision>> {
     let wanted = match *operation {
-        NativeReadOperation::Lookup { parent, .. } => parent,
-        NativeReadOperation::Getattr { serial }
-        | NativeReadOperation::Data { serial }
-        | NativeReadOperation::Open { serial, .. }
-        | NativeReadOperation::Opendir { serial } => serial,
+        KernelReadOperation::Lookup { parent, .. } => parent,
+        KernelReadOperation::Getattr { serial }
+        | KernelReadOperation::Data { serial }
+        | KernelReadOperation::Open { serial, .. }
+        | KernelReadOperation::Opendir { serial } => serial,
     };
     if wanted != protected {
         return Err(OverlayError::Stale);
@@ -87,42 +87,42 @@ pub(crate) fn decide_read(
         facts,
         root: mount.root_serial(),
         open_serial: None,
-        native: None,
+        kernel: None,
         needs: Vec::new(),
     };
     let decision = match decide(operation, &mut eval) {
-        Ok(Some(inode)) => NativeReadDecision::Value(inode),
-        Ok(None) if !eval.needs.is_empty() => NativeReadDecision::Needs(eval.needs),
-        Ok(None) => NativeReadDecision::Failed(
-            ContentError::InvalidRecord("empty native read needs").into(),
+        Ok(Some(inode)) => KernelReadDecision::Value(inode),
+        Ok(None) if !eval.needs.is_empty() => KernelReadDecision::Needs(eval.needs),
+        Ok(None) => KernelReadDecision::Failed(
+            ContentError::InvalidRecord("empty kernel read needs").into(),
         ),
         Err(WorkspaceError::Overlay(error)) => return Err(error),
-        Err(WorkspaceError::Refused(refusal)) => NativeReadDecision::Refused(refusal),
-        Err(error) => NativeReadDecision::Failed(error),
+        Err(WorkspaceError::Refused(refusal)) => KernelReadDecision::Refused(refusal),
+        Err(error) => KernelReadDecision::Failed(error),
     };
     Ok(match decision {
-        NativeReadDecision::Needs(_) => NativeDecision::Needs(decision),
-        NativeReadDecision::Value(ref inode) => NativeDecision::Finished {
+        KernelReadDecision::Needs(_) => KernelDecision::Needs(decision),
+        KernelReadDecision::Value(ref inode) => KernelDecision::Finished {
             inode: Some(inode.clone()),
             value: decision,
         },
-        _ => NativeDecision::Finished {
+        _ => KernelDecision::Finished {
             inode: None,
             value: decision,
         },
     })
 }
-fn decide(operation: &NativeReadOperation, eval: &mut Eval<'_>) -> WorkspaceResult<Option<Inode>> {
+fn decide(operation: &KernelReadOperation, eval: &mut Eval<'_>) -> WorkspaceResult<Option<Inode>> {
     match operation {
         // The source's independent read reference permits removed metadata.
-        NativeReadOperation::Getattr { serial } | NativeReadOperation::Data { serial } => {
+        KernelReadOperation::Getattr { serial } | KernelReadOperation::Data { serial } => {
             eval.target(*serial)
         }
-        NativeReadOperation::Opendir { serial } => eval.directory(*serial),
+        KernelReadOperation::Opendir { serial } => eval.directory(*serial),
         // The kernel names an inode it still references. A file whose
         // last name is gone stays openable under that reference, so a
         // path open racing an unlink or replacement gets the old file.
-        NativeReadOperation::Open { serial, .. } => {
+        KernelReadOperation::Open { serial, .. } => {
             let inode = eval.target(*serial)?;
             match inode {
                 Some(inode) if inode.kind == InodeKind::File => Ok(Some(inode)),
@@ -133,7 +133,7 @@ fn decide(operation: &NativeReadOperation, eval: &mut Eval<'_>) -> WorkspaceResu
                 None => Ok(None),
             }
         }
-        NativeReadOperation::Lookup { parent, name } => {
+        KernelReadOperation::Lookup { parent, name } => {
             let directory = eval.directory(*parent)?;
             let layers = eval.layers(*parent, name)?;
             let bound = eval.bound(*parent, directory.as_ref(), name, layers);

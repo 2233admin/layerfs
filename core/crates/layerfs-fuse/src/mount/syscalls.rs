@@ -89,7 +89,7 @@ pub(crate) fn mount_entry(target: &Path) -> io::Result<MountEntry> {
             found = Some(entry);
         }
     }
-    found.ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "native mount table entry"))
+    found.ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "kernel mount table entry"))
 }
 /// Bound to this exact connection at attach. Absence is reported, and forced
 /// teardown later refuses before effects rather than reopening a guessed path.

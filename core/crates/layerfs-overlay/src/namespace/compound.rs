@@ -146,7 +146,7 @@ impl Overlay {
         })
     }
     /// The transaction body of one checked compound job. The caller owns the
-    /// transaction, so native kernel custody can commit with the publication.
+    /// transaction, so kernel kernel custody can commit with the publication.
     /// `state` is the Workspace row this job read when it checked the
     /// source's custody, `held` the descriptor its fence read and `seen` the
     /// inode rows its evaluation read: none of them is read again here.

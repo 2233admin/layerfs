@@ -20,18 +20,18 @@ impl Service {
             .map_err(Failure::Workspace)
     }
     #[cfg(target_os = "linux")]
-    pub(crate) fn observed_native(
+    pub(crate) fn observed_kernel(
         &self,
         token: WorkspaceToken,
     ) -> Result<Option<layerfs_fuse::session::SessionObserver>, Failure> {
-        use super::native::Native;
+        use super::kernel::Kernel;
         let entries = self.entries.lock().map_err(|_| Failure::Poisoned)?;
         let binding = bound(&entries, token)?;
-        Ok(match &binding.native {
-            Native::Ready(attached) => Some(attached.session.observer()),
-            Native::Leaving(leaving) => Some(leaving.observer.clone()),
-            Native::Retained(kept) => kept.observer.clone(),
-            Native::Unattached | Native::Attaching => None,
+        Ok(match &binding.kernel {
+            Kernel::Ready(attached) => Some(attached.session.observer()),
+            Kernel::Leaving(leaving) => Some(leaving.observer.clone()),
+            Kernel::Retained(kept) => kept.observer.clone(),
+            Kernel::Unattached | Kernel::Attaching => None,
         })
     }
 }

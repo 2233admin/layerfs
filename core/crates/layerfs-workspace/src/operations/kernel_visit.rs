@@ -1,4 +1,4 @@
-//! A native request served by owner visits that record no request source.
+//! A kernel request served by owner visits that record no request source.
 //! Each visit is one job that decides over current rows; the job is the
 //! request's whole window in the owner, so nothing is left to release. Base
 //! facts a visit needs are read from objects already resident in the
@@ -8,19 +8,19 @@
 //! of the base the Workspace has at that moment, so an install between two
 //! visits costs another read and never a stale answer.
 use crate::job::Decided;
-use crate::operations::native_mutation::effect;
-use crate::operations::native_read::decide_read;
+use crate::operations::kernel_mutation::effect;
+use crate::operations::kernel_read::decide_read;
 use crate::{
-    BaseFacts, BaseView, JobOutcome, NamespaceJob, NativeMutationOutcome, NativeReadDecision,
-    NativeReadOperation, NativeReadOutcome, Need, Operation, Position, Refusal, Time, VisitFacts,
-    Workspace, WorkspaceError, WorkspaceResult, WriteData,
+    BaseFacts, BaseView, JobOutcome, KernelMutationOutcome, KernelReadDecision,
+    KernelReadOperation, KernelReadOutcome, NamespaceJob, Need, Operation, Position, Refusal, Time,
+    VisitFacts, Workspace, WorkspaceError, WorkspaceResult, WriteData,
 };
 use layerfs_content::{
     filesystem::{identity::MAXIMUM_INODE_SERIAL, PathName},
     ContentError,
 };
 use layerfs_overlay::{
-    BaseSource, NativeDecision, NativeMount, OpenFile, Overlay, OverlayError, SourceRows,
+    BaseSource, KernelDecision, KernelMount, OpenFile, Overlay, OverlayError, SourceRows,
 };
 use std::{borrow::Cow, fmt, sync::Arc};
 
@@ -28,9 +28,9 @@ use std::{borrow::Cow, fmt, sync::Arc};
 /// not a limit of any operation: an undecided visit continues elsewhere.
 const ROUNDS: usize = 4;
 
-/// What a native mutation was asked to do, before its descriptor is known.
+/// What a kernel mutation was asked to do, before its descriptor is known.
 #[derive(Clone, Debug)]
-pub enum NativeInput {
+pub enum KernelInput {
     Named(Operation),
     Write {
         offset: u64,
@@ -43,7 +43,7 @@ pub enum NativeInput {
         size: Option<u64>,
     },
 }
-impl NativeInput {
+impl KernelInput {
     /// The operation over the request's descriptor, when the two agree.
     pub fn operation(&self, file: Option<OpenFile>) -> Option<Operation> {
         Some(match (self, file) {
@@ -83,16 +83,16 @@ impl NativeInput {
         matches!(self, Self::Named(operation) if operation.creates())
     }
 }
-/// One native mutation request as its callback received it.
+/// One kernel mutation request as its callback received it.
 #[derive(Clone, Debug)]
-pub struct NativeVisitRequest {
-    pub mount: NativeMount,
+pub struct KernelVisitRequest {
+    pub mount: KernelMount,
     pub request: u64,
     /// The inode the kernel holds for this request: a parent or the target.
     pub serial: u64,
     /// The descriptor of a handle-addressed mutation.
     pub handle: Option<u64>,
-    pub input: NativeInput,
+    pub input: KernelInput,
     pub open: Option<bool>,
     pub now: Time,
     /// The reserved serial of a creating operation.
@@ -102,26 +102,26 @@ pub struct NativeVisitRequest {
 }
 /// LOOKUP, GETATTR, OPEN of a regular file or OPENDIR as one owner job.
 #[derive(Clone)]
-pub struct NativeReadVisit {
-    mount: NativeMount,
+pub struct KernelReadVisit {
+    mount: KernelMount,
     serial: u64,
     handle: Option<u64>,
-    operation: NativeReadOperation,
+    operation: KernelReadOperation,
     /// The kernel request an OPEN's or OPENDIR's descriptor is recorded for.
     open: Option<u64>,
     facts: Arc<VisitFacts>,
     resident: BaseView,
 }
-/// One native mutation as one owner job.
+/// One kernel mutation as one owner job.
 #[derive(Clone)]
-pub struct NativeMutationVisit {
-    request: NativeVisitRequest,
+pub struct KernelMutationVisit {
+    request: KernelVisitRequest,
     root: u64,
     resident: BaseView,
 }
-impl fmt::Debug for NativeReadVisit {
+impl fmt::Debug for KernelReadVisit {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("NativeReadVisit")
+        f.debug_struct("KernelReadVisit")
             .field("mount", &self.mount)
             .field("serial", &self.serial)
             .field("handle", &self.handle)
@@ -129,9 +129,9 @@ impl fmt::Debug for NativeReadVisit {
             .finish_non_exhaustive()
     }
 }
-impl fmt::Debug for NativeMutationVisit {
+impl fmt::Debug for KernelMutationVisit {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("NativeMutationVisit")
+        f.debug_struct("KernelMutationVisit")
             .field("request", &self.request)
             .finish_non_exhaustive()
     }
@@ -156,15 +156,15 @@ fn supply(
 }
 impl Workspace {
     /// `resident` reads canonical objects from memory only. No I/O here.
-    pub fn native_read_visit(
+    pub fn kernel_read_visit(
         &self,
         resident: Arc<crate::CanonicalClient>,
-        mount: NativeMount,
+        mount: KernelMount,
         serial: u64,
         handle: Option<u64>,
-        operation: NativeReadOperation,
+        operation: KernelReadOperation,
         facts: Arc<VisitFacts>,
-    ) -> WorkspaceResult<NativeReadVisit> {
+    ) -> WorkspaceResult<KernelReadVisit> {
         let base = self.base()?;
         if mount.engine() != self.route().engine()
             || mount.root_serial() != base.root().root_inode().serial()
@@ -173,11 +173,11 @@ impl Workspace {
         }
         if !matches!(
             operation,
-            NativeReadOperation::Lookup { .. } | NativeReadOperation::Getattr { .. }
+            KernelReadOperation::Lookup { .. } | KernelReadOperation::Getattr { .. }
         ) {
-            return Err(ContentError::InvalidRecord("native visit operation").into());
+            return Err(ContentError::InvalidRecord("kernel visit operation").into());
         }
-        Ok(NativeReadVisit {
+        Ok(KernelReadVisit {
             mount,
             serial,
             handle,
@@ -189,47 +189,47 @@ impl Workspace {
     }
     /// OPEN of the regular file `serial`, which the kernel references, for
     /// the kernel request `request`. `resident` reads from memory only.
-    pub fn native_open_visit(
+    pub fn kernel_open_visit(
         &self,
         resident: Arc<crate::CanonicalClient>,
-        mount: NativeMount,
+        mount: KernelMount,
         request: u64,
         serial: u64,
         writable: bool,
         facts: Arc<VisitFacts>,
-    ) -> WorkspaceResult<NativeReadVisit> {
-        let operation = NativeReadOperation::Open { serial, writable };
+    ) -> WorkspaceResult<KernelReadVisit> {
+        let operation = KernelReadOperation::Open { serial, writable };
         self.opening_visit(resident, mount, request, serial, operation, facts)
     }
     /// OPENDIR of the directory `serial`, which the kernel references, for
     /// the kernel request `request`. `resident` reads from memory only.
-    pub fn native_opendir_visit(
+    pub fn kernel_opendir_visit(
         &self,
         resident: Arc<crate::CanonicalClient>,
-        mount: NativeMount,
+        mount: KernelMount,
         request: u64,
         serial: u64,
         facts: Arc<VisitFacts>,
-    ) -> WorkspaceResult<NativeReadVisit> {
-        let operation = NativeReadOperation::Opendir { serial };
+    ) -> WorkspaceResult<KernelReadVisit> {
+        let operation = KernelReadOperation::Opendir { serial };
         self.opening_visit(resident, mount, request, serial, operation, facts)
     }
     fn opening_visit(
         &self,
         resident: Arc<crate::CanonicalClient>,
-        mount: NativeMount,
+        mount: KernelMount,
         request: u64,
         serial: u64,
-        operation: NativeReadOperation,
+        operation: KernelReadOperation,
         facts: Arc<VisitFacts>,
-    ) -> WorkspaceResult<NativeReadVisit> {
+    ) -> WorkspaceResult<KernelReadVisit> {
         let base = self.base()?;
         if mount.engine() != self.route().engine()
             || mount.root_serial() != base.root().root_inode().serial()
         {
             return Err(OverlayError::Stale.into());
         }
-        Ok(NativeReadVisit {
+        Ok(KernelReadVisit {
             mount,
             serial,
             handle: None,
@@ -239,11 +239,11 @@ impl Workspace {
             resident: base.with_client(resident),
         })
     }
-    pub fn native_mutation_visit(
+    pub fn kernel_mutation_visit(
         &self,
         resident: Arc<crate::CanonicalClient>,
-        request: NativeVisitRequest,
-    ) -> WorkspaceResult<NativeMutationVisit> {
+        request: KernelVisitRequest,
+    ) -> WorkspaceResult<KernelMutationVisit> {
         let base = self.base()?;
         let root = base.root().root_inode().serial();
         if request.mount.engine() != self.route().engine() || request.mount.root_serial() != root {
@@ -256,15 +256,15 @@ impl Workspace {
         {
             return Err(ContentError::InvalidRecord("mutation reserved serial").into());
         }
-        Ok(NativeMutationVisit {
+        Ok(KernelMutationVisit {
             request,
             root,
             resident: base.with_client(resident),
         })
     }
 }
-impl NativeReadVisit {
-    pub const fn mount(&self) -> NativeMount {
+impl KernelReadVisit {
+    pub const fn mount(&self) -> KernelMount {
         self.mount
     }
 
@@ -272,14 +272,14 @@ impl NativeReadVisit {
     /// undecided visit has written nothing. A decided OPEN or OPENDIR
     /// carries its descriptor as the observation's open or directory
     /// candidate.
-    pub fn perform(&self, db: &Overlay) -> NativeReadOutcome {
-        let lookup = matches!(self.operation, NativeReadOperation::Lookup { .. });
+    pub fn perform(&self, db: &Overlay) -> KernelReadOutcome {
+        let lookup = matches!(self.operation, KernelReadOperation::Lookup { .. });
         let decide = |rows: SourceRows<'_>, source: BaseSource| {
             let mut facts = carried(&self.facts, source);
             let mut round = 0;
             loop {
                 let decision = decide_read(&self.operation, &facts, self.mount, rows, self.serial)?;
-                let NativeDecision::Needs(NativeReadDecision::Needs(needs)) = &decision else {
+                let KernelDecision::Needs(KernelReadDecision::Needs(needs)) = &decision else {
                     return Ok(decision);
                 };
                 if round == ROUNDS || !supply(&self.resident, source, facts.to_mut(), needs, None) {
@@ -289,25 +289,25 @@ impl NativeReadVisit {
             }
         };
         match (&self.operation, self.open) {
-            (NativeReadOperation::Open { writable, .. }, Some(request)) => {
-                db.open_native_visit(self.mount, request, self.serial, *writable, decide)
+            (KernelReadOperation::Open { writable, .. }, Some(request)) => {
+                db.open_kernel_visit(self.mount, request, self.serial, *writable, decide)
             }
-            (NativeReadOperation::Opendir { .. }, Some(request)) => {
-                db.opendir_native_visit(self.mount, request, self.serial, decide)
+            (KernelReadOperation::Opendir { .. }, Some(request)) => {
+                db.opendir_kernel_visit(self.mount, request, self.serial, decide)
             }
-            _ => db.observe_native_visit(self.mount, self.serial, self.handle, lookup, decide),
+            _ => db.observe_kernel_visit(self.mount, self.serial, self.handle, lookup, decide),
         }
     }
 }
-impl NativeMutationVisit {
-    pub const fn mount(&self) -> NativeMount {
+impl KernelMutationVisit {
+    pub const fn mount(&self) -> KernelMount {
         self.request.mount
     }
 
     /// The applied outcome, a definite answer without effect, or the needs
     /// of an undecided visit. An undecided visit has written nothing.
-    pub fn perform(&self, db: &Overlay) -> NativeMutationOutcome {
-        let NativeVisitRequest {
+    pub fn perform(&self, db: &Overlay) -> KernelMutationOutcome {
+        let KernelVisitRequest {
             mount,
             request,
             serial,
@@ -319,7 +319,7 @@ impl NativeMutationVisit {
         } = self.request;
         let mut decided = None;
         let mut published = None;
-        let applied = db.mutate_native_visit(mount, request, serial, handle, |rows, file| {
+        let applied = db.mutate_kernel_visit(mount, request, serial, handle, |rows, file| {
             let source = rows.source();
             let Some(operation) = self.request.input.operation(file) else {
                 decided = Some(Ok(JobOutcome::Refused(Refusal::Invalid)));
@@ -375,8 +375,8 @@ impl NativeMutationVisit {
                 })
             }
             (Ok(None), Some(decided), _) => decided,
-            _ => Err(ContentError::InvalidRecord("undecided native visit").into()),
+            _ => Err(ContentError::InvalidRecord("undecided kernel visit").into()),
         };
-        NativeMutationOutcome { result, file }
+        KernelMutationOutcome { result, file }
     }
 }

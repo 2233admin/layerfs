@@ -1,9 +1,9 @@
-//! One native Attach: engine mount owner, the mount's request owner, then a serving session.
+//! One kernel Attach: engine mount owner, the mount's request owner, then a serving session.
 use super::{
-    native::Native,
+    kernel::Kernel,
     registry::{bound_mut, idle},
-    serving::{ready, stage, Attached, Kept, NativeServing},
-    types::NativeFailure,
+    serving::{ready, stage, Attached, Kept, KernelServing},
+    types::KernelFailure,
     Failure, Service, Success,
 };
 use crate::store::BoundWorkspace;
@@ -12,10 +12,10 @@ use layerfs_bridge::control::{
 };
 use layerfs_fuse::{
     attributes::Identity,
-    session::{AttachRemainder, NativeSession, SessionConfig},
+    session::{AttachRemainder, KernelSession, SessionConfig},
     DispatchError,
 };
-use layerfs_overlay::NativeMount;
+use layerfs_overlay::KernelMount;
 use std::sync::Arc;
 
 /// Where a failed Attach leaves the entry.
@@ -31,30 +31,30 @@ impl Service {
     /// Ready is acknowledged only after the kernel mount exists, the handshake
     /// completed, every receive loop entered and the registry records it.
     pub(super) fn attach(&self, token: WorkspaceToken) -> Result<Success, Failure> {
-        let Some(serving) = self.native.clone() else {
+        let Some(serving) = self.kernel.clone() else {
             return Err(Failure::Rejected(
                 ControlCode::Invalid,
-                "native serving not assembled",
+                "kernel serving not assembled",
             ));
         };
         let workspace = self.admit_attach(token)?;
         match self.attach_admitted(&serving, token, &workspace) {
             Ok(attached) => {
                 let reply = Reply::Ready(Box::new(attached.ready.clone()));
-                self.settle(token, Native::Ready(Box::new(attached)), Activity::Idle);
+                self.settle(token, Kernel::Ready(Box::new(attached)), Activity::Idle);
                 Ok(Success::reply(reply))
             }
             Err(Stop::Unattached(failure)) => {
-                self.settle(token, Native::Unattached, Activity::Idle);
+                self.settle(token, Kernel::Unattached, Activity::Idle);
                 Err(failure)
             }
             Err(Stop::Unknown(failure)) => {
-                self.settle(token, Native::Attaching, Activity::Uncertain);
+                self.settle(token, Kernel::Attaching, Activity::Uncertain);
                 Err(failure)
             }
             Err(Stop::Retained(kept)) => {
                 let custody = kept.custody(token);
-                self.settle(token, Native::Retained(kept), Activity::Uncertain);
+                self.settle(token, Kernel::Retained(kept), Activity::Uncertain);
                 Err(Failure::Retained(Box::new(custody)))
             }
         }
@@ -62,25 +62,25 @@ impl Service {
     fn admit_attach(&self, token: WorkspaceToken) -> Result<Arc<BoundWorkspace>, Failure> {
         let mut entries = self.entries.lock().map_err(|_| Failure::Poisoned)?;
         let value = bound_mut(&mut entries, token)?;
-        if let Native::Retained(kept) = &value.native {
+        if let Kernel::Retained(kept) = &value.kernel {
             return Err(Failure::Retained(Box::new(kept.custody(token))));
         }
         idle(value)?;
-        if !matches!(value.native, Native::Unattached) {
-            return Err(Failure::native(
+        if !matches!(value.kernel, Kernel::Unattached) {
+            return Err(Failure::kernel(
                 ControlCode::Invalid,
                 "attach:admission",
-                "Workspace already owns a native connection",
+                "Workspace already owns a kernel connection",
             ));
         }
-        value.native = Native::Attaching;
+        value.kernel = Kernel::Attaching;
         value.activity = Activity::Attaching;
         value.epoch = value.epoch.saturating_add(1);
         Ok(value.workspace.clone())
     }
     fn attach_admitted(
         &self,
-        serving: &NativeServing,
+        serving: &KernelServing,
         token: WorkspaceToken,
         workspace: &Arc<BoundWorkspace>,
     ) -> Result<Attached, Stop> {
@@ -90,7 +90,7 @@ impl Service {
             .filter(|text| text.len() <= MOUNT_DIRECTORY_LIMIT)
             .map(str::to_owned)
         else {
-            return Err(Stop::Unattached(Failure::native(
+            return Err(Stop::Unattached(Failure::kernel(
                 ControlCode::Invalid,
                 "attach:directory",
                 "mount directory exceeds the control record bound",
@@ -128,11 +128,11 @@ impl Service {
             .job(
                 workspace.route(),
                 |job_client: &crate::OwnerClient, job_route| {
-                    job_client.native_mount(job_route, root)
+                    job_client.kernel_mount(job_route, root)
                 },
             )
             .map_err(unknown)?;
-        let failed = |code, phase, detail: String| NativeFailure {
+        let failed = |code, phase, detail: String| KernelFailure {
             code,
             phase,
             detail,
@@ -151,7 +151,7 @@ impl Service {
             }
         };
         let config = &serving.config;
-        let attached = NativeSession::attach(
+        let attached = KernelSession::attach(
             SessionConfig {
                 directory,
                 owner_uid: config.owner_uid,
@@ -217,14 +217,14 @@ impl Service {
     fn unwind(
         &self,
         workspace: &BoundWorkspace,
-        mount: NativeMount,
-        failure: NativeFailure,
+        mount: KernelMount,
+        failure: KernelFailure,
     ) -> Stop {
         match self.job(
             workspace.route(),
-            |job_client: &crate::OwnerClient, job_route| job_client.native_revoke(job_route, mount),
+            |job_client: &crate::OwnerClient, job_route| job_client.kernel_revoke(job_route, mount),
         ) {
-            Ok(()) => Stop::Unattached(Failure::Native(Box::new(failure))),
+            Ok(()) => Stop::Unattached(Failure::Kernel(Box::new(failure))),
             other => Stop::Retained(Box::new(Kept {
                 ready: None,
                 stage: TeardownStage::Revoke,

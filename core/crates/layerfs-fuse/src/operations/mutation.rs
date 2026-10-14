@@ -1,20 +1,20 @@
-//! One native mutation: owner visits that record no request source, fact
+//! One kernel mutation: owner visits that record no request source, fact
 //! reads between undecided visits, a single publishing visit, then the exact
 //! post-reply release of its ticket.
 use crate::ports::{BaseDemandFailed, Fenced, RequestServices, ServiceError, ServiceReply};
-use layerfs_overlay::{NativeMount, OpenFile, Publication};
+use layerfs_overlay::{KernelMount, OpenFile, Publication};
 use layerfs_workspace::{
-    JobOutcome, NativeMutationOutcome, NativeVisitRequest, Refusal, Time, ViewStat, VisitFacts,
+    JobOutcome, KernelMutationOutcome, KernelVisitRequest, Refusal, Time, ViewStat, VisitFacts,
     WorkspaceError,
 };
 use std::{fmt, sync::Arc};
 
 /// What the kernel asked for, before a handle's descriptor is resolved.
-/// What a native mutation was asked to do, before its descriptor is known.
-pub use layerfs_workspace::NativeInput as MutationInput;
+/// What a kernel mutation was asked to do, before its descriptor is known.
+pub use layerfs_workspace::KernelInput as MutationInput;
 #[derive(Clone, Debug)]
 pub struct MutationRequest {
-    pub mount: NativeMount,
+    pub mount: KernelMount,
     pub request: u64,
     /// The parent or target whose kernel reference admits this request.
     pub protected: u64,
@@ -30,7 +30,7 @@ pub struct MutationRequest {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Declined {
     Refused(Refusal),
-    /// Physical admission refused before BEGIN, or the atomic native job
+    /// Physical admission refused before BEGIN, or the atomic kernel job
     /// returned direct SQLite Full after known rollback and allocation
     /// observation. SQL/transient allocation work is paid; no filesystem
     /// mutation or publication ticket exists. Unknown outcomes stay retained.
@@ -52,13 +52,13 @@ pub(super) struct Custody {
     services: Arc<dyn RequestServices>,
     request: MutationRequest,
     // Retain the engine receipt through every consumer of the outcome.
-    receipt: Option<ServiceReply<Arc<NativeMutationOutcome>>>,
+    receipt: Option<ServiceReply<Arc<KernelMutationOutcome>>>,
     /// Published and not yet released: exactly one reply attempt is owed.
     publication: Option<Publication>,
 }
 /// A decided mutation. It still owns its publication ticket until the single
 /// reply attempt has returned.
-pub struct NativeMutation {
+pub struct KernelMutation {
     value: Result<Published, Declined>,
     custody: Custody,
 }
@@ -72,10 +72,10 @@ pub struct MutationFailure {
 }
 /// An attempted owner job whose original result is not a usable answer.
 #[derive(Debug)]
-struct Attempted(Arc<NativeMutationOutcome>);
+struct Attempted(Arc<KernelMutationOutcome>);
 impl fmt::Display for Attempted {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "attempted native mutation: {:?}", self.0.result)
+        write!(f, "attempted kernel mutation: {:?}", self.0.result)
     }
 }
 impl std::error::Error for Attempted {
@@ -123,7 +123,7 @@ impl MutationFailure {
     pub const fn publication(&self) -> Option<Publication> {
         self.custody.publication
     }
-    pub fn outcome(&self) -> Option<&NativeMutationOutcome> {
+    pub fn outcome(&self) -> Option<&KernelMutationOutcome> {
         self.custody
             .receipt
             .as_ref()
@@ -153,7 +153,7 @@ impl MutationFailure {
         }
     }
 }
-impl NativeMutation {
+impl KernelMutation {
     /// Drives one mutation to its deciding owner job. Need rounds publish
     /// nothing; the publishing job is the only attempt and is never replayed.
     pub async fn perform(
@@ -236,7 +236,7 @@ impl Custody {
         }
         let mut facts = Arc::new(VisitFacts::default());
         loop {
-            let visit = NativeVisitRequest {
+            let visit = KernelVisitRequest {
                 mount,
                 request,
                 serial: protected,

@@ -1,5 +1,5 @@
 //! Explicit per-control numeric observations of existing counters only.
-mod native;
+mod kernel;
 pub(super) mod resources;
 mod schema;
 
@@ -168,7 +168,7 @@ impl Application {
         #[cfg(target_os = "linux")]
         let observer = service.as_ref().and_then(|service| {
             crate::control::request_token(operation)
-                .and_then(|token| service.observed_native(token).ok().flatten())
+                .and_then(|token| service.observed_kernel(token).ok().flatten())
         });
         // The operation keeps its exact original result independently of every
         // later counter acquisition and diagnostic sink outcome.
@@ -235,17 +235,17 @@ impl Application {
             {
                 let observer = observer.or_else(|| {
                     service.as_ref().and_then(|service| {
-                        token.and_then(|token| service.observed_native(token).ok().flatten())
+                        token.and_then(|token| service.observed_kernel(token).ok().flatten())
                     })
                 });
                 let drained = match &outcome {
-                    Ok(success) => success.native.as_ref().map(|receipt| receipt.work),
+                    Ok(success) => success.kernel.as_ref().map(|receipt| receipt.work),
                     Err(Failure::After { original, .. }) => {
-                        original.native.as_ref().map(|receipt| receipt.work)
+                        original.kernel.as_ref().map(|receipt| receipt.work)
                     }
                     _ => None,
                 };
-                native::emit(
+                kernel::emit(
                     &mut rows,
                     observer.as_ref().map(|observer| observer.facts()),
                     drained,

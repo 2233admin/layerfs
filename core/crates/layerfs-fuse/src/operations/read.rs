@@ -2,8 +2,8 @@
 use super::lookup::Custody;
 use super::ReadFailure;
 use crate::ports::{RequestServices, ServiceError, ServiceReply};
-use layerfs_overlay::{NativeMount, OverlayError, CELL_BYTES, READ_WINDOW};
-use layerfs_workspace::{NativeReadOperation, NativeWindow, Refusal};
+use layerfs_overlay::{KernelMount, OverlayError, CELL_BYTES, READ_WINDOW};
+use layerfs_workspace::{KernelReadOperation, KernelWindow, Refusal};
 use std::sync::Arc;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -15,13 +15,13 @@ pub enum ReadDataInput {
 /// The bytes of one READ or READLINK reply. Its request holds nothing in the
 /// engine: no source, reader or lease was recorded, so nothing is released
 /// after the reply and dropping this value is all that ends it.
-pub struct NativeData(Bytes);
+pub struct KernelData(Bytes);
 enum Bytes {
     /// A file window the visit decided whole, still in its completion.
-    Visit(ServiceReply<Arc<NativeWindow>>),
+    Visit(ServiceReply<Arc<KernelWindow>>),
     Owned(Vec<u8>),
 }
-impl NativeData {
+impl KernelData {
     pub fn bytes(&self) -> &[u8] {
         match &self.0 {
             Bytes::Visit(window) => window.get().whole(false).unwrap_or_default(),
@@ -38,13 +38,13 @@ impl NativeData {
     /// nothing in the engine either.
     pub async fn read(
         services: Arc<dyn RequestServices>,
-        mount: NativeMount,
+        mount: KernelMount,
         request: u64,
         serial: u64,
         handle: Option<u64>,
         input: ReadDataInput,
     ) -> Result<Result<Self, Refusal>, ReadFailure> {
-        let operation = NativeReadOperation::Data { serial };
+        let operation = KernelReadOperation::Data { serial };
         let mut custody = Custody::unowned(services, mount, request, serial, handle, operation);
         custody.data_input = Some(input);
         match custody.window(input).await {
@@ -57,13 +57,13 @@ impl Custody {
     async fn window(
         &self,
         input: ReadDataInput,
-    ) -> Result<Result<NativeData, Refusal>, ServiceError> {
+    ) -> Result<Result<KernelData, Refusal>, ServiceError> {
         let (offset, length, link) = match input {
             ReadDataInput::File { offset, length } => (offset, length, false),
             ReadDataInput::Link => (0, CELL_BYTES as u32, true),
         };
         if length as usize > READ_WINDOW {
-            return Err(Box::new(OverlayError::Invalid("native read window")));
+            return Err(Box::new(OverlayError::Invalid("kernel read window")));
         }
         let (mount, serial, handle) = self.target();
         let visit = self
@@ -71,11 +71,11 @@ impl Custody {
             .read_visit(mount, serial, handle, offset, length)
             .await?;
         if visit.get().whole(link).is_some() {
-            return Ok(Ok(NativeData(Bytes::Visit(visit))));
+            return Ok(Ok(KernelData(Bytes::Visit(visit))));
         }
         // The request's own copy: the job and its receipt are gone before any
         // provider wait.
-        let window = NativeWindow::clone(visit.get());
+        let window = KernelWindow::clone(visit.get());
         drop(visit);
         let base = if window.inherits(offset, link) {
             // Provider reads never run on the loop that received the request.
@@ -86,7 +86,7 @@ impl Custody {
         let answer = window.finish(base.as_ref(), serial, offset, length, link);
         drop(base); // Return the actual reader before the reply.
         match answer {
-            Ok(answer) => Ok(answer.map(|data| NativeData(Bytes::Owned(data)))),
+            Ok(answer) => Ok(answer.map(|data| KernelData(Bytes::Owned(data)))),
             Err(error) => Err(self.services.failed_base_read(error.into())),
         }
     }

@@ -47,9 +47,9 @@ impl Answer {
             Reply::Status(value) => {
                 // The original record keeps its tag and bytes; a native block
                 // travels under its own tag, so no prefix of it is a valid record.
-                out.byte(if value.native.is_some() { 13 } else { 3 })?;
+                out.byte(if value.kernel.is_some() { 13 } else { 3 })?;
                 put_status(&mut out, value)?;
-                if let Some(native) = &value.native {
+                if let Some(native) = &value.kernel {
                     put_native(&mut out, native)?;
                 }
             }
@@ -94,8 +94,8 @@ impl Answer {
             Reply::Located(value) => {
                 out.byte(11)?;
                 put_status(&mut out, value)?;
-                out.byte(u8::from(value.native.is_some()))?;
-                if let Some(native) = &value.native {
+                out.byte(u8::from(value.kernel.is_some()))?;
+                if let Some(native) = &value.kernel {
                     put_native(&mut out, native)?;
                 }
             }
@@ -158,7 +158,7 @@ impl Answer {
             3 => Reply::Status(Box::new(status(&mut input)?)),
             13 => {
                 let mut value = status(&mut input)?;
-                value.native = Some(native(&mut input)?);
+                value.kernel = Some(native(&mut input)?);
                 Reply::Status(Box::new(value))
             }
             4 => Reply::Unmounted(token(&mut input)?),
@@ -182,7 +182,7 @@ impl Answer {
             11 => {
                 let mut value = status(&mut input)?;
                 if boolean(&mut input)? {
-                    value.native = Some(native(&mut input)?);
+                    value.kernel = Some(native(&mut input)?);
                 }
                 Reply::Located(Box::new(value))
             }
@@ -328,7 +328,7 @@ fn status(input: &mut Reader<'_>) -> Result<WorkspaceStatus, ControlError> {
         published,
         local,
         local_failure,
-        native: None,
+        kernel: None,
     })
 }
 fn put_generation(out: &mut Writer, value: Option<i64>) -> Result<(), ControlError> {

@@ -58,7 +58,7 @@ impl From<OverlayError> for WorkspaceError {
     }
 }
 impl Workspace {
-    /// Bind a real full root and local namespace. Native attachment is separate.
+    /// Bind a real full root and local namespace. Kernel attachment is separate.
     pub fn open(
         overlay: &Overlay,
         client: Arc<CanonicalClient>,

@@ -1,4 +1,4 @@
-//! Public Workspace organization with exact logical and native readiness.
+//! Public Workspace organization with exact logical and kernel readiness.
 mod commit;
 #[cfg(unix)]
 pub(crate) mod exec;

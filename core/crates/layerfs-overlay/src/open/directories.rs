@@ -1,11 +1,11 @@
 //! Directory reply positions with per-job undo and disposal outside service.
 use super::OpenState;
-use crate::{NativeDirectory, Overlay, OverlayError, OverlayResult};
+use crate::{KernelDirectory, Overlay, OverlayError, OverlayResult};
 use std::{collections::BTreeMap, sync::Arc};
 
 #[derive(Clone, Copy)]
 pub(crate) struct DirectoryState {
-    pub directory: NativeDirectory,
+    pub directory: KernelDirectory,
     pub floor: u64,
 }
 pub(crate) struct CookiePage {

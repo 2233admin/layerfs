@@ -3,7 +3,7 @@ use super::{owner::Slot, Application, ApplicationError, ConnectionFailure};
 use layerfs_bridge::{
     control::{Call, Reply, Request},
     initial_record::InitialRecord,
-    native::{self},
+    native::{self as transport},
 };
 use std::{
     io::Write,
@@ -114,7 +114,7 @@ impl Application {
         // Keep one descriptor to clear admission I/O waits after the first owned request.
         let settings = stream.try_clone().map_err(socket_failure)?;
         let mut connection =
-            native::accept(stream, &self.setup.private_key, self.setup.control_peer).map_err(
+            transport::accept(stream, &self.setup.private_key, self.setup.control_peer).map_err(
                 |cause| ConnectionFailure {
                     slot,
                     received: None,

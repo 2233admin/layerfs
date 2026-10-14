@@ -6,7 +6,7 @@ use crate::{
     DispatchError, MountRequests, MountWork,
 };
 use fuser::{SessionMonitor, SessionOutcome, SessionPhase, SessionSnapshot};
-use layerfs_overlay::NativeMount;
+use layerfs_overlay::KernelMount;
 use nix::errno::Errno;
 use std::{
     any::Any,
@@ -43,8 +43,8 @@ pub struct SessionConfig {
 
 /// One mounted connection. Dropping it performs no detach, abort, join or
 /// revocation: every terminal step is an explicit call with a retained result.
-pub struct NativeSession {
-    pub(super) mount: NativeMount,
+pub struct KernelSession {
+    pub(super) mount: KernelMount,
     pub(super) directory: PathBuf,
     pub(super) queue: MountRequests,
     /// The mount's fence, kept so its count outlives the request owner's release.
@@ -68,7 +68,7 @@ pub struct NativeSession {
 /// Maintained observations only: no syscall, SQL job or filesystem request.
 #[derive(Clone, Copy, Debug)]
 pub struct SessionFacts {
-    pub mount: NativeMount,
+    pub mount: KernelMount,
     pub loops: Option<SessionSnapshot>,
     /// Every configured loop entered and none has exited.
     pub serving: bool,
@@ -105,8 +105,8 @@ pub struct Forced {
     /// Admitted requests ended by one terminal reply; see `Fence`.
     pub terminal_replies: u64,
 }
-impl NativeSession {
-    pub const fn mount(&self) -> NativeMount {
+impl KernelSession {
+    pub const fn mount(&self) -> KernelMount {
         self.mount
     }
     pub fn directory(&self) -> &Path {
@@ -150,7 +150,7 @@ impl NativeSession {
 /// Maintained observations of one connection, independent of who owns it.
 #[derive(Clone)]
 pub struct SessionObserver {
-    mount: NativeMount,
+    mount: KernelMount,
     queue: MountRequests,
     accounting: Arc<Accounting>,
     monitor: Option<SessionMonitor>,
@@ -184,9 +184,9 @@ impl fmt::Debug for SessionObserver {
             .finish()
     }
 }
-impl fmt::Debug for NativeSession {
+impl fmt::Debug for KernelSession {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("NativeSession")
+        f.debug_struct("KernelSession")
             .field("mount", &self.mount)
             .field("directory", &self.directory)
             .field("facts", &self.facts())
@@ -230,7 +230,7 @@ pub struct AttachFailure {
 }
 impl fmt::Display for AttachFailure {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "native attach {:?}: {}", self.phase, self.cause)
+        write!(f, "kernel attach {:?}: {}", self.phase, self.cause)
     }
 }
 impl std::error::Error for AttachFailure {
@@ -255,7 +255,7 @@ pub enum DrainStage {
 /// The connection stays owned with its exact stopping stage; a later drain call
 /// observes the same predicate again and replays no syscall.
 pub struct Undrained {
-    pub session: NativeSession,
+    pub session: KernelSession,
     pub stage: DrainStage,
     pub loops: Option<SessionSnapshot>,
     pub work: Option<MountWork>,
@@ -286,7 +286,7 @@ impl fmt::Debug for Undrained {
 /// unmount and never sufficient: engine, Store and control owners are separate.
 #[derive(Debug)]
 pub struct Drained {
-    pub mount: NativeMount,
+    pub mount: KernelMount,
     pub directory: PathBuf,
     /// Original loop/cleanup outcomes; absent when no loop was ever created.
     pub outcome: Option<SessionOutcome>,

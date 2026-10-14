@@ -1,15 +1,15 @@
 //! Normal terminal unmount: reversible probe, complete drain, then Close.
 use super::{
-    native::Native,
+    kernel::Kernel,
     registry::{bound_mut, idle},
-    Failure, NativeEvidence, Service, Success,
+    Failure, KernelEvidence, Service, Success,
 };
 use crate::store::BoundWorkspace;
 use layerfs_bridge::control::{Activity, ForcedFacts, Reply, WorkspaceToken};
 use std::sync::Arc;
 
-/// Original native connection receipt carried to Close.
-type Receipt = Option<Box<NativeEvidence>>;
+/// Original kernel connection receipt carried to Close.
+type Receipt = Option<Box<KernelEvidence>>;
 
 /// What terminal admission took out of the registry entry.
 pub(super) enum Departure {
@@ -25,13 +25,13 @@ impl Service {
             Departure::Unattached => {}
             #[cfg(target_os = "linux")]
             Departure::Session(attached) => {
-                return self.unmount_native(token, workspace, *attached)
+                return self.unmount_kernel(token, workspace, *attached)
             }
         };
         self.close(token, &workspace, None)
     }
     /// One short registry step: no effect unless the entry is idle and its
-    /// native half is either absent or a serving connection with no request.
+    /// kernel half is either absent or a serving connection with no request.
     fn admit_unmount(
         &self,
         token: WorkspaceToken,
@@ -40,15 +40,15 @@ impl Service {
         let value = bound_mut(&mut entries, token)?;
         // Retained custody answers before ordinary activity admission.
         #[cfg(target_os = "linux")]
-        if let Native::Retained(kept) = &value.native {
+        if let Kernel::Retained(kept) = &value.kernel {
             return Err(Failure::Retained(Box::new(kept.custody(token))));
         }
         idle(value)?;
-        let departure = match value.native {
-            Native::Unattached => Departure::Unattached,
+        let departure = match value.kernel {
+            Kernel::Unattached => Departure::Unattached,
             #[cfg(target_os = "linux")]
-            Native::Attaching => {
-                return Err(Failure::native(
+            Kernel::Attaching => {
+                return Err(Failure::kernel(
                     layerfs_bridge::control::ControlCode::Unknown,
                     "unmount:admission",
                     "original Attach outcome retained",
@@ -56,7 +56,7 @@ impl Service {
             }
             #[cfg(target_os = "linux")]
             _ => Departure::Session(super::detach::take(
-                &mut value.native,
+                &mut value.kernel,
                 layerfs_bridge::control::NativePhase::Probing,
             )?),
         };
@@ -64,21 +64,21 @@ impl Service {
         value.epoch = value.epoch.saturating_add(1);
         Ok((value.workspace.clone(), departure))
     }
-    /// Logical Close and routing removal, after every native owner is revoked.
+    /// Logical Close and routing removal, after every kernel owner is revoked.
     pub(super) fn close(
         &self,
         token: WorkspaceToken,
         workspace: &BoundWorkspace,
-        native: Receipt,
+        kernel: Receipt,
     ) -> Result<Success, Failure> {
-        let native = self.closed(token, workspace, native, None)?;
+        let kernel = self.closed(token, workspace, kernel, None)?;
         self.depart(
             token,
             Success {
                 reply: Reply::Unmounted(token),
                 commit: None,
                 observation_failure: None,
-                native,
+                kernel,
             },
         )
     }
@@ -88,15 +88,15 @@ impl Service {
         &self,
         token: WorkspaceToken,
         workspace: &BoundWorkspace,
-        native: Receipt,
+        kernel: Receipt,
         forced: Option<ForcedFacts>,
     ) -> Result<Receipt, Failure> {
         match self.job(
             workspace.route(),
             |job_client: &crate::OwnerClient, job_route| job_client.close(job_route),
         ) {
-            Ok(()) => Ok(native),
-            Err(failure) => Err(self.unclosed(token, failure, native, forced)),
+            Ok(()) => Ok(kernel),
+            Err(failure) => Err(self.unclosed(token, failure, kernel, forced)),
         }
     }
     /// Routing removal after an acknowledged Close; the reply is already known.
@@ -130,22 +130,22 @@ impl Service {
         &self,
         token: WorkspaceToken,
         failure: Failure,
-        native: Receipt,
+        kernel: Receipt,
         forced: Option<ForcedFacts>,
     ) -> Failure {
         #[cfg(target_os = "linux")]
-        if native.is_some() {
+        if kernel.is_some() {
             return self.retain(
                 token,
                 layerfs_bridge::control::TeardownStage::Close,
                 failure.wire().detail,
                 None,
-                Box::new((failure, native)),
+                Box::new((failure, kernel)),
                 forced,
             );
         }
         #[cfg(not(target_os = "linux"))]
-        let _ = (native, forced);
+        let _ = (kernel, forced);
         if let Ok(mut entries) = self.entries.lock() {
             if let Ok(binding) = bound_mut(&mut entries, token) {
                 binding.activity = if failure.uncertain() {
@@ -163,7 +163,7 @@ impl Service {
     pub(super) fn attach(&self, _token: WorkspaceToken) -> Result<Success, Failure> {
         Err(Failure::Rejected(
             layerfs_bridge::control::ControlCode::Invalid,
-            "native serving requires Linux",
+            "kernel serving requires Linux",
         ))
     }
 }

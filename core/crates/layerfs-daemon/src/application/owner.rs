@@ -9,7 +9,7 @@ use crate::{
 use layerfs_bridge::{
     control::{DaemonPhase, DaemonStatus, HelloRequest},
     daemon_setup::DaemonSetup,
-    native,
+    native as transport,
 };
 use layerfs_overlay::ProfileConfig;
 use layerfs_persistence::{PersistenceConfig, SqlitePersistenceProfile};
@@ -40,8 +40,8 @@ pub struct Application {
     pub(super) setup: DaemonSetup,
     pub(super) instance: [u8; 32],
     pub(super) owner: Owner,
-    /// Fixed shared native workers, entered before control readiness.
-    pub(super) native: Option<Arc<crate::control::NativeServing>>,
+    /// Fixed shared kernel workers, entered before control readiness.
+    pub(super) kernel: Option<Arc<crate::control::KernelServing>>,
     pub(super) state: Mutex<State>,
     pub(super) changed: Condvar,
     pub(super) workers: Mutex<Vec<Option<JoinHandle<()>>>>,
@@ -71,7 +71,7 @@ impl Application {
             return Err(ApplicationError::Owner(Box::new(started)));
         }
         let owner = started.result.expect("original successful Overlay start");
-        let instance = match native::generate_keypair() {
+        let instance = match transport::generate_keypair() {
             Ok(keys) => keys.public,
             Err(cause) => {
                 return Err(ApplicationError::AfterOverlay {
@@ -110,8 +110,8 @@ impl Application {
             },
             None => None,
         };
-        let native = match super::filesystem::assemble(&setup) {
-            Ok(native) => native,
+        let kernel = match super::filesystem::assemble(&setup) {
+            Ok(kernel) => kernel,
             Err(cause) => {
                 return Err(ApplicationError::AfterOverlay {
                     owner: Box::new(owner),
@@ -123,7 +123,7 @@ impl Application {
             super::filesystem::service(
                 opened.store.clone(),
                 &owner,
-                native.as_ref(),
+                kernel.as_ref(),
                 l.serial_low_water,
             )
         });
@@ -137,7 +137,7 @@ impl Application {
             setup,
             instance,
             owner,
-            native,
+            kernel,
             state: Mutex::new(State {
                 startup: Startup {
                     phase,

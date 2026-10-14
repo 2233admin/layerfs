@@ -60,7 +60,7 @@ impl SourceView {
         self.base.supply(facts, needs, path)
     }
 }
-/// Base facts of one native request that holds no source, read outside the
+/// Base facts of one kernel request that holds no source, read outside the
 /// owner for one base root. An owner visit uses them only while the
 /// Workspace still has that base.
 #[derive(Clone, Debug, Default)]

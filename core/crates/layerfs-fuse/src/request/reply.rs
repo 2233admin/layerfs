@@ -2,15 +2,15 @@
 use super::terminal;
 use crate::{
     attributes::{refusal, Identity},
-    operations::{NativeData, NativeRead, ReadDataInput},
+    operations::{KernelData, KernelRead, ReadDataInput},
     ports::{Fence, RequestServices},
     RequestDisposition,
 };
 use fuser::{
     Errno, FileHandle, FopenFlags, Generation, ReplyAttr, ReplyData, ReplyEntry, ReplyOpen,
 };
-use layerfs_overlay::NativeMount;
-use layerfs_workspace::NativeReadOperation;
+use layerfs_overlay::KernelMount;
+use layerfs_workspace::KernelReadOperation;
 use std::{sync::Arc, time::Duration};
 /// Entry and attribute lifetime of every reply. It bounds how long the kernel
 /// may answer without asking; it is never what makes an answer correct.
@@ -47,11 +47,11 @@ impl ReadReply {
         self,
         services: Arc<dyn RequestServices>,
         fence: Fence,
-        mount: NativeMount,
+        mount: KernelMount,
         request: u64,
         protected: u64,
         handle: Option<u64>,
-        operation: NativeReadOperation,
+        operation: KernelReadOperation,
         identity: Identity,
     ) -> RequestDisposition {
         let (reply, input) = match self {
@@ -66,7 +66,7 @@ impl ReadReply {
             }
         };
         // Nothing is held in the engine after the visit: the reply ends it.
-        match NativeData::read(services, mount, request, protected, handle, input).await {
+        match KernelData::read(services, mount, request, protected, handle, input).await {
             Ok(Ok(data)) => {
                 reply.data(data.bytes());
                 RequestDisposition::Complete
@@ -87,15 +87,15 @@ impl ReadReply {
         self,
         services: Arc<dyn RequestServices>,
         fence: Fence,
-        mount: NativeMount,
+        mount: KernelMount,
         request: u64,
         protected: u64,
         handle: Option<u64>,
-        operation: NativeReadOperation,
+        operation: KernelReadOperation,
         identity: Identity,
     ) -> RequestDisposition {
         let answer =
-            match NativeRead::prepare(services, mount, request, protected, handle, operation).await
+            match KernelRead::prepare(services, mount, request, protected, handle, operation).await
             {
                 Ok(answer) => answer,
                 Err(error) => {
@@ -120,7 +120,7 @@ impl ReadReply {
                 let Some(handle) = handle else {
                     reply.error(Errno::EIO);
                     return RequestDisposition::Retained(Box::new(answer.retain(Box::new(
-                        std::io::Error::other("successful native open has no handle"),
+                        std::io::Error::other("successful kernel open has no handle"),
                     ))));
                 };
                 reply.opened(FileHandle(handle), open_flags());
@@ -148,7 +148,7 @@ impl ReadReply {
         dispose(answer).await
     }
 }
-async fn dispose(answer: NativeRead) -> RequestDisposition {
+async fn dispose(answer: KernelRead) -> RequestDisposition {
     match answer.dispose().await {
         Ok(()) => RequestDisposition::Complete,
         Err(error) => RequestDisposition::Retained(Box::new(error)),

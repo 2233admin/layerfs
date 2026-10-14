@@ -96,7 +96,7 @@ impl Application {
                 state.startup.service = Some(super::filesystem::service(
                     installed.opened.store.clone(),
                     &self.owner,
-                    self.native.as_ref(),
+                    self.kernel.as_ref(),
                     l.serial_low_water,
                 ));
                 state.startup.installed = Some(installed);
@@ -119,7 +119,7 @@ impl Application {
                     state.startup.service = Some(super::filesystem::service(
                         opened.store.clone(),
                         &self.owner,
-                        self.native.as_ref(),
+                        self.kernel.as_ref(),
                         l.serial_low_water,
                     ));
                     state.startup.phase = DaemonPhase::ControlReady;

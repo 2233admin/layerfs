@@ -1,10 +1,10 @@
-//! Native half of one registry entry and its bounded status block.
+//! Kernel half of one registry entry and its bounded status block.
 use layerfs_bridge::control::{NativePhase, NativeStatus};
 use std::{path::PathBuf, time::Duration};
 
-/// Declared native serving inputs, assembled once by the application.
+/// Declared kernel serving inputs, assembled once by the application.
 #[derive(Clone, Debug)]
-pub struct NativeConfig {
+pub struct KernelConfig {
     /// Existing daemon-owned directory; each mount is a new child of it.
     pub mounts: PathBuf,
     /// Daemon identity recorded as every mount's owner.
@@ -18,15 +18,15 @@ pub struct NativeConfig {
     /// Observation deadline for loop joins and request drain.
     pub drain_wait: Duration,
 }
-/// Native serving is a Linux capability; elsewhere it cannot be constructed.
+/// Kernel serving is a Linux capability; elsewhere it cannot be constructed.
 #[cfg(not(target_os = "linux"))]
 #[derive(Debug)]
-pub enum NativeServing {}
+pub enum KernelServing {}
 #[cfg(target_os = "linux")]
-pub use super::serving::NativeServing;
+pub use super::serving::KernelServing;
 
 /// The registry is the sole authority for which connection an entry owns.
-pub(super) enum Native {
+pub(super) enum Kernel {
     Unattached,
     /// One Attach is admitted, or its engine outcome is unknown.
     #[cfg(target_os = "linux")]
@@ -39,7 +39,7 @@ pub(super) enum Native {
     #[cfg(target_os = "linux")]
     Retained(Box<super::serving::Kept>),
 }
-impl Native {
+impl Kernel {
     /// Maintained observations only: no syscall, SQL job or kernel request.
     pub(super) fn block(&self) -> NativeStatus {
         let plain = |phase| NativeStatus {

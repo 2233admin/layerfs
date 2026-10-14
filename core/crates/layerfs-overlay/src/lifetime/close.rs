@@ -17,13 +17,13 @@ impl Overlay {
             return Ok(CleanupState::Live);
         }
         let open = self.open.borrow();
-        let native = open.mount.is_some_and(|(_, revoked)| !revoked);
+        let kernel = open.mount.is_some_and(|(_, revoked)| !revoked);
         let files = open.files.any_request((0, i64::MIN)..=(0, i64::MAX));
         let readers = open.reads.len() != 0;
         let lookups = open.lookups.len() != 0;
         let pins = open.operations.len() != 0 || open.captured.len() != 0;
         drop(open);
-        let held = native
+        let held = kernel
             || files
             || readers
             || lookups

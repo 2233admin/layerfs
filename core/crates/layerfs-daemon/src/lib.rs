@@ -3,7 +3,7 @@
 //! Each Workspace owns one overlay connection behind one lock; a caller runs
 //! its own short typed call under it and keeps exact failure custody and reply tickets.
 //! Direct Store ports provide immutable data and conditional history transitions.
-//! Control composes native Attach/Ready/unmount over the Fuse session owner;
+//! Control composes kernel Attach/Ready/unmount over the Fuse session owner;
 //! command launch and supervision stay with the Sandbox or external executor.
 #![forbid(unsafe_code)]
 

@@ -9,27 +9,27 @@
 use crate::{BaseView, SourceView, Workspace, WorkspaceResult};
 use layerfs_content::{object::inode_leaf::InodeKind, ContentError};
 use layerfs_overlay::{
-    NativeCookieOffer, NativeDirectoryCursor, NativeDirectoryPage, NativeMount, Overlay,
+    KernelCookieOffer, KernelDirectoryCursor, KernelDirectoryPage, KernelMount, Overlay,
     OverlayError, OverlayResult, PAGE_ROWS,
 };
 use std::{fmt, sync::Arc};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct NativeDirectoryEntry {
+pub struct KernelDirectoryEntry {
     pub name: Vec<u8>,
     pub serial: u64,
     pub kind: InodeKind,
 }
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct NativeDirectoryListing {
-    pub entries: Vec<NativeDirectoryEntry>,
+pub struct KernelDirectoryListing {
+    pub entries: Vec<KernelDirectoryEntry>,
     pub continuation: Option<Vec<u8>>,
     pub visited: usize,
 }
 /// One READDIR reading visit as one read-only owner job.
 #[derive(Clone)]
-pub struct NativeDirectoryVisit {
-    mount: NativeMount,
+pub struct KernelDirectoryVisit {
+    mount: KernelMount,
     serial: u64,
     handle: u64,
     offset: u64,
@@ -38,19 +38,19 @@ pub struct NativeDirectoryVisit {
 }
 /// What the reading visit found, as plain values its request owns.
 #[derive(Clone, Debug)]
-pub struct NativeDirectoryWindow {
-    pub page: NativeDirectoryPage,
+pub struct KernelDirectoryWindow {
+    pub page: KernelDirectoryPage,
     /// The merged names of the window, when memory answered every inherited
     /// name and kind inside the job.
-    pub listing: Option<NativeDirectoryListing>,
+    pub listing: Option<KernelDirectoryListing>,
     /// The offsets the reply may hand out. Absent when the job decided that
     /// the window lists no name.
-    pub offer: Option<NativeCookieOffer>,
+    pub offer: Option<KernelCookieOffer>,
 }
 /// The entries one reply may offer, in order, with their offsets.
 #[derive(Clone, Debug)]
-pub struct NativeDirectoryBatch {
-    pub entries: Vec<NativeDirectoryEntry>,
+pub struct KernelDirectoryBatch {
+    pub entries: Vec<KernelDirectoryEntry>,
     /// Where the request's next window continues when this one lists none.
     pub continuation: Option<Vec<u8>>,
     /// The offset of the first entry; each next entry's is one more.
@@ -59,11 +59,11 @@ pub struct NativeDirectoryBatch {
     /// names with. None: the offsets are those of an already published
     /// reply with these names, and nothing is published. An offer that
     /// rewinds is published even when the reply accepts none of the names.
-    pub publish: Option<NativeCookieOffer>,
+    pub publish: Option<KernelCookieOffer>,
 }
-impl fmt::Debug for NativeDirectoryVisit {
+impl fmt::Debug for KernelDirectoryVisit {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("NativeDirectoryVisit")
+        f.debug_struct("KernelDirectoryVisit")
             .field("mount", &self.mount)
             .field("serial", &self.serial)
             .field("handle", &self.handle)
@@ -75,22 +75,22 @@ impl fmt::Debug for NativeDirectoryVisit {
 impl Workspace {
     /// `resident` answers from memory only. No I/O here. `after` continues
     /// an earlier window of the same request past names that listed nothing.
-    pub fn native_directory_visit(
+    pub fn kernel_directory_visit(
         &self,
         resident: Arc<crate::CanonicalClient>,
-        mount: NativeMount,
+        mount: KernelMount,
         serial: u64,
         handle: u64,
         offset: u64,
         after: Option<Vec<u8>>,
-    ) -> WorkspaceResult<NativeDirectoryVisit> {
+    ) -> WorkspaceResult<KernelDirectoryVisit> {
         let base = self.base()?;
         if mount.engine() != self.route().engine()
             || mount.root_serial() != base.root().root_inode().serial()
         {
             return Err(OverlayError::Stale.into());
         }
-        Ok(NativeDirectoryVisit {
+        Ok(KernelDirectoryVisit {
             mount,
             serial,
             handle,
@@ -100,8 +100,8 @@ impl Workspace {
         })
     }
 }
-impl NativeDirectoryVisit {
-    pub const fn mount(&self) -> NativeMount {
+impl KernelDirectoryVisit {
+    pub const fn mount(&self) -> KernelMount {
         self.mount
     }
 
@@ -109,18 +109,18 @@ impl NativeDirectoryVisit {
     /// left to the one read that follows outside the owner. The reuse lookup
     /// is skipped only when the job itself found that no name is listed.
     /// An offset from before the handle's last rewind lists nothing.
-    pub fn perform(&self, db: &Overlay) -> OverlayResult<NativeDirectoryWindow> {
-        let page = db.read_native_directory_visit(
+    pub fn perform(&self, db: &Overlay) -> OverlayResult<KernelDirectoryWindow> {
+        let page = db.read_kernel_directory_visit(
             self.mount,
             self.serial,
             self.handle,
             self.offset,
             self.after.as_deref(),
         )?;
-        if *page.cursor() == NativeDirectoryCursor::Rewound {
-            return Ok(NativeDirectoryWindow {
+        if *page.cursor() == KernelDirectoryCursor::Rewound {
+            return Ok(KernelDirectoryWindow {
                 page,
-                listing: Some(NativeDirectoryListing {
+                listing: Some(KernelDirectoryListing {
                     entries: Vec::new(),
                     continuation: None,
                     visited: 0,
@@ -133,20 +133,20 @@ impl NativeDirectoryVisit {
             .flatten();
         let offer = match &listing {
             Some(listing) if listing.entries.is_empty() => None,
-            _ => Some(db.offer_native_cookies(&page)?),
+            _ => Some(db.offer_kernel_cookies(&page)?),
         };
-        Ok(NativeDirectoryWindow {
+        Ok(KernelDirectoryWindow {
             page,
             listing,
             offer,
         })
     }
 }
-impl NativeDirectoryWindow {
+impl KernelDirectoryWindow {
     /// The request's offset was handed out before the handle was last
     /// listed from offset 0: it is refused, and the window lists nothing.
     pub fn rewound(&self) -> bool {
-        *self.page.cursor() == NativeDirectoryCursor::Rewound
+        *self.page.cursor() == KernelDirectoryCursor::Rewound
     }
     /// The entries this window may offer and their offsets. `base` is the
     /// Workspace's base over an admitted Store reader and is required when
@@ -157,12 +157,12 @@ impl NativeDirectoryWindow {
     /// same name and whose names these entries begin with is reused: the
     /// batch is exactly its names at its offsets. Otherwise the offsets are
     /// the offer's fresh range.
-    pub fn finish(self, base: Option<&BaseView>) -> WorkspaceResult<NativeDirectoryBatch> {
+    pub fn finish(self, base: Option<&BaseView>) -> WorkspaceResult<KernelDirectoryBatch> {
         let listing = match self.listing {
             Some(listing) => listing,
             None => {
                 let base = base.ok_or(ContentError::InvalidRecord(
-                    "native directory window without its base",
+                    "kernel directory window without its base",
                 ))?;
                 listing(&*base.at(self.page.source().root())?, &self.page)?
             }
@@ -172,7 +172,7 @@ impl NativeDirectoryWindow {
             None if entries.is_empty() => (0, None),
             None => {
                 return Err(
-                    ContentError::InvalidRecord("native directory names without offsets").into(),
+                    ContentError::InvalidRecord("kernel directory names without offsets").into(),
                 )
             }
             Some(offer) => match offer.existing() {
@@ -189,7 +189,7 @@ impl NativeDirectoryWindow {
                 _ => (offer.first(), Some(offer)),
             },
         };
-        Ok(NativeDirectoryBatch {
+        Ok(KernelDirectoryBatch {
             entries,
             continuation: listing.continuation,
             first,
@@ -200,7 +200,7 @@ impl NativeDirectoryWindow {
 /// One window's merged names over `base`, which must be the page's own base
 /// root. This issues no SQL and acquires no kernel lookup reference. An
 /// empty result with a continuation needs another window of the same request.
-fn listing(base: &BaseView, page: &NativeDirectoryPage) -> WorkspaceResult<NativeDirectoryListing> {
+fn listing(base: &BaseView, page: &KernelDirectoryPage) -> WorkspaceResult<KernelDirectoryListing> {
     let view = SourceView {
         base: base.clone(),
         source: page.source(),
@@ -212,7 +212,7 @@ fn listing(base: &BaseView, page: &NativeDirectoryPage) -> WorkspaceResult<Nativ
             .windows(2)
             .any(|pair| pair[0].0 >= pair[1].0)
     {
-        return Err(ContentError::InvalidRecord("native directory page identity").into());
+        return Err(ContentError::InvalidRecord("kernel directory page identity").into());
     }
     if let Some(inode) = &page.local.parent_inode {
         if inode.nlink == 0 && inode.serial != view.root_serial() {
@@ -220,9 +220,9 @@ fn listing(base: &BaseView, page: &NativeDirectoryPage) -> WorkspaceResult<Nativ
             // descriptor retains that proved-empty view; ordinary unowned
             // namespace listing still refuses a removed serial.
             if inode.kind != layerfs_overlay::InodeKind::Directory || inode.entries != 0 {
-                return Err(ContentError::InvalidRecord("removed native directory").into());
+                return Err(ContentError::InvalidRecord("removed kernel directory").into());
             }
-            return Ok(NativeDirectoryListing {
+            return Ok(KernelDirectoryListing {
                 entries: Vec::new(),
                 continuation: None,
                 visited: 0,
@@ -244,9 +244,9 @@ fn listing(base: &BaseView, page: &NativeDirectoryPage) -> WorkspaceResult<Nativ
             },
             Err(_) => view.base().inode(serial)?.value.kind,
         };
-        entries.push(NativeDirectoryEntry { name, serial, kind });
+        entries.push(KernelDirectoryEntry { name, serial, kind });
     }
-    Ok(NativeDirectoryListing {
+    Ok(KernelDirectoryListing {
         entries,
         continuation: listing.continuation,
         visited: listing.visited,

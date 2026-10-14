@@ -1,6 +1,6 @@
 //! Linux half of normal unmount: plain detach once, then the drain barrier.
 use super::{
-    native::Native,
+    kernel::Kernel,
     registry::bound_mut,
     serving::{stage, Attached, Kept, Leaving},
     Failure, Service, Success,
@@ -19,24 +19,24 @@ use std::{fmt, sync::Arc};
 /// lookup decrements, or a replied request's last bookkeeping) is waited out
 /// by the drain barrier after a known detach. Forced admission takes the
 /// session the same way, into its own first phase.
-pub(super) fn take(native: &mut Native, phase: NativePhase) -> Result<Box<Attached>, Failure> {
-    match native {
-        Native::Ready(_) => {}
-        Native::Leaving(_) => {
-            return Err(Failure::native(
+pub(super) fn take(kernel: &mut Kernel, phase: NativePhase) -> Result<Box<Attached>, Failure> {
+    match kernel {
+        Kernel::Ready(_) => {}
+        Kernel::Leaving(_) => {
+            return Err(Failure::kernel(
                 ControlCode::Busy,
                 "unmount:admission",
                 "terminal unmount already admitted",
             ))
         }
-        Native::Unattached | Native::Attaching | Native::Retained(_) => {
+        Kernel::Unattached | Kernel::Attaching | Kernel::Retained(_) => {
             unreachable!("handled by terminal admission")
         }
     }
-    let Native::Ready(attached) = std::mem::replace(native, Native::Attaching) else {
+    let Kernel::Ready(attached) = std::mem::replace(kernel, Kernel::Attaching) else {
         unreachable!("checked serving connection")
     };
-    *native = Native::Leaving(Box::new(Leaving {
+    *kernel = Kernel::Leaving(Box::new(Leaving {
         ready: attached.ready.clone(),
         observer: attached.session.observer(),
         phase,
@@ -46,7 +46,7 @@ pub(super) fn take(native: &mut Native, phase: NativePhase) -> Result<Box<Attach
 impl Service {
     /// The session is serviced normally throughout the probe. Only a known
     /// detach is terminal; after it every stop keeps the exact owner.
-    pub(super) fn unmount_native(
+    pub(super) fn unmount_kernel(
         &self,
         token: WorkspaceToken,
         workspace: Arc<BoundWorkspace>,
@@ -61,10 +61,10 @@ impl Service {
                 // Reversible: the same connection returns to the registry.
                 self.settle(
                     token,
-                    Native::Ready(Box::new(Attached { session, ready })),
+                    Kernel::Ready(Box::new(Attached { session, ready })),
                     Activity::Idle,
                 );
-                return Err(Failure::native(
+                return Err(Failure::kernel(
                     ControlCode::Busy,
                     "unmount:kernel",
                     "kernel reported the mount busy; no terminal effect",
@@ -101,7 +101,7 @@ impl Service {
         // Drain barrier holds: one fixed logical mark, then indexed retirement.
         match self.job(
             workspace.route(),
-            |job_client: &crate::OwnerClient, job_route| job_client.native_revoke(job_route, mount),
+            |job_client: &crate::OwnerClient, job_route| job_client.kernel_revoke(job_route, mount),
         ) {
             Ok(()) => {}
             Err(failure) => {
@@ -117,19 +117,19 @@ impl Service {
         };
         self.close(token, &workspace, Some(drained))
     }
-    /// Describes the exact retained native owner for an operator. Observation
+    /// Describes the exact retained kernel owner for an operator. Observation
     /// only: nothing is transferred, released, retried or settled.
-    pub fn retained_native(&self, token: WorkspaceToken) -> Result<Option<String>, Failure> {
+    pub fn retained_kernel(&self, token: WorkspaceToken) -> Result<Option<String>, Failure> {
         let mut entries = self.entries.lock().map_err(|_| Failure::Poisoned)?;
-        Ok(match &bound_mut(&mut entries, token)?.native {
-            Native::Retained(kept) => Some(format!("{kept:?}")),
+        Ok(match &bound_mut(&mut entries, token)?.kernel {
+            Kernel::Retained(kept) => Some(format!("{kept:?}")),
             _ => None,
         })
     }
     pub(super) fn leaving(&self, token: WorkspaceToken, phase: NativePhase) {
         if let Ok(mut entries) = self.entries.lock() {
             if let Ok(binding) = bound_mut(&mut entries, token) {
-                if let Native::Leaving(leaving) = &mut binding.native {
+                if let Kernel::Leaving(leaving) = &mut binding.kernel {
                     leaving.phase = phase;
                 }
             }
@@ -137,10 +137,10 @@ impl Service {
     }
     /// Poison recovery stores this exact owner only; a poisoned registry never
     /// authorizes another product operation.
-    pub(super) fn settle(&self, token: WorkspaceToken, native: Native, activity: Activity) {
+    pub(super) fn settle(&self, token: WorkspaceToken, kernel: Kernel, activity: Activity) {
         let mut entries = self.entries.lock().unwrap_or_else(|e| e.into_inner());
         if let Ok(binding) = bound_mut(&mut entries, token) {
-            binding.native = native;
+            binding.kernel = kernel;
             binding.activity = activity;
             binding.epoch = binding.epoch.saturating_add(1);
         }
@@ -166,7 +166,7 @@ impl Service {
             forced,
         };
         let mut binding = bound_mut(&mut entries, token).ok();
-        if let Some(Native::Leaving(leaving)) = binding.as_ref().map(|binding| &binding.native) {
+        if let Some(Kernel::Leaving(leaving)) = binding.as_ref().map(|binding| &binding.kernel) {
             kept.ready = Some(leaving.ready.clone());
             // A stop after the session was consumed still reports its
             // connection's own detach and loop facts.
@@ -176,7 +176,7 @@ impl Service {
         }
         let custody = kept.custody(token);
         if let Some(binding) = binding.as_mut() {
-            binding.native = Native::Retained(Box::new(kept));
+            binding.kernel = Kernel::Retained(Box::new(kept));
             binding.epoch = binding.epoch.saturating_add(1);
         }
         Failure::Retained(Box::new(custody))

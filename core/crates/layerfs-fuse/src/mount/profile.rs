@@ -34,11 +34,11 @@ pub(crate) fn negotiate(config: &mut KernelConfig) -> io::Result<Negotiation> {
     if !offered.contains(defaults) {
         return Err(io::Error::new(
             io::ErrorKind::Unsupported,
-            "required native capability absent",
+            "required kernel capability absent",
         ));
     }
     let selected = defaults | (offered & InitFlags::FUSE_MAX_PAGES);
-    let refused = |_| io::Error::new(io::ErrorKind::Unsupported, "native profile limit refused");
+    let refused = |_| io::Error::new(io::ErrorKind::Unsupported, "kernel profile limit refused");
     let window = layerfs_overlay::READ_WINDOW as u32;
     config.set_max_write(window).map_err(refused)?;
     config.set_max_readahead(window).map_err(refused)?;
@@ -51,7 +51,7 @@ pub(crate) fn negotiate(config: &mut KernelConfig) -> io::Result<Negotiation> {
         .map_err(io::Error::from)?
         .and_then(|size| u32::try_from(size).ok())
         .filter(|size| *size != 0)
-        .ok_or_else(|| io::Error::other("native page size unavailable"))?;
+        .ok_or_else(|| io::Error::other("kernel page size unavailable"))?;
     Ok(Negotiation {
         abi: config.kernel_abi(),
         offered,

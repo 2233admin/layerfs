@@ -36,7 +36,7 @@ impl FinalizedConsumer for Staging<'_, '_, '_> {
 impl BoundWorkspace {
     /// Commits the shared published frontier: every locally published change,
     /// whichever process made it. One attempt; this thread runs the
-    /// synchronous captured ports, so it is never a native receive or
+    /// synchronous captured ports, so it is never a kernel receive or
     /// request-service worker.
     pub fn commit_captured(&self) -> Result<CommitSuccess, Box<CommitFailure>> {
         let mut admission = self.admit_commit()?;

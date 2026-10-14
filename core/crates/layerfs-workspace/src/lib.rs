@@ -2,7 +2,7 @@
 //!
 //! The surface binds authentic immutable roots, composes the effective view and
 //! performs ordinary namespace and byte operations as atomic owner jobs.
-//! Lifetimes, runtime/Commit and native FUSE remain separate implementation slices.
+//! Lifetimes, runtime/Commit and kernel FUSE remain separate implementation slices.
 #![forbid(unsafe_code)]
 
 mod base;
@@ -53,17 +53,17 @@ pub use operation::{Operation, Outcome, Position, Refusal, Time, WriteData};
 pub use operations::file::recognize::{
     Recognition, RecognizeWork, WriteRun, RECOGNIZE_BYTES, UNMATCHED_BYTES,
 };
-pub use operations::native_data::{NativeDataVisit, NativeWindow};
-pub use operations::native_directory::{
-    NativeDirectoryBatch, NativeDirectoryEntry, NativeDirectoryListing, NativeDirectoryVisit,
-    NativeDirectoryWindow,
+pub use operations::kernel_data::{KernelDataVisit, KernelWindow};
+pub use operations::kernel_directory::{
+    KernelDirectoryBatch, KernelDirectoryEntry, KernelDirectoryListing, KernelDirectoryVisit,
+    KernelDirectoryWindow,
 };
-pub use operations::native_mutation::NativeMutationOutcome;
-pub use operations::native_read::{
-    NativeReadDecision, NativeReadFailure, NativeReadOperation, NativeReadOutcome, NativeReadValue,
+pub use operations::kernel_mutation::KernelMutationOutcome;
+pub use operations::kernel_read::{
+    KernelReadDecision, KernelReadFailure, KernelReadOperation, KernelReadOutcome, KernelReadValue,
 };
-pub use operations::native_visit::{
-    NativeInput, NativeMutationVisit, NativeReadVisit, NativeVisitRequest,
+pub use operations::kernel_visit::{
+    KernelInput, KernelMutationVisit, KernelReadVisit, KernelVisitRequest,
 };
 pub use port::OverlayCapturedNamespace;
 pub use port::{FileLengths, OverlayCapturedRuns, OverlayFileRead, OverlayJobs, OverlayRead};

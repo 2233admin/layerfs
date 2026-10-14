@@ -1,120 +1,120 @@
-//! Direct native visits and ownership changes on the Workspace connection.
+//! Direct kernel visits and ownership changes on the Workspace connection.
 use crate::{OwnerClient, OwnerError, ServiceClass};
-use layerfs_overlay::{NativeCookieOffer, NativeMount};
+use layerfs_overlay::{KernelCookieOffer, KernelMount};
 use layerfs_workspace::Route;
 use layerfs_workspace::{
-    NativeDataVisit, NativeDirectoryVisit, NativeMutationVisit, NativeReadVisit,
+    KernelDataVisit, KernelDirectoryVisit, KernelMutationVisit, KernelReadVisit,
 };
 use std::sync::Arc;
 impl OwnerClient {
-    pub fn native_mount(
+    pub fn kernel_mount(
         &self,
         route: Route,
         root: u64,
-    ) -> Result<layerfs_overlay::NativeMount, OwnerError> {
+    ) -> Result<layerfs_overlay::KernelMount, OwnerError> {
         self.call(route, ServiceClass::General, None, move |db| {
-            db.create_native_mount(root)
+            db.create_kernel_mount(root)
         })
     }
-    pub fn native_close_file(
+    pub fn kernel_close_file(
         &self,
         route: Route,
-        mount: NativeMount,
+        mount: KernelMount,
         serial: u64,
         handle: u64,
     ) -> Result<(), OwnerError> {
         self.call(route, ServiceClass::General, None, move |db| {
-            db.close_native_file(mount, serial, handle)
+            db.kernel_close_file(mount, serial, handle)
         })
     }
-    pub fn native_observe_visit(
+    pub fn kernel_observe_visit(
         &self,
         route: Route,
-        job: Box<NativeReadVisit>,
-    ) -> Result<std::sync::Arc<layerfs_workspace::NativeReadOutcome>, OwnerError> {
+        job: Box<KernelReadVisit>,
+    ) -> Result<std::sync::Arc<layerfs_workspace::KernelReadOutcome>, OwnerError> {
         self.call(route, ServiceClass::General, None, move |db| {
             Ok(Arc::new(job.perform(db)))
         })
     }
-    pub fn native_read_visit(
+    pub fn kernel_read_visit(
         &self,
         route: Route,
-        job: Box<NativeDataVisit>,
-    ) -> Result<std::sync::Arc<layerfs_workspace::NativeWindow>, OwnerError> {
+        job: Box<KernelDataVisit>,
+    ) -> Result<std::sync::Arc<layerfs_workspace::KernelWindow>, OwnerError> {
         self.call(route, ServiceClass::General, None, move |db| {
             job.perform(db).map(Arc::new)
         })
     }
-    pub fn native_mutate_visit(
+    pub fn kernel_mutate_visit(
         &self,
         route: Route,
-        job: Box<NativeMutationVisit>,
-    ) -> Result<std::sync::Arc<layerfs_workspace::NativeMutationOutcome>, OwnerError> {
+        job: Box<KernelMutationVisit>,
+    ) -> Result<std::sync::Arc<layerfs_workspace::KernelMutationOutcome>, OwnerError> {
         self.call(route, ServiceClass::Mutation, None, move |db| {
             Ok(Arc::new(job.perform(db)))
         })
     }
-    pub fn native_forget(
+    pub fn kernel_forget(
         &self,
         route: Route,
-        mount: NativeMount,
+        mount: KernelMount,
         serial: u64,
         count: u64,
     ) -> Result<(), OwnerError> {
         self.call(route, ServiceClass::General, None, move |db| {
-            db.forget_native(mount, serial, count)
+            db.kernel_forget(mount, serial, count)
         })
     }
-    pub fn native_retained_mount(
+    pub fn kernel_retained_mount(
         &self,
         route: Route,
-    ) -> Result<Option<layerfs_overlay::NativeMount>, OwnerError> {
+    ) -> Result<Option<layerfs_overlay::KernelMount>, OwnerError> {
         self.call(route, ServiceClass::General, None, move |db| {
-            db.retained_native_mount()
+            db.retained_kernel_mount()
         })
     }
-    pub fn native_state(
+    pub fn kernel_state(
         &self,
         route: Route,
-        mount: NativeMount,
-    ) -> Result<layerfs_overlay::NativeMountState, OwnerError> {
+        mount: KernelMount,
+    ) -> Result<layerfs_overlay::KernelMountState, OwnerError> {
         self.call(route, ServiceClass::General, None, move |db| {
-            db.native_mount_state(mount)
+            db.kernel_mount_state(mount)
         })
     }
-    pub fn native_revoke(&self, route: Route, mount: NativeMount) -> Result<(), OwnerError> {
+    pub fn kernel_revoke(&self, route: Route, mount: KernelMount) -> Result<(), OwnerError> {
         self.call(route, ServiceClass::General, None, move |db| {
-            db.revoke_native_mount(mount)
+            db.revoke_kernel_mount(mount)
         })
     }
-    pub fn native_directory_visit(
+    pub fn kernel_directory_visit(
         &self,
         route: Route,
-        visit: NativeDirectoryVisit,
-    ) -> Result<std::sync::Arc<layerfs_workspace::NativeDirectoryWindow>, OwnerError> {
+        visit: KernelDirectoryVisit,
+    ) -> Result<std::sync::Arc<layerfs_workspace::KernelDirectoryWindow>, OwnerError> {
         self.call(route, ServiceClass::General, None, move |db| {
             visit.perform(db).map(Arc::new)
         })
     }
-    pub fn native_directory_publish(
+    pub fn kernel_directory_publish(
         &self,
         route: Route,
-        offer: NativeCookieOffer,
+        offer: KernelCookieOffer,
         names: Vec<Vec<u8>>,
     ) -> Result<(), OwnerError> {
         self.call(route, ServiceClass::General, None, move |db| {
-            db.publish_native_cookies(&offer, &names)
+            db.publish_kernel_cookies(&offer, &names)
         })
     }
-    pub fn native_directory_close(
+    pub fn kernel_directory_close(
         &self,
         route: Route,
-        mount: NativeMount,
+        mount: KernelMount,
         serial: u64,
         handle: u64,
     ) -> Result<(), OwnerError> {
         self.call(route, ServiceClass::General, None, move |db| {
-            db.close_native_directory(mount, serial, handle)
+            db.close_kernel_directory(mount, serial, handle)
         })
     }
 }

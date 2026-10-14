@@ -49,7 +49,7 @@ impl Workspace {
     /// Only the bounded SQL transition holds the binding lock; canonical IO was
     /// prepared outside it. On definite/uncertain failure both original error
     /// and prepared root/capture custody return. Never infer or resend history.
-    /// Native actor composition must preserve this paired binding transition.
+    /// Kernel actor composition must preserve this paired binding transition.
     pub fn install_prepared_base(
         &self,
         overlay: &Overlay,

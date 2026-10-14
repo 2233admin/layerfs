@@ -15,7 +15,7 @@ pub enum Incoherent {
 }
 impl fmt::Display for Incoherent {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "native attribute coherence: {self:?}")
+        write!(f, "kernel attribute coherence: {self:?}")
     }
 }
 impl Error for Incoherent {}

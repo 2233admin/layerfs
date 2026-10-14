@@ -1,7 +1,7 @@
 //! Explicit control operations with short local admission and original receipts.
 use super::{
     registry::{bound_mut, Binding, Entry},
-    types::NativeFailure,
+    types::KernelFailure,
     Failure, Service, Success,
 };
 use crate::store::{
@@ -112,7 +112,7 @@ impl Service {
             // Workspace is admitted. The retained first failure is read
             // here; no owner job is submitted and no entry is created.
             if let Some(stopped) = self.owner.maintenance_failure().map_err(Failure::Owner)? {
-                return Err(Failure::Native(Box::new(NativeFailure {
+                return Err(Failure::Kernel(Box::new(KernelFailure {
                     code: ControlCode::Capacity,
                     phase: "mount:debt",
                     detail: stopped.to_string(),
@@ -155,13 +155,13 @@ impl Service {
             },
             commit: None,
             observation_failure: None,
-            native: None,
+            kernel: None,
         };
         let installed = self.entries.lock().map(|mut entries| {
             entries.insert(
                 workspace,
                 Entry::Bound(Box::new(Binding {
-                    native: super::native::Native::Unattached,
+                    kernel: super::kernel::Kernel::Unattached,
                     workspace: Arc::new(bound.workspace),
                     snapshot,
                     activity: Activity::Idle,

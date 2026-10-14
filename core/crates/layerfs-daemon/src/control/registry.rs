@@ -1,6 +1,6 @@
 //! Short control admission over bounded daemon-owned Workspace routes.
 use super::{
-    native::{Native, NativeServing},
+    kernel::{Kernel, KernelServing},
     Failure,
 };
 use crate::{
@@ -14,7 +14,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 pub(super) struct Binding {
-    pub native: Native,
+    pub kernel: Kernel,
     pub workspace: Arc<BoundWorkspace>,
     pub snapshot: BranchSnapshot,
     pub activity: Activity,
@@ -25,14 +25,14 @@ pub(super) enum Entry {
     Binding,
     Bound(Box<Binding>),
 }
-/// One daemon's native control owner. Whole operations run outside its registry mutex.
+/// One daemon's kernel control owner. Whole operations run outside its registry mutex.
 pub struct Service {
     pub(super) store: Arc<Store>,
     pub(super) owner: OwnerClient,
     pub(super) capacity: usize,
     pub(super) entries: Mutex<BTreeMap<WorkspaceId, Entry>>,
     /// Absent for a control-only Service: Attach is then refused before effects.
-    pub(super) native: Option<Arc<NativeServing>>,
+    pub(super) kernel: Option<Arc<KernelServing>>,
 }
 impl Service {
     /// Binds control to the already initialized owner and its configured capacity.
@@ -42,13 +42,13 @@ impl Service {
             owner: owner.client(),
             capacity: owner.configuration().namespaces,
             entries: Mutex::new(BTreeMap::new()),
-            native: None,
+            kernel: None,
         }
     }
-    /// Binds control and native serving to the same Store and overlay owner.
-    pub fn with_native(store: Arc<Store>, owner: &Owner, native: Arc<NativeServing>) -> Self {
+    /// Binds control and kernel serving to the same Store and overlay owner.
+    pub fn with_kernel(store: Arc<Store>, owner: &Owner, kernel: Arc<KernelServing>) -> Self {
         Self {
-            native: Some(native),
+            kernel: Some(kernel),
             ..Self::new(store, owner)
         }
     }

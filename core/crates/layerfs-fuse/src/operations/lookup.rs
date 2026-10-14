@@ -1,28 +1,28 @@
 //! LOOKUP/GETATTR/OPEN/OPENDIR share the existing atomic semantic plan.
 use crate::ports::{BaseDemandFailed, Fenced, RequestServices, ServiceError, ServiceReply};
-use layerfs_overlay::NativeMount;
+use layerfs_overlay::KernelMount;
 use layerfs_workspace::{
-    NativeReadDecision, NativeReadFailure, NativeReadOperation, NativeReadOutcome, NativeReadValue,
+    KernelReadDecision, KernelReadFailure, KernelReadOperation, KernelReadOutcome, KernelReadValue,
     Refusal, VisitFacts,
 };
 use std::{fmt, sync::Arc};
 
 pub(super) struct Custody {
     pub services: Arc<dyn RequestServices>,
-    mount: NativeMount,
+    mount: KernelMount,
     request: u64,
     protected: u64,
     handle: Option<u64>,
-    operation: NativeReadOperation,
+    operation: KernelReadOperation,
     pub data_input: Option<super::ReadDataInput>,
     // Retain the engine receipt through every cloned outcome consumer.
-    pub receipt: Option<ServiceReply<Arc<NativeReadOutcome>>>,
+    pub receipt: Option<ServiceReply<Arc<KernelReadOutcome>>>,
 }
 /// A deciding answer and the receipt of the visit that decided it.
 /// The request holds nothing else in the engine; the kernel's lookup, open
 /// and directory owners persist independently.
-pub struct NativeRead {
-    pub(super) value: Result<NativeReadValue, Refusal>,
+pub struct KernelRead {
+    pub(super) value: Result<KernelReadValue, Refusal>,
     pub(super) custody: Custody,
 }
 /// Exact failed step and original request identity. A visit records no
@@ -66,7 +66,7 @@ impl ReadFailure {
             custody,
         }
     }
-    pub const fn mount(&self) -> NativeMount {
+    pub const fn mount(&self) -> KernelMount {
         self.custody.mount
     }
     pub const fn request(&self) -> u64 {
@@ -78,13 +78,13 @@ impl ReadFailure {
     pub const fn handle(&self) -> Option<u64> {
         self.custody.handle
     }
-    pub fn operation(&self) -> &NativeReadOperation {
+    pub fn operation(&self) -> &KernelReadOperation {
         &self.custody.operation
     }
     pub const fn data_input(&self) -> Option<super::ReadDataInput> {
         self.custody.data_input
     }
-    pub fn observation(&self) -> Option<&NativeReadOutcome> {
+    pub fn observation(&self) -> Option<&KernelReadOutcome> {
         self.custody
             .receipt
             .as_ref()
@@ -108,14 +108,14 @@ impl ReadFailure {
         Ok(())
     }
 }
-impl NativeRead {
+impl KernelRead {
     pub async fn prepare(
         services: Arc<dyn RequestServices>,
-        mount: NativeMount,
+        mount: KernelMount,
         request: u64,
         protected: u64,
         handle: Option<u64>,
-        operation: NativeReadOperation,
+        operation: KernelReadOperation,
     ) -> Result<Self, ReadFailure> {
         let mut custody = Custody::unowned(services, mount, request, protected, handle, operation);
         match custody.visit().await {
@@ -123,10 +123,10 @@ impl NativeRead {
             Err(reason) => Err(ReadFailure::new(reason, custody)),
         }
     }
-    pub fn value(&self) -> Result<&NativeReadValue, Refusal> {
+    pub fn value(&self) -> Result<&KernelReadValue, Refusal> {
         self.value.as_ref().map_err(|refusal| *refusal)
     }
-    /// Preserve a successfully decided request when native reply conversion or
+    /// Preserve a successfully decided request when kernel reply conversion or
     /// another downstream invariant fails before consumer disposal.
     pub fn retain(self, reason: ServiceError) -> ReadFailure {
         let Self { value, custody } = self;
@@ -145,11 +145,11 @@ impl Custody {
     /// The request as it arrived: nothing is owned in the engine yet.
     pub(super) fn unowned(
         services: Arc<dyn RequestServices>,
-        mount: NativeMount,
+        mount: KernelMount,
         request: u64,
         protected: u64,
         handle: Option<u64>,
-        operation: NativeReadOperation,
+        operation: KernelReadOperation,
     ) -> Self {
         Self {
             services,
@@ -162,7 +162,7 @@ impl Custody {
             receipt: None,
         }
     }
-    pub(super) const fn target(&self) -> (NativeMount, u64, Option<u64>) {
+    pub(super) const fn target(&self) -> (KernelMount, u64, Option<u64>) {
         (self.mount, self.protected, self.handle)
     }
     /// LOOKUP, GETATTR, OPEN and OPENDIR are served by owner visits that
@@ -170,7 +170,7 @@ impl Custody {
     /// afterwards. An undecided visit changed nothing; the base facts it
     /// asked for are read here, outside the owner, before the next visit.
     /// The visit that decides an OPEN or OPENDIR wrote its descriptor.
-    async fn visit(&mut self) -> Result<Result<NativeReadValue, Refusal>, ServiceError> {
+    async fn visit(&mut self) -> Result<Result<KernelReadValue, Refusal>, ServiceError> {
         let mut facts = Arc::new(VisitFacts::default());
         loop {
             let receipt = self
@@ -186,22 +186,22 @@ impl Custody {
                 .await?;
             let original = receipt.get().clone();
             let needs = match (&original.result, &original.decision) {
-                (Ok(None), Some(NativeReadDecision::Value(inode))) => {
+                (Ok(None), Some(KernelReadDecision::Value(inode))) => {
                     let stat = inode.clone().into();
                     self.receipt = Some(receipt);
-                    return Ok(Ok(NativeReadValue {
+                    return Ok(Ok(KernelReadValue {
                         stat,
                         file: original.open_candidate,
                         directory: original.directory_candidate,
                         original,
                     }));
                 }
-                (Ok(None), Some(NativeReadDecision::Refused(refusal))) => return Ok(Err(*refusal)),
-                (Ok(None), Some(NativeReadDecision::Needs(needs))) if !needs.is_empty() => needs,
+                (Ok(None), Some(KernelReadDecision::Refused(refusal))) => return Ok(Err(*refusal)),
+                (Ok(None), Some(KernelReadDecision::Needs(needs))) if !needs.is_empty() => needs,
                 _ => {
                     self.receipt = Some(receipt);
-                    return Err(Box::new(NativeReadFailure {
-                        reason: "native read visit did not produce a usable original answer",
+                    return Err(Box::new(KernelReadFailure {
+                        reason: "kernel read visit did not produce a usable original answer",
                         original,
                     }));
                 }

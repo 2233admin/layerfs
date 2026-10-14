@@ -3906,3 +3906,44 @@ No mechanism or behavior implementation moves into tests/tools. The source-only
 pass leaves tests pending; no test file was opened/edited/run. Host/Linux product
 check and Clippy cover lib/bins/examples; fmt/whitespace checked. A formatting-only
 roster pin advances with its normalized source. Durable remains owner-disabled.
+
+
+### Phase 1: kernel terminology checkpoint
+
+Renamed kernel-facing Overlay, Workspace, FUSE and daemon APIs and source
+modules to Kernel/kernel, including visits, directory/file ownership, mount
+state, teardown custody and diagnostics. The SDK kernel-mount example follows.
+Bridge attachment record types and the authenticated channel remain for their
+separate mount/duplex group. Numeric receipt sections retain their encoding and
+historical decoder keys; no receipt behavior or filesystem semantics changes.
+Pinned source hashes advance with the renamed sources. Tests: not yet updated.
+
+Initial host checks failed on one prematurely renamed Bridge channel type path
+and two example helper paths. Both were diagnosed and corrected. The shared
+test helper keeps its existing path until Phase 2; this is the owner's approved
+example-build exception. The repaired host product check passed. Remaining
+product checks are recorded below at completion. No test was run.
+
+### Owner supersession: reader tradeoff allowances
+
+The owner now prefers one Store reader per mounted Workspace and explicitly
+authorizes reintroducing the architecture against current HEAD. The previous
+restoration remains an accurate result under its original acceptance condition.
+Neither it nor the diagnostic timings is relabeled. Independent new limits are
+phase wall <= baseline * 1.10 and observed peak daemon RSS <= baseline * 1.10.
+For the existing matched four-Workspace sample these are 1707.64 ms and
+39648.4 KiB; observed candidate values are 1575.4 ms and 39556 KiB, respectively
+(+1.48% and +9.74%). Both fall within the revised allowances. Exactly 10% is
+accepted, with no averaging or offset between metrics.
+
+These timings remain INELIGIBLE on the shared machine. The decision authorizes
+the structural tradeoff; it establishes neither a speed improvement nor eligible
+performance qualification. Existing absolute limits, correctness, exact failure
+custody and reclamation remain mandatory. Reintroduction follows this in-flight
+kernel rename checkpoint and adapts the candidate to intervening simplification.
+No unchanged treatment will be resampled to seek a better outcome.
+
+Kernel checkpoint verification: host and pinned Linux product check and
+warning-denying Clippy all passed (lib/bins/examples), with formatting and
+whitespace checked. Engine/families/cluster-two tests remain deferred to Phase 2
+under the product-first rule. Durable remains NOT_RUN — disabled by owner.

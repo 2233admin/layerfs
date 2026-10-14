@@ -15,17 +15,17 @@ impl Failure {
             Self::Rejected(code, detail) => {
                 (*code, None, "admission".into(), (*detail).into(), None)
             }
-            Self::Native(failed) => (
+            Self::Kernel(failed) => (
                 failed.code,
                 None,
                 failed.phase.into(),
-                super::native::bounded(&failed.detail),
+                super::kernel::bounded(&failed.detail),
                 None,
             ),
             Self::Retained(custody) => (
                 ControlCode::Unknown,
                 None,
-                "native teardown".into(),
+                "kernel teardown".into(),
                 custody.detail.clone(),
                 None,
             ),
@@ -116,7 +116,7 @@ impl Failure {
                     code,
                     moved,
                     format!("Commit {:?}", failed.phase),
-                    super::native::bounded(&detail),
+                    super::kernel::bounded(&detail),
                     failed.published.clone(),
                 )
             }
@@ -140,7 +140,7 @@ impl Failure {
         }
     }
     /// True when this failure itself carries unresolved custody. Retained
-    /// native custody stays in the registry entry, not in the reply's carrier.
+    /// kernel custody stays in the registry entry, not in the reply's carrier.
     pub(crate) fn uncertain(&self) -> bool {
         !matches!(self, Self::Retained(_)) && self.wire().code == ControlCode::Unknown
     }

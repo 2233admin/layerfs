@@ -1,10 +1,10 @@
 //! The cookies of published READDIR replies: one memory page per reply, holding
 //! exactly the names its buffer accepted.
-use super::native_directory_read::decode_names;
+use super::kernel_directory_read::decode_names;
 use super::INLINE_PAGES;
 use crate::{
-    contract::native_directory::Published, NativeCookieOffer, NativeDirectoryCursor,
-    NativeDirectoryPage, Overlay, OverlayError, OverlayResult, PAGE_ROWS,
+    contract::kernel_directory::Published, KernelCookieOffer, KernelDirectoryCursor,
+    KernelDirectoryPage, Overlay, OverlayError, OverlayResult, PAGE_ROWS,
 };
 impl Overlay {
     /// Inside the reading visit's job, for a window that may list a name:
@@ -16,10 +16,10 @@ impl Overlay {
     /// A reply at or above the floor listed from the start exists exactly
     /// when the handle has an offset left, so finding one at offset 0 is the
     /// rewind: the offer reuses nothing and its publication retires them.
-    pub fn offer_native_cookies(
+    pub fn offer_kernel_cookies(
         &self,
-        page: &NativeDirectoryPage,
-    ) -> OverlayResult<NativeCookieOffer> {
+        page: &KernelDirectoryPage,
+    ) -> OverlayResult<KernelCookieOffer> {
         let directory = page.directory;
         self.available()?;
         let after = page.cursor.after_name().unwrap_or(&[]).to_vec();
@@ -42,7 +42,7 @@ impl Overlay {
         };
         let published = match existing {
             None => Published::None,
-            Some(_) if page.cursor == NativeDirectoryCursor::Start => Published::Rewind,
+            Some(_) if page.cursor == KernelDirectoryCursor::Start => Published::Rewind,
             Some((first, names)) => Published::Latest(
                 first,
                 decode_names(&names).ok_or(OverlayError::Invalid("cookie names"))?,
@@ -52,7 +52,7 @@ impl Overlay {
         if first < 3 {
             return Err(OverlayError::Invalid("directory cookie range"));
         }
-        Ok(NativeCookieOffer {
+        Ok(KernelCookieOffer {
             directory,
             after,
             first,
@@ -72,9 +72,9 @@ impl Overlay {
     /// publication deletes at most `INLINE_PAGES` replies below it; what is
     /// left goes with a later publication or with the handle. An offer made
     /// before the floor passed its range is Stale and writes nothing.
-    pub fn publish_native_cookies(
+    pub fn publish_kernel_cookies(
         &self,
-        offer: &NativeCookieOffer,
+        offer: &KernelCookieOffer,
         names: &[Vec<u8>],
     ) -> OverlayResult<()> {
         let mut blob = Vec::with_capacity(names.iter().map(|name| 1 + name.len()).sum());
@@ -88,14 +88,14 @@ impl Overlay {
                 || name.contains(&b'/')
                 || name.as_slice() <= last
             {
-                return Err(OverlayError::Invalid("native cookie names"));
+                return Err(OverlayError::Invalid("kernel cookie names"));
             }
             blob.push(name.len() as u8);
             blob.extend_from_slice(name);
             last = name;
         }
         if names.len() > PAGE_ROWS || (names.is_empty() && !offer.rewinds()) {
-            return Err(OverlayError::Invalid("native cookie names"));
+            return Err(OverlayError::Invalid("kernel cookie names"));
         }
         let directory = offer.directory;
         self.atomic(|| {

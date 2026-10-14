@@ -1,8 +1,8 @@
-//! Deferred native enumeration and exact descriptor release.
+//! Deferred kernel enumeration and exact descriptor release.
 use super::{
     accounting::Opcode,
     failure::{failed, KernelInput},
-    terminal, NativeFilesystem,
+    terminal, KernelFilesystem,
 };
 use crate::{
     attributes::Identity,
@@ -14,7 +14,7 @@ use fuser::{Errno, FileHandle, FileType, INodeNo, ReplyDirectory, ReplyEmpty, Re
 use layerfs_content::object::inode_leaf::InodeKind;
 use std::{ffi::OsStr, io, os::unix::ffi::OsStrExt};
 
-impl NativeFilesystem {
+impl KernelFilesystem {
     pub(super) fn read_directory(
         &self,
         req: &Request,

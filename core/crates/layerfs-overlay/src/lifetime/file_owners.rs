@@ -4,7 +4,7 @@ use crate::{
     OverlayResult, ReferenceKind, WorkspaceState,
 };
 
-// Native cookies are opaque u64 values on the wire. Process-wide allocation
+// Kernel cookies are opaque u64 values on the wire. Process-wide allocation
 // prevents one Workspace's valid offset from aliasing another's valid offset.
 // This is an identity cursor, not a shared overlay cache or memory allowance.
 static NEXT_OWNER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
@@ -100,7 +100,7 @@ impl Overlay {
         })
     }
     /// The enclosing owner transaction has already validated current metadata.
-    /// `mount` is the native connection whose kernel request `request`
+    /// `mount` is the kernel connection whose kernel request `request`
     /// receives the descriptor; without one, `request` is the caller's own.
     pub(crate) fn retain_file(
         &self,
@@ -174,7 +174,7 @@ impl Overlay {
         }
         Ok(state)
     }
-    /// Exact close after this descriptor's native/request continuations finish.
+    /// Exact close after this descriptor's kernel/request continuations finish.
     /// Read-processing windows keep their own independent references.
     pub fn close_file(&self, file: OpenFile) -> OverlayResult<()> {
         self.atomic_cleanup(|| self.close_file_inner(file))

@@ -4,7 +4,7 @@ use layerfs_overlay::{CapturedReader, DirectoryEntry, Inode};
 use layerfs_workspace::{OverlayCapturedNamespace, WorkspaceError, WorkspaceResult};
 
 impl OwnerClient {
-    /// This synchronous port serves the constructor thread, never a native
+    /// This synchronous port serves the constructor thread, never a kernel
     /// receive worker. Each call is one attempt under the Workspace lock.
     /// Failure keeps the original input or attempted cause/backing.
     fn captured_namespace_job<T>(

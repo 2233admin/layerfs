@@ -1,10 +1,10 @@
 //! Forced teardown of one connection: one abort write, the terminal fence,
 //! the local drain, then one plain detach. Nothing here is repeated.
-use super::state::{DetachAttempt, DrainStage, Drained, ForceRefusal, NativeSession, Undrained};
+use super::state::{DetachAttempt, DrainStage, Drained, ForceRefusal, KernelSession, Undrained};
 use crate::mount::{syscalls, AbortWrite};
 use std::{sync::atomic::Ordering, time::Instant};
 
-impl NativeSession {
+impl KernelSession {
     /// The abort control bound at attach is still held, unused.
     pub fn abort_bound(&self) -> bool {
         self.abort.is_some()

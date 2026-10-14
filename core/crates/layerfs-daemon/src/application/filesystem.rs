@@ -1,38 +1,38 @@
-//! Native serving assembly over the daemon's one Store and one overlay owner.
+//! Kernel serving assembly over the daemon's one Store and one overlay owner.
 use crate::{
-    control::{NativeServing, Service},
+    control::{KernelServing, Service},
     store::Store,
     Owner,
 };
 use std::sync::Arc;
 
-/// Control and native serving share the same Store handle and overlay owner;
+/// Control and kernel serving share the same Store handle and overlay owner;
 /// the Service's registry stays the sole authority for every mount. The
 /// Store takes its explicit serial low-water here, before any Workspace.
 pub(super) fn service(
     store: Arc<Store>,
     owner: &Owner,
-    native: Option<&Arc<NativeServing>>,
+    kernel: Option<&Arc<KernelServing>>,
     serial_low_water: u64,
 ) -> Arc<Service> {
     store.set_serial_low_water(serial_low_water);
-    Arc::new(match native {
-        Some(native) => Service::with_native(store, owner, native.clone()),
+    Arc::new(match kernel {
+        Some(kernel) => Service::with_kernel(store, owner, kernel.clone()),
         None => Service::new(store, owner),
     })
 }
-/// Native serving is a Linux capability; elsewhere control alone is assembled.
+/// Kernel serving is a Linux capability; elsewhere control alone is assembled.
 #[cfg(not(target_os = "linux"))]
 pub(super) fn assemble(
     _setup: &layerfs_bridge::daemon_setup::DaemonSetup,
-) -> std::io::Result<Option<Arc<NativeServing>>> {
+) -> std::io::Result<Option<Arc<KernelServing>>> {
     Ok(None)
 }
 #[cfg(target_os = "linux")]
 pub(super) use linux::assemble;
 #[cfg(target_os = "linux")]
 mod linux {
-    use crate::control::{NativeConfig, NativeServing};
+    use crate::control::{KernelConfig, KernelServing};
     use layerfs_bridge::daemon_setup::DaemonSetup;
     use nix::{
         fcntl::OFlag,
@@ -57,11 +57,11 @@ mod linux {
     /// device is opened and nothing is mounted until an explicit Attach.
     pub(in crate::application) fn assemble(
         setup: &DaemonSetup,
-    ) -> io::Result<Option<Arc<NativeServing>>> {
+    ) -> io::Result<Option<Arc<KernelServing>>> {
         let mounts = Path::new(&setup.mounts);
         device()?;
         home(mounts)?;
-        NativeServing::start(NativeConfig {
+        KernelServing::start(KernelConfig {
             mounts: mounts.to_owned(),
             owner_uid: Uid::effective().as_raw(),
             owner_gid: Gid::effective().as_raw(),

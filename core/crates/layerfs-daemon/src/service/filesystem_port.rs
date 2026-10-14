@@ -8,11 +8,11 @@ use layerfs_fuse::ports::{
     ServiceReply,
 };
 use layerfs_history::HistoryError;
-use layerfs_overlay::{NativeCookieOffer, NativeMount, Publication};
+use layerfs_overlay::{KernelCookieOffer, KernelMount, Publication};
 use layerfs_workspace::{
-    BaseView, CanonicalClient, JobOutcome, NativeDirectoryWindow, NativeInput,
-    NativeMutationOutcome, NativeReadOperation, NativeReadOutcome, NativeVisitRequest,
-    NativeWindow, Recognition, RecognizeWork, VisitFacts, WorkspaceError, WriteData,
+    BaseView, CanonicalClient, JobOutcome, KernelDirectoryWindow, KernelInput,
+    KernelMutationOutcome, KernelReadOperation, KernelReadOutcome, KernelVisitRequest,
+    KernelWindow, Recognition, RecognizeWork, VisitFacts, WorkspaceError, WriteData,
     RECOGNIZE_BYTES,
 };
 use std::{
@@ -130,17 +130,17 @@ impl FilesystemPort {
 impl RequestServices for FilesystemPort {
     fn directory_visit(
         &self,
-        mount: NativeMount,
+        mount: KernelMount,
         serial: u64,
         handle: u64,
         offset: u64,
         after: Option<Vec<u8>>,
-    ) -> ServiceFuture<'_, ServiceReply<Arc<NativeDirectoryWindow>>> {
+    ) -> ServiceFuture<'_, ServiceReply<Arc<KernelDirectoryWindow>>> {
         // A stopped mount refuses before anything about the request is read.
         if let Err(fenced) = self.fenced(true) {
             return Box::pin(async move { Err(fenced) });
         }
-        let visit = self.0.workspace().native_directory_visit(
+        let visit = self.0.workspace().kernel_directory_visit(
             self.0.resident(),
             mount,
             serial,
@@ -151,7 +151,7 @@ impl RequestServices for FilesystemPort {
         match visit {
             Ok(visit) => self.call(
                 move |job_client: &crate::OwnerClient, route| {
-                    job_client.native_directory_visit(route, visit)
+                    job_client.kernel_directory_visit(route, visit)
                 },
                 true,
             ),
@@ -160,42 +160,42 @@ impl RequestServices for FilesystemPort {
     }
     fn publish_cookies(
         &self,
-        offer: NativeCookieOffer,
+        offer: KernelCookieOffer,
         names: Vec<Vec<u8>>,
     ) -> ServiceFuture<'_, ServiceReply<()>> {
         self.call(
             move |job_client: &crate::OwnerClient, route| {
-                job_client.native_directory_publish(route, offer, names)
+                job_client.kernel_directory_publish(route, offer, names)
             },
             true,
         )
     }
     fn close_directory(
         &self,
-        mount: NativeMount,
+        mount: KernelMount,
         serial: u64,
         handle: u64,
     ) -> ServiceFuture<'_, ServiceReply<()>> {
         self.call(
             move |job_client: &crate::OwnerClient, route| {
-                job_client.native_directory_close(route, mount, serial, handle)
+                job_client.kernel_directory_close(route, mount, serial, handle)
             },
             false,
         )
     }
     fn read_visit(
         &self,
-        mount: NativeMount,
+        mount: KernelMount,
         serial: u64,
         handle: Option<u64>,
         offset: u64,
         length: u32,
-    ) -> ServiceFuture<'_, ServiceReply<Arc<NativeWindow>>> {
+    ) -> ServiceFuture<'_, ServiceReply<Arc<KernelWindow>>> {
         // A stopped mount refuses before anything about the request is read.
         if let Err(fenced) = self.fenced(true) {
             return Box::pin(async move { Err(fenced) });
         }
-        let visit = self.0.workspace().native_data_visit(
+        let visit = self.0.workspace().kernel_data_visit(
             self.0.resident(),
             mount,
             serial,
@@ -206,7 +206,7 @@ impl RequestServices for FilesystemPort {
         match visit {
             Ok(visit) => self.call(
                 move |job_client: &crate::OwnerClient, route| {
-                    job_client.native_read_visit(route, Box::new(visit))
+                    job_client.kernel_read_visit(route, Box::new(visit))
                 },
                 true,
             ),
@@ -215,13 +215,13 @@ impl RequestServices for FilesystemPort {
     }
     fn close_file(
         &self,
-        mount: NativeMount,
+        mount: KernelMount,
         serial: u64,
         handle: u64,
     ) -> ServiceFuture<'_, ServiceReply<()>> {
         self.call(
             move |job_client: &crate::OwnerClient, route| {
-                job_client.native_close_file(route, mount, serial, handle)
+                job_client.kernel_close_file(route, mount, serial, handle)
             },
             false,
         )
@@ -254,33 +254,33 @@ impl RequestServices for FilesystemPort {
     }
     fn observe_visit(
         &self,
-        mount: NativeMount,
+        mount: KernelMount,
         request: u64,
         serial: u64,
         handle: Option<u64>,
-        operation: NativeReadOperation,
+        operation: KernelReadOperation,
         facts: Arc<VisitFacts>,
-    ) -> ServiceFuture<'_, ServiceReply<Arc<NativeReadOutcome>>> {
+    ) -> ServiceFuture<'_, ServiceReply<Arc<KernelReadOutcome>>> {
         // A stopped mount refuses before anything about the request is read.
         if let Err(fenced) = self.fenced(true) {
             return Box::pin(async move { Err(fenced) });
         }
         let (workspace, resident) = (self.0.workspace(), self.0.resident());
         let visit = match operation {
-            NativeReadOperation::Open { writable, .. } => {
-                workspace.native_open_visit(resident, mount, request, serial, writable, facts)
+            KernelReadOperation::Open { writable, .. } => {
+                workspace.kernel_open_visit(resident, mount, request, serial, writable, facts)
             }
-            NativeReadOperation::Opendir { .. } => {
-                workspace.native_opendir_visit(resident, mount, request, serial, facts)
+            KernelReadOperation::Opendir { .. } => {
+                workspace.kernel_opendir_visit(resident, mount, request, serial, facts)
             }
             operation => {
-                workspace.native_read_visit(resident, mount, serial, handle, operation, facts)
+                workspace.kernel_read_visit(resident, mount, serial, handle, operation, facts)
             }
         };
         match visit {
             Ok(visit) => self.call(
                 move |job_client: &crate::OwnerClient, route| {
-                    job_client.native_observe_visit(route, Box::new(visit))
+                    job_client.kernel_observe_visit(route, Box::new(visit))
                 },
                 true,
             ),
@@ -289,14 +289,14 @@ impl RequestServices for FilesystemPort {
     }
     fn mutate_visit(
         &self,
-        request: NativeVisitRequest,
-    ) -> ServiceFuture<'_, ServiceReply<Arc<NativeMutationOutcome>>> {
+        request: KernelVisitRequest,
+    ) -> ServiceFuture<'_, ServiceReply<Arc<KernelMutationOutcome>>> {
         if let Err(fenced) = self.fenced(true) {
             return Box::pin(async move { Err(fenced) });
         }
         // The bytes of an examined write, for the chunk it may have carried.
         let written = match &request.input {
-            NativeInput::Write {
+            KernelInput::Write {
                 offset,
                 data,
                 cached: false,
@@ -308,11 +308,11 @@ impl RequestServices for FilesystemPort {
         let visit = self
             .0
             .workspace()
-            .native_mutation_visit(self.0.resident(), request);
+            .kernel_mutation_visit(self.0.resident(), request);
         let job = match visit {
             Ok(visit) => self.call(
                 move |job_client: &crate::OwnerClient, route| {
-                    job_client.native_mutate_visit(route, Box::new(visit))
+                    job_client.kernel_mutate_visit(route, Box::new(visit))
                 },
                 true,
             ),
@@ -374,13 +374,13 @@ impl RequestServices for FilesystemPort {
     }
     fn forget(
         &self,
-        mount: NativeMount,
+        mount: KernelMount,
         serial: u64,
         count: u64,
     ) -> ServiceFuture<'_, ServiceReply<()>> {
         self.call(
             move |job_client: &crate::OwnerClient, route| {
-                job_client.native_forget(route, mount, serial, count)
+                job_client.kernel_forget(route, mount, serial, count)
             },
             false,
         )

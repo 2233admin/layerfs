@@ -116,7 +116,7 @@ impl Store {
         }
     }
     /// Reserve fair before-effect admission. None is the explicitly unscoped
-    /// control/constructor lane; native callers use their actual Workspace id.
+    /// control/constructor lane; kernel callers use their actual Workspace id.
     pub fn read_ticket(
         &self,
         workspace: Option<WorkspaceId>,

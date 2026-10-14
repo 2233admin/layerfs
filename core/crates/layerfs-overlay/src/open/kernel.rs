@@ -4,7 +4,7 @@ use super::files::FileReferences;
 use super::journal::{JournalMap, OwnerTable};
 use crate::lifetime::orphan::Orphan;
 use crate::{
-    BaseSource, CapturedReader, FileRead, LookupOwner, NativeMount, OpenFile, OperationOwner,
+    BaseSource, CapturedReader, FileRead, KernelMount, LookupOwner, OpenFile, OperationOwner,
 };
 use std::collections::BTreeMap;
 
@@ -18,7 +18,7 @@ pub(crate) struct KernelReference {
 pub(crate) struct OpenState {
     pub kernel: JournalMap<(u64, u64), KernelReference>,
     pub parents: JournalMap<u64, (u64, u64)>,
-    /// Descriptors by owner; requests are (native mount owner or 0, request).
+    /// Descriptors by owner; requests are (kernel mount owner or 0, request).
     pub files: OwnerTable<(u64, i64), OpenFile>,
     pub reads: OwnerTable<i64, FileRead>,
     pub lookups: OwnerTable<i64, LookupOwner>,
@@ -26,8 +26,8 @@ pub(crate) struct OpenState {
     pub orphans: JournalMap<i64, Orphan>,
     pub waits: JournalMap<(i64, i64), ()>,
     /// One attached/revoked mount, restored by whole-job rollback.
-    pub mount: Option<(NativeMount, bool)>,
-    /// Directory handles by owner; requests are (native mount owner, request).
+    pub mount: Option<(KernelMount, bool)>,
+    /// Directory handles by owner; requests are (kernel mount owner, request).
     pub directories: OwnerTable<(u64, u64), DirectoryState>,
     pub operations: OwnerTable<i64, OperationOwner>,
     pub captured: OwnerTable<i64, CapturedReader>,

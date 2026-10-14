@@ -1,16 +1,16 @@
 //! One attach attempt: direct mount, handshake and all-loop serving evidence.
 use super::state::{
-    AttachFailure, AttachPhase, AttachRemainder, DetachAttempt, NativeSession, SessionConfig,
+    AttachFailure, AttachPhase, AttachRemainder, DetachAttempt, KernelSession, SessionConfig,
     RECEIVE_LOOPS,
 };
 use crate::{
-    attributes::Identity, mount::syscalls, ports::MountServices, request::NativeFilesystem,
+    attributes::Identity, mount::syscalls, ports::MountServices, request::KernelFilesystem,
     MountRequests,
 };
 use fuser::{Config, Session, SessionACL, SessionMonitor, SessionPhase};
 use std::{fs, io, sync::Arc, thread, time::Duration};
 
-impl NativeSession {
+impl KernelSession {
     /// Serving is returned only after the kernel mount exists, the handshake
     /// completed and every receive loop entered. Neither a successful spawn nor
     /// a filesystem probe substitutes for that evidence. A failure after the
@@ -37,7 +37,7 @@ impl NativeSession {
                 },
             })
         };
-        let filesystem = match NativeFilesystem::new(queue.clone(), services, identity) {
+        let filesystem = match KernelFilesystem::new(queue.clone(), services, identity) {
             Ok(filesystem) => filesystem,
             Err(error) => {
                 return Err(unmounted(
@@ -88,12 +88,12 @@ impl NativeSession {
         options.acl = SessionACL::All;
         options.n_threads = Some(RECEIVE_LOOPS);
         // The session takes the only descriptor: losing it aborts the connection.
-        let native = match Session::from_fd(filesystem, device, SessionACL::All, options) {
-            Ok(native) => native,
+        let kernel = match Session::from_fd(filesystem, device, SessionACL::All, options) {
+            Ok(kernel) => kernel,
             Err(cause) => return Err(session.abandon(AttachPhase::Handshake, cause)),
         };
         session.negotiation = negotiated.get().copied();
-        let runner = native.into_runner();
+        let runner = kernel.into_runner();
         let monitor = runner.monitor();
         session.monitor = Some(monitor.clone());
         let owner_id = session.mount.owner_id();

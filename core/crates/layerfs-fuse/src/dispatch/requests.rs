@@ -1,7 +1,7 @@
 //! Per-mount request drain and failure custody. Receive workers run requests directly.
 use super::{DispatchError, FailureView, MountWork, RequestDisposition, RequestFuture};
 use crate::ports::Fence;
-use layerfs_overlay::NativeMount;
+use layerfs_overlay::KernelMount;
 use std::{
     any::Any,
     fmt,
@@ -32,7 +32,7 @@ struct Shared {
 #[derive(Clone)]
 pub struct MountRequests {
     shared: Arc<Shared>,
-    mount: NativeMount,
+    mount: KernelMount,
 }
 pub struct Received {
     mount: MountRequests,
@@ -60,7 +60,7 @@ impl Wake for Current {
     }
 }
 impl MountRequests {
-    pub fn new(mount: NativeMount) -> Self {
+    pub fn new(mount: KernelMount) -> Self {
         Self {
             mount,
             shared: Arc::new(Shared {
@@ -75,7 +75,7 @@ impl MountRequests {
             }),
         }
     }
-    pub fn identity(&self) -> NativeMount {
+    pub fn identity(&self) -> KernelMount {
         self.mount
     }
     pub fn receive(&self) -> Result<Received, DispatchError> {

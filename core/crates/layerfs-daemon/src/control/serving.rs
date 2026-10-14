@@ -1,31 +1,31 @@
 //! One shared dispatcher for every mount, and the exact owners an entry keeps.
-use super::native::{bounded, NativeConfig};
+use super::kernel::{bounded, KernelConfig};
 use layerfs_bridge::control::{
     ForcedFacts, NativePhase, NativeReceipt, NativeWork, ReadyMount, TeardownCustody,
     TeardownStage, WorkspaceToken,
 };
 use layerfs_fuse::{
-    session::{DrainStage, NativeSession, SessionFacts, SessionObserver},
+    session::{DrainStage, KernelSession, SessionFacts, SessionObserver},
     DispatchError, MountRequests,
 };
-use layerfs_overlay::NativeMount;
+use layerfs_overlay::KernelMount;
 use std::{fmt, path::PathBuf};
 
-/// Process-wide native serving registry: each mount has its own receive workers.
-pub struct NativeServing {
+/// Process-wide kernel serving registry: each mount has its own receive workers.
+pub struct KernelServing {
     /// Short registration and observation sections only; never held across
     /// a mount, a kernel request or an engine job.
-    pub(super) config: NativeConfig,
+    pub(super) config: KernelConfig,
 }
-impl NativeServing {
+impl KernelServing {
     /// Starts the fixed worker pool once. No mount, device or kernel effect.
-    pub fn start(config: NativeConfig) -> Result<Self, std::io::Error> {
+    pub fn start(config: KernelConfig) -> Result<Self, std::io::Error> {
         Ok(Self { config })
     }
-    pub(super) fn register(&self, mount: NativeMount) -> Result<MountRequests, DispatchError> {
+    pub(super) fn register(&self, mount: KernelMount) -> Result<MountRequests, DispatchError> {
         Ok(MountRequests::new(mount))
     }
-    pub fn config(&self) -> &NativeConfig {
+    pub fn config(&self) -> &KernelConfig {
         &self.config
     }
     /// A namespace is never reused by this daemon, so neither is its directory.
@@ -33,15 +33,15 @@ impl NativeServing {
         self.config.mounts.join(token.namespace.to_string())
     }
 }
-impl fmt::Debug for NativeServing {
+impl fmt::Debug for KernelServing {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("NativeServing")
+        f.debug_struct("KernelServing")
             .field("config", &self.config)
             .finish()
     }
 }
 pub(super) struct Attached {
-    pub session: NativeSession,
+    pub session: KernelSession,
     pub ready: ReadyMount,
 }
 pub(super) struct Leaving {
@@ -125,7 +125,7 @@ pub(super) fn work(facts: &SessionFacts) -> NativeWork {
 pub(super) fn ready(
     token: WorkspaceToken,
     directory: String,
-    session: &NativeSession,
+    session: &KernelSession,
 ) -> Option<ReadyMount> {
     let negotiation = session.negotiation()?;
     let entry = session.entry()?;

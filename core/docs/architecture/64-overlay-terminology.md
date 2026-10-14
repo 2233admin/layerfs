@@ -1,11 +1,11 @@
 # Directory entries and operation records
 
-> **Status:** Current source terminology following owner direction2026-10-07.
+> **Status:** Current source terminology, updated by issue #320 on 2026-10-14.
 > The table names and the record shapes below were revised by issue #321
-> Step C (2026-10-14); the section "Schema 34" is current and supersedes the
+> Step C (2026-10-14); schemas 35–37 below supersede schema 34 and the
 > relation names, the `ns` partition and the schema numbers in the older text.
 
-## Schema 34: one Workspace per database
+## Schema 34: one Workspace per database (superseded by schemas 35–37)
 
 Each Workspace has its own overlay database file, so no row carries a
 Workspace key. Only the `workspace` row names its namespace (`ns`), and the
@@ -140,3 +140,16 @@ allocation identity; startup and template copying do not query logical row
 counts. Allocation observations remain in exact roster work counters. Section
 38 identifies the per-Workspace resource scope; missing live bindings produce
 unavailable values, never successful zeros or a roster substitute.
+
+## Kernel terminology (#320)
+
+The overlay, Workspace, FUSE and daemon kernel-facing types and operations use
+`Kernel` / `kernel_` names, including mount, visit, directory, mutation and
+retained teardown custody. Source modules follow the same names. The SDK
+example is `sandbox_kernel_mount`. This rename preserves the wire counters and
+filesystem behavior. Bridge attach records and the authenticated channel retain
+their old names until the separate mount/duplex rename. Existing numeric receipt
+section 12 remains readable under its historical `native` decoder key; it
+observes kernel serving, not host-file acquisition or a storage pack lane.
+Tests are updated in the separate test pass. Historical receipts retain their
+original names and verdicts.

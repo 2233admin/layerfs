@@ -1,12 +1,12 @@
-//! The original result of one native mutation and the kernel custody that
+//! The original result of one kernel mutation and the kernel custody that
 //! its own reply hands over.
 use crate::{JobOutcome, Operation, WorkspaceResult};
-use layerfs_overlay::{NativeEffect, OpenFile};
+use layerfs_overlay::{KernelEffect, OpenFile};
 
 /// The original owner result. A descriptor is present only for an applied
 /// create-and-open; it is usable only when `result` is the applied outcome.
 #[derive(Debug)]
-pub struct NativeMutationOutcome {
+pub struct KernelMutationOutcome {
     pub result: WorkspaceResult<JobOutcome>,
     pub file: Option<OpenFile>,
 }
@@ -16,15 +16,15 @@ pub(crate) fn effect(
     operation: &Operation,
     fresh: Option<u64>,
     open: Option<bool>,
-) -> NativeEffect {
-    let entry = |serial, parent, directory| NativeEffect::Entry {
+) -> KernelEffect {
+    let entry = |serial, parent, directory| KernelEffect::Entry {
         serial,
         parent,
         directory,
     };
     match (operation, fresh) {
         (Operation::Create { parent, .. }, Some(serial)) => match open {
-            Some(writable) => NativeEffect::Open {
+            Some(writable) => KernelEffect::Open {
                 serial,
                 parent: *parent,
                 writable,
@@ -34,6 +34,6 @@ pub(crate) fn effect(
         (Operation::Mkdir { parent, .. }, Some(serial)) => entry(serial, *parent, true),
         (Operation::Symlink { parent, .. }, Some(serial)) => entry(serial, *parent, false),
         (Operation::Link { serial, parent, .. }, _) => entry(*serial, *parent, false),
-        _ => NativeEffect::None,
+        _ => KernelEffect::None,
     }
 }

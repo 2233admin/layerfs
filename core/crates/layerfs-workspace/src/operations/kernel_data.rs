@@ -13,13 +13,13 @@ use layerfs_content::{
     object::inode_leaf::{InodeKind as BaseKind, InodeValue},
     ContentError,
 };
-use layerfs_overlay::{InodeKind, LocalRead, NativeMount, Overlay, OverlayError, OverlayResult};
+use layerfs_overlay::{InodeKind, KernelMount, LocalRead, Overlay, OverlayError, OverlayResult};
 use std::{fmt, sync::Arc};
 
 /// One READ or READLINK as one read-only owner job.
 #[derive(Clone)]
-pub struct NativeDataVisit {
-    mount: NativeMount,
+pub struct KernelDataVisit {
+    mount: KernelMount,
     serial: u64,
     handle: Option<u64>,
     offset: u64,
@@ -28,7 +28,7 @@ pub struct NativeDataVisit {
 }
 /// What the visit found, as plain values its request owns.
 #[derive(Clone, Debug)]
-pub struct NativeWindow {
+pub struct KernelWindow {
     /// The base root every inherited byte of the window belongs to: the
     /// Workspace's base at the visit, or the root an unlinked file retains.
     pub root: [u8; 32],
@@ -39,9 +39,9 @@ pub struct NativeWindow {
     /// And that regular file's length, when memory remembered it.
     pub length: Option<u64>,
 }
-impl fmt::Debug for NativeDataVisit {
+impl fmt::Debug for KernelDataVisit {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("NativeDataVisit")
+        f.debug_struct("KernelDataVisit")
             .field("mount", &self.mount)
             .field("serial", &self.serial)
             .field("handle", &self.handle)
@@ -54,22 +54,22 @@ impl Workspace {
     /// `resident` answers from memory only. No I/O here. A READ names its
     /// descriptor; a READLINK names none and is served under the kernel's
     /// lookup reference.
-    pub fn native_data_visit(
+    pub fn kernel_data_visit(
         &self,
         resident: Arc<crate::CanonicalClient>,
-        mount: NativeMount,
+        mount: KernelMount,
         serial: u64,
         handle: Option<u64>,
         offset: u64,
         length: u32,
-    ) -> WorkspaceResult<NativeDataVisit> {
+    ) -> WorkspaceResult<KernelDataVisit> {
         let base = self.base()?;
         if mount.engine() != self.route().engine()
             || mount.root_serial() != base.root().root_inode().serial()
         {
             return Err(OverlayError::Stale.into());
         }
-        Ok(NativeDataVisit {
+        Ok(KernelDataVisit {
             mount,
             serial,
             handle,
@@ -79,15 +79,15 @@ impl Workspace {
         })
     }
 }
-impl NativeDataVisit {
-    pub const fn mount(&self) -> NativeMount {
+impl KernelDataVisit {
+    pub const fn mount(&self) -> KernelMount {
         self.mount
     }
 
     /// The visit always decides: what memory does not answer about the base
     /// is left to the one read that follows outside the owner.
-    pub fn perform(&self, db: &Overlay) -> OverlayResult<NativeWindow> {
-        let (root, local) = db.read_native_visit(
+    pub fn perform(&self, db: &Overlay) -> OverlayResult<KernelWindow> {
+        let (root, local) = db.read_kernel_visit(
             self.mount,
             self.serial,
             self.handle,
@@ -99,7 +99,7 @@ impl NativeDataVisit {
         } else {
             (None, None)
         };
-        Ok(NativeWindow {
+        Ok(KernelWindow {
             root,
             local,
             base,
@@ -107,8 +107,8 @@ impl NativeDataVisit {
         })
     }
 }
-const NO_BASE: ContentError = ContentError::InvalidRecord("native window without its base");
-impl NativeWindow {
+const NO_BASE: ContentError = ContentError::InvalidRecord("kernel window without its base");
+impl KernelWindow {
     fn kind(&self) -> Option<InodeKind> {
         match (&self.local, self.base) {
             (Some(local), _) => Some(local.kind),

@@ -328,7 +328,7 @@ impl Wake for ThreadWake {
     }
 }
 impl ReadTicket {
-    /// Compatibility for control/constructor callers. Native workers await the
+    /// Compatibility for control/constructor callers. Kernel workers await the
     /// Future instead; this wait must never run on a Fuse request-service worker.
     pub fn wait(mut self) -> Result<ReadLease, ReadAdmissionError> {
         let waker = Waker::from(Arc::new(ThreadWake(thread::current())));

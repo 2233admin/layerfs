@@ -3,7 +3,7 @@ use crate::{db::integer, BaseSource, Inode, Overlay, OverlayError, OverlayResult
 
 impl Overlay {
     /// Acquires the current base for one bounded request window. Duplicate
-    /// operation IDs fail atomically. Native service fences later acquisitions
+    /// operation IDs fail atomically. Kernel service fences later acquisitions
     /// behind known install readiness, without attempting/retrying install.
     pub fn acquire_base_source(&self, owner: u64) -> OverlayResult<BaseSource> {
         let key = integer(owner)?;

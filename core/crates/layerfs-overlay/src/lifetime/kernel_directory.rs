@@ -1,13 +1,13 @@
-//! Exact native directory owners and retained current parent relationships.
+//! Exact kernel directory owners and retained current parent relationships.
 use crate::{
-    db::integer, NativeDirectory, NativeMount, Overlay, OverlayError, OverlayResult, ReferenceKind,
+    db::integer, KernelDirectory, KernelMount, Overlay, OverlayError, OverlayResult, ReferenceKind,
 };
 impl Overlay {
     /// Called by the deciding lookup/mutation transaction for a directory only.
     /// Its FK follows existing independent file custody, including open dirs.
-    pub(crate) fn set_native_parent(
+    pub(crate) fn set_kernel_parent(
         &self,
-        mount: NativeMount,
+        mount: KernelMount,
         serial: u64,
         parent: u64,
     ) -> OverlayResult<()> {
@@ -19,7 +19,7 @@ impl Overlay {
             .put(serial, (mount.owner, parent));
         Ok(())
     }
-    pub(crate) fn native_parent(&self, mount: NativeMount, serial: u64) -> OverlayResult<u64> {
+    pub(crate) fn kernel_parent(&self, mount: KernelMount, serial: u64) -> OverlayResult<u64> {
         self.available()?;
         self.open
             .borrow()
@@ -30,15 +30,15 @@ impl Overlay {
             .map(|(_, parent)| *parent)
             .ok_or(OverlayError::Stale)
     }
-    pub(crate) fn retain_native_directory(
+    pub(crate) fn retain_kernel_directory(
         &self,
-        mount: NativeMount,
+        mount: KernelMount,
         request: &[u8; 8],
         serial: u64,
-    ) -> OverlayResult<NativeDirectory> {
-        self.native_parent(mount, serial)?;
+    ) -> OverlayResult<KernelDirectory> {
+        self.kernel_parent(mount, serial)?;
         let owner = self.mint_owner()?;
-        let directory = NativeDirectory {
+        let directory = KernelDirectory {
             mount,
             owner,
             serial,
@@ -63,16 +63,16 @@ impl Overlay {
     /// exact descriptor in memory. The handle and its references are released,
     /// and its published replies detached. A closed Workspace still releases
     /// its descriptors.
-    pub fn close_native_directory(
+    pub fn close_kernel_directory(
         &self,
-        mount: NativeMount,
+        mount: KernelMount,
         serial: u64,
         handle: u64,
     ) -> OverlayResult<()> {
         self.atomic_cleanup(|| {
-            let held = super::native_visit::Held::Directory(handle);
-            let (_, _) = self.native_fence(mount, serial, held, false)?;
-            self.close_native_directory_inner(NativeDirectory {
+            let held = super::kernel_visit::Held::Directory(handle);
+            let (_, _) = self.kernel_fence(mount, serial, held, false)?;
+            self.close_kernel_directory_inner(KernelDirectory {
                 mount,
                 owner: handle,
                 serial,
@@ -84,9 +84,9 @@ impl Overlay {
     /// one ownership transfer, so the caller can destroy arbitrarily many
     /// published pages after releasing the connection turn. No row sweep or
     /// terminal maintenance item runs here.
-    pub(crate) fn close_native_directory_inner(
+    pub(crate) fn close_kernel_directory_inner(
         &self,
-        directory: NativeDirectory,
+        directory: KernelDirectory,
     ) -> OverlayResult<()> {
         let owner = directory.owner;
         {

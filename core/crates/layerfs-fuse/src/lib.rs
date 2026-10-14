@@ -1,4 +1,4 @@
-//! Native connection/request ownership over existing Workspace semantics.
+//! Kernel connection/request ownership over existing Workspace semantics.
 #![forbid(unsafe_code)]
 
 pub mod coherence;

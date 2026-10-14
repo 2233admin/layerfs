@@ -1,4 +1,4 @@
-//! Synchronous canonical algorithms using one already admitted native reader.
+//! Synchronous canonical algorithms using one already admitted kernel reader.
 use super::{PortError, ReadLease, StorePorts};
 use layerfs_content::{AuthenticatedObjects, ContentError, ContentResult, ObjectId};
 use layerfs_storage::StorageError;

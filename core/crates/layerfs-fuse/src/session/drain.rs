@@ -1,5 +1,5 @@
 //! Reversible plain detach, then complete connection and request drain.
-use super::state::{DrainStage, Drained, NativeSession, Undrained};
+use super::state::{DrainStage, Drained, KernelSession, Undrained};
 use crate::{mount::syscalls, DispatchError, MountWork};
 use fuser::SessionPhase;
 use nix::errno::Errno;
@@ -7,7 +7,7 @@ use std::{any::Any, fs, sync::atomic::Ordering, time::Instant};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Detach {
-    /// The kernel acknowledged the detach; native admission is now terminal.
+    /// The kernel acknowledged the detach; kernel admission is now terminal.
     Detached,
     /// The kernel's reversible answer. Nothing changed: requests were and
     /// remain serviced normally and no terminal error was injected.
@@ -19,7 +19,7 @@ pub(super) struct Stop {
     panic: Option<Box<dyn Any + Send>>,
     lane: Option<DispatchError>,
 }
-impl NativeSession {
+impl KernelSession {
     /// One plain detach attempt while ordinary request service continues. Any
     /// other errno is the original unestablished outcome for the caller to keep.
     /// Refused before the syscall once forced teardown made its abort write:

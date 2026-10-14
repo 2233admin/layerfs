@@ -154,8 +154,8 @@ pub struct WorkspaceStatus {
     pub local: Option<LocalObservation>,
     /// Original engine observation refusal when local fields are unavailable.
     pub local_failure: Option<ControlRefusal>,
-    /// Native attachment block; absent from a daemon without native serving.
-    pub native: Option<crate::control_native::NativeStatus>,
+    /// Kernel attachment block; absent from a daemon without kernel serving.
+    pub kernel: Option<crate::control_native::NativeStatus>,
 }
 /// Typed refusal knowledge; the daemon retains its original detailed cause.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

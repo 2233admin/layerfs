@@ -129,7 +129,7 @@ impl StorePorts {
             *first = Some(error.clone());
         })
     }
-    /// Native callers await admission before executing a provider demand.
+    /// Kernel callers await admission before executing a provider demand.
     pub fn read_ticket(&self) -> Result<ReadTicket, Arc<PortError>> {
         if let Some(error) = self.failure().map_err(Arc::new)? {
             return Err(error);

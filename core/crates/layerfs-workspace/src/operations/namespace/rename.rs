@@ -20,14 +20,14 @@ pub(crate) struct Move<'a> {
 /// is bounded by the canonical path-component limit and reads only point rows
 /// plus immutable base facts; no reverse index or subtree walk is used.
 ///
-/// A native request carries serials only. Its evidence is the connection's
+/// A kernel request carries serials only. Its evidence is the connection's
 /// retained parent index instead: one row per kernel-known directory, written
 /// by the transactions that looked it up, created it or moved it, and read
 /// here in the publishing job. It is engine state, not a caller's claim.
 fn outside(eval: &mut Eval<'_>, moved: u64, action: &Move<'_>) -> WorkspaceResult<Option<()>> {
-    if let Some((db, mount)) = eval.native {
+    if let Some((db, mount)) = eval.kernel {
         if db
-            .native_ancestors(mount, action.new_parent)?
+            .kernel_ancestors(mount, action.new_parent)?
             .contains(&moved)
         {
             return refuse(Refusal::Invalid);

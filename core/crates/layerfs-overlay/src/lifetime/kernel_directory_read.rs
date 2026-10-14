@@ -1,8 +1,8 @@
 //! READDIR's reading visit: one read-only owner job that records nothing.
 use crate::{
     db::{integer, unsigned},
-    sql, DirectoryEntry, DirectoryEntryWindow, InodeKind, NativeDirectory, NativeDirectoryCursor,
-    NativeDirectoryPage, NativeMount, Overlay, OverlayError, OverlayResult, StatementKind,
+    sql, DirectoryEntry, DirectoryEntryWindow, InodeKind, KernelDirectory, KernelDirectoryCursor,
+    KernelDirectoryPage, KernelMount, Overlay, OverlayError, OverlayResult, StatementKind,
 };
 /// The names of one published reply: one length byte and the bytes of each.
 pub(crate) fn decode_names(blob: &[u8]) -> Option<Vec<Vec<u8>>> {
@@ -21,17 +21,17 @@ pub(crate) fn decode_names(blob: &[u8]) -> Option<Vec<Vec<u8>>> {
 impl Overlay {
     /// The reply that holds `cookie`, and the cookie's name in it. A number
     /// below the handle's floor is no offset since the handle's last rewind.
-    pub(crate) fn native_directory_cursor(
+    pub(crate) fn kernel_directory_cursor(
         &self,
-        directory: NativeDirectory,
+        directory: KernelDirectory,
         offset: u64,
         floor: u64,
-    ) -> OverlayResult<NativeDirectoryCursor> {
+    ) -> OverlayResult<KernelDirectoryCursor> {
         match offset {
-            0 => return Ok(NativeDirectoryCursor::Start),
-            1 => return Ok(NativeDirectoryCursor::AfterDot),
-            2 => return Ok(NativeDirectoryCursor::Names(None)),
-            _ if offset < floor => return Ok(NativeDirectoryCursor::Rewound),
+            0 => return Ok(KernelDirectoryCursor::Start),
+            1 => return Ok(KernelDirectoryCursor::AfterDot),
+            2 => return Ok(KernelDirectoryCursor::Names(None)),
+            _ if offset < floor => return Ok(KernelDirectoryCursor::Rewound),
             _ => {}
         }
         let (first, names) = {
@@ -54,7 +54,7 @@ impl Overlay {
         if index >= names.len() {
             return Err(OverlayError::Stale);
         }
-        Ok(NativeDirectoryCursor::Names(Some(names.swap_remove(index))))
+        Ok(KernelDirectoryCursor::Names(Some(names.swap_remove(index))))
     }
     /// READDIR's reading visit. The fence on the open directory descriptor
     /// (the Workspace row, the mount, the handle), the position the kernel
@@ -65,27 +65,27 @@ impl Overlay {
     ///
     /// Nothing is written and nothing is recorded: the page's source is the
     /// current base, named for the request to read inherited names from.
-    pub fn read_native_directory_visit(
+    pub fn read_kernel_directory_visit(
         &self,
-        mount: NativeMount,
+        mount: KernelMount,
         serial: u64,
         handle: u64,
         offset: u64,
         after: Option<&[u8]>,
-    ) -> OverlayResult<NativeDirectoryPage> {
+    ) -> OverlayResult<KernelDirectoryPage> {
         if after.is_some_and(|name| name.is_empty() || name.len() > 255) {
-            return Err(OverlayError::Invalid("native directory continuation"));
+            return Err(OverlayError::Invalid("kernel directory continuation"));
         }
         let (state, floor) = self.directory_fence(mount, serial, handle, true)?;
-        let directory = NativeDirectory {
+        let directory = KernelDirectory {
             mount,
             owner: handle,
             serial,
         };
-        let cursor = self.native_directory_cursor(directory, offset, floor)?;
+        let cursor = self.kernel_directory_cursor(directory, offset, floor)?;
         let source = self.visit_source(state)?;
-        if cursor == NativeDirectoryCursor::Rewound {
-            return Ok(NativeDirectoryPage {
+        if cursor == KernelDirectoryCursor::Rewound {
+            return Ok(KernelDirectoryPage {
                 directory,
                 cursor,
                 floor,
@@ -103,11 +103,11 @@ impl Overlay {
         }
         if let (Some(after), Some(minimum)) = (after, cursor.after_name()) {
             if after < minimum {
-                return Err(OverlayError::Invalid("native directory continuation"));
+                return Err(OverlayError::Invalid("kernel directory continuation"));
             }
         }
         let parent = match offset {
-            0 | 1 => Some(self.native_parent(mount, serial)?),
+            0 | 1 => Some(self.kernel_parent(mount, serial)?),
             _ => None,
         };
         let parent_inode = self.inode_at(serial, state.active, state.installed)?;
@@ -157,7 +157,7 @@ impl Overlay {
         };
         local_kinds.sort_unstable_by_key(|(serial, _)| *serial);
         local_kinds.dedup_by_key(|(serial, _)| *serial);
-        Ok(NativeDirectoryPage {
+        Ok(KernelDirectoryPage {
             directory,
             cursor,
             floor,

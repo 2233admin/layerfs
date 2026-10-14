@@ -1,15 +1,15 @@
 //! Indexed directory owners, one visit's local name page and the cookies of
 //! one published reply.
-use crate::{BaseSource, DirectoryEntryWindow, InodeKind, NativeMount};
+use crate::{BaseSource, DirectoryEntryWindow, InodeKind, KernelMount};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct NativeDirectory {
-    pub(crate) mount: NativeMount,
+pub struct KernelDirectory {
+    pub(crate) mount: KernelMount,
     pub(crate) owner: u64,
     pub(crate) serial: u64,
 }
-impl NativeDirectory {
-    pub const fn mount(self) -> NativeMount {
+impl KernelDirectory {
+    pub const fn mount(self) -> KernelMount {
         self.mount
     }
     pub const fn owner_id(self) -> u64 {
@@ -23,7 +23,7 @@ impl NativeDirectory {
 /// Position immediately following the supplied kernel offset. Dot entries use
 /// fixed cookies1/2; every ordinary cookie retains its own exact name boundary.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum NativeDirectoryCursor {
+pub enum KernelDirectoryCursor {
     Start,
     AfterDot,
     Names(Option<Vec<u8>>),
@@ -32,7 +32,7 @@ pub enum NativeDirectoryCursor {
     /// is refused and the page lists nothing.
     Rewound,
 }
-impl NativeDirectoryCursor {
+impl KernelDirectoryCursor {
     pub fn after_name(&self) -> Option<&[u8]> {
         match self {
             Self::Names(Some(name)) => Some(name),
@@ -45,9 +45,9 @@ impl NativeDirectoryCursor {
 /// kinds of their local inodes. The request owns it as plain values; nothing
 /// is recorded for it. Immutable names and kinds are merged outside SQL.
 #[derive(Clone, Debug)]
-pub struct NativeDirectoryPage {
-    pub(crate) directory: NativeDirectory,
-    pub(crate) cursor: NativeDirectoryCursor,
+pub struct KernelDirectoryPage {
+    pub(crate) directory: KernelDirectory,
+    pub(crate) cursor: KernelDirectoryCursor,
     /// The handle's floor as the visit's fence read it.
     pub(crate) floor: u64,
     /// The parent the directory was reached through, read only for a reply
@@ -59,11 +59,11 @@ pub struct NativeDirectoryPage {
     /// (serial, kind) of every listed inode that has a local row, ascending.
     pub local_kinds: Vec<(u64, InodeKind)>,
 }
-impl NativeDirectoryPage {
-    pub const fn directory(&self) -> NativeDirectory {
+impl KernelDirectoryPage {
+    pub const fn directory(&self) -> KernelDirectory {
         self.directory
     }
-    pub fn cursor(&self) -> &NativeDirectoryCursor {
+    pub fn cursor(&self) -> &KernelDirectoryCursor {
         &self.cursor
     }
     pub const fn parent(&self) -> Option<u64> {
@@ -83,8 +83,8 @@ impl NativeDirectoryPage {
 /// rewind: it reuses none, and its publication raises the handle's floor to
 /// its fresh range, which retires every earlier reply.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct NativeCookieOffer {
-    pub(crate) directory: NativeDirectory,
+pub struct KernelCookieOffer {
+    pub(crate) directory: KernelDirectory,
     pub(crate) after: Vec<u8>,
     pub(crate) first: u64,
     pub(crate) published: Published,
@@ -100,8 +100,8 @@ pub(crate) enum Published {
     /// A reply listed from the start, found at offset 0: a rewind.
     Rewind,
 }
-impl NativeCookieOffer {
-    pub const fn directory(&self) -> NativeDirectory {
+impl KernelCookieOffer {
+    pub const fn directory(&self) -> KernelDirectory {
         self.directory
     }
     /// The first number of the fresh range.

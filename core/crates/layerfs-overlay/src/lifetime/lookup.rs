@@ -95,7 +95,7 @@ impl Overlay {
         }
         Ok(())
     }
-    /// Call only after native/request continuations using this reference finish.
+    /// Call only after kernel/request continuations using this reference finish.
     pub fn release_lookup(&self, lookup: LookupOwner) -> OverlayResult<()> {
         self.atomic_cleanup(|| {
             self.check_lookup(lookup)?;

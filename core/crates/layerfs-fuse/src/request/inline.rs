@@ -2,7 +2,7 @@
 use super::{
     accounting::{Disposal, Opcode},
     failure::{failed, KernelInput},
-    state::NativeFilesystem,
+    state::KernelFilesystem,
 };
 use crate::RequestDisposition;
 use fuser::{INodeNo, ReplyStatfs};
@@ -34,7 +34,7 @@ thread_local! {
     static FRAME: Cell<(u64, bool)> = const { Cell::new((0, false)) };
 }
 
-impl NativeFilesystem {
+impl KernelFilesystem {
     /// The pinned library delivers a batch as repeated single callbacks sharing
     /// one request identity and does not expose the opcode. `Forget` therefore
     /// counts ownership frames and `BatchForget` those observed with a second

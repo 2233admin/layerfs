@@ -27,7 +27,7 @@ pub enum DispatchError {
 }
 impl fmt::Display for DispatchError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "native dispatch: {self:?}")
+        write!(f, "kernel dispatch: {self:?}")
     }
 }
 impl Error for DispatchError {}

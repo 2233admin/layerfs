@@ -3,9 +3,9 @@
 #[cfg(target_os = "linux")]
 use super::serving::{stage, work, Attached};
 use super::{
-    native::Native,
+    kernel::Kernel,
     registry::{bound_mut, Binding},
-    types::NativeFailure,
+    types::KernelFailure,
     Failure, Service, Success,
 };
 #[cfg(target_os = "linux")]
@@ -33,7 +33,7 @@ const CUSTODY: &str = "force:custody";
 const CAPABILITY: &str = "force:capability";
 
 fn refused(code: ControlCode, phase: &'static str, detail: &'static str) -> Failure {
-    Failure::Native(Box::new(NativeFailure {
+    Failure::Kernel(Box::new(KernelFailure {
         code,
         phase,
         detail: detail.into(),
@@ -50,7 +50,7 @@ fn guard(
 ) -> Result<CommitKnowledge, Failure> {
     // Stored custody answers first: no second abort or detach ever follows it.
     #[cfg(target_os = "linux")]
-    if let Native::Retained(kept) = &value.native {
+    if let Kernel::Retained(kept) = &value.kernel {
         return Err(Failure::Retained(Box::new(kept.custody(token))));
     }
     #[cfg(not(target_os = "linux"))]
@@ -65,7 +65,7 @@ fn guard(
             "Workspace control operation active",
         ));
     }
-    let abort_bound = connection(&value.native)?;
+    let abort_bound = connection(&value.kernel)?;
     let commit = match (value.activity, &value.published) {
         (Activity::Idle, _) => CommitKnowledge::Absent,
         // A known publication is forced with its original outcome.
@@ -97,15 +97,15 @@ fn guard(
 }
 /// Only a serving connection can be forced; answers whether its abort control
 /// is bound. Outside Linux no entry ever owns a connection.
-fn connection(native: &Native) -> Result<bool, Failure> {
-    match native {
-        Native::Unattached => Err(refused(
+fn connection(kernel: &Kernel) -> Result<bool, Failure> {
+    match kernel {
+        Kernel::Unattached => Err(refused(
             ControlCode::Invalid,
             ADMISSION,
-            "Workspace owns no native connection",
+            "Workspace owns no kernel connection",
         )),
         #[cfg(target_os = "linux")]
-        Native::Attaching => Err(refused(
+        Kernel::Attaching => Err(refused(
             ControlCode::Unknown,
             ADMISSION,
             "original Attach outcome retained",
@@ -113,13 +113,13 @@ fn connection(native: &Native) -> Result<bool, Failure> {
         // A terminal operation owns the connection; its activity or stored
         // custody answered above.
         #[cfg(target_os = "linux")]
-        Native::Leaving(_) | Native::Retained(_) => Err(refused(
+        Kernel::Leaving(_) | Kernel::Retained(_) => Err(refused(
             ControlCode::Busy,
             ADMISSION,
             "terminal unmount already admitted",
         )),
         #[cfg(target_os = "linux")]
-        Native::Ready(attached) => Ok(attached.session.abort_bound()),
+        Kernel::Ready(attached) => Ok(attached.session.abort_bound()),
     }
 }
 #[cfg(not(target_os = "linux"))]
@@ -135,7 +135,7 @@ impl Service {
         Err(refused(
             ControlCode::Invalid,
             ADMISSION,
-            "native serving requires Linux",
+            "kernel serving requires Linux",
         ))
     }
 }
@@ -178,7 +178,7 @@ impl Service {
         let mut entries = self.entries.lock().map_err(|_| Failure::Poisoned)?;
         let value = bound_mut(&mut entries, token)?;
         let commit = guard(value, token, relinquish_unknown)?;
-        let attached = super::detach::take(&mut value.native, NativePhase::Stopping)?;
+        let attached = super::detach::take(&mut value.kernel, NativePhase::Stopping)?;
         let prior = value.activity;
         value.activity = Activity::Closing;
         value.epoch = value.epoch.saturating_add(1);
@@ -219,10 +219,10 @@ impl Service {
                 // the activity it had.
                 self.settle(
                     token,
-                    Native::Ready(Box::new(Attached { session, ready })),
+                    Kernel::Ready(Box::new(Attached { session, ready })),
                     prior,
                 );
-                return Err(Failure::native(
+                return Err(Failure::kernel(
                     ControlCode::Failed,
                     CAPABILITY,
                     format!("abort refused before any effect: {refusal:?}"),
@@ -286,7 +286,7 @@ impl Service {
         // Read and dropped at once: its Lifecycle slot returns before Close.
         match self.job(
             workspace.route(),
-            |job_client: &crate::OwnerClient, job_route| job_client.native_revoke(job_route, mount),
+            |job_client: &crate::OwnerClient, job_route| job_client.kernel_revoke(job_route, mount),
         ) {
             Ok(()) => {}
             Err(failure) => {
@@ -300,7 +300,7 @@ impl Service {
                 ));
             }
         }
-        let native = self.closed(token, &workspace, Some(drained), Some(facts.clone()))?;
+        let kernel = self.closed(token, &workspace, Some(drained), Some(facts.clone()))?;
         // One observation of the closed namespace; a failed one claims no
         // state. Its completion is read and dropped here.
         let (cleanup, observation_failure) = match self
@@ -333,7 +333,7 @@ impl Service {
                 })),
                 commit: None,
                 observation_failure,
-                native,
+                kernel,
             },
         )
     }

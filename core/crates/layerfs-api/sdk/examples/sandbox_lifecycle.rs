@@ -3,7 +3,7 @@
 use layerfs_bridge::{
     control::{DaemonPhase, Reply, Request},
     daemon_setup::{DaemonLimits, DaemonSetup},
-    native,
+    native as transport,
 };
 use layerfs_history::{BranchId, HistoryCatalogConfig, HistoryName, LayerStackId, WorkspaceId};
 use layerfs_persistence::{PersistenceConfig, SqlitePersistenceProfile};
@@ -81,7 +81,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         locator: "/layerfs-store/global/store.sqlite".into(),
         policy: StoragePolicy::frozen_default(),
         catalog: HistoryCatalogConfig {
-            binding_key: b"r1d-native-host".to_vec(),
+            binding_key: b"r1d-kernel-host".to_vec(),
             cursor_key: [34; 32],
             incarnation: 1,
         },
@@ -93,8 +93,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         deadline: Instant::now() + Duration::from_secs(5),
     };
     let project = Timing::disabled("init", |timer| ProjectApi::new().init(request, timer)).0?;
-    let keys = native::generate_keypair()?;
-    let daemon = native::generate_keypair()?;
+    let keys = transport::generate_keypair()?;
+    let daemon = transport::generate_keypair()?;
     let docker = Docker::new(&args[1], Duration::from_secs(3))?;
     let api = SandboxApi::new(docker);
     let make = |setup: DaemonSetup| SandboxCreate {
@@ -180,7 +180,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let container = reopened.runtime.identity().to_string();
     api.close(reopened)?;
     println!("SHARED_STORE_REOPEN_AFTER_BOTH_DELETIONS root={:?} container={container} cleanup=Deleted_acknowledged_by_close", project.initialized.root);
-    println!("TWO_DAEMONS_SHARED_STORE separate_overlay=true root={:?} native_fuse=NOT_RUN graceful_daemon_drain=NOT_RUN",project.initialized.root);
+    println!("TWO_DAEMONS_SHARED_STORE separate_overlay=true root={:?} kernel_fuse=NOT_RUN graceful_daemon_drain=NOT_RUN",project.initialized.root);
     fs::remove_dir_all(directory)?;
     Ok(())
 }

@@ -21,7 +21,7 @@ pub enum ServeCause {
     Channel(ChannelError),
     Protocol(ControlError),
 }
-/// Failed native delivery is not rollback. A caller owns every retained receipt.
+/// Failed kernel delivery is not rollback. A caller owns every retained receipt.
 #[derive(Debug)]
 pub struct ServeFailure {
     pub original: Option<Served>,
@@ -63,7 +63,7 @@ impl Service {
 }
 impl fmt::Display for ServeFailure {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "native control: {:?}", self.cause)
+        write!(f, "kernel control: {:?}", self.cause)
     }
 }
 impl std::error::Error for ServeFailure {}

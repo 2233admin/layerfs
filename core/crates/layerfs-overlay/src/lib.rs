@@ -1,6 +1,6 @@
 //! One Workspace's disposable SQLite database and typed atomic jobs.
 //!
-//! The engine owns SQL and profiling. Filesystem validation, scheduling, native
+//! The engine owns SQL and profiling. Filesystem validation, scheduling, kernel
 //! replies and process lifetimes belong to its callers. Windows bound each job;
 //! they do not limit total files, changes, payload or Workspace lifetime.
 #![forbid(unsafe_code)]
@@ -37,11 +37,11 @@ pub use contract::indexed_operation_record::{
     IndexedOperationRecordChange, IndexedOperationRecordKey, IndexedOperationRecordScope,
     OperationRecordExpectedValue,
 };
-pub use contract::native::{
-    NativeApplied, NativeDecision, NativeEffect, NativeMount, NativeMountState, NativeObservation,
+pub use contract::kernel::{
+    KernelApplied, KernelDecision, KernelEffect, KernelMount, KernelMountState, KernelObservation,
 };
-pub use contract::native_directory::{
-    NativeCookieOffer, NativeDirectory, NativeDirectoryCursor, NativeDirectoryPage,
+pub use contract::kernel_directory::{
+    KernelCookieOffer, KernelDirectory, KernelDirectoryCursor, KernelDirectoryPage,
 };
 pub use database::accounting::{Resources, StoredCounts};
 pub use database::physical::{AllocationState, AllocationWork, ClosedFile};

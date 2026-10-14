@@ -7,7 +7,7 @@ impl WorkspaceApi<'_> {
     /// Requests one explicit normal terminal unmount. The daemon probes the
     /// kernel reversibly: Busy leaves the Workspace Ready and usable. Success is
     /// acknowledged only after detach, every loop join, daemon-work drain,
-    /// native-owner revocation and logical Close. Retained custody is returned
+    /// kernel-owner revocation and logical Close. Retained custody is returned
     /// as its own typed cause; this facade adds no teardown shortcut.
     pub fn unmount(
         &mut self,

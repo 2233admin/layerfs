@@ -34,7 +34,7 @@ impl Service {
         Ok(success)
     }
     pub(super) fn status(&self, token: WorkspaceToken) -> Result<Success, Failure> {
-        let (workspace, binding, activity, epoch, published, native) = {
+        let (workspace, binding, activity, epoch, published, kernel) = {
             let entries = self.entries.lock().map_err(|_| Failure::Poisoned)?;
             let value = bound(&entries, token)?;
             (
@@ -44,7 +44,7 @@ impl Service {
                 value.epoch,
                 value.published.clone(),
                 // Copied with the control fields: maintained counters only.
-                self.native.as_ref().map(|_| value.native.block()),
+                self.kernel.as_ref().map(|_| value.kernel.block()),
             )
         };
         let observed = self.job(
@@ -79,11 +79,11 @@ impl Service {
                 published,
                 local,
                 local_failure,
-                native,
+                kernel,
             })),
             commit: None,
             observation_failure,
-            native: None,
+            kernel: None,
         })
     }
 }

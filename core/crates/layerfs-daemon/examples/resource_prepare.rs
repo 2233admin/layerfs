@@ -22,7 +22,7 @@ fn main() {
     for n in 0..count {
         fs::write(
             source.join(format!("entry-{n:06}")),
-            format!("complete-native-entry:{n:06}\0"),
+            format!("complete-kernel-entry:{n:06}\0"),
         )
         .unwrap();
         let file = fs::File::open(source.join(format!("entry-{n:06}"))).unwrap();

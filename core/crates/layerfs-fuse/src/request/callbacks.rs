@@ -4,7 +4,7 @@ use super::{
     failure::{failed, KernelInput},
     mutate::MutationReply,
     reply::ReadReply,
-    state::NativeFilesystem,
+    state::KernelFilesystem,
 };
 use crate::{
     operations::{
@@ -22,7 +22,7 @@ use fuser::{
     ReplyPoll, ReplyStatfs, ReplyWrite, ReplyXattr, Request, TimeOrNow, WriteFlags,
 };
 use layerfs_content::filesystem::PathName;
-use layerfs_workspace::NativeReadOperation;
+use layerfs_workspace::KernelReadOperation;
 use std::{ffi::OsStr, io, os::unix::ffi::OsStrExt, path::Path, time::SystemTime};
 
 /// FLUSH, FSYNC and FSYNCDIR: the declared answer, with no work.
@@ -38,12 +38,12 @@ fn absent() -> Errno {
     }
 }
 
-impl Filesystem for NativeFilesystem {
+impl Filesystem for KernelFilesystem {
     fn init(&mut self, _: &Request, config: &mut KernelConfig) -> io::Result<()> {
         let negotiated = crate::mount::negotiate(config)?;
         self.negotiation
             .set(negotiated)
-            .map_err(|_| io::Error::other("duplicate native initialization"))
+            .map_err(|_| io::Error::other("duplicate kernel initialization"))
     }
     fn lookup(&self, req: &Request, parent: INodeNo, name: &OsStr, reply: ReplyEntry) {
         if name.as_bytes().len() > 255 {
@@ -73,7 +73,7 @@ impl Filesystem for NativeFilesystem {
             req.unique().0,
             parent,
             None,
-            NativeReadOperation::Lookup { parent, name },
+            KernelReadOperation::Lookup { parent, name },
             reply,
         );
     }
@@ -94,7 +94,7 @@ impl Filesystem for NativeFilesystem {
             req.unique().0,
             serial,
             handle.map(|handle| handle.0),
-            NativeReadOperation::Getattr { serial },
+            KernelReadOperation::Getattr { serial },
             reply,
         );
     }
@@ -112,7 +112,7 @@ impl Filesystem for NativeFilesystem {
             req.unique().0,
             serial,
             None,
-            NativeReadOperation::Data { serial },
+            KernelReadOperation::Data { serial },
             reply,
         );
     }
@@ -132,7 +132,7 @@ impl Filesystem for NativeFilesystem {
             req.unique().0,
             serial,
             None,
-            NativeReadOperation::Open {
+            KernelReadOperation::Open {
                 serial,
                 writable: flags.acc_mode() != OpenAccMode::O_RDONLY,
             },
@@ -167,7 +167,7 @@ impl Filesystem for NativeFilesystem {
             req.unique().0,
             serial,
             Some(handle.0),
-            NativeReadOperation::Data { serial },
+            KernelReadOperation::Data { serial },
             reply,
         );
     }
@@ -238,7 +238,7 @@ impl Filesystem for NativeFilesystem {
             req.unique().0,
             serial,
             None,
-            NativeReadOperation::Opendir { serial },
+            KernelReadOperation::Opendir { serial },
             reply,
         );
     }

@@ -1,4 +1,4 @@
-//! Original file publication and opened-Store custody during native installation.
+//! Original file publication and opened-Store custody during kernel installation.
 use crate::{bootstrap::OpenedStore, store::PortError};
 use layerfs_bridge::{
     control::{ControlError, InstallPhase, InstallRefusal, RefusalKind},

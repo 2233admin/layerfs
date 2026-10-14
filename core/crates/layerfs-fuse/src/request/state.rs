@@ -9,10 +9,10 @@ use crate::{
     DispatchError, MountRequests, RequestFuture, RequestOwner,
 };
 use fuser::{Errno, INodeNo};
-use layerfs_workspace::NativeReadOperation;
+use layerfs_workspace::KernelReadOperation;
 use std::sync::{Arc, OnceLock};
 
-pub struct NativeFilesystem {
+pub struct KernelFilesystem {
     pub(super) queue: MountRequests,
     /// The mount's terminal stop, handed to every request's services.
     pub(super) fence: Fence,
@@ -21,7 +21,7 @@ pub struct NativeFilesystem {
     pub(super) negotiation: Arc<OnceLock<Negotiation>>,
     pub(super) accounting: Arc<Accounting>,
 }
-impl NativeFilesystem {
+impl KernelFilesystem {
     pub fn new(
         queue: MountRequests,
         services: Arc<dyn MountServices>,
@@ -148,7 +148,7 @@ impl NativeFilesystem {
         request: u64,
         protected: u64,
         handle: Option<u64>,
-        operation: NativeReadOperation,
+        operation: KernelReadOperation,
         reply: ReadReply,
     ) {
         let services = self.services.clone();

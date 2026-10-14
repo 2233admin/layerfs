@@ -45,7 +45,7 @@ fn main() {
         std::thread::sleep(Duration::from_secs(90));
         std::process::exit(124);
     });
-    // The clone fixture selects a native temporary directory; the observer's
+    // The clone fixture selects a kernel temporary directory; the observer's
     // declared artifact directory is an explicit alias recorded before work.
     let requested = Path::new(&args[1]);
     std::fs::create_dir(requested).unwrap();

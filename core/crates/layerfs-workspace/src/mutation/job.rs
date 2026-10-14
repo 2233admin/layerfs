@@ -7,7 +7,7 @@ use crate::rename::{self, Move};
 use crate::write;
 use crate::{BaseFacts, Need, Operation, Refusal, Time, WorkspaceError, WorkspaceResult};
 use layerfs_content::ContentError;
-use layerfs_overlay::{BaseSource, Changes, Inode, InodeKind, NativeMount, Overlay, Publication};
+use layerfs_overlay::{BaseSource, Changes, Inode, InodeKind, KernelMount, Overlay, Publication};
 
 /// A complete operation input for the SQL owner. It carries data only: the
 /// owner performs no provider, content or kernel work while evaluating it.
@@ -61,12 +61,12 @@ impl NamespaceJob {
     }
     /// The evaluation half of one owner round: current rows over supplied
     /// facts, ending in a final answer or the complete values to publish.
-    /// Nothing is written here. `native` selects that connection's retained
+    /// Nothing is written here. `kernel` selects that connection's retained
     /// parent index as the cycle evidence of a directory move.
     pub(crate) fn decide(
         &self,
         db: &Overlay,
-        native: Option<NativeMount>,
+        kernel: Option<KernelMount>,
     ) -> WorkspaceResult<Decided> {
         if self.now.nanoseconds >= 1_000_000_000 {
             return Ok(Decided::Final(JobOutcome::Refused(Refusal::Invalid)));
@@ -77,7 +77,7 @@ impl NamespaceJob {
             }
             db.check_file(file, true)?;
         }
-        self.decide_over(db, db.source_rows(self.source)?, native)
+        self.decide_over(db, db.source_rows(self.source)?, kernel)
     }
     /// The same evaluation inside a visit, over the rows of the Workspace row
     /// the visit's fence read. That fence also read the operation's
@@ -86,7 +86,7 @@ impl NamespaceJob {
         &self,
         db: &Overlay,
         rows: layerfs_overlay::SourceRows<'_>,
-        native: NativeMount,
+        kernel: KernelMount,
     ) -> WorkspaceResult<Decided> {
         if self.now.nanoseconds >= 1_000_000_000 {
             return Ok(Decided::Final(JobOutcome::Refused(Refusal::Invalid)));
@@ -99,13 +99,13 @@ impl NamespaceJob {
                 return Err(layerfs_overlay::OverlayError::Invalid("read-only descriptor").into());
             }
         }
-        self.decide_over(db, rows, Some(native))
+        self.decide_over(db, rows, Some(kernel))
     }
     fn decide_over(
         &self,
         db: &Overlay,
         rows: layerfs_overlay::SourceRows<'_>,
-        native: Option<NativeMount>,
+        kernel: Option<KernelMount>,
     ) -> WorkspaceResult<Decided> {
         let open = self.operation.file();
         let mut eval = Eval {
@@ -113,7 +113,7 @@ impl NamespaceJob {
             facts: &self.facts,
             root: self.root,
             open_serial: open.map(|file| file.serial()),
-            native: native.map(|mount| (db, mount)),
+            kernel: kernel.map(|mount| (db, mount)),
             needs: Vec::new(),
         };
         let planned = match self.plan(&mut eval) {

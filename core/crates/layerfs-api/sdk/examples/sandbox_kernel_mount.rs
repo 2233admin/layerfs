@@ -1,12 +1,12 @@
 //! Positive-path full topology: host Init and install into a shared VM volume,
-//! then control only. The actual daemon mounts the Workspace natively inside
+//! then control only. The actual daemon mounts the Workspace kernelly inside
 //! its Sandbox; ordinary nonroot commands launched by the runtime, never
 //! registered with the daemon, read the complete root and mutate it through
 //! plain syscalls.
 use layerfs_bridge::{
     control::{ControlCode, DaemonPhase, NativePhase, Reply, Request},
     daemon_setup::{DaemonLimits, DaemonSetup},
-    native,
+    native as transport,
 };
 use layerfs_history::{BranchId, HistoryCatalogConfig, HistoryName, LayerStackId, WorkspaceId};
 use layerfs_persistence::{PersistenceConfig, SqlitePersistenceProfile};
@@ -106,7 +106,7 @@ type Running = (
 );
 enum Directory<'a> {
     Mounted(&'a MountedWorkspace),
-    Native(&'a str),
+    Kernel(&'a str),
 }
 /// Mounted commands use SDK exec; outside-mount commands retain ordinary Sandbox execution.
 fn start(
@@ -117,7 +117,7 @@ fn start(
     let arguments = vec!["bash".into(), "-c".into(), script.into()];
     let created = match directory {
         Directory::Mounted(mounted) => WorkspaceApi::exec(owner, mounted, arguments, vec![], false),
-        Directory::Native(directory) => layerfs_sdk::internal::exec(
+        Directory::Kernel(directory) => layerfs_sdk::internal::exec(
             &owner.runtime,
             layerfs_sandbox::CommandIdentity { uid: 501, gid: 20 },
             arguments,
@@ -175,7 +175,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         locator: "/layerfs-store/global/store.sqlite".into(),
         policy: StoragePolicy::frozen_default(),
         catalog: HistoryCatalogConfig {
-            binding_key: b"r2-native-mount".to_vec(),
+            binding_key: b"r2-kernel-mount".to_vec(),
             cursor_key: [64; 32],
             incarnation: 1,
         },
@@ -187,10 +187,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         deadline: Instant::now() + Duration::from_secs(5),
     };
     let project = Timing::disabled("init", |timer| ProjectApi::new().init(request, timer)).0?;
-    // The native source is absent from here on: the host is control only.
+    // The host source is absent from here on: the host is control only.
     fs::remove_dir_all(directory.join("source"))?;
-    let keys = native::generate_keypair()?;
-    let daemon = native::generate_keypair()?;
+    let keys = transport::generate_keypair()?;
+    let daemon = transport::generate_keypair()?;
     let api = SandboxApi::new(Docker::new(&args[1], Duration::from_secs(3))?);
     let mut owner = api
         .create(
@@ -222,7 +222,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         installed.manifest.host_sqlite, installed.manifest.daemon_sqlite, args[3]
     );
 
-    // Two acknowledgements: bound, then natively Ready.
+    // Two acknowledgements: bound, then kernelly Ready.
     let workspace = WorkspaceId::from_authority([71; 32])?;
     let mounted = WorkspaceApi::new(&mut owner)
         .mount(workspace, branch)
@@ -237,7 +237,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         format!("/workspaces/{}", mounted.bound.token.namespace)
     );
     assert_eq!(mounted.ready.receipt.loops, 2);
-    println!("NATIVE_READY {:?}", mounted.ready);
+    println!("KERNEL_READY {:?}", mounted.ready);
     mark("ready");
 
     // Environment and protection facts observed by an ordinary command.
@@ -263,7 +263,7 @@ fn main() -> Result<(), Box<dyn Error>> {
              printf 'MOUNT %s\\n' \"$(grep ' {root} ' /proc/self/mountinfo)\"; \
              printf 'ORDINARY_ACCESS uid=501 gid=20 CapEff=0 NoNewPrivs=1 private_backing_denied proc_aliases_denied fuse_device_denied mutation_served special_and_setid_refused\\n'"
         ),
-        Directory::Native("/"),
+        Directory::Kernel("/"),
     )?;
     let facts = String::from_utf8(facts)?;
     print!("{facts}");
@@ -324,14 +324,14 @@ fn main() -> Result<(), Box<dyn Error>> {
     let holder = start(
         &owner,
         "sleep 1.2",
-        Directory::Native(&format!("{root}/node_modules")),
+        Directory::Kernel(&format!("{root}/node_modules")),
     )?;
     run(
         &owner,
         &format!(
             "until ls -l /proc/[0-9]*/cwd 2>/dev/null | grep -q '{root}/node_modules'; do sleep 0.02; done"
         ),
-        Directory::Native("/"),
+        Directory::Kernel("/"),
     )?;
     let busy = WorkspaceApi::new(&mut owner)
         .unmount(mounted.bound.token, false)
@@ -346,10 +346,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         other => panic!("{other:?}"),
     }
     let status = WorkspaceApi::new(&mut owner).status(mounted.bound.token)?;
-    let native = status.native.expect("native status block");
-    assert_eq!(native.phase, NativePhase::Ready);
+    let kernel = status.kernel.expect("kernel status block");
+    assert_eq!(kernel.phase, NativePhase::Ready);
     assert_eq!(
-        native.ready.as_ref(),
+        kernel.ready.as_ref(),
         Some(&mounted.ready),
         "same connection"
     );
@@ -368,7 +368,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     run(
         &owner,
         &format!("set -e; test ! -e {root}; ! grep -q ' {root} ' /proc/self/mountinfo"),
-        Directory::Native("/"),
+        Directory::Kernel("/"),
     )?;
     let gone = layerfs_sdk::internal::workspace(layerfs_sdk::internal::control(&mut owner))
         .locate(workspace)
@@ -410,7 +410,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     mark("container_deleted");
     println!("OWNED_CLEANUP container={container} disposition=Deleted_acknowledged_by_close");
     println!(
-        "NATIVE_FULL_TOPOLOGY host_init=true host_data_path=false named_volume={} root={:?} native_fuse=READ_WRITE mutation=RUN commit=NOT_RUN force_unmount=NOT_RUN durable=NOT_RUN",
+        "KERNEL_FULL_TOPOLOGY host_init=true host_data_path=false named_volume={} root={:?} kernel_fuse=READ_WRITE mutation=RUN commit=NOT_RUN force_unmount=NOT_RUN durable=NOT_RUN",
         args[3], project.initialized.root
     );
     fs::remove_dir_all(directory)?;

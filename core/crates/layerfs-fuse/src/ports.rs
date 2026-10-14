@@ -1,8 +1,8 @@
-//! External engine/Store boundaries; all waiting returns to the native pool.
-use layerfs_overlay::{NativeCookieOffer, NativeMount, Publication};
+//! External engine/Store boundaries; all waiting returns to the kernel pool.
+use layerfs_overlay::{KernelCookieOffer, KernelMount, Publication};
 use layerfs_workspace::{
-    BaseView, NativeDirectoryWindow, NativeMutationOutcome, NativeReadOperation, NativeReadOutcome,
-    NativeVisitRequest, NativeWindow, VisitFacts, WriteData,
+    BaseView, KernelDirectoryWindow, KernelMutationOutcome, KernelReadOperation, KernelReadOutcome,
+    KernelVisitRequest, KernelWindow, VisitFacts, WriteData,
 };
 use std::{
     error::Error,
@@ -116,7 +116,7 @@ impl Fence {
 pub struct Fenced;
 impl fmt::Display for Fenced {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("native mount stopped before the attempt")
+        f.write_str("kernel mount stopped before the attempt")
     }
 }
 impl Error for Fenced {}
@@ -165,24 +165,24 @@ pub trait RequestServices: Send + Sync {
     /// records nothing, so its request holds nothing afterwards.
     fn directory_visit(
         &self,
-        mount: NativeMount,
+        mount: KernelMount,
         serial: u64,
         handle: u64,
         offset: u64,
         after: Option<Vec<u8>>,
-    ) -> ServiceFuture<'_, ServiceReply<Arc<NativeDirectoryWindow>>>;
+    ) -> ServiceFuture<'_, ServiceReply<Arc<KernelDirectoryWindow>>>;
     /// READDIR's publishing visit, before the reply is sent: exactly the
     /// names the reply buffer accepted become valid offsets, in one
     /// transaction behind the fence on the still open descriptor.
     fn publish_cookies(
         &self,
-        offer: NativeCookieOffer,
+        offer: KernelCookieOffer,
         names: Vec<Vec<u8>>,
     ) -> ServiceFuture<'_, ServiceReply<()>>;
     /// RELEASEDIR as one owner job: the open descriptor is found and closed.
     fn close_directory(
         &self,
-        mount: NativeMount,
+        mount: KernelMount,
         serial: u64,
         handle: u64,
     ) -> ServiceFuture<'_, ServiceReply<()>>;
@@ -191,15 +191,15 @@ pub trait RequestServices: Send + Sync {
     /// It records nothing, so its request holds nothing afterwards.
     fn read_visit(
         &self,
-        mount: NativeMount,
+        mount: KernelMount,
         serial: u64,
         handle: Option<u64>,
         offset: u64,
         length: u32,
-    ) -> ServiceFuture<'_, ServiceReply<Arc<NativeWindow>>>;
+    ) -> ServiceFuture<'_, ServiceReply<Arc<KernelWindow>>>;
     fn close_file(
         &self,
-        mount: NativeMount,
+        mount: KernelMount,
         serial: u64,
         handle: u64,
     ) -> ServiceFuture<'_, ServiceReply<()>>;
@@ -217,23 +217,23 @@ pub trait RequestServices: Send + Sync {
     /// `request` in that job; no other operation uses `request`.
     fn observe_visit(
         &self,
-        mount: NativeMount,
+        mount: KernelMount,
         request: u64,
         serial: u64,
         handle: Option<u64>,
-        operation: NativeReadOperation,
+        operation: KernelReadOperation,
         facts: Arc<VisitFacts>,
-    ) -> ServiceFuture<'_, ServiceReply<Arc<NativeReadOutcome>>>;
+    ) -> ServiceFuture<'_, ServiceReply<Arc<KernelReadOutcome>>>;
     /// The Workspace's current base over an admitted Store reader, for the
     /// facts an undecided visit asked for and the inherited bytes of a read
     /// window. It acquires nothing in the owner.
     fn base(&self) -> ServiceFuture<'_, BaseView>;
-    /// A native mutation as one owner job with no request source. An
+    /// A kernel mutation as one owner job with no request source. An
     /// undecided outcome has changed nothing and holds nothing.
     fn mutate_visit(
         &self,
-        request: NativeVisitRequest,
-    ) -> ServiceFuture<'_, ServiceReply<Arc<NativeMutationOutcome>>>;
+        request: KernelVisitRequest,
+    ) -> ServiceFuture<'_, ServiceReply<Arc<KernelMutationOutcome>>>;
     /// What the bytes of a WRITE at `offset` of file `serial` establish
     /// about committed content, before the write's first owner visit: the
     /// same bytes, with claims where whole committed chunks were recognized
@@ -242,7 +242,7 @@ pub trait RequestServices: Send + Sync {
     fn recognize(&self, serial: u64, offset: u64, data: WriteData) -> ServiceFuture<'_, WriteData>;
     fn forget(
         &self,
-        mount: NativeMount,
+        mount: KernelMount,
         serial: u64,
         count: u64,
     ) -> ServiceFuture<'_, ServiceReply<()>>;

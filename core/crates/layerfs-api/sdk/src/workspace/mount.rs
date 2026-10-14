@@ -1,4 +1,4 @@
-//! Logical binding and native mount acknowledgements.
+//! Logical binding and kernel mount acknowledgements.
 use crate::{internal::Control, OperationFailure};
 use layerfs_bridge::control::{ReadyMount, Reply, Request, WorkspaceToken};
 use layerfs_history::{BranchId, BranchSnapshot, WorkspaceId};
@@ -33,7 +33,7 @@ impl<'a> WorkspaceApi<'a> {
     }
 }
 
-/// Original logical binding. It carries no mounted location or native readiness.
+/// Original logical binding. It carries no mounted location or kernel readiness.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct BoundWorkspace {
     /// Exact acknowledged namespace/incarnation.
@@ -42,7 +42,7 @@ pub struct BoundWorkspace {
     pub binding: BranchSnapshot,
 }
 
-/// A Workspace that is both bound and natively Ready.
+/// A Workspace that is both bound and kernelly Ready.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MountedWorkspace {
     /// First acknowledgement: the Store/engine binding.
@@ -51,7 +51,7 @@ pub struct MountedWorkspace {
     pub ready: ReadyMount,
 }
 /// A mount stopped at its second acknowledgement. The binding is known and
-/// stays bound; whether a native connection exists is exactly what `attach`
+/// stays bound; whether a kernel connection exists is exactly what `attach`
 /// records. Nothing was rebound, re-attached or unmounted on the caller's behalf.
 #[derive(Debug)]
 pub struct MountFailure {

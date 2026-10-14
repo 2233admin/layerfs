@@ -1,4 +1,4 @@
-//! Native continuation orchestration over independently reusable Workspace plans.
+//! Kernel continuation orchestration over independently reusable Workspace plans.
 pub mod create;
 mod directory;
 pub mod flush;
@@ -12,8 +12,8 @@ pub mod unsupported;
 pub mod write;
 
 pub use directory::{DirectoryBatch, DirectoryFailure, DirectoryStep, DirectoryStream};
-pub use lookup::{NativeRead, ReadFailure};
+pub use lookup::{KernelRead, ReadFailure};
 pub use mutation::{
-    Declined, MutationFailure, MutationInput, MutationRequest, NativeMutation, Published,
+    Declined, KernelMutation, MutationFailure, MutationInput, MutationRequest, Published,
 };
-pub use read::{NativeData, ReadDataInput};
+pub use read::{KernelData, ReadDataInput};

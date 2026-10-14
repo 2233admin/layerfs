@@ -4,8 +4,8 @@ use crate::{
     ports::ServiceError,
     RequestDisposition,
 };
-use layerfs_overlay::NativeMount;
-use layerfs_workspace::NativeReadOperation;
+use layerfs_overlay::KernelMount;
+use layerfs_workspace::KernelReadOperation;
 use std::fmt;
 
 #[derive(Debug)]
@@ -13,7 +13,7 @@ pub enum KernelInput {
     Read {
         protected: u64,
         handle: Option<u64>,
-        operation: NativeReadOperation,
+        operation: KernelReadOperation,
         data: Option<ReadDataInput>,
     },
     Directory {
@@ -40,7 +40,7 @@ pub enum KernelInput {
 #[derive(Debug)]
 pub struct RequestFailure {
     pub request: u64,
-    pub mount: NativeMount,
+    pub mount: KernelMount,
     pub input: KernelInput,
     pub reason: ServiceError,
 }
@@ -48,7 +48,7 @@ impl fmt::Display for RequestFailure {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "native request {} on {:?}, input {:?}: {}",
+            "kernel request {} on {:?}, input {:?}: {}",
             self.request, self.mount, self.input, self.reason
         )
     }
@@ -60,7 +60,7 @@ impl std::error::Error for RequestFailure {
 }
 pub(super) fn failed(
     request: u64,
-    mount: NativeMount,
+    mount: KernelMount,
     input: KernelInput,
     reason: ServiceError,
 ) -> RequestDisposition {

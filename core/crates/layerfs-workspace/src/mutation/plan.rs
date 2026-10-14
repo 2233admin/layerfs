@@ -32,7 +32,7 @@ pub struct MutationInputFailure {
 impl Workspace {
     /// Prepare without SQL, provider I/O or serial allocation. For a creating
     /// operation, the caller supplies one serial from this scope's allocator.
-    /// Native callers reserve it in a separately admitted service step.
+    /// Kernel callers reserve it in a separately admitted service step.
     pub fn prepare_mutation(
         &self,
         view: &SourceView,

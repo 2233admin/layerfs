@@ -1,27 +1,27 @@
-//! One native enumeration request: reading visits, the reply's accepted
+//! One kernel enumeration request: reading visits, the reply's accepted
 //! prefix, one publishing visit. Nothing is held in the engine between them
 //! or after the reply.
 use crate::ports::{BaseDemandFailed, Fenced, RequestServices, ServiceError};
-use layerfs_overlay::{NativeMount, OverlayError};
-use layerfs_workspace::{NativeDirectoryBatch, NativeDirectoryEntry, NativeDirectoryWindow};
+use layerfs_overlay::{KernelMount, OverlayError};
+use layerfs_workspace::{KernelDirectoryBatch, KernelDirectoryEntry, KernelDirectoryWindow};
 use std::{fmt, sync::Arc};
 
 /// One kernel READDIR on an open directory handle. It owns plain values
 /// only: the window its last reading visit returned and the parent for `..`.
 pub struct DirectoryStream {
     services: Arc<dyn RequestServices>,
-    mount: NativeMount,
+    mount: KernelMount,
     request: u64,
     serial: u64,
     handle: u64,
     offset: u64,
     parent: Option<u64>,
-    window: Option<NativeDirectoryWindow>,
+    window: Option<KernelDirectoryWindow>,
     ended: bool,
 }
 pub struct DirectoryBatch {
     stream: DirectoryStream,
-    batch: NativeDirectoryBatch,
+    batch: KernelDirectoryBatch,
 }
 pub enum DirectoryStep {
     Batch(DirectoryBatch),
@@ -44,14 +44,14 @@ pub struct DirectoryFailure {
     pub reason: ServiceError,
     pub provider: Option<ServiceError>,
     stream: DirectoryStream,
-    batch: Option<NativeDirectoryBatch>,
+    batch: Option<KernelDirectoryBatch>,
     prefix: Option<(usize, bool)>,
 }
 impl DirectoryFailure {
     fn new(
         reason: ServiceError,
         stream: DirectoryStream,
-        batch: Option<NativeDirectoryBatch>,
+        batch: Option<KernelDirectoryBatch>,
     ) -> Self {
         let provider = match stream.services.provider_failure() {
             Ok(error) => error,
@@ -65,14 +65,14 @@ impl DirectoryFailure {
             prefix: None,
         }
     }
-    pub const fn mount(&self) -> NativeMount {
+    pub const fn mount(&self) -> KernelMount {
         self.stream.mount
     }
     pub const fn request(&self) -> u64 {
         self.stream.request
     }
     /// The batch whose reply conversion or publication failed.
-    pub fn offered(&self) -> Option<&NativeDirectoryBatch> {
+    pub fn offered(&self) -> Option<&KernelDirectoryBatch> {
         self.batch.as_ref()
     }
     /// Requested accepted count and whether the publication port was invoked.
@@ -139,7 +139,7 @@ impl DirectoryStream {
     /// and a stopped mount fail here.
     pub async fn prepare(
         services: Arc<dyn RequestServices>,
-        mount: NativeMount,
+        mount: KernelMount,
         request: u64,
         serial: u64,
         handle: u64,
@@ -176,7 +176,7 @@ impl DirectoryStream {
             .await?;
         // The request's own copy: the job and its receipt are gone before any
         // provider wait and before the publishing visit.
-        let window = NativeDirectoryWindow::clone(reply.get());
+        let window = KernelDirectoryWindow::clone(reply.get());
         drop(reply);
         self.parent = self.parent.or(window.page.parent());
         self.window = Some(window);
@@ -205,7 +205,7 @@ impl DirectoryStream {
             Err(reason) => Err(DirectoryFailure::new(reason, self, None)),
         }
     }
-    async fn advance(&mut self) -> Result<Option<NativeDirectoryBatch>, ServiceError> {
+    async fn advance(&mut self) -> Result<Option<KernelDirectoryBatch>, ServiceError> {
         loop {
             let Some(window) = self.window.take().filter(|_| !self.ended) else {
                 return Ok(None);
@@ -243,10 +243,10 @@ impl DirectoryStream {
     }
 }
 impl DirectoryBatch {
-    pub fn entries(&self) -> impl Iterator<Item = (&NativeDirectoryEntry, u64)> {
+    pub fn entries(&self) -> impl Iterator<Item = (&KernelDirectoryEntry, u64)> {
         self.batch.entries.iter().zip(self.batch.first..)
     }
-    /// Publish exactly the prefix that actually fit the native reply buffer,
+    /// Publish exactly the prefix that actually fit the kernel reply buffer,
     /// before the reply is sent. Offsets of an already published reply and
     /// an empty prefix publish nothing and submit no job, except that a
     /// rewinding offer is published with whatever prefix it has. Consuming
@@ -258,14 +258,14 @@ impl DirectoryBatch {
         } = self;
         if accepted > batch.entries.len() {
             return Err(DirectoryFailure::new(
-                Box::new(OverlayError::Invalid("native cookie prefix")),
+                Box::new(OverlayError::Invalid("kernel cookie prefix")),
                 stream,
                 Some(batch),
             )
             .with_prefix(accepted, false));
         }
         // One published window ends this reply even when names remain; the
-        // next native read resumes after the last accepted offset.
+        // next kernel read resumes after the last accepted offset.
         stream.ended = true;
         let Some(offer) = batch
             .publish

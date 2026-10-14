@@ -3,14 +3,14 @@ use super::{
     accounting::Opcode,
     failure::{failed, KernelInput},
     reply::{open_flags, TTL},
-    state::NativeFilesystem,
+    state::KernelFilesystem,
     terminal,
 };
 use crate::{
     attributes::{declined, Identity},
     coherence::{attributes::published, pages, reply_order},
     operations::{
-        write::time, Declined, MutationInput, MutationRequest, NativeMutation, Published,
+        write::time, Declined, KernelMutation, MutationInput, MutationRequest, Published,
     },
     ports::{Fence, RequestServices, ServiceError},
     RequestDisposition, RequestOwner,
@@ -20,7 +20,7 @@ use fuser::{
     ReplyEntry, ReplyWrite,
 };
 use layerfs_content::filesystem::PathName;
-use layerfs_overlay::NativeMount;
+use layerfs_overlay::KernelMount;
 use layerfs_workspace::{Refusal, Time};
 use std::{ffi::OsStr, io, os::unix::ffi::OsStrExt, sync::Arc, time::SystemTime};
 
@@ -67,7 +67,7 @@ impl MutationReply {
         Ok(match self {
             Self::Done(_) => Composed::Nothing,
             Self::Written(_, requested) => Composed::Count(
-                pages::written(*requested).map_err(|_| io::Error::other("native write count"))?,
+                pages::written(*requested).map_err(|_| io::Error::other("kernel write count"))?,
             ),
             Self::Attr(_, serial) => Composed::Attributes(attributes(Some(*serial))?),
             Self::Entry(_, expected) => Composed::Attributes(attributes(*expected)?),
@@ -87,7 +87,7 @@ impl MutationReply {
         identity: Identity,
     ) -> RequestDisposition {
         let generation = Generation(request.mount.owner_id());
-        let mutation = match NativeMutation::perform(services, request).await {
+        let mutation = match KernelMutation::perform(services, request).await {
             Ok(mutation) => mutation,
             Err(failure) => {
                 self.error(terminal::errno(failure.fenced()));
@@ -125,14 +125,14 @@ impl MutationReply {
             (reply, Ok(_)) => {
                 reply.error(Errno::EIO);
                 return reply_order::retained(
-                    mutation.retain(io::Error::other("native reply composition").into()),
+                    mutation.retain(io::Error::other("kernel reply composition").into()),
                 );
             }
         }
         reply_order::attempted(mutation).await
     }
 }
-impl NativeFilesystem {
+impl KernelFilesystem {
     /// Hands one admitted mutation to the shared dispatcher. Its input is
     /// built at processing, so every stored time is assigned there.
     #[allow(clippy::too_many_arguments)]
@@ -148,7 +148,7 @@ impl NativeFilesystem {
     ) {
         let services = self.services.clone();
         let fence = self.fence.clone();
-        let mount: NativeMount = self.queue.identity();
+        let mount: KernelMount = self.queue.identity();
         let identity = self.identity;
         self.serve(
             permit,

@@ -119,7 +119,7 @@ fn invalid(message: &'static str) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidInput, message)
 }
 
-/// Store-read tickets one namespace may have waiting: sixteen native requests
+/// Store-read tickets one namespace may have waiting: sixteen kernel requests
 /// plus the fixed control connection population. One additional namespace
 /// serves explicitly unscoped constructor callers.
 pub(super) fn read_limits(

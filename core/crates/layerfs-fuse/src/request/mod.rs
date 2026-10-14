@@ -1,4 +1,4 @@
-//! Native callback entry and single owned reply attempts.
+//! Kernel callback entry and single owned reply attempts.
 mod accounting;
 mod callbacks;
 mod directory;
@@ -11,4 +11,4 @@ mod terminal;
 
 pub use accounting::{Accounting, Disposal, Opcode, OpcodeWork, OPCODES};
 pub use failure::{KernelInput, RequestFailure};
-pub use state::NativeFilesystem;
+pub use state::KernelFilesystem;
