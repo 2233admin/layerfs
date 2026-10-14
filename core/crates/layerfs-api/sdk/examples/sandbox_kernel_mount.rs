@@ -4,9 +4,9 @@
 //! registered with the daemon, read the complete root and mutate it through
 //! plain syscalls.
 use layerfs_bridge::{
-    control::{ControlCode, DaemonPhase, NativePhase, Reply, Request},
+    control::{ControlCode, DaemonPhase, MountPhase, Reply, Request},
     daemon_setup::{DaemonLimits, DaemonSetup},
-    native as transport,
+    duplex as transport,
 };
 use layerfs_history::{BranchId, HistoryCatalogConfig, HistoryName, LayerStackId, WorkspaceId};
 use layerfs_persistence::{PersistenceConfig, SqlitePersistenceProfile};
@@ -346,7 +346,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     let status = WorkspaceApi::new(&mut owner).status(mounted.bound.token)?;
     let kernel = status.kernel.expect("kernel status block");
-    assert_eq!(kernel.phase, NativePhase::Ready);
+    assert_eq!(kernel.phase, MountPhase::Ready);
     assert_eq!(
         kernel.ready.as_ref(),
         Some(&mounted.ready),

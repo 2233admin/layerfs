@@ -13,7 +13,7 @@ use crate::store::BoundWorkspace;
 #[cfg(target_os = "linux")]
 use layerfs_bridge::control::{
     AbortDisposition, DetachDisposition, ForceUnmounted, ForcedCleanup, ForcedFacts, ForcedOutcome,
-    NativePhase, Reply, TeardownStage,
+    MountPhase, Reply, TeardownStage,
 };
 use layerfs_bridge::control::{Activity, CommitKnowledge, ControlCode, WorkspaceToken};
 #[cfg(target_os = "linux")]
@@ -178,7 +178,7 @@ impl Service {
         let mut entries = self.entries.lock().map_err(|_| Failure::Poisoned)?;
         let value = bound_mut(&mut entries, token)?;
         let commit = guard(value, token, relinquish_unknown)?;
-        let attached = super::detach::take(&mut value.kernel, NativePhase::Stopping)?;
+        let attached = super::detach::take(&mut value.kernel, MountPhase::Stopping)?;
         let prior = value.activity;
         value.activity = Activity::Closing;
         value.epoch = value.epoch.saturating_add(1);
@@ -282,7 +282,7 @@ impl Service {
             opcodes: drained.opcodes,
             ..observer.facts()
         });
-        self.leaving(token, NativePhase::Draining);
+        self.leaving(token, MountPhase::Draining);
         // Read and dropped at once: its Lifecycle slot returns before Close.
         match self.job(
             workspace.route(),

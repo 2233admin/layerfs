@@ -1,6 +1,6 @@
 //! Current public SDK Init and an independent, separate-process read proof.
 use crate::{args::Args, events::Events, Result};
-use layerfs_bridge::{native, provision::StoreManifest};
+use layerfs_bridge::{duplex, provision::StoreManifest};
 use layerfs_content::{
     file::FileView,
     filesystem::{
@@ -176,8 +176,8 @@ pub fn initialize_sealed(args: &Args, events: &mut Events) -> Result<layerfs_sdk
             plan.scenario.regular_files,
         )
     };
-    let stack_key = native::generate_keypair()?.public;
-    let branch_key = native::generate_keypair()?.public;
+    let stack_key = duplex::generate_keypair()?.public;
+    let branch_key = duplex::generate_keypair()?.public;
     let mut stack = [0; 16];
     let mut branch = [0; 16];
     stack.copy_from_slice(&stack_key[..16]);
@@ -190,14 +190,14 @@ pub fn initialize_sealed(args: &Args, events: &mut Events) -> Result<layerfs_sdk
         policy: StoragePolicy::frozen_default(),
         catalog: HistoryCatalogConfig {
             binding_key: b"fs-bench-pro-init".to_vec(),
-            cursor_key: native::generate_keypair()?.private,
+            cursor_key: duplex::generate_keypair()?.private,
             incarnation: 1,
         },
         stack: LayerStackId::from_authority(stack),
         stack_name: HistoryName::new("project")?,
         branch: BranchId::from_authority(branch),
         branch_name: HistoryName::new("main")?,
-        scope_seed: native::generate_keypair()?.public,
+        scope_seed: duplex::generate_keypair()?.public,
         deadline: Instant::now() + Duration::from_secs(args.init_seconds),
     };
     let begun = Instant::now();

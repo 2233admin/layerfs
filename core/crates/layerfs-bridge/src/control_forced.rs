@@ -2,7 +2,7 @@
 use crate::{
     control::{ControlError, WorkspaceToken},
     control_history::{outcome, put_outcome, put_token, token},
-    control_native::{put_work, work, NativeWork},
+    control_mount::{put_work, work, MountWork},
     wire::{Reader, Writer},
 };
 use layerfs_history::CommitStagedOutcome;
@@ -71,7 +71,7 @@ pub struct ForcedOutcome {
     /// Abort, detach, Commit knowledge and terminal replies.
     pub facts: ForcedFacts,
     /// Maintained counters observed at the end of the teardown.
-    pub work: NativeWork,
+    pub work: MountWork,
     /// Cleanup state after logical Close.
     pub cleanup: ForcedCleanup,
 }

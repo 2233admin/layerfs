@@ -1,7 +1,7 @@
 //! One attempted authenticated control exchange, retaining the original unknown.
 use layerfs_bridge::{
     control::{Answer, Call, ControlError, Reply, Request},
-    native::{ChannelError, ChannelWork, Connection},
+    duplex::{ChannelError, ChannelWork, Connection},
 };
 use std::fmt;
 /// One sequential control connection. Concurrent callers may use separate channels.

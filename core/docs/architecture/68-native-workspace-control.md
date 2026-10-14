@@ -113,11 +113,11 @@ and bytes; an unknown tag, value or boolean is refused as before.
 | Record | Encoding | Sent when |
 | --- | --- | --- |
 | `Request::ForceUnmount { token, relinquish_unknown }` | request tag 11: token, one strict boolean byte | the caller forces one attached Workspace |
-| `Reply::ForceUnmounted { token, outcome }` | reply tag 14: token, forced facts, `NativeWork`, cleanup byte | the forced teardown completed and the entry left routing |
+| `Reply::ForceUnmounted { token, outcome }` | reply tag 14: token, forced facts, `MountWork`, cleanup byte | the forced teardown completed and the entry left routing |
 | `Reply::Retained` with `forced: Some(ForcedFacts)` | reply tag 15: the tag 12 body, then the facts | a forced teardown stopped after an effect, or a later Unmount, ForceUnmount or Attach met that stored custody |
 | `Reply::Retained` with `forced: None` | reply tag 12, unchanged | a normal unmount or an Attach stopped after an effect |
 | `ForcedFacts { abort, detach, commit, fenced }` | abort byte, detach byte, Commit knowledge (`Absent`; `Published` with the existing outcome encoding; `Unknown`), `u64` | inside tags 14 and 15 |
-| `NativePhase::Stopping` | value 7 in the native status block | status while a forced unmount owns the session |
+| `MountPhase::Stopping` | value 7 in the native status block | status while a forced unmount owns the session |
 | `TeardownStage::Abort` | value 9, valid only with forced facts | the abort write was short or failed |
 
 A refusal before any effect is the existing `Reply::Refused` with phase
@@ -199,3 +199,9 @@ scan or Branch refresh. All original control records and golden vectors remain.
 The [SDK branches method](../../crates/layerfs-api/sdk/src/project/branches.rs)
 checks stack identity, ordering, page size and continuation shape on the original
 sequential channel. These source changes establish no performance qualification.
+
+Current Bridge source terminology (#320): attachment records use MountPhase,
+MountReceipt, MountStatus and MountWork from control_mount. The authenticated
+channel is layerfs_bridge::duplex (feature duplex). Encoded attach tags and
+fields, and the fixed authentication domain bytes, are unchanged. Source tests
+follow in the separate test pass; historical receipts keep their original names.

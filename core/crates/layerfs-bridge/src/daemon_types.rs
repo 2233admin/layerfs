@@ -1,4 +1,4 @@
-//! Authenticated daemon startup observation, separate from native Workspace Ready.
+//! Authenticated daemon startup observation, separate from kernel Workspace Ready.
 /// Maintained application phase; observing it never settles an earlier unknown.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u8)]

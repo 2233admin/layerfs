@@ -3,7 +3,7 @@ use super::{Application, ApplicationError, ConnectionFailure};
 use crate::install_types::StoreSettings;
 use layerfs_bridge::{
     control::{DaemonPhase, InstallPhase, InstallRefusal, InstallReply, RefusalKind},
-    native::Connection,
+    duplex::Connection,
     provision::StoreManifest,
 };
 use layerfs_storage::ReservationBlocks;

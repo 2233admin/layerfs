@@ -7,7 +7,7 @@ use std::fmt;
 /// Final sender marker, emitted only after exact sealed length and EOF checks.
 pub const INSTALL_FINISH: &[u8] = b"LFSF\x01";
 const MAGIC: &[u8] = b"LFSR\x01";
-/// Invalid bounded control input; the native channel owns authentication errors.
+/// Invalid bounded control input; the mount channel owns authentication errors.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ControlError(pub &'static str);
 impl fmt::Display for ControlError {
@@ -77,7 +77,7 @@ pub enum InstallReply {
     Refused(InstallRefusal),
 }
 impl InstallReply {
-    /// Encodes one bounded native control record.
+    /// Encodes one bounded mount control record.
     pub fn encode(&self) -> Result<Vec<u8>, ControlError> {
         let mut out = Writer::new(MAGIC);
         match self {
@@ -168,9 +168,9 @@ pub use crate::control_forced::{
     AbortDisposition, CommitKnowledge, DetachDisposition, ForceUnmounted, ForcedCleanup,
     ForcedFacts, ForcedOutcome,
 };
-pub use crate::control_native::{
-    NativePhase, NativeReceipt, NativeStatus, NativeWork, ReadyMount, TeardownCustody,
-    TeardownStage, MOUNT_DIRECTORY_LIMIT,
+pub use crate::control_mount::{
+    MountPhase, MountReceipt, MountStatus, MountWork, ReadyMount, TeardownCustody, TeardownStage,
+    MOUNT_DIRECTORY_LIMIT,
 };
 pub use crate::control_types::{
     Activity, Answer, Call, CleanupObservation, ControlCode, ControlRefusal, LocalObservation,

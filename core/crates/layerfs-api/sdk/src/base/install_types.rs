@@ -1,7 +1,7 @@
 //! Exact local stream progress and original remote acknowledgement custody.
 use layerfs_bridge::{
     control::{ControlError, InstallPhase, InstallRefusal},
-    native::ChannelError,
+    duplex::ChannelError,
     provision::StoreManifest,
 };
 use std::{fmt, io, path::PathBuf};

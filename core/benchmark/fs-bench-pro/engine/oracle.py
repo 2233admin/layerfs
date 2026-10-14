@@ -35,7 +35,7 @@ SCHEMA_PINS = {
     "core/crates/layerfs-persistence/sql/sqlite/metadata.sql": "7095571b3365d79571078ca8e7471888dca8b2faf715059ddcb119cb7f1ad35a",
     "core/crates/layerfs-persistence/sql/sqlite/history.sql": "469e4bae00a6d23711f21dc41e2091d18d2d4e4f9a4c4dbec8377c3929faf2ef",
     "core/crates/layerfs-persistence/sql/sqlite/acquisition/schema.sql": "76c8bcaef4562497456628a7ddcd0598317cdc0dcba5a37eb4c3bf015a651d6d",
-    "core/crates/layerfs-bridge/src/provision_wire.rs": "1c73c25ee7ba9d04dbca9b169aa9b0b0abdf59e55a10d44cd59e81684ccf34e2",
+    "core/crates/layerfs-bridge/src/provision_wire.rs": "5f5ad45f151ab4e312736bc0f3bd2ab7e0ad01feb198fe321546a493d9c9f993",
     "core/crates/layerfs-bridge/src/wire.rs": "536ee0d655e16b8b89a84670b3acabeac44757d588888442e24a20dcd2dbc26f",
 }
 
@@ -800,7 +800,7 @@ def _overlay_storage_source():
         'core/crates/layerfs-overlay/src/database/physical.rs': '90bc4c7bdc3a597b927d2e2255b614e7da32f264e9b5d34fbce616a653c6f9de',
         'core/crates/layerfs-overlay/src/lifetime/close.rs': '334a6f015bed7959289073b286c48f13d735eda5a4357efad0488672e5a52886',
         'core/crates/layerfs-daemon/src/overlay/workspaces.rs': 'f7bd7fe52254c36b66730264feb5a22ac6d4f8fe9426fad5196374bb982c42e7',
-        'core/crates/layerfs-bridge/src/control_types.rs': 'af0a12a6da6f803e5ece7f6e2568b8a2294119fcbbc0fd53525823d56e919f27',
+        'core/crates/layerfs-bridge/src/control_types.rs': '981071b81bdcbf43905846848eb7dad050174a234ff6958ccd42677ea7bf98f6',
     }
     if ROOT is None or any(file_sha(ROOT / name) != digest for name, digest in pins.items()):
         raise ValueError('closed overlay authoritative schema/accounting source pin changed')

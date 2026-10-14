@@ -3,7 +3,7 @@ use super::{Failure, Service, Success};
 use crate::store::CommitError;
 use layerfs_bridge::{
     control::{Answer, Call, ControlError, Reply},
-    native::{ChannelError, Connection},
+    duplex::{ChannelError, Connection},
 };
 use layerfs_content::filesystem::FilesystemRootId;
 use layerfs_history::BranchSnapshot;

@@ -2,7 +2,7 @@
 use crate::{InstallError, InstallFailure, InstallWork, Installed, SealedProject};
 use layerfs_bridge::{
     control::{ControlError, InstallPhase, InstallReply, INSTALL_FINISH},
-    native::{Connection, MAX_PLAINTEXT_BYTES},
+    duplex::{Connection, MAX_PLAINTEXT_BYTES},
     provision::StoreProfile,
 };
 use layerfs_persistence::SqlitePersistenceProfile;

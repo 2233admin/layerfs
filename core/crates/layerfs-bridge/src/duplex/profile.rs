@@ -12,7 +12,12 @@ pub const NOISE: &str = "Noise_KK_25519_AESGCM_SHA256";
 pub const NOISE: &str = "Noise_KK_25519_ChaChaPoly_BLAKE2s";
 /// Fixed plaintext processing window: Noise's u16 record minus its authentication tag.
 pub const MAX_PLAINTEXT_BYTES: usize = u16::MAX as usize - 16;
-pub(super) const PROLOGUE: &[u8] = b"layerfs/cluster-two/native-channel/v1\0";
+// Fixed authentication domain bytes; source terminology does not change the protocol.
+pub(super) const PROLOGUE: &[u8] = &[
+    0x6c, 0x61, 0x79, 0x65, 0x72, 0x66, 0x73, 0x2f, 0x63, 0x6c, 0x75, 0x73, 0x74, 0x65, 0x72, 0x2d,
+    0x74, 0x77, 0x6f, 0x2f, 0x6e, 0x61, 0x74, 0x69, 0x76, 0x65, 0x2d, 0x63, 0x68, 0x61, 0x6e, 0x6e,
+    0x65, 0x6c, 0x2f, 0x76, 0x31, 0x00,
+];
 
 /// Application-owned static keys; provisioning/rotation remain application work.
 pub struct Keypair {

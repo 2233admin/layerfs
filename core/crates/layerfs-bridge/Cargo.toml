@@ -1,14 +1,14 @@
 [package]
 name = "layerfs-bridge"
-description = "Authenticated bounded native channels for cluster-two runtime integration"
+description = "Authenticated bounded duplex channels for cluster-two runtime integration"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
 [features]
-default = ["native"]
-native = ["dep:snow"]
+default = ["duplex"]
+duplex = ["dep:snow"]
 
 [dependencies]
 layerfs-content = { path = "../layerfs-content" }

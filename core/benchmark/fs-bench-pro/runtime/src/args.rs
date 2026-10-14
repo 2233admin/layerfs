@@ -128,7 +128,7 @@ impl Args {
                 }
                 scope
             }
-            None => layerfs_bridge::native::generate_keypair()?.public,
+            None => layerfs_bridge::duplex::generate_keypair()?.public,
         };
         if init_seconds == 0 {
             return Err("explicit positive setup wall stop required".into());

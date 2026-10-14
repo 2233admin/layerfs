@@ -1,5 +1,5 @@
 //! Kernel half of one registry entry and its bounded status block.
-use layerfs_bridge::control::{NativePhase, NativeStatus};
+use layerfs_bridge::control::{MountPhase, MountStatus};
 use std::{path::PathBuf, time::Duration};
 
 /// Declared kernel serving inputs, assembled once by the application.
@@ -41,22 +41,22 @@ pub(super) enum Kernel {
 }
 impl Kernel {
     /// Maintained observations only: no syscall, SQL job or kernel request.
-    pub(super) fn block(&self) -> NativeStatus {
-        let plain = |phase| NativeStatus {
+    pub(super) fn block(&self) -> MountStatus {
+        let plain = |phase| MountStatus {
             phase,
             ready: None,
             detached: false,
             work: None,
         };
         match self {
-            Self::Unattached => plain(NativePhase::Unattached),
+            Self::Unattached => plain(MountPhase::Unattached),
             #[cfg(target_os = "linux")]
-            Self::Attaching => plain(NativePhase::Attaching),
+            Self::Attaching => plain(MountPhase::Attaching),
             #[cfg(target_os = "linux")]
             Self::Ready(attached) => {
                 let facts = attached.session.facts();
-                NativeStatus {
-                    phase: NativePhase::Ready,
+                MountStatus {
+                    phase: MountPhase::Ready,
                     ready: Some(attached.ready.clone()),
                     detached: facts.detached,
                     work: Some(super::serving::work(&facts)),
@@ -65,7 +65,7 @@ impl Kernel {
             #[cfg(target_os = "linux")]
             Self::Leaving(leaving) => {
                 let facts = leaving.observer.facts();
-                NativeStatus {
+                MountStatus {
                     phase: leaving.phase,
                     ready: Some(leaving.ready.clone()),
                     detached: facts.detached,
@@ -75,8 +75,8 @@ impl Kernel {
             #[cfg(target_os = "linux")]
             Self::Retained(kept) => {
                 let facts = kept.observer.as_ref().map(|observer| observer.facts());
-                NativeStatus {
-                    phase: NativePhase::Retained,
+                MountStatus {
+                    phase: MountPhase::Retained,
                     ready: kept.ready.clone(),
                     detached: facts.as_ref().is_some_and(|facts| facts.detached),
                     work: facts.as_ref().map(super::serving::work),

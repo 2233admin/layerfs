@@ -6,7 +6,7 @@ use crate::{
 };
 pub(crate) const MAGIC: &[u8] = b"LFSI\x01";
 impl StoreManifest {
-    /// Encodes checked metadata; sealed file bytes are separate native records.
+    /// Encodes checked metadata; sealed file bytes are separate duplex records.
     pub fn encode(&self) -> Result<Vec<u8>, ControlError> {
         self.check().map_err(ControlError)?;
         let mut out = Writer::new(MAGIC);

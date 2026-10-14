@@ -3996,3 +3996,27 @@ product check passed; other checks are appended at completion.
 
 Chunk rename verification: host/Linux product check and warning-denying
 Clippy passed; formatting and whitespace passed. No tests run in Phase 1.
+
+
+### Phase 1: Bridge mount records and duplex channel
+
+Renamed control_native to control_mount and its four Native attachment record
+types to Mount*. The authenticated channel module/feature is duplex; product
+consumers, SDK examples, harness runtime and the authorized shared helper follow.
+Attach/control tags, fields and byte encoding remain unchanged. The fixed Noise
+authentication domain is represented explicitly as its existing bytes; the
+source rename does not silently change the handshake protocol. Diagnostic
+messages describe mount or duplex by meaning. Oracle pins and current API docs
+advance. Historical receipt decoder layouts remain supported.
+
+Host product check and Clippy passed. Tests: not yet updated; no test run in
+Phase 1. Other checks are appended below.
+
+The independent Linux harness runtime check found two remaining grouped
+Bridge channel imports in fixture.rs/project.rs. These were diagnosed and
+updated to duplex, together with their channel calls. Product checks themselves
+passed; the affected runtime check follows the mechanical repair.
+
+Bridge verification: host/Linux product check and warning-denying Clippy
+passed; the repaired independent Linux runtime check passed. Formatting and
+whitespace passed. No tests run in Phase 1; source pins match formatted files.

@@ -4,7 +4,7 @@ pub use super::install::install;
 use crate::{BoundWorkspace, OperationFailure, WorkspaceApi};
 use layerfs_bridge::{
     control::{CleanupObservation, ForcedOutcome, ReadyMount, WorkspaceStatus, WorkspaceToken},
-    native::Connection,
+    duplex::Connection,
 };
 use layerfs_history::{BranchId, WorkspaceId};
 use std::ops::{Deref, DerefMut};

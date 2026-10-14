@@ -3,7 +3,7 @@ use crate::{
     control::{ServeFailure, Served},
     install_types::{InstallFailure, InstalledStore},
 };
-use layerfs_bridge::{control::ControlError, native::ChannelError};
+use layerfs_bridge::{control::ControlError, duplex::ChannelError};
 use std::{fmt, io};
 
 /// Exact startup or original connection failure, never followed by a replay.
@@ -34,7 +34,7 @@ pub enum ApplicationError {
         /// Original call/outcome whose reply send completed before the terminal failure.
         served: Box<Served>,
         /// Original terminal byte/work/cause, not a replayed final reply.
-        ending: Box<layerfs_bridge::native::PeerEndFailure>,
+        ending: Box<layerfs_bridge::duplex::PeerEndFailure>,
     },
     /// Original control receipt retained after an unresolved operation or a
     /// separate failed diagnostic transfer. Its known outcome stays unchanged.

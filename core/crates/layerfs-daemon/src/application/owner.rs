@@ -9,7 +9,7 @@ use crate::{
 use layerfs_bridge::{
     control::{DaemonPhase, DaemonStatus, HelloRequest},
     daemon_setup::DaemonSetup,
-    native as transport,
+    duplex as transport,
 };
 use layerfs_overlay::ProfileConfig;
 use layerfs_persistence::{PersistenceConfig, SqlitePersistenceProfile};

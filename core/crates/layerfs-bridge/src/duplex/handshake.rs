@@ -1,4 +1,4 @@
-//! Bounded KK authentication on one supplied native socket; no connection replay.
+//! Bounded KK authentication on one supplied duplex socket; no connection replay.
 use super::{
     channel::Connection,
     error::ChannelResult,
@@ -28,7 +28,7 @@ pub fn accept(
 /// Original handshake success/failure and work completed before its stopping point.
 /// Construction of the successful direction buffers is observed by their owners.
 pub struct ChannelStart {
-    /// Exact original native result, without reconnect/replay or error substitution.
+    /// Exact original duplex result, without reconnect/replay or error substitution.
     pub result: ChannelResult<Connection>,
     /// Actual handshake I/O/crypto/scratch work, including original failed attempts.
     pub work: ChannelWork,

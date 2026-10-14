@@ -3,7 +3,7 @@
 use layerfs_bridge::{
     control::{DaemonPhase, Reply, Request},
     daemon_setup::{DaemonLimits, DaemonSetup},
-    native as transport,
+    duplex as transport,
 };
 use layerfs_history::{BranchId, HistoryCatalogConfig, HistoryName, LayerStackId, WorkspaceId};
 use layerfs_persistence::{PersistenceConfig, SqlitePersistenceProfile};

@@ -7,7 +7,7 @@ use super::{
 };
 use crate::store::BoundWorkspace;
 use layerfs_bridge::control::{
-    Activity, ControlCode, ForcedFacts, NativePhase, TeardownStage, WorkspaceToken,
+    Activity, ControlCode, ForcedFacts, MountPhase, TeardownStage, WorkspaceToken,
 };
 use layerfs_fuse::session::{Detach, SessionObserver};
 use std::{fmt, sync::Arc};
@@ -19,7 +19,7 @@ use std::{fmt, sync::Arc};
 /// lookup decrements, or a replied request's last bookkeeping) is waited out
 /// by the drain barrier after a known detach. Forced admission takes the
 /// session the same way, into its own first phase.
-pub(super) fn take(kernel: &mut Kernel, phase: NativePhase) -> Result<Box<Attached>, Failure> {
+pub(super) fn take(kernel: &mut Kernel, phase: MountPhase) -> Result<Box<Attached>, Failure> {
     match kernel {
         Kernel::Ready(_) => {}
         Kernel::Leaving(_) => {
@@ -81,7 +81,7 @@ impl Service {
                 ))
             }
         }
-        self.leaving(token, NativePhase::Draining);
+        self.leaving(token, MountPhase::Draining);
         let drained = match session.drain() {
             Ok(drained) => drained,
             Err(undrained) => {
@@ -126,7 +126,7 @@ impl Service {
             _ => None,
         })
     }
-    pub(super) fn leaving(&self, token: WorkspaceToken, phase: NativePhase) {
+    pub(super) fn leaving(&self, token: WorkspaceToken, phase: MountPhase) {
         if let Ok(mut entries) = self.entries.lock() {
             if let Ok(binding) = bound_mut(&mut entries, token) {
                 if let Kernel::Leaving(leaving) = &mut binding.kernel {

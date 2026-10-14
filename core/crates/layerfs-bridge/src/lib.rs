@@ -1,16 +1,16 @@
-//! Authenticated bounded native channels and Store provisioning metadata.
+//! Authenticated bounded duplex channels and Store provisioning metadata.
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 pub mod control;
-#[cfg(feature = "native")]
-pub mod native;
+#[cfg(feature = "duplex")]
+pub mod duplex;
 pub mod provision;
 mod provision_wire;
 mod wire;
 
 mod control_forced;
 mod control_history;
-mod control_native;
+mod control_mount;
 mod control_reply;
 mod control_request;
 mod control_types;

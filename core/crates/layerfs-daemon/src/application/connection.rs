@@ -2,8 +2,8 @@
 use super::{owner::Slot, Application, ApplicationError, ConnectionFailure};
 use layerfs_bridge::{
     control::{Call, Reply, Request},
+    duplex::{self as transport},
     initial_record::InitialRecord,
-    native::{self as transport},
 };
 use std::{
     io::Write,

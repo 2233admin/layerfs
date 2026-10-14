@@ -1,7 +1,7 @@
 use crate::{args::Args, events::Events, runtime, Result};
 use layerfs_bridge::{
     control::{Reply, Request},
-    native,
+    duplex,
 };
 use layerfs_history::{BranchId, HistoryCatalogConfig, HistoryName, LayerStackId};
 use layerfs_persistence::{PersistenceConfig, SqlitePersistenceProfile};
@@ -33,10 +33,10 @@ pub fn provision(args: &Args, events: &mut Events) -> Result<()> {
     if (metadata.uid(), metadata.gid()) != (args.uid, args.gid) {
         return Err("command identity must equal preserved source-copy owner".into());
     }
-    let stack_key = native::generate_keypair()?.public;
-    let branch_key = native::generate_keypair()?.public;
-    let cursor_key = native::generate_keypair()?.private;
-    let scope_seed = native::generate_keypair()?.public;
+    let stack_key = duplex::generate_keypair()?.public;
+    let branch_key = duplex::generate_keypair()?.public;
+    let cursor_key = duplex::generate_keypair()?.private;
+    let scope_seed = duplex::generate_keypair()?.public;
     let mut stack = [0; 16];
     stack.copy_from_slice(&stack_key[..16]);
     let mut branch = [0; 16];

@@ -719,7 +719,7 @@ pub fn serve(args: &Args, events: &mut Events) -> Result<()> {
                         .ok_or("four active channel ceiling")?
                 };
                 if channel > extras.len() {
-                    let scope = layerfs_bridge::native::generate_keypair()?.public;
+                    let scope = layerfs_bridge::duplex::generate_keypair()?.public;
                     if scope == [0; 32] || scopes.contains(&scope) {
                         return Err("fresh independent extra scope required".into());
                     }

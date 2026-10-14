@@ -1,5 +1,5 @@
 //! External authenticated endpoints and complete small-root installation oracle.
-use layerfs_bridge::native::{self, Connection};
+use layerfs_bridge::duplex::{self, Connection};
 use layerfs_daemon::{install_types::InstalledStore, store::BindRequest, Owner, OwnerConfig};
 use layerfs_history::{BranchId, HistoryCatalogConfig, HistoryName, LayerStackId, WorkspaceId};
 use layerfs_persistence::{PersistenceConfig, SqlitePersistenceProfile};
@@ -112,18 +112,18 @@ pub fn pair<T: Send + 'static>(
     let (server, _) = listener.accept().unwrap();
     let server = socket(server);
     let worker = Worker(Some(thread::spawn(move || {
-        let mut channel = native::accept(
+        let mut channel = duplex::accept(
             server,
             &SERVER_PRIVATE,
-            native::public_key(&CLIENT_PRIVATE).unwrap(),
+            duplex::public_key(&CLIENT_PRIVATE).unwrap(),
         )
         .unwrap();
         serve(&mut channel)
     })));
-    let channel = native::initiate(
+    let channel = duplex::initiate(
         client,
         &CLIENT_PRIVATE,
-        native::public_key(&SERVER_PRIVATE).unwrap(),
+        duplex::public_key(&SERVER_PRIVATE).unwrap(),
     )
     .unwrap();
     (channel, worker)

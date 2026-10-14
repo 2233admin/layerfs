@@ -1,8 +1,8 @@
 //! One shared dispatcher for every mount, and the exact owners an entry keeps.
 use super::kernel::{bounded, KernelConfig};
 use layerfs_bridge::control::{
-    ForcedFacts, NativePhase, NativeReceipt, NativeWork, ReadyMount, TeardownCustody,
-    TeardownStage, WorkspaceToken,
+    ForcedFacts, MountPhase, MountReceipt, MountWork, ReadyMount, TeardownCustody, TeardownStage,
+    WorkspaceToken,
 };
 use layerfs_fuse::{
     session::{DrainStage, KernelSession, SessionFacts, SessionObserver},
@@ -47,7 +47,7 @@ pub(super) struct Attached {
 pub(super) struct Leaving {
     pub ready: ReadyMount,
     pub observer: SessionObserver,
-    pub phase: NativePhase,
+    pub phase: MountPhase,
 }
 /// Custody that a terminal or attach operation could not finish disposing.
 /// Nothing here is dropped, retried or settled by a later observation.
@@ -100,13 +100,13 @@ pub(super) fn stage(stage: DrainStage) -> TeardownStage {
 fn narrow(value: usize) -> u32 {
     u32::try_from(value).unwrap_or(u32::MAX)
 }
-pub(super) fn work(facts: &SessionFacts) -> NativeWork {
+pub(super) fn work(facts: &SessionFacts) -> MountWork {
     let lane = facts.work.unwrap_or_default();
     let count = |value: usize| u16::try_from(value).unwrap_or(u16::MAX);
     let (configured, entered, exited, joined) = facts.loops.map_or((0, 0, 0, 0), |loops| {
         (loops.configured, loops.entered, loops.exited, loops.joined)
     });
-    NativeWork {
+    MountWork {
         loops_configured: count(configured),
         loops_entered: count(entered),
         loops_exited: count(exited),
@@ -134,7 +134,7 @@ pub(super) fn ready(
     Some(ReadyMount {
         token,
         directory,
-        receipt: NativeReceipt {
+        receipt: MountReceipt {
             mount: facts.mount.owner_id(),
             root: facts.mount.root_serial(),
             mount_id: entry.id,

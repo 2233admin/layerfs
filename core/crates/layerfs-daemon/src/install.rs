@@ -7,7 +7,7 @@ use crate::{
 };
 use layerfs_bridge::{
     control::{ControlError, InstallPhase, InstallReply, INSTALL_FINISH},
-    native::Connection,
+    duplex::Connection,
     provision::{StoreManifest, StoreProfile},
 };
 use layerfs_history::{BranchId, LayerStackId};

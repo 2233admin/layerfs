@@ -2,7 +2,7 @@
 use crate::{bootstrap::OpenedStore, store::PortError};
 use layerfs_bridge::{
     control::{ControlError, InstallPhase, InstallRefusal, RefusalKind},
-    native::ChannelError,
+    duplex::ChannelError,
     provision::StoreManifest,
 };
 use layerfs_content::ContentError;

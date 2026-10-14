@@ -4,9 +4,9 @@
 > in [F5](../issues/307/PRE-S8-F5-20261007.md). No FUSE, Exec or timing admission.
 
 SDK `install(&SealedProject, &mut Connection)` streams the sealed file without
-opening a database or reading the native source directory. The host sends one
+opening a database or reading the host source directory. The host sends one
 checked StoreManifest, receives the original temporary-file admission, streams
-at most65519 bytes per native record, checks exact length and EOF, then sends a
+at most65519 bytes per duplex record, checks exact length and EOF, then sends a
 final marker. Only that marker permits publication. No container grows with total
 file size. Completed local sends and acknowledged daemon writes are separate
 counts; channel diagnostics own cryptographic/socket work.
@@ -28,13 +28,12 @@ The parent directory belongs to the deployment and must not be modified by anoth
 actor during installation. This ownership rule is also required for provisioning
 SQLite's Store placement on a single-kernel local filesystem/named volume.
 
-After a known rename, concrete bootstrap opens one writer first and a fixed read
-set. It reports the actual SQLite version. The original first Branch, stack,
+After a known rename, concrete bootstrap opens one writer first and one control reader plus a mount-time reader factory. It reports the actual SQLite version. The original first Branch, stack,
 headless genesis root, filesystem profile/scope, root inode/listing page and
 portable metadata are checked using the same bounded root validator as bind.
 Install does not qualify the whole namespace. It returns the opened Store for
 normal daemon use and acknowledges an exact manifest with both SQLite versions.
-The host then has only native control authority, never a remote data service.
+The host then has only mount control authority, never a remote data service.
 
 A failed attempt retains the original manifest, exact destination/temporary name,
 acknowledged claim, write counts, known rename, opened Store if any, original typed
@@ -48,10 +47,16 @@ Before-effect local validation leaves an unused connection alone.
 The metadata format has an8192-byte control-record window, explicit versions,
 checked field lengths/booleans and no trailing bytes. Store byte length remains
 u64; the >4GiB metadata test is not an actual >4GiB file proof. Data bytes are
-plain native records during the declared stream; this does not restore object,
+plain duplex records during the declared stream; this does not restore object,
 length, serial or Save RPCs. The prior data framing remains retired.
 
-Native open errors, acknowledgement loss and partial transfer are distinct from
+Store open errors, acknowledgement loss and partial transfer are distinct from
 publication. An acknowledged installation does not by itself prove a complete
 large-root oracle, FUSE readiness, Exec confinement or crash/restart recovery.
 All current execution is Disposable; Durable remains built and owner-deferred.
+
+Current Bridge source terminology (#320): attachment records use MountPhase,
+MountReceipt, MountStatus and MountWork from control_mount. The authenticated
+channel is layerfs_bridge::duplex (feature duplex). Encoded attach tags and
+fields, and the fixed authentication domain bytes, are unchanged. Source tests
+follow in the separate test pass; historical receipts keep their original names.

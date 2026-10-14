@@ -1,7 +1,7 @@
 //! Transport failures retain original crypto/I/O and failed close evidence.
 use std::{fmt, io};
 
-/// One native channel failure, without retries or inferred product disposition.
+/// One duplex channel failure, without retries or inferred product disposition.
 #[derive(Debug)]
 pub enum ChannelError {
     /// Original socket failure.
@@ -39,10 +39,10 @@ impl fmt::Display for ChannelError {
         match self {
             Self::Io(error) => error.fmt(f),
             Self::Noise(error) => error.fmt(f),
-            Self::Invalid(what) => write!(f, "invalid native channel: {what}"),
-            Self::RecordLimit => f.write_str("native record processing window exceeded"),
-            Self::NonceExhausted => f.write_str("native Noise nonce exhausted"),
-            Self::Quarantined => f.write_str("native channel quarantined"),
+            Self::Invalid(what) => write!(f, "invalid duplex channel: {what}"),
+            Self::RecordLimit => f.write_str("duplex record processing window exceeded"),
+            Self::NonceExhausted => f.write_str("duplex Noise nonce exhausted"),
+            Self::Quarantined => f.write_str("duplex channel quarantined"),
             Self::CloseFailed { original, close } => {
                 write!(f, "{original}; shutdown also failed: {close}")
             }
@@ -59,5 +59,5 @@ impl std::error::Error for ChannelError {
         }
     }
 }
-/// Exact native operation result.
+/// Exact duplex operation result.
 pub type ChannelResult<T> = Result<T, ChannelError>;

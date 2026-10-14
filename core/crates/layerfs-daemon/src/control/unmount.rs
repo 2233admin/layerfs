@@ -57,7 +57,7 @@ impl Service {
             #[cfg(target_os = "linux")]
             _ => Departure::Session(super::detach::take(
                 &mut value.kernel,
-                layerfs_bridge::control::NativePhase::Probing,
+                layerfs_bridge::control::MountPhase::Probing,
             )?),
         };
         value.activity = Activity::Closing;

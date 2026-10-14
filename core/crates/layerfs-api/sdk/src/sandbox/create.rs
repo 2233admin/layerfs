@@ -3,7 +3,7 @@ use crate::{internal::Control, OperationFailure};
 use layerfs_bridge::{
     control::{ControlError, DaemonPhase, DaemonStatus, HelloRequest, Reply, Request},
     daemon_setup::DaemonSetup,
-    native::{initiate_observed, public_key, ChannelError, ChannelWork},
+    duplex::{initiate_observed, public_key, ChannelError, ChannelWork},
 };
 use layerfs_sandbox::backend::docker::{
     Docker, ListenerFailure, Sandbox, SandboxCreateFailure, SandboxRequest, UploadFailure,

@@ -1,7 +1,7 @@
 use crate::{args::Args, events::Events, Result};
 use layerfs_bridge::{
     daemon_setup::{DaemonLimits, DaemonSetup},
-    native,
+    duplex,
     provision::StoreManifest,
 };
 use layerfs_sandbox::{
@@ -45,8 +45,8 @@ fn start_inner(
     project: Option<&layerfs_sdk::SealedProject>,
     events: &mut Events,
 ) -> Result<(ManagedSandbox, RuntimeKeys)> {
-    let controller = native::generate_keypair()?;
-    let daemon = native::generate_keypair()?;
+    let controller = duplex::generate_keypair()?;
+    let daemon = duplex::generate_keypair()?;
     let setup = DaemonSetup {
         listen: "0.0.0.0:30421".into(),
         private_key: daemon.private,
@@ -132,7 +132,7 @@ pub fn extra_control(
     let stream = TcpStream::connect_timeout(&endpoint, wait)?;
     stream.set_read_timeout(Some(wait))?;
     stream.set_write_timeout(Some(wait))?;
-    let connection = native::initiate(stream, &keys.controller_private, keys.daemon_peer)?;
+    let connection = duplex::initiate(stream, &keys.controller_private, keys.daemon_peer)?;
     connection.clear_io_waits()?;
     let mut control = layerfs_sdk::internal::Control::new(connection);
     std::mem::swap(layerfs_sdk::internal::control(owner), &mut control);

@@ -1,4 +1,4 @@
-//! Public native-control vocabulary; no immutable-content data service.
+//! Public mount-control vocabulary; no immutable-content data service.
 use layerfs_history::{
     error::MovedState, BranchId, BranchRecord, BranchSnapshot, CommitHistoryRequest, CommitRecord,
     CommitStagedOutcome, ForkRequest, LayerStackId, Page, PageResult, WorkspaceId,
@@ -31,7 +31,7 @@ pub enum Request {
     Cleanup(WorkspaceToken),
     /// End this authenticated control session; no Workspace is closed.
     EndSession,
-    /// Observe/wait for actual daemon startup, separate from a native mount.
+    /// Observe/wait for actual daemon startup, separate from a mount mount.
     Hello(crate::daemon_types::HelloRequest),
     /// Prepare the Store/engine binding. Kernel attachment is the separate Attach.
     Mount {
@@ -57,7 +57,7 @@ pub enum Request {
         /// Bounded page and authenticated continuation from the caller.
         page: Page,
     },
-    /// Mount the bound Workspace natively; acknowledged only when it is Ready.
+    /// Mount the bound Workspace mountly; acknowledged only when it is Ready.
     Attach(WorkspaceToken),
     /// Observe one incarnation by identity alone; settles no original unknown.
     Locate(WorkspaceId),
@@ -110,7 +110,7 @@ pub enum Activity {
     Uncertain,
     /// Publication is known but local installation did not complete normally.
     LocalFailure,
-    /// One native Attach is admitted; its outcome is not yet known.
+    /// One mount Attach is admitted; its outcome is not yet known.
     Attaching,
 }
 /// One indexed engine state-row observation, with its own revision scope.
@@ -155,7 +155,7 @@ pub struct WorkspaceStatus {
     /// Original engine observation refusal when local fields are unavailable.
     pub local_failure: Option<ControlRefusal>,
     /// Kernel attachment block; absent from a daemon without kernel serving.
-    pub kernel: Option<crate::control_native::NativeStatus>,
+    pub kernel: Option<crate::control_mount::MountStatus>,
 }
 /// Typed refusal knowledge; the daemon retains its original detailed cause.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -201,7 +201,7 @@ pub enum Reply {
     },
     /// Original control-session end acknowledgment; filesystem ownership is unchanged.
     SessionEnded,
-    /// Original application startup observation; never native Workspace Ready.
+    /// Original application startup observation; never mount Workspace Ready.
     Hello(crate::daemon_types::DaemonStatus),
     /// Newly bound engine namespace and exact selected history snapshot.
     Bound {
@@ -225,11 +225,11 @@ pub enum Reply {
     /// Original typed refusal.
     Refused(ControlRefusal),
     /// Mounted, handshake complete and every receive loop serving.
-    Ready(Box<crate::control_native::ReadyMount>),
+    Ready(Box<crate::control_mount::ReadyMount>),
     /// Registry observation for Locate; never a replayed Mount or Attach.
     Located(Box<WorkspaceStatus>),
     /// A terminal operation stopped after effects with its custody retained.
-    Retained(Box<crate::control_native::TeardownCustody>),
+    Retained(Box<crate::control_mount::TeardownCustody>),
     /// Forced terminal close acknowledged with its dispositions and cleanup state.
     ForceUnmounted(Box<crate::control_forced::ForceUnmounted>),
 }
