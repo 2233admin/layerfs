@@ -3403,3 +3403,40 @@ comparison is attached to its counted commit: 79,447 -> 79,447 (delta +0).
 Reference absent (retired R9c; last counted 65,417 at tree 498dd1917812). Next:
 owner approval to push the verified branch to `origin/main`, then the section
 4.4 baseline and product-first removal sweep in the handoff's order.
+
+## Landing and small baseline selection (2026-10-14)
+
+Owner approved the push in this session. `git push origin HEAD:main` succeeded:
+`265843629` -> `d4b0c6808`. No other outward action is authorized.
+
+The section 4.4 before-removal samples use build `open-state-land` (clean
+`e50c01063`; product unchanged at landed `d4b0c6808`). The old originals had
+full-source identity `2c11fe8aa`; the driver refused their reuse at the current
+identity. Closed native inputs are reused through the harness's exact producer
+keys, while fresh empty/Store originals were prepared once (11.6 s and 22.5 s).
+The stale empty owned master was removed; the tier-1 master is shared and kept.
+Every measurement uses a new independent writable clone, not a cold claim.
+
+| Selection | Command ms | Commit ms | Requests / jobs / statements | Proof / cleanup | Verdict |
+| --- | ---: | ---: | --- | --- | --- |
+| C01 | 288.6 | N/A | 5,002 / 5,002 / 21,002 | PASS / Gone | INELIGIBLE |
+| C03 | 507.0 | N/A | 9,022 / 9,038 / 49,710 | PASS / Gone | INELIGIBLE |
+| C06 | 136.2 | N/A | 518 / 518 / 7,183 | PASS / Gone | INELIGIBLE |
+| tier 1 mixed 100 MB / 5,000 / k100 | 7,025.5 | 1,845.4 | 26,078 / 88,818 / 462,128 | PASS / Gone; functional PASS | INELIGIBLE |
+
+Raw receipts: `benchmark-results/fs-bench-pro/2026-10-14-issue321-open-state-land-run-cells/`
+and `…-run-mixed_load_bearing/`. Complete case invocations were 6.2, 6.5,
+5.8 and 36.5 s, each bounded by `go.py open-state-land 115 run <family>:<case>`.
+The tier's declared family lane, rather than a new generic 15 s claim, governs
+its command; shared-machine/coldness limitations remain INELIGIBLE. Test copies
+were removed only after sealed manifests checked PASS, with cleanup receipts
+retaining removed hashes. All failures/ineligible verdicts stay unchanged.
+
+The existing exec concurrency tool ran five phases unconditionally. It now
+accepts an explicit `ISSUE320_EXEC_PHASES=w1,w4` subset, validated before any
+setup/runtime effect, preserving the default. A selected `w3-commit` requires
+its preceding `w4` output; the result names the selection. This tooling change
+implements the owner's small-subset instruction and changes no product or
+workload body. Exec baseline is pending at this commit. Syntax and whitespace
+checks apply; no Rust source changes. Durable remains NOT_RUN — disabled by
+owner until explicit reauthorization.

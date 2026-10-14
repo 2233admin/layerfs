@@ -26,6 +26,10 @@ that number before the first phase, to tell waiting for a processor from
 waiting for the one overlay connection. Without it the runtime's own container
 profile applies. The limit used is recorded.
 
+Set ISSUE320_EXEC_PHASES to comma-separated phase labels (for example w1,w4)
+to select a subset before any clone or runtime effect. The default runs all
+five phases above.
+
 Not a harness case and not a sample: no oracle, no proof, exit codes only.
 Times are single observations on a shared machine and are not eligible for a
 performance claim. It removes the container and the volume it created, and
@@ -37,6 +41,7 @@ The cgroup lifetime peak is never relabelled as a phase-local peak.
 """
 import fcntl
 import json
+import os
 import secrets
 import subprocess
 import sys
@@ -68,6 +73,16 @@ def main():
     files = int(sys.argv[4]) if len(sys.argv) > 4 else 2000
     budget = float(sys.argv[5]) if len(sys.argv) > 5 else 90.0
     cpus = sys.argv[6] if len(sys.argv) > 6 else None
+    plans = [("w1", 1, False), ("w2", 2, False), ("w3", 3, False), ("w4", 4, False), ("w3-commit", 3, True)]
+    selection = os.environ.get("ISSUE320_EXEC_PHASES")
+    if selection is not None:
+        labels = selection.split(",")
+        if len(set(labels)) != len(labels) or not labels or any(label not in {plan[0] for plan in plans} for label in labels):
+            raise ValueError("explicit unique exec phase labels required")
+        if "w3-commit" in labels and ("w4" not in labels or labels.index("w4") > labels.index("w3-commit")):
+            raise ValueError("w3-commit requires preceding w4 output")
+        by_label = {plan[0]: plan for plan in plans}
+        plans = [by_label[label] for label in labels]
     started = time.monotonic()
     lock = (ROOT / "core/target/issue320/measurement.lock").open("a")
     fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -82,6 +97,7 @@ def main():
               "source_tree": build["identity"]["source_tree"],
               "sqlite_compile_flags": build.get("explicit_sqlite_flags"),
               "resident_observations": [],
+              "selected_phases": [plan[0] for plan in plans],
               "files_per_writer": files, "writer": "create, append, read of every file; shell builtins; self-timed",
               "interference": {"other_containers_at_start": others}, "phases": []}
     clone = fixtures.clone(prepared, out / "clone", build)
@@ -149,7 +165,6 @@ def main():
             snapshots += 1
             return runtime.send("commit", marker, deadline=time.monotonic() + 15)["fields"]["commit_kind"]
 
-        plans = [("w1", 1, False), ("w2", 2, False), ("w3", 3, False), ("w4", 4, False), ("w3-commit", 3, True)]
         snapshot()
         memory("five-workspaces-before-writes")
         for label, count, commit in plans:
