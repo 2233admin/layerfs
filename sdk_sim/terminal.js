@@ -7,6 +7,7 @@
 (function (global) {
   "use strict";
   const M = typeof module !== "undefined" && module.exports ? require("./model.js") : global.LayerSim;
+  const F = typeof module !== "undefined" && module.exports ? require("./files.js") : global.LayerFiles;
 
   // ---------------------------------------------------------------- tokenizer
   // Shell-like: quotes, backslash escapes, and the operators && | > >> &.
@@ -105,6 +106,7 @@
       switch (cmd) {
         case "help":
           rec.lines.push(L("read:   ls [path] · cat <path> · stat <path> · grep <text> [path] · diff <a>[@C#] <b>[@C#]", "dim"));
+          rec.lines.push(L("view:   blame <path>[@ref] · open <path>[@ref]   (ref: C#, L#, main or a Branch; opens the Files pane)", "dim"));
           rec.lines.push(L("write:  write <path> <<EOF … EOF · edit <path> <old> <new> [--all] · cp · mv · mkdir [-p] · rm [-r]", "dim"));
           rec.lines.push(L("batch:  apply, then write/edit/cp/mv/mkdir/rm lines, then done (or abort): one Commit", "dim"));
           return rec;
@@ -141,6 +143,34 @@
           if (!o.ok) rec.lines.push(refusal(o));
           else if (o.result.contentEqual) rec.lines.push(L(`= equal content · inodes ${o.result.left.inode} ${o.result.sameInode ? "=" : "≠"} ${o.result.right.inode}`, "info"));
           else rec.lines.push(...hunkLines(o.result.hunks));
+          return rec;
+        }
+        case "blame": {
+          if (!args[0]) { rec.lines.push(L("usage: blame <path>[@ref]", "err")); return rec; }
+          const [p, at] = args[0].split("@"), at2 = at || branch, path = abs(p);
+          // Composed client-side: the saved versions, read one by one (no fs.blame yet).
+          if (at2 !== "main" && this.sim.s.branches[at2]) this.call(rec, "branch.list_commits", { branch: at2 });
+          for (const v of F.chainOf(this.sim, at2)) {
+            const o = this.call(rec, "fs.read", { ref: branch, path, commit: v.id });
+            if (!o.ok) break;
+          }
+          const b = F.blame(this.sim, at2, path);
+          if (!b) { rec.lines.push(L(`✕ NoSuchPath  ${path} does not exist at ${at2}`, "err")); return rec; }
+          let last = null;
+          for (const ln of b.lines) {
+            const id = ln.origin.id, chip = id === last ? "  ·" : id.padEnd(3);
+            last = id;
+            rec.lines.push(L(`${chip}  ${String(ln.n).padStart(3)} │ ${ln.text}`));
+          }
+          rec.lines.push(L(`composed from ${b.versions} saved version${b.versions === 1 ? "" : "s"} · proposed SDK call: fs.blame`, "dim"));
+          rec.files = { subject: at2, path, mode: "blame" };
+          return rec;
+        }
+        case "open": {
+          if (!args[0]) { rec.lines.push(L("usage: open <path>[@ref]", "err")); return rec; }
+          const [p, at] = args[0].split("@");
+          rec.open = { subject: at || branch, path: abs(p), mode: "view" };
+          rec.lines.push(L(`→ ${abs(p)} at ${at || branch} opened in the Files pane`, "dim"));
           return rec;
         }
         case "apply":

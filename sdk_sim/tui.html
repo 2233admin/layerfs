@@ -122,7 +122,12 @@ body.nosel, body.nosel * { user-select: none !important; -webkit-user-select: no
 .dock { flex: none; }
 .dock[hidden] { display: none; }
 #fsdock { width: var(--fsw, 360px); }
-#histdock { width: var(--hw, 410px); }
+.right { width: var(--hw, 470px); flex: none; display: flex; flex-direction: column; min-height: 0; }
+.right[hidden] { display: none; }
+#filesdock, #histdock { flex: 1 1 0; min-height: 120px; }
+.right.both #filesdock { flex: 0 0 var(--fh, 52%); }
+.hh.rh { background: var(--grid-bg); }
+.hh[hidden] { display: none; }
 .graph { flex: 0 0 var(--gh, 44%); min-height: 80px; overflow: auto; background: var(--term); }
 #hist-svg { display: block; }
 #hist-svg text { font-family: var(--font); fill: var(--term-text); }
@@ -205,6 +210,55 @@ body.nosel, body.nosel * { user-select: none !important; -webkit-user-select: no
 .hcard .ws small { margin-left: auto; font: 10.5px var(--font); color: var(--text-2); white-space: nowrap; }
 .hcard .ws.stale small { color: var(--red); }
 .hcard .hint { margin: 6px 4px 0; font-size: 10.5px; color: var(--text-3); }
+.kind.files { background: var(--green-bg); color: var(--t-green); }
+.fpane .thead { gap: 5px; }
+.fsel { font: 11.5px var(--mono); height: 22px; max-width: 190px; min-width: 70px; border: 1px solid var(--term-border); border-radius: 5px; background: var(--term); color: var(--term-text); padding: 0 4px; }
+.fpane .vs { color: var(--term-dim); font-size: 11px; }
+.fpane .thead .sp { flex: 1; }
+.fsel.at { max-width: 210px; }
+.sync { font-size: 11px; line-height: 1; flex: none; }
+.sync.live { color: var(--t-green); } .sync.pinned { color: var(--term-dim); }
+.fbar.cmp { gap: 5px; }
+.fbar { flex: none; display: flex; align-items: center; gap: 8px; padding: 4px 8px; background: var(--term-head); border-bottom: 1px solid var(--term-border); font-size: 11.5px; color: var(--term-dim); flex-wrap: wrap; }
+.fbar .segs { display: inline-flex; background: var(--well); border-radius: 6px; padding: 2px; }
+.fbar .seg { border: 0; background: transparent; padding: 2px 10px; border-radius: 4px; cursor: pointer; font-size: 11.5px; color: var(--term-dim); }
+.fbar .seg.on { background: var(--card); color: var(--term-text); box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+.fbar .chipb { border: 1px solid var(--term-border); background: transparent; border-radius: 10px; padding: 0 8px; height: 20px; cursor: pointer; font-size: 11px; color: var(--term-dim); margin-left: 3px; }
+.fbar .chipb.on { border-color: var(--accent); color: var(--accent); background: var(--accent-bg); }
+.fbar .chk { display: inline-flex; gap: 4px; align-items: center; } .fbar .chk.off { opacity: .45; }
+.fbar .sp { flex: 1; } .fbar .fcount { font: 11px var(--mono); }
+.fbar .sdkbtn { opacity: 1; }
+.fsdk { margin: 0; padding: 6px 10px; background: var(--well); border-bottom: 1px solid var(--term-border); font: 11px/1.5 var(--mono); color: var(--term-text); white-space: pre-wrap; }
+.fbody { flex: 1; min-height: 0; display: flex; }
+.ftree { width: 34%; min-width: 150px; max-width: 300px; overflow: auto; border-right: 1px solid var(--term-border); padding: 4px 0; font: 12px/1.5 var(--mono); color: var(--term-text); }
+.term.narrow .fbody { flex-direction: column; } .term.narrow .ftree { width: auto; max-width: none; max-height: 38%; border-right: 0; border-bottom: 1px solid var(--term-border); }
+.frow { display: flex; align-items: center; gap: 4px; padding: 1px 8px; cursor: pointer; white-space: nowrap; }
+.frow:hover { background: var(--well); } .frow.sel { background: var(--accent-bg); }
+.frow .car { width: 10px; color: var(--term-dim); flex: none; } .frow .nm { overflow: hidden; text-overflow: ellipsis; }
+.frow.gone .nm { text-decoration: line-through; color: var(--term-dim); }
+.frow.flat { padding: 2px 10px; font: 12px var(--mono); }
+.fb { font: 700 9.5px var(--mono); padding: 0 4px; border-radius: 3px; margin-left: auto; flex: none; }
+.frow.flat .fb { margin: 0 6px 0 0; }
+.fb.A { color: var(--t-green); background: var(--t-add-bg); } .fb.M { color: var(--t-blue); background: var(--accent-bg); } .fb.D { color: var(--t-red); background: var(--t-del-bg); }
+.fr { margin-left: auto; font: 10px var(--mono); color: var(--term-dim); flex: none; }
+.fview { flex: 1; min-width: 0; overflow: auto; font: 12px/1.55 var(--mono); color: var(--term-text); }
+.fpath { position: sticky; top: 0; z-index: 1; background: var(--term); padding: 5px 10px; border-bottom: 1px solid var(--term-border); font-weight: 600; }
+.fpath span { font-weight: 400; color: var(--term-dim); }
+.fsum { padding: 6px 10px; color: var(--term-dim); font-size: 11.5px; }
+.fsum b { color: var(--term-text); font-weight: 600; }
+.fempty { padding: 18px 12px; color: var(--term-dim); line-height: 1.6; }
+.code { padding: 2px 0 10px; }
+.cl { display: flex; white-space: pre; min-height: 18px; }
+.cl .no { flex: none; width: 34px; padding-right: 8px; text-align: right; color: var(--term-dim); user-select: none; }
+.cl .op { flex: none; width: 14px; color: var(--term-dim); }
+.cl .tx { flex: 1; padding-right: 10px; }
+.cl.add { background: var(--t-add-bg); } .cl.add .op, .cl.add .tx { color: var(--t-green); }
+.cl.del { background: var(--t-del-bg); } .cl.del .op, .cl.del .tx { color: var(--t-red); }
+.bch { flex: none; width: 40px; margin: 0 4px 0 6px; font: 600 10.5px/18px var(--mono); color: var(--bc); border-left: 3px solid var(--bc); padding-left: 5px; cursor: pointer; }
+.bch.cont { opacity: .55; } .bch:hover { background: var(--well); }
+.hcard .cbtns { display: flex; gap: 6px; margin: 8px 4px 0; }
+.hcard .cbtn { flex: 1; border: 0; border-radius: 6px; padding: 5px 6px; background: var(--well); cursor: pointer; font-size: 11.5px; color: var(--text); }
+.hcard .cbtn:hover { background: var(--accent); color: #fff; }
 .toast { position: fixed; left: 50%; top: 52px; transform: translateX(-50%); background: rgba(30,30,32,.92); color: #fff; padding: 7px 14px; border-radius: 8px; font-size: 12px; z-index: 80; opacity: 0; transition: opacity .2s; pointer-events: none; max-width: 90vw; }
 .toast.show { opacity: 1; }
 
@@ -232,7 +286,8 @@ body.nosel, body.nosel * { user-select: none !important; -webkit-user-select: no
   .brand small, .ib .lbl, .kbd, .statusbar .hint { display: none; }
   body { overflow: auto; } .window { height: auto; }
   .work { flex-direction: column; }
-  #fsdock, #histdock { width: auto; height: 320px; }
+  #fsdock { width: auto; height: 320px; }
+  .right { width: auto; } #filesdock, #histdock { flex: none; height: 380px; }
   .vh { display: none; }
   .gridwrap { flex: none; height: 380px; }
 }
@@ -244,9 +299,10 @@ body.nosel, body.nosel * { user-select: none !important; -webkit-user-select: no
     <div class="brand"><svg width="14" height="14" viewBox="0 0 16 16"><path d="M8 1l7 3.5-7 3.5L1 4.5z" fill="currentColor"/><path d="M1 8l7 3.5L15 8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M1 11.5L8 15l7-3.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" opacity=".55"/></svg>LayerFS <small>proposed SDK · simulated</small></div>
     <div class="tabs" id="tabs" role="tablist" aria-label="Branches"></div>
     <button class="ib" id="demo" title="Play the 25-step demo"><svg viewBox="0 0 16 16"><path d="M4.5 2.8v10.4L13 8z" fill="currentColor"/></svg><span class="lbl">Demo</span></button>
+    <button class="ib" id="tog-files" title="Files panel: browse, blame and diff (⌘O)"><svg viewBox="0 0 16 16"><path d="M2 4.5A1.5 1.5 0 0 1 3.5 3h3l1.5 1.5h4.5A1.5 1.5 0 0 1 14 6v5.5a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 11.5z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg><span class="lbl">Files</span><span class="kbd">⌘O</span></button>
     <button class="ib primary" id="new-sb" title="New Sandbox terminal: mounts a new Workspace (⌘T)"><svg viewBox="0 0 16 16"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg><span class="lbl">Sandbox</span><span class="kbd">⌘T</span></button>
     <button class="ib" id="tog-fs" title="fs terminal (⌘1)"><svg viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M6 2.5v11" stroke="currentColor" stroke-width="1.3"/></svg></button>
-    <button class="ib" id="tog-h" title="History (⌘2)"><svg viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M10 2.5v11" stroke="currentColor" stroke-width="1.3"/></svg></button>
+    <button class="ib" id="tog-h" title="History panel (⌘2)"><svg viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M10 2.5v11" stroke="currentColor" stroke-width="1.3"/></svg></button>
     <button class="ib" id="reset" title="Reset the project"><svg viewBox="0 0 16 16"><path d="M3 8a5 5 0 1 0 1.5-3.5M3 2.5v2.8h2.8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
     <button class="ib" id="theme" title="Appearance"></button>
   </div>
@@ -254,13 +310,17 @@ body.nosel, body.nosel * { user-select: none !important; -webkit-user-select: no
     <section class="dock term" id="fsdock" aria-label="fs terminal"></section>
     <div class="vh" id="vh-fs" role="separator" aria-label="Resize fs terminal"></div>
     <div class="gridwrap" id="gridwrap"><div id="grid"></div></div>
-    <div class="vh" id="vh-h" role="separator" aria-label="Resize History"></div>
+    <div class="vh" id="vh-h" role="separator" aria-label="Resize the right panel"></div>
+    <div class="right" id="right">
+    <section class="dock term fpane" id="filesdock" aria-label="Files"></section>
+    <div class="hh rh" id="hh-r" role="separator" aria-label="Resize Files and History"></div>
     <section class="dock term" id="histdock" aria-label="History">
-      <div class="thead"><span class="kind history">HISTORY</span><span class="ttl">website · main + Branches</span><span class="pills"><span class="pill">click nodes to type their ids</span></span></div>
+      <div class="thead"><span class="kind history">HISTORY</span><span class="ttl">website · main + Branches</span><span class="pills"><span class="pill">click nodes to type their ids</span></span><button class="pbtn" data-hidedock="h" title="Hide History (⌘2)"><svg viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button></div>
       <div class="graph" id="graph"><svg id="hist-svg" role="img" aria-label="History graph"></svg></div>
       <div class="hh" id="hh" role="separator" aria-label="Resize graph"></div>
       <div class="tbody" id="hbody"></div>
     </section>
+    </div>
   </div>
   <div class="statusbar" id="status"></div>
 </div>
@@ -282,6 +342,7 @@ body.nosel, body.nosel * { user-select: none !important; -webkit-user-select: no
 
 <script src="model.js"></script>
 <script src="scenarios.js"></script>
+<script src="files.js"></script>
 <script src="terminal.js"></script>
 <script src="demo.js"></script>
 <script>
@@ -289,7 +350,7 @@ body.nosel, body.nosel * { user-select: none !important; -webkit-user-select: no
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const store = { get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } }, set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} } };
-const KEY = "lfs.tui.v3";
+const KEY = "lfs.tui.v4";
 const WEBSITE = LAYERFS_SCENARIOS[0].steps[0].args.files;
 const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -300,7 +361,7 @@ function fresh(bare) {
   sim.run("project.init", { name: "website", files: WEBSITE });
   eng = new LayerTerm.Engine(sim, "website");
   S = { world: sim.s, active: "main", focus: "fs", seq: 1, tabs: [{ branch: "main", layout: null, focus: null, zoom: null }],
-    panes: {}, detached: {}, fs: {}, hist: { lines: [], hist: [] }, docks: { fs: true, h: true } };
+    panes: {}, detached: {}, fs: {}, hist: { lines: [], hist: [] }, docks: { fs: true, h: true, files: false }, files: {} };
   S.hist.lines.push(out("History · project-wide · type help", "dim"));
   if (!bare) runHistory("fork feature-home");
 }
@@ -341,12 +402,15 @@ function runFs(b, line) {
   const f = fsOf(b), prompt = eng.fsPrompt(b, f.state), rec = eng.fs(b, line, f.state);
   record(f.lines, prompt, fsPc(prompt), line, rec);
   if (line.trim() && !f.state.heredoc) f.hist.push(line);
+  if (rec.files) f.lines.push({ k: "link", t: "open in the Files pane (Blame)", files: rec.files });
+  if (rec.open) showInFiles(rec.open);
 }
 function runHistory(line) {
   const rec = eng.history(line);
   record(S.hist.lines, "history> ", "pr-h", line, rec);
   if (line.trim()) S.hist.hist.push(line);
   S.hl = rec.diff ? [rec.diff.from, rec.diff.to] : null;
+  if (rec.diff) S.hist.lines.push({ k: "link", t: "open in the Files pane (Diff)", files: { subject: rec.diff.to, base: rec.diff.from, mode: "diff", path: null } });
   if (rec.forked) openTab(rec.forked);
 }
 function runSandbox(id, line) {
@@ -446,6 +510,7 @@ function transcript(lines) {
       const sdk = l.calls && l.calls.length ? `<button class="sdkbtn" data-sdk title="Show the SDK call and inline Node script">sdk${l.calls.length > 1 ? " ×" + l.calls.length : ""}</button><div class="sdk">${l.calls.map((c) => `<span class="code"><b>${esc(c.call)}</b> → ${esc(c.code)}</span><pre>${esc(c.script)}</pre>`).join("")}</div>` : "";
       return `<div class="ln"><span class="${l.pc || ""}">${esc(l.p)}</span>${esc(l.t)}${sdk}</div>`;
     }
+    if (l.k === "link" && l.files) return `<div class="ln c-dim">  → <span class="lk" data-filescmp="${esc(JSON.stringify(l.files))}">${esc(l.t)}</span></div>`;
     if (l.k === "link") return `<div class="ln c-dim">  → <span class="lk" data-showmount="${esc(l.b)}">${esc(l.t)}</span></div>`;
     return `<div class="ln c-${l.c || "plain"}">${esc(l.t)}</div>`;
   }).join("");
@@ -456,8 +521,14 @@ function restoreInputs(m) { for (const [k, v] of Object.entries(m)) { const i = 
 
 function render() {
   const kept = keepInputs();
-  renderTabs(); renderFs(); renderGrid(); renderHistory(); renderStatus();
+  renderTabs(); renderFs(); renderGrid(); renderRight(); renderFiles(); renderHistory(); renderStatus();
   restoreInputs(kept); applyFocus(); save();
+}
+function renderRight() {
+  const f = S.docks.files, h = S.docks.h;
+  $("right").hidden = !(f || h); $("vh-h").hidden = !(f || h);
+  $("filesdock").hidden = !f; $("histdock").hidden = !h; $("hh-r").hidden = !(f && h);
+  $("right").classList.toggle("both", f && h);
 }
 function renderTabs() {
   $("tabs").innerHTML = S.tabs.map((t) => {
@@ -467,7 +538,7 @@ function renderTabs() {
   }).join("") + `<button class="ib" id="new-tab" title="Fork a new Branch (opens a tab)"><svg viewBox="0 0 16 16"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button>`;
   S.enterTab = null;
   $("new-sb").disabled = S.active === "main";
-  $("tog-fs").classList.toggle("on", S.docks.fs); $("tog-h").classList.toggle("on", S.docks.h);
+  $("tog-fs").classList.toggle("on", S.docks.fs); $("tog-h").classList.toggle("on", S.docks.h); $("tog-files").classList.toggle("on", S.docks.files);
 }
 function renderFs() {
   const b = S.active, f = fsOf(b), dock = $("fsdock");
@@ -503,12 +574,12 @@ function nodeHtml(n, path) {
 }
 function renderGrid() {
   const t = tab(), grid = $("grid");
-  if (S.active === "main") {
-    grid.innerHTML = `<div class="launcher"><div><h2>main is read-only</h2><p>main changes only through <b>publish</b>. To work, fork a Branch in History; it opens in its own tab.</p><button class="ib primary" data-prefill="fork ">Fork a Branch</button></div></div>`;
+  if (!t.layout && S.active === "main") {
+    grid.innerHTML = `<div class="launcher"><div><h2>main is read-only</h2><p>main changes only through <b>publish</b>. To work, fork a Branch in History; it opens in its own tab.</p><button class="ib primary" data-prefill="fork ">Fork a Branch</button> <button class="ib" data-newfiles>Browse files</button></div></div>`;
     return;
   }
   if (!t.layout) {
-    grid.innerHTML = `<div class="launcher"><div><h2>No Workspace on ${esc(S.active)}</h2><p>The fs terminal edits this Branch directly. Open a Sandbox terminal when you need to run commands: it mounts a new Workspace, and <b>unmount</b> closes it.</p><button class="ib primary" data-newsb>New Sandbox terminal</button></div></div>`;
+    grid.innerHTML = `<div class="launcher"><div><h2>No Workspace on ${esc(S.active)}</h2><p>The fs terminal edits this Branch directly. Open a Sandbox terminal when you need to run commands: it mounts a new Workspace, and <b>unmount</b> closes it.</p><button class="ib primary" data-newsb>New Sandbox terminal</button> <button class="ib" data-newfiles>Browse files</button></div></div>`;
     return;
   }
   grid.innerHTML = t.zoom && S.panes[t.zoom] ? paneHtml(t.zoom) : nodeHtml(t.layout, "");
@@ -516,6 +587,167 @@ function renderGrid() {
   S.enter = null;
 }
 function scrollBottom(el) { const b = el.querySelector(".tbody"); if (b) b.scrollTop = b.scrollHeight; }
+
+// ---------------------------------------------------------------- Files pane
+// A read view of the Store at a ref (subject), optionally compared with a base.
+const FM = LayerFiles;
+function defaultBase(subject) {
+  if (subject === "main") return "";
+  if (sim.s.branches[subject]) return "fork:" + subject;
+  return FM.parentRef(sim, subject) || "";
+}
+// A scope is a Branch (or main) plus either "latest" (follows the head as it
+// moves) or one fixed point in that Branch's history: a Commit, a Layer on
+// main, or the Branch's fork point. Internally it is stored as one ref.
+function scopeOf(ref) {
+  const s = sim.s;
+  if (!ref) return { branch: "", at: "latest" };
+  if (ref === "main" || s.branches[ref]) return { branch: ref, at: "latest" };
+  if (ref.startsWith("fork:")) return { branch: ref.slice(5), at: "fork" };
+  if (s.commits[ref]) return { branch: s.commits[ref].branch, at: ref };
+  if (s.layers[ref]) return { branch: "main", at: ref };
+  return { branch: S.active, at: "latest" };
+}
+const refOfScope = (branch, at) => (!branch ? "" : at === "latest" ? branch : at === "fork" ? "fork:" + branch : at);
+const headId = (b) => (b === "main" ? sim.s.main.head : sim.s.branches[b].head || sim.s.branches[b].from);
+function scopeLabel(ref) {
+  const sc = scopeOf(ref);
+  if (!sc.branch) return "nothing";
+  if (sc.at === "latest") return `${sc.branch} · latest (${headId(sc.branch)})`;
+  if (sc.at === "fork") return `${sc.branch} · fork point (${sim.s.branches[sc.branch].from})`;
+  return `${sc.branch} · ${sc.at}`;
+}
+function scopeHtml(which, ref, withNone) {
+  const s = sim.s, sc = scopeOf(ref);
+  const o = (v, label, cur) => `<option value="${esc(v)}"${v === cur ? " selected" : ""}>${esc(label)}</option>`;
+  const branch = (withNone ? o("", "nothing", sc.branch) : "") + o("main", "main", sc.branch) + s.branchOrder.map((n) => o(n, n, sc.branch)).join("");
+  let at = "";
+  if (sc.branch === "main") {
+    at = o("latest", `latest · follows ${s.main.head}`, sc.at) + Object.values(s.layers).sort((a, b) => b.slot - a.slot).map((l) => o(l.id, `${l.id} · ${l.sourceCommit ? "from " + l.sourceCommit : "init"}`, sc.at)).join("");
+  } else if (sc.branch) {
+    const b = s.branches[sc.branch];
+    const cs = Object.values(s.commits).filter((c) => c.branch === sc.branch).sort((a, b2) => b2.slot - a.slot);
+    at = o("latest", `latest · follows ${headId(sc.branch)}`, sc.at) + cs.map((c) => o(c.id, `${c.id} · ${c.by === "fs" ? c.via : "commit"}${c.displacedBy ? " · off the line" : ""}`, sc.at)).join("") + o("fork", `fork point · ${b.from}`, sc.at);
+  }
+  const live = sc.branch && sc.at === "latest";
+  return `<select class="fsel" data-fscope="${which}" data-part="branch" title="${which === "subject" ? "Branch to look at" : "Branch to compare against"}">${branch}</select>${sc.branch ? `<span class="sync ${live ? "live" : "pinned"}" title="${live ? "Follows the head: new Commits show up as they land" : "Fixed at one point in history"}">${live ? "●" : "⊙"}</span><select class="fsel at" data-fscope="${which}" data-part="at" title="Latest, or a fixed point">${at}</select>` : ""}`;
+}
+// One Files view per tab, like the fs terminal.
+function filesOf(b = S.active) {
+  S.files ||= {};
+  return (S.files[b] ||= { subject: b, base: defaultBase(b), path: null, open: [], mode: "view", changedOnly: false, sdk: false });
+}
+function applyFiles(p, opts) {
+  if (opts.subject) { p.subject = opts.subject; if (opts.base === undefined) p.base = defaultBase(opts.subject); }
+  if (opts.base !== undefined) p.base = opts.base;
+  if (opts.mode) p.mode = opts.mode;
+  if (opts.path === null) p.path = null;
+  if (opts.path) {
+    p.path = opts.path;
+    for (let d = LayerSim.parentOf(opts.path); d !== "/"; d = LayerSim.parentOf(d)) if (!p.open.includes(d)) p.open.push(d);
+  }
+  S.hl = [p.subject, p.base].filter(Boolean);
+}
+// Opens the Files panel for this tab and points it at opts.
+function showInFiles(opts = {}) {
+  S.docks.files = true;
+  applyFiles(filesOf(), opts);
+  S.focus = "files"; render();
+}
+const BADGE = { A: "added", M: "modified", D: "deleted" };
+function treeHtml(p, subj, base, ch, dir, depth) {
+  return FM.listBoth(subj, base, dir).filter((e) => !p.changedOnly || !ch || ch.files[e.path] || ch.dirs[e.path]).map((e) => {
+    const open = p.open.includes(e.path), k = ch && ch.files[e.path], roll = ch && !k && ch.dirs[e.path];
+    const row = `<div class="frow${e.path === p.path ? " sel" : ""}${e.gone ? " gone" : ""}" data-ftree="${esc(e.path)}" data-ftype="${e.type}" style="padding-left:${8 + depth * 13}px" title="${esc(e.path)}${k ? " · " + BADGE[k] : ""}">
+      <span class="car">${e.type === "dir" ? (open ? "▾" : "▸") : ""}</span><span class="nm">${esc(e.name)}${e.type === "dir" ? "/" : ""}</span>${k ? `<span class="fb ${k}">${k}</span>` : roll ? `<span class="fr">${roll}</span>` : ""}</div>`;
+    return row + (e.type === "dir" && open ? treeHtml(p, subj, base, ch, e.path, depth + 1) : "");
+  }).join("");
+}
+function sdkCalls(p, sv, bv) {
+  const at = (r) => { const v = FM.resolveRef(sim, r); return v ? v.node : r; };
+  const kind = (r) => (r === "main" || sim.s.branches[r] ? "branch" : /^C\d+$/.test(at(r)) ? "commit" : "layer");
+  const calls = [`fs.list(dir, { commit: ${JSON.stringify(at(p.subject))} })   // per open folder`];
+  if (p.base) {
+    const a = kind(p.base), b = kind(p.subject);
+    calls.push(a === "branch" && b === "branch" ? `branch.diff_branches({ from: ${JSON.stringify(p.base)}, to: ${JSON.stringify(p.subject)} })   // badges`
+      : a === "commit" && b === "commit" ? `branch.diff_commits({ from: ${JSON.stringify(at(p.base))}, to: ${JSON.stringify(at(p.subject))} })   // badges`
+      : `// badges: no single SDK call compares a ${a} with a ${b}; composed from both trees`);
+  }
+  if (p.path) {
+    if (p.mode === "view") calls.push(`fs.read(${JSON.stringify(p.path)}, { commit: ${JSON.stringify(at(p.subject))} })`);
+    if (p.mode === "blame") calls.push(`branch.list_commits() + fs.read(${JSON.stringify(p.path)}, { commit }) per saved version`, `// proposed, not in the SDK yet: fs.blame(path, { commit })`);
+    if (p.mode === "diff" && p.base) calls.push(`fs.diff_files({ left: { path: ${JSON.stringify(p.path)}, commit: ${JSON.stringify(at(p.base))} }, right: { path: ${JSON.stringify(p.path)}, commit: ${JSON.stringify(at(p.subject))} } })`);
+  }
+  return calls.map(esc).join("\n");
+}
+function codeLines(text, extra) {
+  return text.split("\n").map((t, i) => `<div class="cl">${extra ? extra(i) : ""}<span class="no">${i + 1}</span><span class="tx">${esc(t) || " "}</span></div>`).join("");
+}
+function viewHtml(p, sv, bv, ch) {
+  if (!p.path) {
+    if (!ch) return `<div class="fempty">Pick a file on the left.<br>Choose something to compare against to see what changed.</div>`;
+    const list = Object.entries(ch.files).filter(([path]) => (sv.tree[path] || bv.tree[path]).type === "file");
+    if (!list.length) return `<div class="fempty">No file differences between ${esc(scopeLabel(p.base))} and ${esc(scopeLabel(p.subject))}.</div>`;
+    return `<div class="fsum">${list.length} file${list.length === 1 ? "" : "s"} changed from <b>${esc(scopeLabel(p.base))}</b> to <b>${esc(scopeLabel(p.subject))}</b></div>` +
+      list.map(([path, k]) => `<div class="frow flat" data-fopen="${esc(path)}"><span class="fb ${k}">${k}</span><span class="nm">${esc(path)}</span></div>`).join("");
+  }
+  const se = sv.tree[p.path], be = bv && bv.tree[p.path];
+  if (p.mode === "view") {
+    if (!se) return `<div class="fempty">${esc(p.path)} does not exist at ${esc(scopeLabel(p.subject))}${be ? " (deleted; switch to Diff to see what was removed)" : ""}.</div>`;
+    return `<div class="code">${codeLines(se.content)}</div>`;
+  }
+  if (p.mode === "blame") {
+    const b = FM.blame(sim, p.subject, p.path);
+    if (!b) return `<div class="fempty">${esc(p.path)} does not exist at ${esc(scopeLabel(p.subject))}.</div>`;
+    let last = null;
+    const rows = b.lines.map((ln) => {
+      const o = ln.origin, first = o.id !== last; last = o.id;
+      const color = o.kind === "layer" ? "var(--purple)" : branchColor(o.branch);
+      const tip = `${o.id} · ${o.branch} · ${o.kind === "layer" ? o.via : o.by === "fs" ? o.via : "commit from " + o.via.replace("/workspaces/", "/ws/")} · click to diff with its parent`;
+      const chip = `<span class="bch${first ? "" : " cont"}" style="--bc:${color}" data-fblame="${o.id}" title="${esc(tip)}">${first ? o.id : ""}</span>`;
+      return `<div class="cl">${chip}<span class="no">${ln.n}</span><span class="tx">${esc(ln.text) || " "}</span></div>`;
+    }).join("");
+    return `<div class="fsum">Blame at <b>${esc(scopeLabel(p.subject))}</b> · composed from ${b.versions} saved versions</div><div class="code">${rows}</div>`;
+  }
+  // diff
+  if (!bv) return `<div class="fempty">Diff needs something to compare against: pick it next to “vs”, or use parent / fork / main.</div>`;
+  if (!se && !be) return `<div class="fempty">${esc(p.path)} is in neither side.</div>`;
+  const before = be && be.type === "file" ? be.content : null, after = se && se.type === "file" ? se.content : null;
+  if (before === after) return `<div class="fsum">No changes in ${esc(p.path)} between <b>${esc(scopeLabel(p.base))}</b> and <b>${esc(scopeLabel(p.subject))}</b>.</div><div class="code">${codeLines(after || "")}</div>`;
+  let o = 0, n = 0;
+  const rows = LayerSim.lineDiff(before ?? "", after ?? "").map((d) => {
+    if (before == null && d.op === "-") return "";
+    if (after == null && d.op === "+") return "";
+    const on = d.op === "+" ? "" : ++o, nn = d.op === "-" ? "" : ++n;
+    return `<div class="cl ${d.op === "+" ? "add" : d.op === "-" ? "del" : ""}"><span class="no">${on}</span><span class="no">${nn}</span><span class="op">${d.op === " " ? "" : d.op}</span><span class="tx">${esc(d.text) || " "}</span></div>`;
+  }).join("");
+  const note = before == null ? "added" : after == null ? "deleted" : "modified";
+  return `<div class="fsum">${esc(p.path)} · ${note} · <b>${esc(scopeLabel(p.base))}</b> → <b>${esc(scopeLabel(p.subject))}</b></div><div class="code diff">${rows}</div>`;
+}
+function renderFiles() {
+  const dock = $("filesdock");
+  if (!S.docks.files) { dock.innerHTML = ""; return; }
+  const p = filesOf(), sv = FM.resolveRef(sim, p.subject) || FM.resolveRef(sim, p.subject = S.active), bv = p.base ? FM.resolveRef(sim, p.base) : null;
+  const ch = bv ? FM.changeMap(sv.tree, bv.tree) : null;
+  const seg = (m, label) => `<button class="seg${p.mode === m ? " on" : ""}" data-fmode="${m}">${label}</button>`;
+  const preset = (v, label) => (v ? `<button class="chipb${p.base === v ? " on" : ""}" data-fpreset="${esc(v)}">${label}</button>` : "");
+  const parent = FM.parentRef(sim, p.subject), fork = sim.s.branches[p.subject] ? "fork:" + p.subject : sim.s.commits[sv.node] ? "fork:" + sim.s.commits[sv.node].branch : "";
+  dock.innerHTML = `
+    <div class="thead"><span class="kind files">FILES</span>
+      ${scopeHtml("subject", p.subject, false)}
+      <span class="sp"></span>
+      <button class="pbtn" data-hidedock="files" title="Hide Files (⌘O)">${ICON.close}</button></div>
+    <div class="fbar cmp"><span class="vs">compare with</span>${scopeHtml("base", p.base, true)}
+      <button class="pbtn" data-fswap title="Swap the two sides"${p.base ? "" : " disabled"}>⇄</button>
+      <span class="presets">${preset(parent, "parent")}${preset(fork, "fork point")}${p.subject !== "main" ? preset("main", "main") : ""}</span></div>
+    <div class="fbar"><span class="segs">${seg("view", "View")}${seg("blame", "Blame")}${seg("diff", "Diff")}</span>
+      <label class="chk${ch ? "" : " off"}"><input type="checkbox" data-fchanged${p.changedOnly ? " checked" : ""}${ch ? "" : " disabled"}> changed only</label>
+      <span class="sp"></span>${ch ? `<span class="fcount">${ch.count} change${ch.count === 1 ? "" : "s"}</span>` : ""}<button class="sdkbtn on" data-fsdk title="The SDK calls behind this view">sdk</button></div>
+    ${p.sdk ? `<pre class="fsdk">${sdkCalls(p, sv, bv)}</pre>` : ""}
+    <div class="fbody"><div class="ftree">${treeHtml(p, sv.tree, bv ? bv.tree : null, ch, "/", 0)}</div>
+      <div class="fview">${p.path ? `<div class="fpath">${esc(p.path)} <span>@ ${esc(scopeLabel(p.subject))}</span></div>` : ""}${viewHtml(p, sv, bv, ch)}</div></div>`;
+  dock.classList.toggle("narrow", dock.clientWidth < 400);
+}
 
 // ---------------------------------------------------------------- History graph
 let COLW = 46;
@@ -560,7 +792,7 @@ let knownNodes = null, lastLayout = null;
 // One color per Branch lane, in fork order.
 const branchColor = (name) => `var(--b${Math.max(0, sim.s.branchOrder.indexOf(name)) % 6})`;
 function renderHistory() {
-  const dock = $("histdock"); dock.hidden = !S.docks.h; $("vh-h").hidden = !S.docks.h;
+  if (!S.docks.h) return;
   const s = sim.s, svg = $("hist-svg"), wrap = $("graph"), L = layout(s);
   lastLayout = L;
   const W = Math.max(L.width, wrap.clientWidth), H = Math.max(L.height, 80);
@@ -624,7 +856,7 @@ function wsRows(name, nodeId) {
 }
 function cardHtml(id) {
   const s = sim.s, head = '<span class="tag">head</span>';
-  const hint = (x) => `<div class="hint">Click to type ${esc(x)} into History</div>`;
+  const hint = (x, ref = x) => `<div class="cbtns"><button class="cbtn" data-files-at="${esc(ref)}">Browse files</button><button class="cbtn" data-files-cmp="${esc(ref)}">Diff vs parent</button></div><div class="hint">Click: type ${esc(x)} into History · Shift-click: compare the Files pane with it</div>`;
   if (s.layers[id]) {
     const l = s.layers[id];
     return `<div class="h"><b>${l.id}</b>main${id === s.main.head ? head : ""}</div><div class="meta">Layer · root ${l.root}<br>${l.sourceCommit ? `published from ${esc(l.sourceBranch)} ${l.sourceCommit}` : "project.init"}</div>${hint(id)}`;
@@ -639,7 +871,7 @@ function cardHtml(id) {
       <div class="meta">parent ${c.parent || "Branch base"} · root ${c.root}<br>by ${esc(c.by === "fs" ? c.via || "fs" : short(c.via))}</div>${jump}${after}${wsRows(c.branch, id)}${hint(id)}`;
   }
   const name = id.slice(5), b = s.branches[name];
-  return `<div class="h"><b>${esc(name)}</b>fork point${b.head ? "" : head}</div><div class="meta">forked from ${b.from}${b.head ? "" : " · no Commits yet"}</div>${wsRows(name, id)}${hint(name)}`;
+  return `<div class="h"><b>${esc(name)}</b>fork point${b.head ? "" : head}</div><div class="meta">forked from ${b.from}${b.head ? "" : " · no Commits yet"}</div>${wsRows(name, id)}${hint(name, id)}`;
 }
 function showCard(node) {
   clearTimeout(cardTimer);
@@ -675,14 +907,14 @@ function renderStatus() {
 // ---------------------------------------------------------------- focus & keyboard
 function applyFocus() {
   document.querySelectorAll(".term").forEach((el) => el.classList.remove("focused"));
-  const el = S.focus === "fs" ? $("fsdock") : S.focus === "hist" ? $("histdock") : document.querySelector(`[data-pane="${S.focus}"]`);
+  const el = S.focus === "fs" ? $("fsdock") : S.focus === "hist" ? $("histdock") : S.focus === "files" ? $("filesdock") : document.querySelector(`[data-pane="${S.focus}"]`);
   if (!el || el.hidden) return;
   el.classList.add("focused");
   if ($("pop").classList.contains("open")) return;
-  const inp = S.focus === "hist" ? $("hbody").querySelector("input") : el.querySelector("input");
+  const inp = S.focus === "hist" ? $("hbody").querySelector("input") : el.querySelector("input[data-in]");
   if (inp && document.activeElement !== inp) inp.focus({ preventScroll: true });
 }
-function setFocus(f) { S.focus = f; const t = tab(); if (f !== "fs" && f !== "hist" && t) t.focus = f; applyFocus(); }
+function setFocus(f) { S.focus = f; const t = tab(); if (f !== "fs" && f !== "hist" && f !== "files" && t) t.focus = f; applyFocus(); }
 const recall = {};
 document.addEventListener("keydown", (e) => {
   const inp = e.target.closest && e.target.closest("[data-in]");
@@ -707,8 +939,9 @@ document.addEventListener("keydown", (e) => {
   const k = e.key.toLowerCase(), t = tab();
   const run = (fn) => { e.preventDefault(); fn(); };
   if (k === "t") return run(() => openSandboxPicker($("new-sb")));
+  if (k === "o" || k === "3") return run(() => toggleDock("files"));
   if (k === "1") return run(() => { S.docks.fs = true; S.focus = "fs"; render(); });
-  if (k === "2") return run(() => { S.docks.h = true; S.focus = "hist"; render(); });
+  if (k === "2") return run(() => toggleDock("h"));
   if (k === "d" && S.panes[S.focus]) return run(() => newSandboxTerminal(S.panes[S.focus].sandbox, S.focus, e.shiftKey ? "bottom" : "right"));
   if (k === "w" && S.panes[S.focus]) return run(() => closePane(S.focus));
   if (k === "enter" && e.shiftKey && S.panes[S.focus]) return run(() => { t.zoom = t.zoom === S.focus ? null : S.focus; render(); });
@@ -716,7 +949,7 @@ document.addEventListener("keydown", (e) => {
   if (arrows[k] && e.altKey) return run(() => focusDir(...arrows[k]));
 });
 function focusDir(dx, dy) {
-  const all = [...document.querySelectorAll(".term")].filter((el) => !el.hidden).map((el) => ({ id: el.id === "fsdock" ? "fs" : el.id === "histdock" ? "hist" : el.dataset.pane, r: el.getBoundingClientRect() }));
+  const all = [...document.querySelectorAll(".term")].filter((el) => !el.hidden).map((el) => ({ id: el.id === "fsdock" ? "fs" : el.id === "histdock" ? "hist" : el.id === "filesdock" ? "files" : el.dataset.pane, r: el.getBoundingClientRect() }));
   const me = all.find((x) => x.id === S.focus); if (!me) return;
   const cx = me.r.left + me.r.width / 2, cy = me.r.top + me.r.height / 2;
   let best = null, bd = Infinity;
@@ -757,6 +990,7 @@ document.addEventListener("click", (e) => {
   const csb = t.closest("[data-closesb]"); if (csb) { closeSandbox(csb.dataset.closesb); return; }
   const ra = t.closest("[data-reattach]"); if (ra) { reattach(ra.dataset.reattach); return; }
   const sdk = t.closest("[data-sdk]"); if (sdk) { sdk.closest(".ln").classList.toggle("open"); return; }
+  if (filesClick(e, t)) return;
   const sm = t.closest("[data-showmount]");
   if (sm) {
     const keys = mountsOf(sm.dataset.showmount);
@@ -778,8 +1012,52 @@ document.addEventListener("click", (e) => {
   if (t.closest("#fsdock")) setFocus("fs"); else if (t.closest("#histdock")) setFocus("hist"); else { const pane = t.closest("[data-pane]"); if (pane) setFocus(pane.dataset.pane); }
 });
 document.addEventListener("keydown", (e) => { if ((e.key === "Enter" || e.key === " ") && e.target.matches && e.target.matches(".tab")) { e.preventDefault(); e.target.click(); } });
+// Files pane controls, graph hooks and transcript links.
+function filesClick(e, t) {
+  const hd = t.closest("[data-hidedock]"); if (hd) { toggleDock(hd.dataset.hidedock, false); return true; }
+  const nf = t.closest("[data-newfiles]"); if (nf) { showInFiles(); return true; }
+  const link = t.closest("[data-filescmp]"); if (link) { showInFiles(JSON.parse(link.dataset.filescmp)); return true; }
+  const at = t.closest("[data-files-at]"); if (at) { hideCard(true); showInFiles({ subject: at.dataset.filesAt, base: defaultBase(at.dataset.filesAt) }); return true; }
+  const cmp = t.closest("[data-files-cmp]"); if (cmp) { hideCard(true); const r = cmp.dataset.filesCmp; showInFiles({ subject: r, base: FM.parentRef(sim, r) || "", mode: "diff", path: null }); return true; }
+  const pk = t.closest("#hist-svg [data-pick]");
+  if (pk && e.shiftKey) { const r = pk.dataset.card || pk.dataset.pick; showInFiles({ base: r }); toast(`Files now compares with ${r}`); return true; }
+  if (!t.closest("#filesdock")) return false;
+  const p = filesOf(); S.focus = "files";
+  const row = t.closest("[data-ftree]");
+  if (row) {
+    const path = row.dataset.ftree;
+    if (row.dataset.ftype === "dir") p.open = p.open.includes(path) ? p.open.filter((x) => x !== path) : [...p.open, path];
+    else p.path = path;
+    render(); return true;
+  }
+  const fo = t.closest("[data-fopen]"); if (fo) { applyFiles(p, { path: fo.dataset.fopen, mode: p.mode === "view" ? "diff" : p.mode }); render(); return true; }
+  const fm = t.closest("[data-fmode]"); if (fm) { p.mode = fm.dataset.fmode; render(); return true; }
+  const fp = t.closest("[data-fpreset]"); if (fp) { applyFiles(p, { base: fp.dataset.fpreset }); render(); return true; }
+  const fs = t.closest("[data-fswap]"); if (fs && p.base) { applyFiles(p, { subject: p.base, base: p.subject }); render(); return true; }
+  const fb = t.closest("[data-fblame]"); if (fb) { applyFiles(p, { subject: fb.dataset.fblame, base: FM.parentRef(sim, fb.dataset.fblame) || "", mode: "diff" }); render(); return true; }
+  const fk = t.closest("[data-fsdk]"); if (fk) { p.sdk = !p.sdk; render(); return true; }
+  applyFocus(); return true;
+}
+document.addEventListener("change", (e) => {
+  const t = e.target; if (!t.closest || !t.closest("#filesdock")) return;
+  const p = filesOf();
+  if (t.dataset.fscope) {
+    const which = t.dataset.fscope, cur = scopeOf(p[which]);
+    const ref = t.dataset.part === "branch" ? refOfScope(t.value, "latest") : refOfScope(cur.branch, t.value);
+    applyFiles(p, which === "subject" ? { subject: ref, base: t.dataset.part === "branch" ? undefined : p.base } : { base: ref });
+  }
+  else if ("fchanged" in t.dataset) p.changedOnly = t.checked;
+  render();
+});
 $("tog-fs").onclick = () => { S.docks.fs = !S.docks.fs; if (!S.docks.fs && S.focus === "fs") S.focus = tab().focus || "hist"; render(); };
-$("tog-h").onclick = () => { S.docks.h = !S.docks.h; if (!S.docks.h && S.focus === "hist") S.focus = "fs"; render(); };
+function toggleDock(which, on = !S.docks[which]) {
+  S.docks[which] = on;
+  const f = which === "h" ? "hist" : "files";
+  if (on) S.focus = f; else if (S.focus === f) S.focus = tab().focus || "fs";
+  render();
+}
+$("tog-h").onclick = () => toggleDock("h");
+$("tog-files").onclick = () => toggleDock("files");
 $("reset").onclick = () => { if (confirm("Reset the simulated project and all terminals?")) { try { localStorage.removeItem(KEY); } catch {} knownNodes = null; fresh(); render(); } };
 
 // ---------------------------------------------------------------- drag: panes, detached Workspaces, resizers
@@ -811,6 +1089,7 @@ document.addEventListener("pointermove", (e) => {
       const [a, , b] = rz.split.children; a.style.flex = `${rz.n.ratio} 1 0`; b.style.flex = `${1 - rz.n.ratio} 1 0`;
     } else if (rz.kind === "vh-fs") $("work").style.setProperty("--fsw", Math.max(220, Math.min(700, e.clientX - $("work").getBoundingClientRect().left - 6)) + "px");
     else if (rz.kind === "vh-h") { $("work").style.setProperty("--hw", Math.max(260, Math.min(760, $("work").getBoundingClientRect().right - e.clientX - 6)) + "px"); }
+    else if (rz.kind === "hh-r") { const r = $("right").getBoundingClientRect(); $("right").style.setProperty("--fh", Math.max(18, Math.min(82, ((e.clientY - r.top) / r.height) * 100)) + "%"); }
     else if (rz.kind === "hh") { const r = $("histdock").getBoundingClientRect(); $("histdock").style.setProperty("--gh", Math.max(15, Math.min(80, ((e.clientY - r.top - 30) / (r.height - 30)) * 100)) + "%"); }
     return;
   }
@@ -835,7 +1114,7 @@ document.addEventListener("pointermove", (e) => {
 });
 document.addEventListener("pointerup", () => {
   document.body.classList.remove("nosel");
-  if (rz) { rz.dv.classList.remove("active"); if (rz.kind === "vh-h") renderHistory(); rz = null; save(); return; }
+  if (rz) { rz.dv.classList.remove("active"); if (rz.kind === "vh-h") { renderHistory(); renderFiles(); } rz = null; save(); return; }
   if (!drag) return;
   const d = drag; drag = null; hideZone(); d.ghost?.remove();
   document.querySelectorAll(".dragging").forEach((x) => x.classList.remove("dragging"));
