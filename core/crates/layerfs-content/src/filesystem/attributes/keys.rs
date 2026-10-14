@@ -97,11 +97,3 @@ impl PartialOrd for AttributeKey {
         Some(self.cmp(other))
     }
 }
-
-/// Checks that a request list is strictly sorted and duplicate-free.
-pub fn check_patch_order(patches: &[(AttributeKey, Option<Vec<u8>>)]) -> ContentResult<()> {
-    if patches.windows(2).any(|pair| pair[0].0 >= pair[1].0) {
-        return Err(ContentError::NonCanonicalOrdering);
-    }
-    Ok(())
-}

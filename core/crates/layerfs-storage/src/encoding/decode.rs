@@ -17,7 +17,7 @@ use crate::encoding::delta::record;
 use crate::error::{StorageError, StorageResult};
 use crate::location::ObjectLocation;
 use crate::pack::assemble::FULL_TAG as ORDINARY_FULL_TAG;
-use crate::pack::layout::{group_view, parse_header, record_range, GroupCodec, PackLane};
+use crate::pack::layout::{record_range, GroupCodec, PackLane};
 use crate::policy::{StorageCapacities, CANONICAL_LIMIT};
 
 #[derive(Debug)]
@@ -110,48 +110,6 @@ impl GroupCache {
     pub fn retained_bytes(&self) -> usize {
         self.retained
     }
-}
-
-/// Rebuilds the canonical object stored at one locator.
-///
-/// `base` is the exact raw payload of the recorded direct base, already read and
-/// authenticated by the caller, or `None` when the locator records no base. The
-/// presence of the base must agree with the record's own tag.
-///
-/// `group_decodes` is charged once for every group **body** this reconstruction
-/// actually decompresses, which is the ordinary lane's compressed group. Every
-/// other lane decompresses a record frame or copies a raw body, so it leaves the
-/// counter alone. The charge is here, where the decompression happens, rather
-/// than at the caller: a caller that guessed from the header would count a
-/// decompression it did not perform, and a cache added in front of this call
-/// (`P2-4`) must not be charged for a body it served.
-pub fn decode_canonical(
-    pack: &[u8],
-    location: &ObjectLocation,
-    capacities: &StorageCapacities,
-    base: Option<&[u8]>,
-    workspace: &mut DecompressionWorkspace,
-    groups: &mut GroupCache,
-    group_decodes: &mut u64,
-) -> StorageResult<Vec<u8>> {
-    let header = parse_header(pack)?;
-    let view = group_view(pack, header, location.group_number)?;
-    let selected = pack
-        .get(view.start..view.end)
-        .ok_or(StorageError::Integrity("group body range"))?;
-    decode_selected_group(
-        crate::encoding::GroupSlice {
-            header,
-            view,
-            bytes: selected,
-        },
-        location,
-        capacities,
-        base,
-        workspace,
-        groups,
-        group_decodes,
-    )
 }
 
 pub(crate) fn decode_selected_group(
@@ -317,23 +275,6 @@ fn decode_payload(
         (true, None) => Err(StorageError::Integrity("prefix record without base bytes")),
         (false, Some(_)) => Err(StorageError::Integrity("FULL record with base bytes")),
     }
-}
-
-/// Returns every framed record of a group body, in ordinal order.
-pub fn group_records(group: &[u8]) -> StorageResult<Vec<&[u8]>> {
-    if group.len() < 4 {
-        return Err(StorageError::Integrity("group framing"));
-    }
-    let count = u32::from_le_bytes(
-        group[..4]
-            .try_into()
-            .map_err(|_| StorageError::Integrity("group record count"))?,
-    ) as usize;
-    let mut records = Vec::with_capacity(count.min(crate::policy::RECORD_COUNT_LIMIT));
-    for ordinal in 0..count {
-        records.push(framed_record(group, ordinal)?);
-    }
-    Ok(records)
 }
 
 /// Extracts one framed record from a group body.

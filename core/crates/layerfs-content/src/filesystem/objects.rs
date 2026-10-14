@@ -100,11 +100,6 @@ impl<'a> FilesystemObjects<'a> {
         Ok(canonical)
     }
 
-    /// Reads one authenticated canonical object without mutating the boundary.
-    pub fn read_shared(reader: &dyn AuthenticatedObjects, id: ObjectId) -> ContentResult<Vec<u8>> {
-        reader.read_canonical(id)
-    }
-
     /// Reads one bounded group as a single authenticated demand wave.
     ///
     /// The group is bounded by [`MAXIMUM_READ_DEMANDS`]: one wave is one grouped

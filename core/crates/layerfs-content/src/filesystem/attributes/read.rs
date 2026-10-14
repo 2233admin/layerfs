@@ -13,7 +13,7 @@ use crate::filesystem::attributes::codec::{decode_attribute_page, AttributeEntry
 use crate::filesystem::attributes::keys::AttributeKey;
 use crate::filesystem::attributes::portable::PortableMetadata;
 use crate::filesystem::attributes::value::read_value;
-use crate::filesystem::limits::{MAXIMUM_ATTRIBUTE_VALUE_BYTES, MAXIMUM_PAGE_BYTES};
+use crate::filesystem::limits::MAXIMUM_PAGE_BYTES;
 use crate::object::inode_leaf::InodeKind;
 use crate::object::{AuthenticatedObjects, ObjectId};
 
@@ -157,16 +157,6 @@ pub fn read_opaque(
     };
     work.values_read = work.values_read.saturating_add(1);
     Ok(Some(read_value(reader, entry, maximum_bytes)?))
-}
-
-/// Reads one opaque attribute value under the profile's declared value bound.
-pub fn read_value_bounded(
-    reader: &dyn AuthenticatedObjects,
-    root: ObjectId,
-    key: &AttributeKey,
-    work: &mut AttributeReadWork,
-) -> ContentResult<Option<Vec<u8>>> {
-    read_opaque(reader, root, key, MAXIMUM_ATTRIBUTE_VALUE_BYTES, work)
 }
 
 pub(super) fn decode_checked(

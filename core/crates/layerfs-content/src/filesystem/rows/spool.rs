@@ -236,11 +236,6 @@ impl RowSpool {
         Ok(())
     }
 
-    /// True once every declared row has been written.
-    pub fn is_sealed(&self) -> bool {
-        self.sealed
-    }
-
     /// Removes the spool's file. A failure to remove it is reported.
     pub fn cleanup(&mut self) -> ContentResult<()> {
         if self.path.as_os_str().is_empty() {
@@ -491,14 +486,7 @@ impl SerialRowSource for SpoolSerials<'_> {
     }
 }
 
-impl RowSpool {
-    /// True once every row of every run has been written.
-    pub fn is_complete(&self) -> bool {
-        self.written[0] == self.directory_rows
-            && self.written[1] == self.inode_rows
-            && self.written[2] == self.new_rows
-    }
-}
+impl RowSpool {}
 
 /// A bounded reader over one decoded payload.
 struct PayloadReader<'a> {

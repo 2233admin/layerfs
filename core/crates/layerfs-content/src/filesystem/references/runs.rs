@@ -590,16 +590,3 @@ impl LookupScan {
         }
     }
 }
-
-/// Reads every row of one run in serial order.
-pub fn visit_run(
-    run: &Run,
-    buffer_bytes: usize,
-    mut visitor: impl FnMut(Row) -> ContentResult<()>,
-) -> ContentResult<()> {
-    let mut reader = RunReader::new(run, buffer_bytes);
-    while let Some(row) = reader.next()? {
-        visitor(row)?;
-    }
-    Ok(())
-}

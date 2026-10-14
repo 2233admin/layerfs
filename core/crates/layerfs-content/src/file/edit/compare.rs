@@ -14,7 +14,7 @@ use layerfs_telemetry::timer::Active;
 
 use super::{runs::ReplacementRuns, source::Source, zero::ZeroEvidence};
 use crate::error::{ContentError, ContentResult};
-use crate::file::edit::input::{EditSequence, EditSource, Plan, Segment};
+use crate::file::edit::input::{EditSequence, Plan, Segment};
 use crate::file::mapping::{NodeSummary, PageCache, RangeCursor};
 use crate::file::view::FileView;
 use crate::file::{FileRun, FileRuns};
@@ -30,23 +30,6 @@ pub enum NoOpVerdict {
     Equal,
     /// At least one replacement differs; construction must run.
     Differs,
-}
-
-/// Compares every replacement with its base range, bounded and in order.
-///
-/// `pages` is the operation's shared mapping-page memo. A chunked base reads its
-/// windows through a cursor over it, so the pages this pass acquires are already
-/// held when the construction pass reaches them; a whole-file base has no mapping
-/// to navigate and leaves the memo untouched.
-pub fn compare_replacements(
-    view: &FileView,
-    reader: &dyn AuthenticatedObjects,
-    stream: &dyn EditSequence,
-    source: &dyn EditSource,
-    pages: &mut PageCache,
-    scope: TimingScope<'_>,
-) -> ContentResult<NoOpVerdict> {
-    compare_source(view, reader, stream, Source::Legacy(source), pages, scope)
 }
 
 pub(super) fn compare_source(

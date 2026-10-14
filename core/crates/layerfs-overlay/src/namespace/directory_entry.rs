@@ -38,13 +38,6 @@ impl Overlay {
             captured,
         })
     }
-    pub fn source_generations(
-        &self,
-        source: BaseSource,
-    ) -> OverlayResult<(Generation, Option<Generation>)> {
-        let state = self.source_state(source)?;
-        Ok((state.active, state.captured.or(state.consolidating)))
-    }
     pub fn source_directory_entry(
         &self,
         source: BaseSource,

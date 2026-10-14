@@ -195,11 +195,6 @@ impl<'r, 'b> ReferenceReducer<'r, 'b> {
         self.work.serials_scanned = self.work.serials_scanned.saturating_add(serials);
     }
 
-    /// Rows currently held in memory.
-    pub fn pending_rows(&self) -> usize {
-        self.pending.len()
-    }
-
     /// Releases every run this reducer created.
     pub fn release(&mut self) -> ContentResult<()> {
         self.runs.release()

@@ -13,7 +13,5 @@ pub use codec::{decode_attribute_page, encode_attribute_page, AttributeEntry, At
 pub use keys::AttributeKey;
 pub use patch::{apply_patches, AttributePatch, AttributePatchWork};
 pub use portable::PortableMetadata;
-pub use read::{
-    lookup, lookup_many, read_opaque, read_portable, read_value_bounded, AttributeReadWork,
-};
+pub use read::{lookup, lookup_many, read_opaque, read_portable, AttributeReadWork};
 pub use value::{emit_value, read_value};

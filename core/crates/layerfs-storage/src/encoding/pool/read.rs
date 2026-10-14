@@ -378,18 +378,6 @@ impl PoolReader {
         result
     }
 
-    /// Rebuilds the canonical leaf of one pooled locator.
-    pub fn leaf_canonical(
-        &mut self,
-        connection: &dyn Source,
-        capacities: &StorageCapacities,
-        ceiling: i64,
-        workspace: &mut DecompressionWorkspace,
-        root: ObjectLocation,
-    ) -> StorageResult<Vec<u8>> {
-        self.leaf_canonical_with_caches(connection, capacities, ceiling, workspace, root, None)
-    }
-
     /// Shares the owner's immutable ordinary encoded and decoded groups.
     /// Mutable pooled-value input stays reader-local and is invalidated after writes.
     pub(crate) fn leaf_canonical_with_caches(

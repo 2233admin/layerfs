@@ -56,22 +56,6 @@ pub fn apply_inode_values(
     apply_inode_changes(objects, base, changes, scratch_limit)
 }
 
-/// Applies typed changes with the default operation scratch ceiling.
-pub fn apply_changes(
-    objects: &mut FilesystemObjects<'_>,
-    base: Option<ObjectId>,
-    changes: &[InodeChange],
-) -> ContentResult<(ObjectId, SortedWork)> {
-    apply_inode_values(
-        objects,
-        base,
-        changes
-            .iter()
-            .map(|change| Ok((change.serial(), change.value()))),
-        MAXIMUM_SCRATCH_BYTES,
-    )
-}
-
 /// Builds a complete inode table from strictly sorted typed values.
 pub fn build_table(
     objects: &mut FilesystemObjects<'_>,

@@ -112,10 +112,6 @@ impl<'a> Save<'a> {
     pub fn chain_counters(&self) -> crate::encoding::delta::read::ChainCounters {
         self.state.borrow().chain_total
     }
-    /// Actual pooled value reuse, allocation and selection outcomes.
-    pub fn pool_counters(&self) -> crate::save::PoolCounters {
-        self.state.borrow().pool_stats
-    }
     /// Bytes charged by this Save's bounded memo of the values it assigned.
     pub fn pooled_index_bytes(&self) -> usize {
         self.state.borrow().value_memo.len() * 12

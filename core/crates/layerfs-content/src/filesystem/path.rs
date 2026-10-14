@@ -102,15 +102,6 @@ impl LogicalPath {
         std::str::from_utf8(&self.bytes).map_or("", |value| value)
     }
 
-    /// Number of components.
-    pub fn component_count(&self) -> usize {
-        if self.is_root() {
-            0
-        } else {
-            self.bytes.iter().filter(|byte| **byte == b'/').count() + 1
-        }
-    }
-
     /// Components in order.
     pub fn components(&self) -> impl Iterator<Item = &[u8]> {
         self.bytes

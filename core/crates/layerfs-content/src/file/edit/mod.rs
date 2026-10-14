@@ -27,10 +27,9 @@ pub use apply::{
 pub use backing::{
     EditRecordApply, EditRecordChange, EditRecordExpected, EditRecordKey, IndexedEditBacking,
 };
-pub use compare::{compare_replacements, NoOpVerdict, COMPARE_WINDOW_BYTES};
+pub use compare::{NoOpVerdict, COMPARE_WINDOW_BYTES};
 pub use concat::coalesce_adjacent;
 pub use finish::{emit_empty_representation, EmittedRoot};
 pub use input::{Edit, EditSequence, EditSource, IndexedEditSource, ReplacementReader};
 pub use input::{Plan, Segment};
 pub use objects::{EditCounters, EditObjects, EDIT_DEFERRED_LIMIT};
-pub use split::slice_of;
