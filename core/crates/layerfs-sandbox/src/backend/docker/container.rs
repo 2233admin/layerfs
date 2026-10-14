@@ -16,7 +16,7 @@ impl SandboxRequest {
     fn encode(&self, w: &mut dyn Write) -> io::Result<()> {
         w.write_all(b"{\"Image\":")?;
         quoted(w, &self.image)?;
-        w.write_all(b",\"User\":\"0:0\",\"Entrypoint\":[\"/usr/local/bin/layerfs-daemon\"],\"Cmd\":[\"--config\",\"/layerfs-local/config/daemon.setup\"],\"Tty\":false,\"Env\":[\"GLIBC_TUNABLES=glibc.malloc.mmap_threshold=16777216\"],\"ExposedPorts\":{")?;
+        w.write_all(b",\"User\":\"0:0\",\"Entrypoint\":[\"/usr/local/bin/layerfs-daemon\"],\"Cmd\":[\"--config\",\"/layerfs-local/config/daemon.setup\"],\"Tty\":false,\"ExposedPorts\":{")?;
         quoted(w, &format!("{}/tcp", self.port))?;
         w.write_all(b":{}},\"HostConfig\":{\"RestartPolicy\":{\"Name\":\"no\"},\"LogConfig\":{\"Type\":\"json-file\"},\"Privileged\":false,\"CapAdd\":[\"CAP_SYS_ADMIN\"],\"Devices\":[{\"PathOnHost\":\"/dev/fuse\",\"PathInContainer\":\"/dev/fuse\",\"CgroupPermissions\":\"rwm\"}],\"SecurityOpt\":[\"no-new-privileges=true\",\"apparmor=unconfined\",")?;
         quoted(w, SECCOMP)?;
