@@ -317,14 +317,17 @@ def phase_counts(groups, before_identity, end_identity, *, exclusive_observer_sc
         class_count = "jobs_by_class" if direct_mode else "completed"
         owner_keys = ("jobs", "maintenance_jobs", "maintenance_rows", "closed_namespaces", "maintenance_data_bytes") if direct_mode else ("admitted", "receipt_overruns", "receipt_overrun_bytes", "maintenance_jobs", "maintenance_rows", "closed_namespaces", "maintenance_data_bytes")
         raw_owner = difference(before["owner"], end["owner"], owner_keys)
-        raw_classes = difference(before["owner"][class_count], end["owner"][class_count], CLASSES)
+        classes = tuple(before["owner"][class_count])
+        require(classes == tuple(end["owner"][class_count]), "mixed frontier class schemas in one interval")
+        raw_classes = difference(before["owner"][class_count], end["owner"][class_count], classes)
+        observer_class = "General" if "General" in classes else "Read"
         raw_sql = [difference(left,right,statement_keys) for left,right in zip(before["sql_foreground"],end["sql_foreground"])]
         observer_sql = {key: sum(value["observer"]["sql"][key] for value in interval) for key in statement_keys}
         observer_jobs = sum(value["observer"]["jobs"] for value in interval) if direct_mode else len(interval)
-        require(raw_owner[owner_count] >= observer_jobs and raw_classes["Read"] >= observer_jobs, "observer jobs exceed original cumulative delta")
+        require(raw_owner[owner_count] >= observer_jobs and raw_classes[observer_class] >= observer_jobs, "observer jobs exceed original cumulative delta")
         adjusted_owner, adjusted_classes = dict(raw_owner), dict(raw_classes)
         adjusted_owner[owner_count] -= observer_jobs
-        adjusted_classes["Read"] -= observer_jobs
+        adjusted_classes[observer_class] -= observer_jobs
         adjusted_sql = [dict(values) for values in raw_sql]
         for key in statement_keys:
             require(adjusted_sql[0][key] >= observer_sql[key], "observer Startup work exceeds original family delta: " + key)

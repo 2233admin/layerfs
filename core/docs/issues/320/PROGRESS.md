@@ -3806,3 +3806,32 @@ was updated while that check was running. This is a source-stability failure,
 not a product compile result. It is retained under workspace-reader-linux-check-final;
 the subsequent check-stable and clippy-stable runs use frozen source/pins and
 pass. Host check-final and clippy-accepted-source pass. No test rerun occurs.
+
+
+### Reader comparison: before arm and decoder corrections
+
+The shared-pool before arm is e7e65dab9, sealed as reader-pool-before in
+69.0 s. Empty preparation reused closed native inputs, replacing only the
+owned stale 2.2 MB empty original/master volume; 7.3 s. The first ignored sample
+wrapper erroneously nested a measurement lock around exec_concurrency's own
+lock. It failed before clone/mount/phase execution; the observer saw no daemon.
+This retained admission failure is not a measured sample. After diagnosis the
+correct direct-driver invocation sampled w1/w4 once, with their own lock.
+
+The actual before sample ran in 5.449 s. All writer exits and runtime exit were
+zero and its container/volume were removed. Native create/append/read means:
+24.5/10.5/10.5 us per file. W1: 243.4/114.7/220.7; W4:
+325.9/158.8/255.9. Observed sampler peak RSS 36,044 KiB, anonymous 28,964 KiB;
+lifetime VmHWM 36,044 KiB is not a phase bound. Timing INELIGIBLE. Raw result and
+logs are under 2026-10-14-issue320-reader-pool-before-direct-exec and issue321
+reader-pool-before-direct-exec.*; the lock failure remains reader-pool-before-exec.*.
+
+Counter ingestion found another six-class assumption in the exec diagnostic.
+The same issue made C06's phase-count decoder fail on Read, after its complete
+filesystem proof passed and cleanup reached Gone. C06 command 127,137,083 ns;
+its original receipt stays FAIL for instrumentation (no resampling/relabeling).
+The decoder now subtracts the actual General observer class for current arrays,
+and Read for retained arrays, checking endpoint schema equality. Exec uses the
+actual decoded class keys. Raw retained logs permit a separate count recovery;
+that analysis does not run the operation again or alter the original verdict.
+Tests remain deferred to Phase 2. Durable remains owner-disabled.

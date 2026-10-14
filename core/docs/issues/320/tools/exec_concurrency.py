@@ -226,7 +226,7 @@ def main():
         fields = (("jobs", "jobs_by_class"), ("wait_ns", "lock_wait_ns"), ("hold_ns", "hold_ns")) if direct_mode else (("jobs", "completed"), ("wait_ns", "queue_wait_ns"), ("hold_ns", "service_ns"))
         for phase, before, after in zip(result["phases"], owners, owners[1:]):
             phase["owner"] = {name: {kind: after[field][name] - before[field][name] for kind, field in fields}
-                              for name in counts.CLASSES}
+                              for name in before[fields[0][1]]}
     except BaseException as failure:
         result["owner_failure"] = f"{type(failure).__name__}: {failure}"
     (out / "result.json").write_text(json.dumps(result, indent=1) + "\n")
