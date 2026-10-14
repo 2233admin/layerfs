@@ -15,11 +15,11 @@
 
 pub mod timer;
 
-#[cfg(feature = "native")]
+#[cfg(feature = "platform")]
 pub(crate) use output::health;
 pub use runtime::{observation, operation};
-#[cfg(feature = "native")]
+#[cfg(feature = "platform")]
 pub mod output;
-#[cfg(feature = "native")]
+#[cfg(feature = "platform")]
 mod platform;
 pub mod runtime;

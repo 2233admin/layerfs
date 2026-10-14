@@ -153,3 +153,8 @@ section 12 remains readable under its historical `native` decoder key; it
 observes kernel serving, not host-file acquisition or a storage pack lane.
 Tests are updated in the separate test pass. Historical receipts retain their
 original names and verdicts.
+
+Platform telemetry uses the `platform` feature and platform collector names.
+Process start identity is a host observation. Sandbox capability/device prose
+describes a kernel mount; SDK channel prose describes the duplex connection.
+These terminology changes keep behavior and report encoding unchanged.

@@ -3,7 +3,7 @@
 /// Fixed collection identity, independent of process scope and clock domains.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Source {
-    /// Caller-supplied typed data; makes no native collection claim.
+    /// Caller-supplied typed data; makes no platform collection claim.
     #[default]
     Supplied,
     /// Safe POSIX CPU plus libproc RSS/incarnation on macOS.
@@ -12,7 +12,7 @@ pub enum Source {
     Linux,
 }
 impl Source {
-    /// Stable bounded name in native report schema v1.
+    /// Stable bounded name in platform report schema v1.
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Supplied => "supplied",
@@ -30,11 +30,11 @@ pub struct Observation {
     pub selected: u8,
     /// Collection API identity; synthetic reports remain explicitly supplied.
     pub source: Source,
-    /// Observed native collection wall time; absent on supplied data.
+    /// Observed platform collection wall time; absent on supplied data.
     pub probe_ns: Option<u64>,
     /// Local nanoseconds since monitor start.
     pub at_ns: u64,
-    /// Native process start identity, stable only within the stated host scope.
+    /// Host process start identity, stable only within the stated host scope.
     pub incarnation: u64,
     /// Cumulative user CPU nanoseconds.
     pub user_ns: Option<u64>,

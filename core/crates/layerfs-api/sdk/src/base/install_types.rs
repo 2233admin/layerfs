@@ -12,9 +12,9 @@ pub struct InstallWork {
     pub read_calls: u64,
     /// Bytes returned by successful file reads.
     pub read_bytes: u64,
-    /// Completed native data-record sends; no remote file-write inference.
+    /// Completed duplex data-record sends; no remote file-write inference.
     pub sent_records: u64,
-    /// Bytes in completed native data-record sends.
+    /// Bytes in completed duplex data-record sends.
     pub sent_bytes: u64,
     /// Fixed retained file window.
     pub buffer_bytes: usize,

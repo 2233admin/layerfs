@@ -1,4 +1,4 @@
-//! Native filesystem inputs: final bindings, typed values and declared resources.
+//! Filesystem construction inputs: final bindings, typed values and declared resources.
 //!
 //! The caller supplies stable logical changes and authorized identities; C1
 //! validates and consumes them. A directory update lists the *final* binding of

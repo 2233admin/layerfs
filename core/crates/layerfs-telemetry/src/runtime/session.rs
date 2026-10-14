@@ -1,4 +1,4 @@
-//! Explicit native telemetry ownership; disabled startup has no side effects.
+//! Explicit platform telemetry ownership; disabled startup has no side effects.
 use super::{Monitor, MonitorConfig};
 use crate::{
     operation::{Diagnostic, OperationRecorder},
@@ -6,7 +6,7 @@ use crate::{
     timer::RecordingLimits,
 };
 use std::{io, sync::Arc, time::Duration};
-/// Native assembly configuration; the library never reads environment variables.
+/// Platform assembly configuration; the library never reads environment variables.
 pub struct Configuration {
     /// Master switch, checked before every other field or allocation.
     pub enabled: bool,
@@ -47,7 +47,7 @@ impl Runtime {
         }
         config.output.validate()?;
         config.monitor.validate()?;
-        // Validate hostile configuration arithmetic before any native allocation.
+        // Validate hostile configuration arithmetic before any platform allocation.
         let charge =
             || -> Option<usize> {
                 (4usize * 1024 * 1024)

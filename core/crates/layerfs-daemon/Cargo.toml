@@ -1,6 +1,6 @@
 [package]
 name = "layerfs-daemon"
-description = "Daemon-owned fair overlay service; native process/FUSE assembly follows."
+description = "Workspace-owned overlay service with typed kernel mount and Store calls."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

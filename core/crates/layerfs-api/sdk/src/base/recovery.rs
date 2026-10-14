@@ -5,7 +5,7 @@ use layerfs_bridge::control::{
 };
 use layerfs_history::{BranchId, WorkspaceId};
 impl WorkspaceApi<'_> {
-    /// Prepares one logical Store/engine binding once. This is not a native mount.
+    /// Prepares one logical Store/engine binding once. This is not a kernel mount.
     /// Lost delivery keeps the original request/unknown, with no automatic rebind.
     pub(crate) fn bind(
         &mut self,

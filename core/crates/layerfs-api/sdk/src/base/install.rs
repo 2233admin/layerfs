@@ -11,7 +11,7 @@ use std::{
     io::{self, Read},
 };
 
-/// Streams one sealed file over an already authenticated native connection.
+/// Streams one sealed file over an already authenticated duplex connection.
 /// A failed attempt fences that connection and retains original custody. A
 /// successful connection remains usable for subsequent control commands.
 pub fn install(

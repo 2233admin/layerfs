@@ -8,7 +8,7 @@ license.workspace = true
 
 [features]
 default = []
-native = ["dep:libproc", "dep:nix"]
+platform = ["dep:libproc", "dep:nix"]
 [target.'cfg(target_os = "macos")'.dependencies]
 libproc = { version = "=0.14.11", optional = true }
 nix = { version = "=0.31.3", features = ["resource"], optional = true }

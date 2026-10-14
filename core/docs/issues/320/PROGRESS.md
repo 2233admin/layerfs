@@ -4020,3 +4020,19 @@ passed; the affected runtime check follows the mechanical repair.
 Bridge verification: host/Linux product check and warning-denying Clippy
 passed; the repaired independent Linux runtime check passed. Formatting and
 whitespace passed. No tests run in Phase 1; source pins match formatted files.
+
+
+### Phase 1: platform, host and kernel prose
+
+Telemetry feature/cfg names become platform, along with its collector/assembly
+comments and unsupported-platform error. Process-start identity is host-scoped.
+Sandbox mount/access prose uses kernel; generic Content inputs describe
+filesystem construction; SDK base/channel prose uses kernel, host or duplex
+by meaning. The daemon manifest describes the implemented Workspace-owned
+service. Host-file acquisition names/schema remain for the final rename group.
+Product checks explicitly enable layerfs-telemetry/platform so the renamed
+optional collector is compiled on both platforms. Tests: not yet updated.
+
+Prose/platform verification: host/Linux product check and warning-denying
+Clippy passed with the platform collector enabled; fmt/whitespace passed.
+No tests run in Phase 1. Durable execution remains owner-disabled.

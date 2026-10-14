@@ -1,4 +1,4 @@
-//! Exact observed daemon identity, security and native-access settings, and volume placement.
+//! Exact observed daemon identity, security and kernel-access settings, and volume placement.
 use super::{
     json::{once, Json},
     SandboxRequest,

@@ -9,7 +9,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-/// Explicit native configuration; constructing/importing types starts no work.
+/// Explicit platform configuration; constructing/importing types starts no work.
 #[derive(Clone, Copy)]
 pub struct MonitorConfig {
     /// Select cumulative CPU observations.
@@ -48,7 +48,7 @@ struct State {
     failures: crate::health::Counter,
     origin: Instant,
 }
-/// Native lifetime owner. Its window handle can be shared across hosted components.
+/// Platform lifetime owner. Its window handle can be shared across hosted components.
 pub struct Monitor {
     state: Arc<State>,
     worker: Option<JoinHandle<()>>,
@@ -163,7 +163,7 @@ impl Monitor {
     pub fn windows(&self) -> Arc<dyn WindowSource> {
         self.state.clone()
     }
-    /// Failed native observations, never interpreted as zero CPU or zero memory.
+    /// Failed platform observations, never interpreted as zero CPU or zero memory.
     pub fn failures(&self) -> u64 {
         self.state.failures.value()
     }

@@ -105,7 +105,7 @@ impl Control {
                 self.failed = true;
                 phase = ControlPhase::Fence;
                 // Quarantine the underlying owner as well: transferring it into
-                // another Control cannot reset an ended native session.
+                // another Control cannot reset an ended duplex session.
                 self.connection
                     .send
                     .close()
@@ -165,7 +165,7 @@ impl Control {
     pub(crate) fn clear_io_waits(&self) -> Result<(), ChannelError> {
         self.connection.clear_io_waits()
     }
-    /// Actual cumulative native send/receive work for this connection.
+    /// Actual cumulative duplex send/receive work for this connection.
     pub fn channel_work(&self) -> (ChannelWork, ChannelWork) {
         (self.connection.send.work(), self.connection.receive.work())
     }

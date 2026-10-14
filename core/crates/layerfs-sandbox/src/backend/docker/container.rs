@@ -9,7 +9,7 @@ use super::{
 use crate::{ContainerId, RuntimeError, WireFailure};
 use std::io::{self, Read, Write};
 impl SandboxRequest {
-    /// Native mounting needs exactly one capability and one device. The
+    /// Kernel mounting needs exactly one capability and one device. The
     /// container stays unprivileged with no-new-privileges; commands run as
     /// their own nonroot identity and inherit neither.
     /// Nothing in it may create a user namespace: see [`SECCOMP`].

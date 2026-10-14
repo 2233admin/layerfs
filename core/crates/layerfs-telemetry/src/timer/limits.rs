@@ -9,7 +9,7 @@ pub const NODE_CHARGE: usize = 1024;
 pub const MAX_RECORDING_BYTES: usize = MAX_NODES * NODE_CHARGE;
 
 /// A validated per-recording profile. Caller-owned imported reports are separate
-/// owners until attached; native recorder pools charge that overlap separately.
+/// owners until attached; platform recorder pools charge that overlap separately.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct RecordingLimits {
     nodes: usize,

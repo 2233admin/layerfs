@@ -1,11 +1,11 @@
-//! Explicit native monitor and application lifetime assembly.
-#[cfg(feature = "native")]
+//! Explicit platform monitor and application lifetime assembly.
+#[cfg(feature = "platform")]
 mod monitor;
-#[cfg(feature = "native")]
+#[cfg(feature = "platform")]
 pub use monitor::{Monitor, MonitorConfig};
-#[cfg(feature = "native")]
+#[cfg(feature = "platform")]
 mod session;
-#[cfg(feature = "native")]
+#[cfg(feature = "platform")]
 pub use session::{Configuration, Runtime};
 
 pub mod observation;

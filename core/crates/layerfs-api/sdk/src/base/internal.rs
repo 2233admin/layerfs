@@ -40,7 +40,7 @@ impl DerefMut for InternalWorkspaceApi<'_> {
     }
 }
 impl InternalWorkspaceApi<'_> {
-    /// Original logical bind for component proofs; native mount still uses both steps.
+    /// Original logical bind for component proofs; kernel mount still uses both steps.
     pub fn bind(
         &mut self,
         workspace: WorkspaceId,
@@ -140,7 +140,7 @@ pub fn branches(
     crate::project::branches::branches(control, stack, page)
 }
 
-/// The same ordinary launcher for external native commands and disjoint concurrent proof borrows.
+/// The same ordinary launcher for external host commands and disjoint concurrent proof borrows.
 #[cfg(unix)]
 pub fn exec(
     sandbox: &layerfs_sandbox::backend::docker::Sandbox,

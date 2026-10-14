@@ -56,7 +56,7 @@ pub enum SandboxPhase {
     Endpoint,
     /// One TCP connection attempt.
     Connect,
-    /// One expected-peer native authentication.
+    /// One expected-peer duplex authentication.
     Authenticate,
     /// Clears only explicit handshake waits after authentication; owner remains retained on failure.
     Policy,
@@ -143,9 +143,9 @@ pub struct ManagedSandbox {
     /// Original acknowledged installation, when this create installed the Project.
     pub installed: Option<crate::Installed>,
     pub(crate) request: SandboxCreate,
-    /// Original correlated startup status; this is not native Workspace Ready.
+    /// Original correlated startup status; this is not kernel Workspace Ready.
     pub startup: DaemonStatus,
-    /// Actual original native handshake work.
+    /// Actual original duplex handshake work.
     pub handshake: ChannelWork,
     pub(crate) command_identity: layerfs_sandbox::CommandIdentity,
 }
@@ -324,7 +324,7 @@ pub(crate) fn create(
         handshake = start.work;
         let connection = start.result.map_err(SandboxCause::Channel)?;
         // The startup handshake waits are cleared before control/product operations.
-        // Bridge owns cloned native directions; clear policy through that actual owner.
+        // Bridge owns cloned duplex directions; clear policy through that actual owner.
         control = Some(Control::new(connection));
         phase = SandboxPhase::Policy;
         control
