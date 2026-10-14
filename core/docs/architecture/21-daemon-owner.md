@@ -6,7 +6,55 @@ schema16. Earlier algorithm and proof pins retain their original scope; see
 
 > **Status:** Current general guide.
 
-## Issue 321 step 1 ownership update (2026-10-13)
+## Issue 321 final model: one lock per Workspace (2026-10-14)
+
+Implemented at the Step D source of [#321](../issues/321/CHECKLIST.md); this
+section is the current description and supersedes the owner thread, class
+queues, credits, common ledger and notification table described further down.
+Measured outcomes are in the [#320 ledger](../issues/320/PROGRESS.md), not here.
+
+- **Template.** Startup builds an empty schema 34 database at the configured
+  overlay path, checks its close before readiness and keeps only its physical
+  identity handle. It never holds a Workspace row.
+- **One file per mounted Workspace.** Mount copies the template to
+  `<namespace>.sqlite` beside it and opens one connection: 4,096-byte pages,
+  MEMORY journal, synchronous OFF, EXCLUSIVE locking, `temp_store=MEMORY`,
+  mmap off, zero busy timeout and the configured pager allowance. The roster
+  (`overlay/workspaces.rs`) admits the configured number of mounted Workspaces.
+- **One lock.** `overlay/state.rs` holds the connection, the Workspace's open
+  state, its lifecycle and its counted work behind one `Mutex` with one
+  `Condvar`. The calling thread takes the lock, runs one short atomic job and
+  releases it. No lock is held across Store I/O, a whole Exec or a whole
+  Commit. There is no owner thread, queue, admission credit, shared memory
+  budget or notification table, and nothing is shared between two Workspaces'
+  overlays.
+- **Ordering that remains.** A Capture waiting for earlier reply attempts and a
+  known install waiting for earlier base sources each own a finite frontier:
+  a later mutation waits behind a waiting Capture, a later source acquisition
+  behind a waiting install. Everything else runs in lock order.
+- **Memory.** Each connection has its own pager allowance; it is a SQLite
+  suggestion, not a resident bound. Open-file, directory-position and
+  kernel-reference state is resident and grows with open files and with the
+  files the kernel currently references. The engine also remembers three fence
+  rows; see [rows the engine remembers](64-overlay-terminology.md#rows-the-engine-remembers).
+- **Counted work.** A job is one hold of the lock. Each hold records its lock
+  wait, its hold time and its SQL, payload and physical work in its class;
+  a maintenance step is counted only in the maintenance totals.
+- **Terminal unmount.** After the terminal native/control fence and the drain,
+  control checks the connection's close and removes the route. The last
+  backing reference unlinks the Workspace's own singly linked file. A close,
+  identity or unlink failure keeps the original custody and is not retried.
+- **Failure.** A failed job that began a transaction rolls back and forgets
+  the remembered rows. A full device rolls the write back as no space; no
+  space is reserved ahead of use. A panic inside a job retains the connection
+  and fails that Workspace only.
+
+## Issue 321 step 1 ownership update (2026-10-13; superseded in part)
+
+Historical within #321: the owner thread, lane, class queues, ledger, job
+credits and common notification table in this section were removed by Step B;
+schema 33 and the Workspace columns by Step C. The template, the copied file,
+the route-specific client and the terminal file removal remain as described.
 
 The implementation based on `06be791ea` changes `Owner::start_observed` into a
 closed-template owner: startup creates/configures schema 33 and checks its close

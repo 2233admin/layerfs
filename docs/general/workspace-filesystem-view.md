@@ -37,9 +37,10 @@ ignored files, dependencies, symlinks, caches and outputs. Its objects are
 immutable. Each Workspace selects a root; two branches can select different
 roots while sharing objects with identical canonical IDs.
 
-The overlay holds that Workspace's mutable state. One initialized database
-belongs to each daemon, with separate Workspace namespaces inside it. Opening a
-Workspace binds its base and namespace; the target repeated-mount path performs
+The overlay holds that Workspace's mutable state. Since #321 (2026-10-14) each
+mounted Workspace has its own database file, copied at mount from a template
+built before readiness and deleted at terminal unmount. Opening a
+Workspace binds its base and creates that file; the target repeated-mount path performs
 no full-base scan, import, copy or dependency restoration. Demand I/O still pays
 its actual cost.
 

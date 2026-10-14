@@ -12,6 +12,7 @@ from pathlib import Path
 import sqlite3
 import subprocess
 import sys
+import tarfile
 import time
 
 _SOURCE_PARENTS = Path(__file__).resolve().parents
@@ -779,18 +780,27 @@ if __name__ == "__main__":
 
 
 # Closed accounting observation is separate from the existing content/census routes.
-def _overlay_storage_source():
-    """Schema 33: pieces add reference_rows, never payload/validity bytes.
+OVERLAY_SCHEMA_VERSION = 34
+OVERLAY_DIRECTORY = '/layerfs-local/overlay'
+OVERLAY_TEMPLATE = OVERLAY_DIRECTORY + '/overlay.sqlite'
 
-    Table membership, trigger definitions and every maintained count are checked
-    independently; source pins bind the reviewed physical accounting model.
+
+def _overlay_storage_source():
+    """Schema 34 (issue 321): one overlay file per mounted Workspace.
+
+    The configured overlay path is the daemon's closed template: the empty
+    schema, never a Workspace. Each mounted Workspace owns `<namespace>.sqlite`
+    beside it, copied at mount and deleted at terminal unmount. Table
+    membership and trigger definitions are checked independently; source pins
+    bind the reviewed schema, accounting and file-lifetime model.
     """
     pins = {
-        'core/crates/layerfs-overlay/sql/schema.sql': 'f8a9af297716d51d481e8ae1ba554bdbaa09ac72e209877722f3bcaf988532b0',
-        'core/crates/layerfs-overlay/sql/accounting.sql': '6fb0a344b7baf56ca1f6ece2f30253fcd83ac59100bda3ce70629f47e0e7693e',
-        'core/crates/layerfs-overlay/src/database/accounting.rs': '65a3b01fdedcbe065101d02dcc41cd7520def1d2de4fc29f3cc0f89f0d2bd4c4',
-        'core/crates/layerfs-overlay/src/database/allocation.rs': '579cf990c709b51a7cf36820fa21524d7c4ebc18dcf43df4d47d4b1973d8f3c4',
-        'core/crates/layerfs-overlay/src/lifetime/close.rs': '3fa9e4ee99097a9e08860ff07a33a81131dc219b87527f43b8e86d185df112ca',
+        'core/crates/layerfs-overlay/sql/schema.sql': '5aa5c631219c2b50aa5d3145555f8e2d7436f300155de0c27b716611cfcea190',
+        'core/crates/layerfs-overlay/sql/accounting.sql': '33f9dc4e9641d0d198629c42892076becc79e7f9d4acee7e86698bedadbf5caa',
+        'core/crates/layerfs-overlay/src/database/accounting.rs': 'b33959a2e87fe0083cb1c203c9019d499091d8480e7a732770aa1442fc4ae623',
+        'core/crates/layerfs-overlay/src/database/physical.rs': '90bc4c7bdc3a597b927d2e2255b614e7da32f264e9b5d34fbce616a653c6f9de',
+        'core/crates/layerfs-overlay/src/lifetime/close.rs': 'a88c413626dbdb1f54d7eae20a103d4fec5f28abb84f7172f33ab755a1c75e0e',
+        'core/crates/layerfs-daemon/src/overlay/workspaces.rs': '67e105466aabb9b850d2f584c975e7dfe5ddd6e957acc81fd4b3db4688fd0018',
         'core/crates/layerfs-bridge/src/control_types.rs': '1047a09284a17bc49ebe31da53ddb60445b3e68375d06736680b3c7e8b2a0bc9',
     }
     if ROOT is None or any(file_sha(ROOT / name) != digest for name, digest in pins.items()):
@@ -828,7 +838,7 @@ def _storage_owner_identity(owner):
 
 
 def _storage_export_custody(path, kind, custody, before, owners):
-    remote = '/layerfs-local/overlay/overlay.sqlite' if kind == 'overlay' else '/layerfs-store/global/store.sqlite'
+    remote = OVERLAY_TEMPLATE if kind == 'overlay' else '/layerfs-store/global/store.sqlite'
     normalized = kind == 'store' and 'normalization' in custody
     exported = _normalization_binding(path, {key: before[key] for key in ('sha256', 'size')}, custody) if normalized else path
     identity = _closed_store_file(exported) if normalized else before
@@ -884,47 +894,67 @@ def _storage_export_custody(path, kind, custody, before, owners):
     return {key: custody[key] for key in required}
 
 
-def _overlay_owner_accounting(database, owner, tables):
-    incarnation = _storage_owner_identity(owner)
-    ns = owner['namespace']
-    allocated = database.execute("SELECT seq FROM sqlite_sequence WHERE name='workspace'").fetchall()
-    if len(allocated) != 1 or type(allocated[0][0]) is not int or ns > allocated[0][0]:
-        raise ValueError('closed overlay owner is outside allocated namespace domain')
-    owned_tables = [name for name in tables if name != 'sqlite_sequence']
-    queries = {name: f'SELECT count(*) FROM "{name}" WHERE ns=?' for name in owned_tables}
-    counts = {name: database.execute(sql, (ns,)).fetchone()[0] for name, sql in queries.items()}
-    workspace = database.execute('SELECT incarnation,lifecycle FROM workspace WHERE ns=?', (ns,)).fetchall()
-    if workspace and (len(workspace) != 1 or _blob(workspace[0][0], 32) != incarnation):
-        raise ValueError('closed overlay existing namespace incarnation differs')
-    payload = database.execute('SELECT coalesce(sum(length(data)+coalesce(length(validity),0)),0) FROM payload WHERE ns=?', (ns,)).fetchone()[0]
-    records = sum(database.execute(f'SELECT coalesce(sum(length(value)),0) FROM "{name}" WHERE ns=?', (ns,)).fetchone()[0]
-                  for name in ('operation_record', 'owned_operation_record', 'indexed_operation_record'))
-    details = ('file_custody', 'file_handle', 'file_read', 'captured_reader', 'operation_owner', 'lookup_owner',
-               'native_mount', 'native_lookup', 'native_parent', 'native_directory', 'native_cookie')
-    expected = dict(wait_refs=counts['orphan_wait'], namespaces=counts['workspace'], inode_rows=counts['inode'],
-                    directory_entry_rows=counts['directory_entry'], payload_cells=counts['payload'], payload_bytes=payload,
-                    shrink_rows=counts['shrink'], reference_rows=counts['payload_reference'], operation_record_rows=sum(counts[name] for name in
-                    ('operation_record', 'owned_operation_record', 'indexed_operation_record')), operation_record_bytes=records,
-                    orphan_rows=counts['orphan'], owner_rows=counts['lease'], source_rows=counts['base_source'],
-                    owner_details=sum(counts[name] for name in details), retire_targets=counts['reclaim'],
-                    maintenance_targets=counts['maintenance'], ready_targets=database.execute(
-                    'SELECT coalesce(sum(ready),0) FROM maintenance WHERE ns=?', (ns,)).fetchone()[0])
-    names = list(expected)
-    actual = database.execute('SELECT ' + ','.join(names) + ' FROM accounting WHERE ns=?', (ns,)).fetchall()
-    if (workspace and (len(actual) != 1 or actual[0] != tuple(expected.values()))
-            or not workspace and (actual or any(expected.values()))):
-        raise ValueError('closed overlay maintained namespace accounting differs from actual owned rows')
-    queued = bool(database.execute('SELECT 1 FROM reclaim WHERE ns=? AND queue_key=?', (ns, 2**63-1)).fetchone())
-    state = 'GONE' if not workspace else 'LIVE' if workspace[0][1] == 0 else 'QUEUED' if queued else 'HELD'
-    return {**owner, 'state': state, 'row_counts': counts, 'queries': queries,
-            'stored_payload_and_validity_bytes': payload, 'stored_operation_record_bytes': records,
-            'maintained_accounting': expected, 'owned_namespace_rows': sum(counts.values()),
-            'namespace_cleanup_status': 'PASS' if not any(counts.values()) else 'FAIL',
-            'cleanup_scope': 'all current source-defined ns tables; Gone is absence within allocated domain, former owner is separately mount-bound; shared file may remain'}
+def _overlay_directory(custody, template):
+    """Members of the stopped container's overlay directory, from its retained tar.
+
+    The directory holds the closed template and one `<namespace>.sqlite` for
+    each Workspace whose terminal unmount has not deleted its file. Any other
+    member, and a template that is not the exported copy, is refused.
+    """
+    binding = custody.get('directory')
+    if type(binding) is not dict or set(binding) != {'completion', 'completion_sha256', 'stdout', 'stdout_sha256'}:
+        raise ValueError('closed overlay directory complete command/archive hash binding required')
+    if any(file_sha(binding[name]) != binding[name + '_sha256'] for name in ('completion', 'stdout')):
+        raise ValueError('closed overlay directory receipt hash differs')
+    completion = json.loads(Path(binding['completion']).read_text())
+    argv = completion.get('argv', [])
+    if (completion.get('status') != 'PASS' or completion.get('exit_code') != 0 or completion.get('attempts') != 1
+            or Path(completion.get('stdout', '')).resolve() != Path(binding['stdout']).resolve()
+            or len(argv) != 6 or argv[:2] != ['docker', '--host'] or type(argv[2]) is not str
+            or not argv[2].startswith('unix://')
+            or argv[3:] != ['cp', custody['container'] + ':' + OVERLAY_DIRECTORY, '-']):
+        raise ValueError('closed overlay directory exact acknowledged archive command differs')
+    remaining, seen = {}, None
+    with tarfile.open(binding['stdout'], mode='r:') as archive:
+        for member in archive:
+            name = member.name.rstrip('/')
+            if member.isdir() and name == 'overlay':
+                continue
+            parts = name.split('/')
+            if len(parts) != 2 or parts[0] != 'overlay' or not member.isreg():
+                raise ValueError('closed overlay directory holds an unknown member')
+            if parts[1] == 'overlay.sqlite':
+                if seen is not None:
+                    raise ValueError('closed overlay directory repeats its template')
+                seen = {'size': member.size, 'sha256': hashlib.sha256(archive.extractfile(member).read()).hexdigest()}
+                continue
+            stem, _, suffix = parts[1].partition('.')
+            if suffix != 'sqlite' or not stem.isdecimal() or str(int(stem)) != stem or int(stem) <= 0 or int(stem) in remaining:
+                raise ValueError('closed overlay directory holds an unknown member')
+            remaining[int(stem)] = member.size
+    if seen != {'size': template['size'], 'sha256': template['sha256']}:
+        raise ValueError('closed overlay directory template differs from the exported copy')
+    return {'binding': binding, 'template': seen, 'workspace_files': {str(ns): size for ns, size in sorted(remaining.items())},
+            'scope': 'every member of the stopped container overlay directory at the retained archive command; no live or peak size'}
 
 
-def _observe_closed_storage_read_only(sealed_path, kind, owners=()):
-    """Synthetic tests may use this; actual runs require observe_closed_storage custody."""
+def _overlay_owner_state(owner, remaining):
+    """Gone is the absence of the Workspace's own file after the known Stop."""
+    _storage_owner_identity(owner)
+    name = str(owner['namespace']) + '.sqlite'
+    held = remaining.get(str(owner['namespace']))
+    return {**owner, 'state': 'GONE' if held is None else 'HELD', 'workspace_file': OVERLAY_DIRECTORY + '/' + name,
+            'workspace_file_bytes_after_stop': held,
+            'namespace_cleanup_status': 'PASS' if held is None else 'FAIL',
+            'cleanup_scope': 'the Workspace own overlay file in the stopped container; Gone is its absence, with a closed template that holds no row; the former owner is separately mount-bound'}
+
+
+def _observe_closed_storage_read_only(sealed_path, kind, owners=(), remaining=None):
+    """Synthetic tests may use this; actual runs require observe_closed_storage custody.
+
+    `remaining` maps each namespace whose Workspace file is still in the
+    stopped overlay directory to its size; an overlay observation requires it.
+    """
     path = Path(sealed_path)
     if kind not in ('overlay', 'store') or kind == 'store' and owners:
         raise ValueError('closed storage exact overlay/store observation kind required')
@@ -935,6 +965,8 @@ def _observe_closed_storage_read_only(sealed_path, kind, owners=()):
     if kind == 'overlay' and (not owners or len({o.get('namespace') for o in owners}) != len(owners)
                               or len({o.get('key') for o in owners}) != len(owners)):
         raise ValueError('closed overlay unique explicit owner set required')
+    if kind == 'overlay' and type(remaining) is not dict or kind == 'store' and remaining is not None:
+        raise ValueError('closed overlay directory membership required for an overlay observation only')
     with closing(sqlite3.connect(path.resolve().as_uri() + '?mode=ro&immutable=1', uri=True,
                                  timeout=0, isolation_level=None)) as database:
         database.execute('PRAGMA query_only=ON')
@@ -942,7 +974,7 @@ def _observe_closed_storage_read_only(sealed_path, kind, owners=()):
         application = database.execute('PRAGMA application_id').fetchone()[0]
         if kind == 'overlay':
             _, definition, tables, pins = _overlay_storage_source()
-            if version != 33 or application != 1279676210:
+            if version != OVERLAY_SCHEMA_VERSION or application != 1279676210:
                 raise ValueError('closed overlay current schema identity differs')
         else:
             _, text, tables = _schema_source(version)
@@ -962,31 +994,42 @@ def _observe_closed_storage_read_only(sealed_path, kind, owners=()):
         free = database.execute('PRAGMA freelist_count').fetchone()[0]
         if kind == 'overlay' and (page_size != 4096 or database.execute('PRAGMA auto_vacuum').fetchone()[0] != 0):
             raise ValueError('closed overlay stored page layout differs')
-        selected = [_overlay_owner_accounting(database, owner, tables) for owner in owners]
+        template_rows = {}
         if kind == 'overlay':
-            aggregate = database.execute('SELECT orphan_rows FROM accounting WHERE ns=0').fetchall()
-            if aggregate != [(database.execute('SELECT count(*) FROM orphan').fetchone()[0],)]:
-                raise ValueError('closed overlay maintained aggregate orphan accounting differs')
+            # The template is created empty, closed before readiness and only copied afterwards.
+            template_rows = {name: database.execute(f'SELECT count(*) FROM "{name}"').fetchone()[0]
+                             for name in tables if name != 'sqlite_sequence'}
+            if any(template_rows.values()):
+                raise ValueError('closed overlay template holds rows; it is never a Workspace')
+        selected = [_overlay_owner_state(owner, remaining) for owner in owners]
     after = _storage_snapshot_identity(path)
     if before != after:
         raise ValueError('closed storage exported copy changed during immutable observation')
     unavailable = {
-        'workspace_physical_live_bytes': 'UNAVAILABLE: ns BLOB lengths are logical stored bytes, not allocated blocks',
+        'workspace_physical_live_bytes': 'UNAVAILABLE: a Workspace file is deleted at terminal unmount; closed storage holds none of its bytes',
         'workspace_physical_superseded_bytes': 'UNAVAILABLE: no exclusive physical ownership/version classification counter',
-        'workspace_physical_allocated_bytes': 'UNAVAILABLE: one shared SQLite file, indexes/freelist/reservations cannot be assigned by ns',
-        'workspace_physical_peak_bytes': 'UNAVAILABLE: daemon-startup high-water is shared and includes reservation, not original owned-spool peak',
-        'workspace_owned_file_count': 'UNAVAILABLE: current Workspace has ns rows in permanent shared file, no original exclusive spool file topology',
+        'workspace_physical_allocated_bytes': 'UNAVAILABLE: the allocation of a deleted Workspace file is not observable after Stop; no inferred zero while it lived',
+        'workspace_physical_peak_bytes': 'UNAVAILABLE: no retained high-water of a Workspace file; the daemon reports its pages only while it is mounted',
         'reply_tickets': 'UNAVAILABLE: held in engine memory, absent from closed SQL; no inferred zero',
     }
-    return {'schema': 'fs-bench-pro-closed-storage-observation-v1', 'kind': kind, 'observation_status': 'PASS',
+    files = None
+    if kind == 'overlay':
+        files = {'workspace_files_after_stop': len(remaining), 'workspace_file_bytes_after_stop': dict(remaining),
+                 'template_rows': template_rows}
+    else:
+        unavailable['workspace_owned_file_count'] = 'UNAVAILABLE: the Store is shared; Workspace files are an overlay observation'
+    return {'schema': 'fs-bench-pro-closed-storage-observation-v' + ('2' if kind == 'overlay' else '1'), 'kind': kind, 'observation_status': 'PASS',
             'schema_version': version, 'application_id': application, 'source_pins': pins,
             'export_copy': {**before, 'scope': 'actual stat/hash of isolated immutable exported copy; copy allocation is not source allocation'},
             'shared_sqlite': {'page_size_bytes': page_size, 'page_count': pages, 'freelist_count': free,
-                              'scope': 'shared permanent database/index/free pages; no per-Workspace attribution or peak'},
+                              'scope': 'closed empty template of the daemon; no Workspace bytes' if kind == 'overlay' else
+                                       'shared permanent database/index/free pages; no per-Workspace attribution or peak'},
+            **({'overlay_directory': files} if files is not None else {}),
             'owners': selected, 'namespace_cleanup_status': ('PASS' if all(o['namespace_cleanup_status'] == 'PASS' for o in selected) else 'FAIL') if selected else 'UNAVAILABLE',
             'metric_availability': unavailable, 'legacy_physical_equation_status': 'UNAVAILABLE',
             'legacy_physical_resource_status': 'UNAVAILABLE', 'source_main_store_4gib_status': 'UNAVAILABLE',
-            'owned_spool_2gib_status': 'UNAVAILABLE', 'owned_files_after_cleanup_status': 'UNAVAILABLE',
+            'owned_spool_2gib_status': 'UNAVAILABLE',
+            'owned_files_after_cleanup_status': 'UNAVAILABLE' if files is None else 'FAIL' if remaining else 'PASS',
             'original_limits_bytes': {'main_store': 4 * 1024**3, 'owned_spool': 2 * 1024**3},
             'profile_availability': 'connection-local MEMORY/OFF/EXCLUSIVE settings are not attested by reopening a copy; require actual startup profile receipt'}
 
@@ -995,7 +1038,7 @@ def storage_source_stat_body(kind):
     """Fixed metadata-only source observer; caller owns phase/command/custody."""
     if kind not in ('overlay', 'store'):
         raise ValueError('source stat exact storage kind required')
-    remote = '/layerfs-local/overlay/overlay.sqlite' if kind == 'overlay' else '/layerfs-store/global/store.sqlite'
+    remote = OVERLAY_TEMPLATE if kind == 'overlay' else '/layerfs-store/global/store.sqlite'
     return "import json,os,stat\np=" + repr(remote) + "\ns=os.lstat(p)\nassert stat.S_ISREG(s.st_mode) and s.st_nlink==1\nprint(json.dumps({'schema':'fs-bench-pro-source-storage-stat-v1','path':p,'logical_bytes':s.st_size,'allocated_bytes':s.st_blocks*512,'device':s.st_dev,'inode':s.st_ino,'links':s.st_nlink}))\n"
 
 
@@ -1016,7 +1059,7 @@ def _storage_source_stat(custody, kind):
             or argv[9:] != ['-c', storage_source_stat_body(kind)]):
         raise ValueError('source storage stat exact acknowledged command differs')
     result = json.loads(Path(binding['stdout']).read_text())
-    remote = '/layerfs-local/overlay/overlay.sqlite' if kind == 'overlay' else '/layerfs-store/global/store.sqlite'
+    remote = OVERLAY_TEMPLATE if kind == 'overlay' else '/layerfs-store/global/store.sqlite'
     if (set(result) != {'schema', 'path', 'logical_bytes', 'allocated_bytes', 'device', 'inode', 'links'}
             or result['schema'] != 'fs-bench-pro-source-storage-stat-v1' or result['path'] != remote
             or any(type(result[name]) is not int or result[name] < 0 for name in ('logical_bytes', 'allocated_bytes', 'device', 'inode', 'links'))
@@ -1035,8 +1078,12 @@ def observe_closed_storage(sealed_path, export_custody, *, kind, owners=()):
     path, custody, owners = Path(sealed_path), dict(export_custody), list(owners)
     before = _storage_snapshot_identity(path)
     admitted = _storage_export_custody(path, kind, custody, before, owners)
-    result = _observe_closed_storage_read_only(path, kind, owners)
+    directory = _overlay_directory(custody, before) if kind == 'overlay' else None
+    result = _observe_closed_storage_read_only(path, kind, owners,
+                                               directory['workspace_files'] if directory is not None else None)
     result['custody'] = admitted
+    if directory is not None:
+        result['overlay_directory']['archive'] = directory
     if 'normalization' in custody:
         result['normalization'] = custody['normalization']
     result['source_stat'] = _storage_source_stat(custody, kind)

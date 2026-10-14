@@ -1,26 +1,24 @@
 LookupMiss: requests=1000 jobs(read,mutation,lifecycle)=[1000, 0, 0] transactions=0 attempts=2000 executions=2000
-  1000 NAME_LAYERS
-  1000 SELECT w.active,w.captured,w.revision,w.base_root,w.dirty_inodes, w.dirty_directory_entries,w.lifecycle,w.installed,w.captured_revision,w.base_readers,w.consolidating, i.serial,i.kind,i.mode,i.mtime_seconds,i.mtime_nanoseconds,i.nlink,i.size, i.inherited_cutoff,i.born,i.entries,i.subdirs,i.gen,i.epoch,i.height,i.referenced,i.sequence FROM workspace w LEFT JOIN inode i ON i.ns=w.ns AND i.serial=?3 AND i.gen<=w.active AND i.gen>w.installed WHERE w.ns=?1 AND w.incarnation=?2 ORDER BY i.gen DESC LIMIT 1
+  1000 SELECT generation,inode,inherited FROM fs_entry WHERE parent=?1 AND name=?2 AND generation<=?3 AND generation>?4 ORDER BY generation DESC LIMIT 2
+  1000 SELECT w.active,w.captured,w.revision,w.base_root,w.dirty_inodes, w.dirty_directory_entries,w.lifecycle,w.installed,w.captured_revision,w.base_readers,w.consolidating, i.inode,i.kind,i.mode,i.mtime_seconds,i.mtime_nanoseconds,i.nlink,i.size, i.inherited_cutoff,i.born,i.entries,i.subdirs,i.generation,i.epoch,i.height,i.referenced,i.sequence FROM workspace w LEFT JOIN fs_inode i ON i.inode=?3 AND i.generation<=w.active AND i.generation>w.installed WHERE w.ns=?1 AND w.incarnation=?2 ORDER BY i.generation DESC LIMIT 1
 Getattr: requests=1001 jobs(read,mutation,lifecycle)=[1001, 0, 0] transactions=0 attempts=1001 executions=1001
-  1001 SELECT w.active,w.captured,w.revision,w.base_root,w.dirty_inodes, w.dirty_directory_entries,w.lifecycle,w.installed,w.captured_revision,w.base_readers,w.consolidating, i.serial,i.kind,i.mode,i.mtime_seconds,i.mtime_nanoseconds,i.nlink,i.size, i.inherited_cutoff,i.born,i.entries,i.subdirs,i.gen,i.epoch,i.height,i.referenced,i.sequence FROM workspace w LEFT JOIN inode i ON i.ns=w.ns AND i.serial=?3 AND i.gen<=w.active AND i.gen>w.installed WHERE w.ns=?1 AND w.incarnation=?2 ORDER BY i.gen DESC LIMIT 1
+  1001 SELECT w.active,w.captured,w.revision,w.base_root,w.dirty_inodes, w.dirty_directory_entries,w.lifecycle,w.installed,w.captured_revision,w.base_readers,w.consolidating, i.inode,i.kind,i.mode,i.mtime_seconds,i.mtime_nanoseconds,i.nlink,i.size, i.inherited_cutoff,i.born,i.entries,i.subdirs,i.generation,i.epoch,i.height,i.referenced,i.sequence FROM workspace w LEFT JOIN fs_inode i ON i.inode=?3 AND i.generation<=w.active AND i.generation>w.installed WHERE w.ns=?1 AND w.incarnation=?2 ORDER BY i.generation DESC LIMIT 1
 Create: requests=1000 jobs(read,mutation,lifecycle)=[0, 1000, 0] transactions=1000 attempts=8000 executions=10001
-  1000 DIRECTORY_ENTRY_PUT
   1000 FRONTIER_ADVANCE
-  1001 INODE_INSERT
-  999 INODE_UPDATE
-  1000 NAME_LAYERS
-  1000 SELECT w.active,w.captured,w.revision,w.base_root,w.dirty_inodes, w.dirty_directory_entries,w.lifecycle,w.installed,w.captured_revision,w.base_readers,w.consolidating, i.serial,i.kind,i.mode,i.mtime_seconds,i.mtime_nanoseconds,i.nlink,i.size, i.inherited_cutoff,i.born,i.entries,i.subdirs,i.gen,i.epoch,i.height,i.referenced,i.sequence FROM workspace w LEFT JOIN inode i ON i.ns=w.ns AND i.serial=?3 AND i.gen<=w.active AND i.gen>w.installed WHERE w.ns=?1 AND w.incarnation=?2 ORDER BY i.gen DESC LIMIT 1
+  1000 INSERT INTO fs_entry VALUES(?1,?2,?3,?4,?5) ON CONFLICT(parent,name,generation) DO UPDATE SET inode=excluded.inode,inherited=excluded.inherited
+  1001 INSERT INTO fs_inode VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,0,?15)
+  1000 SELECT generation,inode,inherited FROM fs_entry WHERE parent=?1 AND name=?2 AND generation<=?3 AND generation>?4 ORDER BY generation DESC LIMIT 2
+  1000 SELECT w.active,w.captured,w.revision,w.base_root,w.dirty_inodes, w.dirty_directory_entries,w.lifecycle,w.installed,w.captured_revision,w.base_readers,w.consolidating, i.inode,i.kind,i.mode,i.mtime_seconds,i.mtime_nanoseconds,i.nlink,i.size, i.inherited_cutoff,i.born,i.entries,i.subdirs,i.generation,i.epoch,i.height,i.referenced,i.sequence FROM workspace w LEFT JOIN fs_inode i ON i.inode=?3 AND i.generation<=w.active AND i.generation>w.installed WHERE w.ns=?1 AND w.incarnation=?2 ORDER BY i.generation DESC LIMIT 1
+  999 UPDATE fs_inode SET kind=?3,mode=?4, mtime_seconds=?5,mtime_nanoseconds=?6,nlink=?7,size=?8,inherited_cutoff=?9, born=?10,entries=?11,subdirs=?12,epoch=?13,height=?14,sequence=?15 WHERE inode=?1 AND generation=?2
   1000 begin
   1000 commit
 Write: requests=1000 jobs(read,mutation,lifecycle)=[0, 1000, 0] transactions=1000 attempts=7000 executions=8000
-  1000 CELL_COVER
-  1000 CELL_PUT
   1000 FRONTIER_ADVANCE
-  1000 INODE_UPDATE
-  1000 SELECT w.active,w.captured,w.revision,w.base_root,w.dirty_inodes, w.dirty_directory_entries,w.lifecycle,w.installed,w.captured_revision,w.base_readers,w.consolidating, i.serial,i.kind,i.mode,i.mtime_seconds,i.mtime_nanoseconds,i.nlink,i.size, i.inherited_cutoff,i.born,i.entries,i.subdirs,i.gen,i.epoch,i.height,i.referenced,i.sequence FROM workspace w LEFT JOIN inode i ON i.ns=w.ns AND i.serial=?3 AND i.gen<=w.active AND i.gen>w.installed WHERE w.ns=?1 AND w.incarnation=?2 ORDER BY i.gen DESC LIMIT 1
+  1000 INSERT INTO fs_data(inode,generation,cell_offset,epoch,data,validity) VALUES(?1,?2,?3,?4,?5,?6) ON CONFLICT(inode,generation,cell_offset) DO UPDATE SET epoch=excluded.epoch, data=excluded.data,validity=excluded.validity
+  1000 SELECT rowid,cell_offset,epoch,length(data), CASE WHEN cell_offset=?4 AND length(data)<=4096 THEN data END, CASE WHEN cell_offset=?4 THEN validity END FROM fs_data WHERE inode=?1 AND generation=?2 AND cell_offset>=?3 AND cell_offset<=?4 ORDER BY cell_offset DESC LIMIT 1
+  1000 SELECT w.active,w.captured,w.revision,w.base_root,w.dirty_inodes, w.dirty_directory_entries,w.lifecycle,w.installed,w.captured_revision,w.base_readers,w.consolidating, i.inode,i.kind,i.mode,i.mtime_seconds,i.mtime_nanoseconds,i.nlink,i.size, i.inherited_cutoff,i.born,i.entries,i.subdirs,i.generation,i.epoch,i.height,i.referenced,i.sequence FROM workspace w LEFT JOIN fs_inode i ON i.inode=?3 AND i.generation<=w.active AND i.generation>w.installed WHERE w.ns=?1 AND w.incarnation=?2 ORDER BY i.generation DESC LIMIT 1
+  1000 UPDATE fs_inode SET kind=?3,mode=?4, mtime_seconds=?5,mtime_nanoseconds=?6,nlink=?7,size=?8,inherited_cutoff=?9, born=?10,entries=?11,subdirs=?12,epoch=?13,height=?14,sequence=?15 WHERE inode=?1 AND generation=?2
   1000 begin
   1000 commit
-Release: requests=1000 jobs(read,mutation,lifecycle)=[0, 0, 1000] transactions=0 attempts=1000 executions=1000
-  1000 workspace-state
-Status: requests=1 jobs(read,mutation,lifecycle)=[0, 0, 1] transactions=0 attempts=1 executions=1
-  1 workspace-state
+Release: requests=1000 jobs(read,mutation,lifecycle)=[0, 0, 1000] transactions=0 attempts=0 executions=0
+Status: requests=1 jobs(read,mutation,lifecycle)=[0, 0, 1] transactions=0 attempts=0 executions=0

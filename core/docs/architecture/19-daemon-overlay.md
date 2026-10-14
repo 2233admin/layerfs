@@ -14,6 +14,13 @@ selection below describes its original pin. No canonical or global Store
 format/profile changes. Each Workspace still uses its independent database
 copy and connection; schema 33 remains until the selected step-2 revision.
 
+Issue 321 final state, 2026-10-14: the engine is schema 34, one database per
+mounted Workspace with no Workspace key in any row, served under one lock by
+the calling thread. The current description is in the
+[owner guide](21-daemon-owner.md#issue-321-final-model-one-lock-per-workspace-2026-10-14)
+and the [terminology guide](64-overlay-terminology.md); the shared-database,
+namespace-prefix, reservation and owner-queue passages below are historical.
+
 Temporary state is bounded by the ordinary checked job windows: four inode
 and two name changes, 128 KiB read/write, 32 KiB payload rows, 18 reference
 claims and 64-row metadata/record pages. Piece mutation staging covers at most

@@ -44,8 +44,8 @@ diagnostic and measurement. Do not execute Durable or fall back to it. Retained
 Durable implementation may compile, but report its execution as
 `NOT_RUN — disabled by owner until explicit reauthorization`. Preserve historical
 Durable receipts and their original verdicts. This execution policy does not
-claim that the Durable API has been removed. The daemon overlay remains a
-separate MEMORY/OFF/EXCLUSIVE database.
+claim that the Durable API has been removed. Each Workspace's daemon overlay
+remains a separate MEMORY/OFF/EXCLUSIVE database file.
 
 ## LayerFS mental model
 
@@ -68,12 +68,17 @@ separate MEMORY/OFF/EXCLUSIVE database.
   Keep this boundary explicit in implementation
   and proofs; see [execution ownership](core/AGENTS.md#filesystem-access-and-execution-ownership).
 - Initial full-root acquisition is explicit. Repeated mount binds the complete
-  root without a whole-tree scan/copy/materialization, dependency restoration or
-  new database. Demand-loaded metadata/content still pay real I/O.
-- One local overlay SQLite database belongs to each daemon and is initialized
-  before readiness. Workspace metadata, physical payload, operation records and custody
-  are namespaced within it. One SQLite writer does not serialize whole Execs or
-  Commits; use short atomic jobs and bounded fair service.
+  root without a whole-tree scan/copy/materialization or dependency restoration.
+  The only file it creates is the Workspace's own overlay database, copied from
+  the template. Demand-loaded metadata/content still pay real I/O.
+- Each mounted Workspace has its own local overlay SQLite file, copied at mount
+  from a template built before readiness and deleted at terminal unmount. Its
+  metadata, payload and operation records live only in that file; its open-file,
+  directory-position and kernel-reference state lives in daemon memory.
+  Workspaces share no overlay connection, writer, page cache or memory budget;
+  the daemon shares only committed immutable content and the global Store. One
+  lock guards a Workspace's connection: hold it for one short atomic job, never
+  across Store I/O, a whole Exec or a whole Commit.
 - Commit captures the shared locally published Workspace frontier, potentially
   including several calls' changes regardless of how their processes were
   launched. Do not filter captured changes by Exec registration or completion.
@@ -103,10 +108,12 @@ separate MEMORY/OFF/EXCLUSIVE database.
   bounded windows, streaming and backpressure. Resident containers/transport
   frames must not impose artificial total file/edit/Workspace/Commit/flow/time
   caps. Physical capacity, platform/format limits and explicit admission remain.
+  The one resident exception is a Workspace's open state, which grows with open
+  files and with the files the kernel currently references.
 - Automatic bounded local reclamation follows last-owner release, including
-  during live activity and idle periods. Terminal unmount includes close/cleanup;
-  physical SQL deletion may finish later. It does not delete global history or
-  imply that the shared database file shrinks.
+  during live activity and idle periods. Terminal unmount drains requests,
+  closes the Workspace's overlay connection and deletes its file. Neither
+  deletes global history.
 - Target (owner direction 2026-10-07): every daemon opens the global Store
   directly from a volume the daemons share and reads, saves and publishes
   in-process. The host runs Project Init, installs one sealed Store file into
@@ -223,7 +230,8 @@ remain binding; moving them out of this file does not weaken them.
 - Preserve [repository ARM64 build inputs](.cargo/config.toml); explicit
   RUSTFLAGS must repeat the profile. Details are in the core guide.
 - Persistence profiles are scoped to the store. Claim only their guarantees;
-  no `fsync`/`fdatasync`/`sync_data`/`sync_all` on disposable Workspace backing.
+  no `fsync`/`fdatasync`/`sync_data`/`sync_all` on disposable Workspace backing,
+  and no space is reserved ahead of use on it.
   Memory hints are hints, not evidence of resident bounds.
 - New core/application production files obey the 999-line ceiling and 200-line
   declaration/delegation ceiling for `lib.rs`/`mod.rs`. Product-only source,

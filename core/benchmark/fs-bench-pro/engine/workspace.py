@@ -545,6 +545,11 @@ def observe_family_closed_storage(runtime, row, build, output, census_store, cus
     receipts.command([*docker, "cp", runtime.container + ":/layerfs-local/overlay/overlay.sqlite",
                       str(overlay_path)], output, label, seconds(15))
     completion = output / (label + ".completion.json")
+    # Every member of the stopped daemon's overlay directory: the template, and the file of any
+    # Workspace whose terminal unmount did not delete it.
+    listing = receipts.command([*docker, "cp", runtime.container + ":" + oracle.OVERLAY_DIRECTORY, "-"],
+                               output, "closed-overlay-directory", seconds(15))
+    listed = output / "closed-overlay-directory.completion.json"
     events = output / "runtime.events.jsonl"
     owners = [{"key": event["fields"]["key"], "namespace": event["fields"]["workspace_namespace"],
                "incarnation": event["fields"]["workspace_incarnation"]}
@@ -554,15 +559,18 @@ def observe_family_closed_storage(runtime, row, build, output, census_store, cus
         "source_sha256": identity.sha256(overlay_path), "source_size": overlay_path.stat().st_size,
         "export_completion": str(completion), "export_completion_sha256": identity.sha256(completion),
         "runtime_events": str(events), "runtime_events_sha256": identity.sha256(events),
-        "source_stat": source_stats["overlay"]}
+        "source_stat": source_stats["overlay"],
+        "directory": {"completion": str(listed), "completion_sha256": identity.sha256(listed),
+                      "stdout": listing["stdout"], "stdout_sha256": identity.sha256(listing["stdout"])}}
     overlay = oracle.observe_closed_storage(overlay_path, overlay_custody, kind="overlay", owners=owners)
     record = {"store": store, "overlay": overlay,
         "original_physical_resource_status": "UNAVAILABLE",
-        "reason": "shared SQLite has no per-Workspace allocated/live/superseded/peak spool or exclusive owned-file counter; no inferred zero"}
+        "reason": "a Workspace's overlay file is deleted at terminal unmount, so closed storage holds only the empty template and the count of files left; no allocated/live/superseded/peak bytes of a Workspace and no inferred zero"}
     receipts.write_new(output / "closed-storage-observations.json", record)
     row["closed_storage_observations"] = record
-    if store["source_main_store_4gib_status"] != "PASS" or overlay["namespace_cleanup_status"] != "PASS":
-        raise ValueError("original main Store boundary or exact namespace cleanup failed")
+    if (store["source_main_store_4gib_status"] != "PASS" or overlay["namespace_cleanup_status"] != "PASS"
+            or overlay["owned_files_after_cleanup_status"] != "PASS"):
+        raise ValueError("original main Store boundary or exact Workspace file cleanup failed")
     return record
 
 

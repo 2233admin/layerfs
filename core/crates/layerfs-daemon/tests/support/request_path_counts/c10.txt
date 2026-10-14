@@ -1,34 +1,31 @@
 LookupMiss: requests=2 jobs(read,mutation,lifecycle)=[2, 0, 0] transactions=0 attempts=4 executions=4
-  2 NAME_LAYERS
-  2 SELECT w.active,w.captured,w.revision,w.base_root,w.dirty_inodes, w.dirty_directory_entries,w.lifecycle,w.installed,w.captured_revision,w.base_readers,w.consolidating, i.serial,i.kind,i.mode,i.mtime_seconds,i.mtime_nanoseconds,i.nlink,i.size, i.inherited_cutoff,i.born,i.entries,i.subdirs,i.gen,i.epoch,i.height,i.referenced,i.sequence FROM workspace w LEFT JOIN inode i ON i.ns=w.ns AND i.serial=?3 AND i.gen<=w.active AND i.gen>w.installed WHERE w.ns=?1 AND w.incarnation=?2 ORDER BY i.gen DESC LIMIT 1
+  2 SELECT generation,inode,inherited FROM fs_entry WHERE parent=?1 AND name=?2 AND generation<=?3 AND generation>?4 ORDER BY generation DESC LIMIT 2
+  2 SELECT w.active,w.captured,w.revision,w.base_root,w.dirty_inodes, w.dirty_directory_entries,w.lifecycle,w.installed,w.captured_revision,w.base_readers,w.consolidating, i.inode,i.kind,i.mode,i.mtime_seconds,i.mtime_nanoseconds,i.nlink,i.size, i.inherited_cutoff,i.born,i.entries,i.subdirs,i.generation,i.epoch,i.height,i.referenced,i.sequence FROM workspace w LEFT JOIN fs_inode i ON i.inode=?3 AND i.generation<=w.active AND i.generation>w.installed WHERE w.ns=?1 AND w.incarnation=?2 ORDER BY i.generation DESC LIMIT 1
 Lookup: requests=1 jobs(read,mutation,lifecycle)=[2, 0, 0] transactions=0 attempts=5 executions=5
-  1 INODE_LOOKUP
-  2 NAME_LAYERS
-  2 SELECT w.active,w.captured,w.revision,w.base_root,w.dirty_inodes, w.dirty_directory_entries,w.lifecycle,w.installed,w.captured_revision,w.base_readers,w.consolidating, i.serial,i.kind,i.mode,i.mtime_seconds,i.mtime_nanoseconds,i.nlink,i.size, i.inherited_cutoff,i.born,i.entries,i.subdirs,i.gen,i.epoch,i.height,i.referenced,i.sequence FROM workspace w LEFT JOIN inode i ON i.ns=w.ns AND i.serial=?3 AND i.gen<=w.active AND i.gen>w.installed WHERE w.ns=?1 AND w.incarnation=?2 ORDER BY i.gen DESC LIMIT 1
+  2 SELECT generation,inode,inherited FROM fs_entry WHERE parent=?1 AND name=?2 AND generation<=?3 AND generation>?4 ORDER BY generation DESC LIMIT 2
+  1 SELECT inode,kind,mode,mtime_seconds,mtime_nanoseconds,nlink,size,inherited_cutoff,born,entries,subdirs,generation,epoch,height,referenced,sequence FROM fs_inode WHERE inode=?1 AND generation<=?2 AND generation>?3 ORDER BY generation DESC LIMIT 1
+  2 SELECT w.active,w.captured,w.revision,w.base_root,w.dirty_inodes, w.dirty_directory_entries,w.lifecycle,w.installed,w.captured_revision,w.base_readers,w.consolidating, i.inode,i.kind,i.mode,i.mtime_seconds,i.mtime_nanoseconds,i.nlink,i.size, i.inherited_cutoff,i.born,i.entries,i.subdirs,i.generation,i.epoch,i.height,i.referenced,i.sequence FROM workspace w LEFT JOIN fs_inode i ON i.inode=?3 AND i.generation<=w.active AND i.generation>w.installed WHERE w.ns=?1 AND w.incarnation=?2 ORDER BY i.generation DESC LIMIT 1
 Getattr: requests=1 jobs(read,mutation,lifecycle)=[1, 0, 0] transactions=0 attempts=1 executions=1
-  1 SELECT w.active,w.captured,w.revision,w.base_root,w.dirty_inodes, w.dirty_directory_entries,w.lifecycle,w.installed,w.captured_revision,w.base_readers,w.consolidating, i.serial,i.kind,i.mode,i.mtime_seconds,i.mtime_nanoseconds,i.nlink,i.size, i.inherited_cutoff,i.born,i.entries,i.subdirs,i.gen,i.epoch,i.height,i.referenced,i.sequence FROM workspace w LEFT JOIN inode i ON i.ns=w.ns AND i.serial=?3 AND i.gen<=w.active AND i.gen>w.installed WHERE w.ns=?1 AND w.incarnation=?2 ORDER BY i.gen DESC LIMIT 1
+  1 SELECT w.active,w.captured,w.revision,w.base_root,w.dirty_inodes, w.dirty_directory_entries,w.lifecycle,w.installed,w.captured_revision,w.base_readers,w.consolidating, i.inode,i.kind,i.mode,i.mtime_seconds,i.mtime_nanoseconds,i.nlink,i.size, i.inherited_cutoff,i.born,i.entries,i.subdirs,i.generation,i.epoch,i.height,i.referenced,i.sequence FROM workspace w LEFT JOIN fs_inode i ON i.inode=?3 AND i.generation<=w.active AND i.generation>w.installed WHERE w.ns=?1 AND w.incarnation=?2 ORDER BY i.generation DESC LIMIT 1
 Create: requests=1 jobs(read,mutation,lifecycle)=[0, 1, 0] transactions=1 attempts=8 executions=11
-  1 DIRECTORY_ENTRY_PUT
   1 FRONTIER_ADVANCE
-  2 INODE_INSERT
-  1 NAME_LAYERS
-  1 SELECT w.active,w.captured,w.revision,w.base_root,w.dirty_inodes, w.dirty_directory_entries,w.lifecycle,w.installed,w.captured_revision,w.base_readers,w.consolidating, i.serial,i.kind,i.mode,i.mtime_seconds,i.mtime_nanoseconds,i.nlink,i.size, i.inherited_cutoff,i.born,i.entries,i.subdirs,i.gen,i.epoch,i.height,i.referenced,i.sequence FROM workspace w LEFT JOIN inode i ON i.ns=w.ns AND i.serial=?3 AND i.gen<=w.active AND i.gen>w.installed WHERE w.ns=?1 AND w.incarnation=?2 ORDER BY i.gen DESC LIMIT 1
+  1 INSERT INTO fs_entry VALUES(?1,?2,?3,?4,?5) ON CONFLICT(parent,name,generation) DO UPDATE SET inode=excluded.inode,inherited=excluded.inherited
+  2 INSERT INTO fs_inode VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,0,?15)
+  1 SELECT generation,inode,inherited FROM fs_entry WHERE parent=?1 AND name=?2 AND generation<=?3 AND generation>?4 ORDER BY generation DESC LIMIT 2
+  1 SELECT w.active,w.captured,w.revision,w.base_root,w.dirty_inodes, w.dirty_directory_entries,w.lifecycle,w.installed,w.captured_revision,w.base_readers,w.consolidating, i.inode,i.kind,i.mode,i.mtime_seconds,i.mtime_nanoseconds,i.nlink,i.size, i.inherited_cutoff,i.born,i.entries,i.subdirs,i.generation,i.epoch,i.height,i.referenced,i.sequence FROM workspace w LEFT JOIN fs_inode i ON i.inode=?3 AND i.generation<=w.active AND i.generation>w.installed WHERE w.ns=?1 AND w.incarnation=?2 ORDER BY i.generation DESC LIMIT 1
   1 begin
   1 commit
 Write: requests=1024 jobs(read,mutation,lifecycle)=[0, 1024, 0] transactions=1024 attempts=8192 executions=10240
-  2048 CELL_PUT
-  1024 CELL_SHAPES
   1024 FRONTIER_ADVANCE
-  1024 INODE_UPDATE
-  1024 SELECT w.active,w.captured,w.revision,w.base_root,w.dirty_inodes, w.dirty_directory_entries,w.lifecycle,w.installed,w.captured_revision,w.base_readers,w.consolidating, i.serial,i.kind,i.mode,i.mtime_seconds,i.mtime_nanoseconds,i.nlink,i.size, i.inherited_cutoff,i.born,i.entries,i.subdirs,i.gen,i.epoch,i.height,i.referenced,i.sequence FROM workspace w LEFT JOIN inode i ON i.ns=w.ns AND i.serial=?3 AND i.gen<=w.active AND i.gen>w.installed WHERE w.ns=?1 AND w.incarnation=?2 ORDER BY i.gen DESC LIMIT 1
+  2048 INSERT INTO fs_data(inode,generation,cell_offset,epoch,data,validity) VALUES(?1,?2,?3,?4,?5,?6) ON CONFLICT(inode,generation,cell_offset) DO UPDATE SET epoch=excluded.epoch, data=excluded.data,validity=excluded.validity
+  1024 SELECT rowid,cell_offset,epoch,length(data),length(validity) FROM fs_data WHERE inode=?1 AND generation=?2 AND cell_offset>=?3 AND cell_offset<?4 ORDER BY cell_offset
+  1024 SELECT w.active,w.captured,w.revision,w.base_root,w.dirty_inodes, w.dirty_directory_entries,w.lifecycle,w.installed,w.captured_revision,w.base_readers,w.consolidating, i.inode,i.kind,i.mode,i.mtime_seconds,i.mtime_nanoseconds,i.nlink,i.size, i.inherited_cutoff,i.born,i.entries,i.subdirs,i.generation,i.epoch,i.height,i.referenced,i.sequence FROM workspace w LEFT JOIN fs_inode i ON i.inode=?3 AND i.generation<=w.active AND i.generation>w.installed WHERE w.ns=?1 AND w.incarnation=?2 ORDER BY i.generation DESC LIMIT 1
+  1024 UPDATE fs_inode SET kind=?3,mode=?4, mtime_seconds=?5,mtime_nanoseconds=?6,nlink=?7,size=?8,inherited_cutoff=?9, born=?10,entries=?11,subdirs=?12,epoch=?13,height=?14,sequence=?15 WHERE inode=?1 AND generation=?2
   1024 begin
   1024 commit
-Release: requests=2 jobs(read,mutation,lifecycle)=[0, 0, 2] transactions=0 attempts=2 executions=2
-  2 workspace-state
+Release: requests=2 jobs(read,mutation,lifecycle)=[0, 0, 2] transactions=0 attempts=0 executions=0
 Open: requests=1 jobs(read,mutation,lifecycle)=[1, 0, 0] transactions=0 attempts=1 executions=1
-  1 SELECT w.active,w.captured,w.revision,w.base_root,w.dirty_inodes, w.dirty_directory_entries,w.lifecycle,w.installed,w.captured_revision,w.base_readers,w.consolidating, i.serial,i.kind,i.mode,i.mtime_seconds,i.mtime_nanoseconds,i.nlink,i.size, i.inherited_cutoff,i.born,i.entries,i.subdirs,i.gen,i.epoch,i.height,i.referenced,i.sequence FROM workspace w LEFT JOIN inode i ON i.ns=w.ns AND i.serial=?3 AND i.gen<=w.active AND i.gen>w.installed WHERE w.ns=?1 AND w.incarnation=?2 ORDER BY i.gen DESC LIMIT 1
-Read: requests=513 jobs(read,mutation,lifecycle)=[513, 0, 0] transactions=0 attempts=1026 executions=1026
-  513 LAYERS
-  513 workspace-state
-Status: requests=1 jobs(read,mutation,lifecycle)=[0, 0, 1] transactions=0 attempts=1 executions=1
-  1 workspace-state
+  1 SELECT w.active,w.captured,w.revision,w.base_root,w.dirty_inodes, w.dirty_directory_entries,w.lifecycle,w.installed,w.captured_revision,w.base_readers,w.consolidating, i.inode,i.kind,i.mode,i.mtime_seconds,i.mtime_nanoseconds,i.nlink,i.size, i.inherited_cutoff,i.born,i.entries,i.subdirs,i.generation,i.epoch,i.height,i.referenced,i.sequence FROM workspace w LEFT JOIN fs_inode i ON i.inode=?3 AND i.generation<=w.active AND i.generation>w.installed WHERE w.ns=?1 AND w.incarnation=?2 ORDER BY i.generation DESC LIMIT 1
+Read: requests=513 jobs(read,mutation,lifecycle)=[513, 0, 0] transactions=0 attempts=513 executions=513
+  513 SELECT generation,kind,size,inherited_cutoff,epoch,height,nlink,referenced,sequence FROM fs_inode WHERE inode=?1 AND generation<=?2 AND generation>?3 ORDER BY generation DESC LIMIT 4
+Status: requests=1 jobs(read,mutation,lifecycle)=[0, 0, 1] transactions=0 attempts=0 executions=0

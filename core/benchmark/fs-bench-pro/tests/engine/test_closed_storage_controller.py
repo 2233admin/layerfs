@@ -34,8 +34,9 @@ class ClosedStorageController(unittest.TestCase):
                 self.assertEqual(bound[kind]['completion_sha256'], workspace.identity.sha256(bound[kind]['completion']))
 
     def test_every_actual_mounted_token_is_bound_without_physical_zero(self):
-        for store_status, cleanup_status in [('PASS', 'PASS'), ('FAIL', 'PASS'), ('PASS', 'FAIL')]:
-            with self.subTest(store=store_status, cleanup=cleanup_status), tempfile.TemporaryDirectory() as temporary:
+        for store_status, cleanup_status, files_status in [('PASS', 'PASS', 'PASS'), ('FAIL', 'PASS', 'PASS'),
+                                                           ('PASS', 'FAIL', 'PASS'), ('PASS', 'PASS', 'FAIL')]:
+            with self.subTest(store=store_status, cleanup=cleanup_status, files=files_status), tempfile.TemporaryDirectory() as temporary:
                 home = Path(temporary)
                 events = home / 'runtime.events.jsonl'
                 events.write_text('synthetic-only\n')
@@ -44,20 +45,33 @@ class ClosedStorageController(unittest.TestCase):
                     {'event': 'mount', 'fields': {'key': 'proof', 'workspace_namespace': 2, 'workspace_incarnation': '02' * 32}}])
                 row = {'custody': 'KNOWN_STOP', 'clone': {'volume': 'layerfs-fsb-sample-synthetic'}}
                 calls = []
+                commands = []
                 def command(argv, output, label, seconds):
-                    self.assertEqual(argv[3:5], ['cp', runtime.container + ':/layerfs-local/overlay/overlay.sqlite'])
-                    Path(argv[5]).write_bytes(b'synthetic-not-database')
+                    commands.append(argv[3:])
                     receipts.write_new(output / (label + '.completion.json'), {'argv': argv})
+                    if argv[5] == '-':
+                        # The archive of the stopped overlay directory, on the command's stdout.
+                        stdout = output / (label + '.stdout')
+                        stdout.write_bytes(b'synthetic-not-archive')
+                        return {'stdout': str(stdout)}
+                    Path(argv[5]).write_bytes(b'synthetic-not-database')
                 def observe(path, custody, *, kind, owners=()):
                     calls.append((kind, custody, owners))
-                    return {'source_main_store_4gib_status': store_status} if kind == 'store' else {'namespace_cleanup_status': cleanup_status}
+                    return ({'source_main_store_4gib_status': store_status} if kind == 'store' else
+                            {'namespace_cleanup_status': cleanup_status, 'owned_files_after_cleanup_status': files_status})
                 with patch.object(receipts, 'command', side_effect=command), patch.object(workspace.oracle, 'observe_closed_storage', side_effect=observe):
                     operation = lambda: workspace.observe_family_closed_storage(runtime, row, {'socket': '/socket'}, home, home / 'store', {'normalization': 'binding'}, {'store': 'native-source-store', 'overlay': 'native-source-overlay'}, lambda n: n)
-                    if store_status == cleanup_status == 'PASS':
+                    if store_status == cleanup_status == files_status == 'PASS':
                         operation()
                     else:
-                        with self.assertRaisesRegex(ValueError, 'boundary or exact namespace cleanup'):
+                        with self.assertRaisesRegex(ValueError, 'boundary or exact Workspace file cleanup'):
                             operation()
+                self.assertEqual(commands, [
+                    ['cp', runtime.container + ':/layerfs-local/overlay/overlay.sqlite', str(home / 'closed-overlay.sqlite')],
+                    ['cp', runtime.container + ':/layerfs-local/overlay', '-']])
+                directory = calls[1][1]['directory']
+                self.assertEqual(directory['stdout_sha256'], workspace.identity.sha256(directory['stdout']))
+                self.assertEqual(directory['completion_sha256'], workspace.identity.sha256(directory['completion']))
                 self.assertEqual(calls[0][1]['source_stat'], 'native-source-store')
                 self.assertEqual(calls[1][1]['source_stat'], 'native-source-overlay')
                 self.assertEqual([owner['key'] for owner in calls[1][2]], ['paid', 'proof'])

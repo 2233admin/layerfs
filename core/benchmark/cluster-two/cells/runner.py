@@ -573,6 +573,9 @@ def telemetry(path):
     return groups
 
 
+RETIRED_OWNER_BYTES = receipts.RETIRED_OWNER_BYTES
+
+
 def ingest_observations(groups, observations, cache):
     def available(values, provenance):
         return {"status": "AVAILABLE", "value": values, "provenance": provenance}
@@ -608,7 +611,12 @@ def ingest_observations(groups, observations, cache):
     if any(item["available"] for item in global_sql):
         observations["global_sql_work"] = available(global_sql,"original global writer and per-reader SQL snapshots; unavailable reader rows retained, never filled")
     owners = [row for group in groups.values() for row in group if row["section"] == 1 and row["available"]]
-    if owners:
+    if owners and any(view.get("service_schema") == "issue321-direct-workspace" for view in views):
+        # Issue 321: one lock per Workspace has no scheduler allocation or admission credit, and the
+        # owner scalars at these positions now mean something else. Never read them under the old names.
+        for name in ("scheduler_bytes", "peak_credited_bytes"):
+            observations[name] = receipts.unavailable(RETIRED_OWNER_BYTES, not_applicable=True)
+    elif owners:
         last = owners[-1]["values"]
         for name, index in (("scheduler_bytes", 4), ("peak_credited_bytes", 2)):
             if len(last) > index:
@@ -629,6 +637,9 @@ def ingest_observations(groups, observations, cache):
                 cache["object_demands"] = after["values"][0] - before["values"][0]
 
 
+OVERLAY_FILES = "/layerfs-local/overlay/"
+
+
 def snapshot_observations(runtime, observations):
     found = [row for row in runtime.rows if row.get("event") == "external_snapshot"]
     if not found:
@@ -643,17 +654,20 @@ def snapshot_observations(runtime, observations):
             if line.startswith("VmHWM:"):
                 values["daemon_vmhwm_bytes"] = int(line.split()[1]) * 1024
             parts = line.split()
-            if len(parts) == 4 and parts[0].startswith(("/layerfs-store/global/store.sqlite", "/layerfs-local/overlay/overlay.sqlite")):
+            if len(parts) == 4 and parts[0].startswith(("/layerfs-store/global/store.sqlite", OVERLAY_FILES)):
                 backing[parts[0]] = (int(parts[1]), int(parts[2]) * int(parts[3]))
             elif len(parts) == 2 and parts[1] == "ABSENT":
                 backing[parts[0]] = (0, 0)
-    for prefix, base in (("store", "/layerfs-store/global/store.sqlite"), ("overlay", "/layerfs-local/overlay/overlay.sqlite")):
-        paths = [base + suffix for suffix in ("", "-wal", "-shm", "-journal")]
-        if all(path in backing for path in paths):
+    # Issue 321: the overlay is the closed template and one file for each mounted Workspace. A
+    # snapshot that lists them all sums them; one of an earlier runtime lists the template alone.
+    overlays = sorted({path[:path.index(".sqlite") + 7] for path in backing if path.startswith(OVERLAY_FILES)})
+    for prefix, bases in (("store", ["/layerfs-store/global/store.sqlite"]), ("overlay", overlays)):
+        paths = [base + suffix for base in bases for suffix in ("", "-wal", "-shm", "-journal")]
+        if bases and (prefix == "store" or OVERLAY_FILES + "overlay.sqlite" in bases) and all(path in backing for path in paths):
             values[prefix + "_logical_bytes"] = sum(backing[path][0] for path in paths)
             values[prefix + "_allocated_bytes"] = sum(backing[path][1] for path in paths)
     for name, value in values.items():
-        observations[name] = {"status": "AVAILABLE", "value": value, "provenance": str(found[-1]["fields"]["stdout"]) + "; original external observation; VmHWM lifetime only; Store/overlay include explicitly observed sidecars"}
+        observations[name] = {"status": "AVAILABLE", "value": value, "provenance": str(found[-1]["fields"]["stdout"]) + "; original external observation; VmHWM lifetime only; Store/overlay include explicitly observed sidecars; overlay sums " + str(len(overlays)) + " listed file(s): the template and every Workspace file present"}
 
 
 def thread_rows(path):
