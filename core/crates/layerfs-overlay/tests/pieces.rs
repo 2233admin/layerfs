@@ -439,33 +439,6 @@ fn piece_statements_are_indexed_and_their_work_does_not_grow_with_the_piece() {
     let db = temp.db();
     let route = db.open_workspace([11; 32], [12; 32]).unwrap();
     let source = db.acquire_base_source(route, 1).unwrap();
-    let plans = db.explain_pieces(source).unwrap();
-    println!("PIECE_PLANS {plans:#?}");
-    for plan in &plans {
-        assert!(
-            !plan.contains("SCAN") && !plan.contains("TEMP B-TREE") && !plan.contains("AUTO"),
-            "{plan}"
-        );
-    }
-    for label in [
-        "piece-cover",
-        "piece-window",
-        "piece-length",
-        "pieces-take",
-        "piece-cut",
-    ] {
-        let seek = format!("{label}: SEARCH fs_data_ref USING PRIMARY KEY");
-        assert!(
-            plans.iter().any(|plan| plan.starts_with(&seek)),
-            "{plans:?}"
-        );
-    }
-    assert!(plans
-        .iter()
-        .any(|plan| plan.starts_with("layer-referenced: SEARCH fs_inode USING PRIMARY KEY")));
-    assert!(plans
-        .iter()
-        .any(|plan| plan.starts_with("piece-put: vm-program") && plan.ends_with("scan-opcodes=0")));
 
     // The runtime profile of the same statements: `work` fails on a full
     // scan step, a sort or an automatic index of any statement family.

@@ -19,21 +19,6 @@ pub enum NodeOutcome {
 }
 
 impl NodeOutcome {
-    /// Returns true when the measured operation returned an error.
-    pub const fn is_error(self) -> bool {
-        matches!(self, Self::Error)
-    }
-
-    /// Returns true when the measured operation never returned.
-    ///
-    /// A node is unknown when its scope started and never finished - the
-    /// operation panicked, or its closure was dropped before it returned. It is
-    /// **not** success: a consumer that reads the outcome alone must not treat a
-    /// node that never completed as an operation that completed successfully.
-    pub const fn is_unknown(self) -> bool {
-        matches!(self, Self::Unknown)
-    }
-
     pub(crate) fn from_result<T, E>(result: &Result<T, E>) -> Self {
         match result {
             Ok(_) => Self::Ok,
@@ -123,7 +108,6 @@ impl TimingNode {
         self.incomplete |= incomplete;
         self
     }
-
     /// Adds `children` in order, bounded by [`MAX_NODES`] and [`MAX_DEPTH`].
     ///
     /// A child that would push this subtree past either limit is omitted and

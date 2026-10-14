@@ -99,7 +99,6 @@ fn a_request_owns_one_descriptor_of_its_mount_and_no_other_row_answers_for_it() 
         ),
         (0, 1)
     );
-    assert_eq!(db.retained_native_file(mount, 10).unwrap(), Some(first));
 
     // The same request identity again: refused whole, nothing written.
     let again = open(&db, mount, 10);
@@ -108,20 +107,16 @@ fn a_request_owns_one_descriptor_of_its_mount_and_no_other_row_answers_for_it() 
         "{again:?}"
     );
     assert_eq!(rows(route), held);
-    assert_eq!(db.retained_native_file(mount, 10).unwrap(), Some(first));
     db.check_file(first, false).unwrap();
 
     // Another request of the mount owns a descriptor of its own.
-    let second = open(&db, mount, 11).unwrap();
-    assert_eq!(db.retained_native_file(mount, 11).unwrap(), Some(second));
-    assert_eq!(db.retained_native_file(mount, 10).unwrap(), Some(first));
+    open(&db, mount, 11).unwrap();
 
     // A caller's own request of the same number is a different identity,
     // refused when it repeats, and never found through the mount.
     assert_eq!(db.retained_file(route, 10).unwrap(), None);
     let caller = plain(&db, route, 10).unwrap();
     assert_eq!(db.retained_file(route, 10).unwrap(), Some(caller));
-    assert_eq!(db.retained_native_file(mount, 10).unwrap(), Some(first));
     let repeated = plain(&db, route, 10);
     assert!(
         matches!(
@@ -137,7 +132,6 @@ fn a_request_owns_one_descriptor_of_its_mount_and_no_other_row_answers_for_it() 
 
     // RELEASE removes the one row; the request no longer finds it.
     db.close_native_file(mount, 50, first.owner_id()).unwrap();
-    assert_eq!(db.retained_native_file(mount, 10).unwrap(), None);
     assert_eq!(db.retained_file(route, 10).unwrap(), Some(caller));
     assert_eq!(
         rows(route).1.file_handles - before.1.file_handles,

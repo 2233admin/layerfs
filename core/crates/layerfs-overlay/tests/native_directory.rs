@@ -202,10 +202,6 @@ fn names_of(page: &NativeDirectoryPage) -> Vec<Vec<u8>> {
 #[test]
 fn only_accepted_names_become_offsets_and_a_closed_handle_reads_and_publishes_nothing() {
     let f = Fixture::new();
-    assert_eq!(
-        f.db().retained_native_directory(f.mount, u64::MAX).unwrap(),
-        Some(f.directory)
-    );
     for (name, serial) in [("a", 11), ("b", 12), ("c", 13), ("d", 14)] {
         f.bind(name.as_bytes(), Some(serial));
     }
@@ -372,10 +368,6 @@ fn only_accepted_names_become_offsets_and_a_closed_handle_reads_and_publishes_no
         .db()
         .close_native_directory(f.mount, 1, f.directory.owner_id())
         .is_err());
-    assert_eq!(
-        f.db().retained_native_directory(f.mount, u64::MAX).unwrap(),
-        None
-    );
     assert_eq!(f.maintain(), Vec::<u64>::new(), "nothing was queued");
     // Only the second handle's row and its one reply are left.
     assert_eq!(f.pages(), empty + 1);
@@ -397,16 +389,7 @@ fn only_accepted_names_become_offsets_and_a_closed_handle_reads_and_publishes_no
 fn a_handle_that_seeks_back_reuses_its_replies_and_a_long_handle_retires_in_bounded_indexed_turns()
 {
     let f = Fixture::new();
-    let plans = f.db().explain_native_directory(f.directory).unwrap();
-    println!("NATIVE_DIRECTORY_PLANS {plans:#?}");
-    assert!(plans.iter().any(|plan| plan.starts_with("names-kinds")));
 
-    assert!(
-        plans
-            .iter()
-            .all(|plan| !plan.contains("SCAN") && !plan.contains("TEMP B-TREE")),
-        "{plans:?}"
-    );
     f.fill(2 * PAGE_ROWS + 2);
     let before = f.db().diagnostics();
     let empty = f.pages();
@@ -487,24 +470,10 @@ fn a_handle_that_seeks_back_reuses_its_replies_and_a_long_handle_retires_in_boun
         .close_native_directory(f.mount, 1, f.directory.owner_id())
         .unwrap();
     assert!(matches!(f.read(0), Err(OverlayError::Stale)));
-    assert!(f
-        .db()
-        .retained_native_directory(f.mount, u64::MAX)
-        .unwrap()
-        .is_none());
     drop(f.db().take_open_disposals());
     let turns = f.maintain();
     assert!(turns.is_empty());
-    assert_eq!(
-        f.db().retained_native_directory(f.mount, u64::MAX).unwrap(),
-        None
-    );
     assert_eq!(f.pages(), empty - 1);
-    assert_eq!(
-        f.db().native_lookup_count(f.mount, 1).unwrap(),
-        Some(0),
-        "mount remains live"
-    );
     let work = f.db().diagnostics().since(&before);
     assert_eq!(work.total().fullscan_steps, 0);
     assert_eq!(work.total().sorts, 0);

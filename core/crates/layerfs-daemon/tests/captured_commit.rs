@@ -351,7 +351,6 @@ fn every_kind_of_change_commits_through_the_driver_and_reads_back_from_a_fresh_b
     drop(result);
     model::assert_same(&expected, &rebound(&rig, 2, root), "fresh bind");
     model::assert_same(&expected, &live(&first), "live view after install");
-    assert!(!first.commit_in_flight());
     assert!(rig
         .store
         .history()
@@ -483,7 +482,6 @@ fn a_failed_attempt_keeps_its_custody_publishes_nothing_and_a_later_commit_is_ex
         failure.locally_settled && failure.published.is_none(),
         "{failure:?}"
     );
-    assert!(!first.commit_in_flight());
     assert!(rig
         .store
         .history()

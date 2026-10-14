@@ -9,14 +9,6 @@ fn dense_fragmentation_does_not_enlarge_a_later_request() {
     let db = temp.db();
     let route = db.open_workspace([3; 32], [4; 32]).unwrap();
     let source = db.acquire_base_source(route, 1).unwrap();
-    let plans = db.explain_payload(source).unwrap();
-    for plan in &plans {
-        assert!(
-            plan.contains("SEARCH") && !plan.contains("SCAN") && !plan.contains("TEMP"),
-            "{plan}"
-        );
-    }
-    println!("S5_PLANS {plans:?}");
     let window = pattern(WRITE_WINDOW, 5);
     // A never-fragmented file, then a file of 65,536 alternating one-byte
     // writes over an inherited 128 KiB range: every other byte is a base byte.

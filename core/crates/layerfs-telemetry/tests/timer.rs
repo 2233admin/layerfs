@@ -289,8 +289,6 @@ fn a_panic_caught_inside_the_operation_leaves_the_recording_usable() {
     // with that outcome, which made a panic look like success to any consumer
     // reading the outcome rather than the incomplete flag.
     assert_eq!(unstable.outcome(), NodeOutcome::Unknown);
-    assert!(unstable.outcome().is_unknown());
-    assert!(!unstable.outcome().is_error());
     assert_eq!(root.children()[1].outcome(), NodeOutcome::Ok);
     assert!(root.is_incomplete());
     assert_eq!(report.completeness(), Completeness::Clipped);

@@ -114,8 +114,6 @@ pub(crate) const LAYER_LOWER: &str = "SELECT size FROM fs_inode
 pub(crate) const NAME_LAYERS: &str = "SELECT generation,inode,inherited FROM fs_entry
     WHERE parent=?1 AND name=?2 AND generation<=?3 AND generation>?4 ORDER BY generation DESC LIMIT 2";
 pub(crate) const DIRECTORY_ENTRY_LOOKUP:&str="SELECT inode,inherited FROM fs_entry WHERE parent=?1 AND name=?2 AND generation<=?3 AND generation>?4 ORDER BY generation DESC LIMIT 1";
-pub(crate) const LEASE_LOOKUP: &str =
-    "SELECT 1 FROM commit_pin WHERE kind=?1 AND holder=?2 AND resource=?3";
 pub(crate) const RETAINED_CAPTURE: &str = "SELECT captured,captured_revision,base_root
     FROM workspace WHERE ns=?1 AND incarnation=?2";
 pub(crate) const BASE_SOURCE_LOOKUP: &str =

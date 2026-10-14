@@ -112,16 +112,6 @@ fn drained_revocation_fences_all_handles_without_a_cleanup_job() {
         f.db.native_mount_state(f.mount).unwrap(),
         NativeMountState::Revoked
     );
-    for request in 0..HANDLES {
-        assert!(matches!(
-            f.db.retained_native_file(f.mount, 100 + request),
-            Err(layerfs_overlay::OverlayError::Stale)
-        ));
-        assert!(matches!(
-            f.db.retained_native_directory(f.mount, 1000 + request),
-            Err(layerfs_overlay::OverlayError::Stale)
-        ));
-    }
     assert!(f
         .db
         .maintain(MaintenanceCursor::default())

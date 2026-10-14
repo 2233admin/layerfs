@@ -43,16 +43,4 @@ impl Overlay {
         self.state(route)?;
         Ok(self.tickets.page(route, integer(after)?, 64))
     }
-    /// Actual retained-capture point-query plan; paired runtime work is recorded
-    /// in the Capture family, without loading changed membership or payload.
-    pub fn explain_retained_capture(&self, route: Route) -> OverlayResult<Vec<String>> {
-        self.state(route)?;
-        self.query(
-            StatementKind::Explain,
-            &format!("EXPLAIN QUERY PLAN {}", sql::RETAINED_CAPTURE),
-            &[&route.ns, &route.incarnation.as_slice()],
-            40,
-            |row| row.get(3),
-        )
-    }
 }

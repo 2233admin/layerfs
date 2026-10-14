@@ -532,7 +532,6 @@ fn a_visit_that_misses_the_count_is_undecided_writes_nothing_and_decides_once_su
     };
     assert_eq!(needs, wanted);
     assert_eq!(snapshot(&b), before);
-    assert_eq!(b.overlay.native_lookup_count(mount, MIXED).unwrap(), None);
     let work = b.cache.diagnostics().unwrap();
     assert_eq!((work.directory_counts, work.directory_count_scans), (0, 0));
     // The same holds for a mutation: no row, no reply ticket, no reference.
@@ -576,10 +575,6 @@ fn a_visit_that_misses_the_count_is_undecided_writes_nothing_and_decides_once_su
     assert_eq!(
         (found.serial, found.entries, found.subdirs, found.nlink),
         (MIXED, 5, 2, 1)
-    );
-    assert_eq!(
-        b.overlay.native_lookup_count(mount, MIXED).unwrap(),
-        Some(1)
     );
     // Another request, carrying nothing, decides in its one visit: the
     // memory-only path answers from the remembered counts.

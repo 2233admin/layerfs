@@ -177,11 +177,6 @@ impl PackLane {
         }
     }
 
-    /// True when the lane's directory stores only group starts.
-    pub const fn directory_is_starts_only(self) -> bool {
-        matches!(self, Self::WholeFile)
-    }
-
     /// Largest decoded group body of this lane.
     ///
     /// The whole-file lane's groups are bounded by the pack they have to fit, not
@@ -255,20 +250,6 @@ pub const fn directory_capacity(lane: PackLane) -> usize {
 /// Offset of the first group body inside a pack of `lane`.
 pub const fn body_area_offset(lane: PackLane) -> usize {
     HEADER_LEN + directory_capacity(lane)
-}
-
-/// Bytes a pack row allocates for a pack of `lane` that assembles to `used`.
-///
-/// Open packs in every lane but Singleton allocate their full pack limit for
-/// future in-place appends. Placement can instead use the exact assembled length
-/// when a newly created pack closes before its first insert. A Singleton pack
-/// holds one record for its whole life (`append_fits` refuses a second group),
-/// so it always allocates exactly what it uses.
-pub const fn pack_capacity(lane: PackLane, used: usize) -> usize {
-    match lane {
-        PackLane::Singleton => used,
-        PackLane::Ordinary | PackLane::Native | PackLane::WholeFile => lane.pack_limit(),
-    }
 }
 
 /// Bytes one group's directory entry costs in `lane`.

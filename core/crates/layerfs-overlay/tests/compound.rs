@@ -382,25 +382,6 @@ fn compound_statements_keep_point_work_as_the_namespace_grows() {
     let db = temp.db();
     let route = db.open_workspace([6; 32], [7; 32]).unwrap();
     let source = db.acquire_base_source(route, 1).unwrap();
-    let plans = db.explain_compound(source).unwrap();
-    // Eight: the active and lower rows of one name are read by one statement
-    // (`name-layers`), which is listed with the seeks it replaced on the
-    // request path, and an inode is written by a plain insert or by the one
-    // update of the row its key names. Six query plans, then the VM programs
-    // of the two inserts.
-    assert_eq!(plans.len(), 8);
-    assert!(plans[1].starts_with("name-layers: SEARCH"), "{}", plans[1]);
-    assert!(plans[5].starts_with("update-inode"), "{}", plans[5]);
-    assert!(plans[7].starts_with("insert-inode"), "{}", plans[7]);
-    for plan in &plans[..6] {
-        assert!(
-            plan.contains("SEARCH") && !plan.contains("SCAN") && !plan.contains("TEMP"),
-            "{plan}"
-        );
-    }
-    for plan in &plans[6..] {
-        assert!(plan.ends_with("btree-scan-opcodes=0"), "{plan}");
-    }
     // Both parents already have active rows, so every scale replaces the same
     // row shapes: the comparison isolates growth from insert-versus-update.
     settle(
@@ -506,9 +487,6 @@ fn compound_statements_keep_point_work_as_the_namespace_grows() {
             runs += a.executions - b.executions;
             changed += a.rows_changed - b.rows_changed;
         }
-        println!(
-            "S4_COMPOUND siblings={count} complete_job_vm={vm} statements={runs} rows_changed={changed} fullscan=0 sorts=0 autoindex=0 reprepare=0 plans={plans:?}"
-        );
         totals.push((vm, runs, changed));
     }
     assert!(

@@ -9,6 +9,7 @@ mod support;
 use layerfs_content::{
     construct_bytes, construct_stream, read_all, ConstructionPolicy, ContentError,
 };
+use layerfs_telemetry::timer::NodeOutcome;
 use support::{noise, patterned, MemoryStore};
 
 fn record<T>(
@@ -47,7 +48,7 @@ fn small_construction_reports_its_real_scopes() {
     assert_eq!(constructed.logical_len, 4_000);
     let tree = report.root().expect("a recorded root");
     assert_eq!(tree.name(), "c1.construct");
-    assert!(!tree.outcome().is_error());
+    assert_ne!(tree.outcome(), NodeOutcome::Error);
     let scopes = child_names(tree);
     assert_eq!(scopes, vec!["content".to_string()]);
     let inner = child_names(&tree.children()[0]);
@@ -143,7 +144,7 @@ fn a_construction_failure_keeps_its_completed_timing() {
     });
     assert_eq!(result.unwrap_err(), ContentError::Io);
     let tree = report.root().expect("a recorded root");
-    assert!(tree.outcome().is_error());
+    assert_eq!(tree.outcome(), NodeOutcome::Error);
     assert_eq!(tree.name(), "c1.construct");
 }
 

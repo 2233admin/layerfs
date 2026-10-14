@@ -241,17 +241,6 @@ impl ReadPool {
             _ => None,
         })
     }
-    pub fn outstanding(&self, workspace: WorkspaceId) -> Result<usize, ReadAdmissionError> {
-        let state = self.lock();
-        if state.poisoned {
-            return Err(ReadAdmissionError::Poisoned);
-        }
-        Ok(state
-            .lanes
-            .iter()
-            .find(|lane| lane.active && lane.workspace == Some(workspace))
-            .map_or(0, |lane| lane.outstanding))
-    }
     pub fn failures(&self) -> Vec<(usize, Arc<PortError>)> {
         self.lock()
             .retired

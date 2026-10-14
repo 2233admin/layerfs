@@ -66,7 +66,6 @@ fn complete_mutation_reports_triggers_blob_delivery_without_reservation() {
     let resources = db.resources(Some(route)).unwrap();
     assert!(resources.allocation.high_water_allocated_bytes >= initial.allocated_bytes);
     assert_eq!(resources.counts.payload_bytes, CELL_BYTES as u64);
-    println!("S7_COST mutation={mutation:?} allocation_calls={admission:?} cell_copies={copies:?} read={read:?} resources={resources:?} plans={:?}", db.explain_payload(source).unwrap());
 }
 
 #[test]

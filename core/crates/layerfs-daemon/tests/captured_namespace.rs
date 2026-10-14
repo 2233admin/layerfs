@@ -253,7 +253,7 @@ fn direct_provider_pages_and_points_keep_the_exact_capture_after_install_and_clo
     let beside = Temp::new();
     let linked_db = beside.db();
     let other = linked_db.open_workspace([188; 32], [189; 32]).unwrap();
-    let born = linked_db.active_generation(other).unwrap().number() as u64;
+    let born = linked_db.state(other).unwrap().active.number() as u64;
     let (fresh, cell) = link(7, b"direct/target", born);
     let ticket = linked_db.publish(other, &fresh, None, Some(&cell)).unwrap();
     linked_db.reply_attempted(ticket).unwrap();

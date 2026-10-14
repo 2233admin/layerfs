@@ -32,8 +32,6 @@ pub enum Response {
     Opened(Route),
     State(WorkspaceState),
     MaintenanceIdle(bool),
-    PayloadPlans(Vec<String>),
-    LifetimePlans(Vec<String>),
     CleanupState(layerfs_overlay::CleanupState),
     Inode(Option<Inode>),
     Published(Publication),
@@ -56,7 +54,6 @@ pub enum Response {
 pub enum NativeReply {
     Mount(NativeMount),
     RetainedMount(Option<NativeMount>),
-    RetainedFile(Option<OpenFile>),
     File(OpenFile),
     Observed(Arc<NativeReadOutcome>),
     Window(Arc<NativeWindow>),

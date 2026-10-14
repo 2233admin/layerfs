@@ -139,17 +139,7 @@ fn exact_frontier_observations_visit_only_their_fixed_domain() {
     for serial in 1..=193 {
         db.publish(route, &inode(serial), None, None).unwrap();
     }
-    // Reply tickets are held in the engine's memory; only the retained
-    // capture is a stored point query.
-    let plans = [db.explain_retained_capture(route).unwrap()];
-    assert!(
-        plans
-            .iter()
-            .flatten()
-            .all(|p| p.contains("SEARCH") && !p.contains("TEMP B-TREE")),
-        "{plans:?}"
-    );
-    let active = db.active_generation(route).unwrap();
+    let active = db.state(route).unwrap().active;
     let mut counts = None;
     // Repeated observation: the same fixed work each time.
     for population in [1, 2, 3] {
@@ -180,7 +170,7 @@ fn exact_frontier_observations_visit_only_their_fixed_domain() {
         assert_eq!(c_after.sorts - c_before.sorts, 0);
         assert_eq!(c_after.autoindex_rows - c_before.autoindex_rows, 0);
         assert_eq!(c_after.reprepares - c_before.reprepares, 0);
-        println!("S2_FRONTIER other_rows={population} capture_vm={} ticket_page_vm={} returned=1/64 fullscan=0 sorts=0 autoindex=0 reprepare=0 plans={plans:?}",current.0,current.1);
+        println!("S2_FRONTIER other_rows={population} capture_vm={} ticket_page_vm={} returned=1/64 fullscan=0 sorts=0 autoindex=0 reprepare=0",current.0,current.1);
     }
     let mut after = 0;
     let mut count = 0;

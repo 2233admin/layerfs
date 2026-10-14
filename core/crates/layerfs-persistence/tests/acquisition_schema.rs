@@ -88,10 +88,6 @@ fn each_pack_layout_has_one_version_with_and_one_without_the_tables() {
                 PersistenceError::BackendUnavailable
             ))
         );
-        assert_eq!(
-            created.explain_acquisition().unwrap_err(),
-            PersistenceError::BackendUnavailable
-        );
         assert_eq!(created.diagnostics().unwrap().statements, before);
         drop(created);
         let (version, names) = tables(&plain);

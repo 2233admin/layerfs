@@ -351,36 +351,3 @@ fn a_revoked_mount_is_stale_by_the_fence_alone() {
     );
     assert_eq!((after.0 - before.0, after.1 - before.1), (1, 0));
 }
-
-#[test]
-fn the_fences_that_read_a_row_are_indexed_seeks_in_generation_order() {
-    let world = world();
-    let seat = world.seat(56);
-    let plans = world.db.explain_native_visit(seat.mount).unwrap();
-    println!("NATIVE_VISIT_ROW_PLANS {plans:#?}");
-    for (label, seeks) in [("workspace-inode", 2)] {
-        let rows: Vec<&String> = plans
-            .iter()
-            .filter(|plan| plan.starts_with(label))
-            .collect();
-        assert!(!rows.is_empty(), "{label} is not explained");
-        // The Workspace row, the mount row, the inode's rows in key order
-        // and the reference's own rows: no scan, and no sort for the latest.
-        assert_eq!(
-            rows.iter().filter(|plan| plan.contains("SEARCH")).count(),
-            seeks,
-            "{rows:#?}"
-        );
-        for plan in &rows {
-            assert!(
-                !plan.contains("SCAN") && !plan.contains("TEMP B-TREE"),
-                "{plan}"
-            );
-        }
-        assert!(
-            rows.iter()
-                .any(|plan| plan.contains("SEARCH i USING PRIMARY KEY")),
-            "{rows:#?}"
-        );
-    }
-}

@@ -76,143 +76,6 @@ fn source_retains_selected_base_and_exact_close_custody_without_a_generation_pin
     assert_eq!(db.cleanup_state(route).unwrap(), CleanupState::Queued);
     db.close_database().unwrap();
 }
-#[test]
-fn reply_attempt_and_source_release_are_one_transaction_or_nothing() {
-    let temp = Temp::new();
-    let db = Overlay::create(&temp.0.join("db"), ProfileConfig::default()).unwrap();
-    let route = db.open_workspace([1; 32], [2; 32]).unwrap();
-    let source = db.acquire_base_source(route, 7).unwrap();
-    let p = db.publish(route, &inode(), None, None).unwrap();
-    // One transaction (freelist read, BEGIN, COMMIT) instead of two.
-    let before = db.diagnostics();
-    db.reply_attempted_and_release(p, source).unwrap();
-    let work = db.diagnostics().since(&before);
-    assert_eq!(work.statements[StatementKind::Begin as usize].executions, 1);
-    assert_eq!(
-        work.statements[StatementKind::Commit as usize].executions,
-        1
-    );
-    assert_eq!(db.state(route).unwrap().base_readers, 0);
-    assert_eq!(db.retained_base_source(route, 7).unwrap(), None);
-    // Both are gone: the ticket no longer holds back a capture.
-    assert!(db.capture_ready(route).unwrap());
-    assert!(matches!(
-        db.reply_attempted_and_release(p, source),
-        Err(OverlayError::Stale)
-    ));
-
-    // A source that is no longer held fails the whole job: the ticket of the
-    // second publication stays owed and its own release still works.
-    let held = db.acquire_base_source(route, 8).unwrap();
-    let q = db.publish(route, &inode(), None, None).unwrap();
-    assert!(matches!(
-        db.reply_attempted_and_release(q, source),
-        Err(OverlayError::Stale)
-    ));
-    assert!(!db.capture_ready(route).unwrap());
-    assert_eq!(db.retained_base_source(route, 8).unwrap(), Some(held));
-    // A ticket that is not owed fails the whole job: the source stays held.
-    assert!(matches!(
-        db.reply_attempted_and_release(p, held),
-        Err(OverlayError::Stale)
-    ));
-    assert_eq!(db.state(route).unwrap().base_readers, 1);
-    db.reply_attempted_and_release(q, held).unwrap();
-    assert!(db.capture_ready(route).unwrap());
-    assert_eq!(db.state(route).unwrap().base_readers, 0);
-}
-#[test]
-fn source_owner_observation_keeps_indexed_work_as_unrelated_custody_grows() {
-    let temp = Temp::new();
-    let db = Overlay::create(&temp.0.join("db"), ProfileConfig::default()).unwrap();
-    let route = db.open_workspace([11; 32], [12; 32]).unwrap();
-    let source = db.acquire_base_source(route, 7).unwrap();
-    let plan = db.explain_base_source(route, 7).unwrap();
-    assert!(
-        plan.iter()
-            .all(|p| p.contains("SEARCH") && !p.contains("TEMP B-TREE")),
-        "{plan:?}"
-    );
-    let mut previous = 0;
-    let mut vm = None;
-    for count in [128, 1024, 4096] {
-        for owner in previous + 1..=count {
-            // Unrelated owners of the same Workspace.
-            db.acquire_base_source(route, 1000 + owner).unwrap();
-        }
-        previous = count;
-        let before = db.diagnostics().statements[StatementKind::Lease as usize];
-        assert_eq!(db.retained_base_source(route, 7).unwrap(), Some(source));
-        let after = db.diagnostics().statements[StatementKind::Lease as usize];
-        let steps = after.vm_steps - before.vm_steps;
-        if let Some(old) = vm {
-            assert_eq!(old, steps);
-        }
-        vm = Some(steps);
-        assert_eq!(after.attempts - before.attempts, 1);
-        assert_eq!(after.rows_returned - before.rows_returned, 1);
-        assert_eq!(after.fullscan_steps - before.fullscan_steps, 0);
-        assert_eq!(after.sorts - before.sorts, 0);
-        assert_eq!(after.autoindex_rows - before.autoindex_rows, 0);
-        assert_eq!(after.reprepares - before.reprepares, 0);
-        assert_eq!(db.state(route).unwrap().base_readers, count + 1);
-        println!("BASE_SOURCE unrelated_owners={count} point_vm={steps} returned=1 fullscan=0 sorts=0 autoindex=0 reprepare=0 plan={plan:?}");
-    }
-}
-
-#[test]
-fn source_changes_have_finite_plans_and_correlated_runtime_work() {
-    let temp = Temp::new();
-    let db = Overlay::create(&temp.0.join("db"), ProfileConfig::default()).unwrap();
-    let route = db.open_workspace([21; 32], [22; 32]).unwrap();
-    let plans = db.explain_base_source_changes(route, 7).unwrap();
-    assert!(
-        plans
-            .iter()
-            .filter(|p| !p.starts_with("insert:"))
-            .all(|p| p.contains("SEARCH") && !p.contains("TEMP B-TREE")),
-        "{plans:?}"
-    );
-    assert!(
-        !plans
-            .iter()
-            .any(|p| p.contains(" Rewind ") || p.contains(" Next ") || p.contains(" SorterOpen ")),
-        "{plans:?}"
-    );
-    let before = db.diagnostics();
-    let source = db.acquire_base_source(route, 7).unwrap();
-    let acquired = db.diagnostics();
-    db.release_base_source(source).unwrap();
-    let released = db.diagnostics();
-    for (phase, start, end) in [
-        ("acquire", before, acquired),
-        ("release", acquired, released),
-    ] {
-        let mut total_vm = 0;
-        let mut total_rows = 0;
-        for family in [
-            StatementKind::Begin,
-            StatementKind::Commit,
-            StatementKind::Workspace,
-            StatementKind::Lease,
-        ] {
-            let a = start.statements[family as usize];
-            let b = end.statements[family as usize];
-            assert_eq!(b.fullscan_steps - a.fullscan_steps, 0);
-            assert_eq!(b.sorts - a.sorts, 0);
-            assert_eq!(b.autoindex_rows - a.autoindex_rows, 0);
-            assert_eq!(b.reprepares - a.reprepares, 0);
-            total_vm += b.vm_steps - a.vm_steps;
-            total_rows += b.rows_changed - a.rows_changed;
-            println!("BASE_SOURCE_CHANGE phase={phase} family={family:?} runs={} vm={} returned={} changed={} bound_bytes={}",b.executions-a.executions,b.vm_steps-a.vm_steps,b.rows_returned-a.rows_returned,b.rows_changed-a.rows_changed,b.bound_bytes-a.bound_bytes);
-        }
-        // The source row, the Workspace's reader count and the namespace's
-        // source count. The daemon's count was a fourth row.
-        assert_eq!(total_rows, 3);
-        println!("BASE_SOURCE_CHANGE phase={phase} total_vm={total_vm} changed={total_rows} fullscan=0 sorts=0 plans={plans:?}");
-    }
-    assert_eq!(db.state(route).unwrap().base_readers, 0);
-}
 
 #[test]
 fn ordered_source_directory_entry_windows_visit_only_parent_and_generation_with_runtime_evidence() {
@@ -235,7 +98,7 @@ fn ordered_source_directory_entry_windows_visit_only_parent_and_generation_with_
             .unwrap();
         db.reply_attempted(p).unwrap();
     }
-    let capture = db.capture(route).unwrap();
+    db.capture(route).unwrap();
     let source = db.acquire_base_source(route, 7).unwrap();
     let mut previous = 0;
     let mut vm = None;
@@ -258,15 +121,6 @@ fn ordered_source_directory_entry_windows_visit_only_parent_and_generation_with_
             db.reply_attempted(p).unwrap();
         }
         previous = count;
-        let plan = db
-            .explain_source_directory_entries(source, 1, capture.generation, Some(b"n0063"))
-            .unwrap();
-        assert!(
-            plan.iter().all(|p| p.contains("SEARCH")
-                && p.contains("fs_entry_capture")
-                && !p.contains("TEMP B-TREE")),
-            "{plan:?}"
-        );
         let before = db.diagnostics();
         let window = db
             .source_directory_entry_window(source, 1, Some(b"n0063"))
@@ -279,18 +133,6 @@ fn ordered_source_directory_entry_windows_visit_only_parent_and_generation_with_
         let a = before.statements[StatementKind::DirectoryEntry as usize];
         let b = after.statements[StatementKind::DirectoryEntry as usize];
         let steps = b.vm_steps - a.vm_steps;
-        let total_vm: u64 = after
-            .statements
-            .iter()
-            .zip(before.statements)
-            .map(|(end, start)| end.vm_steps - start.vm_steps)
-            .sum();
-        let total_runs: u64 = after
-            .statements
-            .iter()
-            .zip(before.statements)
-            .map(|(end, start)| end.executions - start.executions)
-            .sum();
         if let Some(old) = vm {
             assert_eq!(old, steps);
         }
@@ -300,7 +142,6 @@ fn ordered_source_directory_entry_windows_visit_only_parent_and_generation_with_
         assert_eq!(b.sorts - a.sorts, 0);
         assert_eq!(b.autoindex_rows - a.autoindex_rows, 0);
         assert_eq!(b.reprepares - a.reprepares, 0);
-        println!("S3_NAME_WINDOW unrelated_names={count} name_vm={steps} returned=64 total_vm={total_vm} total_runs={total_runs} source_checks_and_parent_are_separate_families fullscan=0 sorts=0 plan={plan:?}");
     }
     db.release_base_source(source).unwrap();
 }

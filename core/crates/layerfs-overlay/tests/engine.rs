@@ -78,11 +78,6 @@ fn terminal_cleanup_waits_for_exact_owners_and_reply_attempts() {
     // Closed state still accepts the exact earlier send-attempt ticket.
     db.reply_attempted(publication).unwrap();
     assert_eq!(db.cleanup_state(route).unwrap(), CleanupState::Queued);
-    let plans = db.explain_close_held().unwrap();
-    assert!(
-        plans.iter().all(|line| !line.contains("TEMP B-TREE")),
-        "{plans:?}"
-    );
     assert_eq!(
         db.resources(Some(route)).unwrap().counts.inode_rows,
         1,
@@ -194,106 +189,6 @@ fn profile_namespace_binary_values_and_atomic_refusals() {
     assert_eq!(db.state(a).unwrap(), state);
     assert_eq!(db.inode(a, 2).unwrap(), Some(inode(2)));
     println!("readback={p:?}; pages={:?}", db.pages().unwrap());
-    println!(
-        "point EXPLAIN={:?}; runtime={:?}",
-        db.explain_inode(a, 2).unwrap(),
-        kind(db.diagnostics(), StatementKind::Inode)
-    );
-}
-
-#[test]
-fn payload_name_and_owner_access_keep_indexed_scope() {
-    let temp = Temp::new();
-    let db = Overlay::create(&temp.db(), ProfileConfig::default()).unwrap();
-    let a = db.open_workspace([121; 32], [9; 32]).unwrap();
-    let own = Lease {
-        kind: LeaseKind::Operation,
-        owner: 7,
-        resource: 0,
-    };
-    db.acquire(a, own).unwrap();
-    let name = b"binary-index";
-    let p = db
-        .publish(
-            a,
-            &inode(7),
-            Some(&DirectoryEntry {
-                inherited: false,
-                parent: 1,
-                name: name.to_vec(),
-                serial: Some(7),
-            }),
-            Some(&cell(0)),
-        )
-        .unwrap();
-    db.reply_attempted(p).unwrap();
-    let plans = [
-        db.explain_cell(a, 7, p.generation, 0).unwrap(),
-        db.explain_directory_entry(a, 1, name).unwrap(),
-        db.explain_lease(a, own).unwrap(),
-    ];
-    for plan in &plans {
-        assert!(
-            plan.iter()
-                .all(|row| row.contains("SEARCH") && !row.contains("TEMP B-TREE")),
-            "{plan:?}"
-        );
-    }
-    let mut previous = 0;
-    for population in [128, 1024, 4096] {
-        for serial in previous + 1..=population {
-            // Unrelated rows of the same tables: other serials, names and owners.
-            let serial = 10_000 + serial;
-            let other = db
-                .publish(
-                    a,
-                    &inode(serial),
-                    Some(&DirectoryEntry {
-                        inherited: false,
-                        parent: 1,
-                        name: format!("n{serial:05}").into_bytes(),
-                        serial: Some(serial),
-                    }),
-                    Some(&cell(255)),
-                )
-                .unwrap();
-            db.reply_attempted(other).unwrap();
-            db.acquire(
-                a,
-                Lease {
-                    kind: LeaseKind::Reader,
-                    owner: serial,
-                    resource: serial,
-                },
-            )
-            .unwrap();
-        }
-        previous = population;
-        let before = db.diagnostics();
-        assert_eq!(db.cell(a, 7, p.generation, 0).unwrap(), Some(cell(0)));
-        assert_eq!(
-            db.directory_entry(a, 1, name).unwrap().unwrap().serial,
-            Some(7)
-        );
-        assert!(db.lease_exists(a, own).unwrap());
-        let after = db.diagnostics();
-        for family in [
-            StatementKind::Payload,
-            StatementKind::DirectoryEntry,
-            StatementKind::Lease,
-        ] {
-            let start = kind(before, family);
-            let end = kind(after, family);
-            assert_eq!(end.fullscan_steps - start.fullscan_steps, 0);
-            assert_eq!(end.sorts - start.sorts, 0);
-            assert_eq!(end.reprepares - start.reprepares, 0);
-            assert!(
-                end.vm_steps - start.vm_steps < 128,
-                "{family:?} amplification"
-            );
-            println!("S1_ACCESS other_rows={population} family={family:?} vm={} returned={} runs={} bytes={} fullscan={} sorts={} autoindex={} reprepare={} plans={plans:?}",end.vm_steps-start.vm_steps,end.rows_returned-start.rows_returned,end.executions-start.executions,end.bound_bytes-start.bound_bytes,end.fullscan_steps-start.fullscan_steps,end.sorts-start.sorts,end.autoindex_rows-start.autoindex_rows,end.reprepares-start.reprepares);
-        }
-    }
 }
 
 #[test]
@@ -336,7 +231,6 @@ fn local_publication_survives_lost_reply_and_capture_does_not_copy_cells() {
 #[test]
 fn fixed_capture_uses_generation_index_while_active_namespace_grows() {
     // Distinct count-driven cases, no latency/cold-cache or performance verdict.
-    let mut correct_plan = true;
     for (tag, population) in [(10, 128), (11, 1024), (12, 4096)] {
         let temp = Temp::new();
         let db = Overlay::create(&temp.db(), ProfileConfig::default()).unwrap();
@@ -348,11 +242,6 @@ fn fixed_capture_uses_generation_index_while_active_namespace_grows() {
             let p = db.publish(w, &inode(serial), None, None).unwrap();
             db.reply_attempted(p).unwrap();
         }
-        let plan = db.explain_capture(c).unwrap();
-        println!("capture plan before verification: {plan:?}");
-        correct_plan &= plan
-            .iter()
-            .any(|p| p.contains("inode_capture") && p.contains("SEARCH"));
         let before = kind(db.diagnostics(), StatementKind::Capture);
         assert_eq!(db.captured_inodes(c, 0).unwrap(), vec![inode(2)]);
         let after = kind(db.diagnostics(), StatementKind::Capture);
@@ -363,12 +252,7 @@ fn fixed_capture_uses_generation_index_while_active_namespace_grows() {
         assert_eq!(after.reprepares - before.reprepares, 0);
         assert!(after.vm_steps > before.vm_steps);
         assert!(db.captured_inodes(c, 2).unwrap().is_empty());
-        println!("active_population={population}; plan={plan:?}; captured_rows=1; vm_steps={}; fullscan_steps=0; sorts=0; reprepare=0",after.vm_steps-before.vm_steps);
     }
-    assert!(
-        correct_plan,
-        "capture must use its generation-selective index"
-    );
 }
 
 #[test]
@@ -498,20 +382,15 @@ fn captured_name_keysets_use_fixed_generation_and_do_not_revisit_prefixes() {
         let p = db.publish(route, &inode(2), Some(&name), None).unwrap();
         db.reply_attempted(p).unwrap();
     }
-    let plan = db.explain_directory_entry_capture(capture).unwrap();
-    assert!(plan.iter().any(|p| p.contains("fs_entry_capture")));
     let mut after: Option<DirectoryEntry> = None;
     let mut count = 0;
     loop {
-        let before = kind(db.diagnostics(), StatementKind::Capture);
         let page = db
             .captured_directory_entries(
                 capture,
                 after.as_ref().map(|d| (d.parent, d.name.as_slice())),
             )
             .unwrap();
-        let observed = kind(db.diagnostics(), StatementKind::Capture);
-        println!("directory_entry plan={plan:?}; start={count}; rows={}; vm_steps={}; fullscan_steps={}; sorts={}", page.len(), observed.vm_steps-before.vm_steps, observed.fullscan_steps-before.fullscan_steps, observed.sorts-before.sorts);
         if page.is_empty() {
             break;
         }

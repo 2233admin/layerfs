@@ -3,10 +3,7 @@ use super::{Store, StorePorts};
 use crate::OwnerClient;
 use layerfs_history::{BranchSnapshot, WorkspaceId};
 use layerfs_workspace::{CanonicalClient, Workspace, WorkspaceResult};
-use std::sync::{
-    atomic::{AtomicBool, Ordering},
-    Arc, Mutex,
-};
+use std::sync::{atomic::AtomicBool, Arc, Mutex};
 
 pub struct BoundWorkspace {
     pub(super) store: Arc<Store>,
@@ -40,10 +37,6 @@ impl BoundWorkspace {
             .lock()
             .map(|snapshot| snapshot.clone())
             .map_err(|_| layerfs_workspace::WorkspaceError::BindingPoisoned)
-    }
-    /// True until one admitted Commit has a known safe local disposition.
-    pub fn commit_in_flight(&self) -> bool {
-        self.committing.load(Ordering::Acquire)
     }
     pub const fn identity(&self) -> WorkspaceId {
         self.identity

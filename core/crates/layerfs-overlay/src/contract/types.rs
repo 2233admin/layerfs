@@ -23,17 +23,6 @@ pub const WRITE_CLAIMS: usize = 18;
 /// Most reference ranges of one read window: a range is a run of whole
 /// cells of the window, and no two ranges share a cell.
 pub const READ_REFERENCES: usize = READ_WINDOW / CELL_BYTES + 1;
-/// Bytes the reference ranges and their mask add to a read reply of `length`
-/// bytes, at most: one bit a byte and one range a cell.
-pub const fn reference_bytes(length: usize) -> usize {
-    let cells = length / CELL_BYTES + 2;
-    let ranges = if cells < READ_REFERENCES {
-        cells
-    } else {
-        READ_REFERENCES
-    };
-    length.div_ceil(8) + ranges * std::mem::size_of::<ReferenceRange>()
-}
 /// Maximum changed inodes in one compound namespace job, not a namespace limit.
 pub const COMPOUND_INODES: usize = 4;
 /// Maximum changed name bindings in one compound namespace job.

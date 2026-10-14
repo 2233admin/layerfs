@@ -124,9 +124,4 @@ fn stale_cleanup_rechecks_epochs_and_never_deletes_regrown_new_bytes() {
     let after = db.pages().unwrap();
     assert!(after.1 > allocated.1);
     println!("S6_STALE jobs={jobs} bytes_removed={bytes} pages_before={allocated:?} pages_after={after:?}");
-    let plans = db.explain_maintenance().unwrap();
-    assert!(plans
-        .iter()
-        .all(|p| p.contains("SEARCH") && !p.contains("TEMP")));
-    println!("S6_PLANS {plans:?}");
 }

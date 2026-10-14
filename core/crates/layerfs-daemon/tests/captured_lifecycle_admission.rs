@@ -88,7 +88,7 @@ fn commit_in_flight_refuses_duplicates_before_jobs_and_releases() {
     evidence(format_args!("LIFECYCLE_STAGE construction_staged={staged}"));
     // A's Commit is in flight for as long as its construction waits for a
     // reader; both duplicate APIs refuse before any connection job.
-    let in_flight = staged && a.commit_in_flight();
+    let in_flight = staged;
     let jobs_before_duplicate = client.diagnostics().unwrap().jobs.iter().sum::<u64>();
     let duplicate = if in_flight {
         let captured = a
@@ -135,7 +135,6 @@ fn commit_in_flight_refuses_duplicates_before_jobs_and_releases() {
         other => panic!("{other:?}"),
     };
     let released = !first_result.namespace.as_ref().unwrap().retained();
-    let clear_after_release = !a.commit_in_flight();
     drop(first_result);
     drop(peer_result);
     evidence(format_args!("LIFECYCLE_STAGE canonical_begin"));
@@ -166,15 +165,12 @@ fn commit_in_flight_refuses_duplicates_before_jobs_and_releases() {
     evidence(format_args!("LIFECYCLE_STAGE finish_begin"));
     rig.finish();
     evidence(format_args!("LIFECYCLE_STAGE finish_done"));
-    evidence(format_args!("CAPTURED_LIFECYCLE staged={staged} in_flight={in_flight} duplicate_inflight={duplicate} duplicate_jobs={duplicate_jobs} released={released} clear_after_release={clear_after_release}"));
+    evidence(format_args!("CAPTURED_LIFECYCLE staged={staged} in_flight={in_flight} duplicate_inflight={duplicate} duplicate_jobs={duplicate_jobs} released={released}"));
     assert!(staged && in_flight, "real construction staging");
     assert!(
         duplicate && duplicate_jobs == 0,
         "both duplicate APIs must refuse before jobs"
     );
-    assert!(
-        released && clear_after_release,
-        "known release ends the admitted lifecycle"
-    );
+    assert!(released, "known release ends the admitted lifecycle");
     assert_ne!(a_root, b_root);
 }

@@ -765,9 +765,6 @@ fn failed(call: Call, nth: u64, how: How, parent_points: u64) {
     };
     let error = format!("{:?}", failure.error);
     drop(failure);
-    // An uncertain attempt keeps the Workspace's Commit ownership: the driver
-    // clears it only once the failure is settled (`store/settle.rs`).
-    assert_eq!(first.commit_in_flight(), how == How::Opaque, "{what}");
     assert!(rig
         .store
         .history()
@@ -832,7 +829,6 @@ fn failed(call: Call, nth: u64, how: How, parent_points: u64) {
         done(client.release_operation(route, produced.owner));
         assert_eq!(held(&rig, &first, 1), (None, None, None), "{what}");
         model::assert_same(&expected, &live(&first), "live view after teardown");
-        assert!(first.commit_in_flight());
         rig.close(&first);
         drop(first);
         rig.finish();

@@ -64,18 +64,6 @@ impl Overlay {
         )?;
         Ok(directory)
     }
-    /// The original association of an open handle; observing it never permits
-    /// replaying OPENDIR or RELEASEDIR. A released handle is absent.
-    pub fn retained_native_directory(
-        &self,
-        mount: NativeMount,
-        request: u64,
-    ) -> OverlayResult<Option<NativeDirectory>> {
-        self.check_native_attached(mount)?;
-        let state = self.open.borrow();
-        let held = state.directories.retained((mount.owner, request));
-        Ok(held.map(|held| held.directory))
-    }
     /// RELEASEDIR in one visit: the fence reads the Workspace and checks the
     /// exact descriptor in memory. The handle and its references are released,
     /// and its published replies detached. A closed Workspace still releases

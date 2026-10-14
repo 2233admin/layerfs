@@ -409,44 +409,4 @@ impl Overlay {
         Ok(Some(read))
     }
 }
-impl Overlay {
-    /// Plans of the payload statements a write, shrink and layered read use:
-    /// layer rows, one cell, the cells of a window and one staircase step.
-    pub fn explain_payload(&self, source: BaseSource) -> OverlayResult<Vec<String>> {
-        let state = self.source_state(source)?;
-        let (one, gen, floor) = (1_i64, state.active.0, state.installed);
-        let mut plans = Vec::new();
-        for (label, statement, params) in [
-            (
-                "layers",
-                sql::LAYERS,
-                vec![&one as &dyn rusqlite::ToSql, &gen, &floor],
-            ),
-            ("active-layer", sql::LAYER_ACTIVE, vec![&one, &gen]),
-            ("lower-layer", sql::LAYER_LOWER, vec![&one, &gen, &floor]),
-            ("cell", sql::CELL_COVER, vec![&one, &gen, &one, &one]),
-            ("shapes", sql::CELL_SHAPES, vec![&one, &gen, &one, &one]),
-            (
-                "cell-window",
-                sql::CELL_RANGE,
-                vec![&one, &gen, &one, &one, &one],
-            ),
-            ("drop-cell", sql::CELL_DROP, vec![&one, &gen, &one]),
-            ("drop-cells", sql::CELLS_DROP, vec![&one, &gen, &one, &one]),
-            ("drop-row", sql::ROW_DROP, vec![&one]),
-            ("cut-row", sql::ROW_KEEP, vec![&one, &one]),
-            ("move-row", sql::ROW_MOVE, vec![&one, &one, &one]),
-            ("row-cell", sql::ROW_SLICE, vec![&one, &one, &one]),
-            ("step", sql::STEP_GET, vec![&one, &gen, &one]),
-        ] {
-            plans.extend(self.query(
-                StatementKind::Explain,
-                &format!("EXPLAIN QUERY PLAN {statement}"),
-                &params,
-                32,
-                |row| Ok(format!("{label}: {}", row.get::<_, String>(3)?)),
-            )?);
-        }
-        Ok(plans)
-    }
-}
+impl Overlay {}

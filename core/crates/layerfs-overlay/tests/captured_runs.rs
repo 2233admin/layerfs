@@ -177,17 +177,6 @@ fn stale_metadata_has_bounded_continuations_and_monotone_seek_work() {
     let capture = db.capture(route).unwrap();
     let reader = db.acquire_captured_reader(capture, 2).unwrap();
     let cursor = CapturedRunCursor::new(reader, 23, 0, file.expect.len() as u64).unwrap();
-    let plans = db.explain_captured_run(cursor).unwrap();
-    assert!(plans
-        .iter()
-        .any(|row| row.starts_with("captured-cell-metadata: SEARCH")));
-    assert!(plans
-        .iter()
-        .any(|row| row.starts_with("captured-cell-metadata-vm:")));
-    assert!(!plans
-        .iter()
-        .any(|row| row.contains("TEMP B-TREE") || row.contains(": SCAN")));
-    println!("CAPTURED_RUN_PLAN {}", plans.join("\n"));
     let before = db.diagnostics();
     let (bytes, work) = collect(&db, cursor, &[]);
     println!(

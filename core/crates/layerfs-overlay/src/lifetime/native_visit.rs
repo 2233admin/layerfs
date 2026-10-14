@@ -364,28 +364,4 @@ impl Overlay {
                 .map(Some)
         })
     }
-    /// Plans of the statements a visit and its custody use: the four
-    /// fences, the file-reference decrements that return what remains, and
-    /// the VM program of the created-and-opened file's one custody write.
-    pub fn explain_native_visit(&self, mount: NativeMount) -> OverlayResult<Vec<String>> {
-        self.state(mount.route)?;
-        let ns = mount.route.ns;
-        let incarnation = mount.route.incarnation.as_slice();
-        let one = 1_i64;
-        let params: [&dyn rusqlite::ToSql; 3] = [&ns, &incarnation, &one];
-        let mut plans = Vec::new();
-        for (label, statement, bound) in [
-            ("workspace", crate::sql::FENCE_LOOKUP, 2),
-            ("workspace-inode", crate::sql::FENCE_LOOKUP_ROW, 3),
-        ] {
-            plans.extend(self.query(
-                StatementKind::Explain,
-                &format!("EXPLAIN QUERY PLAN {statement}"),
-                &params[..bound],
-                48,
-                |r| Ok(format!("{label}: {}", r.get::<_, String>(3)?)),
-            )?);
-        }
-        Ok(plans)
-    }
 }

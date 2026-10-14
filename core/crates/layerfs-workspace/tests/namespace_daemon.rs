@@ -529,21 +529,6 @@ fn payload_complete_operations_have_indexed_work_through_the_real_owner() {
         position: layerfs_workspace::Position::At(0),
         data: vec![7; 131072].into(),
     });
-    let plans = service.window(|view| {
-        service.job(
-            |job_client: &layerfs_daemon::OwnerClient, job_route| {
-                job_client.payload_plans(job_route, view.source())
-            },
-            |response| match response {
-                Response::PayloadPlans(plans) => plans.clone(),
-                other => panic!("{other:?}"),
-            },
-        )
-    });
-    assert!(plans
-        .iter()
-        .all(|plan| plan.contains("SEARCH") && !plan.contains("SCAN") && !plan.contains("TEMP")));
-    println!("S5_OWNER_PLANS {plans:?}");
     let snapshot = || service.client.diagnostics().unwrap().sql_foreground;
     let quiesce = || {
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);

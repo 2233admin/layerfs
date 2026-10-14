@@ -89,7 +89,6 @@ pub(super) fn start(path: &Path, profile: ProfileConfig, config: OwnerConfig) ->
                 context: super::owner::Context::Roster(pool),
             },
             profile: actual,
-            startup: startup.clone(),
         })
     })();
     crate::OwnerStart {

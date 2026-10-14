@@ -147,38 +147,3 @@ fn typed_location(r: &rusqlite::Row<'_>) -> Result<LocatedObject, BackendError> 
         pack,
     })
 }
-
-pub(crate) fn explain(
-    tx: &Transaction<'_>,
-    ids: &[ObjectId],
-) -> Result<Vec<Vec<String>>, PersistenceError> {
-    if ids.len() > policy::READ_OBJECT_LIMIT {
-        return Err(PersistenceError::Malformed);
-    }
-    let ids: Vec<_> = ids
-        .iter()
-        .copied()
-        .collect::<BTreeSet<_>>()
-        .into_iter()
-        .collect();
-    let mut plans = Vec::new();
-    for page in ids.chunks(tx.input_limit(1, 256, 2)?) {
-        let sql = if page.len() == 1 {
-            LOCATE_ONE.to_owned()
-        } else {
-            locate_sql(page.len())
-        };
-        let plan = tx
-            .query(
-                &format!("EXPLAIN QUERY PLAN {sql}"),
-                page.iter()
-                    .map(|id| Param::Bytes(id.as_bytes().to_vec()))
-                    .collect(),
-            )?
-            .iter()
-            .map(|row| row.get::<String>(3))
-            .collect::<Result<Vec<_>, _>>()?;
-        plans.push(plan);
-    }
-    Ok(plans)
-}

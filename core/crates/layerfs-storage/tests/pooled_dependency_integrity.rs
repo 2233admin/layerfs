@@ -103,20 +103,6 @@ fn literal_delta_cannot_hide_a_wrong_canonical_base() {
             ..Publication::default()
         })
         .unwrap();
-    let input = PooledInput(metadata.clone());
-    let root = metadata.state.lock().unwrap().objects[&objects[0].id()];
-    let capacities = layerfs_storage::policy::StorageCapacities::from_policy(
-        layerfs_storage::StoragePolicy::frozen_default(),
-    )
-    .unwrap();
-    let mut workspace = layerfs_storage::encoding::DecompressionWorkspace::new().unwrap();
-    let body_error = layerfs_storage::encoding::pool::PoolReader::new()
-        .leaf_body(&input, &capacities, i64::MAX, &mut workspace, root)
-        .unwrap_err();
-    assert!(
-        body_error.to_string().contains("pooled canonical identity"),
-        "{body_error}"
-    );
     let storage = Storage::new(metadata).unwrap();
     let error = storage
         .reader()
@@ -127,57 +113,4 @@ fn literal_delta_cannot_hide_a_wrong_canonical_base() {
         error.to_string().contains("pooled canonical identity"),
         "{error}"
     );
-}
-
-struct PooledInput(Arc<metadata::MemoryMetadata>);
-impl layerfs_storage::source::Source for PooledInput {
-    fn location(
-        &self,
-        id: ObjectId,
-        ceiling: i64,
-    ) -> layerfs_storage::StorageResult<Option<ObjectLocation>> {
-        Ok(self
-            .0
-            .state
-            .lock()
-            .unwrap()
-            .objects
-            .get(&id)
-            .copied()
-            .filter(|row| row.pack_id <= ceiling))
-    }
-    fn pack_bytes(&self, id: i64) -> layerfs_storage::StorageResult<Vec<u8>> {
-        Ok(self.0.state.lock().unwrap().packs[&id]
-            .body
-            .as_ref()
-            .clone())
-    }
-    fn inode_values(&self, ordinals: &[u32]) -> layerfs_storage::StorageResult<Vec<[u8; 73]>> {
-        let state = self.0.state.lock().unwrap();
-        ordinals
-            .iter()
-            .map(|ordinal| {
-                state
-                    .values
-                    .get(ordinal)
-                    .copied()
-                    .ok_or(layerfs_storage::StorageError::Integrity("missing value"))
-            })
-            .collect()
-    }
-    fn signatures(
-        &self,
-    ) -> layerfs_storage::StorageResult<Vec<layerfs_storage::location::SignatureRow>> {
-        Err(layerfs_storage::StorageError::Integrity(
-            "unused signatures",
-        ))
-    }
-    fn write_signatures(
-        &self,
-        _: &[layerfs_storage::location::SignatureRow],
-    ) -> layerfs_storage::StorageResult<usize> {
-        Err(layerfs_storage::StorageError::Integrity(
-            "unused signatures",
-        ))
-    }
 }

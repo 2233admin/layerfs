@@ -136,22 +136,3 @@ fn a_closed_workspace_is_held_until_the_last_of_its_owners_is_released() {
     let left = db.resources(Some(route)).unwrap().counts;
     assert_eq!((left.owner_rows, left.owner_details), (0, 0));
 }
-
-#[test]
-fn the_remaining_sql_custody_probe_is_indexed_and_open_custody_is_memory() {
-    let (_temp, db) = engine();
-    let plans = db.explain_close_held().unwrap();
-    println!("CLOSE_HELD_PLANS {plans:#?}");
-    // Every pin of the database is this Workspace's: the probe asks only
-    // whether one exists, and stops at the first entry of a covering index.
-    assert!(
-        plans
-            .iter()
-            .any(|plan| plan.starts_with("SCAN commit_pin USING COVERING INDEX")),
-        "{plans:?}"
-    );
-    assert!(
-        plans.iter().all(|plan| !plan.contains("TEMP B-TREE")),
-        "{plans:?}"
-    );
-}

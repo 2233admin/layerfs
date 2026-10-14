@@ -183,7 +183,6 @@ fn workspace_rotation_and_fifo_prevent_a_hot_lane_owning_the_next_reader() {
     assert!(poll(&mut a2, &event).is_pending());
     assert!(poll(&mut a3, &event).is_pending());
     assert!(poll(&mut b1, &event).is_pending());
-    assert_eq!(f.store.workspace_reads(workspace(1)).unwrap(), 3);
     drop(held);
     receiver.recv_timeout(WAIT).unwrap();
     let b = match poll(&mut b1, &event) {

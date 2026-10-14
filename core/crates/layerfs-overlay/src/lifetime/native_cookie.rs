@@ -3,9 +3,8 @@
 use super::native_directory_read::decode_names;
 use super::INLINE_PAGES;
 use crate::{
-    contract::native_directory::Published, db::integer, sql, NativeCookieOffer,
-    NativeDirectoryCursor, NativeDirectoryPage, Overlay, OverlayError, OverlayResult,
-    StatementKind, PAGE_ROWS,
+    contract::native_directory::Published, NativeCookieOffer, NativeDirectoryCursor,
+    NativeDirectoryPage, Overlay, OverlayError, OverlayResult, PAGE_ROWS,
 };
 impl Overlay {
     /// Inside the reading visit's job, for a window that may list a name:
@@ -133,26 +132,5 @@ impl Overlay {
             )?;
             Ok(())
         })
-    }
-    pub fn explain_native_directory(
-        &self,
-        directory: crate::NativeDirectory,
-    ) -> OverlayResult<Vec<String>> {
-        self.state(directory.mount.route)?;
-        let mut plans = Vec::new();
-        plans.extend(self.query(
-            StatementKind::Explain,
-            &format!("EXPLAIN QUERY PLAN {}", sql::SOURCE_NAMES_KINDS),
-            &[
-                &1_i64,
-                &integer(directory.serial)?,
-                &b"".as_slice(),
-                &1_i64,
-                &0_i64,
-            ],
-            40,
-            |r| Ok(format!("names-kinds: {}", r.get::<_, String>(3)?)),
-        )?);
-        Ok(plans)
     }
 }

@@ -84,41 +84,4 @@ impl Overlay {
         }
         Ok(read.data)
     }
-    /// Plans of the two reader-bound name statements for this exact reader,
-    /// parent and name. Runtime work is observed separately in the Capture family.
-    pub fn explain_reader_directory_entries(
-        &self,
-        reader: CapturedReader,
-        parent: u64,
-        name: &[u8],
-    ) -> OverlayResult<Vec<String>> {
-        self.check_captured_reader(reader)?;
-        if name.len() > 255 {
-            return Err(OverlayError::Invalid("captured name"));
-        }
-        let generation = reader.capture.generation.0;
-        let parent = integer(parent)?;
-        let mut plans = Vec::new();
-        for (label, statement, params) in [
-            (
-                "parent-names",
-                sql::SOURCE_NAMES,
-                [&generation as &dyn rusqlite::ToSql, &parent, &name],
-            ),
-            (
-                "name-point",
-                sql::CAPTURED_DIRECTORY_ENTRY,
-                [&parent, &name, &generation],
-            ),
-        ] {
-            plans.extend(self.query(
-                StatementKind::Explain,
-                &format!("EXPLAIN QUERY PLAN {statement}"),
-                &params,
-                32 + name.len() as u64,
-                |row| Ok(format!("{label}: {}", row.get::<_, String>(3)?)),
-            )?);
-        }
-        Ok(plans)
-    }
 }

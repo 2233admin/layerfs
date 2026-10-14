@@ -304,13 +304,6 @@ impl RuntimeOutput {
     pub fn progress(&self) -> OutputProgress {
         self.progress
     }
-    pub fn pending_payload(&self) -> &[u8] {
-        &self.pending[self.delivered..self.used]
-    }
-    /// Original partial/current standard framing bytes, independent of payload delivery.
-    pub fn framing_bytes(&self) -> &[u8] {
-        &self.header[..self.header_used]
-    }
     /// Streams through caller sinks. EOF establishes transport completion only.
     pub fn copy_to(
         mut self,

@@ -162,11 +162,6 @@ fn empty_whiteout_pages_continue_and_only_accepted_names_become_resume_cookies()
         .entries
         .iter()
         .any(|e| e.serial == local && e.kind == InodeKind::RegularFile));
-    assert_eq!(
-        b.overlay.native_lookup_count(mount, 2).unwrap(),
-        None,
-        "READDIR acquired no lookup"
-    );
     // The reply accepted two names: exactly those become offsets.
     let names: Vec<_> = listed.entries.iter().map(|e| e.name.clone()).collect();
     assert_eq!(names[1], b"alias");

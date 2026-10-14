@@ -164,43 +164,6 @@ impl SourceView {
         let local = overlay.read(self.source, serial, 0, layerfs_overlay::CELL_BYTES as u32)?;
         self.emit_link(serial, local, self.source.root())
     }
-    /// An independent request reference survives lookup release. The caller
-    /// releases it only after target/output consumers have finished.
-    pub fn readlink_owned(
-        &self,
-        overlay: &impl crate::OverlayFileRead,
-        read: layerfs_overlay::FileRead,
-    ) -> WorkspaceResult<layerfs_content::filesystem::SymlinkTarget> {
-        if read.source().route() != self.source.route() {
-            return Err(layerfs_overlay::OverlayError::Stale.into());
-        }
-        let local = overlay.file_read(read, 0, layerfs_overlay::CELL_BYTES as u32)?;
-        self.readlink_window(read, local)
-    }
-    /// Compose an already completed local window without another owner job.
-    /// Its completion and independent read reference stay owned by the caller.
-    pub fn readlink_window(
-        &self,
-        read: layerfs_overlay::FileRead,
-        local: Option<layerfs_overlay::LocalRead>,
-    ) -> WorkspaceResult<layerfs_content::filesystem::SymlinkTarget> {
-        if read.source().route() != self.source.route() {
-            return Err(layerfs_overlay::OverlayError::Stale.into());
-        }
-        self.emit_link(read.serial(), local, read.source().root())
-    }
-    pub fn readlink_captured(
-        &self,
-        overlay: &impl crate::OverlayFileRead,
-        reader: layerfs_overlay::CapturedReader,
-        serial: u64,
-    ) -> WorkspaceResult<layerfs_content::filesystem::SymlinkTarget> {
-        if reader.capture().route() != self.source.route() {
-            return Err(layerfs_overlay::OverlayError::Stale.into());
-        }
-        let local = overlay.captured_read(reader, serial, 0, layerfs_overlay::CELL_BYTES as u32)?;
-        self.emit_link(serial, local, reader.root())
-    }
     fn emit_link(
         &self,
         serial: u64,

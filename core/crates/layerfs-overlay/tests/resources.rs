@@ -42,12 +42,6 @@ fn physical_observation_counts_logical_rows_and_reusable_pages_without_reserve()
     let retained = db.resources(None).unwrap().counts;
     assert_eq!(retained.namespaces, 1);
     assert_eq!(retained.payload_cells, cleaned.counts.payload_cells);
-    // The counts are the one row of the database's Workspace, by its key.
-    let plan = db.explain_accounting().unwrap();
-    assert!(plan
-        .iter()
-        .all(|p| p.contains("SEARCH") && !p.contains("TEMP")));
-    println!("S6_ACCOUNTING_PLAN {plan:?}");
 }
 
 #[test]
@@ -167,7 +161,7 @@ fn last_generation_release_is_fixed_work_and_wakes_retirements_in_bounded_pages(
         }
         assert_eq!(db.resources(Some(route)).unwrap().counts.ready_targets, 0);
         release_work.push(work(&db, || db.release(route, lease).unwrap()));
-        let first = work(&db, || {
+        work(&db, || {
             let step = db.maintain(cursor).unwrap().unwrap();
             cursor = step.cursor;
             assert_eq!(step.work.rows, 64);
@@ -186,7 +180,6 @@ fn last_generation_release_is_fixed_work_and_wakes_retirements_in_bounded_pages(
                 .maintenance_targets,
             0
         );
-        println!("S6_GENERATION_WAKE population={population} release={:?} first_page={first:?} bounded_turns={turns} plans={:?}",release_work.last().unwrap(),db.explain_maintenance().unwrap());
     }
     assert!(
         release_work.windows(2).all(|p| p[0] == p[1]),

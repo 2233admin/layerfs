@@ -600,35 +600,6 @@ fn every_statement_is_an_indexed_search_and_window_work_ignores_population() {
     let temp = Temp::new("acquisition-plans");
     let handles = create(&temp.join("store.sqlite"));
     let port = &handles.acquisition;
-    for (name, plan) in handles.explain_acquisition().unwrap() {
-        println!("ACQUISITION_PLAN {name}: {plan:?}");
-        let entry_window = matches!(name, "entry_dependencies" | "put_entries" | "put_native");
-        let root_window = matches!(name, "complete_file" | "set_directory_root");
-        if root_window {
-            assert!(
-                plan.iter().any(|line| line.starts_with("SEARCH target ")),
-                "{name} must search its indexed target: {plan:?}"
-            );
-        }
-        for line in &plan {
-            let constant_input = (root_window
-                && matches!(line.as_str(), "SCAN 32 CONSTANT ROWS" | "SCAN roots"))
-                || (entry_window
-                    && matches!(
-                        line.as_str(),
-                        "SCAN 32 CONSTANT ROWS" | "SCAN input" | "SCAN source"
-                    ));
-            assert!(
-                !line.starts_with("SCAN") || constant_input,
-                "{name} scans stored state: {line}"
-            );
-            assert!(!line.contains("TEMP B-TREE"), "{name} sorts: {line}");
-            assert!(
-                !line.contains("AUTOMATIC"),
-                "{name} builds an index: {line}"
-            );
-        }
-    }
 
     // The same middle window and the same removal job at two populations.
     let mut observed = Vec::new();

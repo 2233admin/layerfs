@@ -152,17 +152,6 @@ fn native_lookup_uses_actual_owner_and_preserves_original_receipt_until_disposal
     assert!(!file.writable());
     assert!(receipt.work().sql.family(StatementKind::Begin).is_none());
     assert!(receipt.work().sql.family(StatementKind::Commit).is_none());
-    let done = job(
-        &client,
-        route,
-        |job_client: &layerfs_daemon::OwnerClient, job_route| {
-            job_client.native_retained_file(job_route, mount, u64::MAX - 1)
-        },
-    );
-    assert!(
-        matches!(done.result(), Ok(Response::Native(NativeReply::RetainedFile(Some(retained)))) if *retained == file)
-    );
-    drop(done);
     drop((original, receipt));
     assert!(job(
         &client,

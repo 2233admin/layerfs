@@ -412,10 +412,6 @@ impl Mounted<'_> {
             overlay.forget_native(self.mount, serial, 1).unwrap()
         });
         jobs[5] = cost(&work);
-        assert_eq!(
-            overlay.native_lookup_count(self.mount, serial).unwrap(),
-            None
-        );
         // The FORGET reclaimed the file and left the owner nothing to do.
         assert!(!overlay.maintenance_pending());
         let (s, r, work) = self.drain();

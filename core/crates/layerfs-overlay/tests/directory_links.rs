@@ -111,7 +111,7 @@ fn a_failed_capture_folds_the_sealed_count_into_the_active_generation() {
     let sealed = directory(8, 7, 6);
     publish(&db, route, &sealed);
     let capture = db.capture(route).unwrap();
-    let active = db.active_generation(route).unwrap();
+    let active = db.state(route).unwrap().active;
     assert_ne!(active, capture.generation);
     db.resolve_failed_capture(capture).unwrap();
     drain(&db);

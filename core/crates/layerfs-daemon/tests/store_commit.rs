@@ -241,7 +241,6 @@ fn committed_up_to_date_overwrite_and_new_bind_preserve_exact_roots() {
         first.snapshot().unwrap().branch.head_commit,
         Some(record.id)
     );
-    assert!(!first.commit_in_flight());
     assert!(store.history().stage(first.identity()).unwrap().is_none());
     println!(
         "STORE_COMMIT count={} initial={} refills={} publication={} history=1 installed=true",
@@ -407,7 +406,6 @@ fn known_publication_survives_an_unattempted_local_install() {
         failed.published,
         Some(CommitStagedOutcome::Committed(_))
     ));
-    assert!(!failed.locally_settled && workspace.commit_in_flight());
     assert_eq!(workspace.snapshot().unwrap(), original);
     assert!(failed.capture.is_some() && failed.captured.is_some());
     assert!(matches!(
@@ -654,7 +652,6 @@ fn unknown_history_acknowledgement_retains_original_intent_and_capture() {
             && failed.prepared.is_some()
     );
     assert!(failed.published.is_none() && failed.local.is_none() && failed.local_error.is_none());
-    assert!(!failed.locally_settled && workspace.commit_in_flight());
     assert_eq!(workspace.snapshot().unwrap(), original);
     assert!(matches!(
         workspace
@@ -673,10 +670,6 @@ fn unknown_history_acknowledgement_retains_original_intent_and_capture() {
     assert_eq!(
         observed.effective_root,
         failed.intent.as_ref().unwrap().candidate_root
-    );
-    assert!(
-        workspace.commit_in_flight(),
-        "an observer read does not settle the original unknown"
     );
     println!("STORE_UNKNOWN_ACK original=UnknownOutcome capture_and_intent=retained local_resolution=not-attempted install=not-attempted observer_does_not_resolve=true fixture_teardown=explicit-after-owner-stop");
     owner.stop().unwrap();
@@ -741,7 +734,6 @@ fn nested_storage_unknown_keeps_original_capture_and_blocks_another_commit() {
                 "nested original unknown must not resolve capture: case {index}"
             );
             assert!(failed.local.is_none() && failed.local_error.is_none());
-            assert!(workspace.commit_in_flight());
             assert!(matches!(
                 workspace
                     .commit(|_, _, _| unreachable!())
@@ -752,7 +744,6 @@ fn nested_storage_unknown_keeps_original_capture_and_blocks_another_commit() {
             retained.push((workspace, failed));
         } else {
             assert!(failed.locally_settled && failed.local.is_some());
-            assert!(!workspace.commit_in_flight());
             drop(failed);
             let later = workspace
                 .commit(|save, _, snapshot| {

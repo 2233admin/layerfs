@@ -185,10 +185,6 @@ fn cycle(b: &Bench, resident: &Arc<CanonicalClient>, mount: NativeMount, index: 
             .unwrap()
     });
     record(4, work);
-    assert_eq!(
-        b.overlay.native_lookup_count(mount, serial).unwrap(),
-        Some(1)
-    );
     Cycle {
         jobs,
         total: total.total(),

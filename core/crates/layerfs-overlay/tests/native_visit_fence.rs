@@ -206,19 +206,6 @@ impl World {
 }
 
 #[test]
-fn every_visit_statement_is_an_indexed_seek() {
-    let w = world();
-    let plans = w.db.explain_native_visit(w.mount).unwrap();
-    println!("NATIVE_VISIT_PLANS {plans:#?}");
-    for label in ["workspace", "workspace-inode"] {
-        assert!(plans.iter().any(|plan| plan.starts_with(label)));
-    }
-    assert!(plans
-        .iter()
-        .all(|plan| !plan.contains("SCAN") && !plan.contains("TEMP B-TREE")));
-}
-
-#[test]
 fn a_descriptor_of_another_inode_and_a_missing_reference_are_stale() {
     let w = world();
     let file = w.open(w.mount, 1, 50, true);
@@ -246,7 +233,6 @@ fn a_descriptor_of_another_inode_and_a_missing_reference_are_stale() {
     // The kernel forgets the created inode while its descriptor stays open:
     // a visit by that inode is stale, a visit by the descriptor is not.
     w.db.forget_native(w.mount, 50, 1).unwrap();
-    assert_eq!(w.db.native_lookup_count(w.mount, 50).unwrap(), None);
     assert!(matches!(
         w.grow(w.mount, 50, None, None),
         Err(OverlayError::Stale)
@@ -283,7 +269,6 @@ fn a_descriptor_of_another_inode_and_a_missing_reference_are_stale() {
     ));
     assert_eq!(w.snapshot(w.route), held);
     assert_eq!(held.1, closed.1);
-    assert_eq!(w.db.native_lookup_count(w.mount, 50).unwrap(), Some(1));
 }
 
 #[test]
@@ -608,7 +593,6 @@ fn an_open_visit_writes_its_descriptor_alone_and_nothing_unless_it_decides_a_fil
     ));
     assert_eq!((wrong.open_candidate, other.open_candidate), (None, None));
     assert_eq!(rows(), before);
-    assert_eq!(w.db.retained_native_file(w.mount, 10).unwrap(), None);
 
     // Decided: one read-only descriptor of the file, recorded for the
     // request that receives it, beside the first one. No source, no read.
@@ -618,10 +602,6 @@ fn an_open_visit_writes_its_descriptor_alone_and_nothing_unless_it_decides_a_fil
     let second = opened.open_candidate.expect("the OPEN's descriptor");
     assert_eq!((second.serial(), second.writable()), (50, false));
     assert_ne!(second.owner_id(), first.owner_id());
-    assert_eq!(
-        w.db.retained_native_file(w.mount, 10).unwrap(),
-        Some(second)
-    );
     let after = rows();
     assert_eq!(after.0, before.0, "the Workspace row is unchanged");
     // The descriptor's one row, which names its mount and request: no
@@ -656,10 +636,6 @@ fn an_open_visit_writes_its_descriptor_alone_and_nothing_unless_it_decides_a_fil
     let again = open(10, 50, true, Some(Some(inode(50))));
     assert!(again.result.is_err(), "{:?}", again.result);
     assert_eq!(rows(), after);
-    assert_eq!(
-        w.db.retained_native_file(w.mount, 10).unwrap(),
-        Some(second)
-    );
 
     // A file whose last name is gone is still opened under the kernel's
     // reference, and no longer once the kernel has forgotten the inode.
@@ -684,7 +660,6 @@ fn an_open_visit_writes_its_descriptor_alone_and_nothing_unless_it_decides_a_fil
             Err(OverlayError::Stale)
         ));
     }
-    assert_eq!(w.db.retained_native_file(w.mount, 10).unwrap(), None);
 }
 
 #[test]
@@ -752,7 +727,6 @@ fn an_opendir_visit_writes_its_descriptor_alone_and_releasedir_closes_exactly_th
         (None, None)
     );
     assert_eq!(rows(), before);
-    assert_eq!(w.db.retained_native_directory(w.mount, 20).unwrap(), None);
 
     // Decided: one open descriptor of the directory, recorded for the request
     // that receives it. No source and no read; the Workspace row is unchanged.
@@ -763,10 +737,6 @@ fn an_opendir_visit_writes_its_descriptor_alone_and_releasedir_closes_exactly_th
         .directory_candidate
         .expect("the OPENDIR's descriptor");
     assert_eq!(directory.serial(), 1);
-    assert_eq!(
-        w.db.retained_native_directory(w.mount, 20).unwrap(),
-        Some(directory)
-    );
     let after = rows();
     assert_eq!(after.0, before.0, "the Workspace row is unchanged");
     assert_eq!(
@@ -822,14 +792,7 @@ fn an_opendir_visit_writes_its_descriptor_alone_and_releasedir_closes_exactly_th
         w.db.close_native_directory(w.mount, 1, directory.owner_id()),
         Err(OverlayError::Stale)
     ));
-    // The other descriptor is untouched by that release, and a revoked
-    // mount's RELEASEDIR is stale: revocation retires what is left.
-    assert_eq!(
-        w.db.retained_native_directory(w.mount, 21)
-            .unwrap()
-            .map(|d| d.owner_id()),
-        Some(second.owner_id())
-    );
+    // A revoked mount's RELEASEDIR is stale: revocation retires what is left.
     w.db.close_native_file(w.mount, 50, file.owner_id())
         .unwrap();
     w.db.revoke_native_mount(w.mount).unwrap();
@@ -858,7 +821,6 @@ fn a_created_inode_takes_its_custody_without_a_read_and_a_duplicate_fails_whole(
         ),
         (0, 0)
     );
-    assert_eq!(w.db.native_lookup_count(w.mount, 50).unwrap(), Some(1));
 
     // Closing returns what remains in the same statement: the kernel's
     // lookup count still holds the file, so nothing is queued for it.
@@ -896,7 +858,6 @@ fn a_created_inode_takes_its_custody_without_a_read_and_a_duplicate_fails_whole(
         .expect("published");
     w.db.reply_attempted(applied.publication).unwrap();
     assert_eq!(applied.file, None);
-    assert_eq!(w.db.native_lookup_count(w.mount, 51).unwrap(), Some(1));
 
     // An entry for an inode the job did not create (LINK) reads the count
     // the kernel already holds and adds to it.
@@ -920,7 +881,6 @@ fn a_created_inode_takes_its_custody_without_a_read_and_a_duplicate_fails_whole(
         .unwrap()
         .expect("published");
     w.db.reply_attempted(applied.publication).unwrap();
-    assert_eq!(w.db.native_lookup_count(w.mount, 51).unwrap(), Some(2));
 
     // A job that claims to create an inode the kernel already references
     // fails at that insert and is rolled back whole.
@@ -946,9 +906,7 @@ fn a_created_inode_takes_its_custody_without_a_read_and_a_duplicate_fails_whole(
     );
     let after = w.snapshot(w.route);
     assert_eq!((after.0, after.1), (before.0, before.1));
-    assert_eq!(w.db.native_lookup_count(w.mount, 51).unwrap(), Some(2));
     assert_eq!(w.db.inode(w.route, 51).unwrap().unwrap().nlink, 2);
-    assert_eq!(w.db.retained_native_file(w.mount, 4).unwrap(), None);
     assert!(w.db.pending_publications(w.route, 0).unwrap().is_empty());
 
     // The created serial must be one of the job's own live finals.

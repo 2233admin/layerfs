@@ -120,20 +120,6 @@ impl PoolReader {
         Ok(values)
     }
 
-    /// Rebuilds the physical body of one pooled leaf from its delta chain,
-    /// authenticated as a canonical read of the same leaf is.
-    pub fn leaf_body(
-        &mut self,
-        connection: &dyn Source,
-        capacities: &StorageCapacities,
-        ceiling: i64,
-        workspace: &mut DecompressionWorkspace,
-        root: ObjectLocation,
-    ) -> StorageResult<Vec<u8>> {
-        self.reconstruct_leaf(connection, capacities, ceiling, workspace, root, None)
-            .map(|(body, _)| body)
-    }
-
     /// The physical body and the authenticated canonical bytes of one pooled
     /// locator, for a Save that reuses the ordinals of the leaf's values.
     pub(crate) fn leaf_parts_with_caches(

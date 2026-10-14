@@ -232,10 +232,6 @@ fn a_refused_forget_is_refused_by_one_statement_and_writes_nothing() {
         "{result:?}"
     );
     assert_eq!(world.left(seat), before);
-    assert_eq!(
-        world.db.native_lookup_count(seat.mount, 50).unwrap(),
-        Some(1)
-    );
 
     // A closed Workspace still gives its references back.
     world.db.close(seat.route).unwrap();

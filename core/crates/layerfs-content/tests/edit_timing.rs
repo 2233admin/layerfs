@@ -11,7 +11,7 @@ mod support;
 use layerfs_content::{
     apply_edits, construct_bytes, ConstructionPolicy, ContentError, Edit, EditRequest, ObjectId,
 };
-use layerfs_telemetry::timer::{Timing, TimingNode, TimingReport};
+use layerfs_telemetry::timer::{NodeOutcome, Timing, TimingNode, TimingReport};
 use support::{
     edits::Edits, edits::Parts, noise, patterned, read_back, Counted, CountingProvider, MemoryStore,
 };
@@ -83,7 +83,7 @@ fn a_real_edit_reports_its_scopes_without_a_database() {
     assert_ne!(edited, root);
     let tree = report.root().expect("recorded root");
     assert_eq!(tree.name(), "file.edit");
-    assert!(!tree.outcome().is_error());
+    assert_ne!(tree.outcome(), NodeOutcome::Error);
     let top = child_names(tree);
     assert_eq!(top, vec!["edit.op".to_string()], "scopes: {top:?}");
     let inner = child_names(&tree.children()[0]);
@@ -197,5 +197,9 @@ fn a_failing_edit_returns_its_original_error_and_an_error_outcome() {
         "got {error}"
     );
     let tree = report.root().expect("root node still recorded");
-    assert!(tree.outcome().is_error(), "the failing node is marked");
+    assert_eq!(
+        tree.outcome(),
+        NodeOutcome::Error,
+        "the failing node is marked"
+    );
 }

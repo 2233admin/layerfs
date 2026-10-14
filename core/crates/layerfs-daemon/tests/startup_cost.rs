@@ -34,7 +34,6 @@ fn readiness_retains_startup_separately_from_foreground_and_maintenance() {
     assert!(started.creation_reported);
     let owner = started.result.unwrap();
     assert!(started.startup.sql.total().attempts > 40);
-    assert_eq!(started.startup.sql, owner.startup_work().sql);
     let queued = owner.client().diagnostics().unwrap();
     assert_eq!(queued.sql_foreground.total().attempts, 0);
     assert_eq!(queued.sql_maintenance.total().attempts, 0);

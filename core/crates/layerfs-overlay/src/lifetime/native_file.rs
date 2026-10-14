@@ -34,16 +34,6 @@ impl Overlay {
             .map(|(file, _)| file)
             .ok_or(OverlayError::Stale)
     }
-    /// Observes the original request's open owner, without replay or adoption.
-    pub fn retained_native_file(
-        &self,
-        mount: NativeMount,
-        request: u64,
-    ) -> OverlayResult<Option<OpenFile>> {
-        self.check_native_attached(mount)?;
-        let request = (mount.owner, native_request(request));
-        Ok(self.open.borrow().files.retained(request))
-    }
     /// Close the exact handle once. Existing independently acquired sources/read
     /// windows survive; foreign or reused encoded handles are rejected.
     pub fn close_native_file(

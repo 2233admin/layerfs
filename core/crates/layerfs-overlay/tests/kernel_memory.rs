@@ -83,7 +83,6 @@ fn remembered_regular_file_allocation_is_measured_without_a_population_cap() {
     // A real FORGET ends exactly one of those references. No total-cap admission
     // substitutes for serving the last entry.
     db.forget_native(mount, 5002, 1).unwrap();
-    assert_eq!(db.native_lookup_count(mount, 5002).unwrap(), None);
     db.revoke_native_mount(mount).unwrap();
     db.close(route).unwrap();
     db.close_database().unwrap();

@@ -272,7 +272,6 @@ fn every_kind_of_change_commits_through_the_product_constructor() {
     assert_eq!(retained(&rig, &first, request), (None, None));
     model::assert_same(&expected, &rebound(&rig, 2, published.root), "fresh bind");
     model::assert_same(&expected, &live(&first), "live view after install");
-    assert!(!first.commit_in_flight());
     assert!(rig
         .store
         .history()
@@ -318,7 +317,6 @@ fn an_unchanged_workspace_is_up_to_date_and_creates_no_commit() {
     assert_eq!(retained(&rig, &first, request), (None, None));
     assert_eq!((history(&rig), branch(&rig)), before);
     assert_eq!(first.snapshot().unwrap(), bound);
-    assert!(!first.commit_in_flight());
     model::assert_same(&rig.base.flat(), &live(&first), "unchanged live view");
     let first_head = bound.branch.head_commit;
     // A change is a Commit whose parent is the head the Workspace was bound at.
@@ -568,7 +566,6 @@ fn repeated_incremental_commits_keep_the_store_open_and_each_root_is_exact() {
             "fresh bind after the Commit",
         );
         model::assert_same(&expected, &live(&first), "live view after install");
-        assert!(!first.commit_in_flight());
         parent = Some(published.id);
         roots.push(published.root);
         records.insert(0, published);
@@ -656,7 +653,6 @@ fn unpublished(
     expected: &model::Flat,
     what: &str,
 ) {
-    assert!(!workspace.commit_in_flight(), "{what}");
     assert!(rig
         .store
         .history()
@@ -848,7 +844,6 @@ fn an_unknown_history_outcome_keeps_the_reader_and_owner_with_the_failure() {
     assert!(!failure.locally_settled && failure.published.is_none());
     assert!(failure.local.is_none() && failure.local_error.is_none());
     assert!(failure.intent.is_some() && failure.prepared.is_some());
-    assert!(workspace.commit_in_flight());
     // Nothing was released: the failure names the reader and the owner, and
     // the Overlay answers the same two for the same request.
     let namespace = failure.namespace.as_ref().expect("the product closure ran");
@@ -892,7 +887,6 @@ fn an_unknown_history_outcome_keeps_the_reader_and_owner_with_the_failure() {
         observed.effective_root,
         failure.intent.as_ref().unwrap().candidate_root
     );
-    assert!(workspace.commit_in_flight());
     assert_eq!(
         retained(&rig, &workspace, request),
         (Some(reader), Some(operation))

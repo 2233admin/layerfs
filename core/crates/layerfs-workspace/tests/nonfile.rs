@@ -42,13 +42,6 @@ fn linked_symlink_targets_follow_effective_layers_through_repeated_failed_captur
         b.window(|view| assert_eq!(view.readlink(&b.overlay, sym.serial).unwrap(), target));
         b.overlay.resolve_failed_capture(capture).unwrap();
         drain(&b);
-        b.window(|view| {
-            assert_eq!(
-                view.readlink_captured(&b.overlay, reader, sym.serial)
-                    .unwrap(),
-                target
-            )
-        });
         b.overlay.release_captured_reader(reader).unwrap();
         drain(&b);
         b.window(|view| assert_eq!(view.readlink(&b.overlay, sym.serial).unwrap(), target));
@@ -124,10 +117,7 @@ fn non_file_lookup_and_processing_owners_preserve_removed_metadata_and_target() 
     b.overlay.release_lookup(lookup).unwrap();
     assert!(b.overlay.check_lookup(lookup).is_err());
     drain(&b);
-    let view = b.workspace.view_for_source(read.source()).unwrap();
-    assert_eq!(view.readlink_owned(&b.overlay, read).unwrap(), target);
     b.overlay.close(b.route()).unwrap();
-    assert_eq!(view.readlink_owned(&b.overlay, read).unwrap(), target);
     b.overlay.release_file_read(read).unwrap();
     b.overlay.release_lookup(dir_lookup).unwrap();
     b.overlay.release_lookup(root_lookup).unwrap();

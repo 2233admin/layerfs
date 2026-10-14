@@ -13,7 +13,7 @@
 use layerfs_content::{ObjectId, ObjectRole};
 
 use crate::error::{StorageError, StorageResult};
-use crate::pack::layout::{PackLane, WHOLE_FILE_COMPACT_DROP};
+use crate::pack::layout::PackLane;
 
 /// Record tag of a representation without a base.
 pub const FULL_TAG: u8 = 0;
@@ -33,8 +33,6 @@ pub const fn is_stored(tag: u8) -> bool {
     tag == STORED_TAG
 }
 
-/// Bytes of the compact whole-file framing that the lane drops at assembly.
-const COMPACT_DROP: usize = WHOLE_FILE_COMPACT_DROP;
 /// Width of one canonical identity.
 const ID_BYTES: usize = 32;
 
@@ -304,9 +302,4 @@ pub fn stored_base(
         });
     }
     Ok(parse(lane, record, canonical_length)?.base)
-}
-
-/// True when `record` was assembled with its compact framing bytes dropped.
-pub const fn compact_framing_is_dropped(lane: PackLane) -> bool {
-    matches!(lane, PackLane::WholeFile) && COMPACT_DROP > 0
 }

@@ -12,28 +12,6 @@ impl OwnerClient {
             (db.create_native_mount(route, root).map(NativeReply::Mount)).map(Response::Native)
         })
     }
-    pub fn native_retained_mount(&self, route: Route) -> Result<JobReceipt, OwnerError> {
-        self.overlay_job(route, ServiceClass::Lifecycle, None, move |db, route| {
-            (db.retained_native_mount(route)
-                .map(NativeReply::RetainedMount))
-            .map(Response::Native)
-        })
-    }
-    pub fn native_retained_file(
-        &self,
-        route: Route,
-        mount: NativeMount,
-        request: u64,
-    ) -> Result<JobReceipt, OwnerError> {
-        self.overlay_job(route, ServiceClass::Lifecycle, None, move |db, route| {
-            if mount.route() != route {
-                return Err(OverlayError::Stale);
-            }
-            (db.retained_native_file(mount, request)
-                .map(NativeReply::RetainedFile))
-            .map(Response::Native)
-        })
-    }
     pub fn native_file(
         &self,
         route: Route,
@@ -119,6 +97,13 @@ impl OwnerClient {
             }
             (db.forget_native(mount, serial, count)
                 .map(|()| NativeReply::Done))
+            .map(Response::Native)
+        })
+    }
+    pub fn native_retained_mount(&self, route: Route) -> Result<JobReceipt, OwnerError> {
+        self.overlay_job(route, ServiceClass::Lifecycle, None, move |db, route| {
+            (db.retained_native_mount(route)
+                .map(NativeReply::RetainedMount))
             .map(Response::Native)
         })
     }

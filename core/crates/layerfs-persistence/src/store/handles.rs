@@ -36,29 +36,4 @@ impl Handles {
     pub fn diagnostics(&self) -> Result<SqlWork, PersistenceError> {
         self.storage.session.diagnostics().map_err(Into::into)
     }
-    /// Explains the owning bounded locator query on this actual initialized DB.
-    /// Uses the same distinct-ID paging and SQL as normal saved-object lookup.
-    /// This read-only diagnostic neither reads payload nor changes Store policy.
-    pub fn explain_locate(
-        &self,
-        ids: &[layerfs_content::ObjectId],
-    ) -> Result<Vec<Vec<String>>, PersistenceError> {
-        self.storage.session.run(false, |tx| {
-            crate::backend::metadata_locations::explain(tx, ids)
-        })
-    }
-    /// Explains every shipped acquisition statement on this actual initialized
-    /// DB, by statement name. Read-only; refused when the Store was created
-    /// without the acquisition tables.
-    pub fn explain_acquisition(
-        &self,
-    ) -> Result<Vec<(&'static str, Vec<String>)>, PersistenceError> {
-        if self.profile().acquisition != crate::SqliteAcquisitionSchema::Tables {
-            return Err(PersistenceError::BackendUnavailable);
-        }
-        self.storage.session.run(false, |tx| {
-            crate::backend::sqlite::acquisition::statements::explain(tx)
-                .map_err(PersistenceError::from)
-        })
-    }
 }

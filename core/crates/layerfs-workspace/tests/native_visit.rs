@@ -238,7 +238,6 @@ fn a_read_visit_decides_in_one_job_from_resident_objects_or_names_the_facts_it_n
         Seen::Needs(wanted.clone())
     );
     assert_eq!(snapshot(&b), before);
-    assert_eq!(b.overlay.native_lookup_count(mount, 4).unwrap(), None);
 
     // The facts are read outside the owner, from the Workspace's base.
     let mut facts = VisitFacts::default();
@@ -252,7 +251,6 @@ fn a_read_visit_decides_in_one_job_from_resident_objects_or_names_the_facts_it_n
         panic!("the supplied facts did not decide the lookup")
     };
     assert_eq!((found.serial, found.kind), (4, InodeKind::Directory));
-    assert_eq!(b.overlay.native_lookup_count(mount, 4).unwrap(), Some(1));
     let after = snapshot(&b);
     assert_eq!(after.2, before.2);
     assert_eq!(after.3.kernel_entries, before.3.kernel_entries + 1);
@@ -272,7 +270,6 @@ fn a_read_visit_decides_in_one_job_from_resident_objects_or_names_the_facts_it_n
         panic!("resident objects did not decide the lookup")
     };
     assert_eq!(again, found);
-    assert_eq!(b.overlay.native_lookup_count(mount, 4).unwrap(), Some(2));
     let read = b.cache.diagnostics().unwrap();
     assert!(read.cache_hits > work.cache_hits);
     assert_eq!(
@@ -347,7 +344,6 @@ fn a_read_visit_decides_in_one_job_from_resident_objects_or_names_the_facts_it_n
         (file.serial, file.kind, file.size),
         (2, InodeKind::File, 10)
     );
-    assert_eq!(b.overlay.native_lookup_count(mount, 2).unwrap(), Some(1));
     b.overlay.forget_native(mount, 2, 1).unwrap();
     let before = snapshot(&b);
 
@@ -418,7 +414,6 @@ fn an_open_visit_decides_a_regular_file_and_records_its_descriptor_alone() {
     assert!(!needs.is_empty());
     assert_eq!(snapshot(&b).0, before.0);
     assert_eq!(snapshot(&b).1, before.1);
-    assert_eq!(b.overlay.retained_native_file(mount, 30).unwrap(), None);
 
     // With its facts, read outside the owner, the next visit of the same
     // request decides and records the descriptor in its one transaction:
@@ -431,10 +426,6 @@ fn an_open_visit_decides_a_regular_file_and_records_its_descriptor_alone() {
     };
     assert_eq!(opened, file);
     assert_eq!((first.serial(), first.writable()), (2, false));
-    assert_eq!(
-        b.overlay.retained_native_file(mount, 30).unwrap(),
-        Some(first)
-    );
     let after = snapshot(&b);
     assert_eq!(after.0, before.0, "the Workspace row is unchanged");
     assert_eq!(
@@ -607,7 +598,6 @@ fn facts_of_another_base_are_ignored_and_read_again_for_the_present_one() {
         Seen::Needs(wanted.clone())
     );
     assert_eq!(snapshot(&b), before);
-    assert_eq!(b.overlay.native_lookup_count(mount, 2).unwrap(), None);
 
     // Supplying from the present base drops the old facts and reads again.
     let stale = facts.clone();
@@ -704,10 +694,6 @@ fn a_mutation_visit_publishes_once_with_its_reply_custody_and_holds_no_source() 
     );
     assert_eq!(after.1.reply_tickets, before.1.reply_tickets + 1);
     assert_eq!(
-        b.overlay.native_lookup_count(mount, directory).unwrap(),
-        Some(1)
-    );
-    assert_eq!(
         b.overlay.pending_publications(route, 0).unwrap(),
         vec![publication]
     );
@@ -769,14 +755,6 @@ fn a_mutation_visit_publishes_once_with_its_reply_custody_and_holds_no_source() 
             .native_file(mount, serial, file.owner_id())
             .unwrap(),
         file
-    );
-    assert_eq!(
-        b.overlay.retained_native_file(mount, 9).unwrap(),
-        Some(file)
-    );
-    assert_eq!(
-        b.overlay.native_lookup_count(mount, serial).unwrap(),
-        Some(1)
     );
     let after = snapshot(&b);
     assert_eq!(after.2, before.2 + 1);

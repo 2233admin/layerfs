@@ -230,14 +230,6 @@ fn path_windows_use_actual_lengths_without_exceeding_column_or_row_budgets() {
         )
         .unwrap();
     assert_eq!(one.len(), 1);
-    for (name, plan) in handles.explain_acquisition().unwrap() {
-        if matches!(name, "job_sizes" | "directory_sizes") {
-            println!("SIZING_PLAN {name}: {plan:?}");
-            assert!(plan
-                .iter()
-                .all(|line| !line.starts_with("SCAN") && !line.contains("TEMP B-TREE")));
-        }
-    }
 }
 
 /// Owner direction 2026-10-07: Disposable is the sole active development

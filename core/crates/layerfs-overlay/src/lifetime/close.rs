@@ -90,16 +90,6 @@ impl Overlay {
         };
         self.cleanup_state(route)
     }
-    /// The actual remaining SQL custody probe. Open state is checked in memory.
-    pub fn explain_close_held(&self) -> OverlayResult<Vec<String>> {
-        self.query(
-            StatementKind::Explain,
-            &format!("EXPLAIN QUERY PLAN {HELD}"),
-            &[],
-            8,
-            |r| r.get(3),
-        )
-    }
     /// Closes mutation/acquisition admission. Existing exact consumers keep their
     /// original custody until fenced; no namespace row or payload is swept here.
     pub fn close(&self, route: Route) -> OverlayResult<()> {

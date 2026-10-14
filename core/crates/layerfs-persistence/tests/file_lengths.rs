@@ -66,20 +66,6 @@ fn a_cold_whole_file_length_uses_only_indexed_catalogue_rows() {
     assert_eq!(after.sorts - before.sorts, 0);
     assert_eq!(after.autoindex_rows - before.autoindex_rows, 0);
     assert_eq!(after.reprepares - before.reprepares, 0);
-    let plans = handles.explain_locate(&[root]).unwrap();
-    assert!(
-        plans[0]
-            .iter()
-            .any(|line| line.contains("SEARCH o USING PRIMARY KEY")),
-        "{plans:?}"
-    );
-    assert!(
-        plans[0]
-            .iter()
-            .all(|line| !line.contains("SCAN") && !line.contains("TEMP B-TREE")),
-        "{plans:?}"
-    );
-    println!("FILE_LENGTH rows=2 distinct=1 logical_each=131071 canonical_payload_read=0 locate={} statements={} vm_steps={} returned_rows={} fullscan={} sorts={} autoindex={} reprepares={} plans={plans:?}",work.locate,after.statements-before.statements,after.vm_steps-before.vm_steps,after.returned_rows-before.returned_rows,after.fullscan_steps-before.fullscan_steps,after.sorts-before.sorts,after.autoindex_rows-before.autoindex_rows,after.reprepares-before.reprepares);
 }
 
 #[test]

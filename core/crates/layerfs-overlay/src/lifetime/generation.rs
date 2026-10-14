@@ -1,7 +1,7 @@
 //! Fixed captured membership and publication/reply-attempt ordering primitives.
 use crate::{
-    db::integer, inode, sql, BaseSource, Capture, Generation, Inode, Overlay, OverlayError,
-    OverlayResult, Publication, Route, StatementKind,
+    db::integer, inode, sql, Capture, Inode, Overlay, OverlayError, OverlayResult, Publication,
+    Route, StatementKind,
 };
 
 impl Overlay {
@@ -71,17 +71,6 @@ impl Overlay {
             },
         )
     }
-    /// Plan for the exact generation-selective name cursor.
-    pub fn explain_directory_entry_capture(&self, capture: Capture) -> OverlayResult<Vec<String>> {
-        self.checked_capture(capture)?;
-        self.query(
-            StatementKind::Explain,
-            &format!("EXPLAIN QUERY PLAN {}", sql::DIRECTORY_ENTRY_CAPTURE),
-            &[&capture.generation.0, &0_i64, &&[] as &dyn rusqlite::ToSql],
-            24,
-            |row| row.get(3),
-        )
-    }
     /// Readiness observation before a capture attempt. Waiting callers retain
     /// their original operation and wake on reply-attempt progress, without retry.
     pub fn capture_ready(&self, route: Route) -> OverlayResult<bool> {
@@ -103,32 +92,6 @@ impl Overlay {
         self.state(publication.route)?;
         self.tickets.attempted(publication)?;
         Ok(())
-    }
-    /// The reply attempt and the release of the same request's processing
-    /// source, in one transaction: both are recorded or neither is, so a
-    /// failure leaves the ticket and the source in the caller's custody.
-    pub fn reply_attempted_and_release(
-        &self,
-        publication: Publication,
-        source: BaseSource,
-    ) -> OverlayResult<()> {
-        if source.route() != publication.route {
-            return Err(OverlayError::Stale);
-        }
-        self.release_class(source)?;
-        self.atomic_cleanup(|| {
-            self.state(publication.route)?;
-            // The source's release queues a terminal cleanup that waited
-            // for this ticket, so the ticket goes first and comes back,
-            // with its waiter, if the release fails.
-            let settled = self.tickets.attempted(publication)?;
-            self.release_source_inner(source).inspect_err(|_| {
-                self.tickets.issue(publication);
-                if settled == crate::Settled::Watched {
-                    self.tickets.watch(publication.route.ns);
-                }
-            })
-        })
     }
     /// Seals existing rows without copying them. The daemon parks capture until
     /// earlier reply attempts settle; this method does not block a SQL owner.
@@ -168,32 +131,5 @@ impl Overlay {
             return Err(OverlayError::Stale);
         }
         Ok(())
-    }
-    /// Observes the exact query strategy for a fixed captured domain. Runtime
-    /// statement counters are available separately through diagnostics().
-    pub fn explain_capture(&self, capture: Capture) -> OverlayResult<Vec<String>> {
-        self.checked_capture(capture)?;
-        self.query(
-            StatementKind::Explain,
-            &format!("EXPLAIN QUERY PLAN {}", sql::INODE_CAPTURE),
-            &[&capture.generation.0, &0_i64],
-            24,
-            |r| r.get(3),
-        )
-    }
-    /// Observes the ordinary point lookup strategy under this route's live view.
-    pub fn explain_inode(&self, route: Route, serial: u64) -> OverlayResult<Vec<String>> {
-        let state = self.live(route)?;
-        self.query(
-            StatementKind::Explain,
-            &format!("EXPLAIN QUERY PLAN {}", sql::INODE_LOOKUP),
-            &[&integer(serial)?, &state.active.0, &state.installed],
-            32,
-            |r| r.get(3),
-        )
-    }
-    /// Returns the active generation for a caller's bounded cell/read job.
-    pub fn active_generation(&self, route: Route) -> OverlayResult<Generation> {
-        Ok(self.live(route)?.active)
     }
 }

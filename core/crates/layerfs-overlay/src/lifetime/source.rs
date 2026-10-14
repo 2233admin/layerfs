@@ -144,15 +144,4 @@ impl Overlay {
         )?;
         Ok(())
     }
-    /// Production-template plan for one source-owner point observation.
-    pub fn explain_base_source(&self, route: Route, owner: u64) -> OverlayResult<Vec<String>> {
-        self.state(route)?;
-        self.query(
-            StatementKind::Explain,
-            &format!("EXPLAIN QUERY PLAN {}", sql::BASE_SOURCE_LOOKUP),
-            &[&integer(owner)?, &0_i64],
-            16,
-            |row| row.get(3),
-        )
-    }
 }

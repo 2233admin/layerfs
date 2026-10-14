@@ -94,24 +94,4 @@ impl Overlay {
             decode,
         )
     }
-    pub fn explain_source_directory_entries(
-        &self,
-        source: BaseSource,
-        parent: u64,
-        generation: Generation,
-        after: Option<&[u8]>,
-    ) -> OverlayResult<Vec<String>> {
-        self.source_state(source)?;
-        let after = after.unwrap_or(&[]);
-        if after.len() > 255 {
-            return Err(OverlayError::Invalid("source name cursor"));
-        }
-        self.query(
-            StatementKind::Explain,
-            &format!("EXPLAIN QUERY PLAN {}", sql::SOURCE_NAMES),
-            &[&generation.0, &integer(parent)?, &after],
-            24 + after.len() as u64,
-            |row| row.get(3),
-        )
-    }
 }

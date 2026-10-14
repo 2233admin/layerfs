@@ -129,23 +129,6 @@ impl OwnerClient {
             db.reader_inode(reader, serial).map(Response::Inode)
         })
     }
-    pub fn lifetime_plans(&self, route: Route) -> Result<JobReceipt, OwnerError> {
-        self.overlay_job(route, ServiceClass::Read, None, move |db, route| {
-            db.explain_lifetimes(route).map(Response::LifetimePlans)
-        })
-    }
-    pub fn payload_plans(
-        &self,
-        route: Route,
-        source: BaseSource,
-    ) -> Result<JobReceipt, OwnerError> {
-        self.overlay_job(route, ServiceClass::Read, None, move |db, route| {
-            if source.route() != route {
-                return Err(layerfs_overlay::OverlayError::Stale);
-            }
-            db.explain_payload(source).map(Response::PayloadPlans)
-        })
-    }
     pub fn source_read(
         &self,
         route: Route,

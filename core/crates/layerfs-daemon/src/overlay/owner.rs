@@ -102,7 +102,6 @@ impl std::error::Error for OwnerError {
 pub struct Owner {
     pub(super) client: OwnerClient,
     pub(super) profile: DatabaseProfile,
-    pub(super) startup: Arc<layerfs_overlay::CreationWork>,
 }
 #[derive(Clone)]
 pub struct OwnerClient {
@@ -150,7 +149,6 @@ impl Owner {
                     context: Context::Workspace(shared),
                 },
                 profile,
-                startup: startup.clone(),
             }
         });
         crate::OwnerStart {
@@ -159,9 +157,6 @@ impl Owner {
             creation_reported: true,
             elapsed_ns: elapsed(started),
         }
-    }
-    pub fn startup_work(&self) -> &layerfs_overlay::CreationWork {
-        &self.startup
     }
     pub fn configuration(&self) -> OwnerConfig {
         self.client

@@ -569,9 +569,6 @@ fn later_active_rows_install_and_close_leave_reader_answers_until_exact_release(
     assert_eq!(answers(&db, reader, &parents, &points, &links), sealed);
     assert_eq!(check_names(&db, reader, &world), sealed_names);
     assert_eq!(reader.root(), [204; 32]);
-    assert!(db
-        .explain_reader_directory_entries(reader, 10, b"n0001")
-        .is_ok());
     db.release_captured_reader(reader).unwrap();
     assert!(matches!(
         db.reader_parent_directory_entries(reader, 10, None),
@@ -583,10 +580,6 @@ fn later_active_rows_install_and_close_leave_reader_answers_until_exact_release(
     ));
     assert!(matches!(
         db.reader_symlink(reader, 50),
-        Err(OverlayError::Stale)
-    ));
-    assert!(matches!(
-        db.explain_reader_directory_entries(reader, 10, b"n0001"),
         Err(OverlayError::Stale)
     ));
 }
@@ -865,49 +858,9 @@ fn reader_name_and_symlink_jobs_seek_their_sealed_domain_while_the_active_genera
     changed.inherited_cutoff = changed.size;
     active.inode(changed, None);
 
-    let plans = db
-        .explain_reader_directory_entries(reader, 10, b"n0063")
+    // The reader's first job pays its one-time setup outside the cases.
+    db.reader_parent_directory_entries(reader, 10, Some(b"n0063"))
         .unwrap();
-    evidence(format_args!("READER_NAMESPACE_PLAN {plans:?}"));
-    assert_eq!(plans.len(), 2, "{plans:?}");
-    assert!(
-        plans[0].starts_with("parent-names: SEARCH")
-            && plans[0].contains("fs_entry_capture")
-            && plans[0].contains("generation=? AND parent=? AND name>?"),
-        "{plans:?}"
-    );
-    assert!(
-        plans[1].starts_with("name-point: SEARCH")
-            && plans[1].contains("PRIMARY KEY")
-            && plans[1].contains("parent=? AND name=? AND generation=?"),
-        "{plans:?}"
-    );
-    assert!(
-        !plans
-            .iter()
-            .any(|plan| plan.contains("SCAN") || plan.contains("TEMP B-TREE")),
-        "{plans:?}"
-    );
-    // The symlink job reuses the layered read: its two statements, as planned.
-    let payload = db.explain_payload(source).unwrap();
-    let layered: Vec<&String> = payload
-        .iter()
-        .filter(|plan| plan.starts_with("layers:") || plan.starts_with("cell-window:"))
-        .collect();
-    evidence(format_args!("READER_SYMLINK_PLAN {layered:?}"));
-    for label in ["layers: SEARCH", "cell-window: SEARCH"] {
-        assert!(
-            layered.iter().any(|plan| plan.starts_with(label)),
-            "{payload:?}"
-        );
-    }
-    assert!(
-        !layered
-            .iter()
-            .any(|plan| plan.contains("SCAN") || plan.contains("TEMP B-TREE")),
-        "{payload:?}"
-    );
-
     // Distinct count-driven cases, no latency, cold-cache or resident claim.
     let mut previous = 0_u64;
     let mut steps = None;

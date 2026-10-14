@@ -99,15 +99,6 @@ impl Overlay {
             debt_upper_bytes,
         })
     }
-    pub fn explain_accounting(&self) -> OverlayResult<Vec<String>> {
-        self.query(
-            StatementKind::Explain,
-            &format!("EXPLAIN QUERY PLAN {COUNTS}"),
-            &[],
-            8,
-            |r| r.get(3),
-        )
-    }
 }
 
 impl Resources {

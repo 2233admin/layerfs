@@ -39,20 +39,6 @@ fn read_window(service: &Service, open: OpenFile) -> Vec<u8> {
 #[test]
 fn inherited_open_unlinked_log_keeps_bytes_through_owner_installs_failures_and_idle_cleanup() {
     let service = Service::new("orphan-log");
-    service.job(
-        |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.lifetime_plans(job_route),
-        |r| match r {
-            Response::LifetimePlans(plans) => {
-                // Every access is a search; the record fence's owner search is a
-                // scalar subquery, which the plan lists as a node of its own.
-                assert!(plans.iter().all(|p| {
-                    (p.contains("SEARCH") || p.contains("SCALAR SUBQUERY")) && !p.contains("TEMP")
-                }));
-                println!("S6_CUSTODY_PLANS {plans:?}");
-            }
-            other => panic!("{other:?}"),
-        },
-    );
     let open = service.window(|view| {
         let base = service.job(
             |job_client: &layerfs_daemon::OwnerClient, job_route| {
@@ -391,16 +377,9 @@ fn non_file_lookup_custody_survives_real_owner_installs_and_a_last_consumer() {
         },
         |_| (),
     );
-    let view = service.workspace.view_for_source(read.source()).unwrap();
     service.job(
         |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.close(job_route),
         |_| (),
-    );
-    assert_eq!(
-        view.readlink_owned(&service.client, read)
-            .unwrap()
-            .as_bytes(),
-        b"../.git/index"
     );
     service.job(
         |job_client: &layerfs_daemon::OwnerClient, job_route| {

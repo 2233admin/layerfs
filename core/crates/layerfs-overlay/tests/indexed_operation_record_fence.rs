@@ -212,32 +212,6 @@ fn a_job_reads_a_fence_row_only_after_a_statement_that_wrote_it() {
 }
 
 #[test]
-fn the_fence_statements_are_point_searches() {
-    let temp = Temp::new();
-    let db = temp.db();
-    let held = scope(&db, 61);
-    let plans = db.explain_lifetimes(held.owner.route()).unwrap();
-    for plan in &plans {
-        println!("INDEXED_OPERATION_RECORD_FENCE_PLAN {plan}");
-    }
-    // The custody half of the fence is one point search of the owner row
-    // by its key. The Workspace half is the row of `explain_native_visit`.
-    let operation = plans
-        .iter()
-        .filter(|plan| plan.starts_with("operation:"))
-        .collect::<Vec<_>>();
-    assert_eq!(operation.len(), 1, "{plans:?}");
-    assert!(operation[0].contains("SEARCH commit_run"), "{plans:?}");
-    for plan in &plans {
-        assert!(plan.contains("SEARCH"), "{plan}");
-        assert!(
-            !plan.contains("SCAN") && !plan.contains("TEMP B-TREE"),
-            "{plan}"
-        );
-    }
-}
-
-#[test]
 fn several_keys_are_read_under_one_fence_in_the_order_asked() {
     let temp = Temp::new();
     let db = temp.db();

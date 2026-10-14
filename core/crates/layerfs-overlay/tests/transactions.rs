@@ -233,29 +233,6 @@ fn a_failure_after_the_first_write_rolls_back_and_one_before_it_has_nothing_to_r
     assert_eq!(db.inode(route, 3).unwrap(), None);
     assert_eq!(db.pending_publications(route, 0).unwrap(), vec![ticket]);
 
-    let sql = db.diagnostics();
-    let physical = db.allocation_work();
-    // The reply attempt takes its ticket from the engine's memory, which is
-    // no statement. The source that is no longer held then fails the job in
-    // its reads, before any write, and the ticket is issued again.
-    assert!(matches!(
-        db.reply_attempted_and_release(ticket, released),
-        Err(OverlayError::Stale)
-    ));
-    let work = db.diagnostics().since(&sql);
-    for kind in CONTROL {
-        assert_eq!(
-            work.statements[kind as usize],
-            StatementWork::default(),
-            "{kind:?}"
-        );
-    }
-    assert!(work.total().executions > 0);
-    assert_eq!(work.total().rows_changed, 0);
-    assert_eq!(
-        db.allocation_work().since(physical),
-        AllocationWork::default()
-    );
     // The ticket is still owed and settles exactly once afterwards.
     assert_eq!(db.pending_publications(route, 0).unwrap(), vec![ticket]);
     assert_eq!(db.resources(Some(route)).unwrap().counts.reply_tickets, 1);

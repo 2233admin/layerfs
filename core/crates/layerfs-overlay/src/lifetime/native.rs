@@ -113,16 +113,6 @@ impl Overlay {
             .get(&(mount.owner, serial))
             .map(|entry| (entry.owner, entry.count, entry.implicit)))
     }
-    pub fn native_lookup_count(
-        &self,
-        mount: NativeMount,
-        serial: u64,
-    ) -> OverlayResult<Option<u64>> {
-        self.check_native_attached(mount)?;
-        Ok(self
-            .native_lookup_row(mount, serial)?
-            .map(|(_, count, _)| count))
-    }
     pub(crate) fn insert_native_lookup(
         &self,
         mount: NativeMount,

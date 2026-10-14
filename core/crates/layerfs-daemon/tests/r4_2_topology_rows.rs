@@ -294,7 +294,6 @@ fn refused(
         .result(),
         Ok(Response::RetainedCapture(None))
     ));
-    assert!(!first.commit_in_flight());
     assert!(rig
         .store
         .history()

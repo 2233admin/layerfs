@@ -234,21 +234,6 @@ impl Overlay {
             }))
         })
     }
-    /// Ready queue strategy and live physical/debt observations are separate:
-    /// this returns the actual indexed queue plan without scanning its items.
-    pub fn explain_maintenance(&self) -> OverlayResult<Vec<String>> {
-        let mut plans = Vec::new();
-        for statement in [READY, super::source_wait::GENERATION_WINDOW] {
-            plans.extend(self.query(
-                StatementKind::Explain,
-                &format!("EXPLAIN QUERY PLAN {statement}"),
-                &[&0_i64, &0_i64, &0_i64],
-                32,
-                |row| row.get::<_, String>(3),
-            )?);
-        }
-        Ok(plans)
-    }
     pub(crate) fn wake_generation(&self, generation: u64) -> OverlayResult<()> {
         let gen = integer(generation)?;
         if gen != 0 && !self.generation_held(gen)? {

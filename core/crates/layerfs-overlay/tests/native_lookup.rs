@@ -85,10 +85,6 @@ fn native_file_keys_retain_exact_open_owners() {
             });
         assert_eq!(outcome.result.unwrap(), None);
         let file = outcome.open_candidate.unwrap();
-        assert_eq!(
-            f.db.retained_native_file(f.mount, request).unwrap(),
-            Some(file)
-        );
         assert_eq!(f.db.native_file(f.mount, 2, file.owner_id()).unwrap(), file);
         assert_eq!(file.writable(), writable);
         assert_eq!(f.db.check_file(file, true).is_ok(), writable);
@@ -122,13 +118,8 @@ fn native_file_keys_retain_exact_open_owners() {
         .db
         .close_native_file(f.mount, 2, files[0].owner_id())
         .is_err());
-    assert_eq!(f.db.retained_native_file(f.mount, u64::MAX).unwrap(), None);
     // The existing exact file close removes the request's descriptor too.
     f.db.close_file(files[1]).unwrap();
-    assert_eq!(
-        f.db.retained_native_file(f.mount, u64::MAX - 1).unwrap(),
-        None
-    );
     assert!(f.db.native_file(f.mount, 2, files[1].owner_id()).is_err());
     f.db.revoke_native_mount(f.mount).unwrap();
 }
@@ -170,9 +161,7 @@ fn native_open_refuses_nonregular_and_opens_a_removed_file_under_lookup_custody(
     });
     assert_eq!(outcome.result.unwrap(), None);
     let file = outcome.open_candidate.expect("removed file opened");
-    assert_eq!(f.db.retained_native_file(f.mount, 3).unwrap(), Some(file));
     f.db.close_native_file(f.mount, 2, file.owner_id()).unwrap();
-    assert_eq!(f.db.retained_native_file(f.mount, 3).unwrap(), None);
     f.db.forget_native(f.mount, 2, 1).unwrap();
     f.db.revoke_native_mount(f.mount).unwrap();
 }
@@ -180,7 +169,6 @@ fn native_open_refuses_nonregular_and_opens_a_removed_file_under_lookup_custody(
 #[test]
 fn aggregate_forget_is_checked_and_implicit_root_is_independent() {
     let f = Fixture::new();
-    assert_eq!(f.db.native_lookup_count(f.mount, 1).unwrap(), Some(0));
     assert!(matches!(
         f.db.forget_native(f.mount, 1, 1),
         Err(OverlayError::Invalid("native lookup underflow"))
@@ -190,7 +178,6 @@ fn aggregate_forget_is_checked_and_implicit_root_is_independent() {
     for _ in 2..=32 {
         f.lookup(2);
     }
-    assert_eq!(f.db.native_lookup_count(f.mount, 2).unwrap(), Some(32));
     assert_eq!(
         f.db.resources(Some(f.mount.route())).unwrap().counts,
         rows,
@@ -200,12 +187,8 @@ fn aggregate_forget_is_checked_and_implicit_root_is_independent() {
         f.db.forget_native(f.mount, 2, 33),
         Err(OverlayError::Invalid("native lookup underflow"))
     ));
-    assert_eq!(f.db.native_lookup_count(f.mount, 2).unwrap(), Some(32));
     f.db.forget_native(f.mount, 2, 31).unwrap();
-    assert_eq!(f.db.native_lookup_count(f.mount, 2).unwrap(), Some(1));
     f.db.forget_native(f.mount, 2, 1).unwrap();
-    assert_eq!(f.db.native_lookup_count(f.mount, 2).unwrap(), None);
-    assert_eq!(f.db.native_lookup_count(f.mount, 1).unwrap(), Some(0));
     assert!(matches!(
         f.db.forget_native(f.mount, 2, 1),
         Err(OverlayError::Stale)
@@ -440,7 +423,6 @@ fn a_read_visit_records_no_source_and_writes_only_a_positive_lookup_reference() 
     assert_eq!(attributes.decision, Some("attributes"));
     assert!(matches!(attributes.result, Ok(None)));
     f.unchanged(&before);
-    assert_eq!(f.db.native_lookup_count(f.mount, 1).unwrap(), Some(0));
 
     // An undecided visit: the needed fact is its whole outcome.
     let before = f.before();
@@ -464,7 +446,6 @@ fn a_read_visit_records_no_source_and_writes_only_a_positive_lookup_reference() 
         assert_eq!(found.decision, Some(9));
         assert!(matches!(found.result, Ok(None)));
         assert_eq!(f.transactions(&before), (0, 0, 0));
-        assert_eq!(f.db.native_lookup_count(f.mount, 9).unwrap(), Some(held));
         let counts = f.db.resources(Some(route)).unwrap().counts;
         assert_eq!(counts.source_rows, before.counts.source_rows);
         assert_eq!(counts.reply_tickets, 0);
@@ -502,7 +483,6 @@ fn a_read_visit_records_no_source_and_writes_only_a_positive_lookup_reference() 
     });
     assert!(matches!(removed.result, Err(OverlayError::Missing)));
     f.unchanged(&before);
-    assert_eq!(f.db.native_lookup_count(f.mount, 9).unwrap(), Some(2));
 
     // Nothing was recorded for a request, so nothing fences revocation.
     f.db.forget_native(f.mount, 9, 2).unwrap();
@@ -525,7 +505,6 @@ fn a_mutation_visit_publishes_with_its_kernel_custody_and_records_no_source() {
         .unwrap();
     assert_eq!(declined, None);
     f.unchanged(&before);
-    assert_eq!(f.db.retained_native_file(f.mount, REQUEST).unwrap(), None);
 
     // CREATE with an open descriptor: publication, lookup reference,
     // descriptor and reply ticket in the visit's one transaction.
@@ -547,16 +526,11 @@ fn a_mutation_visit_publishes_with_its_kernel_custody_and_records_no_source() {
     assert_eq!(f.transactions(&before), (1, 1, 0));
     let file = applied.file.expect("the created file is open");
     assert_eq!((file.serial(), file.writable()), (50, true));
-    // native_lookup and the file_handle row of the mount's request.
-    assert_eq!(f.db.native_lookup_count(f.mount, 50).unwrap(), Some(1));
+    // The file_handle row of the mount's request.
     f.db.check_file(file, true).unwrap();
     assert_eq!(
         f.db.native_file(f.mount, 50, file.owner_id()).unwrap(),
         file
-    );
-    assert_eq!(
-        f.db.retained_native_file(f.mount, REQUEST).unwrap(),
-        Some(file)
     );
     // The reply ticket.
     assert_eq!(
@@ -658,7 +632,6 @@ fn a_mutation_visit_publishes_with_its_kernel_custody_and_records_no_source() {
     assert_eq!(f.db.resources(Some(route)).unwrap().counts, before.counts);
     assert_eq!(f.db.state(route).unwrap().revision, before.revision);
     assert_eq!(f.db.inode(route, 51).unwrap(), None);
-    assert_eq!(f.db.native_lookup_count(f.mount, 51).unwrap(), None);
     // The ticket the failed visit issued in memory at its frontier advance
     // is withdrawn with it: only the earlier publication is still owed.
     assert_eq!(
