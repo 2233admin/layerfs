@@ -38,7 +38,7 @@ impl Overlay {
             let state = self.open.borrow();
             let store = state
                 .cookies
-                .get(&(directory.mount.route.ns, directory.owner))
+                .get(&directory.owner)
                 .ok_or(OverlayError::Stale)?;
             let (first, page) = store
                 .offsets

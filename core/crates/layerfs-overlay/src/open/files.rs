@@ -1,5 +1,5 @@
-//! Open-file reference counts and exact descriptor request associations.
-use crate::{LeaseKind, OpenFile, OverlayError, OverlayResult};
+//! Open-file reference counts.
+use crate::{LeaseKind, OverlayError, OverlayResult};
 
 #[derive(Clone, Copy, Default)]
 pub(crate) struct FileReferences {
@@ -26,10 +26,4 @@ impl FileReferences {
         .ok_or(OverlayError::Stale)?;
         Ok(())
     }
-}
-#[derive(Clone, Copy)]
-pub(crate) struct HeldFile {
-    pub file: OpenFile,
-    pub mount: u64,
-    pub request: i64,
 }

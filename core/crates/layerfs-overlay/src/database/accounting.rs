@@ -92,10 +92,7 @@ impl Overlay {
         };
         Ok(Resources {
             counts,
-            open: self
-                .open
-                .borrow()
-                .snapshot(route.map(|route| route.namespace())),
+            open: self.open.borrow().snapshot(),
             allocation: self.allocation()?,
             database_pages,
             free_pages,

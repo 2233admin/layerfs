@@ -30,14 +30,9 @@ impl Overlay {
             .rows
             .get(&route.ns)
             .is_some_and(|(_, revoked)| !revoked);
-        let files = open
-            .file_requests
-            .rows
-            .range((route.ns, 0, i64::MIN)..=(route.ns, 0, i64::MAX))
-            .next()
-            .is_some();
-        let readers = open.count_at(Some(route.ns), 3) != 0;
-        let lookups = open.count_at(Some(route.ns), 4) != 0;
+        let files = open.files.any_request((0, i64::MIN)..=(0, i64::MAX));
+        let readers = open.reads.len() != 0;
+        let lookups = open.lookups.len() != 0;
         drop(open);
         let held = native
             || files
@@ -133,7 +128,7 @@ impl Overlay {
                 &[&capture.route().ns],
                 8,
             )?;
-            self.wake_orphan_sources(capture.route.ns, capture.generation.0)
+            self.wake_orphan_sources(capture.generation.0)
         })
     }
 }

@@ -28,7 +28,7 @@ impl Overlay {
             let state = self.open.borrow();
             let store = state
                 .cookies
-                .get(&(directory.mount.route.ns, directory.owner))
+                .get(&directory.owner)
                 .ok_or(OverlayError::Stale)?;
             store
                 .after
@@ -99,7 +99,6 @@ impl Overlay {
             return Err(OverlayError::Invalid("native cookie names"));
         }
         let directory = offer.directory;
-        let ns = directory.mount.route.ns;
         self.atomic(|| {
             let (_, mut floor) =
                 self.directory_fence(directory.mount, directory.serial, directory.owner, true)?;
@@ -109,28 +108,23 @@ impl Overlay {
             if offer.rewinds() {
                 floor = offer.first;
                 let mut state = self.open.borrow_mut();
-                let key = (ns, directory.owner);
-                let mut held = state
+                let (mut held, _) = state
                     .directories
-                    .rows
-                    .get(&key)
-                    .copied()
+                    .get(directory.owner)
                     .ok_or(OverlayError::Stale)?;
                 held.floor = floor;
-                state.directories.put(key, held);
+                state.directories.update(directory.owner, held)?;
             }
             if floor != 0 {
-                self.open.borrow_mut().retire_cookies(
-                    (ns, directory.owner),
-                    floor,
-                    INLINE_PAGES,
-                )?;
+                self.open
+                    .borrow_mut()
+                    .retire_cookies(directory.owner, floor, INLINE_PAGES)?;
             }
             if names.is_empty() {
                 return Ok(());
             }
             self.open.borrow_mut().put_cookie(
-                (ns, directory.owner),
+                directory.owner,
                 offer.first,
                 crate::open::CookiePage {
                     after: offer.after.clone(),

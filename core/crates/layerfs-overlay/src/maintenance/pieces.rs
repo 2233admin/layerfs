@@ -61,7 +61,7 @@ impl Overlay {
     /// item's cursor: every row is deleted unless an orphan still reads its
     /// layer. Returns the rows visited.
     pub(crate) fn retire_pieces(&self, item: &Item, phase: i64) -> OverlayResult<usize> {
-        let (ns, gen) = (item.ns, item.target);
+        let gen = item.target;
         let rows = self.query(
             StatementKind::Reclaim,
             sql::PIECE_GENERATION_PAGE,
@@ -70,7 +70,7 @@ impl Overlay {
             |r| Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?)),
         )?;
         for (serial, offset) in &rows {
-            if !self.orphan_holds(ns, *serial, gen)? {
+            if !self.orphan_holds(*serial, gen)? {
                 self.drop_piece((gen, *serial), *offset)?;
             }
         }

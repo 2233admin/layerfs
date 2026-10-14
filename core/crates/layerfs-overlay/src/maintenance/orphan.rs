@@ -111,7 +111,7 @@ impl Overlay {
                     break;
                 }
                 calls += 1;
-                let step = self.reclaim_orphan(ns, serial, &mut orphan, page)?;
+                let step = self.reclaim_orphan(serial, &mut orphan, page)?;
                 charge(&mut page, &step);
                 if let Some(gen) = step.released {
                     layers[released] = (gen, Next::Ready, Retiring::default());
@@ -193,18 +193,16 @@ impl Overlay {
         Ok(())
     }
     /// The custody row of a file nothing references.
-    pub(crate) fn drop_custody(&self, ns: i64, serial: i64) -> OverlayResult<()> {
+    pub(crate) fn drop_custody(&self, serial: i64) -> OverlayResult<()> {
         let mut state = self.open.borrow_mut();
-        let key = (ns, serial);
         if state
             .custody
             .rows
-            .get(&key)
+            .get(&serial)
             .is_some_and(|refs| refs.total() == 0)
         {
-            state.custody.remove(key);
-            state.count(ns, 5, false);
-            state.remove_parent((ns, serial as u64));
+            state.custody.remove(serial);
+            state.parents.remove(serial as u64);
         }
         Ok(())
     }
@@ -214,15 +212,15 @@ impl Overlay {
         page: Page,
     ) -> OverlayResult<(u64, u64, bool)> {
         let (ns, serial) = (item.ns, item.resource);
-        let Some(mut orphan) = self.orphan(ns, serial)? else {
-            self.drop_custody(ns, serial)?;
+        let Some(mut orphan) = self.orphan(serial)? else {
+            self.drop_custody(serial)?;
             self.finish_item(item)?;
             return Ok((0, 0, true));
         };
-        let step = if self.file_refs(ns, serial)? != 0 {
+        let step = if self.file_refs(serial)? != 0 {
             self.migrate_orphan(ns, serial, orphan, (item.phase, item.aux))?
         } else {
-            self.reclaim_orphan(ns, serial, &mut orphan, page)?
+            self.reclaim_orphan(serial, &mut orphan, page)?
         };
         self.settle_item(item, step)
     }
@@ -247,11 +245,7 @@ impl Overlay {
                     || self.generation_held(lower.gen)?
                 {
                     let mut state = self.open.borrow_mut();
-                    let key = (ns, lower.gen, serial);
-                    if !state.waits.rows.contains_key(&key) {
-                        state.waits.put(key, ());
-                        state.count(ns, 7, true);
-                    }
+                    state.waits.put((lower.gen, serial), ());
                     return Ok(step(0, 0, Next::Held));
                 }
                 let upper = self.orphan_layer(serial)?;
@@ -270,12 +264,7 @@ impl Overlay {
                 }
                 self.execute(StatementKind::Inode,"UPDATE fs_inode SET inherited_cutoff=min(inherited_cutoff,?2) WHERE inode=?1 AND generation=-1",
                     &[&serial,&integer(lower.cutoff)?],24)?;
-                self.release_orphan_layer(
-                    ns,
-                    serial,
-                    lower.gen,
-                    (lower.gen - 1).max(orphan.floor),
-                )?;
+                self.release_orphan_layer(serial, lower.gen, (lower.gen - 1).max(orphan.floor))?;
                 return Ok(Step {
                     released: Some(lower.gen),
                     ..step(1, 0, Next::From(0, -1))
@@ -283,7 +272,7 @@ impl Overlay {
             }
             let mut state = self.open.borrow_mut();
             state.orphans.put(
-                (ns, serial),
+                serial,
                 Orphan {
                     top: orphan.floor,
                     ..orphan
@@ -295,13 +284,7 @@ impl Overlay {
     /// One step of an orphan nothing holds: its newest lower layer is
     /// released, or a page of its own cells or shrink rows is dropped, or
     /// its rows are deleted. `orphan` follows the row.
-    fn reclaim_orphan(
-        &self,
-        ns: i64,
-        serial: i64,
-        orphan: &mut Orphan,
-        page: Page,
-    ) -> OverlayResult<Step> {
+    fn reclaim_orphan(&self, serial: i64, orphan: &mut Orphan, page: Page) -> OverlayResult<Step> {
         // On last owner release, lower namespace ownership is separate. Target
         // only already-retired source rows; future installs own remaining ones.
         if orphan.top > orphan.floor {
@@ -311,7 +294,7 @@ impl Overlay {
                 .copied();
             if let Some(lower) = lower {
                 let next = (lower.gen - 1).max(orphan.floor);
-                self.release_orphan_layer(ns, serial, lower.gen, next)?;
+                self.release_orphan_layer(serial, lower.gen, next)?;
                 orphan.top = next;
                 return Ok(Step {
                     released: Some(lower.gen),
@@ -374,11 +357,10 @@ impl Overlay {
         )?;
         {
             let mut state = self.open.borrow_mut();
-            state.orphans.remove((ns, serial));
-            state.count(ns, 6, false);
+            state.orphans.remove(serial);
         }
         self.orphans_deleted()?;
-        self.drop_custody(ns, serial)?;
+        self.drop_custody(serial)?;
         Ok(step(3, 0, Next::Done))
     }
     pub(crate) fn retire_serial(&self, item: &Item, page: Page) -> OverlayResult<(u64, u64, bool)> {
@@ -405,7 +387,7 @@ impl Overlay {
         if (!known.free && self.generation_held(gen)?)
             || match orphan {
                 Some(orphan) => orphan.holds(gen),
-                None => self.orphan_holds(ns, serial, gen)?,
+                None => self.orphan_holds(serial, gen)?,
             }
         {
             return Ok(step(0, 0, Next::Held));

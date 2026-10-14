@@ -28,7 +28,7 @@ impl Overlay {
                 48,
             )?;
             self.enqueue(crate::maintenance::RETIRE,0,capture.generation.0)?;
-            self.wake_orphan_sources(capture.route.ns,capture.generation.0)?;
+            self.wake_orphan_sources(capture.generation.0)?;
             Ok(())
         })
     }

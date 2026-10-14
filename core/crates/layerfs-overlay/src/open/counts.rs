@@ -56,7 +56,20 @@ impl OpenStateCounts {
     }
 }
 impl OpenState {
-    pub fn snapshot(&self, ns: Option<i64>) -> OpenStateCounts {
-        OpenStateCounts::from_values(std::array::from_fn(|column| self.count_at(ns, column)))
+    /// Each count is its map's length; the maps roll back with the turn.
+    pub fn snapshot(&self) -> OpenStateCounts {
+        OpenStateCounts {
+            kernel_entries: self.kernel.rows.len() as u64,
+            directory_parents: self.parents.rows.len() as u64,
+            file_handles: self.files.len() as u64,
+            file_reads: self.reads.len() as u64,
+            lookup_owners: self.lookups.len() as u64,
+            file_custody: self.custody.rows.len() as u64,
+            orphan_files: self.orphans.rows.len() as u64,
+            generation_waits: self.waits.rows.len() as u64,
+            mounts: self.mounts.rows.len() as u64,
+            directory_handles: self.directories.len() as u64,
+            cookie_pages: self.cookies.values().map(|s| s.offsets.len() as u64).sum(),
+        }
     }
 }

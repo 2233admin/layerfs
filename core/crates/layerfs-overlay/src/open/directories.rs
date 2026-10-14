@@ -6,7 +6,6 @@ use std::{collections::BTreeMap, sync::Arc};
 #[derive(Clone, Copy)]
 pub(crate) struct DirectoryState {
     pub directory: NativeDirectory,
-    pub request: u64,
     pub floor: u64,
 }
 pub(crate) struct CookiePage {
@@ -19,9 +18,9 @@ pub(crate) struct CookieStore {
     pub after: BTreeMap<(Vec<u8>, u64), ()>,
 }
 pub(crate) enum CookieUndo {
-    Open((i64, u64)),
-    Close((i64, u64), CookieStore),
-    Page((i64, u64), u64, Option<Arc<CookiePage>>),
+    Open(u64),
+    Close(u64, CookieStore),
+    Page(u64, u64, Option<Arc<CookiePage>>),
 }
 /// Detached directory reply allocations. The caller drops these after releasing
 /// its connection turn; destroying a large listing holds no Workspace lock.
@@ -45,7 +44,7 @@ impl CookieStore {
     }
 }
 impl OpenState {
-    pub fn open_cookies(&mut self, key: (i64, u64)) -> OverlayResult<()> {
+    pub fn open_cookies(&mut self, key: u64) -> OverlayResult<()> {
         if self.cookies.contains_key(&key) {
             return Err(OverlayError::Stale);
         }
@@ -53,33 +52,21 @@ impl OpenState {
         self.cookie_undo.push(CookieUndo::Open(key));
         Ok(())
     }
-    pub fn close_cookies(&mut self, key: (i64, u64)) -> OverlayResult<()> {
+    pub fn close_cookies(&mut self, key: u64) -> OverlayResult<()> {
         let store = self.cookies.remove(&key).ok_or(OverlayError::Stale)?;
-        self.subtract(key.0, 10, store.offsets.len() as u64);
         self.cookie_undo.push(CookieUndo::Close(key, store));
         Ok(())
     }
-    pub fn put_cookie(
-        &mut self,
-        key: (i64, u64),
-        first: u64,
-        page: CookiePage,
-    ) -> OverlayResult<()> {
+    pub fn put_cookie(&mut self, key: u64, first: u64, page: CookiePage) -> OverlayResult<()> {
         let store = self.cookies.get_mut(&key).ok_or(OverlayError::Stale)?;
         if store.offsets.contains_key(&first) {
             return Err(OverlayError::Invalid("duplicate directory cookie"));
         }
         let before = store.put(first, Arc::new(page));
         self.cookie_undo.push(CookieUndo::Page(key, first, before));
-        self.count(key.0, 10, true);
         Ok(())
     }
-    pub fn retire_cookies(
-        &mut self,
-        key: (i64, u64),
-        floor: u64,
-        maximum: usize,
-    ) -> OverlayResult<()> {
+    pub fn retire_cookies(&mut self, key: u64, floor: u64, maximum: usize) -> OverlayResult<()> {
         let store = self.cookies.get_mut(&key).ok_or(OverlayError::Stale)?;
         let old = store
             .offsets
@@ -94,7 +81,6 @@ impl OpenState {
                 .ok_or(OverlayError::Stale)?
                 .remove(first);
             self.cookie_undo.push(CookieUndo::Page(key, first, before));
-            self.count(key.0, 10, false);
         }
         Ok(())
     }

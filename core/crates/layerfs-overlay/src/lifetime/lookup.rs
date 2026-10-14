@@ -39,18 +39,12 @@ impl Overlay {
                 owner,
                 serial: current.serial,
             };
-            {
-                let mut state = self.open.borrow_mut();
-                let request_key = (source.route.ns, request);
-                if state.lookup_requests.rows.contains_key(&request_key) {
-                    return Err(OverlayError::Invalid("duplicate lookup request"));
-                }
-                state
-                    .lookups
-                    .put((source.route.ns, owner), (lookup, request));
-                state.lookup_requests.put(request_key, owner);
-                state.count(source.route.ns, 4, true);
-            }
+            self.open.borrow_mut().lookups.insert(
+                owner,
+                request,
+                lookup,
+                "duplicate lookup request",
+            )?;
             self.file_ref(source.route.ns, serial, LeaseKind::LookupOwner, true)?;
             Ok(LookupOwner {
                 route: source.route,
@@ -89,13 +83,7 @@ impl Overlay {
     ) -> OverlayResult<Option<LookupOwner>> {
         self.state(route)?;
         let request = integer(request)?;
-        let state = self.open.borrow();
-        Ok(state
-            .lookup_requests
-            .rows
-            .get(&(route.ns, request))
-            .and_then(|owner| state.lookups.rows.get(&(route.ns, *owner)))
-            .map(|(lookup, _)| *lookup))
+        Ok(self.open.borrow().lookups.retained(request))
     }
     pub fn check_lookup(&self, lookup: LookupOwner) -> OverlayResult<()> {
         self.state(lookup.route)?;
@@ -103,9 +91,8 @@ impl Overlay {
             .open
             .borrow()
             .lookups
-            .rows
-            .get(&(lookup.route.ns, lookup.owner))
-            .map(|(held, _)| *held)
+            .get(lookup.owner)
+            .map(|(held, _)| held)
             != Some(lookup)
         {
             return Err(OverlayError::Stale);
@@ -116,14 +103,10 @@ impl Overlay {
     pub fn release_lookup(&self, lookup: LookupOwner) -> OverlayResult<()> {
         self.atomic_cleanup(|| {
             self.check_lookup(lookup)?;
-            {
-                let mut state = self.open.borrow_mut();
-                let key = (lookup.route.ns, lookup.owner);
-                let request = state.lookups.rows.get(&key).ok_or(OverlayError::Stale)?.1;
-                state.lookups.remove(key);
-                state.lookup_requests.remove((lookup.route.ns, request));
-                state.count(lookup.route.ns, 4, false);
-            }
+            self.open
+                .borrow_mut()
+                .lookups
+                .remove(lookup.owner, |held| *held == lookup)?;
             self.file_ref(
                 lookup.route.ns,
                 integer(lookup.serial)?,

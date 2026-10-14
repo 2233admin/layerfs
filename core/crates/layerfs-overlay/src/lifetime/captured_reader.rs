@@ -162,7 +162,7 @@ impl Overlay {
                 ],
                 32,
             )?;
-            self.wake_generation(c.route.ns, c.generation.0 as u64)?;
+            self.wake_generation(c.generation.0 as u64)?;
             Ok(())
         })
     }

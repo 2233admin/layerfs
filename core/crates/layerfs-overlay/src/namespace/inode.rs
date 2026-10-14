@@ -124,11 +124,10 @@ impl Overlay {
     /// length; a smaller size on a regular file is a shrink of that layer.
     pub(crate) fn put_inode(
         &self,
-        route: Route,
         state: &WorkspaceState,
         inode: &Inode,
     ) -> OverlayResult<(bool, Layer)> {
-        self.put_inode_domain(route, state, inode, false, false, None)
+        self.put_inode_domain(state, inode, false, false, None)
     }
     /// The same write for one inode of a compound job. `created` is a serial
     /// reserved for this job: no row of it exists, so none is read and its
@@ -141,7 +140,6 @@ impl Overlay {
     /// that is gone is never created by an update.
     pub(crate) fn put_inode_domain(
         &self,
-        route: Route,
         state: &WorkspaceState,
         inode: &Inode,
         owned: bool,
@@ -149,7 +147,7 @@ impl Overlay {
         seen: Option<&JobRows>,
     ) -> OverlayResult<(bool, Layer)> {
         let serial = integer(inode.serial)?;
-        let orphan = owned && inode.nlink == 0 && self.orphan(route.ns, serial)?.is_some();
+        let orphan = owned && inode.nlink == 0 && self.orphan(serial)?.is_some();
         let gen = if orphan {
             crate::lifetime::orphan::DOMAIN
         } else {
@@ -421,7 +419,7 @@ impl Overlay {
         }
         self.atomic(|| {
             let state = self.live(route)?;
-            let (added, layer) = self.put_inode(route, &state, inode)?;
+            let (added, layer) = self.put_inode(&state, inode)?;
             let mut directory_entries = 0;
             if let (Some(name), Some((parent, target))) = (name, key) {
                 directory_entries = i64::from(self.put_directory_entry(
@@ -436,7 +434,7 @@ impl Overlay {
                 self.put_cell(integer(inode.serial)?, &layer, cell)?;
             }
             if inode.kind == InodeKind::File {
-                self.detach_orphan(route, &state, inode)?;
+                self.detach_orphan(&state, inode)?;
             }
             self.settle(route, &state, i64::from(added), directory_entries)
         })

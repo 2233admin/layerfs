@@ -210,7 +210,7 @@ impl Overlay {
     ) -> OverlayResult<Option<LocalRead>> {
         let state = self.source_state(source)?;
         let key = integer(serial)?;
-        if let Some(orphan) = self.orphan(source.route.ns, key)? {
+        if let Some(orphan) = self.orphan(key)? {
             if self.orphan_layer(key)?.kind == InodeKind::File {
                 return Err(OverlayError::Missing);
             }

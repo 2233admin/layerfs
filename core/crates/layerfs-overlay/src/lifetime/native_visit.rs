@@ -138,23 +138,18 @@ impl Overlay {
         }
         let file = |handle| {
             open.files
-                .rows
-                .get(&(mount.route.ns, handle))
-                .filter(|held| held.mount == mount.owner && held.file.serial == serial)
+                .get(handle)
+                .filter(|(file, (held, _))| *held == mount.owner && file.serial == serial)
         };
         let directory = |handle| {
             open.directories
-                .rows
-                .get(&(mount.route.ns, handle))
+                .get(handle)
+                .map(|(held, _)| held)
                 .filter(|held| held.directory.mount == mount && held.directory.serial == serial)
         };
         let value = match held {
-            Held::Lookup => open
-                .kernel
-                .rows
-                .get(&(mount.route.ns, mount.owner, serial))
-                .map(|_| 1),
-            Held::File(handle) => file(handle).map(|held| i64::from(held.file.writable)),
+            Held::Lookup => open.kernel.rows.get(&(mount.owner, serial)).map(|_| 1),
+            Held::File(handle) => file(handle).map(|(file, _)| i64::from(file.writable)),
             Held::Handle(handle) => {
                 if file(handle).is_some() || directory(handle).is_some() {
                     Some(1)
@@ -314,10 +309,10 @@ impl Overlay {
     ) -> OverlayResult<([u8; 32], Option<LocalRead>)> {
         let held = handle.map_or(Held::Lookup, Held::Handle);
         let (state, _) = self.native_fence(mount, serial, held, true)?;
-        let (ns, key) = (mount.route.ns, integer(serial)?);
+        let key = integer(serial)?;
         // No orphan row exists while this engine holds none.
         if self.orphan_seen.get() {
-            if let Some(orphan) = self.orphan(ns, key)? {
+            if let Some(orphan) = self.orphan(key)? {
                 // Without a descriptor a removed regular file is gone.
                 if handle.is_none() && self.orphan_layer(key)?.kind == InodeKind::File {
                     return Err(OverlayError::Missing);

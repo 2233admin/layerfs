@@ -67,7 +67,7 @@ impl Overlay {
                 self.file_ref(route.ns, integer(lease.resource)?, lease.kind, false)?;
             }
             if lease.kind == LeaseKind::Reader {
-                self.wake_generation(route.ns, lease.resource)?;
+                self.wake_generation(lease.resource)?;
             }
             Ok(())
         })

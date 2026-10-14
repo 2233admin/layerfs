@@ -7,7 +7,7 @@ use crate::{
 
 impl Overlay {
     pub(crate) fn retire_generation(&self, item: &Item) -> OverlayResult<(u64, u64, bool)> {
-        let (ns, gen) = (item.ns, item.target);
+        let gen = item.target;
         let mut bytes = 0;
         let count = match item.phase {
             0 => {
@@ -18,7 +18,7 @@ impl Overlay {
                 // One page of cells, however wide the rows that hold them.
                 let rows = &rows[..PAGE.fit(rows.iter().map(|row| row.2)).0];
                 for (serial, cell, size) in rows {
-                    if self.orphan_holds(ns, *serial, gen)? {
+                    if self.orphan_holds(*serial, gen)? {
                         continue;
                     }
                     self.execute(
@@ -44,7 +44,7 @@ impl Overlay {
                     |r| Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?)),
                 )?;
                 for (serial, depth) in &rows {
-                    if self.orphan_holds(ns, *serial, gen)? {
+                    if self.orphan_holds(*serial, gen)? {
                         continue;
                     }
                     self.execute(
@@ -92,7 +92,7 @@ impl Overlay {
                     |r| r.get::<_, i64>(0),
                 )?;
                 for serial in &rows {
-                    if self.orphan_holds(ns, *serial, gen)? {
+                    if self.orphan_holds(*serial, gen)? {
                         continue;
                     }
                     self.execute(

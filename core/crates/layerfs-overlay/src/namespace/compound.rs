@@ -185,7 +185,6 @@ impl Overlay {
         let mut layers = Vec::with_capacity(changes.inodes.len());
         for inode in &changes.inodes {
             let (added, layer) = self.put_inode_domain(
-                route,
                 &state,
                 inode,
                 changes.open.is_some(),
@@ -224,13 +223,14 @@ impl Overlay {
             }
         }
         if let Some((serial, parent)) = moved_directory {
-            let key = (route.ns, *serial as u64);
+            let key = *serial as u64;
             let held = self.open.borrow().parents.rows.get(&key).copied();
             if let Some((mount, old)) = held {
                 if old != *serial as u64 {
                     self.open
                         .borrow_mut()
-                        .put_parent(key, (mount, *parent as u64));
+                        .parents
+                        .put(key, (mount, *parent as u64));
                 }
             }
         }
@@ -246,7 +246,7 @@ impl Overlay {
         }
         for inode in &changes.inodes {
             if inode.kind == crate::InodeKind::File || changes.detached == Some(inode.serial) {
-                self.detach_orphan(route, &state, inode)?;
+                self.detach_orphan(&state, inode)?;
             }
         }
         self.settle(route, &state, inodes, directory_entries)

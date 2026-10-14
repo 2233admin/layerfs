@@ -249,7 +249,7 @@ impl Overlay {
         }
         Ok(plans)
     }
-    pub(crate) fn wake_generation(&self, ns: i64, generation: u64) -> OverlayResult<()> {
+    pub(crate) fn wake_generation(&self, generation: u64) -> OverlayResult<()> {
         let gen = integer(generation)?;
         if gen != 0 && !self.generation_held(gen)? {
             // Only enqueue here: one last-owner release must not update the
@@ -262,7 +262,7 @@ impl Overlay {
                 16,
             )?;
             self.maintenance_ready.set(true);
-            self.wake_orphan_sources(ns, gen)?;
+            self.wake_orphan_sources(gen)?;
         }
         Ok(())
     }

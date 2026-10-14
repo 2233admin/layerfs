@@ -4,7 +4,7 @@ use crate::{
     inode,
     layers::Layer,
     maintenance::{ORPHAN, SERIAL_RETIRE},
-    sql, FileRead, Inode, LocalRead, Overlay, OverlayError, OverlayResult, Route, StatementKind,
+    sql, FileRead, Inode, LocalRead, Overlay, OverlayError, OverlayResult, StatementKind,
     WorkspaceState,
 };
 pub(crate) const DOMAIN: i64 = -1;
@@ -21,12 +21,12 @@ impl Orphan {
     }
 }
 impl Overlay {
-    pub(crate) fn orphan(&self, ns: i64, serial: i64) -> OverlayResult<Option<Orphan>> {
+    pub(crate) fn orphan(&self, serial: i64) -> OverlayResult<Option<Orphan>> {
         self.available()?;
-        Ok(self.open.borrow().orphans.rows.get(&(ns, serial)).copied())
+        Ok(self.open.borrow().orphans.rows.get(&serial).copied())
     }
-    pub(crate) fn orphan_holds(&self, ns: i64, serial: i64, gen: i64) -> OverlayResult<bool> {
-        Ok(self.orphan(ns, serial)?.is_some_and(|o| o.holds(gen)))
+    pub(crate) fn orphan_holds(&self, serial: i64, gen: i64) -> OverlayResult<bool> {
+        Ok(self.orphan(serial)?.is_some_and(|o| o.holds(gen)))
     }
     /// The orphan-domain row of one serial. This engine holds no orphan
     /// while `orphan_seen` is false, so nothing is read then.
@@ -48,18 +48,13 @@ impl Overlay {
     }
     /// Last unlink creates only ownership/metadata. Its at-most-two lower
     /// domains are retained, never copied or folded in the unlink transaction.
-    pub(crate) fn detach_orphan(
-        &self,
-        route: Route,
-        state: &WorkspaceState,
-        inode: &Inode,
-    ) -> OverlayResult<()> {
+    pub(crate) fn detach_orphan(&self, state: &WorkspaceState, inode: &Inode) -> OverlayResult<()> {
         if inode.nlink != 0 {
             return Ok(());
         }
         let serial = integer(inode.serial)?;
         // While the engine holds no orphan this serial has none.
-        if self.orphan_seen.get() && self.orphan(route.ns, serial)?.is_some() {
+        if self.orphan_seen.get() && self.orphan(serial)?.is_some() {
             return Ok(());
         }
         // Every reference, and the ones that can read or write the file.
@@ -68,7 +63,7 @@ impl Overlay {
             .borrow()
             .custody
             .rows
-            .get(&(route.ns, serial))
+            .get(&serial)
             .copied()
             .unwrap_or_default();
         let (holders, users) = (refs.total(), refs.opens + refs.readers);
@@ -83,19 +78,17 @@ impl Overlay {
         self.orphan_seen.set(true);
         {
             let mut open = self.open.borrow_mut();
-            let key = (route.ns, serial);
-            if open.orphans.rows.contains_key(&key) {
+            if open.orphans.rows.contains_key(&serial) {
                 return Err(OverlayError::Stale);
             }
             open.orphans.put(
-                key,
+                serial,
                 Orphan {
                     root: state.base_root,
                     top: state.active.0,
                     floor: state.installed,
                 },
             );
-            open.count(route.ns, 6, true);
         }
         self.execute(
             StatementKind::Inode,
@@ -134,26 +127,20 @@ impl Overlay {
     }
     pub(crate) fn release_orphan_layer(
         &self,
-        ns: i64,
         serial: i64,
         gen: i64,
         next: i64,
     ) -> OverlayResult<()> {
         let mut state = self.open.borrow_mut();
-        let key = (ns, gen, serial);
-        if state.waits.rows.contains_key(&key) {
-            state.waits.remove(key);
-            state.count(ns, 7, false);
-        }
-        let key = (ns, serial);
+        state.waits.remove((gen, serial));
         let mut orphan = state
             .orphans
             .rows
-            .get(&key)
+            .get(&serial)
             .copied()
             .ok_or(OverlayError::Stale)?;
         orphan.top = next;
-        state.orphans.put(key, orphan);
+        state.orphans.put(serial, orphan);
         Ok(())
     }
     /// One current descriptor-read window. Its independent reader/source
@@ -165,9 +152,8 @@ impl Overlay {
         length: u32,
     ) -> OverlayResult<Option<LocalRead>> {
         self.check_file_read(read)?;
-        let ns = read.source.route.ns;
         let serial = integer(read.serial)?;
-        let Some(orphan) = self.orphan(ns, serial)? else {
+        let Some(orphan) = self.orphan(serial)? else {
             return self.source_read(read.source, read.serial, offset, length);
         };
         self.orphan_read(serial, orphan, offset, length)

@@ -23,7 +23,7 @@ impl Overlay {
                 &[&capture.route.ns],
                 8,
             )?;
-            self.wake_orphan_sources(capture.route.ns, capture.generation.0)?;
+            self.wake_orphan_sources(capture.generation.0)?;
             self.enqueue(FOLD, 0, capture.generation.0)
         })
     }
@@ -138,7 +138,7 @@ impl Overlay {
             return Ok((0, 0, true));
         };
         let serial = integer(lower.serial)?;
-        if self.orphan_holds(item.ns, serial, item.target)? {
+        if self.orphan_holds(serial, item.target)? {
             // The independent orphan retains bytes; the namespace still needs
             // its zero-reference metadata over an unchanged immutable base.
             if lower.nlink == 0
@@ -146,7 +146,7 @@ impl Overlay {
                     .layers(serial, state.active.0, state.active.0 - 1)?
                     .is_empty()
             {
-                self.put_inode(route, &state, &lower)?;
+                self.put_inode(&state, &lower)?;
                 self.execute(
                     StatementKind::Workspace,
                     "UPDATE workspace SET dirty_inodes=dirty_inodes+1 WHERE ns=?1",
@@ -177,7 +177,7 @@ impl Overlay {
         let top = match layers.first().filter(|layer| layer.gen == state.active.0) {
             Some(layer) => *layer,
             None => {
-                let (_, layer) = self.put_inode(route, &state, &lower)?;
+                let (_, layer) = self.put_inode(&state, &lower)?;
                 self.execute(
                     StatementKind::Workspace,
                     "UPDATE workspace SET dirty_inodes=dirty_inodes+1 WHERE ns=?1",

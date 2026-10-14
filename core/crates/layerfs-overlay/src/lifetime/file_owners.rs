@@ -41,32 +41,25 @@ impl Overlay {
         ) {
             return Ok(());
         }
-        let key = (ns, serial);
         let mut refs = self
             .open
             .borrow()
             .custody
             .rows
-            .get(&key)
+            .get(&serial)
             .copied()
             .unwrap_or_default();
         refs.change(kind, add)?;
-        {
-            let mut state = self.open.borrow_mut();
-            if !state.custody.rows.contains_key(&key) {
-                state.count(ns, 5, true);
-            }
-            state.custody.put(key, refs);
-        }
+        self.open.borrow_mut().custody.put(serial, refs);
         if add {
             if !matches!(kind, LeaseKind::Lookup | LeaseKind::LookupOwner)
-                && self.orphan(ns, serial)?.is_some()
+                && self.orphan(serial)?.is_some()
             {
                 self.enqueue(crate::maintenance::ORPHAN, serial, -1)?;
             }
         } else if refs.total() == 0 {
-            match self.orphan(ns, serial)? {
-                None => self.drop_custody(ns, serial)?,
+            match self.orphan(serial)? {
+                None => self.drop_custody(serial)?,
                 Some(orphan) if self.release_step.replace(false) => {
                     self.finish_release(ns, serial, orphan)?
                 }
@@ -78,14 +71,14 @@ impl Overlay {
         }
         Ok(())
     }
-    pub(crate) fn file_refs(&self, ns: i64, serial: i64) -> OverlayResult<u64> {
+    pub(crate) fn file_refs(&self, serial: i64) -> OverlayResult<u64> {
         self.available()?;
         Ok(self
             .open
             .borrow()
             .custody
             .rows
-            .get(&(ns, serial))
+            .get(&serial)
             .copied()
             .unwrap_or_default()
             .total())
@@ -155,21 +148,12 @@ impl Overlay {
             serial,
             writable,
         };
-        let mut state = self.open.borrow_mut();
-        let request_key = (route.ns, mount, request);
-        if state.file_requests.rows.contains_key(&request_key) {
-            return Err(OverlayError::Invalid("duplicate open request"));
-        }
-        state.files.put(
-            (route.ns, owner),
-            crate::open::files::HeldFile {
-                file,
-                mount,
-                request,
-            },
-        );
-        state.file_requests.put(request_key, owner);
-        state.count(route.ns, 2, true);
+        self.open.borrow_mut().files.insert(
+            owner,
+            (mount, request),
+            file,
+            "duplicate open request",
+        )?;
         Ok(file)
     }
 
@@ -177,13 +161,7 @@ impl Overlay {
     pub fn retained_file(&self, route: Route, request: u64) -> OverlayResult<Option<OpenFile>> {
         self.state(route)?;
         let request = integer(request)?;
-        let state = self.open.borrow();
-        Ok(state
-            .file_requests
-            .rows
-            .get(&(route.ns, 0, request))
-            .and_then(|owner| state.files.rows.get(&(route.ns, *owner)))
-            .map(|held| held.file))
+        Ok(self.open.borrow().files.retained((0, request)))
     }
     /// Validates actual descriptor custody; read-only descriptors cannot write.
     pub fn check_file(&self, file: OpenFile, write: bool) -> OverlayResult<()> {
@@ -194,20 +172,16 @@ impl Overlay {
         let state = self.state(file.route)?;
         {
             let open = self.open.borrow();
-            let held = open
-                .files
-                .rows
-                .get(&(file.route.ns, file.owner))
-                .ok_or(OverlayError::Stale)?;
-            if held.file != file {
+            let (held, (mount, _)) = open.files.get(file.owner).ok_or(OverlayError::Stale)?;
+            if held != file {
                 return Err(OverlayError::Stale);
             }
-            if held.mount != 0
+            if mount != 0
                 && !open
                     .mounts
                     .rows
                     .get(&file.route.ns)
-                    .is_some_and(|(mount, revoked)| mount.owner == held.mount && !revoked)
+                    .is_some_and(|(held, revoked)| held.owner == mount && !revoked)
             {
                 return Err(OverlayError::Stale);
             }
@@ -228,23 +202,10 @@ impl Overlay {
     }
     /// Closes a descriptor whose row and Workspace row this job has read.
     pub(crate) fn close_held_file(&self, file: OpenFile) -> OverlayResult<()> {
-        {
-            let mut open = self.open.borrow_mut();
-            let key = (file.route.ns, file.owner);
-            let held = open
-                .files
-                .rows
-                .get(&key)
-                .copied()
-                .ok_or(OverlayError::Stale)?;
-            if held.file != file {
-                return Err(OverlayError::Stale);
-            }
-            open.files.remove(key);
-            open.file_requests
-                .remove((file.route.ns, held.mount, held.request));
-            open.count(file.route.ns, 2, false);
-        }
+        self.open
+            .borrow_mut()
+            .files
+            .remove(file.owner, |held| *held == file)?;
         self.file_ref(
             file.route.ns,
             integer(file.serial)?,
@@ -286,10 +247,6 @@ impl Overlay {
     ) -> OverlayResult<FileRead> {
         let owner = self.mint_owner()?;
         let serial = integer(serial)?;
-        let key = (source.route.ns, request);
-        if self.open.borrow().read_requests.rows.contains_key(&key) {
-            return Err(OverlayError::Invalid("duplicate read request"));
-        }
         let read = FileRead {
             source: BaseSource {
                 owner,
@@ -298,12 +255,10 @@ impl Overlay {
             },
             serial: serial as u64,
         };
-        {
-            let mut state = self.open.borrow_mut();
-            state.reads.put((source.route.ns, owner), (read, request));
-            state.read_requests.put(key, owner);
-            state.count(source.route.ns, 3, true);
-        }
+        self.open
+            .borrow_mut()
+            .reads
+            .insert(owner, request, read, "duplicate read request")?;
         self.execute(
             StatementKind::Lease,
             sql::BASE_SOURCE_INSERT,
@@ -339,13 +294,7 @@ impl Overlay {
     ) -> OverlayResult<Option<FileRead>> {
         self.state(route)?;
         let request = integer(request)?;
-        let state = self.open.borrow();
-        Ok(state
-            .read_requests
-            .rows
-            .get(&(route.ns, request))
-            .and_then(|owner| state.reads.rows.get(&(route.ns, *owner)))
-            .map(|(read, _)| *read))
+        Ok(self.open.borrow().reads.retained(request))
     }
     pub(crate) fn check_file_read(&self, read: FileRead) -> OverlayResult<()> {
         self.source_state(read.source)?;
@@ -353,9 +302,8 @@ impl Overlay {
             .open
             .borrow()
             .reads
-            .rows
-            .get(&(read.source.route.ns, read.source.owner))
-            .map(|(held, _)| *held)
+            .get(read.source.owner)
+            .map(|(held, _)| held)
             != Some(read)
         {
             return Err(OverlayError::Stale);
@@ -369,21 +317,10 @@ impl Overlay {
             let ns = read.source.route.ns;
             let owner = integer(read.source.owner)?;
             let serial = integer(read.serial)?;
-            {
-                let mut state = self.open.borrow_mut();
-                let request = (
-                    ns,
-                    state
-                        .reads
-                        .rows
-                        .get(&(ns, read.source.owner))
-                        .ok_or(OverlayError::Stale)?
-                        .1,
-                );
-                state.reads.remove((ns, read.source.owner));
-                state.read_requests.remove(request);
-                state.count(ns, 3, false);
-            }
+            self.open
+                .borrow_mut()
+                .reads
+                .remove(read.source.owner, |held| *held == read)?;
             self.execute(
                 StatementKind::Lease,
                 "DELETE FROM commit_pin WHERE kind=5 AND holder=?1 AND resource=?2",

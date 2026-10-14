@@ -15,23 +15,14 @@ impl Overlay {
         self.atomic(|| {
             self.live(route)?;
             let held = self.open.borrow().mounts.rows.get(&route.ns).copied();
-            let replaced = match held {
+            match held {
                 Some((_, false)) => return Err(OverlayError::Invalid("duplicate native mount")),
-                Some((revoked, true)) => {
-                    self.retire_revoked_mount(revoked)?;
-                    true
-                }
-                None => false,
-            };
+                Some((revoked, true)) => self.retire_revoked_mount(revoked)?,
+                None => {}
+            }
             let owner = self.mint_owner()?;
             let mount = NativeMount { route, owner, root };
-            {
-                let mut state = self.open.borrow_mut();
-                state.mounts.put(route.ns, (mount, false));
-                if !replaced {
-                    state.count(route.ns, 8, true);
-                }
-            }
+            self.open.borrow_mut().mounts.put(route.ns, (mount, false));
             self.insert_native_lookup(mount, root, true, 0)?;
             self.set_native_parent(mount, root, root)?;
             Ok(mount)
@@ -47,24 +38,24 @@ impl Overlay {
             let references = state
                 .kernel
                 .rows
-                .range((ns, revoked.owner, 0)..=(ns, revoked.owner, u64::MAX))
+                .range((revoked.owner, 0)..=(revoked.owner, u64::MAX))
                 .map(|(key, _)| *key)
                 .collect::<Vec<_>>();
             let parents = state
                 .parents
                 .rows
-                .range((ns, 0)..=(ns, u64::MAX))
+                .iter()
                 .filter(|(_, (owner, _))| *owner == revoked.owner)
                 .map(|(key, _)| *key)
                 .collect::<Vec<_>>();
             (references, parents)
         };
         for key in references {
-            self.open.borrow_mut().remove_kernel(key);
-            self.file_ref(ns, integer(key.2)?, LeaseKind::LookupOwner, false)?;
+            self.open.borrow_mut().kernel.remove(key);
+            self.file_ref(ns, integer(key.1)?, LeaseKind::LookupOwner, false)?;
         }
         for key in parents {
-            self.open.borrow_mut().remove_parent(key);
+            self.open.borrow_mut().parents.remove(key);
         }
         Ok(())
     }
@@ -119,7 +110,7 @@ impl Overlay {
             .borrow()
             .kernel
             .rows
-            .get(&(mount.route.ns, mount.owner, serial))
+            .get(&(mount.owner, serial))
             .map(|entry| (entry.owner, entry.count, entry.implicit)))
     }
     pub fn native_lookup_count(
@@ -157,7 +148,7 @@ impl Overlay {
         implicit: bool,
         count: u64,
     ) -> OverlayResult<()> {
-        let key = (mount.route.ns, mount.owner, serial);
+        let key = (mount.owner, serial);
         integer(serial)?;
         integer(count)?;
         if count == 0 && !implicit {
@@ -168,7 +159,7 @@ impl Overlay {
         if state.kernel.rows.contains_key(&key) {
             return Err(OverlayError::Invalid("duplicate kernel reference"));
         }
-        state.put_kernel(
+        state.kernel.put(
             key,
             crate::open::KernelReference {
                 owner,
@@ -184,8 +175,8 @@ impl Overlay {
                 .checked_add(1)
                 .filter(|count| *count <= i64::MAX as u64)
                 .ok_or(OverlayError::Invalid("native lookup overflow"))?;
-            self.open.borrow_mut().put_kernel(
-                (mount.route.ns, mount.owner, serial),
+            self.open.borrow_mut().kernel.put(
+                (mount.owner, serial),
                 crate::open::KernelReference {
                     owner,
                     count,
@@ -203,7 +194,7 @@ impl Overlay {
         serial: u64,
         owner: u64,
     ) -> OverlayResult<()> {
-        let key = (mount.route.ns, mount.owner, serial);
+        let key = (mount.owner, serial);
         if self
             .open
             .borrow()
@@ -215,7 +206,7 @@ impl Overlay {
         {
             return Err(OverlayError::Stale);
         }
-        self.open.borrow_mut().remove_kernel(key);
+        self.open.borrow_mut().kernel.remove(key);
         self.file_ref(
             mount.route.ns,
             integer(serial)?,
@@ -252,8 +243,8 @@ impl Overlay {
             if after == 0 && !implicit {
                 self.drop_native_lookup(mount, serial, owner)?;
             } else {
-                self.open.borrow_mut().put_kernel(
-                    (mount.route.ns, mount.owner, serial),
+                self.open.borrow_mut().kernel.put(
+                    (mount.owner, serial),
                     crate::open::KernelReference {
                         owner,
                         count: after,

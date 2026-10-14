@@ -29,10 +29,9 @@ impl Overlay {
         self.open
             .borrow()
             .files
-            .rows
-            .get(&(mount.route.ns, handle))
-            .filter(|held| held.mount == mount.owner && held.file.serial == serial)
-            .map(|held| held.file)
+            .get(handle)
+            .filter(|(file, (held, _))| *held == mount.owner && file.serial == serial)
+            .map(|(file, _)| file)
             .ok_or(OverlayError::Stale)
     }
     /// Observes the original request's open owner, without replay or adoption.
@@ -42,13 +41,8 @@ impl Overlay {
         request: u64,
     ) -> OverlayResult<Option<OpenFile>> {
         self.check_native_attached(mount)?;
-        let state = self.open.borrow();
-        Ok(state
-            .file_requests
-            .rows
-            .get(&(mount.route.ns, mount.owner, native_request(request)))
-            .and_then(|owner| state.files.rows.get(&(mount.route.ns, *owner)))
-            .map(|held| held.file))
+        let request = (mount.owner, native_request(request));
+        Ok(self.open.borrow().files.retained(request))
     }
     /// Close the exact handle once. Existing independently acquired sources/read
     /// windows survive; foreign or reused encoded handles are rejected.

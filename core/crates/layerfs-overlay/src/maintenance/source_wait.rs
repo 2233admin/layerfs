@@ -6,13 +6,13 @@ pub(crate) const GENERATION_WINDOW: &str =
     WHERE target=?1 AND kind IN(1,3,7) AND (kind,resource)>(?2,?3)
     ORDER BY kind,resource LIMIT 64";
 impl Overlay {
-    pub(crate) fn wake_orphan_sources(&self, ns: i64, gen: i64) -> OverlayResult<()> {
+    pub(crate) fn wake_orphan_sources(&self, gen: i64) -> OverlayResult<()> {
         if self
             .open
             .borrow()
             .waits
             .rows
-            .range((ns, gen, 0)..=(ns, gen, i64::MAX))
+            .range((gen, 0)..=(gen, i64::MAX))
             .next()
             .is_some()
         {
@@ -26,15 +26,14 @@ impl Overlay {
             .borrow()
             .waits
             .rows
-            .range((item.ns, item.target, 0)..=(item.ns, item.target, i64::MAX))
+            .range((item.target, 0)..=(item.target, i64::MAX))
             .take(64)
-            .map(|(key, _)| key.2)
+            .map(|(key, _)| key.1)
             .collect::<Vec<_>>();
         for serial in &rows {
             self.wake_orphan(*serial)?;
             let mut state = self.open.borrow_mut();
-            state.waits.remove((item.ns, item.target, *serial));
-            state.count(item.ns, 7, false);
+            state.waits.remove((item.target, *serial));
         }
         if rows.is_empty() {
             self.finish_item(item)?;

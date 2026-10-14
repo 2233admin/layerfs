@@ -15,7 +15,8 @@ impl Overlay {
         integer(parent)?;
         self.open
             .borrow_mut()
-            .put_parent((mount.route.ns, serial), (mount.owner, parent));
+            .parents
+            .put(serial, (mount.owner, parent));
         Ok(())
     }
     pub(crate) fn native_parent(&self, mount: NativeMount, serial: u64) -> OverlayResult<u64> {
@@ -24,7 +25,7 @@ impl Overlay {
             .borrow()
             .parents
             .rows
-            .get(&(mount.route.ns, serial))
+            .get(&serial)
             .filter(|(owner, _)| *owner == mount.owner)
             .map(|(_, parent)| *parent)
             .ok_or(OverlayError::Stale)
@@ -45,21 +46,15 @@ impl Overlay {
         let request = u64::from_be_bytes(*request);
         {
             let mut state = self.open.borrow_mut();
-            let request_key = (mount.route.ns, mount.owner, request);
-            if state.directory_requests.rows.contains_key(&request_key) {
-                return Err(OverlayError::Invalid("duplicate directory request"));
-            }
-            state.directories.put(
-                (mount.route.ns, owner),
-                crate::open::DirectoryState {
-                    directory,
-                    request,
-                    floor: 0,
-                },
-            );
-            state.directory_requests.put(request_key, owner);
-            state.count(mount.route.ns, 9, true);
-            state.open_cookies((mount.route.ns, owner))?;
+            let held = crate::open::DirectoryState {
+                directory,
+                floor: 0,
+            };
+            let request = (mount.owner, request);
+            state
+                .directories
+                .insert(owner, request, held, "duplicate directory request")?;
+            state.open_cookies(owner)?;
         }
         self.file_ref(
             mount.route.ns,
@@ -78,12 +73,8 @@ impl Overlay {
     ) -> OverlayResult<Option<NativeDirectory>> {
         self.check_native_attached(mount)?;
         let state = self.open.borrow();
-        Ok(state
-            .directory_requests
-            .rows
-            .get(&(mount.route.ns, mount.owner, request))
-            .and_then(|owner| state.directories.rows.get(&(mount.route.ns, *owner)))
-            .map(|entry| entry.directory))
+        let held = state.directories.retained((mount.owner, request));
+        Ok(held.map(|held| held.directory))
     }
     /// RELEASEDIR in one visit: the fence reads the Workspace and checks the
     /// exact descriptor in memory. The handle and its references are released,
@@ -117,21 +108,9 @@ impl Overlay {
         let (ns, owner) = (directory.mount.route.ns, directory.owner);
         {
             let mut state = self.open.borrow_mut();
-            let held = state
-                .directories
-                .rows
-                .get(&(ns, owner))
-                .copied()
-                .ok_or(OverlayError::Stale)?;
-            if held.directory != directory {
-                return Err(OverlayError::Stale);
-            }
-            state.directories.remove((ns, owner));
-            state
-                .directory_requests
-                .remove((ns, directory.mount.owner, held.request));
-            state.count(ns, 9, false);
-            state.close_cookies((ns, owner))?;
+            let exact = |held: &crate::open::DirectoryState| held.directory == directory;
+            state.directories.remove(owner, exact)?;
+            state.close_cookies(owner)?;
         }
         self.file_ref(ns, integer(directory.serial)?, LeaseKind::FileHandle, false)
     }
