@@ -9,7 +9,7 @@ use super::{
     Failure, Service, Success,
 };
 #[cfg(target_os = "linux")]
-use crate::{store::BoundWorkspace, NativeReply, Response};
+use crate::store::BoundWorkspace;
 #[cfg(target_os = "linux")]
 use layerfs_bridge::control::{
     AbortDisposition, DetachDisposition, ForceUnmounted, ForcedCleanup, ForcedFacts, ForcedOutcome,
@@ -37,7 +37,6 @@ fn refused(code: ControlCode, phase: &'static str, detail: &'static str) -> Fail
         code,
         phase,
         detail: detail.into(),
-        completions: Vec::new(),
         evidence: None,
     }))
 }
@@ -289,12 +288,8 @@ impl Service {
             workspace.route(),
             |job_client: &crate::OwnerClient, job_route| job_client.native_revoke(job_route, mount),
         ) {
-            Ok(done) if matches!(done.result(), Ok(Response::Native(NativeReply::Done))) => {}
-            other => {
-                let failure = match other {
-                    Ok(done) => Failure::JobReceipt(Box::new(done)),
-                    Err(error) => error,
-                };
+            Ok(()) => {}
+            Err(failure) => {
                 return Err(self.retain(
                     token,
                     TeardownStage::Revoke,
@@ -305,13 +300,7 @@ impl Service {
                 ));
             }
         }
-        let (completion, earlier, native) = self.closed(
-            token,
-            &workspace,
-            Vec::new(),
-            Some(drained),
-            Some(facts.clone()),
-        )?;
+        let native = self.closed(token, &workspace, Some(drained), Some(facts.clone()))?;
         // One observation of the closed namespace; a failed one claims no
         // state. Its completion is read and dropped here.
         let (cleanup, observation_failure) = match self
@@ -319,15 +308,16 @@ impl Service {
             .observe_cleanup(None, token.namespace, token.workspace.to_bytes())
             .map_err(Failure::Owner)
         {
-            Ok(done) => match done.result() {
-                Ok(Response::CleanupState(CleanupState::Held)) => (ForcedCleanup::Held, None),
-                Ok(Response::CleanupState(CleanupState::Queued)) => (ForcedCleanup::Queued, None),
-                Ok(Response::CleanupState(CleanupState::Gone)) => (ForcedCleanup::Gone, None),
-                _ => (
-                    ForcedCleanup::Unobserved,
-                    Some(Box::new(Failure::JobReceipt(Box::new(done)))),
-                ),
-            },
+            Ok(CleanupState::Held) => (ForcedCleanup::Held, None),
+            Ok(CleanupState::Queued) => (ForcedCleanup::Queued, None),
+            Ok(CleanupState::Gone) => (ForcedCleanup::Gone, None),
+            Ok(CleanupState::Live) => (
+                ForcedCleanup::Unobserved,
+                Some(Box::new(Failure::Rejected(
+                    ControlCode::Unknown,
+                    "closed Workspace remains live",
+                ))),
+            ),
             Err(error) => (ForcedCleanup::Unobserved, Some(Box::new(error))),
         };
         self.depart(
@@ -341,8 +331,6 @@ impl Service {
                         cleanup,
                     },
                 })),
-                completion: Some(completion),
-                earlier,
                 commit: None,
                 observation_failure,
                 native,

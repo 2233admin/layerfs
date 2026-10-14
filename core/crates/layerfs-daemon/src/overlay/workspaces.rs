@@ -4,7 +4,7 @@ use super::{
     owner::{Owner, OwnerClient, OwnerConfig, OwnerError},
     state::Shared,
 };
-use crate::{OwnerWork, Response};
+use crate::OwnerWork;
 use layerfs_overlay::{Overlay, ProfileConfig, Resources};
 use std::{
     collections::BTreeMap,
@@ -145,21 +145,18 @@ impl Workspaces {
         }
         OwnerError::Retained(cause)
     }
-    pub(super) fn open(
-        self: &Arc<Self>,
-        incarnation: [u8; 32],
-    ) -> Result<(OwnerClient, layerfs_overlay::AllocationWork), OwnerError> {
+    pub(super) fn open(self: &Arc<Self>, incarnation: [u8; 32]) -> Result<OwnerClient, OwnerError> {
         if incarnation == [0; 32] {
             return Err(OwnerError::Overlay(layerfs_overlay::OverlayError::Invalid(
                 "zero incarnation",
             )));
         }
-        let (physical, observation) = {
-            let file = self.template_file.lock().map_err(|_| OwnerError::Stopped)?;
-            let before = file.allocation_work();
-            let physical = file.allocation().map_err(OwnerError::Overlay)?;
-            (physical, file.allocation_work().since(before))
-        };
+        let physical = self
+            .template_file
+            .lock()
+            .map_err(|_| OwnerError::Stopped)?
+            .allocation()
+            .map_err(OwnerError::Overlay)?;
         if physical.logical_bytes != self.template_resources.allocation.logical_bytes {
             return Err(OwnerError::Overlay(layerfs_overlay::OverlayError::Invalid(
                 "template size",
@@ -231,7 +228,7 @@ impl Workspaces {
                     incarnation,
                 },
             );
-        Ok((client, observation))
+        Ok(client)
     }
     pub(super) fn cleanup(
         &self,
@@ -310,16 +307,12 @@ impl Workspaces {
             }
         }
         for client in self.clients()? {
-            let done = client.resources(None, true)?;
-            work.jobs = work.jobs.saturating_add(done.work().jobs);
-            work.sql.accumulate(&done.work().sql.expanded());
-            work.allocation.accumulate(done.work().allocation);
-            work.payload.accumulate(done.work().payload);
-            match done.result() {
-                Ok(Response::Resources(next)) => resources.accumulate(next),
-                Err(_) => return Err(OwnerError::Observation(Box::new(done))),
-                _ => return Err(OwnerError::InvalidAdmission),
-            }
+            let (next, observed) = client.resources_observed(None, true)?;
+            work.jobs = work.jobs.saturating_add(observed.jobs);
+            work.sql.accumulate(observed.sql);
+            work.allocation.accumulate(observed.allocation);
+            work.payload.accumulate(observed.payload);
+            resources.accumulate(&next);
         }
         let retired = {
             let state = self.state.lock().map_err(|_| OwnerError::Stopped)?;

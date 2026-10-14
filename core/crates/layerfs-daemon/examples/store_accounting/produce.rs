@@ -6,10 +6,7 @@ use layerfs_content::{
     },
     ConstructionPolicy,
 };
-use layerfs_daemon::{
-    store::{BoundWorkspace, CommitError},
-    Response,
-};
+use layerfs_daemon::store::{BoundWorkspace, CommitError};
 use layerfs_history::BranchSnapshot;
 use layerfs_storage::Save;
 use layerfs_telemetry::timer::Timing;
@@ -28,12 +25,7 @@ pub fn mutate(bound: &BoundWorkspace) {
 pub fn mutate_tag(bound: &BoundWorkspace, tag: u8) {
     let op = bound.operation().unwrap();
     let route = bound.route();
-    let done = op.overlay().acquire_base_source(route, 1).unwrap();
-    let source = match done.result() {
-        Ok(Response::BaseSource(value)) => *value,
-        other => panic!("{other:?}"),
-    };
-    drop(done);
+    let source = op.overlay().acquire_base_source(route, 1).unwrap();
     let view = op.workspace().view_for_source(source).unwrap();
     let stat = view
         .lookup(
@@ -63,19 +55,9 @@ pub fn mutate_tag(bound: &BoundWorkspace, tag: u8) {
         Outcome::Applied { publication, .. } => publication,
         other => panic!("{other:?}"),
     };
-    assert!(op
-        .overlay()
-        .reply_attempted(publication)
-        .unwrap()
-        .result()
-        .is_ok());
+    op.overlay().reply_attempted(publication).unwrap();
     drop(view);
-    assert!(op
-        .overlay()
-        .release_base_source(route, source)
-        .unwrap()
-        .result()
-        .is_ok());
+    op.overlay().release_base_source(route, source).unwrap();
 }
 pub fn construct(
     save: &Save<'_>,

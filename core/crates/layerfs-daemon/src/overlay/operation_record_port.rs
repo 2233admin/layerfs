@@ -1,42 +1,33 @@
-//! Workspace raw-record port over original short OperationRecord jobs.
-//! Constructor-thread port: each job is one attempt under the Workspace lock.
-use crate::{
-    IndexedOperationRecordJob, IndexedOperationRecordReply, JobReceipt, OwnerClient, Response,
-};
+//! Typed bounded record calls under the Workspace lock.
+use crate::{OriginalInput, OwnerClient, OwnerError, ServiceClass};
 use layerfs_overlay::{
-    IndexedOperationRecordApply, IndexedOperationRecordChange, IndexedOperationRecordKey,
-    IndexedOperationRecordScope,
+    IndexedOperationRecordChange, IndexedOperationRecordKey, IndexedOperationRecordScope, Overlay,
 };
 use layerfs_workspace::{
-    OperationRecordApply, OperationRecordCopies, OperationRecordReply, OverlayOperationRecords,
-    WorkspaceError, WorkspaceResult,
+    OperationRecordApply, OperationRecordReply, OverlayOperationRecords, WorkspaceError,
+    WorkspaceResult,
 };
 
-fn original_job(
-    client: &OwnerClient,
-    job: IndexedOperationRecordJob,
-) -> WorkspaceResult<JobReceipt> {
-    let route = match client.bound_route() {
-        Ok(route) => route,
-        Err(cause) => {
-            return Err(WorkspaceError::Service(Box::new(
-                crate::OwnerError::Unattempted {
+impl OwnerClient {
+    fn record<T, I: Send + 'static>(
+        &self,
+        input: I,
+        action: impl FnOnce(&Overlay, I) -> WorkspaceResult<T> + Send + 'static,
+    ) -> WorkspaceResult<T> {
+        let route = match self.bound_route() {
+            Ok(route) => route,
+            Err(cause) => {
+                return Err(WorkspaceError::Service(Box::new(OwnerError::Unattempted {
                     cause: Box::new(cause),
-                    input: crate::overlay::owner::OriginalInput::new(job),
-                },
-            )))
-        }
-    };
-    let pending = client
-        .indexed_operation_record(route, Box::new(job))
-        .map_err(|cause| WorkspaceError::Service(Box::new(cause)))?;
-    Ok(pending)
-}
-fn copies<T>(value: &Vec<T>) -> OperationRecordCopies {
-    OperationRecordCopies {
-        bytes: (value.len() * std::mem::size_of::<T>()) as u64,
-        allocations: u64::from(!value.is_empty()),
-        retained_bytes: value.capacity() * std::mem::size_of::<T>(),
+                    input: OriginalInput::new(input),
+                })))
+            }
+        };
+        self.call_observed(Some(route), ServiceClass::General, None, move |db, _| {
+            action(db, input).map_err(|cause| OwnerError::Workspace(Box::new(cause)))
+        })
+        .map(|(value, _)| value)
+        .map_err(|cause| WorkspaceError::Service(Box::new(cause)))
     }
 }
 impl OverlayOperationRecords for OwnerClient {
@@ -45,90 +36,44 @@ impl OverlayOperationRecords for OwnerClient {
         scope: IndexedOperationRecordScope,
         key: IndexedOperationRecordKey,
     ) -> WorkspaceResult<OperationRecordReply<bool>> {
-        let done = original_job(self, IndexedOperationRecordJob::Contains { scope, key })?;
-        match done.result() {
-            Ok(Response::IndexedOperationRecord(IndexedOperationRecordReply::Contains(value))) => {
-                Ok(OperationRecordReply::owned(*value))
-            }
-            _ => Err(WorkspaceError::Service(Box::new(done))),
-        }
+        self.record((scope, key), |db, (scope, key)| {
+            db.indexed_operation_record_contains(scope, key)
+                .map_err(Into::into)
+        })
+        .map(OperationRecordReply::owned)
     }
     fn operation_record_get(
         &self,
         scope: IndexedOperationRecordScope,
         key: IndexedOperationRecordKey,
     ) -> WorkspaceResult<OperationRecordReply<Option<Vec<u8>>>> {
-        let done = original_job(self, IndexedOperationRecordJob::Get { scope, key })?;
-        match done.result() {
-            Ok(Response::IndexedOperationRecord(IndexedOperationRecordReply::Value(value))) => {
-                let value = value.clone();
-                let copies = value
-                    .as_ref()
-                    .map_or(OperationRecordCopies::default(), copies);
-                Ok(OperationRecordReply { value, copies })
-            }
-            _ => Err(WorkspaceError::Service(Box::new(done))),
-        }
+        self.record((scope, key), |db, (scope, key)| {
+            db.indexed_operation_record_get(scope, key)
+                .map_err(Into::into)
+        })
+        .map(OperationRecordReply::owned)
     }
     fn operation_record_get_many(
         &self,
         scope: IndexedOperationRecordScope,
         keys: &[IndexedOperationRecordKey],
     ) -> WorkspaceResult<OperationRecordReply<Vec<Option<Vec<u8>>>>> {
-        let job = IndexedOperationRecordJob::GetMany {
-            scope,
-            keys: keys.to_vec(),
-        };
-        let done = original_job(self, job)?;
-        match done.result() {
-            Ok(Response::IndexedOperationRecord(IndexedOperationRecordReply::Values(values))) => {
-                let value = values.clone();
-                let mut total = copies(&value);
-                for bytes in value.iter().flatten() {
-                    let one = copies(bytes);
-                    total.bytes += one.bytes;
-                    total.allocations += one.allocations;
-                    total.retained_bytes += one.retained_bytes;
-                }
-                Ok(OperationRecordReply {
-                    value,
-                    copies: total,
-                })
-            }
-            _ => Err(WorkspaceError::Service(Box::new(done))),
-        }
+        self.record((scope, keys.to_vec()), |db, (scope, keys)| {
+            db.indexed_operation_record_get_many(scope, &keys)
+                .map_err(Into::into)
+        })
+        .map(OperationRecordReply::owned)
     }
     fn operation_record_apply(
         &self,
         scope: IndexedOperationRecordScope,
         changes: Vec<IndexedOperationRecordChange>,
     ) -> WorkspaceResult<OperationRecordReply<OperationRecordApply>> {
-        let done = original_job(self, IndexedOperationRecordJob::Apply { scope, changes })?;
-        match done.result() {
-            Ok(Response::IndexedOperationRecord(IndexedOperationRecordReply::Applied(
-                IndexedOperationRecordApply::Applied,
-            ))) => Ok(OperationRecordReply::owned(OperationRecordApply::Applied)),
-            Ok(Response::IndexedOperationRecord(IndexedOperationRecordReply::Applied(
-                IndexedOperationRecordApply::NotApplied { index, key, actual },
-            ))) => {
-                let index = *index;
-                let key = *key;
-                let actual = actual.clone();
-                let copies = actual
-                    .as_ref()
-                    .map_or(OperationRecordCopies::default(), copies);
-                Ok(OperationRecordReply {
-                    value: OperationRecordApply::NotApplied {
-                        index,
-                        key,
-                        actual,
-                        original: WorkspaceError::Service(Box::new(done)),
-                    },
-                    copies,
-                })
-            }
-            _ => Err(WorkspaceError::Service(Box::new(done))),
-        }
+        // The Workspace port owns the original guarded refusal and counts the
+        // one deciding-value copy. The call transfers that typed result intact.
+        self.record((scope, changes), |db, (scope, changes)| {
+            OverlayOperationRecords::operation_record_apply(db, scope, changes)
+        })
     }
     fn operation_record_keys(
         &self,
@@ -136,23 +81,18 @@ impl OverlayOperationRecords for OwnerClient {
         kind: u32,
         excluded: Option<[u8; 32]>,
     ) -> WorkspaceResult<OperationRecordReply<Vec<[u8; 32]>>> {
-        let job = match excluded {
-            Some(excluded_root) => IndexedOperationRecordJob::FirstKeys {
-                scope,
-                kind,
-                excluded_root,
+        self.record(
+            (scope, kind, excluded),
+            |db, (scope, kind, excluded)| match excluded {
+                Some(root) => db
+                    .indexed_operation_record_first_keys(scope, kind, root)
+                    .map_err(Into::into),
+                None => db
+                    .indexed_operation_record_keys(scope, kind, None)
+                    .map_err(Into::into),
             },
-            None => IndexedOperationRecordJob::FirstKeysAll { scope, kind },
-        };
-        let done = original_job(self, job)?;
-        match done.result() {
-            Ok(Response::IndexedOperationRecord(IndexedOperationRecordReply::Keys(value))) => {
-                let value = value.clone();
-                let copies = copies(&value);
-                Ok(OperationRecordReply { value, copies })
-            }
-            _ => Err(WorkspaceError::Service(Box::new(done))),
-        }
+        )
+        .map(OperationRecordReply::owned)
     }
     fn operation_record_keys_after(
         &self,
@@ -160,17 +100,10 @@ impl OverlayOperationRecords for OwnerClient {
         kind: u32,
         after: Option<[u8; 32]>,
     ) -> WorkspaceResult<OperationRecordReply<Vec<[u8; 32]>>> {
-        let done = original_job(
-            self,
-            IndexedOperationRecordJob::KeysAfter { scope, kind, after },
-        )?;
-        match done.result() {
-            Ok(Response::IndexedOperationRecord(IndexedOperationRecordReply::Keys(value))) => {
-                let value = value.clone();
-                let copies = copies(&value);
-                Ok(OperationRecordReply { value, copies })
-            }
-            _ => Err(WorkspaceError::Service(Box::new(done))),
-        }
+        self.record((scope, kind, after), |db, (scope, kind, after)| {
+            db.indexed_operation_record_keys_after(scope, kind, after)
+                .map_err(Into::into)
+        })
+        .map(OperationRecordReply::owned)
     }
 }

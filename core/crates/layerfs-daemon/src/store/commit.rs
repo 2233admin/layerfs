@@ -2,7 +2,6 @@
 use super::{
     bind::checked_base, BoundWorkspace, CommitError, CommitFailure, CommitPhase, CommitSuccess,
 };
-use crate::Response;
 use layerfs_content::filesystem::FilesystemRootId;
 use layerfs_history::{BranchSnapshot, CommitStagedOutcome, StageRequest};
 use layerfs_overlay::Capture;
@@ -87,15 +86,10 @@ impl BoundWorkspace {
             retained.binding = Some(snapshot.clone());
             let original_base = self.workspace.base().map_err(CommitError::Workspace)?;
             retained.phase = CommitPhase::Capture;
-            let captured = self
+            let capture = self
                 .job(|job_client: &crate::OwnerClient, job_route| job_client.capture(job_route))
                 .map_err(CommitError::Owner)?;
-            let capture = match captured.result() {
-                Ok(Response::Captured(capture)) => *capture,
-                _ => return Err(CommitError::JobReceipt(Box::new(captured))),
-            };
             retained.capture = Some(capture);
-            retained.captured = Some(captured);
             if capture.base_root != snapshot.effective_root.to_bytes()
                 || original_base.identity().0 != snapshot.effective_root
             {
@@ -189,20 +183,14 @@ impl BoundWorkspace {
             next.branch.head_commit = head;
             next.head_root = head.map(|_| root);
             retained.phase = CommitPhase::Install;
-            let installed = self
-                .job(|job_client: &crate::OwnerClient, route| {
-                    job_client.install_prepared(
-                        route,
-                        self.workspace.clone(),
-                        retained.prepared.take().expect("prepared install"),
-                    )
-                })
-                .map_err(CommitError::Owner)?;
-            let installed_ok = matches!(installed.result(), Ok(Response::Done));
-            if !installed_ok {
-                return Err(CommitError::JobReceipt(Box::new(installed)));
-            }
-            retained.local = Some(installed);
+            self.job(|job_client: &crate::OwnerClient, route| {
+                job_client.install_prepared(
+                    route,
+                    self.workspace.clone(),
+                    retained.prepared.take().expect("prepared install"),
+                )
+            })
+            .map_err(CommitError::Owner)?;
             *self
                 .snapshot
                 .lock()
@@ -221,8 +209,6 @@ impl BoundWorkspace {
             saved: retained.saved.expect("known Save"),
             storage: retained.storage.expect("producer observations"),
             capture: retained.capture.expect("known capture"),
-            captured: retained.captured.expect("original capture completion"),
-            installed: retained.local.expect("known local install"),
             namespace: None,
         })
     }

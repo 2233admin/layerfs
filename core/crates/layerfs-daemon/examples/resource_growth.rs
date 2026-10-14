@@ -14,12 +14,12 @@ mod operations;
 #[allow(dead_code)]
 #[path = "store_accounting/produce.rs"]
 mod produce;
+#[global_allocator]
+static ALLOCATOR: allocation::Observed = allocation::Observed;
 #[allow(dead_code)]
 #[path = "../tests/support/native_install.rs"]
 mod support;
-#[global_allocator]
-static ALLOCATOR: allocation::Observed = allocation::Observed;
-use layerfs_daemon::{store::BindRequest, Owner, OwnerConfig, Response};
+use layerfs_daemon::{store::BindRequest, Owner, OwnerConfig};
 use layerfs_history::{BranchId, WorkspaceId};
 use std::{
     fs,
@@ -76,7 +76,7 @@ fn main() {
             },
         )
         .unwrap();
-    drop(bound.open);
+
     let bound = bound.workspace;
     operations::verify_name(&bound, "entry-000000", &fixture::body(0));
     operations::verify_name(
@@ -98,10 +98,7 @@ fn main() {
         }
     }
     observe::phase("close");
-    assert!(matches!(
-        owner.client().close(bound.route()).unwrap().result(),
-        Ok(Response::Done)
-    ));
+    owner.client().close(bound.route()).unwrap();
     drop(bound);
     observe::phase("drain");
     let until = Instant::now() + Duration::from_secs(2);

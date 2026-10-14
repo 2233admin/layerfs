@@ -29,12 +29,13 @@ and local serial ranges. There is no remote data channel.
 Bind captures one coherent BranchSnapshot, then checks the root/profile/scope,
 root inode path, directory root page and portable metadata paths. It never walks
 the namespace or qualifies topology. Only after those checks does it submit one
-local Open. Its success retains the original Open Completion; a refusal retains
-the request, captured snapshot and exact error or attempted Completion. Dropping
-a receipt does not close a Workspace. FUSE attachment/readiness is separate.
+local Open. It returns the bound Workspace directly; a refusal retains the
+request, captured snapshot and exact typed owner error. Attempted owner errors
+retain the backing and original cause. Terminal Close is explicit; FUSE
+attachment/readiness is separate.
 
-Several bound Workspaces use one existing overlay database, with independent
-routes, namespaces and local ranges. Inode ranges come from the shared History
+Each bound Workspace owns its own overlay database and lock, with independent
+routing and local ranges. Inode ranges come from the shared History
 allocator, are consumed once and never recycled. Simultaneous writes may return
 typed Busy; the adapter never makes a second attempt. Base reads use the fixed
 read set while another process owns the writer.

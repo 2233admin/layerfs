@@ -1,6 +1,6 @@
 //! One coherent snapshot and bounded root demand before local namespace creation.
 use super::{BindError, BindPhase, BindRefusal, BindRequest, BindSuccess, BoundWorkspace, Store};
-use crate::{OwnerClient, Response};
+use crate::OwnerClient;
 use layerfs_content::filesystem::{
     attributes::{read_portable, AttributeReadWork},
     directory::decode_directory_page,
@@ -42,18 +42,13 @@ impl Store {
                     .unwrap_or_else(|error| Some(Arc::new(error))),
             })?;
             phase = BindPhase::Open;
-            let pending = owner
+            let route = owner
                 .open(
                     None,
                     request.workspace.to_bytes(),
                     captured.effective_root.to_bytes(),
                 )
                 .map_err(BindError::Owner)?;
-            let open = pending;
-            let route = match open.result() {
-                Ok(Response::Opened(route)) => *route,
-                _ => return Err(BindError::JobReceipt(Box::new(open))),
-            };
             let owner = owner.workspace_client(route).map_err(BindError::Owner)?;
             Ok(BindSuccess {
                 workspace: BoundWorkspace {
@@ -65,7 +60,6 @@ impl Store {
                     committing: std::sync::atomic::AtomicBool::new(false),
                     producer: Default::default(),
                 },
-                open,
             })
         })();
         result.map_err(|error| BindRefusal {

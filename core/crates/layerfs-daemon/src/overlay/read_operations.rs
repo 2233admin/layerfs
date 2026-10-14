@@ -1,6 +1,5 @@
 //! Direct connection operations, each one counted short job on the calling thread.
-use crate::service::receipt::JobReceipt;
-use crate::{OwnerClient, OwnerError, Response, ServiceClass};
+use crate::{OwnerClient, OwnerError, ServiceClass};
 use layerfs_overlay::{BaseSource, Capture, CapturedReader, FileRead};
 use layerfs_workspace::Route;
 impl OwnerClient {
@@ -9,9 +8,9 @@ impl OwnerClient {
         route: Route,
         reader: CapturedReader,
         after: u64,
-    ) -> Result<JobReceipt, OwnerError> {
-        self.overlay_job(route, ServiceClass::Read, None, move |db| {
-            db.reader_inodes(reader, after).map(Response::Inodes)
+    ) -> Result<Vec<layerfs_overlay::Inode>, OwnerError> {
+        self.call(route, ServiceClass::General, None, move |db| {
+            db.reader_inodes(reader, after)
         })
     }
     pub fn reader_directory_entries(
@@ -19,10 +18,9 @@ impl OwnerClient {
         route: Route,
         reader: CapturedReader,
         after: Option<(u64, Vec<u8>)>,
-    ) -> Result<JobReceipt, OwnerError> {
-        self.overlay_job(route, ServiceClass::Read, None, move |db| {
+    ) -> Result<Vec<layerfs_overlay::DirectoryEntry>, OwnerError> {
+        self.call(route, ServiceClass::General, None, move |db| {
             db.reader_directory_entries(reader, after.as_ref().map(|(p, n)| (*p, n.as_slice())))
-                .map(Response::DirectoryEntries)
         })
     }
     pub fn reader_parent_directory_entries(
@@ -31,10 +29,9 @@ impl OwnerClient {
         reader: CapturedReader,
         parent: u64,
         after: Option<Vec<u8>>,
-    ) -> Result<JobReceipt, OwnerError> {
-        self.overlay_job(route, ServiceClass::Read, None, move |db| {
+    ) -> Result<Vec<layerfs_overlay::DirectoryEntry>, OwnerError> {
+        self.call(route, ServiceClass::General, None, move |db| {
             db.reader_parent_directory_entries(reader, parent, after.as_deref())
-                .map(Response::DirectoryEntries)
         })
     }
     pub fn reader_directory_entry(
@@ -43,10 +40,9 @@ impl OwnerClient {
         reader: CapturedReader,
         parent: u64,
         name: Vec<u8>,
-    ) -> Result<JobReceipt, OwnerError> {
-        self.overlay_job(route, ServiceClass::Read, None, move |db| {
+    ) -> Result<Option<layerfs_overlay::DirectoryEntry>, OwnerError> {
+        self.call(route, ServiceClass::General, None, move |db| {
             db.reader_directory_entry(reader, parent, &name)
-                .map(Response::DirectoryEntry)
         })
     }
     pub fn reader_symlink(
@@ -54,9 +50,9 @@ impl OwnerClient {
         route: Route,
         reader: CapturedReader,
         serial: u64,
-    ) -> Result<JobReceipt, OwnerError> {
-        self.overlay_job(route, ServiceClass::Read, None, move |db| {
-            db.reader_symlink(reader, serial).map(Response::Symlink)
+    ) -> Result<Vec<u8>, OwnerError> {
+        self.call(route, ServiceClass::General, None, move |db| {
+            db.reader_symlink(reader, serial)
         })
     }
     pub fn file_read(
@@ -65,9 +61,9 @@ impl OwnerClient {
         read: FileRead,
         offset: u64,
         length: u32,
-    ) -> Result<JobReceipt, OwnerError> {
-        self.overlay_job(route, ServiceClass::Read, None, move |db| {
-            db.read_file(read, offset, length).map(Response::Read)
+    ) -> Result<Option<layerfs_overlay::LocalRead>, OwnerError> {
+        self.call(route, ServiceClass::General, None, move |db| {
+            db.read_file(read, offset, length)
         })
     }
     pub fn captured_read(
@@ -77,20 +73,18 @@ impl OwnerClient {
         serial: u64,
         offset: u64,
         length: u32,
-    ) -> Result<JobReceipt, OwnerError> {
-        self.overlay_job(route, ServiceClass::Read, None, move |db| {
+    ) -> Result<Option<layerfs_overlay::LocalRead>, OwnerError> {
+        self.call(route, ServiceClass::General, None, move |db| {
             db.read_captured(reader, serial, offset, length)
-                .map(Response::Read)
         })
     }
     pub fn captured_run(
         &self,
         route: Route,
         cursor: Box<layerfs_overlay::CapturedRunCursor>,
-    ) -> Result<JobReceipt, OwnerError> {
-        self.overlay_job(route, ServiceClass::Read, None, move |db| {
+    ) -> Result<layerfs_overlay::CapturedRunReply, OwnerError> {
+        self.call(route, ServiceClass::General, None, move |db| {
             db.captured_run_step(*cursor)
-                .map(|value| Response::CapturedRun(Box::new(value)))
         })
     }
     pub fn reader_inode(
@@ -98,9 +92,9 @@ impl OwnerClient {
         route: Route,
         reader: CapturedReader,
         serial: u64,
-    ) -> Result<JobReceipt, OwnerError> {
-        self.overlay_job(route, ServiceClass::Read, None, move |db| {
-            db.reader_inode(reader, serial).map(Response::Inode)
+    ) -> Result<Option<layerfs_overlay::Inode>, OwnerError> {
+        self.call(route, ServiceClass::General, None, move |db| {
+            db.reader_inode(reader, serial)
         })
     }
     pub fn source_read(
@@ -110,10 +104,9 @@ impl OwnerClient {
         serial: u64,
         offset: u64,
         length: u32,
-    ) -> Result<JobReceipt, OwnerError> {
-        self.overlay_job(route, ServiceClass::Read, None, move |db| {
+    ) -> Result<Option<layerfs_overlay::LocalRead>, OwnerError> {
+        self.call(route, ServiceClass::General, None, move |db| {
             db.source_read(source, serial, offset, length)
-                .map(Response::Read)
         })
     }
     pub fn source_cell(
@@ -123,20 +116,27 @@ impl OwnerClient {
         serial: u64,
         generation: u64,
         offset: u64,
-    ) -> Result<JobReceipt, OwnerError> {
-        self.overlay_job(route, ServiceClass::Read, None, move |db| {
+    ) -> Result<Option<layerfs_overlay::Cell>, OwnerError> {
+        self.call(route, ServiceClass::General, None, move |db| {
             db.source_cell(source, serial, generation, offset)
-                .map(Response::Cell)
         })
     }
-    pub fn pending_publications(&self, route: Route, after: u64) -> Result<JobReceipt, OwnerError> {
-        self.overlay_job(route, ServiceClass::Read, None, move |db| {
-            db.pending_publications(after).map(Response::Publications)
+    pub fn pending_publications(
+        &self,
+        route: Route,
+        after: u64,
+    ) -> Result<Vec<layerfs_overlay::Publication>, OwnerError> {
+        self.call(route, ServiceClass::General, None, move |db| {
+            db.pending_publications(after)
         })
     }
-    pub fn acquire_base_source(&self, route: Route, owner: u64) -> Result<JobReceipt, OwnerError> {
-        self.overlay_job(route, ServiceClass::Source, None, move |db| {
-            db.acquire_base_source(owner).map(Response::BaseSource)
+    pub fn acquire_base_source(
+        &self,
+        route: Route,
+        owner: u64,
+    ) -> Result<layerfs_overlay::BaseSource, OwnerError> {
+        self.call(route, ServiceClass::Source, None, move |db| {
+            db.acquire_base_source(owner)
         })
     }
     pub fn source_inode(
@@ -144,9 +144,9 @@ impl OwnerClient {
         route: Route,
         source: BaseSource,
         serial: u64,
-    ) -> Result<JobReceipt, OwnerError> {
-        self.overlay_job(route, ServiceClass::Read, None, move |db| {
-            db.source_inode(source, serial).map(Response::Inode)
+    ) -> Result<Option<layerfs_overlay::Inode>, OwnerError> {
+        self.call(route, ServiceClass::General, None, move |db| {
+            db.source_inode(source, serial)
         })
     }
     pub fn source_directory_entry(
@@ -155,10 +155,9 @@ impl OwnerClient {
         source: BaseSource,
         parent: u64,
         name: Vec<u8>,
-    ) -> Result<JobReceipt, OwnerError> {
-        self.overlay_job(route, ServiceClass::Read, None, move |db| {
+    ) -> Result<Option<layerfs_overlay::DirectoryEntry>, OwnerError> {
+        self.call(route, ServiceClass::General, None, move |db| {
             db.source_directory_entry(source, parent, &name)
-                .map(Response::DirectoryEntry)
         })
     }
     pub fn source_directory_entries(
@@ -167,15 +166,18 @@ impl OwnerClient {
         source: BaseSource,
         parent: u64,
         after: Option<Vec<u8>>,
-    ) -> Result<JobReceipt, OwnerError> {
-        self.overlay_job(route, ServiceClass::Read, None, move |db| {
+    ) -> Result<layerfs_overlay::DirectoryEntryWindow, OwnerError> {
+        self.call(route, ServiceClass::General, None, move |db| {
             db.source_directory_entry_window(source, parent, after.as_deref())
-                .map(Response::DirectoryEntryWindow)
         })
     }
-    pub fn inode(&self, route: Route, serial: u64) -> Result<JobReceipt, OwnerError> {
-        self.overlay_job(route, ServiceClass::Read, None, move |db| {
-            db.inode(serial).map(Response::Inode)
+    pub fn inode(
+        &self,
+        route: Route,
+        serial: u64,
+    ) -> Result<Option<layerfs_overlay::Inode>, OwnerError> {
+        self.call(route, ServiceClass::General, None, move |db| {
+            db.inode(serial)
         })
     }
     pub fn captured_cell(
@@ -184,10 +186,9 @@ impl OwnerClient {
         capture: Capture,
         serial: u64,
         offset: u64,
-    ) -> Result<JobReceipt, OwnerError> {
-        self.overlay_job(route, ServiceClass::Read, None, move |db| {
+    ) -> Result<Option<layerfs_overlay::Cell>, OwnerError> {
+        self.call(route, ServiceClass::General, None, move |db| {
             db.captured_cell(capture, serial, offset)
-                .map(Response::Cell)
         })
     }
 }

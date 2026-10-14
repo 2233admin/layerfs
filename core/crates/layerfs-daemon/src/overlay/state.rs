@@ -81,7 +81,7 @@ impl State {
     /// a maintenance step only in the maintenance totals, never in both.
     pub fn record(&mut self, class: ServiceClass, work: &JobWork, maintenance: bool) {
         if maintenance {
-            self.work.sql_maintenance.accumulate(work.sql.expanded());
+            self.work.sql_maintenance.accumulate(work.sql);
             self.work.allocation_maintenance.accumulate(work.allocation);
             self.work.payload_maintenance.accumulate(work.payload);
             self.work.maintenance_jobs = self.work.maintenance_jobs.saturating_add(1);
@@ -92,7 +92,7 @@ impl State {
                 self.work.lock_wait_ns[class as usize].saturating_add(work.lock_wait_ns);
             self.work.hold_ns[class as usize] =
                 self.work.hold_ns[class as usize].saturating_add(work.hold_ns);
-            self.work.sql_foreground.accumulate(work.sql.expanded());
+            self.work.sql_foreground.accumulate(work.sql);
             self.work.allocation_foreground.accumulate(work.allocation);
             self.work.payload_foreground.accumulate(work.payload);
         }

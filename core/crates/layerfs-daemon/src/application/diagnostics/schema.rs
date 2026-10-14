@@ -8,6 +8,7 @@ pub(super) fn owner<W: Write>(
     work: Option<crate::OwnerWork>,
 ) -> io::Result<()> {
     rows.row(36, 0, Some(&[layerfs_overlay::StatementKind::COUNT as u64]))?;
+    rows.row(37, 0, Some(&[3]))?;
     let Some(w) = work else {
         rows.row(1, 0, None)?;
         rows.row(35, 0, None)?;
@@ -33,21 +34,12 @@ pub(super) fn owner<W: Write>(
             w.jobs[0],
             w.jobs[1],
             w.jobs[2],
-            w.jobs[3],
-            w.jobs[4],
-            w.jobs[5],
             w.lock_wait_ns[0],
             w.lock_wait_ns[1],
             w.lock_wait_ns[2],
-            w.lock_wait_ns[3],
-            w.lock_wait_ns[4],
-            w.lock_wait_ns[5],
             w.hold_ns[0],
             w.hold_ns[1],
             w.hold_ns[2],
-            w.hold_ns[3],
-            w.hold_ns[4],
-            w.hold_ns[5],
         ]),
     )?;
     // Workspace lock holds that run no SQL and are no job of any class.

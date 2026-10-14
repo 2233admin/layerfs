@@ -76,7 +76,7 @@ pub fn commit(
 ) {
     let (local_before, local_after) = local;
     let mut out = Json::new();
-    out.raw("{\"schema\":\"cluster-two-store-accounting-v1\",\"attempt_count\":1,\"mode\":\"diagnostic\",\"namespace_files\":100000,").unwrap();
+    out.raw("{\"schema\":\"cluster-two-store-accounting-v2\",\"attempt_count\":1,\"mode\":\"diagnostic\",\"namespace_files\":100000,").unwrap();
     out.text("outcome", kind).unwrap();
     let (head, root) = match &original.history {
         layerfs_history::CommitStagedOutcome::Committed(record) => (Some(record.id), record.root),
@@ -90,10 +90,6 @@ pub fn commit(
         None => out.raw("null").unwrap(),
     };
 
-    out.raw(",\"engine_capture\":").unwrap();
-    engine_records::database(&mut out, &original.captured.work().sql.expanded()).unwrap();
-    out.raw(",\"engine_install\":").unwrap();
-    engine_records::database(&mut out, &original.installed.work().sql.expanded()).unwrap();
     out.raw(",\"engine_whole_commit\":").unwrap();
     engine_records::database(&mut out, &owner).unwrap();
     out.raw(",\"engine_payload\":").unwrap();

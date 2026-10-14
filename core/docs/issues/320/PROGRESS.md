@@ -3682,3 +3682,47 @@ roster oracle pins advance. Tests: not yet updated; no test file was opened,
 edited or run in this Phase 1 step. Root/owner/source/capture and mounted
 coverage remain required in Phase 2. No runtime or speed qualification is
 claimed. Durable: NOT_RUN — disabled by owner until explicit reauthorization.
+
+
+### Phase 1: direct typed Workspace calls
+
+Removed Response/NativeReply/NativeDirectoryReply, JobReceipt and its retained
+success vectors, IndexedOperationRecordJob/Reply, and heap-allocated JobSql
+family receipts. Workspace methods now take the same lock and return their
+concrete value; reads/record pages transfer owned bounded windows instead of
+cloning an enum payload. Guarded record refusals reuse the existing Workspace
+port's original deciding result and copy accounting. No product code moves
+into tests or tools. The single typed runner retains readiness checks, finite
+Capture/install frontiers and each actual SQL/payload/allocation/lock count.
+
+Unattempted returns the original closure/input. Attempted errors retain exact
+cause, counted work and backing; panic/unknown connection custody remains
+quarantined. Filesystem replies keep the owning Workspace client through their
+reply attempt. Commit failures still retain capture, prepared install, known
+publication, constructor owners and failed release/local-resolution errors.
+Normal/forced teardown retains the original drained connection and exact
+failed boundary, without successful unit-result wrappers. Operator retained
+custody and whole-Store stop/read failures remain available.
+
+ServiceClass is General/Mutation/Source: only the last two affect admission.
+Numeric section 37 declares three classes; the receipt reader still accepts
+older six-class records. Aggregate SQL families remain the declared 12.
+Store-accounting example schema v2 observes whole-Commit counters and omits the
+removed per-capture/install receipt arrays; the reader preserves v1 validation.
+Template allocation observations stay charged once by roster counters, without
+copying them into a child Workspace's totals.
+
+Initial product checks failed on three stale imports/value moves, then on the
+old example receipt fields. A third check found the diagnostic examples'
+fixture dependency on native_install test support. The owner explicitly
+allowed the shared-helper exception; only its Response import and Close receipt
+assertion were mechanically updated. No test was run, and no other test was
+opened or edited. First host Clippy rejected a match that should use matches!;
+that source-only style issue was fixed. Busy gates declined several commands
+while unrelated probe work ran; no other worktree/process was touched.
+
+Final validation uses host/Linux check and warning-denying Clippy on workspace
+lib/bins/examples, with explicit 120 s stops. Tests: not yet updated. Source
+pins advance; engine/families/cluster-two suites remain deferred to Phase 2
+under the product-first boundary. No speed/storage acceptance is claimed.
+Durable: NOT_RUN — disabled by owner until explicit reauthorization.

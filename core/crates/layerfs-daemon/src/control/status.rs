@@ -3,7 +3,6 @@ use super::{
     registry::{bound, Entry},
     Failure, Service, Success,
 };
-use crate::Response;
 use layerfs_bridge::control::{
     ControlCode, LocalObservation, Reply, WorkspaceStatus, WorkspaceToken,
 };
@@ -52,32 +51,22 @@ impl Service {
             workspace.route(),
             |job_client: &crate::OwnerClient, job_route| job_client.state(job_route),
         );
-        let (local, completion, observation_failure) = match observed {
-            Ok(done) => match done.result() {
-                Ok(Response::State(state)) => {
-                    let local = LocalObservation {
-                        revision: state.revision,
-                        active: state.active.number(),
-                        captured: state.captured.map(|generation| generation.number()),
-                        captured_revision: state.captured_revision,
-                        base_root: state.base_root,
-                        dirty_inodes: state.dirty_inodes,
-                        dirty_directory_entries: state.dirty_directory_entries,
-                        closed: state.closed,
-                        base_readers: state.base_readers,
-                    };
-                    // Copied: the observation's Lifecycle slot returns here,
-                    // not when the reply is sent.
-                    drop(done);
-                    (Some(local), None, None)
-                }
-                _ => (
-                    None,
-                    None,
-                    Some(Box::new(Failure::JobReceipt(Box::new(done)))),
-                ),
-            },
-            Err(error) => (None, None, Some(Box::new(error))),
+        let (local, observation_failure) = match observed {
+            Ok(state) => (
+                Some(LocalObservation {
+                    revision: state.revision,
+                    active: state.active.number(),
+                    captured: state.captured.map(|generation| generation.number()),
+                    captured_revision: state.captured_revision,
+                    base_root: state.base_root,
+                    dirty_inodes: state.dirty_inodes,
+                    dirty_directory_entries: state.dirty_directory_entries,
+                    closed: state.closed,
+                    base_readers: state.base_readers,
+                }),
+                None,
+            ),
+            Err(error) => (None, Some(Box::new(error))),
         };
         let local_failure = observation_failure.as_ref().map(|error| error.wire());
         Ok(Success {
@@ -92,8 +81,6 @@ impl Service {
                 local_failure,
                 native,
             })),
-            completion,
-            earlier: Vec::new(),
             commit: None,
             observation_failure,
             native: None,

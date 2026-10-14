@@ -82,7 +82,7 @@ Inside the driver's closure, in order:
 
 | Original cause | `CommitError` |
 | --- | --- |
-| An owner job's completion | `Completion` |
+| An attempted Workspace call failure, with original cause/work/backing | `Owner` |
 | An owner refusal that never admitted the job | `Owner` |
 | The Store provider's typed failure | `Content { provider: Some }` |
 | A Content error | `Content`, with the operation's retained provider failure if any |

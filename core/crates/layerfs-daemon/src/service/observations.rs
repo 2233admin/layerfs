@@ -1,11 +1,9 @@
 //! Exact storage deltas and elapsed lock work of one short operation.
 #[derive(Debug, Default)]
 pub struct JobWork {
-    /// None only for roster compositions that acquire no connection lock.
-    pub class: Option<crate::ServiceClass>,
     /// Actual connection jobs represented by this receipt (compositions sum them).
     pub jobs: u64,
-    pub sql: crate::JobSql,
+    pub sql: layerfs_overlay::DatabaseWork,
     pub payload: layerfs_overlay::PayloadWork,
     pub allocation: layerfs_overlay::AllocationWork,
     pub lock_wait_ns: u64,

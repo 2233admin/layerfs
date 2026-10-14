@@ -106,6 +106,10 @@ def decode(group):
         require(len(direct) == 1 and direct[0] in {0,1}, "direct Workspace marker cardinality/bit")
         result["service_schema"] = "issue321-direct-workspace"
         result["sqlite_cache_group"] = {"memory_management_enabled": bool(direct[0])}
+    class_marker = row(group, 37)
+    require(class_marker is None or (direct_mode and class_marker == [3]), "frontier class marker")
+    classes = ("General", "Mutation", "Source") if class_marker is not None else CLASSES
+    class_count = len(classes)
     scalar = row(group, 1)
     budget = row(group, 31)
     holds = row(group, 35)
@@ -120,12 +124,12 @@ def decode(group):
     if not direct_mode:
         result["field_availability"]["overlay_budget"] = "AVAILABLE" if budget is not None else "UNAVAILABLE"
     if scalar is not None:
-        require(len(scalar) == (24 if direct_mode else 32), "owner scalar/class schema cardinality")
+        require(len(scalar) == (6 + 3 * class_count if direct_mode else 32), "owner scalar/class schema cardinality")
         fields = DIRECT_OWNER_SCALARS if direct_mode else OWNER_SCALARS
         result["owner"] = names(scalar[:len(fields)], fields)
-        slices = (("jobs_by_class",6),("lock_wait_ns",12),("hold_ns",18)) if direct_mode else (("completed",14),("queue_wait_ns",20),("service_ns",26))
+        slices = (("jobs_by_class",6),("lock_wait_ns",6+class_count),("hold_ns",6+2*class_count)) if direct_mode else (("completed",14),("queue_wait_ns",20),("service_ns",26))
         for key, offset in slices:
-            result["owner"][key] = names(scalar[offset:offset+6], CLASSES)
+            result["owner"][key] = names(scalar[offset:offset+class_count], classes)
     for key, section, fields in (("store",8,STORE), ("reader",9,READER), ("cache",10,CACHE),
                                  ("construction",15,CONSTRUCTION), ("storage",16,STORAGE), ("dispatch",11,DISPATCH),
                                  ("native",12,NATIVE), ("loops",24,LOOPS), ("mount",25,MOUNT),

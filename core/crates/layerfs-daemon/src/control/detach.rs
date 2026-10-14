@@ -5,7 +5,7 @@ use super::{
     serving::{stage, Attached, Kept, Leaving},
     Failure, Service, Success,
 };
-use crate::{store::BoundWorkspace, NativeReply, Response};
+use crate::store::BoundWorkspace;
 use layerfs_bridge::control::{
     Activity, ControlCode, ForcedFacts, NativePhase, TeardownStage, WorkspaceToken,
 };
@@ -99,16 +99,12 @@ impl Service {
             }
         };
         // Drain barrier holds: one fixed logical mark, then indexed retirement.
-        let revoked = match self.job(
+        match self.job(
             workspace.route(),
             |job_client: &crate::OwnerClient, job_route| job_client.native_revoke(job_route, mount),
         ) {
-            Ok(done) if matches!(done.result(), Ok(Response::Native(NativeReply::Done))) => done,
-            other => {
-                let failure = match other {
-                    Ok(done) => Failure::JobReceipt(Box::new(done)),
-                    Err(error) => error,
-                };
+            Ok(()) => {}
+            Err(failure) => {
                 return Err(self.retain(
                     token,
                     TeardownStage::Revoke,
@@ -119,7 +115,7 @@ impl Service {
                 ));
             }
         };
-        self.close(token, &workspace, vec![revoked], Some(drained))
+        self.close(token, &workspace, Some(drained))
     }
     /// Describes the exact retained native owner for an operator. Observation
     /// only: nothing is transferred, released, retried or settled.

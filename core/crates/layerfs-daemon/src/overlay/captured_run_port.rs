@@ -1,6 +1,6 @@
 //! Original scoped captured-run jobs of the read class.
 //! Constructor-thread port: each call is one attempt under the Workspace lock.
-use crate::{OwnerClient, Response};
+use crate::OwnerClient;
 use layerfs_overlay::{CapturedReader, CapturedRunCursor, CapturedRunReply, Inode};
 use layerfs_workspace::{OverlayCapturedRuns, WorkspaceError, WorkspaceResult};
 
@@ -19,10 +19,7 @@ impl OverlayCapturedRuns for OwnerClient {
             )
             .map_err(|cause| WorkspaceError::Service(Box::new(cause)))?;
         let done = pending;
-        match done.result() {
-            Ok(Response::Inode(value)) => Ok(value.clone()),
-            _ => Err(WorkspaceError::Service(Box::new(done))),
-        }
+        Ok(done)
     }
     fn captured_run_step(&self, cursor: CapturedRunCursor) -> WorkspaceResult<CapturedRunReply> {
         let route = match self.bound_route() {
@@ -40,11 +37,6 @@ impl OverlayCapturedRuns for OwnerClient {
             .captured_run(route, Box::new(cursor))
             .map_err(|cause| WorkspaceError::Service(Box::new(cause)))?;
         let done = pending;
-        match done.result() {
-            // The independently returned bounded window overlaps its original
-            // receipt during this clone; no zero-copy claim.
-            Ok(Response::CapturedRun(value)) => Ok(value.as_ref().clone()),
-            _ => Err(WorkspaceError::Service(Box::new(done))),
-        }
+        Ok(done)
     }
 }

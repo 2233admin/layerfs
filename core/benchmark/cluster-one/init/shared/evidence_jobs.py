@@ -91,7 +91,7 @@ def database(value):
     exact(value, ("scope", "families", "total"), "SQL database observation")
     require(isinstance(value, dict) and value.get("scope") == "connection-statement-families", "SQL counter scope mismatch")
     families = value.get("families")
-    require(isinstance(families, list) and len(families) == 14, "SQL statement-family cardinality mismatch")
+    require(isinstance(families, list) and len(families) in {12, 14}, "SQL statement-family cardinality mismatch")
     for row in families:
         counter_map(row, STATEMENT, "SQL family")
         require(row["rows_changed"] >= row["direct_rows_changed"], "trigger-inclusive changes below direct changes")

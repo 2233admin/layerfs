@@ -40,10 +40,10 @@ product mental model or campaign-specific benchmark procedures.
   [direct Store boundary](docs/architecture/61-direct-store-adapter.md).
   The host-mediated SDK/upstream transport is retired; see
   [the retirement record](docs/issues/307/PRE-S8-F12-20261007.md).
-  Completions carry exact per-job statement-family receipts under
-  explicit stage charging and a fixed lane table; see the
-  [completion checkpoint](docs/issues/307/S7-COMPLETION-OWNERSHIP-20261007.md). Overlay/Daemon also expose bounded indexed operation records
-  in the same database, with guarded atomic changes and automatic last-owner
+  Workspace calls return typed values directly and count SQL/payload/allocation
+  work under the same lock. Exact attempted failures retain their cause and
+  backing; before-effect refusals retain their original input. Overlay/Daemon
+  also expose bounded indexed operation records in the same database, with guarded atomic changes and automatic last-owner
   cleanup. Content now exposes a backed file editor over these records and
   Workspace supplies an explicit operation/file adapter with first-original
   failure custody. Run-aware localized edits reuse the frozen sparse scanner

@@ -116,7 +116,6 @@ impl Service {
                     code: ControlCode::Capacity,
                     phase: "mount:debt",
                     detail: stopped.to_string(),
-                    completions: Vec::new(),
                     evidence: Some(Box::new(stopped)),
                 })));
             }
@@ -154,8 +153,6 @@ impl Service {
                 token,
                 binding: snapshot.clone(),
             },
-            completion: Some(bound.open),
-            earlier: Vec::new(),
             commit: None,
             observation_failure: None,
             native: None,
@@ -248,15 +245,12 @@ impl Service {
             Err(failed) => Err(Failure::Commit(failed)),
         }
     }
-    pub(super) fn job(
+    pub(super) fn job<T>(
         &self,
         route: layerfs_workspace::Route,
-        command: impl FnOnce(
-                &crate::OwnerClient,
-                layerfs_workspace::Route,
-            ) -> Result<crate::JobReceipt, crate::OwnerError>
+        command: impl FnOnce(&crate::OwnerClient, layerfs_workspace::Route) -> Result<T, crate::OwnerError>
             + Send,
-    ) -> Result<crate::JobReceipt, Failure> {
+    ) -> Result<T, Failure> {
         command(&self.owner, route).map_err(Failure::Owner)
     }
 }

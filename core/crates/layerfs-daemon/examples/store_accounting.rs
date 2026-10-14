@@ -19,7 +19,7 @@ mod records;
 #[path = "../tests/support/native_install.rs"]
 mod support;
 use layerfs_content::filesystem::{FilesystemRootId, PathName};
-use layerfs_daemon::{store::BindRequest, Owner, OwnerConfig, Response};
+use layerfs_daemon::{store::BindRequest, Owner, OwnerConfig};
 use layerfs_history::{CommitStagedOutcome, WorkspaceId};
 use std::{
     fs::OpenOptions,
@@ -76,7 +76,7 @@ fn main() {
             },
         )
         .unwrap();
-    drop(bound.open);
+
     let bound = bound.workspace;
     phase("write");
     produce::mutate(&bound);
@@ -100,8 +100,6 @@ fn main() {
         ));
         let after = f.opened.diagnostics().unwrap();
         let local_after = owner.client().diagnostics().unwrap();
-        let mut exact = result.captured.work().sql.expanded();
-        exact.accumulate(result.installed.work().sql.expanded());
         let whole = local_after.sql_foreground.since(&local.sql_foreground);
         let writes = after.writer.write_commits - before.writer.write_commits;
         let scans = after.writer.fullscan_steps - before.writer.fullscan_steps;
@@ -114,7 +112,6 @@ fn main() {
             whole,
             (local, local_after),
         );
-        assert_eq!(whole, exact);
         assert_eq!(
             local_after.jobs.iter().sum::<u64>() - local.jobs.iter().sum::<u64>(),
             2
@@ -152,10 +149,7 @@ fn main() {
     }
     drop((base, op));
     phase("release");
-    assert!(matches!(
-        owner.client().close(bound.route()).unwrap().result(),
-        Ok(Response::Done)
-    ));
+    owner.client().close(bound.route()).unwrap();
     drop(bound);
     phase("idle");
     let until = Instant::now() + Duration::from_secs(2);

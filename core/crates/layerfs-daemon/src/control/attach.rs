@@ -6,7 +6,7 @@ use super::{
     types::NativeFailure,
     Failure, Service, Success,
 };
-use crate::{store::BoundWorkspace, JobReceipt, NativeReply, Response};
+use crate::store::BoundWorkspace;
 use layerfs_bridge::control::{
     Activity, ControlCode, Reply, TeardownStage, WorkspaceToken, MOUNT_DIRECTORY_LIMIT,
 };
@@ -39,13 +39,10 @@ impl Service {
         };
         let workspace = self.admit_attach(token)?;
         match self.attach_admitted(&serving, token, &workspace) {
-            Ok((attached, created)) => {
+            Ok(attached) => {
                 let reply = Reply::Ready(Box::new(attached.ready.clone()));
                 self.settle(token, Native::Ready(Box::new(attached)), Activity::Idle);
-                Ok(Success {
-                    completion: Some(created),
-                    ..Success::reply(reply)
-                })
+                Ok(Success::reply(reply))
             }
             Err(Stop::Unattached(failure)) => {
                 self.settle(token, Native::Unattached, Activity::Idle);
@@ -86,7 +83,7 @@ impl Service {
         serving: &NativeServing,
         token: WorkspaceToken,
         workspace: &Arc<BoundWorkspace>,
-    ) -> Result<(Attached, JobReceipt), Stop> {
+    ) -> Result<Attached, Stop> {
         let directory = serving.directory(token);
         let Some(text) = directory
             .to_str()
@@ -127,7 +124,7 @@ impl Service {
             return Err(unknown(failure));
         }
         drop(operation);
-        let created = self
+        let mount = self
             .job(
                 workspace.route(),
                 |job_client: &crate::OwnerClient, job_route| {
@@ -135,15 +132,10 @@ impl Service {
                 },
             )
             .map_err(unknown)?;
-        let mount = match created.result() {
-            Ok(Response::Native(NativeReply::Mount(mount))) => *mount,
-            _ => return Err(unknown(Failure::JobReceipt(Box::new(created)))),
-        };
         let failed = |code, phase, detail: String| NativeFailure {
             code,
             phase,
             detail,
-            completions: Vec::new(),
             evidence: None,
         };
         let queue = match serving.register(mount) {
@@ -155,7 +147,7 @@ impl Service {
                     ControlCode::Failed
                 };
                 let failure = failed(code, "attach:mount", format!("mount lane: {error:?}"));
-                return Err(self.unwind(workspace, mount, created, failure));
+                return Err(self.unwind(workspace, mount, failure));
             }
         };
         let config = &serving.config;
@@ -178,7 +170,7 @@ impl Service {
         let failure = match attached {
             Ok(session) => {
                 return match ready(token, text, &session) {
-                    Some(ready) => Ok((Attached { session, ready }, created)),
+                    Some(ready) => Ok(Attached { session, ready }),
                     // A serving session always recorded both receipts; keep the
                     // owner rather than guess if that invariant is ever broken.
                     None => Err(Stop::Retained(Box::new(Kept {
@@ -186,7 +178,7 @@ impl Service {
                         stage: TeardownStage::Detach,
                         detail: "serving session without negotiation receipt".into(),
                         observer: Some(session.observer()),
-                        evidence: Box::new((session, created)),
+                        evidence: Box::new(session),
                         forced: None,
                     }))),
                 };
@@ -207,7 +199,7 @@ impl Service {
                 stage,
                 detail,
                 observer,
-                evidence: Box::new((failure, created)),
+                evidence: Box::new((failure, mount)),
                 forced: None,
             })));
         }
@@ -218,7 +210,7 @@ impl Service {
         };
         let mut refusal = failed(ControlCode::Failed, phase, detail);
         refusal.evidence = Some(failure);
-        Err(self.unwind(workspace, mount, created, refusal))
+        Err(self.unwind(workspace, mount, refusal))
     }
     /// No connection or request owner of this attempt remains: release its engine owner
     /// so the entry returns to Unattached. An unacknowledged release is kept.
@@ -226,23 +218,19 @@ impl Service {
         &self,
         workspace: &BoundWorkspace,
         mount: NativeMount,
-        created: JobReceipt,
-        mut failure: NativeFailure,
+        failure: NativeFailure,
     ) -> Stop {
         match self.job(
             workspace.route(),
             |job_client: &crate::OwnerClient, job_route| job_client.native_revoke(job_route, mount),
         ) {
-            Ok(done) if matches!(done.result(), Ok(Response::Native(NativeReply::Done))) => {
-                failure.completions = vec![created, done];
-                Stop::Unattached(Failure::Native(Box::new(failure)))
-            }
+            Ok(()) => Stop::Unattached(Failure::Native(Box::new(failure))),
             other => Stop::Retained(Box::new(Kept {
                 ready: None,
                 stage: TeardownStage::Revoke,
                 detail: failure.detail.clone(),
                 observer: None,
-                evidence: Box::new((failure, created, other)),
+                evidence: Box::new((failure, mount, other)),
                 forced: None,
             })),
         }

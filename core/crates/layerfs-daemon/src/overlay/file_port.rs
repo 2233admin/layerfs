@@ -1,5 +1,5 @@
 //! Typed independently owned read windows through the real SQL owner.
-use crate::{OwnerClient, Response};
+use crate::OwnerClient;
 use layerfs_overlay::{CapturedReader, FileRead, LocalRead};
 use layerfs_workspace::{OverlayFileRead, WorkspaceError, WorkspaceResult};
 impl OverlayFileRead for OwnerClient {
@@ -12,10 +12,7 @@ impl OverlayFileRead for OwnerClient {
         let done = self.read_job(|job_client: &crate::OwnerClient, route| {
             job_client.file_read(route, read, offset, length)
         })?;
-        match done.result() {
-            Ok(Response::Read(value)) => Ok(value.clone()),
-            _ => Err(WorkspaceError::Service(Box::new(done))),
-        }
+        Ok(done)
     }
     fn captured_read(
         &self,
@@ -38,9 +35,6 @@ impl OverlayFileRead for OwnerClient {
             )
             .map_err(|cause| WorkspaceError::Service(Box::new(cause)))?;
         let done = pending;
-        match done.result() {
-            Ok(Response::Read(value)) => Ok(value.clone()),
-            _ => Err(WorkspaceError::Service(Box::new(done))),
-        }
+        Ok(done)
     }
 }

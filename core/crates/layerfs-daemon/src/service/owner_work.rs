@@ -7,9 +7,9 @@ pub struct OwnerWork {
     pub payload_maintenance: layerfs_overlay::PayloadWork,
     pub allocation_foreground: layerfs_overlay::AllocationWork,
     pub allocation_maintenance: layerfs_overlay::AllocationWork,
-    pub jobs: [u64; 6],
-    pub lock_wait_ns: [u64; 6],
-    pub hold_ns: [u64; 6],
+    pub jobs: [u64; 3],
+    pub lock_wait_ns: [u64; 3],
+    pub hold_ns: [u64; 3],
     /// Holds of a Workspace lock that only read these counters: no SQL and
     /// no job of any class, so an observation never changes what it observes.
     pub observations: u64,
@@ -34,7 +34,7 @@ impl OwnerWork {
             .accumulate(next.allocation_foreground);
         self.allocation_maintenance
             .accumulate(next.allocation_maintenance);
-        for index in 0..6 {
+        for index in 0..3 {
             self.jobs[index] = self.jobs[index].saturating_add(next.jobs[index]);
             self.lock_wait_ns[index] =
                 self.lock_wait_ns[index].saturating_add(next.lock_wait_ns[index]);

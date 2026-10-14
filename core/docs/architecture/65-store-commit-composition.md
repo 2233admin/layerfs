@@ -19,15 +19,16 @@ The local Branch metadata is replaced only after known install. Ordinary reads
 and other Workspaces retain independent sources and read capacity throughout.
 
 CommitSuccess carries the exact history outcome, Save outcome and per-producer
-Storage diagnostics plus original capture/install Completions. The counts are
+Storage diagnostics and the original Capture. Capture and install return typed
+values directly; daemon counters record their actual exclusive lock work. The counts are
 Store calls/transactions, not a whole-operation timing/resource report; F14 still
 owns complete accounting. A changed Commit or UpToDate with the selected small
 input uses one initial reservation, one publication batch and one history write.
 Required block refills remain separately counted for larger Saves.
 
 CommitFailure retains phase, Workspace/route and original binding, capture and
-its Completion, StageRequest/candidate when known, Save diagnostics/outcome,
-prepared root, known publication, and any attempted local completion/error.
+StageRequest/candidate when known, Save diagnostics/outcome, prepared root,
+known publication, and any exact attempted local error with its backing custody.
 The first original Storage error from same-Save Content reads now survives both
 take_failure and finish, matching output-sink custody. A public producer can
 return typed Storage, Workspace, History or owner failures; opaque provider
@@ -89,17 +90,13 @@ inserts do not enlarge the captured EOF. Inode points and pages retain the same
 reader root/floor through install and logical Close. The caller releases the
 reader only after all consumers and original outcome custody have ended.
 
-Since R5 each captured port call and each Commit-thread job waits for an owner
-credit before its one attempt (`OwnerClient::submit_waiting`; see
-[product Commit](79-product-commit.md)); a full Workspace delays it and does not
-refuse it. On a service admission failure that no credit can cure (a stopped
-owner, an impossible charge) the original command is retained as Unattempted.
-An attempted failure retains the original Completion, receipt and credit. The
-adapter never replays, refreshes or releases reader ownership. Successful daemon
-pages are cloned into a bounded constructor-owned window while the original
-credited completion is briefly alive; this is not zero-copy or a whole-process
-memory bound. Schema, SQL and its existing access algorithms were unchanged at
-this stage. R4 added three reader-bound jobs (`ReaderParentDirectoryEntries`,
+Each captured port call and Commit step waits for the Workspace lock and any
+Capture/install readiness frontier before its one attempt. There are no queue
+credits or reply enums. A stopped or invalid admission returns Unattempted with
+the original input; an attempted error retains its original typed cause, work
+and backing. Successful bounded pages transfer their owned values to the
+constructor. The adapter never replays or releases reader ownership.
+R4 added three reader-bound jobs (`ReaderParentDirectoryEntries`,
 `ReaderDirectoryEntry`, `ReaderSymlink`) and one statement, with no schema or
 index change ([captured namespace construction](78-captured-namespace-construction.md)).
 

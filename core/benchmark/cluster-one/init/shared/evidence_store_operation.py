@@ -34,7 +34,7 @@ def validate(path):
     results = []
     original = None
     for index, row in enumerate(rows(path)):
-        require(index < 2 and row.get("schema") == "cluster-two-store-accounting-v1" and row.get("mode") == "diagnostic", "Store operation schema/order")
+        require(index < 2 and row.get("schema") in {"cluster-two-store-accounting-v1", "cluster-two-store-accounting-v2"} and row.get("mode") == "diagnostic", "Store operation schema/order")
         require(row.get("attempt_count") == 1 and type(row.get("attempt_count")) is int, "one original Store attempt")
         require(row.get("namespace_files") == 100000, "whole prepared namespace selection")
         require(row.get("outcome") == ("Committed", "UpToDate")[index], "known original Store outcome")
@@ -45,12 +45,17 @@ def validate(path):
         identity = row["root"], row["head"]
         require(original is None or original == identity, "UpToDate changed the published root/head")
         original = identity
-        for name in ("engine_capture", "engine_install", "engine_whole_commit"):
-            database(row[name])
-        for family in range(14):
-            require(all(row["engine_whole_commit"]["families"][family][key] ==
-                        row["engine_capture"]["families"][family][key] + row["engine_install"]["families"][family][key]
-                        for key in STATEMENT), "whole Commit engine family accounting")
+        database(row["engine_whole_commit"])
+        if row["schema"] == "cluster-two-store-accounting-v1":
+            for name in ("engine_capture", "engine_install"):
+                database(row[name])
+            for family in range(14):
+                require(all(row["engine_whole_commit"]["families"][family][key] ==
+                            row["engine_capture"]["families"][family][key] + row["engine_install"]["families"][family][key]
+                            for key in STATEMENT), "whole Commit engine family accounting")
+        else:
+            require("engine_capture" not in row and "engine_install" not in row,
+                    "typed calls cannot fabricate per-call receipt families")
         counter_map(row["engine_payload"], PAYLOAD, "whole Commit payload")
         counter_map(row["engine_allocation"], ALLOCATION, "whole Commit allocation")
         sql(row["store_writer"])

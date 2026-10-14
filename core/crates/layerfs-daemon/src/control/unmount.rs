@@ -4,7 +4,7 @@ use super::{
     registry::{bound_mut, idle},
     Failure, NativeEvidence, Service, Success,
 };
-use crate::{store::BoundWorkspace, JobReceipt, Response};
+use crate::store::BoundWorkspace;
 use layerfs_bridge::control::{Activity, ForcedFacts, Reply, WorkspaceToken};
 use std::sync::Arc;
 
@@ -21,14 +21,14 @@ pub(super) enum Departure {
 impl Service {
     pub(super) fn unmount(&self, token: WorkspaceToken) -> Result<Success, Failure> {
         let (workspace, departure) = self.admit_unmount(token)?;
-        let earlier = match departure {
-            Departure::Unattached => Vec::new(),
+        match departure {
+            Departure::Unattached => {}
             #[cfg(target_os = "linux")]
             Departure::Session(attached) => {
                 return self.unmount_native(token, workspace, *attached)
             }
         };
-        self.close(token, &workspace, earlier, None)
+        self.close(token, &workspace, None)
     }
     /// One short registry step: no effect unless the entry is idle and its
     /// native half is either absent or a serving connection with no request.
@@ -69,16 +69,13 @@ impl Service {
         &self,
         token: WorkspaceToken,
         workspace: &BoundWorkspace,
-        earlier: Vec<JobReceipt>,
         native: Receipt,
     ) -> Result<Success, Failure> {
-        let (completion, earlier, native) = self.closed(token, workspace, earlier, native, None)?;
+        let native = self.closed(token, workspace, native, None)?;
         self.depart(
             token,
             Success {
                 reply: Reply::Unmounted(token),
-                completion: Some(completion),
-                earlier,
                 commit: None,
                 observation_failure: None,
                 native,
@@ -91,22 +88,15 @@ impl Service {
         &self,
         token: WorkspaceToken,
         workspace: &BoundWorkspace,
-        earlier: Vec<JobReceipt>,
         native: Receipt,
         forced: Option<ForcedFacts>,
-    ) -> Result<(JobReceipt, Vec<JobReceipt>, Receipt), Failure> {
+    ) -> Result<Receipt, Failure> {
         match self.job(
             workspace.route(),
             |job_client: &crate::OwnerClient, job_route| job_client.close(job_route),
         ) {
-            Ok(done) if matches!(done.result(), Ok(Response::Done)) => Ok((done, earlier, native)),
-            other => {
-                let failure = match other {
-                    Ok(done) => Failure::JobReceipt(Box::new(done)),
-                    Err(error) => error,
-                };
-                Err(self.unclosed(token, failure, earlier, native, forced))
-            }
+            Ok(()) => Ok(native),
+            Err(failure) => Err(self.unclosed(token, failure, native, forced)),
         }
     }
     /// Routing removal after an acknowledged Close; the reply is already known.
@@ -140,23 +130,22 @@ impl Service {
         &self,
         token: WorkspaceToken,
         failure: Failure,
-        earlier: Vec<JobReceipt>,
         native: Receipt,
         forced: Option<ForcedFacts>,
     ) -> Failure {
         #[cfg(target_os = "linux")]
-        if native.is_some() || !earlier.is_empty() {
+        if native.is_some() {
             return self.retain(
                 token,
                 layerfs_bridge::control::TeardownStage::Close,
                 failure.wire().detail,
                 None,
-                Box::new((failure, earlier, native)),
+                Box::new((failure, native)),
                 forced,
             );
         }
         #[cfg(not(target_os = "linux"))]
-        let _ = (earlier, native, forced);
+        let _ = (native, forced);
         if let Ok(mut entries) = self.entries.lock() {
             if let Ok(binding) = bound_mut(&mut entries, token) {
                 binding.activity = if failure.uncertain() {

@@ -146,7 +146,7 @@ array; it is never a successful zero-valued snapshot.
 | Section | Index | Values, in order |
 | --- | --- | --- |
 | 0 | Namespace, or 0 when absent | Original operation tag, configured reader count, immutable cache allowance |
-| 1 | 0 | OwnerWork scalar fields in source declaration order, then completed[6], queue_wait_ns[6], service_ns[6] |
+| 1 | 0 | Six OwnerWork scalar fields, then jobs[3], lock_wait_ns[3], hold_ns[3]; classes General, Mutation, Source; section 37 distinguishes retained six-class arrays |
 | 2, 3 | StatementKind 0 to 11 (historical 0 to 13) | Foreground and maintenance StatementWork respectively, all 17 source fields |
 | 4, 5 | 0 | Foreground and maintenance PayloadWork, all seven source fields |
 | 6, 7 | 0 | Foreground and maintenance AllocationWork, six original encoded fields (attempts, requested_bytes, admitted_jobs, refusals, observations, freelist_queries) |
@@ -171,6 +171,7 @@ array; it is never a successful zero-valued snapshot.
 | 31 | 0 | Common overlay budget limit, aggregate pager allowance, fixed bytes, job bytes, peak job bytes and outstanding jobs; actual template SQLite ENABLE_MEMORY_MANAGEMENT readback bit |
 | 99 | 0 | Number of preceding completed records, their values-array number count, their unavailable section count |
 | 36 | 0 | SQL statement-family cardinality: 12 after Workspace/Lease removal; absent in historical 14-family receipts |
+| 37 | 0 | Frontier class cardinality: 3; absent in historical six-class receipts |
 
 All sections use the same original authenticated call correlation. The normal
 Mount facade issues separate bind and Attach calls. Store providers, owner,
@@ -180,25 +181,19 @@ whole-daemon snapshot or exclusive per-Workspace work under concurrency.
 Lifetime peak values do not establish phase-local continuous peaks. Counter
 sampling and stderr backpressure are explicit instrumentation cost.
 
-An observed call makes one additional route-free `Resources { global: true }`
-owner Read job before the owner snapshot, using the existing `resources(None)`
-path. It issues exactly three existing Startup statements: the namespace-zero
-accounting point, page count and free-page count, with two allocation identity
-metadata calls and no transaction or base demand. Section 30 contains this
-original job's runtime receipt; those counts are observation work and must be
-priced separately from the selected filesystem/control operation. The copied
-Resource/cost schemas are fixed transient values, and a successful caller's Completion is
-dropped before owner outstanding/credited-byte snapshots. The publisher can
-still transiently hold its original Arc and that same credit after waking the
-caller. These snapshots do not guarantee zero observer outstanding work or
-credit and do not establish a phase-local peak. Existing stop/drain proofs own
-eventual release; observation neither waits nor retries to force a zero.
-Admission/completion failure stays explicit through missing Resources and the
-completion-availability bit; no observation is retried. A failure also retains
-its exact original command/cause, completion wait cause, or entire failed or
-unexpected Completion. A failed Completion remains charged while held; its
-work copy never substitutes for its original result/custody. Routed Resources calls retain their existing
-state validation, and route-free non-global Resources is refused.
+An observed call explicitly charges Resources work before the owner snapshot.
+Resources computes counts on demand rather than reading the removed accounting
+row. Section 30 reports the actual statement/payload/allocation/lock work and
+section 34 the number of lock holds. Typed calls transfer owned values directly;
+there is no Response, NativeReply, JobReceipt or heap-allocated SQL-family
+receipt. Attempted failures retain exact cause, work and backing, independently
+of the control outcome and diagnostic-output failure. Mutation and Source are
+the only service classes that change frontier waits; other calls are General.
+The parser accepts the declared three-class layout and retained older layouts.
+
+An unavailable observation emits no resources or successful zero counters.
+No observer failure authorizes a retry. Its original cause and any attempted
+work/backing remain in diagnostic failure custody, separate from output errors.
 
 The legitimate operator API `ResourceObservation::acquire(&OwnerClient)` executes
 the same production acquisition used by Application. Its

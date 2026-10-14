@@ -54,10 +54,7 @@ impl Failure {
                 owner_detail(error),
                 None,
             ),
-            Self::JobReceipt(done) => {
-                let (code, detail) = completion(done);
-                (code, None, "owner completion".into(), detail, None)
-            }
+
             Self::Bind(failed) => {
                 let (code, moved, detail) = match &failed.error {
                     BindError::History(error) => {
@@ -71,10 +68,7 @@ impl Failure {
                         (ControlCode::Missing, None, format!("Branch {id} missing"))
                     }
                     BindError::Owner(error) => (owner(error), None, owner_detail(error)),
-                    BindError::JobReceipt(done) => {
-                        let (code, detail) = completion(done);
-                        (code, None, detail)
-                    }
+
                     BindError::Content { error, provider } => (
                         port(
                             provider.as_deref(),
@@ -210,7 +204,6 @@ fn commit(error: &CommitError) -> (ControlCode, Option<MovedState>, String) {
         }
         CommitError::Content { error, .. } => error.to_string(),
         CommitError::Owner(error) => owner_detail(error),
-        CommitError::JobReceipt(done) => completion(done).1,
         CommitError::Workspace(error) => error.to_string(),
         CommitError::InFlight => "Commit already active".into(),
         CommitError::Context(reason) => (*reason).into(),
@@ -224,6 +217,7 @@ fn owner(error: &OwnerError) -> ControlCode {
     }
     match error {
         OwnerError::Unattempted { cause, .. } => owner(cause),
+        OwnerError::Attempted(failure) => owner(&failure.cause),
         OwnerError::AdmissionFull => ControlCode::Capacity,
         OwnerError::InvalidAdmission => ControlCode::Invalid,
         OwnerError::Overlay(
@@ -240,13 +234,8 @@ fn owner(error: &OwnerError) -> ControlCode {
 fn owner_detail(error: &OwnerError) -> String {
     match error {
         OwnerError::Unattempted { cause, .. } => owner_detail(cause),
+        OwnerError::Attempted(failure) => owner_detail(&failure.cause),
         OwnerError::Install { cause, .. } => cause.to_string(),
         other => other.to_string(),
-    }
-}
-fn completion(done: &crate::JobReceipt) -> (ControlCode, String) {
-    match done.result() {
-        Err(error) => (owner(error), owner_detail(error)),
-        Ok(_) => (ControlCode::Unknown, "unexpected owner reply".into()),
     }
 }

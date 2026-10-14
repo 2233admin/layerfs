@@ -173,8 +173,8 @@ impl Application {
         // The operation keeps its exact original result independently of every
         // later counter acquisition and diagnostic sink outcome.
         let outcome = self.control_operation(operation, slot);
-        // One explicitly charged read-only observer job. The caller dropped its
-        // JobReceipt before the snapshot. This observation never replaces the
+        // One explicitly charged read-only observer call. It transfers its typed
+        // value before the snapshot. This observation never replaces the
         // original outcome.
         let resources = resources::ResourceObservation::acquire(&self.owner.client());
         let store = service.as_ref().map(|service| service.observed_store());

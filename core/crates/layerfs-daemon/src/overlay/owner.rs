@@ -1,6 +1,6 @@
 //! Calling-thread jobs under one Workspace connection lock.
 use super::state::{elapsed, Shared};
-use crate::{service::receipt::JobReceipt, JobWork, OwnerWork, Response, ServiceClass};
+use crate::{JobWork, OwnerWork, ServiceClass};
 use layerfs_overlay::{DatabaseProfile, Overlay, OverlayError, ProfileConfig};
 use layerfs_workspace::Route;
 use std::{
@@ -30,7 +30,7 @@ pub enum OwnerError {
     Overlay(OverlayError),
     Stopped,
     Retained(Arc<OwnerError>),
-    Observation(Box<crate::JobReceipt>),
+    Attempted(Box<WorkspaceCallFailure>),
     AdmissionFull,
     InvalidAdmission,
     IdentityExhausted,
@@ -47,6 +47,17 @@ pub enum OwnerError {
     },
     /// Exact failure of an attempted namespace job; never replayed.
     Workspace(Box<layerfs_workspace::WorkspaceError>),
+}
+/// Original attempted failure and the backing it may still own.
+pub struct WorkspaceCallFailure {
+    pub cause: Box<OwnerError>,
+    pub work: JobWork,
+    _backing: Option<Arc<super::backing::Backing>>,
+}
+impl fmt::Debug for WorkspaceCallFailure {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.cause.fmt(f)
+    }
 }
 pub struct WorkspacePanic {
     pub payload: Mutex<Box<dyn std::any::Any + Send>>,
@@ -88,7 +99,7 @@ impl std::error::Error for OwnerError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Retained(error) => Some(error.as_ref()),
-            Self::Observation(error) => Some(error.as_ref()),
+            Self::Attempted(error) => Some(error.cause.as_ref()),
             Self::Io(error) => Some(error),
             Self::Deletion { cause, .. } => Some(cause),
             Self::Overlay(error) => Some(error),
@@ -202,36 +213,37 @@ impl OwnerClient {
 
     /// One short operation; the closure performs at most one transaction and
     /// does no provider I/O. Before-effect failure retains the original input.
-    pub(crate) fn overlay_job<F>(
+    pub(crate) fn call<T, F>(
         &self,
         route: Route,
         class: ServiceClass,
         ready: Option<Readiness>,
         action: F,
-    ) -> Result<JobReceipt, OwnerError>
+    ) -> Result<T, OwnerError>
     where
-        F: FnOnce(&Overlay) -> layerfs_overlay::OverlayResult<Response> + Send + 'static,
+        F: FnOnce(&Overlay) -> layerfs_overlay::OverlayResult<T> + Send + 'static,
     {
-        self.owner_job(Some(route), class, ready, move |db, _| {
+        self.call_observed(Some(route), class, ready, move |db, _| {
             action(db).map_err(OwnerError::Overlay)
         })
+        .map(|(value, _)| value)
     }
-    pub(crate) fn owner_job<F>(
+    pub(crate) fn call_observed<T, F>(
         &self,
         route: Option<Route>,
         class: ServiceClass,
         ready: Option<Readiness>,
         action: F,
-    ) -> Result<JobReceipt, OwnerError>
+    ) -> Result<(T, JobWork), OwnerError>
     where
-        F: FnOnce(&Overlay, Option<Route>) -> Result<Response, OwnerError> + Send + 'static,
+        F: FnOnce(&Overlay, Option<Route>) -> Result<T, OwnerError> + Send + 'static,
     {
         if let Some(pool) = self.roster() {
             let client = route
                 .ok_or(OwnerError::InvalidAdmission)
                 .and_then(|route| pool.client(route.namespace()));
             return match client {
-                Ok(client) => client.owner_job(route, class, ready, action),
+                Ok(client) => client.call_observed(route, class, ready, action),
                 Err(cause) => Err(OwnerError::Unattempted {
                     cause: Box::new(cause),
                     input: OriginalInput::new(action),
@@ -311,18 +323,17 @@ impl OwnerClient {
                 break (sql, allocation, payload, start);
             }
             let mut work = JobWork {
-                class: Some(class),
                 jobs: 1,
                 ..JobWork::default()
             };
-            work.sql.accumulate(&db.diagnostics().since(&sql));
+            work.sql.accumulate(db.diagnostics().since(&sql));
             work.allocation = db.allocation_work().since(allocation);
             work.payload = db.payload_work().since(payload);
             work.lock_wait_ns = wait;
             work.hold_ns = elapsed(start);
             state.record(class, &work, false);
             checks.jobs += 1;
-            checks.sql.accumulate(&work.sql.expanded());
+            checks.sql.accumulate(work.sql);
             checks.allocation.accumulate(work.allocation);
             checks.payload.accumulate(work.payload);
             checks.lock_wait_ns = checks.lock_wait_ns.saturating_add(work.lock_wait_ns);
@@ -349,11 +360,10 @@ impl OwnerClient {
         let db = state.db.as_deref().expect("open connection");
         let performed = catch_unwind(AssertUnwindSafe(|| action(db, route)));
         let mut work = JobWork {
-            class: Some(class),
             jobs: 1,
             ..JobWork::default()
         };
-        work.sql.accumulate(&db.diagnostics().since(&sql));
+        work.sql.accumulate(db.diagnostics().since(&sql));
         work.allocation = db.allocation_work().since(allocation);
         work.payload = db.payload_work().since(payload);
         work.lock_wait_ns = wait;
@@ -367,16 +377,11 @@ impl OwnerClient {
             state.maintenance_error = Some(Arc::new(OverlayError::Quarantined));
         }
         if let Some(initial) = state.initial.take() {
-            work.sql.accumulate(&initial.sql);
+            work.sql.accumulate(initial.sql);
             work.allocation.accumulate(initial.allocation);
         }
         let result = match performed {
-            Ok(result) => {
-                if let Ok(Response::Opened(route)) = &result {
-                    let _ = shared.route.set(*route);
-                }
-                result
-            }
+            Ok(result) => result,
             Err(panic) => {
                 let cause = retain_panic(&mut state, panic);
                 Err(OwnerError::Retained(cause))
@@ -384,7 +389,7 @@ impl OwnerClient {
         };
         state.record(class, &work, false);
         work.jobs += checks.jobs;
-        work.sql.accumulate(&checks.sql.expanded());
+        work.sql.accumulate(checks.sql);
         work.allocation.accumulate(checks.allocation);
         work.payload.accumulate(checks.payload);
         work.lock_wait_ns = work.lock_wait_ns.saturating_add(checks.lock_wait_ns);
@@ -396,7 +401,14 @@ impl OwnerClient {
         if needs_maintenance {
             self.maintain();
         }
-        Ok(JobReceipt::new(result, work, backing))
+        match result {
+            Ok(value) => Ok((value, work)),
+            Err(cause) => Err(OwnerError::Attempted(Box::new(WorkspaceCallFailure {
+                cause: Box::new(cause),
+                work,
+                _backing: backing,
+            }))),
+        }
     }
     fn maintain(&self) {
         let Ok(shared) = self.connection() else {
@@ -423,15 +435,14 @@ impl OwnerClient {
             let payload = db.payload_work().since(payload);
             let disposals = db.take_open_disposals();
             let mut work = JobWork {
-                class: Some(ServiceClass::Lifecycle),
                 jobs: 1,
                 hold_ns: elapsed(start),
                 ..JobWork::default()
             };
-            work.sql.accumulate(&sql);
+            work.sql.accumulate(sql);
             work.allocation = allocation;
             work.payload = payload;
-            state.record(ServiceClass::Lifecycle, &work, true);
+            state.record(ServiceClass::General, &work, true);
             let progress = match step {
                 Ok(Ok(Some(step))) => {
                     state.cursor = step.cursor;
@@ -489,13 +500,12 @@ impl OwnerClient {
             }
         };
         let work = JobWork {
-            class: Some(ServiceClass::Lifecycle),
             jobs: 1,
             lock_wait_ns: wait,
             hold_ns: elapsed(start),
             ..JobWork::default()
         };
-        state.record(ServiceClass::Lifecycle, &work, false);
+        state.record(ServiceClass::General, &work, false);
         drop(state);
         shared.changed.notify_all();
         result
@@ -524,7 +534,7 @@ impl OwnerClient {
     pub fn reply_attempted(
         &self,
         publication: layerfs_overlay::Publication,
-    ) -> Result<JobReceipt, OwnerError> {
+    ) -> Result<(), OwnerError> {
         let client = self.clone();
         let shared = client.connection()?;
         let mut state = shared.state.lock().map_err(|_| OwnerError::Stopped)?;
@@ -538,7 +548,7 @@ impl OwnerClient {
         let result = db
             .reply_tickets()
             .attempted(publication)
-            .map(|_| Response::Done)
+            .map(|_| ())
             .map_err(OwnerError::Overlay);
         let needs_maintenance = db.maintenance_pending();
         let disposals = db.take_open_disposals();
@@ -551,7 +561,13 @@ impl OwnerClient {
         if needs_maintenance {
             client.maintain();
         }
-        Ok(JobReceipt::new(result, JobWork::default(), backing))
+        result.map_err(|cause| {
+            OwnerError::Attempted(Box::new(WorkspaceCallFailure {
+                cause: Box::new(cause),
+                work: JobWork::default(),
+                _backing: backing,
+            }))
+        })
     }
     pub fn diagnostics(&self) -> Result<OwnerWork, OwnerError> {
         match self.roster() {

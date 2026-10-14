@@ -1,6 +1,6 @@
 //! Original Commit knowledge, publication outcome and local ownership receipts.
 use super::PortError;
-use crate::{JobReceipt, OwnerError};
+use crate::OwnerError;
 use layerfs_content::{filesystem::FilesystemUpdateCounters, ContentError};
 use layerfs_history::{
     BranchSnapshot, CommitStagedOutcome, HistoryError, StageRequest, WorkspaceId,
@@ -40,7 +40,6 @@ pub enum CommitError {
     History(HistoryError),
     Workspace(WorkspaceError),
     Owner(OwnerError),
-    JobReceipt(Box<JobReceipt>),
 }
 /// What the product constructor's one namespace attempt acquired, counted and
 /// released. A named reader or owner here was acquired and is not known
@@ -58,8 +57,6 @@ pub struct CapturedConstruction {
     /// Releases known done, in attempt order: reader, then owner. Each
     /// receipt is dropped once read.
     pub released: Vec<ReleasedOwner>,
-    /// The original completion of a release that was attempted and refused.
-    pub release_failure: Option<Box<JobReceipt>>,
     /// The submission failure that ended the release sequence.
     pub release_error: Option<OwnerError>,
 }
@@ -82,8 +79,6 @@ pub struct CommitSuccess {
     pub saved: WriteOutcome,
     pub storage: Diagnostics,
     pub capture: Capture,
-    pub captured: JobReceipt,
-    pub installed: JobReceipt,
     /// The product constructor's receipt; None under a caller's constructor.
     pub namespace: Option<CapturedConstruction>,
 }
@@ -97,14 +92,11 @@ pub struct CommitFailure {
     pub error: CommitError,
     pub intent: Option<StageRequest>,
     pub capture: Option<Capture>,
-    pub captured: Option<JobReceipt>,
     pub prepared: Option<PreparedBase>,
     pub saved: Option<WriteOutcome>,
     pub storage: Option<Diagnostics>,
     /// Some means publication is known even if local install failed.
     pub published: Option<CommitStagedOutcome>,
-    /// Original install or definite-failure resolution completion.
-    pub local: Option<JobReceipt>,
     pub local_error: Option<OwnerError>,
     /// False means capture/unknown custody remains; another Commit is refused.
     pub locally_settled: bool,
@@ -121,12 +113,10 @@ impl CommitFailure {
             error,
             intent: None,
             capture: None,
-            captured: None,
             prepared: None,
             saved: None,
             storage: None,
             published: None,
-            local: None,
             local_error: None,
             locally_settled: false,
             namespace: None,
@@ -168,7 +158,6 @@ impl CommitError {
             ),
             Self::History(error) => error.unknown(),
             Self::Owner(error) => owner_uncertain(error),
-            Self::JobReceipt(done) => done.result().as_ref().err().is_none_or(owner_uncertain),
             Self::Workspace(WorkspaceError::BindingPoisoned) => true,
             Self::Workspace(WorkspaceError::Service(_)) => true,
             Self::Workspace(WorkspaceError::Overlay(
@@ -200,11 +189,21 @@ impl From<WorkspaceError> for CommitError {
 pub(crate) fn owner_uncertain(error: &OwnerError) -> bool {
     match error {
         OwnerError::Unattempted { .. } => false,
+        OwnerError::Attempted(failure) => owner_uncertain(&failure.cause),
+        OwnerError::Retained(cause) => owner_uncertain(cause),
         OwnerError::Overlay(
             layerfs_overlay::OverlayError::Uncertain { .. }
             | layerfs_overlay::OverlayError::Quarantined,
         ) => true,
         OwnerError::WorkspacePanicked(_) => true,
+        OwnerError::Workspace(error) | OwnerError::Install { cause: error, .. } => matches!(
+            error.as_ref(),
+            WorkspaceError::Overlay(
+                layerfs_overlay::OverlayError::Uncertain { .. }
+                    | layerfs_overlay::OverlayError::Quarantined
+            ) | WorkspaceError::BindingPoisoned
+                | WorkspaceError::Service(_)
+        ),
         _ => false,
     }
 }

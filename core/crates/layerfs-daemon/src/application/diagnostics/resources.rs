@@ -1,6 +1,6 @@
 //! One original route-free Resources job, explicitly charged to observation.
 use super::Records;
-use crate::{JobReceipt, OwnerClient, OwnerError, Response};
+use crate::{OwnerClient, OwnerError};
 use std::{
     fmt,
     io::{self, Write},
@@ -19,7 +19,7 @@ pub enum ResourceFailure {
     /// The original operation was refused before any observer attempt.
     BeforeEffect(OwnerError),
     /// The exact attempted result and its statement/allocation work.
-    Result(JobReceipt),
+    Result(OwnerError),
 }
 /// Existing diagnostic I/O custody carries both independent original failures.
 /// The mutex owns only this fixed failure carrier; it adds no service state.
@@ -80,51 +80,47 @@ struct Work {
     lock_wait_ns: u64,
     hold_ns: u64,
 }
-impl ResourceObservation {
-    /// Attempts one existing route-free global Resources job through an operator
-    /// owner. It waits only for that original attempted completion, never retries,
-    /// and retains exact admission, completion or execution failure.
-    pub fn acquire(owner: &OwnerClient) -> Self {
-        let completion = match owner.resources(None, true) {
-            Ok(done) => done,
-            Err(cause) => {
-                return Self {
-                    resources: None,
-                    attempted: false,
-                    work: None,
-                    failure: Some(ResourceFailure::BeforeEffect(cause)),
-                }
-            }
-        };
-        let resources = if let Ok(Response::Resources(resources)) = completion.result() {
-            Some(**resources)
-        } else {
-            // The exact result remains inside JobReceipt below, not an erased error.
-            None
-        };
-        let work = completion.work();
-        let work = Work {
+impl From<&crate::JobWork> for Work {
+    fn from(work: &crate::JobWork) -> Self {
+        Self {
             jobs: work.jobs,
             sql: work.sql.total(),
             payload: work.payload,
             allocation: work.allocation,
             lock_wait_ns: work.lock_wait_ns,
             hold_ns: work.hold_ns,
-        };
-        // Copies are fixed schemas in the existing attempted observation window.
-        // Successful caller backing custody is dropped; failure retains the exact original
-        // completion and its charge for existing diagnostic-failure custody. The
-        // caller retains only the owned direct result.
-        let failure = if resources.is_some() {
-            drop(completion);
-            None
-        } else {
-            Some(ResourceFailure::Result(completion))
+        }
+    }
+}
+impl ResourceObservation {
+    /// Attempts one existing route-free global Resources job through an operator
+    /// owner. It waits only for that original attempted completion, never retries,
+    /// and retains exact admission, completion or execution failure.
+    pub fn acquire(owner: &OwnerClient) -> Self {
+        let (resources, observed, failure) = match owner.resources_observed(None, true) {
+            Ok((value, work)) => (Some(value), Some(work), None),
+            Err(cause) => {
+                let work = match &cause {
+                    OwnerError::Attempted(failure) => Some(&failure.work),
+                    _ => None,
+                };
+                let work = work.map(Work::from);
+                return Self {
+                    resources: None,
+                    attempted: work.is_some(),
+                    work,
+                    failure: Some(if matches!(cause, OwnerError::Attempted(_)) {
+                        ResourceFailure::Result(cause)
+                    } else {
+                        ResourceFailure::BeforeEffect(cause)
+                    }),
+                };
+            }
         };
         Self {
             resources,
             attempted: true,
-            work: Some(work),
+            work: observed.as_ref().map(Work::from),
             failure,
         }
     }
