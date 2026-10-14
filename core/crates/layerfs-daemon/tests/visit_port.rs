@@ -104,10 +104,10 @@ fn finish(
     route: layerfs_overlay::Route,
     command: impl FnOnce(
         &layerfs_daemon::OwnerClient,
-        Option<layerfs_overlay::Route>,
+        layerfs_overlay::Route,
     ) -> Result<layerfs_daemon::JobReceipt, layerfs_daemon::OwnerError>,
 ) -> JobReceipt {
-    command(client, Some(route)).unwrap_or_else(|error| panic!("{error:?}"))
+    command(client, route).unwrap_or_else(|error| panic!("{error:?}"))
 }
 
 /// Owner jobs completed per class, jobs admitted, and Store reader grants.
@@ -255,7 +255,7 @@ impl Rig {
             &self.client,
             route,
             |job_client: &layerfs_daemon::OwnerClient, job_route| {
-                job_client.resources(job_route, false)
+                job_client.resources(Some(job_route), false)
             },
         );
         let sources = match done.result() {
@@ -515,7 +515,7 @@ fn the_last_reply_attempt_wakes_capture_without_a_settling_job() {
     let unparked = rig.client.diagnostics().unwrap();
     let capture = {
         let client = rig.client.clone();
-        std::thread::spawn(move || client.capture(Some(route)))
+        std::thread::spawn(move || client.capture(route))
     };
     until("capture waits behind the tickets", || {
         // The check reads the remembered Workspace row and the tickets in

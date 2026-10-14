@@ -733,18 +733,14 @@ impl Case {
         let route = operation.workspace().route();
         let overlay = operation.overlay();
         let reader = match overlay
-            .retained_captured_reader(Some(route), request)
+            .retained_captured_reader(route, request)
             .unwrap()
             .result()
         {
             Ok(Response::CapturedReader(kept)) => *kept,
             other => panic!("{other:?}"),
         };
-        let owner = match overlay
-            .retained_operation(Some(route), request)
-            .unwrap()
-            .result()
-        {
+        let owner = match overlay.retained_operation(route, request).unwrap().result() {
             Ok(Response::Operation(kept)) => *kept,
             other => panic!("{other:?}"),
         };

@@ -253,10 +253,10 @@ impl Service {
         route: layerfs_overlay::Route,
         command: impl FnOnce(
                 &crate::OwnerClient,
-                Option<layerfs_overlay::Route>,
+                layerfs_overlay::Route,
             ) -> Result<crate::JobReceipt, crate::OwnerError>
             + Send,
     ) -> Result<crate::JobReceipt, Failure> {
-        command(&self.owner, Some(route)).map_err(Failure::Owner)
+        command(&self.owner, route).map_err(Failure::Owner)
     }
 }

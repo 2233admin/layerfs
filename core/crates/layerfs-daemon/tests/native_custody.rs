@@ -249,7 +249,7 @@ fn an_unmount_that_cannot_revoke_stops_retained_and_later_replies_repeat_it() {
         .is_ok());
     // Nothing settles by itself: no hidden retry runs, and the Workspace
     // still answers with its original failure.
-    let again = h.owner.client().native_retained_mount(Some(route));
+    let again = h.owner.client().native_retained_mount(route);
     assert!(
         matches!(&again, Err(OwnerError::Unattempted { cause, .. })
             if matches!(**cause, OwnerError::Retained(_))),

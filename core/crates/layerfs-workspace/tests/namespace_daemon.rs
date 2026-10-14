@@ -127,12 +127,11 @@ impl Service {
         &self,
         command: impl FnOnce(
             &layerfs_daemon::OwnerClient,
-            Option<layerfs_overlay::Route>,
+            layerfs_overlay::Route,
         ) -> Result<layerfs_daemon::JobReceipt, layerfs_daemon::OwnerError>,
         read: impl FnOnce(&Response) -> T,
     ) -> T {
-        let done =
-            command(&self.client, Some(self.route)).unwrap_or_else(|error| panic!("{error:?}"));
+        let done = command(&self.client, self.route).unwrap_or_else(|error| panic!("{error:?}"));
         match done.result() {
             Ok(response) => read(response),
             Err(error) => panic!("{error:?}"),

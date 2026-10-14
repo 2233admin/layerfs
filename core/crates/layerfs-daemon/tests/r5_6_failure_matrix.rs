@@ -441,11 +441,10 @@ fn job(
     route: Route,
     command: impl FnOnce(
         &layerfs_daemon::OwnerClient,
-        Option<layerfs_overlay::Route>,
+        layerfs_overlay::Route,
     ) -> Result<layerfs_daemon::JobReceipt, layerfs_daemon::OwnerError>,
 ) -> Result<JobReceipt, String> {
-    command(&fx.harness.owner.client(), Some(route))
-        .map_err(|error| format!("unattempted: {error:?}"))
+    command(&fx.harness.owner.client(), route).map_err(|error| format!("unattempted: {error:?}"))
 }
 /// What the engine itself holds for one request: the two public `Retained*`
 /// owner jobs, each asked once.

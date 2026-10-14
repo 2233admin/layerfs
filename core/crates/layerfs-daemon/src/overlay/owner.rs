@@ -212,27 +212,23 @@ impl OwnerClient {
         action: F,
     ) -> Result<JobReceipt, OwnerError>
     where
-        F: FnOnce(&Overlay, Option<Route>) -> layerfs_overlay::OverlayResult<Response>
-            + Send
-            + 'static,
+        F: FnOnce(&Overlay, Route) -> layerfs_overlay::OverlayResult<Response> + Send + 'static,
     {
-        self.overlay_job(Some(route), class, None, action)
+        self.overlay_job(route, class, None, action)
     }
     /// One short operation; the closure performs at most one transaction and
     /// does no provider I/O. Before-effect failure retains the original input.
     pub(crate) fn overlay_job<F>(
         &self,
-        route: Option<Route>,
+        route: Route,
         class: ServiceClass,
         ready: Option<Readiness>,
         action: F,
     ) -> Result<JobReceipt, OwnerError>
     where
-        F: FnOnce(&Overlay, Option<Route>) -> layerfs_overlay::OverlayResult<Response>
-            + Send
-            + 'static,
+        F: FnOnce(&Overlay, Route) -> layerfs_overlay::OverlayResult<Response> + Send + 'static,
     {
-        self.owner_job(route, class, ready, move |db, route| {
+        self.owner_job(Some(route), class, ready, move |db, _| {
             action(db, route).map_err(OwnerError::Overlay)
         })
     }

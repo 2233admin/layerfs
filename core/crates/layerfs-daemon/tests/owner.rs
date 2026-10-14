@@ -27,8 +27,8 @@ impl Drop for Temp {
 type Done = Result<JobReceipt, OwnerError>;
 fn submit(
     client: &OwnerClient,
-    route: Option<Route>,
-    command: impl FnOnce(&OwnerClient, Option<Route>) -> Done,
+    route: Route,
+    command: impl FnOnce(&OwnerClient, Route) -> Done,
 ) -> JobReceipt {
     command(client, route).unwrap_or_else(|error| panic!("refused before effect: {error:?}"))
 }
@@ -37,10 +37,10 @@ fn submit(
 fn spawn(
     client: &OwnerClient,
     route: Route,
-    command: impl FnOnce(&OwnerClient, Option<Route>) -> Done + Send + 'static,
+    command: impl FnOnce(&OwnerClient, Route) -> Done + Send + 'static,
 ) -> std::thread::JoinHandle<Done> {
     let client = client.clone();
-    std::thread::spawn(move || command(&client, Some(route)))
+    std::thread::spawn(move || command(&client, route))
 }
 /// Bounded wait until a waiting job of `class` recorded a readiness check
 /// after `from`, the class count observed before it was spawned.
@@ -67,9 +67,9 @@ fn joined(job: std::thread::JoinHandle<Done>) -> Done {
     job.join().unwrap()
 }
 fn open(client: &OwnerClient, tag: u8) -> Route {
-    let done = submit(client, None, |job_client: &OwnerClient, job_route| {
-        job_client.open(job_route, [tag; 32], [17; 32])
-    });
+    let done = client
+        .open(None, [tag; 32], [17; 32])
+        .unwrap_or_else(|error| panic!("refused before effect: {error:?}"));
     match done.result() {
         Ok(Response::Opened(route)) => *route,
         x => panic!("open: {x:?}"),
@@ -94,13 +94,13 @@ fn last_release_makes_the_file_disposable_without_a_terminal_row_sweep() {
         owner: 7,
         resource: 0,
     };
-    assert!(submit(
-        &client,
-        Some(target),
-        |job_client: &OwnerClient, job_route| job_client.acquire(job_route, lease)
-    )
-    .result()
-    .is_ok());
+    assert!(
+        submit(&client, target, |job_client: &OwnerClient, job_route| {
+            job_client.acquire(job_route, lease)
+        })
+        .result()
+        .is_ok()
+    );
     for serial in 1..=512 {
         let done = write(&client, target, serial);
         let p = match done.result() {
@@ -108,50 +108,46 @@ fn last_release_makes_the_file_disposable_without_a_terminal_row_sweep() {
             x => panic!("{x:?}"),
         };
         drop(done);
-        assert!(
-            submit(&client, Some(target), |job_client: &OwnerClient, _| {
-                job_client.reply_attempted(p)
-            })
-            .result()
-            .is_ok()
-        );
+        assert!(submit(&client, target, |job_client: &OwnerClient, _| {
+            job_client.reply_attempted(p)
+        })
+        .result()
+        .is_ok());
     }
-    assert!(submit(
-        &client,
-        Some(target),
-        |job_client: &OwnerClient, job_route| job_client.close(job_route)
-    )
-    .result()
-    .is_ok());
+    assert!(
+        submit(&client, target, |job_client: &OwnerClient, job_route| {
+            job_client.close(job_route)
+        })
+        .result()
+        .is_ok()
+    );
     assert!(matches!(
-        submit(
-            &client,
-            Some(target),
-            |job_client: &OwnerClient, job_route| job_client.cleanup_state(job_route)
-        )
+        submit(&client, target, |job_client: &OwnerClient, job_route| {
+            job_client.cleanup_state(job_route)
+        })
         .result(),
         Ok(Response::CleanupState(CleanupState::Held))
     ));
-    assert!(submit(
-        &client,
-        Some(target),
-        |job_client: &OwnerClient, job_route| job_client.release(job_route, lease)
-    )
-    .result()
-    .is_ok());
+    assert!(
+        submit(&client, target, |job_client: &OwnerClient, job_route| {
+            job_client.release(job_route, lease)
+        })
+        .result()
+        .is_ok()
+    );
     assert_eq!(cleanup_state(&client, target), CleanupState::Queued);
     let rows_before = client.diagnostics().unwrap().maintenance_rows;
     assert!(temp
         .0
         .join(format!("{}.sqlite", target.namespace()))
         .is_file());
-    assert!(submit(
-        &client,
-        Some(other),
-        |job_client: &OwnerClient, job_route| job_client.state(job_route)
-    )
-    .result()
-    .is_ok());
+    assert!(
+        submit(&client, other, |job_client: &OwnerClient, job_route| {
+            job_client.state(job_route)
+        })
+        .result()
+        .is_ok()
+    );
     assert_eq!(client.diagnostics().unwrap().maintenance_rows, rows_before);
     assert!(client.maintenance_failure().unwrap().is_none());
     owner.stop().unwrap();
@@ -175,19 +171,19 @@ fn terminal_close_does_no_row_maintenance_before_control_disposal() {
             x => panic!("{x:?}"),
         };
         drop(done);
-        assert!(submit(&client, Some(route), |job_client: &OwnerClient, _| {
+        assert!(submit(&client, route, |job_client: &OwnerClient, _| {
             job_client.reply_attempted(publication)
         })
         .result()
         .is_ok());
     }
-    assert!(submit(
-        &client,
-        Some(route),
-        |job_client: &OwnerClient, job_route| job_client.close(job_route)
-    )
-    .result()
-    .is_ok());
+    assert!(
+        submit(&client, route, |job_client: &OwnerClient, job_route| {
+            job_client.close(job_route)
+        })
+        .result()
+        .is_ok()
+    );
     assert_eq!(
         cleanup_state(&client, route),
         layerfs_overlay::CleanupState::Queued
@@ -232,11 +228,9 @@ fn failed_capture_waits_for_readers_while_later_writes_and_idle_composition_prog
         let done = write(&client, route, serial);
         reply(&client, publication(&done));
     }
-    let done = submit(
-        &client,
-        Some(route),
-        |job_client: &OwnerClient, job_route| job_client.capture(job_route),
-    );
+    let done = submit(&client, route, |job_client: &OwnerClient, job_route| {
+        job_client.capture(job_route)
+    });
     let capture = match done.result() {
         Ok(Response::Captured(c)) => *c,
         x => panic!("{x:?}"),
@@ -247,20 +241,20 @@ fn failed_capture_waits_for_readers_while_later_writes_and_idle_composition_prog
         owner: 901,
         resource: capture.generation.number() as u64,
     };
-    assert!(submit(
-        &client,
-        Some(route),
-        |job_client: &OwnerClient, job_route| job_client.acquire(job_route, reader)
-    )
-    .result()
-    .is_ok());
-    assert!(submit(
-        &client,
-        Some(route),
-        |job_client: &OwnerClient, job_route| job_client.resolve_failed(job_route, capture)
-    )
-    .result()
-    .is_ok());
+    assert!(
+        submit(&client, route, |job_client: &OwnerClient, job_route| {
+            job_client.acquire(job_route, reader)
+        })
+        .result()
+        .is_ok()
+    );
+    assert!(
+        submit(&client, route, |job_client: &OwnerClient, job_route| {
+            job_client.resolve_failed(job_route, capture)
+        })
+        .result()
+        .is_ok()
+    );
     let checks = class_jobs(&client, layerfs_daemon::ServiceClass::Capture);
     let next = spawn(&client, route, |job_client, job_route| {
         job_client.capture(job_route)
@@ -268,21 +262,19 @@ fn failed_capture_waits_for_readers_while_later_writes_and_idle_composition_prog
     waits(&client, layerfs_daemon::ServiceClass::Capture, checks);
     // A next capture waits for composition, not behind a payload-sized mutation
     // fence. Later writes must finish while the lower reader remains owned.
-    let done = submit(
-        &client,
-        Some(route),
-        |job_client: &OwnerClient, job_route| job_client.publish(job_route, value(999), None, None),
-    );
+    let done = submit(&client, route, |job_client: &OwnerClient, job_route| {
+        job_client.publish(job_route, value(999), None, None)
+    });
     reply(&client, publication(&done));
     drop(done);
     assert!(!next.is_finished());
-    assert!(submit(
-        &client,
-        Some(route),
-        |job_client: &OwnerClient, job_route| job_client.release(job_route, reader)
-    )
-    .result()
-    .is_ok());
+    assert!(
+        submit(&client, route, |job_client: &OwnerClient, job_route| {
+            job_client.release(job_route, reader)
+        })
+        .result()
+        .is_ok()
+    );
     // No additional write/status/cleanup job triggers the composition.
     let done = joined(next).unwrap();
     let captured = match done.result() {
@@ -290,11 +282,9 @@ fn failed_capture_waits_for_readers_while_later_writes_and_idle_composition_prog
         x => panic!("{x:?}"),
     };
     drop(done);
-    let done = submit(
-        &client,
-        Some(route),
-        |job_client: &OwnerClient, job_route| job_client.captured_inodes(job_route, captured, 998),
-    );
+    let done = submit(&client, route, |job_client: &OwnerClient, job_route| {
+        job_client.captured_inodes(job_route, captured, 998)
+    });
     assert!(
         matches!(done.result(),Ok(Response::Inodes(rows)) if rows.len()==1 && rows[0].serial==999)
     );
@@ -307,13 +297,9 @@ fn failed_capture_waits_for_readers_while_later_writes_and_idle_composition_prog
     owner.stop().unwrap();
 }
 fn write(client: &OwnerClient, route: Route, serial: u64) -> JobReceipt {
-    submit(
-        client,
-        Some(route),
-        |job_client: &OwnerClient, job_route| {
-            job_client.publish(job_route, value(serial), None, None)
-        },
-    )
+    submit(client, route, |job_client: &OwnerClient, job_route| {
+        job_client.publish(job_route, value(serial), None, None)
+    })
 }
 fn publication(done: &JobReceipt) -> Publication {
     match done.result() {
@@ -322,7 +308,7 @@ fn publication(done: &JobReceipt) -> Publication {
     }
 }
 fn reply(client: &OwnerClient, p: Publication) {
-    let done = submit(client, Some(p.route()), |job_client: &OwnerClient, _| {
+    let done = submit(client, p.route(), |job_client: &OwnerClient, _| {
         job_client.reply_attempted(p)
     });
     assert!(matches!(done.result(), Ok(Response::Done)));
@@ -360,7 +346,7 @@ fn waiting_capture_allows_unrelated_progress_and_fences_later_mutations() {
         job_client.publish(job_route, value(3), None, None)
     });
     // Another Workspace remains runnable beside both.
-    let other = submit(&client, Some(b), |job_client: &OwnerClient, job_route| {
+    let other = submit(&client, b, |job_client: &OwnerClient, job_route| {
         job_client.state(job_route)
     });
     assert!(matches!(other.result(), Ok(Response::State(_))));
@@ -377,7 +363,7 @@ fn waiting_capture_allows_unrelated_progress_and_fences_later_mutations() {
     let later_publication = publication(&later);
     assert!(later_publication.generation.number() > c.generation.number());
     reply(&client, later_publication);
-    let page = submit(&client, Some(a), |job_client: &OwnerClient, job_route| {
+    let page = submit(&client, a, |job_client: &OwnerClient, job_route| {
         job_client.captured_inodes(job_route, c, 0)
     });
     assert!(matches!(page.result(),Ok(Response::Inodes(rows)) if rows==&vec![value(2)]));
@@ -411,7 +397,7 @@ fn stopping_cancels_unattempted_capture_and_fences_future_admission() {
         "{refused:?}"
     );
     assert!(matches!(
-        client.state(Some(a)),
+        client.state(a),
         Err(OwnerError::Unattempted { ref cause, .. }) if matches!(cause.as_ref(), OwnerError::Stopped)
     ));
     assert!(matches!(published.result(), Ok(Response::Published(_))));
@@ -434,7 +420,7 @@ fn dropped_receipts_keep_exact_backed_custody() {
     // or release its separate reply ticket.
     drop(submit(
         &client,
-        Some(route),
+        route,
         |job_client: &OwnerClient, job_route| {
             job_client.publish(
                 job_route,
@@ -453,11 +439,9 @@ fn dropped_receipts_keep_exact_backed_custody() {
             )
         },
     ));
-    let tickets = submit(
-        &client,
-        Some(route),
-        |job_client: &OwnerClient, job_route| job_client.pending_publications(job_route, 0),
-    );
+    let tickets = submit(&client, route, |job_client: &OwnerClient, job_route| {
+        job_client.pending_publications(job_route, 0)
+    });
     let p = match tickets.result() {
         Ok(Response::Publications(p)) if p.len() == 1 => p[0],
         x => panic!("{x:?}"),
@@ -469,14 +453,12 @@ fn dropped_receipts_keep_exact_backed_custody() {
     reply(&client, p);
     drop(submit(
         &client,
-        Some(route),
+        route,
         |job_client: &OwnerClient, job_route| job_client.capture(job_route),
     ));
-    let retained = submit(
-        &client,
-        Some(route),
-        |job_client: &OwnerClient, job_route| job_client.retained_capture(job_route),
-    );
+    let retained = submit(&client, route, |job_client: &OwnerClient, job_route| {
+        job_client.retained_capture(job_route)
+    });
     let capture = match retained.result() {
         Ok(Response::RetainedCapture(Some(c))) => *c,
         x => panic!("{x:?}"),
@@ -486,20 +468,14 @@ fn dropped_receipts_keep_exact_backed_custody() {
     let later = write(&client, route, 3);
     let later_p = publication(&later);
     drop(later);
-    let observed = submit(
-        &client,
-        Some(route),
-        |job_client: &OwnerClient, job_route| job_client.retained_capture(job_route),
-    );
+    let observed = submit(&client, route, |job_client: &OwnerClient, job_route| {
+        job_client.retained_capture(job_route)
+    });
     assert!(matches!(observed.result(),Ok(Response::RetainedCapture(Some(c))) if *c==capture));
     drop(observed);
-    let names = submit(
-        &client,
-        Some(route),
-        |job_client: &OwnerClient, job_route| {
-            job_client.captured_directory_entries(job_route, capture, None)
-        },
-    );
+    let names = submit(&client, route, |job_client: &OwnerClient, job_route| {
+        job_client.captured_directory_entries(job_route, capture, None)
+    });
     let after = match names.result() {
         Ok(Response::DirectoryEntries(rows)) => {
             assert_eq!(rows.len(), 1);
@@ -509,69 +485,57 @@ fn dropped_receipts_keep_exact_backed_custody() {
         x => panic!("{x:?}"),
     };
     drop(names);
-    let end = submit(
-        &client,
-        Some(route),
-        |job_client: &OwnerClient, job_route| {
-            job_client.captured_directory_entries(job_route, capture, after)
-        },
-    );
+    let end = submit(&client, route, |job_client: &OwnerClient, job_route| {
+        job_client.captured_directory_entries(job_route, capture, after)
+    });
     assert!(matches!(end.result(),Ok(Response::DirectoryEntries(rows)) if rows.is_empty()));
     drop(end);
-    let invalid = submit(
-        &client,
-        Some(route),
-        |job_client: &OwnerClient, job_route| {
-            job_client.captured_directory_entries(job_route, capture, Some((1, vec![1; 256])))
-        },
-    );
+    let invalid = submit(&client, route, |job_client: &OwnerClient, job_route| {
+        job_client.captured_directory_entries(job_route, capture, Some((1, vec![1; 256])))
+    });
     assert!(matches!(
         invalid.result(),
         Err(OwnerError::Overlay(OverlayError::Invalid(_)))
     ));
     drop(invalid);
-    let wrong_route = submit(
-        &client,
-        Some(other),
-        |job_client: &OwnerClient, job_route| job_client.captured_cell(job_route, capture, 2, 0),
-    );
+    let wrong_route = submit(&client, other, |job_client: &OwnerClient, job_route| {
+        job_client.captured_cell(job_route, capture, 2, 0)
+    });
     assert!(matches!(
         wrong_route.result(),
         Err(OwnerError::Overlay(OverlayError::Stale))
     ));
     drop(wrong_route);
-    assert!(submit(
-        &client,
-        Some(route),
-        |job_client: &OwnerClient, job_route| job_client.close(job_route)
-    )
-    .result()
-    .is_ok());
-    let bytes = submit(
-        &client,
-        Some(route),
-        |job_client: &OwnerClient, job_route| job_client.captured_cell(job_route, capture, 2, 0),
+    assert!(
+        submit(&client, route, |job_client: &OwnerClient, job_route| {
+            job_client.close(job_route)
+        })
+        .result()
+        .is_ok()
     );
+    let bytes = submit(&client, route, |job_client: &OwnerClient, job_route| {
+        job_client.captured_cell(job_route, capture, 2, 0)
+    });
     assert!(
         matches!(bytes.result(),Ok(Response::Cell(Some(cell))) if cell.data.iter().all(|b|*b==17))
     );
     drop(bytes);
-    assert!(submit(
-        &client,
-        Some(other),
-        |job_client: &OwnerClient, job_route| job_client.state(job_route)
-    )
-    .result()
-    .is_ok());
+    assert!(
+        submit(&client, other, |job_client: &OwnerClient, job_route| {
+            job_client.state(job_route)
+        })
+        .result()
+        .is_ok()
+    );
     // No upstream construction/Save/history was entered in this operation. The
     // consumer is fenced, so explicit release has a known local-only disposition.
-    assert!(submit(
-        &client,
-        Some(route),
-        |job_client: &OwnerClient, job_route| job_client.release_closed_capture(job_route, capture)
-    )
-    .result()
-    .is_ok());
+    assert!(
+        submit(&client, route, |job_client: &OwnerClient, job_route| {
+            job_client.release_closed_capture(job_route, capture)
+        })
+        .result()
+        .is_ok()
+    );
     reply(&client, later_p);
     assert!(client.maintenance_failure().unwrap().is_none());
     owner.stop().unwrap();
@@ -592,21 +556,17 @@ fn known_install_fences_later_sources_while_existing_reads_mutations_and_other_w
     let done = write(&client, route, 2);
     reply(&client, publication(&done));
     drop(done);
-    let captured = submit(
-        &client,
-        Some(route),
-        |job_client: &OwnerClient, job_route| job_client.capture(job_route),
-    );
+    let captured = submit(&client, route, |job_client: &OwnerClient, job_route| {
+        job_client.capture(job_route)
+    });
     let capture = match captured.result() {
         Ok(Response::Captured(c)) => *c,
         x => panic!("{x:?}"),
     };
     drop(captured);
-    let earlier = submit(
-        &client,
-        Some(route),
-        |job_client: &OwnerClient, job_route| job_client.acquire_base_source(job_route, 7),
-    );
+    let earlier = submit(&client, route, |job_client: &OwnerClient, job_route| {
+        job_client.acquire_base_source(job_route, 7)
+    });
     let source = match earlier.result() {
         Ok(Response::BaseSource(s)) => *s,
         x => panic!("{x:?}"),
@@ -626,31 +586,29 @@ fn known_install_fences_later_sources_while_existing_reads_mutations_and_other_w
         job_client.acquire_base_source(job_route, 8)
     });
     assert!(!install.is_finished() && !later.is_finished());
-    let read = submit(
-        &client,
-        Some(route),
-        |job_client: &OwnerClient, job_route| job_client.source_inode(job_route, source, 2),
-    );
+    let read = submit(&client, route, |job_client: &OwnerClient, job_route| {
+        job_client.source_inode(job_route, source, 2)
+    });
     assert!(matches!(read.result(),Ok(Response::Inode(Some(i))) if i.serial==2));
     drop(read);
     let mutation = write(&client, route, 3);
     let publication = publication(&mutation);
     drop(mutation);
     reply(&client, publication);
-    assert!(submit(
-        &client,
-        Some(other),
-        |job_client: &OwnerClient, job_route| job_client.state(job_route)
-    )
-    .result()
-    .is_ok());
-    assert!(submit(
-        &client,
-        Some(route),
-        |job_client: &OwnerClient, job_route| job_client.release_base_source(job_route, source)
-    )
-    .result()
-    .is_ok());
+    assert!(
+        submit(&client, other, |job_client: &OwnerClient, job_route| {
+            job_client.state(job_route)
+        })
+        .result()
+        .is_ok()
+    );
+    assert!(
+        submit(&client, route, |job_client: &OwnerClient, job_route| {
+            job_client.release_base_source(job_route, source)
+        })
+        .result()
+        .is_ok()
+    );
     assert!(joined(install).unwrap().result().is_ok());
     let later = joined(later).unwrap();
     let next = match later.result() {
@@ -659,18 +617,16 @@ fn known_install_fences_later_sources_while_existing_reads_mutations_and_other_w
     };
     drop(later);
     assert_eq!(next.root(), [77; 32]);
-    assert!(submit(
-        &client,
-        Some(route),
-        |job_client: &OwnerClient, job_route| job_client.release_base_source(job_route, next)
-    )
-    .result()
-    .is_ok());
-    let state = submit(
-        &client,
-        Some(route),
-        |job_client: &OwnerClient, job_route| job_client.state(job_route),
+    assert!(
+        submit(&client, route, |job_client: &OwnerClient, job_route| {
+            job_client.release_base_source(job_route, next)
+        })
+        .result()
+        .is_ok()
     );
+    let state = submit(&client, route, |job_client: &OwnerClient, job_route| {
+        job_client.state(job_route)
+    });
     assert!(
         matches!(state.result(),Ok(Response::State(s)) if s.base_readers==0&&s.base_root==[77;32])
     );
@@ -696,53 +652,49 @@ fn a_dropped_source_receipt_retains_the_backed_owner_and_terminal_release_makes_
     let route = open(&client, 132);
     drop(submit(
         &client,
-        Some(route),
+        route,
         |job_client: &OwnerClient, job_route| job_client.acquire_base_source(job_route, 19),
     ));
-    let retained = submit(
-        &client,
-        Some(route),
-        |job_client: &OwnerClient, job_route| job_client.retained_base_source(job_route, 19),
-    );
+    let retained = submit(&client, route, |job_client: &OwnerClient, job_route| {
+        job_client.retained_base_source(job_route, 19)
+    });
     let source = match retained.result() {
         Ok(Response::RetainedBaseSource(Some(s))) => *s,
         x => panic!("{x:?}"),
     };
     drop(retained);
-    assert!(submit(
-        &client,
-        Some(route),
-        |job_client: &OwnerClient, job_route| job_client.close(job_route)
-    )
-    .result()
-    .is_ok());
-    let state = submit(
-        &client,
-        Some(route),
-        |job_client: &OwnerClient, job_route| job_client.cleanup_state(job_route),
+    assert!(
+        submit(&client, route, |job_client: &OwnerClient, job_route| {
+            job_client.close(job_route)
+        })
+        .result()
+        .is_ok()
     );
+    let state = submit(&client, route, |job_client: &OwnerClient, job_route| {
+        job_client.cleanup_state(job_route)
+    });
     assert!(matches!(
         state.result(),
         Ok(Response::CleanupState(layerfs_overlay::CleanupState::Held))
     ));
     drop(state);
-    assert!(submit(
-        &client,
-        Some(route),
-        |job_client: &OwnerClient, job_route| job_client.release_base_source(job_route, source)
-    )
-    .result()
-    .is_ok());
+    assert!(
+        submit(&client, route, |job_client: &OwnerClient, job_route| {
+            job_client.release_base_source(job_route, source)
+        })
+        .result()
+        .is_ok()
+    );
     owner.stop().unwrap();
 }
 
 fn run(
     client: &OwnerClient,
     route: Route,
-    command: impl FnOnce(&OwnerClient, Option<Route>) -> Done,
+    command: impl FnOnce(&OwnerClient, Route) -> Done,
     what: &str,
 ) -> JobReceipt {
-    command(client, Some(route)).unwrap_or_else(|error| panic!("{what}: {error:?}"))
+    command(client, route).unwrap_or_else(|error| panic!("{what}: {error:?}"))
 }
 fn pending_publications(client: &OwnerClient, route: Route) -> Vec<Publication> {
     let done = run(
@@ -914,9 +866,9 @@ fn a_closed_workspace_becomes_disposable_after_its_last_reply_attempt() {
         .0
         .join(format!("{}.sqlite", route.namespace()))
         .is_file());
-    let resources = submit(&client, None, |job_client: &OwnerClient, job_route| {
-        job_client.resources(job_route, true)
-    });
+    let resources = client
+        .resources(None, true)
+        .unwrap_or_else(|error| panic!("refused before effect: {error:?}"));
     match resources.result() {
         Ok(Response::Resources(resources)) => {
             assert_eq!(resources.counts.namespaces, 1);
@@ -1045,7 +997,7 @@ fn concurrent_submitters_get_every_job_done_exactly_once_with_its_own_result() {
     // The owner stops cleanly and admits nothing afterwards.
     stop_bounded(owner);
     assert!(matches!(
-        client.state(Some(routes[0])),
+        client.state(routes[0]),
         Err(OwnerError::Unattempted { ref cause, .. }) if matches!(cause.as_ref(), OwnerError::Stopped)
     ));
 }

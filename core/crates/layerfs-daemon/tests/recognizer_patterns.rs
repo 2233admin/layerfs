@@ -80,7 +80,9 @@ fn counts(rig: &Rig, workspace: &BoundWorkspace) -> StoredCounts {
     match job(
         &rig.owner.client(),
         workspace.route(),
-        |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.resources(job_route, true),
+        |job_client: &layerfs_daemon::OwnerClient, job_route| {
+            job_client.resources(Some(job_route), true)
+        },
     )
     .result()
     {

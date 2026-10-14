@@ -5,21 +5,19 @@ use layerfs_overlay::{Cell, Inode, InodeKind, Lease, LeaseKind, ProfileConfig, R
 use std::{fs::OpenOptions, io::Write, path::PathBuf};
 fn run(
     client: &OwnerClient,
-    route: Option<Route>,
+    route: Route,
     command: impl FnOnce(
         &layerfs_daemon::OwnerClient,
-        Option<layerfs_overlay::Route>,
+        layerfs_overlay::Route,
     ) -> Result<layerfs_daemon::JobReceipt, layerfs_daemon::OwnerError>,
 ) -> JobReceipt {
     command(client, route).unwrap_or_else(|error| panic!("{error:?}"))
 }
 fn resources(client: &OwnerClient, _route: Route) -> layerfs_overlay::Resources {
-    match run(
-        client,
-        None,
-        |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.resources(job_route, true),
-    )
-    .result()
+    match client
+        .resources(None, true)
+        .unwrap_or_else(|error| panic!("{error:?}"))
+        .result()
     {
         Ok(Response::Resources(r)) => **r,
         x => panic!("{x:?}"),
@@ -36,14 +34,10 @@ fn real_owner_reclaims_at_device_full_after_last_owner_without_a_cleanup_job() {
     )
     .unwrap();
     let client = owner.client();
-    let open = |tag| match run(
-        &client,
-        None,
-        |job_client: &layerfs_daemon::OwnerClient, job_route| {
-            job_client.open(job_route, [tag; 32], [17; 32])
-        },
-    )
-    .result()
+    let open = |tag| match client
+        .open(None, [tag; 32], [17; 32])
+        .unwrap_or_else(|error| panic!("{error:?}"))
+        .result()
     {
         Ok(Response::Opened(r)) => *r,
         x => panic!("{x:?}"),
@@ -67,7 +61,7 @@ fn real_owner_reclaims_at_device_full_after_last_owner_without_a_cleanup_job() {
         inode.serial = serial;
         let done = run(
             &client,
-            Some(route),
+            route,
             |job_client: &layerfs_daemon::OwnerClient, job_route| {
                 job_client.publish(
                     job_route,
@@ -88,7 +82,7 @@ fn real_owner_reclaims_at_device_full_after_last_owner_without_a_cleanup_job() {
         drop(done);
         assert!(run(
             &client,
-            Some(route),
+            route,
             |job_client: &layerfs_daemon::OwnerClient, _| job_client.reply_attempted(p)
         )
         .result()
@@ -96,7 +90,7 @@ fn real_owner_reclaims_at_device_full_after_last_owner_without_a_cleanup_job() {
     }
     let capture = match run(
         &client,
-        Some(route),
+        route,
         |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.capture(job_route),
     )
     .result()
@@ -111,14 +105,14 @@ fn real_owner_reclaims_at_device_full_after_last_owner_without_a_cleanup_job() {
     };
     assert!(run(
         &client,
-        Some(route),
+        route,
         |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.acquire(job_route, lease)
     )
     .result()
     .is_ok());
     let other_state = match run(
         &client,
-        Some(other),
+        other,
         |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.state(job_route),
     )
     .result()
@@ -154,7 +148,7 @@ fn real_owner_reclaims_at_device_full_after_last_owner_without_a_cleanup_job() {
         let work = client.diagnostics().unwrap().sql_foreground;
         let done = run(
             &client,
-            Some(route),
+            route,
             |job_client: &layerfs_daemon::OwnerClient, job_route| {
                 job_client.publish(
                     job_route,
@@ -174,7 +168,7 @@ fn real_owner_reclaims_at_device_full_after_last_owner_without_a_cleanup_job() {
                 drop(done);
                 assert!(run(
                     &client,
-                    Some(route),
+                    route,
                     |job_client: &layerfs_daemon::OwnerClient, _| job_client.reply_attempted(p)
                 )
                 .result()
@@ -200,18 +194,18 @@ fn real_owner_reclaims_at_device_full_after_last_owner_without_a_cleanup_job() {
         before.counts.payload_cells + accepted
     );
     assert!(
-        matches!(run(&client,Some(route),|job_client: &layerfs_daemon::OwnerClient, job_route| job_client.retained_capture(job_route)).result(),Ok(Response::RetainedCapture(Some(c))) if *c==capture)
+        matches!(run(&client,route,|job_client: &layerfs_daemon::OwnerClient, job_route| job_client.retained_capture(job_route)).result(),Ok(Response::RetainedCapture(Some(c))) if *c==capture)
     );
     assert!(run(
         &client,
-        Some(route),
+        route,
         |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.close(job_route)
     )
     .result()
     .is_ok());
     assert!(run(
         &client,
-        Some(route),
+        route,
         |job_client: &layerfs_daemon::OwnerClient, job_route| job_client
             .release_closed_capture(job_route, capture)
     )
@@ -219,7 +213,7 @@ fn real_owner_reclaims_at_device_full_after_last_owner_without_a_cleanup_job() {
     .is_ok());
     assert!(run(
         &client,
-        Some(route),
+        route,
         |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.release(job_route, lease)
     )
     .result()
@@ -229,7 +223,7 @@ fn real_owner_reclaims_at_device_full_after_last_owner_without_a_cleanup_job() {
     assert!(matches!(
         run(
             &client,
-            Some(route),
+            route,
             |job_client: &layerfs_daemon::OwnerClient, job_route| job_client
                 .cleanup_state(job_route)
         )
@@ -243,7 +237,7 @@ fn real_owner_reclaims_at_device_full_after_last_owner_without_a_cleanup_job() {
     assert_eq!(after.counts.payload_cells, 128 + accepted);
     assert_eq!(after.allocation.reserved_tail_bytes, 0);
     assert!(
-        matches!(run(&client,Some(other),|job_client: &layerfs_daemon::OwnerClient, job_route| job_client.state(job_route)).result(),Ok(Response::State(s)) if *s==other_state)
+        matches!(run(&client,other,|job_client: &layerfs_daemon::OwnerClient, job_route| job_client.state(job_route)).result(),Ok(Response::State(s)) if *s==other_state)
     );
     println!("S6_OWNER_DEVICE fixture_filled={filled} accepted_distinct_windows={accepted} before={before:?} after={after:?} owner_work={:?} terminal_row_sweep=false ordinary_refusal=ENOSPC",client.diagnostics().unwrap());
     assert!(client.maintenance_failure().unwrap().is_none());

@@ -36,10 +36,10 @@ fn job(
     route: Route,
     command: impl FnOnce(
         &layerfs_daemon::OwnerClient,
-        Option<layerfs_overlay::Route>,
+        layerfs_overlay::Route,
     ) -> Result<layerfs_daemon::JobReceipt, layerfs_daemon::OwnerError>,
 ) -> JobReceipt {
-    command(owner, Some(route)).unwrap_or_else(|error| panic!("{error:?}"))
+    command(owner, route).unwrap_or_else(|error| panic!("{error:?}"))
 }
 fn bind(store: &Arc<Store>, owner: &Owner, f: &support::Fixture, tag: u8) -> Arc<BoundWorkspace> {
     Arc::new(

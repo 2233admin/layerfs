@@ -209,7 +209,7 @@ pub fn oracle(installed: &InstalledStore, overlay: &Path) {
         );
         assert!(operation.ports().failure().unwrap().is_none());
     }
-    let closed = owner.client().close(Some(bound.workspace.route())).unwrap();
+    let closed = owner.client().close(bound.workspace.route()).unwrap();
     assert!(matches!(closed.result(), Ok(Response::Done)));
     drop((closed, bound));
     owner.stop().unwrap();

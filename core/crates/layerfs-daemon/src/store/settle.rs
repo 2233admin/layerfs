@@ -10,11 +10,11 @@ impl BoundWorkspace {
         &self,
         command: impl FnOnce(
                 &crate::OwnerClient,
-                Option<layerfs_overlay::Route>,
+                layerfs_overlay::Route,
             ) -> Result<crate::JobReceipt, crate::OwnerError>
             + Send,
     ) -> Result<JobReceipt, OwnerError> {
-        command(&self.owner, Some(self.route()))
+        command(&self.owner, self.route())
     }
     pub(super) fn settle_failure(&self, mut failure: CommitFailure) -> Box<CommitFailure> {
         if failure.published.is_some() || failure.error.uncertain() {

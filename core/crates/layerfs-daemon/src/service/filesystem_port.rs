@@ -73,7 +73,7 @@ impl FilesystemPort {
         &self,
         command: impl FnOnce(
                 &crate::OwnerClient,
-                Option<layerfs_overlay::Route>,
+                layerfs_overlay::Route,
             ) -> Result<crate::JobReceipt, crate::OwnerError>
             + Send
             + 'static,
@@ -81,7 +81,7 @@ impl FilesystemPort {
     ) -> ServiceFuture<'_, JobReceipt> {
         Box::pin(async move {
             self.fenced(gated)?;
-            let pending = command(self.0.overlay(), Some(self.0.workspace().route()))
+            let pending = command(self.0.overlay(), self.0.workspace().route())
                 .map_err(|cause| Box::new(cause) as ServiceError)?;
             Ok(pending)
         })
@@ -90,7 +90,7 @@ impl FilesystemPort {
         &self,
         command: impl FnOnce(
                 &crate::OwnerClient,
-                Option<layerfs_overlay::Route>,
+                layerfs_overlay::Route,
             ) -> Result<crate::JobReceipt, crate::OwnerError>
             + Send
             + 'static,
@@ -152,7 +152,7 @@ impl FilesystemPort {
         &self,
         command: impl FnOnce(
                 &crate::OwnerClient,
-                Option<layerfs_overlay::Route>,
+                layerfs_overlay::Route,
             ) -> Result<crate::JobReceipt, crate::OwnerError>
             + Send
             + 'static,
@@ -165,7 +165,7 @@ impl FilesystemPort {
         &self,
         command: impl FnOnce(
                 &crate::OwnerClient,
-                Option<layerfs_overlay::Route>,
+                layerfs_overlay::Route,
             ) -> Result<crate::JobReceipt, crate::OwnerError>
             + Send
             + 'static,

@@ -7,17 +7,13 @@ use layerfs_workspace::{
 };
 use std::sync::Arc;
 impl OwnerClient {
-    pub fn native_mount(&self, route: Option<Route>, root: u64) -> Result<JobReceipt, OwnerError> {
+    pub fn native_mount(&self, route: Route, root: u64) -> Result<JobReceipt, OwnerError> {
         self.overlay_job(route, ServiceClass::Lifecycle, None, move |db, route| {
-            let route = route.ok_or(OverlayError::Invalid("missing route"))?;
-
             (db.create_native_mount(route, root).map(NativeReply::Mount)).map(Response::Native)
         })
     }
-    pub fn native_retained_mount(&self, route: Option<Route>) -> Result<JobReceipt, OwnerError> {
+    pub fn native_retained_mount(&self, route: Route) -> Result<JobReceipt, OwnerError> {
         self.overlay_job(route, ServiceClass::Lifecycle, None, move |db, route| {
-            let route = route.ok_or(OverlayError::Invalid("missing route"))?;
-
             (db.retained_native_mount(route)
                 .map(NativeReply::RetainedMount))
             .map(Response::Native)
@@ -25,12 +21,11 @@ impl OwnerClient {
     }
     pub fn native_retained_file(
         &self,
-        route: Option<Route>,
+        route: Route,
         mount: NativeMount,
         request: u64,
     ) -> Result<JobReceipt, OwnerError> {
         self.overlay_job(route, ServiceClass::Lifecycle, None, move |db, route| {
-            let route = route.ok_or(OverlayError::Invalid("missing route"))?;
             if mount.route() != route {
                 return Err(OverlayError::Stale);
             }
@@ -41,13 +36,12 @@ impl OwnerClient {
     }
     pub fn native_file(
         &self,
-        route: Option<Route>,
+        route: Route,
         mount: NativeMount,
         serial: u64,
         handle: u64,
     ) -> Result<JobReceipt, OwnerError> {
         self.overlay_job(route, ServiceClass::Lifecycle, None, move |db, route| {
-            let route = route.ok_or(OverlayError::Invalid("missing route"))?;
             if mount.route() != route {
                 return Err(OverlayError::Stale);
             }
@@ -56,13 +50,12 @@ impl OwnerClient {
     }
     pub fn native_close_file(
         &self,
-        route: Option<Route>,
+        route: Route,
         mount: NativeMount,
         serial: u64,
         handle: u64,
     ) -> Result<JobReceipt, OwnerError> {
         self.overlay_job(route, ServiceClass::Lifecycle, None, move |db, route| {
-            let route = route.ok_or(OverlayError::Invalid("missing route"))?;
             if mount.route() != route {
                 return Err(OverlayError::Stale);
             }
@@ -73,11 +66,10 @@ impl OwnerClient {
     }
     pub fn native_observe_visit(
         &self,
-        route: Option<Route>,
+        route: Route,
         job: Box<NativeReadVisit>,
     ) -> Result<JobReceipt, OwnerError> {
         self.overlay_job(route, ServiceClass::Read, None, move |db, route| {
-            let route = route.ok_or(OverlayError::Invalid("missing route"))?;
             if job.mount().route() != route {
                 return Err(OverlayError::Stale);
             }
@@ -88,11 +80,10 @@ impl OwnerClient {
     }
     pub fn native_read_visit(
         &self,
-        route: Option<Route>,
+        route: Route,
         job: Box<NativeDataVisit>,
     ) -> Result<JobReceipt, OwnerError> {
         self.overlay_job(route, ServiceClass::Read, None, move |db, route| {
-            let route = route.ok_or(OverlayError::Invalid("missing route"))?;
             if job.mount().route() != route {
                 return Err(OverlayError::Stale);
             }
@@ -103,11 +94,10 @@ impl OwnerClient {
     }
     pub fn native_mutate_visit(
         &self,
-        route: Option<Route>,
+        route: Route,
         job: Box<NativeMutationVisit>,
     ) -> Result<JobReceipt, OwnerError> {
         self.overlay_job(route, ServiceClass::Mutation, None, move |db, route| {
-            let route = route.ok_or(OverlayError::Invalid("missing route"))?;
             if job.mount().route() != route {
                 return Err(OverlayError::Stale);
             }
@@ -118,13 +108,12 @@ impl OwnerClient {
     }
     pub fn native_forget(
         &self,
-        route: Option<Route>,
+        route: Route,
         mount: NativeMount,
         serial: u64,
         count: u64,
     ) -> Result<JobReceipt, OwnerError> {
         self.overlay_job(route, ServiceClass::Lifecycle, None, move |db, route| {
-            let route = route.ok_or(OverlayError::Invalid("missing route"))?;
             if mount.route() != route {
                 return Err(OverlayError::Stale);
             }
@@ -133,13 +122,8 @@ impl OwnerClient {
             .map(Response::Native)
         })
     }
-    pub fn native_state(
-        &self,
-        route: Option<Route>,
-        mount: NativeMount,
-    ) -> Result<JobReceipt, OwnerError> {
+    pub fn native_state(&self, route: Route, mount: NativeMount) -> Result<JobReceipt, OwnerError> {
         self.overlay_job(route, ServiceClass::Lifecycle, None, move |db, route| {
-            let route = route.ok_or(OverlayError::Invalid("missing route"))?;
             if mount.route() != route {
                 return Err(OverlayError::Stale);
             }
@@ -148,11 +132,10 @@ impl OwnerClient {
     }
     pub fn native_revoke(
         &self,
-        route: Option<Route>,
+        route: Route,
         mount: NativeMount,
     ) -> Result<JobReceipt, OwnerError> {
         self.overlay_job(route, ServiceClass::Lifecycle, None, move |db, route| {
-            let route = route.ok_or(OverlayError::Invalid("missing route"))?;
             if mount.route() != route {
                 return Err(OverlayError::Stale);
             }
@@ -161,11 +144,10 @@ impl OwnerClient {
     }
     pub fn native_directory_visit(
         &self,
-        route: Option<Route>,
+        route: Route,
         visit: NativeDirectoryVisit,
     ) -> Result<JobReceipt, OwnerError> {
         self.overlay_job(route, ServiceClass::Read, None, move |db, route| {
-            let route = route.ok_or(OverlayError::Invalid("missing route"))?;
             if visit.mount().route() != route {
                 return Err(OverlayError::Stale);
             }
@@ -177,12 +159,11 @@ impl OwnerClient {
     }
     pub fn native_directory_publish(
         &self,
-        route: Option<Route>,
+        route: Route,
         offer: NativeCookieOffer,
         names: Vec<Vec<u8>>,
     ) -> Result<JobReceipt, OwnerError> {
         self.overlay_job(route, ServiceClass::Read, None, move |db, route| {
-            let route = route.ok_or(OverlayError::Invalid("missing route"))?;
             if offer.directory().mount().route() != route {
                 return Err(OverlayError::Stale);
             }
@@ -193,13 +174,12 @@ impl OwnerClient {
     }
     pub fn native_directory_close(
         &self,
-        route: Option<Route>,
+        route: Route,
         mount: NativeMount,
         serial: u64,
         handle: u64,
     ) -> Result<JobReceipt, OwnerError> {
         self.overlay_job(route, ServiceClass::Lifecycle, None, move |db, route| {
-            let route = route.ok_or(OverlayError::Invalid("missing route"))?;
             if mount.route() != route {
                 return Err(OverlayError::Stale);
             }

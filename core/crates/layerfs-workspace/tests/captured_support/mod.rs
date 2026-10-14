@@ -98,13 +98,9 @@ impl Case {
         )
         .unwrap();
         let client = owner.client();
-        let opened = job(
-            &client,
-            None,
-            |job_client: &layerfs_daemon::OwnerClient, job_route| {
-                job_client.open(job_route, [91; 32], f.root.0.to_bytes())
-            },
-        );
+        let opened = client
+            .open(None, [91; 32], f.root.0.to_bytes())
+            .unwrap_or_else(|error| panic!("{error:?}"));
         let route = match opened.result() {
             Ok(Response::Opened(route)) => *route,
             other => panic!("{other:?}"),
@@ -132,10 +128,10 @@ impl Case {
         &self,
         command: impl FnOnce(
             &layerfs_daemon::OwnerClient,
-            Option<layerfs_overlay::Route>,
+            layerfs_overlay::Route,
         ) -> Result<layerfs_daemon::JobReceipt, layerfs_daemon::OwnerError>,
     ) -> JobReceipt {
-        job(&self.client, Some(self.route), command)
+        job(&self.client, self.route, command)
     }
     pub fn mutate(&self, operation: Operation) -> Option<layerfs_workspace::ViewStat> {
         let acquired = self.job(|job_client: &layerfs_daemon::OwnerClient, job_route| {
@@ -295,10 +291,10 @@ impl Drop for Case {
 }
 pub fn job(
     client: &OwnerClient,
-    route: Option<Route>,
+    route: Route,
     command: impl FnOnce(
         &layerfs_daemon::OwnerClient,
-        Option<layerfs_overlay::Route>,
+        layerfs_overlay::Route,
     ) -> Result<layerfs_daemon::JobReceipt, layerfs_daemon::OwnerError>,
 ) -> JobReceipt {
     command(client, route).unwrap_or_else(|error| panic!("{error:?}"))

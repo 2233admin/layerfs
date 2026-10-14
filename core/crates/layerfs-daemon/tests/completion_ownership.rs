@@ -16,8 +16,8 @@ use std::{
 /// Most statement families one Lifecycle job runs.
 const LIFECYCLE_FAMILIES: usize = 7;
 type Done = Result<JobReceipt, OwnerError>;
-type Job = Box<dyn FnOnce(&OwnerClient, Option<Route>) -> Done>;
-fn job(action: impl FnOnce(&OwnerClient, Option<Route>) -> Done + 'static) -> Job {
+type Job = Box<dyn FnOnce(&OwnerClient, Route) -> Done>;
+fn job(action: impl FnOnce(&OwnerClient, Route) -> Done + 'static) -> Job {
     Box::new(action)
 }
 
@@ -49,8 +49,8 @@ fn start(temp: &Temp) -> Owner {
 }
 fn submit(
     client: &OwnerClient,
-    route: Option<Route>,
-    command: impl FnOnce(&OwnerClient, Option<Route>) -> Done,
+    route: Route,
+    command: impl FnOnce(&OwnerClient, Route) -> Done,
 ) -> JobReceipt {
     command(client, route).unwrap_or_else(|error| panic!("job: {error:?}"))
 }
@@ -161,9 +161,9 @@ impl Ledger {
         name: &str,
         lifecycle: bool,
         route: Route,
-        command: impl FnOnce(&OwnerClient, Option<Route>) -> Done,
+        command: impl FnOnce(&OwnerClient, Route) -> Done,
     ) -> JobReceipt {
-        let done = submit(&self.client, Some(route), command);
+        let done = submit(&self.client, route, command);
         self.take(name, lifecycle, &done);
         self.reconcile();
         done
@@ -176,13 +176,9 @@ fn original_family_receipts_equal_the_foreground_aggregate_on_every_path() {
     let owner = start(&temp);
     let client = owner.client();
     let mut ledger = Ledger::new(&client);
-    let opened = submit(
-        &client,
-        None,
-        |job_client: &layerfs_daemon::OwnerClient, job_route| {
-            job_client.open(job_route, [31; 32], [32; 32])
-        },
-    );
+    let opened = client
+        .open(None, [31; 32], [32; 32])
+        .unwrap_or_else(|error| panic!("{error:?}"));
     ledger.take("Open", true, &opened);
     ledger.reconcile();
     let route = match opened.result() {
@@ -503,7 +499,7 @@ fn original_family_receipts_equal_the_foreground_aggregate_on_every_path() {
     // counted foreground jobs before its receipt exists, so reconcile afterwards.
     let pending_reply = submit(
         &client,
-        Some(route),
+        route,
         |job_client: &layerfs_daemon::OwnerClient, job_route| {
             job_client.publish(job_route, value(3), None, None)
         },
@@ -516,19 +512,17 @@ fn original_family_receipts_equal_the_foreground_aggregate_on_every_path() {
     let checks = client.diagnostics().unwrap().jobs[ServiceClass::Capture as usize];
     let capture = {
         let client = client.clone();
-        std::thread::spawn(move || client.capture(Some(route)))
+        std::thread::spawn(move || client.capture(route))
     };
     counted(&client, ServiceClass::Capture, checks);
-    let state = submit(
-        &client,
-        Some(route),
-        |job_client: &OwnerClient, job_route| job_client.state(job_route),
-    );
+    let state = submit(&client, route, |job_client: &OwnerClient, job_route| {
+        job_client.state(job_route)
+    });
     ledger.take("State", true, &state);
     assert!(!capture.is_finished());
     let replied = submit(
         &client,
-        Some(route),
+        route,
         |job_client: &layerfs_daemon::OwnerClient, _| job_client.reply_attempted(ticket),
     );
     ledger.take("ReplyAttempted", true, &replied);
@@ -585,7 +579,7 @@ fn original_family_receipts_equal_the_foreground_aggregate_on_every_path() {
         .is_ok());
     let next = submit(
         &client,
-        Some(route),
+        route,
         |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.capture(job_route),
     );
     ledger.take("Capture", false, &next);

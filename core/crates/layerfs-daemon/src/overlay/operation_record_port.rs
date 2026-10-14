@@ -20,7 +20,7 @@ fn original_job(
     let command = |job_client: &crate::OwnerClient, route| {
         job_client.indexed_operation_record(route, Box::new(job))
     };
-    let pending = command(client, Some(scope.owner.route()))
+    let pending = command(client, scope.owner.route())
         .map_err(|cause| WorkspaceError::Service(Box::new(cause)))?;
     Ok(pending)
 }

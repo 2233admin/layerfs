@@ -36,22 +36,18 @@ impl Drop for Temp {
 }
 fn job(
     client: &OwnerClient,
-    route: Option<Route>,
+    route: Route,
     command: impl FnOnce(
         &layerfs_daemon::OwnerClient,
-        Option<layerfs_overlay::Route>,
+        layerfs_overlay::Route,
     ) -> Result<layerfs_daemon::JobReceipt, layerfs_daemon::OwnerError>,
 ) -> JobReceipt {
     command(client, route).unwrap_or_else(|error| panic!("{error:?}"))
 }
 fn scope(client: &OwnerClient, tag: u8, file_scope: u64) -> IndexedOperationRecordScope {
-    let opened = job(
-        client,
-        None,
-        |job_client: &layerfs_daemon::OwnerClient, job_route| {
-            job_client.open(job_route, [tag; 32], [3; 32])
-        },
-    );
+    let opened = client
+        .open(None, [tag; 32], [3; 32])
+        .unwrap_or_else(|error| panic!("{error:?}"));
     let route = match opened.result() {
         Ok(Response::Opened(route)) => *route,
         v => panic!("{v:?}"),
@@ -59,7 +55,7 @@ fn scope(client: &OwnerClient, tag: u8, file_scope: u64) -> IndexedOperationReco
     drop(opened);
     let acquired = job(
         client,
-        Some(route),
+        route,
         |job_client: &layerfs_daemon::OwnerClient, job_route| {
             job_client.acquire_operation(job_route, 1)
         },
@@ -85,7 +81,7 @@ fn put(key: EditRecordKey, value: Vec<u8>) -> EditRecordChange {
 fn release(client: &OwnerClient, scope: IndexedOperationRecordScope) {
     let done = job(
         client,
-        Some(scope.owner.route()),
+        scope.owner.route(),
         |job_client: &layerfs_daemon::OwnerClient, job_route| {
             job_client.release_operation(job_route, scope.owner)
         },
@@ -315,9 +311,9 @@ fn canonical_file_edit_uses_real_owner_records_and_explicit_last_owner_cleanup()
     drop(custody);
     let before = job(
         &client,
-        Some(scope.owner.route()),
+        scope.owner.route(),
         |job_client: &layerfs_daemon::OwnerClient, job_route| {
-            job_client.resources(job_route, false)
+            job_client.resources(Some(job_route), false)
         },
     );
     match before.result() {
@@ -333,9 +329,9 @@ fn canonical_file_edit_uses_real_owner_records_and_explicit_last_owner_cleanup()
     loop {
         let done = job(
             &client,
-            Some(scope.owner.route()),
+            scope.owner.route(),
             |job_client: &layerfs_daemon::OwnerClient, job_route| {
-                job_client.resources(job_route, false)
+                job_client.resources(Some(job_route), false)
             },
         );
         let work = match done.result() {

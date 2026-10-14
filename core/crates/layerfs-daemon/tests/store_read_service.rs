@@ -498,7 +498,7 @@ fn bind_reads_snapshot_while_the_original_writer_session_is_occupied() {
     assert!(held.join().unwrap().is_ok());
     assert!(owner
         .client()
-        .close(Some(bound.workspace.route()))
+        .close(bound.workspace.route())
         .unwrap()
         .result()
         .is_ok());

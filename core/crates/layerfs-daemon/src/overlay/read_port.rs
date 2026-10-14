@@ -14,11 +14,11 @@ impl OwnerClient {
         source: BaseSource,
         command: impl FnOnce(
                 &crate::OwnerClient,
-                Option<layerfs_overlay::Route>,
+                layerfs_overlay::Route,
             ) -> Result<crate::JobReceipt, crate::OwnerError>
             + Send,
     ) -> Result<crate::JobReceipt, WorkspaceError> {
-        command(self, Some(source.route())).map_err(error)
+        command(self, source.route()).map_err(error)
     }
 }
 impl OverlayRead for OwnerClient {

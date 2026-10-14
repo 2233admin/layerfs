@@ -21,22 +21,18 @@ const FILES: u64 = 100;
 
 fn job(
     client: &OwnerClient,
-    route: Option<layerfs_overlay::Route>,
+    route: layerfs_overlay::Route,
     command: impl FnOnce(
         &layerfs_daemon::OwnerClient,
-        Option<layerfs_overlay::Route>,
+        layerfs_overlay::Route,
     ) -> Result<layerfs_daemon::JobReceipt, layerfs_daemon::OwnerError>,
 ) -> JobReceipt {
     command(client, route).unwrap_or_else(|error| panic!("{error:?}"))
 }
 fn scope(client: &OwnerClient, tag: u8) -> IndexedOperationRecordScope {
-    let opened = job(
-        client,
-        None,
-        |job_client: &layerfs_daemon::OwnerClient, job_route| {
-            job_client.open(job_route, [tag; 32], [3; 32])
-        },
-    );
+    let opened = client
+        .open(None, [tag; 32], [3; 32])
+        .unwrap_or_else(|error| panic!("{error:?}"));
     let route = match opened.result() {
         Ok(Response::Opened(route)) => *route,
         other => panic!("{other:?}"),
@@ -44,7 +40,7 @@ fn scope(client: &OwnerClient, tag: u8) -> IndexedOperationRecordScope {
     drop(opened);
     let acquired = job(
         client,
-        Some(route),
+        route,
         |job_client: &layerfs_daemon::OwnerClient, job_route| {
             job_client.acquire_operation(job_route, 1)
         },
@@ -61,7 +57,7 @@ fn scope(client: &OwnerClient, tag: u8) -> IndexedOperationRecordScope {
 fn release(client: &OwnerClient, scope: IndexedOperationRecordScope) {
     let done = job(
         client,
-        Some(scope.owner.route()),
+        scope.owner.route(),
         |job_client: &layerfs_daemon::OwnerClient, job_route| {
             job_client.release_operation(job_route, scope.owner)
         },

@@ -120,10 +120,10 @@ fn job(
     route: layerfs_overlay::Route,
     action: impl FnOnce(
         &OwnerClient,
-        Option<layerfs_overlay::Route>,
+        layerfs_overlay::Route,
     ) -> Result<layerfs_daemon::JobReceipt, layerfs_daemon::OwnerError>,
 ) -> layerfs_daemon::JobReceipt {
-    action(client, Some(route)).unwrap()
+    action(client, route).unwrap()
 }
 fn state(client: &OwnerClient, route: layerfs_overlay::Route) -> layerfs_overlay::WorkspaceState {
     let done = job(
@@ -140,7 +140,7 @@ fn resources(client: &OwnerClient, route: layerfs_overlay::Route) -> layerfs_ove
     let done = job(
         client,
         route,
-        move |owner: &layerfs_daemon::OwnerClient, route| owner.resources(route, false),
+        move |owner: &layerfs_daemon::OwnerClient, route| owner.resources(Some(route), false),
     );
     match done.result() {
         Ok(Response::Resources(resources)) => **resources,

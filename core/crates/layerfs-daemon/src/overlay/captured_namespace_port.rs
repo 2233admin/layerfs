@@ -12,11 +12,11 @@ impl OwnerClient {
         reader: CapturedReader,
         command: impl FnOnce(
                 &crate::OwnerClient,
-                Option<layerfs_overlay::Route>,
+                layerfs_overlay::Route,
             ) -> Result<crate::JobReceipt, crate::OwnerError>
             + Send,
     ) -> WorkspaceResult<crate::JobReceipt> {
-        command(self, Some(reader.capture().route()))
+        command(self, reader.capture().route())
             .map_err(|cause| WorkspaceError::Service(Box::new(cause)))
     }
 }

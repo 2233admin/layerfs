@@ -53,7 +53,7 @@ fn a_panic_retains_its_connection_and_fails_only_that_workspace() {
         ),
         other => panic!("{other:?}"),
     }
-    let refused = a.state(Some(a_route)).unwrap_err();
+    let refused = a.state(a_route).unwrap_err();
     match &refused {
         OwnerError::Unattempted { cause, .. } => match cause.as_ref() {
             OwnerError::Retained(cause) => assert!(Arc::ptr_eq(cause, &original)),
@@ -70,7 +70,7 @@ fn a_panic_retains_its_connection_and_fails_only_that_workspace() {
             .executions,
         1
     );
-    let peer = b.state(Some(b_route)).unwrap();
+    let peer = b.state(b_route).unwrap();
     assert!(matches!(peer.result(), Ok(Response::State(_))));
     drop(peer);
     assert!(directory.join("1.sqlite").exists());

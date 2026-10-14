@@ -133,12 +133,8 @@ fn commit(
                 .map(|error| format!("{error:?}")),
             // The attempt released nothing: both owners are still retained.
             retained_after: (
-                retained(
-                    overlay
-                        .retained_captured_reader(Some(route), request)
-                        .unwrap(),
-                ),
-                retained(overlay.retained_operation(Some(route), request).unwrap()),
+                retained(overlay.retained_captured_reader(route, request).unwrap()),
+                retained(overlay.retained_operation(route, request).unwrap()),
             ),
         });
         let (reader, owner) = (custody.reader, custody.operation);

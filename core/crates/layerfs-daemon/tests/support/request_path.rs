@@ -105,10 +105,10 @@ fn finish(
     route: layerfs_overlay::Route,
     command: impl FnOnce(
         &layerfs_daemon::OwnerClient,
-        Option<layerfs_overlay::Route>,
+        layerfs_overlay::Route,
     ) -> Result<layerfs_daemon::JobReceipt, layerfs_daemon::OwnerError>,
 ) -> JobReceipt {
-    command(client, Some(route)).unwrap_or_else(|error| panic!("{error:?}"))
+    command(client, route).unwrap_or_else(|error| panic!("{error:?}"))
 }
 pub fn name(text: &str) -> PathName {
     PathName::new(text).unwrap()

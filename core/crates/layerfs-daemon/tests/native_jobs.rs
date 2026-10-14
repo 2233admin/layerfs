@@ -17,10 +17,10 @@ fn job(
     route: Route,
     command: impl FnOnce(
         &layerfs_daemon::OwnerClient,
-        Option<layerfs_overlay::Route>,
+        layerfs_overlay::Route,
     ) -> Result<layerfs_daemon::JobReceipt, layerfs_daemon::OwnerError>,
 ) -> JobReceipt {
-    command(client, Some(route)).unwrap_or_else(|error| panic!("{error:?}"))
+    command(client, route).unwrap_or_else(|error| panic!("{error:?}"))
 }
 /// An OPEN or OPENDIR owner visit until it decides, reading outside the
 /// owner the base facts an undecided visit names.

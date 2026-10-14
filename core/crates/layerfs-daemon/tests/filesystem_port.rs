@@ -111,7 +111,7 @@ fn real_native_steps_park_for_readers_and_release_original_consumers() {
         .root()
         .root_inode()
         .serial();
-    let done = client.native_mount(Some(bound.route()), root).unwrap();
+    let done = client.native_mount(bound.route(), root).unwrap();
     let mount = match done.result() {
         Ok(Response::Native(NativeReply::Mount(value))) => *value,
         value => panic!("{value:?}"),
@@ -211,9 +211,7 @@ fn real_native_steps_park_for_readers_and_release_original_consumers() {
     // Workspace mutation API; the native read copies its local part in its
     // one visit and fills the inherited part from the base that visit named.
     let operation = bound.operation().unwrap();
-    let acquired = client
-        .acquire_base_source(Some(bound.route()), 991)
-        .unwrap();
+    let acquired = client.acquire_base_source(bound.route(), 991).unwrap();
     let source = match acquired.result() {
         Ok(Response::BaseSource(source)) => *source,
         other => panic!("{other:?}"),
@@ -246,9 +244,7 @@ fn real_native_steps_park_for_readers_and_release_original_consumers() {
     drop(disposed);
     drop(view);
     drop(operation);
-    let released = client
-        .release_base_source(Some(bound.route()), source)
-        .unwrap();
+    let released = client.release_base_source(bound.route(), source).unwrap();
     assert!(released.result().is_ok());
     drop(released);
     let data = wait(NativeData::read(
@@ -382,7 +378,7 @@ fn real_native_steps_park_for_readers_and_release_original_consumers() {
     let released = work(&client);
     assert_eq!(released.jobs, held.jobs);
     drop(wait(services.forget(mount, serial, 1)).unwrap());
-    let done = client.native_revoke(Some(bound.route()), mount).unwrap();
+    let done = client.native_revoke(bound.route(), mount).unwrap();
     assert!(matches!(
         done.result(),
         Ok(Response::Native(NativeReply::Done))
@@ -436,7 +432,7 @@ fn terminal_owner_failure_retains_unattempted_input_without_replay() {
         .root()
         .root_inode()
         .serial();
-    let done = client.native_mount(Some(bound.route()), root).unwrap();
+    let done = client.native_mount(bound.route(), root).unwrap();
     let mount = match done.result() {
         Ok(Response::Native(NativeReply::Mount(value))) => *value,
         value => panic!("{value:?}"),
@@ -572,7 +568,7 @@ fn many_waiting_reads_of_one_mount_all_complete_through_one_reader() {
         .root()
         .root_inode()
         .serial();
-    let done = client.native_mount(Some(bound.route()), root).unwrap();
+    let done = client.native_mount(bound.route(), root).unwrap();
     let mount = match done.result() {
         Ok(Response::Native(NativeReply::Mount(mount))) => *mount,
         other => panic!("{other:?}"),
@@ -649,7 +645,7 @@ fn many_waiting_reads_of_one_mount_all_complete_through_one_reader() {
     until(|| queue.work().unwrap().active == 0);
     let services = bound.request(&Fence::default()).unwrap();
     drop(wait(services.forget(mount, serial, 1)).unwrap());
-    let done = client.native_revoke(Some(bound.route()), mount).unwrap();
+    let done = client.native_revoke(bound.route(), mount).unwrap();
     assert!(done.result().is_ok());
     drop(done);
     queue.stop_receive().unwrap();
@@ -701,7 +697,7 @@ fn directory_consumer_publishes_only_accepted_names_and_a_reply_racing_releasedi
         .root()
         .root_inode()
         .serial();
-    let done = client.native_mount(Some(bound.route()), root).unwrap();
+    let done = client.native_mount(bound.route(), root).unwrap();
     let mount = match done.result() {
         Ok(Response::Native(NativeReply::Mount(mount))) => *mount,
         other => panic!("{other:?}"),
@@ -843,7 +839,7 @@ fn directory_consumer_publishes_only_accepted_names_and_a_reply_racing_releasedi
     assert_eq!(raced.prefix(), Some((remainder.len(), true)));
     drop(raced);
     assert_eq!(store.read_work().outstanding, 0);
-    let done = client.native_revoke(Some(bound.route()), mount).unwrap();
+    let done = client.native_revoke(bound.route(), mount).unwrap();
     assert!(done.result().is_ok());
     drop(done);
     drop(services);

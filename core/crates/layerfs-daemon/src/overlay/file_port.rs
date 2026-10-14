@@ -28,13 +28,7 @@ impl OverlayFileRead for OwnerClient {
             return Err(layerfs_overlay::OverlayError::Invalid("read window").into());
         }
         let pending = self
-            .captured_read(
-                Some(reader.capture().route()),
-                reader,
-                serial,
-                offset,
-                length,
-            )
+            .captured_read(reader.capture().route(), reader, serial, offset, length)
             .map_err(|cause| WorkspaceError::Service(Box::new(cause)))?;
         let done = pending;
         match done.result() {

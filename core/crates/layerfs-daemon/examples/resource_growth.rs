@@ -99,7 +99,7 @@ fn main() {
     }
     observe::phase("close");
     assert!(matches!(
-        owner.client().close(Some(bound.route())).unwrap().result(),
+        owner.client().close(bound.route()).unwrap().result(),
         Ok(Response::Done)
     ));
     drop(bound);

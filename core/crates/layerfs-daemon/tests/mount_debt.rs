@@ -109,7 +109,7 @@ fn publish(client: &OwnerClient, route: Route, serial: u64) -> JobReceipt {
         subdirs: 0,
     };
     client
-        .publish(Some(route), inode, None, None)
+        .publish(route, inode, None, None)
         .unwrap_or_else(|error| panic!("publish: {error:?}"))
 }
 /// The connection counters a refused Mount must leave as they were.

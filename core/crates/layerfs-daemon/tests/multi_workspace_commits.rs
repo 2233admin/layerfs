@@ -323,10 +323,10 @@ fn job(
     route: Route,
     command: impl FnOnce(
         &layerfs_daemon::OwnerClient,
-        Option<layerfs_overlay::Route>,
+        layerfs_overlay::Route,
     ) -> Result<layerfs_daemon::JobReceipt, layerfs_daemon::OwnerError>,
 ) -> JobReceipt {
-    command(owner, Some(route)).unwrap_or_else(|error| panic!("{error:?}"))
+    command(owner, route).unwrap_or_else(|error| panic!("{error:?}"))
 }
 /// The product constructor's own steps through the public driver, with the
 /// constructor-thread ports clocked.

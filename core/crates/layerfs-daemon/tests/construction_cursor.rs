@@ -36,22 +36,18 @@ impl Drop for Temp {
 }
 fn job(
     client: &OwnerClient,
-    route: Option<Route>,
+    route: Route,
     command: impl FnOnce(
         &layerfs_daemon::OwnerClient,
-        Option<layerfs_overlay::Route>,
+        layerfs_overlay::Route,
     ) -> Result<layerfs_daemon::JobReceipt, layerfs_daemon::OwnerError>,
 ) -> JobReceipt {
     command(client, route).unwrap_or_else(|error| panic!("{error:?}"))
 }
 fn scope(client: &OwnerClient, tag: u8) -> IndexedOperationRecordScope {
-    let opened = job(
-        client,
-        None,
-        |job_client: &layerfs_daemon::OwnerClient, job_route| {
-            job_client.open(job_route, [tag; 32], [4; 32])
-        },
-    );
+    let opened = client
+        .open(None, [tag; 32], [4; 32])
+        .unwrap_or_else(|error| panic!("{error:?}"));
     let route = match opened.result() {
         Ok(Response::Opened(route)) => *route,
         v => panic!("{v:?}"),
@@ -59,7 +55,7 @@ fn scope(client: &OwnerClient, tag: u8) -> IndexedOperationRecordScope {
     drop(opened);
     let acquired = job(
         client,
-        Some(route),
+        route,
         |job_client: &layerfs_daemon::OwnerClient, job_route| {
             job_client.acquire_operation(job_route, 1)
         },
@@ -88,7 +84,7 @@ fn put(number: u64) -> ConstructionRecordChange {
 fn release(client: &OwnerClient, scope: IndexedOperationRecordScope) {
     assert!(job(
         client,
-        Some(scope.owner.route()),
+        scope.owner.route(),
         |job_client: &layerfs_daemon::OwnerClient, job_route| job_client
             .release_operation(job_route, scope.owner)
     )

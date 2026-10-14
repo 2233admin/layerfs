@@ -405,7 +405,7 @@ fn status(service: &Service, token: WorkspaceToken) -> Option<WorkspaceStatus> {
 /// retained, and the installed base root. The call takes the Workspace lock
 /// like any other job, on this thread; `None` when it is refused.
 fn engine(owner: &OwnerClient, route: Route) -> Option<(bool, [u8; 32])> {
-    let done = owner.state(Some(route)).ok()?;
+    let done = owner.state(route).ok()?;
     match done.result() {
         Ok(Response::State(state)) => Some((state.captured.is_some(), state.base_root)),
         _ => None,

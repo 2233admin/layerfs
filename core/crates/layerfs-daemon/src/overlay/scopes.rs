@@ -26,9 +26,10 @@ impl OwnerClient {
             done.add_allocation(observed);
             return Ok(done);
         }
-        self.overlay_job(route, ServiceClass::Lifecycle, None, move |db, _| {
+        self.owner_job(route, ServiceClass::Lifecycle, None, move |db, _| {
             db.open_workspace(incarnation, base_root)
                 .map(Response::Opened)
+                .map_err(OwnerError::Overlay)
         })
     }
     pub fn resources(&self, route: Option<Route>, global: bool) -> Result<JobReceipt, OwnerError> {
@@ -47,17 +48,16 @@ impl OwnerClient {
             // account their own SQL/hold once; this receipt retains their work.
             return Ok(JobReceipt::new(result, work, None));
         }
-        self.overlay_job(route, ServiceClass::Read, None, move |db, route| {
-            if let Some(route) = route {
-                db.state(route)?;
-                db.resources(if global { None } else { Some(route) })
-                    .map(|value| Response::Resources(Box::new(value)))
-            } else if global {
-                db.resources(None)
-                    .map(|value| Response::Resources(Box::new(value)))
-            } else {
-                Err(OverlayError::Invalid("missing route"))
+        self.owner_job(route, ServiceClass::Read, None, move |db, route| {
+            match route {
+                Some(route) => db
+                    .state(route)
+                    .and_then(|_| db.resources((!global).then_some(route))),
+                None if global => db.resources(None),
+                None => Err(OverlayError::Invalid("missing route")),
             }
+            .map(|value| Response::Resources(Box::new(value)))
+            .map_err(OwnerError::Overlay)
         })
     }
     pub fn observe_cleanup(
@@ -87,9 +87,10 @@ impl OwnerClient {
                 }
             }
         }
-        self.overlay_job(route, ServiceClass::Lifecycle, None, move |db, _| {
+        self.owner_job(route, ServiceClass::Lifecycle, None, move |db, _| {
             db.observe_cleanup(namespace, incarnation)
                 .map(Response::CleanupState)
+                .map_err(OwnerError::Overlay)
         })
     }
 }

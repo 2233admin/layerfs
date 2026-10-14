@@ -169,7 +169,7 @@ impl<'a> Failing<'a> {
                 match how {
                     How::Opaque => Err(WorkspaceError::Service(Box::new(Injected(call)))),
                     How::Engine => {
-                        let route = Some(self.route);
+                        let route = self.route;
                         let (done, released) = match owner {
                             Some(owner) => (
                                 self.client.release_operation(route, owner),
@@ -827,9 +827,9 @@ fn failed(call: Call, nth: u64, how: How, parent_points: u64) {
         // nothing was published, so the capture is resolved and the reader
         // and the owner released through the owner client. The Workspace
         // stays fenced; the driver is not told.
-        done(client.resolve_failed(Some(route), capture));
-        done(client.release_captured_reader(Some(route), produced.reader));
-        done(client.release_operation(Some(route), produced.owner));
+        done(client.resolve_failed(route, capture));
+        done(client.release_captured_reader(route, produced.reader));
+        done(client.release_operation(route, produced.owner));
         assert_eq!(held(&rig, &first, 1), (None, None, None), "{what}");
         model::assert_same(&expected, &live(&first), "live view after teardown");
         assert!(first.commit_in_flight());
@@ -841,10 +841,10 @@ fn failed(call: Call, nth: u64, how: How, parent_points: u64) {
     // The caller's step after a settled failure, as in the product route:
     // the reader and then the operation owner, whichever are still held.
     if reader.is_some() {
-        done(client.release_captured_reader(Some(route), produced.reader));
+        done(client.release_captured_reader(route, produced.reader));
     }
     if owner.is_some() {
-        done(client.release_operation(Some(route), produced.owner));
+        done(client.release_operation(route, produced.owner));
     }
     assert_eq!(held(&rig, &first, 1), (None, None, None), "{what}");
     model::assert_same(&expected, &live(&first), "live view after the failure");

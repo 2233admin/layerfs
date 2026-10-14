@@ -8,22 +8,18 @@ use std::error::Error;
 
 fn job(
     client: &OwnerClient,
-    route: Option<Route>,
+    route: Route,
     command: impl FnOnce(
         &layerfs_daemon::OwnerClient,
-        Option<layerfs_overlay::Route>,
+        layerfs_overlay::Route,
     ) -> Result<layerfs_daemon::JobReceipt, layerfs_daemon::OwnerError>,
 ) -> JobReceipt {
     command(client, route).unwrap_or_else(|error| panic!("{error:?}"))
 }
 fn setup(client: &OwnerClient, tag: u8, size: u64, with_cell: bool) -> (Route, CapturedReader) {
-    let opened = job(
-        client,
-        None,
-        |job_client: &layerfs_daemon::OwnerClient, job_route| {
-            job_client.open(job_route, [tag; 32], [tag + 1; 32])
-        },
-    );
+    let opened = client
+        .open(None, [tag; 32], [tag + 1; 32])
+        .unwrap_or_else(|error| panic!("{error:?}"));
     let route = match opened.result() {
         Ok(Response::Opened(route)) => *route,
         v => panic!("{v:?}"),
@@ -38,7 +34,7 @@ fn setup(client: &OwnerClient, tag: u8, size: u64, with_cell: bool) -> (Route, C
     cell.validity[0] = 15;
     let published = job(
         client,
-        Some(route),
+        route,
         |job_client: &layerfs_daemon::OwnerClient, job_route| {
             job_client.publish(
                 job_route,
@@ -67,14 +63,14 @@ fn setup(client: &OwnerClient, tag: u8, size: u64, with_cell: bool) -> (Route, C
     drop(published);
     assert!(job(
         client,
-        Some(route),
+        route,
         |job_client: &layerfs_daemon::OwnerClient, _| job_client.reply_attempted(publication)
     )
     .result()
     .is_ok());
     let captured = job(
         client,
-        Some(route),
+        route,
         |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.capture(job_route),
     );
     let capture = match captured.result() {
@@ -84,7 +80,7 @@ fn setup(client: &OwnerClient, tag: u8, size: u64, with_cell: bool) -> (Route, C
     drop(captured);
     let acquired = job(
         client,
-        Some(route),
+        route,
         |job_client: &layerfs_daemon::OwnerClient, job_route| {
             job_client.acquire_captured_reader(job_route, capture, 1)
         },
@@ -126,7 +122,7 @@ fn actual_owner_returns_bounded_window_with_original_root_after_install_and_clos
         if phase == 0 {
             assert!(job(
                 &client,
-                Some(route),
+                route,
                 |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.install(
                     job_route,
                     reader.capture(),
@@ -139,7 +135,7 @@ fn actual_owner_returns_bounded_window_with_original_root_after_install_and_clos
         if phase == 1 {
             assert!(job(
                 &client,
-                Some(route),
+                route,
                 |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.close(job_route)
             )
             .result()
@@ -148,7 +144,7 @@ fn actual_owner_returns_bounded_window_with_original_root_after_install_and_clos
     }
     assert!(job(
         &client,
-        Some(route),
+        route,
         |job_client: &layerfs_daemon::OwnerClient, job_route| job_client
             .release_captured_reader(job_route, reader)
     )
@@ -174,7 +170,7 @@ fn captured_inode_point_retains_old_metadata_and_forward_seek_bounds() {
     assert!(client.captured_inode(reader, 999).unwrap().is_none());
     assert!(job(
         &client,
-        Some(route),
+        route,
         |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.install(
             job_route,
             reader.capture(),
@@ -188,7 +184,7 @@ fn captured_inode_point_retains_old_metadata_and_forward_seek_bounds() {
     current.mode = 0o600;
     let published = job(
         &client,
-        Some(route),
+        route,
         |job_client: &layerfs_daemon::OwnerClient, job_route| {
             job_client.publish(job_route, current, None, None)
         },
@@ -200,7 +196,7 @@ fn captured_inode_point_retains_old_metadata_and_forward_seek_bounds() {
     drop(published);
     assert!(job(
         &client,
-        Some(route),
+        route,
         |job_client: &layerfs_daemon::OwnerClient, _| job_client.reply_attempted(publication)
     )
     .result()
@@ -211,7 +207,7 @@ fn captured_inode_point_retains_old_metadata_and_forward_seek_bounds() {
     );
     let changed = job(
         &client,
-        Some(route),
+        route,
         |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.inode(job_route, 17),
     );
     assert!(matches!(changed.result(),Ok(Response::Inode(Some(i))) if i.size==9 && i.mode==0o600));
@@ -251,7 +247,7 @@ fn captured_inode_point_retains_old_metadata_and_forward_seek_bounds() {
     assert_eq!(next.reader(), reader);
     assert!(job(
         &client,
-        Some(route),
+        route,
         |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.close(job_route)
     )
     .result()
@@ -262,7 +258,7 @@ fn captured_inode_point_retains_old_metadata_and_forward_seek_bounds() {
     );
     assert!(job(
         &client,
-        Some(route),
+        route,
         |job_client: &layerfs_daemon::OwnerClient, job_route| job_client
             .release_captured_reader(job_route, reader)
     )
@@ -309,7 +305,7 @@ fn original_attempted_and_unattempted_run_errors_keep_custody_and_other_scope_pr
     for (route, reader) in [(route, reader), (other, other_reader)] {
         assert!(job(
             &client,
-            Some(route),
+            route,
             |job_client: &layerfs_daemon::OwnerClient, job_route| job_client
                 .release_captured_reader(job_route, reader)
         )
@@ -317,7 +313,7 @@ fn original_attempted_and_unattempted_run_errors_keep_custody_and_other_scope_pr
         .is_ok());
         assert!(job(
             &client,
-            Some(route),
+            route,
             |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.close(job_route)
         )
         .result()

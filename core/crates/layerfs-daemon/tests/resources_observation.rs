@@ -158,7 +158,7 @@ fn global_resources_is_read_only_before_bind_and_after_raw_close() {
         "routed validation retained"
     );
     drop(routed);
-    let closed = client.close(Some(route)).unwrap();
+    let closed = client.close(route).unwrap();
     assert!(matches!(closed.result(), Ok(Response::Done)));
     drop(closed);
     // Raw Close records the drain state. Whole-file disposal belongs to

@@ -33,22 +33,18 @@ impl Drop for Temp {
 }
 fn submit(
     client: &OwnerClient,
-    route: Option<Route>,
+    route: Route,
     command: impl FnOnce(
         &layerfs_daemon::OwnerClient,
-        Option<layerfs_overlay::Route>,
+        layerfs_overlay::Route,
     ) -> Result<layerfs_daemon::JobReceipt, layerfs_daemon::OwnerError>,
 ) -> JobReceipt {
     command(client, route).unwrap_or_else(|error| panic!("{error:?}"))
 }
 fn open(client: &OwnerClient, tag: u8) -> Route {
-    let done = submit(
-        client,
-        None,
-        |job_client: &layerfs_daemon::OwnerClient, job_route| {
-            job_client.open(job_route, [tag; 32], [3; 32])
-        },
-    );
+    let done = client
+        .open(None, [tag; 32], [3; 32])
+        .unwrap_or_else(|error| panic!("{error:?}"));
     match done.result() {
         Ok(Response::Opened(route)) => *route,
         result => panic!("{result:?}"),
@@ -57,7 +53,7 @@ fn open(client: &OwnerClient, tag: u8) -> Route {
 fn scope(client: &OwnerClient, route: Route, request: u64) -> IndexedOperationRecordScope {
     let done = submit(
         client,
-        Some(route),
+        route,
         |job_client: &layerfs_daemon::OwnerClient, job_route| {
             job_client.acquire_operation(job_route, request)
         },
@@ -89,7 +85,7 @@ fn operation_record(
 ) -> JobReceipt {
     submit(
         client,
-        Some(scope.owner.route()),
+        scope.owner.route(),
         |job_client: &layerfs_daemon::OwnerClient, job_route| {
             job_client.indexed_operation_record(job_route, Box::new(job))
         },
@@ -154,7 +150,7 @@ fn original_atomic_refusal_and_credits_survive_independent_owner_jobs() {
     }
     let healthy = submit(
         &client,
-        Some(other),
+        other,
         |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.state(job_route),
     );
     assert!(healthy.result().is_ok());
@@ -178,7 +174,7 @@ fn original_atomic_refusal_and_credits_survive_independent_owner_jobs() {
     drop(deciding);
     let wrong_route = submit(
         &client,
-        Some(other),
+        other,
         |job_client: &layerfs_daemon::OwnerClient, job_route| {
             job_client.indexed_operation_record(
                 job_route,
@@ -251,7 +247,7 @@ fn released_indexed_rows_reclaim_automatically_and_close_preserves_actual_owner(
     drop(done);
     assert!(submit(
         &client,
-        Some(route),
+        route,
         |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.close(job_route)
     )
     .result()
@@ -280,9 +276,9 @@ fn released_indexed_rows_reclaim_automatically_and_close_preserves_actual_owner(
     drop(denied);
     let resources = submit(
         &client,
-        Some(route),
+        route,
         |job_client: &layerfs_daemon::OwnerClient, job_route| {
-            job_client.resources(job_route, false)
+            job_client.resources(Some(job_route), false)
         },
     );
     assert!(
@@ -291,7 +287,7 @@ fn released_indexed_rows_reclaim_automatically_and_close_preserves_actual_owner(
     drop(resources);
     assert!(submit(
         &client,
-        Some(route),
+        route,
         |job_client: &layerfs_daemon::OwnerClient, job_route| job_client
             .release_operation(job_route, scope.owner)
     )
@@ -301,9 +297,9 @@ fn released_indexed_rows_reclaim_automatically_and_close_preserves_actual_owner(
     loop {
         let resources = submit(
             &client,
-            Some(route),
+            route,
             |job_client: &layerfs_daemon::OwnerClient, job_route| {
-                job_client.resources(job_route, false)
+                job_client.resources(Some(job_route), false)
             },
         );
         if matches!(resources.result(), Ok(Response::Resources(r)) if r.counts.operation_record_rows == 0 && r.counts.namespaces == 1)
@@ -319,9 +315,9 @@ fn released_indexed_rows_reclaim_automatically_and_close_preserves_actual_owner(
     }
     let peer = submit(
         &client,
-        Some(other),
+        other,
         |job_client: &layerfs_daemon::OwnerClient, job_route| {
-            job_client.resources(job_route, false)
+            job_client.resources(Some(job_route), false)
         },
     );
     assert!(

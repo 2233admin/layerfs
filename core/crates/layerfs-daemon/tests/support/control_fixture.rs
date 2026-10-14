@@ -120,7 +120,7 @@ pub fn write(service: &Service, token: WorkspaceToken, tag: u8) {
     let route = operation.workspace().route();
     let done = operation
         .overlay()
-        .acquire_base_source(Some(route), NEXT.fetch_add(1, Ordering::Relaxed))
+        .acquire_base_source(route, NEXT.fetch_add(1, Ordering::Relaxed))
         .unwrap();
     let source = match done.result() {
         Ok(Response::BaseSource(source)) => *source,
@@ -165,7 +165,7 @@ pub fn write(service: &Service, token: WorkspaceToken, tag: u8) {
     drop(view);
     assert!(operation
         .overlay()
-        .release_base_source(Some(route), source)
+        .release_base_source(route, source)
         .unwrap()
         .result()
         .is_ok());

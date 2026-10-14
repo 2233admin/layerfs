@@ -57,7 +57,7 @@ fn prove_fixture(f: fixture::Fixture) {
         assert!(matches!(
             owner
                 .client()
-                .close(Some(bound.workspace.route()))
+                .close(bound.workspace.route())
                 .unwrap()
                 .result(),
             Ok(Response::Done)

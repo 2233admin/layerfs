@@ -110,10 +110,10 @@ fn finish(
     route: layerfs_overlay::Route,
     command: impl FnOnce(
         &layerfs_daemon::OwnerClient,
-        Option<layerfs_overlay::Route>,
+        layerfs_overlay::Route,
     ) -> Result<layerfs_daemon::JobReceipt, layerfs_daemon::OwnerError>,
 ) -> JobReceipt {
-    command(client, Some(route)).unwrap_or_else(|error| panic!("{error:?}"))
+    command(client, route).unwrap_or_else(|error| panic!("{error:?}"))
 }
 fn name(text: &str) -> PathName {
     PathName::new(text).unwrap()
@@ -246,7 +246,7 @@ impl Rig {
             &self.client,
             self.bound.route(),
             |job_client: &layerfs_daemon::OwnerClient, job_route| {
-                job_client.resources(job_route, false)
+                job_client.resources(Some(job_route), false)
             },
         );
         let open = match result.result() {

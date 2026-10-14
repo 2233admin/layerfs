@@ -113,10 +113,10 @@ fn finish(
     route: layerfs_overlay::Route,
     command: impl FnOnce(
         &layerfs_daemon::OwnerClient,
-        Option<layerfs_overlay::Route>,
+        layerfs_overlay::Route,
     ) -> Result<layerfs_daemon::JobReceipt, layerfs_daemon::OwnerError>,
 ) -> JobReceipt {
-    command(client, Some(route)).unwrap_or_else(|error| panic!("{error:?}"))
+    command(client, route).unwrap_or_else(|error| panic!("{error:?}"))
 }
 
 /// One bound Workspace with a native mount group and its request drain, and
@@ -603,7 +603,7 @@ fn a_job_waiting_before_the_stop_is_awaited_to_its_original_result() {
     let checks = rig.owner_work().jobs[ServiceClass::Capture as usize];
     let capture = {
         let client = rig.client.clone();
-        std::thread::spawn(move || client.capture(Some(route)))
+        std::thread::spawn(move || client.capture(route))
     };
     // Its readiness check observed the ticket pending: one counted job.
     until("capture waits behind the ticket", || {

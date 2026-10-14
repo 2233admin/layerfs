@@ -11,7 +11,7 @@ impl OverlayCapturedRuns for OwnerClient {
         serial: u64,
     ) -> WorkspaceResult<Option<Inode>> {
         let pending = self
-            .reader_inode(Some(reader.capture().route()), reader, serial)
+            .reader_inode(reader.capture().route(), reader, serial)
             .map_err(|cause| WorkspaceError::Service(Box::new(cause)))?;
         let done = pending;
         match done.result() {
@@ -21,7 +21,7 @@ impl OverlayCapturedRuns for OwnerClient {
     }
     fn captured_run_step(&self, cursor: CapturedRunCursor) -> WorkspaceResult<CapturedRunReply> {
         let pending = self
-            .captured_run(Some(cursor.reader().capture().route()), Box::new(cursor))
+            .captured_run(cursor.reader().capture().route(), Box::new(cursor))
             .map_err(|cause| WorkspaceError::Service(Box::new(cause)))?;
         let done = pending;
         match done.result() {

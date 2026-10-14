@@ -36,10 +36,10 @@ fn entry(serial: u64) -> DirectoryEntry {
 }
 fn job(
     client: &OwnerClient,
-    route: Option<Route>,
+    route: Route,
     command: impl FnOnce(
         &layerfs_daemon::OwnerClient,
-        Option<layerfs_overlay::Route>,
+        layerfs_overlay::Route,
     ) -> Result<layerfs_daemon::JobReceipt, layerfs_daemon::OwnerError>,
 ) -> JobReceipt {
     command(client, route).unwrap_or_else(|error| panic!("{error:?}"))
@@ -56,7 +56,7 @@ fn publish_row(
 ) {
     let done = job(
         client,
-        Some(route),
+        route,
         |job_client: &layerfs_daemon::OwnerClient, job_route| {
             job_client.publish(job_route, inode, name, cell)
         },
@@ -68,7 +68,7 @@ fn publish_row(
     drop(done);
     assert!(job(
         client,
-        Some(route),
+        route,
         |job_client: &layerfs_daemon::OwnerClient, _| job_client.reply_attempted(ticket)
     )
     .result()
@@ -290,13 +290,9 @@ fn owner_pages_preserve_original_failed_completion_and_unattempted_command() {
     )
     .unwrap();
     let client = owner.client();
-    let done = job(
-        &client,
-        None,
-        |job_client: &layerfs_daemon::OwnerClient, job_route| {
-            job_client.open(job_route, [194; 32], [195; 32])
-        },
-    );
+    let done = client
+        .open(None, [194; 32], [195; 32])
+        .unwrap_or_else(|error| panic!("{error:?}"));
     let route = match done.result() {
         Ok(Response::Opened(r)) => *r,
         other => panic!("{other:?}"),
@@ -307,7 +303,7 @@ fn owner_pages_preserve_original_failed_completion_and_unattempted_command() {
     }
     let done = job(
         &client,
-        Some(route),
+        route,
         |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.capture(job_route),
     );
     let capture = match done.result() {
@@ -317,7 +313,7 @@ fn owner_pages_preserve_original_failed_completion_and_unattempted_command() {
     drop(done);
     let done = job(
         &client,
-        Some(route),
+        route,
         |job_client: &layerfs_daemon::OwnerClient, job_route| {
             job_client.acquire_captured_reader(job_route, capture, 1)
         },
@@ -333,7 +329,7 @@ fn owner_pages_preserve_original_failed_completion_and_unattempted_command() {
     assert_pages(&client, reader);
     assert!(job(
         &client,
-        Some(route),
+        route,
         |job_client: &layerfs_daemon::OwnerClient, job_route| job_client
             .install(job_route, capture, [196; 32])
     )
@@ -341,7 +337,7 @@ fn owner_pages_preserve_original_failed_completion_and_unattempted_command() {
     .is_ok());
     assert!(job(
         &client,
-        Some(route),
+        route,
         |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.close(job_route)
     )
     .result()
@@ -367,7 +363,7 @@ fn owner_pages_preserve_original_failed_completion_and_unattempted_command() {
     assert_eq!(client.captured_inode(reader, 1).unwrap(), Some(inode(1)));
     assert!(job(
         &client,
-        Some(route),
+        route,
         |job_client: &layerfs_daemon::OwnerClient, job_route| job_client
             .release_captured_reader(job_route, reader)
     )
@@ -397,13 +393,9 @@ fn owner_parent_names_points_and_symlinks_keep_original_custody() {
     )
     .unwrap();
     let client = owner.client();
-    let done = job(
-        &client,
-        None,
-        |job_client: &layerfs_daemon::OwnerClient, job_route| {
-            job_client.open(job_route, [197; 32], [198; 32])
-        },
-    );
+    let done = client
+        .open(None, [197; 32], [198; 32])
+        .unwrap_or_else(|error| panic!("{error:?}"));
     let route = match done.result() {
         Ok(Response::Opened(r)) => *r,
         other => panic!("{other:?}"),
@@ -411,7 +403,7 @@ fn owner_parent_names_points_and_symlinks_keep_original_custody() {
     drop(done);
     let done = job(
         &client,
-        Some(route),
+        route,
         |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.state(job_route),
     );
     let born = match done.result() {
@@ -438,7 +430,7 @@ fn owner_parent_names_points_and_symlinks_keep_original_custody() {
     }
     let done = job(
         &client,
-        Some(route),
+        route,
         |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.capture(job_route),
     );
     let capture = match done.result() {
@@ -448,7 +440,7 @@ fn owner_parent_names_points_and_symlinks_keep_original_custody() {
     drop(done);
     let done = job(
         &client,
-        Some(route),
+        route,
         |job_client: &layerfs_daemon::OwnerClient, job_route| {
             job_client.acquire_captured_reader(job_route, capture, 1)
         },
@@ -573,7 +565,7 @@ fn owner_parent_names_points_and_symlinks_keep_original_custody() {
 
     assert!(job(
         &client,
-        Some(route),
+        route,
         |job_client: &layerfs_daemon::OwnerClient, job_route| job_client
             .install(job_route, capture, [199; 32])
     )
@@ -582,7 +574,7 @@ fn owner_parent_names_points_and_symlinks_keep_original_custody() {
     sealed(&client);
     assert!(job(
         &client,
-        Some(route),
+        route,
         |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.close(job_route)
     )
     .result()
@@ -590,7 +582,7 @@ fn owner_parent_names_points_and_symlinks_keep_original_custody() {
     sealed(&client);
     assert!(job(
         &client,
-        Some(route),
+        route,
         |job_client: &layerfs_daemon::OwnerClient, job_route| job_client
             .release_captured_reader(job_route, reader)
     )

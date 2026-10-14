@@ -28,7 +28,7 @@ pub fn mutate(bound: &BoundWorkspace) {
 pub fn mutate_tag(bound: &BoundWorkspace, tag: u8) {
     let op = bound.operation().unwrap();
     let route = bound.route();
-    let done = op.overlay().acquire_base_source(Some(route), 1).unwrap();
+    let done = op.overlay().acquire_base_source(route, 1).unwrap();
     let source = match done.result() {
         Ok(Response::BaseSource(value)) => *value,
         other => panic!("{other:?}"),
@@ -72,7 +72,7 @@ pub fn mutate_tag(bound: &BoundWorkspace, tag: u8) {
     drop(view);
     assert!(op
         .overlay()
-        .release_base_source(Some(route), source)
+        .release_base_source(route, source)
         .unwrap()
         .result()
         .is_ok());

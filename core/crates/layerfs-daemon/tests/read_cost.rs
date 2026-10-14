@@ -102,10 +102,10 @@ fn finish(
     route: layerfs_overlay::Route,
     command: impl FnOnce(
         &layerfs_daemon::OwnerClient,
-        Option<layerfs_overlay::Route>,
+        layerfs_overlay::Route,
     ) -> Result<layerfs_daemon::JobReceipt, layerfs_daemon::OwnerError>,
 ) -> JobReceipt {
-    command(client, Some(route)).unwrap_or_else(|error| panic!("{error:?}"))
+    command(client, route).unwrap_or_else(|error| panic!("{error:?}"))
 }
 fn pattern(length: usize, seed: u8) -> Vec<u8> {
     (0..length)
@@ -438,7 +438,7 @@ impl Rig {
             &client,
             bound.route(),
             |job_client: &layerfs_daemon::OwnerClient, job_route| {
-                job_client.resources(job_route, false)
+                job_client.resources(Some(job_route), false)
             },
         );
         match done.result() {

@@ -37,10 +37,10 @@ pub fn job(
     route: Route,
     command: impl FnOnce(
         &layerfs_daemon::OwnerClient,
-        Option<layerfs_overlay::Route>,
+        layerfs_overlay::Route,
     ) -> Result<layerfs_daemon::JobReceipt, layerfs_daemon::OwnerError>,
 ) -> JobReceipt {
-    command(owner, Some(route)).unwrap_or_else(|error| panic!("{error:?}"))
+    command(owner, route).unwrap_or_else(|error| panic!("{error:?}"))
 }
 /// A sealed, installed Disposable Store whose base is the model of the native
 /// source it was initialized from, plus one local owner.
