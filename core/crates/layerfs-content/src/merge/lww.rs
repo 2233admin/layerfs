@@ -99,7 +99,7 @@ impl Rules {
         let path: Vec<char> = path.trim_start_matches('/').chars().collect();
         let mut hit = None;
         for rule in &self.rules {
-            if rule.matches(&path) {
+            if rule.matches(&path, false) {
                 hit = (!rule.negated).then_some(rule);
             }
         }
@@ -135,9 +135,21 @@ fn parse(line: &str) -> Rule {
 }
 
 impl Rule {
+    /// One pattern in the rules-file syntax, used as a path glob.
+    pub fn glob(pattern: &str) -> Self {
+        parse(pattern)
+    }
+
+    /// True when the pattern matches the whole absolute path, not only one
+    /// of its parent directories.
+    pub fn matches_path(&self, path: &str) -> bool {
+        let path: Vec<char> = path.trim_start_matches('/').chars().collect();
+        self.matches(&path, true)
+    }
+
     /// Matches a whole run of names: starting at the path start (anchored) or
-    /// after any `/`, ending at the path end or before a `/`.
-    fn matches(&self, path: &[char]) -> bool {
+    /// after any `/`, ending at the path end or, unless `whole`, before a `/`.
+    fn matches(&self, path: &[char], whole: bool) -> bool {
         let starts = std::iter::once(0).chain(if self.anchored {
             Vec::new()
         } else {
@@ -148,10 +160,10 @@ impl Rule {
         });
         starts
             .into_iter()
-            .any(|start| self.matches_from(path, start))
+            .any(|start| self.matches_from(path, start, whole))
     }
 
-    fn matches_from(&self, path: &[char], start: usize) -> bool {
+    fn matches_from(&self, path: &[char], start: usize, whole: bool) -> bool {
         let n = path.len();
         let mut current = vec![false; n + 1];
         current[start] = true;
@@ -188,6 +200,6 @@ impl Rule {
             }
             current = next;
         }
-        (0..=n).any(|p| current[p] && (p == n || path[p] == '/'))
+        (0..=n).any(|p| current[p] && (p == n || (!whole && path[p] == '/')))
     }
 }

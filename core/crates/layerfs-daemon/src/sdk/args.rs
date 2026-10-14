@@ -225,6 +225,15 @@ pub(crate) fn root(store: &Arc<Store>, node: NodeId) -> Result<ObjectId, SdkRefu
     })
 }
 
+/// How a Commit was made, as the SDK names it.
+pub(crate) fn via(via: layerfs_history::CommitVia) -> &'static str {
+    match via {
+        layerfs_history::CommitVia::Workspace => "exec",
+        layerfs_history::CommitVia::Files => "fs",
+        layerfs_history::CommitVia::Merge => "merge",
+    }
+}
+
 /// A Commit as the SDK shows it.
 pub(crate) fn commit_value(record: &CommitRecord, branch: Option<&str>) -> SdkValue {
     let meta = &record.meta;
@@ -241,14 +250,7 @@ pub(crate) fn commit_value(record: &CommitRecord, branch: Option<&str>) -> SdkVa
         ),
         ("base", SdkValue::text(hex(record.base_layer.as_slice()))),
         ("root", SdkValue::text(hex(record.root.as_bytes()))),
-        (
-            "via",
-            SdkValue::text(match meta.via {
-                layerfs_history::CommitVia::Workspace => "exec",
-                layerfs_history::CommitVia::Files => "fs",
-                layerfs_history::CommitVia::Merge => "merge",
-            }),
-        ),
+        ("via", SdkValue::text(via(meta.via))),
         ("agent", SdkValue::opt_text(meta.agent.clone())),
         ("call", SdkValue::opt_text(meta.call.clone())),
         (

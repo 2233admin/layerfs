@@ -57,6 +57,7 @@ compare::root_changes     bounded path-level difference of two roots
 compare::line_diff        bounded line difference of two texts
 merge::merge_roots        three-way merge of roots, built on theirs
 merge::paths_with_markers named text files still holding a marker block
+merge::Rule::glob         one `/.lww`-syntax pattern matched against whole paths
 ```
 
 Compare and merge are described in
