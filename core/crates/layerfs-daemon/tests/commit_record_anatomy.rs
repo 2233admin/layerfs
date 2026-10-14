@@ -500,27 +500,32 @@ fn record_jobs_of_three_commit_shapes_are_split_by_owner_kind_and_call() {
     let step = one("step", sized_tree, step_change);
     let large = one("large", tree, large_change);
     // Exact at this tree. A change of the record path restages these with
-    // the counts it produces, never with a range.
+    // the counts it produces, never with a range. The Workspace and custody
+    // statements do not grow with the Commit: the engine remembers both
+    // fence rows, and no record or reader job writes either. They were one
+    // per job (284/83, 732/233 and 10,076/1,991). The producer's point reads
+    // are one per sealed record while the change fits the cursor's window
+    // of answers: its record jobs were 104, 279 and 5,017.
     assert_eq!(
         small,
         Totals {
-            record_jobs: 201,
-            producer: 104,
+            record_jobs: 177,
+            producer: 80,
             namespace: 78,
             file_plan: 19,
             edit_engine: 0,
             contains: 0,
-            get: 139,
-            get_many: 9,
+            get: 117,
+            get_many: 7,
             apply: 29,
             first_keys: 2,
             keys_after: 22,
             applied_changes: 91,
             empty_windows: 1,
             reader_jobs: 72,
-            workspace_statements: 284,
-            lease_statements: 83,
-            record_statements: 498,
+            workspace_statements: 2,
+            lease_statements: 11,
+            record_statements: 472,
             begin_statements: 35,
             commit_statements: 35,
         }
@@ -528,23 +533,23 @@ fn record_jobs_of_three_commit_shapes_are_split_by_owner_kind_and_call() {
     assert_eq!(
         step,
         Totals {
-            record_jobs: 499,
-            producer: 279,
+            record_jobs: 390,
+            producer: 170,
             namespace: 113,
             file_plan: 107,
             edit_engine: 0,
             contains: 1,
-            get: 355,
-            get_many: 40,
+            get: 254,
+            get_many: 32,
             apply: 82,
             first_keys: 2,
             keys_after: 19,
             applied_changes: 468,
             empty_windows: 1,
             reader_jobs: 222,
-            workspace_statements: 732,
-            lease_statements: 233,
-            record_statements: 2_124,
+            workspace_statements: 2,
+            lease_statements: 11,
+            record_statements: 1_969,
             begin_statements: 88,
             commit_statements: 88,
         }
@@ -552,23 +557,23 @@ fn record_jobs_of_three_commit_shapes_are_split_by_owner_kind_and_call() {
     assert_eq!(
         large,
         Totals {
-            record_jobs: 8_085,
-            producer: 5_017,
+            record_jobs: 4_938,
+            producer: 1_870,
             namespace: 1_316,
             file_plan: 1_752,
             edit_engine: 0,
             contains: 24,
-            get: 6_352,
-            get_many: 661,
+            get: 3_237,
+            get_many: 629,
             apply: 981,
             first_keys: 2,
             keys_after: 65,
             applied_changes: 4_875,
             empty_windows: 1,
             reader_jobs: 1_980,
-            workspace_statements: 10_076,
-            lease_statements: 1_991,
-            record_statements: 24_441,
+            workspace_statements: 2,
+            lease_statements: 11,
+            record_statements: 20_505,
             begin_statements: 987,
             commit_statements: 987,
         }

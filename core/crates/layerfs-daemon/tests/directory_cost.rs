@@ -743,58 +743,46 @@ const OPENDIR_BASE: Pinned = Pinned {
     sql: &[("Workspace", 1, 1)],
 };
 /// RELEASEDIR of a handle with one published reply: one job. The fence on
-/// the open descriptor, then in one transaction its open count released
-/// (the descriptor has no lease row), its replies found by one bounded
-/// window and deleted, and the handle row deleted. Nothing is queued.
+/// the open descriptor and the remembered Workspace row, then its open
+/// count, its replies and the handle released in memory. No statement, and
+/// nothing is queued.
 const RELEASEDIR_ONE_REPLY: Pinned = Pinned {
     jobs: (0, 1, 0),
     grants: 0,
-    sql: &[("Workspace", 1, 1)],
+    sql: &[],
 };
-/// The same statements with two published replies: the window steps one row
-/// more, and never more than the inline bound and one.
+/// The same with two published replies.
 const RELEASEDIR_TWO_REPLIES: Pinned = Pinned {
     jobs: (0, 1, 0),
     grants: 0,
-    sql: &[("Workspace", 1, 1)],
+    sql: &[],
 };
 /// READDIR that returns names, at any size and any offset, local or
 /// inherited: a reading visit and a publishing visit. The reading visit is
-/// the descriptor's fence, the directory's row, one window of local names
-/// with their kinds, the offset's position (the parent in the first reply)
-/// and the reply to reuse; the publishing visit is the fence and one row
-/// for every accepted name, in the request's one transaction. No reader:
-/// the cache holds the inherited names and kinds.
+/// the descriptor's fence in memory, the directory's row, one window of
+/// local names with their kinds, the offset's position (the parent in the
+/// first reply) and the reply to reuse; the publishing visit is the fence
+/// and the accepted names, in memory. Neither fence reads the Workspace
+/// row: the engine remembers it. No reader: the cache holds the inherited
+/// names and kinds.
 const READDIR_DATA: Pinned = Pinned {
     jobs: (2, 0, 0),
     grants: 0,
-    sql: &[
-        ("Workspace", 2, 2),
-        ("Inode", 1, 1),
-        ("DirectoryEntry", 1, 1),
-    ],
+    sql: &[("Inode", 1, 1), ("DirectoryEntry", 1, 1)],
 };
 /// The same offset again: the reading visit finds the reply it published
 /// and returns it. Nothing is written.
 const READDIR_AGAIN: Pinned = Pinned {
     jobs: (1, 0, 0),
     grants: 0,
-    sql: &[
-        ("Workspace", 1, 1),
-        ("Inode", 1, 1),
-        ("DirectoryEntry", 1, 1),
-    ],
+    sql: &[("Inode", 1, 1), ("DirectoryEntry", 1, 1)],
 };
 /// READDIR after the last name: the reading visit alone, which finds no
 /// name and asks for no offsets.
 const READDIR_END: Pinned = Pinned {
     jobs: (1, 0, 0),
     grants: 0,
-    sql: &[
-        ("Workspace", 1, 1),
-        ("Inode", 1, 1),
-        ("DirectoryEntry", 1, 1),
-    ],
+    sql: &[("Inode", 1, 1), ("DirectoryEntry", 1, 1)],
 };
 /// The same two requests when memory holds nothing of the base: the merge
 /// is made outside the owner over one reader, and the end asks for offsets
@@ -806,11 +794,7 @@ const READDIR_DATA_COLD: Pinned = Pinned {
 const READDIR_END_COLD: Pinned = Pinned {
     jobs: (1, 0, 0),
     grants: 1,
-    sql: &[
-        ("Workspace", 1, 1),
-        ("Inode", 1, 1),
-        ("DirectoryEntry", 1, 1),
-    ],
+    sql: &[("Inode", 1, 1), ("DirectoryEntry", 1, 1)],
 };
 
 #[test]
@@ -841,11 +825,7 @@ fn a_reply_whose_inherited_names_memory_does_not_hold_takes_one_reader() {
 const READDIR_REWIND: Pinned = Pinned {
     jobs: (2, 0, 0),
     grants: 0,
-    sql: &[
-        ("Workspace", 2, 2),
-        ("Inode", 1, 1),
-        ("DirectoryEntry", 1, 1),
-    ],
+    sql: &[("Inode", 1, 1), ("DirectoryEntry", 1, 1)],
 };
 /// A later reply of a handle that has a floor: one statement more, the
 /// bounded delete, here of 8 further rows. It finds nothing once the
@@ -853,11 +833,7 @@ const READDIR_REWIND: Pinned = Pinned {
 const READDIR_AFTER_REWIND: Pinned = Pinned {
     jobs: (2, 0, 0),
     grants: 0,
-    sql: &[
-        ("Workspace", 2, 2),
-        ("Inode", 1, 1),
-        ("DirectoryEntry", 1, 1),
-    ],
+    sql: &[("Inode", 1, 1), ("DirectoryEntry", 1, 1)],
 };
 
 #[test]

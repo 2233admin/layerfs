@@ -42,12 +42,13 @@ fn dense_fragmentation_does_not_enlarge_a_later_request() {
     let read_dense = work(&db, || dense.check());
     let read_fresh = work(&db, || fresh.check());
     // Full-window overwrite of the never-fragmented file: its four rows of
-    // 32 KiB are written where they lie. Eight fixed statements of the job
-    // and one read of the row shapes of the window's four slots; only the
-    // inode and Workspace rows change. With one shape read per slot this
+    // 32 KiB are written where they lie. Six fixed statements of the job
+    // (two more before the engine remembered the Workspace row) and one
+    // read of the row shapes of the window's four slots; only the inode
+    // and Workspace rows change. With one shape read per slot this
     // was (14, 2); before rows of several cells (74, 98).
     let over_fresh = work(&db, || fresh.write(0, &window));
-    assert_eq!((over_fresh.0, over_fresh.2), (9, 2));
+    assert_eq!((over_fresh.0, over_fresh.2), (7, 2));
     // The same over 32 masked cells: the one read of the shapes, and per
     // 32 KiB one
     // range delete of eight cells and one insert, each row change with its
@@ -57,7 +58,7 @@ fn dense_fragmentation_does_not_enlarge_a_later_request() {
     let over_dense = work(&db, || dense.write(0, &window));
     assert_eq!(
         (over_dense.0, over_dense.2),
-        (8 + 1 + 4 * (2 + 8 + 1), 2 + 2 * (32 + 4))
+        (6 + 1 + 4 * (2 + 8 + 1), 2 + 2 * (32 + 4))
     );
     dense.check();
     // The fragments are gone: the window is rows of 32 KiB like the fresh

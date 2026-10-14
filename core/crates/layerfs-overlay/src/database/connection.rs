@@ -26,6 +26,15 @@ pub struct Overlay {
     /// established only by an exact empty ready query; enqueue/release marks
     /// possible work. A rolled-back enqueue can leave only a false positive.
     pub(crate) maintenance_ready: Cell<bool>,
+    /// The Workspace row as this connection last read or wrote it, with its
+    /// incarnation. This connection is the only one and holds the exclusive
+    /// lock, so the row changes only by its own statements: a writing
+    /// statement that names the table forgets it, and so does a failed job.
+    pub(crate) workspace_seen: Cell<Option<([u8; 32], crate::WorkspaceState)>>,
+    /// The operation owner last found holding custody, forgotten the same way.
+    pub(crate) operation_seen: Cell<Option<u64>>,
+    /// The captured reader last found holding custody, forgotten the same way.
+    pub(crate) reader_seen: Cell<Option<crate::CapturedReader>>,
     /// Whether any namespace of this engine holds an orphan. Set when one
     /// is inserted, cleared by the job deleting the last one, and restored
     /// when a job fails, so it is exact:
@@ -187,8 +196,15 @@ impl Overlay {
         decode: impl FnMut(&rusqlite::Row<'_>) -> rusqlite::Result<T>,
     ) -> OverlayResult<Vec<T>> {
         self.available()?;
-        let begin = || self.begin();
         let wanted = matches!(self.transaction.get(), Transaction::Wanted);
+        let writing = || {
+            self.forget(kind, sql);
+            if wanted {
+                self.begin()
+            } else {
+                Ok(())
+            }
+        };
         let result = metrics::query(
             &self.connection,
             &self.work,
@@ -198,13 +214,51 @@ impl Overlay {
                 params,
                 bound_bytes: bytes,
                 cached,
-                before_write: if wanted { Some(&begin) } else { None },
+                before_write: Some(&writing),
             },
             decode,
         );
         result.map_err(|cause| self.failed(cause))
     }
 
+    /// Forgets what is remembered of each table a writing statement names.
+    /// A statement cannot change a table that its text does not name: the
+    /// triggers of this schema write the accounting row alone. Statements
+    /// of three families alone write the remembered tables, so the text of
+    /// any other writing statement is not searched.
+    fn forget(&self, kind: StatementKind, sql: &str) {
+        if !matches!(
+            kind,
+            StatementKind::Workspace | StatementKind::Capture | StatementKind::Lease
+        ) {
+            // The plan of a writing statement is itself not read-only to
+            // SQLite, and writes nothing.
+            debug_assert!(
+                kind == StatementKind::Explain
+                    || !["workspace", "commit_run", "commit_reader"]
+                        .iter()
+                        .any(|table| sql.contains(table)),
+                "{kind:?} writes a remembered table: {sql}"
+            );
+            return;
+        }
+        if sql.contains("workspace") {
+            self.workspace_seen.set(None);
+        }
+        if sql.contains("commit_run") {
+            self.operation_seen.set(None);
+        }
+        if sql.contains("commit_reader") {
+            self.reader_seen.set(None);
+        }
+    }
+    /// Forgets every remembered row: a failed job that wrote may have read
+    /// its own writes before they were rolled back.
+    fn forget_all(&self) {
+        self.workspace_seen.set(None);
+        self.operation_seen.set(None);
+        self.reader_seen.set(None);
+    }
     pub(crate) fn execute(
         &self,
         kind: StatementKind,
@@ -327,6 +381,11 @@ impl Overlay {
             Err(cause) => self.failed(cause),
         };
         self.transaction.set(Transaction::None);
+        // A job that began no transaction wrote nothing: what it read and
+        // remembered is still what the database holds.
+        if begun {
+            self.forget_all();
+        }
         if self.quarantined.get() {
             return Err(failed);
         }

@@ -103,9 +103,10 @@ fn drained_revocation_fences_all_handles_without_a_cleanup_job() {
     let start = f.db.diagnostics();
     f.db.revoke_native_mount(f.mount).unwrap();
     let work = f.db.diagnostics().since(&start).total();
+    // Memory alone: the Workspace row is remembered from the resources read.
     assert_eq!(
         (work.attempts, work.executions, work.direct_rows_changed),
-        (1, 1, 0)
+        (0, 0, 0)
     );
     assert_eq!(
         f.db.native_mount_state(f.mount).unwrap(),

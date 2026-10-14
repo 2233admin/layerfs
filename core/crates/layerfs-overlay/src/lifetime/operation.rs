@@ -54,6 +54,9 @@ impl Overlay {
     }
     /// The owner half of `check_operation`.
     fn operation_custody(&self, owner: OperationOwner) -> OverlayResult<()> {
+        if self.operation_seen.get() == Some(owner.owner) {
+            return Ok(());
+        }
         if self
             .query(
                 StatementKind::Lease,
@@ -66,31 +69,19 @@ impl Overlay {
         {
             return Err(OverlayError::Stale);
         }
+        self.operation_seen.set(Some(owner.owner));
         Ok(())
     }
-    /// The whole fence of one indexed operation_record job in one statement.
+    /// The whole fence of one indexed operation_record job: the Workspace row
+    /// and the owner's custody, each read only when it is not remembered.
     /// Its refusals and their order are those of `live`/`check_operation`: a
     /// stale route first, then a closed Workspace when the job writes, then a
     /// released owner. Existing custody stays readable after logical close.
     pub(crate) fn fence_operation(&self, owner: OperationOwner, write: bool) -> OverlayResult<()> {
-        self.check_route(owner.route)?;
-        let (closed, held) = self
-            .query(
-                StatementKind::Workspace,
-                crate::sql::OPERATION_FENCE,
-                &[&owner.route.incarnation.as_slice(), &integer(owner.owner)?],
-                48,
-                |r| Ok((r.get::<_, i64>(0)? != 0, r.get::<_, i64>(1)? != 0)),
-            )?
-            .pop()
-            .ok_or(OverlayError::Stale)?;
-        if write && closed {
+        if write && self.state(owner.route)?.closed {
             return Err(OverlayError::Closed);
         }
-        if !held {
-            return Err(OverlayError::Stale);
-        }
-        Ok(())
+        self.check_operation(owner)
     }
     /// Exact last-consumer fence. Cleanup owns operation_record independently afterwards.
     pub fn release_operation(&self, owner: OperationOwner) -> OverlayResult<()> {

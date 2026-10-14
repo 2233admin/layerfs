@@ -518,9 +518,9 @@ fn the_last_reply_attempt_wakes_capture_without_a_settling_job() {
         std::thread::spawn(move || client.capture(Some(route)))
     };
     until("capture waits behind the tickets", || {
-        let work = rig.client.diagnostics().unwrap();
-        work.jobs[capture_class] > unparked.jobs[capture_class]
-            && work.sql_foreground.total().attempts > unparked.sql_foreground.total().attempts
+        // The check reads the remembered Workspace row and the tickets in
+        // memory, so it is a job without a statement.
+        rig.client.diagnostics().unwrap().jobs[capture_class] > unparked.jobs[capture_class]
     });
     assert!(!capture.is_finished());
 

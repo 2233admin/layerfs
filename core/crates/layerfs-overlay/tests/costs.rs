@@ -52,14 +52,16 @@ fn complete_mutation_reports_triggers_blob_delivery_without_reservation() {
     );
     let before = db.diagnostics();
     assert_eq!(db.inode(route, 7).unwrap().unwrap().size, CELL_BYTES as u64);
+    // The inode's row holds no BLOB and the Workspace row is remembered.
     assert_eq!(
         db.diagnostics().since(&before).total().returned_blob_bytes,
-        32
+        0
     );
     let before = db.diagnostics();
     assert_eq!(file.read(0, CELL_BYTES as u32), file.expect);
     let read = db.diagnostics().since(&before).total();
-    assert_eq!(read.returned_blob_bytes, CELL_BYTES as u64 + 64);
+    // One 32-byte root fewer than it was: the Workspace row is remembered.
+    assert_eq!(read.returned_blob_bytes, CELL_BYTES as u64 + 32);
     assert_eq!(read.rows_changed + read.direct_rows_changed, 0);
     let resources = db.resources(Some(route)).unwrap();
     assert!(resources.allocation.high_water_allocated_bytes >= initial.allocated_bytes);
@@ -178,7 +180,9 @@ fn one_write_window_costs_the_same_statements_at_either_file_size_and_beside_ano
     // An overwrite writes the four rows where they lie: one shape read,
     // no row changed, no trigger; it was (4, 4, 0, 14), and (32, 64, 96, 42)
     // before rows of several cells.
-    let (first, fresh, over) = ((5, 9, 8, 14), (5, 9, 8, 13), (1, 1, 0, 9));
+    // The whole job is two attempts fewer than it was: its fence and its
+    // custody check read the Workspace row from the engine's memory.
+    let (first, fresh, over) = ((5, 9, 8, 12), (5, 9, 8, 11), (1, 1, 0, 7));
     assert_eq!((seen[0].0, seen[0].1, seen[0].2), (first, over, over));
     assert_eq!((seen[1].0, seen[1].1, seen[1].2), (fresh, over, over));
     // Stored rows of the file and of the two files beside it.

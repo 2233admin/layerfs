@@ -315,7 +315,8 @@ fn drained_revocation_releases_kernel_ownership_without_a_row_sweep() {
     let before = f.db.diagnostics();
     f.db.revoke_native_mount(f.mount).unwrap();
     let work = f.db.diagnostics().since(&before);
-    assert_eq!(work.total().attempts, 1);
+    // Memory alone: the Workspace row is remembered from the close.
+    assert_eq!(work.total().attempts, 0);
     assert_eq!(work.total().rows_changed, 0);
     assert_eq!(
         f.db.native_mount_state(f.mount).unwrap(),

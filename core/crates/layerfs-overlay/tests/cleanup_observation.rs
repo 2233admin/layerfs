@@ -40,7 +40,8 @@ fn observation_keeps_exact_live_and_held_file_disposal_state() {
             CleanupState::Held
         );
         let work = db.diagnostics().since(&sql).total();
-        assert_eq!(work.executions, 2);
+        // The custody search alone: the Workspace row is remembered.
+        assert_eq!(work.executions, 1);
         assert_eq!(work.rows_changed, 0);
         assert_eq!(work.direct_rows_changed, 0);
     }

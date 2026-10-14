@@ -120,9 +120,10 @@ fn sparse_cutoff_gap_above_four_gib_avoids_payload_windows_and_pays_root_metadat
         delta.statements[StatementKind::Payload as usize].returned_blob_bytes,
         0
     );
+    // The Workspace row is remembered from the reader's acquisition.
     assert_eq!(
         delta.statements[StatementKind::Workspace as usize].returned_blob_bytes,
-        64
+        0
     );
     println!("CAPTURED_GAP_ROOT_METADATA {:?}", delta);
     db.release_captured_reader(reader).unwrap();

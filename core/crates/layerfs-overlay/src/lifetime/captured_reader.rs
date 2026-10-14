@@ -65,9 +65,13 @@ impl Overlay {
     }
     pub(crate) fn check_captured_reader(&self, reader: CapturedReader) -> OverlayResult<()> {
         self.state(reader.capture.route)?;
+        if self.reader_seen.get() == Some(reader) {
+            return Ok(());
+        }
         let c = reader.capture;
         if self.query(StatementKind::Lease,"SELECT 1 FROM commit_reader WHERE holder=?1 AND generation=?2 AND revision=?3 AND base_root=?4 AND installed=?5",
             &[&integer(reader.owner)?,&c.generation.0,&c.revision,&c.base_root.as_slice(),&reader.installed],72,|_|Ok(()))?.is_empty() {return Err(OverlayError::Stale)}
+        self.reader_seen.set(Some(reader));
         Ok(())
     }
     /// Fixed sealed metadata pages remain valid after install/definite failure.

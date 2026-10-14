@@ -1,6 +1,8 @@
 //! The fence of every indexed operation_record job: which refusal it returns
 //! for a stale route, a closed Workspace and a released owner, which of them
 //! wins when several hold, and the statements one job executes by family.
+//! The fence is the Workspace row and the owner's custody as the engine
+//! remembers them; each is read again only after a statement that wrote it.
 mod payload_support;
 use layerfs_overlay::*;
 use payload_support::Temp;
@@ -156,42 +158,57 @@ fn each_job_refuses_a_stale_route_then_a_closed_write_then_a_released_owner() {
 }
 
 #[test]
-fn each_job_executes_a_fixed_number_of_fence_statements() {
+fn a_job_reads_a_fence_row_only_after_a_statement_that_wrote_it() {
     let temp = Temp::new();
     let db = temp.db();
     let held = scope(&db, 51);
     db.indexed_operation_record_apply(held, &[put(key(1, 0), vec![5])])
         .unwrap();
     // Workspace, Lease, OperationRecord, Begin, Commit, free-list read.
-    // A read is its one fence statement and one record statement. A write of
-    // one change is its fence, the guard read and the put inside one
-    // transaction. The fence is counted with the Workspace family.
+    // The first apply read the owner's custody; nothing has written either
+    // fence row since. A read is its one record statement. A write of one
+    // change is the guard read and the put inside one transaction: a record
+    // write names neither fence row, so the next job reads neither.
     let expected = [
-        ("contains", [1, 0, 1, 0, 0, 0]),
-        ("get", [1, 0, 1, 0, 0, 0]),
-        // Two keys: one fence, one read for each key.
-        ("get_many", [1, 0, 2, 0, 0, 0]),
-        ("apply", [1, 0, 2, 1, 1, 0]),
-        ("first_keys", [1, 0, 1, 0, 0, 0]),
-        ("first_keys_all", [1, 0, 1, 0, 0, 0]),
-        ("keys_after", [1, 0, 1, 0, 0, 0]),
+        ("contains", [0, 0, 1, 0, 0, 0]),
+        ("get", [0, 0, 1, 0, 0, 0]),
+        // Two keys: one read for each key.
+        ("get_many", [0, 0, 2, 0, 0, 0]),
+        ("apply", [0, 0, 2, 1, 1, 0]),
+        ("first_keys", [0, 0, 1, 0, 0, 0]),
+        ("first_keys_all", [0, 0, 1, 0, 0, 0]),
+        ("keys_after", [0, 0, 1, 0, 0, 0]),
     ];
     for (number, (job, families)) in expected.into_iter().enumerate() {
         let (result, counted) = statements(&db, held, job, 100 + number as u64);
         assert!(result.is_ok(), "{job}: {result:?}");
         assert_eq!(counted, families, "{job}");
     }
-    // A write refused as closed has run its fence and nothing else: no
-    // transaction.
+    // A second owner's acquisition writes the custody table: the next job
+    // of the first reads its custody once, and the one after reads nothing.
+    let second = db.acquire_operation(held.owner.route(), 2).unwrap();
+    let (result, counted) = statements(&db, held, "get", 150);
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(counted, [0, 1, 1, 0, 0, 0]);
+    let (result, counted) = statements(&db, held, "get", 151);
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(counted, [0, 0, 1, 0, 0, 0]);
+    db.release_operation(second).unwrap();
+    // The close writes the Workspace row. A write refused as closed has read
+    // that row and nothing else: no transaction.
     db.close(held.owner.route()).unwrap();
     let (result, counted) = statements(&db, held, "apply", 200);
     assert!(matches!(result, Err(OverlayError::Closed)), "{result:?}");
     assert_eq!(counted, [1, 0, 0, 0, 0, 0]);
-    // A read refused for a released owner has run its fence alone.
+    // The release deletes the owner's custody. A read refused for a
+    // released owner has searched for it and found nothing; nothing is
+    // remembered of an owner that does not hold, so it is searched again.
     db.release_operation(held.owner).unwrap();
-    let (result, counted) = statements(&db, held, "get", 300);
-    assert!(matches!(result, Err(OverlayError::Stale)), "{result:?}");
-    assert_eq!(counted, [1, 0, 0, 0, 0, 0]);
+    for _ in 0..2 {
+        let (result, counted) = statements(&db, held, "get", 300);
+        assert!(matches!(result, Err(OverlayError::Stale)), "{result:?}");
+        assert_eq!(counted, [0, 1, 0, 0, 0, 0]);
+    }
 }
 
 #[test]
@@ -203,24 +220,16 @@ fn the_fence_statements_are_point_searches() {
     for plan in &plans {
         println!("INDEXED_OPERATION_RECORD_FENCE_PLAN {plan}");
     }
-    // The fence is two point searches and nothing else: the Workspace row by
-    // its key, and the owner row by its key.
+    // The custody half of the fence is one point search of the owner row
+    // by its key. The Workspace half is the row of `explain_native_visit`.
     let operation = plans
         .iter()
-        .filter(|plan| plan.starts_with("operation-fence:"))
+        .filter(|plan| plan.starts_with("operation:"))
         .collect::<Vec<_>>();
-    assert_eq!(operation.len(), 3, "{plans:?}");
-    assert!(operation
-        .iter()
-        .any(|plan| plan.contains("SEARCH workspace")));
-    assert!(operation
-        .iter()
-        .any(|plan| plan.contains("SEARCH commit_run")));
-    for plan in operation {
-        assert!(
-            plan.contains("SEARCH") || plan.contains("SCALAR SUBQUERY"),
-            "{plan}"
-        );
+    assert_eq!(operation.len(), 1, "{plans:?}");
+    assert!(operation[0].contains("SEARCH commit_run"), "{plans:?}");
+    for plan in &plans {
+        assert!(plan.contains("SEARCH"), "{plan}");
         assert!(
             !plan.contains("SCAN") && !plan.contains("TEMP B-TREE"),
             "{plan}"
@@ -253,7 +262,7 @@ fn several_keys_are_read_under_one_fence_in_the_order_asked() {
             "{position}"
         );
     }
-    // No key is no read: the fence alone.
+    // No key is no read, and the remembered fence is no statement.
     let before = db.diagnostics();
     assert!(db
         .indexed_operation_record_get_many(held, &[])
@@ -265,7 +274,7 @@ fn several_keys_are_read_under_one_fence_in_the_order_asked() {
             work.statements[StatementKind::Workspace as usize].attempts,
             work.statements[StatementKind::OperationRecord as usize].attempts
         ),
-        (1, 0)
+        (0, 0)
     );
     // The list is bounded, and refused before any statement.
     let many = (0..65).map(|number| key(1, number)).collect::<Vec<_>>();

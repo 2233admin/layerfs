@@ -457,17 +457,18 @@ fn a_handle_that_seeks_back_reuses_its_replies_and_a_long_handle_retires_in_boun
         )
     };
     let (count, reused, first) = cost(0);
-    // SQL reads the Workspace fence, directory row and name window. Parent,
-    // cookie and reuse checks use exact memory ownership.
-    assert_eq!((count, reused, first), (PAGE_ROWS, None, [1, 0, 1, 1, 0]));
+    // SQL reads the directory row and name window. The Workspace fence is
+    // the remembered row; parent, cookie and reuse checks use exact memory
+    // ownership.
+    assert_eq!((count, reused, first), (PAGE_ROWS, None, [0, 0, 1, 1, 0]));
     let (count, last, start) = cost(2);
-    // The fence, the directory's row, the window, the reuse.
-    assert_eq!((count, start), (PAGE_ROWS, [1, 0, 1, 1, 0]));
+    // The directory's row, the window, the reuse.
+    assert_eq!((count, start), (PAGE_ROWS, [0, 0, 1, 1, 0]));
     let (count, last, middle) = cost(last.unwrap());
     // The offset and reuse are memory checks; SQL work remains the same.
-    assert_eq!((count, middle), (PAGE_ROWS, [1, 0, 1, 1, 0]));
+    assert_eq!((count, middle), (PAGE_ROWS, [0, 0, 1, 1, 0]));
     let (count, _, tail) = cost(last.unwrap());
-    assert_eq!((count, tail), (3, [1, 0, 1, 1, 0]));
+    assert_eq!((count, tail), (3, [0, 0, 1, 1, 0]));
 
     // A handle with more replies than its RELEASEDIR deletes itself: the
     // header is marked closed and bounded indexed turns retire the rows.

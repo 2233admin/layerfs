@@ -13,16 +13,21 @@ use layerfs_content::{
 use layerfs_overlay::{CapturedReader, DirectoryEntry, PAGE_ROWS};
 use std::cell::RefCell;
 
+/// Slots of one window of point answers. Serials are allocated in order, so
+/// a change of up to this many neighbouring serials has a slot for each and
+/// reads each sealed record once; a larger change shares slots and reads a
+/// displaced answer again. The window is this size at any change size.
+const POINT_SLOTS: usize = 1024;
 /// One fixed window of sealed point answers, one slot per serial residue.
 /// A sealed record never changes, so a retained answer cannot go stale; a
 /// refused or undecodable read is never retained.
 struct Memo<T: Copy>(RefCell<Vec<Option<(u64, T)>>>);
 impl<T: Copy> Memo<T> {
     fn new() -> Self {
-        Self(RefCell::new(vec![None; PAGE_ROWS]))
+        Self(RefCell::new(vec![None; POINT_SLOTS]))
     }
     fn slot(serial: u64) -> usize {
-        (serial % PAGE_ROWS as u64) as usize
+        (serial % POINT_SLOTS as u64) as usize
     }
     fn get(&self, serial: u64) -> Option<T> {
         self.0.borrow()[Self::slot(serial)]
@@ -35,8 +40,8 @@ impl<T: Copy> Memo<T> {
 }
 /// Every pass and point answers the same sealed rows: headers, values and
 /// fresh ranks from this attempt's records, names from the retained reader.
-/// One window of at most PAGE_ROWS is resident per open pass and per kind of
-/// point answer, whatever the size of the change.
+/// One window of at most PAGE_ROWS is resident per open pass, and one of
+/// POINT_SLOTS per kind of point answer, whatever the size of the change.
 pub(crate) struct Cursor<'s, 'a, P: OverlayCapturedNamespace + OverlayOperationRecords + ?Sized> {
     provider: &'a P,
     shared: &'s Shared<'a, P>,

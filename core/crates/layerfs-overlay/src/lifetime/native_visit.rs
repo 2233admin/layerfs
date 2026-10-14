@@ -106,29 +106,29 @@ impl Overlay {
     ) -> OverlayResult<(WorkspaceState, i64, Option<LocalRow>)> {
         self.check_route(mount.route)?;
         let key = integer(serial)?;
-        let params: [&dyn rusqlite::ToSql; 3] =
-            [&mount.route.ns, &mount.route.incarnation.as_slice(), &key];
-        let (state, local) = self
-            .query(
-                StatementKind::Workspace,
-                if row {
-                    crate::sql::FENCE_LOOKUP_ROW
-                } else {
-                    crate::sql::FENCE_LOOKUP
-                },
-                if row { &params[..] } else { &params[..2] },
-                if row { 48 } else { 40 },
-                |r| {
-                    let local = if row && r.get::<_, Option<i64>>(11)?.is_some() {
-                        Some(inode::local_row_at(r, 11)?)
-                    } else {
-                        None
-                    };
-                    Ok((crate::lifetime::workspace::decode(r)?, local))
-                },
-            )?
-            .pop()
-            .ok_or(OverlayError::Stale)?;
+        let (state, local) = if row {
+            let found = self
+                .query(
+                    StatementKind::Workspace,
+                    crate::sql::FENCE_LOOKUP_ROW,
+                    &[&mount.route.ns, &mount.route.incarnation.as_slice(), &key],
+                    48,
+                    |r| {
+                        let local = if r.get::<_, Option<i64>>(11)?.is_some() {
+                            Some(inode::local_row_at(r, 11)?)
+                        } else {
+                            None
+                        };
+                        Ok((crate::lifetime::workspace::decode(r)?, local))
+                    },
+                )?
+                .pop()
+                .ok_or(OverlayError::Stale)?;
+            self.remember(mount.route, found.0);
+            found
+        } else {
+            (self.state(mount.route)?, None)
+        };
         if live && state.closed {
             return Err(OverlayError::Closed);
         }

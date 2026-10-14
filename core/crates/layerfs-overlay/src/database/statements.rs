@@ -160,15 +160,14 @@ pub(crate) const DIRECTORY_ENTRY_PUT: &str = "INSERT INTO fs_entry VALUES(?1,?2,
     ON CONFLICT(parent,name,generation) DO UPDATE SET inode=excluded.inode,inherited=excluded.inherited";
 pub(crate) const DIRECTORY_ENTRY_DROP: &str =
     "DELETE FROM fs_entry WHERE parent=?1 AND name=?2 AND generation=?3";
+/// The publication of one job, returning the row in the order of
+/// `FENCE_LOOKUP` so that the next job's fence needs no statement.
 pub(crate) const FRONTIER_ADVANCE: &str = "UPDATE workspace SET revision=?2,
-    dirty_inodes=dirty_inodes+?3,dirty_directory_entries=dirty_directory_entries+?4 WHERE ns=?1";
+    dirty_inodes=dirty_inodes+?3,dirty_directory_entries=dirty_directory_entries+?4 WHERE ns=?1
+    RETURNING active,captured,revision,base_root,dirty_inodes,dirty_directory_entries,lifecycle,
+    installed,captured_revision,base_readers,consolidating";
 
 pub(crate) const OPERATION_CUSTODY: &str = "SELECT 1 FROM commit_run WHERE holder=?1";
-/// The Workspace row of one route and that owner's custody, as two point
-/// searches in one statement: whether it is closed, and whether the owner holds.
-pub(crate) const OPERATION_FENCE: &str = "SELECT lifecycle,
-    EXISTS(SELECT 1 FROM commit_run WHERE holder=?2)
-    FROM workspace WHERE incarnation=?1";
 
 pub(crate) const INDEXED_OPERATION_RECORD_CONTAINS: &str = "SELECT 1 FROM commit_record
     WHERE operation=?1 AND file_scope=?2 AND kind=?3 AND key=?4";

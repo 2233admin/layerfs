@@ -292,6 +292,7 @@ const WRITE: [(&str, u64, u64); 5] = [
     ("Inode", 1, 1),
     ("Payload", 2, 3),
 ];
-/// RELEASE checks the Workspace fence and removes exact custody in memory.
-const RELEASE: [(&str, u64, u64); 1] = [("Workspace", 1, 1)];
-const TOTAL: (u64, u64) = (19, 22);
+/// RELEASE checks the remembered Workspace row and removes exact custody in
+/// memory: no statement.
+const RELEASE: [(&str, u64, u64); 0] = [];
+const TOTAL: (u64, u64) = (18, 21);

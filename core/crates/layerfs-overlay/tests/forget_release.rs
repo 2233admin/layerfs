@@ -213,17 +213,18 @@ fn a_refused_forget_is_refused_by_one_statement_and_writes_nothing() {
     );
     assert_eq!(work, (0, 0, 0));
     // No lookup count on the inode: Stale, by the fence alone, before any
-    // transaction.
+    // transaction. The fence is the remembered Workspace row and the
+    // kernel's reference in memory: no statement.
     let (result, work) = attempt(seat.mount, 51, 1);
     assert!(matches!(result, Err(OverlayError::Stale)), "{result:?}");
-    assert_eq!(work, (1, 0, 0));
+    assert_eq!(work, (0, 0, 0));
     // More than the kernel holds: refused after the fence, nothing written.
     let (result, work) = attempt(seat.mount, 50, 2);
     assert!(
         matches!(result, Err(OverlayError::Invalid(_))),
         "{result:?}"
     );
-    assert_eq!(work, (1, 0, 0));
+    assert_eq!(work, (0, 0, 0));
     // The root's implicit count is not the kernel's to give back.
     let (result, _) = attempt(seat.mount, 1, 1);
     assert!(

@@ -47,6 +47,34 @@ a real creation failure rather than a refused setting.
 `user_version` is 34. The file is created fresh and is never reopened: there
 is no migration, conversion or retry.
 
+## Rows the engine remembers
+
+Issue #321 Step D. The connection of a Workspace file is the only one, holds
+the exclusive lock and runs one job at a time, so three rows change only by
+its own statements. The engine keeps what it last read or wrote of each:
+
+| Remembered | Read by | Forgotten by |
+| --- | --- | --- |
+| The `workspace` row with its incarnation | `Overlay::state` and every fence built on it | a writing statement whose text names `workspace` |
+| The operation owner last found in `commit_run` | `check_operation`, `fence_operation` | a writing statement whose text names `commit_run` |
+| The captured reader last found in `commit_reader` | `check_captured_reader` | a writing statement whose text names `commit_reader` |
+
+A statement cannot change a table that its text does not name; the triggers
+of this schema write `accounting` alone. Only statements of the Workspace,
+Capture and Lease families write these tables, so the text of any other
+writing statement is not searched (a debug assertion checks the rule). A job
+that began a transaction and failed forgets all three, because it may have
+read its own writes before they were rolled back; a job that failed before
+its first write wrote nothing and forgets nothing. An owner or reader that is
+not found is not remembered.
+
+The frontier advance of a publication returns the row it wrote
+(`FRONTIER_ADVANCE ... RETURNING`), and the fence that reads an inode's row
+with the Workspace's (`FENCE_LOOKUP_ROW`) returns it too, so both refresh the
+memory. A fence that needs only the Workspace row and a custody that is
+remembered is then no statement: the fences of RELEASE, RELEASEDIR, READ,
+READDIR and FORGET, and of every record and reader job of a Commit.
+
 ## Earlier terminology (schema 16 to 33)
 
 A `directory_entry` is a directory name-to-inode binding, including a recorded

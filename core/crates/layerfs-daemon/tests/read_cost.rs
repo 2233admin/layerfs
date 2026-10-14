@@ -804,10 +804,10 @@ fn an_unlinked_open_file_still_reads_its_own_bytes_in_one_visit() {
         // Inherited bytes come from the root the orphan retains: one reader.
         assert_eq!(cost.jobs, jobs(1, 0, 0), "{label}");
         assert_eq!((cost.grants, cost.length_batches), (grants, 0), "{label}");
-        // The fence, the orphan's row, and its own and its retained layers.
+        // The orphan's row, and its own and its retained layers. The fence
+        // is the remembered Workspace row and the descriptor in memory.
         let families: Vec<_> = cost.sql.iter().map(|(family, ..)| *family).collect();
-        assert_eq!(families, ["Workspace", "Inode", "Payload"], "{label}");
-        assert_eq!(cost.family("Workspace"), (1, 1), "{label}");
+        assert_eq!(families, ["Inode", "Payload"], "{label}");
         assert_eq!(cost.family("Inode"), (2, 2), "{label}");
         // The orphan is held by open state in memory: no lease statement.
         assert_eq!(cost.family("Lease"), (0, 0), "{label}");
@@ -1073,14 +1073,15 @@ const LOOKUP_UNSEEN: Pinned = Pinned {
         ("DirectoryEntry", 2, 2),
     ],
 };
-/// READ of base bytes: one read-only visit (the mount, the descriptor and
-/// the Workspace row in one statement; the inode's local layers in another)
-/// and one reader for the bytes. No transaction, no source, no release.
+/// READ of base bytes: one read-only visit (the mount and the descriptor in
+/// memory with the remembered Workspace row; the inode's local layers in one
+/// statement) and one reader for the bytes. No transaction, no source, no
+/// release.
 const READ_BASE: Pinned = Pinned {
     jobs: (1, 0, 0),
     grants: 1,
     length_batches: 0,
-    sql: &[("Workspace", 1, 1), ("Inode", 1, 1)],
+    sql: &[("Inode", 1, 1)],
 };
 /// READ at or beyond the end of a file: the same visit and nothing else. A
 /// base file's end is the length the daemon remembers; a local file's is its
@@ -1089,7 +1090,7 @@ const READ_END: Pinned = Pinned {
     jobs: (1, 0, 0),
     grants: 0,
     length_batches: 0,
-    sql: &[("Workspace", 1, 1), ("Inode", 1, 1)],
+    sql: &[("Inode", 1, 1)],
 };
 /// READ of local bytes: the visit copies them (one cell-range statement of
 /// the one local layer). No reader.
@@ -1097,7 +1098,7 @@ const READ_LOCAL: Pinned = Pinned {
     jobs: (1, 0, 0),
     grants: 0,
     length_batches: 0,
-    sql: &[("Workspace", 1, 1), ("Inode", 1, 1), ("Payload", 1, 1)],
+    sql: &[("Inode", 1, 1), ("Payload", 1, 1)],
 };
 /// READ of a window that is partly local: the visit of a local one, and one
 /// reader for the inherited span.
@@ -1105,7 +1106,7 @@ const READ_MIXED: Pinned = Pinned {
     jobs: (1, 0, 0),
     grants: 1,
     length_batches: 0,
-    sql: &[("Workspace", 1, 1), ("Inode", 1, 1), ("Payload", 1, 1)],
+    sql: &[("Inode", 1, 1), ("Payload", 1, 1)],
 };
 /// OPEN of a base file this daemon has seen: one visit decides over
 /// resident facts and writes the descriptor in its one transaction (the
@@ -1133,12 +1134,13 @@ const OPEN_UNSEEN: Pinned = Pinned {
     length_batches: 1,
     sql: &[("Workspace", 2, 2)],
 };
-/// RELEASE: one job, one transaction.
+/// RELEASE: one job over open state in memory and the remembered Workspace
+/// row. No statement.
 const RELEASE: Pinned = Pinned {
     jobs: (0, 1, 0),
     grants: 0,
     length_batches: 0,
-    sql: &[("Workspace", 1, 1)],
+    sql: &[],
 };
 /// READLINK of a base link: the visit, under the kernel's lookup reference,
 /// and one reader for the target.
@@ -1146,14 +1148,14 @@ const READLINK_BASE: Pinned = Pinned {
     jobs: (1, 0, 0),
     grants: 1,
     length_batches: 0,
-    sql: &[("Workspace", 1, 1), ("Inode", 1, 1)],
+    sql: &[("Inode", 1, 1)],
 };
 /// READLINK of a local link: the visit copies the target. No reader.
 const READLINK_LOCAL: Pinned = Pinned {
     jobs: (1, 0, 0),
     grants: 0,
     length_batches: 0,
-    sql: &[("Workspace", 1, 1), ("Inode", 1, 1), ("Payload", 1, 1)],
+    sql: &[("Inode", 1, 1), ("Payload", 1, 1)],
 };
 /// READ of base bytes once this engine has made an orphan: the visit also
 /// asks whether its inode is one.
@@ -1161,5 +1163,5 @@ const READ_BASE_BESIDE_ORPHAN: Pinned = Pinned {
     jobs: (1, 0, 0),
     grants: 1,
     length_batches: 0,
-    sql: &[("Workspace", 1, 1), ("Inode", 1, 1)],
+    sql: &[("Inode", 1, 1)],
 };

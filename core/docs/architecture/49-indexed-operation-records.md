@@ -158,16 +158,23 @@ from this source. Content aggregate residency, actual sparse/captured editing,
 runtime Save/transport ownership, held cleanup debt and complete Commit speed/
 storage qualification remain separate required work.
 
-## One fence statement, and several keys in one read job (issue #320)
+## The fence of a record job, and several keys in one read job (issues #320, #321)
 
-Every indexed record job runs **one** fence statement before its own work: the
-Workspace row of its route by key, with the owner row's existence as a scalar
-subquery (`OPERATION_FENCE`, `Overlay::fence_operation`). Its refusals and their
-order are those of the two statements it replaced: a stale route, then a closed
-Workspace when the job writes, then a released owner. Existing custody stays
-readable after logical close. `tests/indexed_operation_record_fence.rs` pins the
-refusal table, the statements of each job and the plan (two point searches). A
-read job is 2 statements; a one-change write is 6 inside one transaction.
+Every indexed record job is fenced before its own work
+(`Overlay::fence_operation`): the Workspace row of its route, then the owner
+row's existence. Its refusals and their order are unchanged: a stale route,
+then a closed Workspace when the job writes, then a released owner. Existing
+custody stays readable after logical close.
+
+Since issue #321 Step D the engine remembers both rows (see
+[overlay terminology](64-overlay-terminology.md#rows-the-engine-remembers)),
+so a record job reads a fence row only after a statement that wrote it. A
+record write names neither row. A read job is therefore 1 statement and a
+one-change write is 4 inside one transaction (one more each with the one
+fence statement of issue #320, `OPERATION_FENCE`, which is removed).
+`tests/indexed_operation_record_fence.rs` pins the refusal table, the
+statements of each job, the read after a custody or Workspace write, and the
+plan of the custody search.
 
 `indexed_operation_record_get_many(scope, keys)` reads the values of at most 64
 keys under one fence, in the order asked; an absent key is `None` in its place.

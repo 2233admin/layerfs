@@ -183,7 +183,9 @@ fn attempted(error: WorkspaceError, expected: &str) {
         Err(OwnerError::Overlay(cause)) => assert_eq!(format!("{cause:?}"), expected),
         other => panic!("{other:?}"),
     }
-    assert!(completion.work().sql.total().attempts > 0);
+    // The original completion keeps the work of its one attempt. A refusal
+    // decided by the remembered fence rows has no statement to keep.
+    assert_eq!(completion.work().jobs, 1);
 }
 fn link(serial: u64, target: &[u8], born: u64) -> (Inode, Cell) {
     let mut data = Box::new([0_u8; CELL_BYTES]);
@@ -358,7 +360,7 @@ fn owner_pages_preserve_original_failed_completion_and_unattempted_command() {
             "captured name cursor"
         )))
     ));
-    assert!(completion.work().sql.total().attempts > 0);
+    assert_eq!(completion.work().jobs, 1);
     drop(original);
     // The failed read did not dispose the reader or turn later observation into
     // a replay. This is a distinct explicit original point call.

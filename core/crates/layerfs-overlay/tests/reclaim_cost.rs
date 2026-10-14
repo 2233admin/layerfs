@@ -45,7 +45,7 @@ fn terminal_close_never_visits_the_workspace_population() {
         assert_eq!(work.direct_rows_changed, 1);
         assert_eq!(
             (work.fullscan_steps, work.sorts, work.returned_blob_bytes),
-            (0, 0, 32)
+            (0, 0, 0)
         );
         let after = db.resources(Some(route)).unwrap().counts;
         assert_eq!(after, before, "close deletes no table row");

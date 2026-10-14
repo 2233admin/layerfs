@@ -575,7 +575,7 @@ const WRITE: [(&str, u64, u64); 5] = [
     ("Inode", 1, 1),
     ("Payload", 2, 3),
 ];
-const RELEASE: [(&str, u64, u64); 1] = [("Workspace", 1, 1)];
+const RELEASE: [(&str, u64, u64); 0] = [];
 /// UNLINK publishes SQL tombstones and orphan-domain metadata. Reference
 /// and orphan ownership checks are memory lookups in the same atomic job.
 const UNLINK: [(&str, u64, u64); 5] = [
@@ -587,30 +587,25 @@ const UNLINK: [(&str, u64, u64); 5] = [
 ];
 /// The last kernel reference invokes one bounded live payload retirement.
 /// The remaining Lease probe protects retained immutable generations.
-const FORGET: [(&str, u64, u64); 6] = [
+const FORGET: [(&str, u64, u64); 5] = [
     ("Begin", 1, 1),
     ("Commit", 1, 1),
-    ("Workspace", 1, 1),
     ("Inode", 2, 2),
     ("Lease", 1, 1),
     ("Reclaim", 7, 9),
 ];
 /// A large file retires one bounded page now and the rest in live maintenance.
-const FORGET_PAGE: [(&str, u64, u64); 6] = [
+const FORGET_PAGE: [(&str, u64, u64); 5] = [
     ("Begin", 1, 1),
     ("Commit", 1, 1),
-    ("Workspace", 1, 1),
     ("Inode", 1, 1),
     ("Lease", 1, 1),
     ("Reclaim", 19, 37),
 ];
 /// An already migrated cell ends its orphan and pending live-maintenance item.
-const FORGET_MIGRATED: [(&str, u64, u64); 4] = [
-    ("Begin", 1, 1),
-    ("Commit", 1, 1),
-    ("Workspace", 1, 1),
-    ("Reclaim", 6, 9),
-];
-/// Linked files release kernel/descriptor custody in memory, behind one fence.
-const LIVE_FORGET: [(&str, u64, u64); 1] = [("Workspace", 1, 1)];
-const LIVE_RELEASE: [(&str, u64, u64); 1] = [("Workspace", 1, 1)];
+const FORGET_MIGRATED: [(&str, u64, u64); 3] =
+    [("Begin", 1, 1), ("Commit", 1, 1), ("Reclaim", 6, 9)];
+/// Linked files release kernel/descriptor custody in memory, behind the
+/// remembered Workspace row: no statement.
+const LIVE_FORGET: [(&str, u64, u64); 0] = [];
+const LIVE_RELEASE: [(&str, u64, u64); 0] = [];

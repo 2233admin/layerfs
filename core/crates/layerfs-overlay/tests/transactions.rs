@@ -212,11 +212,25 @@ fn a_failure_after_the_first_write_rolls_back_and_one_before_it_has_nothing_to_r
     assert_eq!(admission.admitted_jobs, 0);
     // Only failure completion observes physical state.
     assert_eq!(admission.observations, 1);
-    // Neither the inode nor the frontier advance survived, and the ticket
+    // Neither the frontier advance nor the inode survived, and the ticket
     // the failed job issued in memory went with them: only the earlier
     // publication is still owed.
-    assert_eq!(db.inode(route, 3).unwrap(), None);
+    // The failed job's frontier advance returned the advanced row and the
+    // engine remembered it. The rollback forgot it: the row is read again
+    // by one statement and holds the earlier revision.
+    let read = db.diagnostics();
     assert_eq!(db.state(route).unwrap().revision, revision);
+    let read = db.diagnostics().since(&read);
+    assert_eq!(
+        read.statements[StatementKind::Workspace as usize].attempts,
+        1
+    );
+    assert_eq!(read.total().attempts, 1);
+    // Remembered again, it is no statement.
+    let read = db.diagnostics();
+    assert_eq!(db.state(route).unwrap().revision, revision);
+    assert_eq!(db.diagnostics().since(&read).total().attempts, 0);
+    assert_eq!(db.inode(route, 3).unwrap(), None);
     assert_eq!(db.pending_publications(route, 0).unwrap(), vec![ticket]);
 
     let sql = db.diagnostics();
