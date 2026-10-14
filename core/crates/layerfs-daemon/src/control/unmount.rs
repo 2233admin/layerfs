@@ -91,12 +91,17 @@ impl Service {
         kernel: Receipt,
         forced: Option<ForcedFacts>,
     ) -> Result<Receipt, Failure> {
-        match self.job(
-            workspace.route(),
-            |job_client: &crate::OwnerClient, job_route| job_client.close(job_route),
-        ) {
+        match workspace.close() {
             Ok(()) => Ok(kernel),
-            Err(failure) => Err(self.unclosed(token, failure, kernel, forced)),
+            Err(error) => {
+                let failure = match error {
+                    crate::store::CloseError::Owner(cause) => Failure::Owner(cause),
+                    crate::store::CloseError::Reader(cause) => Failure::Workspace(
+                        layerfs_workspace::WorkspaceError::Service(Box::new(cause)),
+                    ),
+                };
+                Err(self.unclosed(token, failure, kernel, forced))
+            }
         }
     }
     /// Routing removal after an acknowledged Close; the reply is already known.

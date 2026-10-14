@@ -13,18 +13,16 @@ use std::{fmt, io, path::PathBuf, sync::Arc};
 /// Fixed startup resources; none is a total Store/namespace/file size limit.
 #[derive(Clone, Copy, Debug)]
 pub struct StoreSettings {
-    pub read_handles: usize,
+    pub workspace_capacity: usize,
     pub cache_bytes: usize,
     pub reservations: ReservationBlocks,
-    pub read_limits: crate::store::ReadLimits,
 }
 impl Default for StoreSettings {
     fn default() -> Self {
         Self {
-            read_handles: 4,
+            workspace_capacity: 16,
             cache_bytes: 8 * 1024 * 1024,
             reservations: ReservationBlocks::default(),
-            read_limits: crate::store::ReadLimits::default(),
         }
     }
 }

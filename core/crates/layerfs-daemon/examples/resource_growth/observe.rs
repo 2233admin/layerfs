@@ -16,8 +16,7 @@ pub fn point(out: &mut File, name: &str, index: usize, opened: &OpenedStore, own
     let local = owner.client().diagnostics().unwrap();
     let cache = opened.store.cache_work().unwrap();
     let (live, allocated, freed) = allocation::snapshot();
-    writeln!(out,"{{\"schema\":\"pre-s8-growth-point-v2\",\"stage\":\"{name}\",\"index\":{index},\"rust_live_requested\":{live},\"rust_allocated\":{allocated},\"rust_freed\":{freed},\"cache_bytes\":{},\"cache_objects\":{},\"read_handles\":{},\"closed_namespaces\":{},\"maintenance_rows\":{},\"maintenance_bytes\":{}}}",cache.charged_cache_bytes,cache.cached_objects,opened.store.read_handles(),local.closed_namespaces,local.maintenance_rows,local.maintenance_data_bytes).unwrap();
-    assert_eq!(opened.store.read_handles(), 4);
+    writeln!(out,"{{\"schema\":\"pre-s8-growth-point-v3\",\"stage\":\"{name}\",\"index\":{index},\"rust_live_requested\":{live},\"rust_allocated\":{allocated},\"rust_freed\":{freed},\"cache_bytes\":{},\"cache_objects\":{},\"read_handles\":{},\"closed_namespaces\":{},\"maintenance_rows\":{},\"maintenance_bytes\":{}}}",cache.charged_cache_bytes,cache.cached_objects,opened.store.read_handles(),local.closed_namespaces,local.maintenance_rows,local.maintenance_data_bytes).unwrap();
     assert!(cache.charged_cache_bytes <= 8 * 1024 * 1024);
 }
 pub fn terminal(out: &mut File) {

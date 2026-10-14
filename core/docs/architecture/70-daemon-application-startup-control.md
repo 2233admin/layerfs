@@ -15,7 +15,7 @@ effective uid and restrictive modes; deployment must keep their ancestors stable
 and daemon-controlled. The config and backing files are outside the mount root.
 The controller's key and daemon key do not appear in environment/arguments.
 
-DaemonSetup carries explicit connection/read/cache/job windows, namespace
+DaemonSetup carries explicit connection/cache windows and namespace
 admission, command identity and backing/mount placement. Command uid differs from
 the daemon and root; it describes Sandbox policy, not an implemented command
 launcher. Linux process/mount/capability access must still be proved through the
@@ -24,7 +24,7 @@ and descriptor controls; provider-independent `store/` receives no path/engine
 transport type. No daemon Exec registration or supervisor is introduced.
 
 R8b update, 2026-10-10: `DaemonLimits` also carries `serial_low_water`, one
-`u64` after the other limits, and the record magic is `LFSD\x02`; a record of
+`u64` after the other limits, and the then-current record magic was `LFSD\x02`; a record of
 the previous layout is refused, not read. Startup refuses a value at or above
 the 1,024-serial refill window as invalid configuration. Each of the three
 places that assemble the control Service passes the value to
@@ -134,8 +134,8 @@ identities. Slot alone cannot distinguish a later connection reusing that slot.
 
 There is no owned formatting buffer or retained opt-in flag, counter registry,
 trace, additional file, thread, queue or cache. A line is at most 4096 bytes,
-and one request emits at most 64 plus twice the configured reader count lines. The
-current complete Linux schema emits 56 plus twice the reader count lines. The
+and one request emits at most 64 plus twice the configured reader observation
+capacity (Workspaces plus control and retired summary). The
 earlier resource-coverage plan's 55 omitted the separate original observer-cost
 record; that cost remains explicitly priced rather than hidden. Schema snapshots
 have fixed size independent of base entries, mutation bytes, history or unrelated
@@ -151,12 +151,12 @@ array; it is never a successful zero-valued snapshot.
 | 4, 5 | 0 | Foreground and maintenance PayloadWork, all seven source fields |
 | 6, 7 | 0 | Foreground and maintenance AllocationWork, six original encoded fields (attempts, requested_bytes, admitted_jobs, refusals, observations, freelist_queries) |
 | 8 | 0 | StoreWork: object_batches, object_ids, length_batches, length_ids, serial_reservations |
-| 9 | 0 | ReadServiceWork, all 13 source fields; booleans encoded as 0 or 1 |
+| 9 | 0 | ReadServiceWork: stopping, poisoned, readers, quarantined, opening_failures, requests, lock_wait_ns; section 39 distinguishes historical 13-field scheduler arrays |
 | 10 | 0 | ClientWork: cache_hits, cache_misses, upstream_batches, authenticated_bytes, evictions, charged_cache_bytes, cached_objects, then seeded_objects, seeded_bytes, seeded_lengths (appended for #320; earlier positions unchanged) |
 | 11 | 0 | DispatchWork, all ten source fields |
 | 12 | 0 | Native mount owner id, root serial, serving, detached, abort_bound |
 | 13 | -1 | Writer SqlWork scalars in declaration order, then seven statement_phases (calls, wall_ns), then seven commit_phases (calls, wall_ns) |
-| 14 | Reader index | Reader SqlWork, same 55-field order as writer |
+| 14 | Reader identity; -2 for closed-reader sum | Reader SqlWork, same 55-field order as writer; unavailable final work invalidates the sum |
 | 15 | 0 | Original Commit CapturedNamespaceWork, all 31 source fields |
 | 16 | 0 | Original Commit Storage Diagnostics, all 42 source fields |
 | 17 to 22 | 0 | Original Content filesystem objects, directories, inodes, references, release and validation work respectively, recursively flattened in declaration order |
@@ -166,13 +166,21 @@ array; it is never a successful zero-valued snapshot.
 | 26 | 0 | All 39 OpcodeWork opcode counts in Opcode declaration order, then handoffs, inline, refused, terminal, unadmitted, forget_units, store_units |
 | 27 | 0 | Attempted abort disposition and value: (1,1) Written, (2,count) Short, (3,errno) Failed; no attempted abort is unavailable |
 | 28 | 0 | Workspace Resources (section 38); historical global Resources: 17 StoredCounts fields in declaration order, five AllocationState scalar fields, six AllocationWork fields, then database_pages, free_pages, debt_upper_bytes |
-| 29 | Reader index | That existing Store reader's 42 Storage Diagnostics fields, in the same order as section 16; unavailable while leased or when the pool observation lock is unavailable |
+| 29 | Reader index | That existing Store reader's 42 Storage Diagnostics fields, in the same order as section 16; unavailable after removal or while its reader lock is unavailable |
 | 30 | 0 | Resource-observer admitted and completion_available bits; when completed, its actual StatementWork total (17 fields), PayloadWork (7), AllocationWork (6), parked_turns, queue_wait_ns and service_ns follow |
 | 31 | 0 | Common overlay budget limit, aggregate pager allowance, fixed bytes, job bytes, peak job bytes and outstanding jobs; actual template SQLite ENABLE_MEMORY_MANAGEMENT readback bit |
 | 99 | 0 | Number of preceding completed records, their values-array number count, their unavailable section count |
+| 39 | 0 | Workspace reader schema: 1; absent in historical shared-pool arrays |
 | 38 | 0 | Resource scope: 1 means the identified Workspace; absent in historical daemon-wide observations |
 | 36 | 0 | SQL statement-family cardinality: 12 after Workspace/Lease removal; absent in historical 14-family receipts |
 | 37 | 0 | Frontier class cardinality: 3; absent in historical six-class receipts |
+
+The #320 reader implementation removes the fixed read_handles setup field and bumps
+the private DaemonSetup layout to LFSD\x04. Old records are refused, never
+misread. Namespace admission now determines maximum mounted reader population;
+each has a verified 2 MiB SQLite cache and short provider transactions. Reader
+observations do not keep closed connections alive. Section 39 declares this
+current demand/lock layout; historical pool records keep their own schema.
 
 All sections use the same original authenticated call correlation. The normal
 Mount facade issues separate bind and Attach calls. Store providers, owner,
@@ -222,15 +230,12 @@ An actual binary proof checks that such two failures still deliver the original
 Status reply and leave the ordinary live state observable. No product fault
 injection or test-only API is involved.
 
-Reader Storage snapshots use a nonblocking pool-state observation lock and copy
-one existing Diagnostics value from idle, Ready or retired custody. The lock is
-released before formatting; active leases and unavailable locks are unavailable,
-without read admission, SQL, cache activity or demand. No whole-reader vector or
-duplicate index is kept. Point observation traverses at most R reader entries
-and S fixed admission slots; collecting R observations is worst-case O(R²+RS)
-in configured service knobs, which remain fixed in this campaign. S is
-(configured namespace capacity + 1) times (16 + configured control connections).
-This work is independent of file/base/history and active Workspace populations.
+Reader Storage snapshots select an existing session under the reader registry
+lock and try its short demand lock. A contended or closed session is unavailable;
+observation performs no admission, SQL, cache fill or provider demand. The
+registry scales with admitted Workspaces, not files or request tickets. Concrete
+SQL observations use weak provider references and a fixed retired-work summary,
+so healthy connections close after unmount even if diagnostics remain alive.
 
 Before an observed terminal operation the application clones the exact existing
 SessionObserver while holding the registry briefly, then releases that lock.
@@ -252,9 +257,9 @@ failure remain observable/retained with their actual scopes. This gap does not
 remove custody or establish success of the failed terminal operation.
 
 This output does not supply kernel syscall/wait counts, per-file residency,
-VmHWM, device I/O, external file allocations or EXPLAIN plans. Leased reader
+VmHWM, device I/O, external file allocations or EXPLAIN plans. Contended reader
 Storage counters remain unavailable until a later separately requested
-observation finds them in pool custody. Linux binary tests
+observation can inspect the owning session. Linux binary tests
 cover ordinary-call silence, equal fixed record counts beside one/four unrelated
 Workspace populations, exactly charged observer jobs/SQL, and original successful bind
 after a failed diagnostic sink. Non-Linux application startup remains Unsupported;
@@ -275,9 +280,7 @@ code 14 in its existing field. No other numeric section, column, persistence
 schema, control operation or execution component is added by this refactor.
 Earlier pinned statements and qualification gaps above retain their own scope.
 
-
-The rejected #320 reader candidate emitted section 39 (seven demand/lock
-fields), used weak reader observations with a retired sum at index -2, and
-private setup LFSD v4. Those receipts stay readable. The restored pool emits
-its existing thirteen-field reader schema and uses LFSD v3 with fixed reader
-count. No successful reader-candidate acceptance is claimed.
+The owner subsequently authorized reintroducing that reader architecture with
+independent <=10% time/RSS allowances. Historical rejection/restoration records
+remain unchanged; current runtime qualification is pending. See the
+[reader design](../issues/320/WORKSPACE-READER-DESIGN-20261014.md).

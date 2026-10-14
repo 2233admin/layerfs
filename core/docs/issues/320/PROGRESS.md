@@ -3947,3 +3947,39 @@ Kernel checkpoint verification: host and pinned Linux product check and
 warning-denying Clippy all passed (lib/bins/examples), with formatting and
 whitespace checked. Engine/families/cluster-two tests remain deferred to Phase 2
 under the product-first rule. Durable remains NOT_RUN — disabled by owner.
+
+
+### Phase 1: reintroduce Workspace-owned Store readers
+
+Adapted the authorized candidate against b65f012ed, preserving the kernel rename
+and the 24 removed forwarding methods. One read-only connection opens per bind
+before readiness and remains until terminal unmount; one explicit control reader
+serves unscoped work. Short provider locks and transactions replace FIFO lanes,
+rotating grants, tickets, leases and quotas. Store-owned immutable cache stays.
+The existing 2 MiB SQLite cache and mmap-off checks are unchanged.
+
+Healthy failed-bind readers close. Normal/forced drain uses paired overlay Close
+and reader close. Weak diagnostic references cannot hold healthy readers open;
+retired counters occupy one fixed summary. Unknown/poisoned sessions and original
+opening errors remain exact operator custody. Whole-Store shutdown blocks demand,
+closes healthy sessions and retains unknown failures. Review additionally made
+shutdown admission idempotent: concurrent/repeated stop cannot double-account
+retired requests. No reopen, retry, replay or guessed cleanup is added.
+
+LFSD v4, explicit seven-field reader receipt layout, typed Close errors and
+examples are restored consistently. Historical decoders remain. Mechanical
+paired-close change in the examples' shared test helper uses the owner's exception;
+no other test file was opened/edited/run. Tests: not yet updated. Host product
+check passed on the adapted implementation; remaining checks follow.
+
+The existing matched diagnostics meet the revised independent 10% allowances;
+no new sample was run. Timings remain INELIGIBLE. Frequent mount bootstrap cost,
+same-mount concurrent calls/Commits, connection/cache scaling, failed bind,
+normal/forced unmount, shutdown races and exact custody remain explicit Phase 2
+qualification requirements. Eligible performance qualification is incomplete.
+Durable: NOT_RUN — disabled by owner until explicit reauthorization.
+
+Reintroduced-reader product verification: host and pinned Linux checks and
+warning-denying Clippy passed for lib/bins/examples. Formatting and whitespace
+passed. Oracle pins match final formatted sources. No tests or new measurements
+were run during Phase 1; the listed final qualifications remain pending.

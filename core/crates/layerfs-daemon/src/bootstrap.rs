@@ -1,58 +1,79 @@
-//! Concrete Store composition, outside the provider-independent adapter.
-use crate::store::{ReadLimits, Store, StoreReader};
+//! Concrete Store composition and mount-time reader opening.
+use crate::store::{Store, StoreReader};
 use layerfs_persistence::{Handles, PersistenceConfig, SqlWork, StorageProvider};
 use layerfs_storage::{ReservationBlocks, Storage, StorageError, StorageResult};
-use std::sync::Arc;
+use std::{
+    collections::BTreeMap,
+    sync::{Arc, Mutex, Weak},
+};
 
-/// Concrete startup metadata stays outside the provider-independent Store.
+struct ReaderObservations {
+    live: BTreeMap<usize, Weak<StorageProvider>>,
+    retired: Option<SqlWork>,
+}
 pub struct OpenedStore {
     pub store: Arc<Store>,
     pub sqlite_version: String,
     writer: Arc<StorageProvider>,
-    readers: Vec<Arc<StorageProvider>>,
+    readers: Arc<Mutex<ReaderObservations>>,
 }
-
-/// Cumulative observations, separately scoped to the writer and each fixed reader.
 pub struct StoreDiagnostics {
     pub writer: SqlWork,
     pub readers: Vec<SqlWork>,
 }
 impl OpenedStore {
-    /// Copies one existing session's work without collecting reader snapshots.
-    /// None selects the writer; a reader index outside the fixed set is absent.
+    pub(crate) fn reader_indices(&self) -> Vec<usize> {
+        let readers = self
+            .readers
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
+        readers.live.keys().copied().chain([usize::MAX]).collect()
+    }
     pub(crate) fn session_diagnostics(
         &self,
         reader: Option<usize>,
     ) -> StorageResult<Option<SqlWork>> {
-        let provider = match reader {
-            None => Some(&self.writer),
-            Some(index) => self.readers.get(index),
+        let Some(index) = reader else {
+            return self
+                .writer
+                .diagnostics()
+                .map(Some)
+                .map_err(StorageError::from);
         };
-        provider
+        let readers = self
+            .readers
+            .lock()
+            .map_err(|_| StorageError::Integrity("reader observations poisoned"))?;
+        if index == usize::MAX {
+            return Ok(readers.retired);
+        }
+        readers
+            .live
+            .get(&index)
+            .and_then(Weak::upgrade)
             .map(|provider| provider.diagnostics().map_err(StorageError::from))
             .transpose()
     }
-    /// Reads existing session counters; this issues no SQL or provider reopen.
     pub fn diagnostics(&self) -> StorageResult<StoreDiagnostics> {
         Ok(StoreDiagnostics {
             writer: self.writer.diagnostics()?,
             readers: self
-                .readers
-                .iter()
-                .map(|reader| reader.diagnostics().map_err(StorageError::from))
+                .reader_indices()
+                .into_iter()
+                .map(|index| {
+                    self.session_diagnostics(Some(index))?
+                        .ok_or(StorageError::Integrity("reader observation unavailable"))
+                })
                 .collect::<StorageResult<Vec<_>>>()?,
         })
     }
 }
 
-/// Opens one writer first and a fixed number of independent read-only sessions.
-/// Read capacity is selected before daemon readiness. No create, conversion,
-/// retry or read-only-to-writable fallback occurs on an open failure.
 pub fn open_store(
     config: PersistenceConfig,
     binding: &[u8],
     cursor_key: [u8; 32],
-    read_handles: usize,
+    workspace_capacity: usize,
     cache_bytes: usize,
     reservations: ReservationBlocks,
 ) -> StorageResult<Arc<Store>> {
@@ -60,71 +81,115 @@ pub fn open_store(
         config,
         binding,
         cursor_key,
-        read_handles,
+        workspace_capacity,
         cache_bytes,
         reservations,
     )
     .map(|opened| opened.store)
 }
-
-/// Opens once and retains the version reported by the actual writable provider.
+/// One control reader opens at startup. Each Workspace reader opens once at bind,
+/// never in the middle of a request. Persistence verifies its 2 MiB page cache.
 pub fn open_store_observed(
     config: PersistenceConfig,
     binding: &[u8],
     cursor_key: [u8; 32],
-    read_handles: usize,
+    workspace_capacity: usize,
     cache_bytes: usize,
     reservations: ReservationBlocks,
 ) -> StorageResult<OpenedStore> {
-    open_store_observed_with_limits(
-        config,
-        binding,
-        cursor_key,
-        read_handles,
-        cache_bytes,
-        reservations,
-        ReadLimits::default(),
-    )
-}
-
-/// Explicit fixed queue selection before readiness, alongside the read set.
-pub fn open_store_observed_with_limits(
-    config: PersistenceConfig,
-    binding: &[u8],
-    cursor_key: [u8; 32],
-    read_handles: usize,
-    cache_bytes: usize,
-    reservations: ReservationBlocks,
-    read_limits: ReadLimits,
-) -> StorageResult<OpenedStore> {
-    if read_handles == 0 {
-        return Err(StorageError::Integrity("empty Store read set"));
+    if workspace_capacity == 0 {
+        return Err(StorageError::Integrity("empty Workspace reader capacity"));
     }
     reservations.validate()?;
     let writer = Handles::open_writable(config.clone(), binding, cursor_key)?;
     let sqlite_version = writer.profile().sqlite_version.clone();
-    let mut readers = Vec::with_capacity(read_handles);
-    let mut observed_readers = Vec::with_capacity(read_handles);
-    for _ in 0..read_handles {
-        let opened = Handles::open_read_only(config.clone(), binding, cursor_key)?;
-        observed_readers.push(opened.storage.clone());
-        readers.push(StoreReader::new(
-            Storage::new(opened.storage)?,
-            Arc::new(opened.history),
-        ));
-    }
+    let observations = Arc::new(Mutex::new(ReaderObservations {
+        live: BTreeMap::new(),
+        retired: Some(SqlWork::default()),
+    }));
+    let binding = binding.to_vec();
+    let registry = observations.clone();
+    let factory: crate::store::ReaderFactory = Arc::new(move |index| {
+        let opened = Handles::open_read_only(config.clone(), &binding, cursor_key)?;
+        let provider = Arc::downgrade(&opened.storage);
+        let reader = StoreReader::new(Storage::new(opened.storage)?, Arc::new(opened.history));
+        registry
+            .lock()
+            .map_err(|_| StorageError::Integrity("reader observations poisoned"))?
+            .live
+            .insert(index, provider.clone());
+        let observed = registry.clone();
+        Ok(reader.on_close(move || {
+            // Weak observation never keeps the SQL connection open after unmount.
+            let mut rows = observed.lock().unwrap_or_else(|poison| poison.into_inner());
+            if let Some(provider) = provider.upgrade() {
+                match provider.diagnostics() {
+                    Ok(work) => {
+                        if let Some(total) = &mut rows.retired {
+                            accumulate(total, work);
+                        }
+                    }
+                    Err(_) => rows.retired = None,
+                }
+            }
+            rows.live.remove(&index);
+        }))
+    });
+    let control = factory(0)?;
     let store = Arc::new(Store::new(
         writer.storage.clone(),
         Arc::new(writer.history),
-        readers,
+        control,
+        factory,
         cache_bytes,
         reservations,
-        read_limits,
+        workspace_capacity,
     )?);
     Ok(OpenedStore {
         store,
         sqlite_version,
         writer: writer.storage,
-        readers: observed_readers,
+        readers: observations,
     })
+}
+fn accumulate(total: &mut SqlWork, next: SqlWork) {
+    macro_rules! add { ($($field:ident),+) => { $(total.$field = total.$field.saturating_add(next.$field);)+ }; }
+    add!(
+        statements,
+        vm_steps,
+        fullscan_steps,
+        sorts,
+        autoindex_rows,
+        reprepares,
+        returned_rows,
+        bound_bytes,
+        statement_ns,
+        commit_ns,
+        transactions,
+        write_transactions,
+        write_commits,
+        commits,
+        read_snapshots,
+        rollbacks,
+        transaction_ns,
+        read_snapshot_ns,
+        sealed_inserts,
+        sealed_body_bytes,
+        blob_open_calls,
+        blob_reopen_calls,
+        blob_read_calls,
+        blob_requested_bytes,
+        blob_read_bytes,
+        blob_read_ns,
+        blob_close_calls
+    );
+    for (to, from) in total
+        .statement_phases
+        .iter_mut()
+        .zip(next.statement_phases)
+        .chain(total.commit_phases.iter_mut().zip(next.commit_phases))
+    {
+        to.calls = to.calls.saturating_add(from.calls);
+        to.wall_ns = to.wall_ns.saturating_add(from.wall_ns);
+    }
 }

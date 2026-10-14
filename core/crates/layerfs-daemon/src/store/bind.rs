@@ -23,10 +23,16 @@ impl Store {
     ) -> Result<BindSuccess, BindRefusal> {
         let mut phase = BindPhase::Snapshot;
         let mut snapshot = None;
+        self.mount_reader(request.workspace)
+            .map_err(|error| BindRefusal {
+                phase,
+                request: request.clone(),
+                snapshot: None,
+                error: BindError::Read(error),
+            })?;
         let result = (|| {
             let captured = self
-                .read_ticket(Some(request.workspace))
-                .and_then(|ticket| ticket.wait())
+                .reader(Some(request.workspace))
                 .map_err(|error| BindError::Read(Arc::new(super::PortError::ReadAdmission(error))))?
                 .snapshot(request.branch)
                 .map_err(BindError::Read)?
@@ -62,11 +68,20 @@ impl Store {
                 },
             })
         })();
-        result.map_err(|error| BindRefusal {
-            phase,
-            request,
-            snapshot,
-            error,
+        result.map_err(|error| {
+            let error = match self.close_reader(request.workspace) {
+                Ok(()) => error,
+                Err(cause) => BindError::Cleanup {
+                    original: Box::new(error),
+                    cause,
+                },
+            };
+            BindRefusal {
+                phase,
+                request,
+                snapshot,
+                error,
+            }
         })
     }
 }

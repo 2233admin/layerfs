@@ -1,8 +1,5 @@
-//! Opened provider ownership and fixed read capacity.
-use super::{
-    read_service::ReadPool, PortError, ReadAdmissionError, ReadLimits, ReadServiceWork, ReadTicket,
-    StoreReader,
-};
+//! Opened provider ownership and one reader per mounted Workspace.
+use super::{read_service::ReadSet, PortError, ReadServiceWork, ReaderFactory, StoreReader};
 use layerfs_history::{HistoryCatalog, WorkspaceId};
 use layerfs_storage::{
     port::PackPersistence, ReservationBlocks, Storage, StorageError, StoragePolicy, StorageResult,
@@ -30,13 +27,13 @@ pub(super) struct Counts {
     pub length_ids: AtomicU64,
     pub serials: AtomicU64,
 }
-/// One global Store binding, with a fixed read set and shared immutable cache.
+/// One global Store binding, with mounted readers and a shared immutable cache.
 /// Opened providers must belong to the same validated authority. Application
 /// composition owns that selection; this adapter knows only the public ports.
 pub struct Store {
     pub(super) writer: Arc<dyn PackPersistence>,
     pub(super) history: Arc<dyn HistoryCatalog>,
-    pub(super) readers: Arc<ReadPool>,
+    pub(super) readers: Arc<ReadSet>,
     policy: StoragePolicy,
     reservations: ReservationBlocks,
     pub(super) cache: Arc<CanonicalCache>,
@@ -49,24 +46,24 @@ pub struct Store {
     pub(super) recognizer: super::Recognizer,
 }
 impl Store {
-    /// Takes already opened providers. Read capacity is fixed for this daemon.
+    /// Takes the control reader and a mount-time factory under explicit capacity.
     pub fn new(
         writer: Arc<dyn PackPersistence>,
         history: Arc<dyn HistoryCatalog>,
-        readers: Vec<StoreReader>,
+        control: StoreReader,
+        factory: ReaderFactory,
         cache_bytes: usize,
         reservations: ReservationBlocks,
-        read_limits: ReadLimits,
+        workspace_capacity: usize,
     ) -> StorageResult<Self> {
         let reservations = reservations.validate()?;
         let policy = writer.policy()?.validated()?;
-        if readers.is_empty() || readers.iter().any(|read| read.storage.policy() != policy) {
-            return Err(StorageError::Integrity("Store read set or policy"));
+        if workspace_capacity == 0 || control.storage.policy() != policy {
+            return Err(StorageError::Integrity("Store reader capacity or policy"));
         }
         let counts = Arc::new(Counts::default());
         let cache = Arc::new(CanonicalCache::new(cache_bytes));
-        let readers = ReadPool::new(readers, read_limits, counts.clone())
-            .map_err(|_| StorageError::Integrity("Store read admission limits"))?;
+        let readers = ReadSet::new(control, factory, counts.clone(), workspace_capacity, policy);
         Ok(Self {
             writer,
             history,
@@ -115,19 +112,23 @@ impl Store {
             serial_reservations: self.counts.serials.load(Ordering::Relaxed),
         }
     }
-    /// Reserve fair before-effect admission. None is the explicitly unscoped
-    /// control/constructor lane; kernel callers use their actual Workspace id.
-    pub fn read_ticket(
+    pub(crate) fn mount_reader(&self, workspace: WorkspaceId) -> Result<(), Arc<PortError>> {
+        self.readers.mount(workspace)
+    }
+    pub(crate) fn close_reader(&self, workspace: WorkspaceId) -> Result<(), Arc<PortError>> {
+        self.readers.close(workspace)
+    }
+    pub(super) fn reader(
         &self,
         workspace: Option<WorkspaceId>,
-    ) -> Result<ReadTicket, ReadAdmissionError> {
-        self.readers.request(workspace)
+    ) -> Result<Arc<super::read_handle::ReadSession>, super::ReadAdmissionError> {
+        self.readers.session(workspace)
     }
     pub fn read_work(&self) -> ReadServiceWork {
         self.readers.work()
     }
-    /// One nonblocking Storage-counter snapshot of a fixed reader index.
-    /// A leased, contended or unavailable reader returns None without acquisition.
+    /// One nonblocking Storage-counter snapshot of an opened reader identity.
+    /// A contended or unavailable reader returns None without acquisition.
     pub fn reader_storage_diagnostics(&self, index: usize) -> Option<layerfs_storage::Diagnostics> {
         self.readers.storage_diagnostics(index)
     }
