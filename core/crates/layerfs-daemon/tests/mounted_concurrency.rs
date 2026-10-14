@@ -76,14 +76,7 @@ use std::{
 const WAIT: Duration = Duration::from_secs(10);
 /// The bounded wait for one Commit to return.
 const COMMIT_WAIT: Duration = Duration::from_secs(30);
-const CLASSES: [&str; 6] = [
-    "read",
-    "mutation",
-    "capture",
-    "lifecycle",
-    "record",
-    "source",
-];
+const CLASSES: [&str; 3] = ["general", "mutation", "source"];
 
 /// Numbered files of one writer until standard input is closed or `cap` files
 /// are made. Each number is written to a pending name and renamed into its
@@ -411,10 +404,10 @@ fn engine(owner: &OwnerClient, route: Route) -> Option<(bool, [u8; 32])> {
 fn work(rig: &Rig, token: WorkspaceToken) -> MountWork {
     rig.harness.status(token).kernel.unwrap().work.unwrap()
 }
-fn completed(before: &OwnerWork, after: &OwnerWork) -> [u64; 6] {
+fn completed(before: &OwnerWork, after: &OwnerWork) -> [u64; 3] {
     std::array::from_fn(|class| after.jobs[class] - before.jobs[class])
 }
-fn classes(delta: [u64; 6]) -> String {
+fn classes(delta: [u64; 3]) -> String {
     CLASSES
         .iter()
         .zip(delta)
@@ -424,7 +417,7 @@ fn classes(delta: [u64; 6]) -> String {
 }
 /// Completed owner jobs of the two classes only filesystem requests submit:
 /// no step of a Commit is a Mutation or a Source job.
-fn filesystem_only(delta: [u64; 6]) -> u64 {
+fn filesystem_only(delta: [u64; 3]) -> u64 {
     delta[ServiceClass::Mutation as usize] + delta[ServiceClass::Source as usize]
 }
 /// Names in one directory of a mount, by `getdents`.
@@ -784,9 +777,9 @@ impl Inside {
             None => *span = Some((now, now)),
         }
     }
-    fn delta(span: &Span) -> [u64; 6] {
+    fn delta(span: &Span) -> [u64; 3] {
         span.as_ref()
-            .map_or([0; 6], |(first, last)| completed(first, last))
+            .map_or([0; 3], |(first, last)| completed(first, last))
     }
 }
 

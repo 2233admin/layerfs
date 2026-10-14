@@ -144,7 +144,7 @@ fn ready_mount_serves_the_complete_root_to_unregistered_access_then_drains() {
     let helper = h.bind(1);
     let token = h.bind(2);
     assert_eq!(h.phase(token), MountPhase::Unattached);
-    let before = lookups(&h, helper);
+    let before = lookups(&h, token);
     let ready = h.attach(token);
     let root = Path::new(&ready.directory);
     assert_eq!(root, h.mounts.join(token.namespace.to_string()));
@@ -218,7 +218,7 @@ fn ready_mount_serves_the_complete_root_to_unregistered_access_then_drains() {
     // the three refusals of `mutating::refusals`; none is an inline reply.
     assert!(served.served > 0 && served.refused >= 6, "{served:?}");
     assert_eq!((served.terminal, served.retained), (0, 0));
-    assert!(lookups(&h, helper) > before);
+    assert!(lookups(&h, token) > before);
     println!(
         "KERNEL_READY paths={paths} regular_bytes={regular} receipt={receipt:?} entry={entry:?} served={served:?}"
     );
@@ -273,7 +273,7 @@ fn ready_mount_serves_the_complete_root_to_unregistered_access_then_drains() {
     resident.wait().unwrap();
 
     // Cached kernel lookups and idle receive loops are not busy.
-    let held = lookups(&h, helper);
+    let held = lookups(&h, token);
     let done = h.unmount(&ready);
     println!(
         "KERNEL_UNMOUNT lookup_owner_details={held} receipt={:?}",

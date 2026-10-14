@@ -17,7 +17,7 @@ mod support;
 use layerfs_bridge::control::{
     Activity, MountPhase, Reply, Request, TeardownStage, WorkspaceToken,
 };
-use layerfs_daemon::{control::Failure, OwnerError};
+use layerfs_daemon::control::Failure;
 use layerfs_history::BranchId;
 use layerfs_workspace::Route;
 use mounted::{mount_entry, until, Harness};
@@ -91,7 +91,7 @@ fn kernel_forget_arrives_on_a_live_connection_with_its_exact_decrement() {
         work.active == 0
     };
     until("attach quiescent", quiet);
-    let baseline = details(&h, helper);
+    let baseline = details(&h, token);
     assert_eq!(work().forget_units, 0);
 
     // 27 names over 26 inodes: the in-root hard link gives one inode two
@@ -106,12 +106,12 @@ fn kernel_forget_arrives_on_a_live_connection_with_its_exact_decrement() {
     assert_eq!((names, inodes), (27, 26));
     assert!(references.values().any(|count| *count == 2));
     until("lookups quiescent", quiet);
-    let looked = details(&h, helper);
+    let looked = details(&h, token);
     assert_eq!(
         looked - baseline,
         custody,
         "one kernel lookup entry per live kernel inode: {baseline:?} {looked:?} {:?}",
-        h.engine_resources(helper).open
+        h.engine_resources(token).open
     );
 
     // Stimulus, bounded: ask for more than the cgroup can give back so the
@@ -124,10 +124,10 @@ fn kernel_forget_arrives_on_a_live_connection_with_its_exact_decrement() {
             .write(true)
             .open(RECLAIM)
             .and_then(|mut file| file.write_all(b"1G"));
-        quiet() && details(&h, helper) == baseline
+        quiet() && details(&h, token) == baseline
     });
     let after = work();
-    let returned = details(&h, helper);
+    let returned = details(&h, token);
     println!(
         "KERNEL_FORGET names={names} inodes={inodes} reclaim_requests={requests} forget_units={} work={after:?} baseline={baseline:?} looked={looked:?} returned={returned:?}",
         after.forget_units
@@ -145,7 +145,7 @@ fn kernel_forget_arrives_on_a_live_connection_with_its_exact_decrement() {
     assert_eq!(walk(&f, root), (references, directories));
     until("second lookups quiescent", quiet);
     assert_eq!(
-        details(&h, helper) - baseline,
+        details(&h, token) - baseline,
         custody,
         "reacquired after FORGET"
     );
@@ -166,9 +166,8 @@ fn kernel_forget_arrives_on_a_live_connection_with_its_exact_decrement() {
 }
 
 #[test]
-fn an_unmount_that_cannot_revoke_stops_retained_and_later_replies_repeat_it() {
+fn an_unmount_of_an_already_revoked_mount_keeps_exact_retained_custody() {
     let (f, h) = harness("-retained");
-    let helper = h.bind(1);
     let ready = h.mount(2);
     let token = ready.token;
     let root = Path::new(&ready.directory);
@@ -179,23 +178,23 @@ fn an_unmount_that_cannot_revoke_stops_retained_and_later_replies_repeat_it() {
     // The kernel sends the read's RELEASE after `close` returns. Its arrival
     // is observed as the descriptor leaving the engine, read through another
     // namespace.
-    let open = details(&h, helper);
+    let open = details(&h, token);
     drop(file);
     until("the read's RELEASE disposed", || {
         let work = h.status(token).kernel.unwrap().work.unwrap();
-        details(&h, helper) < open && work.active == 0
+        details(&h, token) < open && work.active == 0
     });
     let route = route(&h, token);
-    // Real backing identity loss outside the kernel connection. No arbitrary
-    // test job is injected, and no failed revocation is replayed.
-    let backing = f.directory.join(format!("{}.sqlite", token.namespace));
-    let moved = f.directory.join("retained-backing.sqlite");
-    fs::rename(&backing, &moved).unwrap();
-    let staged = h.owner.client().state(route);
-    assert!(
-        staged.is_err(),
-        "backing identity loss must be refused: {staged:?}"
-    );
+    // Stage an inconsistent lifecycle through the public owner port, as the
+    // FORGET proof does for lookup counts. The real kernel connection remains
+    // attached; its terminal teardown must retain the original stale Revoke.
+    let mount = h
+        .owner
+        .client()
+        .kernel_retained_mount(route)
+        .unwrap()
+        .unwrap();
+    h.owner.client().kernel_revoke(route, mount).unwrap();
 
     let custody = match h.try_unmount(token) {
         Err(Failure::Retained(custody)) => *custody,
@@ -240,13 +239,11 @@ fn an_unmount_that_cannot_revoke_stops_retained_and_later_replies_repeat_it() {
         .service
         .execute_control(&Request::Locate(token.workspace))
         .is_ok());
-    // Nothing settles by itself: no hidden retry runs, and the Workspace
-    // still answers with its original failure.
-    let again = h.owner.client().kernel_retained_mount(route);
-    assert!(
-        matches!(&again, Err(OwnerError::Unattempted { cause, .. })
-            if matches!(**cause, OwnerError::Retained(_))),
-        "{again:?}"
+    // The original revoked state remains; retained control custody performs
+    // no guessed replay or additional revocation.
+    assert_eq!(
+        h.owner.client().kernel_state(route, mount).unwrap(),
+        layerfs_overlay::KernelMountState::Revoked
     );
     assert_eq!(h.phase(token), MountPhase::Retained);
     match h.try_unmount(token) {

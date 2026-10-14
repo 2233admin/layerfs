@@ -1,4 +1,4 @@
-//! Public control lifetime and aggregate-credit proofs for private overlay files.
+//! Public control lifetime and backing-file custody proofs for private overlay files.
 #[allow(dead_code)]
 #[path = "support/control_fixture.rs"]
 mod fixture;
@@ -16,7 +16,7 @@ fn token(reply: &Reply) -> WorkspaceToken {
 }
 
 #[test]
-fn terminal_unmount_deletes_only_its_file_after_retained_completions_release() {
+fn terminal_unmount_deletes_only_its_file_after_retained_requests_release() {
     let f = fixture::Fixture::new("issue321-files");
     let branch = BranchId::from_bytes(f.host.project.manifest.branch).unwrap();
     let template = f.host.directory.join("overlay.sqlite");
@@ -33,6 +33,7 @@ fn terminal_unmount_deletes_only_its_file_after_retained_completions_release() {
     let b = mount(112);
     let (a_token, b_token) = (token(&a.reply), token(&b.reply));
     assert_eq!((a_token.namespace, b_token.namespace), (1, 2));
+    let held_a = f.service.operation(a_token).unwrap();
     let a_file = f.host.directory.join("1.sqlite");
     let b_file = f.host.directory.join("2.sqlite");
     assert!(a_file.is_file() && b_file.is_file());
@@ -44,7 +45,7 @@ fn terminal_unmount_deletes_only_its_file_after_retained_completions_release() {
         .unwrap();
     assert_eq!(closed.reply, Reply::Unmounted(a_token));
     drop(closed);
-    assert!(a_file.exists(), "retained Open completion owns the file");
+    assert!(a_file.exists(), "retained request owns the file");
     let queued = f
         .service
         .execute_control(&Request::Cleanup(a_token))
@@ -58,8 +59,8 @@ fn terminal_unmount_deletes_only_its_file_after_retained_completions_release() {
     );
     drop(queued);
 
-    drop(a);
-    assert!(!a_file.exists(), "last completion releases the closed file");
+    drop((a, held_a));
+    assert!(!a_file.exists(), "last request releases the closed file");
     assert!(b_file.exists());
     assert!(f.service.execute_control(&Request::Status(b_token)).is_ok());
     let c = mount(113);
@@ -95,6 +96,7 @@ fn a_replaced_terminal_path_is_retained_and_never_deleted_on_a_guess() {
         })
         .unwrap();
     let selected = token(&bound.reply);
+    let held = f.service.operation(selected).unwrap();
     let path = f.host.directory.join("1.sqlite");
     drop(
         f.service
@@ -105,7 +107,7 @@ fn a_replaced_terminal_path_is_retained_and_never_deleted_on_a_guess() {
     let retained = f.host.directory.join("retained.sqlite");
     std::fs::rename(&path, &retained).unwrap();
     std::fs::write(&path, b"replacement custody").unwrap();
-    drop(bound);
+    drop((bound, held));
     assert_eq!(std::fs::read(&path).unwrap(), b"replacement custody");
     assert_eq!(std::fs::read(&retained).unwrap(), original);
     assert!(f

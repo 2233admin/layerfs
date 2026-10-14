@@ -15,7 +15,7 @@
 
 Owner/current-design consolidation, 2026-10-07: topology is scoped to the actual
 product operation and registered family. Both workstreams implement in core;
-root crates remain the v0.1.6 reference until cluster two completes. This section
+the root v0.1.6 reference is retired by R9c and absent at HEAD. This section
 records the owner's serverless direction, not completed integrated qualification.
 
 - Project Init runs on macOS through the public cluster-one libraries and
@@ -26,8 +26,9 @@ records the owner's serverless direction, not completed integrated qualification
   There is no host runtime, server adapter, coordinator or lock service in the
   data path. Linux uses the pinned bundled SQLite. The Store must be on a named
   in-VM volume or container-local filesystem, never the repository host share.
-- Each daemon separately owns one local overlay SQLite database for all its
-  Workspaces. FUSE, filesystem semantics, Content and ordinary Bash Exec belong
+- Each mounted Workspace owns one local overlay SQLite database behind its
+  own lock, copied from the daemon's closed empty template before readiness.
+  FUSE, filesystem semantics, Content and ordinary Bash Exec belong
   to the daemon's Linux operation path. Global Store WAL and local overlay
   MEMORY/OFF are distinct profiles and databases.
 - New integrated measurements register and exercise the implemented path with

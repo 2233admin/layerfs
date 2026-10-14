@@ -992,11 +992,10 @@ fn fp32_unknown_commit_custody_is_forced_only_when_relinquished_and_stays_unknow
     );
     departed(&fx.harness, &case.directory, &case.connection, token);
     // The Force reply above observed the closed namespace Held while its
-    // connection was open. After the departure the Workspace's connection is
-    // stopped and the daemon answers for its file: reclamation queued behind
-    // the owners that still keep it.
+    // connection was open. After relinquishment the closed backing is disposed;
+    // the original unknown Commit result remains retained independently.
     let engine = case.cleanup();
-    checks.that(engine == format!("{:?}", CleanupState::Queued), || {
+    checks.that(engine == format!("{:?}", CleanupState::Gone), || {
         format!("{name}: the engine reports the closed namespace {engine}")
     });
     // The receipt is not settled by a read: an independent session of the

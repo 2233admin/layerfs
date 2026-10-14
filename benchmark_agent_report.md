@@ -13,8 +13,8 @@ family specification govern the limits and claim; this file governs report
 layout only.
 
 Current implementation is in `core/` for both cluster-one libraries and
-cluster-two integration; root `crates/` is the v0.1.6 reference until cluster two
-completes. The tables below retain family/profile-specific layouts, including
+cluster-two integration. The root v0.1.6 reference was retired by R9c and is
+absent at HEAD; its recovery tag and historical receipts remain available. The tables below retain family/profile-specific layouts, including
 legacy SDK/Server routes. Apply only the layout and limits of the selected frozen
 family. New core reports identify their actual public operation, persistence
 profile and runtime/daemon owners; absent legacy Server/SDK scopes are N/A.

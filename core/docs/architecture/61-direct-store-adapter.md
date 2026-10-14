@@ -125,3 +125,5 @@ recently used file, and a file without state starts over: the cost is a
 missed claim. `StorePorts::fresh` gives a pass its own failure scope.
 `Store::recognizer_work` reports occupancy, evictions and cumulative pass
 work; the diagnostic record format is unchanged.
+
+Reader-work observations use atomic request/wait counters, the write-once original failure and the mutex poison bit; they do not wait for an in-flight provider demand. Exact failure inspection uses that same original Arc without borrowing the provider lock. Mounted provider-hold proofs exposed and regress this boundary: observing work must not cause the bounded provider hold to expire.

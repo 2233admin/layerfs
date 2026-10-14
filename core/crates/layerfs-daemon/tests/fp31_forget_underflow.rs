@@ -236,14 +236,9 @@ fn decrement(
     serial: u64,
     count: u64,
 ) -> Result<(), String> {
-    job(
-        client,
-        route,
-        |job_client: &layerfs_daemon::OwnerClient, job_route| {
-            job_client.kernel_forget(job_route, mount, serial, count)
-        },
-    );
-    Ok(())
+    client
+        .kernel_forget(route, mount, serial, count)
+        .map_err(|error| format!("{error:?}"))
 }
 /// The engine serial of a kernel inode other than the root: the reversible
 /// offset of `layerfs-fuse` `attributes.rs` (`Identity::serial`).
@@ -269,8 +264,8 @@ struct Seen {
     counts: layerfs_overlay::StoredCounts,
     owner_details: u64,
 }
-fn seen(harness: &Harness, through: WorkspaceToken) -> Seen {
-    let resources = harness.engine_resources(through);
+fn seen(client: &OwnerClient) -> Seen {
+    let resources = client.resources().unwrap();
     Seen {
         counts: resources.counts,
         owner_details: resources.open.kernel_entries + resources.open.file_custody,
@@ -318,10 +313,11 @@ fn refused_at_the_service(reduced: Reduced) {
     let ready = rig.mount(2);
     let guard = Mounted(ready.directory.clone());
     let token = ready.token;
-    let route = h.service.operation(token).unwrap().workspace().route();
+    let observed = h.service.operation(token).unwrap();
+    let route = observed.workspace().route();
     let mut checks = Checks::default();
     quiet(h, token);
-    let baseline = seen(h, helper);
+    let baseline = seen(observed.overlay());
     assert_eq!(work(h, token).forget_units, 0);
 
     // One LOOKUP per name: the kernel's count of the inode.
@@ -341,7 +337,7 @@ fn refused_at_the_service(reduced: Reduced) {
         }
     };
     quiet(h, token);
-    let looked = seen(h, helper);
+    let looked = seen(observed.overlay());
     // The inode's kernel lookup entry and its file custody.
     assert_eq!(
         looked.owner_details - baseline.owner_details,
@@ -352,7 +348,7 @@ fn refused_at_the_service(reduced: Reduced) {
 
     // The engine's count is reduced by one through the public owner port.
     assert_eq!(decrement(&client, route, mount, serial(inode), 1), Ok(()));
-    let stolen = seen(h, helper);
+    let stolen = seen(observed.overlay());
     match reduced {
         Reduced::Absent => assert_eq!(
             stolen.owner_details, baseline.owner_details,
@@ -387,10 +383,9 @@ fn refused_at_the_service(reduced: Reduced) {
         now.forget_units == 1 && (now.active, now.retained) == (0, 1)
     });
     let refused = work(h, token);
-    let after = seen(h, helper);
-    // One Status job, and the aggregate count's one read of each of the two
-    // bound Workspaces.
-    observations += 3;
+    let after = seen(observed.overlay());
+    // One Status call and one resource observation of this Workspace.
+    observations += 2;
     let submitted = client.diagnostics().unwrap().jobs.iter().sum::<u64>() - jobs - observations;
     println!(
         "{name}: reclaim_requests={requests} kernel work {staged:?} -> {refused:?} owner_jobs_since_staged={submitted} (beside the test's {observations} observations) engine_counts_equal_reduced={}",
@@ -425,7 +420,7 @@ fn refused_at_the_service(reduced: Reduced) {
         }
         Reduced::TooSmall => {
             let one = decrement(&client, route, mount, serial(inode), 1);
-            let counts = seen(h, helper);
+            let counts = seen(observed.overlay());
             let none = decrement(&client, route, mount, serial(inode), 1);
             println!(
                 "{name}: owner-port decrements of the kept row: first={one:?} owner_details={} second={none:?}",
@@ -510,7 +505,7 @@ fn refused_at_the_service(reduced: Reduced) {
     );
     // Nothing was revoked or closed behind the retained unit.
     let (state, closing) = (mount_state(&client, route, mount), cleanup(&client, route));
-    let last = h.engine(helper);
+    let last = observed.overlay().resources().unwrap().counts;
     let end = client.diagnostics().unwrap();
     println!(
         "{name}: stage=Requests detached=true retained=1 later_replies_equal=2 engine_mount={state:?} cleanup={closing:?} namespaces={}(baseline {}) closed_namespaces={}->{}",
@@ -518,7 +513,7 @@ fn refused_at_the_service(reduced: Reduced) {
     );
     assert_eq!(state, KernelMountState::Live);
     assert_eq!(closing, CleanupState::Live);
-    assert_eq!(last.namespaces, empty.namespaces + 1);
+    assert_eq!(last.namespaces, empty.namespaces);
     assert_eq!(end.closed_namespaces, start.closed_namespaces);
     drop(guard);
     let closed = h.try_unmount(helper).unwrap();

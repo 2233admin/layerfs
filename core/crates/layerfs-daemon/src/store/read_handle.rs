@@ -6,7 +6,7 @@ use layerfs_storage::{Diagnostics, Storage};
 use std::{
     sync::{
         atomic::{AtomicU64, Ordering},
-        Arc, Mutex,
+        Arc, Mutex, OnceLock,
     },
     time::Instant,
 };
@@ -39,12 +39,12 @@ impl Drop for StoreReader {
 
 struct State {
     reader: Option<StoreReader>,
-    failure: Option<Arc<PortError>>,
 }
 pub(super) struct ReadSession {
     pub index: usize,
     state: Mutex<State>,
     counts: Arc<Counts>,
+    failure: OnceLock<Arc<PortError>>,
     pub requests: AtomicU64,
     pub wait_ns: AtomicU64,
 }
@@ -54,33 +54,32 @@ impl ReadSession {
             index,
             state: Mutex::new(State {
                 reader: Some(reader),
-                failure: None,
             }),
             counts,
+            failure: OnceLock::new(),
             requests: AtomicU64::new(0),
             wait_ns: AtomicU64::new(0),
         }
     }
     fn lock(&self) -> Result<std::sync::MutexGuard<'_, State>, Arc<PortError>> {
-        self.state.lock().map_err(|poison| {
-            let mut state = poison.into_inner();
-            state
-                .failure
-                .get_or_insert_with(|| Arc::new(PortError::Poisoned))
+        self.state.lock().map_err(|_| {
+            self.failure
+                .get_or_init(|| Arc::new(PortError::Poisoned))
                 .clone()
         })
     }
+
     fn attempt<T>(
         &self,
         call: impl FnOnce(&StoreReader, &Counts) -> Result<T, PortError>,
     ) -> Result<T, Arc<PortError>> {
         let before = Instant::now();
-        let mut state = self.lock()?;
+        let state = self.lock()?;
         self.wait_ns.fetch_add(
             before.elapsed().as_nanos().min(u64::MAX as u128) as u64,
             Ordering::Relaxed,
         );
-        if let Some(error) = &state.failure {
+        if let Some(error) = self.failure.get() {
             return Err(error.clone());
         }
         let reader = state
@@ -91,9 +90,10 @@ impl ReadSession {
         call(reader, &self.counts).map_err(|error| {
             let error = Arc::new(error);
             if uncertain(&error) {
-                state.failure = Some(error.clone());
+                self.failure.get_or_init(|| error).clone()
+            } else {
+                error
             }
-            error
         })
     }
     pub fn objects(&self, ids: &[ObjectId]) -> Result<Vec<Vec<u8>>, Arc<PortError>> {
@@ -132,23 +132,23 @@ impl ReadSession {
     }
     pub fn close(&self) -> Result<(), Arc<PortError>> {
         let mut state = self.lock()?;
-        if let Some(cause) = &state.failure {
+        if let Some(cause) = self.failure.get() {
             return Err(cause.clone());
         }
         state.reader = None;
         Ok(())
     }
+    pub fn quarantined(&self) -> bool {
+        self.failure.get().is_some() || self.state.is_poisoned()
+    }
     pub fn failure(&self) -> Option<Arc<PortError>> {
-        match self.state.lock() {
-            Ok(state) => state.failure.clone(),
-            Err(poison) => Some(
-                poison
-                    .into_inner()
-                    .failure
-                    .get_or_insert_with(|| Arc::new(PortError::Poisoned))
-                    .clone(),
-            ),
-        }
+        self.failure.get().cloned().or_else(|| {
+            self.state.is_poisoned().then(|| {
+                self.failure
+                    .get_or_init(|| Arc::new(PortError::Poisoned))
+                    .clone()
+            })
+        })
     }
     pub fn diagnostics(&self) -> Option<Diagnostics> {
         self.state

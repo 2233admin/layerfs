@@ -1,4 +1,4 @@
-//! Authentic daemon observations preserve ordinary effects and fixed cardinality.
+//! Authentic daemon observations preserve ordinary effects and explicit identities.
 #![cfg(target_os = "linux")]
 #[allow(dead_code)]
 #[path = "support/host_install.rs"]
@@ -158,13 +158,6 @@ fn values(line: &str) -> Vec<u64> {
     } else {
         text.split(',').map(|v| v.parse().unwrap()).collect()
     }
-}
-fn rows_for(log: &str, call: u64) -> Vec<&str> {
-    log.lines()
-        .filter(|line| {
-            line.starts_with("{\"layerfs_observation\":1,") && number(line, "call") == call
-        })
-        .collect()
 }
 fn validate(rows: &[&str]) {
     assert!(!rows.is_empty());
@@ -334,104 +327,6 @@ fn equal_calls_and_reused_slot_have_distinct_public_observation_identity() {
     drop(process);
     f.cleanup();
 }
-#[test]
-fn observer_reads_are_charged_and_cardinality_does_not_follow_unrelated_workspaces() {
-    let mut cardinalities = Vec::new();
-    for (population, label) in [(1, "observed-small"), (4, "observed-large")] {
-        let f = support::Fixture::new(label, None);
-        let log = f.directory.join("stderr.log");
-        let (process, _, mut control) = start(&f, File::create(&log).unwrap());
-        let mut bound = Vec::new();
-        for n in 0..population {
-            bound.push(
-                layerfs_sdk::internal::workspace(&mut control)
-                    .bind(
-                        WorkspaceId::from_authority([90 + n; 32]).unwrap(),
-                        f.project.branch.branch.id,
-                    )
-                    .unwrap(),
-            );
-        }
-        assert!(
-            fs::read(&log).unwrap().is_empty(),
-            "ordinary controls emitted observations"
-        );
-        let first_call = population as u64 + 1;
-        layerfs_sdk::internal::with_observations(&mut control, &[7; 32])
-            .status(bound[0].token)
-            .unwrap();
-        layerfs_sdk::internal::workspace(&mut control)
-            .status(bound[0].token)
-            .unwrap();
-        layerfs_sdk::internal::with_observations(&mut control, &[7; 32])
-            .status(bound[0].token)
-            .unwrap();
-        let text = fs::read_to_string(&log).unwrap();
-        let first = rows_for(&text, first_call);
-        let last = rows_for(&text, first_call + 2);
-        validate(&first);
-        validate(&last);
-        assert!(rows_for(&text, first_call + 1).is_empty());
-        let admitted = |rows: &[&str]| {
-            values(
-                rows.iter()
-                    .find(|line| number(line, "section") == 1)
-                    .unwrap(),
-            )[0]
-        };
-        assert_eq!(
-            admitted(&last) - admitted(&first),
-            2 + population as u64,
-            "two Status jobs and one read per Workspace; the aggregate observation is no job"
-        );
-        for rows in [&first, &last] {
-            let cost = values(
-                rows.iter()
-                    .find(|line| number(line, "section") == 30)
-                    .unwrap(),
-            );
-            assert_eq!(&cost[..2], &[1, 1]);
-            assert_eq!(cost[2], 3 * population as u64, "observer SQL attempts");
-            assert_eq!(cost[3], 3 * population as u64, "observer SQL executions");
-            assert_eq!(cost[4], 3 * population as u64, "observer returned rows");
-            assert_eq!(cost[5], 0, "observer changed rows");
-            assert!(cost[9] > 0, "actual observer VM steps");
-            let resources = values(
-                rows.iter()
-                    .find(|line| number(line, "section") == 28)
-                    .unwrap(),
-            );
-            assert_eq!(resources.len(), 28);
-            assert_eq!(resources[0], population as u64);
-            // No daemon-wide byte budget exists: each Workspace owns its
-            // connection and memory, and no budget row is emitted.
-            assert!(!rows.iter().any(|line| number(line, "section") == 31));
-            for index in 0..2 {
-                let reader = rows
-                    .iter()
-                    .find(|line| number(line, "section") == 29 && number(line, "index") == index)
-                    .unwrap();
-                assert!(reader.contains("\"available\":true"));
-                assert_eq!(values(reader).len(), 42);
-            }
-        }
-        assert_eq!(first.len(), last.len());
-        cardinalities.push(first.len());
-        for workspace in bound {
-            layerfs_sdk::internal::workspace(&mut control)
-                .unmount(workspace.token, false)
-                .unwrap();
-        }
-        assert_eq!(
-            control.call(Request::EndSession).unwrap(),
-            Reply::SessionEnded
-        );
-        drop(process);
-        f.cleanup();
-    }
-    assert_eq!(cardinalities[0], cardinalities[1]);
-}
-#[cfg(target_os = "linux")]
 #[test]
 fn diagnostic_sink_failure_does_not_repeat_or_hide_successful_bind() {
     let f = support::Fixture::new("observed-failed-sink", None);

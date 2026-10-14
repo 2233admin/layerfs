@@ -7,7 +7,9 @@ use layerfs_content::filesystem::PathName;
 use layerfs_content::{AuthenticatedObjects, ContentError, ObjectId};
 use layerfs_daemon::{
     bootstrap::open_store,
-    store::{BindError, BindPhase, BindRequest, BoundWorkspace, PortError, Store},
+    store::{
+        BindError, BindPhase, BindRequest, BoundWorkspace, PortError, ReadAdmissionError, Store,
+    },
     Owner, OwnerConfig,
 };
 use layerfs_history::{BranchId, WorkspaceId};
@@ -200,15 +202,13 @@ fn bounded_bind_batches_lengths_cache_and_original_failure() {
             )
             .err()
             .unwrap();
-        assert_eq!(duplicate.phase, BindPhase::Open);
+        assert_eq!(duplicate.phase, BindPhase::Snapshot);
+        assert_eq!(duplicate.request.workspace, first.identity());
+        assert_eq!(duplicate.request.branch, fixture.branch);
         assert!(
             matches!(&duplicate.error,
-                BindError::Owner(layerfs_daemon::OwnerError::Unattempted { cause, input })
-                    if matches!(cause.as_ref(), layerfs_daemon::OwnerError::Overlay(layerfs_overlay::OverlayError::Invalid("duplicate incarnation")))
-                    && input.inspect(|kept: Option<&(Option<layerfs_workspace::Route>, [u8; 32], [u8; 32])>| {
-                        kept.is_some_and(|(_, incarnation, _)| *incarnation == first.identity().to_bytes())
-                    })
-            ),
+                BindError::Read(cause) if matches!(cause.as_ref(),
+                    PortError::ReadAdmission(ReadAdmissionError::Stopped))),
             "{duplicate:?}"
         );
         drop(duplicate);

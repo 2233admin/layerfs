@@ -359,3 +359,18 @@ existing Workspace route selection helper remains for FORGET/drain. Removed
 incidental successful-envelope assertions, output counters and removed custody
 observers from kept mounted proofs; original owned failure/capture fields,
 Branch/byte oracles, kernel observations and cleanup outcomes remain.
+
+### Host runtime follow-through, 2026-10-15
+
+- `core/crates/layerfs-overlay/tests/startup_cost.rs` — Old startup SQL counts and schema-size quota; startup cost/failure fixture detail given up.
+- `core/crates/layerfs-daemon/tests/startup_cost.rs` — Old startup receipt counts and schema-size quota; diagnostic startup anatomy given up.
+- `core/crates/layerfs-daemon/tests/e2_startup_receipts.rs` — External diagnostic receipt shape and old schema-size quota; encoder/startup receipt details given up.
+- `core/crates/layerfs-overlay/tests/payload_fragmentation.rs` — Exact statement/trigger cost model; fragmentation cost accounting given up, payload byte models remain.
+- `core/crates/layerfs-persistence/tests/acquisition_units.rs` — Private acquisition charges, rows and query plans duplicate Project backed acquisition/scaling; unit-level charge/fence details given up.
+- `core/crates/layerfs-persistence/tests/acquisition_schema.rs` — Private schema/version/index shape; layout-selection and tampered-acquisition schema fixture details given up.
+- `indexed_operation_record.rs`: delete exact query/trigger-plan case; five bounded record/custody cases survive with existing passes.
+- `orphans.rs`: drop incidental reclaim row count; rollback, retained custody and bytes remain.
+- `workspace_databases.rs`: hold actual request references through terminal file disposal; typed reply retention is gone.
+- `installed_store.rs`: assert exact original BindRequest at earlier stopped reader admission, then verify first binding remains readable.
+
+Linux runtime: delete observed_application::observer_reads_are_charged_and_cardinality_does_not_follow_unrelated_workspaces. Old shared-reader diagnostic row cardinality and statement-charge mechanism; five other operator/control cases retain their passes. No mounted semantic proof file deleted. Resource helpers now observe the target Workspace, then check sibling isolation separately after target Gone.

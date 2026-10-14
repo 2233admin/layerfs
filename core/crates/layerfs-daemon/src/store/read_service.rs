@@ -220,7 +220,7 @@ impl ReadSet {
         };
         for session in sessions {
             work.readers += 1;
-            work.quarantined += usize::from(session.failure().is_some());
+            work.quarantined += usize::from(session.quarantined());
             work.requests = work
                 .requests
                 .saturating_add(session.requests.load(Ordering::Relaxed));

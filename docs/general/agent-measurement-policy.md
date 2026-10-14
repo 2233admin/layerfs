@@ -10,8 +10,9 @@ Read [root instructions](../../AGENTS.md), [core instructions](../../core/AGENTS
 and the owning frozen family/profile before any invocation. Select the actual
 core or explicitly requested legacy reference entrypoint; closed handoffs are
 not current assignments. Existing family-specific exceptions retain their exact
-scope. All new product implementation belongs in core; root crates are the
-v0.1.6 reference until cluster-two retirement.
+scope. All new product implementation belongs in core. The root v0.1.6 reference is
+retired by R9c and absent at HEAD; historical source and receipts retain their
+original scope.
 
 ## 1. A warm cache must never credit a measured phase
 

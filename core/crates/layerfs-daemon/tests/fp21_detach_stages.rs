@@ -402,7 +402,7 @@ struct Staged {
     helper: WorkspaceToken,
     route: Route,
     mount: KernelMount,
-    /// Daemon-wide counts with only the helper bound.
+    /// The unchanged helper Workspace counts.
     empty: StoredCounts,
     /// The same counts with the mount serving and the caller ready.
     idle: Rows,
@@ -472,8 +472,8 @@ impl Staged {
         );
         quiet(&harness, ready.token);
         let mount = engine_mount(&client, route).expect("attached engine mount");
-        let idle = engine_rows(&harness, helper);
-        assert_eq!(idle.0.namespaces, empty.namespaces + 1);
+        let idle = engine_rows(&harness, ready.token);
+        assert_eq!(idle.0.namespaces, empty.namespaces);
         Self {
             open: Open(gate.clone()),
             caller: Some(caller),
@@ -502,7 +502,7 @@ impl Staged {
         engine_mount(&self.client, self.route) == Some(self.mount)
             && mount_state(&self.client, self.route, self.mount) == KernelMountState::Live
             && cleanup(&self.client, self.ready.token) == CleanupState::Live
-            && self.harness.engine(self.helper).namespaces == self.empty.namespaces + 1
+            && self.harness.engine(self.ready.token).namespaces == 1
     }
     /// After a complete teardown: the namespace reaches `Gone`, the engine's
     /// counts return to what they were before the Workspace existed, and
@@ -517,10 +517,14 @@ impl Staged {
             cleanup(&self.client, self.ready.token) == CleanupState::Gone
         });
         let mut last = self.harness.engine(self.helper);
-        before("engine counts returned to their baseline", LONG, || {
-            last = self.harness.engine(self.helper);
-            last == self.empty
-        });
+        before(
+            "sibling Workspace counts remain at their baseline",
+            LONG,
+            || {
+                last = self.harness.engine(self.helper);
+                last == self.empty
+            },
+        );
         checks.that(self.gate.observe() == calls, || {
             format!(
                 "{name}: a Store read after the Workspace was closed: {calls:?} -> {:?}",
@@ -574,7 +578,7 @@ fn unmount_beside(held: Held) {
         staged.gate.observe().holding == 1 && now.active == 1
     });
     let inside = staged.work();
-    let rows = engine_rows(&staged.harness, staged.helper);
+    let rows = engine_rows(&staged.harness, staged.ready.token);
     let readers = staged
         .harness
         .status(token)
@@ -631,7 +635,7 @@ fn unmount_beside(held: Held) {
     checks.that(staged.live(), || {
         format!("{name}: the Workspace was revoked or closed under the consumer")
     });
-    let counts = engine_rows(&staged.harness, staged.helper);
+    let counts = engine_rows(&staged.harness, staged.ready.token);
     checks.that(counts == staged.idle, || {
         format!(
             "{name}: engine rows changed across the detach attempts: {:?} -> {counts:?}",
@@ -651,7 +655,7 @@ fn unmount_beside(held: Held) {
                 format!("{name}: the OPEN answered {answer:?}")
             });
             quiet(&staged.harness, token);
-            let opened = engine_rows(&staged.harness, staged.helper);
+            let opened = engine_rows(&staged.harness, staged.ready.token);
             checks.that(opened.1.file_handles > staged.idle.1.file_handles, || {
                 format!(
                     "{name}: the deciding visit recorded no descriptor: {:?} -> {opened:?}",

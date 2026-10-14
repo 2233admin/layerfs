@@ -306,7 +306,7 @@ fn fp31_batched_forget_is_exact_and_detach_disposes_outstanding_lookup_memory() 
     let route = holds::route(&rig.harness.service, token);
     let mount = root(&ready).to_owned();
     quiet(&rig, token);
-    let baseline = owners(&rig, helper);
+    let baseline = owners(&rig, token);
     assert_eq!(work(&rig, token).forget_units, 0);
 
     // References with kernel lookup custody only, then every name once.
@@ -316,7 +316,7 @@ fn fp31_batched_forget_is_exact_and_detach_disposes_outstanding_lookup_memory() 
     let (names, inodes) = walk(&mount, DIRECTORIES);
     assert_eq!((names, inodes.len() as u64), (NAMES, INODES));
     quiet(&rig, token);
-    let looked = owners(&rig, helper);
+    let looked = owners(&rig, token);
     assert_eq!(
         looked.entries() - baseline.entries(),
         custody(INODES, 1 + DIRECTORIES as u64),
@@ -328,7 +328,7 @@ fn fp31_batched_forget_is_exact_and_detach_disposes_outstanding_lookup_memory() 
         &reclaim,
         &rig,
         token,
-        helper,
+        token,
         baseline.entries() + custody(KEPT, 2),
         "every unreferenced inode returned by FORGET",
     );
@@ -336,7 +336,7 @@ fn fp31_batched_forget_is_exact_and_detach_disposes_outstanding_lookup_memory() 
     reclaim.request();
     quiet(&rig, token);
     let partial = work(&rig, token);
-    let kept = owners(&rig, helper);
+    let kept = owners(&rig, token);
     println!(
         "FP-31 wide: names={names} inodes={INODES} pinned_files={PINNED} reclaim_requests={first_requests}+1 forget_units={} memory_entries(baseline={} looked={} after_reclaim={}) engine_decrement={}",
         partial.forget_units,
@@ -365,7 +365,7 @@ fn fp31_batched_forget_is_exact_and_detach_disposes_outstanding_lookup_memory() 
         &reclaim,
         &rig,
         token,
-        helper,
+        token,
         baseline.entries(),
         "every lookup owner returned by FORGET",
     );
@@ -380,7 +380,7 @@ fn fp31_batched_forget_is_exact_and_detach_disposes_outstanding_lookup_memory() 
     assert_eq!(again_inodes.len() as u64, OUTSTANDING);
     assert!(again_inodes.is_subset(&inodes), "the same inodes again");
     quiet(&rig, token);
-    let outstanding = owners(&rig, helper);
+    let outstanding = owners(&rig, token);
     assert_eq!(
         outstanding.entries() - baseline.entries(),
         custody(OUTSTANDING, 1 + AGAIN as u64),
@@ -397,10 +397,14 @@ fn fp31_batched_forget_is_exact_and_detach_disposes_outstanding_lookup_memory() 
         state == CleanupState::Gone
     });
     let mut last = owners(&rig, helper);
-    before("engine counts returned to their baseline", LONG, || {
-        last = owners(&rig, helper);
-        last == empty
-    });
+    before(
+        "sibling Workspace counts remain at their baseline",
+        LONG,
+        || {
+            last = owners(&rig, helper);
+            last == empty
+        },
+    );
     let end = client.diagnostics().unwrap();
 
     // The receipt: FORGET frames, batched frames and units of the connection.

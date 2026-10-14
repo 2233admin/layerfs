@@ -43,7 +43,9 @@ impl Daemon {
         let volume = format!("{name}-store");
         let binary = std::env::var("LAYERFS_INSTALL_DAEMON_BINARY")
             .expect("explicit build-listed Linux binary");
-        assert!(binary.starts_with("/work/core/target/cluster2-linux/debug/deps/host_handoff-"));
+        assert!(
+            binary.starts_with("/work/core/target/issue320/linux-test/debug/deps/host_handoff-")
+        );
         let absent = docker(&["volume", "inspect", &volume]);
         assert!(
             !absent.status.success()

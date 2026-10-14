@@ -97,7 +97,7 @@ impl Rig {
             fixture.config.clone(),
             installed::BINDING,
             installed::CURSOR,
-            2,
+            4, // three mounted Workspaces plus an independent root verifier
             2 * 1024 * 1024,
             ReservationBlocks::default(),
         )
