@@ -340,7 +340,7 @@
       switch (cmd) {
         case "help":
           rec.lines.push(L("branches · log <branch|main> · fork <name> [from <branch|main|C#>] · diff <a> <b>", "dim"));
-          rec.lines.push(L("merge <a> <b> as <c>   new Branch c = a + b (either may be main); conflicts carry markers in c", "dim"));
+          rec.lines.push(L("merge <a> <b> as <c>   new Branch c = a + b (either may be main); a conflict is listed and nothing is created", "dim"));
           rec.lines.push(L("publish <branch>       replace main's files with the Branch head (overwrite only)", "dim"));
           return rec;
         case "branches": {
@@ -386,17 +386,25 @@
           if (ws.length !== 4 || ws[2] !== "as") { rec.lines.push(L("usage: merge <a> <b> as <c>", "err")); return rec; }
           const [left, right, , name] = ws;
           const o = this.call(rec, "branch.merge", { branch: left, with: right, name });
-          if (!o.ok && o.code !== "Conflict") { rec.lines.push(refusal(o)); return rec; }
-          const r = o.ok ? o.result : o.refusal;
-          if (o.ok && r.fastForward) rec.lines.push(L(`✓ Merged ${name} = ${left}@${r.sources[0].node} + ${right}@${r.sources[1].node} · ${r.mergeBase} is already in ${r.head}'s history, so ${name} points at ${r.head} (no new Commit) · opened in a new tab`, "ok"));
-          else if (o.ok) rec.lines.push(L(`✓ Merged ${name} = ${left}@${r.sources[0].node} + ${right}@${r.sources[1].node} · head ${r.head} · merge base ${r.mergeBase} · opened in a new tab`, "ok"));
-          else rec.lines.push(refusal(o));
-          rec.lines.push(...lwwLines(r.lww));
           if (!o.ok) {
-            rec.lines.push(...conflictLines(r.conflicts));
-            rec.lines.push(L(`  ${name} = ${left}@${r.sources[0].node} + ${right}@${r.sources[1].node} · head ${r.head} with markers · merge base ${r.mergeBase}`, "dim"));
-            rec.lines.push(L(`  ${left} and ${right} are unchanged · open a Sandbox on ${name}, fix the markers, commit`, "dim"));
+            rec.lines.push(refusal(o));
+            if (o.code !== "Conflict") return rec;
+            const r = o.refusal;
+            rec.lines.push(L(`  ${left}@${r.sources[0].node} + ${right}@${r.sources[1].node} · merge base ${r.mergeBase}`, "dim"));
+            for (const c of r.conflicts) {
+              rec.lines.push(...conflictLines([c]));
+              for (const h of c.hunks || []) {
+                for (const t of h.ours) rec.lines.push(L(`      ${left.padEnd(10)} ${t.trim()}`, "del"));
+                for (const t of h.theirs) rec.lines.push(L(`      ${right.padEnd(10)} ${t.trim()}`, "add"));
+              }
+            }
+            rec.lines.push(L(`  make these files agree on ${left} or ${right}, then merge again`, "dim"));
+            return rec;
           }
+          const r = o.result;
+          if (r.fastForward) rec.lines.push(L(`✓ Merged ${name} = ${left}@${r.sources[0].node} + ${right}@${r.sources[1].node} · ${r.mergeBase} is already in ${r.head}'s history, so ${name} points at ${r.head} (no new Commit) · opened in a new tab`, "ok"));
+          else rec.lines.push(L(`✓ Merged ${name} = ${left}@${r.sources[0].node} + ${right}@${r.sources[1].node} · head ${r.head} · merge base ${r.mergeBase} · opened in a new tab`, "ok"));
+          rec.lines.push(...lwwLines(r.lww));
           rec.forked = name;
           return rec;
         }
@@ -405,7 +413,6 @@
           const o = this.call(rec, "branch.publish", { branch: a[0] });
           if (!o.ok) {
             rec.lines.push(refusal(o));
-            if (o.code === "Conflict") { rec.lines.push(...conflictLines(o.refusal.conflicts)); rec.lines.push(L(`  fix the markers on ${a[0]} first (a Sandbox on ${a[0]}, then commit)`, "dim")); }
             return rec;
           }
           const r = o.result;

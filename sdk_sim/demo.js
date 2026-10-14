@@ -95,22 +95,50 @@
     { term: "fs", branch: "header", lines: ['edit app/page.tsx "Hello world" "Hello from header"'], expect: "Committed",
       note: "header changes the page line that feature also changed." },
     { term: "history", lines: ["merge release header as release-2"], expect: "Conflict",
-      note: "Merge conflict: rejected so a script stops, but release-2 exists with markers in the page. The merge base is header's C5, through release's merge link." },
-    { term: "history", lines: ["publish release-2"], expect: "Conflict",
-      note: "Publish refuses a head that still holds markers, so they never reach main." },
-    { ui: "open", as: "sb2", branch: "release-2", expect: "Mounted",
-      note: "Fix it like any conflict: a Workspace on release-2." },
-    { term: "sb2", lines: ["cat app/page.tsx"], expect: "exit:0",
-      note: "release's line against header's line." },
-    { term: "sb2", lines: [DEL("Hello from header")], expect: "exit:0",
-      note: "Keep release's line." },
-    { term: "sb2", lines: ["commit"], expect: "Committed",
-      note: "A normal Commit on release-2." },
+      note: "Merge conflict: refused with the conflicting line from each side; nothing is created. The merge base is header's C5, through release's merge link." },
+    { term: "fs", branch: "header", lines: ['edit app/page.tsx "Hello from header" "Hello, Workspace"'], expect: "Committed",
+      note: "Make the sides agree: header takes release's title." },
+    { term: "history", lines: ["merge release header as release-2"], expect: "Merged",
+      note: "Now the merge is clean." },
     { term: "history", lines: ["publish release-2"], expect: "Added",
       note: "Publish: main now has feature's and header's work." },
   ];
 
-  const STORIES = { tour: { title: "Tour", steps: TOUR }, merge: { title: "Commit & merge", steps: MERGE } };
+  // The two conflict kinds and how each is resolved.
+  const CONFLICTS = [
+    { term: "history", lines: ["fork feature"], expect: "Forked",
+      note: "Conflict 1: a Workspace against its Branch head. Fork feature." },
+    { ui: "open", as: "sb1", expect: "Mounted",
+      note: "Mount a Workspace on feature's head." },
+    { term: "sb1", lines: ['sed -i "s/Hello world/Hello from the Workspace/" app/page.tsx'], expect: "exit:0",
+      note: "The Workspace changes the page title." },
+    { term: "fs", lines: ['edit app/page.tsx "Hello world" "Hello from fs"'], expect: "Committed",
+      note: "fs commits a different title on feature. The head moves, so the Workspace is stale." },
+    { term: "sb1", lines: ["commit"], expect: "Conflict",
+      note: "Both changed the same line: commit is rejected and nothing is committed. The merge is written into the Workspace, which now sits on the head." },
+    { term: "sb1", lines: ["cat app/page.tsx"], expect: "exit:0",
+      note: "The conflict is plain file content: both titles between markers." },
+    { term: "sb1", lines: [DEL("Hello from fs")], expect: "exit:0",
+      note: "Resolve: keep the Workspace's title, delete fs's title and the markers." },
+    { term: "sb1", lines: ["commit"], expect: "Committed",
+      note: "No markers left: a normal Commit on the head." },
+    { term: "sb1", lines: ["unmount"], expect: "Unmounted",
+      note: "Done with this Workspace." },
+    { term: "history", lines: ["fork header"], expect: "Forked",
+      note: "Conflict 2: Branch against Branch. Fork header from main." },
+    { term: "fs", lines: ['edit app/page.tsx "Hello world" "Hello from header"'], expect: "Committed",
+      note: "header changes the same title." },
+    { term: "history", lines: ["merge feature header as release"], expect: "Conflict",
+      note: "Both changed the same line: merge is refused, lists the conflict with each side's line, and creates nothing. feature and header are unchanged." },
+    { term: "fs", lines: ['edit app/page.tsx "Hello from header" "Hello from the Workspace"'], expect: "Committed",
+      note: "Resolve: make the two Branches agree. Here header takes feature's title." },
+    { term: "history", lines: ["merge feature header as release"], expect: "Merged",
+      note: "Same line on both sides now: the merge is clean and release holds both Branches' work." },
+    { term: "history", lines: ["publish release"], expect: "Added",
+      note: "Publish release to main." },
+  ];
+
+  const STORIES = { tour: { title: "Tour", steps: TOUR }, conflicts: { title: "Conflicts", steps: CONFLICTS }, merge: { title: "Commit & merge", steps: MERGE } };
   if (typeof module !== "undefined" && module.exports) module.exports = STORIES;
   else global.LAYERFS_DEMO = STORIES;
 })(this);

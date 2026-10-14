@@ -180,13 +180,14 @@
     const b = (base ?? "").split("\n"), o = ours.split("\n"), t = theirs.split("\n");
     const mo = matchLines(b, o), mt = matchLines(b, t);
     const out = [];
-    let conflicts = 0, bi = 0, oi = 0, ti = 0;
+    const hunks = [];
+    let bi = 0, oi = 0, ti = 0;
     const eq = (x, y) => x.length === y.length && x.every((v, k) => v === y[k]);
     const chunk = (be, oe, te) => {
       const cb = b.slice(bi, be), co = o.slice(oi, oe), ct = t.slice(ti, te);
       if (eq(co, cb)) out.push(...ct);
       else if (eq(ct, cb) || eq(co, ct)) out.push(...co);
-      else { conflicts++; out.push(`<<<<<<< ${labels[0]}`, ...co, "=======", ...ct, `>>>>>>> ${labels[1]}`); }
+      else { hunks.push({ line: out.length + 1, ours: co, theirs: ct }); out.push(`<<<<<<< ${labels[0]}`, ...co, "=======", ...ct, `>>>>>>> ${labels[1]}`); }
     };
     for (let k = 0; k < b.length; k++) {
       if (mo[k] < 0 || mt[k] < 0 || mo[k] < oi || mt[k] < ti) continue;
@@ -195,7 +196,7 @@
       bi = k + 1; oi = mo[k] + 1; ti = mt[k] + 1;
     }
     chunk(b.length, o.length, t.length);
-    return { text: out.join("\n"), conflicts };
+    return { text: out.join("\n"), conflicts: hunks.length, hunks };
   }
 
   // gitignore-style rules from /.lww; "%include <file>" reads another file
@@ -245,7 +246,7 @@
         } else if (o && t && o.type === "file" && t.type === "file") {
           const m = merge3Lines(b && b.type === "file" ? b.content : "", o.content, t.content, opts.labels);
           r = { ...o, content: m.text };
-          if (m.conflicts) conflicts.push({ path: p, kind: b ? "content" : "add/add", blocks: m.conflicts });
+          if (m.conflicts) conflicts.push({ path: p, kind: b ? "content" : "add/add", blocks: m.conflicts, hunks: m.hunks });
         } else if ((o && o.type === "file") || (t && t.type === "file")) {
           const kept = o || t;
           r = { ...kept, content: o ? `<<<<<<< ${lo}\n${o.content}\n=======\n>>>>>>> ${lt} (deleted)` : `<<<<<<< ${lo} (deleted)\n=======\n${t.content}\n>>>>>>> ${lt}` };
@@ -491,9 +492,6 @@
       const already = Object.values(this.s.layers).find((l) => l.sourceBranch === b.name && l.sourceCommit === cid);
       if (already) return { kind: "UpToDate", layer: already.id, main: { headLayer: this.s.main.head, root: this.s.layers[this.s.main.head].root } };
       if (b.head !== cid) refuse("HeadMoved", `${b.name} head is ${b.head}, not ${cid}`);
-      const marked = Object.keys(this.s.roots[c.root]).filter((p) => hasMarkers(this.s.roots[c.root][p].content));
-      if (marked.length) refuse("Conflict", `${cid} still has conflict markers in ${marked.length} file${marked.length === 1 ? "" : "s"}`,
-        { conflicts: marked.map((p) => ({ path: p, kind: "markers" })) });
       const parent = this.s.main.head;
       if (c.root === this.s.layers[parent].root) return { kind: "NoChanges", main: { headLayer: parent } };
       const id = "L" + this.s.seq.layer++;
@@ -506,10 +504,8 @@
     },
     // Proposal: a + b = c. Merging never changes either input: it forks a new
     // Branch `name` from a's head whose first Commit is the three-way merge of
-    // a and b (either may be main). On a conflict c is still created, its
-    // conflicting files carry markers, and the call rejects with Conflict
-    // (err.branch names c). Fix them in a Workspace on c and commit. Publish
-    // is refused while the head still holds a marker block.
+    // a and b (either may be main). A conflict rejects with the conflicting
+    // files and both sides' lines; nothing is created.
     "branch.merge"(a) {
       const left = a.branch, right = a.with;
       if (left === right) refuse("InvalidInput", "merge takes two different sources");
@@ -532,6 +528,10 @@
       const m = this.merge(this.nodeTree(mb), ours, this.nodeTree(rn), {
         labels: [`${left}@${ln}`, `${right}@${rn}`], rules: lwwRules(ours),
         timeOurs: (p) => this.changeTime(ln, p, mb), timeTheirs: (p) => this.changeTime(rn, p, mb) });
+      const sources = [{ ref: left, node: ln }, { ref: right, node: rn }];
+      if (!m.clean)
+        refuse("Conflict", `${left} + ${right} conflict in ${m.conflicts.length} file${m.conflicts.length === 1 ? "" : "s"}; nothing was created`,
+          { sources, mergeBase: mb, conflicts: m.conflicts, lww: m.lww });
       // c's base Layer: main's head when main is one side, else a's base.
       const base = left === "main" ? ln : right === "main" ? rn : this.s.commits[ln] ? this.s.commits[ln].base : ln;
       const b = { name: a.name, base, head: null, from: ln, slot: this.slot() };
@@ -540,13 +540,9 @@
       const root = this.intern(m.tree);
       const id = "C" + ++this.s.seq.commit;
       this.s.commits[id] = { id, parent: this.s.commits[ln] ? ln : null, root, base, branch: a.name, slot: this.slot(), by: "merge", via: `merge ${left} + ${right}`,
-        mergedFrom: rn, mergeBase: mb, lww: m.lww, conflicts: m.conflicts, time: this.tick() };
+        mergedFrom: rn, mergeBase: mb, lww: m.lww, time: this.tick() };
       b.head = id;
-      const out = { branch: a.name, head: id, root, sources: [{ ref: left, node: ln }, { ref: right, node: rn }], mergeBase: mb, conflicts: m.conflicts, lww: m.lww };
-      // A conflict still creates c (with markers) but rejects, so a script stops.
-      if (!m.clean)
-        refuse("Conflict", `${left} + ${right} conflict in ${m.conflicts.length} file${m.conflicts.length === 1 ? "" : "s"}; ${a.name} was created with markers`, out);
-      return { kind: "Merged", ...out };
+      return { kind: "Merged", branch: a.name, head: id, root, sources, mergeBase: mb, conflicts: [], lww: m.lww };
     },
 
     // ---------------------------------------------------------- fs reads

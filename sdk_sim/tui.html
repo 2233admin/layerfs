@@ -146,7 +146,6 @@ body.nosel, body.nosel * { user-select: none !important; -webkit-user-select: no
 #hist-svg .edge.merge { stroke: var(--bc); stroke-width: 1.6; stroke-dasharray: 5 3; }
 #hist-svg .mergehead { fill: none; stroke: var(--bc); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 #hist-svg .commit .inner { fill: var(--term); pointer-events: none; }
-#hist-svg .commit.marked .shape { stroke: var(--red); stroke-width: 2.5; stroke-dasharray: 3 2; }
 #hist-svg .node { cursor: pointer; }
 #hist-svg .node .shape { transform-box: fill-box; transform-origin: center; transition: transform .15s; }
 #hist-svg .node:hover .shape { transform: scale(1.2); }
@@ -837,7 +836,6 @@ function renderHistory() {
     const bc = src ? branchColor(src.branch) : "var(--purple)", ex = b.x - 9, ey = b.y + (a.y < b.y ? -4 : 4), dy = a.y < b.y ? -1 : 1;
     g += `<g style="--bc:${bc}"><path class="edge merge" d="M${a.x},${a.y} C${a.x + 18},${b.y + dy * 22} ${b.x - 28},${b.y + dy * 10} ${ex},${ey}"><title>${c.id} merges ${c.mergedFrom}</title></path><path class="mergehead" d="M${ex - 5},${ey + dy * 4.5} L${ex},${ey} L${ex - 6},${ey - dy * 1}"/></g>`;
   }
-  const marked = (c) => Object.values(s.roots[c.root]).some((e) => LayerSim.hasMarkers(e.content));
   const cls = (id) => `${isNew(id) && !reduced ? " popin" : ""}${hl.has(id) ? " hl" : ""}`;
   const badge = (name, id, p) => {
     const ms = L.info[name].mountsAt[id]; if (!ms) return "";
@@ -846,7 +844,7 @@ function renderHistory() {
   };
   for (const l of Object.values(s.layers)) { const p = L.pos[l.id]; g += `<g class="node layer${cls(l.id)}" data-pick="${l.id}"><rect class="shape" x="${p.x - 8}" y="${p.y - 8}" width="16" height="16" rx="4"/><text class="lbl" x="${p.x}" y="${p.y + 21}" text-anchor="middle">${l.id}</text></g>`; }
   for (const name of s.branchOrder) { const p = L.pos["fork:" + name]; g += `<g class="node fork${cls("fork:" + name)}" style="--bc:${branchColor(name)}" data-pick="${esc(name)}" data-card="fork:${esc(name)}"><circle class="shape" cx="${p.x}" cy="${p.y}" r="4.5"/>${badge(name, "fork:" + name, p)}</g>`; }
-  for (const c of Object.values(s.commits)) { const p = L.pos[c.id]; g += `<g class="node commit ${c.by}${marked(c) ? " marked" : ""}${cls(c.id)}" style="--bc:${branchColor(c.branch)}" data-pick="${c.id}"><circle class="shape" cx="${p.x}" cy="${p.y}" r="7.5"/>${c.mergedFrom ? `<circle class="inner" cx="${p.x}" cy="${p.y}" r="2.8"/>` : ""}<text class="lbl" x="${p.x}" y="${p.y + 20}" text-anchor="middle">${c.id}</text>${badge(c.branch, c.id, p)}</g>`; }
+  for (const c of Object.values(s.commits)) { const p = L.pos[c.id]; g += `<g class="node commit ${c.by}${cls(c.id)}" style="--bc:${branchColor(c.branch)}" data-pick="${c.id}"><circle class="shape" cx="${p.x}" cy="${p.y}" r="7.5"/>${c.mergedFrom ? `<circle class="inner" cx="${p.x}" cy="${p.y}" r="2.8"/>` : ""}<text class="lbl" x="${p.x}" y="${p.y + 20}" text-anchor="middle">${c.id}</text>${badge(c.branch, c.id, p)}</g>`; }
   svg.innerHTML = g + `<g id="hlabels">${lab}</g>`;
   if (knownNodes && [...ids].some((id) => !knownNodes.has(id))) wrap.scrollLeft = wrap.scrollWidth;
   knownNodes = ids;
@@ -870,7 +868,6 @@ function wsRows(name, nodeId) {
   }).join("");
 }
 function cardHtml(id) {
-  const marked = (c) => Object.values(sim.s.roots[c.root]).some((e) => LayerSim.hasMarkers(e.content));
   const s = sim.s, head = '<span class="tag">head</span>';
   const hint = (x, ref = x) => `<div class="cbtns"><button class="cbtn" data-files-at="${esc(ref)}">Browse files</button><button class="cbtn" data-files-cmp="${esc(ref)}">Diff vs parent</button></div><div class="hint">Click: type ${esc(x)} into History · Shift-click: compare the Files pane with it</div>`;
   if (s.layers[id]) {
@@ -885,11 +882,10 @@ function cardHtml(id) {
     const after = c.displacedBy ? `<div class="sec">Off the line</div><div class="meta">${c.displacedBy} was committed from ${s.commits[c.displacedBy].parent || "the fork point"} with --force, so ${c.id} is no longer an ancestor of the head. Still stored and readable by id.</div>` : "";
     const lww = (list) => (list && list.length ? "<br>" + list.map((d) => `last-writer-wins ${esc(d.path)} ← ${esc(d.kept)}`).join("<br>") : "");
     const owner = (n) => (s.commits[n] ? `${esc(s.commits[n].branch)} ${n}` : `main ${n}`);
-    const mrg = c.mergedFrom ? `<div class="sec">Merge</div><div class="meta">merged from ${owner(c.mergedFrom)} into ${c.parent ? owner(c.parent) : "main " + c.base}<br>merge base ${c.mergeBase}${c.conflicts && c.conflicts.length ? `<br><span style="color:var(--red)">written with markers in ${c.conflicts.map((x) => esc(x.path)).join(", ")}</span>` : ""}${lww(c.lww)}</div>`
+    const mrg = c.mergedFrom ? `<div class="sec">Merge</div><div class="meta">merged from ${owner(c.mergedFrom)} into ${c.parent ? owner(c.parent) : "main " + c.base}<br>merge base ${c.mergeBase}${lww(c.lww)}</div>`
       : c.merged ? `<div class="sec">Merged on commit</div><div class="meta">the Workspace was on ${c.merged.from}; merged with head ${c.merged.head}${lww(c.merged.lww)}</div>` : "";
-    const mk = marked(c) ? `<div class="meta" style="color:var(--red)">still holds conflict markers: publish is refused</div>` : "";
     return `<div class="h"><b>${c.id}</b>${esc(c.branch)}${b.head === id ? head : ""}</div>
-      <div class="meta">parent ${c.parent || "Branch base"} · root ${c.root}<br>by ${esc(c.by === "fs" ? c.via || "fs" : c.by === "merge" ? c.via : short(c.via))}</div>${mrg}${mk}${jump}${after}${wsRows(c.branch, id)}${hint(id)}`;
+      <div class="meta">parent ${c.parent || "Branch base"} · root ${c.root}<br>by ${esc(c.by === "fs" ? c.via || "fs" : c.by === "merge" ? c.via : short(c.via))}</div>${mrg}${jump}${after}${wsRows(c.branch, id)}${hint(id)}`;
   }
   const name = id.slice(5), b = s.branches[name];
   return `<div class="h"><b>${esc(name)}</b>fork point${b.head ? "" : head}</div><div class="meta">forked from ${b.from}${b.head ? "" : " · no Commits yet"}</div>${wsRows(name, id)}${hint(name, id)}`;
