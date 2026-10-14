@@ -12,7 +12,7 @@ pub type ProjectResult<T> = Result<T, ProjectError>;
 pub enum ProjectError {
     /// The source or frozen file metadata is invalid.
     InvalidInput,
-    /// The source contains a kind the native importer cannot construct.
+    /// The source contains a kind the host importer cannot construct.
     Unsupported,
     /// The acquisition backing's files are the source or lie inside it;
     /// nothing was begun.

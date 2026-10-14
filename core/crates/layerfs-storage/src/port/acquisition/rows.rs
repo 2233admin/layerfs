@@ -1,7 +1,7 @@
 //! Typed acquisition facts. No engine representation appears here.
 use layerfs_content::{inode_leaf::InodeKind, ObjectId};
 
-/// Bytes of native change evidence: length, mode, mtime and ctime.
+/// Bytes of host change evidence: length, mode, mtime and ctime.
 pub const EVIDENCE_BYTES: usize = 44;
 
 /// One live operation: its identity and the provider session that began it.
@@ -16,9 +16,9 @@ pub struct Owner {
 /// Facts fixed when an operation begins.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Begin {
-    /// Native device of the source root.
+    /// Host device of the source root.
     pub source_device: u64,
-    /// Native inode of the source root.
+    /// Host inode of the source root.
     pub source_inode: u64,
     /// LayerStack authority identity the acquisition is for.
     pub stack: [u8; 16],
@@ -31,7 +31,7 @@ pub struct Begin {
 pub enum Phase {
     /// Source entries are being observed and placed.
     Scanning,
-    /// Native regular files are being constructed.
+    /// Host regular files are being constructed.
     Files,
     /// Directories and the inode table are being built.
     Tree,
@@ -68,12 +68,12 @@ impl Phase {
     }
 }
 
-/// Exact native identity and change evidence of one regular file.
+/// Exact host identity and change evidence of one regular file.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct NativeIdentity {
-    /// Native device, exact and unsigned.
+pub struct HostIdentity {
+    /// Host device, exact and unsigned.
     pub device: u64,
-    /// Native inode, exact and unsigned.
+    /// Host inode, exact and unsigned.
     pub inode: u64,
     /// Opaque evidence that must be byte-equal on every path of the identity.
     pub evidence: [u8; EVIDENCE_BYTES],
@@ -101,10 +101,10 @@ pub struct NewEntry {
     pub metadata_root: ObjectId,
     /// Constructed symlink target root; `None` for other kinds.
     pub target_root: Option<ObjectId>,
-    /// Native path: required for a directory and a regular file.
-    pub native_path: Option<Vec<u8>>,
-    /// Native identity: required for a regular file.
-    pub native: Option<NativeIdentity>,
+    /// Host path: required for a directory and a regular file.
+    pub host_path: Option<Vec<u8>>,
+    /// Host identity: required for a regular file.
+    pub host: Option<HostIdentity>,
 }
 
 /// One unpositioned child read back for placement.
@@ -114,8 +114,8 @@ pub struct Unplaced {
     pub name: Vec<u8>,
     /// File kind.
     pub kind: InodeKind,
-    /// Native identity of a regular file.
-    pub native: Option<NativeIdentity>,
+    /// Host identity of a regular file.
+    pub host: Option<HostIdentity>,
 }
 
 /// One child's assigned position.
@@ -125,8 +125,8 @@ pub struct Placed {
     pub name: Vec<u8>,
     /// Final position.
     pub position: u64,
-    /// Native identity and path of a regular file; `None` for other kinds.
-    pub native: Option<(NativeIdentity, Vec<u8>)>,
+    /// Host identity and path of a regular file; `None` for other kinds.
+    pub host: Option<(HostIdentity, Vec<u8>)>,
 }
 
 /// One directory to read.
@@ -134,22 +134,22 @@ pub struct Placed {
 pub struct Directory {
     /// Directory position.
     pub position: u64,
-    /// Native path the directory is read through.
-    pub native_path: Vec<u8>,
+    /// Host path the directory is read through.
+    pub host_path: Vec<u8>,
 }
 
-/// The first path of one native regular-file identity.
+/// The first path of one host regular-file identity.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Job {
     /// Canonical position, shared by every later path.
     pub position: u64,
     /// Identity and the evidence every path must keep matching.
-    pub native: NativeIdentity,
-    /// Native path of the first path.
-    pub native_path: Vec<u8>,
+    pub host: HostIdentity,
+    /// Host path of the first path.
+    pub host_path: Vec<u8>,
 }
 
-/// One native identity's constructed root and later-path count.
+/// One host identity's constructed root and later-path count.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct FileRoot {
     /// Canonical position.
@@ -167,7 +167,7 @@ pub struct Binding {
     pub key: EntryKey,
     /// Final position.
     pub position: u64,
-    /// Canonical position of a regular file, including a later native path.
+    /// Canonical position of a regular file, including a later host path.
     pub canonical: Option<u64>,
 }
 

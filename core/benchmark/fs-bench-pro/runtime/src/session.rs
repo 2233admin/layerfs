@@ -868,7 +868,7 @@ pub fn serve(args: &Args, events: &mut Events) -> Result<()> {
                     &owner,
                     &body,
                     if key.starts_with("native:") {
-                        runtime::Directory::Native(
+                        runtime::Directory::Host(
                             &directory,
                             layerfs_sandbox::CommandIdentity {
                                 uid: args.uid,

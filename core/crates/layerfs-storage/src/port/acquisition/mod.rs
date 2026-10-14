@@ -11,7 +11,7 @@ pub use contract::{
     WRITE_ROW_BYTES, WRITE_WINDOW_BYTES, WRITE_WINDOW_ROWS,
 };
 pub use rows::{
-    Abandoned, Begin, Binding, Directory, Entry, EntryKey, FileRoot, Job, NativeIdentity, NewEntry,
+    Abandoned, Begin, Binding, Directory, Entry, EntryKey, FileRoot, HostIdentity, Job, NewEntry,
     Owner, Phase, Placed, Unplaced, EVIDENCE_BYTES,
 };
 pub use work::{AcquisitionWork, Discarded, Disposal};

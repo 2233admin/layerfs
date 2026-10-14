@@ -9,13 +9,13 @@
 /// are not pages, file growth or resident memory.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct NamespaceWork {
-    /// Distinct native regular-file identities constructed once.
+    /// Distinct host regular-file identities constructed once.
     pub unique_files: usize,
-    /// Additional native paths sharing those regular-file identities.
+    /// Additional host paths sharing those regular-file identities.
     pub regular_aliases: usize,
     /// Namespace entries placed in backing, including the root directory.
     pub entries: usize,
-    /// Native regular-file paths bound to an identity in backing.
+    /// Host regular-file paths bound to an identity in backing.
     pub jobs: usize,
     /// Most directories that were positioned in backing but not yet read.
     pub frontier: usize,

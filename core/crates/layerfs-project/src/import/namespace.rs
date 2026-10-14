@@ -13,7 +13,7 @@
 //! and every inode in serial order, so each directory and the inode table are
 //! streamed straight into their sorted constructors through one read window.
 //! Each final count is the retained bindings of that serial: one per entry plus
-//! one per native alias. No whole-namespace update, count array or content map
+//! one per host alias. No whole-namespace update, count array or content map
 //! is resident.
 //!
 //! Every serial is assigned by Init from one reservation the C5 catalog
@@ -34,7 +34,7 @@ use layerfs_storage::port::acquisition::WRITE_WINDOW_ROWS;
 use layerfs_storage::{Save, Storage};
 use std::time::Instant;
 
-/// One bounded progress byte on a long native import, separate from result data.
+/// One bounded progress byte on a long host import, separate from result data.
 pub(crate) struct ImportProgress {
     deadline: Instant,
     pub(crate) work: crate::NamespaceWork,
@@ -115,7 +115,7 @@ fn directories(
                 let Some(entry) = entries.next()? else {
                     return Ok(None);
                 };
-                // A later native path binds the serial of its identity's first.
+                // A later host path binds the serial of its identity's first.
                 Ok(Some((
                     entry.key.name,
                     entry.canonical.unwrap_or(entry.position),

@@ -1,4 +1,4 @@
-//! Native Init and original handoff/failure custody.
+//! Host Init and original handoff/failure custody.
 use layerfs_bridge::provision::{check_destination, ProviderKind, StoreManifest, StoreProfile};
 use layerfs_history::{
     BranchId, BranchSnapshot, ForkRequest, ForkSource, HistoryCatalog, HistoryCatalogConfig,
@@ -12,7 +12,7 @@ use layerfs_storage::{port::PersistenceError, Storage, StorageError, StoragePoli
 use layerfs_telemetry::timer::{Active, TimingScope};
 use std::{fmt, path::PathBuf, time::Instant};
 
-/// One native Project Init. The Store is created once with acquisition tables.
+/// One host Project Init. The Store is created once with acquisition tables.
 #[derive(Debug)]
 pub struct InitRequest {
     /// Complete source directory, with no Git-ignore filtering.
@@ -71,7 +71,7 @@ pub enum InitError {
     Persistence(PersistenceError),
     /// Storage construction.
     Storage(StorageError),
-    /// Complete native import, including original acquisition custody.
+    /// Complete host import, including original acquisition custody.
     Project(ProjectError),
     /// First Branch publication.
     History(HistoryError),
@@ -180,7 +180,7 @@ pub(crate) fn initialize(
     }
 }
 
-/// Native Project Init/seal/install and authenticated fork/history organization.
+/// Host Project Init/seal/install and authenticated fork/history organization.
 /// The facade retains no Store handle. Each method delegates one operation.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct ProjectApi;
@@ -189,7 +189,7 @@ impl ProjectApi {
     pub fn new() -> Self {
         Self
     }
-    /// Imports the complete supported native tree, publishes genesis/Branch and seals.
+    /// Imports the complete supported host tree, publishes genesis/Branch and seals.
     /// An explicit Disposable profile is required before any Store creation.
     pub fn init(
         &self,

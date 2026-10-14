@@ -93,7 +93,7 @@ pub(crate) fn check(
         // `sqlite_sequence` is the engine's never-reused operation identity counter.
         expected.extend([
             "init_entry",
-            "init_native_file",
+            "init_host_file",
             "init_operation",
             "sqlite_sequence",
         ]);

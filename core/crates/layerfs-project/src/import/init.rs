@@ -28,7 +28,7 @@ pub struct InitRequest<'a> {
     pub source: &'a Path,
     /// Provider-owned working state for the acquisition's input-sized rows.
     ///
-    /// Where the provider reports a native placement, that directory must lie
+    /// Where the provider reports a host placement, that directory must lie
     /// outside `source` through every path alias; one that is the source or
     /// inside it is refused before the operation begins.
     pub acquisition: &'a dyn Acquisition,
@@ -196,7 +196,7 @@ fn acquire<'a>(
     Ok((root, reservation.start, scanned.entries, save))
 }
 
-/// Refuses native Init where the required Unix metadata contract is unavailable.
+/// Refuses host Init where the required Unix metadata contract is unavailable.
 #[cfg(not(unix))]
 pub fn init(
     _storage: &Storage,

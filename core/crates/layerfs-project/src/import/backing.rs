@@ -1,4 +1,4 @@
-//! One live acquisition operation: bounded windows, native evidence and custody.
+//! One live acquisition operation: bounded windows, host evidence and custody.
 //!
 //! Every input-sized row of an Init lives in the provider behind the
 //! acquisition port. This module holds the resident side only: one read window
@@ -9,8 +9,8 @@ use crate::{NamespaceWork, RetainedAcquisition};
 use layerfs_content::ObjectId;
 use layerfs_storage::port::acquisition::{
     Acquisition, AcquisitionError, AcquisitionResult, Binding, Directory, Entry, EntryKey,
-    FileRoot, Job, Limits, NativeIdentity, NewEntry, Owner, Phase, Placed, Unplaced,
-    EVIDENCE_BYTES, WRITE_ROW_BYTES, WRITE_WINDOW_BYTES, WRITE_WINDOW_ROWS,
+    FileRoot, HostIdentity, Job, Limits, NewEntry, Owner, Phase, Placed, Unplaced, EVIDENCE_BYTES,
+    WRITE_ROW_BYTES, WRITE_WINDOW_BYTES, WRITE_WINDOW_ROWS,
 };
 use layerfs_storage::port::PersistenceError;
 use std::{cell::Cell, collections::VecDeque, fs::Metadata, os::unix::fs::MetadataExt};
@@ -18,7 +18,7 @@ use std::{cell::Cell, collections::VecDeque, fs::Metadata, os::unix::fs::Metadat
 /// Rows the job queue or one resident child buffer may hold.
 pub(crate) const WINDOW_ROWS: usize = 512;
 
-/// Native identity and change evidence observed for one source inode.
+/// Host identity and change evidence observed for one source inode.
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub(crate) struct Stamp {
     pub dev: u64,
@@ -48,7 +48,7 @@ impl Stamp {
         metadata.is_file() && !metadata.file_type().is_symlink() && *self == Self::of(metadata)
     }
     /// The identity and byte-exact evidence every path of this inode must share.
-    pub(crate) fn identity(&self) -> NativeIdentity {
+    pub(crate) fn identity(&self) -> HostIdentity {
         let mut evidence = [0; EVIDENCE_BYTES];
         evidence[..8].copy_from_slice(&self.len.to_be_bytes());
         evidence[8..12].copy_from_slice(&self.mode.to_be_bytes());
@@ -56,23 +56,23 @@ impl Stamp {
         for (slot, value) in evidence[12..].chunks_exact_mut(8).zip(times) {
             slot.copy_from_slice(&value.to_be_bytes());
         }
-        NativeIdentity {
+        HostIdentity {
             device: self.dev,
             inode: self.ino,
             evidence,
         }
     }
-    pub(crate) fn from_identity(native: &NativeIdentity) -> Self {
+    pub(crate) fn from_identity(host: &HostIdentity) -> Self {
         let field = |at: usize| {
             let mut value = [0; 8];
-            value.copy_from_slice(&native.evidence[at..at + 8]);
+            value.copy_from_slice(&host.evidence[at..at + 8]);
             value
         };
         let mut mode = [0; 4];
-        mode.copy_from_slice(&native.evidence[8..12]);
+        mode.copy_from_slice(&host.evidence[8..12]);
         Self {
-            dev: native.device,
-            ino: native.inode,
+            dev: host.device,
+            ino: host.inode,
             len: u64::from_be_bytes(field(0)),
             mode: u32::from_be_bytes(mode),
             mtime: i64::from_be_bytes(field(12)),
@@ -83,7 +83,7 @@ impl Stamp {
     }
 }
 
-/// Native regular-file paths bound so far, by whether they named a new identity.
+/// Host regular-file paths bound so far, by whether they named a new identity.
 #[derive(Clone, Copy, Default)]
 pub(crate) struct Bound {
     pub unique: usize,
@@ -177,7 +177,7 @@ impl<'a> Backing<'a> {
             |directory| directory.position,
         )
     }
-    /// The first path of every native identity in position order.
+    /// The first path of every host identity in position order.
     pub(crate) fn jobs(&self) -> Stream<'_, 'a, Job, u64> {
         Stream::new(
             self,
@@ -188,7 +188,7 @@ impl<'a> Backing<'a> {
             |job| job.position,
         )
     }
-    /// Every native identity's constructed root and later-path count.
+    /// Every host identity's constructed root and later-path count.
     pub(crate) fn file_roots(&self) -> Stream<'_, 'a, FileRoot, u64> {
         Stream::new(
             self,
@@ -228,7 +228,7 @@ impl<'a> Backing<'a> {
             .port
             .place_children(self.owner, parent, placed)
             .map_err(changed_source)?;
-        let regular = placed.iter().filter(|child| child.native.is_some());
+        let regular = placed.iter().filter(|child| child.host.is_some());
         bound.count(regular.map(|child| child.position), &canonical)?;
         placed.clear();
         Ok(())
@@ -353,10 +353,10 @@ impl RetainedCleanup {
 const ROOT_ROW_BYTES: usize = 48;
 
 fn entry_bytes(entry: &NewEntry) -> usize {
-    entry.key.name.len() + entry.native_path.as_ref().map_or(0, Vec::len) + WRITE_ROW_BYTES
+    entry.key.name.len() + entry.host_path.as_ref().map_or(0, Vec::len) + WRITE_ROW_BYTES
 }
 pub(crate) fn placed_bytes(child: &Placed) -> usize {
-    child.name.len() + child.native.as_ref().map_or(0, |(_, path)| path.len()) + WRITE_ROW_BYTES
+    child.name.len() + child.host.as_ref().map_or(0, |(_, path)| path.len()) + WRITE_ROW_BYTES
 }
 /// True when adding `bytes` to a window of `rows` and `held` would exceed it.
 pub(crate) fn window_full(rows: usize, held: usize, bytes: usize) -> bool {
@@ -407,7 +407,7 @@ impl Pending {
             .port
             .put_entries(backing.owner, &self.entries)
             .map_err(changed_source)?;
-        let regular = self.entries.iter().filter(|entry| entry.native.is_some());
+        let regular = self.entries.iter().filter(|entry| entry.host.is_some());
         bound.count(regular.filter_map(|entry| entry.position), &canonical)?;
         self.entries.clear();
         self.bytes = 0;

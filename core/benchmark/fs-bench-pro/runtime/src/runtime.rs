@@ -147,7 +147,7 @@ pub fn extra_control(
 
 pub enum Directory<'a> {
     Mounted(&'a MountedWorkspace),
-    Native(&'a str, CommandIdentity),
+    Host(&'a str, CommandIdentity),
 }
 /// One ordinary runtime Bash; the mounted convenience adds no daemon registration.
 /// Streams go directly to files, with no output-sized resident collection.
@@ -162,7 +162,7 @@ pub fn command(
 ) -> Result<()> {
     let directory = match &location {
         Directory::Mounted(workspace) => workspace.ready.directory.as_str(),
-        Directory::Native(directory, _) => directory,
+        Directory::Host(directory, _) => directory,
     };
     command_created(
         &owner.runtime.identity().to_string(),
@@ -185,7 +185,7 @@ pub fn command(
                     Directory::Mounted(workspace) => {
                         WorkspaceApi::exec(owner, workspace, arguments, environment.to_vec(), false)
                     }
-                    Directory::Native(directory, identity) => layerfs_sdk::internal::exec(
+                    Directory::Host(directory, identity) => layerfs_sdk::internal::exec(
                         &owner.runtime,
                         identity,
                         arguments,

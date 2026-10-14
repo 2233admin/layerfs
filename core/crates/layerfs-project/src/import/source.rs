@@ -1,4 +1,4 @@
-//! Native source observations; symbolic links are stored without traversal.
+//! Host source observations; symbolic links are stored without traversal.
 use crate::ProjectError;
 use layerfs_content::filesystem::symlink::SymlinkTarget;
 use std::{
@@ -33,7 +33,7 @@ pub(super) fn read_link(path: &Path, scanned: &Metadata) -> Result<Vec<u8>, Proj
 /// Refuses a backing whose files are the source or lie inside it.
 ///
 /// The placement is resolved through its links first, then each ancestor's
-/// native identity is compared with the source's, so a symlinked or otherwise
+/// host identity is compared with the source's, so a symlinked or otherwise
 /// aliased spelling of a directory inside the source is recognised. Nothing is
 /// begun or changed: a backing inside the source would both alter the source
 /// while it is read and be acquired as part of it.

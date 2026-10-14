@@ -47,14 +47,14 @@ pub enum SqliteAcquisitionSchema {
     /// Schema versions 7 to 9: no acquisition tables; acquisition is unavailable.
     #[default]
     Absent,
-    /// Schema versions 10 to 12: the same pack layouts with the acquisition tables.
+    /// Schema versions 13 to 15: the same pack layouts with the acquisition tables.
     Tables,
 }
 impl SqliteAcquisitionSchema {
     pub(crate) const fn version_offset(self) -> i64 {
         match self {
             Self::Absent => 0,
-            Self::Tables => 3,
+            Self::Tables => 6,
         }
     }
 }

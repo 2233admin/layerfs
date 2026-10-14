@@ -10,7 +10,7 @@ use super::statements::{
 use crate::backend::{records::BackendError, Session, Transaction};
 use layerfs_content::{inode_leaf::InodeKind, ObjectId};
 use layerfs_storage::port::acquisition::{
-    Binding, Directory, Entry, EntryKey, FileRoot, Job, Limits, NativeIdentity, Owner, Phase,
+    Binding, Directory, Entry, EntryKey, FileRoot, HostIdentity, Job, Limits, Owner, Phase,
     Unplaced, EVIDENCE_BYTES,
 };
 use rusqlite::{types::FromSql, Row, ToSql};
@@ -54,8 +54,8 @@ fn exact<const N: usize>(bytes: &[u8]) -> Result<[u8; N], BackendError> {
     <[u8; N]>::try_from(bytes).map_err(|_| BackendError::Integrity)
 }
 
-fn native(device: &[u8], inode: &[u8], evidence: &[u8]) -> Result<NativeIdentity, BackendError> {
-    Ok(NativeIdentity {
+fn host(device: &[u8], inode: &[u8], evidence: &[u8]) -> Result<HostIdentity, BackendError> {
+    Ok(HostIdentity {
         device: u64::from_be_bytes(exact(device)?),
         inode: u64::from_be_bytes(exact(inode)?),
         evidence: exact::<EVIDENCE_BYTES>(evidence)?,
@@ -154,13 +154,13 @@ pub(crate) fn unplaced_children(
             rusqlite::types::ValueRef::Null => None,
             _ => {
                 let packed: [u8; 60] = exact(super::super::rows::blob(row, 3)?)?;
-                Some(native(&packed[..8], &packed[8..16], &packed[16..])?)
+                Some(host(&packed[..8], &packed[8..16], &packed[16..])?)
             }
         };
         Ok(Unplaced {
             name: super::super::rows::blob(row, 1)?.to_vec(),
             kind: kind(row, 2)?,
-            native: identity,
+            host: identity,
         })
     };
     match after_name {
@@ -202,7 +202,7 @@ pub(crate) fn directories(
         |row| {
             Ok(Directory {
                 position: number(get(row, 0)?)?,
-                native_path: super::super::rows::blob(row, 1)?.to_vec(),
+                host_path: super::super::rows::blob(row, 1)?.to_vec(),
             })
         },
     )?)
@@ -229,12 +229,12 @@ pub(crate) fn directory_path(
 fn job_row(row: &Row<'_>, start: usize) -> Result<Job, BackendError> {
     Ok(Job {
         position: number(get(row, start)?)?,
-        native: native(
+        host: host(
             super::super::rows::blob(row, start + 1)?,
             super::super::rows::blob(row, start + 2)?,
             super::super::rows::blob(row, start + 3)?,
         )?,
-        native_path: super::super::rows::blob(row, start + 4)?.to_vec(),
+        host_path: super::super::rows::blob(row, start + 4)?.to_vec(),
     })
 }
 

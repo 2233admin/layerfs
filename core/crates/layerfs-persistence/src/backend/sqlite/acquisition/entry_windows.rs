@@ -1,8 +1,8 @@
 //! Fixed independent-entry SQL inputs; dependency boundaries keep ordered execution.
 use super::{
-    accounting::{charge, entry_bytes, native_bytes},
+    accounting::{charge, entry_bytes, host_bytes},
     statements::{
-        signed, Failure, BIND_NATIVE, ENTRY_DEPENDENCIES, PUT_ENTRIES, PUT_ENTRY, PUT_NATIVE,
+        signed, Failure, BIND_HOST_FILE, ENTRY_DEPENDENCIES, PUT_ENTRIES, PUT_ENTRY, PUT_HOST_FILE,
     },
     writes::{packed, put_one, well_formed},
 };
@@ -23,7 +23,7 @@ struct Input<'a> {
     metadata: Option<&'a [u8]>,
     target: Option<&'a [u8]>,
     path: Option<&'a [u8]>,
-    native: Option<[u8; 60]>,
+    host: Option<[u8; 60]>,
 }
 impl<'a> Input<'a> {
     /// Only rows whose shape and SQL constraints cannot refuse may be grouped.
@@ -37,7 +37,7 @@ impl<'a> Input<'a> {
             None => -1,
         };
         let position = entry.position.map(signed).transpose().ok()?;
-        let path = entry.native_path.as_deref();
+        let path = entry.host_path.as_deref();
         if path.is_some_and(|path| path.is_empty() || path.len() > 4096)
             || (entry.kind == InodeKind::RegularFile && position == Some(0))
         {
@@ -54,7 +54,7 @@ impl<'a> Input<'a> {
                 .as_ref()
                 .map(|root| root.as_bytes().as_slice()),
             path,
-            native: entry.native.map(packed),
+            host: entry.host.map(packed),
         })
     }
 }
@@ -65,10 +65,10 @@ pub(crate) fn append(
     entries: &[NewEntry],
 ) -> Result<Vec<u64>, Failure> {
     let operation = signed(owner.operation)?;
-    let mut native_one = tx.prepare(BIND_NATIVE)?;
+    let mut host_one = tx.prepare(BIND_HOST_FILE)?;
     let mut entry_one = tx.prepare(PUT_ENTRY)?;
     let mut dependencies = tx.prepare(ENTRY_DEPENDENCIES)?;
-    let mut natives = tx.prepare(PUT_NATIVE)?;
+    let mut host_files = tx.prepare(PUT_HOST_FILE)?;
     let mut append = tx.prepare(PUT_ENTRIES)?;
     let (mut offset, mut rows, mut bytes) = (0, 0, 0);
     let mut canonical = Vec::new();
@@ -92,9 +92,8 @@ pub(crate) fn append(
             {
                 break;
             }
-            if let (Some(position), Some(native)) = (entry.position, entry.native) {
-                if !identities.insert((native.device, native.inode)) || !positions.insert(position)
-                {
+            if let (Some(position), Some(host)) = (entry.position, entry.host) {
+                if !identities.insert((host.device, host.inode)) || !positions.insert(position) {
                     break;
                 }
             }
@@ -103,7 +102,7 @@ pub(crate) fn append(
         }
         if count != 0 {
             let packed: [_; INPUT_ROWS] =
-                std::array::from_fn(|i| input[i].native.as_ref().map(|n| n.as_slice()));
+                std::array::from_fn(|i| input[i].host.as_ref().map(|n| n.as_slice()));
             let identities: [_; INPUT_ROWS] = std::array::from_fn(|i| {
                 packed[i]
                     .filter(|_| input[i].position.is_some())
@@ -116,7 +115,7 @@ pub(crate) fn append(
                     packed[i].filter(|_| input[i].position.is_none())
                 }
             });
-            // One binding allocation and one packed-native view survive the
+            // One binding allocation and one packed-host view survive the
             // dependency check. Writes bind only the accepted prefix, without
             // clearing/rebuilding the independently classified input rows.
             let absent: Option<&[u8]> = None;
@@ -146,13 +145,13 @@ pub(crate) fn append(
             if count != 0 {
                 if input[..count]
                     .iter()
-                    .any(|row| row.native.is_some() && row.position.is_some())
+                    .any(|row| row.host.is_some() && row.position.is_some())
                 {
                     values.clear();
                     values.push(&operation);
                     for i in 0..count {
                         let row = &input[i];
-                        if row.native.is_some() && row.position.is_some() {
+                        if row.host.is_some() && row.position.is_some() {
                             values.extend([
                                 &row.position as &dyn rusqlite::ToSql,
                                 &packed[i],
@@ -161,9 +160,9 @@ pub(crate) fn append(
                         }
                     }
                     values.resize(1 + 3 * INPUT_ROWS, &absent);
-                    natives.borrowed(
+                    host_files.borrowed(
                         &values,
-                        native_binding_bytes(&entries[offset..offset + count]),
+                        host_binding_bytes(&entries[offset..offset + count]),
                     )?;
                 }
                 values.clear();
@@ -188,15 +187,11 @@ pub(crate) fn append(
                 for entry in &entries[offset..offset + count] {
                     rows += 1;
                     bytes += entry_bytes(entry);
-                    if let (Some(position), Some(_)) = (entry.position, entry.native) {
+                    if let (Some(position), Some(_)) = (entry.position, entry.host) {
                         canonical.push(position);
                         rows += 1;
-                        bytes += native_bytes(
-                            entry
-                                .native_path
-                                .as_deref()
-                                .ok_or(BackendError::Integrity)?,
-                        );
+                        bytes +=
+                            host_bytes(entry.host_path.as_deref().ok_or(BackendError::Integrity)?);
                     }
                 }
                 offset += count;
@@ -204,7 +199,7 @@ pub(crate) fn append(
             }
         }
         let (first, added_rows, added_bytes) =
-            put_one(&mut native_one, &mut entry_one, operation, &entries[offset])?;
+            put_one(&mut host_one, &mut entry_one, operation, &entries[offset])?;
         canonical.extend(first);
         rows += added_rows;
         bytes += added_bytes;
@@ -221,7 +216,7 @@ fn dependency_bytes(entries: &[NewEntry]) -> u64 {
         .map(|e| {
             16 + e.position.map_or(0, |_| 8)
                 + e.key.name.len() as u64
-                + if e.native.is_some() && e.position.is_some() {
+                + if e.host.is_some() && e.position.is_some() {
                     16
                 } else {
                     0
@@ -230,11 +225,11 @@ fn dependency_bytes(entries: &[NewEntry]) -> u64 {
         .sum::<u64>()
 }
 
-fn native_binding_bytes(entries: &[NewEntry]) -> u64 {
+fn host_binding_bytes(entries: &[NewEntry]) -> u64 {
     8 + entries
         .iter()
-        .filter(|e| e.native.is_some() && e.position.is_some())
-        .map(|e| 68 + e.native_path.as_ref().map_or(0, |p| p.len() as u64))
+        .filter(|e| e.host.is_some() && e.position.is_some())
+        .map(|e| 68 + e.host_path.as_ref().map_or(0, |p| p.len() as u64))
         .sum::<u64>()
 }
 
@@ -246,8 +241,8 @@ fn entry_binding_bytes(entries: &[NewEntry]) -> u64 {
                 + e.key.name.len() as u64
                 + e.target_root.map_or(0, |_| 32)
                 + if e.kind == InodeKind::Directory {
-                    e.native_path.as_ref().map_or(0, |p| p.len() as u64)
-                } else if e.native.is_some() && e.position.is_none() {
+                    e.host_path.as_ref().map_or(0, |p| p.len() as u64)
+                } else if e.host.is_some() && e.position.is_none() {
                     60
                 } else {
                     0

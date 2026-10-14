@@ -134,7 +134,7 @@ impl Acquisition for AcquisitionProvider {
 
     fn put_entries(&self, owner: Owner, entries: &[NewEntry]) -> AcquisitionResult<Vec<u64>> {
         let bytes = entries.iter().map(|entry| {
-            entry.key.name.len() + entry.native_path.as_ref().map_or(0, Vec::len) + WRITE_ROW_BYTES
+            entry.key.name.len() + entry.host_path.as_ref().map_or(0, Vec::len) + WRITE_ROW_BYTES
         });
         bounded(entries.len(), bytes.sum())?;
         self.unit(owner, true, |tx| writes::put_entries(tx, owner, entries))
@@ -160,7 +160,7 @@ impl Acquisition for AcquisitionProvider {
     ) -> AcquisitionResult<Vec<u64>> {
         let bytes = placed.iter().map(|child| {
             child.name.len()
-                + child.native.as_ref().map_or(0, |(_, path)| path.len())
+                + child.host.as_ref().map_or(0, |(_, path)| path.len())
                 + WRITE_ROW_BYTES
         });
         bounded(placed.len(), bytes.sum())?;

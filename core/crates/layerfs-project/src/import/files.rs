@@ -1,4 +1,4 @@
-//! Constructs each native regular-file identity once into the single Save owner.
+//! Constructs each host regular-file identity once into the single Save owner.
 //!
 //! The owning thread alone reads the backing and accepts objects. It feeds a
 //! fixed job queue from the backed identity stream; constructors return bounded
@@ -26,7 +26,7 @@ use std::{
 
 const INIT_WORKERS: usize = 4;
 
-/// The first path of one native identity with the evidence it must keep matching.
+/// The first path of one host identity with the evidence it must keep matching.
 struct Job {
     /// Canonical position, shared by every later path of the identity.
     id: u64,
@@ -37,13 +37,13 @@ impl Job {
     fn of(job: acquisition::Job) -> Self {
         Self {
             id: job.position,
-            stamp: Stamp::from_identity(&job.native),
-            path: PathBuf::from(OsString::from_vec(job.native_path)),
+            stamp: Stamp::from_identity(&job.host),
+            path: PathBuf::from(OsString::from_vec(job.host_path)),
         }
     }
 }
 
-/// Constructs every native identity once and records its root in backing.
+/// Constructs every host identity once and records its root in backing.
 pub(crate) fn save_files(
     backing: &Backing<'_>,
     aliases: usize,
@@ -56,7 +56,7 @@ pub(crate) fn save_files(
     let deadline = progress.deadline();
     let (feed, jobs) = mpsc::sync_channel::<Job>(WINDOW_ROWS);
     let jobs = Mutex::new(jobs);
-    let mut natives = backing.jobs();
+    let mut host_files = backing.jobs();
     let mut roots: Vec<(u64, ObjectId)> = Vec::new();
     std::thread::scope(|workers| -> Result<(), Failure> {
         let mut feed = Some(feed);
@@ -84,7 +84,7 @@ pub(crate) fn save_files(
             while let Some(sender) = &feed {
                 let job = match held.take() {
                     Some(job) => job,
-                    None => match natives.next()? {
+                    None => match host_files.next()? {
                         Some(job) => Job::of(job),
                         None => {
                             feed = None;
@@ -169,7 +169,7 @@ fn check_aliases(backing: &Backing<'_>, progress: &mut ImportProgress) -> Result
         }
         if first.is_none_or(|(held, _)| held != canonical) {
             let job = backing.job(canonical)?;
-            first = Some((canonical, Stamp::from_identity(&job.native)));
+            first = Some((canonical, Stamp::from_identity(&job.host)));
         }
         let (Some((_, directory)), Some((_, stamp))) = (&directory, &first) else {
             return Err(Failure::InvalidInput);

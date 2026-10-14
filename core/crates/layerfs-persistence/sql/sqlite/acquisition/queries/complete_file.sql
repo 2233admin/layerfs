@@ -33,7 +33,7 @@ WITH roots(position,root) AS (VALUES
  (?62,?63),
  (?64,?65)
 )
-UPDATE init_native_file AS target SET file_root=roots.root
+UPDATE init_host_file AS target SET file_root=roots.root
 FROM roots
 WHERE target.operation_id=?1 AND target.canonical_position=roots.position
  AND target.file_root IS NULL

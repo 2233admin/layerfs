@@ -6,7 +6,7 @@
 use super::accounting::{credit, owner};
 use super::statements::{
     signed, unsigned, Failure, ABANDONED, DISCARD_ENTRIES, DISCARD_ENTRY_KEYS, DISCARD_ENTRY_TAIL,
-    DISCARD_NATIVE, DISCARD_NATIVE_KEYS, DISCARD_NATIVE_TAIL, RELEASE, RELEASE_ABANDONED,
+    DISCARD_HOST_FILE, DISCARD_HOST_FILE_KEYS, DISCARD_HOST_FILE_TAIL, RELEASE, RELEASE_ABANDONED,
 };
 use crate::backend::{records::BackendError, Transaction};
 use layerfs_storage::port::acquisition::{
@@ -60,18 +60,22 @@ fn remove_entries(
     }
 }
 
-fn remove_native(tx: &Transaction<'_>, operation: i64, budget: i64) -> Result<(i64, i64), Failure> {
+fn remove_host_file(
+    tx: &Transaction<'_>,
+    operation: i64,
+    budget: i64,
+) -> Result<(i64, i64), Failure> {
     if budget == 0 {
         return Ok((0, 0));
     }
-    let mut last = tx.borrowed(DISCARD_NATIVE_KEYS, &[&operation, &(budget - 1)], 16)?;
+    let mut last = tx.borrowed(DISCARD_HOST_FILE_KEYS, &[&operation, &(budget - 1)], 16)?;
     if last.is_empty() {
-        last = tx.borrowed(DISCARD_NATIVE_TAIL, &[&operation], 8)?;
+        last = tx.borrowed(DISCARD_HOST_FILE_TAIL, &[&operation], 8)?;
     }
     match last.first() {
         Some(row) => {
             let position: i64 = row.get(0)?;
-            remove(tx, DISCARD_NATIVE, &[&operation, &position], 16)
+            remove(tx, DISCARD_HOST_FILE, &[&operation, &position], 16)
         }
         None => Ok((0, 0)),
     }
@@ -80,8 +84,8 @@ fn remove_native(tx: &Transaction<'_>, operation: i64, budget: i64) -> Result<(i
 fn discard_rows(tx: &Transaction<'_>, target: Owner, budget: i64) -> Result<Discarded, Failure> {
     let operation = signed(target.operation)?;
     let (entry_rows, entry_bytes) = remove_entries(tx, operation, budget)?;
-    let (native_rows, native_bytes) = remove_native(tx, operation, budget - entry_rows)?;
-    let (rows, bytes) = (entry_rows + native_rows, entry_bytes + native_bytes);
+    let (host_rows, host_bytes) = remove_host_file(tx, operation, budget - entry_rows)?;
+    let (rows, bytes) = (entry_rows + host_rows, entry_bytes + host_bytes);
     let remaining_rows = credit(tx, target, rows, bytes)?;
     Ok(Discarded {
         rows: unsigned(rows)?,

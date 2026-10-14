@@ -32,7 +32,7 @@ WITH input(parent,name,position,kind,metadata,target,detail) AS (VALUES
  (?212,?213,?214,?215,?216,?217,?218),
  (?219,?220,?221,?222,?223,?224,?225)
 )
-INSERT INTO init_entry(operation_id,parent_position,name,position,kind,canonical_position,metadata_root,content_root,native_path,native)
+INSERT INTO init_entry(operation_id,parent_position,name,position,kind,canonical_position,metadata_root,content_root,host_path,host_identity)
 SELECT ?1,parent,name,position,kind,CASE WHEN kind=1 THEN position END,metadata,target,
  CASE WHEN kind=2 THEN detail END,CASE WHEN kind=1 AND position IS NULL THEN detail END
 FROM input WHERE kind IS NOT NULL

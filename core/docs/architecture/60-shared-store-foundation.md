@@ -148,3 +148,21 @@ Storage handle permits one active Save; concurrent producers use separate
 handles over the same Store. No mutex spans a whole Commit, and Commit never
 runs Init acquisition/abandoned-operation cleanup. These concurrency and
 publication obligations still require their own proof.
+
+
+## Host acquisition schema (#320, 2026-10-14)
+
+Initial acquisition uses HostIdentity/host_path in its Storage port and Project
+adapter. SQLite stores init_host_file with init_host_file_identity, host_path
+and the packed host_identity column. Query/method names use put_host_file,
+bind_host_file, remove_host_file and discard_host_file. Identity/evidence byte
+widths, bounded windows, counters and acquisition behavior are unchanged.
+
+The renamed acquisition layouts are Store schema versions 13–15; 7–9 without
+acquisition tables retain their identities. Old 10–12 files refuse at open,
+without migration or inferred cleanup. Exact source/definition validation and
+the independent census oracle follow the new SQL. The owner permits this format
+change. Existing sealed benchmark originals were inspected read-only before
+the change: empty (163840 bytes) and tier 1 (102072320 bytes) both have schema 10
+and the retired acquisition names. They require fresh preparation; their bytes
+and receipts remain preserved pending the handoff's specific preparation approval.

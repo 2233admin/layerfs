@@ -29,7 +29,7 @@ pub(crate) struct Scanned {
     pub entries: u64,
     /// True when at least one directory bound no child.
     pub childless: bool,
-    /// Later native paths that share an earlier path's regular-file identity.
+    /// Later host paths that share an earlier path's regular-file identity.
     pub aliases: usize,
 }
 
@@ -112,7 +112,7 @@ impl Roots<'_, '_> {
             Some(_) => child_path(directory, &child.name),
             None => directory.as_os_str().as_bytes().to_vec(),
         };
-        let (native_path, native) = match child.kind {
+        let (host_path, host) = match child.kind {
             InodeKind::Directory => (Some(path()), None),
             InodeKind::RegularFile => (Some(path()), Some(child.stamp.identity())),
             InodeKind::Symlink => (None, None),
@@ -126,8 +126,8 @@ impl Roots<'_, '_> {
             kind: child.kind,
             metadata_root,
             target_root,
-            native_path,
-            native,
+            host_path,
+            host,
         })
     }
 }
@@ -201,7 +201,7 @@ pub(crate) fn scan(
         placement.frontier -= 1;
         progress.tick()?;
         let parent = directory.position;
-        let path = PathBuf::from(OsString::from_vec(directory.native_path));
+        let path = PathBuf::from(OsString::from_vec(directory.host_path));
         let (mut count, mut wide) = (0usize, false);
         for child in fs::read_dir(&path)? {
             progress.tick()?;
@@ -277,13 +277,13 @@ fn place_wide(
         after = Some(last.name.clone());
         for child in window {
             progress.tick()?;
-            let native = child
-                .native
+            let host = child
+                .host
                 .map(|identity| (identity, child_path(directory, &child.name)));
             let child = Placed {
                 position: placement.assign(child.kind)?,
                 name: child.name,
-                native,
+                host,
             };
             let bytes = placed_bytes(&child);
             if window_full(placed.len(), held, bytes) {

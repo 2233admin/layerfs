@@ -36,7 +36,7 @@ SELECT min(slot) FROM input AS source WHERE kind IS NOT NULL AND (
  EXISTS(SELECT 1 FROM init_entry WHERE operation_id=?1 AND parent_position=source.parent AND name=source.name)
  OR (kind=2 AND position IS NOT NULL AND EXISTS(SELECT 1 FROM init_entry WHERE operation_id=?1 AND kind=2 AND position=source.position))
  OR (identity IS NOT NULL AND position IS NOT NULL AND (
-  EXISTS(SELECT 1 FROM init_native_file WHERE operation_id=?1 AND device=substr(source.identity,1,8) AND inode=substr(source.identity,9,8))
-  OR EXISTS(SELECT 1 FROM init_native_file WHERE operation_id=?1 AND canonical_position=source.position)
+  EXISTS(SELECT 1 FROM init_host_file WHERE operation_id=?1 AND device=substr(source.identity,1,8) AND inode=substr(source.identity,9,8))
+  OR EXISTS(SELECT 1 FROM init_host_file WHERE operation_id=?1 AND canonical_position=source.position)
  ))
 )

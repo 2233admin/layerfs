@@ -22,20 +22,20 @@ CREATE TABLE init_entry (
  canonical_position INTEGER CHECK(canonical_position>0),
  metadata_root BLOB NOT NULL CHECK(length(metadata_root)=32),
  content_root BLOB CHECK(length(content_root)=32),
- native_path BLOB CHECK(length(native_path) BETWEEN 1 AND 4096),
- native BLOB CHECK(length(native)=60),
+ host_path BLOB CHECK(length(host_path) BETWEEN 1 AND 4096),
+ host_identity BLOB CHECK(length(host_identity)=60),
  PRIMARY KEY(operation_id,parent_position,name)
 ) STRICT, WITHOUT ROWID;
 CREATE UNIQUE INDEX init_entry_directory ON init_entry(operation_id,position) WHERE kind=2;
-CREATE TABLE init_native_file (
+CREATE TABLE init_host_file (
  operation_id INTEGER NOT NULL REFERENCES init_operation(operation_id),
  canonical_position INTEGER NOT NULL CHECK(canonical_position>0),
  device BLOB NOT NULL CHECK(length(device)=8),
  inode BLOB NOT NULL CHECK(length(inode)=8),
  evidence BLOB NOT NULL CHECK(length(evidence)=44),
- native_path BLOB NOT NULL CHECK(length(native_path) BETWEEN 1 AND 4096),
+ host_path BLOB NOT NULL CHECK(length(host_path) BETWEEN 1 AND 4096),
  aliases INTEGER NOT NULL DEFAULT 0 CHECK(aliases>=0),
  file_root BLOB CHECK(length(file_root)=32),
  PRIMARY KEY(operation_id,canonical_position)
 ) STRICT, WITHOUT ROWID;
-CREATE UNIQUE INDEX init_native_file_identity ON init_native_file(operation_id,device,inode);
+CREATE UNIQUE INDEX init_host_file_identity ON init_host_file(operation_id,device,inode);

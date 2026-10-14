@@ -1,4 +1,4 @@
-//! Public Project organization over native Init and authenticated daemon control.
+//! Public Project organization over host Init and authenticated daemon control.
 pub(crate) mod branches;
 pub(crate) mod commits;
 pub(crate) mod fork;

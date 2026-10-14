@@ -16,7 +16,7 @@ pub const READ_WINDOW_BYTES: usize = 256 * 1024;
 pub const WRITE_WINDOW_ROWS: usize = 4096;
 /// Payload bytes one write window carries at most.
 pub const WRITE_WINDOW_BYTES: usize = 1024 * 1024;
-/// Payload bytes one written row is charged beside its name and native path.
+/// Payload bytes one written row is charged beside its name and host path.
 /// A caller sizing a window with this charge stays within the provider's.
 pub const WRITE_ROW_BYTES: usize = 160;
 
@@ -52,7 +52,7 @@ pub enum AcquisitionError {
     Stale,
     /// A window exceeds the port's row or byte maximum, or a row is malformed.
     Bounds,
-    /// A later path of one native identity carried different evidence, or a
+    /// A later path of one host identity carried different evidence, or a
     /// row the unit addressed was not in the state the unit requires. The
     /// unit changed nothing.
     Changed {
@@ -84,7 +84,7 @@ pub type AcquisitionResult<T> = Result<T, AcquisitionError>;
 pub trait Acquisition: Send + Sync {
     /// Starts one operation and returns its owner.
     fn begin(&self, facts: &Begin) -> AcquisitionResult<Owner>;
-    /// Native directory holding files this backing mutates, when it has one.
+    /// Host directory holding files this backing mutates, when it has one.
     /// A source containing it would acquire the backing itself.
     fn placement(&self) -> Option<PathBuf>;
     /// Appends one window of entries. Returns the canonical position of every
@@ -113,9 +113,9 @@ pub trait Acquisition: Send + Sync {
         after: Option<u64>,
         limits: Limits,
     ) -> AcquisitionResult<Vec<Directory>>;
-    /// Native path of the directory at one position.
+    /// Host path of the directory at one position.
     fn directory_path(&self, owner: Owner, position: u64) -> AcquisitionResult<Option<Vec<u8>>>;
-    /// First paths of native identities after one position, in position order.
+    /// First paths of host identities after one position, in position order.
     fn jobs(&self, owner: Owner, after: Option<u64>, limits: Limits)
         -> AcquisitionResult<Vec<Job>>;
     /// The first path of the identity whose canonical position is `position`.

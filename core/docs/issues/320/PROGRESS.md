@@ -4036,3 +4036,43 @@ optional collector is compiled on both platforms. Tests: not yet updated.
 Prose/platform verification: host/Linux product check and warning-denying
 Clippy passed with the platform collector enabled; fmt/whitespace passed.
 No tests run in Phase 1. Durable execution remains owner-disabled.
+
+
+### Phase 1: host-file acquisition and Store schema rename
+
+Before editing, read-only inspection of the closed empty and tier-1 originals
+found schema 10, init_native_file and native_path/native columns. Recorded exact
+paths/sizes/SHA-256/schema in core/target/issue321/host-schema-prepared-before.json.
+Their sizes are 163840 and 102072320 bytes. The new exact schema cannot open
+these inputs. No original, master volume or payload was replaced or regenerated.
+New subset measurements therefore remain NOT_RUN pending the handoff's specific
+approval to prepare benchmark originals again. Routine functional fixtures in
+the test pass remain independently authorized.
+
+Project and the acquisition port use HostIdentity/host/host_path and host-file
+method names. SQLite uses init_host_file/init_host_file_identity, host_path and
+host_identity; query filenames follow. Packed identity/evidence bytes and window
+semantics are unchanged. Renamed acquisition layouts use schema 13–15; schemas
+7–9 without acquisition stay valid, old 10–12 refuse once without migration.
+The owner permits this format change. Census schema selection/pins advance.
+
+The first host check found two missed acquisition-provider field references;
+these were diagnosed and changed mechanically. The repaired host product check
+passed. Tests: not yet updated. Additional checks follow. Historical records
+and the original benchmark diagnostics stay unchanged and INELIGIBLE.
+
+Host schema verification: host/Linux product check and warning-denying Clippy
+passed; independent Linux harness runtime check passed. Formatting and
+whitespace passed. Oracle pins match final sources. Product src/SQL contains
+no remaining native/Native words; test names and references await Phase 2.
+
+Phase 1 reachability review keeps the named constructor/operator/custody
+exceptions, actual trait/benchmark ports and kernel proof APIs. The former
+reader scheduler is removed rather than relocated. cleanup_task remains backed
+SQL under the documented trace-and-leave exception; the target is still seven
+tables, zero triggers, no SQL custody rows. No additional measured optimization
+is selected: the existing opcode counters count GETATTRs but contain no
+per-opcode time, so request share is not a measured wall-time share.
+default_permissions remains enabled. Final subset measurements are blocked
+by the specifically approval-gated original preparation. Eligible performance
+qualification remains incomplete; no unchanged treatments were rerun.

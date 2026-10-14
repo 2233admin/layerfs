@@ -1,4 +1,4 @@
-WITH input(position,native,path) AS (VALUES
+WITH input(position,host_identity,path) AS (VALUES
  (?2,?3,?4),
  (?5,?6,?7),
  (?8,?9,?10),
@@ -32,6 +32,6 @@ WITH input(position,native,path) AS (VALUES
  (?92,?93,?94),
  (?95,?96,?97)
 )
-INSERT INTO init_native_file(operation_id,canonical_position,device,inode,evidence,native_path)
-SELECT ?1,position,substr(native,1,8),substr(native,9,8),substr(native,17,44),path
+INSERT INTO init_host_file(operation_id,canonical_position,device,inode,evidence,host_path)
+SELECT ?1,position,substr(host_identity,1,8),substr(host_identity,9,8),substr(host_identity,17,44),path
 FROM input WHERE position IS NOT NULL

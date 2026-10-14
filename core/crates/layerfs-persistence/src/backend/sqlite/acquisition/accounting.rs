@@ -1,6 +1,6 @@
 //! Owner checks and exact row/payload-byte charges of one operation.
 //!
-//! A row's payload is its variable bytes: name, native path, native identity
+//! A row's payload is its variable bytes: name, host path, host identity
 //! and object identities. The same amounts are charged when a row is written,
 //! adjusted when it changes and read back from the engine when it is removed,
 //! so an operation whose rows are all gone holds exactly zero.
@@ -10,26 +10,26 @@ use layerfs_storage::port::acquisition::{AcquisitionWork, NewEntry, Owner, Phase
 
 /// Bytes of one stored object identity.
 pub(crate) const ROOT_BYTES: i64 = 32;
-/// Bytes of one stored native identity with its evidence.
-pub(crate) const NATIVE_BYTES: i64 = 60;
+/// Bytes of one stored host identity with its evidence.
+pub(crate) const HOST_BYTES: i64 = 60;
 
 /// Payload bytes of one entry row as it is inserted.
 pub(crate) fn entry_bytes(entry: &NewEntry) -> i64 {
     let stored_path = match entry.kind {
-        layerfs_content::inode_leaf::InodeKind::Directory => entry.native_path.as_deref(),
+        layerfs_content::inode_leaf::InodeKind::Directory => entry.host_path.as_deref(),
         _ => None,
     };
-    let unplaced_native = entry.position.is_none() && entry.native.is_some();
+    let unplaced_host_file = entry.position.is_none() && entry.host.is_some();
     entry.key.name.len() as i64
         + stored_path.map_or(0, |path| path.len() as i64)
-        + if unplaced_native { NATIVE_BYTES } else { 0 }
+        + if unplaced_host_file { HOST_BYTES } else { 0 }
         + ROOT_BYTES
         + entry.target_root.map_or(0, |_| ROOT_BYTES)
 }
 
-/// Payload bytes of one first-path native row as it is inserted.
-pub(crate) fn native_bytes(path: &[u8]) -> i64 {
-    path.len() as i64 + NATIVE_BYTES
+/// Payload bytes of one first-path host row as it is inserted.
+pub(crate) fn host_bytes(path: &[u8]) -> i64 {
+    path.len() as i64 + HOST_BYTES
 }
 
 fn identity(owner: Owner) -> Result<[i64; 2], Failure> {
