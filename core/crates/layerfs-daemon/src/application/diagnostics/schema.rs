@@ -7,12 +7,13 @@ pub(super) fn owner<W: Write>(
     rows: &mut Records<'_, W>,
     work: Option<crate::OwnerWork>,
 ) -> io::Result<()> {
+    rows.row(36, 0, Some(&[layerfs_overlay::StatementKind::COUNT as u64]))?;
     let Some(w) = work else {
         rows.row(1, 0, None)?;
         rows.row(35, 0, None)?;
-        for family in 0..14 {
-            rows.row(2, family, None)?;
-            rows.row(3, family, None)?;
+        for family in 0..layerfs_overlay::StatementKind::COUNT {
+            rows.row(2, family as i64, None)?;
+            rows.row(3, family as i64, None)?;
         }
         for section in 4..=7 {
             rows.row(section, 0, None)?;
@@ -55,7 +56,7 @@ pub(super) fn owner<W: Write>(
         0,
         Some(&[w.observations, w.reply_attempts, w.reply_hold_ns]),
     )?;
-    for family in 0..14 {
+    for family in 0..layerfs_overlay::StatementKind::COUNT {
         statement(rows, 2, family as i64, w.sql_foreground.statements[family])?;
         statement(rows, 3, family as i64, w.sql_maintenance.statements[family])?;
     }

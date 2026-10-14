@@ -29,10 +29,6 @@ pub struct Overlay {
     /// Runtime state of the one bound Workspace. Atomic jobs snapshot this fixed
     /// value; known rollback restores it and unknown outcomes retain custody.
     pub(crate) workspace: Cell<Option<([u8; 32], crate::WorkspaceState)>>,
-    /// The operation owner last found holding custody, forgotten the same way.
-    pub(crate) operation_seen: Cell<Option<u64>>,
-    /// The captured reader last found holding custody, forgotten the same way.
-    pub(crate) reader_seen: Cell<Option<crate::CapturedReader>>,
     /// Whether any namespace of this engine holds an orphan. Set when one
     /// is inserted, cleared by the job deleting the last one, and restored
     /// when a job fails, so it is exact:
@@ -196,7 +192,6 @@ impl Overlay {
         self.available()?;
         let wanted = matches!(self.transaction.get(), Transaction::Wanted);
         let writing = || {
-            self.forget(kind, sql);
             if wanted {
                 self.begin()
             } else {
@@ -219,40 +214,7 @@ impl Overlay {
         result.map_err(|cause| self.failed(cause))
     }
 
-    /// Forgets what is remembered of each table a writing statement names.
-    /// A statement cannot change a table that its text does not name: the
-    /// triggers of this schema write the accounting row alone. Statements
-    /// of three families alone write the remembered tables, so the text of
-    /// any other writing statement is not searched.
-    fn forget(&self, kind: StatementKind, sql: &str) {
-        if !matches!(
-            kind,
-            StatementKind::Workspace | StatementKind::Capture | StatementKind::Lease
-        ) {
-            // The plan of a writing statement is itself not read-only to
-            // SQLite, and writes nothing.
-            debug_assert!(
-                kind == StatementKind::Explain
-                    || !["commit_run", "commit_reader"]
-                        .iter()
-                        .any(|table| sql.contains(table)),
-                "{kind:?} writes a remembered table: {sql}"
-            );
-            return;
-        }
-        if sql.contains("commit_run") {
-            self.operation_seen.set(None);
-        }
-        if sql.contains("commit_reader") {
-            self.reader_seen.set(None);
-        }
-    }
-    /// Forgets every remembered row: a failed job that wrote may have read
-    /// its own writes before they were rolled back.
-    fn forget_all(&self) {
-        self.operation_seen.set(None);
-        self.reader_seen.set(None);
-    }
+    /// One writing statement, with its original counted outcome.
     pub(crate) fn execute(
         &self,
         kind: StatementKind,
@@ -378,11 +340,6 @@ impl Overlay {
             Err(cause) => self.failed(cause),
         };
         self.transaction.set(Transaction::None);
-        // With no SQL transaction, remembered SQL rows did not change.
-        // Runtime state still rolls back below on a known failure.
-        if begun {
-            self.forget_all();
-        }
         if self.quarantined.get() {
             return Err(failed);
         }

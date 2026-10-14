@@ -147,7 +147,7 @@ array; it is never a successful zero-valued snapshot.
 | --- | --- | --- |
 | 0 | Namespace, or 0 when absent | Original operation tag, configured reader count, immutable cache allowance |
 | 1 | 0 | OwnerWork scalar fields in source declaration order, then completed[6], queue_wait_ns[6], service_ns[6] |
-| 2, 3 | StatementKind 0 to 13 | Foreground and maintenance StatementWork respectively, all 17 source fields |
+| 2, 3 | StatementKind 0 to 11 (historical 0 to 13) | Foreground and maintenance StatementWork respectively, all 17 source fields |
 | 4, 5 | 0 | Foreground and maintenance PayloadWork, all seven source fields |
 | 6, 7 | 0 | Foreground and maintenance AllocationWork, six original encoded fields (attempts, requested_bytes, admitted_jobs, refusals, observations, freelist_queries) |
 | 8 | 0 | StoreWork: object_batches, object_ids, length_batches, length_ids, serial_reservations |
@@ -170,6 +170,7 @@ array; it is never a successful zero-valued snapshot.
 | 30 | 0 | Resource-observer admitted and completion_available bits; when completed, its actual StatementWork total (17 fields), PayloadWork (7), AllocationWork (6), parked_turns, queue_wait_ns and service_ns follow |
 | 31 | 0 | Common overlay budget limit, aggregate pager allowance, fixed bytes, job bytes, peak job bytes and outstanding jobs; actual template SQLite ENABLE_MEMORY_MANAGEMENT readback bit |
 | 99 | 0 | Number of preceding completed records, their values-array number count, their unavailable section count |
+| 36 | 0 | SQL statement-family cardinality: 12 after Workspace/Lease removal; absent in historical 14-family receipts |
 
 All sections use the same original authenticated call correlation. The normal
 Mount facade issues separate bind and Attach calls. Store providers, owner,

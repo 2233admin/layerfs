@@ -780,13 +780,13 @@ if __name__ == "__main__":
 
 
 # Closed accounting observation is separate from the existing content/census routes.
-OVERLAY_SCHEMA_VERSION = 36
+OVERLAY_SCHEMA_VERSION = 37
 OVERLAY_DIRECTORY = '/layerfs-local/overlay'
 OVERLAY_TEMPLATE = OVERLAY_DIRECTORY + '/overlay.sqlite'
 
 
 def _overlay_storage_source():
-    """Schema 36 (issue 320): one overlay file per mounted Workspace.
+    """Schema 37 (issue 320): one overlay file per mounted Workspace.
 
     The configured overlay path is the daemon's closed template: the empty
     schema, with Workspace state held only in engine memory. Each mounted Workspace owns `<namespace>.sqlite`
@@ -795,10 +795,10 @@ def _overlay_storage_source():
     bind the reviewed schema, accounting and file-lifetime model.
     """
     pins = {
-        'core/crates/layerfs-overlay/sql/schema.sql': '88d18eeb731d97735dcf9d8b97fb9091e5550170c5dc012c069d47fc0ada44d3',
-        'core/crates/layerfs-overlay/src/database/accounting.rs': '8a4f66afaa6291bd0ed891c90e6911788d06b628bfacf65ad8ba2aa71f69c4cb',
+        'core/crates/layerfs-overlay/sql/schema.sql': 'f2e86b2eed8118842c7c48da17398dc96a842ef4a8259a620822f8250b1ae7a2',
+        'core/crates/layerfs-overlay/src/database/accounting.rs': 'ab03be57dd089cbdb528993c46e645e1cfc5567b0dfbe290e642a3a62e6cb421',
         'core/crates/layerfs-overlay/src/database/physical.rs': '90bc4c7bdc3a597b927d2e2255b614e7da32f264e9b5d34fbce616a653c6f9de',
-        'core/crates/layerfs-overlay/src/lifetime/close.rs': '92fd1889c9a9f69d22b8ef4fe2800060bca7cbbb78c1b6f3a8863ece0be21c0b',
+        'core/crates/layerfs-overlay/src/lifetime/close.rs': '7f3850de1dcc84e680d1d540cea249f214edc05589d4da3e79f234e16a03c536',
         'core/crates/layerfs-daemon/src/overlay/workspaces.rs': '7037616a53cc5246b48ec9a77246173c6988739b165888ee63b428ee7f3bdebb',
         'core/crates/layerfs-bridge/src/control_types.rs': '1047a09284a17bc49ebe31da53ddb60445b3e68375d06736680b3c7e8b2a0bc9',
     }

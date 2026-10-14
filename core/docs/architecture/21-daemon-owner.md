@@ -13,7 +13,7 @@ section is the current description and supersedes the owner thread, class
 queues, credits, common ledger and notification table described further down.
 Measured outcomes are in the [#320 ledger](../issues/320/PROGRESS.md), not here.
 
-- **Template.** Startup builds an empty schema 36 database at the configured
+- **Template.** Startup builds an empty schema 37 database at the configured
   overlay path, checks its close before readiness and keeps only its physical
   identity handle. It never holds a Workspace row.
 - **One file per mounted Workspace.** Mount copies the template to
@@ -44,8 +44,8 @@ Measured outcomes are in the [#320 ledger](../issues/320/PROGRESS.md), not here.
   suggestion, not a resident bound. Open-file, directory-position and
   kernel-reference state is resident and grows with open files and with the
   files the kernel currently references. Workspace lifecycle/frontier counters
-  are one journaled runtime value; operation/reader SQL custody alone remains
-  remembered. See [runtime state](64-overlay-terminology.md#runtime-workspace-state-and-remembered-sql-custody).
+  are one journaled runtime value. Commit runs, captured readers and base pins
+  reuse journaled owner maps; generation hold checks use a count index. See [runtime state](64-overlay-terminology.md#runtime-workspace-state-and-remembered-sql-custody).
 - **Resources.** Schema 35 removes trigger-maintained accounting. The explicit
   Resources observation counts current rows and sums stored lengths on demand;
   its table visits are charged to that observer, not to each mutation. Ordinary

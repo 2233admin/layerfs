@@ -1,7 +1,7 @@
 //! Fixed captured input remains independently owned across install and failure.
 use crate::{
     db::{integer, unsigned},
-    Capture, CapturedReader, LeaseKind, Overlay, OverlayError, OverlayResult, Route, StatementKind,
+    Capture, CapturedReader, Overlay, OverlayError, OverlayResult, Route, StatementKind,
 };
 impl Overlay {
     /// Acquire before construction/read passes. The exact captured root/floor
@@ -22,30 +22,19 @@ impl Overlay {
                 return Err(OverlayError::Closed);
             }
             let owner = self.mint_owner()?;
-            self.execute(
-                StatementKind::Lease,
-                "INSERT INTO commit_reader VALUES(?1,?2,?3,?4,?5,?6)",
-                &[
-                    &request,
-                    &integer(owner)?,
-                    &capture.generation.0,
-                    &capture.revision,
-                    &capture.base_root.as_slice(),
-                    &state.installed,
-                ],
-                80,
-            )?;
-            self.execute(
-                StatementKind::Lease,
-                "INSERT INTO commit_pin VALUES(6,?1,?2)",
-                &[&integer(owner)?, &capture.generation.0],
-                24,
-            )?;
-            Ok(CapturedReader {
+            let reader = CapturedReader {
                 capture,
                 owner,
                 installed: state.installed,
-            })
+            };
+            self.open.borrow_mut().captured.insert(
+                owner,
+                request,
+                reader,
+                "duplicate captured request",
+            )?;
+            self.captured_reference(capture.generation.0, true)?;
+            Ok(reader)
         })
     }
     /// Coherent original custody; absence is not permission to repeat acquisition.
@@ -55,23 +44,41 @@ impl Overlay {
         request: u64,
     ) -> OverlayResult<Option<CapturedReader>> {
         self.state(route)?;
-        self.query(StatementKind::Lease,"SELECT holder,generation,revision,base_root,installed FROM commit_reader WHERE request=?1",
-            &[&integer(request)?],16,|r| {
-                let root:Vec<u8>=r.get(3)?;
-                Ok(CapturedReader {owner:unsigned(r,0)?,installed:r.get(4)?,capture:Capture {
-                    route,generation:crate::Generation(r.get(1)?),revision:r.get(2)?,
-                    base_root:root.try_into().map_err(|_|rusqlite::Error::InvalidQuery)?}})
-            }).map(|mut rows|rows.pop())
+        Ok(self.open.borrow().captured.retained(integer(request)?))
     }
     pub(crate) fn check_captured_reader(&self, reader: CapturedReader) -> OverlayResult<()> {
         self.state(reader.capture.route)?;
-        if self.reader_seen.get() == Some(reader) {
-            return Ok(());
+        if self
+            .open
+            .borrow()
+            .captured
+            .get(reader.owner)
+            .map(|(held, _)| held)
+            != Some(reader)
+        {
+            return Err(OverlayError::Stale);
         }
-        let c = reader.capture;
-        if self.query(StatementKind::Lease,"SELECT 1 FROM commit_reader WHERE holder=?1 AND generation=?2 AND revision=?3 AND base_root=?4 AND installed=?5",
-            &[&integer(reader.owner)?,&c.generation.0,&c.revision,&c.base_root.as_slice(),&reader.installed],72,|_|Ok(()))?.is_empty() {return Err(OverlayError::Stale)}
-        self.reader_seen.set(Some(reader));
+        Ok(())
+    }
+    fn captured_reference(&self, generation: i64, add: bool) -> OverlayResult<()> {
+        let mut open = self.open.borrow_mut();
+        let count = open
+            .captured_generations
+            .rows
+            .get(&generation)
+            .copied()
+            .unwrap_or(0);
+        let next = if add {
+            count.checked_add(1)
+        } else {
+            count.checked_sub(1)
+        }
+        .ok_or(OverlayError::Stale)?;
+        if next == 0 {
+            open.captured_generations.remove(generation);
+        } else {
+            open.captured_generations.put(generation, next);
+        }
         Ok(())
     }
     /// Fixed sealed metadata pages remain valid after install/definite failure.
@@ -146,22 +153,11 @@ impl Overlay {
         self.atomic_cleanup(|| {
             self.check_captured_reader(reader)?;
             let c = reader.capture;
-            self.execute(
-                StatementKind::Lease,
-                "DELETE FROM commit_reader WHERE holder=?1",
-                &[&integer(reader.owner)?],
-                16,
-            )?;
-            self.execute(
-                StatementKind::Lease,
-                "DELETE FROM commit_pin WHERE kind=?1 AND holder=?2 AND resource=?3",
-                &[
-                    &(LeaseKind::CapturedReader as i64),
-                    &integer(reader.owner)?,
-                    &c.generation.0,
-                ],
-                32,
-            )?;
+            self.open
+                .borrow_mut()
+                .captured
+                .remove(reader.owner, |held| *held == reader)?;
+            self.captured_reference(c.generation.0, false)?;
             self.wake_generation(c.generation.0 as u64)?;
             Ok(())
         })

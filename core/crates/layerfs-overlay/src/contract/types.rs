@@ -306,13 +306,10 @@ impl BaseSource {
         born > self.installed as u64
     }
 }
-/// Independently keyed custody, not a resident owner map.
+/// Exact file-reference class, independent of generation or processing pins.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-#[repr(i64)]
-pub enum LeaseKind {
-    FileReader = 5,
-    CapturedReader = 6,
-    FileHandle = 7,
-    Processing = 8,
-    LookupOwner = 9,
+pub(crate) enum ReferenceKind {
+    Reader,
+    File,
+    Lookup,
 }

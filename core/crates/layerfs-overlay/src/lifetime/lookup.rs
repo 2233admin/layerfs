@@ -1,7 +1,7 @@
 //! Exact lookup ownership, including non-file metadata after removal.
 use crate::{
-    db::integer, inode, BaseSource, Inode, InodeKind, LeaseKind, LookupOwner, Overlay,
-    OverlayError, OverlayResult, Route,
+    db::integer, inode, BaseSource, Inode, InodeKind, LookupOwner, Overlay, OverlayError,
+    OverlayResult, ReferenceKind, Route,
 };
 impl Overlay {
     /// The authenticated root serial distinguishes its canonical zero count
@@ -45,7 +45,7 @@ impl Overlay {
                 lookup,
                 "duplicate lookup request",
             )?;
-            self.file_ref(source.route.ns, serial, LeaseKind::LookupOwner, true)?;
+            self.file_ref(source.route.ns, serial, ReferenceKind::Lookup, true)?;
             Ok(LookupOwner {
                 route: source.route,
                 owner,
@@ -110,7 +110,7 @@ impl Overlay {
             self.file_ref(
                 lookup.route.ns,
                 integer(lookup.serial)?,
-                LeaseKind::LookupOwner,
+                ReferenceKind::Lookup,
                 false,
             )?;
             Ok(())

@@ -3,7 +3,9 @@ use super::directories::{CookieStore, CookieUndo, DirectoryState, OpenDisposals}
 use super::files::FileReferences;
 use super::journal::{JournalMap, OwnerTable};
 use crate::lifetime::orphan::Orphan;
-use crate::{FileRead, LookupOwner, NativeMount, OpenFile};
+use crate::{
+    BaseSource, CapturedReader, FileRead, LookupOwner, NativeMount, OpenFile, OperationOwner,
+};
 use std::collections::BTreeMap;
 
 #[derive(Clone, Copy)]
@@ -27,6 +29,10 @@ pub(crate) struct OpenState {
     pub mount: Option<(NativeMount, bool)>,
     /// Directory handles by owner; requests are (native mount owner, request).
     pub directories: OwnerTable<(u64, u64), DirectoryState>,
+    pub operations: OwnerTable<i64, OperationOwner>,
+    pub captured: OwnerTable<i64, CapturedReader>,
+    pub captured_generations: JournalMap<i64, u64>,
+    pub sources: JournalMap<(u64, i64), BaseSource>,
     pub cookies: BTreeMap<u64, CookieStore>,
     pub cookie_undo: Vec<CookieUndo>,
     pub disposals: OpenDisposals,
@@ -42,6 +48,10 @@ impl OpenState {
         self.orphans.commit();
         self.waits.commit();
         self.directories.commit();
+        self.operations.commit();
+        self.captured.commit();
+        self.captured_generations.commit();
+        self.sources.commit();
         self.commit_cookies();
     }
     pub fn rollback(&mut self) {
@@ -54,6 +64,10 @@ impl OpenState {
         self.orphans.rollback();
         self.waits.rollback();
         self.directories.rollback();
+        self.operations.rollback();
+        self.captured.rollback();
+        self.captured_generations.rollback();
+        self.sources.rollback();
         self.rollback_cookies();
     }
 }

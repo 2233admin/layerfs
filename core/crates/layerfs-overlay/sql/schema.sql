@@ -67,22 +67,9 @@ CREATE TABLE fs_data_ref (
 ) STRICT, WITHOUT ROWID;
 CREATE INDEX fs_data_generation ON fs_data(generation,inode,cell_offset);
 CREATE INDEX fs_truncate_generation ON fs_truncate(generation,inode,depth);
-CREATE TABLE commit_pin (
-    kind INTEGER NOT NULL CHECK(kind BETWEEN 1 AND 6 OR kind=8),
-    holder INTEGER NOT NULL CHECK(holder>0),
-    resource INTEGER NOT NULL CHECK(resource>=0),
-    PRIMARY KEY(kind,holder,resource)
-) STRICT, WITHOUT ROWID;
-CREATE TABLE commit_base_pin (
-    kind INTEGER NOT NULL DEFAULT 0 CHECK(kind BETWEEN 0 AND 2),
-    holder INTEGER NOT NULL CHECK(holder>0),
-    base_root BLOB NOT NULL CHECK(length(base_root)=32),
-    PRIMARY KEY(kind,holder)
-) STRICT, WITHOUT ROWID;
 
 PRAGMA application_id=1279676210;
 
-CREATE INDEX commit_pin_resource ON commit_pin(kind,resource,holder);
 CREATE TABLE cleanup_task (
     kind INTEGER NOT NULL CHECK(kind BETWEEN 1 AND 12),
     resource INTEGER NOT NULL CHECK(resource>=0),
@@ -97,21 +84,7 @@ CREATE TABLE cleanup_task (
 CREATE INDEX cleanup_task_ready ON cleanup_task(ready,kind,resource,target);
 CREATE INDEX cleanup_task_generation ON cleanup_task(target,kind,resource);
 
-CREATE TABLE commit_reader (
-    request INTEGER NOT NULL CHECK(request>0),
-    holder INTEGER NOT NULL CHECK(holder>0),
-    generation INTEGER NOT NULL CHECK(generation>0),
-    revision INTEGER NOT NULL CHECK(revision>=0),
-    base_root BLOB NOT NULL CHECK(length(base_root)=32),
-    installed INTEGER NOT NULL CHECK(installed>=0),
-    PRIMARY KEY(holder), UNIQUE(request)
-) STRICT, WITHOUT ROWID;
 
-CREATE TABLE commit_run (
-    request INTEGER NOT NULL CHECK(request>0),
-    holder INTEGER NOT NULL CHECK(holder>0),
-    PRIMARY KEY(holder), UNIQUE(request)
-) STRICT, WITHOUT ROWID;
 CREATE TABLE commit_record (
     operation INTEGER NOT NULL CHECK(operation>0),
     file_scope BLOB NOT NULL CHECK(length(file_scope)=8),
@@ -121,4 +94,4 @@ CREATE TABLE commit_record (
     PRIMARY KEY(operation,file_scope,kind,key)
 ) STRICT, WITHOUT ROWID;
 
-PRAGMA user_version=36;
+PRAGMA user_version=37;

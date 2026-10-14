@@ -1,5 +1,5 @@
 //! Open-file reference counts.
-use crate::{LeaseKind, OverlayError, OverlayResult};
+use crate::{OverlayError, OverlayResult, ReferenceKind};
 
 #[derive(Clone, Copy, Default)]
 pub(crate) struct FileReferences {
@@ -11,12 +11,11 @@ impl FileReferences {
     pub fn total(self) -> u64 {
         self.opens + self.lookups + self.readers
     }
-    pub fn change(&mut self, kind: LeaseKind, add: bool) -> OverlayResult<()> {
+    pub fn change(&mut self, kind: ReferenceKind, add: bool) -> OverlayResult<()> {
         let value = match kind {
-            LeaseKind::FileHandle => &mut self.opens,
-            LeaseKind::LookupOwner => &mut self.lookups,
-            LeaseKind::FileReader => &mut self.readers,
-            _ => return Ok(()),
+            ReferenceKind::File => &mut self.opens,
+            ReferenceKind::Lookup => &mut self.lookups,
+            ReferenceKind::Reader => &mut self.readers,
         };
         *value = if add {
             value.checked_add(1)

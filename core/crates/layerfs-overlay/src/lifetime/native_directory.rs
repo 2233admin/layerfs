@@ -1,6 +1,6 @@
 //! Exact native directory owners and retained current parent relationships.
 use crate::{
-    db::integer, LeaseKind, NativeDirectory, NativeMount, Overlay, OverlayError, OverlayResult,
+    db::integer, NativeDirectory, NativeMount, Overlay, OverlayError, OverlayResult, ReferenceKind,
 };
 impl Overlay {
     /// Called by the deciding lookup/mutation transaction for a directory only.
@@ -56,12 +56,7 @@ impl Overlay {
                 .insert(owner, request, held, "duplicate directory request")?;
             state.open_cookies(owner)?;
         }
-        self.file_ref(
-            mount.route.ns,
-            integer(serial)?,
-            LeaseKind::FileHandle,
-            true,
-        )?;
+        self.file_ref(mount.route.ns, integer(serial)?, ReferenceKind::File, true)?;
         Ok(directory)
     }
     /// RELEASEDIR in one visit: the fence reads the Workspace and checks the
@@ -100,7 +95,7 @@ impl Overlay {
             state.directories.remove(owner, exact)?;
             state.close_cookies(owner)?;
         }
-        self.file_ref(ns, integer(directory.serial)?, LeaseKind::FileHandle, false)
+        self.file_ref(ns, integer(directory.serial)?, ReferenceKind::File, false)
     }
 }
 /// Published replies one RELEASEDIR deletes in its own job, one maintenance

@@ -160,15 +160,13 @@ impl Overlay {
         Ok(())
     }
     pub(crate) fn generation_held(&self, generation: i64) -> OverlayResult<bool> {
-        Ok(!self
-            .query(
-                StatementKind::Lease,
-                crate::sql::GENERATION_HELD,
-                &[&generation],
-                16,
-                |_| Ok(()),
-            )?
-            .is_empty())
+        self.available()?;
+        Ok(self
+            .open
+            .borrow()
+            .captured_generations
+            .rows
+            .contains_key(&generation))
     }
     /// One weighted live-state maintenance turn. It never waits, processes a
     /// whole payload, retries a failure or scans a held population. The daemon

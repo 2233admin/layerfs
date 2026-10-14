@@ -1,7 +1,6 @@
 //! Exact short base-source custody, with provider IO outside the SQL owner.
 use crate::{
-    db::integer, sql, BaseSource, Inode, Overlay, OverlayError, OverlayResult, Route,
-    StatementKind, WorkspaceState,
+    db::integer, BaseSource, Inode, Overlay, OverlayError, OverlayResult, Route, WorkspaceState,
 };
 
 impl Overlay {
@@ -15,20 +14,16 @@ impl Overlay {
         }
         self.atomic(|| {
             let state = self.live(route)?;
-            self.execute(
-                StatementKind::Lease,
-                sql::BASE_SOURCE_INSERT,
-                &[&key, &state.base_root.as_slice(), &0_i64],
-                48,
-            )?;
-            self.source_count(route, true)?;
-            Ok(BaseSource {
+            let source = BaseSource {
                 route,
                 owner,
                 class: 0,
                 root: state.base_root,
                 installed: state.installed,
-            })
+            };
+            self.insert_source(source)?;
+            self.source_count(route, true)?;
+            Ok(source)
         })
     }
     /// Bounded observation of original custody after a lost completion. Missing
@@ -48,29 +43,30 @@ impl Overlay {
         installed: i64,
         class: i64,
     ) -> OverlayResult<Option<BaseSource>> {
-        self.query(
-            StatementKind::Lease,
-            sql::BASE_SOURCE_LOOKUP,
-            &[&integer(owner)?, &class],
-            16,
-            |row| {
-                let root: Vec<u8> = row.get(0)?;
-                Ok(BaseSource {
-                    route,
-                    owner,
-                    class,
-                    root: root.try_into().map_err(|_| rusqlite::Error::InvalidQuery)?,
-                    installed,
-                })
-            },
-        )
-        .map(|mut rows| rows.pop())
+        integer(owner)?;
+        Ok(self
+            .open
+            .borrow()
+            .sources
+            .rows
+            .get(&(owner, class))
+            .copied()
+            .filter(|source| source.route == route && source.installed == installed))
+    }
+    pub(crate) fn insert_source(&self, source: BaseSource) -> OverlayResult<()> {
+        let key = (source.owner, source.class);
+        let mut open = self.open.borrow_mut();
+        if open.sources.rows.contains_key(&key) {
+            return Err(OverlayError::Invalid("duplicate base source"));
+        }
+        open.sources.put(key, source);
+        Ok(())
     }
     pub(crate) fn source_state(&self, source: BaseSource) -> OverlayResult<WorkspaceState> {
         let state = self.state(source.route)?;
         self.source_held(source, state)
     }
-    /// The same check against a Workspace row this transaction already read.
+    /// The same check against runtime Workspace state this job already read.
     pub(crate) fn source_held(
         &self,
         source: BaseSource,
@@ -118,19 +114,10 @@ impl Overlay {
     }
     pub(crate) fn release_source_inner(&self, source: BaseSource) -> OverlayResult<()> {
         self.source_state(source)?;
-        let changed = self.execute(
-            StatementKind::Lease,
-            sql::BASE_SOURCE_DELETE,
-            &[
-                &integer(source.owner)?,
-                &source.root.as_slice(),
-                &source.class,
-            ],
-            48,
-        )?;
-        if changed != 1 {
-            return Err(OverlayError::Stale);
-        }
+        self.open
+            .borrow_mut()
+            .sources
+            .remove((source.owner, source.class));
         self.source_count(source.route, false)?;
         Ok(())
     }

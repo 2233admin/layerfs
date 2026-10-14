@@ -1,7 +1,7 @@
 //! Indexed native connection and kernel lookup ownership.
 use crate::{
-    db::integer, LeaseKind, NativeMount, NativeMountState, Overlay, OverlayError, OverlayResult,
-    Route, WorkspaceState,
+    db::integer, NativeMount, NativeMountState, Overlay, OverlayError, OverlayResult,
+    ReferenceKind, Route, WorkspaceState,
 };
 
 impl Overlay {
@@ -52,7 +52,7 @@ impl Overlay {
         };
         for key in references {
             self.open.borrow_mut().kernel.remove(key);
-            self.file_ref(ns, integer(key.1)?, LeaseKind::LookupOwner, false)?;
+            self.file_ref(ns, integer(key.1)?, ReferenceKind::Lookup, false)?;
         }
         for key in parents {
             self.open.borrow_mut().parents.remove(key);
@@ -118,7 +118,7 @@ impl Overlay {
         self.file_ref(
             mount.route.ns,
             integer(serial)?,
-            LeaseKind::LookupOwner,
+            ReferenceKind::Lookup,
             true,
         )
     }
@@ -194,7 +194,7 @@ impl Overlay {
         self.file_ref(
             mount.route.ns,
             integer(serial)?,
-            LeaseKind::LookupOwner,
+            ReferenceKind::Lookup,
             false,
         )
     }

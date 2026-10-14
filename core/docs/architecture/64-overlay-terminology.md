@@ -48,7 +48,7 @@ physical limits: creation fails if its schema exceeds the chosen quota. The
 schema-34 30-page observation precedes accounting removal and is not a
 schema-35 size claim.
 
-`user_version` is 36. The file is created fresh and is never reopened: there
+`user_version` is 37. The file is created fresh and is never reopened: there
 is no migration, conversion or retry.
 
 <a id="rows-the-engine-remembers"></a>
@@ -70,20 +70,25 @@ Counters retain the former nonnegative signed SQLite range. Capture freezes its
 paired generation/revision; install preserves later active state and the same
 visible view. Base-source acquisition/release no longer updates SQL counters.
 
-Only operation and captured-reader SQL custody remain remembered:
+Schema 37 also removes `commit_run`, `commit_reader`, `commit_pin` and
+`commit_base_pin`. The existing journaled OwnerTable holds operation and captured
+reader values indexed by minted holder and exact request. A generation-count
+map indexes captured holds without scanning owners. Base sources live in one
+journaled (holder, class) map; their retained root/floor remains exact. File
+read/open/lookup custody is already resident. Last-owner release updates these
+indexes and wakes held cleanup in the same atomic job.
 
-| Remembered | Read by | Forgotten by |
-| --- | --- | --- |
-| The operation owner last found in `commit_run` | `check_operation`, `fence_operation` | a writing statement naming `commit_run` |
-| The captured reader last found in `commit_reader` | `check_captured_reader` | a writing statement naming `commit_reader` |
+No SQL custody cache or statement-text invalidation remains. Resources preserves
+its previous count meanings from map lengths (read/operation/captured pins,
+base sources, operation/reader details), alongside on-demand filesystem counts.
+The closed template cannot report those live memory owners; no zero is inferred
+from their absence in SQL. There are seven product tables: the five filesystem
+relations, commit_record and cleanup_task. The final cleanup-list cut is pending.
 
-Schema 36 has no triggers. Writes naming either remembered table forget its
-hint; a failed job that began SQL forgets both, because it may have read its own
-writes. Runtime Workspace state never becomes an absent/stale hint. A kernel
-visit reads the runtime frontier and its indexed local inode in the same locked
-job; no Workspace-table join or namespace allocator query remains. Templates
-are closed empty SQL files; each copy verifies absence of rows in every remaining
-product table before binding a fresh runtime Workspace.
+The former LeaseKind is replaced by private Reader/File/Lookup reference classes;
+no generic leases or SQL lease family remain. StatementKind also drops the now
+unused Workspace family, leaving twelve SQL families. Telemetry section 36
+records that cardinality so readers preserve historical fourteen-family receipts.
 
 ## Earlier terminology (schema 16 to 33)
 

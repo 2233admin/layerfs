@@ -139,8 +139,11 @@ def decode(group):
         if values is not None:
             result[key] = names(values, fields)
         result["field_availability"][key] = "AVAILABLE" if values is not None else "UNAVAILABLE"
+    family_marker = row(group, 36)
+    require(family_marker is None or family_marker in ([12], [14]), "statement family cardinality marker")
+    family_count = family_marker[0] if family_marker is not None else 14
     for key, section in (("sql_foreground",2), ("sql_maintenance",3)):
-        families = [row(group, section, index) for index in range(14)]
+        families = [row(group, section, index) for index in range(family_count)]
         if all(values is not None for values in families):
             result[key] = [names(values, STATEMENT) for values in families]
         result["field_availability"][key] = "AVAILABLE" if key in result else "UNAVAILABLE"

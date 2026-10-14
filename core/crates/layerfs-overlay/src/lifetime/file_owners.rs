@@ -1,7 +1,7 @@
 //! Exact open and read-processing owners; no descriptor pins a generation chain.
 use crate::{
-    db::integer, inode, sql, BaseSource, FileRead, Inode, InodeKind, LeaseKind, OpenFile, Overlay,
-    OverlayError, OverlayResult, Route, StatementKind, WorkspaceState,
+    db::integer, inode, BaseSource, FileRead, Inode, InodeKind, OpenFile, Overlay, OverlayError,
+    OverlayResult, ReferenceKind, Route, WorkspaceState,
 };
 
 // Native cookies are opaque u64 values on the wire. Process-wide allocation
@@ -28,15 +28,9 @@ impl Overlay {
         &self,
         ns: i64,
         serial: i64,
-        kind: LeaseKind,
+        kind: ReferenceKind,
         add: bool,
     ) -> OverlayResult<()> {
-        if !matches!(
-            kind,
-            LeaseKind::FileHandle | LeaseKind::LookupOwner | LeaseKind::FileReader
-        ) {
-            return Ok(());
-        }
         let mut refs = self
             .open
             .borrow()
@@ -48,7 +42,7 @@ impl Overlay {
         refs.change(kind, add)?;
         self.open.borrow_mut().custody.put(serial, refs);
         if add {
-            if !matches!(kind, LeaseKind::LookupOwner) && self.orphan(serial)?.is_some() {
+            if !matches!(kind, ReferenceKind::Lookup) && self.orphan(serial)?.is_some() {
                 self.enqueue(crate::maintenance::ORPHAN, serial, -1)?;
             }
         } else if refs.total() == 0 {
@@ -118,7 +112,7 @@ impl Overlay {
         writable: bool,
     ) -> OverlayResult<OpenFile> {
         let file = self.retain_file_row(route, mount, request, serial, writable)?;
-        self.file_ref(route.ns, integer(serial)?, LeaseKind::FileHandle, true)?;
+        self.file_ref(route.ns, integer(serial)?, ReferenceKind::File, true)?;
         Ok(file)
     }
     /// The descriptor's row without its file reference, which the caller
@@ -201,7 +195,7 @@ impl Overlay {
         self.file_ref(
             file.route.ns,
             integer(file.serial)?,
-            LeaseKind::FileHandle,
+            ReferenceKind::File,
             false,
         )?;
         Ok(())
@@ -251,28 +245,10 @@ impl Overlay {
             .borrow_mut()
             .reads
             .insert(owner, request, read, "duplicate read request")?;
-        self.execute(
-            StatementKind::Lease,
-            sql::BASE_SOURCE_INSERT,
-            &[&integer(owner)?, &source.root.as_slice(), &1_i64],
-            56,
-        )?;
+        self.insert_source(read.source)?;
         self.source_count(source.route, true)?;
-        self.execute(
-            StatementKind::Lease,
-            "INSERT INTO commit_pin VALUES(5,?1,?2)",
-            &[&integer(owner)?, &serial],
-            24,
-        )?;
-        self.file_ref(source.route.ns, serial, LeaseKind::FileReader, true)?;
-        Ok(FileRead {
-            source: BaseSource {
-                owner,
-                class: 1,
-                ..source
-            },
-            serial: serial as u64,
-        })
+        self.file_ref(source.route.ns, serial, ReferenceKind::Reader, true)?;
+        Ok(read)
     }
     pub fn retained_file_read(
         &self,
@@ -302,19 +278,12 @@ impl Overlay {
         self.atomic_cleanup(|| {
             self.check_file_read(read)?;
             let ns = read.source.route.ns;
-            let owner = integer(read.source.owner)?;
             let serial = integer(read.serial)?;
             self.open
                 .borrow_mut()
                 .reads
                 .remove(read.source.owner, |held| *held == read)?;
-            self.execute(
-                StatementKind::Lease,
-                "DELETE FROM commit_pin WHERE kind=5 AND holder=?1 AND resource=?2",
-                &[&owner, &serial],
-                24,
-            )?;
-            self.file_ref(ns, serial, LeaseKind::FileReader, false)?;
+            self.file_ref(ns, serial, ReferenceKind::Reader, false)?;
             self.release_source_inner(read.source)
         })
     }

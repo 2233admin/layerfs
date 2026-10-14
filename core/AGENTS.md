@@ -163,11 +163,13 @@ unmount. The naming
 change authorizes no physical table redesign; generic temporary buffers and
 historical receipts retain their distinct terms. See the
 [terminology guide](docs/architecture/64-overlay-terminology.md).
-The #320 product sweep (2026-10-14, schema 36) removes accounting triggers,
+The #320 product sweep (2026-10-14, schema 37) removes accounting triggers,
 Workspace/allocator SQL rows and generic caller-minted leases. Workspace
 lifecycle/frontier/dirty/base-reader counters are one journaled runtime value,
 restored only after known whole-job rollback; unknown outcomes retain custody.
-Resources computes row/length totals on demand. See the current
+Commit runs/readers/base pins are journaled owner maps; captured generation
+holds use a count index. Resources computes row/length totals on demand and
+retains exact owner counts from memory. See the current
 [runtime state](docs/architecture/64-overlay-terminology.md#runtime-workspace-state-and-remembered-sql-custody).
 
 Schema17 adds native mount/source/lookup/read associations, atomic Workspace

@@ -14,6 +14,7 @@ mod namespace;
 mod open;
 mod payload;
 pub(crate) use contract::error;
+pub(crate) use contract::types::ReferenceKind;
 pub(crate) use database::connection as db;
 pub(crate) use lifetime::close;
 pub(crate) use namespace::compound;
@@ -59,7 +60,7 @@ pub use profile::{DatabaseProfile, ProfileConfig};
 pub use reclaim::ReclaimStep;
 pub use types::{
     BaseSource, Binding, Capture, Cell, Changes, ClaimedRange, DirectoryEntry,
-    DirectoryEntryChange, DirectoryEntryWindow, Generation, Inode, InodeKind, LeaseKind, LocalRead,
+    DirectoryEntryChange, DirectoryEntryWindow, Generation, Inode, InodeKind, LocalRead,
     NameLayers, PayloadWrite, Publication, ReferenceRange, Route, WorkspaceState, WriteClaims,
     CELL_BYTES, COMPOUND_DIRECTORY_ENTRIES, COMPOUND_INODES, MASK_BYTES, OPERATION_RECORD_BYTES,
     PAGE_ROWS, READ_REFERENCES, READ_WINDOW, RUN_BYTES, WRITE_CLAIMS, WRITE_WINDOW,

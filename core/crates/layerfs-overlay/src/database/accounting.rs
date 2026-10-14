@@ -39,9 +39,9 @@ const COUNTS: &str = "SELECT
     (SELECT count(*) FROM fs_truncate),
     (SELECT count(*) FROM commit_record),
     (SELECT coalesce(sum(length(value)),0) FROM commit_record),
-    (SELECT count(*) FROM commit_pin),
-    (SELECT count(*) FROM commit_base_pin),
-    (SELECT count(*) FROM commit_reader)+(SELECT count(*) FROM commit_run),
+    ?2,
+    ?3,
+    ?4,
     (SELECT count(*) FROM cleanup_task),
     (SELECT coalesce(sum(ready),0) FROM cleanup_task),
     (SELECT count(*) FROM fs_data_ref)";
@@ -56,11 +56,21 @@ impl Overlay {
         // This explicit diagnostic visits rows on demand and projects lengths,
         // never payload values. Ordinary mutations maintain no accounting row.
         // The daemon sums separate Workspace observations where requested.
+        let (pins, sources, details) = {
+            let open = self.open.borrow();
+            let details = open.captured.len() + open.operations.len();
+            (open.reads.len() + details, open.sources.rows.len(), details)
+        };
         let counts = self
             .query(
                 StatementKind::Startup,
                 COUNTS,
-                &[&i64::from(self.workspace.get().is_some())],
+                &[
+                    &i64::from(self.workspace.get().is_some()),
+                    &crate::db::integer(pins as u64)?,
+                    &crate::db::integer(sources as u64)?,
+                    &crate::db::integer(details as u64)?,
+                ],
                 8,
                 |r| {
                     Ok(StoredCounts {

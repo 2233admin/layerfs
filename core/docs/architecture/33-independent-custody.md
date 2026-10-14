@@ -8,6 +8,14 @@ schema16. Earlier algorithm and proof pins retain their original scope; see
 > Physical admission/headroom and exact whiteout simplification are not delivered
 > by this checkpoint. Native reference/output wiring remains S8.
 
+Current #320 placement update (2026-10-14, schema 37): the older SQL custody
+relations below are replaced by journaled resident owner tables and base-source
+maps. Exact retained request lookup, nonrecycled holder identity, captured
+root/floor and generation hold/release remain. Known whole-job failure restores
+maps with SQL; unknown outcomes retain them. Processing records remain backed
+SQL and transfer to bounded automatic cleanup after exact release. No process
+exit is a release fence and no lost reply authorizes acquisition replay.
+
 Schema v11 adds nonrecycled engine owner IDs, exact open/file-read/captured-reader/
 operation records, file reference counts and one independent orphan domain. The
 [capabilities](../../crates/layerfs-overlay/src/contract/custody.rs) bind engine,
@@ -102,6 +110,6 @@ Reader/Open/Lookup/Operation (1–4) have no product producer. Generation hold
 checks now consider only the minted CapturedReader pin (kind 6). File handles,
 lookup owners, file readers and processing owners retain their exact identity,
 last-owner release and original failure custody. This supersedes primitive
-lease prose above; it changes no mounted filesystem semantics. The remaining
-`LeaseKind` name is transitional until the runtime pin rows move to memory.
+lease prose above; it changes no mounted filesystem semantics. Schema 37 then removes the remaining SQL pins and replaces the transitional
+`LeaseKind` with private file-reference classes.
 Tests are intentionally deferred to the owner's separate Phase 2 pass.

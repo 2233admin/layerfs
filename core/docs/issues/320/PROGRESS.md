@@ -3600,3 +3600,39 @@ proofs stay on the Phase 2 keep list. No schema-36 sample or runtime PASS is
 claimed. Next: remove remaining overlay Route/ns checks and runtime pin/run/
 reader/cleanup tables, then direct typed calls and rename in the product sweep.
 Durable: NOT_RUN — disabled by owner until explicit reauthorization.
+
+### Phase 1: Commit and base custody to journaled memory (schema 37)
+
+`commit_run`, `commit_reader`, `commit_pin` and `commit_base_pin` are removed.
+Operation and captured-reader owners reuse OwnerTable: exact request -> minted
+holder -> original value. Base sources are journaled by (holder, class), with
+root/floor retained. A journaled generation-count map makes captured holds an
+indexed lookup; cleanup never scans the captured-reader population. Last-owner
+release wakes the same bounded automatic reclamation paths. File readers use
+their existing owner table rather than a duplicate SQL pin.
+
+All maps commit/roll back with the existing atomic job journal. Unknown SQL/
+rollback results retain attempted maps and original custody; no lost reply
+replays acquisition or releases its owner. Captured readers remain independent
+of current root/floor after install, processing remains findable by request
+and operation records remain SQL-backed. Resources derives the same owner/
+source/detail count meanings from map lengths. No code moves to tests/tools.
+
+There are now seven SQL tables: five filesystem tables, commit_record and
+cleanup_task; zero triggers and zero SQL custody rows. Runtime Workspace and
+owner hints no longer need statement-text cache invalidation. The now unused
+Workspace/Lease SQL families are removed (12 remain); telemetry section 36
+declares cardinality. The harness parser accepts current 12-family and retained
+14-family receipts without relabeling old arrays. The private Reader/File/Lookup
+reference class replaces the obsolete LeaseKind. Cleanup-list relocation and
+remaining Route/ns elimination follow.
+
+Host check passed with unused SQL imports in file_owners; those imports were
+removed. Host/Linux Clippy -D warnings and Linux check, workspace lib/bins/
+examples, PASS under 120 s stops. Fmt, Python syntax and whitespace PASS.
+Logs: `simplify-custody-{host,linux}-{check,clippy}`. Schema/accounting/close
+oracle pins and affected architecture/core/telemetry docs advance.
+Tests: not yet updated; no test opened/edited/run in Phase 1. Capture/install/
+open-reader, lost-reply, exact-refusal and last-owner proofs remain required
+in Phase 2; no runtime qualification or speed/storage claim is made here.
+Durable: NOT_RUN — disabled by owner until explicit reauthorization.

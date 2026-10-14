@@ -60,13 +60,13 @@ impl Overlay {
                 self.file_ref(
                     mount.route.ns,
                     integer(serial)?,
-                    crate::LeaseKind::LookupOwner,
+                    crate::ReferenceKind::Lookup,
                     true,
                 )?;
                 self.file_ref(
                     mount.route.ns,
                     integer(serial)?,
-                    crate::LeaseKind::FileHandle,
+                    crate::ReferenceKind::File,
                     true,
                 )?;
                 Some(file)

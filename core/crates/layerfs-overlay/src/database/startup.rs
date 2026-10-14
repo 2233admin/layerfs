@@ -147,7 +147,7 @@ fn initialize(path: &Path, config: ProfileConfig, template: Option<(&Path, i64)>
             super::profile::readback(&connection, &sql, "PRAGMA user_version", |row| row.get(0))?;
         let application: i64 =
             super::profile::readback(&connection, &sql, "PRAGMA application_id", |row| row.get(0))?;
-        if profile.schema_version != 36 || application != 1279676210 {
+        if profile.schema_version != 37 || application != 1279676210 {
             return Err(crate::OverlayError::Invalid("overlay schema readback"));
         }
         if template.is_some() {
@@ -157,8 +157,6 @@ fn initialize(path: &Path, config: ProfileConfig, template: Option<(&Path, i64)>
                 "SELECT EXISTS(SELECT 1 FROM fs_inode) OR EXISTS(SELECT 1 FROM fs_entry)
                  OR EXISTS(SELECT 1 FROM fs_data) OR EXISTS(SELECT 1 FROM fs_data_ref)
                  OR EXISTS(SELECT 1 FROM fs_truncate) OR EXISTS(SELECT 1 FROM commit_record)
-                 OR EXISTS(SELECT 1 FROM commit_pin) OR EXISTS(SELECT 1 FROM commit_base_pin)
-                 OR EXISTS(SELECT 1 FROM commit_run) OR EXISTS(SELECT 1 FROM commit_reader)
                  OR EXISTS(SELECT 1 FROM cleanup_task)",
                 |row| row.get(0),
             )?;
@@ -190,8 +188,6 @@ fn initialize(path: &Path, config: ProfileConfig, template: Option<(&Path, i64)>
                     .map_err(|_| crate::OverlayError::Invalid("engine identity exhausted"))?,
             }),
             workspace: Cell::new(None),
-            operation_seen: Cell::new(None),
-            reader_seen: Cell::new(None),
             maintenance_ready: Cell::new(false),
             orphan_seen: Cell::new(false),
             pieces_seen: Cell::new(false),

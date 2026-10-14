@@ -14,16 +14,17 @@ pub enum StatementKind {
     Begin,
     Commit,
     Rollback,
-    Workspace,
     Inode,
     DirectoryEntry,
     Payload,
     Frontier,
     Capture,
     OperationRecord,
-    Lease,
     Explain,
     Reclaim,
+}
+impl StatementKind {
+    pub const COUNT: usize = Self::Reclaim as usize + 1;
 }
 /// Inclusive statement/check-out/binding/step/mapping observations.
 /// Elapsed nanoseconds are diagnostic wall, not exclusive CPU or a latency gate.
@@ -32,7 +33,7 @@ pub struct StatementWork {
     pub attempts: u64,
     pub executions: u64,
     pub rows_returned: u64,
-    /// All changed rows, including accounting triggers.
+    /// All changed rows, including any SQLite side effects.
     pub rows_changed: u64,
     /// Direct statement changes; excludes trigger side effects.
     pub direct_rows_changed: u64,
@@ -62,7 +63,7 @@ pub struct StatementWork {
 /// Connection-scoped counters. Snapshot around one exclusive owner job for scope.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct DatabaseWork {
-    pub statements: [StatementWork; 14],
+    pub statements: [StatementWork; StatementKind::COUNT],
 }
 
 pub(crate) struct Query<'a> {

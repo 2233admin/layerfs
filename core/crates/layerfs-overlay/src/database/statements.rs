@@ -114,12 +114,6 @@ pub(crate) const LAYER_LOWER: &str = "SELECT size FROM fs_inode
 pub(crate) const NAME_LAYERS: &str = "SELECT generation,inode,inherited FROM fs_entry
     WHERE parent=?1 AND name=?2 AND generation<=?3 AND generation>?4 ORDER BY generation DESC LIMIT 2";
 pub(crate) const DIRECTORY_ENTRY_LOOKUP:&str="SELECT inode,inherited FROM fs_entry WHERE parent=?1 AND name=?2 AND generation<=?3 AND generation>?4 ORDER BY generation DESC LIMIT 1";
-pub(crate) const BASE_SOURCE_LOOKUP: &str =
-    "SELECT base_root FROM commit_base_pin WHERE holder=?1 AND kind=?2";
-pub(crate) const BASE_SOURCE_INSERT: &str =
-    "INSERT INTO commit_base_pin(holder,base_root,kind) VALUES(?1,?2,?3)";
-pub(crate) const BASE_SOURCE_DELETE: &str =
-    "DELETE FROM commit_base_pin WHERE holder=?1 AND base_root=?2 AND kind=?3";
 pub(crate) const DIRECTORY_ENTRY_CAPTURE: &str = "SELECT parent,name,inode,inherited
     FROM fs_entry INDEXED BY fs_entry_capture WHERE generation=?1
     AND (parent,name)>(?2,?3) ORDER BY parent,name LIMIT 64";
@@ -152,7 +146,6 @@ pub(crate) const DIRECTORY_ENTRY_PUT: &str = "INSERT INTO fs_entry VALUES(?1,?2,
     ON CONFLICT(parent,name,generation) DO UPDATE SET inode=excluded.inode,inherited=excluded.inherited";
 pub(crate) const DIRECTORY_ENTRY_DROP: &str =
     "DELETE FROM fs_entry WHERE parent=?1 AND name=?2 AND generation=?3";
-pub(crate) const OPERATION_CUSTODY: &str = "SELECT 1 FROM commit_run WHERE holder=?1";
 
 pub(crate) const INDEXED_OPERATION_RECORD_CONTAINS: &str = "SELECT 1 FROM commit_record
     WHERE operation=?1 AND file_scope=?2 AND kind=?3 AND key=?4";
@@ -179,9 +172,6 @@ pub(crate) const INDEXED_OPERATION_RECORD_DELETE_OPERATION: &str = "DELETE FROM 
 pub(crate) const INDEXED_OPERATION_RECORD_RECLAIM_OPERATION: &str =
     "SELECT file_scope,kind,key,length(value)
     FROM commit_record WHERE operation=?1 ORDER BY file_scope,kind,key LIMIT 64";
-
-pub(crate) const GENERATION_HELD: &str = "SELECT 1 FROM commit_pin INDEXED BY commit_pin_resource
-            WHERE kind=6 AND resource=?1 LIMIT 1";
 
 /// Whether layer ?2 of serial ?1 is installed below floor ?3 or superseded
 /// by a later row up to the runtime active frontier ?4.

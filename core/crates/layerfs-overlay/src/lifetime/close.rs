@@ -1,5 +1,5 @@
 //! Logical terminal close; physical disposal belongs to the Workspace file owner.
-use crate::{Capture, Overlay, OverlayError, OverlayResult, Route, StatementKind};
+use crate::{Capture, Overlay, OverlayError, OverlayResult, Route};
 
 /// Whether a Workspace is serving, retained by a consumer, ready for checked
 /// connection close, or physically absent from its owner. Only the daemon's
@@ -11,7 +11,6 @@ pub enum CleanupState {
     Queued,
     Gone,
 }
-const HELD: &str = "SELECT EXISTS(SELECT 1 FROM commit_pin)";
 impl Overlay {
     fn terminal_state(&self, state: &crate::WorkspaceState) -> OverlayResult<CleanupState> {
         if !state.closed {
@@ -22,6 +21,7 @@ impl Overlay {
         let files = open.files.any_request((0, i64::MIN)..=(0, i64::MAX));
         let readers = open.reads.len() != 0;
         let lookups = open.lookups.len() != 0;
+        let pins = open.operations.len() != 0 || open.captured.len() != 0;
         drop(open);
         let held = native
             || files
@@ -30,9 +30,7 @@ impl Overlay {
             || state.captured.is_some()
             || state.base_readers != 0
             || self.tickets.pending()
-            || self.query(StatementKind::Workspace, HELD, &[], 8, |r| {
-                r.get::<_, bool>(0)
-            })?[0];
+            || pins;
         Ok(if held {
             CleanupState::Held
         } else {
