@@ -11,7 +11,7 @@ use layerfs_content::{
 use layerfs_daemon::{
     bootstrap::open_store,
     store::{BindRequest, BoundWorkspace, Store, StoreOperation},
-    Command, Completion, Owner, OwnerClient, OwnerConfig, Response,
+    JobReceipt, Owner, OwnerClient, OwnerConfig, Response,
 };
 use layerfs_history::WorkspaceId;
 use layerfs_overlay::{ProfileConfig, Route};
@@ -32,32 +32,16 @@ pub fn evidence(line: std::fmt::Arguments<'_>) {
     use std::io::Write;
     writeln!(std::io::stdout().lock(), "{line}").unwrap();
 }
-pub fn job(owner: &OwnerClient, route: Route, command: Command) -> Completion {
-    let pending = owner
-        .try_submit(Some(route), command)
-        .unwrap_or_else(|e| panic!("{e:?}"));
-    let until = Instant::now() + Duration::from_secs(5);
-    loop {
-        if let Some(done) = pending.try_complete().unwrap() {
-            return done;
-        }
-        assert!(Instant::now() < until, "bounded original local completion");
-        std::thread::yield_now();
-    }
+pub fn job(
+    owner: &OwnerClient,
+    route: Route,
+    command: impl FnOnce(
+        &layerfs_daemon::OwnerClient,
+        Option<layerfs_overlay::Route>,
+    ) -> Result<layerfs_daemon::JobReceipt, layerfs_daemon::OwnerError>,
+) -> JobReceipt {
+    command(owner, Some(route)).unwrap_or_else(|error| panic!("{error:?}"))
 }
-/// The engine thread drops its own final credit after the consumer observes a
-/// completion: bound the wait for that release before an exact counter check.
-pub fn settled(client: &OwnerClient, outstanding: usize) {
-    let end = Instant::now() + Duration::from_secs(3);
-    while client.diagnostics().unwrap().outstanding != outstanding {
-        assert!(
-            Instant::now() < end,
-            "engine did not release its final credit"
-        );
-        std::thread::yield_now();
-    }
-}
-
 /// A sealed, installed Disposable Store whose base is the model of the native
 /// source it was initialized from, plus one local owner.
 pub struct Rig {
@@ -113,7 +97,12 @@ impl Rig {
     }
     pub fn close(&self, workspace: &BoundWorkspace) {
         assert!(matches!(
-            job(&self.owner.client(), workspace.route(), Command::Close).result(),
+            job(
+                &self.owner.client(),
+                workspace.route(),
+                |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.close(job_route)
+            )
+            .result(),
             Ok(Response::Done)
         ));
     }
@@ -134,8 +123,8 @@ pub fn window<T>(
     let acquired = job(
         operation.overlay(),
         workspace.route(),
-        Command::AcquireBaseSource {
-            owner: NEXT.fetch_add(1, Ordering::Relaxed),
+        |job_client: &layerfs_daemon::OwnerClient, job_route| {
+            job_client.acquire_base_source(job_route, NEXT.fetch_add(1, Ordering::Relaxed))
         },
     );
     let source = match acquired.result() {
@@ -149,7 +138,8 @@ pub fn window<T>(
     assert!(job(
         operation.overlay(),
         workspace.route(),
-        Command::ReleaseBaseSource(source)
+        |job_client: &layerfs_daemon::OwnerClient, job_route| job_client
+            .release_base_source(job_route, source)
     )
     .result()
     .is_ok());
@@ -166,6 +156,14 @@ pub enum Do<'a> {
     Remove(&'a str),
     Rename(&'a str, &'a str),
     Write(&'a str, u64, &'a [u8]),
+    /// A write whose bytes the caller claims to equal committed content of
+    /// the given root from the given offset: the same bytes to the model.
+    #[allow(dead_code)]
+    Claimed(&'a str, u64, &'a [u8], [u8; 32], u64),
+    /// A write whose bytes first pass the request port's recognizer, as a
+    /// kernel WRITE's do: whatever it claims, the model gets the same bytes.
+    #[allow(dead_code)]
+    Recognized(&'a str, u64, &'a [u8]),
     Truncate(&'a str, u64),
     Chmod(&'a str, u32),
     Utimens(&'a str, Stamp),
@@ -283,6 +281,29 @@ impl<'a> Session<'a> {
                     position: Position::At(offset),
                     data: data.into(),
                 },
+                Do::Claimed(path, offset, data, source, source_offset) => Operation::Write {
+                    serial: resolve(operation, view, path).serial,
+                    position: Position::At(offset),
+                    data: layerfs_workspace::WriteData::from(data).claimed(
+                        layerfs_overlay::WriteClaims {
+                            source,
+                            after: None,
+                            ranges: vec![layerfs_overlay::ClaimedRange {
+                                offset,
+                                length: data.len() as u64,
+                                source_offset,
+                            }],
+                        },
+                    ),
+                },
+                Do::Recognized(path, offset, data) => {
+                    let serial = resolve(operation, view, path).serial;
+                    Operation::Write {
+                        serial,
+                        position: Position::At(offset),
+                        data: recognized(self.workspace, serial, offset, data),
+                    }
+                }
                 Do::Truncate(path, size) => Operation::SetAttributes {
                     serial: resolve(operation, view, path).serial,
                     mode: None,
@@ -311,10 +332,21 @@ impl<'a> Session<'a> {
                 .unwrap_or_else(|e| panic!("{step:?}: {e:?}"));
             match outcome {
                 Outcome::Applied { publication, .. } => {
+                    // What the request port records after a write it examined.
+                    if let Do::Recognized(path, offset, data) = step {
+                        let serial = resolve(operation, view, path).serial;
+                        operation.ports().recognizer().published(
+                            self.workspace.route(),
+                            serial,
+                            (offset, offset + data.len() as u64),
+                            publication.revision(),
+                        );
+                    }
                     assert!(job(
                         operation.overlay(),
                         self.workspace.route(),
-                        Command::ReplyAttempted(publication)
+                        |job_client: &layerfs_daemon::OwnerClient, _| job_client
+                            .reply_attempted(publication)
                     )
                     .result()
                     .is_ok());
@@ -331,7 +363,11 @@ impl<'a> Session<'a> {
             Do::Link(existing, path) => self.model.link(existing, path, stamp),
             Do::Remove(path) => self.model.remove(path, stamp),
             Do::Rename(from, to) => self.model.rename(from, to, stamp),
-            Do::Write(path, offset, data) => self.model.write(path, offset as usize, data, stamp),
+            Do::Write(path, offset, data)
+            | Do::Claimed(path, offset, data, ..)
+            | Do::Recognized(path, offset, data) => {
+                self.model.write(path, offset as usize, data, stamp)
+            }
             Do::Truncate(path, size) => self.model.truncate(path, size as usize, stamp),
             Do::Chmod(path, mode) => self.model.chmod(path, mode),
             Do::Utimens(path, mtime) => self.model.utimens(path, mtime),
@@ -342,6 +378,52 @@ impl<'a> Session<'a> {
             "{step:?}: Workspace and model disagree on whether anything changed"
         );
     }
+}
+
+/// The bytes of one write after the request port's recognition pass, driven
+/// to its end under a bounded wait: a fresh request's services, as a kernel
+/// WRITE has them.
+#[allow(dead_code)]
+pub fn recognized(
+    workspace: &BoundWorkspace,
+    serial: u64,
+    offset: u64,
+    data: &[u8],
+) -> layerfs_workspace::WriteData {
+    use layerfs_fuse::ports::{Fence, MountServices};
+    use std::{
+        sync::mpsc,
+        task::{Context, Poll, Wake, Waker},
+    };
+    struct Event(mpsc::SyncSender<()>);
+    impl Wake for Event {
+        fn wake(self: Arc<Self>) {
+            let _ = self.0.try_send(());
+        }
+    }
+    let services = workspace.request(&Fence::default()).unwrap();
+    let mut pass = services.recognize(serial, offset, data.into());
+    let (send, woken) = mpsc::sync_channel(1);
+    let waker = Waker::from(Arc::new(Event(send)));
+    let until = Instant::now() + Duration::from_secs(5);
+    loop {
+        match pass.as_mut().poll(&mut Context::from_waker(&waker)) {
+            Poll::Ready(bytes) => return bytes.unwrap_or_else(|e| panic!("{e:?}")),
+            Poll::Pending => woken
+                .recv_timeout(until.saturating_duration_since(Instant::now()))
+                .expect("bounded recognition pass"),
+        }
+    }
+}
+
+/// The content root of a regular file in the Workspace's current base.
+#[allow(dead_code)]
+pub fn content_root(workspace: &BoundWorkspace, path: &str) -> [u8; 32] {
+    window(workspace, |operation, view| {
+        let serial = resolve(operation, view, path).serial;
+        let value = view.base().inode(serial).unwrap().value;
+        value.content_root.to_bytes()
+    })
 }
 
 /// Complete walk of the live effective view through ordinary Workspace reads.

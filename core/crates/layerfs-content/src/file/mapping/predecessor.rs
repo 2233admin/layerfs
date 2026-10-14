@@ -19,8 +19,8 @@
 use layerfs_telemetry::timer::{Active, TimingScope};
 
 use crate::error::{ContentError, ContentResult};
-use crate::file::mapping::codec::decode_node_with_context;
-use crate::file::mapping::types::{ExtentNode, ExtentSlice, NodeSummary};
+use crate::file::mapping::extents::Walk;
+use crate::file::mapping::types::ExtentSlice;
 use crate::object::{AuthenticatedObjects, ObjectId};
 
 /// Extent descriptors one cursor walks before it stops offering hints.
@@ -49,9 +49,7 @@ impl<'a> PredecessorBase<'a> {
 pub struct PredecessorCursor<'a, 'r, 's> {
     reader: &'a dyn AuthenticatedObjects,
     scope: &'s TimingScope<'r, Active>,
-    stack: Vec<(NodeSummary, bool, u64)>,
-    leaf: std::vec::IntoIter<ExtentSlice>,
-    position: u64,
+    walk: Walk,
     current: Option<(u64, u64, ExtentSlice)>,
     descriptors: usize,
     exhausted: bool,
@@ -79,18 +77,7 @@ impl<'a, 'r, 's> PredecessorCursor<'a, 'r, 's> {
         Ok(Some(Self {
             reader: base.reader,
             scope,
-            stack: vec![(
-                NodeSummary {
-                    id: state.mapping_root,
-                    bytes: state.logical_len,
-                    extents: state.extent_count,
-                    level: state.tree_level,
-                },
-                true,
-                0,
-            )],
-            leaf: Vec::new().into_iter(),
-            position: 0,
+            walk: Walk::new(state),
             current: None,
             descriptors: 0,
             exhausted: false,
@@ -137,84 +124,13 @@ impl<'a, 'r, 's> PredecessorCursor<'a, 'r, 's> {
 
     /// Advances the frontier to the next extent at or after `start`.
     fn next_extent(&mut self, start: u64) -> ContentResult<Option<(u64, u64, ExtentSlice)>> {
-        loop {
-            if let Some(extent) = self.leaf.next() {
-                self.descriptors += 1;
-                let from = self.position;
-                self.position = from
-                    .checked_add(u64::from(extent.logical_length()))
-                    .ok_or(ContentError::LengthOverflow)?;
-                return Ok(Some((from, self.position, extent)));
-            }
-            let Some((summary, root, base)) = self.stack.pop() else {
-                return Ok(None);
-            };
-            // A subtree that ends at or before the requested start cannot overlap
-            // it, and neither can any subtree after it in logical order, so the
-            // walk skips it without reading its page.
-            if start != 0
-                && base
-                    .checked_add(summary.bytes)
-                    .ok_or(ContentError::LengthOverflow)?
-                    <= start
-            {
-                continue;
-            }
-            match self.page(summary, root)? {
-                ExtentNode::Leaf { extents, .. } => {
-                    self.leaf = extents.into_iter();
-                    self.position = base;
-                }
-                ExtentNode::Branch {
-                    level, children, ..
-                } => {
-                    let child_level = level
-                        .checked_sub(1)
-                        .ok_or(ContentError::MappingDepthExceeded)?;
-                    let mut previous_bytes = 0_u64;
-                    let mut previous_extents = 0_u64;
-                    let mut pending = Vec::with_capacity(children.len());
-                    for child in &children {
-                        let bytes = child
-                            .cumulative_logical_end
-                            .checked_sub(previous_bytes)
-                            .ok_or(ContentError::InvalidRecord("predecessor branch order"))?;
-                        let extents = child
-                            .cumulative_extent_end
-                            .checked_sub(previous_extents)
-                            .ok_or(ContentError::InvalidRecord("predecessor branch order"))?;
-                        pending.push((
-                            NodeSummary {
-                                id: child.child_object_id,
-                                bytes,
-                                extents,
-                                level: child_level,
-                            },
-                            false,
-                            base.checked_add(previous_bytes)
-                                .ok_or(ContentError::LengthOverflow)?,
-                        ));
-                        previous_bytes = child.cumulative_logical_end;
-                        previous_extents = child.cumulative_extent_end;
-                    }
-                    self.stack.extend(pending.into_iter().rev());
-                }
-            }
+        let (reader, scope) = (self.reader, self.scope);
+        let found = self.walk.next(start, &mut |id| {
+            reader.read_canonical_scoped(id, scope.child("mapping.predecessor"))
+        })?;
+        if found.is_some() {
+            self.descriptors += 1;
         }
-    }
-
-    /// Acquires and decodes one mapping page, checked against its own summary.
-    fn page(&self, summary: NodeSummary, root: bool) -> ContentResult<ExtentNode> {
-        let canonical = self
-            .reader
-            .read_canonical_scoped(summary.id, self.scope.child("mapping.predecessor"))?;
-        let node = decode_node_with_context(&canonical, root)?;
-        if node.level() != summary.level
-            || node.logical_len() != summary.bytes
-            || node.extent_count() != summary.extents
-        {
-            return Err(ContentError::InvalidRecord("predecessor summary"));
-        }
-        Ok(node)
+        Ok(found)
     }
 }

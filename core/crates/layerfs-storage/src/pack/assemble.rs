@@ -203,25 +203,6 @@ pub fn build_group(
             records: records.len(),
             codec: GroupCodec::Raw,
         }),
-        PackLane::PooledMetadata => {
-            if records.len() != 1 {
-                return Err(StorageError::Integrity("pooled group record count"));
-            }
-            let bytes = frame_group(records)?;
-            if bytes.len() > crate::policy::METADATA_GROUP_LIMIT {
-                return Err(StorageError::CapacityExceeded {
-                    what: "pack.pooled_group_body",
-                    limit: crate::policy::METADATA_GROUP_LIMIT as u64,
-                    actual: bytes.len() as u64,
-                });
-            }
-            Ok(EncodedGroup {
-                decoded_length: bytes.len(),
-                bytes,
-                records: 1,
-                codec: GroupCodec::Raw,
-            })
-        }
         PackLane::Ordinary => {
             let raw = frame_group(records)?;
             let decoded_length = raw.len();
@@ -340,10 +321,7 @@ pub fn directory_entries(
                     .checked_add(group.bytes.len())
                     .ok_or(StorageError::Integrity("pack size"))?;
             }
-            PackLane::Ordinary
-            | PackLane::Native
-            | PackLane::PooledMetadata
-            | PackLane::Singleton => {
+            PackLane::Ordinary | PackLane::Native | PackLane::Singleton => {
                 bytes.extend_from_slice(
                     &u32::try_from(offset)
                         .map_err(|_| StorageError::Integrity("group start"))?

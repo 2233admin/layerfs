@@ -43,6 +43,11 @@ Every producer obtains its own Storage state through Store::producer, using
 the startup ReservationBlocks passed through concrete bootstrap. Only the
 opened provider is shared. No mutable Save is global, no ownership spans a
 whole Commit, and Init acquisition/cleanup is unavailable through these ports.
+A bound Workspace keeps the Storage state of its last completed Commit and
+gives it to its next one, so the bounded per-handle indexes are not read from
+the Store again by every Commit; admission already allows one Commit of a
+Workspace at a time. A Commit that does not complete drops that state, and the
+next one obtains a new one. Each Commit still reports only its own counts.
 The combined publication and paired local install are now implemented in
 [Store Commit](65-store-commit-composition.md); S10 still supplies live namespace
 normalization.
@@ -110,3 +115,24 @@ returns Busy. The quarantine case is not a disk-I/O fault campaign. Native
 per-demand orchestration, status wire fields, mounted fairness, aggregate drain
 and full R2 acceptance remain separate required integration. No new SQLite query,
 canonical format, speed/storage or cold/RSS claim accompanies this scheduler.
+
+## Write-recognizer slots
+
+Added 2026-10-11 for [#316](https://github.com/Ephemeral-AI-Lab/layerfs/issues/316),
+phase 2. The Store owns the
+[fixed table](../../crates/layerfs-daemon/src/store/recognizer.rs) of the
+write recognizer: 64 slots, shared by every Workspace of the daemon, keyed by
+Workspace route and inode serial. A slot is the fixed-size state of one
+file's writes and holds no committed byte. It may hold one carried chunk in
+each direction, allocated only while a chunk is carried: a hash state of
+about 2 KiB, and for a writer in falling offsets the last bytes of one
+chunk, at most 32 KiB of the earlier write. The allowance is the table plus
+both for every slot, about 2.2 MiB for the daemon, reported as
+`capacity_bytes`; no cache bound changed. `Recognizer::published` records
+the revision of an applied write for the chunk that write carried. A request takes its file's state out of the table for
+the length of a pass and puts it back, so the table's lock is never held
+while bytes are hashed or a page is read. A full table drops the least
+recently used file, and a file without state starts over: the cost is a
+missed claim. `StorePorts::fresh` gives a pass its own failure scope.
+`Store::recognizer_work` reports occupancy, evictions and cumulative pass
+work; the diagnostic record format is unchanged.

@@ -61,15 +61,12 @@ mod linux {
         let mounts = Path::new(&setup.mounts);
         device()?;
         home(mounts)?;
-        let limits = setup.limits;
         NativeServing::start(NativeConfig {
             mounts: mounts.to_owned(),
             owner_uid: Uid::effective().as_raw(),
             owner_gid: Gid::effective().as_raw(),
             command_uid: setup.command_uid,
             command_gid: setup.command_gid,
-            read_handles: usize::from(limits.read_handles),
-            namespaces: limits.namespaces as usize,
             ready_wait: READY_WAIT,
             drain_wait: DRAIN_WAIT,
         })

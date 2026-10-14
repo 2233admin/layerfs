@@ -20,10 +20,21 @@ ALLOCATION = ("attempts", "requested_bytes", "admitted_jobs", "refusals", "obser
 OWNER_SCALARS = ("admitted", "credited_bytes", "peak_credited_bytes", "outstanding", "scheduler_bytes",
                  "queued", "peak_queued", "receipt_overruns", "receipt_overrun_bytes", "maintenance_jobs",
                  "maintenance_rows", "closed_namespaces", "maintenance_data_bytes", "maintenance_ns")
+DIRECT_OWNER_SCALARS = ("jobs", "maintenance_jobs", "maintenance_rows", "closed_namespaces", "maintenance_data_bytes", "maintenance_ns")
+DIRECT_MOUNT = ("active", "retained", "requests", "completed", "terminal")
+DIRECT_DISPOSITION = ("served", "inline", "refused", "terminal", "forget_units", "store_units")
 CLASSES = ("Read", "Mutation", "Capture", "Lifecycle", "OperationRecord", "Source")
 STORED = ("wait_refs", "namespaces", "inode_rows", "directory_entry_rows", "payload_cells", "payload_bytes",
           "shrink_rows", "operation_record_rows", "operation_record_bytes", "orphan_rows", "owner_rows",
           "source_rows", "owner_details", "reply_tickets", "retire_targets", "maintenance_targets", "ready_targets")
+# Original arrays remain readable for retained receipts. Step A reports memory
+# separately and removes three SQL counters; it supplies section 32 as the
+# explicit discriminator. No deleted counter is synthesized for current calls.
+STORED_OPEN_MEMORY = tuple(name for name in STORED if name not in
+                          {"wait_refs", "orphan_rows", "retire_targets"})
+OPEN_STATE = ("kernel_entries", "directory_parents", "file_handles", "file_reads",
+              "lookup_owners", "file_custody", "orphan_files", "generation_waits",
+              "mounts", "directory_handles", "cookie_pages")
 ALLOCATION_STATE = ("logical_bytes", "allocated_bytes", "high_water_allocated_bytes", "reserved_tail_bytes", "cleanup_headroom_bytes")
 STORAGE = ("policy", "locate", "read_packs", "read_pack_selections", "whole_selected", "whole_due_density",
            "whole_due_singleton", "whole_due_small", "whole_due_reuse", "range_selected", "range_scan_bytes",
@@ -37,7 +48,10 @@ STORAGE = ("policy", "locate", "read_packs", "read_pack_selections", "whole_sele
 STORE = ("object_batches", "object_ids", "length_batches", "length_ids", "serial_reservations")
 READER = ("stopping", "poisoned", "readers", "quarantined", "waiting", "assigned", "leased", "outstanding",
           "peak_outstanding", "grants", "queue_wait_ns", "maximum_queue_wait_ns", "scheduler_bytes")
-CACHE = ("cache_hits", "cache_misses", "upstream_batches", "authenticated_bytes", "evictions", "charged_cache_bytes", "cached_objects")
+CACHE = ("cache_hits", "cache_misses", "upstream_batches", "authenticated_bytes", "evictions", "charged_cache_bytes", "cached_objects",
+         "seeded_objects", "seeded_bytes", "seeded_lengths")
+# The five leading counters and the three seeded counters only grow; the two between them are gauges.
+CACHE_COUNTERS = CACHE[:5] + CACHE[7:]
 CONSTRUCTION = ("inode_rows", "entry_rows", "inode_pages", "entry_pages", "change_pages", "largest_page",
                 "parent_points", "base_lookups", "headers_written", "headers_dropped", "values_written",
                 "fresh_serials", "tombstones_skipped", "files_constructed", "files_unchanged", "symlinks",
@@ -86,11 +100,31 @@ def decode(group):
     result = {"identity": identity(group), "operation_tag": group[0]["values"][0],
               "namespace": group[0]["index"], "schema_source": SCHEMA_SOURCE,
               "field_availability": {}}
+    direct = row(group, 33)
+    direct_mode = direct is not None
+    if direct_mode:
+        require(len(direct) == 1 and direct[0] in {0,1}, "direct Workspace marker cardinality/bit")
+        result["service_schema"] = "issue321-direct-workspace"
+        result["sqlite_cache_group"] = {"memory_management_enabled": bool(direct[0])}
     scalar = row(group, 1)
+    budget = row(group, 31)
+    holds = row(group, 35)
+    if holds is not None:
+        require(direct_mode and len(holds) == 3, "lock-only hold schema cardinality")
+        result["lock_only_holds"] = names(holds, ("observations", "reply_attempts", "reply_hold_ns"))
+    if direct_mode:
+        require(budget is None, "direct Workspace emitted retired budget")
+    if budget is not None:
+        result["overlay_budget"] = names(budget, ("limit_bytes", "pager_allowance_bytes", "fixed_bytes",
+            "job_bytes", "peak_job_bytes", "outstanding", "memory_management_enabled"))
+    if not direct_mode:
+        result["field_availability"]["overlay_budget"] = "AVAILABLE" if budget is not None else "UNAVAILABLE"
     if scalar is not None:
-        require(len(scalar) == 32, "owner scalar/class schema cardinality")
-        result["owner"] = names(scalar[:14], OWNER_SCALARS)
-        for key, offset in (("completed",14), ("queue_wait_ns",20), ("service_ns",26)):
+        require(len(scalar) == (24 if direct_mode else 32), "owner scalar/class schema cardinality")
+        fields = DIRECT_OWNER_SCALARS if direct_mode else OWNER_SCALARS
+        result["owner"] = names(scalar[:len(fields)], fields)
+        slices = (("jobs_by_class",6),("lock_wait_ns",12),("hold_ns",18)) if direct_mode else (("completed",14),("queue_wait_ns",20),("service_ns",26))
+        for key, offset in slices:
             result["owner"][key] = names(scalar[offset:offset+6], CLASSES)
     for key, section, fields in (("store",8,STORE), ("reader",9,READER), ("cache",10,CACHE),
                                  ("construction",15,CONSTRUCTION), ("storage",16,STORAGE), ("dispatch",11,DISPATCH),
@@ -98,6 +132,10 @@ def decode(group):
                                  ("payload_foreground",4,PAYLOAD), ("payload_maintenance",5,PAYLOAD),
                                  ("allocation_foreground",6,ALLOCATION), ("allocation_maintenance",7,ALLOCATION)):
         values = row(group, section)
+        if direct_mode and key == "dispatch":
+            require(values is None, "direct Workspace emitted retired dispatcher")
+            continue
+        if direct_mode and key == "mount": fields = DIRECT_MOUNT
         if values is not None:
             result[key] = names(values, fields)
         result["field_availability"][key] = "AVAILABLE" if values is not None else "UNAVAILABLE"
@@ -106,19 +144,26 @@ def decode(group):
         if all(values is not None for values in families):
             result[key] = [names(values, STATEMENT) for values in families]
         result["field_availability"][key] = "AVAILABLE" if key in result else "UNAVAILABLE"
-    values = row(group, 28)
+    values, open_values = row(group, 28), row(group, 32)
+    result["field_availability"]["open_state"] = "AVAILABLE" if open_values is not None else "UNAVAILABLE"
+    if open_values is not None:
+        require(values is not None, "memory ownership without resource observation")
+        result["open_state"] = names(open_values, OPEN_STATE)
     if values is not None:
-        require(len(values) == 31, "resource schema cardinality")
-        result["stored_counts"] = names(values[:17], STORED)
-        result["allocation_state"] = names(values[17:22], ALLOCATION_STATE)
-        result["allocation_work"] = names(values[22:28], ALLOCATION)
-        result["pages"] = names(values[28:], ("database_pages", "free_pages", "debt_upper_bytes"))
+        fields = STORED_OPEN_MEMORY if open_values is not None else STORED
+        require(len(values) == len(fields) + 14, "resource schema cardinality")
+        at = len(fields)
+        result["resource_schema"] = ("issue321-open-memory" if open_values is not None else "original-sql-ownership")
+        result["stored_counts"] = names(values[:at], fields)
+        result["allocation_state"] = names(values[at:at+5], ALLOCATION_STATE)
+        result["allocation_work"] = names(values[at+5:at+11], ALLOCATION)
+        result["pages"] = names(values[at+11:], ("database_pages", "free_pages", "debt_upper_bytes"))
     result["reader_storage"] = {item["index"]: names(item["values"], STORAGE) for item in group
                                 if item["section"] == 29 and item["available"]}
     opcode = row(group,26)
     if opcode is not None:
-        require(len(opcode) == 46, "opcode/disposition source schema cardinality")
-        result["opcodes"] = {"by_opcode": opcode[:39], "disposition": names(opcode[39:],OPCODE_DISPOSITION)}
+        require(len(opcode) == (45 if direct_mode else 46), "opcode/disposition source schema cardinality")
+        result["opcodes"] = {"by_opcode": opcode[:39], "disposition": names(opcode[39:], DIRECT_DISPOSITION if direct_mode else OPCODE_DISPOSITION)}
     for section, field in ((13,"global_sql_writer"),(14,"global_sql_readers")):
         selected = {}
         for item in group:
@@ -134,15 +179,20 @@ def decode(group):
             result[field] = selected
     cost = row(group, 30)
     if cost is not None:
-        require(len(cost) in {2,35} and cost[0] in {0,1} and cost[1] in {0,1}, "observer cost schema cardinality/bits")
-        result["observer"] = {"admitted": bool(cost[0]), "completion_available": bool(cost[1])}
+        full = 34 if direct_mode else 35
+        require(len(cost) in {2,full} and cost[0] in {0,1} and cost[1] in {0,1}, "observer cost schema cardinality/bits")
+        result["observer"] = {("attempted" if direct_mode else "admitted"): bool(cost[0]), "completion_available": bool(cost[1])}
         if cost[1]:
-            require(len(cost) == 35 and cost[0] == 1, "completed observer work requires original admission")
+            require(len(cost) == full and cost[0] == 1, "completed observer work requires original attempt")
             result["observer"].update(sql=names(cost[2:19], STATEMENT), payload=names(cost[19:26], PAYLOAD),
                                       allocation=names(cost[26:32], ALLOCATION),
-                                      times=names(cost[32:], ("parked_turns", "queue_wait_ns", "service_ns")))
+                                      times=names(cost[32:], ("lock_wait_ns", "hold_ns") if direct_mode else ("parked_turns", "queue_wait_ns", "service_ns")))
+            if direct_mode:
+                jobs = row(group, 34)
+                require(jobs is not None, "direct observer job count missing")
+                result["observer"].update(names(jobs, ("jobs",)))
         else:
-            require(len(cost) == 2, "unavailable observer work must not fabricate counter arrays")
+            require(len(cost) == 2 and (not direct_mode or row(group,34) is None), "unavailable observer work must not fabricate counter arrays")
     return result
 
 
@@ -248,42 +298,46 @@ def phase_counts(groups, before_identity, end_identity, *, exclusive_observer_sc
         require(len(interval) == end_identity[2]-before_identity[2], "original interval observer call missing")
         require(all(value.get("observer", {}).get("completion_available") for value in interval), "exact observer work unavailable in interval")
         statement_keys = tuple(key for key in STATEMENT if key != "elapsed_ns")
-        raw_owner = difference(before["owner"], end["owner"], ("admitted", "receipt_overruns", "receipt_overrun_bytes",
-                               "maintenance_jobs", "maintenance_rows", "closed_namespaces", "maintenance_data_bytes"))
-        raw_classes = difference(before["owner"]["completed"], end["owner"]["completed"], CLASSES)
+        direct_mode = before.get("service_schema") == "issue321-direct-workspace"
+        require(direct_mode == (end.get("service_schema") == "issue321-direct-workspace"), "mixed service schemas in one interval")
+        owner_count = "jobs" if direct_mode else "admitted"
+        class_count = "jobs_by_class" if direct_mode else "completed"
+        owner_keys = ("jobs", "maintenance_jobs", "maintenance_rows", "closed_namespaces", "maintenance_data_bytes") if direct_mode else ("admitted", "receipt_overruns", "receipt_overrun_bytes", "maintenance_jobs", "maintenance_rows", "closed_namespaces", "maintenance_data_bytes")
+        raw_owner = difference(before["owner"], end["owner"], owner_keys)
+        raw_classes = difference(before["owner"][class_count], end["owner"][class_count], CLASSES)
         raw_sql = [difference(left,right,statement_keys) for left,right in zip(before["sql_foreground"],end["sql_foreground"])]
         observer_sql = {key: sum(value["observer"]["sql"][key] for value in interval) for key in statement_keys}
-        observer_jobs = len(interval)
-        require(raw_owner["admitted"] >= observer_jobs and raw_classes["Read"] >= observer_jobs, "observer jobs exceed original cumulative delta")
+        observer_jobs = sum(value["observer"]["jobs"] for value in interval) if direct_mode else len(interval)
+        require(raw_owner[owner_count] >= observer_jobs and raw_classes["Read"] >= observer_jobs, "observer jobs exceed original cumulative delta")
         adjusted_owner, adjusted_classes = dict(raw_owner), dict(raw_classes)
-        adjusted_owner["admitted"] -= observer_jobs
+        adjusted_owner[owner_count] -= observer_jobs
         adjusted_classes["Read"] -= observer_jobs
         adjusted_sql = [dict(values) for values in raw_sql]
         for key in statement_keys:
             require(adjusted_sql[0][key] >= observer_sql[key], "observer Startup work exceeds original family delta: " + key)
             adjusted_sql[0][key] -= observer_sql[key]
-        result.update(status="AVAILABLE", raw={"owner": raw_owner, "completed": raw_classes, "sql_foreground": raw_sql},
+        result.update(status="AVAILABLE", raw={"owner": raw_owner, class_count: raw_classes, "sql_foreground": raw_sql},
                       observer={"jobs": observer_jobs, "Read_completions": observer_jobs, "Startup_statement_work": observer_sql,
                                 "original_costs": [value["observer"] for value in interval]},
-                      adjusted={"owner": adjusted_owner, "completed": adjusted_classes, "sql_foreground": adjusted_sql})
+                      adjusted={"owner": adjusted_owner, class_count: adjusted_classes, "sql_foreground": adjusted_sql})
         status_calls = {value["identity"] for value in interval if value["operation_tag"] == 3}
         states = {tuple((tuple(key[0]),tuple(key[1]),key[2])): item.get("status_state", {})
                   for item in (control_correlation or []) if item["event"] == "workspace_status" for key in item["identities"]}
         if all(states.get(key, {}).get("status") == "AVAILABLE" for key in status_calls):
             jobs = sum(states[key]["Lifecycle_jobs"] for key in status_calls)
-            require(adjusted_owner["admitted"] >= jobs and adjusted_classes["Lifecycle"] >= jobs,
+            require(adjusted_owner[owner_count] >= jobs and adjusted_classes["Lifecycle"] >= jobs,
                     "typed Status State jobs exceed original post-Resources cumulative delta")
             without_status_owner, without_status_classes = dict(adjusted_owner), dict(adjusted_classes)
-            without_status_owner["admitted"] -= jobs
+            without_status_owner[owner_count] -= jobs
             without_status_classes["Lifecycle"] -= jobs
             result["status_state_attribution"] = {"status": "AVAILABLE", "Lifecycle_jobs": jobs,
                         "original_operands": [states[key] for key in sorted(status_calls)],
                         "sql_work": "UNAVAILABLE: no exact original State StatementWork supplied"}
-            result["adjusted_without_status_state_jobs"] = {"owner": without_status_owner, "completed": without_status_classes,
+            result["adjusted_without_status_state_jobs"] = {"owner": without_status_owner, class_count: without_status_classes,
                         "scope": "count-only floor view; original public Status jobs retained in raw and Resources-adjusted views; SQL/time unchanged"}
         else:
             result["status_state_attribution"] = {"status": "UNAVAILABLE", "reason": "typed original Status.local outcome unavailable; no guessed job/SQL subtraction"}
-        for key, fields in (("store",STORE),("cache",CACHE[:5])):
+        for key, fields in (("store",STORE),("cache",CACHE_COUNTERS)):
             if key in before and key in end:
                 result["raw"][key] = difference(before[key],end[key],fields)
         if "reader" in before and "reader" in end:
@@ -296,12 +350,12 @@ def phase_counts(groups, before_identity, end_identity, *, exclusive_observer_sc
                 # end endpoint's own counters are the whole interval.
                 require(all(last != 2**64-1 for last in right["by_opcode"]), "opcode counters saturated")
                 result["raw"]["opcodes"] = {"by_opcode": list(right["by_opcode"]),
-                        "disposition": difference(dict.fromkeys(OPCODE_DISPOSITION,0),right["disposition"],OPCODE_DISPOSITION),
+                        "disposition": difference(dict.fromkeys(DIRECT_DISPOSITION if direct_mode else OPCODE_DISPOSITION,0),right["disposition"],DIRECT_DISPOSITION if direct_mode else OPCODE_DISPOSITION),
                         "scope": "a later mount connection counted from its own start; the before endpoint's connection was detached"}
             else:
                 require(all(last >= first and last != 2**64-1 and first != 2**64-1 for first,last in zip(left["by_opcode"],right["by_opcode"])), "opcode counters decreased or saturated")
                 result["raw"]["opcodes"] = {"by_opcode": [last-first for first,last in zip(left["by_opcode"],right["by_opcode"])],
-                        "disposition": difference(left["disposition"],right["disposition"],OPCODE_DISPOSITION),
+                        "disposition": difference(left["disposition"],right["disposition"],DIRECT_DISPOSITION if direct_mode else OPCODE_DISPOSITION),
                         "scope": "one original mount connection; control diagnostic counts are not FUSE requests"}
     except (ValueError, KeyError, TypeError, IndexError) as error:
         result["status"] = "UNAVAILABLE"

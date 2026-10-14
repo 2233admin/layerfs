@@ -14,7 +14,7 @@ use layerfs_daemon::{install::receive_install, install_types::StoreSettings};
 use layerfs_history::{
     BranchId, CommitStagedOutcome, ForkRequest, ForkSource, HistoryName, WorkspaceId,
 };
-use layerfs_sdk::control::Control;
+use layerfs_sdk::internal::Control;
 use std::{fs, path::PathBuf, thread};
 fn identity(tag: u8) -> WorkspaceId {
     WorkspaceId::from_authority([tag; 32]).unwrap()
@@ -48,6 +48,12 @@ fn close(client: &mut Control, token: WorkspaceToken) {
 fn daemon_process_role() {
     role::run();
 }
+/// Each daemon keeps its Workspace files beside its own overlay path.
+fn local(directory: &std::path::Path, name: &str) -> std::path::PathBuf {
+    let local = directory.join(name);
+    std::fs::create_dir_all(&local).unwrap();
+    local.join("overlay.sqlite")
+}
 #[test]
 fn overlapping_saves_ordered_overwrites_and_killed_daemon_preserve_the_shared_store() {
     let base = if cfg!(target_os = "linux") {
@@ -65,7 +71,7 @@ fn overlapping_saves_ordered_overwrites_and_killed_daemon_preserve_the_shared_st
     let (mut channel, installer) = support::pair(move |connection| {
         receive_install(connection, &destination, StoreSettings::default())
     });
-    let installed = layerfs_sdk::install(&source.project, &mut channel).unwrap();
+    let installed = layerfs_sdk::internal::install(&source.project, &mut channel).unwrap();
     drop(installer.join().unwrap());
     drop(channel);
     let manifest = shared.join("manifest.bin");
@@ -73,8 +79,7 @@ fn overlapping_saves_ordered_overwrites_and_killed_daemon_preserve_the_shared_st
     fs::remove_file(&source.project.store.path).unwrap();
     let main = source.project.branch.branch.id;
     let fork = BranchId::from_authority([57; 16]);
-    let (mut a, mut ca) =
-        process::Daemon::start("A", &manifest, &source.directory.join("A-overlay.sqlite"));
+    let (mut a, mut ca) = process::Daemon::start("A", &manifest, &local(&source.directory, "A"));
     assert!(matches!(
         ca.call(Request::Fork(ForkRequest {
             stack: source.project.branch.branch.stack,
@@ -85,8 +90,7 @@ fn overlapping_saves_ordered_overwrites_and_killed_daemon_preserve_the_shared_st
         .unwrap(),
         Reply::Forked(_)
     ));
-    let (mut b, mut cb) =
-        process::Daemon::start("B", &manifest, &source.directory.join("B-overlay.sqlite"));
+    let (mut b, mut cb) = process::Daemon::start("B", &manifest, &local(&source.directory, "B"));
     let ta = mount(&mut ca, 11, main);
     let tb = mount(&mut cb, 12, fork);
     let first_a = thread::spawn(move || {
@@ -149,7 +153,7 @@ fn overlapping_saves_ordered_overwrites_and_killed_daemon_preserve_the_shared_st
     drop(cb);
     // All prior daemon Store handles are now gone. This is a fresh opener.
     let (mut fresh, mut client) =
-        process::Daemon::start("C", &manifest, &source.directory.join("C-overlay.sqlite"));
+        process::Daemon::start("C", &manifest, &local(&source.directory, "C"));
     let check_main = mount(&mut client, 21, main);
     fresh.event("SHARING_ROOT_ORACLE");
     let check_fork = mount(&mut client, 22, fork);

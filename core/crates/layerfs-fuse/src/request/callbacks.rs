@@ -54,7 +54,7 @@ impl Filesystem for NativeFilesystem {
                 Errno::ENAMETOOLONG,
             );
         }
-        let Some((permit, reply)) = self.admit(
+        let Some((permit, reply)) = self.receive_request(
             Opcode::Lookup,
             ReadReply::Entry(reply),
             name.as_bytes().len(),
@@ -81,7 +81,9 @@ impl Filesystem for NativeFilesystem {
         self.forget_unit(req.unique().0, inode, count);
     }
     fn getattr(&self, req: &Request, inode: INodeNo, handle: Option<FileHandle>, reply: ReplyAttr) {
-        let Some((permit, reply)) = self.admit(Opcode::Getattr, ReadReply::Attr(reply), 0) else {
+        let Some((permit, reply)) =
+            self.receive_request(Opcode::Getattr, ReadReply::Attr(reply), 0)
+        else {
             return;
         };
         let Some((serial, reply)) = self.serial(inode, reply, ReadReply::error) else {
@@ -97,7 +99,9 @@ impl Filesystem for NativeFilesystem {
         );
     }
     fn readlink(&self, req: &Request, inode: INodeNo, reply: ReplyData) {
-        let Some((permit, reply)) = self.admit(Opcode::Readlink, ReadReply::Link(reply), 0) else {
+        let Some((permit, reply)) =
+            self.receive_request(Opcode::Readlink, ReadReply::Link(reply), 0)
+        else {
             return;
         };
         let Some((serial, reply)) = self.serial(inode, reply, ReadReply::error) else {
@@ -113,7 +117,8 @@ impl Filesystem for NativeFilesystem {
         );
     }
     fn open(&self, req: &Request, inode: INodeNo, flags: OpenFlags, reply: ReplyOpen) {
-        let Some((permit, reply)) = self.admit(Opcode::Open, ReadReply::Open(reply, false), 0)
+        let Some((permit, reply)) =
+            self.receive_request(Opcode::Open, ReadReply::Open(reply, false), 0)
         else {
             return;
         };
@@ -147,7 +152,7 @@ impl Filesystem for NativeFilesystem {
     ) {
         self.accounting.read_size(size);
         let Some((permit, reply)) =
-            self.admit(Opcode::Read, ReadReply::Data(reply, offset, size), 0)
+            self.receive_request(Opcode::Read, ReadReply::Data(reply, offset, size), 0)
         else {
             return;
         };
@@ -176,7 +181,8 @@ impl Filesystem for NativeFilesystem {
         _: bool,
         reply: ReplyEmpty,
     ) {
-        let Some((permit, reply)) = self.admit_reply(Opcode::Release, 0, reply, ReplyEmpty::error)
+        let Some((permit, reply)) =
+            self.receive_reply(Opcode::Release, 0, reply, ReplyEmpty::error)
         else {
             return;
         };
@@ -185,7 +191,7 @@ impl Filesystem for NativeFilesystem {
         let services = self.services.clone();
         let fence = self.fence.clone();
         let request = req.unique().0;
-        self.handoff(
+        self.serve(
             permit,
             Box::pin(async move {
                 let outcome = async {
@@ -219,7 +225,8 @@ impl Filesystem for NativeFilesystem {
         );
     }
     fn opendir(&self, req: &Request, inode: INodeNo, _: OpenFlags, reply: ReplyOpen) {
-        let Some((permit, reply)) = self.admit(Opcode::Opendir, ReadReply::Open(reply, true), 0)
+        let Some((permit, reply)) =
+            self.receive_request(Opcode::Opendir, ReadReply::Open(reply, true), 0)
         else {
             return;
         };
@@ -322,7 +329,7 @@ impl Filesystem for NativeFilesystem {
         let serial = self.identity.serial(inode);
         let reply = MutationReply::Attr(reply, serial.unwrap_or(0));
         let Some((permit, reply)) =
-            self.admit_reply(Opcode::Setattr, 0, reply, MutationReply::error)
+            self.receive_reply(Opcode::Setattr, 0, reply, MutationReply::error)
         else {
             return;
         };
@@ -527,7 +534,7 @@ impl Filesystem for NativeFilesystem {
         }
         let reply = MutationReply::Written(reply, data.len());
         let Some((permit, reply)) =
-            self.admit_reply(Opcode::Write, data.len(), reply, MutationReply::error)
+            self.receive_reply(Opcode::Write, data.len(), reply, MutationReply::error)
         else {
             return;
         };

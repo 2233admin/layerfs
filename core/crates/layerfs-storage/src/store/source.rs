@@ -1,8 +1,8 @@
 //! Engine-independent bounded physical input for the shared encoding algorithms.
 
 use crate::error::StorageResult;
-use crate::location::{ObjectLocation, SignatureRow, ValueGroupRow};
-use layerfs_content::ObjectId;
+use crate::location::{ObjectLocation, SignatureRow};
+use layerfs_content::{inode_leaf::INODE_VALUE_BYTES, ObjectId};
 
 /// Physical input and advisory-index persistence used by unchanged encoding.
 pub trait Source {
@@ -33,22 +33,10 @@ pub trait Source {
     fn validate_cached_pack(&self, _info: crate::location::PackInfo) -> StorageResult<()> {
         Ok(())
     }
-    /// Advisory catalogue prefetch for one bounded pooled leaf, before value reads.
-    /// Scalar sources deliberately do no prefetch; `value_group` remains the
-    /// required lookup and missing values still fail during reconstruction.
-    fn prepare_value_groups(&self, _ordinals: &[u32]) -> StorageResult<()> {
-        Ok(())
-    }
-    /// Pooled catalogue row covering one ordinal.
-    fn value_group(&self, ordinal: u32) -> StorageResult<Option<ValueGroupRow>>;
-    /// Streams catalogue rows in ordinal order without an unbounded allocation.
-    fn value_groups(
-        &self,
-        from: Option<u32>,
-        visit: &mut dyn FnMut(ValueGroupRow) -> StorageResult<()>,
-    ) -> StorageResult<()>;
-    /// First ordinal in the retained candidate window.
-    fn window_start(&self) -> StorageResult<u32>;
+    /// The stored inode value of every ordinal, in the order asked, for the
+    /// rows of one leaf and of the chain it is stored against. An ordinal
+    /// without a stored value is an integrity failure, never an omission.
+    fn inode_values(&self, ordinals: &[u32]) -> StorageResult<Vec<[u8; INODE_VALUE_BYTES]>>;
     /// At most 8,192 persisted signatures, in insertion order.
     fn signatures(&self) -> StorageResult<Vec<SignatureRow>>;
     /// Records a real cache consult for operation-count diagnostics.

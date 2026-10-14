@@ -110,7 +110,7 @@ fn array(out: &mut Json, values: &[u64]) -> io::Result<()> {
     out.raw("]")
 }
 pub fn owner(out: &mut Json, v: OwnerWork) -> io::Result<()> {
-    out.raw("{\"scope\":\"same-owner-cumulative\",\"credit_scope\":\"queued-executing-caller-held-results\",\"sql_foreground\":")?;
+    out.raw("{\"scope\":\"all-workspaces-cumulative\",\"sql_foreground\":")?;
     database(out, &v.sql_foreground)?;
     out.raw(",\"sql_maintenance\":")?;
     database(out, &v.sql_maintenance)?;
@@ -126,22 +126,18 @@ pub fn owner(out: &mut Json, v: OwnerWork) -> io::Result<()> {
     numbers(
         out,
         &[
-            ("admitted", v.admitted),
-            ("credited_bytes", v.credited_bytes as u64),
-            ("peak_credited_bytes", v.peak_credited_bytes as u64),
-            ("outstanding", v.outstanding as u64),
             ("maintenance_jobs", v.maintenance_jobs),
             ("maintenance_rows", v.maintenance_rows),
             ("maintenance_data_bytes", v.maintenance_data_bytes),
             ("maintenance_ns", v.maintenance_ns),
         ],
     )?;
-    out.raw(",\"completed\":")?;
-    array(out, &v.completed)?;
-    out.raw(",\"queue_wait_ns\":")?;
-    array(out, &v.queue_wait_ns)?;
-    out.raw(",\"service_ns\":")?;
-    array(out, &v.service_ns)?;
+    out.raw(",\"jobs\":")?;
+    array(out, &v.jobs)?;
+    out.raw(",\"lock_wait_ns\":")?;
+    array(out, &v.lock_wait_ns)?;
+    out.raw(",\"hold_ns\":")?;
+    array(out, &v.hold_ns)?;
     out.raw("}")
 }
 pub fn configuration(out: &mut Json, profile: ProfileConfig, owner: OwnerConfig) -> io::Result<()> {
@@ -154,19 +150,7 @@ pub fn configuration(out: &mut Json, profile: ProfileConfig, owner: OwnerConfig)
         out.raw("null")?;
     }
     out.raw("},\"owner\":")?;
-    numbers(
-        out,
-        &[
-            ("bytes", owner.bytes as u64),
-            ("lifecycle_reserve", owner.lifecycle_reserve as u64),
-            ("namespaces", owner.namespaces as u64),
-            ("jobs_per_namespace", owner.jobs_per_namespace as u64),
-            (
-                "lifecycle_jobs_per_namespace",
-                owner.lifecycle_jobs_per_namespace as u64,
-            ),
-        ],
-    )?;
+    numbers(out, &[("namespaces", owner.namespaces as u64)])?;
     out.raw("}")
 }
 pub fn profile(out: &mut Json, v: &DatabaseProfile) -> io::Result<()> {

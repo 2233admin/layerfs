@@ -26,10 +26,6 @@ pub const GROUP_LIMIT: usize = 65_536;
 pub const GROUP_TARGET: usize = 48 * 1024;
 /// Largest assembled pack BLOB for the ordinary and native lanes.
 pub const PACK_LIMIT: usize = 256 * 1024;
-/// New pooled packs retain at most one quarter of the ordinary pack's capacity.
-pub const POOLED_PACK_LIMIT: usize = 64 * 1024;
-/// Read bound of the v22 pooled framing.
-pub const POOLED_V22_PACK_LIMIT: usize = 128 * 1024;
 /// Largest group count in one pack.
 pub const GROUP_COUNT_LIMIT: usize = 256;
 /// Largest record count in one group.
@@ -92,10 +88,6 @@ pub const SINGLETON_FRAMING_SLACK: usize = 4_096;
 /// Largest assembled singleton pack: one maximum canonical record plus framing.
 pub const SINGLETON_PACK_LIMIT: usize = CANONICAL_LIMIT + SINGLETON_FRAMING_SLACK;
 
-/// Values in one pooled physical metadata group.
-pub const VALUES_PER_GROUP: usize = 165;
-/// Largest accepted pooled metadata group body.
-pub const METADATA_GROUP_LIMIT: usize = 16 * 1024;
 /// Rows in one pooled metadata leaf.
 pub const POOLED_LEAF_ROWS_LIMIT: usize = 100;
 
@@ -139,8 +131,6 @@ pub const POOLED_VALUE_CACHE_BYTES: usize = 512 * 1024;
 /// cannot go stale within a wave. Visibility is checked before the cache is
 /// consulted, never after (see `encoding::delta::read::Resolver::decode_at`).
 pub const DECODED_GROUP_CACHE_BYTES: usize = 512 * 1024;
-/// Decoded value-group work one pooled metadata chain may spend.
-pub const METADATA_DECODED_WORK_LIMIT: u64 = 32 * 1024 * 1024;
 /// Default pooled-metadata dependency depth.
 pub const DEFAULT_METADATA_DELTA_MAX_DEPTH: u8 = 8;
 /// Canonical bytes one pooled-metadata chain may reconstruct.
@@ -288,8 +278,6 @@ pub struct StorageCapacities {
     pub singleton_pack_limit: usize,
     /// Largest group payload.
     pub group_limit: usize,
-    /// Largest pooled metadata group body.
-    pub metadata_group_limit: usize,
     /// Whole-file dependency bound.
     pub whole_file_delta_max_depth: u8,
     /// Chunk dependency bound.
@@ -335,7 +323,6 @@ impl StorageCapacities {
             pack_limit: PACK_LIMIT,
             singleton_pack_limit: SINGLETON_PACK_LIMIT,
             group_limit: GROUP_LIMIT,
-            metadata_group_limit: METADATA_GROUP_LIMIT,
             whole_file_delta_max_depth: policy.whole_file_delta_max_depth(),
             chunk_delta_max_depth: policy.chunk_delta_max_depth(),
             metadata_delta_max_depth: policy.metadata_delta_max_depth(),

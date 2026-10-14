@@ -3490,8 +3490,8 @@
         "command_ms": 15000,
         "operation_watchdog_ms": 60000,
         "performance_hard_watchdog_ms": 60000,
-        "verifier_ms": 25000,
-        "verification_hard_watchdog_ms": 35000
+        "verifier_ms": 80000,
+        "verification_hard_watchdog_ms": 90000
       },
       "reference": {
         "release": "0.1.6",
@@ -3508,7 +3508,8 @@
         "P3 uses ordinary FUSE edits: unchanged fourteen native stage2 targets followed by the original two ordered prepared ordinary single-file members, never an atomic batch. Branch context changes only the original explicit tag/salt metadata and native recipe parameters.",
         "Frozen executable uses worker-start barriers per segment, not per-stage/pre-Commit barriers. Two-worker discard/reopen occurs afterK/2 (5 forK10,50 forK100), and B retains already committed state; roadmap requires fixed5/dirtyBstage6/pre-Commit barrier. Preserve these source discrepancies explicitly, without silent correction.",
         "H17 frozen stage5 sets copied explicit mtime before writing/syncing/renaming the temporary, while the original oracle retains stage4 timestamp. Strict resulting metadata FAIL remains FAIL; no automatic normalization, oracle weakening or not-applicable classification.",
-        "Historical complete pure product-call sum aggregates parallel workers; current complete-command wall, actual public Commit overlap, per-worker records, storage and unavailable metrics are separately retained. Original15s target and60s execution declaration remain; four-workspace extension has original60s verification declaration."
+        "Historical complete pure product-call sum aggregates parallel workers; current complete-command wall, actual public Commit overlap, per-worker records, storage and unavailable metrics are separately retained. Original15s target and60s execution declaration remain; four-workspace extension has original60s verification declaration.",
+        "Owner direction 2026-10-12 (#319 phase 13): verification work 25000 -> 80000 ms, hard publication 35000 -> 90000 ms for this named case only; cleanup reserve 3000 ms and publication guard 250 ms unchanged. Measured command, Commit and performance limits unchanged."
       ],
       "registry": {
         "family": "multi_workspace_development",
@@ -6223,8 +6224,8 @@
         "command_ms": 15000,
         "operation_watchdog_ms": 60000,
         "performance_hard_watchdog_ms": 60000,
-        "verifier_ms": 25000,
-        "verification_hard_watchdog_ms": 35000
+        "verifier_ms": 80000,
+        "verification_hard_watchdog_ms": 90000
       },
       "reference": {
         "release": "0.1.6",
@@ -6241,7 +6242,8 @@
         "P3 uses ordinary FUSE edits: unchanged fourteen native stage2 targets followed by the original two ordered prepared ordinary single-file members, never an atomic batch. Branch context changes only the original explicit tag/salt metadata and native recipe parameters.",
         "Frozen executable uses worker-start barriers per segment, not per-stage/pre-Commit barriers. Two-worker discard/reopen occurs afterK/2 (5 forK10,50 forK100), and B retains already committed state; roadmap requires fixed5/dirtyBstage6/pre-Commit barrier. Preserve these source discrepancies explicitly, without silent correction.",
         "H17 frozen stage5 sets copied explicit mtime before writing/syncing/renaming the temporary, while the original oracle retains stage4 timestamp. Strict resulting metadata FAIL remains FAIL; no automatic normalization, oracle weakening or not-applicable classification.",
-        "Historical complete pure product-call sum aggregates parallel workers; current complete-command wall, actual public Commit overlap, per-worker records, storage and unavailable metrics are separately retained. Original15s target and60s execution declaration remain; four-workspace extension has original60s verification declaration."
+        "Historical complete pure product-call sum aggregates parallel workers; current complete-command wall, actual public Commit overlap, per-worker records, storage and unavailable metrics are separately retained. Original15s target and60s execution declaration remain; four-workspace extension has original60s verification declaration.",
+        "Owner direction 2026-10-12 (#319 phase 13): verification work 25000 -> 80000 ms, hard publication 35000 -> 90000 ms for this named case only; cleanup reserve 3000 ms and publication guard 250 ms unchanged. Measured command, Commit and performance limits unchanged."
       ],
       "registry": {
         "family": "multi_workspace_development",

@@ -1,11 +1,11 @@
-//! Original per-job statement families, their owner aggregate and the credited
-//! completion ownership behind them, through the public owner API only.
+//! Original per-job statement families and their Workspace aggregate, through
+//! the public direct-call API only.
 use layerfs_daemon::{
-    Command, Completion, Owner, OwnerClient, OwnerConfig, OwnerError, OwnerWork, Pending, Response,
+    JobReceipt, Owner, OwnerClient, OwnerConfig, OwnerError, OwnerWork, Response, ServiceClass,
 };
 use layerfs_overlay::{
-    AllocationWork, DatabaseWork, Inode, InodeKind, Lease, LeaseKind, OperationRecord,
-    OverlayError, PayloadWork, ProfileConfig, Publication, Route, StatementKind,
+    AllocationWork, DatabaseWork, Inode, InodeKind, Lease, LeaseKind, OverlayError, PayloadWork,
+    ProfileConfig, Publication, Route, StatementKind,
 };
 use std::{
     path::PathBuf,
@@ -13,8 +13,13 @@ use std::{
     time::{Duration, Instant},
 };
 
-/// Families a Lifecycle job is admitted for; its slot charge reserves these.
+/// Most statement families one Lifecycle job runs.
 const LIFECYCLE_FAMILIES: usize = 7;
+type Done = Result<JobReceipt, OwnerError>;
+type Job = Box<dyn FnOnce(&OwnerClient, Option<Route>) -> Done>;
+fn job(action: impl FnOnce(&OwnerClient, Option<Route>) -> Done + 'static) -> Job {
+    Box::new(action)
+}
 
 struct Temp(PathBuf);
 impl Temp {
@@ -42,59 +47,29 @@ fn start(temp: &Temp) -> Owner {
     )
     .unwrap()
 }
-fn submit(client: &OwnerClient, route: Option<Route>, command: Command) -> Pending {
-    match client.try_submit(route, command) {
-        Ok(pending) => pending,
-        Err((error, command)) => panic!("admission of {command:?}: {error:?}"),
-    }
+fn submit(
+    client: &OwnerClient,
+    route: Option<Route>,
+    command: impl FnOnce(&OwnerClient, Option<Route>) -> Done,
+) -> JobReceipt {
+    command(client, route).unwrap_or_else(|error| panic!("job: {error:?}"))
 }
-/// Bounded wait: a stalled owner fails the test instead of hanging it.
-fn finish(pending: &Pending) -> Completion {
+/// Waits, bounded, until a counted job of `class` beyond `from` has run.
+fn counted(client: &OwnerClient, class: ServiceClass, from: u64) {
     let deadline = Instant::now() + Duration::from_secs(20);
-    loop {
-        if let Some(done) = pending.try_complete().unwrap() {
-            return done;
-        }
-        assert!(Instant::now() < deadline, "owner completion deadline");
+    while client.diagnostics().unwrap().jobs[class as usize] <= from {
+        assert!(Instant::now() < deadline, "no {class:?} job was counted");
         std::thread::yield_now();
     }
 }
-/// Publication makes the result visible before the publisher drops its own
-/// original cell. Observe final release instead of assuming the caller wins
-/// after that drop. This issues no new job and retains a bounded deadline.
-fn credit_count(client: &OwnerClient, expected: usize) -> OwnerWork {
-    let deadline = Instant::now() + Duration::from_secs(5);
-    loop {
-        let work = client.diagnostics().unwrap();
-        if work.outstanding == expected {
-            return work;
-        }
-        assert!(
-            Instant::now() < deadline,
-            "credit release deadline: {work:?}"
-        );
-        std::thread::yield_now();
-    }
-}
-/// Waits until the one job submitted after `before` has run a readiness turn
-/// and is queued again: its turn is published before it is requeued.
-fn parked(client: &OwnerClient, before: &OwnerWork) {
-    let attempts = before.sql_foreground.total().attempts;
+/// Bounded join: a caller that never returns fails the test instead of hanging it.
+fn joined(call: std::thread::JoinHandle<Done>) -> JobReceipt {
     let deadline = Instant::now() + Duration::from_secs(20);
-    loop {
-        let now = client.diagnostics().unwrap();
-        if now.queued == 1 && now.sql_foreground.total().attempts > attempts {
-            return;
-        }
-        assert!(
-            Instant::now() < deadline,
-            "job never parked: queued={} outstanding={} attempts={} before={attempts}",
-            now.queued,
-            now.outstanding,
-            now.sql_foreground.total().attempts
-        );
+    while !call.is_finished() {
+        assert!(Instant::now() < deadline, "the waiting call never returned");
         std::thread::yield_now();
     }
+    call.join().unwrap().unwrap()
 }
 fn value(serial: u64) -> Inode {
     Inode {
@@ -112,7 +87,7 @@ fn value(serial: u64) -> Inode {
     }
 }
 
-/// Sums original receipts and compares them with the same owner's foreground
+/// Sums original receipts and compares them with the same Workspace's foreground
 /// aggregate. Maintenance has its own aggregate and never enters either side.
 struct Ledger {
     client: OwnerClient,
@@ -121,7 +96,7 @@ struct Ledger {
     payload: PayloadWork,
     allocation: AllocationWork,
     lifecycle_max: usize,
-    parked: u64,
+    checks: u64,
 }
 impl Ledger {
     fn new(client: &OwnerClient) -> Self {
@@ -132,10 +107,10 @@ impl Ledger {
             payload: PayloadWork::default(),
             allocation: AllocationWork::default(),
             lifecycle_max: 0,
-            parked: 0,
+            checks: 0,
         }
     }
-    fn take(&mut self, name: &str, lifecycle: bool, done: &Completion) {
+    fn take(&mut self, name: &str, lifecycle: bool, done: &JobReceipt) {
         let work = done.work();
         assert_eq!(work.sql.total(), work.sql.expanded().total());
         assert_eq!(
@@ -151,19 +126,20 @@ impl Ledger {
         self.sql.accumulate(work.sql.expanded());
         self.payload.accumulate(work.payload);
         self.allocation.accumulate(work.allocation);
-        self.parked += work.parked_turns;
+        // Readiness checks a waiting call ran before its one effect.
+        self.checks += work.jobs.saturating_sub(1);
         if lifecycle {
             self.lifecycle_max = self.lifecycle_max.max(work.sql.families());
         }
         println!(
-            "S7_JOB_FAMILIES command={name} lifecycle={lifecycle} families={} parked_turns={} ok={}",
+            "S7_JOB_FAMILIES command={name} lifecycle={lifecycle} families={} jobs={} ok={}",
             work.sql.families(),
-            work.parked_turns,
+            work.jobs,
             done.result().is_ok()
         );
     }
-    /// Valid whenever no admitted job is still unfinished: every visible
-    /// completion's work is already in the owner aggregate, and nothing else is.
+    /// Valid whenever no call is still waiting: every returned receipt's work
+    /// is already in the Workspace aggregate, and nothing else is.
     fn reconcile(&self) {
         let now = self.client.diagnostics().unwrap();
         assert_eq!(
@@ -180,8 +156,14 @@ impl Ledger {
             self.allocation
         );
     }
-    fn run(&mut self, name: &str, lifecycle: bool, route: Route, command: Command) -> Completion {
-        let done = finish(&submit(&self.client, Some(route), command));
+    fn run(
+        &mut self,
+        name: &str,
+        lifecycle: bool,
+        route: Route,
+        command: impl FnOnce(&OwnerClient, Option<Route>) -> Done,
+    ) -> JobReceipt {
+        let done = submit(&self.client, Some(route), command);
         self.take(name, lifecycle, &done);
         self.reconcile();
         done
@@ -194,14 +176,13 @@ fn original_family_receipts_equal_the_foreground_aggregate_on_every_path() {
     let owner = start(&temp);
     let client = owner.client();
     let mut ledger = Ledger::new(&client);
-    let opened = finish(&submit(
+    let opened = submit(
         &client,
         None,
-        Command::Open {
-            incarnation: [31; 32],
-            base_root: [32; 32],
+        |job_client: &layerfs_daemon::OwnerClient, job_route| {
+            job_client.open(job_route, [31; 32], [32; 32])
         },
-    ));
+    );
     ledger.take("Open", true, &opened);
     ledger.reconcile();
     let route = match opened.result() {
@@ -217,24 +198,65 @@ fn original_family_receipts_equal_the_foreground_aggregate_on_every_path() {
     drop(opened);
 
     for (name, command) in [
-        ("State", Command::State),
-        ("CleanupState", Command::CleanupState),
-        ("MaintenanceIdle", Command::MaintenanceIdle),
-        ("RetainedCapture", Command::RetainedCapture),
+        (
+            "State",
+            job(move |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.state(job_route)
+            }),
+        ),
+        (
+            "CleanupState",
+            job(move |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.cleanup_state(job_route)
+            }),
+        ),
+        (
+            "MaintenanceIdle",
+            job(move |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.maintenance_idle(job_route)
+            }),
+        ),
+        (
+            "RetainedCapture",
+            job(move |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.retained_capture(job_route)
+            }),
+        ),
         (
             "RetainedBaseSource",
-            Command::RetainedBaseSource { owner: 5 },
+            job(move |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.retained_base_source(job_route, 5)
+            }),
         ),
-        ("RetainedFile", Command::RetainedFile { request: 1 }),
-        ("RetainedFileRead", Command::RetainedFileRead { request: 1 }),
+        (
+            "RetainedFile",
+            job(move |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.retained_file(job_route, 1)
+            }),
+        ),
+        (
+            "RetainedFileRead",
+            job(move |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.retained_file_read(job_route, 1)
+            }),
+        ),
         (
             "RetainedCapturedReader",
-            Command::RetainedCapturedReader { request: 1 },
+            job(move |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.retained_captured_reader(job_route, 1)
+            }),
         ),
-        ("RetainedLookup", Command::RetainedLookup { request: 1 }),
+        (
+            "RetainedLookup",
+            job(move |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.retained_lookup(job_route, 1)
+            }),
+        ),
         (
             "RetainedOperation",
-            Command::RetainedOperation { request: 1 },
+            job(move |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.retained_operation(job_route, 1)
+            }),
         ),
     ] {
         assert!(ledger.run(name, true, route, command).result().is_ok());
@@ -245,11 +267,23 @@ fn original_family_receipts_equal_the_foreground_aggregate_on_every_path() {
         resource: 0,
     };
     assert!(ledger
-        .run("Acquire", true, route, Command::Acquire(lease))
+        .run(
+            "Acquire",
+            true,
+            route,
+            |job_client: &layerfs_daemon::OwnerClient, job_route| job_client
+                .acquire(job_route, lease)
+        )
         .result()
         .is_ok());
     assert!(ledger
-        .run("Release", true, route, Command::Release(lease))
+        .run(
+            "Release",
+            true,
+            route,
+            |job_client: &layerfs_daemon::OwnerClient, job_route| job_client
+                .release(job_route, lease)
+        )
         .result()
         .is_ok());
     let operation = match ledger
@@ -257,7 +291,9 @@ fn original_family_receipts_equal_the_foreground_aggregate_on_every_path() {
             "AcquireOperation",
             true,
             route,
-            Command::AcquireOperation { request: 1 },
+            |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.acquire_operation(job_route, 1)
+            },
         )
         .result()
     {
@@ -269,24 +305,23 @@ fn original_family_receipts_equal_the_foreground_aggregate_on_every_path() {
             "ReleaseOperation",
             true,
             route,
-            Command::ReleaseOperation(operation)
+            |job_client: &layerfs_daemon::OwnerClient, job_route| job_client
+                .release_operation(job_route, operation)
         )
         .result()
         .is_ok());
 
-    // A reply attempt on the owner's turn, then the same attempt again. The
-    // ticket is held in the engine's memory, so neither job writes: the
-    // first finds a live Workspace with nothing to queue, and the second
-    // fails on a ticket that is no longer held, after its route's read.
+    // A reply attempt, then the same attempt again. The ticket is held in the
+    // engine's memory, so neither job runs SQL: the first finds a live
+    // Workspace with nothing to queue, and the second fails on a ticket that
+    // is no longer held.
     let publish = |ledger: &mut Ledger, serial: u64| -> Publication {
         let done = ledger.run(
             "Publish",
             false,
             route,
-            Command::Publish {
-                inode: value(serial),
-                name: None,
-                cell: None,
+            |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.publish(job_route, value(serial), None, None)
             },
         );
         match done.result() {
@@ -299,14 +334,14 @@ fn original_family_receipts_equal_the_foreground_aggregate_on_every_path() {
         "ReplyAttempted",
         true,
         route,
-        Command::ReplyAttempted(first),
+        |job_client: &layerfs_daemon::OwnerClient, _| job_client.reply_attempted(first),
     );
     assert!(replied.result().is_ok());
     let failed = ledger.run(
         "ReplyAttempted-again",
         true,
         route,
-        Command::ReplyAttempted(first),
+        |job_client: &layerfs_daemon::OwnerClient, _| job_client.reply_attempted(first),
     );
     assert!(matches!(
         failed.result(),
@@ -321,9 +356,9 @@ fn original_family_receipts_equal_the_foreground_aggregate_on_every_path() {
         ] {
             assert!(done.work().sql.family(kind).is_none(), "{kind:?}");
         }
-        assert_eq!(done.work().sql.total().rows_changed, 0);
-        // What each did run is in its own receipt: the route's point read.
-        assert!(done.work().sql.family(StatementKind::Workspace).is_some());
+        // Each is a counted hold that is no job; its receipt reports nothing.
+        assert_eq!(done.work().sql.total().attempts, 0);
+        assert_eq!(done.work().jobs, 0);
     }
     drop((replied, failed));
 
@@ -332,7 +367,9 @@ fn original_family_receipts_equal_the_foreground_aggregate_on_every_path() {
             "AcquireBaseSource",
             false,
             route,
-            Command::AcquireBaseSource { owner: 7 },
+            |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.acquire_base_source(job_route, 7)
+            },
         )
         .result()
     {
@@ -345,7 +382,9 @@ fn original_family_receipts_equal_the_foreground_aggregate_on_every_path() {
         "AcquireBaseSource-again",
         false,
         route,
-        Command::AcquireBaseSource { owner: 7 },
+        |job_client: &layerfs_daemon::OwnerClient, job_route| {
+            job_client.acquire_base_source(job_route, 7)
+        },
     );
     assert!(matches!(failed.result(), Err(OwnerError::Overlay(_))));
     assert_eq!(
@@ -373,11 +412,8 @@ fn original_family_receipts_equal_the_foreground_aggregate_on_every_path() {
             "OpenFile",
             true,
             route,
-            Command::OpenFile {
-                source,
-                request: 11,
-                base: value(2),
-                writable: true,
+            |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.open_file(job_route, source, 11, value(2), true)
             },
         )
         .result()
@@ -390,10 +426,8 @@ fn original_family_receipts_equal_the_foreground_aggregate_on_every_path() {
             "AcquireFileRead",
             true,
             route,
-            Command::AcquireFileRead {
-                source,
-                file,
-                request: 12,
+            |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.acquire_file_read(job_route, source, file, 12)
             },
         )
         .result()
@@ -406,11 +440,8 @@ fn original_family_receipts_equal_the_foreground_aggregate_on_every_path() {
             "AcquireLookup",
             true,
             route,
-            Command::AcquireLookup {
-                source,
-                request: 13,
-                base: value(2),
-                root: 1,
+            |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.acquire_lookup(job_route, source, 13, value(2), 1)
             },
         )
         .result()
@@ -423,10 +454,8 @@ fn original_family_receipts_equal_the_foreground_aggregate_on_every_path() {
             "AcquireLookupRead",
             true,
             route,
-            Command::AcquireLookupRead {
-                source,
-                lookup,
-                request: 14,
+            |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.acquire_lookup_read(job_route, source, lookup, 14)
             },
         )
         .result()
@@ -435,47 +464,77 @@ fn original_family_receipts_equal_the_foreground_aggregate_on_every_path() {
         other => panic!("lookup read: {other:?}"),
     };
     for (name, command) in [
-        ("ReleaseFileRead", Command::ReleaseFileRead(lookup_read)),
-        ("ReleaseLookup", Command::ReleaseLookup(lookup)),
-        ("ReleaseFileRead", Command::ReleaseFileRead(read)),
-        ("CloseFile", Command::CloseFile(file)),
-        ("ReleaseBaseSource", Command::ReleaseBaseSource(source)),
+        (
+            "ReleaseFileRead",
+            job(move |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.release_file_read(job_route, lookup_read)
+            }),
+        ),
+        (
+            "ReleaseLookup",
+            job(move |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.release_lookup(job_route, lookup)
+            }),
+        ),
+        (
+            "ReleaseFileRead",
+            job(move |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.release_file_read(job_route, read)
+            }),
+        ),
+        (
+            "CloseFile",
+            job(move |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.close_file(job_route, file)
+            }),
+        ),
+        (
+            "ReleaseBaseSource",
+            job(move |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.release_base_source(job_route, source)
+            }),
+        ),
     ] {
         let done = ledger.run(name, true, route, command);
         assert!(done.result().is_ok(), "{name}: {done:?}");
     }
 
-    // A capture parks on the unsettled reply ticket. Its readiness turns are
-    // foreground work before its completion exists, so reconcile afterwards.
-    let pending_reply = finish(&submit(
+    // A capture waits on the unattempted reply ticket. Its readiness checks are
+    // counted foreground jobs before its receipt exists, so reconcile afterwards.
+    let pending_reply = submit(
         &client,
         Some(route),
-        Command::Publish {
-            inode: value(3),
-            name: None,
-            cell: None,
+        |job_client: &layerfs_daemon::OwnerClient, job_route| {
+            job_client.publish(job_route, value(3), None, None)
         },
-    ));
+    );
     ledger.take("Publish", false, &pending_reply);
     let ticket = match pending_reply.result() {
         Ok(Response::Published(publication)) => *publication,
         other => panic!("publish: {other:?}"),
     };
-    let capture = submit(&client, Some(route), Command::Capture);
-    let state = finish(&submit(&client, Some(route), Command::State));
-    ledger.take("State", true, &state);
-    assert!(capture.try_complete().unwrap().is_none());
-    let replied = finish(&submit(
+    let checks = client.diagnostics().unwrap().jobs[ServiceClass::Capture as usize];
+    let capture = {
+        let client = client.clone();
+        std::thread::spawn(move || client.capture(Some(route)))
+    };
+    counted(&client, ServiceClass::Capture, checks);
+    let state = submit(
         &client,
         Some(route),
-        Command::ReplyAttempted(ticket),
-    ));
+        |job_client: &OwnerClient, job_route| job_client.state(job_route),
+    );
+    ledger.take("State", true, &state);
+    assert!(!capture.is_finished());
+    let replied = submit(
+        &client,
+        Some(route),
+        |job_client: &layerfs_daemon::OwnerClient, _| job_client.reply_attempted(ticket),
+    );
     ledger.take("ReplyAttempted", true, &replied);
-    let captured = finish(&capture);
+    let captured = joined(capture);
     ledger.take("Capture", false, &captured);
-    assert!(captured.work().parked_turns >= 1);
     ledger.reconcile();
-    // Held lifecycle results occupy their namespace's two slots until dropped.
     drop((state, replied, pending_reply));
     let capture = match captured.result() {
         Ok(Response::Captured(capture)) => *capture,
@@ -486,9 +545,8 @@ fn original_family_receipts_equal_the_foreground_aggregate_on_every_path() {
             "AcquireCapturedReader",
             true,
             route,
-            Command::AcquireCapturedReader {
-                capture,
-                request: 21,
+            |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.acquire_captured_reader(job_route, capture, 21)
             },
         )
         .result()
@@ -499,21 +557,37 @@ fn original_family_receipts_equal_the_foreground_aggregate_on_every_path() {
     for (name, command) in [
         (
             "ReleaseCapturedReader",
-            Command::ReleaseCapturedReader(reader),
+            job(move |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.release_captured_reader(job_route, reader)
+            }),
         ),
-        ("ResolveFailed", Command::ResolveFailed(capture)),
+        (
+            "ResolveFailed",
+            job(move |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.resolve_failed(job_route, capture)
+            }),
+        ),
     ] {
         let done = ledger.run(name, true, route, command);
         assert!(done.result().is_ok(), "{name}: {done:?}");
     }
 
-    // The next capture may park for automatic composition; close with it held.
+    // The next capture may wait for automatic composition; close with it held.
     let last = publish(&mut ledger, 4);
     assert!(ledger
-        .run("ReplyAttempted", true, route, Command::ReplyAttempted(last))
+        .run(
+            "ReplyAttempted",
+            true,
+            route,
+            |job_client: &layerfs_daemon::OwnerClient, _| job_client.reply_attempted(last)
+        )
         .result()
         .is_ok());
-    let next = finish(&submit(&client, Some(route), Command::Capture));
+    let next = submit(
+        &client,
+        Some(route),
+        |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.capture(job_route),
+    );
     ledger.take("Capture", false, &next);
     ledger.reconcile();
     let next = match next.result() {
@@ -521,272 +595,37 @@ fn original_family_receipts_equal_the_foreground_aggregate_on_every_path() {
         other => panic!("capture: {other:?}"),
     };
     for (name, command) in [
-        ("Close", Command::Close),
-        ("ReleaseClosedCapture", Command::ReleaseClosedCapture(next)),
-        ("CleanupState", Command::CleanupState),
+        (
+            "Close",
+            job(move |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.close(job_route)
+            }),
+        ),
+        (
+            "ReleaseClosedCapture",
+            job(move |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.release_closed_capture(job_route, next)
+            }),
+        ),
+        (
+            "CleanupState",
+            job(move |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.cleanup_state(job_route)
+            }),
+        ),
     ] {
         let done = ledger.run(name, true, route, command);
         assert!(done.result().is_ok(), "{name}: {done:?}");
     }
 
-    let after = client.diagnostics().unwrap();
-    assert!(ledger.parked >= 1);
+    assert!(ledger.checks >= 1);
     assert!(ledger.lifecycle_max <= LIFECYCLE_FAMILIES);
-    assert_eq!(after.receipt_overruns, 0);
-    assert_eq!(after.receipt_overrun_bytes, 0);
-    assert_eq!(after.queued, 0);
-    assert!(after.peak_queued >= 2);
     println!(
-        "S7_FAMILY_LEDGER lifecycle_max_families={} parked_turns={} foreground_attempts={}",
+        "S7_FAMILY_LEDGER lifecycle_max_families={} readiness_checks={} foreground_attempts={}",
         ledger.lifecycle_max,
-        ledger.parked,
+        ledger.checks,
         ledger.sql.total().attempts
     );
     assert!(client.maintenance_failure().unwrap().is_none());
     owner.stop().unwrap();
-}
-
-#[test]
-fn every_configured_lifecycle_slot_is_admitted_while_ordinary_credit_is_saturated() {
-    let temp = Temp::new();
-    let config = OwnerConfig::default();
-    assert_eq!(
-        (
-            config.bytes,
-            config.lifecycle_reserve,
-            config.namespaces,
-            config.lifecycle_jobs_per_namespace
-        ),
-        (8 * 1024 * 1024, 64 * 1024, 16, 2)
-    );
-    let owner = start(&temp);
-    let client = owner.client();
-    let routes: Vec<Route> = (0..config.namespaces as u8)
-        .map(|tag| {
-            let done = finish(&submit(
-                &client,
-                None,
-                Command::Open {
-                    incarnation: [tag + 1; 32],
-                    base_root: [99; 32],
-                },
-            ));
-            match done.result() {
-                Ok(Response::Opened(route)) => *route,
-                other => panic!("open: {other:?}"),
-            }
-        })
-        .collect();
-    let idle = credit_count(&client, 0);
-    assert_eq!((idle.outstanding, idle.credited_bytes), (0, 0));
-    let scheduler = idle.scheduler_bytes;
-    assert!(scheduler > 0);
-
-    // Actual charges, read from the ledger of one held result of each kind.
-    let held = finish(&submit(&client, Some(routes[0]), Command::State));
-    let lifecycle_charge = client.diagnostics().unwrap().credited_bytes;
-    drop(held);
-    assert_eq!(credit_count(&client, 0).credited_bytes, 0);
-    let held = finish(&submit(&client, Some(routes[0]), Command::Inode(2)));
-    let ordinary_charge = client.diagnostics().unwrap().credited_bytes;
-    drop(held);
-    assert_eq!(credit_count(&client, 0).credited_bytes, 0);
-    let slots = config.namespaces * config.lifecycle_jobs_per_namespace;
-    assert_eq!(slots, 32);
-    assert!(slots * lifecycle_charge <= config.lifecycle_reserve);
-
-    // Saturate ordinary bytes with held results owning real input capacity.
-    let ordinary_limit = config.bytes - scheduler - config.lifecycle_reserve;
-    let mut ordinary = Vec::new();
-    let mut capacity = 60_000;
-    let mut turn = 0;
-    while capacity > 0 {
-        let route = routes[turn % routes.len()];
-        match client.try_submit(
-            Some(route),
-            Command::PutOperationRecord {
-                operation: 1,
-                record: OperationRecord {
-                    kind: 1,
-                    key: turn as u64,
-                    value: Vec::with_capacity(capacity),
-                },
-            },
-        ) {
-            Ok(pending) => {
-                ordinary.push(finish(&pending));
-                turn += 1;
-            }
-            Err((OwnerError::AdmissionFull, _)) => capacity /= 2,
-            Err((error, _)) => panic!("ordinary admission: {error:?}"),
-        }
-    }
-    let saturated = client.diagnostics().unwrap();
-    assert_eq!(saturated.outstanding, ordinary.len());
-    assert!(saturated.credited_bytes <= ordinary_limit);
-    assert!(ordinary_limit - saturated.credited_bytes < ordinary_charge);
-    assert!(ordinary.len() < config.namespaces * config.jobs_per_namespace);
-    let route = routes[(turn + 1) % routes.len()];
-    assert!(matches!(
-        client.try_submit(Some(route), Command::Inode(2)),
-        Err((OwnerError::AdmissionFull, Command::Inode(2)))
-    ));
-
-    // All 32 lifecycle slots are admitted, served and held at once.
-    let mut lifecycle = Vec::new();
-    for route in &routes {
-        for _ in 0..config.lifecycle_jobs_per_namespace {
-            let done = finish(&submit(&client, Some(*route), Command::State));
-            assert!(matches!(done.result(), Ok(Response::State(_))));
-            assert!(done.work().sql.families() <= LIFECYCLE_FAMILIES);
-            lifecycle.push(done);
-        }
-    }
-    assert_eq!(lifecycle.len(), slots);
-    let full = client.diagnostics().unwrap();
-    assert_eq!(full.outstanding, ordinary.len() + slots);
-    assert_eq!(
-        full.credited_bytes,
-        saturated.credited_bytes + slots * lifecycle_charge
-    );
-    assert!(full.peak_credited_bytes <= config.bytes - scheduler);
-    assert_eq!(full.receipt_overruns, 0);
-    // The slot count itself still refuses a third job in one namespace.
-    assert!(matches!(
-        client.try_submit(Some(routes[0]), Command::State),
-        Err((OwnerError::AdmissionFull, Command::State))
-    ));
-    println!(
-        "S7_COMPLETION_CREDIT bytes={} lifecycle_reserve={} scheduler_bytes={scheduler} \
-         lifecycle_charge={lifecycle_charge} lifecycle_slots={slots} \
-         lifecycle_slot_bytes={} ordinary_default_charge={ordinary_charge} \
-         ordinary_held={} ordinary_credited={} peak_credited={}",
-        config.bytes,
-        config.lifecycle_reserve,
-        slots * lifecycle_charge,
-        ordinary.len(),
-        saturated.credited_bytes,
-        full.peak_credited_bytes
-    );
-    drop(lifecycle);
-    drop(ordinary);
-    let released = credit_count(&client, 0);
-    assert_eq!((released.outstanding, released.credited_bytes), (0, 0));
-    owner.stop().unwrap();
-}
-
-#[test]
-fn a_completion_is_handed_out_once_and_wakes_its_blocked_waiter() {
-    let temp = Temp::new();
-    let owner = start(&temp);
-    let client = owner.client();
-    let opened = finish(&submit(
-        &client,
-        None,
-        Command::Open {
-            incarnation: [61; 32],
-            base_root: [62; 32],
-        },
-    ));
-    let route = match opened.result() {
-        Ok(Response::Opened(route)) => *route,
-        other => panic!("open: {other:?}"),
-    };
-    drop(opened);
-
-    // One-shot delivery: the taken result stays valid, later takes disconnect,
-    // and the credit lasts until both the Pending and the Completion are gone.
-    let pending = submit(&client, Some(route), Command::State);
-    let done = finish(&pending);
-    assert!(matches!(
-        pending.try_complete(),
-        Err(OwnerError::Disconnected)
-    ));
-    assert!(matches!(done.result(), Ok(Response::State(_))));
-    assert!(matches!(pending.wait(), Err(OwnerError::Disconnected)));
-    assert_eq!(credit_count(&client, 1).outstanding, 1);
-    drop(done);
-    assert_eq!(credit_count(&client, 0).outstanding, 0);
-
-    // A waiter blocked on a parked capture is woken by its publication. If this
-    // thread fails first, dropping the owner returns the capture unattempted.
-    let published = finish(&submit(
-        &client,
-        Some(route),
-        Command::Publish {
-            inode: value(2),
-            name: None,
-            cell: None,
-        },
-    ));
-    let ticket = match published.result() {
-        Ok(Response::Published(publication)) => *publication,
-        other => panic!("publish: {other:?}"),
-    };
-    drop(published);
-    let before = client.diagnostics().unwrap();
-    let capture = submit(&client, Some(route), Command::Capture);
-    let waiter = std::thread::spawn(move || capture.wait());
-    parked(&client, &before);
-    assert!(!waiter.is_finished());
-    let replied = finish(&submit(
-        &client,
-        Some(route),
-        Command::ReplyAttempted(ticket),
-    ));
-    assert!(matches!(replied.result(), Ok(Response::Done)));
-    drop(replied);
-    let captured = waiter.join().unwrap().unwrap();
-    assert!(matches!(captured.result(), Ok(Response::Captured(_))));
-    assert!(captured.work().parked_turns >= 1);
-
-    // Receiver loss neither cancels an admitted job nor leaks its credit.
-    drop(submit(&client, Some(route), Command::State));
-    let deadline = Instant::now() + Duration::from_secs(20);
-    while client.diagnostics().unwrap().outstanding != 1 {
-        assert!(Instant::now() < deadline, "lost receiver kept its credit");
-        std::thread::yield_now();
-    }
-    drop(captured);
-
-    // Stop returns the exact unattempted command to a blocked waiter. The
-    // first workspace still retains its capture, so this one parks elsewhere.
-    let opened = finish(&submit(
-        &client,
-        None,
-        Command::Open {
-            incarnation: [63; 32],
-            base_root: [62; 32],
-        },
-    ));
-    let route = match opened.result() {
-        Ok(Response::Opened(route)) => *route,
-        other => panic!("open: {other:?}"),
-    };
-    drop(opened);
-    let unsettled = finish(&submit(
-        &client,
-        Some(route),
-        Command::Publish {
-            inode: value(3),
-            name: None,
-            cell: None,
-        },
-    ));
-    assert!(unsettled.result().is_ok());
-    let before = client.diagnostics().unwrap();
-    let capture = submit(&client, Some(route), Command::Capture);
-    let waiter = std::thread::spawn(move || capture.wait());
-    parked(&client, &before);
-    owner.stop().unwrap();
-    let stopped = waiter.join().unwrap().unwrap();
-    assert!(matches!(
-        stopped.result(),
-        Err(OwnerError::Unattempted { cause, command })
-            if matches!(cause.as_ref(), OwnerError::Stopped)
-                && matches!(command.as_ref(), Command::Capture)
-    ));
-    // The parked readiness work it already did stays on the original receipt.
-    assert!(stopped.work().parked_turns >= 1);
-    assert!(stopped.work().sql.families() >= 1);
 }

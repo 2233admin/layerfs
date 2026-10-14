@@ -3,11 +3,8 @@
 mod metadata;
 use layerfs_content::{inode_leaf::*, FinalizedObject, ObjectId, ObjectRole};
 use layerfs_storage::{
-    encoding::{
-        pool::{leaf, value_group},
-        CompressionWorkspace,
-    },
-    location::{ObjectLocation, PackDomain, PackInfo, ValueGroupRow},
+    encoding::pool::leaf,
+    location::{InodeValueRow, ObjectLocation, PackDomain, PackInfo},
     pack::{assemble, build_group, layout::PackLane},
     port::*,
     Storage,
@@ -56,15 +53,6 @@ fn literal_delta_cannot_hide_a_wrong_canonical_base() {
     delta.push(1);
     delta.extend_from_slice(&(target_body.len() as u32).to_le_bytes());
     delta.extend_from_slice(&target_body);
-    let mut encode = CompressionWorkspace::new().unwrap();
-    let built = value_group::build(
-        &values
-            .iter()
-            .map(|v| value_group::canonical_value(v).unwrap())
-            .collect::<Vec<_>>(),
-        &mut encode,
-    )
-    .unwrap();
     let bodies = [
         assemble(
             PackLane::Ordinary,
@@ -76,7 +64,6 @@ fn literal_delta_cannot_hide_a_wrong_canonical_base() {
             &[build_group(PackLane::Ordinary, &[delta], None).unwrap()],
         )
         .unwrap(),
-        assemble(PackLane::PooledMetadata, &[built.group]).unwrap(),
     ];
     metadata
         .publish(&Publication {
@@ -105,13 +92,14 @@ fn literal_delta_cannot_hide_a_wrong_canonical_base() {
                     record_number: 0,
                 })
                 .collect(),
-            value_groups: vec![ValueGroupRow {
-                first_ordinal: 1,
-                count: 2,
-                pack_id: 3,
-                group_number: 0,
-                digest: built.digest,
-            }],
+            inode_values: values
+                .iter()
+                .zip(1u32..)
+                .map(|(value, ordinal)| InodeValueRow {
+                    ordinal,
+                    value: *value,
+                })
+                .collect(),
             ..Publication::default()
         })
         .unwrap();
@@ -164,31 +152,18 @@ impl layerfs_storage::source::Source for PooledInput {
             .as_ref()
             .clone())
     }
-    fn value_group(&self, ordinal: u32) -> layerfs_storage::StorageResult<Option<ValueGroupRow>> {
-        Ok(self
-            .0
-            .state
-            .lock()
-            .unwrap()
-            .groups
-            .values()
-            .find(|row| {
-                ordinal >= row.first_ordinal
-                    && u64::from(ordinal) < u64::from(row.first_ordinal) + row.count as u64
+    fn inode_values(&self, ordinals: &[u32]) -> layerfs_storage::StorageResult<Vec<[u8; 73]>> {
+        let state = self.0.state.lock().unwrap();
+        ordinals
+            .iter()
+            .map(|ordinal| {
+                state
+                    .values
+                    .get(ordinal)
+                    .copied()
+                    .ok_or(layerfs_storage::StorageError::Integrity("missing value"))
             })
-            .copied())
-    }
-    fn value_groups(
-        &self,
-        _: Option<u32>,
-        _: &mut dyn FnMut(ValueGroupRow) -> layerfs_storage::StorageResult<()>,
-    ) -> layerfs_storage::StorageResult<()> {
-        Err(layerfs_storage::StorageError::Integrity(
-            "unused catalogue scan",
-        ))
-    }
-    fn window_start(&self) -> layerfs_storage::StorageResult<u32> {
-        Err(layerfs_storage::StorageError::Integrity("unused window"))
+            .collect()
     }
     fn signatures(
         &self,

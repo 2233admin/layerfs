@@ -6,6 +6,120 @@ schema16. Earlier algorithm and proof pins retain their original scope; see
 
 > **Status:** Current general guide.
 
+## Issue 321 final model: one lock per Workspace (2026-10-14)
+
+Implemented at the Step D source of [#321](../issues/321/CHECKLIST.md); this
+section is the current description and supersedes the owner thread, class
+queues, credits, common ledger and notification table described further down.
+Measured outcomes are in the [#320 ledger](../issues/320/PROGRESS.md), not here.
+
+- **Template.** Startup builds an empty schema 34 database at the configured
+  overlay path, checks its close before readiness and keeps only its physical
+  identity handle. It never holds a Workspace row.
+- **One file per mounted Workspace.** Mount copies the template to
+  `<namespace>.sqlite` beside it and opens one connection: 4,096-byte pages,
+  MEMORY journal, synchronous OFF, EXCLUSIVE locking, `temp_store=MEMORY`,
+  mmap off, zero busy timeout and the configured pager allowance. The roster
+  (`overlay/workspaces.rs`) admits the configured number of mounted Workspaces.
+- **One lock.** `overlay/state.rs` holds the connection, the Workspace's open
+  state, its lifecycle and its counted work behind one `Mutex` with one
+  `Condvar`. The calling thread takes the lock, runs one short atomic job and
+  releases it. No lock is held across Store I/O, a whole Exec or a whole
+  Commit. There is no owner thread, queue, admission credit, shared memory
+  budget or notification table, and nothing is shared between two Workspaces'
+  overlays.
+- **Ordering that remains.** A Capture waiting for earlier reply attempts and a
+  known install waiting for earlier base sources each own a finite frontier:
+  a later mutation waits behind a waiting Capture, a later source acquisition
+  behind a waiting install. Everything else runs in lock order.
+- **Memory.** Each connection has its own pager allowance; it is a SQLite
+  suggestion, not a resident bound. Open-file, directory-position and
+  kernel-reference state is resident and grows with open files and with the
+  files the kernel currently references. The engine also remembers three fence
+  rows; see [rows the engine remembers](64-overlay-terminology.md#rows-the-engine-remembers).
+- **Counted work.** A job is one hold of the lock. Each hold records its lock
+  wait, its hold time and its SQL, payload and physical work in its class;
+  a maintenance step is counted only in the maintenance totals.
+- **Terminal unmount.** After the terminal native/control fence and the drain,
+  control checks the connection's close and removes the route. The last
+  backing reference unlinks the Workspace's own singly linked file. A close,
+  identity or unlink failure keeps the original custody and is not retried.
+- **Failure.** A failed job that began a transaction rolls back and forgets
+  the remembered rows. A full device rolls the write back as no space; no
+  space is reserved ahead of use. A panic inside a job retains the connection
+  and fails that Workspace only.
+
+## Issue 321 step 1 ownership update (2026-10-13; superseded in part)
+
+Historical within #321: the owner thread, lane, class queues, ledger, job
+credits and common notification table in this section were removed by Step B;
+schema 33 and the Workspace columns by Step C. The template, the copied file,
+the route-specific client and the terminal file removal remain as described.
+
+The implementation based on `06be791ea` changes `Owner::start_observed` into a
+closed-template owner: startup creates/configures schema 33 and checks its close
+before readiness. The configured Overlay path is the template file; its physical
+identity handle remains after checked connection close. A mount copies
+that empty file into an ordinary monotonic `<namespace>.sqlite`, opens one
+connection and starts its own owner thread. No pool of spares or offset identities
+is present. Existing job SQL and Workspace columns are unchanged in this step.
+`Store::bind` transfers the route-specific `OwnerClient` to `BoundWorkspace`, so
+filesystem/Commit ports go directly to their own connection. Control routes and
+cleanup observations resolve the same owner; daemon resources aggregate separate
+short observations without a cross-Workspace transaction. Copy/profile startup
+SQL is retained in the first job and its owner aggregate, not hidden in setup.
+The closed template pays identity/physical observations without SQL; live files
+pay their own read jobs. The aggregate observer's original costs remain explicit.
+
+The queue has one Workspace lane and six class queues. Capture, install, source
+and mutation fences remain; there is no rotation between Workspaces. One daemon
+ledger charges queued/executing/retained jobs, fixed scheduler allocations and
+the sum of configured pager allowances. The daemon's pager setting is divided
+across its existing configured Workspace admission capacity (at least one page
+per connection); `BudgetWork` reports the common ledger. SQLite cache_size is
+still a suggestion, not an RSS bound. Journal, SQLite statement memory, native
+buffers and thread stacks require separate physical observations. Large files,
+namespaces and edit histories retain their backed, windowed structures.
+
+After the existing terminal native/control fence and acknowledged Close, control
+removes that route, checks connection close and joins its worker. Retained clients
+and completions own the file through a separate backing reference. The last one
+unlinks only the original singly linked inode after known terminal/close facts.
+An identity mismatch/unlink/close failure retains original custody and is not
+retried. Live Workspace maintenance stays automatic; terminal row cleanup code
+is retained only until the table revision in step 2. The independent heap proof
+still compares actual retained job allocations against job credits: boxing the
+large scheduler state allows it to be released when only weak completion
+notifications survive shutdown.
+
+Host owner, completion-storage, cleanup-control and new file/budget/custody proofs
+cover these seams. Linux mounted/device proofs, page-cache build selection and
+step-end measurements are still pending; this note claims no speed, physical
+memory qualification or step-1 completion. Historical descriptions and receipts
+below retain their original shared-database scope. Both AGENTS.md guides remain
+unchanged pending the owner's wording approval.
+
+### Common admission notifications
+
+The independent owners use one fixed daemon notification table. Completion
+release publishes the local lane slot before returning common byte credit;
+`Budget::release` then notifies that same table once. A completion surviving
+its local owner still returns its shared credit and notifies. No lock spans
+a caller's wake/drop callback. Notifications move at most 16 wakers per fixed
+stack window, unlock, and invoke them before reading the next window. All
+slots are visited; the window is not a registration/Workspace/workload cap.
+
+With the default 288 slots, an active notification uses 19 table-lock turns
+(one length observation plus 18 windows), versus the prior 289. Removing the
+duplicate completion notification takes source-derived table-lock turns per
+active credit release from 578 to 19. This is work removed outside the owner
+service clock; it is not evidence that this cost alone explains service wall
+growth. SQL, publication, queued capture/install and original refusal/custody
+semantics are unchanged. Reentrant wake, cancellation, saturation and owner-loss
+proofs cover availability after both local/shared release facts.
+
+## Historical shared-connection description
+
 S5 update after `f5558fc22`: `SourceRead` provides one composed local byte
 window, with base I/O outside the owner. `DatabaseWork` exposes a connection
 counter snapshot after route validation, and `PayloadPlans` exposes the actual

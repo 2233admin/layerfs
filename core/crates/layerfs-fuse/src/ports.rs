@@ -2,7 +2,7 @@
 use layerfs_overlay::{NativeCookieOffer, NativeMount, Publication};
 use layerfs_workspace::{
     BaseView, NativeDirectoryWindow, NativeMutationOutcome, NativeReadOperation, NativeReadOutcome,
-    NativeVisitRequest, NativeWindow, VisitFacts,
+    NativeVisitRequest, NativeWindow, VisitFacts, WriteData,
 };
 use std::{
     error::Error,
@@ -18,7 +18,7 @@ use std::{
 pub type ServiceError = Box<dyn Error + Send + Sync>;
 pub type ServiceFuture<'a, T> = Pin<Box<dyn Future<Output = Result<T, ServiceError>> + Send + 'a>>;
 
-/// One mount's terminal stop, shared by its lane, its requests and their
+/// One mount's terminal stop, shared by its request owner, its requests and their
 /// service ports. Only forced teardown sets it, once; nothing clears it. A
 /// default fence is never stopped. It carries no request, job or lease.
 ///
@@ -121,8 +121,8 @@ impl fmt::Display for Fenced {
 }
 impl Error for Fenced {}
 
-/// A projection and its original service completion. Field order drops the
-/// projection before its credit owner. Keep this receipt through every consumer
+/// A projection and its original service receipt. Field order drops the
+/// projection before its receipt. Keep this receipt through every consumer
 /// sharing its original payload. Consuming a bounded response into independent
 /// request-owned storage ends those consumers; Arc::clone alone does not. Copying
 /// an engine token acquires no new lease and does not release its backed owner.
@@ -153,8 +153,8 @@ pub trait MountServices: Send + Sync {
 ///
 /// Once the fence is stopped, every acquiring call returns [`Fenced`] before
 /// its attempt, also from a wait it was already in: `observe_visit`,
-/// `read_visit`, `mutate_visit`, `base`, `reserve_serial`, `directory_visit`
-/// and `publish_cookies`. A job already submitted is awaited to its original
+/// `read_visit`, `mutate_visit`, `base`, `recognize`, `reserve_serial`,
+/// `directory_visit` and `publish_cookies`. A job already submitted is awaited to its original
 /// result. The disposal calls are never refused by the fence:
 /// `reply_attempted`, `close_file`, `close_directory` and `forget`.
 pub trait RequestServices: Send + Sync {
@@ -234,6 +234,12 @@ pub trait RequestServices: Send + Sync {
         &self,
         request: NativeVisitRequest,
     ) -> ServiceFuture<'_, ServiceReply<Arc<NativeMutationOutcome>>>;
+    /// What the bytes of a WRITE at `offset` of file `serial` establish
+    /// about committed content, before the write's first owner visit: the
+    /// same bytes, with claims where whole committed chunks were recognized
+    /// in them. It reads no engine state and publishes nothing. Bytes that
+    /// are not recognized, for whatever reason, are returned unclaimed.
+    fn recognize(&self, serial: u64, offset: u64, data: WriteData) -> ServiceFuture<'_, WriteData>;
     fn forget(
         &self,
         mount: NativeMount,

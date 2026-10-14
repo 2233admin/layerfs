@@ -9,11 +9,11 @@ mod model;
 #[allow(dead_code)]
 #[path = "support/installed_store.rs"]
 mod support;
-use drive::{evidence, job, live, settled, Do, Rig, Session};
+use drive::{evidence, job, live, Do, Rig, Session};
 use layerfs_content::{filesystem::validate::ValidationWork, ObjectId};
 use layerfs_daemon::{
     store::{BoundWorkspace, CommitError, CommitFailure, CommitPhase, CommitSuccess},
-    Command, Completion, OwnerError, OwnerWork, Response,
+    JobReceipt, OwnerError, OwnerWork, Response,
 };
 use layerfs_history::CommitStagedOutcome;
 use layerfs_overlay::OverlayError;
@@ -68,21 +68,36 @@ fn commit(
         let reader = match job(
             overlay,
             route,
-            Command::AcquireCapturedReader { capture, request },
+            |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.acquire_captured_reader(job_route, capture, request)
+            },
         )
         .result()
         {
             Ok(Response::CapturedReader(Some(reader))) => *reader,
             other => panic!("{other:?}"),
         };
-        let owner = match job(overlay, route, Command::AcquireOperation { request }).result() {
+        let owner = match job(
+            overlay,
+            route,
+            |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.acquire_operation(job_route, request)
+            },
+        )
+        .result()
+        {
             Ok(Response::Operation(Some(owner))) => *owner,
             other => panic!("{other:?}"),
         };
         if fault == Fault::ReleasedReader {
-            assert!(job(overlay, route, Command::ReleaseCapturedReader(reader))
-                .result()
-                .is_ok());
+            assert!(job(
+                overlay,
+                route,
+                |job_client: &layerfs_daemon::OwnerClient, job_route| job_client
+                    .release_captured_reader(job_route, reader)
+            )
+            .result()
+            .is_ok());
         }
         let mut sink = save.sink();
         let CapturedNamespaceAttempt { result, custody } =
@@ -100,7 +115,7 @@ fn commit(
             })
             .0
             .unwrap();
-        let retained = |command| match job(overlay, route, command).result() {
+        let retained = |done: JobReceipt| match done.result() {
             Ok(Response::CapturedReader(kept)) => kept.is_some(),
             Ok(Response::Operation(kept)) => kept.is_some(),
             other => panic!("{other:?}"),
@@ -118,8 +133,12 @@ fn commit(
                 .map(|error| format!("{error:?}")),
             // The attempt released nothing: both owners are still retained.
             retained_after: (
-                retained(Command::RetainedCapturedReader { request }),
-                retained(Command::RetainedOperation { request }),
+                retained(
+                    overlay
+                        .retained_captured_reader(Some(route), request)
+                        .unwrap(),
+                ),
+                retained(overlay.retained_operation(Some(route), request).unwrap()),
             ),
         });
         let (reader, owner) = (custody.reader, custody.operation);
@@ -140,13 +159,23 @@ fn commit(
             .or_else(|| custody.records.failure.take());
         drop(custody);
         if fault != Fault::ReleasedReader {
-            assert!(job(overlay, route, Command::ReleaseCapturedReader(reader))
-                .result()
-                .is_ok());
-        }
-        assert!(job(overlay, route, Command::ReleaseOperation(owner))
+            assert!(job(
+                overlay,
+                route,
+                |job_client: &layerfs_daemon::OwnerClient, job_route| job_client
+                    .release_captured_reader(job_route, reader)
+            )
             .result()
             .is_ok());
+        }
+        assert!(job(
+            overlay,
+            route,
+            |job_client: &layerfs_daemon::OwnerClient, job_route| job_client
+                .release_operation(job_route, owner)
+        )
+        .result()
+        .is_ok());
         // A base read that failed left its exact cause with the Store ports.
         let provider = || {
             operation
@@ -162,8 +191,8 @@ fn commit(
             // An owner job goes back as what it was: its completion, or the
             // refusal that never admitted it.
             (Err(_), Some(WorkspaceError::Service(service))) => {
-                Err(match service.downcast::<Completion>() {
-                    Ok(completion) => CommitError::Completion(completion),
+                Err(match service.downcast::<JobReceipt>() {
+                    Ok(completion) => CommitError::JobReceipt(completion),
                     Err(other) => match other.downcast::<OwnerError>() {
                         Ok(owner) => CommitError::Owner(*owner),
                         Err(other) => CommitError::Workspace(WorkspaceError::Service(other)),
@@ -368,7 +397,6 @@ fn every_kind_of_change_commits_through_the_driver_and_reads_back_from_a_fresh_b
     evidence(format_args!(
         "CAPTURED_COMMIT_READBACK commits=2 up_to_date=1 fresh_binds=3 oracle=independent_model"
     ));
-    settled(&rig.owner.client(), 0);
     rig.close(&first);
     drop(first);
     rig.finish();
@@ -423,7 +451,6 @@ fn mutations_after_the_capture_stay_out_of_its_root_and_survive_install() {
         at_capture.len(),
         later.len()
     ));
-    settled(&rig.owner.client(), 0);
     rig.close(&first);
     drop(first);
     rig.finish();
@@ -450,7 +477,7 @@ fn a_failed_attempt_keeps_its_custody_publishes_nothing_and_a_later_commit_is_ex
     assert!(
         matches!(
             &failure.error,
-            CommitError::Completion(refused)
+            CommitError::JobReceipt(refused)
                 if matches!(refused.result(), Err(OwnerError::Overlay(OverlayError::Stale)))
         ),
         "{:?}",
@@ -501,7 +528,6 @@ fn a_failed_attempt_keeps_its_custody_publishes_nothing_and_a_later_commit_is_ex
         &rebound(&rig, 2, root),
         "fresh bind after the failure",
     );
-    settled(&rig.owner.client(), 0);
     rig.close(&first);
     drop(first);
     rig.finish();
@@ -562,7 +588,6 @@ fn cost(bulk: usize) -> Cost {
         Do::Create("bulk/new", 0o644),
     ]);
     let expected = session.model.flat();
-    settled(&rig.owner.client(), 0);
     let before = rig.owner.client().diagnostics().unwrap();
     let client_before = first.operation().unwrap().client().diagnostics().unwrap();
     let (result, produced) = commit(&rig, &first, 1, || {}, Fault::None);
@@ -570,7 +595,6 @@ fn cost(bulk: usize) -> Cost {
     let storage = format!("{:?}", result.as_ref().unwrap().storage);
     // The Commit's own completions are caller-held credits until dropped.
     drop(result);
-    settled(&rig.owner.client(), 0);
     let after = rig.owner.client().diagnostics().unwrap();
     // Read before the oracle's own complete walk of the published root.
     let client_after = first.operation().unwrap().client().diagnostics().unwrap();
@@ -582,7 +606,7 @@ fn cost(bulk: usize) -> Cost {
         work: produced.work,
         validation: produced.validation.unwrap(),
         counters: produced.counters,
-        jobs: after.completed.iter().sum::<u64>() - before.completed.iter().sum::<u64>(),
+        jobs: after.jobs.iter().sum::<u64>() - before.jobs.iter().sum::<u64>(),
         statements: b.0 - a.0,
         vm_steps: b.1 - a.1,
         sql_rows: b.2 - a.2,
@@ -654,7 +678,12 @@ fn a_fixed_small_change_costs_the_same_counted_work_as_the_base_grows() {
         // the only difference between sizes is those record point jobs.
         let extra = other.work.record_jobs as i64 - small.work.record_jobs as i64;
         assert_eq!(other.jobs as i64 - small.jobs as i64, extra);
-        assert_eq!(other.statements as i64 - small.statements as i64, 3 * extra);
+        // A record job is its one fence statement and one read for each key
+        // it asks: a point job one key, a pass's fresh job the answers it
+        // does not hold of up to 21 serials. The keys read differ by no more
+        // than the points asked.
+        let reads = other.statements as i64 - small.statements as i64 - extra;
+        assert!(reads.abs() <= points(&other.work) as i64, "{reads} {extra}");
         assert_eq!(other.sql_changed, small.sql_changed);
         assert!((other.sql_rows as i64 - small.sql_rows as i64).abs() <= 4 * extra.abs());
         assert_eq!((other.fullscan, small.fullscan), (0, 0));
@@ -723,7 +752,6 @@ fn two_workspaces_on_one_owner_capture_only_their_own_rows() {
         expected_one.len(),
         expected_two.len()
     ));
-    settled(&rig.owner.client(), 0);
     rig.close(&first);
     rig.close(&second);
     drop((first, second));

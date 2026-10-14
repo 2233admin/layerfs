@@ -2,7 +2,8 @@
 use crate::{
     db::integer, indexed_operation_record_changes_bytes, sql, IndexedOperationRecordApply,
     IndexedOperationRecordChange, IndexedOperationRecordKey, IndexedOperationRecordScope,
-    OperationRecordExpectedValue, Overlay, OverlayResult, StatementKind,
+    OperationRecordExpectedValue, Overlay, OverlayError, OverlayResult, StatementKind,
+    OPERATION_RECORD_BYTES, PAGE_ROWS,
 };
 
 impl Overlay {
@@ -13,14 +14,13 @@ impl Overlay {
         scope: IndexedOperationRecordScope,
         key: IndexedOperationRecordKey,
     ) -> OverlayResult<bool> {
-        self.check_operation(scope.owner)?;
+        self.fence_operation(scope.owner, false)?;
         let file = scope.file_scope.to_be_bytes();
         Ok(!self
             .query(
                 StatementKind::OperationRecord,
                 sql::INDEXED_OPERATION_RECORD_CONTAINS,
                 &[
-                    &scope.owner.route.ns,
                     &integer(scope.owner.owner)?,
                     &file.as_slice(),
                     &i64::from(key.kind),
@@ -38,8 +38,32 @@ impl Overlay {
         scope: IndexedOperationRecordScope,
         key: IndexedOperationRecordKey,
     ) -> OverlayResult<Option<Vec<u8>>> {
-        self.check_operation(scope.owner)?;
+        self.fence_operation(scope.owner, false)?;
         self.indexed_value(scope, key)
+    }
+
+    /// Reads the bounded raw values of at most `PAGE_ROWS` keys under one
+    /// fence, in the order asked. Together they stay inside one record envelope.
+    pub fn indexed_operation_record_get_many(
+        &self,
+        scope: IndexedOperationRecordScope,
+        keys: &[IndexedOperationRecordKey],
+    ) -> OverlayResult<Vec<Option<Vec<u8>>>> {
+        if keys.len() > PAGE_ROWS {
+            return Err(OverlayError::Invalid("indexed operation_record key list"));
+        }
+        self.fence_operation(scope.owner, false)?;
+        let mut values = Vec::with_capacity(keys.len());
+        let mut bytes = 0_usize;
+        for key in keys {
+            let value = self.indexed_value(scope, *key)?;
+            bytes = bytes.saturating_add(value.as_ref().map_or(0, Vec::len));
+            if bytes > OPERATION_RECORD_BYTES {
+                return Err(OverlayError::Invalid("indexed operation_record values"));
+            }
+            values.push(value);
+        }
+        Ok(values)
     }
 
     fn indexed_value(
@@ -52,7 +76,6 @@ impl Overlay {
             StatementKind::OperationRecord,
             sql::INDEXED_OPERATION_RECORD_GET,
             &[
-                &scope.owner.route.ns,
                 &integer(scope.owner.owner)?,
                 &file.as_slice(),
                 &i64::from(key.kind),
@@ -74,8 +97,7 @@ impl Overlay {
     ) -> OverlayResult<IndexedOperationRecordApply> {
         indexed_operation_record_changes_bytes(changes)?;
         self.atomic(|| {
-            self.live(scope.owner.route)?;
-            self.check_operation(scope.owner)?;
+            self.fence_operation(scope.owner, true)?;
             for (index, change) in changes.iter().enumerate() {
                 let actual = self.indexed_value(scope, change.key)?;
                 let matches = match (&change.expected, &actual) {
@@ -96,8 +118,7 @@ impl Overlay {
             let file = scope.file_scope.to_be_bytes();
             let operation = integer(scope.owner.owner)?;
             for change in changes {
-                let params: [&dyn rusqlite::ToSql; 5] = [
-                    &scope.owner.route.ns,
+                let params: [&dyn rusqlite::ToSql; 4] = [
                     &operation,
                     &file.as_slice(),
                     &i64::from(change.key.kind),
@@ -107,7 +128,7 @@ impl Overlay {
                     self.execute(
                         StatementKind::OperationRecord,
                         sql::INDEXED_OPERATION_RECORD_PUT,
-                        &[params[0], params[1], params[2], params[3], params[4], value],
+                        &[params[0], params[1], params[2], params[3], value],
                         64 + value.len() as u64,
                     )?;
                 } else {
@@ -143,12 +164,11 @@ impl Overlay {
         kind: u32,
         excluded_root: Option<[u8; 32]>,
     ) -> OverlayResult<Vec<[u8; 32]>> {
-        self.check_operation(scope.owner)?;
+        self.fence_operation(scope.owner, false)?;
         let file = scope.file_scope.to_be_bytes();
         let operation = integer(scope.owner.owner)?;
         let kind = i64::from(kind);
-        let prefix: [&dyn rusqlite::ToSql; 4] =
-            [&scope.owner.route.ns, &operation, &file.as_slice(), &kind];
+        let prefix: [&dyn rusqlite::ToSql; 3] = [&operation, &file.as_slice(), &kind];
         let decode = |r: &rusqlite::Row<'_>| {
             let key: Vec<u8> = r.get(0)?;
             key.try_into().map_err(|_| rusqlite::Error::InvalidQuery)
@@ -157,7 +177,7 @@ impl Overlay {
             Some(root) => self.query(
                 StatementKind::OperationRecord,
                 sql::INDEXED_OPERATION_RECORD_KEYS,
-                &[prefix[0], prefix[1], prefix[2], prefix[3], &root.as_slice()],
+                &[prefix[0], prefix[1], prefix[2], &root.as_slice()],
                 64,
                 decode,
             ),
@@ -183,13 +203,12 @@ impl Overlay {
         let Some(after) = after else {
             return self.indexed_operation_record_keys(scope, kind, None);
         };
-        self.check_operation(scope.owner)?;
+        self.fence_operation(scope.owner, false)?;
         let file = scope.file_scope.to_be_bytes();
         self.query(
             StatementKind::OperationRecord,
             sql::INDEXED_OPERATION_RECORD_KEYS_AFTER,
             &[
-                &scope.owner.route.ns,
                 &integer(scope.owner.owner)?,
                 &file.as_slice(),
                 &i64::from(kind),

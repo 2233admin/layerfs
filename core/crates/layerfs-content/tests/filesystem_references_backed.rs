@@ -269,6 +269,204 @@ fn wide_multiwindow_direct_rows_remove_the_reducer_quota_and_match_canonical_roo
 }
 
 #[test]
+fn a_touched_row_pass_reads_a_wave_of_rows_in_jobs_of_twenty_one_and_matches_canonical_roots() {
+    // One hundred files leave a directory: a hundred and one touched rows, in
+    // key windows of 64 and 37. Each of the two passes takes them in waves of
+    // the default 32 rows and reads a wave three records a row, at most 21
+    // rows to a job: 21 + 11, 21 + 11, then 21 + 11 and 5. Seven jobs a pass
+    // where each row was its own job before. The hundred removals and the
+    // parent's value were held in five windows of at most 21 serials first:
+    // five read jobs and five guarded writes for 101 rows. The hundred zero
+    // rows are queued by one job a seed wave (four jobs, at most 32 rows and
+    // 64 changes) and leave the queue sixteen to a job: seven times one read
+    // of the work items, one read of rows and nodes (64 keys), one write.
+    let count = 100u64;
+    let directories = [DirectoryUpdate {
+        parent: 1,
+        changes: (2..count + 2)
+            .map(|serial| (name_of(&format!("f{serial:05}")), Some(serial)))
+            .collect(),
+    }];
+    let mut kinds = vec![(1, InodeKind::Directory)];
+    kinds.extend((2..count + 2).map(|serial| (serial, InodeKind::RegularFile)));
+    let (store, original) = base(&directories, &kinds);
+    let edits = [DirectoryUpdate {
+        parent: 1,
+        changes: directories[0]
+            .changes
+            .iter()
+            .map(|(name, _)| (name.clone(), None))
+            .collect(),
+    }];
+    let input = update_input(&original, &edits, &[], &[], FilesystemResources::default());
+    let mut records = Records::default();
+    let (actual, _, _) = backed(&store, &input, &mut records, false, None);
+    let actual = actual.unwrap();
+    let mut expected_store = TreeStore::new();
+    let expected = update_filesystem(
+        &mut FilesystemObjects::new(&store, &mut expected_store),
+        &input,
+        None,
+    )
+    .unwrap();
+    assert_eq!((actual.root, actual.value), (expected.root, expected.value));
+    assert_eq!(actual.counters.references.serials_scanned, count + 1);
+    assert_eq!(actual.counters.references.final_removals, count);
+    assert_eq!(records.maximum_read_keys, 64);
+    assert_eq!(
+        records.wide_reads,
+        5 + 14 + 2 * 7,
+        "five windows, seven jobs a pass, two reads a transfer"
+    );
+    assert_eq!(records.row_jobs, 5, "one guarded write a window");
+    assert_eq!(records.work_jobs, 4 + 7, "seed waves and transfers");
+    assert_eq!(
+        records.enumerations, 4,
+        "each pass ends on its window of 37 keys without asking for one more"
+    );
+    assert_eq!(records.maximum_changes, 64, "32 queued rows of a seed wave");
+    assert_eq!(records.after_failure, 0);
+}
+
+#[test]
+fn a_serial_moved_inside_one_window_is_read_once_and_written_once_from_its_first_result() {
+    let directories = [
+        directory(1, &[("a", 10), ("b", 11)]),
+        directory(10, &[("file", 2)]),
+        directory(11, &[]),
+    ];
+    let kinds = [
+        (1, InodeKind::Directory),
+        (2, InodeKind::RegularFile),
+        (10, InodeKind::Directory),
+        (11, InodeKind::Directory),
+    ];
+    let (store, original) = base(&directories, &kinds);
+    // Directory 10 loses the binding before directory 11 gains it: the row of
+    // serial 2 goes to -1 and back to 0 inside one window.
+    let edits = [
+        DirectoryUpdate {
+            parent: 10,
+            changes: vec![(name_of("file"), None)],
+        },
+        directory(11, &[("file", 2)]),
+    ];
+    let input = update_input(&original, &edits, &[], &[], FilesystemResources::default());
+    let mut records = Records::default();
+    let (actual, _, _) = backed(&store, &input, &mut records, false, None);
+    let actual = actual.unwrap();
+    let mut expected_store = TreeStore::new();
+    let expected = update_filesystem(
+        &mut FilesystemObjects::new(&store, &mut expected_store),
+        &input,
+        None,
+    )
+    .unwrap();
+    assert_eq!((actual.root, actual.value), (expected.root, expected.value));
+    assert_eq!(
+        row(&records, 2),
+        Row::Effect {
+            serial: 2,
+            value: None,
+            delta: 0
+        }
+    );
+    // One version: the second meaning was applied to the first one's result
+    // and both left in the same write, guarded by the absence that was read.
+    assert_eq!(records.row_versions[&2].len(), 1);
+    assert_eq!(records.row_jobs, 1, "rows 2, 10 and 11 are one write");
+    assert_eq!(records.maximum_changes, 6);
+    assert_eq!(actual.counters.references.rows_touched, 3);
+    assert_eq!(records.after_failure, 0);
+}
+
+#[test]
+fn a_refused_window_writes_none_of_its_rows_and_keeps_the_whole_write_as_the_original() {
+    let directories = [directory(1, &[("a", 2), ("b", 3), ("c", 4)])];
+    let kinds = [
+        (1, InodeKind::Directory),
+        (2, InodeKind::RegularFile),
+        (3, InodeKind::RegularFile),
+        (4, InodeKind::RegularFile),
+    ];
+    let (store, original) = base(&directories, &kinds);
+    let edits = [DirectoryUpdate {
+        parent: 1,
+        changes: ["a", "b", "c"].map(|name| (name_of(name), None)).to_vec(),
+    }];
+    let input = update_input(&original, &edits, &[], &[], FilesystemResources::default());
+    // The provider refuses the first witness guard: the fifth change of the
+    // one write, after every row guard was accepted.
+    let mut refused = Records {
+        refuse_kind: Some(TOUCH),
+        ..Default::default()
+    };
+    let (result, emitted, _) = backed(&store, &input, &mut refused, false, None);
+    assert_eq!(
+        result,
+        Err(ContentError::ProviderFailure {
+            what: "filesystem backing precondition"
+        })
+    );
+    assert!(!refused
+        .values
+        .keys()
+        .any(|key| key.kind == ROW || key.kind == TOUCH));
+    let original = refused.original.as_ref().unwrap();
+    let keys = original.iter().map(|change| change.key).collect::<Vec<_>>();
+    let mut expected = [1, 2, 3, 4].map(|serial| key(ROW, serial)).to_vec();
+    expected.extend([1, 2, 3, 4].map(|serial| key(TOUCH, serial)));
+    assert_eq!(keys, expected);
+    assert_eq!(refused.row_jobs, 1);
+    assert_eq!(refused.after_failure, 0);
+    no_final(&emitted);
+}
+
+#[test]
+fn a_batched_transfer_returns_its_first_items_refusal_and_writes_nothing() {
+    let directories = [directory(1, &[("a", 2), ("b", 3)])];
+    let kinds = [
+        (1, InodeKind::Directory),
+        (2, InodeKind::RegularFile),
+        (3, InodeKind::RegularFile),
+    ];
+    let (store, original) = base(&directories, &kinds);
+    let edits = [DirectoryUpdate {
+        parent: 1,
+        changes: ["a", "b"].map(|name| (name_of(name), None)).to_vec(),
+    }];
+    let input = update_input(&original, &edits, &[], &[], FilesystemResources::default());
+    // Serials 2 and 3 are queued as work items 1 and 2 and leave in one job.
+    // The second item's work record cannot be read; in one case the first
+    // item's node state is wrong as well.
+    for (first_is_wrong, refusal) in [
+        (true, "filesystem release node state"),
+        (false, "filesystem release work missing"),
+    ] {
+        let mut records = Records::default();
+        records.queued_answers.insert(key(WORK, 2), None);
+        if first_is_wrong {
+            records
+                .queued_answers
+                .insert(key(NODE, 2), Some(vec![1, 1]));
+        }
+        let (result, emitted, _) = backed(&store, &input, &mut records, false, None);
+        // The first item is checked before the second one's unreadable record
+        // is reported, as when each item was its own job.
+        assert_eq!(result, Err(ContentError::InvalidRecord(refusal)));
+        // Nothing of the job is written, the readable first item included.
+        assert_eq!(records.work_jobs, 1, "the seed's queueing job only");
+        assert!(records.values.contains_key(&key(WORK, 1)));
+        assert!(records.values.contains_key(&key(WORK, 2)));
+        assert_eq!(records.values[&key(NODE, 2)], [1, 0]);
+        assert_eq!(records.values[&key(NODE, 3)], [1, 0]);
+        assert!(!records.values.keys().any(|key| key.kind == FRAME));
+        assert_eq!(records.after_failure, 0);
+        no_final(&emitted);
+    }
+}
+
+#[test]
 fn release_creates_lower_serial_rows_repeated_counts_and_surviving_aliases_without_losing_final_rows(
 ) {
     let directories = [
@@ -736,7 +934,8 @@ fn paged_release_keeps_actual_utf8_name_boundaries_and_all_repeated_parent_pages
 }
 
 #[test]
-fn missing_fresh_membership_and_stale_row_guard_cannot_change_rows_or_touch_witnesses() {
+fn missing_fresh_membership_is_refused_before_any_final_row_and_a_stale_row_guard_changes_nothing()
+{
     let (store, original) = base(&[directory(1, &[])], &[(1, InodeKind::Directory)]);
     let edits = [directory(1, &[("new", 2)])];
     let values = [InodeUpdate {
@@ -759,10 +958,9 @@ fn missing_fresh_membership_and_stale_row_guard_cannot_change_rows_or_touch_witn
         result,
         Err(ContentError::InvalidRecord("filesystem fresh membership"))
     );
-    assert!(!missing
-        .values
-        .keys()
-        .any(|key| key.kind == ROW || key.kind == TOUCH));
+    // The declaration and the serial's first row are one guarded write, so
+    // the lost member is met by the first read of the row: the seed pass.
+    assert_eq!(missing.row_jobs, 1);
     assert_eq!(missing.after_failure, 0);
     no_final(&emitted);
     let mut stale = Records::default();

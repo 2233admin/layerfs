@@ -17,9 +17,9 @@ mod support;
 use layerfs_bridge::control::{
     Activity, NativePhase, Reply, Request, TeardownStage, WorkspaceToken,
 };
-use layerfs_daemon::{control::Failure, Command, Completion, NativeJob, NativeReply, Response};
+use layerfs_daemon::{control::Failure, JobReceipt, OwnerError, ServiceClass};
 use layerfs_history::BranchId;
-use layerfs_overlay::{NativeMount, Route};
+use layerfs_overlay::Route;
 use mounted::{mount_entry, until, Harness};
 use std::{
     collections::BTreeMap,
@@ -45,20 +45,11 @@ fn harness(label: &str) -> (fixture::Fixture, Harness) {
 fn route(h: &Harness, token: WorkspaceToken) -> Route {
     h.service.operation(token).unwrap().workspace().route()
 }
-fn job(h: &Harness, route: Route, command: Command) -> Completion {
-    h.owner
-        .client()
-        .try_submit(Some(route), command)
-        .unwrap()
-        .wait()
-        .unwrap()
-}
-fn engine_mount(h: &Harness, route: Route) -> NativeMount {
-    let done = job(h, route, Command::Native(NativeJob::RetainedMount));
-    match done.result() {
-        Ok(Response::Native(NativeReply::RetainedMount(Some(mount)))) => *mount,
-        other => panic!("{other:?}"),
-    }
+/// The kernel and descriptor ownership the engine keeps in memory: kernel
+/// lookup entries, file custody, retained directory parents and open handles.
+fn details(h: &Harness, through: WorkspaceToken) -> u64 {
+    let open = h.engine_resources(through).open;
+    open.kernel_entries + open.file_custody + open.directory_parents + open.file_handles
 }
 /// Every non-root path once by ordinary `lstat`: one positive LOOKUP each.
 /// The names of each inode, and how many of the inodes are directories.
@@ -97,10 +88,10 @@ fn kernel_forget_arrives_on_a_live_connection_with_its_exact_decrement() {
     let work = || h.status(token).native.unwrap().work.unwrap();
     let quiet = || {
         let work = work();
-        work.received == 0 && work.admitted == 0
+        work.active == 0
     };
     until("attach quiescent", quiet);
-    let baseline = h.engine(helper);
+    let baseline = details(&h, helper);
     assert_eq!(work().forget_units, 0);
 
     // 27 names over 26 inodes: the in-root hard link gives one inode two
@@ -108,18 +99,19 @@ fn kernel_forget_arrives_on_a_live_connection_with_its_exact_decrement() {
     let (references, directories) = walk(&f, root);
     let names: u64 = references.values().sum();
     let inodes = references.len() as u64;
-    // Each referenced inode has its lookup row and its file-custody row,
-    // and a directory its retained parent row. No `lease` row stands for a
-    // lookup reference.
+    // Each referenced inode has its kernel lookup entry and its file custody
+    // in memory, and a directory its retained parent. No stored row stands
+    // for a lookup reference.
     let custody = 2 * inodes + directories;
     assert_eq!((names, inodes), (27, 26));
     assert!(references.values().any(|count| *count == 2));
     until("lookups quiescent", quiet);
-    let looked = h.engine(helper);
+    let looked = details(&h, helper);
     assert_eq!(
-        looked.owner_details - baseline.owner_details,
+        looked - baseline,
         custody,
-        "one indexed lookup owner per live kernel inode: {baseline:?} {looked:?}"
+        "one kernel lookup entry per live kernel inode: {baseline:?} {looked:?} {:?}",
+        h.engine_resources(helper).open
     );
 
     // Stimulus, bounded: ask for more than the cgroup can give back so the
@@ -132,10 +124,10 @@ fn kernel_forget_arrives_on_a_live_connection_with_its_exact_decrement() {
             .write(true)
             .open(RECLAIM)
             .and_then(|mut file| file.write_all(b"1G"));
-        quiet() && h.engine(helper).owner_details == baseline.owner_details
+        quiet() && details(&h, helper) == baseline
     });
     let after = work();
-    let returned = h.engine(helper);
+    let returned = details(&h, helper);
     println!(
         "NATIVE_FORGET names={names} inodes={inodes} reclaim_requests={requests} forget_units={} work={after:?} baseline={baseline:?} looked={looked:?} returned={returned:?}",
         after.forget_units
@@ -143,11 +135,8 @@ fn kernel_forget_arrives_on_a_live_connection_with_its_exact_decrement() {
     // Exactness: a short decrement leaves its row (the count above would not
     // return), an excess one is an underflow failure retained on the lane.
     assert_eq!(after.forget_units, inodes, "one unit per evicted inode");
-    assert_eq!(
-        (after.retained, after.unadmitted, after.terminal),
-        (0, 0, 0)
-    );
-    assert_eq!(returned.owner_details, baseline.owner_details);
+    assert_eq!((after.retained, after.terminal), (0, 0));
+    assert_eq!(returned, baseline);
     assert_eq!(h.phase(token), NativePhase::Ready);
     assert!(mount_entry(&ready.directory).is_some());
 
@@ -156,7 +145,7 @@ fn kernel_forget_arrives_on_a_live_connection_with_its_exact_decrement() {
     assert_eq!(walk(&f, root), (references, directories));
     until("second lookups quiescent", quiet);
     assert_eq!(
-        h.engine(helper).owner_details - baseline.owner_details,
+        details(&h, helper) - baseline,
         custody,
         "reacquired after FORGET"
     );
@@ -166,8 +155,7 @@ fn kernel_forget_arrives_on_a_live_connection_with_its_exact_decrement() {
     );
     h.unmount(&ready);
     until("native ownership retired", || {
-        let counts = h.engine(helper);
-        counts.namespaces == 1 && counts.owner_details <= baseline.owner_details
+        h.engine(helper).namespaces == 1 && details(&h, helper) <= baseline
     });
     assert!(matches!(
         h.try_unmount(helper).unwrap().reply,
@@ -188,26 +176,33 @@ fn an_unmount_that_cannot_revoke_stops_retained_and_later_replies_repeat_it() {
     let mut bytes = Vec::new();
     file.read_to_end(&mut bytes).unwrap();
     assert_eq!(bytes, fixture::FILES[6].1);
-    // A service consumer outside the kernel connection: both of this
-    // namespace's lifecycle slots are held by owner results the test keeps.
-    // Connection drain cannot see them; the unmount's revocation is refused
-    // unattempted and the unmount stops retained rather than waiting.
-    // The kernel sends the read's RELEASE after `close` returns, and it
-    // occupies a lifecycle slot: a nonwaiting test submission made before it
-    // is disposed is refused unattempted. Its arrival is observed as the
-    // descriptor row leaving the engine, read through another namespace.
-    let open = h.engine(helper).owner_details;
+    // The kernel sends the read's RELEASE after `close` returns. Its arrival
+    // is observed as the descriptor leaving the engine, read through another
+    // namespace.
+    let open = details(&h, helper);
     drop(file);
     until("the read's RELEASE disposed", || {
         let work = h.status(token).native.unwrap().work.unwrap();
-        h.engine(helper).owner_details < open && work.received == 0 && work.admitted == 0
+        details(&h, helper) < open && work.active == 0
     });
     let route = route(&h, token);
-    let mount = engine_mount(&h, route);
-    let held = [
-        job(&h, route, Command::Native(NativeJob::RetainedMount)),
-        job(&h, route, Command::Native(NativeJob::RetainedMount)),
-    ];
+    // A failure outside the kernel connection: one owner job of the test's
+    // own panics and the Workspace keeps that original failure. Connection
+    // drain cannot see it; the unmount's revocation is refused with the
+    // retained cause and the unmount stops retained rather than guessing.
+    let staged = h
+        .owner
+        .client()
+        .job(route, ServiceClass::Lifecycle, |_, _| {
+            panic!("staged Workspace failure")
+        });
+    assert!(
+        matches!(
+            staged.as_ref().map(JobReceipt::result),
+            Ok(Err(OwnerError::Retained(_)))
+        ),
+        "{staged:?}"
+    );
 
     let custody = match h.try_unmount(token) {
         Err(Failure::Retained(custody)) => *custody,
@@ -220,10 +215,13 @@ fn an_unmount_that_cannot_revoke_stops_retained_and_later_replies_repeat_it() {
     let work = custody.work.expect("counters at the stopping boundary");
     assert_eq!(
         (work.loops_configured, work.loops_joined),
-        (1, 1),
+        (
+            layerfs_fuse::RECEIVE_SLOTS as u16,
+            layerfs_fuse::RECEIVE_SLOTS as u16
+        ),
         "{work:?}"
     );
-    assert_eq!((work.received, work.admitted, work.retained), (0, 0, 0));
+    assert_eq!((work.active, work.retained), (0, 0));
     assert!(!custody.detail.is_empty());
     // Effects that happened stay happened; nothing is reported as unmounted.
     assert!(mount_entry(&ready.directory).is_none());
@@ -249,21 +247,19 @@ fn an_unmount_that_cannot_revoke_stops_retained_and_later_replies_repeat_it() {
         .service
         .execute_control(&Request::Locate(token.workspace))
         .is_ok());
-    // Releasing the consumer settles nothing by itself: no hidden retry runs.
-    drop(held);
-    assert_eq!(
-        engine_mount(&h, route),
-        mount,
-        "the engine mount is neither revoked nor replaced"
+    // Nothing settles by itself: no hidden retry runs, and the Workspace
+    // still answers with its original failure.
+    let again = h.owner.client().native_retained_mount(Some(route));
+    assert!(
+        matches!(&again, Err(OwnerError::Unattempted { cause, .. })
+            if matches!(**cause, OwnerError::Retained(_))),
+        "{again:?}"
     );
     assert_eq!(h.phase(token), NativePhase::Retained);
     match h.try_unmount(token) {
         Err(Failure::Retained(again)) => assert_eq!(*again, custody),
         other => panic!("{other:?}"),
     }
-    assert_eq!(engine_mount(&h, route), mount);
-    let serving = h.serving.work().unwrap();
-    assert_eq!(serving.mounts, 0, "the drained lane was released");
-    h.stop();
+    h.stop_retained();
     f.cleanup();
 }

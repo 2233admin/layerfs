@@ -30,6 +30,9 @@ def integer(value):
     return type(value) is int and value >= 0
 
 
+RETIRED_OWNER_BYTES = "retired by issue 321: one lock per Workspace has no scheduler allocation or admission credit"
+
+
 def unavailable(reason, not_applicable=False):
     require(isinstance(reason, str) and bool(reason), "unavailable reason required")
     return {"status": "NOT_APPLICABLE" if not_applicable else "UNAVAILABLE", "value": None, "reason": reason}
@@ -227,8 +230,13 @@ def validate_receipt(row):
     require(all(isinstance(key, str) and bool(key) and isinstance(value, str) and len(value) == 64
                 and all(char in "0123456789abcdef" for char in value) for key, value in row["raw_artifacts"].items()), "artifact hash schema")
     if row["resource_status"] == "PASS":
+        retired = [row["observations"][name] for name in ("scheduler_bytes", "peak_credited_bytes")]
+        # Both are observed, or both are the exact issue 321 retirement: never one of each, never another reason.
+        require(all(item["status"] == "AVAILABLE" for item in retired)
+                or all(item == unavailable(RETIRED_OWNER_BYTES, not_applicable=True) for item in retired),
+                "resource PASS requires actual memory and disk observations: scheduler and credit bytes observed, or both exactly retired")
         require(all(row["observations"][name]["status"] == "AVAILABLE" for name in
-                    ("scheduler_bytes", "peak_credited_bytes", "immutable_cache_allowance_bytes", "daemon_vmhwm_bytes",
+                    ("immutable_cache_allowance_bytes", "daemon_vmhwm_bytes",
                      "store_logical_bytes", "store_allocated_bytes", "overlay_logical_bytes", "overlay_allocated_bytes")),
                 "resource PASS requires actual memory and disk observations")
     return row

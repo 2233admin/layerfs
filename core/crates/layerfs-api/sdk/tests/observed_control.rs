@@ -5,7 +5,7 @@ use layerfs_bridge::{
 };
 use layerfs_history::WorkspaceId;
 use layerfs_sdk::{
-    control::{Control, ControlPhase},
+    internal::{Control, ControlPhase},
     WorkspaceApi,
 };
 use std::{
@@ -68,17 +68,21 @@ fn facade_observation_is_explicit_and_does_not_persist_on_channel() {
         }
     });
     assert_eq!(
-        WorkspaceApi::new(&mut control).cleanup(token()).unwrap(),
-        CleanupObservation::Gone
-    );
-    assert_eq!(
-        WorkspaceApi::with_observations(&mut control, &[7; 32])
+        layerfs_sdk::internal::workspace(&mut control)
             .cleanup(token())
             .unwrap(),
         CleanupObservation::Gone
     );
     assert_eq!(
-        WorkspaceApi::new(&mut control).cleanup(token()).unwrap(),
+        layerfs_sdk::internal::with_observations(&mut control, &[7; 32])
+            .cleanup(token())
+            .unwrap(),
+        CleanupObservation::Gone
+    );
+    assert_eq!(
+        layerfs_sdk::internal::workspace(&mut control)
+            .cleanup(token())
+            .unwrap(),
         CleanupObservation::Gone
     );
     worker.join().unwrap();
@@ -115,4 +119,164 @@ fn observed_facade_borrows_scope_with_same_two_pointer_layout() {
         std::mem::size_of::<WorkspaceApi<'_>>(),
         2 * std::mem::size_of::<usize>()
     );
+}
+
+#[test]
+fn unmount_force_selects_one_original_request_without_unknown_relinquishment() {
+    use layerfs_bridge::control::{ControlCode, ControlRefusal};
+    let (mut control, worker) = pair(|mut channel| {
+        for force in [false, true] {
+            let call = Call::decode(channel.receive.receive().unwrap()).unwrap();
+            let reply = if force {
+                assert_eq!(
+                    call.request,
+                    Request::ForceUnmount {
+                        token: token(),
+                        relinquish_unknown: false
+                    }
+                );
+                Reply::Refused(ControlRefusal {
+                    code: ControlCode::Busy,
+                    phase: "force:admission".into(),
+                    moved: None,
+                    published: None,
+                    detail: "original owner retained".into(),
+                })
+            } else {
+                assert_eq!(call.request, Request::Unmount(token()));
+                Reply::Unmounted(token())
+            };
+            channel
+                .send
+                .send(&Answer { id: call.id, reply }.encode().unwrap())
+                .unwrap();
+        }
+    });
+    assert_eq!(
+        layerfs_sdk::internal::workspace(&mut control)
+            .unmount(token(), false)
+            .unwrap(),
+        None
+    );
+    let failure = layerfs_sdk::internal::workspace(&mut control)
+        .unmount(token(), true)
+        .unwrap_err();
+    assert!(
+        matches!(failure.cause, layerfs_sdk::OperationCause::Remote(ref cause) if cause.code == ControlCode::Busy && cause.phase == "force:admission")
+    );
+    worker.join().unwrap();
+}
+
+fn branch_record(stack: layerfs_history::LayerStackId) -> layerfs_history::BranchRecord {
+    layerfs_history::BranchRecord {
+        id: layerfs_history::BranchId::from_authority([4; 16]),
+        stack,
+        name: layerfs_history::HistoryName::new("main").unwrap(),
+        base_layer: layerfs_history::LayerId::from_bytes([0x32; 33]).unwrap(),
+        head_commit: None,
+    }
+}
+#[test]
+fn branches_keeps_one_original_request_and_exact_authenticated_continuation_per_call() {
+    use layerfs_history::{LayerStackId, Page, PageResult};
+    let stack = LayerStackId::from_authority([8; 16]);
+    let (mut control, worker) = pair(move |mut channel| {
+        for cursor in [None, Some(vec![6; 160])] {
+            let call = Call::decode(channel.receive.receive().unwrap()).unwrap();
+            assert_eq!(
+                call.request,
+                Request::Branches {
+                    stack,
+                    page: Page {
+                        cursor: cursor.clone(),
+                        limit: 1
+                    }
+                }
+            );
+            let answer = Answer {
+                id: call.id,
+                reply: Reply::Branches(PageResult {
+                    records: vec![branch_record(stack)],
+                    continuation: if cursor.is_none() {
+                        Some(vec![6; 160])
+                    } else {
+                        None
+                    },
+                }),
+            };
+            channel.send.send(&answer.encode().unwrap()).unwrap();
+        }
+    });
+    let first = layerfs_sdk::internal::branches(
+        &mut control,
+        stack,
+        Page {
+            cursor: None,
+            limit: 1,
+        },
+    )
+    .unwrap();
+    assert_eq!(first.records, [branch_record(stack)]);
+    let second = layerfs_sdk::internal::branches(
+        &mut control,
+        stack,
+        Page {
+            cursor: first.continuation,
+            limit: 1,
+        },
+    )
+    .unwrap();
+    assert!(second.continuation.is_none());
+    assert_eq!(control.channel_work().0.records, 2);
+    assert_eq!(control.channel_work().1.records, 2);
+    worker.join().unwrap();
+}
+#[test]
+fn branches_wrong_stack_retains_original_reply_and_quarantines_the_attempted_owner() {
+    use layerfs_history::{LayerStackId, Page, PageResult};
+    let stack = LayerStackId::from_authority([8; 16]);
+    let (mut control, worker) = pair(move |mut channel| {
+        let call = Call::decode(channel.receive.receive().unwrap()).unwrap();
+        channel
+            .send
+            .send(
+                &Answer {
+                    id: call.id,
+                    reply: Reply::Branches(PageResult {
+                        records: vec![branch_record(LayerStackId::from_authority([9; 16]))],
+                        continuation: None,
+                    }),
+                }
+                .encode()
+                .unwrap(),
+            )
+            .unwrap();
+    });
+    let error = layerfs_sdk::internal::branches(
+        &mut control,
+        stack,
+        Page {
+            cursor: None,
+            limit: 1,
+        },
+    )
+    .unwrap_err();
+    let layerfs_sdk::OperationCause::Exchange(cause) = error.cause else {
+        panic!("original exchange failure required")
+    };
+    assert_eq!(cause.phase, ControlPhase::Validate);
+    assert!(cause.attempted);
+    assert!(matches!(cause.received.unwrap().reply, Reply::Branches(_)));
+    let refused = control
+        .call(Request::Branches {
+            stack,
+            page: Page {
+                cursor: None,
+                limit: 1,
+            },
+        })
+        .unwrap_err();
+    assert!(!refused.attempted);
+    assert_eq!(control.channel_work().0.records, 1);
+    worker.join().unwrap();
 }

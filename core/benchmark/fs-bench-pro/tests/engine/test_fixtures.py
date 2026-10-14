@@ -14,13 +14,57 @@ sys.path.insert(0, str(BENCH))
 from engine import fixtures
 
 
-class Fixtures(unittest.TestCase):
+class IsolatedInputs(unittest.TestCase):
+    def setUp(self):
+        cache = tempfile.TemporaryDirectory(); self.addCleanup(cache.cleanup)
+        patcher = patch.object(fixtures.prepared_inputs, "CACHE", Path(cache.name) / "inputs")
+        patcher.start(); self.addCleanup(patcher.stop)
+
+
+class Fixtures(IsolatedInputs):
+    def test_master_reuse_crosses_producer_key_directories_in_kept_cache(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            cache = Path(temporary) / "kept-fixtures"
+            prior = cache / "first-key" / "first-recipe"
+            prior.mkdir(parents=True)
+            good = {"schema": "fs-bench-pro-prepared-workspace-v1", "status": "PASS",
+                "global_profile": "Disposable/WAL/OFF",
+                "store_builder_key": fixtures.prepared_inputs.product_store_key({"files": {}}),
+                "source_uid": 501, "source_gid": 20, "fixture": {"fixture_sha256": "same"},
+                "master_volume": "one-master", "provision": {"store_sha256": "same-store"}}
+            (prior / "prepared.json").write_text(json.dumps(good))
+            (prior / "manifest.json").write_text("retained provenance")
+            with patch.object(fixtures, "load", return_value=good) as checked:
+                reused, record = fixtures.compatible_master(cache / "second-key" / "second-recipe",
+                    {"fixture_sha256": "same"}, {"files": {}}, 501, 20)
+            checked.assert_called_once_with(prior)
+            self.assertEqual(reused["master_volume"], "one-master")
+            self.assertEqual(record["prepared"], str(prior.resolve()))
+
+    def test_nested_history_genesis_reuses_the_same_kept_initial_store(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            cache = Path(temporary) / "kept-fixtures"
+            prior = cache / "first-key" / "access" / "genesis"
+            prior.mkdir(parents=True)
+            good = {"schema": "fs-bench-pro-prepared-workspace-v1", "status": "PASS",
+                "global_profile": "Disposable/WAL/OFF",
+                "store_builder_key": fixtures.prepared_inputs.product_store_key({"files": {}}),
+                "source_uid": 501, "source_gid": 20, "fixture": {"fixture_sha256": "same"},
+                "master_volume": "one-master", "provision": {"store_sha256": "same-store"}}
+            (prior / "prepared.json").write_text(json.dumps(good))
+            (prior / "manifest.json").write_text("retained provenance")
+            with patch.object(fixtures, "load", return_value=good) as checked:
+                reused, _ = fixtures.compatible_master(cache / "second-key" / "access" / "genesis",
+                    {"fixture_sha256": "same"}, {"files": {}}, 501, 20)
+            checked.assert_called_once_with(prior)
+            self.assertEqual(reused["master_volume"], "one-master")
+
     def test_master_reuse_requires_exact_input_profile_product_and_identity(self):
         good = {"schema": "fs-bench-pro-prepared-workspace-v1", "status": "PASS",
-                "global_profile": "Disposable/WAL/OFF", "identity": {"product_tree": "product"},
+                "global_profile": "Disposable/WAL/OFF", "store_builder_key": fixtures.prepared_inputs.product_store_key({"files": {}}), "identity": {"product_tree": "product", "files": {}},
                 "source_uid": 501, "source_gid": 20, "fixture": {"fixture_sha256": "fixture"},
                 "master_volume": "immutable-master", "provision": {"store_sha256": "sealed"}}
-        variants = ({}, {"global_profile": "Durable"}, {"identity": {"product_tree": "other"}},
+        variants = ({}, {"global_profile": "Durable"}, {"store_builder_key": {"changed_product": True}},
                     {"source_uid": 502}, {"source_gid": 21}, {"fixture": {"fixture_sha256": "other"}},
                     {"status": "FAIL"})
         for changed in variants:
@@ -32,7 +76,7 @@ class Fixtures(unittest.TestCase):
                 (prior / "manifest.json").write_text("sealed prior evidence")
                 with patch.object(fixtures, "load", return_value=good) as checked:
                     reused, record = fixtures.compatible_master(root / "new", {"fixture_sha256": "fixture"},
-                                                               {"product_tree": "product"}, 501, 20)
+                                                               {"product_tree": "product", "files": {}}, 501, 20)
                 self.assertEqual(checked.call_count, 0 if changed else 1)
                 if changed:
                     self.assertIsNone(reused)
@@ -47,11 +91,11 @@ class Fixtures(unittest.TestCase):
             prior = root / "prior"
             prior.mkdir()
             (prior / "prepared.json").write_text(json.dumps({"schema": "fs-bench-pro-prepared-workspace-v1",
-                "status": "PASS", "global_profile": "Disposable/WAL/OFF", "identity": {"product_tree": "product"},
+                "status": "PASS", "global_profile": "Disposable/WAL/OFF", "store_builder_key": fixtures.prepared_inputs.product_store_key({"files": {}}), "identity": {"product_tree": "product", "files": {}},
                 "source_uid": 501, "source_gid": 20, "fixture": {"fixture_sha256": "fixture"}}))
             with patch.object(fixtures, "load", side_effect=ValueError("retained evidence changed")):
                 with self.assertRaisesRegex(ValueError, "retained evidence changed"):
-                    fixtures.compatible_master(root / "new", {"fixture_sha256": "fixture"}, {"product_tree": "product"}, 501, 20)
+                    fixtures.compatible_master(root / "new", {"fixture_sha256": "fixture"}, {"product_tree": "product", "files": {}}, 501, 20)
 
     def test_recipe_is_independent_of_output_path_and_never_overwrites(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -99,9 +143,9 @@ class Fixtures(unittest.TestCase):
             self.assertIn("cache/residency.py", result["files"])
 
 
-class RecipeHistory(unittest.TestCase):
+class RecipeHistory(IsolatedInputs):
     def case(self, schema, count, selected, mixed=False):
-        case = {"id": "original-case", "v016_case": "original-case",
+        case = {"id": "original-case", "v016_case": "original-case", "fixture": {"recipe": "original-case", "profile": "mock-history", "seed": 1},
                 "history_schedule": {"schema": schema, "commits": count, "verification_steps": selected}}
         if mixed:
             case["m1_schedule"] = {"tier": "L100"}
@@ -115,7 +159,7 @@ class RecipeHistory(unittest.TestCase):
             if mode == "m1-scope":
                 output = Path(folder) / (label + ".stdout")
                 output.write_text("original-m1-selective-scope-v1\npath\tkind\tlength\tmode\tmtime_seconds\tmtime_nanoseconds\tranges\ttarget\n")
-                return {"stdout": str(output), "status": "PASS"}
+                return {"argv": argv, "stdout": str(output), "status": "PASS", "exit_code": 0}
             if mode == "prepare-sdk-step":
                 step, root = int(argv[3]), Path(argv[4])
                 root.mkdir()
@@ -129,7 +173,7 @@ class RecipeHistory(unittest.TestCase):
                 output = Path(folder) / (label + ".stdout")
                 output.write_text(json.dumps({"case": case, "step": step, "members": 2,
                     "descriptor_sha256": hashlib.sha256(body.encode()).hexdigest()}))
-                return {"stdout": str(output), "status": "PASS"}
+                return {"argv": argv, "stdout": str(output), "status": "PASS", "exit_code": 0}
             step = 0 if mode == "fixture" else int(argv[3])
             root = Path(argv[3] if mode == "fixture" else argv[4])
             body = f"workspace-independent-manifest-v1\nstate-{step}\n"
@@ -150,16 +194,17 @@ class RecipeHistory(unittest.TestCase):
                 record["verification_status"] = "pass"
             output = Path(folder) / (label + ".stdout")
             output.write_text(json.dumps(record))
-            return {"stdout": str(output), "status": "PASS"}
+            return {"argv": argv, "stdout": str(output), "status": "PASS", "exit_code": 0}
         return command
 
     def build(self, root):
+        fixtures.prepared_inputs.CACHE = root / "shared-input-cache"
         binaries = {}
-        for name in ("workspace-writer", "workspace-linux", "workload-linux", "edit-linux", "edit-host"):
+        for name in ("namespace-writer", "workspace-writer", "workload-host", "workspace-linux", "workload-linux", "edit-linux", "edit-host"):
             path = root / name
             path.write_text(name)
             binaries[name] = {"path": str(path), "sha256": fixtures.identity.sha256(path)}
-        return {"binaries": binaries}
+        return {"binaries": binaries, "flags": "mock fixture tools", "explicit_rustflags": None}
 
     def test_five_hundred_commits_materialize_only_original_selected_states(self):
         selected = [0, 1, 199, 200, 201, 250, 499, 500]
@@ -178,6 +223,7 @@ class RecipeHistory(unittest.TestCase):
             for state in history:
                 self.assertEqual(fixtures.identity.sha256(state["manifest"]), state["manifest_sha256"])
                 self.assertEqual(state["native_recipe"]["binary_sha256"], build["binaries"]["workspace-writer"]["sha256"])
+                self.assertTrue(Path(state["native_root"]).is_dir(), "non-M1 consumers keep their native roots")
             self.assertFalse((folder / "native-states/state-2").exists())
 
     def test_m1_regular_and_exhaustive_keep_materialization_separate_from_observed_modes(self):
@@ -199,6 +245,109 @@ class RecipeHistory(unittest.TestCase):
                     self.assertTrue(Path(state["manifest"]).read_text().startswith("original-m1-selective-scope-v1\n"))
                     self.assertNotEqual(state["manifest_sha256"], state["native_manifest_sha256"])
                     self.assertEqual(state["scope_recipe"]["binary_sha256"], build["binaries"]["edit-host"]["sha256"])
+
+    def test_m1_checkpoint_payloads_are_released_before_preparation_is_sealed(self):
+        outcomes=[]
+        for count in (10,20):
+            selected=list(range(5,count+1,5))
+            with self.subTest(count=count), tempfile.TemporaryDirectory() as temporary:
+                folder=Path(temporary); build=self.build(folder)
+                case=self.case("original-m1-commit-sequence-v1",count,selected,mixed=True)
+                calls=[]; peaks=[]; native_command=self.native_commands(calls)
+                def authored(argv, out, label, seconds, **options):
+                    result=native_command(argv,out,label,seconds,**options)
+                    if argv[1]=="expected-step":
+                        peaks.append(len(list(folder.rglob("independent-native-state"))))
+                    return result
+                with patch.object(fixtures.receipts,"command",side_effect=authored):
+                    initial,final,native,history,_=fixtures.prepare_recipe_history(case,folder,build)
+                self.assertEqual((initial["logical_bytes"],final["logical_bytes"]),(1,count+1))
+                self.assertEqual(set(native),{"state-0"})
+                self.assertEqual([state["index"] for state in history],selected)
+                for state in history:
+                    self.assertEqual(fixtures.identity.sha256(state["manifest"]),state["manifest_sha256"])
+                    self.assertEqual(fixtures.identity.sha256(state["native_manifest"]),state["native_manifest_sha256"])
+                    self.assertEqual(state["native_recipe"]["binary_sha256"],build["binaries"]["workspace-writer"]["sha256"])
+                    self.assertEqual(state["scope_recipe"]["binary_sha256"],build["binaries"]["edit-host"]["sha256"])
+                    self.assertEqual(state["verification_scope"],"original-m1-selective-scope-v1")
+                recipes=json.loads((folder/"history-native-recipes.json").read_text())
+                self.assertEqual(recipes["states"],history)
+                fixtures.receipts.manifest(folder)
+                sealed=fixtures.receipts.verify_manifest(folder)
+                payload_entries=[name for name in sealed["files"] if name.endswith("independent-native-state")]
+                retained=len(list(folder.rglob("independent-native-state")))
+                outcomes.append((count,retained,max(peaks),payload_entries))
+                self.assertEqual(len(payload_entries), 1)
+                self.assertTrue(payload_entries[0].endswith("/source/independent-native-state"))
+                self.assertIn("history-native-recipes.json",sealed["files"])
+                for step in selected:
+                    self.assertIn(f"history-manifests/state-{step}.tsv",sealed["files"])
+        for count,retained,peak,payload_entries in outcomes:
+            print(json.dumps({"selected_checkpoints":count//5,"retained_payload_roots":retained,"peak_payload_roots":peak,"sealed_payload_entries":len(payload_entries)}))
+            with self.subTest(selected_checkpoints=count//5):
+                self.assertEqual(retained,1,f"{count//5} generated checkpoints must leave only the pristine source")
+                self.assertEqual(peak,2,"source plus one currently-generated checkpoint is the peak")
+                self.assertEqual(len(payload_entries), 1)
+                self.assertTrue(payload_entries[0].endswith("/source/independent-native-state"))
+
+    def test_m1_checkpoint_cleanup_refuses_foreign_or_existing_outputs(self):
+        for variant in ("existing","symlink"):
+            with self.subTest(variant=variant), tempfile.TemporaryDirectory() as temporary:
+                base=Path(temporary); folder=base/"prepared"; folder.mkdir()
+                foreign=base/"foreign"; foreign.mkdir(); (foreign/"keep").write_text("untouched")
+                build=self.build(folder); case=self.case("original-m1-commit-sequence-v1",5,[5],mixed=True)
+                calls=[]; command=self.native_commands(calls); target=folder/"expected-native"
+                if variant=="existing":
+                    target.mkdir(); (target/"keep").write_text("pre-existing")
+                def author(argv,out,label,seconds,**options):
+                    result=command(argv,out,label,seconds,**options)
+                    if variant=="symlink" and argv[1]=="expected-step":
+                        fixtures.shutil.rmtree(Path(argv[4]))
+                        Path(argv[4]).symlink_to(foreign,target_is_directory=True)
+                    return result
+                with patch.object(fixtures.receipts,"command",side_effect=author):
+                    with self.assertRaises(FileExistsError if variant=="existing" else ValueError):
+                        fixtures.prepare_recipe_history(case,folder,build)
+                self.assertEqual((foreign/"keep").read_text(),"untouched")
+                self.assertTrue((fixtures.prepared_inputs.source_path(case, build)/"independent-native-state").is_file())
+                self.assertFalse((folder/"history-native-recipes.json").exists())
+                if variant=="existing":
+                    self.assertEqual((target/"keep").read_text(),"pre-existing")
+                    self.assertFalse(any(argv[1]=="expected-step" for argv,_,_ in calls))
+                else:
+                    self.assertTrue(target.is_symlink())
+
+    def test_m1_cleanup_failure_keeps_original_error_and_does_not_publish_preparation(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            folder=Path(temporary); build=self.build(folder)
+            case=self.case("original-m1-commit-sequence-v1",5,[5],mixed=True); calls=[]
+            with patch.object(fixtures.receipts,"command",side_effect=self.native_commands(calls)), \
+                    patch.object(fixtures.shutil,"rmtree",side_effect=OSError("original checkpoint cleanup refusal")) as remove:
+                with self.assertRaisesRegex(OSError,"original checkpoint cleanup refusal"):
+                    fixtures.prepare_recipe_history(case,folder,build)
+                remove.assert_called_once_with(folder/"expected-native")
+            self.assertTrue((folder/"expected-native/independent-native-state").is_file())
+            self.assertTrue((folder/"expected-native.manifest.tsv").is_file())
+            self.assertTrue((folder/"history-manifests/state-5.tsv").is_file())
+            self.assertFalse((folder/"history-native-recipes.json").exists())
+
+    def test_m1_invalid_full_manifest_is_not_cleaned_or_admitted(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            folder=Path(temporary); build=self.build(folder)
+            case=self.case("original-m1-commit-sequence-v1",5,[5],mixed=True)
+            command=self.native_commands([])
+            def corrupted(argv,out,label,seconds,**options):
+                result=command(argv,out,label,seconds,**options)
+                if argv[1]=="expected-step":
+                    Path(argv[4]).with_suffix(".manifest.tsv").write_text("original mismatch retained")
+                return result
+            with patch.object(fixtures.receipts,"command",side_effect=corrupted), \
+                    patch.object(fixtures.shutil,"rmtree",wraps=fixtures.shutil.rmtree) as remove:
+                with self.assertRaisesRegex(ValueError,"manifest identity differs"):
+                    fixtures.prepare_recipe_history(case,folder,build)
+                remove.assert_not_called()
+            self.assertTrue((folder/"expected-native/independent-native-state").is_file())
+            self.assertFalse((folder/"history-native-recipes.json").exists())
 
     def test_invalid_checkpoint_scope_refuses_before_native_authoring(self):
         cases = [self.case("unknown", 2, [0, 2]),
@@ -252,7 +401,7 @@ class RecipeHistory(unittest.TestCase):
             reused = {"master_volume": "sealed-m1-master", "provision": {"store_sha256": "sealed"}}
             with patch.object(fixtures.identity, "ROOT", repo), \
                     patch.object(fixtures.identity, "load_build", return_value=build), \
-                    patch.object(fixtures.identity, "source_identity", return_value={"product_tree": "same"}), \
+                    patch.object(fixtures.identity, "source_identity", return_value={"product_tree": "same", "files": {}}), \
                     patch.object(fixtures, "family_case", return_value=({"family": "mixed_load_bearing"}, case)), \
                     patch.object(fixtures, "assets", side_effect=assets), \
                     patch.object(fixtures, "compatible_master", return_value=(reused, {"scope": "closed independent input"})), \

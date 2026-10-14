@@ -10,7 +10,7 @@ use crate::{
     wire::{Reader, Writer},
 };
 use layerfs_history::PageResult;
-const MAGIC: &[u8] = b"LFSA\x01";
+const MAGIC: &[u8] = b"LFSA\x02";
 impl Answer {
     /// Encodes one bounded original result; publication is independent of delivery.
     pub fn encode(&self) -> Result<Vec<u8>, ControlError> {
@@ -60,6 +60,17 @@ impl Answer {
             Reply::Forked(value) => {
                 out.byte(5)?;
                 put_binding(&mut out, value)?;
+            }
+            Reply::Branches(value) => {
+                if value.records.len() > HISTORY_WINDOW as usize {
+                    return Err(ControlError("branches result window"));
+                }
+                out.byte(17)?;
+                out.put(&(value.records.len() as u16).to_be_bytes())?;
+                for row in &value.records {
+                    put_branch(&mut out, row)?;
+                }
+                put_cursor(&mut out, &value.continuation)?;
             }
             Reply::History(value) => {
                 if value.records.len() > HISTORY_WINDOW as usize {
@@ -112,6 +123,20 @@ impl Answer {
             return Err(ControlError("control correlation"));
         }
         let reply = match input.byte()? {
+            17 => {
+                let count = u16::from_be_bytes(input.array()?);
+                if count > HISTORY_WINDOW {
+                    return Err(ControlError("branches result window"));
+                }
+                let mut records = Vec::with_capacity(count as usize);
+                for _ in 0..count {
+                    records.push(branch(&mut input)?);
+                }
+                Reply::Branches(PageResult {
+                    records,
+                    continuation: cursor(&mut input)?,
+                })
+            }
             16 => {
                 let token = token(&mut input)?;
                 let state = match input.byte()? {

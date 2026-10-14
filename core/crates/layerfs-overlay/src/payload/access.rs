@@ -14,13 +14,7 @@ pub(crate) fn check(cell: &Cell) -> OverlayResult<()> {
 impl Overlay {
     /// Replaces one whole cell of a layer inside the caller's transaction,
     /// stamped with that layer's epoch. A cell with no valid byte leaves no row.
-    pub(crate) fn put_cell(
-        &self,
-        route: Route,
-        serial: i64,
-        layer: &Layer,
-        cell: &Cell,
-    ) -> OverlayResult<()> {
+    pub(crate) fn put_cell(&self, serial: i64, layer: &Layer, cell: &Cell) -> OverlayResult<()> {
         let mut observed = self.payload_work.get();
         observed.cell_copy_bytes = observed
             .cell_copy_bytes
@@ -33,18 +27,17 @@ impl Overlay {
         let key = integer(cell.offset)?;
         // A wide row over this cell gives it up: a stale one is garbage, a
         // live one keeps its other cells as rows of their own.
-        if let Some((shape, _)) = self.covering(route.ns, serial, layer.gen, key)? {
+        if let Some((shape, _)) = self.covering(serial, layer.gen, key)? {
             if shape.wide() {
-                if self.stale(route.ns, serial, layer, shape.offset, shape.epoch)? {
+                if self.stale(serial, layer, shape.offset, shape.epoch)? {
                     self.drop_row(shape.row)?;
                 } else {
-                    let layer = (route.ns, serial, layer.gen);
+                    let layer = (serial, layer.gen);
                     self.carve(layer, &shape, key, key + CELL_BYTES as i64)?;
                 }
             }
         }
         self.store(
-            route.ns,
             serial,
             layer.gen,
             key,
@@ -66,7 +59,7 @@ impl Overlay {
         if generation != state.active && Some(generation) != state.captured {
             return Err(OverlayError::Stale);
         }
-        self.cell_at(route, serial, generation, offset)
+        self.cell_at(serial, generation, offset)
     }
     /// The raw stored cell of a retained capture, including while terminal
     /// close awaits fenced construction/history disposition. Install/release
@@ -78,7 +71,7 @@ impl Overlay {
         offset: u64,
     ) -> OverlayResult<Option<Cell>> {
         self.checked_capture(capture)?;
-        self.cell_at(capture.route(), serial, capture.generation, offset)
+        self.cell_at(serial, capture.generation, offset)
     }
     /// One cell written at an exact live generation of an owned source, such as
     /// the creation generation of a local symlink target.
@@ -94,11 +87,10 @@ impl Overlay {
         if generation <= state.installed || generation > state.active.0 {
             return Err(OverlayError::Stale);
         }
-        self.cell_at(source.route(), serial, Generation(generation), offset)
+        self.cell_at(serial, Generation(generation), offset)
     }
     fn cell_at(
         &self,
-        route: Route,
         serial: u64,
         generation: Generation,
         offset: u64,
@@ -107,9 +99,7 @@ impl Overlay {
         if offset % CELL_BYTES as u64 != 0 {
             return Ok(None);
         }
-        let Some((shape, stored)) =
-            self.covering(route.ns, integer(serial)?, generation.0, cell)?
-        else {
+        let Some((shape, stored)) = self.covering(integer(serial)?, generation.0, cell)? else {
             return Ok(None);
         };
         // A wide row is dense: its cell is whole.

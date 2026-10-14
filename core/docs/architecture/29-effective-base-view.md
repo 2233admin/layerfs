@@ -139,3 +139,15 @@ is absent. `readlink` serves a locally created symlink from its creation cell
 and an inherited one from the base object. Enumeration semantics under mutation
 are declared in [namespace operations](30-namespace-operations.md), which also
 supersedes this document's statement that atomic namespace effects are pending.
+
+### Named fact value reuse (#319)
+
+A requested base name supplies the child serial and its already authenticated
+inode value. The initial inode fact derives portable metadata and owning length
+from that value instead of rereading the root/inode-table path. Aliases whose
+inode fact is already supplied still add only the name fact. Destination-path
+walking continues to supply names without eagerly adding every inode; the768
+fact window, admission, native root correlation, install fences and logical
+absence/provider-error distinction remain unchanged. Directory counts use the
+same bounded derivation. Zero remains an acknowledged owning regular-file length,
+and symlink length comes from the unchanged authenticated target decoder.

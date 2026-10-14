@@ -187,14 +187,16 @@ fn a_row_the_job_read_is_written_as_the_indexed_path_writes_it() {
     assert_eq!(w.row(50).inherited_cutoff, 0);
 
     // A directory's counts and time, then its mode, over the row it read.
-    assert_eq!(w.visit(&[1], vec![directory(3, 1)]), 2);
+    // It is the inode the visit names: its row came with the fence, so the
+    // update is the job's one inode statement.
+    assert_eq!(w.visit(&[1], vec![directory(3, 1)]), 1);
     assert_eq!(w.row(1), directory(3, 1));
     let renamed = Inode {
         mode: 0o700,
         mtime_seconds: 12,
         ..directory(3, 1)
     };
-    assert_eq!(w.visit(&[1], vec![renamed.clone()]), 2);
+    assert_eq!(w.visit(&[1], vec![renamed.clone()]), 1);
     assert_eq!(w.row(1), renamed);
 }
 
@@ -215,7 +217,9 @@ fn a_job_keeps_the_rows_it_can_publish_and_reads_the_rest_by_index() {
     // as one job can publish; the second reads the two that were not kept.
     // The kept row is updated with no probe, the other after its probe.
     let twice: Vec<u64> = serials.iter().chain(&serials).copied().collect();
-    let kept = COMPOUND_INODES as u64;
+    // The row of the root, which the visit names, came with its fence and
+    // holds one of the places.
+    let kept = COMPOUND_INODES as u64 - 1;
     let unkept = serials.len() as u64 - kept;
     assert_eq!(
         w.visit(&twice, vec![grown(50), grown(55)]),

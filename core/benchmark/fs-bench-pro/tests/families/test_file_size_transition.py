@@ -70,6 +70,10 @@ class Definition(unittest.TestCase):
             if case["fixture"]["alias"]:
                 self.assertTrue(any("no parent-directory normalization" in row["what"] for row in case["differences"]))
                 self.assertIn("parent-mtime incompatibility", case["port_review"]["oracle_coverage"])
+                self.assertEqual(case["automatic_parent_mtime"]["native_precision_allowance_ns"], 1_000_000_000)
+                self.assertEqual(case["automatic_parent_mtime"]["max_operation_ns"], 60_000_000_000)
+            else:
+                self.assertNotIn("automatic_parent_mtime", case)
 
 
 class PreparedRoute(unittest.TestCase):
@@ -100,6 +104,16 @@ class PreparedRoute(unittest.TestCase):
             alias = invoke("v016-boundary-alias-roundtrip-v1", bound)
             self.assertEqual(alias.returncode, 0, alias.stderr)
             self.assertEqual(json.loads(alias.stdout), ["v016-boundary-alias", "1", "2"])
+            wrapped = subprocess.run(["/bin/bash", str(FAMILY / "workload.sh"), "apply",
+                                      "v016-boundary-alias-roundtrip-v1", "5"],
+                                     env=bound, capture_output=True, text=True, timeout=10)
+            self.assertEqual(wrapped.returncode, 0, wrapped.stderr)
+            self.assertEqual(json.loads(wrapped.stdout), ["apply-boundary-alias", "5", str(writer)])
+            custody = subprocess.run(["/bin/bash", str(FAMILY / "workload.sh"), "verify",
+                                      "v016-boundary-alias-roundtrip-v1", "5", "/code/history/custody.tsv"],
+                                     env=bound, capture_output=True, text=True, timeout=10)
+            self.assertEqual(custody.returncode, 0, custody.stderr)
+            self.assertEqual(json.loads(custody.stdout), ["verify", "v016-boundary-alias-roundtrip-v1", "5", "/code/history/custody.tsv"])
 
 
 class NativeAlias(unittest.TestCase):

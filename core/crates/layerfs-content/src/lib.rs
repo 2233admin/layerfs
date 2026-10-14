@@ -29,8 +29,8 @@ pub use file::{
     construct_bytes_with_predecessor, construct_runs, construct_stream, encode_whole_file_payload,
     read_all, read_all_bounded, read_range, whole_file_payload, ConstructedFile, Edit,
     EditRecordApply, EditRecordChange, EditRecordExpected, EditRecordKey, EditRequest,
-    EditSequence, EditSource, FileContent, FileRun, FileRuns, FileView, IndexedEditBacking,
-    IndexedEditRequest, IndexedEditSource, PredecessorBase, RunConstruction,
+    EditSequence, EditSource, Extent, ExtentCursor, FileContent, FileRun, FileRuns, FileView,
+    IndexedEditBacking, IndexedEditRequest, IndexedEditSource, PredecessorBase, RunConstruction,
 };
 /// Neutral names for the same opaque construction-record protocol. Existing
 /// file-edit names remain public and refer to these identical types/trait.

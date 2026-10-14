@@ -18,6 +18,22 @@ pub const OPERATION_RECORD_BYTES: usize = 65_536;
 pub const WRITE_WINDOW: usize = 128 * 1024;
 /// Largest byte window of one local read plan.
 pub const READ_WINDOW: usize = 128 * 1024;
+/// Most claimed ranges of one write job: one per matched run of a window.
+pub const WRITE_CLAIMS: usize = 18;
+/// Most reference ranges of one read window: a range is a run of whole
+/// cells of the window, and no two ranges share a cell.
+pub const READ_REFERENCES: usize = READ_WINDOW / CELL_BYTES + 1;
+/// Bytes the reference ranges and their mask add to a read reply of `length`
+/// bytes, at most: one bit a byte and one range a cell.
+pub const fn reference_bytes(length: usize) -> usize {
+    let cells = length / CELL_BYTES + 2;
+    let ranges = if cells < READ_REFERENCES {
+        cells
+    } else {
+        READ_REFERENCES
+    };
+    length.div_ceil(8) + ranges * std::mem::size_of::<ReferenceRange>()
+}
 /// Maximum changed inodes in one compound namespace job, not a namespace limit.
 pub const COMPOUND_INODES: usize = 4;
 /// Maximum changed name bindings in one compound namespace job.
@@ -129,6 +145,10 @@ pub struct Changes {
     pub cell: Option<(u64, Cell)>,
     /// One byte window written into a changed regular file, same transaction.
     pub write: Option<PayloadWrite>,
+    /// Ranges of that window whose bytes equal committed content. They
+    /// become reference pieces; every other byte of the window is stored.
+    /// Boxed: most jobs carry none, and the job value stays small.
+    pub claims: Option<Box<WriteClaims>>,
 }
 /// Bytes of one bounded write job. Shared, so job rounds never copy them.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -136,6 +156,39 @@ pub struct PayloadWrite {
     pub serial: u64,
     pub offset: u64,
     pub data: std::sync::Arc<[u8]>,
+}
+/// One range of a write whose bytes equal committed bytes of the claims'
+/// source from `source_offset`.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ClaimedRange {
+    pub offset: u64,
+    pub length: u64,
+    pub source_offset: u64,
+}
+/// What the caller established about the bytes of one write job: ranges that
+/// equal committed content of one immutable root. The engine trusts the
+/// claim and stores no byte of a claimed range; whole cells of it become one
+/// reference piece and its ragged edges are stored from the written bytes.
+/// Ranges are in file order and do not overlap. Only the first may start
+/// before the written window and only the last may end after it, each by at
+/// most `RUN_BYTES`: those bytes were stored by an earlier job, and that
+/// part is honoured only while the file's content sequence is still `after`,
+/// the revision of that job's publication.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct WriteClaims {
+    pub source: [u8; 32],
+    pub after: Option<i64>,
+    pub ranges: Vec<ClaimedRange>,
+}
+/// One range of a read window that committed content supplies: bytes
+/// `[offset, offset + length)` of the file are the bytes of content root
+/// `source` from `source_offset`.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ReferenceRange {
+    pub offset: u64,
+    pub length: u64,
+    pub source: [u8; 32],
+    pub source_offset: u64,
 }
 /// Local layers of one read window, composed in one owner job. `data` holds
 /// every byte decided locally (written bytes and zeros) from `offset`, clamped
@@ -152,6 +205,14 @@ pub struct LocalRead {
     /// Exact independent inherited root, when the read is orphan/captured
     /// input. Ordinary current-source reads use the source's bound root.
     pub base_root: Option<[u8; 32]>,
+    /// Ranges of committed content that supply bytes of this window, at most
+    /// `READ_REFERENCES`. Each is a run of cells clipped to the window, and no
+    /// two overlap. Empty for a file without reference pieces.
+    pub references: Vec<ReferenceRange>,
+    /// Empty when `references` is; otherwise one bit per byte of `data`, in
+    /// the form of `inherited`: set for a byte that the one range holding it
+    /// supplies. A clear bit inside a range is a byte decided otherwise.
+    pub referenced: Vec<u8>,
 }
 /// Local rows of one name: the active generation and the latest lower one.
 /// The outer None is "no row"; the inner None is a whiteout.
@@ -276,11 +337,4 @@ pub struct Lease {
     pub kind: LeaseKind,
     pub owner: u64,
     pub resource: u64,
-}
-/// One operation-keyed construction record.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct OperationRecord {
-    pub kind: u32,
-    pub key: u64,
-    pub value: Vec<u8>,
 }

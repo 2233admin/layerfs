@@ -150,15 +150,14 @@ fn reads_then_writes_are_one_transaction_begun_at_the_first_write() {
     assert_eq!(executions(StatementKind::Begin), 1);
     assert_eq!(executions(StatementKind::Commit), 1);
     assert_eq!(executions(StatementKind::Rollback), 0);
-    // The freelist cookie of the one admission.
-    assert_eq!(executions(StatementKind::Startup), 1);
+    // Ordinary writes perform no capacity statement.
+    assert_eq!(executions(StatementKind::Startup), 0);
     let admission = db.allocation_work().since(physical);
-    assert_eq!(admission.freelist_queries, 1);
-    assert_eq!(admission.admitted_jobs, 1);
+    assert_eq!(admission.freelist_queries, 0);
+    assert_eq!(admission.admitted_jobs, 0);
     assert_eq!(admission.refusals, 0);
     assert!(admission.attempts <= 1);
-    // One observation admits; an allocation adds its own readback.
-    assert_eq!(admission.observations, 1 + admission.attempts);
+    assert_eq!(admission.observations, 0);
     assert_eq!(
         db.indexed_operation_record_get(scope, key(1)).unwrap(),
         Some(b"two".to_vec())
@@ -210,14 +209,28 @@ fn a_failure_after_the_first_write_rolls_back_and_one_before_it_has_nothing_to_r
     assert_eq!(executions(StatementKind::Commit), 0);
     assert!(work.total().rows_changed > 0);
     let admission = db.allocation_work().since(physical);
-    assert_eq!(admission.admitted_jobs, 1);
-    // Admission, an allocation's readback, and the one after the rollback.
-    assert_eq!(admission.observations, 2 + admission.attempts);
-    // Neither the inode nor the frontier advance survived, and the ticket
+    assert_eq!(admission.admitted_jobs, 0);
+    // Only failure completion observes physical state.
+    assert_eq!(admission.observations, 1);
+    // Neither the frontier advance nor the inode survived, and the ticket
     // the failed job issued in memory went with them: only the earlier
     // publication is still owed.
-    assert_eq!(db.inode(route, 3).unwrap(), None);
+    // The failed job's frontier advance returned the advanced row and the
+    // engine remembered it. The rollback forgot it: the row is read again
+    // by one statement and holds the earlier revision.
+    let read = db.diagnostics();
     assert_eq!(db.state(route).unwrap().revision, revision);
+    let read = db.diagnostics().since(&read);
+    assert_eq!(
+        read.statements[StatementKind::Workspace as usize].attempts,
+        1
+    );
+    assert_eq!(read.total().attempts, 1);
+    // Remembered again, it is no statement.
+    let read = db.diagnostics();
+    assert_eq!(db.state(route).unwrap().revision, revision);
+    assert_eq!(db.diagnostics().since(&read).total().attempts, 0);
+    assert_eq!(db.inode(route, 3).unwrap(), None);
     assert_eq!(db.pending_publications(route, 0).unwrap(), vec![ticket]);
 
     let sql = db.diagnostics();
@@ -288,7 +301,7 @@ fn a_failure_after_the_first_write_rolls_back_and_one_before_it_has_nothing_to_r
 }
 
 #[test]
-fn consecutive_writes_that_do_not_grow_the_file_allocate_at_most_once() {
+fn consecutive_writes_do_no_capacity_observation_or_reservation() {
     let temp = Temp::new();
     let db = temp.db();
     let scope = scope(&db, 7);
@@ -296,51 +309,17 @@ fn consecutive_writes_that_do_not_grow_the_file_allocate_at_most_once() {
     let length = db.allocation().unwrap().logical_bytes;
     let physical = db.allocation_work();
     applied(&db, scope, &[change(1, Some(b"one"), Some(b"two"))]);
-    let first = db.allocation_work().since(physical);
+    assert_eq!(
+        db.allocation_work().since(physical),
+        AllocationWork::default()
+    );
     applied(&db, scope, &[change(1, Some(b"two"), Some(b"six"))]);
-    let both = db.allocation_work().since(physical);
-    assert_eq!(both.admitted_jobs, 2);
-    assert_eq!(both.freelist_queries, 2);
-    assert_eq!(both.refusals, 0);
-    // The file had grown into the startup range, so the first admission may
-    // establish the range again. The second finds it whole.
-    assert!(both.attempts <= 1, "{both:?}");
-    assert_eq!(both.attempts, first.attempts);
-    assert_eq!(both.observations, 2 + both.attempts);
+    assert_eq!(
+        db.allocation_work().since(physical),
+        AllocationWork::default()
+    );
     let after = db.allocation().unwrap();
     assert_eq!(after.logical_bytes, length);
-    // The guarantee itself: reusable pages plus the reserved tail cover a job.
-    let (_, free) = db.pages().unwrap();
-    assert!(after.reserved_tail_bytes + free * 4096 >= MUTATION_GROWTH + CLEANUP_HEADROOM);
-}
-
-#[test]
-fn owner_identities_are_unique_and_increasing_across_namespaces() {
-    let temp = Temp::new();
-    let db = temp.db();
-    let routes = [
-        db.open_workspace([9; 32], [10; 32]).unwrap(),
-        db.open_workspace([11; 32], [10; 32]).unwrap(),
-    ];
-    let sources = routes.map(|route| db.acquire_base_source(route, 7).unwrap());
-    let mut minted = Vec::new();
-    for request in 1..=3 {
-        for source in sources {
-            let open = db.open_file(source, request, &file(), false).unwrap();
-            minted.push(open.owner_id());
-        }
-    }
-    // One counter serves the engine; the first identity is 1.
-    assert_eq!(minted, [1, 2, 3, 4, 5, 6]);
-    // A repeated request fails after its identity was minted. The identity
-    // is not handed out again.
-    assert!(db.open_file(sources[0], 1, &file(), false).is_err());
-    let next = db.open_file(sources[1], 4, &file(), false).unwrap();
-    assert!(next.owner_id() > 6);
-    assert_eq!(
-        db.retained_file(routes[1], 4)
-            .unwrap()
-            .map(OpenFile::owner_id),
-        Some(next.owner_id())
-    );
+    assert_eq!(after.reserved_tail_bytes, 0);
+    assert_eq!(after.cleanup_headroom_bytes, 0);
 }

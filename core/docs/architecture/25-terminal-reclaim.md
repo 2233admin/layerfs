@@ -12,6 +12,14 @@ terminal maintenance. Subsequent [live composition](32-live-composition.md) and
 cleanup and repeated definite-failure composition. Physical headroom admission
 and complete S6/S8 exits remain open.
 
+Issue 316 update, 2026-10-11 (overlay schema 33): `payload_reference` is a
+twelfth terminal table, deleted like the others: one page of 64 rows in
+primary-key order `(gen, serial, file_offset)` and one range delete for the
+page. An engine that never wrote a reference piece passes this table without
+a statement, so a namespace without pieces is reclaimed by the same
+statements as before. The foreign-key check of the final delete probes the
+table's primary key by `ns`.
+
 R7 update, 2026-10-09 (reclamation by key range, decision U4). Implemented:
 a step of a closed namespace reads one page of one terminal table in
 primary-key order and deletes it with ONE statement,
@@ -126,3 +134,22 @@ See [shared physical capacity](35-shared-physical-capacity.md) and the
 [S6 exit audit](../issues/307/S6-EXIT-AUDIT.md) for current scope/evidence. Earlier
 checkpoint limitations and numbers above retain their original source identity.
 Native/runtime/kernel and integrated qualification remain later milestones.
+
+## Issue 321 step 1 terminal file ownership
+
+The per-Workspace daemon route now checks the sole connection close and joins
+its worker after terminal control fencing/Close. Clients and completions retain
+an independent backing owner; its last release unlinks only that Workspace's
+original inode after known close/terminal facts. Gone means the file is deleted;
+Queued includes a closed file still retained by a result/client. Failed deletion
+is recorded without replay, and a replaced path is preserved. Global history and
+other Workspace databases are unchanged. Live SQL reclamation continues. The
+schema-33 terminal row-reclaim implementation remains until step 2 and its old
+receipts keep their original claims. No numerical reclamation deadline is added.
+
+The backing keeps an original descriptor through last-owner release, preventing
+inode reuse from making a replacement path appear owned. Successful unlink is
+followed by identity-handle close before Gone is published. Failed unlink retains
+both the original descriptor and error in the failed slot. A SQLite checked-close
+refusal also retains its connection without a destructor-driven close retry;
+that quarantined custody lasts until process exit. No sync or replay is added.

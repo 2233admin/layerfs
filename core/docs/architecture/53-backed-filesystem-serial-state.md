@@ -124,10 +124,40 @@ final value. The selected negative-count clamp remains zero on both routes.
 Fresh declaration is separate from touched membership. Declaration atomically
 guards fresh/row/touch absence; it does not eagerly create a count row for an
 unused allocated identity. Each real point mutation guards the exact existing
-Row96 bytes and touched witness (or both Missing) in a single bounded job. A
+Row96 bytes and touched witness (or both Missing). A
 missing half, wrong key/serial, malformed version or Count/Effect disagreement
 with actual sealed fresh facts refuses before further requests. Touched
 cardinality is a checked scalar of successful row insertions, not a resident set.
+
+Declarations and the binding and value meanings before the release seed are
+held in a write-behind window (`references/indexed_window.rs`): at most 64
+meanings of at most 21 distinct serials, in arrival order. The input is asked
+whether a serial is fresh when it enters the window. A full window, the seed
+pass and the final pass write it: the fresh member, row and witness of every
+serial the window did not itself declare are read in one job, each serial's
+first meaning starts from that stored row after the checks above, a later
+meaning of the same serial is applied to the result of its earlier one, and
+all rows leave in one guarded job whose guards are the values that were read
+(or absence, for a serial the window declared). A refused write applies no
+row of the window and is retained whole as the original refusal. A second
+declaration of a serial the window holds writes the window first, so the
+stored guards refuse it as they would have. A stored row is never read while
+a meaning is held. What moved: a row error is met when its window is written,
+not at the call that named the serial, and a declared serial's member is read
+back by the passes, not before its first row is written.
+
+A touched-row pass (the release seed and the final rows) takes its rows in
+waves of at most the base read batch (never above 64) and reads a wave's rows
+together: fresh member, row and touched witness of at most 21 serials are one
+job of at most 63 keys (`IndexedReducer::required_many`,
+`references/indexed_rows.rs` `RowCursor::wave`). Every serial of the job gets
+the same checks a single row read makes, in serial order. No row beyond the
+wave is read, so the writes a caller makes between waves are never behind a
+row already in hand. A key window of fewer than 64 keys holds every remaining
+key, so a touched-row pass and each placement pass of validation end on it
+without asking for one more; no row or placement is added while its pass
+runs. The release work drain is not such a pass: releasing queues new work, so
+it still ends only on an empty window.
 
 The raw port's additive `keys_after(kind, after)` returns at most64 complete keys,
 strictly greater than the actual full32-byte boundary. None includes all-zero
@@ -149,6 +179,15 @@ are backed; all independent seeds are pushed before paging, preserving resident
 traversal order. `ReleaseWork::peak_depth` remains peak simultaneous release
 cursor-frame occupancy, including sibling seeds. It is not namespace path depth,
 an aggregate resident-memory measurement or O(path-depth) backing-size evidence.
+
+The seed queues the zero rows of one wave together: the work item and node of
+at most 32 rows are one guarded job. Queued items leave the FIFO at most 16 to
+a job, in ordinal order: their work records are one read job, their rows
+(member, row, witness) and node states a second of at most 64 keys, and every
+work deletion, node step and new directory frame one guarded job. An item that
+cannot be read ends the job after the items before it were checked, so the
+refusal returned is the first one in item order; a refusal applies nothing of
+the job.
 
 Each child decrement, row/touch guard, optional newly queued directory, node
 state and exact consumed name progress is one all-guards-before-effects change.

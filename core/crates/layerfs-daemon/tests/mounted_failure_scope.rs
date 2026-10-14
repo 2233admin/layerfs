@@ -44,6 +44,7 @@ use layerfs_storage::{
     port::{PackPersistence, PackReadChoice, PackReadPlan, PersistenceError},
     ReservationBlocks, Storage,
 };
+use layerfs_workspace::SERIAL_REFILL;
 use model::Model;
 use mounted::{mount_entry, Harness, COMMAND};
 use nix::errno::Errno;
@@ -211,8 +212,8 @@ fn quiet_within(harness: &Harness, token: WorkspaceToken, limit: Duration) -> bo
     let mut last = None;
     within(limit, || {
         let work = harness.status(token).native.unwrap().work.unwrap();
-        let now = (work.received, work.admitted, work.completed);
-        let settled = work.received == 0 && work.admitted == 0 && last == Some(now);
+        let now = (work.active, work.completed);
+        let settled = work.active == 0 && last == Some(now);
         last = Some(now);
         settled
     })
@@ -698,10 +699,28 @@ fn a_create_with_no_serial_range_under_a_held_store_writer_is_eagain_with_no_eff
         )
     };
 
-    // No serial was reserved since the Store was opened, so the Workspace
-    // has no local range: its first create must reserve.
+    // The mount reserved the first window before readiness. Creates that
+    // consume the whole window leave the Workspace with no local range: its
+    // next create must reserve.
     let opened = (fx.attempts().len(), fx.store.work().serial_reservations);
-    assert_eq!(opened, (0, 0), "the Workspace starts with no serial range");
+    assert_eq!(opened, (1, 1), "the mount reserves the first serial window");
+    let filled = bash_in(
+        COMMAND,
+        &mount,
+        &format!("for i in $(seq 1 {SERIAL_REFILL}); do : > fill-$i || exit 1; done"),
+    );
+    assert!(
+        filled.status.success(),
+        "consuming the first window: {:?} {:?}",
+        filled.status,
+        String::from_utf8_lossy(&filled.stderr)
+    );
+    let consumed = (fx.attempts().len(), fx.store.work().serial_reservations);
+    assert_eq!(
+        consumed,
+        (1, 1),
+        "a create inside the first window reserved"
+    );
     let names_before = names(&mount);
     let (quiet_before, revision_before, _, _) = observe(&fx, WAIT);
 
@@ -741,13 +760,13 @@ fn a_create_with_no_serial_range_under_a_held_store_writer_is_eagain_with_no_eff
     );
     expect!(
         checks,
-        attempts_held.len() == 1 && attempts_held[0].busy && attempts_held[0].reserved.is_none(),
+        attempts_held.len() == 2 && attempts_held[1].busy && attempts_held[1].reserved.is_none(),
         "not exactly one reservation attempt answered Busy: {attempts_held:?}"
     );
     expect!(
         checks,
-        counted_held == 1,
-        "the Store counted {counted_held} serial reservations for one create"
+        counted_held == 2,
+        "the Store counted {counted_held} serial reservations for the mount and one create"
     );
     expect!(
         checks,
@@ -800,7 +819,7 @@ fn a_create_with_no_serial_range_under_a_held_store_writer_is_eagain_with_no_eff
     );
     expect!(
         checks,
-        attempts_created.len() == 2 && attempts_created[1].reserved.is_some(),
+        attempts_created.len() == 3 && attempts_created[2].reserved.is_some(),
         "the later create did not make one successful reservation: {attempts_created:?}"
     );
     expect!(
@@ -810,7 +829,7 @@ fn a_create_with_no_serial_range_under_a_held_store_writer_is_eagain_with_no_eff
     );
     expect!(
         checks,
-        another.status.success() && attempts_after.len() == 2,
+        another.status.success() && attempts_after.len() == 3,
         "a create inside the reserved range: {:?}, {} attempts",
         another.status,
         attempts_after.len()

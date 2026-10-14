@@ -149,7 +149,7 @@ fn shared_mapping_stores_are_published_and_never_change_size() {
 
     quiet(&h, ready.token);
     let work = h.status(ready.token).native.unwrap().work.unwrap();
-    assert_eq!((work.retained, work.terminal, work.unadmitted), (0, 0, 0));
+    assert_eq!((work.retained, work.terminal), (0, 0));
     let receipt = unmounted(&h, &ready);
     let counts = opcodes(&receipt);
     let stores = mutating::counter(&receipt, "store_units");
@@ -347,7 +347,7 @@ fn removed_references_keep_exact_state_without_open_custody() {
     drop((reference, directory, replaced, alias, writer, fresh, old));
     quiet(&h, ready.token);
     let work = h.status(ready.token).native.unwrap().work.unwrap();
-    assert_eq!((work.retained, work.terminal, work.unadmitted), (0, 0, 0));
+    assert_eq!((work.retained, work.terminal), (0, 0));
     unmounted(&h, &ready);
     h.stop();
     f.cleanup();
@@ -430,7 +430,7 @@ fn a_lookup_racing_create_unlink_and_rename_never_binds_a_stale_inode() {
     let work = h.status(ready.token).native.unwrap().work.unwrap();
     println!("NATIVE_LOOKUP_RACE rounds={ROUNDS} found_missed_empty={observed:?} work={work:?}");
     assert!(observed.0 > 0, "the readers observed nothing");
-    assert_eq!((work.retained, work.terminal, work.unadmitted), (0, 0, 0));
+    assert_eq!((work.retained, work.terminal), (0, 0));
     unmounted(&h, &ready);
     h.stop();
     f.cleanup();
@@ -512,7 +512,7 @@ fn size_never_shrinks_under_concurrent_append_and_refusals_stay_refused() {
 
     quiet(&h, ready.token);
     let work = h.status(ready.token).native.unwrap().work.unwrap();
-    assert_eq!((work.retained, work.terminal, work.unadmitted), (0, 0, 0));
+    assert_eq!((work.retained, work.terminal), (0, 0));
     let receipt = unmounted(&h, &ready);
     let counts = opcodes(&receipt);
     let count = |opcode: Opcode| counts[opcode as usize];
@@ -637,7 +637,7 @@ fn mutations_racing_the_unmount_probe_keep_normal_results_and_persist() {
         "control admission reopened"
     );
     let work = status.native.unwrap().work.unwrap();
-    assert_eq!((work.retained, work.terminal, work.unadmitted), (0, 0, 0));
+    assert_eq!((work.retained, work.terminal), (0, 0));
     println!("NATIVE_PROBE_RACE probes={PROBES} records={records} work={work:?}");
     assert!(resident.try_wait().unwrap().is_none());
     resident.kill().unwrap();

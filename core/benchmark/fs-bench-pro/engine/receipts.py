@@ -10,6 +10,13 @@ import signal
 import subprocess
 import time
 
+
+def sample_claim_key(treatment, source_commit):
+    """Issue319 owner scope: one case/treatment per exact committed source identity."""
+    return hashlib.sha256(json.dumps({"source_commit": source_commit,
+        "treatment": treatment}, sort_keys=True).encode()).hexdigest()
+
+
 ROOT = Path(__file__).resolve().parents[4]
 REFERENCE_SOURCES = (
     "release-notes/0.1.6/benchmark-performance.csv",

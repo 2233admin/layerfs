@@ -1,4 +1,4 @@
-//! One native Attach: engine mount owner, shared lane, then a serving session.
+//! One native Attach: engine mount owner, the mount's request owner, then a serving session.
 use super::{
     native::Native,
     registry::{bound_mut, idle},
@@ -6,7 +6,7 @@ use super::{
     types::NativeFailure,
     Failure, Service, Success,
 };
-use crate::{store::BoundWorkspace, Command, Completion, NativeJob, NativeReply, Response};
+use crate::{store::BoundWorkspace, JobReceipt, NativeReply, Response};
 use layerfs_bridge::control::{
     Activity, ControlCode, Reply, TeardownStage, WorkspaceToken, MOUNT_DIRECTORY_LIMIT,
 };
@@ -20,7 +20,7 @@ use std::sync::Arc;
 
 /// Where a failed Attach leaves the entry.
 enum Stop {
-    /// No engine, lane, kernel or directory owner of this attempt remains.
+    /// No engine, request, kernel or directory owner of this attempt remains.
     Unattached(Failure),
     /// The engine mount outcome is unknown: never a second attachment.
     Unknown(Failure),
@@ -86,7 +86,7 @@ impl Service {
         serving: &NativeServing,
         token: WorkspaceToken,
         workspace: &Arc<BoundWorkspace>,
-    ) -> Result<(Attached, Completion), Stop> {
+    ) -> Result<(Attached, JobReceipt), Stop> {
         let directory = serving.directory(token);
         let Some(text) = directory
             .to_str()
@@ -111,15 +111,33 @@ impl Service {
                 Stop::Unattached(failure)
             }
         };
+        // Prepare the initial authoritative range before any kernel request
+        // can create an inode. Bind stays a read-only snapshot operation.
+        let operation = workspace
+            .operation()
+            .map_err(|error| Stop::Unattached(Failure::Workspace(error)))?;
+        if let Err(error) = operation.workspace().prepare_serials(operation.ports()) {
+            let failure = match operation.ports().failure() {
+                Ok(Some(cause)) => match cause.as_ref() {
+                    crate::store::PortError::History(error) => Failure::History(error.clone()),
+                    _ => Failure::Workspace(error),
+                },
+                Ok(None) | Err(_) => Failure::Workspace(error),
+            };
+            return Err(unknown(failure));
+        }
+        drop(operation);
         let created = self
             .job(
                 workspace.route(),
-                Command::Native(NativeJob::Mount { root }),
+                |job_client: &crate::OwnerClient, job_route| {
+                    job_client.native_mount(job_route, root)
+                },
             )
             .map_err(unknown)?;
         let mount = match created.result() {
             Ok(Response::Native(NativeReply::Mount(mount))) => *mount,
-            _ => return Err(unknown(Failure::Completion(Box::new(created)))),
+            _ => return Err(unknown(Failure::JobReceipt(Box::new(created)))),
         };
         let failed = |code, phase, detail: String| NativeFailure {
             code,
@@ -202,16 +220,19 @@ impl Service {
         refusal.evidence = Some(failure);
         Err(self.unwind(workspace, mount, created, refusal))
     }
-    /// No connection or lane of this attempt remains: release its engine owner
+    /// No connection or request owner of this attempt remains: release its engine owner
     /// so the entry returns to Unattached. An unacknowledged release is kept.
     fn unwind(
         &self,
         workspace: &BoundWorkspace,
         mount: NativeMount,
-        created: Completion,
+        created: JobReceipt,
         mut failure: NativeFailure,
     ) -> Stop {
-        match self.job(workspace.route(), Command::Native(NativeJob::Revoke(mount))) {
+        match self.job(
+            workspace.route(),
+            |job_client: &crate::OwnerClient, job_route| job_client.native_revoke(job_route, mount),
+        ) {
             Ok(done) if matches!(done.result(), Ok(Response::Native(NativeReply::Done))) => {
                 failure.completions = vec![created, done];
                 Stop::Unattached(Failure::Native(Box::new(failure)))

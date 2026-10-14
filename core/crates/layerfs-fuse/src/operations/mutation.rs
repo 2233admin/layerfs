@@ -1,11 +1,8 @@
 //! One native mutation: owner visits that record no request source, fact
 //! reads between undecided visits, a single publishing visit, then the exact
 //! post-reply release of its ticket.
-use crate::{
-    ports::{BaseDemandFailed, Fenced, RequestServices, ServiceError, ServiceReply},
-    NextTurn,
-};
-use layerfs_overlay::{NativeMount, OpenFile, OverlayError, Publication};
+use crate::ports::{BaseDemandFailed, Fenced, RequestServices, ServiceError, ServiceReply};
+use layerfs_overlay::{NativeMount, OpenFile, Publication};
 use layerfs_workspace::{
     JobOutcome, NativeMutationOutcome, NativeVisitRequest, Refusal, Time, ViewStat, VisitFacts,
     WorkspaceError,
@@ -28,11 +25,15 @@ pub struct MutationRequest {
     /// Assigned at processing; the engine owns every stored time.
     pub now: Time,
 }
-/// A definite answer with no effect: nothing was published, no ticket exists.
+/// A definite answer without filesystem publication or a ticket. Attempted
+/// SQL and transient allocation observations remain counted.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Declined {
     Refused(Refusal),
-    /// The engine's physical reservation refused the transaction before it.
+    /// Physical admission refused before BEGIN, or the atomic native job
+    /// returned direct SQLite Full after known rollback and allocation
+    /// observation. SQL/transient allocation work is paid; no filesystem
+    /// mutation or publication ticket exists. Unknown outcomes stay retained.
     NoSpace,
     /// The serial allocator's writer was contended; nothing was reserved.
     Contended,
@@ -50,7 +51,7 @@ pub struct Published {
 pub(super) struct Custody {
     services: Arc<dyn RequestServices>,
     request: MutationRequest,
-    // Retain engine completion credit through every consumer of the outcome.
+    // Retain the engine receipt through every consumer of the outcome.
     receipt: Option<ServiceReply<Arc<NativeMutationOutcome>>>,
     /// Published and not yet released: exactly one reply attempt is owed.
     publication: Option<Publication>,
@@ -220,6 +221,19 @@ impl Custody {
             }
             _ => None,
         };
+        // What a write's own bytes say about committed content is settled
+        // once, before the first owner visit, and is part of every visit.
+        if let MutationInput::Write {
+            offset,
+            data,
+            cached: false,
+        } = &mut self.request.input
+        {
+            *data = self
+                .services
+                .recognize(protected, *offset, data.clone())
+                .await?;
+        }
         let mut facts = Arc::new(VisitFacts::default());
         loop {
             let visit = NativeVisitRequest {
@@ -253,16 +267,24 @@ impl Custody {
                 }
                 Ok(JobOutcome::Refused(refusal)) => return Ok(Err(Declined::Refused(*refusal))),
                 Ok(JobOutcome::Needs(needs)) if !needs.is_empty() => needs,
-                // The engine's reservation refuses before any statement of
-                // the transaction: a definite answer with no effect.
-                Err(WorkspaceError::Overlay(OverlayError::Reservation { .. })) => {
+                // Only the atomic visit's direct, known rollback qualifies.
+                // Keep its original completion until the one ENOSPC reply and
+                // normal release. Uncertain wrappers/provider ambiguity remain
+                // attempted failures with their original custody.
+                Err(WorkspaceError::Overlay(error))
+                    if error.is_no_space()
+                        && self.publication.is_none()
+                        && self
+                            .services
+                            .provider_failure()
+                            .is_ok_and(|failure| failure.is_none()) =>
+                {
                     return Ok(Err(Declined::NoSpace))
                 }
                 _ => return Err(Box::new(Attempted(original))),
             };
             self.receipt = None;
             // Provider reads never run on the loop that received the request.
-            crate::LeaveReceiver::default().await;
             let base = self.services.base().await?;
             let path = match &self.request.input {
                 MutationInput::Named(operation) => operation.destination_path(),
@@ -273,7 +295,6 @@ impl Custody {
             if let Err(error) = result {
                 return Err(self.services.failed_base_read(error.into()));
             }
-            NextTurn::default().await;
         }
     }
     async fn release(&mut self) -> Result<(), ServiceError> {

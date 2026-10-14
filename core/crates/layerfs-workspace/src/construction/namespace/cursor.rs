@@ -13,16 +13,21 @@ use layerfs_content::{
 use layerfs_overlay::{CapturedReader, DirectoryEntry, PAGE_ROWS};
 use std::cell::RefCell;
 
+/// Slots of one window of point answers. Serials are allocated in order, so
+/// a change of up to this many neighbouring serials has a slot for each and
+/// reads each sealed record once; a larger change shares slots and reads a
+/// displaced answer again. The window is this size at any change size.
+const POINT_SLOTS: usize = 1024;
 /// One fixed window of sealed point answers, one slot per serial residue.
 /// A sealed record never changes, so a retained answer cannot go stale; a
 /// refused or undecodable read is never retained.
 struct Memo<T: Copy>(RefCell<Vec<Option<(u64, T)>>>);
 impl<T: Copy> Memo<T> {
     fn new() -> Self {
-        Self(RefCell::new(vec![None; PAGE_ROWS]))
+        Self(RefCell::new(vec![None; POINT_SLOTS]))
     }
     fn slot(serial: u64) -> usize {
-        (serial % PAGE_ROWS as u64) as usize
+        (serial % POINT_SLOTS as u64) as usize
     }
     fn get(&self, serial: u64) -> Option<T> {
         self.0.borrow()[Self::slot(serial)]
@@ -35,8 +40,8 @@ impl<T: Copy> Memo<T> {
 }
 /// Every pass and point answers the same sealed rows: headers, values and
 /// fresh ranks from this attempt's records, names from the retained reader.
-/// One window of at most PAGE_ROWS is resident per open pass and per kind of
-/// point answer, whatever the size of the change.
+/// One window of at most PAGE_ROWS is resident per open pass, and one of
+/// POINT_SLOTS per kind of point answer, whatever the size of the change.
 pub(crate) struct Cursor<'s, 'a, P: OverlayCapturedNamespace + OverlayOperationRecords + ?Sized> {
     provider: &'a P,
     shared: &'s Shared<'a, P>,
@@ -113,18 +118,49 @@ impl<'s, 'a, P: OverlayCapturedNamespace + OverlayOperationRecords + ?Sized> Cur
             self.shared.borrow().ready()?;
             return Ok(rank);
         }
-        let rank = match self.record(FRESH, serial)? {
-            Some(raw) => Some(
-                read_number(&raw, "captured namespace fresh rank")
-                    .and_then(|rank| {
-                        usize::try_from(rank).map_err(|_| ContentError::LengthOverflow)
-                    })
-                    .map_err(|error| self.fail(error))?,
-            ),
-            None => None,
-        };
+        let rank = self.decode_rank(self.record(FRESH, serial)?)?;
         self.rank.set(serial, rank);
         Ok(rank)
+    }
+    fn decode_rank(&self, raw: Option<Vec<u8>>) -> ContentResult<Option<usize>> {
+        raw.map(|raw| {
+            read_number(&raw, "captured namespace fresh rank")
+                .and_then(|rank| usize::try_from(rank).map_err(|_| ContentError::LengthOverflow))
+                .map_err(|error| self.fail(error))
+        })
+        .transpose()
+    }
+    /// The fresh ranks of at most PAGE_ROWS serials: the answers not already
+    /// held are read as one record job.
+    fn ranks(&self, serials: &[u64]) -> ContentResult<Vec<Option<usize>>> {
+        self.shared.borrow().ready()?;
+        if serials.len() > PAGE_ROWS {
+            return Err(self.fail(ContentError::InvalidRecord(
+                "captured namespace point window",
+            )));
+        }
+        let mut ranks = serials
+            .iter()
+            .map(|serial| self.rank.get(*serial))
+            .collect::<Vec<_>>();
+        let unknown = serials
+            .iter()
+            .zip(&ranks)
+            .filter(|(_, rank)| rank.is_none())
+            .map(|(serial, _)| key(FRESH, *serial))
+            .collect::<Vec<_>>();
+        if !unknown.is_empty() {
+            let mut read = self.shared.borrow_mut().get_many(&unknown)?.into_iter();
+            for (serial, rank) in serials.iter().zip(&mut ranks) {
+                if rank.is_none() {
+                    let raw = read.next().ok_or(ContentError::UnexpectedEof)?;
+                    let answer = self.decode_rank(raw)?;
+                    self.rank.set(*serial, answer);
+                    *rank = Some(answer);
+                }
+            }
+        }
+        Ok(ranks.into_iter().map(Option::flatten).collect())
     }
     /// One original parent-local page of the retained reader.
     fn names(&self, parent: u64, after: Option<Vec<u8>>) -> ContentResult<Vec<DirectoryEntry>> {
@@ -169,9 +205,11 @@ impl Keys {
                     .borrow_mut()
                     .content(ContentError::InvalidRecord("captured namespace key window")));
             }
-            match keys.last() {
-                Some(last) => self.after = Some(*last),
-                None => self.ended = true,
+            // A short window ends a sealed sequence: no empty window job
+            // follows. A full one may be the last, so one more is asked for.
+            self.ended = keys.len() < PAGE_ROWS;
+            if let Some(last) = keys.last() {
+                self.after = Some(*last);
             }
             self.window = keys.into_iter();
         }
@@ -369,5 +407,16 @@ impl<P: OverlayCapturedNamespace + OverlayOperationRecords + ?Sized> StreamedRow
     fn new_position(&self, serial: u64) -> ContentResult<Option<usize>> {
         self.count(|work| &mut work.fresh_points);
         self.rank(serial)
+    }
+    fn are_new(&self, serials: &[u64]) -> ContentResult<Vec<bool>> {
+        add(
+            &mut self.shared.borrow_mut().work.fresh_points,
+            serials.len() as u64,
+        );
+        Ok(self
+            .ranks(serials)?
+            .into_iter()
+            .map(|rank| rank.is_some())
+            .collect())
     }
 }

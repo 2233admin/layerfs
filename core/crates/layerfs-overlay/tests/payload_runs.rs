@@ -335,7 +335,11 @@ fn an_orphan_keeps_every_byte_while_rows_of_several_cells_move_into_its_domain()
         maintain(&db);
         let left = db.resources(Some(route)).unwrap().counts;
         assert_eq!(
-            (left.payload_cells, left.payload_bytes, left.orphan_rows),
+            (
+                left.payload_cells,
+                left.payload_bytes,
+                db.resources(None).unwrap().open.orphan_files
+            ),
             (0, 0, 0),
             "the last owner's release reclaims every row"
         );

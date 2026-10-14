@@ -8,16 +8,23 @@ Read [root instructions](../../../AGENTS.md), [core instructions](../../AGENTS.m
 [measurement workflow](../../../docs/general/agent-measurement-policy.md),
 [benchmark rules](../../../docs/general/benchmark_rules.md) and
 [report template](../../../benchmark_agent_report.md) before changing a harness
-or collecting a sample. The owner handoff selects the 25 frozen root families,
-in the spec's stage and batch order. No optimization or new family is selected.
+or collecting a sample. The original owner handoff selected the 25 frozen root families,
+in the spec's stage and batch order. Issue319's later owner direction selects repair/optimization and retires
+`workspace_reliability`. The #319 SDK follow-up then removes 85 selected cases
+and keeps all five capped edits because their oracle is stricter than the twins.
+The active selection is 157 cases in [tiers.json](tiers.json): everyday 108 and
+heavy 49. Three repository_history definitions remain outside both tiers and
+NOT_RUN by owner direction, so the default catalogue has 160 definitions in 24
+family directories. Historical 242-case receipts and frozen root definitions
+remain unchanged; current tier selection supersedes their active membership.
 The [rollout ledger](../../docs/benchmark/fs-bench-pro/ROLLOUT-LEDGER.md) records
 implementation, checks, decisions, failures and outstanding work.
 
 ## Active route and profiles
 
 The workload benchmark's single entry point is `bench.py`, implemented in the
-rollout. `families/` contains only the 25 original-name family directories;
-each case starts pending and needs a committed definition, parity review,
+rollout. `families/` retains the 24 original-name family directories; the two
+tiers select 23 active families and exclude repository_history. Each case starts pending and needs a committed definition, parity review,
 fixture and independent oracle before one sample. The engine owns machinery
 once. The moved `runtime/` is the ordinary SDK/Sandbox control driver from the
 working cluster-two path. It is harness code, outside production LOC.
@@ -90,3 +97,14 @@ or repeat loop extends a test. Host Cargo is `+1.85.1 --locked`, with the
 repository ARM64 flags. Use worktree-local Cargo targets. No CI or aggregate
 pre-push gate exists. After harness changes run owning scoped tests, preserving
 failures. Product changes additionally need the covering checks in core's guide.
+
+## Kept workload tiers
+
+The tracked tier entry point is `tier.py`: `all` is for the owner in their
+terminal; agents use `next`, exactly one case per command. Missing preparation
+returns the exact `bench.py prepare` command and starts no sample. Prepare that
+distinct fixture under the existing bound, then invoke `next`. See
+[kept fixture preparation](../../docs/benchmark/fs-bench-pro/PREPARED-FIXTURES.md)
+for producer keys, integrity, persistent ownership, source identity and cleanup.
+No script mode authorizes an unchanged retry, widened oracle, product tuning or
+Durable. Case counters and all original verdicts remain visible in the journal.

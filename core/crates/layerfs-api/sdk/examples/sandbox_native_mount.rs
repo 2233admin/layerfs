@@ -12,8 +12,8 @@ use layerfs_history::{BranchId, HistoryCatalogConfig, HistoryName, LayerStackId,
 use layerfs_persistence::{PersistenceConfig, SqlitePersistenceProfile};
 use layerfs_sandbox::backend::docker::{Docker, SandboxRequest};
 use layerfs_sdk::{
-    InitRequest, ManagedSandbox, OperationCause, ProjectApi, SandboxApi, SandboxCreate,
-    WorkspaceApi,
+    InitRequest, ManagedSandbox, MountedWorkspace, OperationCause, ProjectApi, SandboxApi,
+    SandboxCreate, WorkspaceApi,
 };
 use layerfs_storage::StoragePolicy;
 use layerfs_telemetry::timer::Timing;
@@ -93,11 +93,7 @@ fn setup(private: [u8; 32], peer: [u8; 32]) -> DaemonSetup {
             handshake_ms: 2000,
             read_handles: 2,
             cache_bytes: 65536,
-            owner_bytes: 16 * 1024 * 1024,
-            lifecycle_reserve: 2 * 1024 * 1024,
             namespaces: 8,
-            ordinary_jobs: 8,
-            lifecycle_jobs: 4,
             pager_kib: 1024,
             serial_low_water: 256,
         },
@@ -108,16 +104,29 @@ type Running = (
     layerfs_sandbox::backend::docker::RuntimeOutput,
     layerfs_sandbox::backend::docker::ExecHandle,
 );
-/// One ordinary runtime command under the deployment's nonroot identity.
-fn start(owner: &ManagedSandbox, script: &str, directory: &str) -> Result<Running, Box<dyn Error>> {
-    let created = owner
-        .exec(
-            vec!["bash".into(), "-c".into(), script.into()],
+enum Directory<'a> {
+    Mounted(&'a MountedWorkspace),
+    Native(&'a str),
+}
+/// Mounted commands use SDK exec; outside-mount commands retain ordinary Sandbox execution.
+fn start(
+    owner: &ManagedSandbox,
+    script: &str,
+    directory: Directory<'_>,
+) -> Result<Running, Box<dyn Error>> {
+    let arguments = vec!["bash".into(), "-c".into(), script.into()];
+    let created = match directory {
+        Directory::Mounted(mounted) => WorkspaceApi::exec(owner, mounted, arguments, vec![], false),
+        Directory::Native(directory) => layerfs_sdk::internal::exec(
+            &owner.runtime,
+            layerfs_sandbox::CommandIdentity { uid: 501, gid: 20 },
+            arguments,
             vec![],
             directory.into(),
             false,
-        )
-        .map_err(|f| format!("create {f:?}"))?;
+        ),
+    }
+    .map_err(|f| format!("create {f:?}"))?;
     let attached = created.start().map_err(|f| format!("start {f:?}"))?;
     let (_input, output, handle) = attached.into_parts().map_err(|f| format!("split {f:?}"))?;
     Ok((output, handle))
@@ -138,7 +147,11 @@ fn finish((output, handle): Running) -> Result<Vec<u8>, Box<dyn Error>> {
     }
     Ok(stdout)
 }
-fn run(owner: &ManagedSandbox, script: &str, directory: &str) -> Result<Vec<u8>, Box<dyn Error>> {
+fn run(
+    owner: &ManagedSandbox,
+    script: &str,
+    directory: Directory<'_>,
+) -> Result<Vec<u8>, Box<dyn Error>> {
     finish(start(owner, script, directory)?)
 }
 fn main() -> Result<(), Box<dyn Error>> {
@@ -180,24 +193,30 @@ fn main() -> Result<(), Box<dyn Error>> {
     let daemon = native::generate_keypair()?;
     let api = SandboxApi::new(Docker::new(&args[1], Duration::from_secs(3))?);
     let mut owner = api
-        .create(SandboxCreate {
-            deployment: SandboxRequest {
-                image: args[2].clone(),
-                store_volume: args[3].clone(),
-                port: 30421,
+        .create(
+            SandboxCreate {
+                deployment: SandboxRequest {
+                    image: args[2].clone(),
+                    store_volume: args[3].clone(),
+                    port: 30421,
+                },
+                setup: setup(daemon.private, keys.public),
+                executable: PathBuf::from(&args[4]),
+                controller_private: keys.private,
+                daemon_peer: daemon.public,
+                startup_wait: Duration::from_secs(3),
             },
-            setup: setup(daemon.private, keys.public),
-            executable: PathBuf::from(&args[4]),
-            controller_private: keys.private,
-            daemon_peer: daemon.public,
-            startup_wait: Duration::from_secs(3),
-        })
+            &project,
+        )
         .map_err(|f| format!("create {f:?}"))?;
     println!("OWNED_CONTAINER {}", owner.runtime.identity());
     mark("sandbox_started");
-    assert_eq!(owner.startup.phase, DaemonPhase::InstallPending);
-    let installed = owner.control.install_project(&project)?;
-    assert_eq!(owner.status(true)?.phase, DaemonPhase::ControlReady);
+    assert_eq!(owner.startup.phase, DaemonPhase::ControlReady);
+    let installed = owner.installed.take().expect("installed");
+    assert_eq!(
+        layerfs_sdk::internal::sandbox_status(&mut owner, true)?.phase,
+        DaemonPhase::ControlReady
+    );
     println!(
         "DIRECT_STORE host_sqlite={} daemon_sqlite={:?} profile=Disposable volume={}",
         installed.manifest.host_sqlite, installed.manifest.daemon_sqlite, args[3]
@@ -205,7 +224,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // Two acknowledgements: bound, then natively Ready.
     let workspace = WorkspaceId::from_authority([71; 32])?;
-    let mounted = WorkspaceApi::new(&mut owner.control)
+    let mounted = WorkspaceApi::new(&mut owner)
         .mount(workspace, branch)
         .map_err(|f| format!("mount {f:?}"))?;
     assert_eq!(
@@ -244,7 +263,7 @@ fn main() -> Result<(), Box<dyn Error>> {
              printf 'MOUNT %s\\n' \"$(grep ' {root} ' /proc/self/mountinfo)\"; \
              printf 'ORDINARY_ACCESS uid=501 gid=20 CapEff=0 NoNewPrivs=1 private_backing_denied proc_aliases_denied fuse_device_denied mutation_served special_and_setid_refused\\n'"
         ),
-        "/",
+        Directory::Native("/"),
     )?;
     let facts = String::from_utf8(facts)?;
     print!("{facts}");
@@ -257,7 +276,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let listed = run(
         &owner,
         "set -e; find . -mindepth 1 -printf '%y %m %U %G %p\\n' | LC_ALL=C sort",
-        &root,
+        Directory::Mounted(&mounted),
     )?;
     assert_eq!(String::from_utf8(listed)?, listing());
     let links = run(
@@ -265,7 +284,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         "set -e; readlink dependency; stat -c '%s %h' file alias; \
          test \"$(stat -c %i file)\" = \"$(stat -c %i alias)\"; \
          cmp dependency/index.js node_modules/pkg/index.js; test ! -e missing",
-        &root,
+        Directory::Mounted(&mounted),
     )?;
     assert_eq!(
         String::from_utf8(links)?,
@@ -275,7 +294,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let bytes = run(
         &owner,
         "set -e; cat .gitignore .git/index ignored.bin node_modules/pkg/index.js file alias",
-        &root,
+        Directory::Mounted(&mounted),
     )?;
     let mut expected: Vec<u8> = order
         .iter()
@@ -295,23 +314,27 @@ fn main() -> Result<(), Box<dyn Error>> {
         "set -e; n=0; for i in $(seq 40); do cat file alias .git/index >/dev/null; \
          ls -laR . >/dev/null; dd if=file bs=4096 skip=31 count=2 iflag=direct status=none | wc -c >/dev/null; \
          n=$((n+1)); done; echo $n",
-        &root,
+        Directory::Mounted(&mounted),
     )?;
     assert_eq!(rounds, b"40\n");
     mark("sustained");
 
     // Reversible normal unmount: a running command's working directory keeps
     // the kernel busy. The filesystem neither kills nor waits for the command.
-    let holder = start(&owner, "sleep 1.2", &format!("{root}/node_modules"))?;
+    let holder = start(
+        &owner,
+        "sleep 1.2",
+        Directory::Native(&format!("{root}/node_modules")),
+    )?;
     run(
         &owner,
         &format!(
             "until ls -l /proc/[0-9]*/cwd 2>/dev/null | grep -q '{root}/node_modules'; do sleep 0.02; done"
         ),
-        "/",
+        Directory::Native("/"),
     )?;
-    let busy = WorkspaceApi::new(&mut owner.control)
-        .unmount(mounted.bound.token)
+    let busy = WorkspaceApi::new(&mut owner)
+        .unmount(mounted.bound.token, false)
         .unwrap_err();
     match &busy.cause {
         OperationCause::Remote(refusal) => {
@@ -322,7 +345,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
         other => panic!("{other:?}"),
     }
-    let status = WorkspaceApi::new(&mut owner.control).status(mounted.bound.token)?;
+    let status = WorkspaceApi::new(&mut owner).status(mounted.bound.token)?;
     let native = status.native.expect("native status block");
     assert_eq!(native.phase, NativePhase::Ready);
     assert_eq!(
@@ -330,21 +353,24 @@ fn main() -> Result<(), Box<dyn Error>> {
         Some(&mounted.ready),
         "same connection"
     );
-    assert_eq!(run(&owner, "cat .git/index", &root)?, FILES[1].1);
+    assert_eq!(
+        run(&owner, "cat .git/index", Directory::Mounted(&mounted))?,
+        FILES[1].1
+    );
     finish(holder)?;
     println!("UNMOUNT_BUSY phase=unmount:kernel workspace_ready=true command_untouched=true");
     mark("busy");
 
     // Terminal unmount: detach, loop joins, drain, revocation and Close.
-    WorkspaceApi::new(&mut owner.control)
-        .unmount(mounted.bound.token)
+    WorkspaceApi::new(&mut owner)
+        .unmount(mounted.bound.token, false)
         .map_err(|f| format!("unmount {f:?}"))?;
     run(
         &owner,
         &format!("set -e; test ! -e {root}; ! grep -q ' {root} ' /proc/self/mountinfo"),
-        "/",
+        Directory::Native("/"),
     )?;
-    let gone = WorkspaceApi::new(&mut owner.control)
+    let gone = layerfs_sdk::internal::workspace(layerfs_sdk::internal::control(&mut owner))
         .locate(workspace)
         .unwrap_err();
     assert!(
@@ -355,7 +381,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // Frequent fresh mounts of the same Branch: new namespace, new directory.
     for tag in 72..75 {
-        let fresh = WorkspaceApi::new(&mut owner.control)
+        let fresh = WorkspaceApi::new(&mut owner)
             .mount(WorkspaceId::from_authority([tag; 32])?, branch)
             .map_err(|f| format!("fresh mount {f:?}"))?;
         assert_ne!(fresh.ready.directory, root);
@@ -363,34 +389,26 @@ fn main() -> Result<(), Box<dyn Error>> {
             run(
                 &owner,
                 "wc -c < file; cat .git/index",
-                &fresh.ready.directory
+                Directory::Mounted(&fresh)
             )?,
             [format!("{FILE_BYTES}\n").as_bytes(), FILES[1].1].concat()
         );
-        WorkspaceApi::new(&mut owner.control)
-            .unmount(fresh.bound.token)
+        WorkspaceApi::new(&mut owner)
+            .unmount(fresh.bound.token, false)
             .map_err(|f| format!("fresh unmount {f:?}"))?;
     }
     println!("FRESH_MOUNTS count=3 each_ready_read_unmounted=true");
     mark("fresh_mounts");
     assert!(matches!(
-        owner
-            .control
+        layerfs_sdk::internal::control(&mut owner)
             .call(Request::EndSession)
             .map_err(|f| format!("end {f:?}"))?,
         Reply::SessionEnded
     ));
-    owner.runtime.stop(1).map_err(|f| format!("stop {f:?}"))?;
-    owner
-        .runtime
-        .delete()
-        .map_err(|f| format!("delete {f:?}"))?;
+    let container = owner.runtime.identity().to_string();
+    api.close(owner)?;
     mark("container_deleted");
-    println!(
-        "OWNED_CLEANUP container={} disposition={:?}",
-        owner.runtime.identity(),
-        owner.runtime.disposition()
-    );
+    println!("OWNED_CLEANUP container={container} disposition=Deleted_acknowledged_by_close");
     println!(
         "NATIVE_FULL_TOPOLOGY host_init=true host_data_path=false named_volume={} root={:?} native_fuse=READ_WRITE mutation=RUN commit=NOT_RUN force_unmount=NOT_RUN durable=NOT_RUN",
         args[3], project.initialized.root

@@ -59,7 +59,6 @@ impl Overlay {
     /// with its bytes; a wider row is never loaded.
     pub(crate) fn covering(
         &self,
-        ns: i64,
         serial: i64,
         gen: i64,
         cell: i64,
@@ -68,7 +67,7 @@ impl Overlay {
             .query(
                 StatementKind::Payload,
                 sql::CELL_COVER,
-                &[&ns, &serial, &gen, &slot(cell), &cell],
+                &[&serial, &gen, &slot(cell), &cell],
                 40,
                 |row| {
                     let validity: Option<Vec<u8>> = row.get(5)?;
@@ -88,11 +87,11 @@ impl Overlay {
         Ok(found.filter(|(shape, _)| shape.end() > cell))
     }
     /// Shapes of the rows of one layer that occupy a cell of `[from, to)`,
-    /// in order. The range lies inside one slot, so at most one slot of rows
-    /// is visited and no bytes are loaded.
+    /// in order. The range is one slot, or the slots of one read window
+    /// that a write is about to replace, so at most that many rows are
+    /// visited and no bytes are loaded.
     pub(crate) fn shapes(
         &self,
-        ns: i64,
         serial: i64,
         gen: i64,
         from: i64,
@@ -101,7 +100,7 @@ impl Overlay {
         let mut shapes = self.query(
             StatementKind::Payload,
             sql::CELL_SHAPES,
-            &[&ns, &serial, &gen, &slot(from), &to],
+            &[&serial, &gen, &slot(from), &to],
             40,
             |row| Shape::decode(row, row.get::<_, Option<i64>>(4)?.is_some()),
         )?;
@@ -129,7 +128,7 @@ impl Overlay {
     /// or drops the row in the same job.
     pub(crate) fn part(
         &self,
-        (ns, serial, gen): (i64, i64, i64),
+        (serial, gen): (i64, i64),
         shape: &Shape,
         at: i64,
         length: i64,
@@ -138,15 +137,7 @@ impl Overlay {
         self.execute(
             StatementKind::Payload,
             sql::CELL_PUT,
-            &[
-                &ns,
-                &serial,
-                &gen,
-                &at,
-                &shape.epoch,
-                &data,
-                &None::<Vec<u8>>,
-            ],
+            &[&serial, &gen, &at, &shape.epoch, &data, &None::<Vec<u8>>],
             40 + data.len() as u64,
         )?;
         Ok(())
@@ -170,7 +161,7 @@ impl Overlay {
             Some(open) => open.reopen(row),
             None => self
                 .connection
-                .blob_open(rusqlite::MAIN_DB, "payload", "data", row, false)
+                .blob_open(rusqlite::MAIN_DB, "fs_data", "data", row, false)
                 .map(|open| *blob = Some(open)),
         }
         .and_then(|()| match blob {
@@ -183,7 +174,7 @@ impl Overlay {
     /// below and above stays, as rows of their own with the same stamp.
     pub(crate) fn carve(
         &self,
-        layer: (i64, i64, i64),
+        layer: (i64, i64),
         shape: &Shape,
         from: i64,
         to: i64,
@@ -216,26 +207,31 @@ impl Overlay {
     /// One call handles one row: at most `RUN_BYTES`.
     pub(crate) fn transfer_row(
         &self,
-        ns: i64,
         serial: i64,
         lower: &Layer,
         upper: &Layer,
         cell: i64,
     ) -> OverlayResult<u64> {
-        let Some((old, bytes)) = self.covering(ns, serial, lower.gen, cell)? else {
+        let Some((old, bytes)) = self.covering(serial, lower.gen, cell)? else {
             return Ok(0);
         };
-        if self.stale(ns, serial, lower, old.offset, old.epoch)? {
+        if self.stale(serial, lower, old.offset, old.epoch)? {
             self.drop_row(old.row)?;
             return Ok(0);
         }
         let limit = integer(lower.size.min(upper.cutoff))?;
-        let above = self.shapes(ns, serial, upper.gen, old.offset, old.end())?;
+        let above = self.shapes(serial, upper.gen, old.offset, old.end())?;
         let mut live = false;
         for shape in &above {
-            live = live || !self.stale(ns, serial, upper, shape.offset, shape.epoch)?;
+            live = live || !self.stale(serial, upper, shape.offset, shape.epoch)?;
         }
-        if !live && old.offset + old.length <= limit {
+        // An upper piece decides its cells before any lower byte: a lower
+        // row neither moves over one nor is merged into its cells.
+        let pieces = match upper.referenced {
+            true => self.live_pieces(serial, upper, old.offset, old.end())?,
+            false => Vec::new(),
+        };
+        if !live && pieces.is_empty() && old.offset + old.length <= limit {
             for shape in &above {
                 self.drop_row(shape.row)?;
             }
@@ -258,8 +254,11 @@ impl Overlay {
         let mut copied = 0;
         for (index, data) in stored.data.chunks(CELL_BYTES).enumerate() {
             let at = old.offset + index as i64 * CELL;
+            if pieces.iter().any(|own| own.offset <= at && at < own.end()) {
+                continue;
+            }
             let end = (limit - at).clamp(0, data.len() as i64) as usize;
-            copied += self.merge_below(ns, serial, upper, at, &stored, index * CELL_BYTES, end)?;
+            copied += self.merge_below(serial, upper, at, &stored, index * CELL_BYTES, end)?;
         }
         self.drop_row(old.row)?;
         Ok(copied)
@@ -270,7 +269,6 @@ impl Overlay {
     #[allow(clippy::too_many_arguments)]
     fn merge_below(
         &self,
-        ns: i64,
         serial: i64,
         upper: &Layer,
         cell: i64,
@@ -278,10 +276,10 @@ impl Overlay {
         from: usize,
         end: usize,
     ) -> OverlayResult<u64> {
-        let mut window = match self.covering(ns, serial, upper.gen, cell)? {
+        let mut window = match self.covering(serial, upper.gen, cell)? {
             None => Window::empty(&self.payload_work),
             Some((shape, current)) => {
-                if self.stale(ns, serial, upper, shape.offset, shape.epoch)? {
+                if self.stale(serial, upper, shape.offset, shape.epoch)? {
                     // The upsert replaces a row of one cell, not a wider one.
                     if shape.wide() {
                         self.drop_row(shape.row)?;
@@ -307,7 +305,6 @@ impl Overlay {
         observed.cell_copy_bytes = observed.cell_copy_bytes.saturating_add(copied);
         self.payload_work.set(observed);
         self.store(
-            ns,
             serial,
             upper.gen,
             cell,

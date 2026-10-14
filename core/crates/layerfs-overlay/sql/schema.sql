@@ -1,5 +1,5 @@
 -- Disposable overlay schema; its version is the user_version at the end.
--- All owner relations lead with Workspace ns.
+-- One database holds one Workspace: only its `workspace` row names it.
 CREATE TABLE workspace (
     ns INTEGER PRIMARY KEY AUTOINCREMENT,
     incarnation BLOB NOT NULL UNIQUE CHECK(length(incarnation)=32),
@@ -17,10 +17,9 @@ CREATE TABLE workspace (
     CHECK(captured IS NULL OR consolidating IS NULL),
     CHECK((captured IS NULL)=(captured_revision IS NULL))
 ) STRICT;
-CREATE TABLE inode (
-    ns INTEGER NOT NULL REFERENCES workspace(ns),
-    serial INTEGER NOT NULL CHECK(serial>0),
-    gen INTEGER NOT NULL CHECK(gen=-1 OR gen>0),
+CREATE TABLE fs_inode (
+    inode INTEGER NOT NULL CHECK(inode>0),
+    generation INTEGER NOT NULL CHECK(generation=-1 OR generation>0),
     kind INTEGER NOT NULL CHECK(kind BETWEEN 1 AND 3),
     mode INTEGER NOT NULL CHECK(mode>=0 AND ((kind=1 AND mode<=511) OR (kind=2 AND mode<=1023) OR (kind=3 AND mode=511))),
     mtime_seconds INTEGER NOT NULL,
@@ -28,83 +27,81 @@ CREATE TABLE inode (
     nlink INTEGER NOT NULL CHECK(nlink>=0),
     size INTEGER NOT NULL CHECK(size>=0),
     inherited_cutoff INTEGER NOT NULL CHECK(inherited_cutoff>=0),
-    born INTEGER NOT NULL CHECK(born>=0 AND (gen=-1 OR born<=gen)),
+    born INTEGER NOT NULL CHECK(born>=0 AND (generation=-1 OR born<=generation)),
     entries INTEGER NOT NULL CHECK(entries>=0 AND (kind=2 OR entries=0)),
     subdirs INTEGER NOT NULL CHECK(subdirs>=0 AND (kind=2 OR subdirs=0)),
     epoch INTEGER NOT NULL CHECK(epoch>=0),
     height INTEGER NOT NULL CHECK(height>=0 AND height<=epoch),
-    PRIMARY KEY(ns,serial,gen)
+    -- Whether this layer of the file has ever held a reference piece.
+    referenced INTEGER NOT NULL DEFAULT 0 CHECK(referenced IN(0,1)),
+    -- Content sequence: the Workspace revision that last wrote this row.
+    sequence INTEGER NOT NULL DEFAULT 0 CHECK(sequence>=0),
+    PRIMARY KEY(inode,generation)
 ) STRICT, WITHOUT ROWID;
-CREATE INDEX inode_capture ON inode(ns,gen,serial);
-CREATE TABLE directory_entry (
-    ns INTEGER NOT NULL REFERENCES workspace(ns),
+CREATE INDEX fs_inode_capture ON fs_inode(generation,inode);
+CREATE TABLE fs_entry (
     parent INTEGER NOT NULL CHECK(parent>0),
     name BLOB NOT NULL CHECK(length(name)>0 AND length(name)<=255),
-    gen INTEGER NOT NULL CHECK(gen>0),
-    serial INTEGER CHECK(serial>0),
+    generation INTEGER NOT NULL CHECK(generation>0),
+    inode INTEGER CHECK(inode>0),
     inherited INTEGER NOT NULL CHECK(inherited IN(0,1)),
-    PRIMARY KEY(ns,parent,name,gen)
+    PRIMARY KEY(parent,name,generation)
 ) STRICT, WITHOUT ROWID;
-CREATE INDEX directory_entry_capture ON directory_entry(ns,gen,parent,name);
-CREATE TABLE payload (
+CREATE INDEX fs_entry_capture ON fs_entry(generation,parent,name);
+CREATE TABLE fs_data (
     rowid INTEGER PRIMARY KEY,
-    ns INTEGER NOT NULL REFERENCES workspace(ns),
-    serial INTEGER NOT NULL CHECK(serial>0),
-    gen INTEGER NOT NULL CHECK(gen=-1 OR gen>0),
+    inode INTEGER NOT NULL CHECK(inode>0),
+    generation INTEGER NOT NULL CHECK(generation=-1 OR generation>0),
     cell_offset INTEGER NOT NULL CHECK(cell_offset>=0 AND cell_offset%4096=0),
     epoch INTEGER NOT NULL CHECK(epoch>=0),
     -- One cell at most, or a dense run of whole cells inside one aligned 32768-byte slot.
     data BLOB NOT NULL CHECK(length(data) BETWEEN 1 AND 32768 AND (length(data)<=4096 OR
         (validity IS NULL AND length(data)%4096=0 AND cell_offset/32768=(cell_offset+length(data)-1)/32768))),
     validity BLOB CHECK(validity IS NULL OR length(validity)=(length(data)+7)/8),
-    UNIQUE(ns,serial,gen,cell_offset)
+    UNIQUE(inode,generation,cell_offset)
 ) STRICT;
-CREATE TABLE shrink (
-    ns INTEGER NOT NULL REFERENCES workspace(ns),
-    serial INTEGER NOT NULL CHECK(serial>0),
-    gen INTEGER NOT NULL CHECK(gen=-1 OR gen>0),
+CREATE TABLE fs_truncate (
+    inode INTEGER NOT NULL CHECK(inode>0),
+    generation INTEGER NOT NULL CHECK(generation=-1 OR generation>0),
     depth INTEGER NOT NULL CHECK(depth>0),
     cell_offset INTEGER NOT NULL CHECK(cell_offset>=0 AND cell_offset%4096=0),
     epoch INTEGER NOT NULL CHECK(epoch>0),
-    PRIMARY KEY(ns,serial,gen,depth)
+    PRIMARY KEY(inode,generation,depth)
 ) STRICT, WITHOUT ROWID;
-CREATE INDEX payload_generation ON payload(ns,gen,serial,cell_offset);
-CREATE INDEX shrink_generation ON shrink(ns,gen,serial,depth);
-CREATE TABLE lease (
-    ns INTEGER NOT NULL REFERENCES workspace(ns),
+-- A reference piece: `length` bytes of one layer from `file_offset` are the
+-- committed bytes of content root `source` from `source_offset`. It holds no
+-- bytes. Pieces of one layer never overlap, live or stale; a piece is stale
+-- by its first byte and its stamp, like a fs_data row.
+CREATE TABLE fs_data_ref (
+    generation INTEGER NOT NULL CHECK(generation=-1 OR generation>0),
+    inode INTEGER NOT NULL CHECK(inode>0),
+    file_offset INTEGER NOT NULL CHECK(file_offset>=0 AND file_offset%4096=0),
+    length INTEGER NOT NULL CHECK(length>0),
+    epoch INTEGER NOT NULL CHECK(epoch>=0),
+    source BLOB NOT NULL CHECK(length(source)=32),
+    source_offset INTEGER NOT NULL CHECK(source_offset>=0),
+    PRIMARY KEY(generation,inode,file_offset)
+) STRICT, WITHOUT ROWID;
+CREATE INDEX fs_data_generation ON fs_data(generation,inode,cell_offset);
+CREATE INDEX fs_truncate_generation ON fs_truncate(generation,inode,depth);
+CREATE TABLE commit_pin (
     kind INTEGER NOT NULL CHECK(kind BETWEEN 1 AND 6 OR kind=8),
-    owner INTEGER NOT NULL CHECK(owner>0),
+    holder INTEGER NOT NULL CHECK(holder>0),
     resource INTEGER NOT NULL CHECK(resource>=0),
-    PRIMARY KEY(ns,kind,owner,resource)
+    PRIMARY KEY(kind,holder,resource)
 ) STRICT, WITHOUT ROWID;
-CREATE TABLE base_source (
-    ns INTEGER NOT NULL REFERENCES workspace(ns),
+CREATE TABLE commit_base_pin (
     kind INTEGER NOT NULL DEFAULT 0 CHECK(kind BETWEEN 0 AND 2),
-    owner INTEGER NOT NULL CHECK(owner>0),
+    holder INTEGER NOT NULL CHECK(holder>0),
     base_root BLOB NOT NULL CHECK(length(base_root)=32),
-    PRIMARY KEY(ns,kind,owner)
+    PRIMARY KEY(kind,holder)
 ) STRICT, WITHOUT ROWID;
-CREATE TABLE operation_record (
-    ns INTEGER NOT NULL REFERENCES workspace(ns),
-    operation INTEGER NOT NULL CHECK(operation>0),
-    kind INTEGER NOT NULL CHECK(kind>=0),
-    key INTEGER NOT NULL CHECK(key>=0),
-    value BLOB NOT NULL CHECK(length(value)<=65536),
-    PRIMARY KEY(ns,operation,kind,key)
-) STRICT, WITHOUT ROWID;
-CREATE TABLE reclaim (
-    ns INTEGER NOT NULL REFERENCES workspace(ns),
-    queue_key INTEGER NOT NULL CHECK(queue_key>0),
-    target INTEGER NOT NULL CHECK(target>0),
-    cursor INTEGER NOT NULL CHECK(cursor>=0),
-    PRIMARY KEY(ns,queue_key)
-) STRICT, WITHOUT ROWID;
+
 PRAGMA application_id=1279676210;
-CREATE INDEX reclaim_ready ON reclaim(queue_key,ns);
-CREATE INDEX lease_resource ON lease(ns,kind,resource,owner);
-CREATE TABLE maintenance (
-    ns INTEGER NOT NULL REFERENCES workspace(ns),
-    kind INTEGER NOT NULL CHECK(kind BETWEEN 1 AND 11),
+
+CREATE INDEX commit_pin_resource ON commit_pin(kind,resource,holder);
+CREATE TABLE cleanup_task (
+    kind INTEGER NOT NULL CHECK(kind BETWEEN 1 AND 12),
     resource INTEGER NOT NULL CHECK(resource>=0),
     target INTEGER NOT NULL CHECK(target<>0),
     phase INTEGER NOT NULL DEFAULT 0 CHECK(phase>=0),
@@ -112,145 +109,33 @@ CREATE TABLE maintenance (
     aux INTEGER NOT NULL DEFAULT -1 CHECK(aux>=-1),
     name BLOB NOT NULL DEFAULT X'' CHECK(length(name)<=255),
     ready INTEGER NOT NULL DEFAULT 1 CHECK(ready IN(0,1)),
-    PRIMARY KEY(ns,kind,resource,target)
+    PRIMARY KEY(kind,resource,target)
 ) STRICT, WITHOUT ROWID;
-CREATE INDEX maintenance_ready ON maintenance(ready,ns,kind,resource,target);
-CREATE INDEX maintenance_generation ON maintenance(ns,target,kind,resource);
+CREATE INDEX cleanup_task_ready ON cleanup_task(ready,kind,resource,target);
+CREATE INDEX cleanup_task_generation ON cleanup_task(target,kind,resource);
 
-
-CREATE TABLE file_custody (
-    ns INTEGER NOT NULL REFERENCES workspace(ns),
-    serial INTEGER NOT NULL CHECK(serial>0),
-    opens INTEGER NOT NULL DEFAULT 0 CHECK(opens>=0),
-    lookups INTEGER NOT NULL DEFAULT 0 CHECK(lookups>=0),
-    readers INTEGER NOT NULL DEFAULT 0 CHECK(readers>=0),
-    PRIMARY KEY(ns,serial)
-) STRICT, WITHOUT ROWID;
--- One open regular-file descriptor. A native descriptor names its mount and
--- the kernel request that received it (any 64 bits); any other has mount 0
--- and names its caller's request.
-CREATE TABLE file_handle (
-    ns INTEGER NOT NULL REFERENCES workspace(ns),
-    mount INTEGER NOT NULL CHECK(mount>=0),
-    request INTEGER NOT NULL CHECK(mount>0 OR request>0),
-    owner INTEGER NOT NULL CHECK(owner>0),
-    serial INTEGER NOT NULL CHECK(serial>0),
-    writable INTEGER NOT NULL CHECK(writable IN(0,1)),
-    PRIMARY KEY(ns,owner), UNIQUE(ns,mount,request)
-) STRICT, WITHOUT ROWID;
-CREATE TABLE file_read (
-    ns INTEGER NOT NULL REFERENCES workspace(ns),
-    request INTEGER NOT NULL CHECK(request<>0),
-    owner INTEGER NOT NULL CHECK(owner>0),
-    serial INTEGER NOT NULL CHECK(serial>0),
-    PRIMARY KEY(ns,owner), UNIQUE(ns,request)
-) STRICT, WITHOUT ROWID;
-CREATE TABLE captured_reader (
-    ns INTEGER NOT NULL REFERENCES workspace(ns),
+CREATE TABLE commit_reader (
     request INTEGER NOT NULL CHECK(request>0),
-    owner INTEGER NOT NULL CHECK(owner>0),
-    gen INTEGER NOT NULL CHECK(gen>0),
+    holder INTEGER NOT NULL CHECK(holder>0),
+    generation INTEGER NOT NULL CHECK(generation>0),
     revision INTEGER NOT NULL CHECK(revision>=0),
     base_root BLOB NOT NULL CHECK(length(base_root)=32),
     installed INTEGER NOT NULL CHECK(installed>=0),
-    PRIMARY KEY(ns,owner), UNIQUE(ns,request)
-) STRICT, WITHOUT ROWID;
-CREATE TABLE orphan (
-    ns INTEGER NOT NULL REFERENCES workspace(ns),
-    serial INTEGER NOT NULL CHECK(serial>0),
-    base_root BLOB NOT NULL CHECK(length(base_root)=32),
-    lower_top INTEGER NOT NULL CHECK(lower_top>=0),
-    lower_floor INTEGER NOT NULL CHECK(lower_floor>=0 AND lower_floor<=lower_top),
-    PRIMARY KEY(ns,serial)
+    PRIMARY KEY(holder), UNIQUE(request)
 ) STRICT, WITHOUT ROWID;
 
-CREATE TABLE operation_owner (
-    ns INTEGER NOT NULL REFERENCES workspace(ns),
+CREATE TABLE commit_run (
     request INTEGER NOT NULL CHECK(request>0),
-    owner INTEGER NOT NULL CHECK(owner>0),
-    PRIMARY KEY(ns,owner), UNIQUE(ns,request)
+    holder INTEGER NOT NULL CHECK(holder>0),
+    PRIMARY KEY(holder), UNIQUE(request)
 ) STRICT, WITHOUT ROWID;
-CREATE TABLE owned_operation_record (
-    ns INTEGER NOT NULL REFERENCES workspace(ns),
-    operation INTEGER NOT NULL CHECK(operation>0),
-    kind INTEGER NOT NULL CHECK(kind>=0),
-    key INTEGER NOT NULL CHECK(key>=0),
-    value BLOB NOT NULL CHECK(length(value)<=65536),
-    PRIMARY KEY(ns,operation,kind,key)
-) STRICT, WITHOUT ROWID;
-CREATE TABLE indexed_operation_record (
-    ns INTEGER NOT NULL REFERENCES workspace(ns),
+CREATE TABLE commit_record (
     operation INTEGER NOT NULL CHECK(operation>0),
     file_scope BLOB NOT NULL CHECK(length(file_scope)=8),
     kind INTEGER NOT NULL CHECK(kind BETWEEN 0 AND 4294967295),
     key BLOB NOT NULL CHECK(length(key)=32),
     value BLOB NOT NULL CHECK(length(value)<=65536),
-    PRIMARY KEY(ns,operation,file_scope,kind,key)
+    PRIMARY KEY(operation,file_scope,kind,key)
 ) STRICT, WITHOUT ROWID;
-CREATE TABLE lookup_owner (
-    ns INTEGER NOT NULL REFERENCES workspace(ns),
-    request INTEGER NOT NULL CHECK(request>0),
-    owner INTEGER NOT NULL CHECK(owner>0),
-    serial INTEGER NOT NULL CHECK(serial>0),
-    PRIMARY KEY(ns,owner), UNIQUE(ns,request)
-) STRICT, WITHOUT ROWID;
-CREATE TABLE orphan_wait (
-    ns INTEGER NOT NULL REFERENCES workspace(ns),
-    gen INTEGER NOT NULL CHECK(gen>0),
-    serial INTEGER NOT NULL CHECK(serial>0),
-    PRIMARY KEY(ns,gen,serial)
-) STRICT, WITHOUT ROWID;
-CREATE TABLE native_mount (
-    ns INTEGER PRIMARY KEY REFERENCES workspace(ns),
-    owner INTEGER NOT NULL CHECK(owner>0),
-    root INTEGER NOT NULL CHECK(root>0),
-    revoked INTEGER NOT NULL CHECK(revoked IN(0,1)),
-    UNIQUE(ns,owner)
-) STRICT;
-CREATE TABLE native_lookup (
-    ns INTEGER NOT NULL REFERENCES workspace(ns),
-    mount INTEGER NOT NULL CHECK(mount>0),
-    serial INTEGER NOT NULL CHECK(serial>0),
-    owner INTEGER NOT NULL CHECK(owner>0),
-    nlookup INTEGER NOT NULL CHECK(nlookup>=0),
-    implicit INTEGER NOT NULL CHECK(implicit IN(0,1)),
-    CHECK(nlookup>0 OR implicit=1),
-    PRIMARY KEY(ns,mount,serial), UNIQUE(ns,owner)
-) STRICT, WITHOUT ROWID;
-CREATE TABLE native_parent (
-    ns INTEGER NOT NULL,
-    mount INTEGER NOT NULL CHECK(mount>0),
-    serial INTEGER NOT NULL CHECK(serial>0),
-    parent INTEGER NOT NULL CHECK(parent>0),
-    PRIMARY KEY(ns,serial),
-    FOREIGN KEY(ns,serial) REFERENCES file_custody(ns,serial) ON DELETE CASCADE
-) STRICT, WITHOUT ROWID;
-CREATE TABLE native_directory (
-    ns INTEGER NOT NULL REFERENCES workspace(ns),
-    mount INTEGER NOT NULL CHECK(mount>0),
-    owner INTEGER NOT NULL CHECK(owner>0),
-    serial INTEGER NOT NULL CHECK(serial>0),
-    request BLOB NOT NULL CHECK(length(request)=8),
-    closed INTEGER NOT NULL DEFAULT 0 CHECK(closed IN(0,1)),
-    -- The first cookie of the reply that last listed this handle from
-    -- offset 0 over published replies; 0 until then. A reply row below it
-    -- is retired and none of its cookies is an offset.
-    floor INTEGER NOT NULL DEFAULT 0 CHECK(floor>=0),
-    PRIMARY KEY(ns,owner), UNIQUE(ns,mount,request)
-) STRICT, WITHOUT ROWID;
-CREATE INDEX native_directory_open ON native_directory(ns,mount,owner) WHERE closed=0;
--- One row per published READDIR reply of one open directory: the names the
--- reply buffer accepted, each one byte of length and its bytes, in order.
--- Cookie first_cookie+i resumes strictly after the i-th name. `after` is
--- the name the reply was listed after (empty at the start).
-CREATE TABLE native_cookie (
-    ns INTEGER NOT NULL,
-    owner INTEGER NOT NULL CHECK(owner>0),
-    first_cookie INTEGER NOT NULL CHECK(first_cookie>=3),
-    after BLOB NOT NULL CHECK(length(after)<=255),
-    names BLOB NOT NULL CHECK(length(names)>=2 AND length(names)<=16384),
-    PRIMARY KEY(ns,owner,first_cookie),
-    FOREIGN KEY(ns,owner) REFERENCES native_directory(ns,owner)
-) STRICT, WITHOUT ROWID;
-CREATE INDEX native_cookie_after ON native_cookie(ns,owner,after,first_cookie);
-PRAGMA user_version=32;
+
+PRAGMA user_version=34;

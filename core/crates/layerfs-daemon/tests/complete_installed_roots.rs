@@ -8,7 +8,7 @@ mod oracle;
 #[allow(dead_code)]
 #[path = "support/native_install.rs"]
 mod support;
-use layerfs_daemon::{store::BindRequest, Command, Owner, OwnerConfig, Response};
+use layerfs_daemon::{store::BindRequest, Owner, OwnerConfig, Response};
 use layerfs_history::WorkspaceId;
 fn proof(shape: fixture::Shape) {
     let f = fixture::Fixture::new(shape);
@@ -57,9 +57,7 @@ fn prove_fixture(f: fixture::Fixture) {
         assert!(matches!(
             owner
                 .client()
-                .try_submit(Some(bound.workspace.route()), Command::Close)
-                .unwrap()
-                .wait()
+                .close(Some(bound.workspace.route()))
                 .unwrap()
                 .result(),
             Ok(Response::Done)

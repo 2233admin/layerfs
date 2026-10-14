@@ -1,5 +1,5 @@
 //! Typed independently owned read windows through the real SQL owner.
-use crate::{Command, OwnerClient, Response};
+use crate::{OwnerClient, Response};
 use layerfs_overlay::{CapturedReader, FileRead, LocalRead};
 use layerfs_workspace::{OverlayFileRead, WorkspaceError, WorkspaceResult};
 impl OverlayFileRead for OwnerClient {
@@ -9,14 +9,9 @@ impl OverlayFileRead for OwnerClient {
         offset: u64,
         length: u32,
     ) -> WorkspaceResult<Option<LocalRead>> {
-        let done = self.read_job(
-            read.source(),
-            Command::FileRead {
-                read,
-                offset,
-                length,
-            },
-        )?;
+        let done = self.read_job(read.source(), |job_client: &crate::OwnerClient, route| {
+            job_client.file_read(route, read, offset, length)
+        })?;
         match done.result() {
             Ok(Response::Read(value)) => Ok(value.clone()),
             _ => Err(WorkspaceError::Service(Box::new(done))),
@@ -33,24 +28,15 @@ impl OverlayFileRead for OwnerClient {
             return Err(layerfs_overlay::OverlayError::Invalid("read window").into());
         }
         let pending = self
-            .try_submit(
+            .captured_read(
                 Some(reader.capture().route()),
-                Command::CapturedRead {
-                    reader,
-                    serial,
-                    offset,
-                    length,
-                },
+                reader,
+                serial,
+                offset,
+                length,
             )
-            .map_err(|(cause, command)| {
-                WorkspaceError::Service(Box::new(crate::OwnerError::Unattempted {
-                    cause: Box::new(cause),
-                    command: Box::new(command),
-                }))
-            })?;
-        let done = pending
-            .wait()
-            .map_err(|error| WorkspaceError::Service(Box::new(error)))?;
+            .map_err(|cause| WorkspaceError::Service(Box::new(cause)))?;
+        let done = pending;
         match done.result() {
             Ok(Response::Read(value)) => Ok(value.clone()),
             _ => Err(WorkspaceError::Service(Box::new(done))),

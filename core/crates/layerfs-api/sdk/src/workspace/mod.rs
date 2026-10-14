@@ -1,11 +1,10 @@
 //! Public Workspace organization with exact logical and native readiness.
-mod api;
-mod attach;
-mod binding;
-mod cleanup;
 mod commit;
+#[cfg(unix)]
+pub(crate) mod exec;
+mod mount;
 mod status;
 mod unmount;
-pub use api::WorkspaceApi;
-pub use attach::{MountFailure, MountedWorkspace};
-pub use binding::BoundWorkspace;
+pub use mount::BoundWorkspace;
+pub use mount::WorkspaceApi;
+pub use mount::{MountFailure, MountedWorkspace};

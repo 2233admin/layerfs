@@ -1,6 +1,5 @@
 //! Actual ordinary Sandbox lifecycle; independent from filesystem admission and drain.
-mod api;
-mod lifecycle;
-mod types;
-pub use api::{ManagedSandbox, SandboxApi};
-pub use types::{SandboxCause, SandboxCreate, SandboxFailure, SandboxPhase};
+mod close;
+pub(crate) mod create;
+pub use create::{ManagedSandbox, SandboxApi};
+pub use create::{SandboxCause, SandboxCreate, SandboxFailure, SandboxPhase};

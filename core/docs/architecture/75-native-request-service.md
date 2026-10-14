@@ -140,6 +140,14 @@ the original per-request scope and the reader's quarantine custody; how the
 request that observed it ends is described under
 [Failed base demand](#failed-base-demand).
 
+The `recognize` port (2026-10-11, #316 phase 2) is the one port that submits
+no owner job. It takes the bytes of a WRITE and returns them, with claims
+where committed chunks were recognized
+([recognition before the first visit](77-native-mutation-coherence.md#recognition-before-the-first-visit)).
+Its Store reads use a fresh `StorePorts` scope and one admitted reader that
+is returned before the first owner visit; a failure there is not recorded as
+the request's base demand and not in the mount's failed-demand slots.
+
 ## Terminal fence and gated ports
 
 Forced teardown needs one thing the normal path does not: a request parked

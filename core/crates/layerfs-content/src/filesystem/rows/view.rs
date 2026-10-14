@@ -26,6 +26,10 @@ pub(crate) trait OperationInput {
     fn is_new(&self, serial: u64) -> ContentResult<bool> {
         Ok(self.new_position(serial)?.is_some())
     }
+    /// Whether each of at most 64 serials is fresh, in the order asked.
+    fn are_new(&self, serials: &[u64]) -> ContentResult<Vec<bool>> {
+        serials.iter().map(|serial| self.is_new(*serial)).collect()
+    }
 }
 
 pub(crate) trait OperationDirectories<'a> {
@@ -296,5 +300,8 @@ impl OperationInput for StreamedInput<'_> {
     }
     fn new_position(&self, serial: u64) -> ContentResult<Option<usize>> {
         self.input.new_position(serial)
+    }
+    fn are_new(&self, serials: &[u64]) -> ContentResult<Vec<bool>> {
+        self.input.are_new(serials)
     }
 }

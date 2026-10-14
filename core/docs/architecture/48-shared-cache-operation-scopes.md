@@ -10,6 +10,12 @@ a fresh provider for each operation while retaining one immutable byte allowance
 and the original Workspace's installed root and reserved serial ranges. It opens
 no Store, overlay database, namespace or additional mutable tree.
 
+Issue 316 update, 2026-10-11: `BaseView::content(root)` opens a committed
+regular file by its content root alone, through the view's client, and
+`BaseContent::read` reads one bounded range of it. Reference ranges of a read
+and references a Commit cannot retain use it; it adds no cache, allowance or
+provider.
+
 ## Public surface and ownership
 
 The additive APIs are exported by [Workspace](../../crates/layerfs-workspace/src/lib.rs):

@@ -1,4 +1,5 @@
-//! Composed file read: one local layered plan, then one inherited base range.
+//! Composed file read: one local layered plan, then one inherited base range
+//! and the committed ranges its reference pieces name.
 use crate::{BaseView, OverlayFileRead, OverlayRead, SourceView, WorkspaceError, WorkspaceResult};
 use layerfs_content::ContentError;
 use layerfs_overlay::{CapturedReader, FileRead, InodeKind, LocalRead, READ_WINDOW};
@@ -119,8 +120,10 @@ impl SourceView {
     }
 }
 /// A regular file's local window with its inherited bytes read from `base`,
-/// which the caller bound to the root those bytes belong to. A window with
-/// no inherited byte needs no base.
+/// which the caller bound to the root those bytes belong to, and the bytes
+/// of each reference range read from the committed content the range names,
+/// at its source offset, through the same client. A window with no inherited
+/// byte and no reference range needs no base.
 pub(crate) fn file_window(
     base: Option<&BaseView>,
     serial: u64,
@@ -139,10 +142,77 @@ pub(crate) fn file_window(
         let mut inherited = Vec::with_capacity(plan.length() as usize);
         plan.emit(&mut inherited)?;
         let first = (from - local.offset) as usize;
-        for slot in first..first + span as usize {
-            if local.inherited[slot / 8] & (1 << (slot % 8)) != 0 {
-                // The base file ends where it ends; beyond that is zero.
-                local.data[slot] = inherited.get(slot - first).copied().unwrap_or(0);
+        let end = first + span as usize;
+        let bit = |slot: usize| local.inherited[slot / 8] & (1 << (slot % 8)) != 0;
+        let mut slot = first;
+        while slot < end {
+            // Whole mask bytes move eight slots at a time, in a run or a gap.
+            let whole = |slot: usize, bits: u8| {
+                slot % 8 == 0 && slot + 8 <= end && local.inherited[slot / 8] == bits
+            };
+            if whole(slot, 0) {
+                slot += 8;
+                continue;
+            }
+            if !bit(slot) {
+                slot += 1;
+                continue;
+            }
+            let start = slot;
+            while slot < end {
+                if whole(slot, u8::MAX) {
+                    slot += 8;
+                } else if bit(slot) {
+                    slot += 1;
+                } else {
+                    break;
+                }
+            }
+            // The base file ends where it ends; beyond that is zero.
+            let held = inherited
+                .len()
+                .saturating_sub(start - first)
+                .min(slot - start);
+            local.data[start..start + held]
+                .copy_from_slice(&inherited[start - first..start - first + held]);
+            local.data[start + held..slot].fill(0);
+        }
+    }
+    if !local.references.is_empty() {
+        let base = base.ok_or(ContentError::InvalidRecord(
+            "referenced window without base",
+        ))?;
+        if local.referenced.len() != local.data.len().div_ceil(8) {
+            return Err(ContentError::InvalidRecord("reference mask of a window").into());
+        }
+        let mut held: Option<crate::BaseContent> = None;
+        let mut bytes = Vec::new();
+        for range in &local.references {
+            let first = range
+                .offset
+                .checked_sub(local.offset)
+                .filter(|first| {
+                    range.length <= READ_WINDOW as u64
+                        && first + range.length <= local.data.len() as u64
+                })
+                .ok_or(ContentError::InvalidRecord("reference range of a window"))?
+                as usize;
+            if held
+                .as_ref()
+                .is_none_or(|content| content.root() != range.source)
+            {
+                held = Some(base.content(range.source)?);
+            }
+            let content = held.as_ref().ok_or(ContentError::UnexpectedEof)?;
+            bytes.clear();
+            // A range beyond the end of its source is an error, never zeros.
+            content.read(range.source_offset, range.length, &mut bytes)?;
+            // Ranges never overlap: a set bit inside one is a byte it supplies,
+            // and a clear one a byte a cell decided.
+            for (slot, byte) in (first..).zip(&bytes) {
+                if local.referenced[slot / 8] & (1 << (slot % 8)) != 0 {
+                    local.data[slot] = *byte;
+                }
             }
         }
     }

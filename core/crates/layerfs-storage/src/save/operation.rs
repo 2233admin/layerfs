@@ -85,7 +85,6 @@ impl<'a> Save<'a> {
             } = &mut *state;
             packer.flush(next_pack, *pack_end)?;
         }
-        state.packer.seal_pool()?;
         state.flush_signatures()?;
         drop(closing);
         state.register_ready()?;
@@ -117,9 +116,9 @@ impl<'a> Save<'a> {
     pub fn pool_counters(&self) -> crate::save::PoolCounters {
         self.state.borrow().pool_stats
     }
-    /// Bounded candidate index's current charged bytes.
+    /// Bytes charged by this Save's bounded memo of the values it assigned.
     pub fn pooled_index_bytes(&self) -> usize {
-        self.state.borrow().pool_index.live_bytes()
+        self.state.borrow().value_memo.len() * 12
     }
     /// Canonical bytes waiting in the bounded producer batch.
     pub fn pending_canonical_bytes(&self) -> u64 {
@@ -131,8 +130,6 @@ impl Drop for Save<'_> {
         if !self.finished.get() {
             let state = self.state.get_mut();
             state.candidates.invalidate();
-            state.pool_index.invalidate();
-            state.storage.source.refresh_window();
             state.storage.source.invalidate_signatures();
         }
     }

@@ -5,7 +5,7 @@ use super::state::{
 };
 use crate::{
     attributes::Identity, mount::syscalls, ports::MountServices, request::NativeFilesystem,
-    MountQueue,
+    MountRequests,
 };
 use fuser::{Config, Session, SessionACL, SessionMonitor, SessionPhase};
 use std::{fs, io, sync::Arc, thread, time::Duration};
@@ -17,15 +17,15 @@ impl NativeSession {
     /// mount call makes exactly one detach attempt and reports what remains.
     pub fn attach(
         config: SessionConfig,
-        queue: MountQueue,
+        queue: MountRequests,
         services: Arc<dyn MountServices>,
         identity: Identity,
     ) -> Result<Self, Box<AttachFailure>> {
-        let unmounted = |phase, cause, directory: bool, queue: &MountQueue| {
+        let unmounted = |phase, cause, directory: bool, queue: &MountRequests| {
             let directory = directory
                 .then(|| fs::remove_dir(&config.directory).err())
                 .flatten();
-            let lane = queue.stop_admission().and_then(|()| queue.finish()).err();
+            let lane = queue.stop_receive().and_then(|()| queue.finish()).err();
             Box::new(AttachFailure {
                 phase,
                 cause,
@@ -165,14 +165,14 @@ impl NativeSession {
         })
     }
 }
-/// The first receiver exit or unwind closes new handoff and wakes every
-/// borrowed admission waiter. It depends on no request capacity, kernel
+/// The first receiver exit or unwind refuses later receives and wakes every
+/// drain waiter. It depends on no request capacity, kernel
 /// request or polling interval: only this session's own lifecycle event.
-fn fence_first_exit(monitor: SessionMonitor, queue: MountQueue) {
+fn fence_first_exit(monitor: SessionMonitor, queue: MountRequests) {
     let mut loops = monitor.snapshot();
     while !matches!(loops.phase, SessionPhase::Stopping | SessionPhase::Joined) {
         loops = monitor.wait_for_change(loops.revision, Duration::MAX);
     }
-    // A lane already released by a completed drain has no waiter to wake.
-    let _ = queue.stop_admission();
+    // A request owner already released by a completed drain has no waiter to wake.
+    let _ = queue.stop_receive();
 }

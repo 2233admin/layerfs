@@ -45,6 +45,8 @@ pub struct Store {
     pub(super) counts: Arc<Counts>,
     /// Unconsumed local serials below which a create refills early.
     pub(super) serial_low_water: AtomicU64,
+    /// The write recognizer's fixed slots, shared by every Workspace.
+    pub(super) recognizer: super::Recognizer,
 }
 impl Store {
     /// Takes already opened providers. Read capacity is fixed for this daemon.
@@ -75,6 +77,7 @@ impl Store {
             cache,
             counts,
             serial_low_water: AtomicU64::new(0),
+            recognizer: super::Recognizer::new(),
         })
     }
     /// Explicit configuration. Application assembly calls this once, before
@@ -99,6 +102,9 @@ impl Store {
     }
     pub fn cache_work(&self) -> layerfs_content::ContentResult<ClientWork> {
         self.cache.diagnostics()
+    }
+    pub fn recognizer_work(&self) -> super::RecognizerWork {
+        self.recognizer.work()
     }
     pub fn work(&self) -> StoreWork {
         StoreWork {

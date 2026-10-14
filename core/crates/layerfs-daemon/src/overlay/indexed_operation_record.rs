@@ -1,8 +1,7 @@
-//! Credited short raw-record jobs, with no Content algorithm or provider I/O.
+//! Short raw-record jobs, with no Content algorithm or provider I/O.
 use layerfs_overlay::{
-    indexed_operation_record_changes_bytes, IndexedOperationRecordApply,
-    IndexedOperationRecordChange, IndexedOperationRecordKey, IndexedOperationRecordScope, Overlay,
-    OverlayError, OverlayResult, Route, OPERATION_RECORD_BYTES, PAGE_ROWS,
+    IndexedOperationRecordApply, IndexedOperationRecordChange, IndexedOperationRecordKey,
+    IndexedOperationRecordScope, Overlay, OverlayError, OverlayResult, Route,
 };
 
 /// Complete bounded inputs for the existing OperationRecord service class.
@@ -15,6 +14,11 @@ pub enum IndexedOperationRecordJob {
     Get {
         scope: IndexedOperationRecordScope,
         key: IndexedOperationRecordKey,
+    },
+    /// At most `PAGE_ROWS` keys; their values share one reply envelope.
+    GetMany {
+        scope: IndexedOperationRecordScope,
+        keys: Vec<IndexedOperationRecordKey>,
     },
     Apply {
         scope: IndexedOperationRecordScope,
@@ -36,42 +40,17 @@ pub enum IndexedOperationRecordJob {
     },
 }
 
-/// Original deciding outcomes stay inside the existing credited Completion.
+/// Original deciding outcomes stay inside the job's JobReceipt.
 #[derive(Debug)]
 pub enum IndexedOperationRecordReply {
     Contains(bool),
     Value(Option<Vec<u8>>),
+    Values(Vec<Option<Vec<u8>>>),
     Applied(IndexedOperationRecordApply),
     Keys(Vec<[u8; 32]>),
 }
 
 impl IndexedOperationRecordJob {
-    pub(crate) fn charge(&self) -> Option<usize> {
-        let (input, reply) = match self {
-            Self::Contains { .. } => (0, 0),
-            Self::Get { .. } => (0, OPERATION_RECORD_BYTES),
-            Self::Apply { changes, .. } => {
-                let used = indexed_operation_record_changes_bytes(changes).ok()?;
-                let spare = changes
-                    .capacity()
-                    .checked_sub(changes.len())?
-                    .checked_mul(std::mem::size_of::<IndexedOperationRecordChange>())?;
-                let input = used.checked_add(spare)?;
-                if input > OPERATION_RECORD_BYTES {
-                    return None;
-                }
-                (input, OPERATION_RECORD_BYTES)
-            }
-            Self::FirstKeys { .. } | Self::FirstKeysAll { .. } | Self::KeysAfter { .. } => {
-                (0, PAGE_ROWS * 32)
-            }
-        };
-        std::mem::size_of::<Self>()
-            .checked_add(std::mem::size_of::<IndexedOperationRecordReply>())?
-            .checked_add(input)?
-            .checked_add(reply)
-    }
-
     pub(crate) fn perform(
         self,
         db: &Overlay,
@@ -80,6 +59,7 @@ impl IndexedOperationRecordJob {
         let scope = match &self {
             Self::Contains { scope, .. }
             | Self::Get { scope, .. }
+            | Self::GetMany { scope, .. }
             | Self::Apply { scope, .. }
             | Self::FirstKeys { scope, .. }
             | Self::FirstKeysAll { scope, .. }
@@ -95,6 +75,9 @@ impl IndexedOperationRecordJob {
             Self::Get { key, .. } => db
                 .indexed_operation_record_get(scope, key)
                 .map(IndexedOperationRecordReply::Value),
+            Self::GetMany { keys, .. } => db
+                .indexed_operation_record_get_many(scope, &keys)
+                .map(IndexedOperationRecordReply::Values),
             Self::Apply { changes, .. } => db
                 .indexed_operation_record_apply(scope, &changes)
                 .map(IndexedOperationRecordReply::Applied),

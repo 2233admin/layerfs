@@ -60,7 +60,6 @@ fn terminal_cleanup_waits_for_exact_owners_and_reply_attempts() {
     let temp = Temp::new();
     let db = Overlay::create(&temp.db(), ProfileConfig::default()).unwrap();
     let route = db.open_workspace([101; 32], [9; 32]).unwrap();
-    let other = db.open_workspace([102; 32], [9; 32]).unwrap();
     let lease = Lease {
         kind: LeaseKind::Open,
         owner: 1,
@@ -70,7 +69,6 @@ fn terminal_cleanup_waits_for_exact_owners_and_reply_attempts() {
     let publication = db.publish(route, &inode(7), None, Some(&cell(9))).unwrap();
     db.close(route).unwrap();
     assert_eq!(db.cleanup_state(route).unwrap(), CleanupState::Held);
-    assert!(db.reclaim_closed(0).unwrap().is_none());
     assert!(matches!(
         db.publish(route, &inode(8), None, None),
         Err(OverlayError::Closed)
@@ -80,22 +78,16 @@ fn terminal_cleanup_waits_for_exact_owners_and_reply_attempts() {
     // Closed state still accepts the exact earlier send-attempt ticket.
     db.reply_attempted(publication).unwrap();
     assert_eq!(db.cleanup_state(route).unwrap(), CleanupState::Queued);
-    let plans = db.explain_closed_reclaim().unwrap();
+    let plans = db.explain_close_held().unwrap();
     assert!(
-        plans
-            .iter()
-            .all(|line| !line.contains("SCAN") && !line.contains("TEMP B-TREE")),
+        plans.iter().all(|line| !line.contains("TEMP B-TREE")),
         "{plans:?}"
     );
-    let mut steps = 0;
-    while let Some(step) = db.reclaim_closed(0).unwrap() {
-        assert!(step.rows <= 64);
-        assert!(step.data_bytes <= 65536);
-        steps += 1;
-    }
-    assert!(steps > 0);
-    assert_eq!(db.cleanup_state(route).unwrap(), CleanupState::Gone);
-    assert!(!db.state(other).unwrap().closed);
+    assert_eq!(
+        db.resources(Some(route)).unwrap().counts.inode_rows,
+        1,
+        "terminal close leaves the file's rows for whole-file disposal"
+    );
 }
 
 #[test]
@@ -108,86 +100,14 @@ fn closed_capture_retains_its_existing_rows_until_explicit_known_release() {
     let capture = db.capture(route).unwrap();
     db.close(route).unwrap();
     assert_eq!(db.cleanup_state(route).unwrap(), CleanupState::Held);
-    assert!(db.reclaim_closed(0).unwrap().is_none());
     assert_eq!(db.captured_inodes(capture, 0).unwrap(), [inode(1)]);
     db.release_closed_capture(capture).unwrap();
     assert!(matches!(
         db.release_closed_capture(capture),
         Err(OverlayError::Stale)
     ));
-    while db.reclaim_closed(0).unwrap().is_some() {}
-    assert_eq!(db.cleanup_state(route).unwrap(), CleanupState::Gone);
-}
-
-#[test]
-fn reclaim_pages_do_not_visit_a_large_held_namespace_or_copy_operation_record_values() {
-    let temp = Temp::new();
-    let db = Overlay::create(&temp.db(), ProfileConfig::default()).unwrap();
-    let held = db.open_workspace([104; 32], [9; 32]).unwrap();
-    let ready = db.open_workspace([105; 32], [9; 32]).unwrap();
-    db.acquire(
-        held,
-        Lease {
-            kind: LeaseKind::Reader,
-            owner: 1,
-            resource: 0,
-        },
-    )
-    .unwrap();
-    for serial in 1..=1024 {
-        let p = db.publish(held, &inode(serial), None, None).unwrap();
-        db.reply_attempted(p).unwrap();
-    }
-    db.close(held).unwrap();
-    let op = Lease {
-        kind: LeaseKind::Operation,
-        owner: 8,
-        resource: 0,
-    };
-    db.acquire(ready, op).unwrap();
-    for key in 0..3 {
-        db.put_operation_record(
-            ready,
-            8,
-            &OperationRecord {
-                kind: 0,
-                key,
-                value: vec![7; 65536],
-            },
-        )
-        .unwrap();
-    }
-    db.release(ready, op).unwrap();
-    db.close(ready).unwrap();
-    let mut operation_record_windows = 0;
-    loop {
-        let before = kind(db.diagnostics(), StatementKind::Reclaim);
-        let Some(step) = db.reclaim_closed(0).unwrap() else {
-            break;
-        };
-        let after = kind(db.diagnostics(), StatementKind::Reclaim);
-        assert_eq!(step.namespace, ready.namespace() as u64);
-        assert_eq!(after.fullscan_steps - before.fullscan_steps, 0);
-        assert_eq!(after.sorts - before.sorts, 0);
-        assert!(step.rows <= 64 && step.data_bytes <= 65536);
-        if step.data_bytes != 0 {
-            assert_eq!(step.rows, 1);
-            operation_record_windows += 1;
-        }
-        println!(
-            "CLOSE_RECLAIM step={step:?} vm={} returned={} fullscan={} sorts={}",
-            after.vm_steps - before.vm_steps,
-            after.rows_returned - before.rows_returned,
-            after.fullscan_steps - before.fullscan_steps,
-            after.sorts - before.sorts
-        );
-    }
-    assert_eq!(operation_record_windows, 3);
-    assert_eq!(db.cleanup_state(held).unwrap(), CleanupState::Held);
-    println!(
-        "CLOSE_RECLAIM plans={:?}",
-        db.explain_closed_reclaim().unwrap()
-    );
+    assert_eq!(db.cleanup_state(route).unwrap(), CleanupState::Queued);
+    db.close_database().unwrap();
 }
 
 #[test]
@@ -196,7 +116,7 @@ fn profile_namespace_binary_values_and_atomic_refusals() {
     let db = Overlay::create(&temp.db(), ProfileConfig::default()).unwrap();
     assert!(Overlay::create(&temp.db(), ProfileConfig::default()).is_err());
     let p = db.profile();
-    assert_eq!(p.schema_version, 32);
+    assert_eq!(p.schema_version, 34);
     assert_eq!(p.max_pages, i64::from(u32::MAX - 1));
     assert_eq!(p.explicit_page_quota, None);
     #[cfg(unix)]
@@ -219,12 +139,15 @@ fn profile_namespace_binary_values_and_atomic_refusals() {
     );
     assert_eq!(
         (p.page_size, p.cache_size, p.foreign_keys, p.temp_store),
-        (4096, -2048, 1, 1)
+        (4096, -2048, 1, 2)
     );
     assert!(!p.compile_options.is_empty());
     let a = db.open_workspace([1; 32], [9; 32]).unwrap();
-    let b = db.open_workspace([2; 32], [8; 32]).unwrap();
-    assert_ne!(a.namespace(), b.namespace());
+    // One database holds one Workspace: another is refused, whatever it names.
+    assert!(matches!(
+        db.open_workspace([2; 32], [8; 32]),
+        Err(OverlayError::Invalid(_))
+    ));
     assert!(db.open_workspace([1; 32], [9; 32]).is_err());
     let before = kind(db.diagnostics(), StatementKind::Commit).attempts;
     let publication = db
@@ -249,8 +172,6 @@ fn profile_namespace_binary_values_and_atomic_refusals() {
         db.cell(a, 2, publication.generation, 0).unwrap(),
         Some(cell(61))
     );
-    assert!(db.inode(b, 2).unwrap().is_none());
-    assert!(db.cell(b, 2, publication.generation, 0).unwrap().is_none());
     assert_eq!(
         db.directory_entry(a, 1, b"ignored.bin")
             .unwrap()
@@ -281,11 +202,10 @@ fn profile_namespace_binary_values_and_atomic_refusals() {
 }
 
 #[test]
-fn payload_name_operation_record_and_owner_access_keep_indexed_scope() {
+fn payload_name_and_owner_access_keep_indexed_scope() {
     let temp = Temp::new();
     let db = Overlay::create(&temp.db(), ProfileConfig::default()).unwrap();
     let a = db.open_workspace([121; 32], [9; 32]).unwrap();
-    let b = db.open_workspace([122; 32], [9; 32]).unwrap();
     let own = Lease {
         kind: LeaseKind::Operation,
         owner: 7,
@@ -307,20 +227,9 @@ fn payload_name_operation_record_and_owner_access_keep_indexed_scope() {
         )
         .unwrap();
     db.reply_attempted(p).unwrap();
-    db.put_operation_record(
-        a,
-        7,
-        &OperationRecord {
-            kind: 4,
-            key: 0,
-            value: vec![0, 255, 0, 61],
-        },
-    )
-    .unwrap();
     let plans = [
         db.explain_cell(a, 7, p.generation, 0).unwrap(),
         db.explain_directory_entry(a, 1, name).unwrap(),
-        db.explain_operation_record(a, 7, 4, None).unwrap(),
         db.explain_lease(a, own).unwrap(),
     ];
     for plan in &plans {
@@ -333,14 +242,16 @@ fn payload_name_operation_record_and_owner_access_keep_indexed_scope() {
     let mut previous = 0;
     for population in [128, 1024, 4096] {
         for serial in previous + 1..=population {
+            // Unrelated rows of the same tables: other serials, names and owners.
+            let serial = 10_000 + serial;
             let other = db
                 .publish(
-                    b,
+                    a,
                     &inode(serial),
                     Some(&DirectoryEntry {
                         inherited: false,
                         parent: 1,
-                        name: format!("n{serial:04}").into_bytes(),
+                        name: format!("n{serial:05}").into_bytes(),
                         serial: Some(serial),
                     }),
                     Some(&cell(255)),
@@ -348,7 +259,7 @@ fn payload_name_operation_record_and_owner_access_keep_indexed_scope() {
                 .unwrap();
             db.reply_attempted(other).unwrap();
             db.acquire(
-                b,
+                a,
                 Lease {
                     kind: LeaseKind::Reader,
                     owner: serial,
@@ -364,17 +275,11 @@ fn payload_name_operation_record_and_owner_access_keep_indexed_scope() {
             db.directory_entry(a, 1, name).unwrap().unwrap().serial,
             Some(7)
         );
-        assert_eq!(
-            db.operation_record_page(a, 7, 4, None).unwrap()[0].value,
-            [0, 255, 0, 61]
-        );
         assert!(db.lease_exists(a, own).unwrap());
-        assert!(!db.lease_exists(b, own).unwrap());
         let after = db.diagnostics();
         for family in [
             StatementKind::Payload,
             StatementKind::DirectoryEntry,
-            StatementKind::OperationRecord,
             StatementKind::Lease,
         ] {
             let start = kind(before, family);
@@ -430,11 +335,11 @@ fn local_publication_survives_lost_reply_and_capture_does_not_copy_cells() {
 
 #[test]
 fn fixed_capture_uses_generation_index_while_active_namespace_grows() {
-    let temp = Temp::new();
-    let db = Overlay::create(&temp.db(), ProfileConfig::default()).unwrap();
     // Distinct count-driven cases, no latency/cold-cache or performance verdict.
     let mut correct_plan = true;
     for (tag, population) in [(10, 128), (11, 1024), (12, 4096)] {
+        let temp = Temp::new();
+        let db = Overlay::create(&temp.db(), ProfileConfig::default()).unwrap();
         let w = db.open_workspace([tag; 32], [20; 32]).unwrap();
         let p = db.publish(w, &inode(2), None, None).unwrap();
         db.reply_attempted(p).unwrap();
@@ -464,63 +369,6 @@ fn fixed_capture_uses_generation_index_while_active_namespace_grows() {
         correct_plan,
         "capture must use its generation-selective index"
     );
-}
-
-#[test]
-fn backed_owner_and_operation_record_pages_have_no_total_record_limit() {
-    let temp = Temp::new();
-    let db = Overlay::create(&temp.db(), ProfileConfig::default()).unwrap();
-    let a = db.open_workspace([21; 32], [22; 32]).unwrap();
-    let b = db.open_workspace([23; 32], [22; 32]).unwrap();
-    let lease = Lease {
-        kind: LeaseKind::Operation,
-        owner: 1,
-        resource: 0,
-    };
-    db.acquire(a, lease).unwrap();
-    assert!(db.acquire(a, lease).is_err());
-    let record = OperationRecord {
-        kind: 1,
-        key: 0,
-        value: vec![0, 255, 0],
-    };
-    assert!(matches!(
-        db.put_operation_record(b, 1, &record),
-        Err(OverlayError::Missing)
-    ));
-    for key in 0..193 {
-        db.put_operation_record(
-            a,
-            1,
-            &OperationRecord {
-                key,
-                ..record.clone()
-            },
-        )
-        .unwrap();
-    }
-    let mut after = None;
-    let mut count = 0;
-    loop {
-        let page = db.operation_record_page(a, 1, 1, after).unwrap();
-        if page.is_empty() {
-            break;
-        }
-        assert!(page.len() <= PAGE_ROWS);
-        for item in &page {
-            assert_eq!(item.value, record.value);
-            assert_eq!(item.key, count);
-            count += 1;
-        }
-        after = Some(page.last().unwrap().key);
-    }
-    assert_eq!(count, 193);
-    db.release(a, lease).unwrap();
-    assert!(matches!(
-        db.operation_record_page(a, 1, 1, None),
-        Err(OverlayError::Missing)
-    ));
-    assert!(matches!(db.release(a, lease), Err(OverlayError::Missing)));
 }
 
 #[test]
@@ -651,7 +499,7 @@ fn captured_name_keysets_use_fixed_generation_and_do_not_revisit_prefixes() {
         db.reply_attempted(p).unwrap();
     }
     let plan = db.explain_directory_entry_capture(capture).unwrap();
-    assert!(plan.iter().any(|p| p.contains("directory_entry_capture")));
+    assert!(plan.iter().any(|p| p.contains("fs_entry_capture")));
     let mut after: Option<DirectoryEntry> = None;
     let mut count = 0;
     loop {
@@ -691,7 +539,6 @@ fn real_sqlite_full_aborts_one_mutation_without_losing_previous_publication() {
     )
     .unwrap();
     let a = db.open_workspace([92; 32], [93; 32]).unwrap();
-    let b = db.open_workspace([94; 32], [93; 32]).unwrap();
     let initial = db.publish(a, &inode(2), None, Some(&cell(97))).unwrap();
     db.reply_attempted(initial).unwrap();
     let retained = db.capture(a).unwrap();
@@ -716,7 +563,6 @@ fn real_sqlite_full_aborts_one_mutation_without_losing_previous_publication() {
                 assert_eq!(db.captured_cell(retained, 2, 0).unwrap(), Some(cell(97)));
                 assert_eq!(db.inode(a, 2).unwrap(), prior);
                 assert!(db.cell(a, 2, before.active, data.offset).unwrap().is_none());
-                assert_eq!(db.state(b).unwrap().revision, 0);
                 println!(
                     "one-attempt physical quota failure at cell {index}: {error:?}; pages={:?}",
                     db.pages().unwrap()

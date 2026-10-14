@@ -1,8 +1,7 @@
 //! Engine-minted operation ownership and independent bounded operation_record custody.
 use crate::{
     db::{integer, unsigned},
-    OperationOwner, OperationRecord, Overlay, OverlayError, OverlayResult, Route, StatementKind,
-    OPERATION_RECORD_BYTES,
+    OperationOwner, Overlay, OverlayError, OverlayResult, Route, StatementKind,
 };
 impl Overlay {
     /// One acquisition attempt. Query retained custody by request after a lost reply.
@@ -16,14 +15,14 @@ impl Overlay {
             let owner = self.mint_owner()?;
             self.execute(
                 StatementKind::Lease,
-                "INSERT INTO operation_owner VALUES(?1,?2,?3)",
-                &[&route.ns, &request, &integer(owner)?],
+                "INSERT INTO commit_run VALUES(?1,?2)",
+                &[&request, &integer(owner)?],
                 24,
             )?;
             self.execute(
                 StatementKind::Lease,
-                "INSERT INTO lease VALUES(?1,8,?2,0)",
-                &[&route.ns, &integer(owner)?],
+                "INSERT INTO commit_pin VALUES(8,?1,0)",
+                &[&integer(owner)?],
                 16,
             )?;
             Ok(OperationOwner { route, owner })
@@ -37,8 +36,8 @@ impl Overlay {
         self.state(route)?;
         self.query(
             StatementKind::Lease,
-            "SELECT owner FROM operation_owner WHERE ns=?1 AND request=?2",
-            &[&route.ns, &integer(request)?],
+            "SELECT holder FROM commit_run WHERE request=?1",
+            &[&integer(request)?],
             16,
             |r| {
                 Ok(OperationOwner {
@@ -51,11 +50,18 @@ impl Overlay {
     }
     pub(crate) fn check_operation(&self, owner: OperationOwner) -> OverlayResult<()> {
         self.state(owner.route)?;
+        self.operation_custody(owner)
+    }
+    /// The owner half of `check_operation`.
+    fn operation_custody(&self, owner: OperationOwner) -> OverlayResult<()> {
+        if self.operation_seen.get() == Some(owner.owner) {
+            return Ok(());
+        }
         if self
             .query(
                 StatementKind::Lease,
                 crate::sql::OPERATION_CUSTODY,
-                &[&owner.route.ns, &integer(owner.owner)?],
+                &[&integer(owner.owner)?],
                 16,
                 |_| Ok(()),
             )?
@@ -63,63 +69,19 @@ impl Overlay {
         {
             return Err(OverlayError::Stale);
         }
+        self.operation_seen.set(Some(owner.owner));
         Ok(())
     }
-    /// Existing processing custody remains readable after logical close; new
-    /// operation_record mutation refuses. No process exit or Drop implies release.
-    pub fn put_owned_operation_record(
-        &self,
-        owner: OperationOwner,
-        record: &OperationRecord,
-    ) -> OverlayResult<()> {
-        if record.value.len() > OPERATION_RECORD_BYTES {
-            return Err(OverlayError::Invalid("operation_record window"));
+    /// The whole fence of one indexed operation_record job: the Workspace row
+    /// and the owner's custody, each read only when it is not remembered.
+    /// Its refusals and their order are those of `live`/`check_operation`: a
+    /// stale route first, then a closed Workspace when the job writes, then a
+    /// released owner. Existing custody stays readable after logical close.
+    pub(crate) fn fence_operation(&self, owner: OperationOwner, write: bool) -> OverlayResult<()> {
+        if write && self.state(owner.route)?.closed {
+            return Err(OverlayError::Closed);
         }
-        self.atomic(|| {
-            self.live(owner.route)?;
-            self.check_operation(owner)?;
-            self.execute(
-                StatementKind::OperationRecord,
-                "INSERT INTO owned_operation_record VALUES(?1,?2,?3,?4,?5)
-                ON CONFLICT(ns,operation,kind,key) DO UPDATE SET value=excluded.value",
-                &[
-                    &owner.route.ns,
-                    &integer(owner.owner)?,
-                    &i64::from(record.kind),
-                    &integer(record.key)?,
-                    &record.value,
-                ],
-                32 + record.value.len() as u64,
-            )?;
-            Ok(())
-        })
-    }
-    pub fn owned_operation_record_page(
-        &self,
-        owner: OperationOwner,
-        kind: u32,
-        after: Option<u64>,
-    ) -> OverlayResult<Vec<OperationRecord>> {
-        self.check_operation(owner)?;
-        self.query(
-            StatementKind::OperationRecord,
-            "SELECT kind,key,value FROM owned_operation_record
-            WHERE ns=?1 AND operation=?2 AND kind=?3 AND key>?4 ORDER BY key LIMIT 64",
-            &[
-                &owner.route.ns,
-                &integer(owner.owner)?,
-                &i64::from(kind),
-                &after.map(integer).transpose()?.unwrap_or(-1),
-            ],
-            32,
-            |r| {
-                Ok(OperationRecord {
-                    kind: r.get(0)?,
-                    key: unsigned(r, 1)?,
-                    value: r.get(2)?,
-                })
-            },
-        )
+        self.check_operation(owner)
     }
     /// Exact last-consumer fence. Cleanup owns operation_record independently afterwards.
     pub fn release_operation(&self, owner: OperationOwner) -> OverlayResult<()> {
@@ -127,29 +89,22 @@ impl Overlay {
             self.check_operation(owner)?;
             self.execute(
                 StatementKind::Lease,
-                "DELETE FROM operation_owner WHERE ns=?1 AND owner=?2",
-                &[&owner.route.ns, &integer(owner.owner)?],
+                "DELETE FROM commit_run WHERE holder=?1",
+                &[&integer(owner.owner)?],
                 16,
             )?;
             self.execute(
                 StatementKind::Lease,
-                "DELETE FROM lease WHERE ns=?1 AND kind=8 AND owner=?2 AND resource=0",
-                &[&owner.route.ns, &integer(owner.owner)?],
+                "DELETE FROM commit_pin WHERE kind=8 AND holder=?1 AND resource=0",
+                &[&integer(owner.owner)?],
                 16,
             )?;
             self.enqueue(
-                owner.route.ns,
-                crate::maintenance::OPERATION_RECORD,
-                integer(owner.owner)?,
-                1,
-            )?;
-            self.enqueue(
-                owner.route.ns,
                 crate::maintenance::OPERATION_RECORD,
                 integer(owner.owner)?,
                 2,
             )?;
-            self.queue_closed(owner.route)
+            Ok(())
         })
     }
 }

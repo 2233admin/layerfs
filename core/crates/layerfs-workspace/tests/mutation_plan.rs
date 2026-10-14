@@ -141,11 +141,9 @@ fn different_source_and_failed_base_demand_finish_without_discarding_input() {
         let first = missing.job().unwrap().perform(&b.overlay);
         assert!(missing.accept(first).unwrap().is_none());
         b.fixture.store.objects.lock().unwrap().clear();
-        let charge = missing.charge();
         assert!(missing.supply(view).is_err());
         assert_eq!(missing.stage(), MutationStage::Finished);
         assert!(missing.job().is_none());
-        assert!(missing.charge() >= charge);
         assert!(matches!(missing.operation(), Operation::Create { name, .. } if name.as_bytes()==b"missing-base"));
         assert_eq!(b.overlay.state(b.route()).unwrap().revision, 0);
     });

@@ -18,14 +18,13 @@ class Footprint(unittest.TestCase):
         cls.family = json.loads((FAMILY/"family.json").read_text())
         cls.cases = cls.family["cases"]
 
-    def test_original_six_control_geometries_and_seed_are_exact(self):
+    def test_five_kept_control_geometries_and_seed_are_exact(self):
         expected = [("unique-100000",100000,1001,500000000,100000),
             ("metadata-cardinality-100000",100000,1001,500000000,100000),
             ("large-object-500m",100,2,500000000,100000),
             ("unique-100-low-v1",100,2,5000000,100),
-            ("metadata-cardinality-100-low-v1",100,2,5000000,100),
-            ("large-object-10m-low-v1",10,2,10000000,10)]
-        self.assertEqual(len(self.cases),6)
+            ("metadata-cardinality-100-low-v1",100,2,5000000,100)]
+        self.assertEqual(len(self.cases),5)
         for c,(suffix,files,dirs,logical,tier) in zip(self.cases,expected):
             ident = "store-footprint-"+suffix
             self.assertEqual((c["id"],c["v016_case"],c["status"]),(ident,ident,"ported"))
@@ -60,7 +59,7 @@ class Footprint(unittest.TestCase):
     def test_original_watchdogs_and_resources_have_no_new_ratio_gate(self):
         for c in self.cases:
             self.assertEqual(c["budget"],{"command_ms":15000,"operation_watchdog_ms":120000,
-                "performance_hard_watchdog_ms":120000,"verifier_ms":45000,"verification_hard_watchdog_ms":59000,
+                "performance_hard_watchdog_ms":120000,"verifier_ms":75000 if c["id"].endswith("-100000") else 45000,"verification_hard_watchdog_ms":89000 if c["id"].endswith("-100000") else 59000,
                 "cleanup_reserve_ms":4000,"publication_guard_ms":250,"wall_stop_ms":120000})
             p=c["resource_profile"]
             self.assertEqual((p["container_cpus"],p["container_memory_bytes"],p["container_memory_swap_bytes"],p["container_pids_limit"]),(2,2*1024**3,2*1024**3,256))

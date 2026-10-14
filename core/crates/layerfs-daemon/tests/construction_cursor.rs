@@ -3,10 +3,7 @@ use layerfs_content::{
     ConstructionRecordApply, ConstructionRecordChange, ConstructionRecordExpected,
     ConstructionRecordKey, ContentError, ContentResult, IndexedConstructionBacking,
 };
-use layerfs_daemon::{
-    Command, Completion, IndexedOperationRecordJob, Owner, OwnerClient, OwnerConfig, OwnerError,
-    Pending, Response,
-};
+use layerfs_daemon::{JobReceipt, Owner, OwnerClient, OwnerConfig, OwnerError, Response};
 use layerfs_overlay::{
     IndexedOperationRecordKey, IndexedOperationRecordScope, OverlayError, ProfileConfig, Route,
 };
@@ -17,7 +14,6 @@ use layerfs_workspace::{
 use std::{
     path::PathBuf,
     sync::atomic::{AtomicU64, Ordering},
-    time::{Duration, Instant},
 };
 
 struct Temp(PathBuf);
@@ -38,30 +34,22 @@ impl Drop for Temp {
         std::fs::remove_dir_all(&self.0).unwrap();
     }
 }
-fn wait(pending: Pending) -> Completion {
-    let deadline = Instant::now() + Duration::from_secs(3);
-    loop {
-        if let Some(done) = pending.try_complete().unwrap() {
-            return done;
-        }
-        assert!(Instant::now() < deadline, "bounded original cursor job");
-        std::thread::yield_now();
-    }
-}
-fn job(client: &OwnerClient, route: Option<Route>, command: Command) -> Completion {
-    wait(
-        client
-            .try_submit(route, command)
-            .unwrap_or_else(|(cause, command)| panic!("{cause:?}: {command:?}")),
-    )
+fn job(
+    client: &OwnerClient,
+    route: Option<Route>,
+    command: impl FnOnce(
+        &layerfs_daemon::OwnerClient,
+        Option<layerfs_overlay::Route>,
+    ) -> Result<layerfs_daemon::JobReceipt, layerfs_daemon::OwnerError>,
+) -> JobReceipt {
+    command(client, route).unwrap_or_else(|error| panic!("{error:?}"))
 }
 fn scope(client: &OwnerClient, tag: u8) -> IndexedOperationRecordScope {
     let opened = job(
         client,
         None,
-        Command::Open {
-            incarnation: [tag; 32],
-            base_root: [4; 32],
+        |job_client: &layerfs_daemon::OwnerClient, job_route| {
+            job_client.open(job_route, [tag; 32], [4; 32])
         },
     );
     let route = match opened.result() {
@@ -72,7 +60,9 @@ fn scope(client: &OwnerClient, tag: u8) -> IndexedOperationRecordScope {
     let acquired = job(
         client,
         Some(route),
-        Command::AcquireOperation { request: 1 },
+        |job_client: &layerfs_daemon::OwnerClient, job_route| {
+            job_client.acquire_operation(job_route, 1)
+        },
     );
     let owner = match acquired.result() {
         Ok(Response::Operation(Some(owner))) => *owner,
@@ -99,26 +89,12 @@ fn release(client: &OwnerClient, scope: IndexedOperationRecordScope) {
     assert!(job(
         client,
         Some(scope.owner.route()),
-        Command::ReleaseOperation(scope.owner)
+        |job_client: &layerfs_daemon::OwnerClient, job_route| job_client
+            .release_operation(job_route, scope.owner)
     )
     .result()
     .is_ok());
 }
-fn no_credits(client: &OwnerClient) {
-    let deadline = Instant::now() + Duration::from_secs(3);
-    loop {
-        let work = client.diagnostics().unwrap();
-        if work.outstanding == 0 && work.credited_bytes == 0 {
-            return;
-        }
-        assert!(
-            Instant::now() < deadline,
-            "bounded original reply release: {work:?}"
-        );
-        std::thread::yield_now();
-    }
-}
-
 #[test]
 fn real_owner_preserves_sealed_keys_and_observes_bounded_reply_copies() {
     let temp = Temp::new();
@@ -183,7 +159,7 @@ fn attempted_and_unattempted_range_failures_keep_original_custody_without_resend
     let mut failed = IndexedConstructionRecords::new(&client, first);
     assert!(failed.keys_after(27, Some(key(81).key)).is_err());
     let original = match failed.failure().unwrap() {
-        WorkspaceError::Service(error) => error.downcast_ref::<Completion>().unwrap(),
+        WorkspaceError::Service(error) => error.downcast_ref::<JobReceipt>().unwrap(),
         v => panic!("{v:?}"),
     };
     assert!(matches!(
@@ -191,13 +167,15 @@ fn attempted_and_unattempted_range_failures_keep_original_custody_without_resend
         Err(OwnerError::Overlay(OverlayError::Stale))
     ));
     let before = client.diagnostics().unwrap();
-    assert_eq!(before.outstanding, 1);
     let calls = failed.work().calls;
     assert!(failed.keys_after(27, None).is_err());
     assert!(failed.contains(key(0)).is_err());
     assert!(failed.apply(vec![put(0)]).is_err());
     assert_eq!(failed.work().calls, calls);
-    assert_eq!(client.diagnostics().unwrap().admitted, before.admitted);
+    assert_eq!(
+        client.diagnostics().unwrap().jobs.iter().sum::<u64>(),
+        before.jobs.iter().sum::<u64>()
+    );
     let mut other = IndexedConstructionRecords::new(&client, healthy);
     assert_eq!(
         other.apply(vec![put(0)]).unwrap(),
@@ -206,25 +184,18 @@ fn attempted_and_unattempted_range_failures_keep_original_custody_without_resend
     assert_eq!(other.keys_after(27, None).unwrap(), vec![key(0).key]);
     drop(failed.into_custody());
     drop(other.into_custody());
-    no_credits(&client);
     release(&client, healthy);
     owner.stop().unwrap();
     let mut stopped = IndexedConstructionRecords::new(&client, healthy);
     let boundary = key(99).key;
     assert!(stopped.keys_after(27, Some(boundary)).is_err());
+    // Stopped before any effect: the unattempted action owns its original
+    // cursor job and is not replayed.
     match stopped.failure().unwrap() {
-        WorkspaceError::Service(error) => match error.downcast_ref::<OwnerError>().unwrap() {
-            OwnerError::Unattempted { command, .. } => match command.as_ref() {
-                Command::IndexedOperationRecord(job) => match job.as_ref() {
-                    IndexedOperationRecordJob::KeysAfter { scope, kind, after } => {
-                        assert_eq!((*scope, *kind, *after), (healthy, 27, Some(boundary)))
-                    }
-                    v => panic!("{v:?}"),
-                },
-                v => panic!("{v:?}"),
-            },
-            v => panic!("{v:?}"),
-        },
+        WorkspaceError::Service(error) => assert!(matches!(
+            error.downcast_ref::<OwnerError>().unwrap(),
+            OwnerError::Unattempted { cause, .. } if matches!(cause.as_ref(), OwnerError::Stopped)
+        )),
         v => panic!("{v:?}"),
     };
     assert!(stopped.keys_after(27, None).is_err());
@@ -307,12 +278,14 @@ fn unavailable_capability_retains_typed_original_without_provider_substitution()
     assert!(records.first_keys(27, None).is_err());
     assert_eq!(records.work().calls, 1);
     assert_eq!(records.work().terminal_calls, 3);
-    assert_eq!(client.diagnostics().unwrap().admitted, before.admitted);
+    assert_eq!(
+        client.diagnostics().unwrap().jobs.iter().sum::<u64>(),
+        before.jobs.iter().sum::<u64>()
+    );
     let custody = records.into_custody();
     assert_eq!(custody.scope, scope);
     assert!(matches!(&custody.failure,Some(WorkspaceError::Content(error)) if *error==original));
     drop(custody);
-    no_credits(&client);
     release(&client, scope);
     owner.stop().unwrap();
 }

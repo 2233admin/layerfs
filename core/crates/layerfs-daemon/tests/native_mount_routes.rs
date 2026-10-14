@@ -17,7 +17,7 @@ use layerfs_daemon::{
     install_types::{InstalledStore, StoreSettings},
 };
 use layerfs_history::{BranchId, WorkspaceId};
-use layerfs_sdk::{control::Control, OperationCause, WorkspaceApi};
+use layerfs_sdk::{internal::Control, OperationCause};
 use mounted::{until, Harness};
 use nix::fcntl::OFlag;
 use std::{
@@ -38,7 +38,7 @@ fn installed(label: &str) -> (support::Fixture, InstalledStore, Harness) {
     let (mut client, worker) = support::pair(move |connection| {
         receive_install(connection, &target, StoreSettings::default())
     });
-    layerfs_sdk::install(&native.project, &mut client).unwrap();
+    layerfs_sdk::internal::install(&native.project, &mut client).unwrap();
     let installed = worker.join().unwrap();
     let branch = BranchId::from_bytes(installed.manifest.branch).unwrap();
     let harness = Harness::new(installed.opened.store.clone(), &native.directory, branch);
@@ -173,7 +173,7 @@ fn lost_bind_and_attach_acknowledgements_are_located_without_replay() {
     let (native, installed, h) = installed("routes");
     let workspace = WorkspaceId::from_authority([7; 32]).unwrap();
     let (mut control, worker) = session(&h);
-    let mut api = WorkspaceApi::new(&mut control);
+    let mut api = layerfs_sdk::internal::workspace(&mut control);
     assert_eq!(
         refusal(api.locate(workspace)).0,
         ControlCode::Missing,
@@ -218,7 +218,7 @@ fn lost_bind_and_attach_acknowledgements_are_located_without_replay() {
         api.status(bound).unwrap().native.unwrap().ready,
         Some(ready)
     );
-    api.unmount(bound).unwrap();
+    api.unmount(bound, false).unwrap();
     assert_eq!(refusal(api.locate(workspace)).0, ControlCode::Missing);
     assert!(!root.exists());
 
@@ -249,8 +249,8 @@ fn lost_bind_and_attach_acknowledgements_are_located_without_replay() {
     });
     let attached = api.attach(next).unwrap();
     whole_root(Path::new(&attached.directory));
-    api.unmount(next).unwrap();
-    api.unmount(mounted.bound.token).unwrap();
+    api.unmount(next, false).unwrap();
+    api.unmount(mounted.bound.token, false).unwrap();
     assert_eq!(
         control.call(Request::EndSession).unwrap(),
         Reply::SessionEnded
@@ -315,7 +315,7 @@ fn fresh_mounts_repeat_and_one_mount_sustains_uncached_work() {
     }
     until("asynchronous releases served", || {
         let work = h.status(ready.token).native.unwrap().work.unwrap();
-        work.received == 0 && work.admitted == 0
+        work.active == 0
     });
     let after = h.status(ready.token).native.unwrap().work.unwrap();
     // Per round: open, four windowed reads, two tail reads, opendir, at least
@@ -324,13 +324,10 @@ fn fresh_mounts_repeat_and_one_mount_sustains_uncached_work() {
         after.completed - before.completed >= (2 * ROUNDS * 10) as u64,
         "{before:?} {after:?}"
     );
-    assert_eq!(
-        (after.retained, after.terminal, after.unadmitted),
-        (0, 0, 0)
-    );
+    assert_eq!((after.retained, after.terminal), (0, 0));
     assert_eq!(
         (after.loops_entered, after.loops_exited),
-        (1, 0),
+        (layerfs_fuse::RECEIVE_SLOTS as u16, 0),
         "same connection throughout"
     );
     whole_root(&root);

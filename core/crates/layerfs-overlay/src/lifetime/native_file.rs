@@ -1,8 +1,5 @@
 //! Encoded native file handles retain the existing exact OpenFile owner.
-use crate::{
-    db::{integer, unsigned},
-    NativeMount, OpenFile, Overlay, OverlayError, OverlayResult, StatementKind,
-};
+use crate::{NativeMount, OpenFile, Overlay, OverlayError, OverlayResult};
 
 /// A kernel request identity as the descriptor row stores it: the same 64
 /// bits, so two requests of one mount have one row key exactly when they are
@@ -28,27 +25,15 @@ impl Overlay {
         serial: u64,
         handle: u64,
     ) -> OverlayResult<OpenFile> {
-        self.query(
-            StatementKind::Lease,
-            "SELECT writable FROM file_handle WHERE ns=?1 AND owner=?3 AND mount=?2 AND serial=?4",
-            &[
-                &mount.route.ns,
-                &integer(mount.owner)?,
-                &integer(handle)?,
-                &integer(serial)?,
-            ],
-            32,
-            |r| {
-                Ok(OpenFile {
-                    route: mount.route,
-                    owner: handle,
-                    serial,
-                    writable: r.get(0)?,
-                })
-            },
-        )?
-        .pop()
-        .ok_or(OverlayError::Stale)
+        self.available()?;
+        self.open
+            .borrow()
+            .files
+            .rows
+            .get(&(mount.route.ns, handle))
+            .filter(|held| held.mount == mount.owner && held.file.serial == serial)
+            .map(|held| held.file)
+            .ok_or(OverlayError::Stale)
     }
     /// Observes the original request's open owner, without replay or adoption.
     pub fn retained_native_file(
@@ -57,25 +42,13 @@ impl Overlay {
         request: u64,
     ) -> OverlayResult<Option<OpenFile>> {
         self.check_native_attached(mount)?;
-        self.query(
-            StatementKind::Lease,
-            "SELECT owner,serial,writable FROM file_handle WHERE ns=?1 AND mount=?2 AND request=?3",
-            &[
-                &mount.route.ns,
-                &integer(mount.owner)?,
-                &native_request(request),
-            ],
-            24,
-            |r| {
-                Ok(OpenFile {
-                    route: mount.route,
-                    owner: unsigned(r, 0)?,
-                    serial: unsigned(r, 1)?,
-                    writable: r.get(2)?,
-                })
-            },
-        )
-        .map(|mut rows| rows.pop())
+        let state = self.open.borrow();
+        Ok(state
+            .file_requests
+            .rows
+            .get(&(mount.route.ns, mount.owner, native_request(request)))
+            .and_then(|owner| state.files.rows.get(&(mount.route.ns, *owner)))
+            .map(|held| held.file))
     }
     /// Close the exact handle once. Existing independently acquired sources/read
     /// windows survive; foreign or reused encoded handles are rejected.
@@ -88,7 +61,7 @@ impl Overlay {
         self.atomic_cleanup(|| {
             // The fence read this descriptor's row and the Workspace row;
             // a closed Workspace still releases its descriptors.
-            let (state, writable) = self.native_fence(
+            let (_, writable) = self.native_fence(
                 mount,
                 serial,
                 super::native_visit::Held::File(handle),
@@ -100,7 +73,7 @@ impl Overlay {
                 serial,
                 writable,
             };
-            self.close_held_file(file, &state)
+            self.close_held_file(file)
         })
     }
 }

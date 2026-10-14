@@ -235,5 +235,10 @@ fn h28_old_init_ack_unchanged_and_closed_non_disposable_or_installed_values_refu
     assert!(
         include_str!("../src/project.rs").contains("initialize_sealed(args, events).map(|_| ())")
     );
-    assert!(include_str!("../src/fixture.rs").contains("owner.control.install_project(project)"));
+    assert!(include_str!("../src/fixture.rs").contains("runtime::start(args, project, events)"));
+    assert!(include_str!("../src/fixture.rs")
+        .contains("original create installation acknowledgement missing"));
+    assert!(
+        include_str!("../src/runtime.rs").contains("Some(project) => api.create(request, project)")
+    );
 }

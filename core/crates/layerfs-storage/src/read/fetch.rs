@@ -3,13 +3,13 @@
 use super::{locator_cache::LocatorCache, Diagnostics};
 use crate::{
     error::{StorageError, StorageResult},
-    location::{ObjectLocation, PackDomain, PackInfo, SignatureRow, ValueGroupRow},
+    location::{ObjectLocation, PackDomain, PackInfo, SignatureRow},
     pack::layout,
     policy::{DEPENDENCY_PACK_CACHE_BYTES, READ_OBJECT_LIMIT, SINGLETON_PACK_LIMIT},
-    port::{PackPersistence, ValueGroupQuery, ValueGroups},
+    port::PackPersistence,
     source::Source,
 };
-use layerfs_content::ObjectId;
+use layerfs_content::{inode_leaf::INODE_VALUE_BYTES, ObjectId};
 use std::{
     cell::{Cell, RefCell},
     collections::{BTreeMap, BTreeSet},
@@ -21,9 +21,6 @@ pub(crate) struct Fetch {
     locators: RefCell<LocatorCache>,
     absent: RefCell<BTreeSet<ObjectId>>,
     descriptors: RefCell<BTreeMap<i64, PackInfo>>,
-    groups: RefCell<BTreeMap<u32, ValueGroupRow>>,
-    missing_ordinals: RefCell<BTreeSet<u32>>,
-    window: Cell<Option<u32>>,
     signatures: RefCell<Option<Vec<SignatureRow>>>,
     counters: Cell<Diagnostics>,
 }
@@ -34,9 +31,6 @@ impl Fetch {
             locators: RefCell::new(LocatorCache::default()),
             absent: RefCell::new(BTreeSet::new()),
             descriptors: RefCell::new(BTreeMap::new()),
-            groups: RefCell::new(BTreeMap::new()),
-            missing_ordinals: RefCell::new(BTreeSet::new()),
-            window: Cell::new(None),
             signatures: RefCell::new(None),
             counters: Cell::new(Diagnostics::default()),
         }
@@ -57,15 +51,11 @@ impl Fetch {
             absent.remove(id);
         }
     }
-    pub(crate) fn refresh_window(&self) {
-        self.window.set(None);
-    }
     pub(crate) fn invalidate_signatures(&self) {
         *self.signatures.borrow_mut() = None;
     }
     pub(crate) fn begin_demand(&self) {
         self.absent.borrow_mut().clear();
-        self.missing_ordinals.borrow_mut().clear();
     }
     pub(crate) fn locate(&self, ids: &[ObjectId]) -> StorageResult<()> {
         let mut missing = BTreeSet::new();
@@ -194,80 +184,6 @@ impl Fetch {
         validate_frame(info, &body)?;
         Ok(body)
     }
-    pub(crate) fn prefetch_values(&self, ordinals: &[u32]) -> StorageResult<()> {
-        let wanted: Vec<_> = ordinals
-            .iter()
-            .copied()
-            .collect::<BTreeSet<_>>()
-            .into_iter()
-            .filter(|ordinal| {
-                self.covering(*ordinal).is_none()
-                    && !self.missing_ordinals.borrow().contains(ordinal)
-            })
-            .collect();
-        for page in wanted.chunks(READ_OBJECT_LIMIT) {
-            let reply = self.catalogue(ValueGroupQuery::Ordinals(page))?;
-            if reply.next.is_some() || reply.rows.len() > page.len() {
-                return Err(StorageError::Integrity("catalogue set cardinality"));
-            }
-            for ordinal in page {
-                if self.covering(*ordinal).is_none() {
-                    let mut missing = self.missing_ordinals.borrow_mut();
-                    if missing.len() >= READ_OBJECT_LIMIT {
-                        missing.clear();
-                    }
-                    missing.insert(*ordinal);
-                }
-            }
-            for row in &reply.rows {
-                if !page.iter().any(|ordinal| covers(*row, *ordinal)) {
-                    return Err(StorageError::Integrity("unrequested value group"));
-                }
-            }
-        }
-        Ok(())
-    }
-    fn covering(&self, ordinal: u32) -> Option<ValueGroupRow> {
-        self.groups
-            .borrow()
-            .range(..=ordinal)
-            .next_back()
-            .map(|(_, row)| *row)
-            .filter(|row| covers(*row, ordinal))
-    }
-    fn catalogue(&self, query: ValueGroupQuery<'_>) -> StorageResult<ValueGroups> {
-        self.note(|c| c.value_groups += 1);
-        let reply = self.metadata.value_groups(query)?;
-        if reply.window_start == 0 || reply.rows.len() > READ_OBJECT_LIMIT {
-            return Err(StorageError::Integrity("catalogue bound/window"));
-        }
-        let mut end = 0;
-        for row in &reply.rows {
-            if row.first_ordinal == 0
-                || u64::from(row.first_ordinal) < end
-                || row.count == 0
-                || row.count > crate::policy::VALUES_PER_GROUP
-                || row.pack_id <= 0
-                || row.group_number >= crate::policy::GROUP_COUNT_LIMIT
-            {
-                return Err(StorageError::Integrity("port value group"));
-            }
-            end = u64::from(row.first_ordinal) + row.count as u64;
-            if end > u64::from(u32::MAX) + 1 {
-                return Err(StorageError::Integrity("ordinal range"));
-            }
-            let mut cache = self.groups.borrow_mut();
-            if cache.len() >= READ_OBJECT_LIMIT {
-                cache.clear();
-            }
-            if cache.get(&row.first_ordinal).is_some_and(|old| old != row) {
-                return Err(StorageError::Integrity("inconsistent value group"));
-            }
-            cache.insert(row.first_ordinal, *row);
-        }
-        self.window.set(Some(reply.window_start));
-        Ok(reply)
-    }
 }
 impl Source for Fetch {
     fn ordered_dependencies(&self) -> bool {
@@ -283,7 +199,7 @@ impl Source for Fetch {
             if info.domain == PackDomain::Payload {
                 return self.payload(info);
             }
-        } else if !self.groups.borrow().values().any(|row| row.pack_id == id) {
+        } else {
             return Err(StorageError::Integrity("pack descriptor missing"));
         }
         let mut packs = crate::encoding::PackCache::new();
@@ -291,9 +207,6 @@ impl Source for Fetch {
         packs
             .remove(&id)
             .ok_or(StorageError::Integrity("metadata pack missing"))
-    }
-    fn prepare_value_groups(&self, ordinals: &[u32]) -> StorageResult<()> {
-        self.prefetch_values(ordinals)
     }
     fn validate_cached_pack(&self, info: PackInfo) -> StorageResult<()> {
         self.remember_pack(info)
@@ -383,56 +296,39 @@ impl Source for Fetch {
             }
         }
     }
-    fn value_group(&self, ordinal: u32) -> StorageResult<Option<ValueGroupRow>> {
-        if ordinal == 0 {
+    fn inode_values(&self, ordinals: &[u32]) -> StorageResult<Vec<[u8; INODE_VALUE_BYTES]>> {
+        if ordinals.contains(&0) {
             return Err(StorageError::Integrity("metadata ordinal"));
         }
-        if let Some(row) = self.covering(ordinal) {
-            return Ok(Some(row));
-        }
-        self.prefetch_values(&[ordinal])?;
-        Ok(self.covering(ordinal))
-    }
-    fn value_groups(
-        &self,
-        from: Option<u32>,
-        visit: &mut dyn FnMut(ValueGroupRow) -> StorageResult<()>,
-    ) -> StorageResult<()> {
-        let mut from = from.unwrap_or(1);
-        loop {
-            let page = self.catalogue(ValueGroupQuery::Page {
-                from,
-                limit: READ_OBJECT_LIMIT,
-            })?;
-            if page
-                .rows
-                .first()
-                .is_some_and(|row| row.first_ordinal < from)
-            {
-                return Err(StorageError::Integrity("catalogue chronology"));
-            }
-            let last = page
-                .rows
-                .last()
-                .map(|row| row.first_ordinal)
-                .unwrap_or(from);
-            for row in page.rows {
-                visit(row)?;
-            }
-            match page.next {
-                Some(next) if next > last => from = next,
-                Some(_) => return Err(StorageError::Integrity("catalogue page progress")),
-                None => return Ok(()),
+        let wanted: Vec<u32> = ordinals
+            .iter()
+            .copied()
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect();
+        let mut found = BTreeMap::new();
+        let mut rows = Vec::new();
+        for page in wanted.chunks(READ_OBJECT_LIMIT) {
+            self.note(|c| c.value_groups += 1);
+            self.metadata.inode_values(page, &mut rows)?;
+            // The reply may omit an ordinal but never add, repeat or reorder one.
+            let mut asked = page.iter();
+            for row in &rows {
+                if !asked.any(|ordinal| *ordinal == row.ordinal) {
+                    return Err(StorageError::Integrity("unrequested inode value"));
+                }
+                found.insert(row.ordinal, row.value);
             }
         }
-    }
-    fn window_start(&self) -> StorageResult<u32> {
-        if let Some(start) = self.window.get() {
-            return Ok(start);
-        }
-        Ok(self
-            .catalogue(ValueGroupQuery::Page { from: 1, limit: 0 })?
-            .window_start)
+        ordinals
+            .iter()
+            .map(|ordinal| {
+                found
+                    .get(ordinal)
+                    .copied()
+                    .ok_or(StorageError::Integrity("metadata ordinal missing"))
+            })
+            .collect()
     }
     fn signatures(&self) -> StorageResult<Vec<SignatureRow>> {
         if let Some(rows) = self.signatures.borrow().as_ref() {
@@ -468,10 +364,6 @@ impl Source for Fetch {
     fn note_pack_cache_hit(&self) {
         self.note(|c| c.pack_hits += 1);
     }
-}
-fn covers(row: ValueGroupRow, ordinal: u32) -> bool {
-    ordinal >= row.first_ordinal
-        && u64::from(ordinal) < u64::from(row.first_ordinal) + row.count as u64
 }
 fn check_info(info: PackInfo) -> StorageResult<()> {
     if info.pack_id <= 0 || !(32..=SINGLETON_PACK_LIMIT).contains(&info.length) {

@@ -1,8 +1,7 @@
 //! Indexed native connection and kernel lookup ownership.
 use crate::{
-    db::{integer, unsigned},
-    LeaseKind, NativeMount, NativeMountState, Overlay, OverlayError, OverlayResult, Route,
-    StatementKind, WorkspaceState,
+    db::integer, LeaseKind, NativeMount, NativeMountState, Overlay, OverlayError, OverlayResult,
+    Route, WorkspaceState,
 };
 
 impl Overlay {
@@ -15,57 +14,80 @@ impl Overlay {
         integer(root)?;
         self.atomic(|| {
             self.live(route)?;
+            let held = self.open.borrow().mounts.rows.get(&route.ns).copied();
+            let replaced = match held {
+                Some((_, false)) => return Err(OverlayError::Invalid("duplicate native mount")),
+                Some((revoked, true)) => {
+                    self.retire_revoked_mount(revoked)?;
+                    true
+                }
+                None => false,
+            };
             let owner = self.mint_owner()?;
-            self.execute(
-                StatementKind::Lease,
-                "INSERT INTO native_mount(ns,owner,root,revoked) VALUES(?1,?2,?3,0)",
-                &[&route.ns, &integer(owner)?, &integer(root)?],
-                24,
-            )?;
             let mount = NativeMount { route, owner, root };
+            {
+                let mut state = self.open.borrow_mut();
+                state.mounts.put(route.ns, (mount, false));
+                if !replaced {
+                    state.count(route.ns, 8, true);
+                }
+            }
             self.insert_native_lookup(mount, root, true, 0)?;
             self.set_native_parent(mount, root, root)?;
             Ok(mount)
         })
     }
+    /// A revoked mount is drained and can receive nothing: its remaining
+    /// kernel references and parents leave with it when the Workspace is
+    /// attached again.
+    fn retire_revoked_mount(&self, revoked: NativeMount) -> OverlayResult<()> {
+        let ns = revoked.route.ns;
+        let (references, parents) = {
+            let state = self.open.borrow();
+            let references = state
+                .kernel
+                .rows
+                .range((ns, revoked.owner, 0)..=(ns, revoked.owner, u64::MAX))
+                .map(|(key, _)| *key)
+                .collect::<Vec<_>>();
+            let parents = state
+                .parents
+                .rows
+                .range((ns, 0)..=(ns, u64::MAX))
+                .filter(|(_, (owner, _))| *owner == revoked.owner)
+                .map(|(key, _)| *key)
+                .collect::<Vec<_>>();
+            (references, parents)
+        };
+        for key in references {
+            self.open.borrow_mut().remove_kernel(key);
+            self.file_ref(ns, integer(key.2)?, LeaseKind::LookupOwner, false)?;
+        }
+        for key in parents {
+            self.open.borrow_mut().remove_parent(key);
+        }
+        Ok(())
+    }
     /// Observes the original connection, without adopting or replaying attach.
     pub fn retained_native_mount(&self, route: Route) -> OverlayResult<Option<NativeMount>> {
         self.state(route)?;
-        self.query(
-            StatementKind::Lease,
-            "SELECT owner,root FROM native_mount WHERE ns=?1",
-            &[&route.ns],
-            8,
-            |r| {
-                Ok(NativeMount {
-                    route,
-                    owner: unsigned(r, 0)?,
-                    root: unsigned(r, 1)?,
-                })
-            },
-        )
-        .map(|mut rows| rows.pop())
+        Ok(self
+            .open
+            .borrow()
+            .mounts
+            .rows
+            .get(&route.ns)
+            .map(|(mount, _)| *mount))
     }
     pub fn native_mount_state(&self, mount: NativeMount) -> OverlayResult<NativeMountState> {
         self.check_route(mount.route)?;
-        let row = self
-            .query(
-                StatementKind::Lease,
-                "SELECT owner,root,revoked FROM native_mount WHERE ns=?1",
-                &[&mount.route.ns],
-                8,
-                |r| Ok((unsigned(r, 0)?, unsigned(r, 1)?, r.get::<_, bool>(2)?)),
-            )?
-            .pop();
-        match row {
+        match self.open.borrow().mounts.rows.get(&mount.route.ns) {
             None => Ok(NativeMountState::Gone),
-            Some((owner, root, revoked)) if owner == mount.owner && root == mount.root => {
-                Ok(if revoked {
-                    NativeMountState::Revoked
-                } else {
-                    NativeMountState::Live
-                })
-            }
+            Some((held, revoked)) if *held == mount => Ok(if *revoked {
+                NativeMountState::Revoked
+            } else {
+                NativeMountState::Live
+            }),
             Some(_) => Err(OverlayError::Stale),
         }
     }
@@ -90,11 +112,15 @@ impl Overlay {
         mount: NativeMount,
         serial: u64,
     ) -> OverlayResult<Option<(u64, u64, bool)>> {
-        self.query(StatementKind::Lease,
-            "SELECT owner,nlookup,implicit FROM native_lookup WHERE ns=?1 AND mount=?2 AND serial=?3",
-            &[&mount.route.ns, &integer(mount.owner)?, &integer(serial)?], 24,
-            |r| Ok((unsigned(r, 0)?, unsigned(r, 1)?, r.get(2)?)))
-            .map(|mut rows| rows.pop())
+        self.available()?;
+        integer(serial)?;
+        Ok(self
+            .open
+            .borrow()
+            .kernel
+            .rows
+            .get(&(mount.route.ns, mount.owner, serial))
+            .map(|entry| (entry.owner, entry.count, entry.implicit)))
     }
     pub fn native_lookup_count(
         &self,
@@ -131,38 +157,41 @@ impl Overlay {
         implicit: bool,
         count: u64,
     ) -> OverlayResult<()> {
+        let key = (mount.route.ns, mount.owner, serial);
+        integer(serial)?;
+        integer(count)?;
+        if count == 0 && !implicit {
+            return Err(OverlayError::Invalid("empty kernel reference"));
+        }
         let owner = self.mint_owner()?;
-        self.execute(
-            StatementKind::Lease,
-            "INSERT INTO native_lookup VALUES(?1,?2,?3,?4,?5,?6)",
-            &[
-                &mount.route.ns,
-                &integer(mount.owner)?,
-                &integer(serial)?,
-                &integer(owner)?,
-                &integer(count)?,
-                &implicit,
-            ],
-            48,
-        )?;
+        let mut state = self.open.borrow_mut();
+        if state.kernel.rows.contains_key(&key) {
+            return Err(OverlayError::Invalid("duplicate kernel reference"));
+        }
+        state.put_kernel(
+            key,
+            crate::open::KernelReference {
+                owner,
+                count,
+                implicit,
+            },
+        );
         Ok(())
     }
     pub(crate) fn add_native_lookup(&self, mount: NativeMount, serial: u64) -> OverlayResult<()> {
-        if let Some((_, count, _)) = self.native_lookup_row(mount, serial)? {
-            let next = count
+        if let Some((owner, count, implicit)) = self.native_lookup_row(mount, serial)? {
+            let count = count
                 .checked_add(1)
+                .filter(|count| *count <= i64::MAX as u64)
                 .ok_or(OverlayError::Invalid("native lookup overflow"))?;
-            self.execute(
-                StatementKind::Lease,
-                "UPDATE native_lookup SET nlookup=?4 WHERE ns=?1 AND mount=?2 AND serial=?3",
-                &[
-                    &mount.route.ns,
-                    &integer(mount.owner)?,
-                    &integer(serial)?,
-                    &integer(next)?,
-                ],
-                32,
-            )?;
+            self.open.borrow_mut().put_kernel(
+                (mount.route.ns, mount.owner, serial),
+                crate::open::KernelReference {
+                    owner,
+                    count,
+                    implicit,
+                },
+            );
             Ok(())
         } else {
             self.insert_native_lookup(mount, serial, false, 1)
@@ -174,23 +203,40 @@ impl Overlay {
         serial: u64,
         owner: u64,
     ) -> OverlayResult<()> {
-        self.execute(
-            StatementKind::Lease,
-            "DELETE FROM native_lookup WHERE ns=?1 AND mount=?2 AND serial=?3 AND owner=?4",
-            &[
-                &mount.route.ns,
-                &integer(mount.owner)?,
-                &integer(serial)?,
-                &integer(owner)?,
-            ],
-            32,
-        )?;
+        let key = (mount.route.ns, mount.owner, serial);
+        if self
+            .open
+            .borrow()
+            .kernel
+            .rows
+            .get(&key)
+            .map(|entry| entry.owner)
+            != Some(owner)
+        {
+            return Err(OverlayError::Stale);
+        }
+        self.open.borrow_mut().remove_kernel(key);
         self.file_ref(
             mount.route.ns,
             integer(serial)?,
             LeaseKind::LookupOwner,
             false,
         )
+    }
+    /// FORGET's fence in one statement: the Workspace row, closed or not,
+    /// this mount attached and not revoked, and the lookup row the request
+    /// names (its owner, count and whether it is the connection's implicit
+    /// one). A missing or foreign Workspace, mount or lookup row is Stale.
+    fn forget_fence(
+        &self,
+        mount: NativeMount,
+        serial: u64,
+    ) -> OverlayResult<(WorkspaceState, u64, u64, bool)> {
+        let state = self.check_native_attached(mount)?;
+        let (owner, count, implicit) = self
+            .native_lookup_row(mount, serial)?
+            .ok_or(OverlayError::Stale)?;
+        Ok((state, owner, count, implicit))
     }
     /// Exact no-reply kernel decrement. Failure retains the original caller's
     /// record; it never compensates an unavailable send/delivery outcome.
@@ -199,51 +245,38 @@ impl Overlay {
             return Err(OverlayError::Invalid("zero native forget"));
         }
         self.atomic_cleanup(|| {
-            let state = self.check_native_attached(mount)?;
-            let (owner, held, implicit) = self
-                .native_lookup_row(mount, serial)?
-                .ok_or(OverlayError::Stale)?;
+            let (_, owner, held, implicit) = self.forget_fence(mount, serial)?;
             let after = held
                 .checked_sub(count)
                 .ok_or(OverlayError::Invalid("native lookup underflow"))?;
             if after == 0 && !implicit {
                 self.drop_native_lookup(mount, serial, owner)?;
             } else {
-                self.execute(
-                    StatementKind::Lease,
-                    "UPDATE native_lookup SET nlookup=?4 WHERE ns=?1 AND mount=?2 AND serial=?3",
-                    &[
-                        &mount.route.ns,
-                        &integer(mount.owner)?,
-                        &integer(serial)?,
-                        &integer(after)?,
-                    ],
-                    32,
-                )?;
+                self.open.borrow_mut().put_kernel(
+                    (mount.route.ns, mount.owner, serial),
+                    crate::open::KernelReference {
+                        owner,
+                        count: after,
+                        implicit,
+                    },
+                );
             }
             // The release changes no lifecycle, capture or base reader.
-            self.queue_closed_at(mount.route, &state)
+            Ok(())
         })
     }
     /// Call only after detach and complete native/service consumer drain. A
     /// request records nothing here, so the fixed logical mark waits for no
     /// row. An open file or directory handle whose kernel RELEASE can no longer arrive
-    /// stops representing a consumer here; bounded maintenance retires it.
+    /// stops representing a consumer here; its allocation goes with file close.
     pub fn revoke_native_mount(&self, mount: NativeMount) -> OverlayResult<()> {
         self.atomic_cleanup(|| {
             self.check_native_attached(mount)?;
-            self.execute(
-                StatementKind::Lease,
-                "UPDATE native_mount SET revoked=1 WHERE ns=?1 AND owner=?2",
-                &[&mount.route.ns, &integer(mount.owner)?],
-                16,
-            )?;
-            self.enqueue(
-                mount.route.ns,
-                crate::maintenance::NATIVE,
-                integer(mount.owner)?,
-                integer(mount.owner)?,
-            )
+            self.open
+                .borrow_mut()
+                .mounts
+                .put(mount.route.ns, (mount, true));
+            Ok(())
         })
     }
 }

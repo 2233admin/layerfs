@@ -66,18 +66,17 @@ use history_boundary::{Boundary, ObservedHistory};
 use history_gate::Point;
 use layerfs_bridge::control::{
     AbortDisposition, Activity, CommitKnowledge, ControlCode, DetachDisposition, ForcedCleanup,
-    ForcedFacts, ForcedOutcome, NativePhase, NativeWork, Reply, Request, TeardownCustody,
-    TeardownStage, WorkspaceToken,
+    ForcedOutcome, NativePhase, NativeWork, Reply, Request, TeardownCustody, WorkspaceToken,
 };
 use layerfs_content::{filesystem::FilesystemRootId, ObjectId};
 use layerfs_daemon::{
     bootstrap::open_store,
     control::{Failure, Service, Success},
     store::{CommitError, CommitPhase, ReadLimits, ReleasedOwner, Store, StoreReader},
-    Command, Completion, NativeJob, NativeReply, OwnerClient, OwnerError, Response,
+    Response,
 };
 use layerfs_history::{CommitStagedOutcome, HistoryCatalog, HistoryError, WorkspaceId};
-use layerfs_overlay::{CleanupState, NativeMountState, Route};
+use layerfs_overlay::CleanupState;
 use layerfs_persistence::Handles;
 use layerfs_storage::{port::PackPersistence, ReservationBlocks, Storage};
 use model::{assert_same, Flat, Model};
@@ -95,82 +94,6 @@ use std::{
     thread::{self, JoinHandle},
     time::{Duration, Instant},
 };
-
-/// External catalog boundary scope: test code at the public History port and
-/// the owner's public admission, as `mounted_commit_failures.rs` case F4.
-mod catalog_boundary {
-    use layerfs_daemon::{Admission, Command, OwnerClient};
-    use layerfs_history::*;
-    use layerfs_overlay::Route;
-    use layerfs_persistence::Handles;
-    use std::sync::{Arc, Mutex};
-
-    /// Admission registrations of the local owner, reserved and never polled:
-    /// none of their commands is ever submitted. Dropping one frees its slot.
-    pub struct Saturated {
-        pub registrations: Vec<Admission>,
-        /// The owner's refusal of the next registration.
-        pub refusal: Option<String>,
-    }
-    /// The real catalog. Once armed, the next `stage_and_commit` performs the
-    /// real publication and, before returning its exact known outcome, takes
-    /// every free admission registration of the armed owner.
-    pub struct PublishedThenSaturated {
-        pub handles: Arc<Handles>,
-        pub armed: Mutex<Option<(OwnerClient, Route)>>,
-        pub held: Mutex<Option<Saturated>>,
-    }
-    macro_rules! forward {
-        ($($name:ident($($arg:ident: $ty:ty),*) -> $out:ty;)*) => {$(
-            fn $name(&self, $($arg: $ty),*) -> $out { self.handles.history.$name($($arg),*) }
-        )*};
-    }
-    impl HistoryCatalog for PublishedThenSaturated {
-        forward! {
-            catalog_id() -> CatalogId;
-            incarnation() -> u64;
-            layer_stack(id: LayerStackId) -> HistoryResult<Option<LayerStackRecord>>;
-            layer_stacks(page: &Page) -> HistoryResult<PageResult<LayerStackRecord>>;
-            branch(id: BranchId) -> HistoryResult<Option<BranchRecord>>;
-            branch_snapshot(id: BranchId) -> HistoryResult<Option<BranchSnapshot>>;
-            branches(stack: LayerStackId, page: &Page) -> HistoryResult<PageResult<BranchRecord>>;
-            commit(id: CommitId) -> HistoryResult<Option<CommitRecord>>;
-            layer(id: LayerId) -> HistoryResult<Option<LayerRecord>>;
-            stage(workspace: WorkspaceId) -> HistoryResult<Option<StageRecord>>;
-            stages(branch: BranchId, page: &Page) -> HistoryResult<PageResult<StageRecord>>;
-            commit_history(request: &CommitHistoryRequest) -> HistoryResult<PageResult<CommitRecord>>;
-            layer_history(request: &LayerHistoryRequest) -> HistoryResult<PageResult<LayerRecord>>;
-            initialize_layerstack(request: &StackInitialization) -> HistoryResult<LayerStackRecord>;
-            fork(request: &ForkRequest) -> HistoryResult<BranchSnapshot>;
-            stage_changes(request: &StageRequest) -> HistoryResult<StageRecord>;
-            commit_staged(request: &CommitStagedRequest) -> HistoryResult<CommitStagedOutcome>;
-            add_layer(request: &AddLayerRequest) -> HistoryResult<AddLayerOutcome>;
-            discard_stage(request: &DiscardRequest) -> HistoryResult<DiscardOutcome>;
-            reserve_inodes(request: &ReserveRequest) -> HistoryResult<Reservation>;
-        }
-        fn stage_and_commit(&self, request: &StageRequest) -> HistoryResult<CommitStagedOutcome> {
-            let outcome = self.handles.history.stage_and_commit(request)?;
-            let armed = self.armed.lock().unwrap().take();
-            if let Some((client, route)) = armed {
-                // The loop bound is above the owner's registration capacity.
-                let mut held = Saturated {
-                    registrations: Vec::new(),
-                    refusal: None,
-                };
-                while held.registrations.len() < 4096 && held.refusal.is_none() {
-                    let command = Command::Resources { global: false };
-                    match client.submit_when_available(Some(route), command) {
-                        Ok(waiting) => held.registrations.push(waiting),
-                        Err((cause, _)) => held.refusal = Some(format!("{cause:?}")),
-                    }
-                }
-                *self.held.lock().unwrap() = Some(held);
-            }
-            Ok(outcome)
-        }
-    }
-}
-use catalog_boundary::PublishedThenSaturated;
 
 /// Every bounded readiness or completion observation of the test.
 const WAIT: Duration = Duration::from_secs(5);
@@ -296,21 +219,6 @@ fn bash(directory: &Path, script: &str) -> Option<(ExitStatus, Vec<u8>)> {
         .unwrap();
     Some((status, output))
 }
-/// One plain umount(8) of an aborted mount, launched and reaped by the test.
-fn plain_umount(directory: &str) -> ExitStatus {
-    let mut child = Process::new("umount")
-        .arg(directory)
-        .stdin(Stdio::null())
-        .spawn()
-        .unwrap();
-    match exited(&mut child, WAIT) {
-        Some(status) => status,
-        None => {
-            reap(&mut child, "umount");
-            panic!("umount {directory} did not return within {WAIT:?}")
-        }
-    }
-}
 /// This mount namespace's whole mount-table row of `directory`.
 fn row(directory: &str) -> Option<String> {
     let table = fs::read_to_string("/proc/self/mountinfo").unwrap();
@@ -405,24 +313,11 @@ impl Fx {
         let mut last = None;
         within("connection quiescent", || {
             let now = self.status_work(token);
-            let settled = now.received == 0 && now.admitted == 0 && last == Some(now.completed);
+            let settled = now.active == 0 && last == Some(now.completed);
             last = Some(now.completed);
             thread::sleep(Duration::from_millis(10));
             settled
         });
-    }
-    /// The owner's count of caller-held results once it is zero, or as it is
-    /// after a second. A readiness wait before one attempt; it never fails.
-    fn outstanding(&self) -> usize {
-        let client = self.harness.owner.client();
-        let deadline = Instant::now() + Duration::from_secs(1);
-        loop {
-            let now = client.diagnostics().unwrap().outstanding;
-            if now == 0 || Instant::now() >= deadline {
-                return now;
-            }
-            thread::sleep(Duration::from_millis(2));
-        }
     }
     /// The Branch's current root, which must be `root`, walked completely
     /// through a fresh bind of a new Workspace that is closed again. Reads
@@ -487,28 +382,6 @@ impl Fx {
         );
         drop(store);
         fixture.cleanup();
-    }
-}
-/// One read-only owner job of the test's own, bounded: a readiness wait for
-/// a free slot, then the job's completion.
-fn job(client: &OwnerClient, route: Route, mut command: Command) -> Completion {
-    let deadline = Instant::now() + WAIT;
-    let pending = loop {
-        match client.try_submit(Some(route), command) {
-            Ok(pending) => break pending,
-            Err((OwnerError::AdmissionFull, unattempted)) if Instant::now() < deadline => {
-                command = unattempted;
-                thread::sleep(Duration::from_millis(1));
-            }
-            Err((error, command)) => panic!("{command:?}: {error:?}"),
-        }
-    };
-    loop {
-        if let Some(done) = pending.try_complete().unwrap() {
-            return done;
-        }
-        assert!(Instant::now() < deadline, "the job did not complete");
-        thread::sleep(Duration::from_millis(1));
     }
 }
 /// One read and one write by an ordinary external process: the base file's
@@ -585,7 +458,7 @@ fn completed(outcome: &ForcedOutcome, done: &Success) -> bool {
         && outcome.cleanup != ForcedCleanup::Unobserved
         && done.observation_failure.is_none()
         && done.completion.is_some()
-        && (work.received, work.admitted, work.retained) == (0, 0, 0)
+        && (work.active, work.retained) == (0, 0)
         && work.loops_joined == work.loops_configured
 }
 /// Independent kernel observations of a completed teardown, and routing.
@@ -935,7 +808,6 @@ fn busy_while_a_commit_is_held(name: &'static str, label: &str, point: Option<Po
     );
 
     // The same Workspace is forced once its Commit has ended.
-    let outstanding = fx.outstanding();
     let (outcome, done) = forced(name, &fx.harness, token, false);
     checks.that(
         completed(&outcome, &done) && outcome.facts.commit == CommitKnowledge::Absent,
@@ -943,7 +815,7 @@ fn busy_while_a_commit_is_held(name: &'static str, label: &str, point: Option<Po
     );
     departed(&fx.harness, &ready.directory, &connection, token);
     println!(
-        "{name} after: activity_before_force={:?} owner_outstanding_before_force={outstanding} force=ForceUnmounted abort={:?} detach={:?} commit={:?} cleanup={:?} mount_row=None token=Missing deviations={}",
+        "{name} after: activity_before_force={:?} force=ForceUnmounted abort={:?} detach={:?} commit={:?} cleanup={:?} mount_row=None token=Missing deviations={}",
         idle.activity,
         outcome.facts.abort,
         outcome.facts.detach,
@@ -986,7 +858,6 @@ struct Custody {
     token: WorkspaceToken,
     directory: String,
     connection: fusectl::Connection,
-    route: Route,
     readme: Vec<u8>,
 }
 impl Custody {
@@ -1004,14 +875,12 @@ impl Custody {
         let readme = fs::read(mount.join("README.md")).unwrap();
         fx.quiet(ready.token);
         assert_eq!(fx.harness.status(ready.token).activity, Activity::Idle);
-        let route = holds::route(&fx.harness.service, ready.token);
         (
             Self {
                 fx,
                 token: ready.token,
                 directory: ready.directory,
                 connection,
-                route,
                 readme,
             },
             guard,
@@ -1020,7 +889,11 @@ impl Custody {
     /// The closed namespace's cleanup state, asked of the engine by the test.
     fn cleanup(&self) -> String {
         let client = self.fx.harness.owner.client();
-        match job(&client, self.route, Command::CleanupState).result() {
+        match client
+            .observe_cleanup(None, self.token.namespace, self.token.workspace.to_bytes())
+            .unwrap_or_else(|error| panic!("{error:?}"))
+            .result()
+        {
             Ok(Response::CleanupState(state)) => format!("{state:?}"),
             other => brief(&other),
         }
@@ -1068,7 +941,6 @@ fn fp32_unknown_commit_custody_is_forced_only_when_relinquished_and_stays_unknow
     let candidate = failure.intent.as_ref().map(|intent| intent.candidate_root);
     // Dropped before any Force: a kept failure can hold Lifecycle credits.
     drop(failure);
-    let outstanding = fx.outstanding();
     fx.quiet(token);
     let kept = fx.harness.status(token);
     assert_eq!(kept.activity, Activity::Uncertain);
@@ -1108,7 +980,7 @@ fn fp32_unknown_commit_custody_is_forced_only_when_relinquished_and_stays_unknow
         format!("{name}: the mount did not serve after the refusal: {served:?}")
     });
     println!(
-        "{name} without_flag: refusal={refusal:?} activity={:?} epoch_unchanged={} native_phase={:?} mount_row=unchanged:{} own_connection={} mount_serves={served:?} owner_outstanding={outstanding}",
+        "{name} without_flag: refusal={refusal:?} activity={:?} epoch_unchanged={} native_phase={:?} mount_row=unchanged:{} own_connection={} mount_serves={served:?}",
         after.activity,
         after.epoch == kept.epoch,
         native_block.phase,
@@ -1126,8 +998,12 @@ fn fp32_unknown_commit_custody_is_forced_only_when_relinquished_and_stays_unknow
         || format!("{name}: Force with relinquish_unknown: {outcome:?}"),
     );
     departed(&fx.harness, &case.directory, &case.connection, token);
+    // The Force reply above observed the closed namespace Held while its
+    // connection was open. After the departure the Workspace's connection is
+    // stopped and the daemon answers for its file: reclamation queued behind
+    // the owners that still keep it.
     let engine = case.cleanup();
-    checks.that(engine == format!("{:?}", CleanupState::Held), || {
+    checks.that(engine == format!("{:?}", CleanupState::Queued), || {
         format!("{name}: the engine reports the closed namespace {engine}")
     });
     // The receipt is not settled by a read: an independent session of the
@@ -1160,391 +1036,5 @@ fn fp32_unknown_commit_custody_is_forced_only_when_relinquished_and_stays_unknow
     );
     drop(done);
     case.fx.finish(true);
-    checks.done(name);
-}
-
-/// FP-32, known publication with an unattempted install (as F4): Force needs
-/// no flag and its receipt carries the registry's original publication.
-#[test]
-fn fp32_a_known_publication_is_forced_with_its_original_outcome() {
-    let name = "FP-32 known publication";
-    fusectl::mount();
-    let mut refusing = None;
-    let (case, _guard) = Custody::start(Fx::wrapped("fp32-published", |handles, _| {
-        let catalog = Arc::new(PublishedThenSaturated {
-            handles,
-            armed: Mutex::new(None),
-            held: Mutex::new(None),
-        });
-        refusing = Some(catalog.clone());
-        catalog
-    }));
-    let refusing = refusing.expect("catalog boundary");
-    let (fx, token) = (&case.fx, case.token);
-    let mut checks = Checks::default();
-    let bound = fx.harness.status(token);
-    *refusing.armed.lock().unwrap() = Some((fx.harness.owner.client(), case.route));
-    let result = fx.harness.try_commit(token);
-    // The external effect ends here: every registration is dropped unpolled.
-    let held = refusing
-        .held
-        .lock()
-        .unwrap()
-        .take()
-        .expect("the boundary ran");
-    let (count, refusal) = (held.registrations.len(), held.refusal.clone());
-    drop(held);
-    assert!(
-        refusal.as_deref() == Some("AdmissionFull") && count > 0,
-        "{name}: staging: {count} reserved, refusal {refusal:?}"
-    );
-    let failure = match result {
-        Err(Failure::Commit(failure)) => failure,
-        other => panic!("{name}: staging: {}", brief(&other)),
-    };
-    println!(
-        "{name} staged: reserved_registrations={count} phase={:?} error={} published={} locally_settled={}",
-        failure.phase,
-        brief(&failure.error),
-        brief(&failure.published),
-        failure.locally_settled
-    );
-    assert!(
-        matches!(
-            &failure.error,
-            CommitError::Owner(OwnerError::Unattempted { cause, command })
-                if matches!(**cause, OwnerError::AdmissionFull)
-                    && matches!(**command, Command::InstallPrepared { .. })
-        ) && failure.phase == CommitPhase::Install,
-        "{name}: staging"
-    );
-    let original = failure.published.clone();
-    match &original {
-        Some(CommitStagedOutcome::Committed(record)) => {
-            assert_eq!(record.parent, bound.binding.branch.head_commit);
-        }
-        other => panic!("{name}: staging: published {other:?}"),
-    }
-    // Dropped before the Force: a kept failure can hold Lifecycle credits.
-    drop(failure);
-    let outstanding = fx.outstanding();
-    fx.quiet(token);
-    let kept = fx.harness.status(token);
-    assert_eq!(kept.activity, Activity::LocalFailure);
-    assert_eq!(kept.published, original, "the registry's publication");
-
-    let (outcome, done) = forced(name, &fx.harness, token, false);
-    let published = kept.published.clone().map(CommitKnowledge::Published);
-    checks.that(
-        completed(&outcome, &done) && Some(&outcome.facts.commit) == published.as_ref(),
-        || {
-            format!(
-                "{name}: Force without the flag: {outcome:?}; the registry's publication {:?}",
-                kept.published
-            )
-        },
-    );
-    departed(&fx.harness, &case.directory, &case.connection, token);
-    let engine = case.cleanup();
-    println!(
-        "{name} force: relinquish_unknown=false activity_before={:?} owner_outstanding_before={outstanding} force=ForceUnmounted abort={:?} detach={:?} commit_equals_registry_publication={} cleanup={:?} engine_cleanup_state={engine} mount_row=None token=Missing deviations={}",
-        kept.activity,
-        outcome.facts.abort,
-        outcome.facts.detach,
-        Some(&outcome.facts.commit) == published.as_ref(),
-        outcome.cleanup,
-        checks.0.len()
-    );
-    drop(done);
-    drop(refusing);
-    case.fx.finish(true);
-    checks.done(name);
-}
-
-/// The fields of a stored custody that never change; `detached` and `work`
-/// are read live from the connection's maintained counters.
-fn stable(
-    custody: &TeardownCustody,
-) -> (WorkspaceToken, TeardownStage, &str, Option<&ForcedFacts>) {
-    (
-        custody.token,
-        custody.stage,
-        custody.detail.as_str(),
-        custody.forced.as_ref(),
-    )
-}
-/// Every later terminal or attach call on a retained entry, each once: true
-/// when each returned the stored custody with no detach known.
-fn later(harness: &Harness, token: WorkspaceToken, stored: &TeardownCustody) -> bool {
-    [
-        Request::ForceUnmount {
-            token,
-            relinquish_unknown: false,
-        },
-        Request::ForceUnmount {
-            token,
-            relinquish_unknown: true,
-        },
-        Request::Unmount(token),
-        Request::Attach(token),
-    ]
-    .into_iter()
-    .all(|request| match harness.service.execute_control(&request) {
-        Err(Failure::Retained(custody)) => {
-            let equal = stable(&custody) == stable(stored) && !custody.detached;
-            if !equal {
-                println!("FORCED_DEVIATION {request:?} returned {custody:?}");
-            }
-            equal
-        }
-        other => panic!("{request:?} on a retained entry: {}", brief(&other)),
-    })
-}
-
-/// FP-32, attempted work past the loops' exit. Both Lifecycle credits of the
-/// lane are held by the test; an external append is published and answered,
-/// and the releases that follow it cannot be admitted. Force aborts, the
-/// loops exit, and the drain stops at the requests that are still owned: no
-/// detach, no revocation, no Close. The write's reply ticket was returned
-/// from the replying thread, with no owner job, before the hold mattered.
-#[test]
-fn fp32_held_lifecycle_credits_keep_an_attempted_write_and_the_teardown_retained() {
-    let name = "FP-32 held credits";
-    fusectl::mount();
-    let fx = Fx::plain("fp32-credits");
-    let ready = fx.harness.mount(1);
-    let _guard = Mounted(ready.directory.clone());
-    let token = ready.token;
-    let mut checks = Checks::default();
-    assert!(ready.receipt.abort_bound, "{:?}", ready.receipt);
-    let connection = fusectl::own(&ready);
-    let mount = root(&ready).to_path_buf();
-    passed(
-        &bash_in(
-            COMMAND,
-            &mount,
-            "set -eu; umask 022; mkdir local; printf 'written through the mount\\n' > local/file.txt",
-        ),
-        "before the hold",
-    );
-    fx.quiet(token);
-    let idle = fx.outstanding();
-    let client = fx.harness.owner.client();
-    let route = holds::route(&fx.harness.service, token);
-    let engine = match job(&client, route, Command::Native(NativeJob::RetainedMount)).result() {
-        Ok(Response::Native(NativeReply::RetainedMount(Some(mount)))) => *mount,
-        other => panic!("{other:?}"),
-    };
-    // Publications whose reply attempt is not yet recorded: a Read-class
-    // observation, so it is admitted while the Lifecycle credits are held.
-    let tickets = || -> Vec<i64> {
-        match job(&client, route, Command::PendingPublications { after: 0 }).result() {
-            Ok(Response::Publications(pending)) => {
-                pending.iter().map(|ticket| ticket.revision()).collect()
-            }
-            other => panic!("{other:?}"),
-        }
-    };
-    assert!(
-        tickets().is_empty(),
-        "no publication ticket before the hold"
-    );
-    let before = fx.harness.status(token);
-    let before_row = row(&ready.directory).expect("mount row");
-
-    let credits = holds::Credits::lifecycle(&client, route, 2, WAIT);
-    // The attempted work: an ordinary process appends and reads back. Its
-    // write is published and answered; the releases after it (the close of
-    // its descriptor, the read sources) cannot be admitted.
-    let wrote = bash(
-        &mount,
-        "set -eu; printf 'appended\\n' >> local/file.txt; cat local/file.txt",
-    );
-    assert!(
-        wrote
-            .as_ref()
-            .is_some_and(|(status, output)| status.success()
-                && output == b"written through the mount\nappended\n"),
-        "{name}: staging: the append under held credits: {wrote:?}"
-    );
-    let mut last = None;
-    within(
-        "the append's requests parked behind the held credits",
-        || {
-            let now = fx.status_work(token);
-            let parked = now.admitted != 0
-                && now.admitted == now.parked
-                && last == Some((now.admitted, now.completed));
-            last = Some((now.admitted, now.completed));
-            thread::sleep(Duration::from_millis(10));
-            parked
-        },
-    );
-    let parked = fx.status_work(token);
-    // The reply attempt of the published write is recorded in the engine's
-    // memory by the replying thread: no Lifecycle credit was needed for it.
-    let held = tickets();
-    assert!(
-        held.is_empty() && parked.admitted != 0,
-        "{name}: staging: the write's ticket is returned and its releases are parked: {held:?} {parked:?}"
-    );
-    println!(
-        "{name} before: lifecycle_credits_held={} owner_outstanding_idle={idle} append={:?} admitted={} parked={} completed={} pending_publication_revisions={held:?} engine_revision_before_append={:?}",
-        credits.count(),
-        wrote.as_ref().map(|(status, _)| status.code()),
-        parked.admitted,
-        parked.parked,
-        parked.completed,
-        before.local.as_ref().map(|local| local.revision)
-    );
-
-    let custody = match force(&fx.harness, token, false) {
-        Ended::Retained(custody) => *custody,
-        Ended::Unmounted(outcome, _) => {
-            panic!("{name}: forced past requests that are still owned: {outcome:?}")
-        }
-    };
-    println!("{name} custody={custody:?}");
-    println!(
-        "{name} retained_owner={}",
-        brief(&fx.harness.service.retained_native(token))
-    );
-    let facts = custody.forced.clone();
-    checks.that(
-        custody.token == token
-            && custody.stage == TeardownStage::Requests
-            && !custody.detached
-            && facts.as_ref().is_some_and(|facts| {
-                facts.abort == AbortDisposition::Written
-                    && facts.detach == DetachDisposition::NotAttempted
-                    && facts.commit == CommitKnowledge::Absent
-            }),
-        || {
-            format!(
-                "{name}: not Retained at Requests with abort Written and no detach: {custody:?}"
-            )
-        },
-    );
-    // The loops exited and were joined; every request that was owned before
-    // the abort is still owned: the fence ended none of them.
-    checks.that(
-        custody.work.is_some_and(|work| {
-            work.loops_joined == work.loops_configured
-                && work.loops_configured != 0
-                && work.admitted >= parked.admitted
-                && work.received == 0
-        }),
-        || format!("{name}: the connection at the stop: {:?}", custody.work),
-    );
-    let stopped = fx.harness.status(token);
-    let stopped_row = row(&ready.directory);
-    let kept = tickets();
-    checks.that(
-        stopped_row.as_deref() == Some(before_row.as_str())
-            && connection.exists()
-            && stopped.activity == Activity::Closing
-            && stopped
-                .native
-                .as_ref()
-                .is_some_and(|native| native.phase == NativePhase::Retained && !native.detached),
-        || {
-            format!(
-                "{name}: after the stop: row {stopped_row:?}, activity {:?}, native {:?}",
-                stopped.activity,
-                stopped.native.as_ref().map(|native| native.phase)
-            )
-        },
-    );
-    // The attempted write keeps its result; no ticket appeared or vanished.
-    checks.that(kept == held, || {
-        format!("{name}: the publication tickets changed: {held:?} -> {kept:?}")
-    });
-    // A later call returns the stored custody: no second abort, no detach.
-    let equal_held = later(&fx.harness, token, &custody);
-    checks.that(
-        equal_held && row(&ready.directory).as_deref() == Some(before_row.as_str()),
-        || format!("{name}: a later call, credits still held, had an effect"),
-    );
-    println!(
-        "{name} after_force: stage={:?} abort={:?} detach={:?} detached={} fenced={:?} mount_row=unchanged:{} own_connection={} phase={:?} activity={:?} pending_publication_revisions={kept:?} later_calls_equal_custody={equal_held}",
-        custody.stage,
-        facts.as_ref().map(|facts| facts.abort),
-        facts.as_ref().map(|facts| facts.detach),
-        custody.detached,
-        facts.as_ref().map(|facts| facts.fenced),
-        stopped_row.as_deref() == Some(before_row.as_str()),
-        connection.exists(),
-        stopped.native.as_ref().map(|native| native.phase),
-        stopped.activity
-    );
-
-    // The hold ends. The owned requests dispose themselves; the engine mount
-    // is still live, the namespace open, and nothing is detached afterwards.
-    credits.release();
-    within(
-        "the owned requests completed once the credits returned",
-        || {
-            let now = fx.status_work(token);
-            now.admitted == 0 && now.received == 0
-        },
-    );
-    let mount_state = match job(&client, route, Command::Native(NativeJob::State(engine))).result()
-    {
-        Ok(Response::Native(NativeReply::State(state))) => Some(*state),
-        other => {
-            println!("{name} engine mount state: {}", brief(&other));
-            None
-        }
-    };
-    let namespace = match job(&client, route, Command::CleanupState).result() {
-        Ok(Response::CleanupState(state)) => Some(*state),
-        other => {
-            println!("{name} cleanup state: {}", brief(&other));
-            None
-        }
-    };
-    let released = tickets();
-    let last_status = fx.harness.status(token);
-    let equal_released = later(&fx.harness, token, &custody);
-    let last_row = row(&ready.directory);
-    checks.that(
-        mount_state == Some(NativeMountState::Live)
-            && namespace == Some(CleanupState::Live)
-            && last_status.local.as_ref().is_some_and(|local| !local.closed),
-        || {
-            format!(
-                "{name}: the engine after the stop: mount {mount_state:?}, namespace {namespace:?}, local {:?}",
-                last_status.local
-            )
-        },
-    );
-    checks.that(
-        equal_released && last_row.as_deref() == Some(before_row.as_str()),
-        || format!("{name}: a later call, credits returned, had an effect: row {last_row:?}"),
-    );
-    println!(
-        "{name} after_release: engine_mount={mount_state:?} namespace={namespace:?} closed={:?} engine_revision={:?} pending_publication_revisions={released:?} admitted={:?} later_calls_equal_custody={equal_released} mount_row=unchanged:{} registry_phase={:?}",
-        last_status.local.as_ref().map(|local| local.closed),
-        last_status.local.as_ref().map(|local| local.revision),
-        last_status
-            .native
-            .as_ref()
-            .and_then(|native| native.work)
-            .map(|work| work.admitted),
-        last_row.as_deref() == Some(before_row.as_str()),
-        last_status.native.as_ref().map(|native| native.phase)
-    );
-
-    // Teardown by the test: the product never detaches this mount.
-    let detached = plain_umount(&ready.directory);
-    assert!(detached.success(), "{name}: umount: {detached:?}");
-    assert!(mount_entry(&ready.directory).is_none());
-    println!(
-        "{name} teardown: by_test=plain umount(8) status={:?} mount_row=None deviations={}",
-        detached.code(),
-        checks.0.len()
-    );
-    drop(client);
-    fx.finish(false);
     checks.done(name);
 }

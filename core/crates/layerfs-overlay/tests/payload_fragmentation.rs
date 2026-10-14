@@ -42,12 +42,15 @@ fn dense_fragmentation_does_not_enlarge_a_later_request() {
     let read_dense = work(&db, || dense.check());
     let read_fresh = work(&db, || fresh.check());
     // Full-window overwrite of the never-fragmented file: its four rows of
-    // 32 KiB are written where they lie. Ten fixed statements of the job,
-    // one read of row shapes per row; only the inode and Workspace rows
-    // change. Before rows of several cells this was (74, 98).
+    // 32 KiB are written where they lie. Six fixed statements of the job
+    // (two more before the engine remembered the Workspace row) and one
+    // read of the row shapes of the window's four slots; only the inode
+    // and Workspace rows change. With one shape read per slot this
+    // was (14, 2); before rows of several cells (74, 98).
     let over_fresh = work(&db, || fresh.write(0, &window));
-    assert_eq!((over_fresh.0, over_fresh.2), (14, 2));
-    // The same over 32 masked cells: per 32 KiB one read of the shapes, one
+    assert_eq!((over_fresh.0, over_fresh.2), (7, 2));
+    // The same over 32 masked cells: the one read of the shapes, and per
+    // 32 KiB one
     // range delete of eight cells and one insert, each row change with its
     // accounting trigger program, which updates one row. The cost is fixed
     // by the window, not by the 65,536 earlier writes. It was (74, 98) as
@@ -55,7 +58,7 @@ fn dense_fragmentation_does_not_enlarge_a_later_request() {
     let over_dense = work(&db, || dense.write(0, &window));
     assert_eq!(
         (over_dense.0, over_dense.2),
-        (10 + 4 * (3 + 8 + 1), 2 + 2 * (32 + 4))
+        (6 + 1 + 4 * (2 + 8 + 1), 2 + 2 * (32 + 4))
     );
     dense.check();
     // The fragments are gone: the window is rows of 32 KiB like the fresh
@@ -76,10 +79,11 @@ fn dense_fragmentation_does_not_enlarge_a_later_request() {
     assert_eq!(edge_dense, edge_fresh);
     // The window starts and ends inside a cell of a row of 32 KiB: both
     // parts are written in place after one point read each, and the whole
-    // cells between them span three rows instead of four.
+    // cells between them span three rows, whose shapes are one read as the
+    // four rows' are.
     assert_eq!(
         (edge_fresh.0, edge_fresh.2),
-        (over_fresh.0 + 2 - 1, 2),
+        (over_fresh.0 + 2, 2),
         "two edge-cell point reads"
     );
     dense.check();

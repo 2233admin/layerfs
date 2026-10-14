@@ -2,7 +2,7 @@
 use crate::{backend::Session, metadata, objects, publication};
 use layerfs_content::ObjectId;
 use layerfs_storage::{
-    location::{LocatedObject, SignatureRow},
+    location::{InodeValueRow, LocatedObject, SignatureRow},
     port::*,
     StoragePolicy,
 };
@@ -58,9 +58,14 @@ impl PackPersistence for StorageProvider {
             crate::backend::sqlite::objects_selection::read_scoped(tx, id, plan)
         })
     }
-    fn value_groups(&self, query: ValueGroupQuery<'_>) -> Result<ValueGroups, PersistenceError> {
+    fn inode_values(
+        &self,
+        ordinals: &[u32],
+        out: &mut Vec<InodeValueRow>,
+    ) -> Result<(), PersistenceError> {
+        out.clear();
         self.session
-            .run(false, |tx| metadata::pooling::read(tx, query))
+            .run(false, |tx| metadata::values::read(tx, ordinals, out))
     }
     fn signatures(&self, out: &mut Vec<SignatureRow>) -> Result<(), PersistenceError> {
         out.clear();

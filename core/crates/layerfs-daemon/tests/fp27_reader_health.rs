@@ -38,7 +38,7 @@
 //!
 //! Limit, by source: a retained request's original failure is kept in its
 //! dispatcher slot, and the daemon exposes no observation of it
-//! (`MountQueue::inspect_retained` has no caller in daemon source). The
+//! (`MountRequests::inspect_retained` has no caller in daemon source). The
 //! second test therefore shows the cause by what the public counters can
 //! and cannot be: the lane was at its bound by the Store's own answer, the
 //! READ was granted no reader, and no failed demand was recorded.
@@ -55,17 +55,10 @@ mod mounted;
 #[allow(dead_code)]
 #[path = "support/mounted_commit.rs"]
 mod rig;
-use layerfs_bridge::control::{
-    Activity, NativePhase, NativeWork, Reply, Request, TeardownStage, WorkspaceToken,
-};
+use layerfs_bridge::control::{NativeWork, Reply, WorkspaceToken};
 use layerfs_content::ObjectId;
-use layerfs_daemon::{
-    control::Failure,
-    store::{PortError, ReadAdmissionError, ReadLimits, ReadTicket, Store, StoreReader},
-    Command, Completion, NativeJob, NativeReply, OwnerClient, OwnerError, Response,
-};
+use layerfs_daemon::store::{PortError, ReadLimits, Store, StoreReader};
 use layerfs_fuse::request::Opcode;
-use layerfs_overlay::{CleanupState, NativeMount, NativeMountState, Route};
 use layerfs_persistence::{Handles, SqlitePersistenceProfile, StorageProvider};
 use layerfs_storage::{
     location::PackInfo,
@@ -171,56 +164,12 @@ fn quiet(harness: &Harness, token: WorkspaceToken) -> bool {
     let mut last = None;
     eventually(|| {
         let now = work(harness, token);
-        let seen = (now.received, now.admitted, now.completed);
-        let settled = now.received == 0 && now.admitted == now.retained && last == Some(seen);
+        let seen = (now.active, now.completed);
+        let settled = now.active == 0 && last == Some(seen);
         last = Some(seen);
         thread::sleep(Duration::from_millis(5));
         settled
     })
-}
-/// One owner job of the test, attempted once after a bounded wait for a free
-/// slot of its class, and awaited within the same bound.
-fn job(client: &OwnerClient, route: Route, mut command: Command) -> Completion {
-    let deadline = Instant::now() + WAIT;
-    let pending = loop {
-        match client.try_submit(Some(route), command) {
-            Ok(pending) => break pending,
-            Err((OwnerError::AdmissionFull, back)) => {
-                assert!(Instant::now() < deadline, "owner observation {back:?}");
-                command = back;
-                thread::sleep(Duration::from_millis(1));
-            }
-            Err((error, back)) => panic!("owner observation {back:?}: {error:?}"),
-        }
-    };
-    loop {
-        if let Some(done) = pending.try_complete().unwrap() {
-            return done;
-        }
-        assert!(Instant::now() < deadline, "owner observation incomplete");
-        thread::sleep(Duration::from_millis(1));
-    }
-}
-fn engine_mount(client: &OwnerClient, route: Route) -> Option<NativeMount> {
-    let done = job(client, route, Command::Native(NativeJob::RetainedMount));
-    match done.result() {
-        Ok(Response::Native(NativeReply::RetainedMount(mount))) => *mount,
-        other => panic!("{other:?}"),
-    }
-}
-fn mount_state(client: &OwnerClient, route: Route, mount: NativeMount) -> NativeMountState {
-    let done = job(client, route, Command::Native(NativeJob::State(mount)));
-    match done.result() {
-        Ok(Response::Native(NativeReply::State(state))) => *state,
-        other => panic!("{other:?}"),
-    }
-}
-fn cleanup(client: &OwnerClient, route: Route) -> CleanupState {
-    let done = job(client, route, Command::CleanupState);
-    match done.result() {
-        Ok(Response::CleanupState(state)) => *state,
-        other => panic!("{other:?}"),
-    }
 }
 /// Per-opcode frame counts out of a Debug-rendered drain receipt.
 fn opcodes(receipt: &str) -> Vec<u64> {
@@ -484,9 +433,9 @@ fn fp27_a_read_whose_own_demand_observes_the_quarantined_reader_fails_alone_with
     // One request since the open, completed, with nothing retained.
     checks.that(
         quiet_after
-            && failed.handoffs == opened.handoffs + 1
+            && failed.served == opened.served + 1
             && failed.completed == opened.completed + 1
-            && (failed.retained, failed.terminal, failed.admitted) == (0, 0, 0),
+            && (failed.retained, failed.terminal, failed.active) == (0, 0, 0),
         || format!("the failed READ did not end by itself: {opened:?} -> {failed:?}"),
     );
 
@@ -532,7 +481,7 @@ fn fp27_a_read_whose_own_demand_observes_the_quarantined_reader_fails_alone_with
         || format!("the read pool at the end: {end_pool:?}"),
     );
     checks.that(
-        quiet_end && (served.retained, served.terminal, served.unadmitted) == (0, 0, 0),
+        quiet_end && (served.retained, served.terminal) == (0, 0),
         || format!("the mount retained or ended a request: {served:?}"),
     );
 
@@ -583,249 +532,3 @@ fn fp27_a_read_whose_own_demand_observes_the_quarantined_reader_fails_alone_with
 }
 
 // ------------------------------------------------------- Capacity retained
-
-/// FP-27, `Capacity`. With every read-admission ticket of the mounted
-/// Workspace's own lane taken by the test, the next READ's admission is
-/// refused before anything is read. By source the caller is answered `EIO`
-/// and the request is retained (not ended as a failed base demand); a later
-/// READ on the same descriptor is refused `ENOTCONN` at admission, because a
-/// retained request makes its lane terminal; returning the tickets settles
-/// nothing; the later Unmount detaches, finds the retained request and stops
-/// `Retained` at `Requests`, and later replies repeat that custody.
-#[test]
-fn fp27_a_read_refused_capacity_on_its_own_full_lane_is_retained_and_unmount_stops_at_requests() {
-    let fx = Fx::new("fp27-capacity");
-    let client = fx.harness.owner.client();
-    let ready = fx.harness.mount(1);
-    let mounted = Mounted(ready.directory.clone());
-    let mount = root(&ready).to_path_buf();
-    let token = ready.token;
-    let route = fx
-        .harness
-        .service
-        .operation(token)
-        .unwrap()
-        .workspace()
-        .route();
-    let mut checks = Checks::default();
-    let engine = engine_mount(&client, route).expect("attached engine mount");
-
-    // Looked up and opened while the lane is free.
-    let file = Arc::new(direct(&mount.join(COLD[0].0)));
-    assert!(quiet(&fx.harness, token), "the open is answered");
-    let opened = work(&fx.harness, token);
-    let idle = fx.store.read_work();
-    assert_eq!((idle.quarantined, idle.outstanding), (0, 0), "{idle:?}");
-    assert_eq!(fx.store.workspace_reads(token.workspace), Ok(0));
-
-    // Every ticket of the mounted Workspace's own lane, through the public
-    // Store API. A ticket that is not polled is an unstarted admission.
-    let bound = ReadLimits::default().requests_per_namespace;
-    let tickets: Vec<ReadTicket> = (0..bound)
-        .map(|taken| {
-            fx.store
-                .read_ticket(Some(token.workspace))
-                .unwrap_or_else(|error| panic!("ticket {taken} of {bound}: {error:?}"))
-        })
-        .collect();
-    // The Store's own answer for one more on that lane.
-    let one_more = fx.store.read_ticket(Some(token.workspace)).err();
-    let held = fx.store.read_work();
-    println!(
-        "FP-27 capacity staged: lane_bound={bound} tickets_held={} workspace_reads={:?} one_more={one_more:?} pool={held:?}",
-        tickets.len(),
-        fx.store.workspace_reads(token.workspace)
-    );
-    assert_eq!(
-        one_more,
-        Some(ReadAdmissionError::Capacity),
-        "NOT STAGED unless the lane is at its bound"
-    );
-    assert_eq!(fx.store.workspace_reads(token.workspace), Ok(bound));
-
-    // The READ whose admission is refused.
-    let refused = pread_apart(file.clone()).recv_timeout(WAIT).ok();
-    let settled = eventually(|| {
-        let now = work(&fx.harness, token);
-        now.received == 0 && now.retained == 1 && now.admitted == 1
-    });
-    let kept = work(&fx.harness, token);
-    let pool = fx.store.read_work();
-    println!(
-        "FP-27 capacity: READ={} native work {opened:?} -> {kept:?} pool={pool:?} reader_failures={}",
-        match &refused {
-            Some(Ok(bytes)) => format!("Ok({} bytes)", bytes.len()),
-            other => format!("{other:?}"),
-        },
-        fx.store.reader_failures().len()
-    );
-    checks.that(refused == Some(Err(Some(Errno::EIO))), || {
-        format!(
-            "the READ refused Capacity was not answered EIO: {}",
-            brief(&refused)
-        )
-    });
-    // Retained with its cause, not ended: it stays admitted and uncompleted.
-    checks.that(
-        settled
-            && kept.handoffs == opened.handoffs + 1
-            && kept.completed == opened.completed
-            && (kept.retained, kept.admitted, kept.terminal) == (1, 1, 0),
-        || format!("the refused READ is not retained: {opened:?} -> {kept:?}"),
-    );
-    // It was granted no reader, quarantined none, and holds no ticket.
-    checks.that(
-        pool.grants == held.grants
-            && pool.quarantined == 0
-            && pool.outstanding == bound
-            && fx.store.reader_failures().is_empty(),
-        || format!("the refused READ reached a reader: {held:?} -> {pool:?}"),
-    );
-
-    // The tickets are returned. Nothing settles the retained request, and
-    // by source a retained request makes its lane terminal
-    // (`layerfs-fuse` `dispatch/task.rs`): a later READ on the same
-    // descriptor is refused at admission with one `ENOTCONN` reply
-    // (`request/state.rs`, `admit_reply`) and counted `terminal`. Attempt 1
-    // of this test expected that READ to be served; that expectation was the
-    // test's own and is not what source defines.
-    drop(tickets);
-    // Observed after the return and before the later READ: the pool counts
-    // a grant whenever a reader is assigned to a waiting ticket, and each
-    // cancelled ticket of the test passed its reader to the test's next one
-    // (attempt 2 compared across the return and counted those).
-    let returned = fx.store.read_work();
-    checks.that(returned.outstanding == 0, || {
-        format!("tickets after the return: {returned:?}")
-    });
-    let again = pread_apart(file.clone()).recv_timeout(WAIT).ok();
-    let quiet_again = quiet(&fx.harness, token);
-    let after = work(&fx.harness, token);
-    let unasked = fx.store.read_work();
-    println!(
-        "FP-27 capacity: tickets returned: later READ on the same descriptor={} native work={after:?} pool {returned:?} -> {unasked:?}",
-        match &again {
-            Some(Ok(bytes)) => format!("Ok({} bytes)", bytes.len()),
-            other => format!("{other:?}"),
-        }
-    );
-    checks.that(again == Some(Err(Some(Errno::ENOTCONN))), || {
-        format!(
-            "the READ after the retention was not refused ENOTCONN at admission: {}",
-            brief(&again)
-        )
-    });
-    checks.that(
-        quiet_again
-            && (after.retained, after.admitted) == (1, 1)
-            && after.terminal == kept.terminal + 1
-            && after.completed == kept.completed
-            && after.handoffs == kept.handoffs,
-        || format!("the retained READ did not stay as it was, or the later READ was admitted: {kept:?} -> {after:?}"),
-    );
-    // The refused READ asked the Store for nothing.
-    checks.that(
-        unasked.grants == returned.grants && unasked.quarantined == 0 && unasked.outstanding == 0,
-        || format!("the READ refused at admission reached the Store: {returned:?} -> {unasked:?}"),
-    );
-
-    // The later Unmount: detach, then the drain finds the retained request.
-    drop(file);
-    let quiet_last = quiet(&fx.harness, token);
-    let before_unmount = work(&fx.harness, token);
-    let custody = match fx.harness.try_unmount(token) {
-        Err(Failure::Retained(custody)) => Some(*custody),
-        other => {
-            checks.that(false, || {
-                format!(
-                    "the Unmount with a retained request answered {}",
-                    match &other {
-                        Ok(done) => brief(&done.reply),
-                        Err(failure) => brief(failure),
-                    }
-                )
-            });
-            None
-        }
-    };
-    println!(
-        "FP-27 capacity: unmount quiet_before={quiet_last} work_before={before_unmount:?} custody={custody:?}"
-    );
-    let mut clean = false;
-    if let Some(custody) = &custody {
-        checks.that(
-            custody.token == token
-                && custody.stage == TeardownStage::Requests
-                && custody.detached
-                && custody.forced.is_none(),
-            || format!("not Retained at Requests after a known detach: {custody:?}"),
-        );
-        checks.that(
-            custody.work.is_some_and(|work| {
-                (work.received, work.admitted, work.retained) == (0, 1, 1)
-                    && (work.loops_configured, work.loops_joined) == (1, 1)
-            }),
-            || format!("counters at the stop: {:?}", custody.work),
-        );
-        checks.that(mount_entry(&ready.directory).is_none(), || {
-            "the mount is still in the table after a known detach".to_owned()
-        });
-        let status = fx.harness.status(token);
-        let native = status.native.as_ref();
-        checks.that(
-            status.activity == Activity::Closing
-                && native
-                    .is_some_and(|native| native.phase == NativePhase::Retained && native.detached),
-            || format!("status after the stop: {status:?}"),
-        );
-        let text = fx.harness.service.retained_native(token).unwrap();
-        let text = text.unwrap_or_default();
-        println!("FP-27 capacity: kept={}", brief(&text));
-        checks.that(
-            text.contains("stage: Requests")
-                && text.contains("failed_demands: FailedDemands { count: 0, first: None"),
-            || format!("the kept owner: {text}"),
-        );
-        // Later operations answer with the same custody and attempt nothing.
-        let jobs = client.diagnostics().unwrap().admitted;
-        for request in [Request::Unmount(token), Request::Attach(token)] {
-            match fx.harness.service.execute_control(&request) {
-                Err(Failure::Retained(again)) => checks.that(*again == *custody, || {
-                    format!("{request:?} answered {again:?}, not the same custody")
-                }),
-                other => checks.that(false, || {
-                    format!(
-                        "{request:?} answered {}",
-                        match &other {
-                            Ok(done) => brief(&done.reply),
-                            Err(failure) => brief(failure),
-                        }
-                    )
-                }),
-            }
-        }
-        checks.that(client.diagnostics().unwrap().admitted == jobs, || {
-            "a later reply submitted an owner job".to_owned()
-        });
-        // Nothing was revoked or closed behind the retained request.
-        let (state, closing) = (mount_state(&client, route, engine), cleanup(&client, route));
-        println!(
-            "FP-27 capacity: stage=Requests detached=true retained=1 later_replies_equal=2 engine_mount={state:?} cleanup={closing:?} serving={:?}",
-            fx.harness.serving.work()
-        );
-        checks.that(
-            state == NativeMountState::Live && closing == CleanupState::Live,
-            || format!("revoked or closed behind a retained request: {state:?} {closing:?}"),
-        );
-    } else {
-        clean = mount_entry(&ready.directory).is_none()
-            && fx
-                .harness
-                .service
-                .execute_control(&Request::Status(token))
-                .is_err();
-    }
-    drop(mounted);
-    fx.finish(clean);
-    checks.done("FP-27 Capacity retained");
-}

@@ -127,11 +127,16 @@ pub struct Fixture {
     pub bytes: Vec<u8>,
 }
 pub fn fixture() -> Fixture {
+    fixture_with(
+        (0..400_000)
+            .map(|i| ((i * 17 + i / 128) % 251) as u8)
+            .collect(),
+    )
+}
+/// The same tree with `bytes` as the content of the large file, serial 8.
+pub fn fixture_with(bytes: Vec<u8>) -> Fixture {
     let store = Store::default();
     let scope = scope_for_seed([11; 32]);
-    let bytes: Vec<u8> = (0..400_000)
-        .map(|i| ((i * 17 + i / 128) % 251) as u8)
-        .collect();
     let small = file(&store, b"original\0\xff");
     let large = file(&store, &bytes);
     let symlink = SymlinkTarget::new(b"../.git/index".to_vec())

@@ -1,9 +1,6 @@
 //! Engine-independent two-port handle and shared bounded physical indexes.
 
-use crate::{
-    encoding::{delta::candidates::Candidates, pool::PoolIndex},
-    save::Save,
-};
+use crate::{encoding::delta::candidates::Candidates, save::Save};
 use crate::{
     error::StorageResult,
     policy::{StorageCapacities, StoragePolicy},
@@ -19,7 +16,6 @@ pub struct Storage {
     policy: StoragePolicy,
     capacities: StorageCapacities,
     pub(crate) candidates: RefCell<Candidates>,
-    pub(crate) pool_index: RefCell<PoolIndex>,
     pub(crate) reservations: crate::ReservationBlocks,
 }
 impl Storage {
@@ -43,7 +39,6 @@ impl Storage {
             policy,
             capacities,
             candidates: RefCell::new(Candidates::new()?),
-            pool_index: RefCell::new(PoolIndex::new()),
             reservations,
         })
     }

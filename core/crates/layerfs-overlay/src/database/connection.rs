@@ -1,4 +1,4 @@
-//! One owner connection; no database, schema or connection per Workspace.
+//! One exclusive owner connection for one disposable Workspace file.
 use crate::{
     metrics, DatabaseProfile, DatabaseWork, OverlayError, OverlayResult, ProfileConfig,
     StatementKind,
@@ -10,24 +10,41 @@ use std::{
     sync::Arc,
 };
 
-/// Daemon-local engine. The daemon runs short jobs on it one exclusive turn
-/// at a time, on its owner thread or on the thread that submitted the job.
+/// Daemon-local engine of one Workspace. The daemon runs short jobs on it one
+/// at a time, each on its calling thread under the Workspace lock.
 pub struct Overlay {
     pub(crate) identity: u64,
     pub(crate) connection: Connection,
+    pub(crate) open: RefCell<crate::open::OpenState>,
     pub(crate) work: RefCell<DatabaseWork>,
     pub(crate) payload_work: Cell<crate::PayloadWork>,
     pub(crate) quarantined: Cell<bool>,
+    /// The namespace of this database's one Workspace; zero until it is
+    /// opened. A database is created empty and is never reopened.
+    pub(crate) namespace: Cell<i64>,
     /// Connection-local readiness hints, never namespace/owner data. False is
     /// established only by an exact empty ready query; enqueue/release marks
     /// possible work. A rolled-back enqueue can leave only a false positive.
     pub(crate) maintenance_ready: Cell<bool>,
-    pub(crate) closed_ready: Cell<bool>,
-    /// Whether any namespace of this engine holds an orphan row. Set before
-    /// the only statement that inserts one, cleared by the transaction that
-    /// deletes the last one, and restored when a job fails, so it is exact:
+    /// The Workspace row as this connection last read or wrote it, with its
+    /// incarnation. This connection is the only one and holds the exclusive
+    /// lock, so the row changes only by its own statements: a writing
+    /// statement that names the table forgets it, and so does a failed job.
+    pub(crate) workspace_seen: Cell<Option<([u8; 32], crate::WorkspaceState)>>,
+    /// The operation owner last found holding custody, forgotten the same way.
+    pub(crate) operation_seen: Cell<Option<u64>>,
+    /// The captured reader last found holding custody, forgotten the same way.
+    pub(crate) reader_seen: Cell<Option<crate::CapturedReader>>,
+    /// Whether any namespace of this engine holds an orphan. Set when one
+    /// is inserted, cleared by the job deleting the last one, and restored
+    /// when a job fails, so it is exact:
     /// while false no orphan row and no orphan-domain inode row exists.
     pub(crate) orphan_seen: Cell<bool>,
+    /// Whether this engine has ever written a reference piece. Set before
+    /// the only statement that inserts one and restored when a job fails, so
+    /// while it is false no piece row exists and no path issues a piece
+    /// statement. It is never cleared.
+    pub(crate) pieces_seen: Cell<bool>,
     /// Whether the running atomic job may still finish one orphan's release
     /// itself. Set when a job starts, cleared by the first last reference
     /// that uses it and by every maintenance step, so one job does at most
@@ -35,26 +52,21 @@ pub struct Overlay {
     pub(crate) release_step: Cell<bool>,
     /// What the running atomic job has asked of this connection.
     pub(super) transaction: Cell<Transaction>,
-    /// Next owner identity of this engine. The database is created by this
-    /// connection and never reopened, so the counter needs no stored row.
-    pub(crate) next_owner: Cell<u64>,
     /// Reply tickets of this engine's publications, shared with the threads
     /// that attempt replies.
     pub(crate) tickets: Arc<crate::ReplyTickets>,
     /// Tickets issued by the running atomic job, withdrawn if it fails.
     pub(crate) issued: RefCell<Vec<(i64, i64)>>,
     pub(super) profile: DatabaseProfile,
-    pub(super) allocation: crate::database::allocation::Allocation,
+    pub(super) allocation: crate::database::physical::Allocation,
 }
 /// An atomic job starts its SQLite transaction at its first writing statement.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum Transaction {
     None,
     /// The job has executed no writing statement; its reads ran in autocommit.
-    Wanted {
-        cleanup: bool,
-    },
-    /// Admission and BEGIN are executing for the job's first writing statement.
+    Wanted,
+    /// BEGIN is executing for the job's first writing statement.
     Beginning,
     Begun,
 }
@@ -69,6 +81,42 @@ impl Overlay {
     pub fn create_observed(path: &Path, config: ProfileConfig) -> crate::Creation {
         crate::database::startup::create(path, config)
     }
+    /// Copies a closed empty template into a fresh owned file and opens it.
+    /// Schema DDL is paid by template creation; settings and identities are
+    /// verified on each connection. A failed copy/open retains its artifact.
+    pub fn copy_template_observed(
+        path: &Path,
+        config: ProfileConfig,
+        template: &Path,
+        namespace: i64,
+    ) -> crate::Creation {
+        crate::database::startup::copy_template(path, config, template, namespace)
+    }
+
+    /// Checked close of the sole disposable connection. It performs no sync.
+    /// Callers establish all request/capture/handle fences before consuming it.
+    /// The path is retained on failure; close never authorizes an implicit replay.
+    pub fn close_database(self) -> OverlayResult<()> {
+        self.close_database_file().map(drop)
+    }
+    /// Checked close retaining only the physical file identity, for an immutable
+    /// template observed after readiness. The returned handle has no connection.
+    pub fn close_database_file(self) -> OverlayResult<crate::ClosedFile> {
+        self.connection.flush_prepared_statement_cache();
+        let open = self.open.into_inner();
+        self.connection
+            .close()
+            .map_err(|refused| OverlayError::Uncertain {
+                cause: Box::new(OverlayError::Close(Box::new(crate::CloseFailure::retain(
+                    refused, open,
+                )))),
+                completion: None,
+            })?;
+        Ok(crate::ClosedFile {
+            allocation: self.allocation,
+        })
+    }
+
     /// Selected settings actually read back from this initialized connection.
     pub fn profile(&self) -> &DatabaseProfile {
         &self.profile
@@ -77,11 +125,16 @@ impl Overlay {
     pub fn diagnostics(&self) -> DatabaseWork {
         *self.work.borrow()
     }
+    /// Whether an uncertain outcome closed this engine to every later job and
+    /// maintenance step. It is never cleared.
+    pub fn quarantined(&self) -> bool {
+        self.quarantined.get()
+    }
     /// Whether a maintenance turn may find work: the connection-local hints
-    /// that `maintain` and `reclaim_closed` consult. False is exact; true can
+    /// that live `maintain` consults. False is exact; true can
     /// be a false positive that the next turn clears.
     pub fn maintenance_pending(&self) -> bool {
-        self.maintenance_ready.get() || self.closed_ready.get()
+        self.maintenance_ready.get()
     }
     /// Codec/composed-window copies from the same exclusive owner scope.
     pub fn payload_work(&self) -> crate::PayloadWork {
@@ -143,8 +196,15 @@ impl Overlay {
         decode: impl FnMut(&rusqlite::Row<'_>) -> rusqlite::Result<T>,
     ) -> OverlayResult<Vec<T>> {
         self.available()?;
-        let begin = || self.begin();
-        let wanted = matches!(self.transaction.get(), Transaction::Wanted { .. });
+        let wanted = matches!(self.transaction.get(), Transaction::Wanted);
+        let writing = || {
+            self.forget(kind, sql);
+            if wanted {
+                self.begin()
+            } else {
+                Ok(())
+            }
+        };
         let result = metrics::query(
             &self.connection,
             &self.work,
@@ -154,20 +214,50 @@ impl Overlay {
                 params,
                 bound_bytes: bytes,
                 cached,
-                before_write: if wanted { Some(&begin) } else { None },
+                before_write: Some(&writing),
             },
             decode,
         );
-        match result {
-            Err(cause) if cause.unsafe_database_state() => {
-                self.quarantined.set(true);
-                Err(OverlayError::Uncertain {
-                    cause: Box::new(cause),
-                    completion: None,
-                })
-            }
-            result => result,
+        result.map_err(|cause| self.failed(cause))
+    }
+
+    /// Forgets what is remembered of each table a writing statement names.
+    /// A statement cannot change a table that its text does not name: the
+    /// triggers of this schema write the accounting row alone. Statements
+    /// of three families alone write the remembered tables, so the text of
+    /// any other writing statement is not searched.
+    fn forget(&self, kind: StatementKind, sql: &str) {
+        if !matches!(
+            kind,
+            StatementKind::Workspace | StatementKind::Capture | StatementKind::Lease
+        ) {
+            // The plan of a writing statement is itself not read-only to
+            // SQLite, and writes nothing.
+            debug_assert!(
+                kind == StatementKind::Explain
+                    || !["workspace", "commit_run", "commit_reader"]
+                        .iter()
+                        .any(|table| sql.contains(table)),
+                "{kind:?} writes a remembered table: {sql}"
+            );
+            return;
         }
+        if sql.contains("workspace") {
+            self.workspace_seen.set(None);
+        }
+        if sql.contains("commit_run") {
+            self.operation_seen.set(None);
+        }
+        if sql.contains("commit_reader") {
+            self.reader_seen.set(None);
+        }
+    }
+    /// Forgets every remembered row: a failed job that wrote may have read
+    /// its own writes before they were rolled back.
+    fn forget_all(&self) {
+        self.workspace_seen.set(None);
+        self.operation_seen.set(None);
+        self.reader_seen.set(None);
     }
     pub(crate) fn execute(
         &self,
@@ -190,6 +280,22 @@ impl Overlay {
         if !cause.unsafe_database_state() {
             return cause;
         }
+        // Only a writing job can defer quarantine for capacity classification.
+        // Its caller must still establish a whole-job rollback before returning
+        // NoSpace. Read failures and non-capacity I/O stay uncertain.
+        if self.writing() && cause.capacity_io() {
+            match self.allocation.device_full() {
+                Ok(true) => return cause,
+                Ok(false) => {}
+                Err(observation) => {
+                    self.quarantined.set(true);
+                    return OverlayError::Uncertain {
+                        cause: Box::new(cause),
+                        completion: Some(Box::new(observation)),
+                    };
+                }
+            }
+        }
         self.quarantined.set(true);
         OverlayError::Uncertain {
             cause: Box::new(cause),
@@ -197,13 +303,13 @@ impl Overlay {
         }
     }
     pub(crate) fn atomic<T>(&self, job: impl FnOnce() -> OverlayResult<T>) -> OverlayResult<T> {
-        self.transaction(false, job)
+        self.transaction(job)
     }
     pub(crate) fn atomic_cleanup<T>(
         &self,
         job: impl FnOnce() -> OverlayResult<T>,
     ) -> OverlayResult<T> {
-        self.transaction(true, job)
+        self.transaction(job)
     }
     /// The engine's reply tickets, for the threads that attempt replies.
     pub fn reply_tickets(&self) -> Arc<crate::ReplyTickets> {
@@ -224,138 +330,116 @@ impl Overlay {
     }
     pub fn allocation(&self) -> OverlayResult<crate::AllocationState> {
         self.available()?;
-        self.allocation.state()
-    }
-    /// Runs one job atomically. Reads before the job's first writing statement
-    /// execute in autocommit: this connection is the only one, holds the
-    /// exclusive lock and runs one job at a time, so they see the same state.
-    /// A job that writes nothing begins, commits and admits nothing.
-    fn transaction<T>(
-        &self,
-        cleanup: bool,
-        job: impl FnOnce() -> OverlayResult<T>,
-    ) -> OverlayResult<T> {
-        self.available()?;
-        if self.transaction.get() != Transaction::None {
-            return Err(OverlayError::Invalid("nested transaction"));
-        }
-        self.transaction.set(Transaction::Wanted { cleanup });
-        self.release_step.set(true);
-        let orphans = self.orphan_seen.get();
-        let result = job();
-        // A failed job's orphan rows are as they were before it.
-        if result.is_err() {
-            self.orphan_seen.set(orphans);
-        }
-        // A ticket exists for its holder only once its job has succeeded.
-        let issued = std::mem::take(&mut *self.issued.borrow_mut());
-        if result.is_err() {
-            for (ns, revision) in issued {
-                self.tickets.withdraw(ns, revision);
-            }
-        }
-        if self.transaction.replace(Transaction::None) != Transaction::Begun {
-            return result;
-        }
-        let failure = match result {
-            Ok(value) => match self.execute(StatementKind::Commit, "COMMIT", &[], 0) {
-                // A commit never shrinks this file. The next admission's own
-                // observation sees the committed length and allocation.
-                Ok(_) => return Ok(value),
-                Err(cause) => {
-                    self.quarantined.set(true);
-                    OverlayError::Uncertain {
-                        cause: Box::new(cause),
-                        completion: None,
-                    }
-                }
-            },
+        match self.allocation.state() {
+            Ok(state) => Ok(state),
             Err(cause) => {
-                if self.quarantined.get() {
-                    return Err(cause);
-                }
-                if !self.connection.is_autocommit() {
-                    if let Err(error) = self.execute(StatementKind::Rollback, "ROLLBACK", &[], 0) {
-                        self.quarantined.set(true);
-                        return Err(OverlayError::Uncertain {
-                            cause: Box::new(cause),
-                            completion: Some(Box::new(error)),
-                        });
-                    }
-                }
-                cause
-            }
-        };
-        // Observe rollback truncation before another admission or resource
-        // report can credit discarded physical tail. An unknown identity or
-        // metadata result quarantines this connection with original custody.
-        if let Err(cause) = self.allocation.state() {
-            self.quarantined.set(true);
-            return Err(OverlayError::Uncertain {
-                cause: Box::new(cause),
-                completion: Some(Box::new(failure)),
-            });
-        }
-        Err(failure)
-    }
-    /// Admission and BEGIN for the first writing statement of an atomic job,
-    /// before that statement executes. A failure is returned by that statement
-    /// and leaves no transaction open.
-    fn begin(&self) -> OverlayResult<()> {
-        let Transaction::Wanted { cleanup } = self.transaction.get() else {
-            return Ok(());
-        };
-        // BEGIN IMMEDIATE is itself a writing statement.
-        self.transaction.set(Transaction::Beginning);
-        let begun = self
-            .admit(cleanup)
-            .and_then(|()| self.execute(StatementKind::Begin, "BEGIN IMMEDIATE", &[], 0));
-        self.transaction.set(match begun {
-            Ok(_) => Transaction::Begun,
-            Err(_) => Transaction::Wanted { cleanup },
-        });
-        begun.map(|_| ())
-    }
-    fn admit(&self, cleanup: bool) -> OverlayResult<()> {
-        // page_count includes Expire in the supported SQLite VM. Keep it out
-        // of the hot admission path; committed dense descriptor length supplies
-        // the physical bound, and freelist_count reads one nonexpiring cookie.
-        self.allocation.freelist_query();
-        let free = self.query(
-            StatementKind::Startup,
-            "PRAGMA main.freelist_count",
-            &[],
-            0,
-            |r| unsigned(r, 0),
-        )?[0];
-        let admission = match self.allocation.state() {
-            Ok(state)
-                if state.logical_bytes != 0
-                    && state.logical_bytes % 4096 == 0
-                    && free <= state.logical_bytes / 4096 =>
-            {
-                self.allocation.admit(cleanup, free * 4096, state)
-            }
-            Ok(_) => Err(OverlayError::Invalid(
-                "committed database length/accounting",
-            )),
-            Err(error) => Err(error),
-        };
-        match admission {
-            Err(cause)
-                if !matches!(
-                    cause,
-                    OverlayError::Reservation { .. } | OverlayError::UnsupportedPlatform
-                ) =>
-            {
                 self.quarantined.set(true);
                 Err(OverlayError::Uncertain {
                     cause: Box::new(cause),
                     completion: None,
                 })
             }
-            admission => admission,
         }
+    }
+    /// Runs one job atomically. Reads before the job's first writing statement
+    /// execute in autocommit: this connection is the only one, holds the
+    /// exclusive lock and runs one job at a time, so they see the same state.
+    /// A job that writes nothing begins and commits nothing.
+    fn transaction<T>(&self, job: impl FnOnce() -> OverlayResult<T>) -> OverlayResult<T> {
+        self.available()?;
+        if self.transaction.get() != Transaction::None {
+            return Err(OverlayError::Invalid("nested transaction"));
+        }
+        self.transaction.set(Transaction::Wanted);
+        self.release_step.set(true);
+        let (orphans, pieces) = (self.orphan_seen.get(), self.pieces_seen.get());
+        let result = job();
+        let issued = std::mem::take(&mut *self.issued.borrow_mut());
+        let begun = self.transaction.get() == Transaction::Begun;
+        let failed = match result {
+            Ok(value) if begun => match self.execute(StatementKind::Commit, "COMMIT", &[], 0) {
+                Ok(_) => {
+                    self.transaction.set(Transaction::None);
+                    self.open.borrow_mut().commit();
+                    return Ok(value);
+                }
+                Err(cause) if cause.is_sqlite_full() || cause.capacity_io() => cause,
+                Err(cause) => {
+                    self.transaction.set(Transaction::None);
+                    self.quarantined.set(true);
+                    return Err(OverlayError::Uncertain {
+                        cause: Box::new(cause),
+                        completion: None,
+                    });
+                }
+            },
+            Ok(value) => {
+                self.transaction.set(Transaction::None);
+                self.open.borrow_mut().commit();
+                return Ok(value);
+            }
+            Err(cause) => self.failed(cause),
+        };
+        self.transaction.set(Transaction::None);
+        // A job that began no transaction wrote nothing: what it read and
+        // remembered is still what the database holds.
+        if begun {
+            self.forget_all();
+        }
+        if self.quarantined.get() {
+            return Err(failed);
+        }
+        if begun && !self.connection.is_autocommit() {
+            // One rollback attempt, only when SQLite has not already rolled
+            // back the transaction. A failed rollback retains both causes.
+            if let Err(completion) = self.execute(StatementKind::Rollback, "ROLLBACK", &[], 0) {
+                self.quarantined.set(true);
+                return Err(OverlayError::Uncertain {
+                    cause: Box::new(failed),
+                    completion: Some(Box::new(completion)),
+                });
+            }
+        }
+        // Hints and reply tickets revert only after known whole-job failure,
+        // including a capacity failure at COMMIT, never on an unknown outcome.
+        self.orphan_seen.set(orphans);
+        self.pieces_seen.set(pieces);
+        self.open.borrow_mut().rollback();
+        for (ns, revision) in issued {
+            self.tickets.withdraw(ns, revision);
+        }
+        if begun {
+            if let Err(observation) = self.allocation.state() {
+                self.quarantined.set(true);
+                return Err(OverlayError::Uncertain {
+                    cause: Box::new(failed),
+                    completion: Some(Box::new(observation)),
+                });
+            }
+        }
+        if failed.capacity_io() {
+            Err(OverlayError::NoSpace {
+                cause: Box::new(failed),
+            })
+        } else {
+            Err(failed)
+        }
+    }
+    /// Admission and BEGIN for the first writing statement of an atomic job,
+    /// before that statement executes. A failure is returned by that statement
+    /// and leaves no transaction open.
+    fn begin(&self) -> OverlayResult<()> {
+        let Transaction::Wanted = self.transaction.get() else {
+            return Ok(());
+        };
+        // BEGIN IMMEDIATE is itself a writing statement.
+        self.transaction.set(Transaction::Beginning);
+        let begun = self.execute(StatementKind::Begin, "BEGIN IMMEDIATE", &[], 0);
+        self.transaction.set(match begun {
+            Ok(_) => Transaction::Begun,
+            Err(_) => Transaction::Wanted,
+        });
+        begun.map(|_| ())
     }
 }
 pub(crate) fn integer(value: u64) -> OverlayResult<i64> {

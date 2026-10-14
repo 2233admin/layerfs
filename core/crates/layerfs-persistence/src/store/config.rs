@@ -35,19 +35,19 @@ impl SqlitePackLayout {
     }
     pub(crate) const fn version(self) -> i64 {
         match self {
-            Self::Monolithic => 1,
-            Self::GroupRows => 2,
-            Self::GroupRowsIndexed => 3,
+            Self::Monolithic => 7,
+            Self::GroupRows => 8,
+            Self::GroupRowsIndexed => 9,
         }
     }
 }
 /// Explicit creation-only selection of the initial-acquisition working tables.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum SqliteAcquisitionSchema {
-    /// Schema versions 1 to 3: no acquisition tables; acquisition is unavailable.
+    /// Schema versions 7 to 9: no acquisition tables; acquisition is unavailable.
     #[default]
     Absent,
-    /// Schema versions 4 to 6: the same pack layouts with the acquisition tables.
+    /// Schema versions 10 to 12: the same pack layouts with the acquisition tables.
     Tables,
 }
 impl SqliteAcquisitionSchema {

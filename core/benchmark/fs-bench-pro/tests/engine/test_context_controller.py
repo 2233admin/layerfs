@@ -22,6 +22,46 @@ def cases(family):
 
 
 class ContextController(unittest.TestCase):
+    def test_transcript_modes_bind_only_declared_payload_checkpoints(self):
+        for family in ('branch_development', 'multi_workspace_development'):
+            for case in cases(family):
+                with self.subTest(case=case['id']):
+                    plan = fixtures.context_plan(case)
+                    checkpoints = {(item['role'], item['index']):
+                                   f"checkpoint-{item['role']}-{item['index']}"
+                                   for item in plan['checkpoints']}
+                    prepared = {'context_checkpoints': [dict(role=role, index=index, manifest=path)
+                                for (role, index), path in checkpoints.items()]}
+                    branches = {}
+                    expected_order = []
+                    for role in plan['roles']:
+                        records = []
+                        for index in range(1, plan['local_commits'][role] + 1):
+                            fields = dict(commit_id=f'commit-{role}-{index}', stack='stack',
+                                          root=f'root-{role}-{index}', parent=f'parent-{role}-{index}',
+                                          base_layer='base')
+                            records.append(dict(index=index, commit={'fields': fields}))
+                            expected_order.append((role, index))
+                        branches[role] = dict(branch_id=f'branch-{role}', name=f'name-{role}',
+                            stack='stack', base_layer='base', initial_parent='-', initial_root='initial',
+                            final_head=records[-1]['commit']['fields']['commit_id'],
+                            final_root=records[-1]['commit']['fields']['root'], commits=records)
+                    for modes in (None, Path('declared-modes') if case.get('m1_schedule') else None):
+                        transcript = workspace.context_transcript(case, prepared, {'branches': branches}, modes)
+                        commits = [line.split('\t') for line in transcript.splitlines()
+                                   if line.startswith('commit\t')]
+                        self.assertEqual([(row[1], int(row[2])) for row in commits], expected_order)
+                        selected = []
+                        for row in commits:
+                            pair = (row[1], int(row[2]))
+                            if pair in checkpoints:
+                                selected.append(pair)
+                                self.assertEqual(row[8], checkpoints[pair])
+                                self.assertEqual(row[9], '-' if modes is None else str(modes))
+                            else:
+                                self.assertEqual(row[8:], ['-', '-'])
+                        self.assertEqual(set(selected), set(checkpoints))
+
     def test_every_original_role_stage_and_sdk_substitution(self):
         for family in ('branch_development', 'multi_workspace_development'):
             for case in cases(family):

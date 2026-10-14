@@ -334,7 +334,7 @@ fn dedup_oracle_full_bytes_do_not_substitute_for_exact_independent_chunk_partiti
 
 #[test]
 fn dedup_oracle_reuse_exact_typed_maps_and_semantic_mutations_fail_closed() {
-    let case = "dedup-workspace-exact-1-compact-v2";
+    let case = "dedup-workspace-exact-100";
     let (_, initial_bag, initial) = qualified(case, 0);
     workspace_oracle::verify_dedup_files(&initial_bag, case, 0, &initial.files).unwrap();
     let (_, bag, final_tree) = qualified(case, 1);
@@ -371,7 +371,7 @@ fn dedup_oracle_reuse_exact_typed_maps_and_semantic_mutations_fail_closed() {
 
 #[test]
 fn dedup_oracle_unique_cross_and_reuse_internal_disjointness_are_real_guards() {
-    let case = "dedup-workspace-unique-1-compact-v2";
+    let case = "dedup-workspace-unique-100";
     let (_, bag, proof) = qualified(case, 1);
     let files = workspace_oracle::verify_dedup_files(&bag, case, 1, &proof.files).unwrap();
     let mut wrong = files.clone();
@@ -381,9 +381,9 @@ fn dedup_oracle_unique_cross_and_reuse_internal_disjointness_are_real_guards() {
     let chunk = wrong["added/a0000.dat"].spans[0].clone();
     wrong.get_mut("added/a0000.dat").unwrap().spans.push(chunk);
     assert!(workspace_oracle::require_dedup_storage(case, 1, &wrong).is_err());
-    let case = "dedup-cross-file-unique-10";
+    let case = "dedup-cross-file-unique-100";
     let mut synthetic = BTreeMap::new();
-    for i in 0..10 {
+    for i in 0..100 {
         synthetic.insert(
             format!("files/f{i:04}.dat"),
             workspace_oracle::DedupFile {
@@ -508,7 +508,7 @@ fn dedup_oracle_real_public_import_provider_and_exact_gate_are_qualified() {
 
 #[test]
 fn dedup_oracle_real_reuse_initial_and_first_commit_bind_both_immutable_states() {
-    let case = "dedup-workspace-exact-1-compact-v2";
+    let case = "dedup-workspace-exact-100";
     let home = init(case, "reuse");
     let mut request = args(&home, case, "pristine");
     request.mode = "verify-reuse-initial".into();
@@ -547,8 +547,13 @@ fn dedup_oracle_real_reuse_initial_and_first_commit_bind_both_immutable_states()
         .unwrap();
         serials.insert(entry.path, tree.resolve(&logical).unwrap().serial);
     }
-    let added_serial = serials.values().max().unwrap() + 1;
-    serials.insert("added/a0000.dat".into(), added_serial);
+    let mut next_serial = serials.values().max().unwrap() + 1;
+    for entry in edit_model::entries(case, 1).unwrap() {
+        if !serials.contains_key(&entry.path) {
+            serials.insert(entry.path, next_serial);
+            next_serial += 1;
+        }
+    }
     drop(tree);
     drop(reader);
     let (root, bag) = constructed_with_serials(

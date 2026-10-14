@@ -35,12 +35,19 @@ uncertainty is retained conservatively rather than called definite.
 
 After definite nonpublication, one ResolveFailed job preserves the composed live
 view and starts existing bounded local consolidation. That is not Store cleanup
-or a history retry. The Commit slot releases only on a known safe disposition.
+or a history retry. One invocation-owned admission guard covers either public
+Commit entrypoint, including `commit_captured` reader and operation-owner releases.
+It is acquired once before capture; the captured wrapper uses the admitted driver
+without reacquiring it. Known install alone does not release the slot while those
+owners remain. The Commit slot releases only on a known safe disposition.
 Unknown outcome performs no resolution, install, resend or inferred discard.
 Known publication with a failed/unattempted local install is explicitly still
 published and blocks another Commit. A later observer read does not settle an
 original unknown. These retained results remain the caller's ownership; restart
-custody and an unknown resolver are not introduced.
+custody and an unknown resolver are not introduced. A refused `InFlight` call owns
+no guard and cannot clear the admitted invocation's slot. Unwinding conservatively
+keeps admission. Admission is per Workspace; disjoint Workspaces may construct,
+publish and install concurrently through their independent attempts.
 
 The [Store-half proof](../issues/307/PRE-S8-F8-COMPOSITION-20261007.md) first writes
 real overlay bytes, then directly constructs the matching captured change with

@@ -72,6 +72,59 @@ class WalFixture:
 
 
 class ClosedStoreNormalization(unittest.TestCase):
+    def test_initial_raw_digest_uses_the_scratch_copy_read(self):
+        with tempfile.TemporaryDirectory(prefix="fsb-closed-copy-count-") as temporary:
+            home = Path(temporary).resolve()
+            fixture = WalFixture(home)
+            scratch = home / "normalized/scratch"
+            real_open = Path.open
+            counts = {"raw": {}, "scratch": {}}
+            sizes = []
+
+            class Counted:
+                def __init__(self, stream, kind, name):
+                    self.stream, self.kind, self.name = stream, kind, name
+
+                def __enter__(self):
+                    self.stream.__enter__()
+                    return self
+
+                def __exit__(self, *args):
+                    return self.stream.__exit__(*args)
+
+                def read(self, size):
+                    chunk = self.stream.read(size)
+                    totals = counts[self.kind]
+                    totals[self.name] = totals.get(self.name, 0) + len(chunk)
+                    sizes.append(size)
+                    return chunk
+
+            def opened(path, mode="r", *args, **kwargs):
+                stream = real_open(path, mode, *args, **kwargs)
+                parent = path.resolve().parent
+                kind = "raw" if parent == fixture.raw else "scratch" if parent == scratch else None
+                return Counted(stream, kind, path.name) if mode == "rb" and kind else stream
+
+            with patch.object(Path, "open", opened):
+                result = fixture.normalize(home)
+            record = json.loads(Path(result["receipt"]).read_text())
+            self.assertEqual(record["raw_files"], fixture.before)
+            self.assertEqual(record["copied_files"], fixture.before)
+            self.assertEqual(record["raw_files_after"], fixture.before)
+            self.assertEqual(fixture.identities(), fixture.before)
+            self.assertEqual(oracle._sealed_identity(result["path"]), result["normalized_identity"])
+            self.assertEqual(fixture.census(result)["commit_count"], 3)
+            raw_stat = (fixture.raw / "store.sqlite").stat()
+            copied_stat = (scratch / "store.sqlite").stat()
+            self.assertNotEqual((raw_stat.st_dev, raw_stat.st_ino), (copied_stat.st_dev, copied_stat.st_ino))
+            expected = {name: value["size"] for name, value in fixture.before.items()}
+            print(json.dumps({"scope": "Python normalization stream bytes; SQLite C VFS excluded",
+                              "source_sizes": expected, "observed": counts}), flush=True)
+            self.assertTrue(sizes)
+            self.assertTrue(all(size == 65536 for size in sizes))
+            self.assertEqual(counts["scratch"], expected)
+            self.assertEqual(counts["raw"], {name: 2 * size for name, size in expected.items()})
+
     def test_target_selects_off_before_wal_can_initialize_file(self):
         with tempfile.TemporaryDirectory(prefix="fsb-closed-initial-profile-") as temporary:
             home = Path(temporary).resolve()

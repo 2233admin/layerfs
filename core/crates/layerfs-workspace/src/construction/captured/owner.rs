@@ -37,6 +37,16 @@ pub struct CapturedFileWork {
     /// Successfully retained immutable file classifications; failed opens are
     /// represented by their original cause rather than counted as success.
     pub classifications: u64,
+    /// Bytes of references and inherited ranges that the edit script could
+    /// not retain, read from committed content and offered as new bytes.
+    pub committed_bytes: u64,
+    /// Successful bounded windows authenticating a shifted edit edge.
+    pub edge_windows: u64,
+    /// Logical bytes acquired for edge comparison, counting both sources.
+    /// These are not physical IO or whole-operation read counts.
+    pub edge_read_bytes: u64,
+    /// Bytes whose unchanged base mapping survived authenticated edge trimming.
+    pub edge_retained_bytes: u64,
 }
 /// Exact retained reader, record scope and first-original errors for caller fences.
 /// This value and its Drop perform no reader/operation release or retry.
@@ -125,7 +135,14 @@ impl<'a, P: OverlayCapturedRuns + OverlayOperationRecords + ?Sized> CapturedFile
         };
         let result = owner.bind(workspace, records_scope).and_then(|facts| {
             owner.facts = Some(facts);
-            normalize::prepare(provider, &owner.shared, facts).map_err(WorkspaceError::Content)
+            normalize::prepare(
+                provider,
+                &owner.shared,
+                facts,
+                owner.base.as_ref(),
+                owner.file.as_ref(),
+            )
+            .map_err(WorkspaceError::Content)
         });
         match result {
             Ok((count, context)) => {
@@ -236,6 +253,7 @@ impl<'a, P: OverlayCapturedRuns + OverlayOperationRecords + ?Sized> CapturedFile
             facts,
             self.count,
             &self.context,
+            self.base.as_ref(),
         )?;
         if let Some(view) = &self.file {
             let client = self

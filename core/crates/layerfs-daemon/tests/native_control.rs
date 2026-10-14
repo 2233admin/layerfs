@@ -10,9 +10,9 @@ use layerfs_bridge::control::{Activity, ControlCode, Reply, Request, WorkspaceTo
 use layerfs_daemon::control::Service;
 use layerfs_history::{
     BranchId, CommitHistoryRequest, CommitStagedOutcome, ForkRequest, ForkSource, HistoryName,
-    WorkspaceId,
+    Page, WorkspaceId,
 };
-use layerfs_sdk::{control::Control, OperationCause, ProjectApi, WorkspaceApi};
+use layerfs_sdk::{internal::Control, OperationCause};
 use std::sync::{
     atomic::{AtomicU8, Ordering},
     mpsc, Arc,
@@ -26,20 +26,29 @@ fn mount(
     workspace: WorkspaceId,
     branch: BranchId,
 ) -> (WorkspaceToken, layerfs_history::BranchSnapshot) {
-    let bound = WorkspaceApi::new(client).bind(workspace, branch).unwrap();
+    let bound = layerfs_sdk::internal::workspace(client)
+        .bind(workspace, branch)
+        .unwrap();
     (bound.token, bound.binding)
 }
 fn committed(client: &mut Control, token: WorkspaceToken) -> layerfs_history::CommitRecord {
-    match WorkspaceApi::new(client).commit(token).unwrap() {
+    match layerfs_sdk::internal::workspace(client)
+        .commit(token)
+        .unwrap()
+    {
         CommitStagedOutcome::Committed(value) => value,
         other => panic!("{other:?}"),
     }
 }
 fn status(client: &mut Control, token: WorkspaceToken) -> layerfs_bridge::control::WorkspaceStatus {
-    WorkspaceApi::new(client).status(token).unwrap()
+    layerfs_sdk::internal::workspace(client)
+        .status(token)
+        .unwrap()
 }
 fn close(client: &mut Control, token: WorkspaceToken) {
-    WorkspaceApi::new(client).unmount(token).unwrap();
+    layerfs_sdk::internal::workspace(client)
+        .unmount(token, false)
+        .unwrap();
 }
 
 fn serve(
@@ -107,7 +116,7 @@ fn native_mount_commit_status_fork_history_and_terminal_unmount() {
     fixture::write(&f.service, b, b'B');
     let first = committed(&mut client, a);
     assert!(
-        matches!(WorkspaceApi::new(&mut client).commit(a).unwrap(),CommitStagedOutcome::UpToDate{head:Some(head),root} if head==first.id&&root==first.root)
+        matches!(layerfs_sdk::internal::workspace(&mut client).commit(a).unwrap(),CommitStagedOutcome::UpToDate{head:Some(head),root} if head==first.id&&root==first.root)
     );
     let sql = f.statements();
     let stale = status(&mut client, b);
@@ -122,55 +131,74 @@ fn native_mount_commit_status_fork_history_and_terminal_unmount() {
     assert_eq!(overwritten.parent, original.branch.head_commit);
     assert_ne!(overwritten.root, first.root);
     let fork = BranchId::from_authority([75; 16]);
-    let forked = ProjectApi::new()
-        .fork(
-            &mut client,
-            ForkRequest {
-                stack: original.branch.stack,
-                branch: fork,
-                name: HistoryName::new("fork").unwrap(),
-                source: ForkSource::Commit {
-                    branch,
-                    commit: overwritten.id,
-                },
+    let forked = layerfs_sdk::internal::fork(
+        &mut client,
+        ForkRequest {
+            stack: original.branch.stack,
+            branch: fork,
+            name: HistoryName::new("fork").unwrap(),
+            source: ForkSource::Commit {
+                branch,
+                commit: overwritten.id,
             },
-        )
-        .unwrap();
+        },
+    )
+    .unwrap();
     assert_eq!(forked.effective_root, overwritten.root);
+    let first_page = layerfs_sdk::internal::branches(
+        &mut client,
+        original.branch.stack,
+        Page {
+            cursor: None,
+            limit: 1,
+        },
+    )
+    .unwrap();
+    assert_eq!(first_page.records, [forked.branch.clone()]);
+    let second_page = layerfs_sdk::internal::branches(
+        &mut client,
+        original.branch.stack,
+        Page {
+            cursor: Some(first_page.continuation.unwrap()),
+            limit: 1,
+        },
+    )
+    .unwrap();
+    assert_eq!(second_page.records[0].id, branch);
+    assert_eq!(second_page.records[0].head_commit, Some(overwritten.id));
+    assert!(second_page.continuation.is_none());
     let (c, binding) = mount(&mut client, identity(73), fork);
     assert_eq!(binding.effective_root, overwritten.root);
     fixture::write(&f.service, a, b'C');
     tag.store(b'C', Ordering::Release);
     let second = committed(&mut client, a);
     assert_eq!(second.parent, Some(first.id));
-    let page = ProjectApi::new()
-        .history(
-            &mut client,
-            CommitHistoryRequest {
-                branch,
-                start: None,
-                cursor: None,
-                limit: 1,
-            },
-        )
-        .unwrap();
+    let page = layerfs_sdk::internal::commits(
+        &mut client,
+        CommitHistoryRequest {
+            branch,
+            start: None,
+            cursor: None,
+            limit: 1,
+        },
+    )
+    .unwrap();
     assert_eq!(page.records, vec![second.clone()]);
     let cursor = page.continuation.unwrap();
     fixture::write(&f.service, a, b'D');
     tag.store(b'D', Ordering::Release);
     let third = committed(&mut client, a);
     assert_eq!(third.parent, Some(second.id));
-    let page = ProjectApi::new()
-        .history(
-            &mut client,
-            CommitHistoryRequest {
-                branch,
-                start: None,
-                cursor: Some(cursor),
-                limit: 1,
-            },
-        )
-        .unwrap();
+    let page = layerfs_sdk::internal::commits(
+        &mut client,
+        CommitHistoryRequest {
+            branch,
+            start: None,
+            cursor: Some(cursor),
+            limit: 1,
+        },
+    )
+    .unwrap();
     assert_eq!(page.records, vec![first]);
     assert!(page.continuation.is_none());
     let stale_token = WorkspaceToken {
@@ -189,7 +217,7 @@ fn native_mount_commit_status_fork_history_and_terminal_unmount() {
     let (end, _) = mount(&mut client, last, branch);
     close(&mut client, end);
     let count = worker.join();
-    assert_eq!(count, 20);
+    assert_eq!(count, 22);
     println!("CONTROL_FLOW overwrite_last_effect=true captured_parent_preserved=true calls={count} Store_SQL_for_status=0 history_anchor_stable=true stale_namespace_fenced=true");
     f.cleanup();
 }
@@ -210,7 +238,7 @@ fn control_busy_keeps_the_channel_healthy_for_a_later_explicit_call() {
     let writer =
         held_writer::HeldWriter::acquire(&std::path::PathBuf::from(&f.installed.manifest.locator));
     assert!(
-        matches!(WorkspaceApi::new(&mut client).commit(token).unwrap_err().cause, OperationCause::Remote(value) if value.code==ControlCode::Busy)
+        matches!(layerfs_sdk::internal::workspace(&mut client).commit(token).unwrap_err().cause, OperationCause::Remote(value) if value.code==ControlCode::Busy)
     );
     writer.release();
     let observed = status(&mut client, token);
@@ -248,7 +276,8 @@ fn original_lost_control_reply_is_not_replayed_or_settled_by_an_observer() {
     let (token, _) = mount(&mut client, last, branch);
     fixture::write(&f.service, token, b'L');
     let server_fence = fence.recv_timeout(Duration::from_secs(3)).unwrap();
-    let calling = std::thread::spawn(move || WorkspaceApi::new(&mut client).commit(token));
+    let calling =
+        std::thread::spawn(move || layerfs_sdk::internal::workspace(&mut client).commit(token));
     entered.recv_timeout(Duration::from_secs(3)).unwrap();
     server_fence.close().unwrap();
     send_release.send(()).unwrap();
@@ -616,7 +645,7 @@ fn forced_unmount_refuses_a_workspace_without_a_connection_before_any_effect() {
     }
     // The SDK operation carries the same refusal.
     assert!(
-        matches!(WorkspaceApi::new(&mut client).force_unmount(token, false).unwrap_err().cause, OperationCause::Remote(value) if value.code == ControlCode::Invalid && value.phase == "force:admission")
+        matches!(layerfs_sdk::internal::workspace(&mut client).unmount(token, true).unwrap_err().cause, OperationCause::Remote(value) if value.code == ControlCode::Invalid && value.phase == "force:admission")
     );
     // At the control owner: the original typed failure, and the ordinary
     // token refusals ahead of it.

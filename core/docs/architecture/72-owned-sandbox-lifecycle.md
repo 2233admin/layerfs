@@ -69,14 +69,27 @@ cleared on the actual shared socket before product operations; this adds no
 ordinary command duration limit.
 
 Installer mode sends Hello without waiting for Store and selects InstallPending.
-`Control::install_project` borrows that same Connection and keeps its correlation
-counter; an attempted failure makes the owner terminal while returning the
-original InstallFailure. A same-incarnation Hello wait then observes ControlReady.
+`SandboxApi::create(request, project)` folds installation into this lifecycle.
+Its hidden install plumbing borrows that same Connection and keeps correlation;
+an attempted failure makes the control owner terminal while retaining the original
+InstallFailure and owned runtime. The same-incarnation Hello must observe
+ControlReady, or create returns the original observation and installation custody.
 Additional Sandboxes explicitly open the retained Installed manifest on the same
 volume. Listener/authentication/ControlReady are distinct from native Workspace
-Ready. `ManagedSandbox::exec` selects its admitted UID/GID and delegates ordinary
-Exec creation; returned runtime owners launch, stream and inspect independently
-of filesystem lifetime. No shell exit or stream EOF establishes FS drain.
+Ready. `WorkspaceApi::exec(sandbox, mounted, arguments, environment, stdin)`
+selects the mount directory and its deployment's admitted UID/GID, then delegates
+the unchanged Sandbox Exec creation. ManagedSandbox::exec is removed. Returned
+runtime owners launch, stream and inspect independently of filesystem lifetime.
+No shell exit or stream EOF establishes FS drain.
+
+`SandboxApi::close` consumes the exact acknowledged owner, attempts stop once,
+then deletes once after known stop (force=false, v=false). Stop failure does not
+attempt delete. A failure retains original runtime/control, request, handshake,
+status and any installation acknowledgement. Shared Store volumes remain borrowed;
+close establishes container lifecycle, not graceful filesystem drain. Matching
+explicit existing-Store create retains the original ready startup and one Hello,
+without another install; a mismatched Project is refused before deployment.
+The complete surface and layout are in [sdk.md](../../../sdk.md).
 
 EndSession now preserves terminal socket ownership: the daemon knows its final
 reply send completed, then waits once for caller EOF and fences once before slot

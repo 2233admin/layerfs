@@ -4,7 +4,7 @@ use super::{
     registry::{bound_mut, idle},
     Failure, NativeEvidence, Service, Success,
 };
-use crate::{store::BoundWorkspace, Command, Completion, Response};
+use crate::{store::BoundWorkspace, JobReceipt, Response};
 use layerfs_bridge::control::{Activity, ForcedFacts, Reply, WorkspaceToken};
 use std::sync::Arc;
 
@@ -69,7 +69,7 @@ impl Service {
         &self,
         token: WorkspaceToken,
         workspace: &BoundWorkspace,
-        earlier: Vec<Completion>,
+        earlier: Vec<JobReceipt>,
         native: Receipt,
     ) -> Result<Success, Failure> {
         let (completion, earlier, native) = self.closed(token, workspace, earlier, native, None)?;
@@ -91,15 +91,18 @@ impl Service {
         &self,
         token: WorkspaceToken,
         workspace: &BoundWorkspace,
-        earlier: Vec<Completion>,
+        earlier: Vec<JobReceipt>,
         native: Receipt,
         forced: Option<ForcedFacts>,
-    ) -> Result<(Completion, Vec<Completion>, Receipt), Failure> {
-        match self.job(workspace.route(), Command::Close) {
+    ) -> Result<(JobReceipt, Vec<JobReceipt>, Receipt), Failure> {
+        match self.job(
+            workspace.route(),
+            |job_client: &crate::OwnerClient, job_route| job_client.close(job_route),
+        ) {
             Ok(done) if matches!(done.result(), Ok(Response::Done)) => Ok((done, earlier, native)),
             other => {
                 let failure = match other {
-                    Ok(done) => Failure::Completion(Box::new(done)),
+                    Ok(done) => Failure::JobReceipt(Box::new(done)),
                     Err(error) => error,
                 };
                 Err(self.unclosed(token, failure, earlier, native, forced))
@@ -123,6 +126,12 @@ impl Service {
                 original: Box::new(success),
             });
         }
+        if let Err(cause) = self.owner.retire_namespace(token.namespace) {
+            return Err(Failure::After {
+                cause: Box::new(Failure::Owner(cause)),
+                original: Box::new(success),
+            });
+        }
         Ok(success)
     }
     /// Close was not acknowledged. Without a connection the entry returns to
@@ -131,7 +140,7 @@ impl Service {
         &self,
         token: WorkspaceToken,
         failure: Failure,
-        earlier: Vec<Completion>,
+        earlier: Vec<JobReceipt>,
         native: Receipt,
         forced: Option<ForcedFacts>,
     ) -> Failure {

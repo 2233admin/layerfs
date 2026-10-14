@@ -8,7 +8,7 @@ use layerfs_content::{
 };
 use layerfs_daemon::{
     store::{BoundWorkspace, CommitError},
-    Command, Response,
+    Response,
 };
 use layerfs_history::BranchSnapshot;
 use layerfs_storage::Save;
@@ -28,12 +28,7 @@ pub fn mutate(bound: &BoundWorkspace) {
 pub fn mutate_tag(bound: &BoundWorkspace, tag: u8) {
     let op = bound.operation().unwrap();
     let route = bound.route();
-    let done = op
-        .overlay()
-        .try_submit(Some(route), Command::AcquireBaseSource { owner: 1 })
-        .unwrap()
-        .wait()
-        .unwrap();
+    let done = op.overlay().acquire_base_source(Some(route), 1).unwrap();
     let source = match done.result() {
         Ok(Response::BaseSource(value)) => *value,
         other => panic!("{other:?}"),
@@ -70,18 +65,14 @@ pub fn mutate_tag(bound: &BoundWorkspace, tag: u8) {
     };
     assert!(op
         .overlay()
-        .try_submit(Some(route), Command::ReplyAttempted(publication))
-        .unwrap()
-        .wait()
+        .reply_attempted(publication)
         .unwrap()
         .result()
         .is_ok());
     drop(view);
     assert!(op
         .overlay()
-        .try_submit(Some(route), Command::ReleaseBaseSource(source))
-        .unwrap()
-        .wait()
+        .release_base_source(Some(route), source)
         .unwrap()
         .result()
         .is_ok());

@@ -1,4 +1,4 @@
-//! Engine-independent physical locations and catalogue rows.
+//! Engine-independent physical locations and stored value rows.
 
 use layerfs_content::{ObjectId, ObjectRole};
 
@@ -19,19 +19,13 @@ pub struct ObjectLocation {
     pub record_number: usize,
 }
 
-/// One catalogue row.
+/// One stored inode value: the row a pooled leaf names by its ordinal.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct ValueGroupRow {
-    /// First ordinal the group covers.
-    pub first_ordinal: u32,
-    /// Number of values in the group.
-    pub count: usize,
-    /// Pack holding the group.
-    pub pack_id: i64,
-    /// Group ordinal inside the pack.
-    pub group_number: usize,
-    /// Digest of the decoded group body.
-    pub digest: ObjectId,
+pub struct InodeValueRow {
+    /// The ordinal, assigned once from a Save's reserved block.
+    pub ordinal: u32,
+    /// The 73 value bytes of one inode-leaf row.
+    pub value: [u8; layerfs_content::inode_leaf::INODE_VALUE_BYTES],
 }
 
 /// One persisted advisory content-signature ring entry.
@@ -61,7 +55,7 @@ impl PackDomain {
     pub const fn for_lane(lane: crate::pack::layout::PackLane) -> Self {
         use crate::pack::layout::PackLane;
         match lane {
-            PackLane::Ordinary | PackLane::PooledMetadata => Self::Metadata,
+            PackLane::Ordinary => Self::Metadata,
             PackLane::Native | PackLane::WholeFile | PackLane::Singleton => Self::Payload,
         }
     }

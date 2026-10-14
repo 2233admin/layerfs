@@ -7,7 +7,7 @@ use layerfs_history::{
     HistoryName, LayerId, LayerStackId, WorkspaceId,
 };
 const CALL: &[u8] = b"LFSC\x01";
-const ANSWER: &[u8] = b"LFSA\x01";
+const ANSWER: &[u8] = b"LFSA\x02";
 const ID: u64 = 0x0102_0304_0506_0708;
 const ID_BYTES: &[u8] = &[1, 2, 3, 4, 5, 6, 7, 8];
 /// Five magic bytes and the eight-byte correlation precede the tag.
@@ -76,23 +76,18 @@ const WORK: NativeWork = NativeWork {
     loops_entered: 0,
     loops_exited: 0,
     loops_joined: 0,
-    received: 0,
-    admitted: 0,
-    queued: 0,
-    running: 0,
-    parked: 0,
+    active: 0,
     retained: 0,
     completed: 0,
-    handoffs: 0,
+    served: 0,
     inline: 0,
     refused: 0,
     terminal: 0,
-    unadmitted: 0,
     forget_units: 9,
 };
-/// The first u16 and the last u64 of the 88-byte counter block.
+/// The first u16 and the last u64 of the 64-byte counter block.
 fn work_bytes() -> Vec<u8> {
-    join(&[&[0, 2], &[0; 78], &[0, 0, 0, 0, 0, 0, 0, 9]])
+    join(&[&[0, 2], &[0; 54], &[0, 0, 0, 0, 0, 0, 0, 9]])
 }
 fn facts(
     abort: AbortDisposition,
@@ -474,18 +469,13 @@ fn the_largest_forced_records_stay_under_the_record_limit() {
         loops_entered: u16::MAX,
         loops_exited: u16::MAX,
         loops_joined: u16::MAX,
-        received: u32::MAX,
-        admitted: u32::MAX,
-        queued: u32::MAX,
-        running: u32::MAX,
-        parked: u32::MAX,
+        active: u32::MAX,
         retained: u32::MAX,
         completed: u64::MAX,
-        handoffs: u64::MAX,
+        served: u64::MAX,
         inline: u64::MAX,
         refused: u64::MAX,
         terminal: u64::MAX,
-        unadmitted: u64::MAX,
         forget_units: u64::MAX,
     };
     // The longest Commit knowledge is a Commit record with a parent.
@@ -507,8 +497,8 @@ fn the_largest_forced_records_stay_under_the_record_limit() {
         })),
     };
     let bytes = receipt.encode().unwrap();
-    // 14 of magic, correlation and tag; token 40; facts 2 + 151 + 8; counters 88; cleanup 1.
-    assert_eq!(bytes.len(), 304);
+    // 14 of magic, correlation and tag; token 40; facts 2 + 151 + 8; counters 64; cleanup 1.
+    assert_eq!(bytes.len(), 280);
     assert_eq!(Answer::decode(&bytes).unwrap(), receipt);
     let custody = |detail: usize| Answer {
         id: u64::MAX,
@@ -523,8 +513,8 @@ fn the_largest_forced_records_stay_under_the_record_limit() {
     };
     let retained = custody(2048);
     let bytes = retained.encode().unwrap();
-    // 14; token 40; stage and detach 2; counters 1 + 88; detail 2 + 2048; facts 161.
-    assert_eq!(bytes.len(), 2356);
+    // 14; token 40; stage and detach 2; counters 1 + 64; detail 2 + 2048; facts 161.
+    assert_eq!(bytes.len(), 2332);
     assert!(bytes.len() < RECORD_LIMIT);
     assert_eq!(Answer::decode(&bytes).unwrap(), retained);
     for end in 0..bytes.len() {

@@ -54,7 +54,7 @@ impl Failure {
                 owner_detail(error),
                 None,
             ),
-            Self::Completion(done) => {
+            Self::JobReceipt(done) => {
                 let (code, detail) = completion(done);
                 (code, None, "owner completion".into(), detail, None)
             }
@@ -71,7 +71,7 @@ impl Failure {
                         (ControlCode::Missing, None, format!("Branch {id} missing"))
                     }
                     BindError::Owner(error) => (owner(error), None, owner_detail(error)),
-                    BindError::Completion(done) => {
+                    BindError::JobReceipt(done) => {
                         let (code, detail) = completion(done);
                         (code, None, detail)
                     }
@@ -210,7 +210,7 @@ fn commit(error: &CommitError) -> (ControlCode, Option<MovedState>, String) {
         }
         CommitError::Content { error, .. } => error.to_string(),
         CommitError::Owner(error) => owner_detail(error),
-        CommitError::Completion(done) => completion(done).1,
+        CommitError::JobReceipt(done) => completion(done).1,
         CommitError::Workspace(error) => error.to_string(),
         CommitError::InFlight => "Commit already active".into(),
         CommitError::Context(reason) => (*reason).into(),
@@ -244,7 +244,7 @@ fn owner_detail(error: &OwnerError) -> String {
         other => other.to_string(),
     }
 }
-fn completion(done: &crate::Completion) -> (ControlCode, String) {
+fn completion(done: &crate::JobReceipt) -> (ControlCode, String) {
     match done.result() {
         Err(error) => (owner(error), owner_detail(error)),
         Ok(_) => (ControlCode::Unknown, "unexpected owner reply".into()),

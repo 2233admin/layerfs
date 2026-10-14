@@ -1,16 +1,9 @@
-//! One shared native request pool; SQL scheduling stays with the engine owner.
-mod admission;
+//! Request ownership beside each mount; no daemon-wide request dispatcher.
 mod diagnostics;
-mod queue;
-mod task;
+mod requests;
 mod types;
-mod workers;
-
-pub use admission::{AdmissionFailure, MountQueue, Permit, Received};
-pub use diagnostics::{DispatchWork, MountWork};
-pub use task::{LeaveReceiver, NextTurn};
+pub use diagnostics::MountWork;
+pub use requests::{InputFailure, MountRequests, Received, RequestOwner};
 pub use types::{
-    DispatchConfig, DispatchError, FailureView, RequestDisposition, RequestFuture, Shutdown,
-    StartFailure, HANDOFFS, MAX_INPUT_BYTES, RECEIVE_SLOTS,
+    DispatchError, FailureView, RequestDisposition, RequestFuture, MAX_INPUT_BYTES, RECEIVE_SLOTS,
 };
-pub use workers::Dispatch;

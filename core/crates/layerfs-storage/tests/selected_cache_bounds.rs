@@ -2,7 +2,7 @@
 use layerfs_content::ObjectId;
 use layerfs_storage::{
     encoding::{PackAcquisition, PackCache, PackUnit},
-    location::{ObjectLocation, PackDomain, PackInfo, SignatureRow, ValueGroupRow},
+    location::{ObjectLocation, PackDomain, PackInfo, SignatureRow},
     pack::{
         assemble, build_group,
         layout::{self, PackLane},
@@ -115,17 +115,7 @@ impl Source for Input {
         self.directory_passes.set(self.directory_passes.get() + 1);
         self.unshared_walks.set(self.unshared_walks.get() + groups);
     }
-    fn value_group(&self, _: u32) -> StorageResult<Option<ValueGroupRow>> {
-        Err(StorageError::Integrity("unexpected fixture query"))
-    }
-    fn value_groups(
-        &self,
-        _: Option<u32>,
-        _: &mut dyn FnMut(ValueGroupRow) -> StorageResult<()>,
-    ) -> StorageResult<()> {
-        Err(StorageError::Integrity("unexpected fixture query"))
-    }
-    fn window_start(&self) -> StorageResult<u32> {
+    fn inode_values(&self, _: &[u32]) -> StorageResult<Vec<[u8; 73]>> {
         Err(StorageError::Integrity("unexpected fixture query"))
     }
     fn signatures(&self) -> StorageResult<Vec<SignatureRow>> {

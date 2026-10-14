@@ -1,8 +1,7 @@
 //! Exact lookup ownership, including non-file metadata after removal.
 use crate::{
-    db::{integer, unsigned},
-    inode, BaseSource, Inode, InodeKind, LeaseKind, LookupOwner, Overlay, OverlayError,
-    OverlayResult, Route, StatementKind,
+    db::integer, inode, BaseSource, Inode, InodeKind, LeaseKind, LookupOwner, Overlay,
+    OverlayError, OverlayResult, Route,
 };
 impl Overlay {
     /// The authenticated root serial distinguishes its canonical zero count
@@ -26,7 +25,7 @@ impl Overlay {
                 return Err(OverlayError::Closed);
             }
             let current = self
-                .inode_at(source.route, base.serial, state.active, state.installed)?
+                .inode_at(base.serial, state.active, state.installed)?
                 .unwrap_or_else(|| base.clone());
             if current.nlink == 0
                 && !(current.kind == InodeKind::Directory && current.serial == root)
@@ -35,12 +34,23 @@ impl Overlay {
             }
             let owner = self.mint_owner()?;
             let serial = integer(current.serial)?;
-            self.execute(
-                StatementKind::Lease,
-                "INSERT INTO lookup_owner VALUES(?1,?2,?3,?4)",
-                &[&source.route.ns, &request, &integer(owner)?, &serial],
-                32,
-            )?;
+            let lookup = LookupOwner {
+                route: source.route,
+                owner,
+                serial: current.serial,
+            };
+            {
+                let mut state = self.open.borrow_mut();
+                let request_key = (source.route.ns, request);
+                if state.lookup_requests.rows.contains_key(&request_key) {
+                    return Err(OverlayError::Invalid("duplicate lookup request"));
+                }
+                state
+                    .lookups
+                    .put((source.route.ns, owner), (lookup, request));
+                state.lookup_requests.put(request_key, owner);
+                state.count(source.route.ns, 4, true);
+            }
             self.file_ref(source.route.ns, serial, LeaseKind::LookupOwner, true)?;
             Ok(LookupOwner {
                 route: source.route,
@@ -78,36 +88,25 @@ impl Overlay {
         request: u64,
     ) -> OverlayResult<Option<LookupOwner>> {
         self.state(route)?;
-        self.query(
-            StatementKind::Lease,
-            "SELECT owner,serial FROM lookup_owner WHERE ns=?1 AND request=?2",
-            &[&route.ns, &integer(request)?],
-            16,
-            |r| {
-                Ok(LookupOwner {
-                    route,
-                    owner: unsigned(r, 0)?,
-                    serial: unsigned(r, 1)?,
-                })
-            },
-        )
-        .map(|mut rows| rows.pop())
+        let request = integer(request)?;
+        let state = self.open.borrow();
+        Ok(state
+            .lookup_requests
+            .rows
+            .get(&(route.ns, request))
+            .and_then(|owner| state.lookups.rows.get(&(route.ns, *owner)))
+            .map(|(lookup, _)| *lookup))
     }
     pub fn check_lookup(&self, lookup: LookupOwner) -> OverlayResult<()> {
         self.state(lookup.route)?;
         if self
-            .query(
-                StatementKind::Lease,
-                "SELECT 1 FROM lookup_owner WHERE ns=?1 AND owner=?2 AND serial=?3",
-                &[
-                    &lookup.route.ns,
-                    &integer(lookup.owner)?,
-                    &integer(lookup.serial)?,
-                ],
-                24,
-                |_| Ok(()),
-            )?
-            .is_empty()
+            .open
+            .borrow()
+            .lookups
+            .rows
+            .get(&(lookup.route.ns, lookup.owner))
+            .map(|(held, _)| *held)
+            != Some(lookup)
         {
             return Err(OverlayError::Stale);
         }
@@ -117,19 +116,21 @@ impl Overlay {
     pub fn release_lookup(&self, lookup: LookupOwner) -> OverlayResult<()> {
         self.atomic_cleanup(|| {
             self.check_lookup(lookup)?;
-            self.execute(
-                StatementKind::Lease,
-                "DELETE FROM lookup_owner WHERE ns=?1 AND owner=?2",
-                &[&lookup.route.ns, &integer(lookup.owner)?],
-                16,
-            )?;
+            {
+                let mut state = self.open.borrow_mut();
+                let key = (lookup.route.ns, lookup.owner);
+                let request = state.lookups.rows.get(&key).ok_or(OverlayError::Stale)?.1;
+                state.lookups.remove(key);
+                state.lookup_requests.remove((lookup.route.ns, request));
+                state.count(lookup.route.ns, 4, false);
+            }
             self.file_ref(
                 lookup.route.ns,
                 integer(lookup.serial)?,
                 LeaseKind::LookupOwner,
                 false,
             )?;
-            self.queue_closed(lookup.route)
+            Ok(())
         })
     }
 }

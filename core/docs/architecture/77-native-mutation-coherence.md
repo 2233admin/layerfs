@@ -75,6 +75,21 @@ publishing Overlay owner job:
    request keeps both. A mutation that published nothing releases its source
    alone.
 
+**Known capacity exhaustion (issue 319, 2026-10-12).** A physical reservation
+refusal before BEGIN and a direct SQLite Full returned by the atomic native
+visit after confirmed rollback both answer `ENOSPC`, with no published
+filesystem mutation or ticket. The latter still pays attempted SQL work and
+actual transient allocation observations; rollback cannot erase the event
+peak. The original completion remains owned through the single error reply,
+then normal reply disposal releases it. The mount continues serving, and both
+normal and forced terminal drain remain available. The Overlay error predicate
+identifies direct SQLite Full only; it does not establish rollback knowledge.
+The atomic visit supplies that knowledge. An uncertain COMMIT/rollback result,
+a provider ambiguity or an existing publication is never reclassified from a
+nested capacity cause: it retains the original failed request and `EIO` outcome.
+This is current SQL-format capacity behavior, not qualification of the retired
+remote ShortAppend or one-shot NoSpace instrumentation cases.
+
 **Early serial refill (R8b, 2026-10-10; owner ruling P-1).**
 `DaemonLimits.serial_low_water` is an explicit value of the private
 configuration record; startup refuses one at or above the 1,024-serial refill
@@ -140,6 +155,102 @@ the connection's retained parent chain
 indexed point reads of rows recorded at LOOKUP, MKDIR and directory moves,
 bounded by the canonical depth. A missing step is `Stale`, never an assumed
 root. The non-native path still requires the caller's destination path.
+
+## Recognition before the first visit
+
+Added 2026-10-11 for [#316](https://github.com/Ephemeral-AI-Lab/layerfs/issues/316),
+phase 2. A WRITE without the page-cache flag passes one request port,
+`recognize`, before its first owner visit. The port returns the same bytes,
+with [claims](31-payload-streams.md) where whole committed chunks of the
+file's own committed content were recognized in them; the publishing job then
+stores those ranges as reference pieces and every other byte as cells. The
+kernel request, its reply and the operation are unchanged, and nothing but the
+bytes of ordinary WRITE requests creates a claim.
+
+The [recognizer](../../crates/layerfs-workspace/src/operations/file/recognize.rs)
+reads the write's bytes and mapping pages of the committed file. It reads no
+overlay row, holds no SQL writer and fetches no committed chunk.
+
+- **Gate.** Nothing is done for a write below one minimum chunk (8 KiB), for
+  a file with no committed content, or for committed content that is not in
+  chunks. A committed length below the smallest whole-file threshold decides
+  that without reading the content root. The answer is remembered for the
+  base it was given for.
+- **Follow.** Once a shift (file offset less source offset) is known, the
+  committed extents that fall wholly inside the request under that shift are
+  compared one by one: the bytes are hashed with Content's chunk identity and
+  the identity is compared with the extent's. Equal identity is the only
+  proof; an extent that is a slice of a chunk never matches. Two consecutive
+  differing chunks end the run.
+- **Search.** With no shift, or when the known one matched nothing in the
+  request, the first 64 KiB are scanned once for cut candidates in both pair
+  alignments. A committed extent is tried only where its length fits between
+  two candidates; extents are taken from after the last claim, or from
+  512 KiB before the written offset, 64 at a time. A chunk cut at the maximum
+  size has no candidate at its end and is left to a followed run. At most
+  eight identities are computed in one search and one search runs a request.
+- **Forward sources.** A new shift is accepted only when it keeps the source
+  moving forward after the last claim. Other bytes are stored.
+- **Budget.** After 1 MiB of consecutive requests that claimed nothing, a
+  file's writes are no longer examined while its state is remembered.
+- **Carry.** Added in phase 3. When a followed run reaches a committed chunk
+  that begins in the request and continues past its end, the identity of the
+  chunk's first bytes is kept in the file's state: a streaming hash, never
+  the bytes. The request that begins exactly where that one ended supplies
+  the rest; if the finished identity is the committed chunk's, its claim
+  begins before its own bytes, over the part the earlier request stored (and
+  over the end of that request's claim that was not whole cells), at most
+  one chunk (32 KiB) back and never before that request. The claim names the
+  revision of the publication that stored those bytes, which the port
+  records when the earlier write's job is applied; the engine honours the
+  part before the request only while the file's content sequence is still
+  that revision, and otherwise stores it as it was. So the pieces of an
+  unbroken tail are contiguous in file and source and extend one row. A
+  carried chunk serves the next request or none: a request elsewhere, a
+  shorter one than the rest of the chunk, an unpublished or failed write and
+  any other publication to the file all drop it, at the cost of one chunk
+  stored. A write below 8 KiB is still never examined.
+- **Carry in falling offsets.** A program that grows a file in place moves
+  its tail from the end backward, so its requests arrive in falling offsets
+  and the chunk between two requests is cut the other way round: its end is
+  written first. A request whose followed run begins right after such a
+  chunk keeps the chunk's last bytes, its own first bytes, at most one chunk
+  (32 KiB). The request that ends exactly where that one began holds the
+  chunk's beginning; the identity of both parts is the proof, and the claim
+  then ends after the request, in the bytes the earlier request stored,
+  under the same revision rule. A request completes a chunk at its beginning
+  or at its end, not both, because a claim names one earlier publication.
+- The claims of one request are at most 18 ranges and adjacent chunks share
+  a range.
+
+A pass first runs over the Store's memory-only client. When a page or the
+file's length is not in memory it records nothing and is repeated once over an
+admitted reader, in demand custody of its own: a failed read there is a
+missed claim and never the request's failure. Hashing and page reads run
+after the request has left the receive loop. A miss of any kind, a stopped
+budget and an evicted state all store the write exactly as before; only a
+stopped fence ends the request, as it would at the visit.
+
+Per-file state is fixed in size and holds no bytes: the base it belongs to,
+the gate's answer, the shift, the last claim's range and the unmatched
+count, and at most one carried chunk in each direction: for rising offsets
+its extent, the hash state and the revision, and for falling offsets the
+chunk's last bytes as the earlier request wrote them, at most 32 KiB. These
+are bytes of a write in flight between two requests, not a cache of
+committed content. The daemon keeps it in
+[64 slots shared by every Workspace](61-direct-store-adapter.md), least
+recently used first out.
+
+Checked by
+[the Workspace test](../../crates/layerfs-workspace/tests/recognize.rs), by
+[the daemon test](../../crates/layerfs-daemon/tests/recognizer.rs) through the
+request port, the product Commit and a fresh bind, and by
+[the mounted proof](../../crates/layerfs-daemon/tests/mounted_recognizer.rs),
+in which a process launched outside the daemon shifts two tails with `dd`:
+with the carry each tail is one or two piece rows. Before the carry every
+request left one stored stretch between two pieces, and the Commit paid one
+edit for each; both states are measured in the
+[progress ledger](../issues/316/PROGRESS.md).
 
 ## Coherence without notifications
 
@@ -230,3 +341,24 @@ Every mutating opcode is counted by opcode and disposal like the read path.
 length the kernel has sent on the connection (2026-10-10, owner decision C-2):
 the observed request maxima beside the negotiated 131072. The counts are
 reported in the connection's drain receipt.
+
+Issue 319 update, 2026-10-11 (after harness checkpoint `b97857b7f`): the first
+follow established by a search now visits the committed extent holding the
+request's first byte, before the whole match where following begins. It retains
+that leading extent only when it crosses the request's beginning; it makes no
+claim for it. This supplies the existing backward carry with the earlier
+request's own tail bytes. The next adjacent request still has to complete the
+whole chunk identity, and Overlay still checks the earlier publication revision
+before accepting a claim beyond the request. A changed shift clears a previous
+unclaimed leading extent. No committed payload is fetched, and the slot, search,
+hash and claim budgets are unchanged.
+
+The added traversal covers only the prefix of this bounded request before the
+search's first match, at most the request window, plus its leading extent and
+mapping path. It does not scan the file prefix or retain another chunk. Initial
+search previously skipped that leading extent, leaving an unclaimed chunk at
+the first backward request boundary far from the actual edit. The external
+[retention regression](../../crates/layerfs-daemon/tests/recognizer_diagnostics.rs)
+uses the exact benchmark fixture and request pattern, verifies every committed
+byte and asserts that original chunks away from the edit remain named. This
+source description is separate from the [issue 319 measurements](../issues/319/PROGRESS.md).

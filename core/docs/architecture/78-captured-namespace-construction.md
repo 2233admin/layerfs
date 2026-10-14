@@ -161,8 +161,14 @@ takes a Workspace, a provider, a `CapturedReader` and an `OperationOwner`.
    the three declared totals.
 5. **Update.** `update_filesystem_streamed_backed` runs over the sealed rows.
    Names are served from the reader's parent-local pages and name points;
-   headers, values and fresh ranks from the records, with a 64-slot window of
-   sealed point answers per kind.
+   headers, values and fresh ranks from the records, with a 1,024-slot window
+   of sealed point answers per kind (64 before issue #321 Step D). A change
+   whose serials fit the window reads each sealed record once; a larger one
+   shares slots and reads a displaced answer again. The window is this size
+   at any change size: about 150 KiB for one construction. Content's reference passes ask whether the
+   serials of one row job (at most 21) are fresh in one call
+   (`StreamedRowSource::are_new`); the cursor reads the ranks it does not
+   hold as one record job and retains them in the same window.
 
 Producer records share the operation's file scope 0 with Content's filesystem
 records: `0x434E_0000` context, `0x434E_0001` header, `0x434E_0002` value,

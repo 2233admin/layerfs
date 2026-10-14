@@ -46,6 +46,8 @@ pub(super) fn mark_in_place(
         let Some((last, _)) = window.last().copied() else {
             return Ok(());
         };
+        // A window of fewer than 64 placements held every remaining one.
+        let short = window.len() < RECORD_WINDOW;
         for (_, placement) in window {
             if !placement.stored || !placement.parent_stored || records.scanned(placement.parent)? {
                 continue;
@@ -60,6 +62,9 @@ pub(super) fn mark_in_place(
             }
             .run(input)?;
             records.mark_scanned(placement.parent)?;
+        }
+        if short {
+            return Ok(());
         }
         after = Some(last);
     }

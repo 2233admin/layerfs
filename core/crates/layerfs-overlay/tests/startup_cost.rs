@@ -25,7 +25,7 @@ impl Drop for Temp {
 }
 
 #[test]
-fn startup_counts_profile_schema_accounting_and_entire_reservation() {
+fn startup_counts_profile_schema_accounting_without_reservation() {
     let temp = Temp::new();
     let path = temp.0.join("overlay.sqlite");
     let created = Overlay::create_observed(&path, ProfileConfig::default());
@@ -45,15 +45,14 @@ fn startup_counts_profile_schema_accounting_and_entire_reservation() {
     );
     assert!(work.sql.total().statement_memory_sample_bytes > 0);
     assert!(work.sql.total().sql_bytes > 1000);
-    assert_eq!(work.allocation.attempts, 1);
-    assert_eq!(
-        work.allocation.requested_bytes,
-        MUTATION_GROWTH + CLEANUP_HEADROOM
-    );
+    assert_eq!(work.allocation.attempts, 0);
+    assert_eq!(work.allocation.requested_bytes, 0);
     let physical = work.allocation_state.as_ref().unwrap().as_ref().unwrap();
-    assert!(physical.high_water_allocated_bytes >= MUTATION_GROWTH + CLEANUP_HEADROOM);
+    assert_eq!(physical.reserved_tail_bytes, 0);
+    assert_eq!(physical.cleanup_headroom_bytes, 0);
+    assert!(physical.allocated_bytes < 1 << 20);
     assert_eq!(physical.work, work.allocation);
-    assert_eq!(db.profile().schema_version, 32);
+    assert_eq!(db.profile().schema_version, 34);
     println!("S7_STARTUP_SUCCESS {work:?}");
 }
 
@@ -84,7 +83,7 @@ fn real_schema_full_failure_retains_original_error_work_and_artifact() {
     let created = Overlay::create_observed(
         &path,
         ProfileConfig {
-            max_pages: Some(32),
+            max_pages: Some(24),
             ..ProfileConfig::default()
         },
     );

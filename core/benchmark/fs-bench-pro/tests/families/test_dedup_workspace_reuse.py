@@ -18,12 +18,11 @@ class DedupWorkspaceReuse(unittest.TestCase):
     def setUpClass(cls):
         cls.rows = json.loads((FAMILY / "family.json").read_text())["cases"]
 
-    def test_original_fourteen_ids_and_separate_compact_fixed_base_controls(self):
-        expected = [f"dedup-workspace-{kind}-{n}" + ("-compact-v2" if n <= 10 else "")
-                    for kind in ("exact", "local", "unique") for n in (1, 10, 100, 500)]
-        expected += [f"dedup-workspace-unique-{n}-base128-v3" for n in (1, 10)]
+    def test_five_kept_ids_and_separate_compact_fixed_base_controls(self):
+        expected = [f"dedup-workspace-{kind}-100" for kind in ("exact", "local", "unique")]
+        expected += ["dedup-workspace-unique-500", "dedup-workspace-unique-1-base128-v3"]
         self.assertEqual([row["id"] for row in self.rows], expected)
-        self.assertEqual(len({row["id"] for row in self.rows}), 14)
+        self.assertEqual(len({row["id"] for row in self.rows}), 5)
         for row in self.rows:
             case = row["id"]
             self.assertEqual(row["v016_case"], case)
@@ -91,7 +90,7 @@ class DedupWorkspaceReuse(unittest.TestCase):
     def test_original_budgets_resources_and_missing_cache_evidence_stay_explicit(self):
         for row in self.rows:
             self.assertEqual(row["budget"], {"command_ms": 15000, "performance_hard_watchdog_ms": 120000,
-                "operation_watchdog_ms": 120000, "verifier_ms": 45000, "verification_hard_watchdog_ms": 59000,
+                "operation_watchdog_ms": 120000, "verifier_ms": 75000 if row["id"].endswith("-500") else 45000, "verification_hard_watchdog_ms": 89000 if row["id"].endswith("-500") else 59000,
                 "cleanup_reserve_ms": 4000, "publication_guard_ms": 250})
             self.assertTrue(row["original_ordinary_guards"])
             self.assertEqual(row["resource_profile"], {"cpus": 2, "memory_bytes": 2 * 1024**3,

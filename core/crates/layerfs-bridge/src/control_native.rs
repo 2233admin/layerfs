@@ -82,30 +82,20 @@ pub struct NativeWork {
     pub loops_exited: u16,
     /// Loops known joined.
     pub loops_joined: u16,
-    /// Fixed receive units currently held by callbacks.
-    pub received: u32,
-    /// Requests admitted and not yet disposed.
-    pub admitted: u32,
-    /// Admitted requests queued for a worker.
-    pub queued: u32,
-    /// Admitted requests currently executing one step.
-    pub running: u32,
-    /// Admitted requests parked on an owner or Store completion.
-    pub parked: u32,
+    /// Requests executing on this mount's plain workers.
+    pub active: u32,
     /// Requests retained with an original failure or panic.
     pub retained: u32,
     /// Requests that reached a disposition.
     pub completed: u64,
-    /// Kernel frames handed to the shared dispatcher.
-    pub handoffs: u64,
+    /// Kernel frames served on this mount's receive workers.
+    pub served: u64,
     /// Kernel frames answered inline with no engine or Store work.
     pub inline: u64,
     /// Kernel frames refused by declared policy.
     pub refused: u64,
-    /// Kernel frames answered with a terminal error after admission closed.
+    /// Kernel frames answered with a terminal error after receive stopped.
     pub terminal: u64,
-    /// No-reply ownership units that arrived after admission closed.
-    pub unadmitted: u64,
     /// Bounded lookup-decrement ownership units, distinct from frames.
     pub forget_units: u64,
 }
@@ -129,11 +119,11 @@ pub enum TeardownStage {
     Detach = 1,
     /// Not every created receive loop is known joined.
     Join = 2,
-    /// The connection owner or its admission watcher did not return normally.
+    /// The connection owner or its exit watcher did not return normally.
     Owner = 3,
-    /// Received, admitted or retained request ownership remains.
+    /// Received, running or retained request ownership remains.
     Requests = 4,
-    /// The shared dispatcher did not release this mount's lane.
+    /// This mount's request owner was not released.
     Lane = 5,
     /// Native-owner revocation was refused or its outcome is unknown.
     Revoke = 6,
@@ -235,23 +225,15 @@ pub(crate) fn put_work(out: &mut Writer, value: &NativeWork) -> Result<(), Contr
     ] {
         out.put(&field.to_be_bytes())?;
     }
-    for field in [
-        value.received,
-        value.admitted,
-        value.queued,
-        value.running,
-        value.parked,
-        value.retained,
-    ] {
+    for field in [value.active, value.retained] {
         out.put(&field.to_be_bytes())?;
     }
     for field in [
         value.completed,
-        value.handoffs,
+        value.served,
         value.inline,
         value.refused,
         value.terminal,
-        value.unadmitted,
         value.forget_units,
     ] {
         out.put(&field.to_be_bytes())?;
@@ -264,18 +246,13 @@ pub(crate) fn work(input: &mut Reader<'_>) -> Result<NativeWork, ControlError> {
         loops_entered: u16::from_be_bytes(input.array()?),
         loops_exited: u16::from_be_bytes(input.array()?),
         loops_joined: u16::from_be_bytes(input.array()?),
-        received: u32::from_be_bytes(input.array()?),
-        admitted: u32::from_be_bytes(input.array()?),
-        queued: u32::from_be_bytes(input.array()?),
-        running: u32::from_be_bytes(input.array()?),
-        parked: u32::from_be_bytes(input.array()?),
+        active: u32::from_be_bytes(input.array()?),
         retained: u32::from_be_bytes(input.array()?),
         completed: u64::from_be_bytes(input.array()?),
-        handoffs: u64::from_be_bytes(input.array()?),
+        served: u64::from_be_bytes(input.array()?),
         inline: u64::from_be_bytes(input.array()?),
         refused: u64::from_be_bytes(input.array()?),
         terminal: u64::from_be_bytes(input.array()?),
-        unadmitted: u64::from_be_bytes(input.array()?),
         forget_units: u64::from_be_bytes(input.array()?),
     })
 }

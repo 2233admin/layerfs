@@ -5,10 +5,10 @@
 //! real local owner, without a mount.
 //!
 //! Workspace operations cannot state either shape. The rows are written with
-//! the engine's public `Command::Publish`, whose name row is independent of
+//! the engine's public `|job_client: &layerfs_daemon::OwnerClient, job_route| job_client.publish(job_route)`, whose name row is independent of
 //! the inode row published with it: each publish repeats, unchanged, the
 //! local inode row of one ordinary file the capture already holds, read back
-//! with `Command::Inode`, and adds one name row. No provider answer is
+//! with `|job_client: &layerfs_daemon::OwnerClient, job_route| job_client.inode(job_route)`, and adds one name row. No provider answer is
 //! changed and no product hook exists: the product constructor reads the
 //! rows the engine really holds.
 //!
@@ -25,14 +25,14 @@ mod model;
 #[allow(dead_code)]
 #[path = "support/installed_store.rs"]
 mod support;
-use drive::{evidence, job, live, settled, window, Do, Rig, Session};
+use drive::{evidence, job, live, window, Do, Rig, Session};
 use layerfs_content::{filesystem::PathName, ContentError, ObjectId};
 use layerfs_daemon::{
     store::{
         BoundWorkspace, CapturedConstruction, CommitError, CommitPhase, CommitSuccess,
         ReleasedOwner,
     },
-    Command, Response,
+    Response,
 };
 use layerfs_history::{CommitHistoryRequest, CommitRecord, CommitStagedOutcome};
 use layerfs_overlay::{Capture, CapturedReader, DirectoryEntry, Inode, OperationOwner};
@@ -58,7 +58,9 @@ fn retained(
     let reader = match job(
         &client,
         workspace.route(),
-        Command::RetainedCapturedReader { request },
+        |job_client: &layerfs_daemon::OwnerClient, job_route| {
+            job_client.retained_captured_reader(job_route, request)
+        },
     )
     .result()
     {
@@ -68,7 +70,9 @@ fn retained(
     let owner = match job(
         &client,
         workspace.route(),
-        Command::RetainedOperation { request },
+        |job_client: &layerfs_daemon::OwnerClient, job_route| {
+            job_client.retained_operation(job_route, request)
+        },
     )
     .result()
     {
@@ -165,16 +169,14 @@ fn row(parent: u64, name: &str, serial: Option<u64>, inherited: bool) -> Directo
         serial,
     }
 }
-/// One real `Command::Publish`: the unchanged inode row and one name row.
+/// One real `|job_client: &layerfs_daemon::OwnerClient, job_route| job_client.publish(job_route)`: the unchanged inode row and one name row.
 fn publish(rig: &Rig, workspace: &BoundWorkspace, inode: &Inode, name: DirectoryEntry) {
     let client = rig.owner.client();
     let done = job(
         &client,
         workspace.route(),
-        Command::Publish {
-            inode: inode.clone(),
-            name: Some(name),
-            cell: None,
+        |job_client: &layerfs_daemon::OwnerClient, job_route| {
+            job_client.publish(job_route, inode.clone(), Some(name), None)
         },
     );
     let ticket = match done.result() {
@@ -182,11 +184,13 @@ fn publish(rig: &Rig, workspace: &BoundWorkspace, inode: &Inode, name: Directory
         other => panic!("{other:?}"),
     };
     drop(done);
-    assert!(
-        job(&client, workspace.route(), Command::ReplyAttempted(ticket))
-            .result()
-            .is_ok()
-    );
+    assert!(job(
+        &client,
+        workspace.route(),
+        |job_client: &layerfs_daemon::OwnerClient, _| job_client.reply_attempted(ticket)
+    )
+    .result()
+    .is_ok());
 }
 
 /// `rows` gives the name rows that state the shape, and the name rows that
@@ -218,7 +222,13 @@ fn refused(
     // The ordinary file's own local row, exactly as the engine holds it.
     let real = serial(&first, "real");
     let client = rig.owner.client();
-    let inode = match job(&client, first.route(), Command::Inode(real)).result() {
+    let inode = match job(
+        &client,
+        first.route(),
+        |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.inode(job_route, real),
+    )
+    .result()
+    {
         Ok(Response::Inode(Some(inode))) => inode.clone(),
         other => panic!("{other:?}"),
     };
@@ -228,7 +238,7 @@ fn refused(
         publish(&rig, &first, &inode, name.clone());
     }
     evidence(format_args!(
-        "R4-2 {what} STAGED how=Command::Publish of the unchanged inode row of serial {real} with each name row; rows={stated:?} serials(root={} a={} a/b={} keep={})",
+        "R4-2 {what} STAGED how=|job_client: &layerfs_daemon::OwnerClient, job_route| job_client.publish(job_route) of the unchanged inode row of serial {real} with each name row; rows={stated:?} serials(root={} a={} a/b={} keep={})",
         serials.root, serials.a, serials.b, serials.keep
     ));
 
@@ -275,7 +285,13 @@ fn refused(
     drop(failure);
     assert_eq!(retained(&rig, &first, first_request), (None, None));
     assert!(matches!(
-        job(&client, first.route(), Command::RetainedCapture).result(),
+        job(
+            &client,
+            first.route(),
+            |job_client: &layerfs_daemon::OwnerClient, job_route| job_client
+                .retained_capture(job_route)
+        )
+        .result(),
         Ok(Response::RetainedCapture(None))
     ));
     assert!(!first.commit_in_flight());
@@ -321,7 +337,6 @@ fn refused(
         "R4-2 {what} RESULT rows_taken_back={taken_back:?} later_commit=Committed fresh_bind=exact live=exact paths={}",
         expected.len()
     ));
-    settled(&client, 0);
     rig.close(&first);
     drop(first);
     rig.finish();

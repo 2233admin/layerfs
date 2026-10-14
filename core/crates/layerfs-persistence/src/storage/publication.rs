@@ -11,9 +11,8 @@ pub(crate) fn publish(
 pub(crate) fn validate(batch: &Publication) -> Result<(), PersistenceError> {
     let count = batch.packs.len()
         + batch.objects.len()
-        + batch.value_groups.len()
+        + batch.inode_values.len()
         + batch.signatures.len()
-        + usize::from(batch.window_start.is_some())
         + usize::from(batch.release_ordinals.is_some());
     if count > policy::TRANSACTION_ROW_LIMIT as usize {
         return Err(PersistenceError::Malformed);
@@ -73,16 +72,9 @@ pub(crate) fn validate(batch: &Publication) -> Result<(), PersistenceError> {
             return Err(PersistenceError::Malformed);
         }
     }
-    let mut groups = BTreeSet::new();
-    for row in &batch.value_groups {
-        if !groups.insert(row.first_ordinal)
-            || row.first_ordinal == 0
-            || row.count == 0
-            || row.count > policy::VALUES_PER_GROUP
-            || row.pack_id <= 0
-            || row.group_number >= policy::GROUP_COUNT_LIMIT
-            || u64::from(row.first_ordinal) + row.count as u64 > u64::from(u32::MAX) + 1
-        {
+    let mut ordinals = BTreeSet::new();
+    for row in &batch.inode_values {
+        if row.ordinal == 0 || !ordinals.insert(row.ordinal) {
             return Err(PersistenceError::Malformed);
         }
     }
@@ -97,13 +89,11 @@ pub(crate) fn validate(batch: &Publication) -> Result<(), PersistenceError> {
             return Err(PersistenceError::Malformed);
         }
     }
-    if batch.window_start == Some(0)
-        || batch.release_ordinals.is_some_and(|(first, count)| {
-            first == 0
-                || count > policy::METADATA_INDEX_VALUES
-                || u64::from(first) + count as u64 > u64::from(u32::MAX) + 1
-        })
-    {
+    if batch.release_ordinals.is_some_and(|(first, count)| {
+        first == 0
+            || count > policy::METADATA_INDEX_VALUES
+            || u64::from(first) + count as u64 > u64::from(u32::MAX) + 1
+    }) {
         return Err(PersistenceError::Malformed);
     }
     Ok(())

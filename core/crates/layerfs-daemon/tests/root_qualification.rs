@@ -11,10 +11,10 @@ use layerfs_content::filesystem::{
 };
 use layerfs_content::object::inode_leaf::{InodeKind, InodeValue};
 use layerfs_content::{ContentError, ObjectId, ObjectRole};
-use layerfs_daemon::{Command, Completion, Owner, OwnerClient, OwnerConfig, Response};
+use layerfs_daemon::{JobReceipt, Owner, OwnerClient, OwnerConfig, Response};
 use layerfs_overlay::{IndexedOperationRecordScope, ProfileConfig};
 use layerfs_workspace::IndexedEditRecords;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 const DIRECTORIES: u64 = 20;
 const FILES: u64 = 100;
@@ -22,39 +22,19 @@ const FILES: u64 = 100;
 fn job(
     client: &OwnerClient,
     route: Option<layerfs_overlay::Route>,
-    command: Command,
-) -> Completion {
-    let pending = client
-        .try_submit(route, command)
-        .unwrap_or_else(|(cause, command)| panic!("{cause:?}: {command:?}"));
-    let deadline = Instant::now() + Duration::from_secs(20);
-    loop {
-        if let Some(done) = pending.try_complete().unwrap() {
-            return done;
-        }
-        assert!(Instant::now() < deadline, "bounded original owner result");
-        std::thread::yield_now();
-    }
-}
-/// The engine thread drops its own final credit after the consumer observes a
-/// completion: bound the wait for that release before an exact counter check.
-fn settled(client: &OwnerClient, outstanding: usize) {
-    let end = Instant::now() + Duration::from_secs(3);
-    while client.diagnostics().unwrap().outstanding != outstanding {
-        assert!(
-            Instant::now() < end,
-            "engine did not release its final credit"
-        );
-        std::thread::yield_now();
-    }
+    command: impl FnOnce(
+        &layerfs_daemon::OwnerClient,
+        Option<layerfs_overlay::Route>,
+    ) -> Result<layerfs_daemon::JobReceipt, layerfs_daemon::OwnerError>,
+) -> JobReceipt {
+    command(client, route).unwrap_or_else(|error| panic!("{error:?}"))
 }
 fn scope(client: &OwnerClient, tag: u8) -> IndexedOperationRecordScope {
     let opened = job(
         client,
         None,
-        Command::Open {
-            incarnation: [tag; 32],
-            base_root: [3; 32],
+        |job_client: &layerfs_daemon::OwnerClient, job_route| {
+            job_client.open(job_route, [tag; 32], [3; 32])
         },
     );
     let route = match opened.result() {
@@ -65,7 +45,9 @@ fn scope(client: &OwnerClient, tag: u8) -> IndexedOperationRecordScope {
     let acquired = job(
         client,
         Some(route),
-        Command::AcquireOperation { request: 1 },
+        |job_client: &layerfs_daemon::OwnerClient, job_route| {
+            job_client.acquire_operation(job_route, 1)
+        },
     );
     let owner = match acquired.result() {
         Ok(Response::Operation(Some(owner))) => *owner,
@@ -80,7 +62,9 @@ fn release(client: &OwnerClient, scope: IndexedOperationRecordScope) {
     let done = job(
         client,
         Some(scope.owner.route()),
-        Command::ReleaseOperation(scope.owner),
+        |job_client: &layerfs_daemon::OwnerClient, job_route| {
+            job_client.release_operation(job_route, scope.owner)
+        },
     );
     assert!(done.result().is_ok(), "{done:?}");
 }
@@ -205,7 +189,6 @@ fn a_real_root_qualifies_through_short_original_operation_record_jobs() {
     let own = context(&session, session.root);
 
     let first = scope(&client, 21);
-    settled(&client, 0);
     let before = client.diagnostics().unwrap();
     let mut records = IndexedEditRecords::new(&client, first);
     let mut work = QualificationWork::default();
@@ -222,10 +205,11 @@ fn a_real_root_qualifies_through_short_original_operation_record_jobs() {
     assert_eq!(provider.calls, work.record_reads + work.record_batches);
     assert_eq!(provider.converted_changes, work.record_changes);
     assert_eq!((provider.terminal_calls, provider.saturated), (0, false));
-    settled(&client, before.outstanding);
     let after = client.diagnostics().unwrap();
-    assert_eq!(after.admitted - before.admitted, provider.calls);
-    assert_eq!(after.outstanding, before.outstanding);
+    assert_eq!(
+        after.jobs.iter().sum::<u64>() - before.jobs.iter().sum::<u64>(),
+        provider.calls
+    );
     println!(
         "S9_R2_QUALIFY_REAL_OPERATION_RECORD inodes={inodes} bindings={bindings} inode_pages={} \
          directory_pages={} record_reads={} record_batches={} record_changes={} \
@@ -273,8 +257,6 @@ fn a_real_root_qualifies_through_short_original_operation_record_jobs() {
 
     release(&client, first);
     release(&client, second);
-    settled(&client, 0);
-    assert_eq!(client.diagnostics().unwrap().outstanding, 0);
     owner.stop().unwrap();
     std::fs::remove_dir_all(path).unwrap();
 }

@@ -71,7 +71,6 @@ pub fn plan(case: &str) -> Result<Plan> {
     } else {
         let id = match control.infra_tier {
             100 => "namespace-100-compact-v3",
-            1_000 => "namespace-1000-compact-v3",
             10_000 => "namespace-10000",
             100_000 => "namespace-100000",
             _ => return Err("original footprint namespace geometry absent".into()),

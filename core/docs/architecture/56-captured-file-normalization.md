@@ -10,6 +10,124 @@ schema16. Earlier algorithm and proof pins retain their original scope; see
 > Namespace reduction, release resolution, complete root qualification and
 > integrated Commit remain open.
 
+Issue 316 update, 2026-10-11 (source `8c1993f4a`): preparation runs a
+[shapes-only cursor](55-captured-sparse-run-cursor.md), so it reads no payload
+for dense rows of the newest layer; the construction source still reads each
+replacement byte once. Preparation no longer visits bytes beyond the surviving
+base (the smaller of the base and final lengths): they are one trailing insert
+whatever they hold, and the construction source still refuses an inherited
+byte there. A new file therefore has zero normalization steps. A cached
+normalized edit is returned without reading the sealed context again; the
+context is checked before every read of the records, before the first run of a
+new-file stream and before its End. Where the text below says that source
+lookup rechecks the sealed context, that now applies to a lookup that reads a
+record.
+
+Issue 320 update, 2026-10-13: the context is still opened by its own guarded
+write before any normalization step. A full job of 64 edits is written at
+once; the edits that remain when the plan ends and the sealing context change
+(opened bytes to sealed bytes) are one guarded job, the context key first. A
+lookup that reads an edit record reads the sealed context and that edit as one
+two-key job and checks the context first.
+
+Issue 316 update, 2026-10-11 (reference pieces, overlay schema 33): the final
+changes of a file are an
+[edit script](../../crates/layerfs-workspace/src/construction/captured/script.rs).
+One forward pass with constant state reads the captured spans in file order.
+A span is retained when its bytes are bytes of the file's own committed base
+at or after the base cursor: inherited bytes, or a `Reference` step (or a
+reference range of a window) whose root is that base. Every other span is new
+bytes. New bytes wait until the next retained span, which closes them and the
+base bytes it skipped into one `Edit::new(start, start + skipped, new)`. An
+edit is in the coordinates of the result so far, so its start is its own
+offset in the final file, and the construction source reads its replacement
+there. The end of the file closes what is pending and removes the base bytes
+not consumed.
+
+| Final file | Sealed edits |
+| --- | --- |
+| A piece equal to the base at its own offset | none; the root is the base root |
+| `k` new bytes at `p`, then the base from `p` | `insert(p, k)` |
+| The base from `p + d` at `p` | `delete(p, p + d)` |
+| Both, apart | one edit each, each at its final offset |
+| A reference behind the base cursor, or to another root | an edit that covers it; its bytes are read from committed content |
+
+- **What cannot be retained is read.** A reference to another committed root,
+  and the part of a reference or of inherited bytes that lies behind the base
+  cursor, are new bytes. The construction source reads them from committed
+  content by root and offset through the operation's client and offers them
+  as new bytes: correct for any source, and linear in those bytes.
+  `CapturedFileWork::committed_bytes` counts them.
+- **A file without pieces keeps its edits.** A unit of the cursor says whether
+  the file holds pieces (`CapturedRunReply::referenced`). Without them the
+  pass stops at the surviving base as before and seals the same records: an
+  equal-length overwrite for each changed run and one trailing insert or
+  delete. With them it visits the file to its end, because a piece beyond the
+  surviving base may name base bytes that no earlier edit consumed (an insert
+  longer than the tail it moves).
+- **Context version 2.** The sealed context records whether the edits are a
+  script. A script edit is checked for a start not after its end, a
+  replacement within the final length and a nonempty change; the edits of a
+  file without pieces keep their exact checks. Edit records are unchanged.
+
+Issue 319 update, 2026-10-11: ordinary shifted writes can prove whole chunks
+while leaving copied chunk fragments and ragged cell edges literal. For a file
+with pieces and a changed final size, preparation authenticates bounded edges
+of provisional edits that change length or follow a length change. It compares at most two maximum chunks
+(64 KiB) at each end against the corresponding immutable base range, retains
+exactly equal prefix/suffix bytes, and seals the shortened edit. Comparison
+stops at a mismatching byte. The original provisional length deltas translate
+final offsets to base offsets; trimming preserves those deltas. Pure inserts,
+pure deletes, unchanged final size, in-place scripts without a shift
+and files without pieces keep
+their existing path.
+
+The [edge adapter](../../crates/layerfs-workspace/src/construction/captured/edges.rs)
+uses the retained base FileView and independent bounded captured cursors before
+the construction source exists. It holds two fixed 64 KiB byte buffers, never a
+complete replacement. Longer edits remain valid and stream through Content;
+this limit bounds comparison work, not supported edit or file size. Authenticated
+base/payload reads and cursor jobs are real preparation work. This is an explicit
+exception to the earlier shapes-only payload rule for shifted file edges.
+Nothing creates or changes reference pieces during construction, and unchanged
+bytes keep their payload identity and source offset through Content's existing
+mapping slice/split algorithm. CDC, edit-record encoding and context version
+remain unchanged. A read failure ends the same original attempt and retains its
+custody; no equality guess, alternate provider or retry is introduced.
+
+Issue 319 update, 2026-10-12: the same authentication also applies when the
+final file shrinks. Copied replacement suffixes can retain their immutable base
+mapping rather than reconstructing those equal bytes. Signed provisional deltas
+still translate each subsequent edit before trimming; shrinking and growing
+edits use identical checked ranges and bounded comparisons. A mismatch remains
+replacement content. Pure deletes with no replacement overlap and scripts with
+unchanged final size keep their existing path.
+
+`CapturedFileWork::edge_windows` counts successful comparison windows,
+`edge_read_bytes` counts logical bytes acquired from both sources, and
+`edge_retained_bytes` counts bytes preserved by trimming. These do not claim
+physical IO, cache misses, or total operation residency. Successful namespace
+construction accumulates those three observations as `file_edge_windows`,
+`file_edge_read_bytes` and `file_edge_retained_bytes`; failures retain the file's
+own counters and original cause. Captured byte-window calls made here count as
+normalization steps, while ordinary construction source calls keep their own
+counter. The external daemon `captured_edge_retention` target exercises only
+ordinary truncation and recognized writes, compares full live/fresh-root bytes,
+and observes exact persisted payload/source mappings including partial chunks.
+Its test scope includes unaligned middle insertion, prepend, replace-grow,
+shrinking deletion, changed copied edge bytes and a larger input. External
+Workspace tests also cover two shrinking edits after a negative provisional
+delta and copied replacement edges that mismatch at both ends. Verification outcomes are recorded
+in the owning issue ledger rather than inferred from this source description.
+
+The external test `captured_piece_edits` writes pieces through the ordinary
+Workspace write with claims, compares the live and the sealed view with the
+final bytes, and checks the sealed records, the committed bytes and the
+byte-source canonical root for each row above. An insert in the middle seals
+one edit with the same 4 normalization steps, 1 source step and 5 rows over a
+1 MiB and a 6 MiB base; object reads were 4 and 7. Only tests create a piece
+in this phase.
+
 `CapturedFileEdits::prepare(workspace, provider, reader, serial, records_scope)`
 selects one regular file in an actual retained capture. It accepts no declared
 file root, base length or final length. The Workspace route must equal the exact

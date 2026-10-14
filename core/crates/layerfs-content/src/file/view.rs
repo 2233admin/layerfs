@@ -66,6 +66,16 @@ impl FileView {
         }
     }
 
+    /// A forward cursor over the extents of a chunked base, at its first
+    /// extent; none for a whole-file base, which has no extents. Reads
+    /// nothing until the cursor is advanced.
+    pub fn extents(&self) -> Option<mapping::ExtentCursor> {
+        match self.content {
+            FileContent::Chunked(state) => Some(mapping::ExtentCursor::new(state)),
+            FileContent::WholeFile { .. } => None,
+        }
+    }
+
     /// Whole-file payload of a non-chunked base.
     pub fn whole_file_bytes(&self) -> ContentResult<Option<&[u8]>> {
         match self.content {

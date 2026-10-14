@@ -13,7 +13,7 @@ use layerfs_daemon::{
     install::receive_install,
     install_types::{InstalledStore, StoreSettings},
     store::CommitError,
-    Command, Owner, OwnerConfig, Response,
+    Owner, OwnerConfig, Response,
 };
 use layerfs_history::BranchSnapshot;
 use layerfs_storage::Save;
@@ -39,7 +39,7 @@ impl Fixture {
         let (mut client, worker) = support::pair(move |connection| {
             receive_install(connection, &target, StoreSettings::default())
         });
-        layerfs_sdk::install(&native.project, &mut client).unwrap();
+        layerfs_sdk::internal::install(&native.project, &mut client).unwrap();
         let installed = worker.join().unwrap();
         let owner = Owner::start(
             &native.directory.join("overlay.sqlite"),
@@ -120,14 +120,7 @@ pub fn write(service: &Service, token: WorkspaceToken, tag: u8) {
     let route = operation.workspace().route();
     let done = operation
         .overlay()
-        .try_submit(
-            Some(route),
-            Command::AcquireBaseSource {
-                owner: NEXT.fetch_add(1, Ordering::Relaxed),
-            },
-        )
-        .unwrap()
-        .wait()
+        .acquire_base_source(Some(route), NEXT.fetch_add(1, Ordering::Relaxed))
         .unwrap();
     let source = match done.result() {
         Ok(Response::BaseSource(source)) => *source,
@@ -165,18 +158,14 @@ pub fn write(service: &Service, token: WorkspaceToken, tag: u8) {
     };
     assert!(operation
         .overlay()
-        .try_submit(Some(route), Command::ReplyAttempted(publication))
-        .unwrap()
-        .wait()
+        .reply_attempted(publication)
         .unwrap()
         .result()
         .is_ok());
     drop(view);
     assert!(operation
         .overlay()
-        .try_submit(Some(route), Command::ReleaseBaseSource(source))
-        .unwrap()
-        .wait()
+        .release_base_source(Some(route), source)
         .unwrap()
         .result()
         .is_ok());

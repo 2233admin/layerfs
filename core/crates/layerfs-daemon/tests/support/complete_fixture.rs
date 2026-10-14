@@ -8,7 +8,7 @@ use layerfs_daemon::{
 };
 use layerfs_history::{BranchId, HistoryCatalogConfig, HistoryName, LayerStackId};
 use layerfs_persistence::{PersistenceConfig, SqlitePersistenceProfile};
-use layerfs_sdk::{initialize, InitRequest};
+use layerfs_sdk::{InitRequest, ProjectApi};
 use layerfs_storage::StoragePolicy;
 use layerfs_telemetry::timer::Timing;
 use std::{
@@ -188,7 +188,7 @@ impl Fixture {
         let root_metadata = metadata(&source);
         let destination = directory.join("store.sqlite");
         let project = Timing::disabled("q1.init", |scope| {
-            initialize(
+            ProjectApi::new().init(
                 InitRequest {
                     source: source.clone(),
                     store: PersistenceConfig::sqlite(directory.join("sealed.sqlite"))
@@ -242,7 +242,7 @@ impl Fixture {
         let (mut channel, worker) = support::pair(move |channel| {
             receive_install(channel, &destination, StoreSettings::default())
         });
-        let ack = layerfs_sdk::install(&project, &mut channel).unwrap();
+        let ack = layerfs_sdk::internal::install(&project, &mut channel).unwrap();
         let installed = worker.join().unwrap();
         fs::remove_file(project.store.path).unwrap();
         println!(

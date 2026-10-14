@@ -12,7 +12,7 @@ ident = fixture_module.ident
 
 
 class GraphFixture(fixture_module.StoreFixture):
-    def __init__(self, home, version=1):
+    def __init__(self, home, version=7):
         super().__init__(home, version)
         self.mutate('UPDATE "commit" SET parent_commit_id=? WHERE commit_id=?',
                     (ident(0x12,33,1), ident(0x12,33,3)))
@@ -53,7 +53,7 @@ class GraphFixture(fixture_module.StoreFixture):
 class TopologyCensus(unittest.TestCase):
     def test_identical_acknowledgements_collapse_only_full_tuples_and_keep_unused_initial_branch(self):
         with tempfile.TemporaryDirectory() as temporary:
-            for version in range(1,7):
+            for version in range(7,13):
                 home=Path(temporary)/str(version); home.mkdir()
                 fixture=GraphFixture(home,version)
                 before=oracle.file_sha(fixture.path)

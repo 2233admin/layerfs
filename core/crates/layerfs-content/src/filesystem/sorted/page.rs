@@ -2,10 +2,14 @@
 //!
 //! A stored page is read, authenticated, decoded and checked against its
 //! root/non-root context. An unfinished page this operation built stays decoded
-//! and private until the merge proves it final. Untouched subtrees stay as their
-//! stored identity and their bytes are never read again, which is what makes a
-//! localized update cost the changed path plus the siblings that prove the
-//! partition, not the whole tree.
+//! and private until the merge proves it final. A child no change reaches stays
+//! the identity its parent row records and is not read: a branch row holds a key
+//! and an identity, a stored non-root page is filled by construction, and the
+//! parent's recorded totals already include it. It is read only when its own
+//! rows are needed - it joins an underfull neighbour, or its parent page splits
+//! or is itself joined - and is then checked against its parent row like any
+//! other child. A localized update therefore costs the changed paths, not every
+//! sibling beneath the branch pages on them.
 
 use std::marker::PhantomData;
 use std::rc::Rc;
@@ -14,9 +18,7 @@ use crate::error::{ContentError, ContentResult};
 use crate::filesystem::limits::MAXIMUM_PAGE_BYTES;
 use crate::filesystem::objects::FilesystemObjects;
 use crate::filesystem::sorted::budget::{Budget, Lease};
-use crate::filesystem::sorted::format::{
-    node_header, Format, PageView, Wire, WireEntry, EMPTY_PAGE_BYTES,
-};
+use crate::filesystem::sorted::format::{node_header, Format, PageView, Wire, EMPTY_PAGE_BYTES};
 use crate::object::{FinalizedObject, ObjectId, ObjectRole};
 
 /// Largest work one operation may hold for its own unfinished pages.
@@ -31,10 +33,13 @@ pub const MAXIMUM_SCRATCH_BYTES: usize = crate::filesystem::limits::MAXIMUM_OPER
 /// branch page in one wave. It is not the 4,096-id demand ceiling: a full-width
 /// reserve of 256 x 8,280 B plus one decode slot is about 2.08 MiB against the
 /// 4 MiB operation lease, while 4,096 x 8,280 B would be 33.9 MiB and the
-/// narrowing loop below would clamp it on every call. A parent's batch is held
-/// while the merge descends into its children, so a child's own batch narrows
-/// instead of doubling the reservation.
+/// narrowing loop below would clamp it on every call. A batch serves a page
+/// whose every child is needed: one that is joined or split. The merge itself
+/// reads the children its changes reach one at a time, as it reaches them.
 pub const BATCH_CHILDREN: usize = 256;
+
+/// Page levels a tree may have.
+pub(crate) const LEVELS: usize = crate::filesystem::limits::MAXIMUM_TREE_LEVEL as usize + 1;
 
 /// One slot of the accumulating right spine: a private page, if one exists.
 pub(crate) type PageSlot<K, V> = Option<Box<Page<K, V>>>;
@@ -86,6 +91,9 @@ pub(crate) struct Entry<K, V> {
     pub size: usize,
     /// Rows in this child.
     pub items: usize,
+    /// True while this stored child has not been read: its count, bytes, size
+    /// and items are unknown here and held as zero.
+    pub unread: bool,
     /// This child's unfinished page, when it is private to this operation.
     pub pending: Option<Box<Page<K, V>>>,
 }
@@ -106,6 +114,12 @@ pub(crate) struct Page<K, V> {
     pub widths: usize,
     /// Stored origin of this page, when it was materialized from one.
     pub origin: Option<ObjectId>,
+    /// Rows whose stored child has not been read.
+    pub unread: usize,
+    /// Subtree entries and bytes the unread rows hold together: what the stored
+    /// page recorded less every child of it that was read. Set once the merge of
+    /// that page has finished, and cleared when the rows are read.
+    pub carried: Option<(u64, u64)>,
     /// Retained page and row scratch.
     pub lease: Lease,
 }
@@ -126,21 +140,24 @@ pub(crate) struct Node<K, V> {
     pub size: usize,
     /// Rows in this page.
     pub items: usize,
+    /// True while this stored page has not been read; see [`Entry::unread`].
+    pub unread: bool,
     /// This page's decoded rows, while still private.
     pub pending: Option<Box<Page<K, V>>>,
 }
 
-impl<K: Clone, V> Node<K, V> {
-    /// Wraps one stored page summary.
-    pub(crate) fn existing(id: ObjectId, wire: &Wire<K, V>) -> Self {
+impl<K, V> Node<K, V> {
+    /// A stored child no change reaches, as its parent row records it.
+    pub(crate) fn stored(id: ObjectId, max: K, level: u8) -> Self {
         Self {
-            max: wire.entries.last().map(|entry| entry.key.clone()),
+            max: Some(max),
             id: Some(id),
-            level: wire.level,
-            count: wire.count,
-            bytes: wire.bytes,
-            size: wire.size,
-            items: wire.entries.len(),
+            level,
+            count: 0,
+            bytes: 0,
+            size: 0,
+            items: 0,
+            unread: true,
             pending: None,
         }
     }
@@ -156,6 +173,10 @@ pub(crate) struct Engine<'o, 'e, F: Format> {
     pub budget: Rc<Budget>,
     /// Work performed so far.
     pub work: SortedWork,
+    /// Recorded entries and bytes of the stored children read so far beneath
+    /// the branch page being merged, by the children's level. The page's own
+    /// recorded totals less these are what its unread children hold.
+    pub known: [(u64, u64); LEVELS],
     /// The page format.
     pub format: PhantomData<F>,
 }
@@ -173,6 +194,7 @@ impl<'o, 'e, F: Format> Engine<'o, 'e, F> {
             observe,
             budget: Budget::new(scratch_limit),
             work: SortedWork::default(),
+            known: [(0, 0); LEVELS],
             format: PhantomData,
         }
     }
@@ -190,8 +212,27 @@ impl<'o, 'e, F: Format> Engine<'o, 'e, F> {
             entries: Vec::new(),
             widths: 0,
             origin: None,
+            unread: 0,
+            carried: None,
             lease,
         })
+    }
+
+    /// Adds one read stored child's recorded totals to its level's sum.
+    pub(crate) fn credit(&mut self, wire: &Wire<F::Key, F::Value>) -> ContentResult<()> {
+        let known = self
+            .known
+            .get_mut(usize::from(wire.level))
+            .ok_or(ContentError::MappingDepthExceeded)?;
+        known.0 = known
+            .0
+            .checked_add(wire.count)
+            .ok_or(ContentError::LengthOverflow)?;
+        known.1 = known
+            .1
+            .checked_add(wire.bytes)
+            .ok_or(ContentError::LengthOverflow)?;
+        Ok(())
     }
 
     /// Reads, authenticates, decodes and context-checks one stored page.
@@ -231,14 +272,14 @@ impl<'o, 'e, F: Format> Engine<'o, 'e, F> {
 
     /// Reads one bounded group of children as a single authenticated demand.
     ///
-    /// The group is narrowed to the remaining budget when the full width does not
-    /// fit, and the caller falls back to the ordinary point read only when not
-    /// even one child fits. Every page is still read, authenticated, decoded and
-    /// checked.
+    /// `child` names the group's children by position. The group is narrowed to
+    /// the remaining budget when the full width does not fit, and the caller
+    /// falls back to the ordinary point read only when not even one child fits.
+    /// Every page is still read, authenticated, decoded and checked.
     pub(crate) fn batch_children(
         &mut self,
-        entries: &[WireEntry<F::Key, F::Value>],
         width: usize,
+        child: &mut dyn FnMut(usize) -> ContentResult<ObjectId>,
     ) -> ContentResult<BatchChildren> {
         let associations =
             std::mem::size_of::<ObjectId>() + std::mem::size_of::<(ObjectId, Vec<u8>)>();
@@ -252,9 +293,8 @@ impl<'o, 'e, F: Format> Engine<'o, 'e, F> {
             let Ok(mut lease) = self.budget.reserve(reserved) else {
                 continue;
             };
-            let ids = entries[..chunk]
-                .iter()
-                .map(|entry| entry.child.ok_or(ContentError::InvalidRecord("branch row")))
+            let ids = (0..chunk)
+                .map(&mut *child)
                 .collect::<ContentResult<Vec<_>>>()?;
             let fetched = self.objects.read_batch(&ids)?;
             let mut values = Vec::with_capacity(fetched.len());
@@ -281,6 +321,27 @@ impl<'o, 'e, F: Format> Engine<'o, 'e, F> {
         Ok((1, Vec::new(), None))
     }
 
+    /// One child of a group [`Self::batch_children`] fetched, decoded and
+    /// context-checked; a point read when no group could be reserved.
+    pub(crate) fn fetched(
+        &mut self,
+        id: ObjectId,
+        available: &mut Vec<(ObjectId, Vec<u8>)>,
+        retained: &mut Option<Lease>,
+    ) -> ContentResult<ReadPage<F::Key, F::Value>> {
+        let Some(retained) = retained else {
+            return self.read(id, false);
+        };
+        let position = available
+            .iter()
+            .position(|(found, _)| *found == id)
+            .ok_or(ContentError::MissingObject)?;
+        let (_, canonical) = available.remove(position);
+        let read = self.decode_page(false, &canonical)?;
+        retained.shrink(canonical.capacity());
+        Ok(read)
+    }
+
     /// The canonical-context checks every read page must pass.
     pub(crate) fn check_page(root: bool, wire: &Wire<F::Key, F::Value>) -> ContentResult<()> {
         if (!root && !F::filled(wire.size, wire.entries.len(), wire.level))
@@ -303,16 +364,30 @@ impl<'o, 'e, F: Format> Engine<'o, 'e, F> {
                 .last()
                 .map_or(0, |entry| F::heap_bytes(&entry.key)),
         )?;
-        let count = page.entries.iter().try_fold(0_u64, |total, entry| {
-            total
-                .checked_add(entry.count)
-                .ok_or(ContentError::LengthOverflow)
-        })?;
-        let bytes = page.entries.iter().try_fold(0_u64, |total, entry| {
-            total
-                .checked_add(entry.bytes)
-                .ok_or(ContentError::LengthOverflow)
-        })?;
+        // Unread rows hold zero here; their share is the page's carried rest.
+        let (carried_count, carried_bytes) = match (page.unread, page.carried) {
+            (0, None) => (0, 0),
+            (0, Some(_)) | (_, None) => {
+                return Err(ContentError::InvalidRecord("tree subtree summary"));
+            }
+            (_, Some(carried)) => carried,
+        };
+        let count = page
+            .entries
+            .iter()
+            .try_fold(carried_count, |total, entry| {
+                total
+                    .checked_add(entry.count)
+                    .ok_or(ContentError::LengthOverflow)
+            })?;
+        let bytes = page
+            .entries
+            .iter()
+            .try_fold(carried_bytes, |total, entry| {
+                total
+                    .checked_add(entry.bytes)
+                    .ok_or(ContentError::LengthOverflow)
+            })?;
         let size = EMPTY_PAGE_BYTES
             + page
                 .entries
@@ -327,13 +402,17 @@ impl<'o, 'e, F: Format> Engine<'o, 'e, F> {
             bytes,
             size,
             items: page.entries.len(),
+            unread: false,
             pending: Some(Box::new(page)),
         })
     }
 
     /// True when a node satisfies the format's non-root fill rule.
+    ///
+    /// An unread node is a stored non-root page, which no writer emits and no
+    /// reader accepts unless it is filled.
     pub(crate) fn filled(node: &Node<F::Key, F::Value>) -> bool {
-        F::filled(node.size, node.items, node.level)
+        node.unread || F::filled(node.size, node.items, node.level)
     }
 
     /// Encodes and emits one final node, reusing its identity when unchanged.
@@ -429,6 +508,7 @@ impl<'o, 'e, F: Format> Engine<'o, 'e, F> {
             bytes: entry.bytes,
             size: entry.size,
             items,
+            unread: entry.unread,
             pending: entry.pending,
         }
     }
@@ -446,21 +526,102 @@ impl<'o, 'e, F: Format> Engine<'o, 'e, F> {
             bytes: node.bytes,
             size: node.size,
             items: node.items,
+            unread: node.unread,
             pending: node.pending,
         })
     }
 
     /// Loads the decoded rows of a node, reading it when it is still stored.
+    ///
+    /// Every row of the returned page carries its own summary: a stored child
+    /// that was not read before is read and checked here.
     pub(crate) fn materialize(
         &mut self,
         node: Node<F::Key, F::Value>,
     ) -> ContentResult<Page<F::Key, F::Value>> {
         if let Some(page) = node.pending {
-            return Ok(*page);
+            let mut page = *page;
+            self.resolve(&mut page)?;
+            return Ok(page);
         }
         let id = node.id.ok_or(ContentError::IdentityMismatch)?;
-        let read = self.read(id, true)?;
+        if !node.unread {
+            let read = self.read(id, true)?;
+            return self.page_from_wire(id, read);
+        }
+        // First read of this child: the checks the merge applies to a child it
+        // descends into, and its totals join those read beneath its parent.
+        let read = self.read(id, false)?;
+        if read.wire.level != node.level
+            || read.wire.entries.last().map(|entry| &entry.key) != node.max.as_ref()
+        {
+            return Err(ContentError::InvalidRecord("tree child summary"));
+        }
+        self.credit(&read.wire)?;
         self.page_from_wire(id, read)
+    }
+
+    /// Reads every child of `page` that has not been read, so that each row
+    /// carries its own summary and the page can be split or joined.
+    ///
+    /// While the page is still being merged the totals read join those of its
+    /// level; once it carries the rest of its stored totals they must match it.
+    pub(crate) fn resolve(&mut self, page: &mut Page<F::Key, F::Value>) -> ContentResult<()> {
+        if page.unread == 0 {
+            return Ok(());
+        }
+        let mut count = 0_u64;
+        let mut bytes = 0_u64;
+        // Rows before `from` carry their summary.
+        let mut from = 0;
+        while page.unread > 0 {
+            // One bounded authenticated group per wave, as a materialized page
+            // reads its children; the group narrows to the remaining budget.
+            let width = BATCH_CHILDREN.min(page.unread);
+            let rows = &page.entries[from..];
+            let (chunk, mut available, mut retained) =
+                self.batch_children(width, &mut |position| {
+                    rows.iter()
+                        .filter(|entry| entry.unread)
+                        .nth(position)
+                        .and_then(|entry| entry.id)
+                        .ok_or(ContentError::InvalidRecord("branch row"))
+                })?;
+            for _ in 0..chunk {
+                from += page.entries[from..]
+                    .iter()
+                    .position(|entry| entry.unread)
+                    .ok_or(ContentError::InvalidRecord("branch row"))?;
+                let entry = &mut page.entries[from];
+                let id = entry.id.ok_or(ContentError::IdentityMismatch)?;
+                let read = self.fetched(id, &mut available, &mut retained)?;
+                self.check_child(page.level, &entry.key, &read.wire)?;
+                entry.count = read.wire.count;
+                entry.bytes = read.wire.bytes;
+                entry.size = read.wire.size;
+                entry.items = read.wire.entries.len();
+                entry.unread = false;
+                count = count
+                    .checked_add(read.wire.count)
+                    .ok_or(ContentError::LengthOverflow)?;
+                bytes = bytes
+                    .checked_add(read.wire.bytes)
+                    .ok_or(ContentError::LengthOverflow)?;
+                if page.carried.is_none() {
+                    self.credit(&read.wire)?;
+                }
+                page.unread -= 1;
+                from += 1;
+            }
+        }
+        if page
+            .carried
+            .take()
+            .is_some_and(|carried| carried != (count, bytes))
+        {
+            return Err(ContentError::InvalidRecord("tree subtree summary"));
+        }
+        Ok(())
     }
 
     /// Expands one decoded page into entries, reading each child summary.
@@ -483,6 +644,7 @@ impl<'o, 'e, F: Format> Engine<'o, 'e, F> {
                         count: 1,
                         size: 0,
                         items: 0,
+                        unread: false,
                         pending: None,
                     },
                 )?;
@@ -497,27 +659,19 @@ impl<'o, 'e, F: Format> Engine<'o, 'e, F> {
             let mut start = 0;
             while start < count {
                 let width = BATCH_CHILDREN.min(count - start);
-                let (chunk, fetched, mut retained) =
-                    self.batch_children(&entries[start..], width)?;
-                let mut available = fetched;
+                let group = &entries[start..];
+                let (chunk, mut available, mut retained) =
+                    self.batch_children(width, &mut |position| {
+                        group[position]
+                            .child
+                            .ok_or(ContentError::InvalidRecord("branch row"))
+                    })?;
                 for entry in &entries[start..start + chunk] {
                     let child = entry
                         .child
                         .ok_or(ContentError::InvalidRecord("branch row"))?;
                     let key = entry.key.clone();
-                    let read = if let Some(retained) = &mut retained {
-                        let position = available
-                            .iter()
-                            .position(|(id, _)| *id == child)
-                            .ok_or(ContentError::MissingObject)?;
-                        let (_, canonical) = available.remove(position);
-                        let read = self.decode_page(false, &canonical)?;
-                        retained.shrink(canonical.capacity());
-                        drop(canonical);
-                        read
-                    } else {
-                        self.read(child, false)?
-                    };
+                    let read = self.fetched(child, &mut available, &mut retained)?;
                     self.check_child(page.level, &key, &read.wire)?;
                     self.append_entry(
                         &mut page,
@@ -529,6 +683,7 @@ impl<'o, 'e, F: Format> Engine<'o, 'e, F> {
                             count: read.wire.count,
                             size: read.wire.size,
                             items: read.wire.entries.len(),
+                            unread: false,
                             pending: None,
                         },
                     )?;
@@ -592,6 +747,7 @@ impl<'o, 'e, F: Format> Engine<'o, 'e, F> {
             .widths
             .checked_add(F::width(&entry.key, page.level))
             .ok_or(ContentError::LengthOverflow)?;
+        page.unread += usize::from(entry.unread);
         page.entries.push(entry);
         Ok(())
     }

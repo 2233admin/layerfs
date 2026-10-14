@@ -18,7 +18,7 @@ impl Overlay {
             self.execute(
                 StatementKind::Lease,
                 sql::BASE_SOURCE_INSERT,
-                &[&route.ns, &key, &state.base_root.as_slice(), &0_i64],
+                &[&key, &state.base_root.as_slice(), &0_i64],
                 48,
             )?;
             self.execute(
@@ -56,7 +56,7 @@ impl Overlay {
         self.query(
             StatementKind::Lease,
             sql::BASE_SOURCE_LOOKUP,
-            &[&route.ns, &integer(owner)?, &class],
+            &[&integer(owner)?, &class],
             16,
             |row| {
                 let root: Vec<u8> = row.get(0)?;
@@ -105,7 +105,7 @@ impl Overlay {
     /// Existing request custody stays usable during logical close.
     pub fn source_inode(&self, source: BaseSource, serial: u64) -> OverlayResult<Option<Inode>> {
         let state = self.source_state(source)?;
-        self.inode_at(source.route, serial, state.active, state.installed)
+        self.inode_at(serial, state.active, state.installed)
     }
     /// One exact release after the request/provider continuation is fenced.
     /// Original errors leave this source in custody; no hidden Drop SQL/retry.
@@ -127,7 +127,6 @@ impl Overlay {
             StatementKind::Lease,
             sql::BASE_SOURCE_DELETE,
             &[
-                &source.route.ns,
                 &integer(source.owner)?,
                 &source.root.as_slice(),
                 &source.class,
@@ -143,7 +142,7 @@ impl Overlay {
             &[&source.route.ns],
             8,
         )?;
-        self.queue_closed(source.route)
+        Ok(())
     }
     /// Production-template plan for one source-owner point observation.
     pub fn explain_base_source(&self, route: Route, owner: u64) -> OverlayResult<Vec<String>> {
@@ -151,7 +150,7 @@ impl Overlay {
         self.query(
             StatementKind::Explain,
             &format!("EXPLAIN QUERY PLAN {}", sql::BASE_SOURCE_LOOKUP),
-            &[&route.ns, &integer(owner)?, &0_i64],
+            &[&integer(owner)?, &0_i64],
             16,
             |row| row.get(3),
         )

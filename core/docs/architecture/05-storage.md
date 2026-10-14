@@ -1,5 +1,49 @@
 # Storage (C2, `layerfs-storage`)
 
+### Issue 320 design B: inode values as stored rows (2026-10-13)
+
+Described against parent `120456785`. This supersedes, for inode values, every
+older section below that speaks of value groups, the ordinal catalogue, the
+retained window or `PoolIndex`; those sections are kept as history.
+
+- **What is stored.** A pooled leaf record is unchanged: a physical body of
+  `(serial, ordinal)` rows, FULL or COPY/INSERT against one direct base, at most
+  the persisted chain depth. The 73 value bytes of each row are one row of the
+  Store table `inode_value(ordinal INTEGER PRIMARY KEY, value BLOB)`. No value
+  pack, value group, catalogue row or window exists. Canonical objects and
+  their identities are unchanged; only the physical encoding moved.
+- **Read.** `PoolReader` rebuilds the bodies of the chain, collects the ordinals
+  of all of them and asks `Source::inode_values` once. `Fetch` forwards that to
+  `PackPersistence::inode_values`: one statement execution in one transaction,
+  the ordinals bound as one JSON parameter of inclusive runs, so values written
+  together are one rowid range scan. No pack is read and nothing is
+  decompressed for values.
+- **Authentication.** Every element of the chain, the requested leaf last, is
+  rebuilt to canonical bytes from those values and checked against its own
+  identity. Canonical bytes contain every value, so a wrong, replaced or absent
+  row can only fail the read (`pooled canonical identity`, `metadata ordinal
+  missing`). There is no per-row digest: the leaf identity is the check.
+- **Save.** A value keeps the ordinal it has in a stored leaf the object names
+  as an advisory predecessor; those leaves are read authenticated, including one
+  too deep to carry another delta. A value none of them holds is looked up in
+  the Save's own memo of the values it assigned (fingerprint candidates, full
+  bytes decide, at most 131,072 entries, dropped whole at the bound) and
+  otherwise takes the next ordinal of the Save's reserved block. New values are
+  published as rows in the Save's publication transactions, before or with the
+  first leaf that names them. A new Workspace's first Commit reads nothing of
+  earlier Commits for this purpose.
+- **Removed.** `encoding/pool/index.rs`, `encoding/pool/value_group.rs`, the
+  handle's catalogue row cache, the pooled tail of the packer, the window fields
+  of `store_policy` and of `Publication`, and `ValueGroupQuery`. The pooled pack
+  lane (`PackLane::PooledMetadata`, header versions 12, 21 and 22) and its
+  limits are removed from the pack grammar: such a pack is refused as an
+  unsupported framing, and four lanes remain.
+- **Compatibility.** None with earlier Stores: schema versions 1 to 6 are
+  refused at open by version, table set and schema text.
+- **Not deduplicated.** A value saved again by a later Save that names no base
+  leaf holding it is stored again (about 80 bytes). Within one Save, which is
+  how a tree is first saved, a repeated value is stored once.
+
 ### #307 owning file-length metadata checkpoint
 
 The P5 slice after `bfeec632c` adds a saved-file length API and actual locator
@@ -1492,3 +1536,43 @@ maintenance. This reduces repeated SQLite statement expiration/repreparation;
 its source and runtime counters determine the actual effect. The v1 campaign
 is retained, including all gate failures. The prospective final source uses
 space-scaling-v2 cases with identical inputs, cold state,30/19s caps and gates.
+
+
+### Concurrent Save reservation and catalogue boundary
+
+The direct Store admits independent Save producers with disjoint acknowledged
+initial ordinal blocks. Reservation order and publication order are independent:
+a higher block may publish while an earlier Save has not constructed its first
+pooled group. On first pooled demand, the Save now synchronizes catalogue
+candidates strictly below the first ordinal of its own initial reservation.
+The concrete Store reader uses indexed bounded BeforePage queries, including
+an actual paid query for an empty range. It validates page progress, chronological
+nonoverlap and complete group ends against that exclusive boundary. Ordinary
+canonical ordinal lookup keeps its full authenticated catalogue authority.
+
+A persisted global window may have advanced beyond that earlier producer.
+Only its disposable local candidate index clamps that floor to its own reserved
+boundary; it does not rewind the global window, reallocate ordinals, retry an
+operation, or serialize a whole Save/Commit. Later foreign values may be missed
+as reuse candidates and stored again, which preserves canonical content and
+valid ordinal ownership. A fresh subsequent Save sees both published ranges.
+The existing public unbounded-range PoolIndex sync remains available for its
+standalone callers; custom Source adapters stream/filter rows, while the direct
+Store pushes the bound into each database page.
+
+Qualification is the issue319 component evidence at its exact source identity.
+It is correctness evidence, not performance eligibility, and does not change
+frozen count limits or make the skipped clean environment run eligible.
+
+
+The SQLite publisher also preserves the global candidate bound under reversed
+publication. A late group below the current floor remains readable but neither
+rewinds that floor nor charges the active window. When an eligible group would
+overflow131072 values, the existing update chooses the highest published group's
+first ordinal and count through an indexed latest-row lookup. Its retained suffix
+then consists of that one complete group. Serial publication still chooses the
+incoming group, as before. No full catalogue count/scan or extra statement is
+added; the actual extra SQL instructions remain paid. An explicit monotonic batch
+floor advance may conservatively overcharge the retained counter; it cannot
+undercount or widen the active suffix. Format, allocator/tail rules and canonical
+point reads are unchanged.

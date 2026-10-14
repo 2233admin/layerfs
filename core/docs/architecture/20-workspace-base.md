@@ -97,3 +97,131 @@ owning SDK stat lengths. See [effective base view](29-effective-base-view.md) an
 [S3 exit audit](../issues/307/S3-EXIT-AUDIT.md). Earlier limitations/evidence above
 retain their source scope; native/logical runtime transport, mutable byte semantics
 and aggregate resource acceptance remain unfinished.
+
+## Immutable stat inode reuse (#319)
+
+`BaseView::stat_with_lengths` resolves the inode-table path once, then passes
+that exact immutable inode value's metadata root and kind to the existing
+public typed attribute reader. It retains all portable mode/mtime validation
+and the explicit owning file-length port; symlink and directory handling stay
+on the same current Content interfaces. It does not re-resolve the serial solely
+to read metadata, retain a metadata mirror, or raise cache admission bounds.
+The external eight-inode count diagnostic observes nine canonical lookups per
+resident regular-file stat rather than ten, with unchanged metadata, length,
+misses, upstream demands and remembered-length count. This is an operation-work
+count, not a cold-latency or SQLite performance claim.
+
+Named base facts now retain the Resolved child that the existing public child
+lookup authenticated, and pass that value to the private stat implementation.
+Portable metadata and owning lengths still use their existing ports. Symlink
+stat uses the same kind-checked SymlinkTarget decoder on the already resolved
+content root, preserving no-follow and target framing/limits. Serial-only stat
+resolves once and delegates. An external zero-cache named-file count is13 ->11
+canonical acquisitions, with one owning length call; named symlink15 ->12.
+No owner-job, SQLite, cold-latency, memory-residency or benchmark claim follows
+from these source counts. No public API or cache admission changes.
+
+## Lookups start at the retained root (#320)
+
+`BaseView` keeps the filesystem root it decoded and checked at `open`. Its
+`inode`, `child`, `list`, `readlink` and child-directory count now start at
+that root's inode table with the same public Content readers
+(`inode::lookup`, `inode::lookup_many`, `directory::read::lookup_counted`,
+`list_after`) instead of building a `FilesystemRead`, which acquired and
+decoded the root object again on every call. The root is immutable and named
+by its identity, so the answers are the same. One base lookup makes one fewer
+cache acquisition: on the eight-inode fixture inode 2 to 1, child 4 to 3,
+stat of a file 9 to 8, stat of a symlink 10 to 9, readlink 3 to 2, list 3 to
+2, and a named file with no cache 11 to 10 canonical objects. Objects asked of
+the Store, bytes, lengths and bounds are unchanged. A memory-only client no
+longer needs the root object itself resident to answer from resident pages.
+The root object is no longer touched by lookups, so it ages like any other
+entry; `open` and a rebind still acquire it. These are counts on the host,
+not a timing or mounted claim.
+
+## Portable mode and mtime are remembered by metadata root (#320)
+
+A base stat needs the portable mode and mtime of the inode's metadata root.
+The canonical format stores each of the two as a small file of its own, so
+decoding them acquires seven objects: the attribute page, then a file state,
+a mapping leaf and a payload for each value. The answer is a pure function of
+the immutable metadata root and the inode kind it was checked against.
+`CanonicalClient::portable` therefore remembers the decoded, checked answer in
+the shared cache owner under exactly that root and kind, as a file length is
+already remembered under its content root: charged 272 bytes to the same
+allowance, evicted in the same least-recently-used order, shared by every
+Workspace of the daemon, never keyed by path, branch or Workspace. The first
+stat reads and authenticates the same seven objects as before; a failed read
+remembers nothing; an evicted answer costs the same reads again. With an
+allowance too small for one entry nothing is remembered. A hit grants no
+authority: the caller still needs its own authenticated inode value to name
+the root. `ClientWork` reports the entries held (`portable_metadata`) and the
+decodes made (`portable_metadata_reads`). Resident stat of a file on the
+eight-inode fixture: 8 acquisitions to 1; of a symlink 9 to 2. Objects asked
+of the Store on first touch are unchanged. Each remembered answer adds its
+272-byte charge, so a full cache evicts somewhat more: see the measured
+counts in [issue 320](../issues/320/SHARED-CACHE.md). Host counts, not a
+timing or mounted claim.
+
+## A published Commit places the namespace objects it constructed (#320)
+
+A Commit hands every object it constructs to its Save. Until this change it
+kept none, so the first reader of each one fetched it back from the Store:
+one Store read, one reader admission and one identity hash for each. Most
+steady-state cache misses were such objects
+([issue 320](../issues/320/SHARED-CACHE.md)).
+
+The product Commit now stages them. `store/captured.rs` wraps the Save's
+sink in a consumer that offers each finalized object to a
+`ConstructedObjects` set before handing it on unchanged. The set belongs to
+that one Commit attempt and no reader can reach it. `commit_admitted` calls
+its `published` callback once, only after History has answered this
+publication with the saved candidate root (Committed or UpToDate); the
+callback moves the set into the shared cache with
+`CanonicalCache::admit_constructed`. A construction, Save, validation or
+publication that fails or whose outcome is unknown never runs the callback:
+the set is dropped and nothing of it was ever in the cache.
+
+- **What is staged.** Every role except a file's payload: `WholeFile` never,
+  `Chunk` only when its canonical bytes are no more than the 256-byte
+  bookkeeping charge of an entry (an attribute value's payload is such a
+  chunk and cannot be told from a file's by role). Each identity once.
+- **Whole-file lengths.** Of a `WholeFile` object the set keeps the length
+  under its content root, not the payload: canonical bytes less
+  `WHOLE_FILE_CANONICAL_OVERHEAD`, which is the Store's own answer for that
+  role (`layerfs-storage` `read/length.rs`). Admission remembers it exactly
+  as a length the Store answered: 264 bytes of charge, the same eviction
+  order, counted in `seeded_lengths`. The first stat of a file a Commit
+  created then asks the Store nothing. A chunked file's length is not
+  staged: its file state cannot be told from an attribute value's by role,
+  and the Store answers it as before.
+- **What authenticates an entry.** The identity is the `FinalizedObject`'s
+  own: `FinalizedObject::new` computes it from the canonical allocation and
+  `admit` checks it, and the type has no way to change either afterwards.
+  The staged bytes are one copy of that allocation, made while the object is
+  still owned by the constructor. Nothing is hashed again and the bytes are
+  moved, not copied, into the cache.
+- **Bounds.** The set is charged like the cache (bytes plus 256) and holds at
+  most one eighth of the cache allowance; when a Commit constructs more, the
+  oldest staged objects are dropped. Construction emits children before
+  parents, so what remains is the root and the pages nearest to it. An
+  object charged more than that bound is not staged. Admission charges the
+  ordinary allowance and evicts in the ordinary least-recently-used order;
+  an object already cached is left alone. One Commit can therefore displace
+  at most an eighth of the cache.
+- **No authority.** A placed entry is keyed by identity only. A reader still
+  needs an authenticated root to name it.
+- **Counted.** `ClientWork::seeded_objects` and `seeded_bytes` count what was
+  placed. They are not misses, upstream batches or authenticated bytes.
+
+The Commit's own validation still reads the new root's top from the Store
+before publication (three objects, seven when the root directory itself
+changed): that happens before the set may be placed, and it is the one check
+that the saved root is readable. Those objects enter the cache as ordinary
+authenticated misses, as before.
+
+This is product behaviour paid inside the Commit, not setup. A command that
+follows a Commit in the same daemon starts with those objects resident by
+the product's own doing; a measurement that claims a cold phase after a
+Commit must declare that state and may not call it cold.
+

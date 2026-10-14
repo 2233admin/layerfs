@@ -94,7 +94,7 @@ fn explicit_creation_reopens_declared_units_and_keeps_sparse_canonical_order() {
     assert_eq!(
         db.query_row("PRAGMA user_version", [], |r| r.get::<_, i64>(0))
             .unwrap(),
-        2
+        8
     );
     assert_eq!(
         db.query_row("SELECT count(*) FROM pack_unit", [], |r| r.get::<_, i64>(0))
@@ -149,7 +149,6 @@ fn complete_reads_reassemble_exact_bytes_and_digest_for_every_lane() {
         PackLane::Ordinary,
         PackLane::Native,
         PackLane::WholeFile,
-        PackLane::PooledMetadata,
         PackLane::Singleton,
     ]
     .into_iter()
@@ -294,10 +293,12 @@ fn late_locator_failure_rolls_back_control_and_every_unit() {
 fn exact_physical_fanout_refuses_over_budget_batch_before_begin() {
     let t = support::Temp::new("unit-row-limit");
     let h = create(&t.join("db"));
-    let groups = (0..256)
-        .map(|_| build_group(PackLane::PooledMetadata, &[vec![0; 64]], None).unwrap())
+    // Sixteen groups are the most a pack of a written lane holds: one pack
+    // row, sixteen unit rows and 8,180 locators are six rows over the bound.
+    let groups = (0..16)
+        .map(|_| build_group(PackLane::Ordinary, &[vec![0; 64]], None).unwrap())
         .collect::<Vec<_>>();
-    let body = assemble(PackLane::PooledMetadata, &groups).unwrap();
+    let body = assemble(PackLane::Ordinary, &groups).unwrap();
     let pack = PublishedPack {
         info: PackInfo {
             pack_id: 1,
@@ -309,7 +310,7 @@ fn exact_physical_fanout_refuses_over_budget_batch_before_begin() {
     };
     let batch = Publication {
         packs: vec![pack],
-        objects: (0u64..8000)
+        objects: (0u64..8180)
             .map(|i| ObjectLocation {
                 object_id: layerfs_content::ObjectId::for_bytes(&i.to_be_bytes()),
                 role: ObjectRole::FileState,

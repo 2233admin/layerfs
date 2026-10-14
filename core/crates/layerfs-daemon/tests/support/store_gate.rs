@@ -15,11 +15,10 @@
 //! as `#[path = "support/store_gate.rs"] mod store_gate;`.
 use layerfs_content::ObjectId;
 use layerfs_storage::{
-    location::{LocatedObject, SignatureRow},
+    location::{InodeValueRow, LocatedObject, SignatureRow},
     port::{
         AcquiredPackRead, PackPersistence, PackReadPlan, PersistedPack, PersistedPackRead,
         PersistenceError, Publication, Published, PublishedPack, Reserve, Reserved,
-        ValueGroupQuery, ValueGroups,
     },
     StoragePolicy,
 };
@@ -149,9 +148,9 @@ impl PackPersistence for Gated {
         let _pass = self.gate.enter()?;
         self.inner.read_scoped_pack(id, plan)
     }
-    fn value_groups(&self, query: ValueGroupQuery<'_>) -> Answer<ValueGroups> {
+    fn inode_values(&self, ordinals: &[u32], out: &mut Vec<InodeValueRow>) -> Answer<()> {
         let _pass = self.gate.enter()?;
-        self.inner.value_groups(query)
+        self.inner.inode_values(ordinals, out)
     }
     fn signatures(&self, out: &mut Vec<SignatureRow>) -> Answer<()> {
         let _pass = self.gate.enter()?;

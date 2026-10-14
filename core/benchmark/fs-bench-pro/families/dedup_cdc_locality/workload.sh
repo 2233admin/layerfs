@@ -10,7 +10,7 @@ case "$case_id" in
   dedup-cdc-boundaries-proof) ;;
   dedup-cdc-overwrite-*|dedup-cdc-insert-*|dedup-cdc-delete-*|dedup-cdc-common-body-*|dedup-cdc-scattered-*)
     tier=${case_id##*-}
-    case "$tier" in 1|10|100|500) ;; *) fail 'unregistered original CDC tier' ;; esac
+    case "$tier" in 100) ;; *) fail 'unregistered original CDC tier' ;; esac
     # Exact reconstruction refuses prefixes such as overwrite-extra-1.
     profile=${case_id#dedup-cdc-}
     profile=${profile%-*}

@@ -158,6 +158,36 @@ from this source. Content aggregate residency, actual sparse/captured editing,
 runtime Save/transport ownership, held cleanup debt and complete Commit speed/
 storage qualification remain separate required work.
 
+## The fence of a record job, and several keys in one read job (issues #320, #321)
+
+Every indexed record job is fenced before its own work
+(`Overlay::fence_operation`): the Workspace row of its route, then the owner
+row's existence. Its refusals and their order are unchanged: a stale route,
+then a closed Workspace when the job writes, then a released owner. Existing
+custody stays readable after logical close.
+
+Since issue #321 Step D the engine remembers both rows (see
+[overlay terminology](64-overlay-terminology.md#rows-the-engine-remembers)),
+so a record job reads a fence row only after a statement that wrote it. A
+record write names neither row. A read job is therefore 1 statement and a
+one-change write is 4 inside one transaction (one more each with the one
+fence statement of issue #320, `OPERATION_FENCE`, which is removed).
+`tests/indexed_operation_record_fence.rs` pins the refusal table, the
+statements of each job, the read after a custody or Workspace write, and the
+plan of the custody search.
+
+`indexed_operation_record_get_many(scope, keys)` reads the values of at most 64
+keys under one fence, in the order asked; an absent key is `None` in its place.
+A longer list is refused before any statement. The values of one job share one
+64 KiB reply envelope and a job that exceeds it is refused, so callers batch
+only keys whose values are small by construction. The construction port and
+the Workspace port forward it as `get_many` and `operation_record_get_many`;
+both default to asking for each key in turn, so a provider that cannot serve
+them together keeps its behaviour and its first-refusal order. The daemon's
+`GetMany` job charges its key list, one reply slot per key and one 64 KiB
+envelope. Its first user is Content's reference reducer, which reads the fresh
+member, the row and the touched witness of one serial as one job.
+
 ## Non-destructive complete-key cursor
 
 The additive `indexed_operation_record_keys_after(scope, kind, after)` projects at most
@@ -172,6 +202,8 @@ appear behind an already consumed boundary; the owning constructor must complete
 its sealed pass before such insertions and restart from None for the later phase.
 Detached/release work queues retain their separate first-key traversal because
 they consume records and may admit new work. These meanings are not interchangeable.
+A window of fewer than 64 keys holds every remaining key; the producer's sealed
+pass ends on one without asking for an empty window.
 
 The neutral construction port and Workspace adapter forward this as `keys_after`
 and `operation_record_keys_after`. Older providers return an explicit unavailable-capability

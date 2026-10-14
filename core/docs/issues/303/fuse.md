@@ -7,6 +7,21 @@
 > is implemented or measured. This is the primary kernel-facing design;
 > [05](05-fuse-assessment.md) retains source/evidence assessment.
 
+Owner supersession 2026-10-13, implemented by [#321](../321/CHECKLIST.md) (final
+source 2026-10-14): each mounted Workspace has its own overlay SQLite file,
+copied at mount from a template built before readiness and deleted at terminal
+unmount. One lock guards its single connection and the calling thread runs each
+short atomic job. The one-database-per-daemon decision of 2026-10-05, Workspace
+row prefixes, the fair owner thread, its queues, admission credits, the shared
+pager and the common memory budget are superseded wherever they appear below;
+that text keeps its original pin as history. Open-file, directory-position and
+kernel-reference state is resident daemon memory, and no space is reserved
+ahead of use. Filesystem guarantees, exact ownership, the shared live frontier,
+automatic bounded live reclamation and the global Store boundary are unchanged.
+The implemented description is the
+[owner guide](../../architecture/21-daemon-owner.md#issue-321-final-model-one-lock-per-workspace-2026-10-14);
+measured outcomes are in the [#320 ledger](../320/PROGRESS.md).
+
 Owner supersession 2026-10-08 at R0 input `1a6bb53ef`: the SDK exposes
 ProjectApi, WorkspaceApi and SandboxApi. Ordinary Sandbox/runtime or an external
 executor owns command launch, standard streams, exit status and explicit

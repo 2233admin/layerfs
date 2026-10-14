@@ -1,7 +1,7 @@
 //! Original control operation receipts, independent of delivery acknowledgement.
 use crate::{
     store::{BindRefusal, CommitFailure, CommitSuccess},
-    Completion, OwnerError,
+    JobReceipt, OwnerError,
 };
 use layerfs_bridge::control::{ControlCode, Reply};
 use layerfs_history::HistoryError;
@@ -18,9 +18,9 @@ pub enum NativeEvidence {}
 #[derive(Debug)]
 pub struct Success {
     pub reply: Reply,
-    pub completion: Option<Completion>,
+    pub completion: Option<JobReceipt>,
     /// Earlier engine completions of the same operation, in attempt order.
-    pub earlier: Vec<Completion>,
+    pub earlier: Vec<JobReceipt>,
     pub commit: Option<CommitSuccess>,
     pub observation_failure: Option<Box<Failure>>,
     /// Original native connection receipt of a terminal unmount.
@@ -35,7 +35,7 @@ pub struct NativeFailure {
     pub phase: &'static str,
     pub detail: String,
     /// Engine completions this operation attempted, in order.
-    pub completions: Vec<Completion>,
+    pub completions: Vec<JobReceipt>,
     /// Original connection evidence, when the failing boundary produced one.
     pub evidence: Option<Box<dyn std::fmt::Debug + Send>>,
 }
@@ -47,7 +47,7 @@ pub enum Failure {
     Bind(Box<BindRefusal>),
     Commit(Box<CommitFailure>),
     Owner(OwnerError),
-    Completion(Box<Completion>),
+    JobReceipt(Box<JobReceipt>),
     History(HistoryError),
     Workspace(WorkspaceError),
     Native(Box<NativeFailure>),

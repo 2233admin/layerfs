@@ -40,6 +40,18 @@ definite `Invalid` refusal.
 
 ## Attach
 
+Issue319 phase7 prepares the Workspace's initial authoritative serial window
+before the engine mount job and before native serving. The single History
+reservation is made outside Workspace locks, consumes no individual serial,
+and preserves an existing unconsumed window. Initial reservation refusal leaves
+no engine or kernel mount effect; exact History Busy remains a definite refusal,
+while an unknown provider result retains uncertain Attach custody. Bind remains
+read-only. The 1,024 serial refill window and subsequent low-water handling are
+unchanged; Workspace adds no reservation retry or serial-specific wait. The
+owner's subsequent2026-10-12 Store admission rule can wait before one SQL attempt
+for cooperating writers, as scoped by the integration contract; no failed
+Commit Begin is replayed.
+
 [`NativeSession::attach`](../../crates/layerfs-fuse/src/session/startup.rs) is one
 attempt with no retry. In order it builds the callback adapter, creates the mount
 directory (an existing path is refused), opens the device, calls `mount(2)`,
@@ -128,10 +140,13 @@ phase, the Ready record, whether detach is known and `NativeWork` counters copie
 from maintained state. Status performs no syscall and one existing engine
 observation; it never settles an unknown.
 
-The [SDK](../../crates/layerfs-api/sdk/src/workspace/attach.rs) exposes `attach`,
-`locate` and a two-acknowledgement `mount`. If the second acknowledgement fails,
-`MountFailure` returns the already bound Workspace so the caller can observe or
-attach explicitly; nothing is rolled back or resent on its behalf.
+The [SDK mount](../../crates/layerfs-api/sdk/src/workspace/mount.rs) exposes the
+two-acknowledgement mount without a Project argument. Bind/attach and lost-reply
+locate are available only in the hidden component-proof/recovery module. If the
+second acknowledgement fails, MountFailure retains the already bound Workspace;
+no operation is rolled back or resent. Ordinary Workspace exec delegates existing
+Sandbox execution at the acknowledged mount, without a daemon Exec registration.
+See [the implemented SDK interface](../../../sdk.md).
 
 ## Registry state
 

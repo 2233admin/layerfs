@@ -107,6 +107,15 @@ class RuntimeBuildReuse(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "product tree differs"):
             identity.reuse_runtime_inputs({**previous["identity"], "product_tree": "changed"}, previous, None)
 
+    def test_sqlite_compile_flags_refuse_reuse_of_a_different_binary_arm(self):
+        previous = self.qualified()
+        flags = "-USQLITE_ENABLE_MEMORY_MANAGEMENT"
+        with patch.dict(identity.os.environ, {"LIBSQLITE3_FLAGS": flags}):
+            with self.assertRaisesRegex(ValueError, "profile, image, flags or disposition"):
+                identity.reuse_runtime_inputs(previous["identity"], previous, None)
+            previous["explicit_sqlite_flags"] = flags
+            self.assertEqual(identity.reuse_runtime_inputs(previous["identity"], previous, None), [])
+
     def test_failed_host_build_retains_declared_reuse_without_a_successful_seal(self):
         from engine import receipts
         previous = self.qualified()

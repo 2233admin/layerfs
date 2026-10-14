@@ -29,6 +29,12 @@ pub fn key(kind: u32, serial: u64) -> ConstructionRecordKey {
 pub struct Records {
     pub values: BTreeMap<ConstructionRecordKey, Vec<u8>>,
     pub calls: usize,
+    /// Read jobs of two serials or more, and the most keys one read job asked.
+    pub wide_reads: usize,
+    pub maximum_read_keys: usize,
+    /// Guarded jobs that write a reference row, and that write a work item.
+    pub row_jobs: usize,
+    pub work_jobs: usize,
     pub after_failure: usize,
     pub terminal: bool,
     pub original: Option<Vec<ConstructionRecordChange>>,
@@ -42,6 +48,8 @@ pub struct Records {
     pub missing_kind: Option<u32>,
     pub corrupt_row_tag: bool,
     pub missing_queued: bool,
+    /// Answers given in place of the stored ones once release work is queued.
+    pub queued_answers: BTreeMap<ConstructionRecordKey, Option<Vec<u8>>>,
     pub malformed_key: bool,
     pub duplicate_key: bool,
     pub maximum_job: usize,
@@ -72,14 +80,8 @@ impl Records {
             what: "original indexed reference failure",
         }
     }
-}
-impl IndexedConstructionBacking for Records {
-    fn contains(&mut self, key: ConstructionRecordKey) -> ContentResult<bool> {
-        self.enter()?;
-        Ok(self.values.contains_key(&key))
-    }
-    fn get(&mut self, key: ConstructionRecordKey) -> ContentResult<Option<Vec<u8>>> {
-        self.enter()?;
+    /// The answer one key gets inside a job that has already been entered.
+    fn value(&mut self, key: ConstructionRecordKey) -> ContentResult<Option<Vec<u8>>> {
         if topology(key.kind) {
             self.topology_reads += 1;
         }
@@ -93,6 +95,11 @@ impl IndexedConstructionBacking for Records {
         if self.missing_kind == Some(key.kind) && self.values.contains_key(&key) {
             return Ok(None);
         }
+        if self.values.keys().any(|stored| stored.kind == WORK) {
+            if let Some(answer) = self.queued_answers.get(&key) {
+                return Ok(answer.clone());
+            }
+        }
         let mut result = self.values.get(&key).cloned();
         if self.corrupt_kind == Some(key.kind) && result.is_some() {
             self.terminal = true;
@@ -105,6 +112,24 @@ impl IndexedConstructionBacking for Records {
             }
         }
         Ok(result)
+    }
+}
+impl IndexedConstructionBacking for Records {
+    fn contains(&mut self, key: ConstructionRecordKey) -> ContentResult<bool> {
+        self.enter()?;
+        Ok(self.values.contains_key(&key))
+    }
+    fn get(&mut self, key: ConstructionRecordKey) -> ContentResult<Option<Vec<u8>>> {
+        self.enter()?;
+        self.value(key)
+    }
+    /// One call: every key is answered by the same job, in the order asked.
+    fn get_many(&mut self, keys: &[ConstructionRecordKey]) -> ContentResult<Vec<Option<Vec<u8>>>> {
+        self.enter()?;
+        assert!(keys.len() <= 64, "one read job asks at most 64 keys");
+        self.wide_reads += usize::from(keys.len() > 3);
+        self.maximum_read_keys = self.maximum_read_keys.max(keys.len());
+        keys.iter().map(|key| self.value(*key)).collect()
     }
     fn apply(
         &mut self,
@@ -126,6 +151,8 @@ impl IndexedConstructionBacking for Records {
         assert!(bytes <= 65_536);
         self.maximum_job = self.maximum_job.max(bytes);
         self.maximum_changes = self.maximum_changes.max(changes.len());
+        self.row_jobs += usize::from(changes.iter().any(|change| change.key.kind == ROW));
+        self.work_jobs += usize::from(changes.iter().any(|change| change.key.kind == WORK));
         if changes.iter().any(|change| topology(change.key.kind)) {
             assert!(changes.iter().all(|change| topology(change.key.kind)));
             assert!(changes.len() <= 64, "one topology batch is one key window");

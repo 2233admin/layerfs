@@ -139,6 +139,7 @@ impl Overlay {
                 return Err(OverlayError::Invalid("compound write window"));
             }
         }
+        crate::payload::pieces::check_claims(changes)?;
         Ok(CheckedChanges {
             keys,
             moved_directory,
@@ -208,39 +209,40 @@ impl Overlay {
             };
             // Computed once: it decides the row and is the value the row records.
             let (added, lower) =
-                self.name_inheritance(&state, route.ns, *parent, &change.name, inherited)?;
+                self.name_inheritance(&state, *parent, &change.name, inherited, seen)?;
             if target.is_some() || lower {
-                self.bind_name(route.ns, &state, *parent, &change.name, *target, lower)?;
+                self.bind_name(&state, *parent, &change.name, *target, lower)?;
                 directory_entries += i64::from(added);
             } else {
                 // Nothing below binds this name: no row is the final state.
                 directory_entries -= self.execute(
                     StatementKind::DirectoryEntry,
                     sql::DIRECTORY_ENTRY_DROP,
-                    &[&route.ns, parent, &change.name, &state.active.0],
+                    &[parent, &change.name, &state.active.0],
                     24 + change.name.len() as u64,
                 )? as i64;
             }
         }
         if let Some((serial, parent)) = moved_directory {
-            self.execute(
-                StatementKind::Lease,
-                "UPDATE native_parent SET parent=?3 WHERE ns=?1 AND serial=?2 AND serial<>parent",
-                &[&route.ns, &serial, &parent],
-                24,
-            )?;
+            let key = (route.ns, *serial as u64);
+            let held = self.open.borrow().parents.rows.get(&key).copied();
+            if let Some((mount, old)) = held {
+                if old != *serial as u64 {
+                    self.open
+                        .borrow_mut()
+                        .put_parent(key, (mount, *parent as u64));
+                }
+            }
         }
         if let Some((serial, cell)) = &changes.cell {
-            self.put_cell(route, integer(*serial)?, layer(*serial)?, cell)?;
+            self.put_cell(integer(*serial)?, layer(*serial)?, cell)?;
         }
         if let Some(write) = &changes.write {
-            self.write_cells(
-                route.ns,
-                integer(write.serial)?,
-                layer(write.serial)?,
-                write.offset,
-                &write.data,
-            )?;
+            let (serial, layer) = (integer(write.serial)?, layer(write.serial)?);
+            match &changes.claims {
+                None => self.write_cells(serial, layer, write.offset, &write.data)?,
+                Some(claims) => self.write_claimed(serial, layer, write, claims)?,
+            }
         }
         for inode in &changes.inodes {
             if inode.kind == crate::InodeKind::File || changes.detached == Some(inode.serial) {
@@ -254,23 +256,21 @@ impl Overlay {
     /// inserts. INSERT plans are VM programs.
     pub fn explain_compound(&self, source: BaseSource) -> OverlayResult<Vec<String>> {
         let state = self.source_state(source)?;
-        let ns = source.route.ns;
         let name: &[u8] = b"n";
         let none: Option<i64> = None;
         // Every column of one inode row, in the table's order.
         let (one, zero) = (1_i64, 0_i64);
-        let mut row: Vec<&dyn rusqlite::ToSql> = vec![&ns, &one, &state.active.0, &one];
+        let mut row: Vec<&dyn rusqlite::ToSql> = vec![&one, &state.active.0, &one];
         row.extend([&zero as &dyn rusqlite::ToSql; 3]);
         row.push(&one);
-        row.extend([&zero as &dyn rusqlite::ToSql; 7]);
+        row.extend([&zero as &dyn rusqlite::ToSql; 8]);
         let mut plans = Vec::new();
         for (label, statement, params) in [
             (
                 "lower-name",
                 sql::DIRECTORY_ENTRY_LOOKUP,
                 vec![
-                    &ns as &dyn rusqlite::ToSql,
-                    &1_i64,
+                    &1_i64 as &dyn rusqlite::ToSql,
                     &name,
                     &state.active.0,
                     &state.installed,
@@ -279,22 +279,22 @@ impl Overlay {
             (
                 "name-layers",
                 sql::NAME_LAYERS,
-                vec![&ns, &1_i64, &name, &state.active.0, &state.installed],
+                vec![&1_i64, &name, &state.active.0, &state.installed],
             ),
             (
                 "active-name",
                 sql::DIRECTORY_ENTRY_ACTIVE,
-                vec![&ns, &1_i64, &name, &state.active.0],
+                vec![&1_i64, &name, &state.active.0],
             ),
             (
                 "drop-name",
                 sql::DIRECTORY_ENTRY_DROP,
-                vec![&ns, &1_i64, &name, &state.active.0],
+                vec![&1_i64, &name, &state.active.0],
             ),
             (
                 "active-inode",
                 sql::LAYER_ACTIVE,
-                vec![&ns, &1_i64, &state.active.0],
+                vec![&1_i64, &state.active.0],
             ),
             ("update-inode", sql::INODE_UPDATE, row.clone()),
         ] {
@@ -310,7 +310,7 @@ impl Overlay {
             (
                 "put-name",
                 sql::DIRECTORY_ENTRY_PUT,
-                vec![&ns, &1_i64, &name, &state.active.0, &none, &false],
+                vec![&1_i64, &name, &state.active.0, &none, &false],
             ),
             ("insert-inode", sql::INODE_INSERT, row.clone()),
         ];
@@ -366,35 +366,26 @@ impl SourceRows<'_> {
     /// Latest local inode row of the current view; None delegates to the base.
     /// Inside a job that keeps its reads, a serial is read once.
     pub fn inode(&self, serial: u64) -> OverlayResult<Option<Inode>> {
-        let (route, state) = (self.source.route, &self.state);
+        let state = &self.state;
         let Some(seen) = self.seen else {
-            return self
-                .db
-                .inode_at(route, serial, state.active, state.installed);
+            return self.db.inode_at(serial, state.active, state.installed);
         };
         let key = integer(serial)?;
         if let Some(inode) = seen.seen(key) {
             return Ok(inode);
         }
         // An orphan-domain row is not a row of the view: it is not kept.
-        if let Some(orphan) = self.db.orphan_inode(route.ns, key)? {
+        if let Some(orphan) = self.db.orphan_inode(key)? {
             return Ok(Some(orphan));
         }
-        let row = self
-            .db
-            .local_row(route.ns, key, state.active, state.installed)?;
+        let row = self.db.local_row(key, state.active, state.installed)?;
         seen.record(key, &row);
         Ok(row.map(|row| row.inode))
     }
     /// The active row and the latest lower row of one name, in one seek.
+    /// Inside a job that keeps its reads, a name is read once.
     pub fn name(&self, parent: u64, name: &[u8]) -> OverlayResult<NameLayers> {
         let key = check_name(parent, name)?;
-        self.db.name_layers(
-            self.source.route.ns,
-            key,
-            name,
-            self.state.active.0,
-            self.state.installed,
-        )
+        self.db.name_layers_seen(&self.state, key, name, self.seen)
     }
 }

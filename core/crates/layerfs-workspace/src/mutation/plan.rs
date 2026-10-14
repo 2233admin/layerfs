@@ -79,10 +79,7 @@ impl MutationPlan {
     pub const fn operation(&self) -> &Operation {
         &self.job.operation
     }
-    /// Heap retained by the semantic plan, distinct from service job credits.
-    pub fn charge(&self) -> usize {
-        self.job.charge() + self.needs.capacity() * (std::mem::size_of::<Need>() + 255)
-    }
+
     /// Accept exactly the original owner result. Only a nonempty Needs result
     /// permits another round; attempted failures and publication are terminal.
     pub fn accept(

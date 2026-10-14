@@ -69,7 +69,7 @@ pub fn shell(identity: u32, script: &str) -> Output {
 pub fn quiet(h: &Harness, token: WorkspaceToken) {
     until("connection quiescent", || {
         let work = h.status(token).native.unwrap().work.unwrap();
-        work.received == 0 && work.admitted == 0
+        work.active == 0
     });
 }
 /// Normal terminal unmount with a complete drain; returns its receipt text.
@@ -256,7 +256,7 @@ pub fn bytes_of(length: usize, seed: u8) -> Vec<u8> {
 pub fn frames(h: &Harness, token: WorkspaceToken) -> u64 {
     quiet(h, token);
     let work = h.status(token).native.unwrap().work.unwrap();
-    work.handoffs + work.inline + work.refused
+    work.served + work.inline + work.refused
 }
 /// Per-opcode frame counts out of a Debug-rendered drain receipt.
 pub fn opcodes(receipt: &str) -> Vec<u64> {

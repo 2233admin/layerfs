@@ -5,7 +5,7 @@ use super::{
     serving::{stage, Attached, Kept, Leaving},
     Failure, Service, Success,
 };
-use crate::{store::BoundWorkspace, Command, NativeJob, NativeReply, Response};
+use crate::{store::BoundWorkspace, NativeReply, Response};
 use layerfs_bridge::control::{
     Activity, ControlCode, ForcedFacts, NativePhase, TeardownStage, WorkspaceToken,
 };
@@ -99,11 +99,14 @@ impl Service {
             }
         };
         // Drain barrier holds: one fixed logical mark, then indexed retirement.
-        let revoked = match self.job(workspace.route(), Command::Native(NativeJob::Revoke(mount))) {
+        let revoked = match self.job(
+            workspace.route(),
+            |job_client: &crate::OwnerClient, job_route| job_client.native_revoke(job_route, mount),
+        ) {
             Ok(done) if matches!(done.result(), Ok(Response::Native(NativeReply::Done))) => done,
             other => {
                 let failure = match other {
-                    Ok(done) => Failure::Completion(Box::new(done)),
+                    Ok(done) => Failure::JobReceipt(Box::new(done)),
                     Err(error) => error,
                 };
                 return Err(self.retain(

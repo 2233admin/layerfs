@@ -282,9 +282,6 @@ pub(crate) fn decode_selected_group(
             }
             Ok(canonical)
         }
-        PackLane::PooledMetadata => Err(StorageError::Integrity(
-            "pooled metadata record requires value groups",
-        )),
     }
 }
 

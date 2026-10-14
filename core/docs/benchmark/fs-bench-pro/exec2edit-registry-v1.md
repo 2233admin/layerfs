@@ -1,5 +1,12 @@
 # #232 Workspace Exec/FUSE edit registry v1 — frozen case and cache contract
 
+> **Current API boundary, 2026-10-12:** [sdk.md](../../../../sdk.md) describes
+> the implemented operation surface. Workspace exec now returns the ordinary
+> Sandbox runtime owner at the mount; it adds no daemon command registration,
+> automatic Commit/unmount or ordinary command timeout. This page retains its
+> original September contract/source and verdicts; it is not current SDK API
+> documentation or a new measurement authorization.
+
 > **Status:** Phase 1 contract freeze. No timed sample exists. This document
 > registers cases; it is not a performance receipt and carries no PASS.
 > Written 2026-09-24 against the [#232 implementation specification](../../issues/232/SPEC.md).
@@ -62,7 +69,7 @@ Every scenario ID is the historical selection ID with `-exec-v1` appended, under
 a distinct `workspace_exec_edit_*` family ID; no row inherits the historical
 direct-SDK `edit_*` PASS, and the G2 PASS status is never reused. The per-case
 target is that same historical selection's G2 candidate `edit_commit_ns` from the
-[#152 final report](../../../docs/roadmap/0.1/0.1.6/evidence/issue152-final-report.md)
+[#152 final report](../../../../docs/roadmap/0.1/0.1.6/evidence/issue152-final-report.md)
 at 0.01 ms precision.
 
 ### `workspace_exec_edit_length_preserving` (12 cases)

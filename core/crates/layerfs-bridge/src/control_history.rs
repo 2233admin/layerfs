@@ -73,6 +73,22 @@ pub(crate) fn cursor(input: &mut Reader<'_>) -> Result<Option<Vec<u8>>, ControlE
     }
     Ok(Some(bytes.to_vec()))
 }
+pub(crate) fn put_branch(out: &mut Writer, value: &BranchRecord) -> Result<(), ControlError> {
+    out.put(&value.id.to_bytes())?;
+    out.put(&value.stack.to_bytes())?;
+    out.blob(value.name.as_str().as_bytes())?;
+    out.put(&value.base_layer.to_bytes())?;
+    put_head(out, value.head_commit)
+}
+pub(crate) fn branch(input: &mut Reader<'_>) -> Result<BranchRecord, ControlError> {
+    Ok(BranchRecord {
+        id: history(BranchId::from_bytes(input.array()?))?,
+        stack: history(LayerStackId::from_bytes(input.array()?))?,
+        name: history(HistoryName::new(&input.text(63)?))?,
+        base_layer: history(LayerId::from_bytes(input.array()?))?,
+        head_commit: head(input)?,
+    })
+}
 pub(crate) fn put_binding(out: &mut Writer, value: &BranchSnapshot) -> Result<(), ControlError> {
     let b = &value.branch;
     out.put(&b.id.to_bytes())?;

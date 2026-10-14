@@ -5,9 +5,12 @@ mod edit_model;
 #[allow(dead_code)]
 #[path = "../../../../../benchmark/fs-bench-pro/workload/main.rs"]
 mod reference;
+#[path = "../../engine/recipes/sdk_edit_model.rs"]
+mod sdk_edit_model;
 
-use edit_model::{m1_state, sdk_step};
+use edit_model::m1_state;
 use reference::workspace_common::{Content, Entry, EntryKind};
+use sdk_edit_model::sdk_step;
 use std::collections::BTreeMap;
 
 const SMALL: &str = "v016-mixed-development-100mb-5000-k10-v1";

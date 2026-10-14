@@ -1,6 +1,6 @@
 # Workspace queues: fair scheduling for concurrent workloads
 
-> **Status:** Current general guide.
+> **Status:** Archived; retained for historical evidence only.
 > Source review: 2026-10-05, committed local `main`
 > `6e84b91818bff510f4902537e413eda5094cf754`.
 > Documentation issue: [#310](https://github.com/Ephemeral-AI-Lab/layerfs/issues/310).
@@ -8,6 +8,20 @@
 Navigation links were updated on 2026-10-06 for the responsibility-folder moves.
 The source-review claims retain their original pin above; current continuation
 scope is in the [S7–S9 handoff](../../core/docs/issues/307/HANDOFF-S7-S9.md).
+
+Issue [#321](https://github.com/Ephemeral-AI-Lab/layerfs/issues/321) update, 2026-10-14
+(local branch `issue321-workspace-overlay`): every mounted Workspace now has its
+own overlay SQLite file, copied at mount from a template built before readiness
+and deleted at terminal unmount, with one connection behind one lock and the
+calling thread running each short job. The shared overlay database, Workspace
+row prefixes, the owner thread, its queues, admission credits and the common
+memory budget described below at this guide's source pin are removed.
+Workspaces share only committed immutable content and the global Store. The
+implemented description is the
+[owner guide](../../core/docs/architecture/21-daemon-owner.md#issue-321-final-model-one-lock-per-workspace-2026-10-14).
+Nothing below describes current source: there is no queue, scheduler, class
+rotation or credit. What remains is that a later mutation waits behind a
+waiting Capture and a later source acquisition behind a waiting known install.
 
 This guide explains how the daemon's bounded Workspace queues support concurrent
 workloads over one overlay database. It documents the committed scheduler and

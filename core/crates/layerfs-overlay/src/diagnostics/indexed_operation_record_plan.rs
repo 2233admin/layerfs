@@ -15,26 +15,18 @@ impl Overlay {
         excluded_root: [u8; 32],
     ) -> OverlayResult<Vec<String>> {
         self.check_operation(scope.owner)?;
-        let ns = scope.owner.route.ns;
         let operation = integer(scope.owner.owner)?;
         let file = scope.file_scope.to_be_bytes();
         let kind = i64::from(key.kind);
-        let point: [&dyn rusqlite::ToSql; 5] = [
-            &ns,
-            &operation,
-            &file.as_slice(),
-            &kind,
-            &key.key.as_slice(),
-        ];
-        let keys: [&dyn rusqlite::ToSql; 5] = [
-            &ns,
+        let point: [&dyn rusqlite::ToSql; 4] =
+            [&operation, &file.as_slice(), &kind, &key.key.as_slice()];
+        let keys: [&dyn rusqlite::ToSql; 4] = [
             &operation,
             &file.as_slice(),
             &kind,
             &excluded_root.as_slice(),
         ];
-        let operation_params: [&dyn rusqlite::ToSql; 2] = [&ns, &operation];
-        let namespace_params: [&dyn rusqlite::ToSql; 1] = [&ns];
+        let operation_params: [&dyn rusqlite::ToSql; 1] = [&operation];
         let mut plans = Vec::new();
         for (label, statement, params, bytes) in [
             (
@@ -64,7 +56,7 @@ impl Overlay {
             (
                 "all-keys",
                 sql::INDEXED_OPERATION_RECORD_ALL_KEYS,
-                &keys[..4],
+                &keys[..3],
                 32,
             ),
             (
@@ -80,20 +72,8 @@ impl Overlay {
                 16,
             ),
             (
-                "namespace-cleanup",
-                sql::INDEXED_OPERATION_RECORD_RECLAIM_NAMESPACE,
-                namespace_params.as_slice(),
-                8,
-            ),
-            (
                 "operation-cleanup-delete",
                 sql::INDEXED_OPERATION_RECORD_DELETE_OPERATION,
-                point.as_slice(),
-                64,
-            ),
-            (
-                "namespace-cleanup-delete",
-                sql::INDEXED_OPERATION_RECORD_DELETE_NAMESPACE,
                 point.as_slice(),
                 64,
             ),
@@ -107,8 +87,7 @@ impl Overlay {
             )?);
         }
         let empty: &[u8] = &[];
-        let put: [&dyn rusqlite::ToSql; 6] =
-            [point[0], point[1], point[2], point[3], point[4], &empty];
+        let put: [&dyn rusqlite::ToSql; 5] = [point[0], point[1], point[2], point[3], &empty];
         for (label, statement, params, bytes) in [
             (
                 "put-vm",
@@ -125,7 +104,7 @@ impl Overlay {
             (
                 "all-keys-vm",
                 sql::INDEXED_OPERATION_RECORD_ALL_KEYS,
-                &keys[..4],
+                &keys[..3],
                 32,
             ),
             (

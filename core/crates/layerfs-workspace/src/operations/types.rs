@@ -1,21 +1,29 @@
 //! Ordinary namespace operations, their exact refusals and published results.
 use crate::ViewStat;
 use layerfs_content::filesystem::{PathName, SymlinkTarget};
-use layerfs_overlay::{OpenFile, Publication};
+use layerfs_overlay::{OpenFile, Publication, WriteClaims};
 use std::{fmt, ops::Deref, sync::Arc};
 
 /// Bytes of one write window. Shared, so an operation's owner rounds and its
-/// publication never copy them, and printed by length only.
+/// publication never copy them, and printed by length only. With them, what
+/// the caller established about them: ranges that equal committed content.
 #[derive(Clone, Eq, PartialEq)]
-pub struct WriteData(pub(crate) Arc<[u8]>);
+pub struct WriteData(pub(crate) Arc<[u8]>, pub(crate) Option<Arc<WriteClaims>>);
 impl From<Vec<u8>> for WriteData {
     fn from(bytes: Vec<u8>) -> Self {
-        Self(bytes.into())
+        Self(bytes.into(), None)
     }
 }
 impl From<&[u8]> for WriteData {
     fn from(bytes: &[u8]) -> Self {
-        Self(bytes.into())
+        Self(bytes.into(), None)
+    }
+}
+impl WriteData {
+    /// The same bytes with claims about them. Only a write at a stated
+    /// offset publishes them; an append and a mapped store drop them.
+    pub fn claimed(self, claims: WriteClaims) -> Self {
+        Self(self.0, Some(Arc::new(claims)))
     }
 }
 impl Deref for WriteData {
@@ -26,7 +34,8 @@ impl Deref for WriteData {
 }
 impl fmt::Debug for WriteData {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "WriteData({} bytes)", self.0.len())
+        let claims = self.1.as_ref().map_or(0, |claims| claims.ranges.len());
+        write!(f, "WriteData({} bytes, {claims} claims)", self.0.len())
     }
 }
 /// Where a write lands. `End` is resolved against the size current in the

@@ -152,8 +152,13 @@ impl Proof<'_, '_, '_, '_> {
             let Some((last, _)) = window.last().copied() else {
                 return Ok(());
             };
+            // A window of fewer than 64 placements held every remaining one.
+            let short = window.len() < RECORD_WINDOW;
             for (directory, _) in window {
                 self.prove(directory, limit)?;
+            }
+            if short {
+                return Ok(());
             }
             after = Some(last);
         }
@@ -177,6 +182,7 @@ impl Proof<'_, '_, '_, '_> {
             let Some((last, _)) = window.last().copied() else {
                 return Ok(false);
             };
+            let short = window.len() < RECORD_WINDOW;
             for (_, placement) in window {
                 if !placement.in_place
                     && placement.parent_stored
@@ -185,6 +191,9 @@ impl Proof<'_, '_, '_, '_> {
                 {
                     return Ok(true);
                 }
+            }
+            if short {
+                return Ok(false);
             }
             after = Some(last);
         }
@@ -201,6 +210,7 @@ impl Proof<'_, '_, '_, '_> {
             let Some((last, _)) = window.last().copied() else {
                 return Ok(());
             };
+            let short = window.len() < RECORD_WINDOW;
             let moved = window
                 .into_iter()
                 .filter(|(_, placement)| placement.stored && !placement.in_place)
@@ -212,6 +222,9 @@ impl Proof<'_, '_, '_, '_> {
             for (directory, base) in moved.into_iter().zip(bases) {
                 let base = base.ok_or(ContentError::InvalidRecord("missing base inode"))?;
                 self.territory(table, directory, base.content_root)?;
+            }
+            if short {
+                return Ok(());
             }
             after = Some(last);
         }

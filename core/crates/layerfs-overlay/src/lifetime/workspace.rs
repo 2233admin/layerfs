@@ -23,7 +23,8 @@ pub(crate) fn decode(r: &rusqlite::Row<'_>) -> rusqlite::Result<WorkspaceState> 
     })
 }
 impl Overlay {
-    /// Binds one complete root without opening another database or scanning it.
+    /// Binds one complete root as the one Workspace of this database, without
+    /// scanning it. A database that already holds a Workspace refuses another.
     /// Authority/root validation is performed by the Workspace/runtime caller.
     pub fn open_workspace(
         &self,
@@ -33,7 +34,11 @@ impl Overlay {
         if incarnation == [0; 32] {
             return Err(OverlayError::Invalid("zero incarnation"));
         }
-        self.atomic(|| {
+        // Rows of this database carry no Workspace key: it holds one.
+        if self.namespace.get() != 0 {
+            return Err(OverlayError::Invalid("database already holds a Workspace"));
+        }
+        let route = self.atomic(|| {
             let ns = self.query(
                 StatementKind::Workspace,
                 "INSERT INTO workspace(incarnation,base_root,active) VALUES(?1,?2,1) RETURNING ns",
@@ -46,21 +51,37 @@ impl Overlay {
                 ns,
                 incarnation,
             })
-        })
+        })?;
+        self.namespace.set(route.ns);
+        Ok(route)
     }
     /// One route-qualified point observation. It does not enumerate/count payload.
+    /// The row is read when this connection does not remember it.
     pub fn state(&self, route: Route) -> OverlayResult<WorkspaceState> {
         self.check_route(route)?;
-        self.query(
-            StatementKind::Workspace,
-            "SELECT active,captured,revision,base_root,dirty_inodes,dirty_directory_entries,lifecycle,installed,captured_revision,base_readers
-             ,consolidating FROM workspace WHERE ns=?1 AND incarnation=?2",
-            &[&route.ns, &route.incarnation.as_slice()],
-            40,
-            decode,
-        )?
-        .pop()
-        .ok_or(OverlayError::Stale)
+        if let Some((incarnation, state)) = self.workspace_seen.get() {
+            if incarnation == route.incarnation && route.ns == self.namespace.get() {
+                return Ok(state);
+            }
+        }
+        let state = self
+            .query(
+                StatementKind::Workspace,
+                crate::sql::FENCE_LOOKUP,
+                &[&route.ns, &route.incarnation.as_slice()],
+                40,
+                decode,
+            )?
+            .pop()
+            .ok_or(OverlayError::Stale)?;
+        self.remember(route, state);
+        Ok(state)
+    }
+    /// Remembers the row that a statement of this connection just returned.
+    pub(crate) fn remember(&self, route: Route, state: WorkspaceState) {
+        if route.ns == self.namespace.get() {
+            self.workspace_seen.set(Some((route.incarnation, state)));
+        }
     }
     pub(crate) fn live(&self, route: Route) -> OverlayResult<WorkspaceState> {
         let state = self.state(route)?;

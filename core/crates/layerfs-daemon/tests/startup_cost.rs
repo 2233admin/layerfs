@@ -51,7 +51,7 @@ fn failed_owner_start_exposes_original_creation_receipt_without_retry() {
     let started = Owner::start_observed(
         &path,
         ProfileConfig {
-            max_pages: Some(32),
+            max_pages: Some(24),
             ..ProfileConfig::default()
         },
         OwnerConfig::default(),
@@ -78,10 +78,7 @@ fn admission_refusal_has_no_creation_receipt_or_artifact_effect() {
     let started = Owner::start_observed(
         &path,
         ProfileConfig::default(),
-        OwnerConfig {
-            bytes: 1,
-            ..Default::default()
-        },
+        OwnerConfig { namespaces: 0 },
     );
     assert!(matches!(started.result, Err(OwnerError::InvalidAdmission)));
     assert!(!started.creation_reported);

@@ -1,8 +1,7 @@
-//! Workspace raw-record port over original short credited OperationRecord jobs.
-//! Constructor-thread port: each job waits for a credit before its one attempt.
+//! Workspace raw-record port over original short OperationRecord jobs.
+//! Constructor-thread port: each job is one attempt under the Workspace lock.
 use crate::{
-    Command, Completion, IndexedOperationRecordJob, IndexedOperationRecordReply, OwnerClient,
-    OwnerError, Response,
+    IndexedOperationRecordJob, IndexedOperationRecordReply, JobReceipt, OwnerClient, Response,
 };
 use layerfs_overlay::{
     IndexedOperationRecordApply, IndexedOperationRecordChange, IndexedOperationRecordKey,
@@ -17,19 +16,13 @@ fn original_job(
     client: &OwnerClient,
     scope: IndexedOperationRecordScope,
     job: IndexedOperationRecordJob,
-) -> WorkspaceResult<Completion> {
-    let command = Command::IndexedOperationRecord(Box::new(job));
-    let pending = client
-        .submit_waiting(Some(scope.owner.route()), command)
-        .map_err(|(cause, command)| {
-            WorkspaceError::Service(Box::new(OwnerError::Unattempted {
-                cause: Box::new(cause),
-                command: Box::new(command),
-            }))
-        })?;
-    pending
-        .wait()
-        .map_err(|cause| WorkspaceError::Service(Box::new(cause)))
+) -> WorkspaceResult<JobReceipt> {
+    let command = |job_client: &crate::OwnerClient, route| {
+        job_client.indexed_operation_record(route, Box::new(job))
+    };
+    let pending = command(client, Some(scope.owner.route()))
+        .map_err(|cause| WorkspaceError::Service(Box::new(cause)))?;
+    Ok(pending)
 }
 fn copies<T>(value: &Vec<T>) -> OperationRecordCopies {
     OperationRecordCopies {
@@ -69,6 +62,34 @@ impl OverlayOperationRecords for OwnerClient {
                     .as_ref()
                     .map_or(OperationRecordCopies::default(), copies);
                 Ok(OperationRecordReply { value, copies })
+            }
+            _ => Err(WorkspaceError::Service(Box::new(done))),
+        }
+    }
+    fn operation_record_get_many(
+        &self,
+        scope: IndexedOperationRecordScope,
+        keys: &[IndexedOperationRecordKey],
+    ) -> WorkspaceResult<OperationRecordReply<Vec<Option<Vec<u8>>>>> {
+        let job = IndexedOperationRecordJob::GetMany {
+            scope,
+            keys: keys.to_vec(),
+        };
+        let done = original_job(self, scope, job)?;
+        match done.result() {
+            Ok(Response::IndexedOperationRecord(IndexedOperationRecordReply::Values(values))) => {
+                let value = values.clone();
+                let mut total = copies(&value);
+                for bytes in value.iter().flatten() {
+                    let one = copies(bytes);
+                    total.bytes += one.bytes;
+                    total.allocations += one.allocations;
+                    total.retained_bytes += one.retained_bytes;
+                }
+                Ok(OperationRecordReply {
+                    value,
+                    copies: total,
+                })
             }
             _ => Err(WorkspaceError::Service(Box::new(done))),
         }

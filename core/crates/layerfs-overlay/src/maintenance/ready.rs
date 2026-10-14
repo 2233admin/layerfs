@@ -10,11 +10,11 @@ pub(crate) const RETIRE: i64 = 3;
 pub(crate) const STALE: i64 = 4;
 pub(crate) const STEPS: i64 = 5;
 pub(crate) const OPERATION_RECORD: i64 = 6;
-pub(crate) const NATIVE: i64 = 10;
-pub(crate) const NATIVE_DIRECTORY: i64 = 11;
-const READY: &str = "SELECT ns,kind,resource,target,phase,cursor,aux,name FROM maintenance
-    INDEXED BY maintenance_ready WHERE ready=1 AND (ns,kind,resource,target)>(?1,?2,?3,?4)
-    ORDER BY ns,kind,resource,target LIMIT 1";
+/// Stale reference pieces of one layer after a shrink.
+pub(crate) const STALE_PIECES: i64 = 12;
+const READY: &str = "SELECT kind,resource,target,phase,cursor,aux,name FROM cleanup_task
+    INDEXED BY cleanup_task_ready WHERE ready=1 AND (kind,resource,target)>(?1,?2,?3)
+    ORDER BY kind,resource,target LIMIT 1";
 /// What a step of an orphan or of a layer's retirement may still drop:
 /// payload cells, and rows of any kind. A row wider than one cell counts as
 /// the cells it holds, so a page is the same bytes however its rows are
@@ -53,7 +53,7 @@ impl Page {
 
 /// Fixed scheduler cursor, independent of the number of maintenance targets.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct MaintenanceCursor(pub(crate) [i64; 4]);
+pub struct MaintenanceCursor(pub(crate) [i64; 3]);
 /// One actually serviced maintenance item and its next scheduling cursor.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct MaintenanceStep {
@@ -71,20 +71,21 @@ pub(crate) struct Item {
     pub name: Vec<u8>,
 }
 impl Item {
-    fn decode(r: &rusqlite::Row<'_>) -> rusqlite::Result<Self> {
+    /// One queue row of the Workspace `ns` that owns this database.
+    fn decode(ns: i64, r: &rusqlite::Row<'_>) -> rusqlite::Result<Self> {
         Ok(Self {
-            ns: r.get(0)?,
-            kind: r.get(1)?,
-            resource: r.get(2)?,
-            target: r.get(3)?,
-            phase: r.get(4)?,
-            cursor: r.get(5)?,
-            aux: r.get(6)?,
-            name: r.get(7)?,
+            ns,
+            kind: r.get(0)?,
+            resource: r.get(1)?,
+            target: r.get(2)?,
+            phase: r.get(3)?,
+            cursor: r.get(4)?,
+            aux: r.get(5)?,
+            name: r.get(6)?,
         })
     }
     pub fn key(&self) -> MaintenanceCursor {
-        MaintenanceCursor([self.ns, self.kind, self.resource, self.target])
+        MaintenanceCursor([self.kind, self.resource, self.target])
     }
 }
 impl Overlay {
@@ -95,25 +96,19 @@ impl Overlay {
         Ok(self
             .query(
                 StatementKind::Reclaim,
-                "SELECT 1 FROM maintenance WHERE ns=?1 LIMIT 1",
-                &[&route.ns],
+                "SELECT 1 FROM cleanup_task LIMIT 1",
+                &[],
                 8,
                 |_| Ok(()),
             )?
             .is_empty())
     }
-    pub(crate) fn enqueue(
-        &self,
-        ns: i64,
-        kind: i64,
-        resource: i64,
-        target: i64,
-    ) -> OverlayResult<()> {
+    pub(crate) fn enqueue(&self, kind: i64, resource: i64, target: i64) -> OverlayResult<()> {
         self.execute(
             StatementKind::Reclaim,
-            "INSERT INTO maintenance(ns,kind,resource,target) VALUES(?1,?2,?3,?4)
-            ON CONFLICT(ns,kind,resource,target) DO NOTHING",
-            &[&ns, &kind, &resource, &target],
+            "INSERT INTO cleanup_task(kind,resource,target) VALUES(?1,?2,?3)
+            ON CONFLICT(kind,resource,target) DO NOTHING",
+            &[&kind, &resource, &target],
             32,
         )?;
         self.maintenance_ready.set(true);
@@ -129,10 +124,9 @@ impl Overlay {
     ) -> OverlayResult<()> {
         self.execute(
             StatementKind::Reclaim,
-            "UPDATE maintenance SET phase=?5,cursor=?6,aux=?7,name=?8
-            WHERE ns=?1 AND kind=?2 AND resource=?3 AND target=?4",
+            "UPDATE cleanup_task SET phase=?4,cursor=?5,aux=?6,name=?7
+            WHERE kind=?1 AND resource=?2 AND target=?3",
             &[
-                &item.ns,
                 &item.kind,
                 &item.resource,
                 &item.target,
@@ -148,9 +142,9 @@ impl Overlay {
     pub(crate) fn finish_item(&self, item: &Item) -> OverlayResult<()> {
         self.execute(
             StatementKind::Reclaim,
-            "DELETE FROM maintenance
-            WHERE ns=?1 AND kind=?2 AND resource=?3 AND target=?4",
-            &[&item.ns, &item.kind, &item.resource, &item.target],
+            "DELETE FROM cleanup_task
+            WHERE kind=?1 AND resource=?2 AND target=?3",
+            &[&item.kind, &item.resource, &item.target],
             32,
         )?;
         Ok(())
@@ -158,19 +152,19 @@ impl Overlay {
     pub(crate) fn hold_item(&self, item: &Item) -> OverlayResult<()> {
         self.execute(
             StatementKind::Reclaim,
-            "UPDATE maintenance SET ready=0
-            WHERE ns=?1 AND kind=?2 AND resource=?3 AND target=?4",
-            &[&item.ns, &item.kind, &item.resource, &item.target],
+            "UPDATE cleanup_task SET ready=0
+            WHERE kind=?1 AND resource=?2 AND target=?3",
+            &[&item.kind, &item.resource, &item.target],
             32,
         )?;
         Ok(())
     }
-    pub(crate) fn generation_held(&self, ns: i64, generation: i64) -> OverlayResult<bool> {
+    pub(crate) fn generation_held(&self, generation: i64) -> OverlayResult<bool> {
         Ok(!self
             .query(
                 StatementKind::Lease,
                 crate::sql::GENERATION_HELD,
-                &[&ns, &generation],
+                &[&generation],
                 16,
                 |_| Ok(()),
             )?
@@ -187,13 +181,14 @@ impl Overlay {
         self.atomic_cleanup(|| {
             // A step is already one bounded page: a release inside it queues.
             self.release_step.set(false);
+            let ns = self.namespace.get();
             let mut item = self
                 .query(
                     StatementKind::Reclaim,
                     READY,
-                    &[&after.0[0], &after.0[1], &after.0[2], &after.0[3]],
+                    &[&after.0[0], &after.0[1], &after.0[2]],
                     32,
-                    Item::decode,
+                    |r| Item::decode(ns, r),
                 )?
                 .pop();
             if item.is_none() && after != MaintenanceCursor::default() {
@@ -201,9 +196,9 @@ impl Overlay {
                     .query(
                         StatementKind::Reclaim,
                         READY,
-                        &[&0_i64, &0_i64, &0_i64, &0_i64],
+                        &[&0_i64, &0_i64, &0_i64],
                         32,
-                        Item::decode,
+                        |r| Item::decode(ns, r),
                     )?
                     .pop();
             }
@@ -211,25 +206,23 @@ impl Overlay {
                 self.maintenance_ready.set(false);
                 return Ok(None);
             };
-            let (rows, bytes, done) = if matches!(item.kind, FOLD | RETIRE)
-                && self.generation_held(item.ns, item.target)?
-            {
-                self.hold_item(&item)?;
-                (0, 0, false)
-            } else {
-                match item.kind {
-                    FOLD => self.fold_namespace(&item)?,
-                    RETIRE => self.retire_generation(&item)?,
-                    ORPHAN => self.maintain_orphan(&item, PAGE)?,
-                    WAKE_ORPHAN => self.wake_orphan_step(&item)?,
-                    WAKE_GENERATION => self.wake_generation_step(&item)?,
-                    NATIVE => self.retire_native(&item)?,
-                    NATIVE_DIRECTORY => self.retire_native_directory(&item)?,
-                    SERIAL_RETIRE => self.retire_serial(&item, PAGE)?,
-                    STALE | STEPS | OPERATION_RECORD => self.clean_live_item(&item)?,
-                    _ => return Err(OverlayError::Invalid("maintenance kind")),
-                }
-            };
+            let (rows, bytes, done) =
+                if matches!(item.kind, FOLD | RETIRE) && self.generation_held(item.target)? {
+                    self.hold_item(&item)?;
+                    (0, 0, false)
+                } else {
+                    match item.kind {
+                        FOLD => self.fold_namespace(&item)?,
+                        RETIRE => self.retire_generation(&item)?,
+                        ORPHAN => self.maintain_orphan(&item, PAGE)?,
+                        WAKE_ORPHAN => self.wake_orphan_step(&item)?,
+                        WAKE_GENERATION => self.wake_generation_step(&item)?,
+                        SERIAL_RETIRE => self.retire_serial(&item, PAGE)?,
+                        STALE | STEPS | OPERATION_RECORD => self.clean_live_item(&item)?,
+                        STALE_PIECES => self.clean_pieces(&item)?,
+                        _ => return Err(OverlayError::Invalid("maintenance kind")),
+                    }
+                };
             Ok(Some(MaintenanceStep {
                 cursor: item.key(),
                 work: ReclaimStep {
@@ -249,7 +242,7 @@ impl Overlay {
             plans.extend(self.query(
                 StatementKind::Explain,
                 &format!("EXPLAIN QUERY PLAN {statement}"),
-                &[&0_i64, &0_i64, &0_i64, &0_i64],
+                &[&0_i64, &0_i64, &0_i64],
                 32,
                 |row| row.get::<_, String>(3),
             )?);
@@ -258,14 +251,14 @@ impl Overlay {
     }
     pub(crate) fn wake_generation(&self, ns: i64, generation: u64) -> OverlayResult<()> {
         let gen = integer(generation)?;
-        if gen != 0 && !self.generation_held(ns, gen)? {
+        if gen != 0 && !self.generation_held(gen)? {
             // Only enqueue here: one last-owner release must not update the
             // arbitrarily many serial-retirement targets for this generation.
             self.execute(
                 StatementKind::Reclaim,
-                "INSERT INTO maintenance(ns,kind,resource,target) VALUES(?1,9,0,?2)
-                 ON CONFLICT(ns,kind,resource,target) DO UPDATE SET cursor=0,aux=-1,ready=1",
-                &[&ns, &gen],
+                "INSERT INTO cleanup_task(kind,resource,target) VALUES(9,0,?1)
+                 ON CONFLICT(kind,resource,target) DO UPDATE SET cursor=0,aux=-1,ready=1",
+                &[&gen],
                 16,
             )?;
             self.maintenance_ready.set(true);

@@ -209,8 +209,8 @@ fn quiet_within(harness: &Harness, token: WorkspaceToken, limit: Duration) -> bo
     let mut last = None;
     within(limit, || {
         let work = harness.status(token).native.unwrap().work.unwrap();
-        let now = (work.received, work.admitted, work.completed);
-        let settled = work.received == 0 && work.admitted == 0 && last == Some(now);
+        let now = (work.active, work.completed);
+        let settled = work.active == 0 && last == Some(now);
         last = Some(now);
         settled
     })
@@ -401,18 +401,16 @@ fn contended(error: &WorkspaceError) -> bool {
         Some(PortError::History(HistoryError::Busy))
     )
 }
-/// The first window, reserved by the Workspace's first create.
+/// The first window, reserved by the mount before readiness and used by the
+/// Workspace's first create.
 fn first_window(checks: &mut Checks, fx: &Fx, mount: &Path) -> u64 {
-    let opened = fx.counts();
-    assert_eq!(opened, (0, 0), "the Workspace starts with no serial range");
-    let first = create(mount, "first.txt");
     let attempts = fx.attempts();
     let start = attempts
         .first()
         .and_then(|attempt| attempt.reserved)
         .map_or(0, |(start, _)| start);
     println!(
-        "PA first create (no local range): attempts={attempts:?} store_serial_reservations={}",
+        "PA ready (first window reserved before readiness): attempts={attempts:?} store_serial_reservations={}",
         fx.store.work().serial_reservations
     );
     expect!(
@@ -420,7 +418,14 @@ fn first_window(checks: &mut Checks, fx: &Fx, mount: &Path) -> u64 {
         attempts.len() == 1
             && attempts[0].reserved.is_some_and(|(_, count)| count == SERIAL_REFILL)
             && fx.counts() == (1, 1),
-        "the first create did not make exactly one successful reservation of {SERIAL_REFILL}: {attempts:?}"
+        "the mount did not make exactly one successful reservation of {SERIAL_REFILL}: {attempts:?}"
+    );
+    let first = create(mount, "first.txt");
+    expect!(
+        checks,
+        fx.counts() == (1, 1),
+        "the first create did not use the window reserved before readiness: {:?}",
+        fx.attempts()
     );
     created(
         checks,

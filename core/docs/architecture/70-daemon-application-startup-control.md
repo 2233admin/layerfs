@@ -149,10 +149,10 @@ array; it is never a successful zero-valued snapshot.
 | 1 | 0 | OwnerWork scalar fields in source declaration order, then completed[6], queue_wait_ns[6], service_ns[6] |
 | 2, 3 | StatementKind 0 to 13 | Foreground and maintenance StatementWork respectively, all 17 source fields |
 | 4, 5 | 0 | Foreground and maintenance PayloadWork, all seven source fields |
-| 6, 7 | 0 | Foreground and maintenance AllocationWork, all six source fields |
+| 6, 7 | 0 | Foreground and maintenance AllocationWork, six original encoded fields (attempts, requested_bytes, admitted_jobs, refusals, observations, freelist_queries) |
 | 8 | 0 | StoreWork: object_batches, object_ids, length_batches, length_ids, serial_reservations |
 | 9 | 0 | ReadServiceWork, all 13 source fields; booleans encoded as 0 or 1 |
-| 10 | 0 | ClientWork, all seven source fields |
+| 10 | 0 | ClientWork: cache_hits, cache_misses, upstream_batches, authenticated_bytes, evictions, charged_cache_bytes, cached_objects, then seeded_objects, seeded_bytes, seeded_lengths (appended for #320; earlier positions unchanged) |
 | 11 | 0 | DispatchWork, all ten source fields |
 | 12 | 0 | Native mount owner id, root serial, serving, detached, abort_bound |
 | 13 | -1 | Writer SqlWork scalars in declaration order, then seven statement_phases (calls, wall_ns), then seven commit_phases (calls, wall_ns) |
@@ -168,6 +168,7 @@ array; it is never a successful zero-valued snapshot.
 | 28 | 0 | Global Resources: 17 StoredCounts fields in declaration order, five AllocationState scalar fields, six AllocationWork fields, then database_pages, free_pages, debt_upper_bytes |
 | 29 | Reader index | That existing Store reader's 42 Storage Diagnostics fields, in the same order as section 16; unavailable while leased or when the pool observation lock is unavailable |
 | 30 | 0 | Resource-observer admitted and completion_available bits; when completed, its actual StatementWork total (17 fields), PayloadWork (7), AllocationWork (6), parked_turns, queue_wait_ns and service_ns follow |
+| 31 | 0 | Common overlay budget limit, aggregate pager allowance, fixed bytes, job bytes, peak job bytes and outstanding jobs; actual template SQLite ENABLE_MEMORY_MANAGEMENT readback bit |
 | 99 | 0 | Number of preceding completed records, their values-array number count, their unavailable section count |
 
 All sections use the same original authenticated call correlation. The normal
@@ -258,3 +259,17 @@ Workspace populations, exactly charged observer jobs/SQL, and original successfu
 after a failed diagnostic sink. Non-Linux application startup remains Unsupported;
 host codec/SDK proofs do not claim Linux binary execution. These tests and source
 descriptions do not constitute performance admission evidence.
+
+
+## SDK refactor addition — 2026-10-12
+
+The current [SDK surface](../../../sdk.md) has Project init/fork/branches/commits,
+Sandbox create/close and Workspace mount/exec/commit/status/unmount. Create folds
+the original installation and requires its ready observation; close is explicit
+container stop/delete and makes no application drain claim. Optional Workspace
+exec delegates Sandbox execution; this daemon still supervises no commands.
+The authorized Branch-page request is control tag 14, with reply tag 17 and one
+existing HistoryCatalog::branches dispatch. Numeric section 0 reports operation
+code 14 in its existing field. No other numeric section, column, persistence
+schema, control operation or execution component is added by this refactor.
+Earlier pinned statements and qualification gaps above retain their own scope.

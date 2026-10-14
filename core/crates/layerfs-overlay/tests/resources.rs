@@ -2,7 +2,7 @@ mod payload_support;
 use layerfs_overlay::*;
 use payload_support::*;
 #[test]
-fn physical_reserve_counts_allocation_separately_from_logical_rows_and_reusable_pages() {
+fn physical_observation_counts_logical_rows_and_reusable_pages_without_reserve() {
     let temp = Temp::new();
     let db = temp.db();
     let route = db.open_workspace([151; 32], [152; 32]).unwrap();
@@ -14,7 +14,8 @@ fn physical_reserve_counts_allocation_separately_from_logical_rows_and_reusable_
     // Four rows of 32 KiB.
     assert_eq!(r.counts.payload_cells, 4);
     assert_eq!(r.counts.payload_bytes, 131072);
-    assert!(r.allocation.allocated_bytes > r.allocation.logical_bytes + CLEANUP_HEADROOM);
+    assert_eq!(r.allocation.reserved_tail_bytes, 0);
+    assert_eq!(r.allocation.cleanup_headroom_bytes, 0);
     assert_eq!(r.counts.reply_tickets, 0);
     assert_eq!(r.counts.source_rows, 1);
     let global = db.resources(None).unwrap();
@@ -37,12 +38,11 @@ fn physical_reserve_counts_allocation_separately_from_logical_rows_and_reusable_
     println!("S6_RESOURCES before={r:?} pending={pending:?} after={cleaned:?}");
     db.release_base_source(source).unwrap();
     db.close(route).unwrap();
-    for _ in 0..1000 {
-        if db.reclaim_closed(0).unwrap().unwrap().done {
-            break;
-        }
-    }
-    assert_eq!(db.resources(None).unwrap().counts, StoredCounts::default());
+    assert_eq!(db.cleanup_state(route).unwrap(), CleanupState::Queued);
+    let retained = db.resources(None).unwrap().counts;
+    assert_eq!(retained.namespaces, 1);
+    assert_eq!(retained.payload_cells, cleaned.counts.payload_cells);
+    // The counts are the one row of the database's Workspace, by its key.
     let plan = db.explain_accounting().unwrap();
     assert!(plan
         .iter()
@@ -88,7 +88,7 @@ fn retained_snapshot_parks_orphan_migration_then_rows_move_without_payload_dupli
     // Rows of 32 KiB: 64 hold the 2 MiB.
     assert_eq!(held.counts.payload_cells, 64);
     assert_eq!(held.counts.payload_bytes, 2 << 20);
-    assert_eq!(held.counts.wait_refs, 1);
+    assert_eq!(held.open.generation_waits, 1);
     db.resolve_failed_capture(capture).unwrap();
     db.release_captured_reader(reader).unwrap();
     for turn in 0..2000 {
@@ -105,7 +105,7 @@ fn retained_snapshot_parks_orphan_migration_then_rows_move_without_payload_dupli
     let moved = db.resources(Some(route)).unwrap();
     assert_eq!(moved.counts.payload_cells, 64);
     assert_eq!(moved.counts.payload_bytes, 2 << 20);
-    assert_eq!(moved.counts.wait_refs, 0);
+    assert_eq!(moved.open.generation_waits, 0);
     let read = db.acquire_file_read(source, open, 1).unwrap();
     for at in (0..2 << 20).step_by(131072) {
         assert_eq!(
@@ -210,15 +210,7 @@ fn lost_backing_path_quarantines_without_sql_or_releasing_published_capture() {
     let bytes = std::fs::read(&path).unwrap();
     let retained = temp.0.join("retained.sqlite");
     std::fs::rename(&path, &retained).unwrap();
-    let error = db
-        .apply(
-            source,
-            &Changes {
-                inodes: vec![f.inode(20)],
-                ..Changes::default()
-            },
-        )
-        .unwrap_err();
+    let error = db.allocation().unwrap_err();
     assert!(
         matches!(&error,OverlayError::Uncertain {cause,completion:None} if matches!(cause.as_ref(),OverlayError::Io(e) if e.kind()==std::io::ErrorKind::NotFound)),
         "{error:?}"

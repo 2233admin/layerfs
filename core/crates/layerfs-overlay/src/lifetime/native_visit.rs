@@ -3,7 +3,7 @@
 //! to release: install, revoke, close and reclamation are owner jobs too and
 //! cannot run inside it. A visit that cannot decide changes nothing; its
 //! request holds nothing until it visits again.
-use crate::namespace::job_rows::JobRows;
+use crate::namespace::job_rows::{JobRows, LocalRow};
 use crate::{
     db::integer, inode, BaseSource, Changes, InodeKind, LocalRead, NativeApplied, NativeDecision,
     NativeEffect, NativeMount, NativeObservation, OpenFile, Overlay, OverlayError, OverlayResult,
@@ -58,8 +58,27 @@ impl Overlay {
         held: Held,
         live: bool,
     ) -> OverlayResult<(WorkspaceState, bool)> {
-        let (state, held) = self.fence_row(mount, serial, held, live)?;
+        let (state, held, _) = self.fence_row(mount, serial, held, live, false)?;
         Ok((state, held != 0))
+    }
+    /// The same fence for a visit that decides over the inode it names. Its
+    /// statement also read that inode's latest local row of the view, which
+    /// starts the job's row memory: the decision and its publication do not
+    /// read the row again. While the engine holds an orphan, an inode read
+    /// asks the orphan domain first, so nothing is kept then and the row is
+    /// read where it is asked for, as before.
+    fn visit_fence(
+        &self,
+        mount: NativeMount,
+        serial: u64,
+        held: Held,
+    ) -> OverlayResult<(WorkspaceState, bool, JobRows)> {
+        let (state, held, row) = self.fence_row(mount, serial, held, true, true)?;
+        let seen = JobRows::new();
+        if !self.orphan_seen.get() {
+            seen.record(integer(serial)?, &row);
+        }
+        Ok((state, held != 0, seen))
     }
     /// The same fence on an open directory descriptor, and its floor: the
     /// first cookie that is still an offset of the handle.
@@ -70,65 +89,85 @@ impl Overlay {
         handle: u64,
         live: bool,
     ) -> OverlayResult<(WorkspaceState, u64)> {
-        let (state, floor) = self.fence_row(mount, serial, Held::Directory(handle), live)?;
+        let (state, floor, _) =
+            self.fence_row(mount, serial, Held::Directory(handle), live, false)?;
         let floor = u64::try_from(floor).map_err(|_| OverlayError::Invalid("directory floor"))?;
         Ok((state, floor))
     }
+    /// `row` selects the statement that also returns the named inode's
+    /// latest local row.
     fn fence_row(
         &self,
         mount: NativeMount,
         serial: u64,
         held: Held,
         live: bool,
-    ) -> OverlayResult<(WorkspaceState, i64)> {
+        row: bool,
+    ) -> OverlayResult<(WorkspaceState, i64, Option<LocalRow>)> {
         self.check_route(mount.route)?;
-        let (owner, key) = (integer(mount.owner)?, integer(serial)?);
-        let incarnation = mount.route.incarnation.as_slice();
-        let decode = |r: &rusqlite::Row<'_>| {
-            Ok((
-                crate::lifetime::workspace::decode(r)?,
-                r.get::<_, Option<i64>>(11)?,
-                r.get::<_, Option<i64>>(12)?,
-                r.get::<_, Option<bool>>(13)?,
-                r.get::<_, Option<i64>>(14)?,
-            ))
+        let key = integer(serial)?;
+        let (state, local) = if row {
+            let found = self
+                .query(
+                    StatementKind::Workspace,
+                    crate::sql::FENCE_LOOKUP_ROW,
+                    &[&mount.route.ns, &mount.route.incarnation.as_slice(), &key],
+                    48,
+                    |r| {
+                        let local = if r.get::<_, Option<i64>>(11)?.is_some() {
+                            Some(inode::local_row_at(r, 11)?)
+                        } else {
+                            None
+                        };
+                        Ok((crate::lifetime::workspace::decode(r)?, local))
+                    },
+                )?
+                .pop()
+                .ok_or(OverlayError::Stale)?;
+            self.remember(mount.route, found.0);
+            found
+        } else {
+            (self.state(mount.route)?, None)
         };
-        let row = match held {
-            Held::Lookup => self.query(
-                StatementKind::Workspace,
-                crate::sql::FENCE_LOOKUP,
-                &[&mount.route.ns, &incarnation, &owner, &key],
-                56,
-                decode,
-            ),
-            Held::File(handle) | Held::Handle(handle) | Held::Directory(handle) => self.query(
-                StatementKind::Workspace,
-                match held {
-                    Held::File(_) => crate::sql::FENCE_FILE,
-                    Held::Directory(_) => crate::sql::FENCE_DIRECTORY,
-                    _ => crate::sql::FENCE_HANDLE,
-                },
-                &[
-                    &mount.route.ns,
-                    &incarnation,
-                    &owner,
-                    &key,
-                    &integer(handle)?,
-                ],
-                64,
-                decode,
-            ),
-        }?
-        .pop();
-        let (state, attached, root, revoked, held) = row.ok_or(OverlayError::Stale)?;
         if live && state.closed {
             return Err(OverlayError::Closed);
         }
-        if attached != Some(owner) || root != Some(integer(mount.root)?) || revoked != Some(false) {
+        let open = self.open.borrow();
+        if open.mounts.rows.get(&mount.route.ns) != Some(&(mount, false)) {
             return Err(OverlayError::Stale);
         }
-        Ok((state, held.ok_or(OverlayError::Stale)?))
+        let file = |handle| {
+            open.files
+                .rows
+                .get(&(mount.route.ns, handle))
+                .filter(|held| held.mount == mount.owner && held.file.serial == serial)
+        };
+        let directory = |handle| {
+            open.directories
+                .rows
+                .get(&(mount.route.ns, handle))
+                .filter(|held| held.directory.mount == mount && held.directory.serial == serial)
+        };
+        let value = match held {
+            Held::Lookup => open
+                .kernel
+                .rows
+                .get(&(mount.route.ns, mount.owner, serial))
+                .map(|_| 1),
+            Held::File(handle) => file(handle).map(|held| i64::from(held.file.writable)),
+            Held::Handle(handle) => {
+                if file(handle).is_some() || directory(handle).is_some() {
+                    Some(1)
+                } else {
+                    None
+                }
+            }
+            Held::Directory(handle) => directory(handle).map(|held| held.floor as i64),
+        }
+        .ok_or(OverlayError::Stale)?;
+        Ok((state, value, local))
     }
+
     /// LOOKUP or GETATTR in one visit. The callback is one bounded semantic
     /// decision over current rows and base facts it holds or reads from
     /// memory; it performs no provider I/O. A decision that still needs a
@@ -193,10 +232,10 @@ impl Overlay {
         let result = self
             .atomic(|| {
                 let held = handle.map_or(Held::Lookup, Held::Handle);
-                let (state, _) = self.native_fence(mount, serial, held, true)?;
+                // The job's rounds read each inode row once, and the row
+                // of the inode it names with its fence.
+                let (state, _, seen) = self.visit_fence(mount, serial, held)?;
                 let source = self.visit_source(mount, state)?;
-                // The job's rounds read each inode row once.
-                let seen = JobRows::new();
                 let rows = self.source_rows_at(source, state, Some(&seen));
                 let inode = match decide(rows, source)? {
                     NativeDecision::Needs(value) => {
@@ -280,15 +319,14 @@ impl Overlay {
         if self.orphan_seen.get() {
             if let Some(orphan) = self.orphan(ns, key)? {
                 // Without a descriptor a removed regular file is gone.
-                if handle.is_none() && self.orphan_layer(ns, key)?.kind == InodeKind::File {
+                if handle.is_none() && self.orphan_layer(key)?.kind == InodeKind::File {
                     return Err(OverlayError::Missing);
                 }
-                let local = self.orphan_read(ns, key, orphan, offset, length)?;
+                let local = self.orphan_read(key, orphan, offset, length)?;
                 return Ok((orphan.root, local));
             }
         }
-        let local =
-            self.read_layers(ns, serial, state.active.0, state.installed, offset, length)?;
+        let local = self.read_layers(serial, state.active.0, state.installed, offset, length)?;
         Ok((state.base_root, local))
     }
     /// One native mutation in one visit. The callback decides over current
@@ -310,7 +348,9 @@ impl Overlay {
     ) -> OverlayResult<Option<NativeApplied>> {
         self.atomic(|| {
             let held = handle.map_or(Held::Lookup, Held::File);
-            let (state, writable) = self.native_fence(mount, serial, held, true)?;
+            // The rows the decision reads are the rows it publishes over;
+            // the fence read the row of the inode the request names.
+            let (state, writable, seen) = self.visit_fence(mount, serial, held)?;
             let file = handle.map(|owner| OpenFile {
                 route: mount.route,
                 owner,
@@ -318,8 +358,6 @@ impl Overlay {
                 writable,
             });
             let source = self.visit_source(mount, state)?;
-            // The rows the decision reads are the rows it publishes over.
-            let seen = JobRows::new();
             let rows = self.source_rows_at(source, state, Some(&seen));
             let Some((changes, effect)) = decide(rows, file)? else {
                 return Ok(None);
@@ -336,33 +374,23 @@ impl Overlay {
     /// the VM program of the created-and-opened file's one custody write.
     pub fn explain_native_visit(&self, mount: NativeMount) -> OverlayResult<Vec<String>> {
         self.state(mount.route)?;
-        let (ns, owner, one) = (mount.route.ns, integer(mount.owner)?, 1_i64);
+        let ns = mount.route.ns;
         let incarnation = mount.route.incarnation.as_slice();
-        let fence: [&dyn rusqlite::ToSql; 5] = [&ns, &incarnation, &owner, &one, &one];
-        let custody: [&dyn rusqlite::ToSql; 2] = [&ns, &one];
+        let one = 1_i64;
+        let params: [&dyn rusqlite::ToSql; 3] = [&ns, &incarnation, &one];
         let mut plans = Vec::new();
-        for (label, statement, params) in [
-            ("fence-lookup", crate::sql::FENCE_LOOKUP, &fence[..4]),
-            ("fence-file", crate::sql::FENCE_FILE, &fence[..]),
-            ("fence-handle", crate::sql::FENCE_HANDLE, &fence[..]),
-            ("fence-directory", crate::sql::FENCE_DIRECTORY, &fence[..]),
-            ("drop-open", crate::sql::FILE_OPENS_DROP, &custody[..]),
-            ("drop-lookup", crate::sql::FILE_LOOKUPS_DROP, &custody[..]),
-            ("drop-reader", crate::sql::FILE_READERS_DROP, &custody[..]),
+        for (label, statement, bound) in [
+            ("workspace", crate::sql::FENCE_LOOKUP, 2),
+            ("workspace-inode", crate::sql::FENCE_LOOKUP_ROW, 3),
         ] {
             plans.extend(self.query(
                 StatementKind::Explain,
                 &format!("EXPLAIN QUERY PLAN {statement}"),
-                params,
-                64,
-                |row| Ok(format!("{label}: {}", row.get::<_, String>(3)?)),
+                &params[..bound],
+                48,
+                |r| Ok(format!("{label}: {}", r.get::<_, String>(3)?)),
             )?);
         }
-        plans.push(self.explain_program(
-            "open-and-lookup",
-            crate::sql::FILE_OPEN_LOOKUP_ADD,
-            &custody,
-        )?);
         Ok(plans)
     }
 }

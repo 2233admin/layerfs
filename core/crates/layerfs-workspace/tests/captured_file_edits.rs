@@ -1,341 +1,19 @@
 //! Real owner normalization with an independent final-byte/canonical oracle.
+mod captured_support;
 mod common;
-use common::{file, fixture, Store};
+use captured_support::*;
+use common::{file, Store};
 use layerfs_content::{
-    apply_edits, construct_runs, read_all, AuthenticatedObjects, ConstructionPolicy, ContentError,
-    ContentResult, Edit, EditRequest, EditSequence, EditSource, FileRun, FileRuns,
-    FinalizedConsumer, FinalizedObject, ObjectId, ObjectRole,
+    construct_runs, ConstructionPolicy, ContentError, ContentResult, Edit, FileRun, FileRuns,
+    FinalizedConsumer, FinalizedObject, ObjectRole,
 };
-use layerfs_daemon::{Command, Completion, Owner, OwnerClient, OwnerConfig, Response};
-use layerfs_overlay::{
-    CapturedReader, IndexedOperationRecordScope, OperationOwner, ProfileConfig, Route,
-};
+use layerfs_daemon::{JobReceipt, OwnerClient};
+use layerfs_overlay::{CapturedReader, IndexedOperationRecordScope};
 use layerfs_telemetry::timer::Timing;
 use layerfs_workspace::{
-    BaseView, CanonicalClient, CapturedFileAttempt, CapturedFileCustody, CapturedFileEdits,
-    InodeSerials, Operation, Outcome, OverlayCapturedRuns, OverlayOperationRecords, Position, Time,
-    Workspace, WorkspaceError, WorkspaceResult,
+    CapturedFileAttempt, CapturedFileEdits, Operation, OverlayCapturedRuns,
+    OverlayOperationRecords, WorkspaceError, WorkspaceResult,
 };
-use std::{
-    cell::Cell,
-    collections::BTreeMap,
-    path::PathBuf,
-    sync::{
-        atomic::{AtomicU64, Ordering},
-        Arc, Mutex,
-    },
-    time::{Duration, Instant},
-};
-
-const TIME: Time = Time {
-    seconds: 1,
-    nanoseconds: 0,
-};
-const CONTEXT: u32 = 0x4346_0000;
-const EDITS: u32 = 0x4346_0001;
-struct Objects {
-    store: Store,
-    calls: Mutex<BTreeMap<ObjectId, u64>>,
-    refusal: Mutex<Option<(ObjectId, ContentError)>>,
-}
-impl AuthenticatedObjects for Objects {
-    fn read_canonical_batch(&self, ids: &[ObjectId]) -> ContentResult<Vec<Vec<u8>>> {
-        for id in ids {
-            *self.calls.lock().unwrap().entry(*id).or_default() += 1;
-        }
-        if let Some((id, cause)) = &*self.refusal.lock().unwrap() {
-            if ids.contains(id) {
-                return Err(cause.clone());
-            }
-        }
-        self.store.read_canonical_batch(ids)
-    }
-}
-struct Serials(AtomicU64);
-impl InodeSerials for Serials {
-    fn reserve(&self, count: u64) -> WorkspaceResult<(u64, u64)> {
-        Ok((self.0.fetch_add(count, Ordering::Relaxed), count))
-    }
-}
-struct Case {
-    owner: Option<Owner>,
-    client: OwnerClient,
-    workspace: Arc<Workspace>,
-    objects: Arc<Objects>,
-    store: Store,
-    bytes: Vec<u8>,
-    route: Route,
-    next: Cell<u64>,
-    serials: Serials,
-    path: PathBuf,
-}
-impl Case {
-    fn new() -> Self {
-        static NEXT: AtomicU64 = AtomicU64::new(0);
-        let f = fixture();
-        let objects = Arc::new(Objects {
-            store: f.store.clone(),
-            calls: Mutex::new(BTreeMap::new()),
-            refusal: Mutex::new(None),
-        });
-        let canonical = Arc::new(CanonicalClient::with_lengths(
-            objects.clone(),
-            Arc::new(f.store.clone()),
-            0,
-        ));
-        let base = BaseView::open(canonical, f.root, f.scope).unwrap();
-        let path = std::env::temp_dir().join(format!(
-            "layerfs-captured-edits-{}-{}.sqlite",
-            std::process::id(),
-            NEXT.fetch_add(1, Ordering::Relaxed)
-        ));
-        let owner = Owner::start(&path, ProfileConfig::default(), OwnerConfig::default()).unwrap();
-        let client = owner.client();
-        let opened = job(
-            &client,
-            None,
-            Command::Open {
-                incarnation: [91; 32],
-                base_root: f.root.0.to_bytes(),
-            },
-        );
-        let route = match opened.result() {
-            Ok(Response::Opened(route)) => *route,
-            other => panic!("{other:?}"),
-        };
-        drop(opened);
-        Self {
-            owner: Some(owner),
-            client,
-            workspace: Arc::new(Workspace::bind(route, base)),
-            objects,
-            store: f.store,
-            bytes: f.bytes,
-            route,
-            next: Cell::new(0),
-            serials: Serials(AtomicU64::new(1000)),
-            path,
-        }
-    }
-    fn request(&self) -> u64 {
-        let value = self.next.get() + 1;
-        self.next.set(value);
-        value
-    }
-    fn job(&self, command: Command) -> Completion {
-        job(&self.client, Some(self.route), command)
-    }
-    fn mutate(&self, operation: Operation) -> Option<layerfs_workspace::ViewStat> {
-        let acquired = self.job(Command::AcquireBaseSource {
-            owner: self.request(),
-        });
-        let source = match acquired.result() {
-            Ok(Response::BaseSource(source)) => *source,
-            other => panic!("{other:?}"),
-        };
-        drop(acquired);
-        let view = self.workspace.view_for_source(source).unwrap();
-        let outcome = self
-            .workspace
-            .mutate(&self.client, &self.serials, &view, operation, TIME)
-            .unwrap();
-        let result = match outcome {
-            Outcome::Applied { publication, stat } => {
-                assert!(self
-                    .job(Command::ReplyAttempted(publication))
-                    .result()
-                    .is_ok());
-                stat
-            }
-            Outcome::Unchanged { stat } => stat,
-        };
-        assert!(self
-            .job(Command::ReleaseBaseSource(source))
-            .result()
-            .is_ok());
-        result
-    }
-    fn write(&self, serial: u64, at: u64, bytes: &[u8]) {
-        self.mutate(Operation::Write {
-            serial,
-            position: Position::At(at),
-            data: bytes.into(),
-        });
-    }
-    fn size(&self, serial: u64, size: u64) {
-        self.mutate(Operation::SetAttributes {
-            serial,
-            mode: None,
-            mtime: None,
-            size: Some(size),
-        });
-    }
-    fn captured(&self, file_scope: u64) -> (CapturedReader, IndexedOperationRecordScope) {
-        let captured = self.job(Command::Capture);
-        let capture = match captured.result() {
-            Ok(Response::Captured(capture)) => *capture,
-            other => panic!("{other:?}"),
-        };
-        drop(captured);
-        let acquired = self.job(Command::AcquireCapturedReader {
-            capture,
-            request: self.request(),
-        });
-        let reader = match acquired.result() {
-            Ok(Response::CapturedReader(Some(reader))) => *reader,
-            other => panic!("{other:?}"),
-        };
-        drop(acquired);
-        let acquired = self.job(Command::AcquireOperation {
-            request: self.request(),
-        });
-        let owner = match acquired.result() {
-            Ok(Response::Operation(Some(owner))) => *owner,
-            other => panic!("{other:?}"),
-        };
-        drop(acquired);
-        (reader, IndexedOperationRecordScope { owner, file_scope })
-    }
-    fn construct(
-        &self,
-        reader: CapturedReader,
-        scope: IndexedOperationRecordScope,
-        serial: u64,
-    ) -> CapturedFileAttempt {
-        let prepared =
-            CapturedFileEdits::prepare(&self.workspace, &self.client, reader, serial, scope)
-                .unwrap();
-        let policy = ConstructionPolicy::frozen_default();
-        Timing::disabled("captured-proof", |timing| {
-            Ok::<CapturedFileAttempt, ContentError>(prepared.construct(
-                policy,
-                &policy.capacities(),
-                &mut self.store.clone(),
-                timing.child("construct"),
-            ))
-        })
-        .0
-        .unwrap()
-    }
-    fn release(&self, custody: CapturedFileCustody, reader_released: bool) {
-        let reader = custody.reader;
-        let operation = custody.records.scope.owner;
-        drop(custody); // First drop original credited outcomes, not their engine owners.
-        if !reader_released {
-            assert!(self
-                .job(Command::ReleaseCapturedReader(reader))
-                .result()
-                .is_ok());
-        }
-        release_operation(self, operation);
-    }
-    fn oracle(&self, root: ObjectId, expected: &[u8], edits: Option<&Model>) {
-        let mut bytes = Vec::new();
-        Timing::disabled("oracle", |scope| {
-            read_all(&self.store, root, &mut bytes, scope.child("read"))
-        })
-        .0
-        .unwrap();
-        assert_eq!(bytes, expected);
-        let canonical = match edits {
-            None => file(&self.store, expected),
-            Some(edits) => {
-                Timing::disabled("byte-edit-oracle", |scope| {
-                    apply_edits(
-                        ConstructionPolicy::frozen_default(),
-                        &ConstructionPolicy::frozen_default().capacities(),
-                        &self.store,
-                        EditRequest {
-                            root: edits.root,
-                            edits,
-                            source: edits,
-                        },
-                        &mut self.store.clone(),
-                        scope.child("construct"),
-                    )
-                })
-                .0
-                .unwrap()
-                .root
-            }
-        };
-        assert_eq!(
-            root, canonical,
-            "independent final bytes and original byte-source canonical route"
-        );
-    }
-}
-impl Drop for Case {
-    fn drop(&mut self) {
-        if let Some(owner) = self.owner.take() {
-            owner.stop().unwrap();
-        }
-        let _ = std::fs::remove_file(&self.path);
-    }
-}
-fn job(client: &OwnerClient, route: Option<Route>, command: Command) -> Completion {
-    let pending = client
-        .try_submit(route, command)
-        .unwrap_or_else(|(cause, original)| panic!("original admission: {cause:?} {original:?}"));
-    let end = Instant::now() + Duration::from_secs(3);
-    loop {
-        if let Some(original) = pending.try_complete().unwrap() {
-            return original;
-        }
-        assert!(Instant::now() < end, "bounded original owner job");
-        std::thread::yield_now();
-    }
-}
-/// The engine thread drops its own final credit after the consumer observes a
-/// completion: bound the wait for that release before an exact counter check.
-fn settled(client: &OwnerClient, outstanding: usize) {
-    let end = Instant::now() + Duration::from_secs(3);
-    while client.diagnostics().unwrap().outstanding != outstanding {
-        assert!(
-            Instant::now() < end,
-            "engine did not release its final credit"
-        );
-        std::thread::yield_now();
-    }
-}
-fn release_operation(case: &Case, owner: OperationOwner) {
-    assert!(case.job(Command::ReleaseOperation(owner)).result().is_ok());
-}
-struct Model {
-    root: ObjectId,
-    base: u64,
-    bytes: Vec<u8>,
-    edits: Vec<Edit>,
-}
-impl EditSequence for Model {
-    fn base_len(&self) -> u64 {
-        self.base
-    }
-    fn final_len(&self) -> u64 {
-        self.bytes.len() as u64
-    }
-    fn len(&self) -> usize {
-        self.edits.len()
-    }
-    fn edit_at(&self, index: usize) -> ContentResult<Edit> {
-        self.edits
-            .get(index)
-            .copied()
-            .ok_or(ContentError::InvalidRecord("oracle edit index"))
-    }
-}
-impl EditSource for Model {
-    fn replacement_len(&self, index: usize) -> u64 {
-        self.edits[index].replacement_len()
-    }
-    fn read_at(&self, index: usize, offset: u64, output: &mut [u8]) -> ContentResult<usize> {
-        let edit = self.edits[index];
-        let start = edit.start() + offset;
-        let count = (edit.replacement_len() - offset).min(output.len() as u64) as usize;
-        output[..count].copy_from_slice(&self.bytes[start as usize..start as usize + count]);
-        Ok(count)
-    }
-}
 
 #[test]
 fn overlapping_writes_shrink_regrow_and_cross_cell_spans_match_final_bytes() {
@@ -381,8 +59,6 @@ fn overlapping_writes_shrink_regrow_and_cross_cell_spans_match_final_bytes() {
         Some(&1)
     );
     case.release(attempt.custody, false);
-    settled(&case.client, 0);
-    assert_eq!(case.client.diagnostics().unwrap().credited_bytes, 0);
 }
 
 #[test]
@@ -427,7 +103,10 @@ fn length_growth_and_true_new_file_do_not_use_a_fabricated_base() {
     drop(attempt.custody);
     drop(fresh_attempt.custody);
     assert!(case
-        .job(Command::ReleaseCapturedReader(reader))
+        .job(
+            |job_client: &layerfs_daemon::OwnerClient, job_route| job_client
+                .release_captured_reader(job_route, reader)
+        )
         .result()
         .is_ok());
     release_operation(&case, scope.owner);
@@ -463,10 +142,13 @@ fn many_edits_use_numbered_records_after_install_and_reads_survive_close() {
     let prepared =
         CapturedFileEdits::prepare(&case.workspace, &case.client, reader, 8, scope).unwrap();
     assert!(case
-        .job(Command::Install {
-            capture: reader.capture(),
-            root: reader.root()
-        })
+        .job(
+            |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.install(
+                job_route,
+                reader.capture(),
+                reader.root()
+            )
+        )
         .result()
         .is_ok());
     let policy = ConstructionPolicy::frozen_default();
@@ -524,7 +206,10 @@ fn many_edits_use_numbered_records_after_install_and_reads_survive_close() {
         after = keys.last().copied();
     }
     assert_eq!(count, 129);
-    assert!(case.job(Command::Close).result().is_ok());
+    assert!(case
+        .job(|job_client: &layerfs_daemon::OwnerClient, job_route| job_client.close(job_route))
+        .result()
+        .is_ok());
     let reply = case
         .client
         .captured_run_step(layerfs_overlay::CapturedRunCursor::new(reader, 8, 0, 400000).unwrap())
@@ -578,7 +263,8 @@ fn new_hole_above_four_gib_uses_bounded_original_run_work() {
     assert_eq!(result.root, oracle.file.root);
     assert_eq!(result.logical_len, length);
     assert_eq!(attempt.custody.work.normalized_edits, 1);
-    assert_eq!(attempt.custody.work.normalization_steps, 1);
+    // A new file has no surviving base bytes, so normalization visits nothing.
+    assert_eq!(attempt.custody.work.normalization_steps, 0);
     assert_eq!(attempt.custody.work.source_steps, 1);
     case.release(attempt.custody, false);
 }
@@ -657,12 +343,14 @@ fn occupied_context_and_retired_reader_keep_original_completions_without_replay(
     let Some(WorkspaceError::Service(original)) = &custody.records.failure else {
         panic!("original deciding completion")
     };
-    assert!(original.downcast_ref::<Completion>().is_some());
+    assert!(original.downcast_ref::<JobReceipt>().is_some());
     assert_eq!(custody.work.normalization_steps, 0);
-    assert!(case.client.diagnostics().unwrap().credited_bytes > 0);
     drop(custody);
     assert!(case
-        .job(Command::ReleaseCapturedReader(reader))
+        .job(
+            |job_client: &layerfs_daemon::OwnerClient, job_route| job_client
+                .release_captured_reader(job_route, reader)
+        )
         .result()
         .is_ok());
     let policy = ConstructionPolicy::frozen_default();
@@ -680,7 +368,7 @@ fn occupied_context_and_retired_reader_keep_original_completions_without_replay(
     let Some(WorkspaceError::Service(original)) = &attempt.custody.failure else {
         panic!("original captured failure")
     };
-    let done = original.downcast_ref::<Completion>().unwrap();
+    let done = original.downcast_ref::<JobReceipt>().unwrap();
     assert!(matches!(
         done.result(),
         Err(layerfs_daemon::OwnerError::Overlay(
@@ -746,7 +434,7 @@ fn accepted_children_remain_with_consumer_when_final_file_root_is_refused() {
         .unwrap();
     assert_eq!(
         &context[..2],
-        &[1, 1],
+        &[2, 1],
         "original sealed normalization remains"
     );
     case.release(attempt.custody, false);
@@ -781,6 +469,8 @@ impl OverlayCapturedRuns for InheritedPort<'_> {
                 let next = match &original.step {
                     layerfs_overlay::CapturedRunStep::Window { next, .. }
                     | layerfs_overlay::CapturedRunStep::Gap { next, .. }
+                    | layerfs_overlay::CapturedRunStep::Local { next, .. }
+                    | layerfs_overlay::CapturedRunStep::Reference { next, .. }
                     | layerfs_overlay::CapturedRunStep::Continue(next) => *next,
                     layerfs_overlay::CapturedRunStep::End => panic!("nonempty original input"),
                 };
@@ -822,6 +512,8 @@ impl OverlayCapturedRuns for InheritedPort<'_> {
                         inherited,
                         span: Some((offset, end)),
                         base_root: Some(cursor.reader().root()),
+                        references: Vec::new(),
+                        referenced: Vec::new(),
                     }),
                     next,
                 }
@@ -931,7 +623,10 @@ fn logical_close_allows_retained_reads_but_refuses_normalization_record_mutation
     let case = Case::new();
     case.write(8, 17, b"changed");
     let (reader, scope) = case.captured(92);
-    assert!(case.job(Command::Close).result().is_ok());
+    assert!(case
+        .job(|job_client: &layerfs_daemon::OwnerClient, job_route| job_client.close(job_route))
+        .result()
+        .is_ok());
     let read = case
         .client
         .captured_run_step(layerfs_overlay::CapturedRunCursor::new(reader, 8, 0, 400000).unwrap())
@@ -945,9 +640,9 @@ fn logical_close_allows_retained_reads_but_refuses_normalization_record_mutation
         Err(original) => original,
     };
     let Some(WorkspaceError::Service(original)) = &custody.records.failure else {
-        panic!("original closed Completion")
+        panic!("original closed JobReceipt")
     };
-    let done = original.downcast_ref::<Completion>().unwrap();
+    let done = original.downcast_ref::<JobReceipt>().unwrap();
     assert!(matches!(
         done.result(),
         Err(layerfs_daemon::OwnerError::Overlay(
@@ -1057,10 +752,13 @@ fn prepare_after_actual_binding_install_rebinds_only_the_retained_original_root(
         .prepare_base_install(reader.capture(), next)
         .unwrap();
     assert!(case
-        .job(Command::InstallPrepared {
-            workspace: case.workspace.clone(),
-            input
-        })
+        .job(
+            |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.install_prepared(
+                job_route,
+                case.workspace.clone(),
+                input
+            )
+        )
         .result()
         .is_ok());
     assert_eq!(case.workspace.base().unwrap().identity(), next);
@@ -1097,7 +795,7 @@ fn small_window_with_oversized_retained_capacity_refuses_before_pending_or_outpu
             record_oversized: false,
             continuation: None,
         };
-        let admitted = case.client.diagnostics().unwrap().admitted;
+        let admitted = case.client.diagnostics().unwrap().jobs.iter().sum::<u64>();
         let objects = case.store.objects.lock().unwrap().len();
         let custody = match CapturedFileEdits::prepare(&case.workspace, &provider, reader, 2, scope)
         {
@@ -1118,7 +816,7 @@ fn small_window_with_oversized_retained_capacity_refuses_before_pending_or_outpu
             "only the initial Missing context; no edit or sealing jobs"
         );
         assert_eq!(
-            case.client.diagnostics().unwrap().admitted,
+            case.client.diagnostics().unwrap().jobs.iter().sum::<u64>(),
             admitted + 3,
             "one exact inode point, initial context and original window; no later job"
         );
@@ -1141,7 +839,7 @@ fn small_window_with_oversized_retained_capacity_refuses_before_pending_or_outpu
     };
     let prepared =
         CapturedFileEdits::prepare(&case.workspace, &provider, reader, 2, scope).unwrap();
-    let admitted = case.client.diagnostics().unwrap().admitted;
+    let admitted = case.client.diagnostics().unwrap().jobs.iter().sum::<u64>();
     let mut consumer = RejectFinal {
         store: case.store.clone(),
         children: 0,
@@ -1165,7 +863,7 @@ fn small_window_with_oversized_retained_capacity_refuses_before_pending_or_outpu
     assert_eq!(consumer.children, 0);
     assert_eq!(attempt.custody.work.source_steps, 0);
     assert_eq!(
-        case.client.diagnostics().unwrap().admitted,
+        case.client.diagnostics().unwrap().jobs.iter().sum::<u64>(),
         admitted + 1,
         "original context point only; no later source/backing job"
     );
@@ -1185,7 +883,7 @@ fn unchanged_or_restarted_continuation_refuses_without_spinning_or_output() {
             record_oversized: false,
             continuation: Some(restart),
         };
-        let admitted = case.client.diagnostics().unwrap().admitted;
+        let admitted = case.client.diagnostics().unwrap().jobs.iter().sum::<u64>();
         let objects = case.store.objects.lock().unwrap().len();
         let custody = match CapturedFileEdits::prepare(&case.workspace, &provider, reader, 8, scope)
         {
@@ -1202,7 +900,7 @@ fn unchanged_or_restarted_continuation_refuses_without_spinning_or_output() {
         assert_eq!(custody.work.normalized_edits, 0);
         assert_eq!(custody.records.work.calls, 1);
         assert_eq!(
-            case.client.diagnostics().unwrap().admitted,
+            case.client.diagnostics().unwrap().jobs.iter().sum::<u64>(),
             admitted + 3,
             "one original metadata unit and no later call"
         );

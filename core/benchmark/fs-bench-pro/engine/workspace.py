@@ -16,20 +16,123 @@ from cells import counts, runner as cell_runner, workloads
 
 BASELINE = identity.ROOT / "core/docs/issues/307/checks/timing-baseline-20261010/baseline.json"
 BASELINE_SHA256 = "a6ada570050f14bb6ff5bd61c74c0d0fda439f323f695fdea1212b26b590d3f8"
+# Issue319 phase 14: the frozen C10 row holds one kernel-shaped extra READ (513).
+# The source model gives 512: 67,108,864 file bytes in READ_WINDOW 131,072 requests;
+# the frozen sample's own warm-up mount of the same command and frozen C09 on the
+# same file both count 512. One READ is one request, one owner job and two
+# statements. The baseline file itself stays unchanged.
+# Issue 320 lowered statements for the same requests and owner jobs; issue 321 (one
+# file and one lock per Workspace, open state in memory, remembered fence rows) lowers
+# them again. Each statement count below is the per-request model of the final #321
+# source (core/docs/issues/320/REQUEST-PATH.md section 10) applied to the cell's frozen
+# request mix. C10 keeps its phase 14 request and owner-job correction.
+CELL_COUNT_CORRECTIONS = {
+    "C01": {"statements": 21002}, "C02": {"statements": 22002}, "C04": {"statements": 19612},
+    "C05": {"statements": 20269}, "C06": {"statements": 7183}, "C07": {"statements": 17440},
+    "C08": {"statements": 7185}, "C09": {"statements": 517},
+    "C10": {"requests": 1547, "owner_jobs": 1546, "statements": 10773}, "C11": {"statements": 7174}}
+# Two cells cannot be one number: a request that runs while a removed file still waits
+# for the kernel's FORGET costs more. C03 is 49,038 + 2P, P the inode reads made in such
+# windows (at most one for each of 2,000 GETATTRs and two for each of 1,000 UNLINKs).
+# C12 runs git, whose LINK, RENAME and SYMLINK requests no replay measures and whose
+# LOOKUPs split between absent and present names: 10,977 is the one count observed at
+# the final source, kept with the same forty statements either side as before. It is
+# an estimate, not a model result. Requests and owner jobs of both stay exact.
+CELL_STATEMENT_RANGES = {"C03": {"low": 49038, "high": 49038 + 2 * 4000, "step": 2},
+                         "C12": {"low": 10937, "high": 11017, "step": 1}}
+
+
+def cell_expected_counts(cell, names):
+    """Frozen twelve-cell counts with the named source-model correction, and the frozen row."""
+    wanted = next(item for item in json.loads(BASELINE.read_text())["selections"] if item["cell"] == cell)
+    frozen = {name: wanted[name] for name in names}
+    return {**frozen, **{name: value for name, value in CELL_COUNT_CORRECTIONS.get(cell, {}).items() if name in frozen}}, frozen
+
+
+def cell_counts_reproduced(cell, totals, wanted):
+    """Exact for every count, except the statements of a cell with a declared range."""
+    allowed = CELL_STATEMENT_RANGES.get(cell)
+    for name in totals:
+        if name == "statements" and allowed is not None:
+            value = totals[name]
+            if not (allowed["low"] <= value <= allowed["high"] and (value - allowed["low"]) % allowed["step"] == 0):
+                return False
+        elif totals[name] != wanted[name]:
+            return False
+    return True
 BATCH4_HISTORY_SCHEMAS = frozenset(("original-v016-boundary-sequence-v1",
     "original-dedup-history-sequence-v1", "original-m1-commit-sequence-v1"))
 BATCH4_FAMILIES = frozenset(("file_size_transition","dedup_branch_history","mixed_load_bearing"))
 
 
+
+# Owner D-3, issue319: only the six previously failing largest checks.
+LARGE_CHECK_CASES = frozenset(("dedup-workspace-unique-500",
+    "store-footprint-unique-100000", "store-footprint-metadata-cardinality-100000"))
+
+
+def alias_parent_custody(case, prepared, command, output):
+    """Bind the independently qualified single automatic alias field."""
+    declaration = case.get("automatic_parent_mtime")
+    expected = {"schema":"original-boundary-parent-mtime-v1", "path":"data", "step":5,
+                "native_precision_allowance_ns":1000000000, "max_operation_ns":60000000000,
+                "publication":"exact observed nanoseconds on fresh native and persisted trees"}
+    if (case.get("v016_case") != "v016-boundary-alias-roundtrip-v1"
+            or command["fields"].get("exit_code") != "0"
+            or not isinstance(declaration,dict) or any(declaration.get(k) != v for k,v in expected.items() if k != "publication")
+            or prepared.get("native_verification",{}).get("automatic-parent-mtime",{}).get("verification_status") != "pass"):
+        raise ValueError("original alias automatic-time declaration/native qualification differs")
+    text = Path(command["fields"]["stdout"]).read_text()
+    marker = expected["schema"] + "\n"
+    if text.count(marker) != 1:
+        raise ValueError("exactly one alias parent custody observation required")
+    body = text[text.index(marker):]
+    lines = body.splitlines()
+    if (len(lines) != 8 or not body.endswith("\n") or lines[:4] !=
+            [expected["schema"],"case\tv016-boundary-alias-roundtrip-v1","step\t5","path\tdata"]):
+        raise ValueError("alias parent custody fixed-domain rows differ")
+    values=[]
+    for name,line in zip(("initial","started","finished","observed"),lines[4:]):
+        fields=line.split("\t")
+        if len(fields)!=3 or fields[0]!=name:
+            raise ValueError("alias custody timestamp row differs")
+        seconds,nanos=map(int,fields[1:])
+        if seconds<0 or not 0<=nanos<1000000000 or line!=f"{name}\t{seconds}\t{nanos}":
+            raise ValueError("alias custody timestamp domain/canonical form differs")
+        values.append(seconds*1000000000+nanos)
+    initial,start,end,observed=values
+    if (initial!=1700000000000000000 or observed==initial or end<start
+            or end-start>60000000000 or observed<start-1000000000 or observed>end):
+        raise ValueError("alias custody original epoch/clock envelope differs")
+    path=script(output,"boundary-parent-mtime.tsv",body)
+    return {"index":5,"path":str(path),"sha256":identity.sha256(path),
+            "helper_stdout":command["fields"]["stdout"],
+            "helper_stdout_sha256":identity.sha256(command["fields"]["stdout"]),
+            "scope":"only alias data parent automatic mtime; all publication comparisons exact"}
+
+
+# Owner direction 2026-10-12, issue319 phase 13: only the six 500 MiB mixed
+# cases, whose mounted proof of one 30298-path root alone takes 17-21 s.
+LARGE_ROOT_PROOF_LIMITS = {
+    "v016-mixed-development-500mb-30000-k10-v1": (50000, 60000),
+    "v016-mixed-development-500mb-30000-k100-v1": (50000, 60000),
+    "v016-workspace-mixed-500mb-30000-k10-v1": (80000, 90000),
+    "v016-workspace-mixed-500mb-30000-k100-v1": (80000, 90000),
+    "v016-branch-mixed-500mb-30000-k10-v1": (105000, 115000),
+    "v016-branch-mixed-500mb-30000-k100-v1": (105000, 115000),
+}
+
+
 def import_proof_deadlines(case, charged_ns=0):
     budget = case["budget"]
     reserve = budget.get("cleanup_reserve_ms", case.get("original_resource_guards", {}).get("verification_cleanup_reserve_ms", 4000))
-    if (budget["verifier_ms"], budget["verification_hard_watchdog_ms"], reserve, budget.get("publication_guard_ms", 250)) != (45000,59000,4000,250):
+    work, hard = (75000, 89000) if case.get("id") in LARGE_CHECK_CASES else (45000, 59000)
+    if (budget["verifier_ms"], budget["verification_hard_watchdog_ms"], reserve, budget.get("publication_guard_ms", 250)) != (work, hard, 4000, 250):
         raise ValueError("original import work/cleanup/publication limits required")
     if type(charged_ns) is not int or charged_ns < 0:
         raise ValueError("nonnegative original charged proof wall required")
     now = time.monotonic()-charged_ns/1e9
-    return {"work": now+41, "cleanup": now+45, "publication": now+59}
+    return {"work": now+(work-reserve)/1000, "cleanup": now+work/1000, "publication": now+hard/1000}
 
 
 def verify_import_mount(case, prepared, build, output, row, deadlines):
@@ -197,14 +300,14 @@ def price(groups, events, bindings, measured_label="measured command", with_warm
     if "opcodes" not in command["raw"]:
         raise ValueError("original kernel opcode count unavailable")
     totals = {"requests": sum(command["raw"]["opcodes"]["by_opcode"]),
-              "owner_jobs": command["adjusted"]["owner"]["admitted"],
+              "owner_jobs": command["adjusted"]["owner"]["jobs" if "jobs" in command["adjusted"]["owner"] else "admitted"],
               "statements": sum(row["executions"] for row in command["adjusted"]["sql_foreground"])}
     return totals, priced, correlated
 
 
 def claim_key(cell, current, prepared, build):
-    # Physical clone IDs, authority randomness, report dates and source commit
-    # labels cannot manufacture a new sample of unchanged execution bytes.
+    # The owner-directed final baseline is scoped to the exact committed source.
+    # Clone IDs, authority randomness and report dates never alter its claim.
     harness = {name: digest for name, digest in current["files"].items()
                if name.startswith(("core/benchmark/fs-bench-pro/engine/", "core/benchmark/cluster-two/cells/",
                                    "core/benchmark/cluster-two/cache/")) or name.endswith("/bench.py")}
@@ -212,7 +315,7 @@ def claim_key(cell, current, prepared, build):
              "product": current["product_tree"], "harness": harness,
              "binaries": {name: row["sha256"] for name, row in build["binaries"].items()},
              "image": identity.IMAGE, "body": workloads.COMMANDS[cell]}
-    return hashlib.sha256(json.dumps(value, sort_keys=True).encode()).hexdigest()
+    return receipts.sample_claim_key(value, current["source_commit"])
 
 
 def one_cell(cell, prepared_folder, build_folder, output):
@@ -343,9 +446,13 @@ def one_cell(cell, prepared_folder, build_folder, output):
         row["observations"] = observations
         row["cache"]["status"] = cache.validate("B", row["cache"])
         row["status"] = "PASS" if row["cache"]["status"] == "ELIGIBLE" else "INELIGIBLE"
-        wanted = next(item for item in json.loads(BASELINE.read_text())["selections"] if item["cell"] == cell)
-        row["count_reproduction"] = {"expected": {name: wanted[name] for name in totals},
-                                      "actual": totals, "status": "PASS" if all(totals[name] == wanted[name] for name in totals) else "FAIL"}
+        wanted, frozen = cell_expected_counts(cell, totals)
+        row["count_reproduction"] = {"expected": wanted,
+                                      "actual": totals, "status": "PASS" if cell_counts_reproduced(cell, totals, wanted) else "FAIL"}
+        if cell in CELL_STATEMENT_RANGES:
+            row["count_reproduction"]["statements_range"] = CELL_STATEMENT_RANGES[cell]
+        if wanted != frozen:
+            row["count_reproduction"]["frozen_baseline"] = frozen
         if row["count_reproduction"]["status"] != "PASS":
             row.update(status="FAIL", tag="stage 0.4 exact request/owner-job/statement counts differ")
         if row["status"] == "PASS":
@@ -440,6 +547,11 @@ def observe_family_closed_storage(runtime, row, build, output, census_store, cus
     receipts.command([*docker, "cp", runtime.container + ":/layerfs-local/overlay/overlay.sqlite",
                       str(overlay_path)], output, label, seconds(15))
     completion = output / (label + ".completion.json")
+    # Every member of the stopped daemon's overlay directory: the template, and the file of any
+    # Workspace whose terminal unmount did not delete it.
+    listing = receipts.command([*docker, "cp", runtime.container + ":" + oracle.OVERLAY_DIRECTORY, "-"],
+                               output, "closed-overlay-directory", seconds(15))
+    listed = output / "closed-overlay-directory.completion.json"
     events = output / "runtime.events.jsonl"
     owners = [{"key": event["fields"]["key"], "namespace": event["fields"]["workspace_namespace"],
                "incarnation": event["fields"]["workspace_incarnation"]}
@@ -449,15 +561,18 @@ def observe_family_closed_storage(runtime, row, build, output, census_store, cus
         "source_sha256": identity.sha256(overlay_path), "source_size": overlay_path.stat().st_size,
         "export_completion": str(completion), "export_completion_sha256": identity.sha256(completion),
         "runtime_events": str(events), "runtime_events_sha256": identity.sha256(events),
-        "source_stat": source_stats["overlay"]}
+        "source_stat": source_stats["overlay"],
+        "directory": {"completion": str(listed), "completion_sha256": identity.sha256(listed),
+                      "stdout": listing["stdout"], "stdout_sha256": identity.sha256(listing["stdout"])}}
     overlay = oracle.observe_closed_storage(overlay_path, overlay_custody, kind="overlay", owners=owners)
     record = {"store": store, "overlay": overlay,
         "original_physical_resource_status": "UNAVAILABLE",
-        "reason": "shared SQLite has no per-Workspace allocated/live/superseded/peak spool or exclusive owned-file counter; no inferred zero"}
+        "reason": "a Workspace's overlay file is deleted at terminal unmount, so closed storage holds only the empty template and the count of files left; no allocated/live/superseded/peak bytes of a Workspace and no inferred zero"}
     receipts.write_new(output / "closed-storage-observations.json", record)
     row["closed_storage_observations"] = record
-    if store["source_main_store_4gib_status"] != "PASS" or overlay["namespace_cleanup_status"] != "PASS":
-        raise ValueError("original main Store boundary or exact namespace cleanup failed")
+    if (store["source_main_store_4gib_status"] != "PASS" or overlay["namespace_cleanup_status"] != "PASS"
+            or overlay["owned_files_after_cleanup_status"] != "PASS"):
+        raise ValueError("original main Store boundary or exact Workspace file cleanup failed")
     return record
 
 
@@ -604,17 +719,8 @@ def ordinary_resource_values(row, before=None):
 
 def ordinary_resource_guard(runtime, build, output, label, before=None, seconds=15):
     """Observe only the actual sample's backing stat/cgroup outside product time."""
-    body = """import json
-from pathlib import Path
-store=Path('/layerfs-store/global/store.sqlite').stat()
-events=dict(line.split() for line in Path('/sys/fs/cgroup/memory.events').read_text().splitlines())
-print(json.dumps({'store_main_logical_bytes':store.st_size,'store_main_allocated_bytes':store.st_blocks*512,
- 'oom':int(events['oom']),'oom_kill':int(events['oom_kill']),
- 'swap_current':int(Path('/sys/fs/cgroup/memory.swap.current').read_text())}))
-"""
-    docker = ["docker", "--host", "unix://" + build["socket"]]
-    attempted = receipts.command([*docker, "exec", "--user", "0:0", runtime.container,
-                                  "python3", "-B", "-c", body], output, label, seconds)
+    from . import resource_exec
+    attempted = resource_exec.command(build['socket'], runtime.container, output, label, seconds)
     row = json.loads(Path(attempted["stdout"]).read_text())
     row["scope"] = "original 4GiB main Store apparent/allocated bound; actual own container OOM/swap; retired host Store RSS/physical-spool peak not asserted"
     return ordinary_resource_values(row, before)
@@ -786,6 +892,18 @@ def qualify_history_mechanism(proofs):
             "scope": "existence only; per-state/file observations may repeat content IDs; no count/percentage/storage/latency quota; retired schema10 counters N/A"}
 
 
+def exhaustive_owner_ceiling(case):
+    """Only the named large verification invocation gets the expanded ceiling."""
+    large = case.get("v016_case") == "v016-mixed-exhaustive-500mb-30000-k100-v1"
+    expected = 275000 if large else 120000
+    if case.get("owner_test_ceiling_ms") != expected:
+        raise ValueError("exact exhaustive owner ceiling required")
+    if large and (case.get("historical_owner_test_ceiling_ms") != 120000
+            or (case["budget"]["verifier_ms"],case["budget"]["verification_hard_watchdog_ms"]) != (300000,310000)):
+        raise ValueError("large exhaustive exception retains its original proof declaration")
+    return expected
+
+
 def family_proof_deadlines(case, charged_ns=0, owner_stop=None):
     """Original work/reserve/publication limits, with separate owner test ceiling."""
     if case.get("git_workflow"):
@@ -803,13 +921,15 @@ def family_proof_deadlines(case, charged_ns=0, owner_stop=None):
     budget = case["budget"]
     work, hard = budget["verifier_ms"], budget["verification_hard_watchdog_ms"]
     if case.get("proof_only"):
-        if work not in (120000, 300000) or hard != work + 10000 or case.get("owner_test_ceiling_ms") != 120000:
-            raise ValueError("original exhaustive declaration and owner120s ceiling required")
+        if work not in (120000, 300000) or hard != work + 10000:
+            raise ValueError("original exhaustive declaration required")
+        exhaustive_owner_ceiling(case)
         reserve = budget.get("verification_cleanup_reserve_ms", 3000)
     else:
-        if (work, hard) not in ((25000,35000),(45000,59000)):
+        named = LARGE_ROOT_PROOF_LIMITS.get(case.get("id"))
+        if (work, hard) not in ((named,) if named else ((25000,35000),(45000,59000))):
             raise ValueError("original history verification limits required")
-        reserve = budget.get("cleanup_reserve_ms", budget.get("verification_cleanup_reserve_ms", 3000 if work==25000 else 4000))
+        reserve = budget.get("cleanup_reserve_ms", budget.get("verification_cleanup_reserve_ms", 4000 if work==45000 else 3000))
     if reserve != (4000 if work==45000 else 3000) or budget.get("publication_guard_ms",250) != 250:
         raise ValueError("original history cleanup reserve and publication guard required")
     now = time.monotonic()
@@ -884,6 +1004,18 @@ def operation_commit_expectation(case, index):
     return value
 
 
+
+def commit_deadline(case, overall, ordinary_seconds):
+    """Owner D-4: only Commit consumes the capped two-second watchdog."""
+    cap = case["budget"].get("commit_watchdog_ms")
+    if cap is not None:
+        if (case.get("registry", {}).get("family") != "edit_length_changing_capped"
+                or cap != 2000 or case["budget"].get("historical_edit_commit_end_watchdog_ms") != 2000):
+            raise ValueError("D-4 requires the exact capped Commit-only2000ms declaration")
+        ordinary_seconds = cap / 1000
+    return operation_deadline(overall, ordinary_seconds)
+
+
 def one_family_case(family, case, prepared_folder, build_folder, output, *, preparation_only=False):
     """Single ordinary call/Commit through the same SDK/Sandbox machinery."""
     if case.get('historical_access'):
@@ -915,7 +1047,8 @@ def one_family_case(family, case, prepared_folder, build_folder, output, *, prep
         raise ValueError("exact original fresh Init/edit footprint preparation required")
     if footprint:
         operation_commit_expectation(case, 1)
-    owner_stop = started_test_ns/1_000_000_000+120 if proof_only else None
+    owner_ceiling_ms = exhaustive_owner_ceiling(case) if proof_only else None
+    owner_stop = started_test_ns/1_000_000_000+owner_ceiling_ms/1000 if proof_only else None
     body = None if case.get("control_only") else "/bin/bash /code/workload.sh apply " + shlex.quote(case["v016_case"])
     if footprint:
         body += " "+shlex.quote(prepared["fixture"]["edit_path"])
@@ -927,7 +1060,7 @@ def one_family_case(family, case, prepared_folder, build_folder, output, *, prep
                  "product": current["product_tree"], "body": bodies, "helpers": prepared["helpers"]["files"],
                  "binaries": {name: row["sha256"] for name, row in build["binaries"].items()},
                  "engine": identity.sha256(__file__), "image": identity.IMAGE}
-    key = hashlib.sha256(json.dumps(treatment, sort_keys=True).encode()).hexdigest()
+    key = receipts.sample_claim_key(treatment, current["source_commit"])
     claims = identity.ROOT / "benchmark-results/fs-bench-pro/claims"
     claims.mkdir(parents=True, exist_ok=True)
     if not preparation_only:
@@ -948,7 +1081,7 @@ def one_family_case(family, case, prepared_folder, build_folder, output, *, prep
            "interference": current.get("cross_worktree_interference","shared host/Docker VM/protected and own failed services, unquantified"),
            "proof_only": proof_only, "performance_mode":"verification-only" if proof_only else "single original performance attempt",
            "performance_declaration":case.get("performance_mode","single original performance attempt"),
-           "owner_test_ceiling_ns":120_000_000_000 if proof_only else None}
+           "owner_test_ceiling_ns":owner_ceiling_ms*1_000_000 if proof_only else None}
     row["helper_admission"]=helper_admission
     if preparation_only:
         row.update(schema="fs-bench-pro-prepared-producer-attempt-v1", setup_only=True,
@@ -1096,12 +1229,10 @@ def one_family_case(family, case, prepared_folder, build_folder, output, *, prep
                 raise ValueError("fresh footprint mount differs from exact measured Init/root/first Branch")
         bindings["measured_mount_attach"] = endpoint(mount)
         row["phases"]["mount_ns"] = mount["span"]["duration_ns"]
-        group_ms = case["budget"].get("edit_commit_end_watchdog_ms")
-        group_stop = time.monotonic() + group_ms / 1000 if group_ms is not None else None
-        row["edit_commit_end_group"] = {"watchdog_ms": group_ms,
-                                       "scope": "ordinary edit, Commit and terminal unmount; excludes measured mount/setup/warmup/proof"}
+        row["commit_watchdog"] = {"watchdog_ms": case["budget"].get("commit_watchdog_ms"),
+                                  "scope": "Commit only; ordinary command and unmount watchdogs unchanged"}
         operation_seconds = min(120,case["budget"].get("operation_watchdog_ms", 120000) / 1000)
-        phase_stop = (phase_started if recipe_history else time.monotonic()) + case["budget"].get("performance_hard_watchdog_ms", case["budget"]["command_ms"]) / 1000 if ordered else group_stop
+        phase_stop = (phase_started if recipe_history else time.monotonic()) + case["budget"].get("performance_hard_watchdog_ms", case["budget"]["command_ms"]) / 1000 if ordered else None
         if footprint:
             phase_stop=clock.started/1e9+case["budget"]["performance_hard_watchdog_ms"]/1000
         if owner_stop is not None:
@@ -1111,7 +1242,7 @@ def one_family_case(family, case, prepared_folder, build_folder, output, *, prep
             if small_history:
                 history_observer(clock, row, f"free-space-before-state-{index}", lambda: history_free_space(output))
             step_started = time.monotonic_ns()
-            step_stop = operation_deadline(phase_stop, operation_seconds) if ordered else group_stop
+            step_stop = operation_deadline(phase_stop, operation_seconds) if ordered else None
             command = None
             if command_body is not None:
                 command = runtime.send("command", selected, script(output, f"command-{index}.sh" if ordered else "command.sh", command_body),
@@ -1132,6 +1263,9 @@ def one_family_case(family, case, prepared_folder, build_folder, output, *, prep
                         "helper_stdout":command["fields"]["stdout"],"helper_stdout_sha256":identity.sha256(command["fields"]["stdout"])}
                 created_modes,final_modes = history_observer(clock,row,f"original-created-modes-{index}",capture_modes)
                 row.setdefault("created_mode_prefixes",[]).append(final_modes)
+            if case.get("automatic_parent_mtime") and index == 5:
+                row["automatic_parent_mtime_custody"] = history_observer(clock,row,"original-alias-parent-custody",
+                    lambda: alias_parent_custody(case,prepared,command,output))
             if footprint or case.get("original_ordinary_guards"):
                 row["ordinary_resource_guards"]["steps"].append(history_observer(clock, row, f"ordinary-before-commit-{index}",
                     lambda: ordinary_resource_guard(runtime, build, output, f"ordinary-resources-before-commit-{index}", row["ordinary_resource_guards"]["before"],operation_deadline(phase_stop,15)-time.monotonic())))
@@ -1151,7 +1285,7 @@ def one_family_case(family, case, prepared_folder, build_folder, output, *, prep
                     raise TimeoutError("original cumulative Git proof work allowance exhausted before measured Commit")
                 row["counts_scope"] = "measured Git command, excluded precommit custody verifier FUSE/SQL work and Commit; only original Status observer adjusted; no guessed verifier subtraction"
             row["cache"]["commit_started_monotonic_ns"] = time.monotonic_ns()
-            committed = runtime.send("commit", selected, deadline=operation_deadline(step_stop, operation_seconds))
+            committed = runtime.send("commit", selected, deadline=commit_deadline(case, step_stop, operation_seconds))
             row["phases"]["commit_ns"] += committed["span"]["duration_ns"]
             row["commit"] = committed
             expected_kind = operation_commit_expectation(case, index) if ordered or footprint else case["expected_commit"]
@@ -1192,7 +1326,7 @@ def one_family_case(family, case, prepared_folder, build_folder, output, *, prep
             proof_stop = publication_stop = proof_deadlines["publication"]
             row["proof_policy"] = {"work_cutoff_monotonic":proof_work_stop,"cleanup_cutoff_monotonic":proof_cleanup_stop,
                 "publication_cutoff_monotonic":publication_stop,"original_verifier_ms":case["budget"]["verifier_ms"],
-                "original_hard_watchdog_ms":case["budget"]["verification_hard_watchdog_ms"],"owner_test_ceiling_ms":120000 if proof_only else None}
+                "original_hard_watchdog_ms":case["budget"]["verification_hard_watchdog_ms"],"owner_test_ceiling_ms":owner_ceiling_ms if proof_only else None}
         def proof_seconds(limit, cleanup=False):
             left = proof_stop - time.monotonic()
             if proof_work_stop is not None:
@@ -1218,6 +1352,10 @@ def one_family_case(family, case, prepared_folder, build_folder, output, *, prep
                 raise ValueError("original measured created-mode observations unavailable")
             receipts.command([*docker,"cp",final_modes["path"],runtime.container+":/code/history/observed-final-modes.tsv"],output,"native-created-modes-stage",proof_seconds(15))
             verify_body = "/bin/bash /code/workload.sh verify-step " + shlex.quote(case["v016_case"])+f" {case['history_schedule']['commits']} /code/history/observed-final-modes.tsv"
+        elif case.get("automatic_parent_mtime"):
+            custody=row["automatic_parent_mtime_custody"]
+            receipts.command([*docker,"cp",custody["path"],runtime.container+":/code/history/observed-parent-mtime.tsv"],output,"native-alias-custody-stage",proof_seconds(15))
+            verify_body="/bin/bash /code/workload.sh verify "+shlex.quote(case["v016_case"])+" 5 /code/history/observed-parent-mtime.tsv"
         elif footprint:
             boundary=footprint_boundary(prepared)
             row["footprint_boundary"]=boundary
@@ -1231,6 +1369,8 @@ def one_family_case(family, case, prepared_folder, build_folder, output, *, prep
         proof = verify_native_receipt(case, verified, row.get("footprint_boundary"))
         if case.get("m1_schedule") and proof["created_modes_digest"]!=final_modes["sha256"]:
             raise ValueError("native selective proof did not bind exact measured mode observations")
+        if case.get("automatic_parent_mtime") and proof.get("parent_mtime_custody_sha256") != row["automatic_parent_mtime_custody"]["sha256"]:
+            raise ValueError("native alias proof differs from exact measured timestamp custody")
         if case.get("git_workflow"):
             row["git_semantics"] = verify_git_semantic_fields(proof, prepared)
         runtime.send("unmount", verify_mount, deadline=time.monotonic() + (proof_seconds(15, cleanup=True) if proof_deadlines else native_seconds(15)))
@@ -1301,6 +1441,8 @@ def one_family_case(family, case, prepared_folder, build_folder, output, *, prep
             graph_args.extend(["--history-file", str(transcript)])
             if case.get("m1_schedule"):
                 graph_args.extend(["--source-copy",final_modes["path"]])
+        if case.get("automatic_parent_mtime"):
+            graph_args.extend(["--source-copy",row["automatic_parent_mtime_custody"]["path"]])
         if case.get("git_workflow"):
             graph_args.extend(["--source-copy", row["git_precommit"]["path"]])
         if footprint:
@@ -1318,7 +1460,7 @@ def one_family_case(family, case, prepared_folder, build_folder, output, *, prep
         if reuse:
             initial_root = row["pristine_payload_attribution"]["proof"]["fields"]["root"]
             transcript = script(output,"acknowledged-reuse.tsv",
-                "0\t-\t-\t"+initial_root+"\t"+str(Path(prepared_folder).resolve()/"source.manifest.tsv")+"\n"+
+                "0\t-\t-\t"+initial_root+"\t"+str(Path(prepared["source"]).resolve().with_suffix(".manifest.tsv"))+"\n"+
                 "1\t"+committed["fields"]["commit_id"]+"\t"+committed["fields"]["parent"]+"\t"+
                 committed["fields"]["root"]+"\t"+str(Path(prepared_folder).resolve()/"expected-native.manifest.tsv")+"\n")
             graph_args.extend(["--history-file",str(transcript)])
@@ -1359,6 +1501,8 @@ def one_family_case(family, case, prepared_folder, build_folder, output, *, prep
             proof_events = [item for item in events if item["event"] == ("store_footprint_verified" if footprint else "workspace_verified")]
             if len(proof_events) != 1 or events[-1]["event"] != "finished" or proof_events[0]["fields"]["final_root" if footprint else "root"] != committed["fields"]["root"]:
                 raise ValueError("original persisted root proof differs from exact acknowledged Commit root")
+            if case.get("automatic_parent_mtime") and proof_events[0]["fields"].get("parent_mtime_custody_sha256") != row["automatic_parent_mtime_custody"]["sha256"]:
+                raise ValueError("persisted alias proof differs from exact measured timestamp custody")
             if footprint:
                 fields=proof_events[0]["fields"]
                 if any(fields.get(key)!=boundary[expected] for key,expected in (("selected_path","path"),("boundary_start","start"),("boundary_end","end"),("file_size","file_size"),("boundary_sha256","sha256"))):
@@ -1485,7 +1629,7 @@ def one_family_case(family, case, prepared_folder, build_folder, output, *, prep
             row["timing_scope"] = "controller from original fresh measured public Init through actual-project public SDK installation, SDK runtime/setup, first fresh mount, ordinary clipped edit, Commit and terminal End; declared read-only resource-observer intervals excluded and retained; cleanup/fresh mounted and typed verification/Stop separate"
         if proof_only:
             row["proof_wall_ns"]=time.monotonic_ns()-started_test_ns
-            row["proof_wall_scope"]="verification-only complete invocation from source/build/prepared admission through setup, all original calls/Commits, native/public/census proof, required cleanup/Stop and prepublication close; owner120s ceiling separately enforced"
+            row["proof_wall_scope"]="verification-only complete invocation from source/build/prepared admission through setup, all original calls/Commits, native/public/census proof, required cleanup/Stop and prepublication close; declared owner invocation ceiling separately enforced"
         row["evidence"] = str(output.relative_to(identity.ROOT.resolve()))
         if (case.get("git_workflow") or batch4 or reuse or footprint) and publication_stop is not None:
             if proof_started is not None:
@@ -1712,7 +1856,7 @@ def one_access_case(family, case, prepared_folder, build_folder, output):
                  'helpers': prepared['helpers']['files'], 'producer_store': prepared['closed_producer']['store_sha256'],
                  'producer_transcript': prepared['closed_producer']['transcript_sha256'],
                  'binaries': {name: value['sha256'] for name, value in build['binaries'].items()}, 'image': identity.IMAGE}
-    claim = hashlib.sha256(json.dumps(treatment, sort_keys=True).encode()).hexdigest()
+    claim = receipts.sample_claim_key(treatment, current["source_commit"])
     claims = identity.ROOT / 'benchmark-results/fs-bench-pro/claims'; claims.mkdir(parents=True, exist_ok=True)
     with (claims / claim).open('x') as stream:
         stream.write(str(output) + '\n')
@@ -2002,7 +2146,7 @@ def context_transcript(case, prepared, graph, modes_file=None):
             fields = record['commit']['fields']
             columns = ['commit', role, str(record['index']), fields['commit_id'], fields['stack'], fields['root'],
                 fields['parent'], fields['base_layer'], selected.get((role, record['index']), '-'),
-                str(modes_file) if modes_file is not None else '-']
+                str(modes_file) if modes_file is not None and (role, record['index']) in selected else '-']
             rows.append('\t'.join(columns))
     return '\n'.join(rows) + '\n'
 
@@ -2043,7 +2187,8 @@ def context_deadlines(case, started, *, phase='verification'):
         return {'work': started + (hard - reserve) / 1000, 'cleanup': started + hard / 1000}
     work, hard = budget['verifier_ms'], budget['verification_hard_watchdog_ms']
     reserve = budget.get('verification_cleanup_reserve_ms', 3000)
-    if (work, hard) not in ((25000, 35000), (30000, 40000), (60000, 70000)) or reserve != 3000:
+    named = LARGE_ROOT_PROOF_LIMITS.get(case.get('id'))
+    if (work, hard) not in ((named,) if named else ((25000, 35000), (30000, 40000), (60000, 70000))) or reserve != 3000:
         raise ValueError('exact original batch5 verification work/hard/reserve required')
     return {'work': started + (work - reserve) / 1000, 'cleanup': started + work / 1000,
             'publication': started + hard / 1000}
@@ -2223,7 +2368,7 @@ def one_context_case(family, case, prepared_folder, build_folder, output, *, pre
         'product': current['product_tree'], 'bodies': bodies, 'helpers': prepared['helpers']['files'],
         'binaries': {name: value['sha256'] for name, value in build['binaries'].items()},
         'engine': identity.sha256(__file__), 'image': identity.IMAGE}
-    claim = hashlib.sha256(json.dumps(treatment, sort_keys=True).encode()).hexdigest()
+    claim = receipts.sample_claim_key(treatment, current["source_commit"])
     claims = identity.ROOT / 'benchmark-results/fs-bench-pro/claims'
     claims.mkdir(parents=True, exist_ok=True)
     if not preparation_only:
@@ -2544,11 +2689,13 @@ def context_numeric_counts(groups, events):
                 for key in item['identities']]
     if not interval or any(not row.get('observer', {}).get('completion_available') for row in interval):
         raise ValueError('exact completed Resources cost of every concurrent observer required')
-    raw_owner = counts.difference(first['owner'], last['owner'], ('admitted',))['admitted']
+    owner_count = 'jobs' if first.get('service_schema') == 'issue321-direct-workspace' else 'admitted'
+    raw_owner = counts.difference(first['owner'], last['owner'], (owner_count,))[owner_count]
+    observer_jobs = sum(row['observer']['jobs'] for row in interval) if owner_count == 'jobs' else len(interval)
     sql = [counts.difference(left, right, ('executions',))['executions']
            for left, right in zip(first['sql_foreground'], last['sql_foreground'])]
     observer_sql = sum(row['observer']['sql']['executions'] for row in interval)
-    if raw_owner < len(interval) or sql[0] < observer_sql:
+    if raw_owner < observer_jobs or sql[0] < observer_sql:
         raise ValueError('exact observer costs exceed original whole-daemon cumulative delta')
     # Kernel counters belong to individual mount connections, not the daemon.
     # Each last acknowledged Unmount snapshot retains that connection's totals.
@@ -2567,10 +2714,10 @@ def context_numeric_counts(groups, events):
         owners.add(native['owner_id']); kernel.append({'key': item['key'], 'native_owner_id': native['owner_id'], 'requests': sum(rows)})
     if len(kernel) != len(mounts):
         raise ValueError('every measured connection terminal request census required')
-    totals = {'requests': sum(row['requests'] for row in kernel), 'owner_jobs': raw_owner - len(interval),
+    totals = {'requests': sum(row['requests'] for row in kernel), 'owner_jobs': raw_owner - observer_jobs,
               'statements': sum(sql) - observer_sql}
     return {'totals': totals, 'scope': 'one daemon cumulative first-ready to last measured Status interval; every acknowledged channel Resources cost subtracted exactly once; per-connection terminal opcode totals include original witness/reopen',
             'raw': {'owner_jobs': raw_owner, 'statement_executions_by_family': sql},
-            'observer': {'jobs': len(interval), 'statement_executions': observer_sql},
+            'observer': {'jobs': observer_jobs, 'statement_executions': observer_sql},
             'kernel_connections': kernel, 'correlation': correlation,
             'endpoints': {'before': begin, 'end': end}, 'source': counts.SCHEMA_SOURCE}

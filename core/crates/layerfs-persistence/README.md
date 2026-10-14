@@ -10,17 +10,19 @@ there is no PostgreSQL implementation or fallback. MinIO/S3 are outside the
 active product.
 
 The twelve logical tables are `pack`; `store_policy`, `object_location`,
-`metadata_value_group`, `content_signature`; and `history_meta`,
+`inode_value`, `content_signature`; and `history_meta`,
 `scope_allocator`, `layer_stack`, `layer`, `commit`, `branch`, `workspace_stage`.
-Schema 1 has application ID 1279677264 and 4096-byte pages. Existing incompatible
+Schema versions 7 to 12 (three pack layouts, with or without the acquisition
+tables) have application ID 1279677264 and 4096-byte pages. Versions 1 to 6 kept
+inode values in pooled packs behind `metadata_value_group`. Existing incompatible
 Stores are refused, without migration or automatic adoption. Files and
 directories remain canonical objects, without persistent SQL mirrors.
 
 `Handles::create`, `open_writable` and `open_read_only` require explicit
 application authority. The handles share a connection/session, while each C2
 publication and C5 operation has a separate bounded transaction. Published pack
-bodies, descriptors, first-wins locators, pooled groups, signatures and window
-changes commit together. Already sealed bodies use one final INSERT; construction
+bodies, descriptors, first-wins locators, inode value rows, signatures and
+ordinal changes commit together. Already sealed bodies use one final INSERT; construction
 is private in the bounded C2 packer, so no published BLOB is appended or rewritten.
 `Arc<Vec<u8>>` shares sealed construction storage through publication without a
 second whole-body copy. Locator statements split at actual engine limits within

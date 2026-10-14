@@ -9,13 +9,12 @@ BENCH = Path(__file__).resolve().parents[2]
 ROOT = BENCH.parents[2]
 FAMILY = BENCH / "families/directory_construction_traversal"
 KINDS = ("directory-construct", "directory-metadata-scan", "directory-content-scan")
-TIERS = (1, 10, 100, 500)
+TIERS = (1, 100, 500)
 DEPTHS = (1, 4, 2, 8, 3, 10, 5, 7, 6, 9)
 SOURCE = "d296981ace76fe751bebf00dee52818fe18a3eef"
 TAG_OBJECT = "ae3310fada4a1fe35cb99ab02270b7538a0d03f7"
 COUNTS = {
     1: (50, 134, 184, 1, 186),
-    10: (500, 143, 643, 55, 699),
     100: (2000, 143, 2143, 550, 2694),
     500: (5000, 158, 5158, 2750, 7909),
 }
@@ -55,7 +54,7 @@ class DirectoryConstructionTraversal(unittest.TestCase):
         self.assertEqual(self.family["family"], "directory_construction_traversal")
         self.assertEqual(self.family["engine"], "workspace")
         self.assertEqual([row["id"] for row in rows], expected)
-        self.assertEqual(len({row["id"] for row in rows}), 12)
+        self.assertEqual(len({row["id"] for row in rows}), 9)
         for row in rows:
             kind, tier = row["registry"]["kind"], int(row["registry"]["tier"])
             construct = kind == "directory-construct"

@@ -12,7 +12,7 @@ use layerfs_bridge::{
     provision::StoreManifest,
 };
 use layerfs_history::WorkspaceId;
-use layerfs_sdk::{control::Control, ProjectApi, WorkspaceApi};
+use layerfs_sdk::internal::Control;
 use std::{
     collections::BTreeSet,
     fs::{self, File},
@@ -76,11 +76,7 @@ fn configure(f: &support::Fixture, deployment: &Deployment) -> PathBuf {
             read_handles: 2,
             handshake_ms: 3000,
             cache_bytes: 64 * 1024,
-            owner_bytes: 16 * 1024 * 1024,
-            lifecycle_reserve: 2 * 1024 * 1024,
             namespaces: 8,
-            ordinary_jobs: 8,
-            lifecycle_jobs: 4,
             pager_kib: 1024,
             serial_low_water: deployment.serial_low_water,
         },
@@ -134,8 +130,7 @@ fn start_with(
     let manifest = match deployment.existing_store {
         Some(manifest) => manifest,
         None => {
-            ProjectApi::new()
-                .install(&f.project, &mut connection)
+            layerfs_sdk::internal::install(&f.project, &mut connection)
                 .unwrap()
                 .manifest
         }
@@ -245,7 +240,7 @@ fn equal_calls_and_reused_slot_have_distinct_public_observation_identity() {
     let f = support::Fixture::new("observed-correlation", None);
     let log = f.directory.join("stderr.log");
     let (process, address, mut initial) = start(&f, File::create(&log).unwrap());
-    let bound = WorkspaceApi::new(&mut initial)
+    let bound = layerfs_sdk::internal::workspace(&mut initial)
         .bind(
             WorkspaceId::from_authority([111; 32]).unwrap(),
             f.project.branch.branch.id,
@@ -260,7 +255,7 @@ fn equal_calls_and_reused_slot_have_distinct_public_observation_identity() {
     let mut second = Control::new(connect(address));
     for (channel, scope) in [(&mut first, [7; 32]), (&mut second, [8; 32])] {
         assert_eq!(
-            WorkspaceApi::with_observations(channel, &scope)
+            layerfs_sdk::internal::with_observations(channel, &scope)
                 .status(bound.token)
                 .unwrap()
                 .token,
@@ -284,7 +279,7 @@ fn equal_calls_and_reused_slot_have_distinct_public_observation_identity() {
     }
     let mut later = Control::new(connect(address));
     assert_eq!(
-        WorkspaceApi::with_observations(&mut later, &[9; 32])
+        layerfs_sdk::internal::with_observations(&mut later, &[9; 32])
             .status(bound.token)
             .unwrap()
             .token,
@@ -330,8 +325,8 @@ fn equal_calls_and_reused_slot_have_distinct_public_observation_identity() {
         later.call(Request::EndSession).unwrap(),
         Reply::SessionEnded
     );
-    WorkspaceApi::new(&mut initial)
-        .unmount(bound.token)
+    layerfs_sdk::internal::workspace(&mut initial)
+        .unmount(bound.token, false)
         .unwrap();
     assert_eq!(
         initial.call(Request::EndSession).unwrap(),
@@ -341,7 +336,7 @@ fn equal_calls_and_reused_slot_have_distinct_public_observation_identity() {
     f.cleanup();
 }
 #[test]
-fn observer_job_is_charged_and_cardinality_does_not_follow_unrelated_workspaces() {
+fn observer_reads_are_charged_and_cardinality_does_not_follow_unrelated_workspaces() {
     let mut cardinalities = Vec::new();
     for (population, label) in [(1, "observed-small"), (4, "observed-large")] {
         let f = support::Fixture::new(label, None);
@@ -350,7 +345,7 @@ fn observer_job_is_charged_and_cardinality_does_not_follow_unrelated_workspaces(
         let mut bound = Vec::new();
         for n in 0..population {
             bound.push(
-                WorkspaceApi::new(&mut control)
+                layerfs_sdk::internal::workspace(&mut control)
                     .bind(
                         WorkspaceId::from_authority([90 + n; 32]).unwrap(),
                         f.project.branch.branch.id,
@@ -363,13 +358,13 @@ fn observer_job_is_charged_and_cardinality_does_not_follow_unrelated_workspaces(
             "ordinary controls emitted observations"
         );
         let first_call = population as u64 + 1;
-        WorkspaceApi::with_observations(&mut control, &[7; 32])
+        layerfs_sdk::internal::with_observations(&mut control, &[7; 32])
             .status(bound[0].token)
             .unwrap();
-        WorkspaceApi::new(&mut control)
+        layerfs_sdk::internal::workspace(&mut control)
             .status(bound[0].token)
             .unwrap();
-        WorkspaceApi::with_observations(&mut control, &[7; 32])
+        layerfs_sdk::internal::with_observations(&mut control, &[7; 32])
             .status(bound[0].token)
             .unwrap();
         let text = fs::read_to_string(&log).unwrap();
@@ -387,8 +382,8 @@ fn observer_job_is_charged_and_cardinality_does_not_follow_unrelated_workspaces(
         };
         assert_eq!(
             admitted(&last) - admitted(&first),
-            3,
-            "two Status jobs plus exactly one charged resource observer job"
+            2 + population as u64,
+            "two Status jobs and one read per Workspace; the aggregate observation is no job"
         );
         for rows in [&first, &last] {
             let cost = values(
@@ -397,9 +392,9 @@ fn observer_job_is_charged_and_cardinality_does_not_follow_unrelated_workspaces(
                     .unwrap(),
             );
             assert_eq!(&cost[..2], &[1, 1]);
-            assert_eq!(cost[2], 3, "observer SQL attempts");
-            assert_eq!(cost[3], 3, "observer SQL executions");
-            assert_eq!(cost[4], 3, "observer returned rows");
+            assert_eq!(cost[2], 3 * population as u64, "observer SQL attempts");
+            assert_eq!(cost[3], 3 * population as u64, "observer SQL executions");
+            assert_eq!(cost[4], 3 * population as u64, "observer returned rows");
             assert_eq!(cost[5], 0, "observer changed rows");
             assert!(cost[9] > 0, "actual observer VM steps");
             let resources = values(
@@ -407,8 +402,11 @@ fn observer_job_is_charged_and_cardinality_does_not_follow_unrelated_workspaces(
                     .find(|line| number(line, "section") == 28)
                     .unwrap(),
             );
-            assert_eq!(resources.len(), 31);
-            assert_eq!(resources[1], population as u64);
+            assert_eq!(resources.len(), 28);
+            assert_eq!(resources[0], population as u64);
+            // No daemon-wide byte budget exists: each Workspace owns its
+            // connection and memory, and no budget row is emitted.
+            assert!(!rows.iter().any(|line| number(line, "section") == 31));
             for index in 0..2 {
                 let reader = rows
                     .iter()
@@ -421,8 +419,8 @@ fn observer_job_is_charged_and_cardinality_does_not_follow_unrelated_workspaces(
         assert_eq!(first.len(), last.len());
         cardinalities.push(first.len());
         for workspace in bound {
-            WorkspaceApi::new(&mut control)
-                .unmount(workspace.token)
+            layerfs_sdk::internal::workspace(&mut control)
+                .unmount(workspace.token, false)
                 .unwrap();
         }
         assert_eq!(
@@ -441,14 +439,14 @@ fn diagnostic_sink_failure_does_not_repeat_or_hide_successful_bind() {
     let (process, address, mut control) =
         start(&f, File::options().write(true).open("/dev/full").unwrap());
     let workspace = WorkspaceId::from_authority([99; 32]).unwrap();
-    let bound = WorkspaceApi::with_observations(&mut control, &[7; 32])
+    let bound = layerfs_sdk::internal::with_observations(&mut control, &[7; 32])
         .bind(workspace, f.project.branch.branch.id)
         .unwrap();
     // A fresh authenticated observer establishes existing state; it neither
     // replays the bind nor settles a previously unknown reply.
     let mut observer = Control::new(connect(address));
     assert_eq!(
-        WorkspaceApi::new(&mut observer)
+        layerfs_sdk::internal::workspace(&mut observer)
             .status(bound.token)
             .unwrap()
             .token,
@@ -459,13 +457,13 @@ fn diagnostic_sink_failure_does_not_repeat_or_hide_successful_bind() {
         Reply::Refused(refusal) if refusal.code == ControlCode::Busy)
     );
     assert_eq!(
-        WorkspaceApi::new(&mut observer)
+        layerfs_sdk::internal::workspace(&mut observer)
             .cleanup(bound.token)
             .unwrap(),
         CleanupObservation::Live
     );
-    WorkspaceApi::new(&mut observer)
-        .unmount(bound.token)
+    layerfs_sdk::internal::workspace(&mut observer)
+        .unmount(bound.token, false)
         .unwrap();
     assert_eq!(
         observer.call(Request::EndSession).unwrap(),
@@ -479,7 +477,7 @@ fn resource_and_output_failure_preserve_original_status_reply() {
     let f = support::Fixture::new("observed-resource-and-sink", None);
     let (process, address, mut control) =
         start(&f, File::options().write(true).open("/dev/full").unwrap());
-    let bound = WorkspaceApi::new(&mut control)
+    let bound = layerfs_sdk::internal::workspace(&mut control)
         .bind(
             WorkspaceId::from_authority([123; 32]).unwrap(),
             f.project.branch.branch.id,
@@ -488,7 +486,7 @@ fn resource_and_output_failure_preserve_original_status_reply() {
     let backing = f.directory.join("overlay.sqlite");
     fs::rename(&backing, f.directory.join("original-overlay.sqlite")).unwrap();
     fs::write(&backing, b"external physical identity change").unwrap();
-    let original = WorkspaceApi::with_observations(&mut control, &[17; 32])
+    let original = layerfs_sdk::internal::with_observations(&mut control, &[17; 32])
         .status(bound.token)
         .unwrap();
     assert_eq!(original.token, bound.token);
@@ -498,7 +496,7 @@ fn resource_and_output_failure_preserve_original_status_reply() {
     // the original live state and does not repeat any mutation or binding.
     let mut observer = Control::new(connect(address));
     assert_eq!(
-        WorkspaceApi::new(&mut observer)
+        layerfs_sdk::internal::workspace(&mut observer)
             .status(bound.token)
             .unwrap()
             .token,
@@ -570,11 +568,14 @@ fn configured_serial_low_water_reaches_a_mounted_create_on_both_startup_routes()
         (2, "existing", 0),
     ] {
         let log = f.directory.join(format!("stderr-{run}.log"));
+        let local = f.directory.join(format!("overlay-{run}"));
+        fs::create_dir(&local).unwrap();
+        fs::set_permissions(&local, fs::Permissions::from_mode(0o700)).unwrap();
         let (process, _, mut control, served) = start_with(
             &f,
             File::create(&log).unwrap(),
             Deployment {
-                overlay: f.directory.join(format!("overlay-{run}.sqlite")),
+                overlay: local.join("template.sqlite"),
                 mounts: mounts.clone(),
                 serial_low_water: low_water,
                 existing_store: manifest.clone(),
@@ -583,16 +584,18 @@ fn configured_serial_low_water_reaches_a_mounted_create_on_both_startup_routes()
         assert_eq!(manifest.is_some(), route == "existing");
         assert!(served.daemon_sqlite.is_some());
         manifest = Some(served);
-        let bound = WorkspaceApi::new(&mut control)
+        let bound = layerfs_sdk::internal::workspace(&mut control)
             .bind(
                 WorkspaceId::from_authority([140 + run; 32]).unwrap(),
                 f.project.branch.branch.id,
             )
             .unwrap();
-        let ready = WorkspaceApi::new(&mut control).attach(bound.token).unwrap();
+        let ready = layerfs_sdk::internal::workspace(&mut control)
+            .attach(bound.token)
+            .unwrap();
         let guard = MountGuard(ready.directory.clone());
         let observe = |control: &mut Control| {
-            WorkspaceApi::with_observations(control, &[21; 32])
+            layerfs_sdk::internal::with_observations(control, &[21; 32])
                 .status(bound.token)
                 .unwrap();
             serial_reservations(&log)
@@ -628,15 +631,15 @@ fn configured_serial_low_water_reaches_a_mounted_create_on_both_startup_routes()
         let deadline = std::time::Instant::now() + Duration::from_secs(8);
         let mut last = None;
         loop {
-            let work = WorkspaceApi::new(&mut control)
+            let work = layerfs_sdk::internal::workspace(&mut control)
                 .status(bound.token)
                 .unwrap()
                 .native
                 .unwrap()
                 .work
                 .unwrap();
-            let now = (work.received, work.admitted, work.completed);
-            if work.received == 0 && work.admitted == 0 && last == Some(now) {
+            let now = (work.active, work.completed);
+            if work.active == 0 && last == Some(now) {
                 break;
             }
             last = Some(now);
@@ -646,8 +649,8 @@ fn configured_serial_low_water_reaches_a_mounted_create_on_both_startup_routes()
             );
             thread::sleep(Duration::from_millis(2));
         }
-        WorkspaceApi::new(&mut control)
-            .unmount(bound.token)
+        layerfs_sdk::internal::workspace(&mut control)
+            .unmount(bound.token, false)
             .unwrap();
         drop(guard);
         assert_eq!(
@@ -662,15 +665,16 @@ fn configured_serial_low_water_reaches_a_mounted_create_on_both_startup_routes()
         );
         seen.push((route, low_water, counts));
     }
-    // The first create finds no range and reserves. Below 1,023 the second
-    // makes the one early reservation and the third makes none; with 0 no
-    // create inside the window reserves.
+    // The mount reserves the first window before readiness, so the first
+    // create reserves nothing. Below 1,023 the second makes the one early
+    // reservation and the third makes none; with 0 no create inside the
+    // window reserves.
     assert_eq!(
         seen,
         [
-            ("install", LOW, vec![0, 1, 2, 2]),
-            ("existing", LOW, vec![0, 1, 2, 2]),
-            ("existing", 0, vec![0, 1, 1, 1]),
+            ("install", LOW, vec![1, 1, 2, 2]),
+            ("existing", LOW, vec![1, 1, 2, 2]),
+            ("existing", 0, vec![1, 1, 1, 1]),
         ]
     );
     fs::remove_dir(&mounts).unwrap();

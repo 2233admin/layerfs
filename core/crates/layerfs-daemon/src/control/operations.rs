@@ -4,12 +4,9 @@ use super::{
     types::NativeFailure,
     Failure, Service, Success,
 };
-use crate::{
-    store::{
-        BindPhase, BindRequest, BoundWorkspace, CapturedConstruction, CommitError, CommitFailure,
-        CommitSuccess,
-    },
-    Command, OwnerError,
+use crate::store::{
+    BindPhase, BindRequest, BoundWorkspace, CapturedConstruction, CommitError, CommitFailure,
+    CommitSuccess,
 };
 use layerfs_bridge::control::{
     Activity, ControlCode, Reply, Request, WorkspaceToken, HISTORY_WINDOW,
@@ -68,6 +65,19 @@ impl Service {
                 .fork(request)
                 .map(|snapshot| Success::reply(Reply::Forked(snapshot)))
                 .map_err(Failure::History),
+            Request::Branches { stack, page } => {
+                if page.limit == 0 || page.limit > HISTORY_WINDOW {
+                    return Err(Failure::Rejected(
+                        ControlCode::Invalid,
+                        "branches processing window",
+                    ));
+                }
+                self.store
+                    .history()
+                    .branches(*stack, page)
+                    .map(|page| Success::reply(Reply::Branches(page)))
+                    .map_err(Failure::History)
+            }
             Request::History(request) => {
                 if request.limit == 0 || request.limit > HISTORY_WINDOW {
                     return Err(Failure::Rejected(
@@ -241,17 +251,12 @@ impl Service {
     pub(super) fn job(
         &self,
         route: layerfs_overlay::Route,
-        command: Command,
-    ) -> Result<crate::Completion, Failure> {
-        self.owner
-            .try_submit(Some(route), command)
-            .map_err(|(cause, command)| {
-                Failure::Owner(OwnerError::Unattempted {
-                    cause: Box::new(cause),
-                    command: Box::new(command),
-                })
-            })?
-            .wait()
-            .map_err(Failure::Owner)
+        command: impl FnOnce(
+                &crate::OwnerClient,
+                Option<layerfs_overlay::Route>,
+            ) -> Result<crate::JobReceipt, crate::OwnerError>
+            + Send,
+    ) -> Result<crate::JobReceipt, Failure> {
+        command(&self.owner, Some(route)).map_err(Failure::Owner)
     }
 }

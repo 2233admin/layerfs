@@ -42,6 +42,12 @@ pub struct CapturedNamespaceWork {
     pub files_constructed: u64,
     /// Constructions that returned the retained base file root unchanged.
     pub files_unchanged: u64,
+    /// Successful bounded shifted-file edge comparison windows.
+    pub file_edge_windows: u64,
+    /// Logical bytes acquired from both sources for those windows.
+    pub file_edge_read_bytes: u64,
+    /// File bytes retaining their base mapping after authenticated trimming.
+    pub file_edge_retained_bytes: u64,
     /// Captured targets emitted for fresh symlinks.
     pub symlinks: u64,
     /// Fresh portable metadata trees built.

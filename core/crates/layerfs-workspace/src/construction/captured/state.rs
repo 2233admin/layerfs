@@ -80,6 +80,29 @@ impl<P: OverlayOperationRecords + ?Sized> State<'_, P> {
         Ok(value)
     }
 }
+impl<P: OverlayOperationRecords + ?Sized> State<'_, P> {
+    /// Two records as one read job, each inside the record value bound.
+    pub fn get_pair(&mut self, keys: [EditRecordKey; 2]) -> ContentResult<[Option<Vec<u8>>; 2]> {
+        self.ready()?;
+        let result = self.records.get_many(&keys);
+        let values = result.map_err(|error| self.content(error))?;
+        if let Some(actual) = values
+            .iter()
+            .flatten()
+            .map(Vec::capacity)
+            .find(|capacity| *capacity > layerfs_overlay::OPERATION_RECORD_BYTES)
+        {
+            return Err(self.content(ContentError::BoundedCapacityExceeded {
+                what: "captured record returned capacity",
+                limit: layerfs_overlay::OPERATION_RECORD_BYTES as u64,
+                actual: actual as u64,
+            }));
+        }
+        values
+            .try_into()
+            .map_err(|_| self.content(ContentError::InvalidRecord("captured record pair")))
+    }
+}
 pub(super) fn key(kind: u32, number: u64) -> EditRecordKey {
     let mut key = [0; 32];
     key[..8].copy_from_slice(&number.to_be_bytes());

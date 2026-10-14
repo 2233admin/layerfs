@@ -6,6 +6,51 @@ schema16. Earlier algorithm and proof pins retain their original scope; see
 
 > **Status:** Current general guide.
 
+Issue 321 step-1 temporary-state correction, 2026-10-13: each overlay
+connection selects and verifies `temp_store=MEMORY` (readback 2), in addition
+to MEMORY journal/OFF/EXCLUSIVE, mmap off and zero busy timeout. This removes
+SQLite's auxiliary temporary database/sorter-file route. The historical FILE
+selection below describes its original pin. No canonical or global Store
+format/profile changes. Each Workspace still uses its independent database
+copy and connection; schema 33 remains until the selected step-2 revision.
+
+Issue 321 final state, 2026-10-14: the engine is schema 34, one database per
+mounted Workspace with no Workspace key in any row, served under one lock by
+the calling thread. The current description is in the
+[owner guide](21-daemon-owner.md#issue-321-final-model-one-lock-per-workspace-2026-10-14)
+and the [terminology guide](64-overlay-terminology.md); the shared-database,
+namespace-prefix, reservation and owner-queue passages below are historical.
+
+Temporary state is bounded by the ordinary checked job windows: four inode
+and two name changes, 128 KiB read/write, 32 KiB payload rows, 18 reference
+claims and 64-row metadata/record pages. Piece mutation staging covers at most
+the write window plus one 32 KiB run at either edge (48 aligned piece starts).
+Cookie retirement handles at most eight 16 KiB pages, and live maintenance
+uses its existing row/byte window. Indexed plans avoid temporary sorts on
+request paths. MEMORY rollback and statement journals retain pages only for
+one atomic job; SQLite frees their chunks at its completion. These source
+windows do not make the cache-size suggestion or admission ledger an RSS
+bound. SQLite connection/statement caches, journals/ephemeral state, stacks,
+allocator retention and kernel file cache require separate resource evidence.
+
+Issue 316 update, 2026-10-11 (overlay schema 33, phase 1 of the
+[reference-piece plan](../issues/316/PIECE-STRUCTURE-IMPLEMENTATION-PLAN.md)):
+a file range of a layer has a fourth kind, the reference piece. The new table
+`payload_reference (ns, gen, serial, file_offset, length, epoch, source,
+source_offset)`, `WITHOUT ROWID` with primary key `(ns, gen, serial,
+file_offset)`, holds one row per piece: `length` bytes of the layer from
+`file_offset` are the committed bytes of content root `source` from
+`source_offset`. A piece holds no bytes and starts on a cell boundary.
+`inode` gains `referenced` (this layer has held a piece; a layer without it
+issues no piece statement) and `sequence` (the Workspace revision that last
+wrote the row). `maintenance.kind` admits 12, and `accounting` gains
+`reference_rows` with an insert and a delete trigger: 57 accounting triggers.
+`PRAGMA user_version` and its startup readback are 33. The rules of the rows
+are in [payload layers](31-payload-streams.md), with the paths that retire,
+move and reclaim pieces. Maintenance kind 12 is the paged deletion of one
+layer's stale pieces after a shrink. In this phase only tests write a piece:
+no request path sends a claim.
+
 R7 update, 2026-10-09 (overlay schema 32): `native_directory` gains
 `floor INTEGER NOT NULL DEFAULT 0`, the first cookie that is still an offset
 of an open directory handle. A READDIR at offset 0 over published replies

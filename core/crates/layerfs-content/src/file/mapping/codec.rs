@@ -86,6 +86,74 @@ pub fn encode_chunk_object(bytes: &[u8]) -> ContentResult<Vec<u8>> {
     Ok(canonical)
 }
 
+/// Identity of the canonical chunk object whose payload is exactly `bytes`,
+/// without building that object: the identity of what `encode_chunk_object`
+/// returns for the same bytes. Hashes the frozen framing, then the payload.
+pub fn chunk_id(bytes: &[u8]) -> ContentResult<ObjectId> {
+    let mut identity = ChunkIdentity::new(bytes.len())?;
+    identity.update(bytes)?;
+    identity.finish()
+}
+
+/// The identity of the canonical chunk object of a payload whose length is
+/// known and whose bytes arrive in order, part by part. The frozen framing
+/// states the length first, so it is hashed at once and the payload after
+/// it. Fixed in size: no payload byte is kept.
+#[derive(Clone, Debug)]
+pub struct ChunkIdentity {
+    stream: crate::object::IdentityStream,
+    remaining: usize,
+}
+
+impl ChunkIdentity {
+    /// Starts the identity of a chunk of `length` payload bytes.
+    pub fn new(length: usize) -> ContentResult<Self> {
+        if length > cdc::MAXIMUM_CHUNK_BYTES {
+            return Err(ContentError::ObjectLimitExceeded {
+                limit: cdc::MAXIMUM_CHUNK_BYTES,
+                actual: length,
+            });
+        }
+        let value_len = (CHUNK_MAGIC.len() + length) as u32;
+        let mut framing = [0_u8; HEADER_LEN + codec::VALUE_LEN_BYTES + CHUNK_MAGIC.len()];
+        framing[..4].copy_from_slice(&OBJECT_MAGIC);
+        framing[4] = codec::BYTES_KIND;
+        framing[5..9].copy_from_slice(&(value_len + codec::VALUE_LEN_BYTES as u32).to_be_bytes());
+        framing[9..13].copy_from_slice(&value_len.to_be_bytes());
+        framing[13..].copy_from_slice(CHUNK_MAGIC);
+        let mut stream = ObjectId::stream();
+        stream.update(&framing);
+        Ok(Self {
+            stream,
+            remaining: length,
+        })
+    }
+
+    /// Payload bytes not yet added.
+    pub const fn remaining(&self) -> usize {
+        self.remaining
+    }
+
+    /// Adds the next payload bytes. More than remain is refused and adds
+    /// nothing.
+    pub fn update(&mut self, bytes: &[u8]) -> ContentResult<()> {
+        self.remaining = self
+            .remaining
+            .checked_sub(bytes.len())
+            .ok_or(ContentError::InvalidRecord("chunk identity length"))?;
+        self.stream.update(bytes);
+        Ok(())
+    }
+
+    /// The chunk's identity, once every payload byte was added.
+    pub fn finish(&self) -> ContentResult<ObjectId> {
+        if self.remaining != 0 {
+            return Err(ContentError::InvalidRecord("chunk identity length"));
+        }
+        Ok(self.stream.finish())
+    }
+}
+
 /// Borrows the payload of a chunk object value.
 pub fn decode_chunk_payload(value: &[u8]) -> ContentResult<&[u8]> {
     let bytes = value

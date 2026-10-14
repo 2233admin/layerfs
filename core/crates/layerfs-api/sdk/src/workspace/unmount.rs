@@ -9,10 +9,17 @@ impl WorkspaceApi<'_> {
     /// acknowledged only after detach, every loop join, daemon-work drain,
     /// native-owner revocation and logical Close. Retained custody is returned
     /// as its own typed cause; this facade adds no teardown shortcut.
-    pub fn unmount(&mut self, token: WorkspaceToken) -> Result<(), Box<OperationFailure>> {
+    pub fn unmount(
+        &mut self,
+        token: WorkspaceToken,
+        force: bool,
+    ) -> Result<Option<ForcedOutcome>, Box<OperationFailure>> {
+        if force {
+            return self.force_unmount(token, false).map(Some);
+        }
         let request = Request::Unmount(token);
         match self.exchange(request.clone())? {
-            Reply::Unmounted(_) => Ok(()),
+            Reply::Unmounted(_) => Ok(None),
             reply => Err(OperationFailure::unexpected(request, reply)),
         }
     }
@@ -23,7 +30,7 @@ impl WorkspaceApi<'_> {
     /// and cleanup dispositions. A refusal before any effect is a remote
     /// cause; retained custody, with its forced facts, is its own typed cause.
     /// This facade signals no process and never replays the request.
-    pub fn force_unmount(
+    pub(crate) fn force_unmount(
         &mut self,
         token: WorkspaceToken,
         relinquish_unknown: bool,

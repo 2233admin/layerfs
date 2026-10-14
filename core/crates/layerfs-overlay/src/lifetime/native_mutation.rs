@@ -2,7 +2,7 @@
 //! lookup and open custody that the mutation's own reply hands to the kernel.
 use crate::{
     db::integer, Changes, NativeApplied, NativeEffect, NativeMount, Overlay, OverlayError,
-    OverlayResult, StatementKind,
+    OverlayResult,
 };
 
 /// Longest parent chain one cycle check reads: the canonical component limit
@@ -57,11 +57,17 @@ impl Overlay {
                 // One custody row write covers the lookup and the descriptor.
                 self.insert_native_lookup_row(mount, serial, false, 1)?;
                 let file = self.retain_file_row(mount.route, native, key, serial, writable)?;
-                self.execute(
-                    StatementKind::Lease,
-                    crate::sql::FILE_OPEN_LOOKUP_ADD,
-                    &[&mount.route.ns, &integer(serial)?],
-                    16,
+                self.file_ref(
+                    mount.route.ns,
+                    integer(serial)?,
+                    crate::LeaseKind::LookupOwner,
+                    true,
+                )?;
+                self.file_ref(
+                    mount.route.ns,
+                    integer(serial)?,
+                    crate::LeaseKind::FileHandle,
+                    true,
                 )?;
                 Some(file)
             }

@@ -872,14 +872,14 @@ fn reader_name_and_symlink_jobs_seek_their_sealed_domain_while_the_active_genera
     assert_eq!(plans.len(), 2, "{plans:?}");
     assert!(
         plans[0].starts_with("parent-names: SEARCH")
-            && plans[0].contains("directory_entry_capture")
-            && plans[0].contains("ns=? AND gen=? AND parent=? AND name>?"),
+            && plans[0].contains("fs_entry_capture")
+            && plans[0].contains("generation=? AND parent=? AND name>?"),
         "{plans:?}"
     );
     assert!(
         plans[1].starts_with("name-point: SEARCH")
             && plans[1].contains("PRIMARY KEY")
-            && plans[1].contains("ns=? AND parent=? AND name=? AND gen=?"),
+            && plans[1].contains("parent=? AND name=? AND generation=?"),
         "{plans:?}"
     );
     assert!(

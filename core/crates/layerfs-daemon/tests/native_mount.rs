@@ -133,19 +133,26 @@ fn command(identity: u32, program: &str, argument: &Path) -> std::process::Outpu
         .unwrap()
 }
 
+/// The kernel lookup entries and file custody the engine keeps in memory.
+fn lookups(h: &Harness, through: layerfs_bridge::control::WorkspaceToken) -> u64 {
+    let open = h.engine_resources(through).open;
+    open.kernel_entries + open.file_custody
+}
 #[test]
 fn ready_mount_serves_the_complete_root_to_unregistered_access_then_drains() {
     let (f, h) = harness("-ready");
     let helper = h.bind(1);
     let token = h.bind(2);
     assert_eq!(h.phase(token), NativePhase::Unattached);
-    let before = h.engine(helper);
+    let before = lookups(&h, helper);
     let ready = h.attach(token);
     let root = Path::new(&ready.directory);
     assert_eq!(root, h.mounts.join(token.namespace.to_string()));
     // Ready evidence: kernel mount, negotiated profile and the loop serving.
     let receipt = ready.receipt;
-    assert_eq!(receipt.loops, 1);
+    // The mount's declared receive workers.
+    const LOOPS: u16 = layerfs_fuse::RECEIVE_SLOTS as u16;
+    assert_eq!(receipt.loops, LOOPS);
     assert_eq!(receipt.abi_major, 7);
     assert_eq!((receipt.max_write, receipt.max_readahead), (131072, 131072));
     assert_eq!(
@@ -180,9 +187,9 @@ fn ready_mount_serves_the_complete_root_to_unregistered_access_then_drains() {
     let work = native.work.unwrap();
     assert_eq!(
         (work.loops_configured, work.loops_entered, work.loops_exited),
-        (1, 1, 0)
+        (LOOPS, LOOPS, 0)
     );
-    assert_eq!((work.received, work.admitted, work.retained), (0, 0, 0));
+    assert_eq!((work.active, work.retained), (0, 0));
 
     let (paths, regular) = complete_root(&f, root);
     mutating::refusals(root);
@@ -209,12 +216,9 @@ fn ready_mount_serves_the_complete_root_to_unregistered_access_then_drains() {
     let served = h.status(token).native.unwrap().work.unwrap();
     // FLUSH, FSYNC and FSYNCDIR are refused once each with ENOSYS, beside
     // the three refusals of `mutating::refusals`; none is an inline reply.
-    assert!(served.handoffs > 0 && served.refused >= 6, "{served:?}");
-    assert_eq!(
-        (served.terminal, served.unadmitted, served.retained),
-        (0, 0, 0)
-    );
-    assert!(h.engine(helper).owner_details > before.owner_details);
+    assert!(served.served > 0 && served.refused >= 6, "{served:?}");
+    assert_eq!((served.terminal, served.retained), (0, 0));
+    assert!(lookups(&h, helper) > before);
     println!(
         "NATIVE_READY paths={paths} regular_bytes={regular} receipt={receipt:?} entry={entry:?} served={served:?}"
     );
@@ -269,10 +273,10 @@ fn ready_mount_serves_the_complete_root_to_unregistered_access_then_drains() {
     resident.wait().unwrap();
 
     // Cached kernel lookups and idle receive loops are not busy.
-    let lookups = h.engine(helper).owner_details;
+    let held = lookups(&h, helper);
     let done = h.unmount(&ready);
     println!(
-        "NATIVE_UNMOUNT lookup_owner_details={lookups} receipt={:?}",
+        "NATIVE_UNMOUNT lookup_owner_details={held} receipt={:?}",
         done.native
     );
     for request in [Request::Status(token), Request::Attach(token)] {
@@ -287,8 +291,7 @@ fn ready_mount_serves_the_complete_root_to_unregistered_access_then_drains() {
     ));
     // Indexed retirement and namespace deletion finish as bounded owner work.
     until("native ownership retired", || {
-        let counts = h.engine(helper);
-        counts.namespaces == 1 && counts.owner_details <= before.owner_details
+        h.engine(helper).namespaces == 1 && lookups(&h, helper) <= before
     });
     assert!(matches!(
         h.try_unmount(helper).unwrap().reply,
@@ -375,18 +378,13 @@ fn attach_refusals_have_no_effect_and_a_failed_attach_returns_to_unattached() {
 }
 
 #[test]
-fn two_workspaces_share_one_dispatcher_and_unmount_independently() {
+fn two_workspaces_mount_and_unmount_independently() {
     let (f, h) = harness("-shared");
     let first = h.mount(3);
     let second = h.mount(4);
     assert_ne!(first.directory, second.directory);
     assert_ne!(first.receipt.mount_id, second.receipt.mount_id);
     assert_ne!(first.receipt.device_minor, second.receipt.device_minor);
-    let work = h.serving.work().unwrap();
-    assert_eq!(
-        (work.mounts, work.live_workers),
-        (2, mounted::READ_HANDLES + 2)
-    );
     let roots = [first.directory.clone(), second.directory.clone()];
     let fixture = Arc::new(f);
     let readers: Vec<_> = roots
@@ -407,7 +405,6 @@ fn two_workspaces_share_one_dispatcher_and_unmount_independently() {
     h.unmount(&first);
     assert_eq!(h.phase(second.token), NativePhase::Ready);
     complete_root(&fixture, Path::new(&second.directory));
-    assert_eq!(h.serving.work().unwrap().mounts, 1);
     h.unmount(&second);
     h.stop();
     Arc::try_unwrap(fixture).ok().unwrap().cleanup();

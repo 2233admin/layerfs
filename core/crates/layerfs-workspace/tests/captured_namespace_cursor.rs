@@ -328,7 +328,11 @@ fn work_grows_linearly_with_the_change_and_pages_stay_bounded() {
     // call. They are counted bounds of this workload, not timing.
     const PER_ROW: u64 = 10;
     const CALLS_PER_ROW: u64 = 18;
-    let sizes = [40, 160, 640];
+    // The slots of the cursor's window of point answers. The last change
+    // exceeds it, so some of its answers are displaced and read again; it
+    // is held to the same ceilings per row as the others.
+    const POINTS: u64 = 1024;
+    let sizes = [40, 160, 640, 1600];
     let runs: Vec<Counted> = sizes
         .iter()
         .map(|files| bulk(&format!("cc-bulk-{files}"), *files))
@@ -353,12 +357,14 @@ fn work_grows_linearly_with_the_change_and_pages_stay_bounded() {
             );
         }
     }
-    // Growth between the two sizes that both exceed one window. A change
-    // within one window is cheaper per row, because the cursor answers its
-    // repeated points from the retained window, so it is not a baseline.
-    for pair in runs[1..].windows(2) {
+    assert!(runs[3].work.inode_rows > POINTS);
+    // Growth between the two sizes that both exceed one page and fit the
+    // window of point answers, so that each reads a sealed record once. A
+    // change within one page is cheaper per row, and one beyond the window
+    // of answers reads its displaced answers again, so neither is a baseline.
+    for pair in runs[1..3].windows(2) {
         let (small, big) = (&pair[0], &pair[1]);
-        assert!(small.work.inode_rows > WINDOW as u64);
+        assert!(small.work.inode_rows > WINDOW as u64 && big.work.inode_rows <= POINTS);
         for ((name, less), (_, more)) in counters(&small.work).into_iter().zip(counters(&big.work))
         {
             assert!(

@@ -1,22 +1,10 @@
 //! Actual statement families of one original owner job, in exact owned rows.
 use layerfs_overlay::{DatabaseWork, StatementKind, StatementWork};
-use std::mem::size_of;
-
-/// Statement families of one Overlay connection snapshot.
-pub(crate) const FAMILIES: usize = size_of::<DatabaseWork>() / size_of::<StatementWork>();
-/// Distinct families one Lifecycle job can execute in maintained source: the
-/// pre-BEGIN freelist read, BEGIN, COMMIT or ROLLBACK (never both), and at most
-/// four of the Workspace/Lease/Reclaim/Capture/Inode/Frontier/OperationRecord domains.
-/// Lifecycle jobs never park, so no readiness family is added. This bounds the
-/// admitted receipt charge only: a further actual family is retained and
-/// charged when observed, never dropped.
-pub(crate) const LIFECYCLE_FAMILIES: usize = 7;
-const _: () = assert!(FAMILIES <= u16::BITS as usize && LIFECYCLE_FAMILIES <= FAMILIES);
 
 /// Statement work attributed to one original job, including every readiness
-/// turn which parked it. A family has a row only when it observed work; values
-/// are the connection deltas of this job's exclusive turns, never derived from
-/// its class or command name.
+/// check it made while waiting. A family has a row only when it observed work;
+/// values are the connection deltas of this job's own lock holds, never
+/// derived from its class or command name.
 #[derive(Debug, Default)]
 pub struct JobSql {
     mask: u16,
@@ -55,10 +43,6 @@ impl JobSql {
             }
         }
         all
-    }
-    /// Owned row bytes retained with this receipt.
-    pub(crate) fn heap_bytes(&self) -> usize {
-        self.rows.len() * size_of::<StatementWork>()
     }
     /// Adds one exclusive turn. The previous rows are released before their
     /// exact successor is allocated, so both never coexist.

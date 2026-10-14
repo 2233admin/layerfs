@@ -5,6 +5,7 @@ mod edit_model;
 #[allow(dead_code)]
 #[path = "../../../../../benchmark/fs-bench-pro/workload/main.rs"]
 mod reference;
+mod sdk_edit_model;
 use std::os::unix::fs::MetadataExt;
 use std::{
     collections::BTreeMap,
@@ -54,16 +55,6 @@ fn verify_m1_state(
     state: edit_model::M1State,
 ) -> reference::Result<()> {
     use reference::workspace_common::{self as common, EntryKind};
-    let paths = common::native_paths(root)?;
-    if paths
-        != state
-            .entries
-            .iter()
-            .map(|entry| entry.path.clone())
-            .collect::<Vec<_>>()
-    {
-        return Err("original M1 selective namespace differs".into());
-    }
     let expected = state
         .entries
         .iter()
@@ -83,9 +74,13 @@ fn verify_m1_state(
     let mut actual = vec![0; common::SCRATCH_BYTES];
     let mut wanted = vec![0; common::SCRATCH_BYTES];
     let mut checked_bytes = 0u64;
-    for entry in &state.entries {
-        let path = root.join(&entry.path);
-        let metadata = fs::symlink_metadata(&path)?;
+    let mut inspect = |relative: &str,
+                       path: &Path,
+                       metadata: fs::Metadata|
+     -> reference::Result<()> {
+        let entry = expected
+            .get(relative)
+            .ok_or("original M1 selective namespace differs")?;
         let (class, content) = match &entry.kind {
             EntryKind::Directory if metadata.is_dir() => {
                 if let Some(mode) = state.directory_modes.get(&entry.path) {
@@ -97,10 +92,10 @@ fn verify_m1_state(
                         .into());
                     }
                 }
-                continue;
+                return Ok(());
             }
             EntryKind::Symlink(target) if metadata.file_type().is_symlink() => {
-                if fs::read_link(&path)?.to_str() != Some(target.as_str())
+                if fs::read_link(path)?.to_str() != Some(target.as_str())
                     || metadata.len() != target.len() as u64
                 {
                     return Err(format!(
@@ -109,7 +104,7 @@ fn verify_m1_state(
                     )
                     .into());
                 }
-                continue;
+                return Ok(());
             }
             EntryKind::File(content) if metadata.is_file() => (entry.path.as_str(), content),
             EntryKind::Hardlink(target) if metadata.is_file() => {
@@ -159,9 +154,9 @@ fn verify_m1_state(
         // Empty ranges at zero/exact128KiB are explicit original length/type
         // coverage, not an instruction to replace the oracle with full reads.
         if ranges.is_empty() {
-            continue;
+            return Ok(());
         }
-        let mut file = fs::File::open(&path)?;
+        let mut file = fs::File::open(path)?;
         for &(offset, len) in ranges {
             if offset
                 .checked_add(len)
@@ -191,6 +186,40 @@ fn verify_m1_state(
                     .ok_or("M1 checked bytes overflow")?;
             }
         }
+        Ok(())
+    };
+    let mut paths = vec![".".to_owned()];
+    let root_path = root.join(".");
+    inspect(".", &root_path, fs::symlink_metadata(&root_path)?)?;
+    let mut directories = vec![root.to_owned()];
+    while let Some(directory) = directories.pop() {
+        for item in fs::read_dir(directory)? {
+            let path = item?.path();
+            let relative = path
+                .strip_prefix(root)?
+                .to_str()
+                .ok_or("non-UTF8 fixture path")?
+                .to_owned();
+            let metadata = fs::symlink_metadata(&path)?;
+            let directory = metadata.is_dir();
+            // Membership in the canonical expected map authenticates the
+            // relative name before it is visited or used as a directory.
+            inspect(&relative, &path, metadata)?;
+            if directory {
+                directories.push(path);
+            }
+            paths.push(relative);
+        }
+    }
+    paths.sort();
+    if paths
+        != state
+            .entries
+            .iter()
+            .map(|entry| entry.path.clone())
+            .collect::<Vec<_>>()
+    {
+        return Err("original M1 selective namespace differs".into());
     }
     let scope = edit_model::m1_scope_tsv(&state)?;
     let scope_digest = reference::sdk_edit_common::sha256_hex(scope.as_bytes());
@@ -292,36 +321,6 @@ fn prepare_context_discard(id: &str, folder: &Path) -> reference::Result<()> {
 
 fn main() -> reference::Result<()> {
     let args: Vec<_> = std::env::args().collect();
-    if let [_, mode, id, root] = args.as_slice() {
-        if matches!(
-            mode.as_str(),
-            "materialize-reliability" | "verify-reliability-native"
-        ) {
-            let case = reference::workspace_reliability::resolve(id)?;
-            if !matches!(case.kind, "corrupt-descendant" | "missing-descendant") {
-                return Err("only original integrity reliability fixtures are admitted".into());
-            }
-            let entries = reference::workspace_reliability::fixture_for(&case)?;
-            let root = Path::new(root);
-            let manifest = reference::workspace_common::manifest(&entries)?;
-            if mode == "materialize-reliability" {
-                if root.exists() || root.with_extension("manifest.tsv").exists() {
-                    return Err("fresh reliability fixture and manifest required".into());
-                }
-                reference::workspace_common::create_fixture(root, &entries)?;
-                use std::io::Write;
-                fs::OpenOptions::new()
-                    .write(true)
-                    .create_new(true)
-                    .open(root.with_extension("manifest.tsv"))?
-                    .write_all(manifest.as_bytes())?;
-            }
-            let proof = reference::workspace_common::verify_native(root, &entries)?;
-            println!("{{\"schema\":\"fs-bench-pro-native-reliability-fixture-v1\",\"status\":\"PASS\",\"case\":\"{id}\",\"seed\":1,\"entries\":{},\"logical_bytes\":{},\"manifest_sha256\":\"{}\",\"verification_status\":\"pass\"}}",
-                entries.len(), proof["logical_bytes"], reference::sdk_edit_common::sha256_hex(manifest.as_bytes()));
-            return Ok(());
-        }
-    }
     if let [_, mode, id, step, root] = args.as_slice() {
         if mode == "import-qualified" {
             let step = step.parse::<usize>()?;
@@ -441,7 +440,7 @@ fn main() -> reference::Result<()> {
         entries
     };
     if mode == "fixture" {
-        if let Some(wanted) = edit_model::fixture_sha256(id)? {
+        if let Some(wanted) = sdk_edit_model::fixture_sha256(id)? {
             if edit_model::original_fixture_hash(&entries)? != wanted {
                 return Err("original SDK fixture digest differs from frozen seal".into());
             }

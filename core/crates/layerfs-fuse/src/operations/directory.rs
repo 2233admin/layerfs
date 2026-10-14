@@ -1,10 +1,7 @@
 //! One native enumeration request: reading visits, the reply's accepted
 //! prefix, one publishing visit. Nothing is held in the engine between them
 //! or after the reply.
-use crate::{
-    ports::{BaseDemandFailed, Fenced, RequestServices, ServiceError},
-    NextTurn,
-};
+use crate::ports::{BaseDemandFailed, Fenced, RequestServices, ServiceError};
 use layerfs_overlay::{NativeMount, OverlayError};
 use layerfs_workspace::{NativeDirectoryBatch, NativeDirectoryEntry, NativeDirectoryWindow};
 use std::{fmt, sync::Arc};
@@ -177,7 +174,7 @@ impl DirectoryStream {
             .services
             .directory_visit(self.mount, self.serial, self.handle, self.offset, after)
             .await?;
-        // The request's own copy: the job and its credit are gone before any
+        // The request's own copy: the job and its receipt are gone before any
         // provider wait and before the publishing visit.
         let window = NativeDirectoryWindow::clone(reply.get());
         drop(reply);
@@ -217,7 +214,6 @@ impl DirectoryStream {
             // hold leaves the receive loop and takes one Store reader.
             let base = if window.listing.is_none() {
                 // Provider reads never run on the loop that received the request.
-                crate::LeaveReceiver::default().await;
                 Some(self.services.base().await?)
             } else {
                 None
@@ -233,7 +229,6 @@ impl DirectoryStream {
             }
             match batch.continuation {
                 Some(next) => {
-                    NextTurn::default().await;
                     self.visit(Some(next)).await?;
                 }
                 None => {

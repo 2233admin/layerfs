@@ -13,8 +13,7 @@ use layerfs_content::filesystem::PathName;
 use layerfs_daemon::{
     bootstrap::open_store,
     store::{BindRequest, BoundWorkspace, Store},
-    Command, Completion, NativeJob, NativeReply, Owner, OwnerClient, OwnerConfig, Response,
-    ServiceClass,
+    JobReceipt, NativeReply, Owner, OwnerClient, OwnerConfig, Response, ServiceClass,
 };
 use layerfs_fuse::{
     operations::{
@@ -45,8 +44,8 @@ const SMALL: usize = 10;
 const LARGE: usize = 4000;
 /// Names of one reply of the large directories: one owner window.
 const WINDOW: usize = layerfs_overlay::PAGE_ROWS;
-/// Published replies of one handle that RELEASEDIR deletes itself.
 const INLINE: usize = 8;
+/// Published replies of one handle that RELEASEDIR deletes itself.
 const NOW: Time = Time {
     seconds: 1_700_000_000,
     nanoseconds: 0,
@@ -106,12 +105,15 @@ fn until(what: &str, mut condition: impl FnMut() -> bool) {
         std::thread::yield_now();
     }
 }
-fn finish(client: &OwnerClient, route: layerfs_overlay::Route, command: Command) -> Completion {
-    let pending = match client.try_submit(Some(route), command) {
-        Ok(pending) => pending,
-        Err((error, command)) => panic!("admission of {command:?}: {error:?}"),
-    };
-    wait(pending).unwrap()
+fn finish(
+    client: &OwnerClient,
+    route: layerfs_overlay::Route,
+    command: impl FnOnce(
+        &layerfs_daemon::OwnerClient,
+        Option<layerfs_overlay::Route>,
+    ) -> Result<layerfs_daemon::JobReceipt, layerfs_daemon::OwnerError>,
+) -> JobReceipt {
+    command(client, Some(route)).unwrap_or_else(|error| panic!("{error:?}"))
 }
 fn name(text: &str) -> PathName {
     PathName::new(text).unwrap()
@@ -226,35 +228,40 @@ impl Rig {
     /// The maintenance turns and rows the owner has run, once none is due.
     fn maintenance(&self) -> (u64, u64) {
         until("maintenance idle", || {
-            let done = finish(&self.client, self.bound.route(), Command::MaintenanceIdle);
+            let done = finish(
+                &self.client,
+                self.bound.route(),
+                |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                    job_client.maintenance_idle(job_route)
+                },
+            );
             matches!(done.result(), Ok(Response::MaintenanceIdle(true)))
         });
         let work = self.client.diagnostics().unwrap();
         (work.maintenance_jobs, work.maintenance_rows)
     }
-    /// Handle and reply rows the engine stores for the home Workspace.
-    fn stored(&self) -> u64 {
-        let done = finish(
+    /// Handle and published-page allocations of the home Workspace.
+    fn cookie_entries(&self) -> u64 {
+        let result = finish(
             &self.client,
             self.bound.route(),
-            Command::Resources { global: false },
+            |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.resources(job_route, false)
+            },
         );
-        match done.result() {
-            Ok(Response::Resources(resources)) => resources.counts.owner_details,
-            other => panic!("resources: {other:?}"),
-        }
+        let open = match result.result() {
+            Ok(Response::Resources(r)) => r.open,
+            other => panic!("cookie memory observation: {other:?}"),
+        };
+        open.directory_handles + open.cookie_pages
     }
-    /// Taken once every result of the request under observation is returned.
     fn snapshot(&self) -> Snapshot {
-        until("owner results returned", || {
-            self.client.diagnostics().unwrap().outstanding == 0
-        });
         let work = self.client.diagnostics().unwrap();
         let readers = self.store.read_work();
         assert_eq!((readers.outstanding, readers.waiting), (0, 0));
         Snapshot {
-            completed: work.completed,
-            admitted: work.admitted,
+            completed: work.jobs,
+            admitted: work.jobs.iter().sum::<u64>(),
             grants: readers.grants,
             sql: work.sql_foreground,
         }
@@ -304,9 +311,6 @@ impl Rig {
             home,
         } = self;
         home.leave(&client);
-        until("owner credits returned", || {
-            client.diagnostics().unwrap().outstanding == 0
-        });
         assert_eq!(store.read_work().outstanding, 0);
         owner.stop().unwrap();
         drop(store);
@@ -343,7 +347,9 @@ impl Seat {
         let done = finish(
             client,
             bound.route(),
-            Command::Native(NativeJob::Mount { root }),
+            |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.native_mount(job_route, root)
+            },
         );
         let mount = match done.result() {
             Ok(Response::Native(NativeReply::Mount(mount))) => *mount,
@@ -510,7 +516,9 @@ impl Seat {
         let done = finish(
             client,
             self.bound.route(),
-            Command::Native(NativeJob::Revoke(self.mount)),
+            |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.native_revoke(job_route, self.mount)
+            },
         );
         assert!(
             matches!(done.result(), Ok(Response::Native(NativeReply::Done))),
@@ -679,20 +687,17 @@ fn opendir_readdir_and_releasedir_cost_exactly_this_at_any_size_and_beside_unrel
         assert_eq!(of(&first, label), wanted, "{label}");
     }
 
-    // Listing and closing a small directory leaves maintenance nothing: its
-    // one reply is deleted by RELEASEDIR itself. A handle with more replies
-    // than the inline bound is retired by the indexed item instead, in turns
-    // of that bound and one for the handle.
+    // RELEASEDIR detaches any size of cookie listing, without SQL cleanup.
     let idle = rig.maintenance();
     rig.enumerate(subjects.local_small);
     rig.enumerate(subjects.base_small);
-    assert_eq!(rig.maintenance(), idle, "a small directory was queued");
+    assert_eq!(rig.maintenance(), idle);
     let (_, replies) = rig.enumerate(subjects.local_large);
     assert_eq!(replies, LARGE.div_ceil(WINDOW));
-    let retired = rig.maintenance();
     assert_eq!(
-        (retired.0 - idle.0, retired.1 - idle.1),
-        (replies.div_ceil(INLINE) as u64 + 1, replies as u64 + 1)
+        rig.maintenance(),
+        idle,
+        "memory cookie disposal queues no SQL job"
     );
 
     // OPENDIR of a regular file is refused by kind and leaves nothing.
@@ -722,107 +727,62 @@ impl Pinned {
         cost
     }
 }
-const TRANSACTION: [(&str, u64, u64); 3] = [("Startup", 1, 1), ("Begin", 1, 1), ("Commit", 1, 1)];
 /// OPENDIR of a local directory: one visit. The fence on the kernel's lookup
-/// reference, the directory's row, and in its one transaction the parent it
+/// reference, which reads the directory's row, and in its one transaction the parent it
 /// was reached through, the handle row, its lease and the open count.
 const OPENDIR_LOCAL: Pinned = Pinned {
     jobs: (1, 0, 0),
     grants: 0,
-    sql: &[
-        TRANSACTION[0],
-        TRANSACTION[1],
-        TRANSACTION[2],
-        ("Workspace", 1, 1),
-        ("Inode", 1, 1),
-        ("Lease", 3, 4),
-    ],
+    sql: &[("Workspace", 1, 1)],
 };
 /// OPENDIR of a base directory this daemon has seen: the same visit, decided
 /// over the resident inode. No reader.
 const OPENDIR_BASE: Pinned = Pinned {
     jobs: (1, 0, 0),
     grants: 0,
-    sql: &[
-        TRANSACTION[0],
-        TRANSACTION[1],
-        TRANSACTION[2],
-        ("Workspace", 1, 1),
-        ("Inode", 1, 1),
-        ("Lease", 3, 4),
-    ],
+    sql: &[("Workspace", 1, 1)],
 };
 /// RELEASEDIR of a handle with one published reply: one job. The fence on
-/// the open descriptor, then in one transaction its open count released
-/// (the descriptor has no lease row), its replies found by one bounded
-/// window and deleted, and the handle row deleted. Nothing is queued.
+/// the open descriptor and the remembered Workspace row, then its open
+/// count, its replies and the handle released in memory. No statement, and
+/// nothing is queued.
 const RELEASEDIR_ONE_REPLY: Pinned = Pinned {
     jobs: (0, 1, 0),
     grants: 0,
-    sql: &[
-        TRANSACTION[0],
-        TRANSACTION[1],
-        TRANSACTION[2],
-        ("Workspace", 1, 1),
-        ("Lease", 4, 6),
-    ],
+    sql: &[],
 };
-/// The same statements with two published replies: the window steps one row
-/// more, and never more than the inline bound and one.
+/// The same with two published replies.
 const RELEASEDIR_TWO_REPLIES: Pinned = Pinned {
     jobs: (0, 1, 0),
     grants: 0,
-    sql: &[
-        TRANSACTION[0],
-        TRANSACTION[1],
-        TRANSACTION[2],
-        ("Workspace", 1, 1),
-        ("Lease", 4, 7),
-    ],
+    sql: &[],
 };
 /// READDIR that returns names, at any size and any offset, local or
 /// inherited: a reading visit and a publishing visit. The reading visit is
-/// the descriptor's fence, the directory's row, one window of local names
-/// with their kinds, the offset's position (the parent in the first reply)
-/// and the reply to reuse; the publishing visit is the fence and one row
-/// for every accepted name, in the request's one transaction. No reader:
-/// the cache holds the inherited names and kinds.
+/// the descriptor's fence in memory, the directory's row, one window of
+/// local names with their kinds, the offset's position (the parent in the
+/// first reply) and the reply to reuse; the publishing visit is the fence
+/// and the accepted names, in memory. Neither fence reads the Workspace
+/// row: the engine remembers it. No reader: the cache holds the inherited
+/// names and kinds.
 const READDIR_DATA: Pinned = Pinned {
     jobs: (2, 0, 0),
     grants: 0,
-    sql: &[
-        TRANSACTION[0],
-        TRANSACTION[1],
-        TRANSACTION[2],
-        ("Workspace", 2, 2),
-        ("Inode", 1, 1),
-        ("DirectoryEntry", 1, 1),
-        ("Lease", 3, 4),
-    ],
+    sql: &[("Inode", 1, 1), ("DirectoryEntry", 1, 1)],
 };
 /// The same offset again: the reading visit finds the reply it published
 /// and returns it. Nothing is written.
 const READDIR_AGAIN: Pinned = Pinned {
     jobs: (1, 0, 0),
     grants: 0,
-    sql: &[
-        ("Workspace", 1, 1),
-        ("Inode", 1, 1),
-        ("DirectoryEntry", 1, 1),
-        ("Lease", 2, 2),
-    ],
+    sql: &[("Inode", 1, 1), ("DirectoryEntry", 1, 1)],
 };
 /// READDIR after the last name: the reading visit alone, which finds no
 /// name and asks for no offsets.
 const READDIR_END: Pinned = Pinned {
     jobs: (1, 0, 0),
     grants: 0,
-    sql: &[
-        ("Workspace", 1, 1),
-        ("Inode", 1, 1),
-        ("DirectoryEntry", 1, 1),
-        ("Lease", 1, 1),
-    ],
+    sql: &[("Inode", 1, 1), ("DirectoryEntry", 1, 1)],
 };
 /// The same two requests when memory holds nothing of the base: the merge
 /// is made outside the owner over one reader, and the end asks for offsets
@@ -834,12 +794,7 @@ const READDIR_DATA_COLD: Pinned = Pinned {
 const READDIR_END_COLD: Pinned = Pinned {
     jobs: (1, 0, 0),
     grants: 1,
-    sql: &[
-        ("Workspace", 1, 1),
-        ("Inode", 1, 1),
-        ("DirectoryEntry", 1, 1),
-        ("Lease", 2, 2),
-    ],
+    sql: &[("Inode", 1, 1), ("DirectoryEntry", 1, 1)],
 };
 
 #[test]
@@ -870,15 +825,7 @@ fn a_reply_whose_inherited_names_memory_does_not_hold_takes_one_reader() {
 const READDIR_REWIND: Pinned = Pinned {
     jobs: (2, 0, 0),
     grants: 0,
-    sql: &[
-        TRANSACTION[0],
-        TRANSACTION[1],
-        TRANSACTION[2],
-        ("Workspace", 2, 2),
-        ("Inode", 1, 1),
-        ("DirectoryEntry", 1, 1),
-        ("Lease", 5, 14),
-    ],
+    sql: &[("Inode", 1, 1), ("DirectoryEntry", 1, 1)],
 };
 /// A later reply of a handle that has a floor: one statement more, the
 /// bounded delete, here of 8 further rows. It finds nothing once the
@@ -886,15 +833,7 @@ const READDIR_REWIND: Pinned = Pinned {
 const READDIR_AFTER_REWIND: Pinned = Pinned {
     jobs: (2, 0, 0),
     grants: 0,
-    sql: &[
-        TRANSACTION[0],
-        TRANSACTION[1],
-        TRANSACTION[2],
-        ("Workspace", 2, 2),
-        ("Inode", 1, 1),
-        ("DirectoryEntry", 1, 1),
-        ("Lease", 4, 13),
-    ],
+    sql: &[("Inode", 1, 1), ("DirectoryEntry", 1, 1)],
 };
 
 #[test]
@@ -903,7 +842,7 @@ fn a_rewound_handle_stores_one_listing_and_refuses_the_offsets_it_gave_before() 
     let replies = 20;
     let directory = rig.local_directory("rewound", replies * WINDOW);
     let handle = rig.opendir(directory);
-    let mut open = rig.stored();
+    let mut open = rig.cookie_entries();
     let idle = rig.maintenance();
 
     // An ordinary listing: one row per reply, at the ordinary cost.
@@ -915,7 +854,7 @@ fn a_rewound_handle_stores_one_listing_and_refuses_the_offsets_it_gave_before() 
     before.push(page.last().unwrap().1);
     let (rest, more) = rig.rest(directory, handle, before[2]);
     assert_eq!((rest.len(), more), ((replies - 2) * WINDOW, replies - 2));
-    assert_eq!(rig.stored(), open + replies as u64);
+    assert_eq!(rig.cookie_entries(), open + replies as u64);
 
     // Five rewinds, each after one more name that sorts before every other,
     // so every reply of every listing differs from the last one's. Each
@@ -924,12 +863,12 @@ fn a_rewound_handle_stores_one_listing_and_refuses_the_offsets_it_gave_before() 
     for round in 0..5 {
         let created = format!("a-{round}");
         // The created file's own rows are not rows of the handle.
-        let quiet = rig.stored();
+        let quiet = rig.cookie_entries();
         rig.mutate(
             directory,
             MutationInput::Named(create(directory, name(&created), 0o644)),
         );
-        open += rig.stored() - quiet;
+        open += rig.cookie_entries() - quiet;
         early.push(created.into_bytes());
         let (page, cost) = rig.measured(|| rig.readdir(directory, handle, 0));
         assert_eq!(cost, READDIR_REWIND.cost(), "round {round}");
@@ -950,7 +889,11 @@ fn a_rewound_handle_stores_one_listing_and_refuses_the_offsets_it_gave_before() 
             .chain((0..replies * WINDOW).map(|index| child(index).into_bytes()))
             .collect();
         assert_eq!(listed, wanted, "round {round}");
-        assert_eq!(rig.stored(), open + replies as u64 + 1, "round {round}");
+        assert_eq!(
+            rig.cookie_entries(),
+            open + replies as u64 + 1,
+            "round {round}"
+        );
         // Every offset given before this rewind is refused as an invalid
         // argument of its own request; nothing is retained for it.
         for offset in &before {
@@ -969,17 +912,16 @@ fn a_rewound_handle_stores_one_listing_and_refuses_the_offsets_it_gave_before() 
     // earlier listing to the handle's release: 21 rows, 8 deleted, 1 added.
     rig.readdir(directory, handle, 0);
     assert_eq!(
-        rig.stored(),
+        rig.cookie_entries(),
         open + (replies as u64 + 1) - INLINE as u64 + 1
     );
     rig.releasedir(directory, handle);
-    let retired = rig.maintenance();
     assert_eq!(
-        (retired.0 - idle.0, retired.1 - idle.1),
-        (3, 14 + 1),
-        "14 rows in two turns, then the handle"
+        rig.maintenance(),
+        idle,
+        "detached cookie pages queue no row cleanup"
     );
-    assert_eq!(rig.stored(), open - 1);
+    assert_eq!(rig.cookie_entries(), open - 1);
     rig.stop();
 }
 

@@ -2,7 +2,7 @@
 use super::{
     bind::checked_base, BoundWorkspace, CommitError, CommitFailure, CommitPhase, CommitSuccess,
 };
-use crate::{Command, Response};
+use crate::Response;
 use layerfs_content::filesystem::FilesystemRootId;
 use layerfs_history::{BranchSnapshot, CommitStagedOutcome, StageRequest};
 use layerfs_overlay::Capture;
@@ -10,11 +10,26 @@ use layerfs_storage::Save;
 use layerfs_workspace::WorkspaceError;
 use std::sync::{atomic::Ordering, Arc};
 
+/// Admission belongs to exactly one invocation. It stays held unless that
+/// invocation establishes a safe disposition, including its captured releases.
+/// Unwinding or an unknown result conservatively retains admission.
+pub(super) struct CommitAdmission<'a> {
+    workspace: &'a BoundWorkspace,
+    pub(super) released: bool,
+}
+impl Drop for CommitAdmission<'_> {
+    fn drop(&mut self) {
+        if self.released {
+            self.workspace.committing.store(false, Ordering::Release);
+        }
+    }
+}
+
 impl BoundWorkspace {
     /// Captures once and drives one caller-owned Content producer over that
     /// exact context. The producer must represent the capture faithfully; live
     /// namespace normalization is a separate constructor, not an implicit Init.
-    /// No ownership guard spans construction or provider I/O. On definite
+    /// No owner or Workspace mutex spans construction or provider I/O. On definite
     /// nonpublication one local resolution preserves the accepted view; unknown
     /// and known-publication/install failure retain original custody.
     pub fn commit(
@@ -25,31 +40,59 @@ impl BoundWorkspace {
             &BranchSnapshot,
         ) -> Result<FilesystemRootId, CommitError>,
     ) -> Result<CommitSuccess, Box<CommitFailure>> {
-        if self
-            .committing
+        let mut admission = self.admit_commit()?;
+        let result = self.commit_admitted(construct, || ());
+        admission.released = match &result {
+            Ok(_) => true,
+            Err(failure) => failure.locally_settled,
+        };
+        result
+    }
+    pub(super) fn admit_commit(&self) -> Result<CommitAdmission<'_>, Box<CommitFailure>> {
+        self.committing
             .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
-            .is_err()
-        {
-            return Err(Box::new(CommitFailure::new(
-                CommitError::InFlight,
-                self.identity,
-                self.route(),
-            )));
-        }
+            .map_err(|_| {
+                Box::new(CommitFailure::new(
+                    CommitError::InFlight,
+                    self.identity,
+                    self.route(),
+                ))
+            })?;
+        Ok(CommitAdmission {
+            workspace: self,
+            released: false,
+        })
+    }
+    /// The admitted invocation owns the flag through any wrapper's releases.
+    /// `published` runs once, only after History answered this publication
+    /// with the saved candidate root; a failed or unknown publication, and
+    /// every earlier failure, never runs it.
+    pub(super) fn commit_admitted(
+        &self,
+        construct: impl FnOnce(
+            &Save<'_>,
+            Capture,
+            &BranchSnapshot,
+        ) -> Result<FilesystemRootId, CommitError>,
+        published: impl FnOnce(),
+    ) -> Result<CommitSuccess, Box<CommitFailure>> {
         let mut retained = CommitFailure::new(
             CommitError::Context("incomplete Commit"),
             self.identity,
             self.route(),
         );
+        let mut producer = None;
         let result = (|| {
             let snapshot = self.snapshot().map_err(CommitError::Workspace)?;
             retained.binding = Some(snapshot.clone());
             let original_base = self.workspace.base().map_err(CommitError::Workspace)?;
             retained.phase = CommitPhase::Capture;
-            let captured = self.job(Command::Capture).map_err(CommitError::Owner)?;
+            let captured = self
+                .job(|job_client: &crate::OwnerClient, job_route| job_client.capture(job_route))
+                .map_err(CommitError::Owner)?;
             let capture = match captured.result() {
                 Ok(Response::Captured(capture)) => *capture,
-                _ => return Err(CommitError::Completion(Box::new(captured))),
+                _ => return Err(CommitError::JobReceipt(Box::new(captured))),
             };
             retained.capture = Some(capture);
             retained.captured = Some(captured);
@@ -61,7 +104,10 @@ impl BoundWorkspace {
                 ));
             }
             retained.phase = CommitPhase::Begin;
-            let storage = self.store.producer().map_err(CommitError::Storage)?;
+            let (storage, before) = self
+                .producer
+                .take(&self.store)
+                .map_err(CommitError::Storage)?;
             let built = (|| {
                 let save = storage.begin_save().map_err(CommitError::Storage)?;
                 retained.phase = CommitPhase::Construct;
@@ -81,8 +127,9 @@ impl BoundWorkspace {
                 retained.saved = Some(save.finish().map_err(CommitError::Storage)?);
                 Ok(candidate)
             })();
-            retained.storage = Some(storage.diagnostics());
+            retained.storage = Some(super::producer::since(storage.diagnostics(), before));
             let candidate = built?;
+            producer = Some(storage);
             retained.intent = Some(StageRequest {
                 workspace: self.identity,
                 branch: snapshot.branch.id,
@@ -138,18 +185,22 @@ impl BoundWorkspace {
                     "publication differs from saved candidate",
                 ));
             }
+            published();
             next.branch.head_commit = head;
             next.head_root = head.map(|_| root);
             retained.phase = CommitPhase::Install;
             let installed = self
-                .job(Command::InstallPrepared {
-                    workspace: self.workspace.clone(),
-                    input: retained.prepared.take().expect("prepared install"),
+                .job(|job_client: &crate::OwnerClient, route| {
+                    job_client.install_prepared(
+                        route,
+                        self.workspace.clone(),
+                        retained.prepared.take().expect("prepared install"),
+                    )
                 })
                 .map_err(CommitError::Owner)?;
             let installed_ok = matches!(installed.result(), Ok(Response::Done));
             if !installed_ok {
-                return Err(CommitError::Completion(Box::new(installed)));
+                return Err(CommitError::JobReceipt(Box::new(installed)));
             }
             retained.local = Some(installed);
             *self
@@ -162,7 +213,9 @@ impl BoundWorkspace {
             retained.error = error;
             return Err(self.settle_failure(retained));
         }
-        self.committing.store(false, Ordering::Release);
+        if let Some(storage) = producer {
+            self.producer.keep(storage);
+        }
         Ok(CommitSuccess {
             history: retained.published.expect("known publication"),
             saved: retained.saved.expect("known Save"),

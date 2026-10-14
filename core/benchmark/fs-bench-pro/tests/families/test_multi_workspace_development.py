@@ -76,8 +76,9 @@ class MultiWorkspaceDevelopment(unittest.TestCase):
                              (30000, 500000000) if large else (5000, 100000000))
             self.assertEqual(row["budget"], {"command_ms": 15000,
                               "operation_watchdog_ms": 60000, "performance_hard_watchdog_ms": 60000,
-                              "verifier_ms": 60000 if four else 25000,
-                              "verification_hard_watchdog_ms": 70000 if four else 35000})
+                              # Owner direction 2026-10-12 (#319 phase 13): the two named 500 MiB mixed cases only.
+                              "verifier_ms": 60000 if four else 80000 if row["id"].startswith("v016-workspace-mixed-500mb") else 25000,
+                              "verification_hard_watchdog_ms": 70000 if four else 90000 if row["id"].startswith("v016-workspace-mixed-500mb") else 35000})
             self.assertEqual(len(row["steps"]), k)
             for ordinal, step in enumerate(row["steps"], 1):
                 self.assertEqual(step["index"], ordinal)

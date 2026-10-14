@@ -124,7 +124,10 @@ A refusal before any effect is the existing `Reply::Refused` with phase
 `force:admission`, `force:custody` or `force:capability`. The daemon routes
 the request in [`control/operations.rs`](../../crates/layerfs-daemon/src/control/operations.rs)
 to [`control/force.rs`](../../crates/layerfs-daemon/src/control/force.rs); the
-SDK operation is `WorkspaceApi::force_unmount(token, relinquish_unknown)`.
+current public SDK operation is `WorkspaceApi::unmount(token, true)`. It retains
+forced outcome facts and passes false for unknown-custody relinquishment. The
+original explicit relinquishment flag remains in the hidden component-proof
+helper; see [the SDK surface](../../../sdk.md).
 
 A Commit failure that leaves the registry `Uncertain` always answers `Unknown`:
 besides an unreleased reader or owner, that now includes a definite failure
@@ -179,3 +182,20 @@ schema and its separate epochs are described in
 This instrumentation is source behavior, not qualification or a measured
 optimization result. Its owning external tests include additive literal bytes,
 malicious nesting, observed facade scope, and authentic Linux binary observations.
+
+
+## SDK facade and Branch pages — 2026-10-12
+
+The [implemented SDK](../../../sdk.md) folds bind/attach into mount and normal/
+forced teardown into unmount(force). Raw control, recovery and diagnostic borrows
+remain hidden for component proofs and benchmark count attribution. This changes
+no earlier request/reply tag or publication/ownership semantics.
+Public Project commits renames history and sends the unchanged History request.
+Public branches adds request tag 14 and reply tag 17. The request carries one
+LayerStackId, the existing optional authenticated cursor and a limit of 1 to 32.
+The reply carries bounded BranchRecords and continuation. Its one dispatch arm
+calls the existing HistoryCatalog::branches port in name order, without a hidden
+scan or Branch refresh. All original control records and golden vectors remain.
+The [SDK branches method](../../crates/layerfs-api/sdk/src/project/branches.rs)
+checks stack identity, ordering, page size and continuation shape on the original
+sequential channel. These source changes establish no performance qualification.

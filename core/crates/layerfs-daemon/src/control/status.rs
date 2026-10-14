@@ -3,7 +3,7 @@ use super::{
     registry::{bound, Entry},
     Failure, Service, Success,
 };
-use crate::{Command, Response};
+use crate::Response;
 use layerfs_bridge::control::{
     ControlCode, LocalObservation, Reply, WorkspaceStatus, WorkspaceToken,
 };
@@ -48,7 +48,10 @@ impl Service {
                 self.native.as_ref().map(|_| value.native.block()),
             )
         };
-        let observed = self.job(workspace.route(), Command::State);
+        let observed = self.job(
+            workspace.route(),
+            |job_client: &crate::OwnerClient, job_route| job_client.state(job_route),
+        );
         let (local, completion, observation_failure) = match observed {
             Ok(done) => match done.result() {
                 Ok(Response::State(state)) => {
@@ -71,7 +74,7 @@ impl Service {
                 _ => (
                     None,
                     None,
-                    Some(Box::new(Failure::Completion(Box::new(done)))),
+                    Some(Box::new(Failure::JobReceipt(Box::new(done)))),
                 ),
             },
             Err(error) => (None, None, Some(Box::new(error))),

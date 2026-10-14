@@ -2,16 +2,18 @@
 use super::seal::Packer;
 use crate::{
     error::StorageResult,
-    location::{ObjectLocation, SignatureRow, ValueGroupRow},
+    location::{ObjectLocation, SignatureRow},
     read::Fetch,
     source::Source,
 };
-use layerfs_content::ObjectId;
+use layerfs_content::{inode_leaf::INODE_VALUE_BYTES, ObjectId};
 use std::{cell::RefCell, collections::BTreeMap};
 pub(super) struct WaveSource<'a> {
     pub(super) fetch: &'a Fetch,
     pub(super) packer: &'a Packer,
     pub(super) signatures: &'a RefCell<BTreeMap<usize, SignatureRow>>,
+    /// Values this Save assigned and has not published yet, by ordinal.
+    pub(super) values: &'a BTreeMap<u32, [u8; INODE_VALUE_BYTES]>,
 }
 impl Source for WaveSource<'_> {
     fn ordered_dependencies(&self) -> bool {
@@ -24,9 +26,6 @@ impl Source for WaveSource<'_> {
         }
     }
     fn pack_bytes(&self, id: i64) -> StorageResult<Vec<u8>> {
-        if let Some(body) = self.packer.pooled_body(id)? {
-            return Ok(body);
-        }
         match self
             .packer
             .ready
@@ -60,9 +59,6 @@ impl Source for WaveSource<'_> {
         groups: &[usize],
         whole_for_reuse: bool,
     ) -> StorageResult<crate::encoding::PackAcquisition> {
-        if let Some(body) = self.packer.pooled_body(id)? {
-            return Ok(crate::encoding::PackAcquisition::Whole { info: None, body });
-        }
         if let Some(pack) = self
             .packer
             .ready
@@ -76,21 +72,29 @@ impl Source for WaveSource<'_> {
         }
         self.fetch.acquire_groups(id, groups, whole_for_reuse)
     }
-    fn value_group(&self, ordinal: u32) -> StorageResult<Option<ValueGroupRow>> {
-        match self.packer.pooled_row(ordinal) {
-            Some(row) => Ok(Some(row)),
-            None => self.fetch.value_group(ordinal),
+    /// This Save's unpublished values are answered from memory; the stored
+    /// ones are asked for together.
+    fn inode_values(&self, ordinals: &[u32]) -> StorageResult<Vec<[u8; INODE_VALUE_BYTES]>> {
+        let stored: Vec<u32> = ordinals
+            .iter()
+            .copied()
+            .filter(|ordinal| !self.values.contains_key(ordinal))
+            .collect();
+        let mut stored = if stored.is_empty() {
+            Vec::new()
+        } else {
+            self.fetch.inode_values(&stored)?
         }
-    }
-    fn value_groups(
-        &self,
-        from: Option<u32>,
-        visit: &mut dyn FnMut(ValueGroupRow) -> StorageResult<()>,
-    ) -> StorageResult<()> {
-        self.fetch.value_groups(from, visit)
-    }
-    fn window_start(&self) -> StorageResult<u32> {
-        self.fetch.window_start()
+        .into_iter();
+        ordinals
+            .iter()
+            .map(|ordinal| match self.values.get(ordinal) {
+                Some(value) => Ok(*value),
+                None => stored
+                    .next()
+                    .ok_or(crate::StorageError::Integrity("metadata ordinal missing")),
+            })
+            .collect()
     }
     fn signatures(&self) -> StorageResult<Vec<SignatureRow>> {
         self.fetch.signatures()

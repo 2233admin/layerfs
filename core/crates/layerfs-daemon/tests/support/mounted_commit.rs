@@ -223,7 +223,7 @@ impl Rig {
                 .unwrap()
                 .work
                 .unwrap();
-            work.received == 0 && work.admitted == 0
+            work.active == 0
         });
         format!("{:?}", self.harness.unmount(ready).native)
     }

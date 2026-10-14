@@ -99,6 +99,7 @@ pub(crate) fn create(
         directory_entries: vec![bind(parent, name, fresh.serial)],
         cell,
         write: None,
+        claims: None,
     };
     Ok(Some((changes, inode)))
 }
@@ -141,6 +142,7 @@ pub(crate) fn link(
         directory_entries: vec![bind(parent, name, serial)],
         cell: None,
         write: None,
+        claims: None,
     };
     Ok(Some((changes, file)))
 }

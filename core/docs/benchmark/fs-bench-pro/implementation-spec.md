@@ -59,6 +59,24 @@ implement them, run them and fix bugs, not to optimize.
 | Core benchmark directories | Eight siblings: `fs-bench-pro`, `fs-bench-pro-storage-content`, `r7-runtime`, `r7-tools`, `r8-tools`, `r7-passthrough`, `r7-cache`, `cluster2-platform` |
 | SDK surface | `ProjectApi` init and install; `WorkspaceApi` bind, mount, commit, status, unmount, force unmount, cleanup; `SandboxApi` create, exec, status. `ProjectApi::fork` and `ProjectApi::history` are already public thin methods over the existing control requests (source correction, 2026-10-10) |
 
+The table above is a historical source snapshot, not the current SDK contract.
+The 2026-10-12 owner follow-up is implemented at the [SDK surface](../../../../sdk.md):
+Project init/fork/branches/commits, Sandbox create/close and Workspace mount/exec/
+commit/status/unmount. One file per operation and base/ replace the earlier layout.
+Control/recovery/observation borrows are hidden. Project commits sends the original
+History request; branches alone adds an authorized request and dispatch.
+
+The runtime uses public Workspace exec for mounted commands and the same internal
+launcher for native/concurrent proof borrows. No launcher, command registration,
+ordinary timeout or implicit Commit/unmount is added. Setup closes its exact
+container through SDK stop/delete and independently observes deletion. Samples
+retain backend Stop until strict closed Store/overlay export and telemetry are
+harvested, then remove their own resources. This preserves the original readback
+and count scopes; it is not a second public SDK operation or an optimization.
+The historical P-1 routing below is superseded for current callers by public
+ProjectApi::fork and ProjectApi::commits borrowing ManagedSandbox; raw component
+channels remain internal. The original pinned source and results remain archival.
+
 ## 3. Rules the design follows
 
 1. **A family is data and scripts. The machinery exists once.** Adding a

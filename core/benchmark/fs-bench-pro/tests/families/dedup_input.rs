@@ -168,14 +168,14 @@ fn all_boundary_source_paths_and_short_changed_identity_are_required() {
 fn cross_file_internal_duplicates_disjoint_bases_and_mixed_pairs_stay_strict() {
     for case in [
         "dedup-cross-file-anchor-1",
-        "dedup-cross-file-identical-10",
-        "dedup-cross-file-unique-10",
-        "dedup-cross-file-mixed-10",
+        "dedup-cross-file-identical-100",
+        "dedup-cross-file-unique-100",
+        "dedup-cross-file-mixed-100",
     ] {
         let expected = dedup_input::expected(case, 0).unwrap();
         assert!(dedup_input::validate_contract(case, 0, &expected).is_ok());
     }
-    let case = "dedup-cross-file-unique-10";
+    let case = "dedup-cross-file-unique-100";
     let expected = dedup_input::expected(case, 0).unwrap();
     let mut bad = expected.clone();
     bad.insert(
@@ -186,7 +186,7 @@ fn cross_file_internal_duplicates_disjoint_bases_and_mixed_pairs_stay_strict() {
         .unwrap_err()
         .to_string()
         .contains("distinct cross-file bases"));
-    let case = "dedup-cross-file-mixed-10";
+    let case = "dedup-cross-file-mixed-100";
     let mut bad = dedup_input::expected(case, 0).unwrap();
     bad.get_mut("files/f0001.dat").unwrap()[0].raw_sha256 = "f".repeat(64);
     assert!(dedup_input::validate_contract(case, 0, &bad)
@@ -215,19 +215,19 @@ fn cross_file_internal_duplicates_disjoint_bases_and_mixed_pairs_stay_strict() {
 #[test]
 fn workspace_exact_local_unique_and_frozen_cdc_diagnostics_are_preserved() {
     for profile in ["exact", "local", "unique"] {
-        let case = format!("dedup-workspace-{profile}-1-compact-v2");
+        let case = format!("dedup-workspace-{profile}-100");
         for step in 0..=1 {
             assert!(dedup_input::expected(&case, step).is_ok());
         }
     }
-    let case = "dedup-workspace-unique-1-compact-v2";
+    let case = "dedup-workspace-unique-100";
     let mut bad = dedup_input::expected(case, 1).unwrap();
     bad.insert("added/a0000.dat".into(), bad["base/b0000.dat"].clone());
     assert!(dedup_input::validate_contract(case, 1, &bad)
         .unwrap_err()
         .to_string()
         .contains("intersect base"));
-    let case = "dedup-workspace-exact-1-compact-v2";
+    let case = "dedup-workspace-exact-100";
     let mut bad = dedup_input::expected(case, 1).unwrap();
     bad.get_mut("added/a0000.dat").unwrap()[0].raw_sha256 = "f".repeat(64);
     assert!(dedup_input::validate_contract(case, 1, &bad)
@@ -269,7 +269,7 @@ fn native_qualification_reads_all_source_bytes_and_metadata_without_store() {
     for (index, case) in [
         "dedup-cdc-boundaries-proof",
         "dedup-cross-file-anchor-1",
-        "dedup-workspace-exact-1-compact-v2",
+        "dedup-workspace-exact-100",
     ]
     .iter()
     .enumerate()

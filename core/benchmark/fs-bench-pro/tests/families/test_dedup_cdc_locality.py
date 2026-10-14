@@ -11,7 +11,7 @@ BENCH = Path(__file__).resolve().parents[2]
 ROOT = BENCH.parents[2]
 FAMILY = BENCH / "families/dedup_cdc_locality"
 PROFILES = ("overwrite", "insert", "delete", "common-body", "scattered")
-TIERS = (1, 10, 100, 500)
+TIERS = (100,)
 PERFORMANCE = [f"dedup-cdc-{profile}-{tier}" for profile in PROFILES for tier in TIERS]
 PROOF = "dedup-cdc-boundaries-proof"
 

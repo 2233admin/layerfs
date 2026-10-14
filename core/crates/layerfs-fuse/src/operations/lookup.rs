@@ -1,8 +1,5 @@
 //! LOOKUP/GETATTR/OPEN/OPENDIR share the existing atomic semantic plan.
-use crate::{
-    ports::{BaseDemandFailed, Fenced, RequestServices, ServiceError, ServiceReply},
-    NextTurn,
-};
+use crate::ports::{BaseDemandFailed, Fenced, RequestServices, ServiceError, ServiceReply};
 use layerfs_overlay::NativeMount;
 use layerfs_workspace::{
     NativeReadDecision, NativeReadFailure, NativeReadOperation, NativeReadOutcome, NativeReadValue,
@@ -18,10 +15,10 @@ pub(super) struct Custody {
     handle: Option<u64>,
     operation: NativeReadOperation,
     pub data_input: Option<super::ReadDataInput>,
-    // Retain engine completion credit through every cloned outcome consumer.
+    // Retain the engine receipt through every cloned outcome consumer.
     pub receipt: Option<ServiceReply<Arc<NativeReadOutcome>>>,
 }
-/// A deciding answer and the completion credit of the visit that decided it.
+/// A deciding answer and the receipt of the visit that decided it.
 /// The request holds nothing else in the engine; the kernel's lookup, open
 /// and directory owners persist independently.
 pub struct NativeRead {
@@ -137,7 +134,7 @@ impl NativeRead {
         ReadFailure::new(reason, custody)
     }
     /// Called only after the single reply attempt and disposal of its payload.
-    /// It returns the visit's completion credit; nothing is released in the
+    /// It drops the visit's receipt; nothing is released in the
     /// engine and the kernel's owners stay live.
     pub async fn dispose(self) -> Result<(), ReadFailure> {
         drop(self);
@@ -209,17 +206,15 @@ impl Custody {
                     }));
                 }
             };
-            // The job and its credit are gone before any provider wait.
+            // The job and its receipt are gone before any provider wait.
             drop(receipt);
-            // Provider reads never run on the loop that received the request.
-            crate::LeaveReceiver::default().await;
+            // The receive worker running this request performs its provider read.
             let base = self.services.base().await?;
             let result = Arc::make_mut(&mut facts).supply(&base, needs, None);
             drop(base); // Return the actual reader before another SQL wait.
             if let Err(error) = result {
                 return Err(self.services.failed_base_read(error.into()));
             }
-            NextTurn::default().await;
         }
     }
 }

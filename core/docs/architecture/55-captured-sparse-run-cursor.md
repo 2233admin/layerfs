@@ -12,6 +12,43 @@ cursor's cell, the next seek starts at the row's end, and a window ends with
 the widest row that holds its first byte, so its length and mask are bounded
 by `RUN_BYTES` and `RUN_BYTES/8` instead of one cell.
 
+Issue 316 update, 2026-10-11 (source `8c1993f4a`): a cursor made with
+`shapes_only()` serves a caller that needs to know which bytes are local and
+not what they hold. When its first byte lies in a live dense row of the newest
+layer, the step is `Local { offset, length, next }`: that row and the live
+dense rows of the same layer that follow it without a gap, at most 64 physical
+rows in one unit. The newest layer decides those bytes whatever lower layers
+hold, so no payload is composed or returned. A masked row, a row that stops
+inside its cell, a lower layer and a stale row keep the composed `Window`. A
+payload cursor never receives `Local`, and the mode is part of the cursor
+identity that `metadata_advanced_from` checks. The external overlay test
+`captured_runs` requires the same changed/inherited classification of every
+byte from both modes.
+
+Issue 316 update, 2026-10-11 (overlay schema 33): a file with a layer that
+holds [reference pieces](31-payload-streams.md) takes its step from
+[the piece-aware unit](../../crates/layerfs-overlay/src/payload/pieces/captured.rs).
+The layers decide the cursor's byte in order, each by its cell first and then
+by its piece, as the layered read does. A live piece over the byte gives
+`Reference { offset, length, root, source_offset, next }`: the interval is the
+committed bytes of content root `root` from `source_offset`. It ends at the
+piece's end, at the next cell of this or a newer layer, at the next piece of a
+newer layer, or at a size or cutoff bound, whichever is first. A cell over the
+byte still gives the composed `Window`, whose read plan names any piece
+beneath its unwritten bytes as reference ranges; a shapes-only cursor still
+receives `Local` for dense rows of the newest layer. Pieces are sought by key
+at the cursor's byte (the row at or before it, then the first row after it):
+at most two rows of a layer in a unit, whatever the length of a piece. The
+cursor holds no piece state, so its size and `metadata_advanced_from` are
+unchanged, and a stale piece only bounds a unit. A file with no such layer
+runs the unit described below, with the same statements as before. Every
+reply says which of the two it was (`CapturedRunReply::referenced`), so a
+consumer learns from its first unit whether a later one may be a `Reference`.
+The
+external test `pieces` walks sealed files with both cursor modes: 12 units for
+a file with two pieces, a masked cell, two dense rows and a regrown tail, and
+equal units, rows and statements for a piece of 256 KiB and one of 6 MiB.
+
 `CapturedRunCursor` retains the exact engine-minted CapturedReader, serial,
 checked caller-supplied logical size, current position and fixed per-layer
 metadata lookahead. It acquires/releases no reader or operation. When a local

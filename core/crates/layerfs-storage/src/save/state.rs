@@ -7,7 +7,7 @@ use crate::{
             read::ChainCounters,
             select::{DeltaCounters, DepthCache},
         },
-        pool::{PoolIndex, PoolReader},
+        pool::PoolReader,
         CompressionWorkspace, DecompressionWorkspace, GroupCache,
     },
     error::StorageResult,
@@ -15,6 +15,7 @@ use crate::{
     save::{PendingBatch, SaveProfile},
     storage::Storage,
 };
+use layerfs_content::inode_leaf::INODE_VALUE_BYTES;
 use std::{
     cell::{RefCell, RefMut},
     collections::BTreeMap,
@@ -50,12 +51,14 @@ pub(super) struct State<'a> {
     pub(super) groups: GroupCache,
     pub(super) packs: crate::encoding::PackCache,
     pub(super) pool: PoolReader,
-    pub(super) pool_index: RefMut<'a, PoolIndex>,
-    pub(super) pool_synced: bool,
+    /// Values this Save assigned and has not published yet, by ordinal.
+    pub(super) values: BTreeMap<u32, [u8; INODE_VALUE_BYTES]>,
+    /// Fingerprint of each value this Save assigned and the ordinal it got.
+    /// A candidate filter only: full value bytes decide equality.
+    pub(super) value_memo: BTreeMap<u64, u32>,
     pub(super) pool_stats: crate::save::PoolCounters,
     pub(super) next_ordinal: u64,
     pub(super) ordinal_end: u64,
-    pub(super) window_change: Option<u32>,
     pub(super) finishing: bool,
     pub(super) depths: DepthCache,
     pub(super) chain: ChainCounters,
@@ -86,15 +89,11 @@ impl<'a> State<'a> {
             groups: GroupCache::new(),
             packs: crate::encoding::PackCache::new(),
             pool: PoolReader::new(),
-            pool_index: storage
-                .pool_index
-                .try_borrow_mut()
-                .map_err(|_| crate::StorageError::Integrity("one pooled producer per handle"))?,
-            pool_synced: false,
+            values: BTreeMap::new(),
+            value_memo: BTreeMap::new(),
             pool_stats: crate::save::PoolCounters::default(),
             next_ordinal: 0,
             ordinal_end: 0,
-            window_change: None,
             finishing: false,
             depths: DepthCache::new(),
             chain: ChainCounters::default(),

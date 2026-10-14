@@ -132,12 +132,10 @@ fn non_file_lookup_and_processing_owners_preserve_removed_metadata_and_target() 
     b.overlay.release_lookup(dir_lookup).unwrap();
     b.overlay.release_lookup(root_lookup).unwrap();
     drain(&b);
-    for _ in 0..1000 {
-        if b.overlay.reclaim_closed(0).unwrap().unwrap().done {
-            return;
-        }
-    }
-    panic!("terminal cleanup stalled");
+    assert_eq!(
+        b.overlay.cleanup_state(b.route()).unwrap(),
+        layerfs_overlay::CleanupState::Queued,
+    );
 }
 
 #[test]

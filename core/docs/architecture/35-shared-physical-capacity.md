@@ -7,7 +7,44 @@ schema16. Earlier algorithm and proof pins retain their original scope; see
 > **Status:** Current implementation guide, S6 completion slice after `be651a048`.
 > Qualification and retained outcomes are in the [S6 audit](../issues/307/S6-EXIT-AUDIT.md).
 
-The [allocation owner](../../crates/layerfs-overlay/src/database/allocation.rs)
+## Issue 321 reservation removal (2026-10-13)
+
+The step-1 patch based on `06be791ea` removes the physical reservation, its
+allocation primitives and its pre-write freelist/capacity check. An ordinary
+writing job goes directly to its single `BEGIN IMMEDIATE`; read-only jobs still
+start no transaction. No storage is reserved beyond SQLite's logical file end.
+`physical.rs` performs read-only identity and allocated-byte observations during
+startup, explicit resource diagnostics and failure completion. The retained
+allocation telemetry fields report zero attempts, requested bytes, admitted
+capacity jobs, refusals, reserved tail and cleanup headroom. These fields preserve
+receipt decoding; they describe no remaining reservation implementation.
+
+Direct SQLite Full is a definite no-space result only after whole-job rollback,
+including capacity failure at `COMMIT`. A write/truncate I/O error can also report
+no space when the original file identity is verified, its descriptor's filesystem
+has zero available blocks, and SQLite has automatically rolled back or the engine's
+one explicit `ROLLBACK` succeeds. `NoSpace` retains the original SQLite cause.
+No witness before an ordinary write is added; `capacity_checks` counts only
+failure observations. Other I/O errors, a non-full device, corrupt state, failed
+rollback/observation and other unknown Commit outcomes keep quarantined custody.
+Reply tickets and connection-local hints revert only after known whole-job
+failure. This uses SQLite's documented [transaction error handling](https://sqlite.org/lang_transaction.html).
+
+The device proofs keep state, capture bytes, independent-Workspace and exact
+failure-phase oracles. A separate external syscall fixture translates only a real
+ENOSPC `pwrite` failure into EIO, after the one unchanged syscall, so SQLite's
+I/O-error path is exercised on a full ext4 device. No SQLite/product hook or
+operation replay is introduced. These successor device runs are still pending;
+the source path is not physical qualification. The Linux startup
+filesystem observation remains, but the reservation-specific magic refusal is
+removed. Host-share execution is not thereby qualified.
+
+The original derivation and receipts below retain their historical scope. Their
+reservation/headroom claims do not describe the current implementation.
+
+## Historical reservation implementation
+
+The [allocation owner](../../crates/layerfs-overlay/src/database/physical.rs)
 retains the descriptor for the fresh private disposable SQLite file, checks its
 path/device/inode/link identity and establishes physical capacity before startup
 DDL or each BEGIN. It uses existing locked nix0.31.3 safe allocation calls. Linux
@@ -122,3 +159,17 @@ Operator page-count observations use a fresh statement once: its SQLite Expire
 program must not remain cached and induce automatic reprepare. Nonexpiring
 freelist admission remains cached. Preparation and execution stay in recorded
 diagnostics; eight repeated public snapshots have zero reprepare.
+
+## Closed template engine seam (issue 321 step 1)
+
+`Overlay::copy_template_observed` makes an independent streaming byte copy into
+a `create_new`, mode-0600 file, opens one connection, configures and verifies its
+profile/schema, and seeds the existing Workspace AUTOINCREMENT allocator with
+an ordinary positive daemon-assigned namespace. It executes no schema DDL.
+`Overlay::close_database` consumes and checks the sole connection close, without
+sync or deletion. Copy/open/close failures retain their original artifact and
+cause. `CreationWork` records copy calls and copied bytes separately from file
+creation and SQL startup. The daemon must protect a closed, empty template and
+fence all live owners before terminal close. The external template tests prove
+independent routes 1/2, unchanged template bytes, existing-file refusal and no
+sidecars. Daemon lifetime integration is still pending at this seam.

@@ -3,10 +3,7 @@ set -euo pipefail
 writer=${WORKLOAD_WRITER:-/code/writers/workload}
 [[ "$#" == 2 ]] || exit 2
 case "$2" in
-  dedup-workspace-exact-1-compact-v2|dedup-workspace-exact-10-compact-v2|dedup-workspace-exact-100|dedup-workspace-exact-500|\
-  dedup-workspace-local-1-compact-v2|dedup-workspace-local-10-compact-v2|dedup-workspace-local-100|dedup-workspace-local-500|\
-  dedup-workspace-unique-1-compact-v2|dedup-workspace-unique-10-compact-v2|dedup-workspace-unique-100|dedup-workspace-unique-500|\
-  dedup-workspace-unique-1-base128-v3|dedup-workspace-unique-10-base128-v3) ;;
+  dedup-workspace-exact-100|dedup-workspace-local-100|dedup-workspace-unique-100|dedup-workspace-unique-500|dedup-workspace-unique-1-base128-v3) ;;
   *) exit 2 ;;
 esac
 case "$1" in

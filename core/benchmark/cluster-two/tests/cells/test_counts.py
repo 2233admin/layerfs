@@ -63,6 +63,34 @@ class CounterViews(unittest.TestCase):
         self.assertEqual(decoded["allocation_state"]["logical_bytes"], 17)
         self.assertEqual(decoded["pages"]["debt_upper_bytes"], 30)
 
+    def test_memory_ownership_has_exact_distinct_field_slices(self):
+        rows = snapshot(2)
+        rows.append(dict(rows[0], section=28, index=0, values=list(range(28))))
+        rows.append(dict(rows[0], section=32, index=0, values=list(range(11))))
+        decoded = counts.decode(rows)
+        self.assertEqual(decoded["resource_schema"], "issue321-open-memory")
+        self.assertEqual(decoded["stored_counts"]["namespaces"], 0)
+        self.assertEqual(decoded["stored_counts"]["ready_targets"], 13)
+        self.assertEqual(decoded["allocation_state"]["logical_bytes"], 14)
+        self.assertEqual(decoded["pages"]["debt_upper_bytes"], 27)
+        self.assertEqual(decoded["open_state"]["kernel_entries"], 0)
+        self.assertEqual(decoded["open_state"]["cookie_pages"], 10)
+        self.assertFalse({"wait_refs", "orphan_rows", "retire_targets"} & decoded["stored_counts"].keys())
+        rows[-1]["values"].pop()
+        with self.assertRaisesRegex(ValueError, "cardinality"):
+            counts.decode(rows)
+
+    def test_new_resource_width_requires_original_memory_discriminator(self):
+        rows = snapshot(2)
+        rows.append(dict(rows[0], section=28, index=0, values=list(range(28))))
+        with self.assertRaisesRegex(ValueError, "cardinality"):
+            counts.decode(rows)
+        rows.append(dict(rows[0], section=32, index=0, values=list(range(11))))
+        rows[-2]["available"] = False
+        rows[-2]["values"] = []
+        with self.assertRaisesRegex(ValueError, "memory ownership without resource"):
+            counts.decode(rows)
+
     def test_unavailable_cost_has_no_fabricated_work(self):
         rows = snapshot(2)
         rows[-1]["values"] = [1,0]
@@ -75,6 +103,17 @@ class CounterViews(unittest.TestCase):
         rows.append(dict(rows[0],section=29,index=1,values=list(range(42))))
         decoded = counts.decode(rows)
         self.assertEqual(decoded["reader_storage"][1]["forced_seals"], 41)
+
+    def test_overlay_budget_preserves_the_actual_cache_build_bit(self):
+        rows = snapshot(2)
+        self.assertEqual(counts.decode(rows)["field_availability"]["overlay_budget"], "UNAVAILABLE")
+        rows.append(dict(rows[0], section=31, index=0, values=[8388608,1048576,8192,64,128,1,0]))
+        budget = counts.decode(rows)["overlay_budget"]
+        self.assertEqual(budget["pager_allowance_bytes"], 1048576)
+        self.assertEqual(budget["memory_management_enabled"], 0)
+        rows[-1]["values"].pop()
+        with self.assertRaisesRegex(ValueError, "cardinality"):
+            counts.decode(rows)
 
     def test_cardinality_cannot_be_silently_truncated(self):
         rows = snapshot(2)
@@ -246,6 +285,41 @@ class ExactSubtraction(unittest.TestCase):
             adjusted.append((result["adjusted"]["owner"]["admitted"],result["adjusted"]["sql_foreground"][0]["executions"]))
         self.assertEqual(adjusted,[(5,4),(5,4)])
 
+
+class DirectWorkspaceCounters(unittest.TestCase):
+    @staticmethod
+    def direct(call, *, jobs=0, read=0, mutation=0, startup=0):
+        rows = snapshot(call, startup=startup)
+        owner = next(row for row in rows if row["section"] == 1)
+        owner["values"] = [jobs,0,0,0,0,0,read,mutation,0,0,0,0] + [0]*12
+        cost = next(row for row in rows if row["section"] == 30)
+        cost["values"] = cost["values"][:32] + [0,0]
+        cost["values"][2:5] = [6,6,6]
+        cost["values"][9] = 60
+        rows += [dict(owner,section=33,values=[0]), dict(owner,section=34,values=[4])]
+        return rows
+    def test_deleted_gauges_are_absent_and_current_width_requires_marker(self):
+        rows = self.direct(2, jobs=7, read=4, mutation=3, startup=6)
+        value = counts.decode(rows)
+        self.assertEqual(value["owner"]["jobs"], 7)
+        self.assertNotIn("admitted", value["owner"])
+        self.assertNotIn("overlay_budget", value)
+        self.assertEqual(value["observer"]["jobs"],4)
+        self.assertNotIn("parked_turns", value["observer"]["times"])
+        self.assertNotIn("lock_only_holds", value)
+        owner = next(row for row in rows if row["section"] == 1)
+        held = counts.decode(rows + [dict(owner,section=35,values=[2,5,900])])
+        self.assertEqual(held["lock_only_holds"], {"observations": 2, "reply_attempts": 5, "reply_hold_ns": 900})
+        with self.assertRaises(ValueError): counts.decode(rows + [dict(owner,section=35,values=[2,5])])
+        with self.assertRaises(ValueError): counts.decode([row for row in rows if row["section"] != 33])
+        with self.assertRaises(ValueError): counts.decode([row for row in rows if row["section"] != 34])
+    def test_exact_constituent_jobs_and_sql_are_subtracted_once(self):
+        before, end = self.direct(2), self.direct(3, jobs=7, read=4, mutation=3, startup=6)
+        result = counts.phase_counts(groups(before,end), counts.identity(before), counts.identity(end), exclusive_observer_scope=True)
+        self.assertEqual(result["status"],"AVAILABLE",result)
+        self.assertEqual(result["adjusted"]["owner"]["jobs"],3)
+        self.assertEqual(result["adjusted"]["jobs_by_class"]["Read"],0)
+        self.assertEqual(result["adjusted"]["sql_foreground"][0]["executions"],0)
 
 if __name__ == "__main__":
     unittest.main()

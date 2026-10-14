@@ -4,8 +4,9 @@
 //! is written by a refused visit.
 use layerfs_overlay::{
     Binding, Changes, CleanupState, DirectoryEntryChange, Inode, InodeKind, MaintenanceCursor,
-    NativeDecision, NativeEffect, NativeMount, OpenFile, Overlay, OverlayError, PayloadWrite,
-    ProfileConfig, Publication, Route, StatementKind, StoredCounts, WorkspaceState, READ_WINDOW,
+    NativeDecision, NativeEffect, NativeMount, NativeMountState, OpenFile, Overlay, OverlayError,
+    PayloadWrite, ProfileConfig, Publication, Route, StatementKind, StoredCounts, WorkspaceState,
+    READ_WINDOW,
 };
 use std::{
     path::PathBuf,
@@ -108,11 +109,20 @@ impl World {
         applied.file.expect("the created file is open")
     }
     /// The Workspace row, its exact counts and the transactions begun so far.
-    fn snapshot(&self, route: Route) -> (WorkspaceState, StoredCounts, u64) {
+    fn snapshot(
+        &self,
+        route: Route,
+    ) -> (
+        WorkspaceState,
+        StoredCounts,
+        u64,
+        layerfs_overlay::OpenStateCounts,
+    ) {
         (
             self.db.state(route).unwrap(),
             self.db.resources(Some(route)).unwrap().counts,
             self.db.diagnostics().statements[StatementKind::Begin as usize].executions,
+            self.db.resources(Some(route)).unwrap().open,
         )
     }
     /// A visit addressed by `handle` that would write one more byte of size.
@@ -200,87 +210,20 @@ fn every_visit_statement_is_an_indexed_seek() {
     let w = world();
     let plans = w.db.explain_native_visit(w.mount).unwrap();
     println!("NATIVE_VISIT_PLANS {plans:#?}");
-    for label in [
-        "fence-lookup",
-        "fence-file",
-        "fence-handle",
-        "fence-directory",
-        "drop-open",
-        "drop-lookup",
-        "drop-reader",
-        "open-and-lookup",
-    ] {
-        assert!(
-            plans.iter().any(|plan| plan.starts_with(label)),
-            "{label} is not explained: {plans:?}"
-        );
+    for label in ["workspace", "workspace-inode"] {
+        assert!(plans.iter().any(|plan| plan.starts_with(label)));
     }
-    let (program, queries) = plans.split_last().unwrap();
-    for plan in queries {
-        assert!(
-            !plan.contains("SCAN") && !plan.contains("TEMP B-TREE"),
-            "{plan}"
-        );
-    }
-    assert!(program.ends_with("btree-scan-opcodes=0"), "{program}");
-    // Every table a fence touches is reached by a key: the Workspace row,
-    // the mount row and the reference's own rows.
-    let seeks = |label: &str| {
-        queries
-            .iter()
-            .filter(|plan| plan.starts_with(label) && plan.contains("SEARCH"))
-            .count()
-    };
-    assert_eq!(
-        [
-            seeks("fence-lookup"),
-            seeks("fence-file"),
-            seeks("fence-handle"),
-            seeks("drop-open"),
-            seeks("drop-lookup"),
-            seeks("drop-reader")
-        ],
-        [3, 3, 4, 1, 1, 1],
-        "{plans:#?}"
-    );
-    // The merged name seek of a visit's evaluation and publication.
-    let source = w.db.acquire_base_source(w.route, 1).unwrap();
-    let compound = w.db.explain_compound(source).unwrap();
-    let name = compound
+    assert!(plans
         .iter()
-        .find(|plan| plan.starts_with("name-layers"))
-        .expect("the name seek is explained");
-    assert!(
-        name.contains("SEARCH") && !name.contains("SCAN") && !name.contains("TEMP B-TREE"),
-        "{name}"
-    );
+        .all(|plan| !plan.contains("SCAN") && !plan.contains("TEMP B-TREE")));
 }
 
 #[test]
-fn a_descriptor_of_another_mount_or_inode_and_a_missing_reference_are_stale() {
+fn a_descriptor_of_another_inode_and_a_missing_reference_are_stale() {
     let w = world();
     let file = w.open(w.mount, 1, 50, true);
-    let other = w.db.open_workspace([33; 32], [34; 32]).unwrap();
-    let elsewhere = w.db.create_native_mount(other, 1).unwrap();
-    let theirs = w.open(elsewhere, 2, 50, true);
-    assert_ne!(file.owner_id(), theirs.owner_id());
 
-    let before = (w.snapshot(w.route), w.snapshot(other));
-    // This mount's descriptor through the other mount, and the reverse.
-    for (mount, handle) in [(elsewhere, file.owner_id()), (w.mount, theirs.owner_id())] {
-        assert!(matches!(
-            w.grow(mount, 50, Some(handle), None),
-            Err(OverlayError::Stale)
-        ));
-        assert!(matches!(
-            w.read(mount, 50, Some(handle)),
-            OverlayError::Stale
-        ));
-        assert!(matches!(
-            w.db.close_native_file(mount, 50, handle),
-            Err(OverlayError::Stale)
-        ));
-    }
+    let before = w.snapshot(w.route);
     // The descriptor on another inode, and a handle that was never issued.
     for (serial, handle) in [(1, file.owner_id()), (50, u64::MAX >> 1)] {
         assert!(matches!(
@@ -298,7 +241,7 @@ fn a_descriptor_of_another_mount_or_inode_and_a_missing_reference_are_stale() {
         Err(OverlayError::Stale)
     ));
     assert!(matches!(w.read(w.mount, 77, None), OverlayError::Stale));
-    assert_eq!((w.snapshot(w.route), w.snapshot(other)), before);
+    assert_eq!(w.snapshot(w.route), before);
 
     // The kernel forgets the created inode while its descriptor stays open:
     // a visit by that inode is stale, a visit by the descriptor is not.
@@ -339,7 +282,8 @@ fn a_descriptor_of_another_mount_or_inode_and_a_missing_reference_are_stale() {
         Err(OverlayError::Stale)
     ));
     assert_eq!(w.snapshot(w.route), held);
-    assert_ne!(held.1, closed.1);
+    assert_eq!(held.1, closed.1);
+    assert_eq!(w.db.native_lookup_count(w.mount, 50).unwrap(), Some(1));
 }
 
 #[test]
@@ -465,24 +409,37 @@ fn a_revoked_or_replaced_mount_is_stale_for_every_fenced_job() {
         Err(OverlayError::Stale)
     ));
 
-    // A new connection of the same Workspace: the old token names a mount
-    // that is gone, and its handle is not the new mount's.
+    // Reattachment is a new mount incarnation. It revives no token of the
+    // revoked one, and a second live mount is refused.
     let again = w.db.create_native_mount(w.route, 1).unwrap();
-    assert_ne!(again.owner_id(), w.mount.owner_id());
-    let before = w.snapshot(w.route);
+    assert_ne!(again, w.mount);
+    assert_eq!(
+        w.db.native_mount_state(again).unwrap(),
+        NativeMountState::Live
+    );
     assert!(matches!(
-        w.grow(w.mount, 1, None, None),
+        w.db.native_mount_state(w.mount),
         Err(OverlayError::Stale)
     ));
-    assert!(matches!(w.read(w.mount, 1, None), OverlayError::Stale));
     assert!(matches!(
-        w.grow(again, 50, Some(file.owner_id()), None),
+        w.db.native_file(again, 50, file.owner_id()),
         Err(OverlayError::Stale)
     ));
-    assert_eq!(w.snapshot(w.route), before);
-    let reopened = w.open(again, 2, 60, true);
-    w.db.close_native_file(again, 60, reopened.owner_id())
-        .unwrap();
+    assert!(matches!(
+        w.db.create_native_mount(w.route, 1),
+        Err(OverlayError::Invalid("duplicate native mount"))
+    ));
+    let replacement = world();
+    assert!(matches!(
+        replacement
+            .db
+            .native_file(replacement.mount, 50, file.owner_id()),
+        Err(OverlayError::Stale)
+    ));
+    assert!(matches!(
+        w.read(replacement.mount, 1, None),
+        OverlayError::Stale
+    ));
 }
 
 #[test]
@@ -614,7 +571,10 @@ fn an_open_visit_writes_its_descriptor_alone_and_nothing_unless_it_decides_a_fil
             })
         })
     };
-    let rows = || (w.snapshot(w.route).0, w.snapshot(w.route).1);
+    let rows = || {
+        let snapshot = w.snapshot(w.route);
+        (snapshot.0, snapshot.1, snapshot.3)
+    };
     let before = rows();
 
     // Undecided, and decided without an inode (a refusal): nothing written.
@@ -676,12 +636,13 @@ fn an_open_visit_writes_its_descriptor_alone_and_nothing_unless_it_decides_a_fil
         ),
         (
             0,
-            1,
+            0,
             before.1.source_rows,
             before.1.inode_rows,
             before.1.payload_cells
         )
     );
+    assert_eq!(w.db.resources(Some(w.route)).unwrap().open.file_handles, 2);
     // The descriptor reads, and being read-only it cannot publish.
     assert!(w
         .db
@@ -746,7 +707,10 @@ fn an_opendir_visit_writes_its_descriptor_alone_and_releasedir_closes_exactly_th
             })
         })
     };
-    let rows = || (w.snapshot(w.route).0, w.snapshot(w.route).1);
+    let rows = || {
+        let snapshot = w.snapshot(w.route);
+        (snapshot.0, snapshot.1, snapshot.3)
+    };
     let before = rows();
 
     // Undecided, and decided without an inode (a refusal): nothing written.
@@ -892,7 +856,7 @@ fn a_created_inode_takes_its_custody_without_a_read_and_a_duplicate_fails_whole(
             after.attempts - before.attempts,
             after.rows_returned - before.rows_returned
         ),
-        (3, 0)
+        (0, 0)
     );
     assert_eq!(w.db.native_lookup_count(w.mount, 50).unwrap(), Some(1));
 
@@ -907,7 +871,7 @@ fn a_created_inode_takes_its_custody_without_a_read_and_a_duplicate_fails_whole(
             after.attempts - before.attempts,
             after.rows_returned - before.rows_returned
         ),
-        (2, 1)
+        (0, 0)
     );
     assert!(w.db.maintenance_idle(w.route).unwrap());
     // The last reference of a file with no orphan deletes its custody row

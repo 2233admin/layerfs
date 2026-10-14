@@ -12,8 +12,7 @@ use layerfs_content::filesystem::PathName;
 use layerfs_daemon::{
     bootstrap::open_store,
     store::{BindRequest, BoundWorkspace, Store},
-    Command, Completion, NativeJob, NativeReply, Owner, OwnerClient, OwnerConfig, OwnerError,
-    Response, ServiceClass,
+    JobReceipt, NativeReply, Owner, OwnerClient, OwnerConfig, OwnerError, Response, ServiceClass,
 };
 use layerfs_fuse::{
     operations::{
@@ -100,12 +99,15 @@ fn until(what: &str, mut condition: impl FnMut() -> bool) {
         std::thread::yield_now();
     }
 }
-fn finish(client: &OwnerClient, route: layerfs_overlay::Route, command: Command) -> Completion {
-    let pending = match client.try_submit(Some(route), command) {
-        Ok(pending) => pending,
-        Err((error, command)) => panic!("admission of {command:?}: {error:?}"),
-    };
-    wait(pending).unwrap()
+fn finish(
+    client: &OwnerClient,
+    route: layerfs_overlay::Route,
+    command: impl FnOnce(
+        &layerfs_daemon::OwnerClient,
+        Option<layerfs_overlay::Route>,
+    ) -> Result<layerfs_daemon::JobReceipt, layerfs_daemon::OwnerError>,
+) -> JobReceipt {
+    command(client, Some(route)).unwrap_or_else(|error| panic!("{error:?}"))
 }
 
 /// Owner jobs completed per class, jobs admitted, and Store reader grants.
@@ -187,7 +189,9 @@ impl Rig {
         let done = finish(
             &client,
             bound.route(),
-            Command::Native(NativeJob::Mount { root }),
+            |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.native_mount(job_route, root)
+            },
         );
         let mount = match done.result() {
             Ok(Response::Native(NativeReply::Mount(mount))) => *mount,
@@ -209,15 +213,12 @@ impl Rig {
     }
     /// Taken once every result of the request under observation is returned.
     fn counted(&self) -> Counted {
-        until("owner results returned", || {
-            self.client.diagnostics().unwrap().outstanding == 0
-        });
         let work = self.client.diagnostics().unwrap();
         let readers = self.store.read_work();
         assert_eq!((readers.outstanding, readers.waiting), (0, 0));
         Counted {
-            completed: work.completed,
-            admitted: work.admitted,
+            completed: work.jobs,
+            admitted: work.jobs.iter().sum::<u64>(),
             grants: readers.grants,
         }
     }
@@ -240,13 +241,23 @@ impl Rig {
     /// owner jobs themselves.
     fn recorded(&self) -> (u64, u64) {
         let route = self.bound.route();
-        let done = finish(&self.client, route, Command::State);
+        let done = finish(
+            &self.client,
+            route,
+            |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.state(job_route),
+        );
         let readers = match done.result() {
             Ok(Response::State(state)) => state.base_readers,
             other => panic!("state: {other:?}"),
         };
         drop(done);
-        let done = finish(&self.client, route, Command::Resources { global: false });
+        let done = finish(
+            &self.client,
+            route,
+            |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.resources(job_route, false)
+            },
+        );
         let sources = match done.result() {
             Ok(Response::Resources(resources)) => resources.counts.source_rows,
             other => panic!("resources: {other:?}"),
@@ -258,7 +269,9 @@ impl Rig {
         let done = finish(
             &self.client,
             self.bound.route(),
-            Command::Native(NativeJob::Revoke(self.mount)),
+            |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.native_revoke(job_route, self.mount)
+            },
         );
         assert!(
             matches!(done.result(), Ok(Response::Native(NativeReply::Done))),
@@ -271,7 +284,9 @@ impl Rig {
         let done = finish(
             &self.client,
             self.bound.route(),
-            Command::PendingPublications { after: 0 },
+            |job_client: &layerfs_daemon::OwnerClient, job_route| {
+                job_client.pending_publications(job_route, 0)
+            },
         );
         match done.result() {
             Ok(Response::Publications(pending)) => pending.clone(),
@@ -290,7 +305,11 @@ impl Rig {
         }
     }
     fn revision(&self) -> i64 {
-        let done = finish(&self.client, self.bound.route(), Command::State);
+        let done = finish(
+            &self.client,
+            self.bound.route(),
+            |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.state(job_route),
+        );
         match done.result() {
             Ok(Response::State(state)) => state.revision,
             other => panic!("state: {other:?}"),
@@ -305,14 +324,11 @@ impl Rig {
             fixture,
             store,
             owner,
-            client,
+            client: _,
             bound,
             services,
             ..
         } = self;
-        until("owner credits returned", || {
-            client.diagnostics().unwrap().outstanding == 0
-        });
         assert_eq!(store.read_work().outstanding, 0);
         drop(services);
         drop(bound);
@@ -415,10 +431,13 @@ fn a_create_is_one_mutation_job_and_its_reply_attempt_is_no_owner_job() {
     assert_eq!((file.serial(), file.writable()), (serial, true));
     // The mutation's original result is still held for its reply.
     let work = rig.client.diagnostics().unwrap();
-    assert_eq!(work.outstanding, 1);
     let mut expected = before.and(&[(ServiceClass::Mutation, 1)], 0);
     assert_eq!(
-        (work.completed, work.admitted, rig.store.read_work().grants),
+        (
+            work.jobs,
+            work.jobs.iter().sum::<u64>(),
+            rig.store.read_work().grants
+        ),
         (expected.completed, expected.admitted, expected.grants)
     );
     // Its one reply ticket is owed. This observation is the test's own
@@ -427,12 +446,9 @@ fn a_create_is_one_mutation_job_and_its_reply_attempt_is_no_owner_job() {
     assert_eq!(owed.len(), 1);
     assert_eq!(owed[0].revision(), rig.revision());
     expected = expected.and(&[(ServiceClass::Read, 1), (ServiceClass::Lifecycle, 1)], 0);
-    until("the observations' results returned", || {
-        rig.client.diagnostics().unwrap().outstanding == 1
-    });
     let work = rig.client.diagnostics().unwrap();
     assert_eq!(
-        (work.completed, work.admitted),
+        (work.jobs, work.jobs.iter().sum::<u64>()),
         (expected.completed, expected.admitted)
     );
 
@@ -444,7 +460,7 @@ fn a_create_is_one_mutation_job_and_its_reply_attempt_is_no_owner_job() {
     // The ticket was returned, and exactly once.
     assert!(rig.pending_publications().is_empty());
     assert!(matches!(
-        rig.client.reply_attempted(owed[0]),
+        rig.client.reply_attempted(owed[0]).unwrap().result(),
         Err(OwnerError::Overlay(OverlayError::Stale))
     ));
     assert_eq!(rig.recorded(), (0, 0));
@@ -467,7 +483,7 @@ fn a_create_is_one_mutation_job_and_its_reply_attempt_is_no_owner_job() {
 }
 
 #[test]
-fn a_capture_parked_behind_the_ticket_is_owed_exactly_one_settling_job() {
+fn the_last_reply_attempt_wakes_capture_without_a_settling_job() {
     let rig = Rig::new("visit-port-settled", 164);
     let (mount, route) = (rig.mount, rig.bound.route());
     let warm = rig.lookup(1, "absent-warm");
@@ -492,63 +508,42 @@ fn a_capture_parked_behind_the_ticket_is_owed_exactly_one_settling_job() {
     assert_eq!(owed.len(), 2);
     let revision = rig.revision();
     assert_eq!(owed[1].revision(), revision);
-    until("the observations' results returned", || {
-        rig.client.diagnostics().unwrap().outstanding == 2
-    });
 
-    // A Capture is admitted and parks: its readiness turn observes the
-    // tickets pending, which is published before the job is requeued.
+    // A Capture waits before its effect on its calling thread: each readiness
+    // check that observes the tickets pending is one recorded short hold.
+    let capture_class = ServiceClass::Capture as usize;
     let unparked = rig.client.diagnostics().unwrap();
-    let mut capture = Box::pin(
-        rig.client
-            .try_submit(Some(route), Command::Capture)
-            .unwrap(),
-    );
-    until("capture parked behind the tickets", || {
-        let work = rig.client.diagnostics().unwrap();
-        work.queued == 1
-            && work.sql_foreground.total().attempts > unparked.sql_foreground.total().attempts
+    let capture = {
+        let client = rig.client.clone();
+        std::thread::spawn(move || client.capture(Some(route)))
+    };
+    until("capture waits behind the tickets", || {
+        // The check reads the remembered Workspace row and the tickets in
+        // memory, so it is a job without a statement.
+        rig.client.diagnostics().unwrap().jobs[capture_class] > unparked.jobs[capture_class]
     });
-    let stepper = Stepper::new();
-    assert!(stepper.poll(capture.as_mut()).is_pending());
-    let parked = rig.client.diagnostics().unwrap();
-    assert_eq!(parked.admitted, unparked.admitted + 1);
-    assert_eq!(parked.completed, unparked.completed);
-    // Both mutation results and the capture's admission are still held.
-    assert_eq!((parked.queued, parked.outstanding), (1, 3));
+    assert!(!capture.is_finished());
 
-    // The first reply attempt leaves a ticket pending: no owner job, and
-    // the capture stays parked.
+    // The first reply attempt leaves a ticket pending: the capture keeps
+    // waiting, and nothing of class Mutation ran for the attempt.
+    let parked = rig.client.diagnostics().unwrap();
     wait(first.replied()).unwrap();
     let work = rig.client.diagnostics().unwrap();
     assert_eq!(
-        (work.admitted, work.completed, work.queued),
-        (parked.admitted, parked.completed, 1)
+        work.jobs[ServiceClass::Mutation as usize],
+        parked.jobs[ServiceClass::Mutation as usize]
     );
-    assert!(stepper.poll(capture.as_mut()).is_pending());
+    assert!(!capture.is_finished());
 
-    // The last one is what the capture waited for: exactly one settling
-    // job of class Lifecycle, after which the capture runs and completes.
+    // The last attempt wakes the waiting capture on the same lock.
     wait(second.replied()).unwrap();
-    let captured = stepper.finish(capture.as_mut(), "parked capture").unwrap();
+    until("the waiting capture returned", || capture.is_finished());
+    let captured = capture.join().unwrap().unwrap();
     let sealed = match captured.result() {
         Ok(Response::Captured(capture)) => *capture,
         other => panic!("capture: {other:?}"),
     };
-    assert!(captured.work().parked_turns >= 1);
-    // The result's credit is held by its completion and by its handle.
-    drop((captured, capture));
-    until("owner results returned", || {
-        rig.client.diagnostics().unwrap().outstanding == 0
-    });
-    let work = rig.client.diagnostics().unwrap();
-    let mut completed = parked.completed;
-    completed[ServiceClass::Lifecycle as usize] += 1;
-    completed[ServiceClass::Capture as usize] += 1;
-    assert_eq!(
-        (work.admitted, work.completed, work.queued),
-        (parked.admitted + 1, completed, 0)
-    );
+    drop(captured);
     // It sealed both publications, and no ticket is owed.
     assert_eq!(sealed.revision, revision);
     assert!(rig.pending_publications().is_empty());
@@ -565,13 +560,13 @@ fn a_capture_parked_behind_the_ticket_is_owed_exactly_one_settling_job() {
     wait(third.replied()).unwrap();
     let work = rig.client.diagnostics().unwrap();
     assert_eq!(
-        (work.admitted, work.completed),
-        (before.admitted, before.completed)
+        (work.jobs.iter().sum::<u64>(), work.jobs),
+        (before.jobs.iter().sum::<u64>(), before.jobs)
     );
     assert!(rig.pending_publications().is_empty());
 
     println!(
-        "VISIT-SETTLED parked_capture=(2 tickets owed) first_attempt=(0 jobs, capture parked) last_attempt=(1 Lifecycle ReplySettled, capture completes) later_attempt=(0 jobs)"
+        "VISIT-SETTLED parked_capture=(2 tickets owed) first_attempt=(0 jobs, capture parked) last_attempt=(0 settling jobs, capture completes) later_attempt=(0 jobs)"
     );
     for serial in made.into_iter().chain([last]) {
         drop(wait(rig.services.forget(mount, serial, 1)).unwrap());
@@ -616,9 +611,6 @@ fn a_request_between_two_visits_fences_no_revocation_and_its_next_visit_is_refus
     ));
     stepper.park(making.as_mut(), "mutation", || {
         rig.store.read_work().waiting == 2
-    });
-    until("the undecided visits returned their results", || {
-        rig.client.diagnostics().unwrap().outstanding == 0
     });
     // Each made one visit and wrote nothing: no source, no reader count.
     assert_eq!(rig.recorded(), (0, 0));

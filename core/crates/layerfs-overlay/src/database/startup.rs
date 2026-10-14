@@ -23,6 +23,9 @@ pub struct Creation {
 #[derive(Debug, Default)]
 pub struct CreationWork {
     pub file_create_calls: u64,
+    /// Copies into fresh, independently writable files; never a hardlink.
+    pub file_copy_calls: u64,
+    pub copied_bytes: u64,
     /// Actual Linux read-only O_NOFOLLOW opens of the newly created file for
     /// filesystem identification. Zero on other platforms or creation failure.
     pub filesystem_open_calls: u64,
@@ -50,6 +53,19 @@ pub struct CreationWork {
 }
 
 pub(crate) fn create(path: &Path, config: ProfileConfig) -> Creation {
+    initialize(path, config, None)
+}
+
+pub(crate) fn copy_template(
+    path: &Path,
+    config: ProfileConfig,
+    template: &Path,
+    namespace: i64,
+) -> Creation {
+    initialize(path, config, Some((template, namespace)))
+}
+
+fn initialize(path: &Path, config: ProfileConfig, template: Option<(&Path, i64)>) -> Creation {
     let start = Instant::now();
     let sql = RefCell::new(DatabaseWork::default());
     let mut work = CreationWork::default();
@@ -66,7 +82,15 @@ pub(crate) fn create(path: &Path, config: ProfileConfig) -> Creation {
             options.mode(0o600);
         }
         work.file_create_calls = 1;
-        let file = options.open(path)?;
+        let mut file = options.open(path)?;
+        if let Some((template, namespace)) = template {
+            if namespace <= 0 {
+                return Err(crate::OverlayError::Invalid("Workspace namespace"));
+            }
+            let mut source = std::fs::File::open(template)?;
+            work.file_copy_calls = 1;
+            work.copied_bytes = std::io::copy(&mut source, &mut file)?;
+        }
         #[cfg(target_os = "linux")]
         {
             use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
@@ -99,15 +123,8 @@ pub(crate) fn create(path: &Path, config: ProfileConfig) -> Creation {
             #[allow(clippy::unnecessary_cast)]
             let linux_magic = filesystem.filesystem_type().0 as i64;
             work.linux_filesystem_type = Some(linux_magic);
-            // E04 receipt 75: this host share adds blocks for the same successful
-            // KEEP_SIZE range. Refuse before bulk reservation; do not reuse a
-            // range or infer its position from block totals to evade S6 admission.
-            if linux_magic == 0x6a656a63 {
-                return Err(crate::OverlayError::UnsupportedFilesystem { linux_magic });
-            }
         }
-        let physical = allocation.insert(super::allocation::Allocation::new(file, path)?);
-        physical.admit(false, 0, physical.state()?)?;
+        allocation = Some(super::physical::Allocation::new(file, path)?);
         work.sqlite_open_calls = 1;
         let connection = Connection::open_with_flags(
             path,
@@ -119,22 +136,46 @@ pub(crate) fn create(path: &Path, config: ProfileConfig) -> Creation {
             &sql,
             &mut work.connection_configuration_calls,
         )?;
-        crate::diagnostics::startup::batch(
-            &connection,
-            &sql,
-            include_str!("../../sql/schema.sql"),
-        )?;
-        crate::diagnostics::startup::batch(
-            &connection,
-            &sql,
-            include_str!("../../sql/accounting.sql"),
-        )?;
+        if template.is_none() {
+            crate::diagnostics::startup::batch(
+                &connection,
+                &sql,
+                include_str!("../../sql/schema.sql"),
+            )?;
+            crate::diagnostics::startup::batch(
+                &connection,
+                &sql,
+                include_str!("../../sql/accounting.sql"),
+            )?;
+        }
         profile.schema_version =
             super::profile::readback(&connection, &sql, "PRAGMA user_version", |row| row.get(0))?;
         let application: i64 =
             super::profile::readback(&connection, &sql, "PRAGMA application_id", |row| row.get(0))?;
-        if profile.schema_version != 32 || application != 1279676210 {
+        if profile.schema_version != 34 || application != 1279676210 {
             return Err(crate::OverlayError::Invalid("overlay schema readback"));
+        }
+        if let Some((_, namespace)) = template {
+            let populated: i64 = super::profile::readback(
+                &connection,
+                &sql,
+                "SELECT EXISTS(SELECT 1 FROM workspace WHERE ns>0 LIMIT 1)",
+                |row| row.get(0),
+            )?;
+            if populated != 0 {
+                return Err(crate::OverlayError::Invalid("populated overlay template"));
+            }
+            // The existing INSERT/RETURNING job remains unchanged. Seed its
+            // ordinary AUTOINCREMENT allocator with the daemon's next identity.
+            // The copy is still private and has no Workspace row or owner.
+            crate::diagnostics::startup::batch(
+                &connection,
+                &sql,
+                &format!(
+                    "INSERT INTO sqlite_sequence(name,seq) VALUES('workspace',{})",
+                    namespace - 1
+                ),
+            )?;
         }
         work.cache_configuration_calls = 1;
         // The capacity covers the engine's fixed statement set, about 224
@@ -150,15 +191,19 @@ pub(crate) fn create(path: &Path, config: ProfileConfig) -> Creation {
         Ok(Overlay {
             identity,
             connection,
+            open: RefCell::new(crate::open::OpenState::default()),
             work: RefCell::new(*sql.borrow()),
             payload_work: Cell::new(crate::PayloadWork::default()),
             quarantined: Cell::new(false),
+            namespace: Cell::new(0),
+            workspace_seen: Cell::new(None),
+            operation_seen: Cell::new(None),
+            reader_seen: Cell::new(None),
             maintenance_ready: Cell::new(false),
-            closed_ready: Cell::new(false),
             orphan_seen: Cell::new(false),
+            pieces_seen: Cell::new(false),
             release_step: Cell::new(false),
             transaction: Cell::new(super::connection::Transaction::None),
-            next_owner: Cell::new(1),
             tickets: std::sync::Arc::new(crate::ReplyTickets::new(identity)),
             issued: Default::default(),
             profile,

@@ -64,11 +64,7 @@ impl Application {
                 max_pages: None,
             },
             OwnerConfig {
-                bytes: usize_value(l.owner_bytes)?,
-                lifecycle_reserve: usize_value(l.lifecycle_reserve)?,
                 namespaces: l.namespaces as usize,
-                jobs_per_namespace: l.ordinary_jobs as usize,
-                lifecycle_jobs_per_namespace: l.lifecycle_jobs as usize,
             },
         );
         if started.result.is_err() {

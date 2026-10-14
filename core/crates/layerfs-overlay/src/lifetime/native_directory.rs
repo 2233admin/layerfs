@@ -1,7 +1,6 @@
 //! Exact native directory owners and retained current parent relationships.
 use crate::{
-    db::{integer, unsigned},
-    LeaseKind, NativeDirectory, NativeMount, Overlay, OverlayError, OverlayResult, StatementKind,
+    db::integer, LeaseKind, NativeDirectory, NativeMount, Overlay, OverlayError, OverlayResult,
 };
 impl Overlay {
     /// Called by the deciding lookup/mutation transaction for a directory only.
@@ -12,21 +11,23 @@ impl Overlay {
         serial: u64,
         parent: u64,
     ) -> OverlayResult<()> {
-        self.execute(StatementKind::Lease,
-            "INSERT INTO native_parent VALUES(?1,?2,?3,?4) ON CONFLICT(ns,serial) DO UPDATE SET mount=excluded.mount,parent=excluded.parent",
-            &[&mount.route.ns, &integer(mount.owner)?, &integer(serial)?, &integer(parent)?], 32)?;
+        integer(serial)?;
+        integer(parent)?;
+        self.open
+            .borrow_mut()
+            .put_parent((mount.route.ns, serial), (mount.owner, parent));
         Ok(())
     }
     pub(crate) fn native_parent(&self, mount: NativeMount, serial: u64) -> OverlayResult<u64> {
-        self.query(
-            StatementKind::Lease,
-            "SELECT parent FROM native_parent WHERE ns=?1 AND serial=?2 AND mount=?3",
-            &[&mount.route.ns, &integer(serial)?, &integer(mount.owner)?],
-            24,
-            |r| unsigned(r, 0),
-        )?
-        .pop()
-        .ok_or(OverlayError::Stale)
+        self.available()?;
+        self.open
+            .borrow()
+            .parents
+            .rows
+            .get(&(mount.route.ns, serial))
+            .filter(|(owner, _)| *owner == mount.owner)
+            .map(|(_, parent)| *parent)
+            .ok_or(OverlayError::Stale)
     }
     pub(crate) fn retain_native_directory(
         &self,
@@ -36,61 +37,57 @@ impl Overlay {
     ) -> OverlayResult<NativeDirectory> {
         self.native_parent(mount, serial)?;
         let owner = self.mint_owner()?;
-        self.execute(
-            StatementKind::Lease,
-            "INSERT INTO native_directory(ns,mount,owner,serial,request) VALUES(?1,?2,?3,?4,?5)",
-            &[
-                &mount.route.ns,
-                &integer(mount.owner)?,
-                &integer(owner)?,
-                &integer(serial)?,
-                &request.as_slice(),
-            ],
-            40,
-        )?;
+        let directory = NativeDirectory {
+            mount,
+            owner,
+            serial,
+        };
+        let request = u64::from_be_bytes(*request);
+        {
+            let mut state = self.open.borrow_mut();
+            let request_key = (mount.route.ns, mount.owner, request);
+            if state.directory_requests.rows.contains_key(&request_key) {
+                return Err(OverlayError::Invalid("duplicate directory request"));
+            }
+            state.directories.put(
+                (mount.route.ns, owner),
+                crate::open::DirectoryState {
+                    directory,
+                    request,
+                    floor: 0,
+                },
+            );
+            state.directory_requests.put(request_key, owner);
+            state.count(mount.route.ns, 9, true);
+            state.open_cookies((mount.route.ns, owner))?;
+        }
         self.file_ref(
             mount.route.ns,
             integer(serial)?,
             LeaseKind::FileHandle,
             true,
         )?;
-        Ok(NativeDirectory {
-            mount,
-            owner,
-            serial,
-        })
+        Ok(directory)
     }
-    /// The original association of an open handle, or of a closed one whose
-    /// cookie cleanup is pending; observing it never permits replaying
-    /// OPENDIR or RELEASEDIR.
+    /// The original association of an open handle; observing it never permits
+    /// replaying OPENDIR or RELEASEDIR. A released handle is absent.
     pub fn retained_native_directory(
         &self,
         mount: NativeMount,
         request: u64,
     ) -> OverlayResult<Option<NativeDirectory>> {
         self.check_native_attached(mount)?;
-        self.query(
-            StatementKind::Lease,
-            "SELECT owner,serial FROM native_directory WHERE ns=?1 AND mount=?2 AND request=?3",
-            &[
-                &mount.route.ns,
-                &integer(mount.owner)?,
-                &request.to_be_bytes().as_slice(),
-            ],
-            24,
-            |r| {
-                Ok(NativeDirectory {
-                    mount,
-                    owner: unsigned(r, 0)?,
-                    serial: unsigned(r, 1)?,
-                })
-            },
-        )
-        .map(|mut rows| rows.pop())
+        let state = self.open.borrow();
+        Ok(state
+            .directory_requests
+            .rows
+            .get(&(mount.route.ns, mount.owner, request))
+            .and_then(|owner| state.directories.rows.get(&(mount.route.ns, *owner)))
+            .map(|entry| entry.directory))
     }
-    /// RELEASEDIR in one visit: the fence reads this open descriptor's row
-    /// and the Workspace row, then the handle is closed, its lease released
-    /// and its published replies retired. A closed Workspace still releases
+    /// RELEASEDIR in one visit: the fence reads the Workspace and checks the
+    /// exact descriptor in memory. The handle and its references are released,
+    /// and its published replies detached. A closed Workspace still releases
     /// its descriptors.
     pub fn close_native_directory(
         &self,
@@ -100,59 +97,43 @@ impl Overlay {
     ) -> OverlayResult<()> {
         self.atomic_cleanup(|| {
             let held = super::native_visit::Held::Directory(handle);
-            let (state, _) = self.native_fence(mount, serial, held, false)?;
+            let (_, _) = self.native_fence(mount, serial, held, false)?;
             self.close_native_directory_inner(NativeDirectory {
                 mount,
                 owner: handle,
                 serial,
             })?;
-            self.queue_closed_at(mount.route, &state)
+            Ok(())
         })
     }
-    /// The caller established that this exact handle row is still open, and
-    /// decides afterwards whether its closed Workspace can be reclaimed.
-    ///
-    /// A handle with at most `INLINE_PAGES` published replies is deleted
-    /// here, rows and header, and queues nothing. Past that the header is
-    /// marked closed and its bounded, indexed maintenance item retires the
-    /// rows a window at a time; nothing is refused either way.
+    /// The caller fenced this exact open handle. Detach its cookie store as
+    /// one ownership transfer, so the caller can destroy arbitrarily many
+    /// published pages after releasing the connection turn. No row sweep or
+    /// terminal maintenance item runs here.
     pub(crate) fn close_native_directory_inner(
         &self,
         directory: NativeDirectory,
     ) -> OverlayResult<()> {
-        let (ns, owner) = (directory.mount.route.ns, integer(directory.owner)?);
-        self.file_ref(ns, integer(directory.serial)?, LeaseKind::FileHandle, false)?;
-        let pages = self.query(
-            StatementKind::Lease,
-            crate::sql::COOKIE_PAGES,
-            &[&ns, &owner, &0_i64],
-            24,
-            |_| Ok(()),
-        )?;
-        if pages.len() > INLINE_PAGES {
-            self.execute(
-                StatementKind::Lease,
-                "UPDATE native_directory SET closed=1 WHERE ns=?1 AND owner=?2",
-                &[&ns, &owner],
-                16,
-            )?;
-            return self.enqueue(ns, crate::maintenance::NATIVE_DIRECTORY, owner, owner);
+        let (ns, owner) = (directory.mount.route.ns, directory.owner);
+        {
+            let mut state = self.open.borrow_mut();
+            let held = state
+                .directories
+                .rows
+                .get(&(ns, owner))
+                .copied()
+                .ok_or(OverlayError::Stale)?;
+            if held.directory != directory {
+                return Err(OverlayError::Stale);
+            }
+            state.directories.remove((ns, owner));
+            state
+                .directory_requests
+                .remove((ns, directory.mount.owner, held.request));
+            state.count(ns, 9, false);
+            state.close_cookies((ns, owner))?;
         }
-        if !pages.is_empty() {
-            self.execute(
-                StatementKind::Lease,
-                "DELETE FROM native_cookie WHERE ns=?1 AND owner=?2",
-                &[&ns, &owner],
-                16,
-            )?;
-        }
-        self.execute(
-            StatementKind::Lease,
-            "DELETE FROM native_directory WHERE ns=?1 AND owner=?2",
-            &[&ns, &owner],
-            16,
-        )?;
-        Ok(())
+        self.file_ref(ns, integer(directory.serial)?, LeaseKind::FileHandle, false)
     }
 }
 /// Published replies one RELEASEDIR deletes in its own job, one maintenance

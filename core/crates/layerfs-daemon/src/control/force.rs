@@ -9,7 +9,7 @@ use super::{
     Failure, Service, Success,
 };
 #[cfg(target_os = "linux")]
-use crate::{store::BoundWorkspace, Command, NativeJob, NativeReply, Response};
+use crate::{store::BoundWorkspace, NativeReply, Response};
 #[cfg(target_os = "linux")]
 use layerfs_bridge::control::{
     AbortDisposition, DetachDisposition, ForceUnmounted, ForcedCleanup, ForcedFacts, ForcedOutcome,
@@ -277,7 +277,7 @@ impl Service {
         };
         facts.detach = DetachDisposition::Detached;
         facts.fenced = drained.forced.map_or(0, |forced| forced.terminal_replies);
-        // The lane is released, so its last counters come from the receipt.
+        // The mount is released, so its last counters come from the receipt.
         let work = work(&SessionFacts {
             work: Ok(drained.work),
             opcodes: drained.opcodes,
@@ -285,11 +285,14 @@ impl Service {
         });
         self.leaving(token, NativePhase::Draining);
         // Read and dropped at once: its Lifecycle slot returns before Close.
-        match self.job(workspace.route(), Command::Native(NativeJob::Revoke(mount))) {
+        match self.job(
+            workspace.route(),
+            |job_client: &crate::OwnerClient, job_route| job_client.native_revoke(job_route, mount),
+        ) {
             Ok(done) if matches!(done.result(), Ok(Response::Native(NativeReply::Done))) => {}
             other => {
                 let failure = match other {
-                    Ok(done) => Failure::Completion(Box::new(done)),
+                    Ok(done) => Failure::JobReceipt(Box::new(done)),
                     Err(error) => error,
                 };
                 return Err(self.retain(
@@ -312,7 +315,9 @@ impl Service {
         // One observation of the closed namespace; a failed one claims no
         // state. Its completion is read and dropped here.
         let (cleanup, observation_failure) = match self
-            .job(workspace.route(), Command::CleanupState)
+            .owner
+            .observe_cleanup(None, token.namespace, token.workspace.to_bytes())
+            .map_err(Failure::Owner)
         {
             Ok(done) => match done.result() {
                 Ok(Response::CleanupState(CleanupState::Held)) => (ForcedCleanup::Held, None),
@@ -320,7 +325,7 @@ impl Service {
                 Ok(Response::CleanupState(CleanupState::Gone)) => (ForcedCleanup::Gone, None),
                 _ => (
                     ForcedCleanup::Unobserved,
-                    Some(Box::new(Failure::Completion(Box::new(done)))),
+                    Some(Box::new(Failure::JobReceipt(Box::new(done)))),
                 ),
             },
             Err(error) => (ForcedCleanup::Unobserved, Some(Box::new(error))),

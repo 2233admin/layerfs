@@ -3,11 +3,11 @@ use layerfs_overlay::*;
 use payload_support::*;
 
 #[test]
-fn complete_mutation_reports_triggers_blob_delivery_and_physical_reservation() {
+fn complete_mutation_reports_triggers_blob_delivery_without_reservation() {
     let temp = Temp::new();
     let db = temp.db();
     let initial = db.allocation().unwrap();
-    assert!(initial.allocated_bytes >= MUTATION_GROWTH + CLEANUP_HEADROOM);
+    assert_eq!(initial.reserved_tail_bytes, 0);
     let route = db.open_workspace([231; 32], [232; 32]).unwrap();
     let source = db.acquire_base_source(route, 1).unwrap();
     let mut file = File::new(&db, source, 7, Vec::new());
@@ -25,17 +25,16 @@ fn complete_mutation_reports_triggers_blob_delivery_and_physical_reservation() {
     assert_eq!(copies.cell_copy_bytes, 0);
     assert_eq!(copies.cell_zeroed_bytes, 0);
     // File::write includes the mutation and its reply attempt. Only the
-    // mutation writes: the attempt returns a ticket held in the engine's
-    // memory, and its owner turn finds a live Workspace with nothing to
-    // queue, so it begins no transaction and pays no admission.
+    // mutation writes: the attempt returns a ticket held in memory and
+    // performs no database job.
     // Count-trigger changes of the mutation remain visible.
-    assert_eq!(admission.freelist_queries, 1);
-    assert_eq!(admission.admitted_jobs, 1);
+    assert_eq!(admission.freelist_queries, 0);
+    assert_eq!(admission.admitted_jobs, 0);
     assert_eq!(admission.refusals, 0);
     // The file has not grown since its range was last established, so
     // the admission does not allocate, on Linux as on macOS.
     assert_eq!(admission.attempts, 0);
-    assert_eq!(admission.observations, 1);
+    assert_eq!(admission.observations, 0);
     let work = db.diagnostics().since(&sql);
     assert_eq!(work.statements[StatementKind::Begin as usize].executions, 1);
     assert_eq!(
@@ -53,14 +52,16 @@ fn complete_mutation_reports_triggers_blob_delivery_and_physical_reservation() {
     );
     let before = db.diagnostics();
     assert_eq!(db.inode(route, 7).unwrap().unwrap().size, CELL_BYTES as u64);
+    // The inode's row holds no BLOB and the Workspace row is remembered.
     assert_eq!(
         db.diagnostics().since(&before).total().returned_blob_bytes,
-        32
+        0
     );
     let before = db.diagnostics();
     assert_eq!(file.read(0, CELL_BYTES as u32), file.expect);
     let read = db.diagnostics().since(&before).total();
-    assert_eq!(read.returned_blob_bytes, CELL_BYTES as u64 + 64);
+    // One 32-byte root fewer than it was: the Workspace row is remembered.
+    assert_eq!(read.returned_blob_bytes, CELL_BYTES as u64 + 32);
     assert_eq!(read.rows_changed + read.direct_rows_changed, 0);
     let resources = db.resources(Some(route)).unwrap();
     assert!(resources.allocation.high_water_allocated_bytes >= initial.allocated_bytes);
@@ -71,15 +72,17 @@ fn complete_mutation_reports_triggers_blob_delivery_and_physical_reservation() {
 #[test]
 fn failed_atomic_job_retains_attempted_cost_and_rolls_back_logical_counts() {
     let temp = Temp::new();
+    let probe = Overlay::create(&temp.0.join("schema.sqlite"), ProfileConfig::default()).unwrap();
+    let schema_pages = probe.allocation().unwrap().logical_bytes / 4096;
+    probe.close_database().unwrap();
     let db = Overlay::create(
         &temp.0.join("overlay.sqlite"),
         ProfileConfig {
             pager_kib: 4,
-            // Schema 28 is 63 pages and the 128 KiB mutation needs 32 more
-            // (four rows of 32 KiB), so it fits in 95. This leaves room for
-            // the schema and setup and fewer pages than the mutation needs:
-            // it must fail in DML.
-            max_pages: Some(80),
+            // Setup fits in eight pages beyond the current schema. A 128 KiB
+            // mutation needs at least 32 payload pages, so DML must fail after
+            // making counted changes. Removing tables cannot erase the fault.
+            max_pages: Some(u32::try_from(schema_pages + 8).unwrap()),
         },
     )
     .unwrap();
@@ -156,7 +159,7 @@ fn one_write_window_costs_the_same_statements_at_either_file_size_and_beside_ano
         let copies = db.payload_work().since(copies);
         assert_eq!(copies.write_input_bytes, 3 * WRITE_WINDOW as u64);
         // The two overwrites are written where their rows lie: the counts
-        // pinned below show four shape reads and no row changed for each,
+        // pinned below show one shape read and no row changed for each,
         // and `check` reads the new bytes back.
         assert_eq!((copies.cell_copy_bytes, copies.cell_zeroed_bytes), (0, 0));
         file.check();
@@ -168,14 +171,18 @@ fn one_write_window_costs_the_same_statements_at_either_file_size_and_beside_ano
         );
     }
     // (Payload attempts, Payload executions, Payload rows changed, attempts
-    // of the whole job). A fresh window is four rows of 32 KiB: per row one
-    // read of the slot's shapes and one insert with its accounting trigger
-    // program, which updates the namespace's row (it updated the daemon's
-    // too: 12 rows). Before rows of several cells this was (32, 64, 96, 42):
+    // of the whole job). A fresh window is four rows of 32 KiB: one read of
+    // the shapes of the window's four slots, and per row one insert with its
+    // accounting trigger program, which updates the namespace's row (it
+    // updated the daemon's too: 12 rows). With one shape read per slot it
+    // was (8, 12, 8, 19); before rows of several cells (32, 64, 96, 42):
     // 32 cell upserts and their trigger programs.
-    // An overwrite writes the four rows where they lie: four shape reads,
-    // no row changed, no trigger; it was (32, 64, 96, 42) as well.
-    let (first, fresh, over) = ((8, 12, 8, 19), (8, 12, 8, 18), (4, 4, 0, 14));
+    // An overwrite writes the four rows where they lie: one shape read,
+    // no row changed, no trigger; it was (4, 4, 0, 14), and (32, 64, 96, 42)
+    // before rows of several cells.
+    // The whole job is two attempts fewer than it was: its fence and its
+    // custody check read the Workspace row from the engine's memory.
+    let (first, fresh, over) = ((5, 9, 8, 12), (5, 9, 8, 11), (1, 1, 0, 7));
     assert_eq!((seen[0].0, seen[0].1, seen[0].2), (first, over, over));
     assert_eq!((seen[1].0, seen[1].1, seen[1].2), (fresh, over, over));
     // Stored rows of the file and of the two files beside it.

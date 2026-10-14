@@ -5,7 +5,6 @@ writer=${WORKLOAD_WRITER:-/code/writers/workload}
 case "$2" in
   store-footprint-unique-100000|store-footprint-metadata-cardinality-100000|store-footprint-large-object-500m) tier=100000 ;;
   store-footprint-unique-100-low-v1|store-footprint-metadata-cardinality-100-low-v1) tier=100 ;;
-  store-footprint-large-object-10m-low-v1) tier=10 ;;
   *) exit 2 ;;
 esac
 case "$1" in

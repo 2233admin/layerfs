@@ -1,6 +1,6 @@
 //! Exact bind intent and original owner completion custody.
 use super::{BoundWorkspace, PortError};
-use crate::{Completion, OwnerError};
+use crate::{JobReceipt, OwnerError};
 use layerfs_content::ContentError;
 use layerfs_history::{BranchId, BranchSnapshot, HistoryError, WorkspaceId};
 use std::{fmt, sync::Arc};
@@ -26,7 +26,7 @@ pub enum BindError {
         provider: Option<Arc<PortError>>,
     },
     Owner(OwnerError),
-    Completion(Box<Completion>),
+    JobReceipt(Box<JobReceipt>),
 }
 #[derive(Debug)]
 pub struct BindRefusal {
@@ -37,8 +37,8 @@ pub struct BindRefusal {
 }
 pub struct BindSuccess {
     pub workspace: BoundWorkspace,
-    /// Original Open receipt and credit. Dropping it does not unmount.
-    pub open: Completion,
+    /// Original Open receipt. Dropping it does not unmount.
+    pub open: JobReceipt,
 }
 impl fmt::Display for BindRefusal {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

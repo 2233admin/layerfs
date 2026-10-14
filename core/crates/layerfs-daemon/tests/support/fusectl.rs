@@ -49,8 +49,11 @@ pub fn mount() {
         .stdin(Stdio::null())
         .output()
         .unwrap();
+    // Tests of one binary run on several threads: another thread may mount
+    // it between the check above and this process, which then reports
+    // "already mounted". What matters is that it is mounted now.
     assert!(
-        output.status.success() && mounted(),
+        mounted(),
         "mount -t fusectl: {:?} {}",
         output.status,
         String::from_utf8_lossy(&output.stderr)

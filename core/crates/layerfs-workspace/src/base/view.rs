@@ -1,9 +1,11 @@
 //! Demand reads through current public content APIs, without a base-tree mirror.
 use crate::{CanonicalClient, WorkspaceResult};
 use layerfs_content::filesystem::attributes::PortableMetadata;
+use layerfs_content::filesystem::directory::read::{list_after, lookup_counted, DirectoryReadWork};
+use layerfs_content::filesystem::inode::{lookup, InodeReadWork, InodeTable};
 use layerfs_content::filesystem::{
-    DirectoryListing, FilesystemRead, FilesystemRoot, FilesystemRootId, InodeScope, PathName,
-    Resolved, SymlinkTarget,
+    DirectoryListing, DirectoryRoot, FilesystemRead, FilesystemRoot, FilesystemRootId, InodeScope,
+    PathName, Resolved, SymlinkTarget,
 };
 use layerfs_content::object::inode_leaf::{InodeKind, InodeValue};
 use layerfs_content::{AuthenticatedObjects, ContentError, ContentResult, FileView};
@@ -82,14 +84,35 @@ impl BaseView {
         let identity = FilesystemRootId(layerfs_content::ObjectId::from_bytes(&root)?);
         Ok(std::borrow::Cow::Owned(self.rebind(identity)?))
     }
-    pub(crate) fn reader(&self) -> ContentResult<FilesystemRead<'_>> {
-        FilesystemRead::new(self.client.as_ref(), self.identity)
+    /// The inode table of the root checked at open. The root is immutable,
+    /// so no lookup acquires or decodes that object again.
+    pub(crate) fn table(&self) -> InodeTable {
+        InodeTable {
+            root: self.root.inode_table(),
+            root_serial: self.root.root_inode().serial(),
+        }
     }
     pub fn child(&self, parent: u64, name: &PathName) -> ContentResult<Resolved> {
-        self.reader()?.resolve_child(parent, name)
+        let directory = self.inode(parent)?.value;
+        if directory.kind != InodeKind::Directory {
+            return Err(ContentError::WrongLogicalRole);
+        }
+        let found = lookup_counted(
+            self.client.as_ref(),
+            DirectoryRoot(directory.content_root),
+            name,
+            &mut DirectoryReadWork::default(),
+        )?;
+        self.inode(found.ok_or(ContentError::PathNotFound)?.1)
     }
+    /// A serial the table does not hold is a logical absence.
     pub fn inode(&self, serial: u64) -> ContentResult<Resolved> {
-        self.reader()?.resolve_inode(serial)
+        let work = &mut InodeReadWork::default();
+        let value = lookup(self.client.as_ref(), self.table(), serial, work)?;
+        Ok(Resolved {
+            serial,
+            value: value.ok_or(ContentError::PathNotFound)?,
+        })
     }
     pub fn list(
         &self,
@@ -98,7 +121,18 @@ impl BaseView {
         entries: usize,
         bytes: usize,
     ) -> ContentResult<DirectoryListing> {
-        self.reader()?.list_inode(serial, after, entries, bytes)
+        let value = self.inode(serial)?.value;
+        if value.kind != InodeKind::Directory {
+            return Err(ContentError::WrongLogicalRole);
+        }
+        list_after(
+            self.client.as_ref(),
+            DirectoryRoot(value.content_root),
+            after,
+            entries,
+            bytes,
+            &mut DirectoryReadWork::default(),
+        )
     }
     pub fn list_after_bytes(
         &self,
@@ -113,11 +147,11 @@ impl BaseView {
         }
         layerfs_content::filesystem::directory::read::list_after_bytes(
             self.client.as_ref(),
-            layerfs_content::filesystem::DirectoryRoot(value.content_root),
+            DirectoryRoot(value.content_root),
             after,
             entries,
             bytes,
-            &mut layerfs_content::filesystem::directory::DirectoryReadWork::default(),
+            &mut DirectoryReadWork::default(),
         )
     }
     /// Bindings recorded by a directory's root page: one authenticated object,
@@ -130,7 +164,11 @@ impl BaseView {
         Ok(layerfs_content::filesystem::directory::codec::page_shape(&page)?.1)
     }
     pub fn readlink(&self, serial: u64) -> ContentResult<SymlinkTarget> {
-        self.reader()?.readlink_inode(serial)
+        let value = self.inode(serial)?.value;
+        if value.kind != InodeKind::Symlink {
+            return Err(ContentError::WrongLogicalRole);
+        }
+        SymlinkTarget::decode(&self.client.read_canonical(value.content_root)?)
     }
     pub fn stat(&self, serial: u64) -> WorkspaceResult<BaseStat> {
         self.stat_with_lengths(serial, self.client.as_ref())
@@ -141,12 +179,23 @@ impl BaseView {
         serial: u64,
         lengths: &dyn crate::FileLengths,
     ) -> WorkspaceResult<BaseStat> {
-        let mut read = self.reader()?;
-        let value = read.resolve_inode(serial)?.value;
-        let metadata = read.read_portable_inode(serial)?;
+        self.stat_resolved_with_lengths(self.inode(serial)?, lengths)
+    }
+    /// Complete stat from the child already authenticated in this base.
+    pub(crate) fn stat_resolved_with_lengths(
+        &self,
+        resolved: Resolved,
+        lengths: &dyn crate::FileLengths,
+    ) -> WorkspaceResult<BaseStat> {
+        let Resolved { serial, value } = resolved;
+        let metadata = self.client.portable(value.metadata_root, value.kind)?;
         let logical_len = match value.kind {
             InodeKind::RegularFile => lengths.file_length(value.content_root)?,
-            InodeKind::Symlink => read.readlink_inode(serial)?.as_bytes().len() as u64,
+            InodeKind::Symlink => {
+                SymlinkTarget::decode(&self.client.read_canonical(value.content_root)?)?
+                    .as_bytes()
+                    .len() as u64
+            }
             InodeKind::Directory => 0,
         };
         Ok(BaseStat {
@@ -197,6 +246,51 @@ impl BaseView {
             start,
             end,
         })
+    }
+}
+/// One committed regular file named by its content root alone: the source a
+/// reference piece names, whichever base bound that file.
+pub struct BaseContent {
+    client: Arc<CanonicalClient>,
+    file: FileView,
+}
+impl BaseView {
+    /// Opens committed file content by its root: one authenticated object
+    /// through this view's client and no namespace lookup.
+    pub fn content(&self, root: [u8; 32]) -> ContentResult<BaseContent> {
+        let root = layerfs_content::ObjectId::from_bytes(&root)?;
+        let file = Timing::disabled("base.content", |scope| {
+            FileView::open(self.client.as_ref(), root, scope.child("file"))
+        })
+        .0?;
+        Ok(BaseContent {
+            client: self.client.clone(),
+            file,
+        })
+    }
+}
+impl BaseContent {
+    pub fn root(&self) -> [u8; 32] {
+        self.file.root().to_bytes()
+    }
+    pub fn length(&self) -> u64 {
+        self.file.logical_len()
+    }
+    /// The mapping root of content in chunks; none for a whole-file payload.
+    pub(crate) fn state(&self) -> ContentResult<Option<layerfs_content::file::mapping::FileState>> {
+        self.file.file_state()
+    }
+    /// Appends exactly `length` committed bytes from `offset`. A range that
+    /// passes the end of the content is an error, never zeros.
+    pub fn read(&self, offset: u64, length: u64, sink: &mut dyn Write) -> ContentResult<()> {
+        let end = offset
+            .checked_add(length)
+            .ok_or(ContentError::LengthOverflow)?;
+        Timing::disabled("base.content", |scope| {
+            self.file
+                .read_range(self.client.as_ref(), offset..end, sink, scope)
+        })
+        .0
     }
 }
 impl BaseRead {

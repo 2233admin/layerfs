@@ -154,6 +154,27 @@ def docker_socket():
     return value[len("unix://"):]
 
 
+
+def workload_source(root=ROOT):
+    """Route only the D-2 M1 correction; preserve all frozen reference bytes."""
+    import re
+    original = root / "benchmark/fs-bench-pro/workload/main.rs"
+    generated = root / "core/target/fs-bench-pro-workload/main.rs"
+    generated.parent.mkdir(parents=True, exist_ok=True)
+    def relative(path):
+        return json.dumps(os.path.relpath(path, generated.parent))
+    def included(match):
+        name = match[1]
+        path = (root / "core/benchmark/fs-bench-pro/writers/v016_m1.rs"
+                if name == "v016_m1.rs" else original.parent / name)
+        return "include!(" + relative(path) + ");"
+    body = re.sub(r'include!\("([^\"]+)"\);', included, original.read_text())
+    body = re.sub(r'((?:pub\(crate\) )?mod (\w+);)',
+                  lambda match: "#[path = " + relative(original.parent / (match[2] + ".rs")) + "]\n" + match[1], body)
+    generated.write_text(body)
+    return generated
+
+
 def build(folder, root=ROOT):
     """Locked host/runtime and pinned-image daemon builds with source byte checks."""
     from . import receipts
@@ -180,6 +201,7 @@ def build(folder, root=ROOT):
     environment = {**os.environ, "CARGO_TARGET_DIR": str(root / "core/target/r7-host-release"),
                    "LAYERFS_CONSTRUCTION_WORKERS": "1"}
     flags = environment.get("RUSTFLAGS")
+    sqlite_flags = environment.get("LIBSQLITE3_FLAGS")
     if flags is not None and any(flag not in flags for flag in
                                  ("aes_armv8", "polyval_armv8", "chacha20_force_neon", "+aes,+sha2")):
         raise ValueError("explicit RUSTFLAGS must repeat the repository ARM64 profile")
@@ -192,7 +214,7 @@ def build(folder, root=ROOT):
     edit_host = root / "core/target/fs-bench-pro-edit-host"
     for name, source, output in (("namespace-writer", root / "core/benchmark/fs-bench-pro/engine/recipes/namespace.rs", namespace_writer),
                                  ("workspace-writer", root / "core/benchmark/fs-bench-pro/engine/recipes/workspace.rs", workspace_writer),
-                                 ("workload-host", root / "benchmark/fs-bench-pro/workload/main.rs", workload_host),
+                                 ("workload-host", workload_source(root), workload_host),
                                  ("edit-host", root / "core/benchmark/fs-bench-pro/writers/edit.rs", edit_host)):
         receipts.command(["rustup", "run", "1.85.1", "rustc", "--edition=2021", "-O", *ARM64_FLAGS,
                           str(source), "-o", str(output)], folder, name, 120)
@@ -203,12 +225,14 @@ def build(folder, root=ROOT):
     workload_linux = root / "core/target/fs-bench-pro-workload-linux"
     edit_linux = root / "core/target/fs-bench-pro-edit-linux"
     workspace_linux = root / "core/target/fs-bench-pro-workspace-linux"
-    body = "set -eu; sha256sum -c " + shlex.quote(inside) + "; cargo build --manifest-path core/Cargo.toml --locked --offline --release -p layerfs-daemon --bin layerfs-daemon; rustc --version; rustc --edition=2021 -O " + shlex.join(ARM64_FLAGS) + " benchmark/fs-bench-pro/workload/main.rs -o /work/core/target/fs-bench-pro-workload-linux; rustc --edition=2021 -O " + shlex.join(ARM64_FLAGS) + " core/benchmark/fs-bench-pro/writers/edit.rs -o /work/core/target/fs-bench-pro-edit-linux; rustc --edition=2021 -O " + shlex.join(ARM64_FLAGS) + " core/benchmark/fs-bench-pro/engine/recipes/workspace.rs -o /work/core/target/fs-bench-pro-workspace-linux; sha256sum -c " + shlex.quote(inside)
+    body = "set -eu; sha256sum -c " + shlex.quote(inside) + "; cargo build --manifest-path core/Cargo.toml --locked --offline -j 3 --release -p layerfs-daemon --bin layerfs-daemon; rustc --version; rustc --edition=2021 -O " + shlex.join(ARM64_FLAGS) + " core/target/fs-bench-pro-workload/main.rs -o /work/core/target/fs-bench-pro-workload-linux; rustc --edition=2021 -O " + shlex.join(ARM64_FLAGS) + " core/benchmark/fs-bench-pro/writers/edit.rs -o /work/core/target/fs-bench-pro-edit-linux; rustc --edition=2021 -O " + shlex.join(ARM64_FLAGS) + " core/benchmark/fs-bench-pro/engine/recipes/workspace.rs -o /work/core/target/fs-bench-pro-workspace-linux; sha256sum -c " + shlex.quote(inside)
     receipts.command([*docker, "create", "--name", container, "--network", "none",
                       "-v", str(root) + ":/work", "-w", "/work",
                       "-e", "CARGO_HOME=/work/core/target/cluster2-linux-cargo",
                       "-e", "CARGO_TARGET_DIR=/work/core/target/r7-linux-release",
-                      "-e", "LAYERFS_CONSTRUCTION_WORKERS=1", IMAGE, "/bin/bash", "-c", body],
+                      "-e", "LAYERFS_CONSTRUCTION_WORKERS=1",
+                      *([] if sqlite_flags is None else ["-e", "LIBSQLITE3_FLAGS=" + sqlite_flags]),
+                      IMAGE, "/bin/bash", "-c", body],
                      folder, "linux-create", 15)
     linux = receipts.command([*docker, "start", "--attach", container], folder, "linux-release", 120)
     after = source_identity(root)
@@ -235,6 +259,7 @@ def build(folder, root=ROOT):
               "binaries": binaries, "image": IMAGE, "socket": socket,
               "builds": [host, linux], "flags": ".cargo/config.toml ARM64 profile; explicit override recorded",
               "explicit_rustflags": flags, "incremental_reuse": "existing worktree-local r7 Cargo caches; both locked builds attempted",
+              "explicit_sqlite_flags": sqlite_flags,
               "global_profile": "Disposable/WAL/OFF", "overlay_profile": "MEMORY/OFF/EXCLUSIVE",
               "construction_workers": 1, "fuser_check": provenance,
               "fuser_disposition": "OWNER-3's two passthrough refusals retained; no checker PASS claimed",
@@ -285,6 +310,7 @@ def reuse_runtime_inputs(before, previous, flags):
                 "durable": "NOT_RUN — disabled by owner until explicit reauthorization",
                 "flags": ".cargo/config.toml ARM64 profile; explicit override recorded",
                 "explicit_rustflags": flags,
+                "explicit_sqlite_flags": os.environ.get("LIBSQLITE3_FLAGS"),
                 "fuser_disposition": "OWNER-3's two passthrough refusals retained; no checker PASS claimed"}
     if any(previous.get(key) != value for key, value in expected.items()):
         raise ValueError("reused build profile, image, flags or disposition differs")
@@ -328,6 +354,10 @@ def original_build_evidence(folder, previous):
     create = json.loads(read("linux-create.attempt.json"))
     if IMAGE not in create["argv"] or shlex.join(ARM64_FLAGS) not in create["argv"][-1]:
         raise ValueError("reused original Linux image or ARM64 flags differ")
+    sqlite_environment = [value for value in create["argv"] if value.startswith("LIBSQLITE3_FLAGS=")]
+    sqlite_flags = previous.get("explicit_sqlite_flags")
+    if sqlite_environment != ([] if sqlite_flags is None else ["LIBSQLITE3_FLAGS=" + sqlite_flags]):
+        raise ValueError("reused original SQLite compilation environment differs")
     if read("image.stdout").strip() != IMAGE:
         raise ValueError("reused original image readback differs")
     refusal = json.loads(read("fuser-integrity.completion.json"))

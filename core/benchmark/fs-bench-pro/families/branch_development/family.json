@@ -8211,11 +8211,11 @@
       },
       "budget": {
         "command_ms": 15000,
-        "verifier_ms": 25000,
+        "verifier_ms": 105000,
         "operation_watchdog_ms": 60000,
         "performance_hard_watchdog_ms": 60000,
         "performance_cleanup_reserve_ms": 3000,
-        "verification_hard_watchdog_ms": 35000,
+        "verification_hard_watchdog_ms": 115000,
         "verification_cleanup_reserve_ms": 3000,
         "publication_guard_ms": 250
       },
@@ -8241,7 +8241,8 @@
         "Frozen executable fixture has53/303 role-data directories plus2 move parents and8 scratch directories:63/313 excludingroot. Historical prose says52/302 and62/312. Original executable files/bytes and decimal high-water reserves remain unchanged.",
         "Frozen executable SDK loop visits sdk_insert role then sdk_delete role; prose says shrinkfirst. The executable inserts first on oddcycles and deletes first on evencycles. Exact target/kind order is retained without reordering for transient size.",
         "H-17 frozen helper/oracle inconsistency remains strict: atomic-save temporary receives stage4 mtime before writing; write updates mtime while original shadow retains stage4 seconds. No timestamp normalization, product change or not-applicable preclassification is introduced.",
-        "Original explicit mtime seconds remain mandatory; current selective proof also retains original helper nanoseconds123456789. Automatic mtimes and undeclared file modes remain unconstrained."
+        "Original explicit mtime seconds remain mandatory; current selective proof also retains original helper nanoseconds123456789. Automatic mtimes and undeclared file modes remain unconstrained.",
+        "Owner direction 2026-10-12 (#319 phase 13): verification work 25000 -> 105000 ms, hard publication 35000 -> 115000 ms for this named case only; cleanup reserve 3000 ms and publication guard 250 ms unchanged. Measured command, Commit and performance limits unchanged."
       ],
       "registry": {
         "family": "branch_development",
@@ -14406,11 +14407,11 @@
       },
       "budget": {
         "command_ms": 15000,
-        "verifier_ms": 30000,
+        "verifier_ms": 105000,
         "operation_watchdog_ms": 60000,
         "performance_hard_watchdog_ms": 60000,
         "performance_cleanup_reserve_ms": 3000,
-        "verification_hard_watchdog_ms": 40000,
+        "verification_hard_watchdog_ms": 115000,
         "verification_cleanup_reserve_ms": 3000,
         "publication_guard_ms": 250
       },
@@ -14436,7 +14437,8 @@
         "Frozen executable fixture has53/303 role-data directories plus2 move parents and8 scratch directories:63/313 excludingroot. Historical prose says52/302 and62/312. Original executable files/bytes and decimal high-water reserves remain unchanged.",
         "Frozen executable SDK loop visits sdk_insert role then sdk_delete role; prose says shrinkfirst. The executable inserts first on oddcycles and deletes first on evencycles. Exact target/kind order is retained without reordering for transient size.",
         "H-17 frozen helper/oracle inconsistency remains strict: atomic-save temporary receives stage4 mtime before writing; write updates mtime while original shadow retains stage4 seconds. No timestamp normalization, product change or not-applicable preclassification is introduced.",
-        "Original explicit mtime seconds remain mandatory; current selective proof also retains original helper nanoseconds123456789. Automatic mtimes and undeclared file modes remain unconstrained."
+        "Original explicit mtime seconds remain mandatory; current selective proof also retains original helper nanoseconds123456789. Automatic mtimes and undeclared file modes remain unconstrained.",
+        "Owner direction 2026-10-12 (#319 phase 13): verification work 30000 -> 105000 ms, hard publication 40000 -> 115000 ms for this named case only; cleanup reserve 3000 ms and publication guard 250 ms unchanged. Measured command, Commit and performance limits unchanged."
       ],
       "registry": {
         "family": "branch_development",

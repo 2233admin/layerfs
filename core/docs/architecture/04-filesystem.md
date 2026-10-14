@@ -1,5 +1,15 @@
 # Filesystem trees
 
+> **#319 inode decoder allocation repair (same-commit source over
+> `f1d2d8276`):** the private common inode-leaf decoder maps each fully checked
+> value directly into the typed wire representation. It still validates the
+> complete page, every serial/order/value, and all header/count/byte bounds.
+> The pooling reader retains its raw rows through the same grammar. The typed
+> reader removes one raw-row vector and the second value decode; public codecs,
+> canonical bytes and provider acquisitions are unchanged. External 8/100-row
+> allocation counts drop 2 -> 1, with the existing reallocation retained.
+> This is a source/count result, not native or typed-proof speed qualification.
+
 > **#258 stable identity reads:** The source in the same commit as this note
 > extends `FilesystemRead` with parent-serial child resolution, inode-serial
 > resolution/listing, and portable metadata and symlink reads by inode serial.
@@ -128,19 +138,48 @@ threshold admits **one row more than the page can hold**.
 ```text
    a stored page  ──read──► authenticate ──► decode ──► check against root/non-root context
         │
-        │  UNTOUCHED SUBTREES stay as their stored identity
-        │  and their bytes are NEVER READ AGAIN
+        │  A CHILD NO CHANGE REACHES stays the identity its parent row
+        │  records and is NOT READ
         ▼
    ┌────────────────────────────────────────────────────────────────────────┐
    │  what a localized update costs:                                        │
-   │      the changed path  +  the siblings that PROVE THE PARTITION        │
-   │  NOT the whole tree                                                    │
+   │      the changed paths  +  the neighbour an UNDERFULL page joins       │
+   │      +  the other children of a branch page that SPLITS or IS JOINED   │
+   │  NOT every sibling beneath the branch pages on the path                │
    └────────────────────────────────────────────────────────────────────────┘
 ```
 
 An unfinished page this operation built stays **decoded and private** until the
-merge proves it final. Children are read in bounded authenticated batches
-(`BATCH_CHILDREN = 256`), and the accumulating right spine holds private pages.
+merge proves it final, and the accumulating right spine holds private pages.
+
+**Which stored pages a merge reads (issue #320).** A branch row holds a key and a
+child identity and nothing else, so the merge decides from the row alone whether
+a change reaches the child. It reads:
+
+- each child a change reaches, one point read as the merge arrives at it, checked
+  against its parent row (level, last key) and the non-root fill rule;
+- the neighbour an underfull page joins — the one before it, or the one after
+  the first child;
+- every not-yet-read child of a branch page that **splits** or is itself
+  **joined**, as bounded authenticated batches (`BATCH_CHILDREN = 256`), because
+  each resulting page records its own totals and needs each row's summary.
+
+A child no change reaches is not read. Its partition is already final: a stored
+non-root page is filled, since no writer emits and no reader accepts one that is
+not. Its totals are already inside its parent's recorded totals, so the new
+parent records `stored totals − totals of the children read + totals of what
+replaced them`. The output is byte-identical to a merge that reads every child;
+`tests/filesystem_sorted_localized.rs` pins that against roots recorded from the
+earlier merge for scattered, dense, insert-heavy, delete-heavy and
+whole-child-removal batches on both formats and on two- and three-level trees.
+
+What the merge no longer does is re-check the children it does not read. A
+branch page's recorded totals are compared with the sum of its children only when
+all of them were read (otherwise the rest must still cover one entry per unread
+child), and an unread child's level, last key and fill are not compared with its
+parent row. Those properties of an authenticated stored page are taken from the
+writer that emitted it. A dense update pays one read wave per changed child where
+the earlier merge paid one batch per branch page.
 
 **Filling and splitting read a running total, not a re-sum.** A page carries the
 sum of its rows' encoded widths, maintained by the one funnel every row passes
@@ -155,8 +194,7 @@ children are bounded by the directory format at 232 (1-byte names), so 256 cover
 every legal page in one wave. A full-width reservation is `256 x (8,192 + 88)`
 plus one decode slot — about 2.08 MiB against the 4 MiB operation lease — where
 the 4,096-id demand ceiling would reserve 33.9 MiB and the narrowing loop would
-clamp it on every call. A parent's batch is held while the merge descends into its
-children, so an inner batch **narrows** to what the remaining lease affords
+clamp it on every call. A batch **narrows** to what the remaining lease affords
 instead of refusing; `peak_scratch_bytes` rises with the width and stays inside
 the declared lease.
 

@@ -88,6 +88,27 @@ pub trait OverlayOperationRecords {
         scope: IndexedOperationRecordScope,
         key: IndexedOperationRecordKey,
     ) -> WorkspaceResult<OperationRecordReply<Option<Vec<u8>>>>;
+    /// The values of at most 64 keys in the order asked, as one job where the
+    /// provider serves them together under one fence. The default asks for
+    /// each key in turn: its first refusal is the first refused key's.
+    fn operation_record_get_many(
+        &self,
+        scope: IndexedOperationRecordScope,
+        keys: &[IndexedOperationRecordKey],
+    ) -> WorkspaceResult<OperationRecordReply<Vec<Option<Vec<u8>>>>> {
+        let mut value = Vec::with_capacity(keys.len());
+        let mut copies = OperationRecordCopies::default();
+        for key in keys {
+            let reply = self.operation_record_get(scope, *key)?;
+            copies.bytes = copies.bytes.saturating_add(reply.copies.bytes);
+            copies.allocations = copies.allocations.saturating_add(reply.copies.allocations);
+            copies.retained_bytes = copies
+                .retained_bytes
+                .saturating_add(reply.copies.retained_bytes);
+            value.push(reply.value);
+        }
+        Ok(OperationRecordReply { value, copies })
+    }
     fn operation_record_apply(
         &self,
         scope: IndexedOperationRecordScope,
@@ -101,6 +122,9 @@ pub trait OverlayOperationRecords {
     ) -> WorkspaceResult<OperationRecordReply<Vec<[u8; 32]>>>;
     /// Non-destructive complete-key cursor, returning at most 64 sorted keys.
     /// None precedes all identities; Some excludes keys <= that full identity.
+    /// A window of fewer than 64 keys holds every remaining key: a provider
+    /// never returns a short window while later keys exist, and a pass over a
+    /// sealed kind ends on one without asking again.
     /// Older providers refuse this separate capability explicitly.
     fn operation_record_keys_after(
         &self,
@@ -131,6 +155,15 @@ impl OverlayOperationRecords for Overlay {
         key: IndexedOperationRecordKey,
     ) -> WorkspaceResult<OperationRecordReply<Option<Vec<u8>>>> {
         self.indexed_operation_record_get(scope, key)
+            .map(OperationRecordReply::owned)
+            .map_err(Into::into)
+    }
+    fn operation_record_get_many(
+        &self,
+        scope: IndexedOperationRecordScope,
+        keys: &[IndexedOperationRecordKey],
+    ) -> WorkspaceResult<OperationRecordReply<Vec<Option<Vec<u8>>>>> {
+        self.indexed_operation_record_get_many(scope, keys)
             .map(OperationRecordReply::owned)
             .map_err(Into::into)
     }

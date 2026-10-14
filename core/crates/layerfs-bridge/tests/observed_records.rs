@@ -174,7 +174,7 @@ fn cleanup_has_exact_additive_tags_and_checked_state() {
             id: 1,
             reply: Reply::Cleanup { token, state },
         };
-        let mut expected = prefix(b"LFSA\x01", 16);
+        let mut expected = prefix(b"LFSA\x02", 16);
         expected.extend_from_slice(&[3; 32]);
         expected.extend_from_slice(&7i64.to_be_bytes());
         expected.push(tag);

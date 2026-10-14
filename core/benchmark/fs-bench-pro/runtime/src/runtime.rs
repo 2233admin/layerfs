@@ -8,7 +8,7 @@ use layerfs_sandbox::{
     backend::docker::{Docker, ExecRequest},
     CommandIdentity,
 };
-use layerfs_sdk::{ManagedSandbox, SandboxApi, SandboxCreate};
+use layerfs_sdk::{ManagedSandbox, MountedWorkspace, SandboxApi, SandboxCreate, WorkspaceApi};
 use std::{
     fs,
     net::{SocketAddr, TcpStream},
@@ -19,10 +19,10 @@ use std::{
 
 pub fn start(
     args: &Args,
-    manifest: Option<StoreManifest>,
+    project: &layerfs_sdk::SealedProject,
     events: &mut Events,
 ) -> Result<ManagedSandbox> {
-    Ok(start_with_keys(args, manifest, events)?.0)
+    Ok(start_inner(args, None, Some(project), events)?.0)
 }
 
 /// Private authentication material retained only for original extra channels.
@@ -35,6 +35,14 @@ pub struct RuntimeKeys {
 pub fn start_with_keys(
     args: &Args,
     manifest: Option<StoreManifest>,
+    events: &mut Events,
+) -> Result<(ManagedSandbox, RuntimeKeys)> {
+    start_inner(args, manifest, None, events)
+}
+fn start_inner(
+    args: &Args,
+    manifest: Option<StoreManifest>,
+    project: Option<&layerfs_sdk::SealedProject>,
     events: &mut Events,
 ) -> Result<(ManagedSandbox, RuntimeKeys)> {
     let controller = native::generate_keypair()?;
@@ -55,11 +63,7 @@ pub fn start_with_keys(
             handshake_ms: 2000,
             read_handles: 2,
             cache_bytes: 8 * 1024 * 1024,
-            owner_bytes: 8 * 1024 * 1024,
-            lifecycle_reserve: 64 * 1024,
             namespaces: 16,
-            ordinary_jobs: 16,
-            lifecycle_jobs: 2,
             pager_kib: 1024,
             serial_low_water: 256,
         },
@@ -67,20 +71,23 @@ pub fn start_with_keys(
     };
     events.value("sandbox_create_attempt", &format!("volume={} image={} executable={} acknowledged_container=UNAVAILABLE until original create returns", args.volume,args.image,args.executable.display()))?;
     let begun = Instant::now();
-    let owner = SandboxApi::new(Docker::new(&args.socket, Duration::from_secs(3))?)
-        .create(SandboxCreate {
-            deployment: layerfs_sandbox::backend::docker::SandboxRequest {
-                image: args.image.clone(),
-                store_volume: args.volume.clone(),
-                port: 30421,
-            },
-            setup,
-            executable: args.executable.clone(),
-            controller_private: controller.private,
-            daemon_peer: daemon.public,
-            startup_wait: Duration::from_secs(3),
-        })
-        .map_err(|error| format!("sandbox original failure phase={:?} cause={:?} acknowledged_container={}; private request omitted",error.phase,error.cause,error.sandbox.as_ref().map(|runtime|runtime.identity().to_string()).unwrap_or_else(||"UNAVAILABLE".into())))?;
+    let api = SandboxApi::new(Docker::new(&args.socket, Duration::from_secs(3))?);
+    let request = SandboxCreate {
+        deployment: layerfs_sandbox::backend::docker::SandboxRequest {
+            image: args.image.clone(),
+            store_volume: args.volume.clone(),
+            port: 30421,
+        },
+        setup,
+        executable: args.executable.clone(),
+        controller_private: controller.private,
+        daemon_peer: daemon.public,
+        startup_wait: Duration::from_secs(3),
+    };
+    let owner = match project {
+        Some(project) => api.create(request, project),
+        None => layerfs_sdk::internal::start(&api, request),
+    }.map_err(|error| format!("sandbox original failure phase={:?} cause={:?} acknowledged_container={}; private request omitted",error.phase,error.cause,error.sandbox.as_ref().map(|runtime|runtime.identity().to_string()).unwrap_or_else(||"UNAVAILABLE".into())))?;
     let elapsed = events.span(begun);
     let instance = crate::hex(&owner.startup.instance);
     events.fields(
@@ -110,7 +117,7 @@ pub fn start_with_keys(
 pub fn extra_control(
     owner: &mut ManagedSandbox,
     keys: &mut RuntimeKeys,
-) -> Result<layerfs_sdk::control::Control> {
+) -> Result<layerfs_sdk::internal::Control> {
     let endpoint = match keys.endpoint {
         Some(value) => value,
         None => {
@@ -128,10 +135,10 @@ pub fn extra_control(
     stream.set_write_timeout(Some(wait))?;
     let connection = native::initiate(stream, &keys.controller_private, keys.daemon_peer)?;
     connection.clear_io_waits()?;
-    let mut control = layerfs_sdk::control::Control::new(connection);
-    std::mem::swap(&mut owner.control, &mut control);
-    let hello = owner.status(true);
-    std::mem::swap(&mut owner.control, &mut control);
+    let mut control = layerfs_sdk::internal::Control::new(connection);
+    std::mem::swap(layerfs_sdk::internal::control(owner), &mut control);
+    let hello = layerfs_sdk::internal::sandbox_status(owner, true);
+    std::mem::swap(layerfs_sdk::internal::control(owner), &mut control);
     let status = hello.map_err(|failure| format!("extra channel original Hello {failure:?}"))?;
     if status.instance != owner.startup.instance || status.phase != owner.startup.phase {
         return Err("extra channel same daemon incarnation/phase required".into());
@@ -139,17 +146,25 @@ pub fn extra_control(
     Ok(control)
 }
 
-/// An external ordinary runtime Bash: no WorkspaceApi.exec and no registration.
+pub enum Directory<'a> {
+    Mounted(&'a MountedWorkspace),
+    Native(&'a str, CommandIdentity),
+}
+/// One ordinary runtime Bash; the mounted convenience adds no daemon registration.
 /// Streams go directly to files, with no output-sized resident collection.
 pub fn command(
     owner: &ManagedSandbox,
     body: &str,
-    directory: &str,
+    location: Directory<'_>,
     label: &str,
     observer: bool,
     environment: &[String],
     events: &mut Events,
 ) -> Result<()> {
+    let directory = match &location {
+        Directory::Mounted(workspace) => workspace.ready.directory.as_str(),
+        Directory::Native(directory, _) => directory,
+    };
     command_created(
         &owner.runtime.identity().to_string(),
         body,
@@ -167,7 +182,19 @@ pub fn command(
                     stdin: false,
                 })
             } else {
-                owner.exec(arguments, environment.to_vec(), directory.into(), false)
+                match location {
+                    Directory::Mounted(workspace) => {
+                        WorkspaceApi::exec(owner, workspace, arguments, environment.to_vec(), false)
+                    }
+                    Directory::Native(directory, identity) => layerfs_sdk::internal::exec(
+                        &owner.runtime,
+                        identity,
+                        arguments,
+                        environment.to_vec(),
+                        directory.into(),
+                        false,
+                    ),
+                }
             }
             .map_err(|error| format!("external exec create {error:?}").into())
         },
@@ -196,15 +223,15 @@ pub fn concurrent_command(
         false,
         environment,
         |arguments| {
-            sandbox
-                .create_exec(ExecRequest {
-                    identity,
-                    arguments,
-                    environment: environment.to_vec(),
-                    directory: directory.into(),
-                    stdin: false,
-                })
-                .map_err(|error| format!("external parallel exec create {error:?}").into())
+            layerfs_sdk::internal::exec(
+                sandbox,
+                identity,
+                arguments,
+                environment.to_vec(),
+                directory.into(),
+                false,
+            )
+            .map_err(|error| format!("external parallel exec create {error:?}").into())
         },
         Some(work),
         events,
@@ -300,7 +327,7 @@ pub fn body(path: &Path) -> Result<String> {
 pub fn snapshot(owner: &ManagedSandbox, socket: &str, events: &mut Events) -> Result<()> {
     // Observer-only root identity reads the daemon's protected files. It
     // acquires no filesystem owner and makes no mutation or cache hint.
-    let body = "set -e; printf 'DAEMON_STATUS\\n'; cat /proc/1/status; printf 'BACKING_BYTES\\n'; for base in /layerfs-store/global/store.sqlite /layerfs-local/overlay/overlay.sqlite; do for suffix in '' -wal -shm -journal; do p=$base$suffix; if test -e \"$p\"; then stat -c '%n %s %b %B' \"$p\"; else printf '%s ABSENT\\n' \"$p\"; fi; done; done; printf 'OWN_CONTAINER_CGROUP\\n'; for p in /sys/fs/cgroup/memory.stat /sys/fs/cgroup/memory.current /sys/fs/cgroup/memory.peak; do if test -r \"$p\"; then printf '%s\\n' \"$p\"; cat \"$p\"; else printf '%s UNAVAILABLE\\n' \"$p\"; fi; done; printf 'DAEMON_THREADS\\n'; for t in /proc/1/task/*; do printf 'THREAD\\t%s\\t%s\\t%s\\t%s\\t%s\\n' \"${t##*/}\" \"$(cat \"$t/comm\" 2>/dev/null)\" \"$(cat \"$t/schedstat\" 2>/dev/null)\" \"$(awk '/ctxt_switches/{printf \"%s \", $2}' \"$t/status\" 2>/dev/null)\" \"$(sed 's/.*) //' \"$t/stat\" 2>/dev/null | awk '{print $8,$12,$13,$37}')\"; done; printf 'CGROUP_CPU\\n'; cat /sys/fs/cgroup/cpu.stat 2>/dev/null || true; printf 'KERNEL\\t%s\\t%s\\n' \"$(uname -r)\" \"$(nproc)\"";
+    let body = "set -e; printf 'DAEMON_STATUS\\n'; cat /proc/1/status; printf 'BACKING_BYTES\\n'; for base in /layerfs-store/global/store.sqlite /layerfs-local/overlay/*.sqlite; do for suffix in '' -wal -shm -journal; do p=$base$suffix; if test -e \"$p\"; then stat -c '%n %s %b %B' \"$p\"; else printf '%s ABSENT\\n' \"$p\"; fi; done; done; printf 'OWN_CONTAINER_CGROUP\\n'; for p in /sys/fs/cgroup/memory.stat /sys/fs/cgroup/memory.current /sys/fs/cgroup/memory.peak; do if test -r \"$p\"; then printf '%s\\n' \"$p\"; cat \"$p\"; else printf '%s UNAVAILABLE\\n' \"$p\"; fi; done; printf 'DAEMON_THREADS\\n'; for t in /proc/1/task/*; do printf 'THREAD\\t%s\\t%s\\t%s\\t%s\\t%s\\n' \"${t##*/}\" \"$(cat \"$t/comm\" 2>/dev/null)\" \"$(cat \"$t/schedstat\" 2>/dev/null)\" \"$(awk '/ctxt_switches/{printf \"%s \", $2}' \"$t/status\" 2>/dev/null)\" \"$(sed 's/.*) //' \"$t/stat\" 2>/dev/null | awk '{print $8,$12,$13,$37}')\"; done; printf 'CGROUP_CPU\\n'; cat /sys/fs/cgroup/cpu.stat 2>/dev/null || true; printf 'KERNEL\\t%s\\t%s\\n' \"$(uname -r)\" \"$(nproc)\"";
     let (stdout_path, stdout) = events.output("external_snapshot", "stdout")?;
     let (stderr_path, stderr) = events.output("external_snapshot", "stderr")?;
     events.value("external_snapshot_attempt", &format!("container={} executor=docker-cli user=0:0 read_only=true; original SDK root-command refusal is preserved",owner.runtime.identity()))?;
@@ -346,4 +373,11 @@ pub fn snapshot(owner: &ManagedSandbox, socket: &str, events: &mut Events) -> Re
         return Err(format!("original external snapshot failed {status:?}").into());
     }
     Ok(())
+}
+
+/// Explicit original stop/delete; the returned error retains the typed SDK custody.
+pub fn close(owner: ManagedSandbox, socket: &str) -> Result<()> {
+    SandboxApi::new(Docker::new(socket, Duration::from_secs(3))?)
+        .close(owner)
+        .map_err(|error| error as Box<dyn std::error::Error>)
 }

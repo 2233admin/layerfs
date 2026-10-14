@@ -15,6 +15,7 @@ pub struct BoundWorkspace {
     pub(super) identity: WorkspaceId,
     pub(super) workspace: Arc<Workspace>,
     pub(super) committing: AtomicBool,
+    pub(super) producer: super::producer::Producer,
 }
 pub struct StoreOperation {
     workspace: Workspace,

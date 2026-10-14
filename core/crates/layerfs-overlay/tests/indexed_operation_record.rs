@@ -58,7 +58,6 @@ fn complete_keys_and_full_file_scopes_never_alias_other_custody() {
         file_scope: u64::MAX,
         ..first
     };
-    let other_namespace = scope(&db, 203, 1, 0);
     let low = key(u32::MAX, 1);
     let high = IndexedOperationRecordKey {
         key: [0xff; 32],
@@ -69,7 +68,6 @@ fn complete_keys_and_full_file_scopes_never_alias_other_custody() {
     apply(&db, first, &[put(low, vec![]), put(high, vec![11])]);
     apply(&db, second, &[put(low, vec![12])]);
     apply(&db, other_file, &[put(low, vec![13])]);
-    apply(&db, other_namespace, &[put(low, vec![14])]);
     assert!(db.indexed_operation_record_contains(first, low).unwrap());
     assert_eq!(
         db.indexed_operation_record_get(first, low).unwrap(),
@@ -79,7 +77,7 @@ fn complete_keys_and_full_file_scopes_never_alias_other_custody() {
         db.indexed_operation_record_get(first, high).unwrap(),
         Some(vec![11])
     );
-    for (scope, expected) in [(second, 12), (other_file, 13), (other_namespace, 14)] {
+    for (scope, expected) in [(second, 12), (other_file, 13)] {
         assert_eq!(
             db.indexed_operation_record_get(scope, low).unwrap(),
             Some(vec![expected])
@@ -101,7 +99,7 @@ fn complete_keys_and_full_file_scopes_never_alias_other_custody() {
     let counts = db.resources(None).unwrap().counts;
     assert_eq!(
         (counts.operation_record_rows, counts.operation_record_bytes),
-        (5, 4)
+        (4, 3)
     );
 }
 
@@ -165,7 +163,7 @@ fn optional_exclusion_keeps_zero_identity_and_finds_new_lower_keys() {
         .unwrap();
     assert!(plans
         .iter()
-        .any(|p| p.starts_with("all-keys: SEARCH indexed_operation_record USING PRIMARY KEY")));
+        .any(|p| p.starts_with("all-keys: SEARCH commit_record USING PRIMARY KEY")));
     assert!(plans.iter().any(|p| p.starts_with("all-keys-vm:")));
     println!("INDEXED_ALL_KEYS original_work={operation_record:?} plans={plans:?}");
     db.release_operation(scope.owner).unwrap();
@@ -326,24 +324,12 @@ fn state_exceeding_eight_mib_reclaims_in_windows_without_reusing_a_released_owne
     let temp = Temp::new();
     let db = temp.db();
     let first = scope(&db, 209, 1, 1);
-    db.put_owned_operation_record(
-        first.owner,
-        &OperationRecord {
-            kind: 1,
-            key: 1,
-            value: vec![8; OPERATION_RECORD_BYTES],
-        },
-    )
-    .unwrap();
     for number in 0..144 {
         apply(&db, first, &[put(key(1, number), vec![9; 60_000])]);
     }
     let before = db.resources(None).unwrap().counts;
-    assert_eq!(before.operation_record_rows, 145);
-    assert_eq!(
-        before.operation_record_bytes,
-        144 * 60_000 + OPERATION_RECORD_BYTES as u64
-    );
+    assert_eq!(before.operation_record_rows, 144);
+    assert_eq!(before.operation_record_bytes, 144 * 60_000);
     assert!(before.operation_record_bytes > 8 * 1024 * 1024);
     db.release_operation(first.owner).unwrap();
     let second = IndexedOperationRecordScope {
@@ -381,21 +367,17 @@ fn state_exceeding_eight_mib_reclaims_in_windows_without_reusing_a_released_owne
     ));
     db.release_operation(second.owner).unwrap();
     maintain(&db, 50);
-    for _ in 0..100 {
-        if db.reclaim_closed(0).unwrap().unwrap().done {
-            let counts = db.resources(None).unwrap().counts;
-            assert_eq!(
-                (
-                    counts.namespaces,
-                    counts.operation_record_rows,
-                    counts.operation_record_bytes
-                ),
-                (0, 0, 0)
-            );
-            return;
-        }
-    }
-    panic!("bounded terminal operation_record reclamation did not finish");
+    assert_eq!(
+        db.cleanup_state(second.owner.route()).unwrap(),
+        CleanupState::Queued
+    );
+    let counts = db.resources(None).unwrap().counts;
+    assert_eq!(
+        (counts.operation_record_rows, counts.operation_record_bytes),
+        (0, 0)
+    );
+    assert_eq!(counts.namespaces, 1);
+    db.close_database().unwrap();
 }
 
 #[test]
@@ -420,17 +402,10 @@ fn exact_plans_correlate_with_bounded_executed_point_and_window_work() {
         let plans = db
             .explain_indexed_operation_record(scope, key(1, 7), key(2, 0).key)
             .unwrap();
-        for label in [
-            "contains",
-            "get",
-            "delete",
-            "keys",
-            "operation-cleanup",
-            "namespace-cleanup",
-        ] {
+        for label in ["contains", "get", "delete", "keys", "operation-cleanup"] {
             assert!(
                 plans.iter().any(|p| p.starts_with(&format!("{label}:"))
-                    && p.contains("SEARCH indexed_operation_record USING PRIMARY KEY")),
+                    && p.contains("SEARCH commit_record USING PRIMARY KEY")),
                 "{plans:?}"
             );
         }

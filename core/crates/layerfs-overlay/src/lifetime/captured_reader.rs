@@ -24,9 +24,8 @@ impl Overlay {
             let owner = self.mint_owner()?;
             self.execute(
                 StatementKind::Lease,
-                "INSERT INTO captured_reader VALUES(?1,?2,?3,?4,?5,?6,?7)",
+                "INSERT INTO commit_reader VALUES(?1,?2,?3,?4,?5,?6)",
                 &[
-                    &capture.route.ns,
                     &request,
                     &integer(owner)?,
                     &capture.generation.0,
@@ -38,8 +37,8 @@ impl Overlay {
             )?;
             self.execute(
                 StatementKind::Lease,
-                "INSERT INTO lease VALUES(?1,6,?2,?3)",
-                &[&capture.route.ns, &integer(owner)?, &capture.generation.0],
+                "INSERT INTO commit_pin VALUES(6,?1,?2)",
+                &[&integer(owner)?, &capture.generation.0],
                 24,
             )?;
             Ok(CapturedReader {
@@ -56,8 +55,8 @@ impl Overlay {
         request: u64,
     ) -> OverlayResult<Option<CapturedReader>> {
         self.state(route)?;
-        self.query(StatementKind::Lease,"SELECT owner,gen,revision,base_root,installed FROM captured_reader WHERE ns=?1 AND request=?2",
-            &[&route.ns,&integer(request)?],16,|r| {
+        self.query(StatementKind::Lease,"SELECT holder,generation,revision,base_root,installed FROM commit_reader WHERE request=?1",
+            &[&integer(request)?],16,|r| {
                 let root:Vec<u8>=r.get(3)?;
                 Ok(CapturedReader {owner:unsigned(r,0)?,installed:r.get(4)?,capture:Capture {
                     route,generation:crate::Generation(r.get(1)?),revision:r.get(2)?,
@@ -66,9 +65,13 @@ impl Overlay {
     }
     pub(crate) fn check_captured_reader(&self, reader: CapturedReader) -> OverlayResult<()> {
         self.state(reader.capture.route)?;
+        if self.reader_seen.get() == Some(reader) {
+            return Ok(());
+        }
         let c = reader.capture;
-        if self.query(StatementKind::Lease,"SELECT 1 FROM captured_reader WHERE ns=?1 AND owner=?2 AND gen=?3 AND revision=?4 AND base_root=?5 AND installed=?6",
-            &[&c.route.ns,&integer(reader.owner)?,&c.generation.0,&c.revision,&c.base_root.as_slice(),&reader.installed],72,|_|Ok(()))?.is_empty() {return Err(OverlayError::Stale)}
+        if self.query(StatementKind::Lease,"SELECT 1 FROM commit_reader WHERE holder=?1 AND generation=?2 AND revision=?3 AND base_root=?4 AND installed=?5",
+            &[&integer(reader.owner)?,&c.generation.0,&c.revision,&c.base_root.as_slice(),&reader.installed],72,|_|Ok(()))?.is_empty() {return Err(OverlayError::Stale)}
+        self.reader_seen.set(Some(reader));
         Ok(())
     }
     /// Fixed sealed metadata pages remain valid after install/definite failure.
@@ -81,11 +84,7 @@ impl Overlay {
         self.query(
             StatementKind::Capture,
             crate::sql::INODE_CAPTURE,
-            &[
-                &reader.capture.route.ns,
-                &reader.capture.generation.0,
-                &integer(after)?,
-            ],
+            &[&reader.capture.generation.0, &integer(after)?],
             24,
             crate::inode::decode,
         )
@@ -105,7 +104,6 @@ impl Overlay {
             StatementKind::Capture,
             crate::sql::INODE_LOOKUP,
             &[
-                &reader.capture.route.ns,
                 &integer(serial)?,
                 &reader.capture.generation.0,
                 &reader.installed,
@@ -128,12 +126,7 @@ impl Overlay {
         self.query(
             StatementKind::Capture,
             crate::sql::DIRECTORY_ENTRY_CAPTURE,
-            &[
-                &reader.capture.route.ns,
-                &reader.capture.generation.0,
-                &integer(parent)?,
-                &name,
-            ],
+            &[&reader.capture.generation.0, &integer(parent)?, &name],
             24 + name.len() as u64,
             |r| {
                 Ok(crate::DirectoryEntry {
@@ -155,15 +148,14 @@ impl Overlay {
             let c = reader.capture;
             self.execute(
                 StatementKind::Lease,
-                "DELETE FROM captured_reader WHERE ns=?1 AND owner=?2",
-                &[&c.route.ns, &integer(reader.owner)?],
+                "DELETE FROM commit_reader WHERE holder=?1",
+                &[&integer(reader.owner)?],
                 16,
             )?;
             self.execute(
                 StatementKind::Lease,
-                "DELETE FROM lease WHERE ns=?1 AND kind=?2 AND owner=?3 AND resource=?4",
+                "DELETE FROM commit_pin WHERE kind=?1 AND holder=?2 AND resource=?3",
                 &[
-                    &c.route.ns,
                     &(LeaseKind::CapturedReader as i64),
                     &integer(reader.owner)?,
                     &c.generation.0,
@@ -171,7 +163,7 @@ impl Overlay {
                 32,
             )?;
             self.wake_generation(c.route.ns, c.generation.0 as u64)?;
-            self.queue_closed(c.route)
+            Ok(())
         })
     }
     /// One immutable captured byte window, independent of current installed floor.
@@ -184,7 +176,6 @@ impl Overlay {
     ) -> OverlayResult<Option<crate::LocalRead>> {
         self.check_captured_reader(reader)?;
         let mut plan = self.read_layers(
-            reader.capture.route.ns,
             serial,
             reader.capture.generation.0,
             reader.installed,

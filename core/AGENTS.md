@@ -21,11 +21,18 @@ product mental model or campaign-specific benchmark procedures.
   lookup/stat/paged name merge, prepared actor install and atomic ordinary
   namespace operations, bounded writes/truncate/regrow and composed payload
   reads. Independent file/captured/operation custody and bounded live reclamation
-  are implemented through S6, including physical reservation/headroom and
-  indexed automatic reclamation; native/runtime/integrated exits remain
+  are implemented through S6, including indexed automatic reclamation (its
+  physical reservation and headroom were removed by #321: no space is reserved
+  ahead of use, and a full device rolls the write back as no space);
+  native/runtime/integrated exits remain
   unfinished. See [S6 audit](docs/issues/307/S6-EXIT-AUDIT.md). Its relocated
   predecessor `layerfs-workspace-legacy` was removed by R7-retire.
-  Daemon exposes the fair SQL owner and a direct global Store adapter with a
+  Since #321 the daemon holds one overlay file and connection per mounted
+  Workspace, each behind its own lock, with the calling thread running each
+  short job; the fair SQL owner thread, its queue, credits and shared memory
+  budget are removed. See the [terminology guide](docs/architecture/64-overlay-terminology.md)
+  and the [#321 record](docs/issues/321/CHECKLIST.md).
+  Daemon also exposes a direct global Store adapter with a
   fixed read set with fair admission/quarantine and read-only bind snapshots,
   one immutable cache shared across Workspaces, bounded root
   binding and operation-owned exact failures. Concrete opening stays outside
@@ -106,7 +113,7 @@ product mental model or campaign-specific benchmark procedures.
   one publishing Overlay job, with no notification and no writeback cache; see
   [native mutation and kernel coherence](docs/architecture/77-native-mutation-coherence.md).
   A control Commit runs the captured namespace producer through the unchanged
-  driver, and waits for owner admission before each of its jobs; the mounted
+  driver, and takes the Workspace's overlay lock for each of its jobs; the mounted
   proofs and their limits are in the
   [R5 record](docs/issues/307/R5-COMPLETION-20261009.md). Forced unmount of one
   Workspace is implemented as `ForceUnmount`: a before-effect guard, one abort
@@ -149,7 +156,10 @@ product mental model or campaign-specific benchmark procedures.
 
 Overlay schema19 uses `directory_entry` and `operation_record` terminology,
 including owned/indexed variants, throughout SQL and the active public ports.
-Workspaces still share physical tables partitioned by namespace. The naming
+Through schema 33 Workspaces shared physical tables partitioned by namespace;
+since #321 (schema 34) every mounted Workspace has its own file with the same
+tables, copied from a closed empty template at mount and deleted at terminal
+unmount. The naming
 change authorizes no physical table redesign; generic temporary buffers and
 historical receipts retain their distinct terms. See the
 [terminology guide](docs/architecture/64-overlay-terminology.md).
@@ -198,8 +208,13 @@ executors, interactive shells and ordinary Sandbox execution.
 Sandbox setup or the external executor establishes command identity, mount
 visibility and protection of Store, Overlay and daemon credentials. Ordinary
 runtime execution owns standard I/O, exit status and caller-requested cancellation.
-SDK public organization uses ProjectApi, WorkspaceApi and SandboxApi. Optional
-WorkspaceApi.exec selects the mounted directory and delegates to Sandbox;
+SDK public organization is the eleven operations documented in
+[the implemented SDK surface](../sdk.md), with operation files under
+[layerfs-api/sdk/src](crates/layerfs-api/sdk/src/). Project offers init/fork/
+branches/commits; Sandbox offers create/close; Workspace offers mount/exec/
+commit/status/unmount. Shared control/recovery/diagnostic plumbing lives in
+base/ and the hidden internal module. Optional WorkspaceApi.exec selects the
+mounted directory and delegates the existing Sandbox launcher;
 the daemon has no exec/supervisor, launcher mode, per-Exec cgroups, command
 registration or custom Exec stream/status/cancellation protocol.
 
@@ -390,13 +405,24 @@ fixtures, examples and tools do not contribute to production LOC.
 - Target (owner direction 2026-10-07): the same Store opened directly by every
   Linux daemon from a shared volume, several writer processes, no host in the
   data path, using only Disposable/WAL/OFF. A contended
-  write is one exact before-effect refusal, never a wait or retry. Follow the
+  write still has one SQL attempt and exact failure/unknown custody. Owner
+  clarification2026-10-12 requires one ongoing Commit per Workspace and allows
+  concurrent Commits on different Workspaces. Bounded before-effect admission
+  now queues SQL work within a Session and coordinates short Linux writer jobs
+  on the existing local Store parent-directory inode; multiple Store files in
+  one directory share this coarse short-transaction lane. Do not open/close a
+  separate main/WAL/SHM descriptor for advisory ownership: closing a main-file
+  descriptor can cancel SQLite's own process POSIX locks. This admission does
+  not gate whole Saves or Commits or replay
+  a failed SQL attempt. macOS has Session admission only; separate macOS writers
+  and uncoordinated raw SQLite writers retain exact Busy refusal. Follow the
   [integration contract](docs/issues/303/06-cluster-one-integration.md) and its
   [deepest-file plan](docs/issues/307/SERVERLESS-STORE-PLAN-20261007.md); do not
   extend the host-mediated SDK runtime, Bridge data codec or daemon upstream.
 - The daemon overlay is a separate owner/profile from global persistence:
-  one local database per daemon, Workspace-prefixed state. Its MEMORY/OFF
-  single-owner proposal is not an implemented distributed Store or a universal
+  one local database file per mounted Workspace, opened MEMORY/OFF/EXCLUSIVE by
+  one connection behind that Workspace's lock. Workspaces share no overlay
+  connection, page cache or memory budget. It is not an implemented distributed Store or a universal
   global-Store rule; reader-pool alternatives need their own proofs.
 - WAL/sync are permitted for a declared global Store profile. Do not add
   fsync/fdatasync/sync_data/sync_all on disposable Workspace backing. Memory

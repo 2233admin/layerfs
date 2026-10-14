@@ -173,7 +173,7 @@ fn a_directory_reports_two_links_plus_its_child_directories() {
 
     quiet(&h, ready.token);
     let work = h.status(ready.token).native.unwrap().work.unwrap();
-    assert_eq!((work.retained, work.terminal, work.unadmitted), (0, 0, 0));
+    assert_eq!((work.retained, work.terminal), (0, 0));
     println!("MOUNTED_LINKS directories={directories} work={work:?}");
     unmounted(&h, &ready);
     h.stop();

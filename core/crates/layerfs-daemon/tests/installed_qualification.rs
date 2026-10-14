@@ -12,29 +12,31 @@ use layerfs_content::{ContentError, ObjectId};
 use layerfs_daemon::{
     bootstrap::open_store,
     store::{BindRequest, BoundWorkspace, Store},
-    Command, Completion, Owner, OwnerClient, OwnerConfig, Response,
+    JobReceipt, Owner, OwnerClient, OwnerConfig, Response,
 };
 use layerfs_history::{BranchId, WorkspaceId};
 use layerfs_overlay::{IndexedOperationRecordScope, ProfileConfig, Route};
 use layerfs_workspace::IndexedEditRecords;
-use std::{
-    sync::Arc,
-    time::{Duration, Instant},
-};
+use std::sync::Arc;
 
-fn job(client: &OwnerClient, route: Route, command: Command) -> Completion {
-    let pending = client.try_submit(Some(route), command).unwrap();
-    let deadline = Instant::now() + Duration::from_secs(5);
-    loop {
-        if let Some(done) = pending.try_complete().unwrap() {
-            return done;
-        }
-        assert!(Instant::now() < deadline, "bounded original result");
-        std::thread::yield_now();
-    }
+fn job(
+    client: &OwnerClient,
+    route: Route,
+    command: impl FnOnce(
+        &layerfs_daemon::OwnerClient,
+        Option<layerfs_overlay::Route>,
+    ) -> Result<layerfs_daemon::JobReceipt, layerfs_daemon::OwnerError>,
+) -> JobReceipt {
+    command(client, Some(route)).unwrap_or_else(|error| panic!("{error:?}"))
 }
 fn bind(store: &Arc<Store>, owner: &Owner, branch: BranchId, tag: u8) -> BoundWorkspace {
-    let before = owner.client().diagnostics().unwrap().admitted;
+    let before = owner
+        .client()
+        .diagnostics()
+        .unwrap()
+        .jobs
+        .iter()
+        .sum::<u64>();
     let bound = store
         .bind(
             owner.client(),
@@ -45,7 +47,14 @@ fn bind(store: &Arc<Store>, owner: &Owner, branch: BranchId, tag: u8) -> BoundWo
         )
         .unwrap();
     assert_eq!(
-        owner.client().diagnostics().unwrap().admitted - before,
+        owner
+            .client()
+            .diagnostics()
+            .unwrap()
+            .jobs
+            .iter()
+            .sum::<u64>()
+            - before,
         1,
         "bind has one Open, no operation acquisition or qualification jobs"
     );
@@ -64,7 +73,9 @@ fn qualify(workspace: &BoundWorkspace, expected: (u64, u64, u64), exact_flat: bo
     let done = job(
         owner,
         workspace.route(),
-        Command::AcquireOperation { request: 1 },
+        |job_client: &layerfs_daemon::OwnerClient, job_route| {
+            job_client.acquire_operation(job_route, 1)
+        },
     );
     let lease = match done.result() {
         Ok(Response::Operation(Some(lease))) => *lease,
@@ -107,8 +118,10 @@ fn qualify(workspace: &BoundWorkspace, expected: (u64, u64, u64), exact_flat: bo
         assert_eq!(work.record_changes, 1 + expected.0 + expected.2);
     }
     let after = owner.diagnostics().unwrap();
-    assert_eq!(after.admitted - before.admitted, backing.calls);
-    assert_eq!(after.outstanding, before.outstanding);
+    assert_eq!(
+        after.jobs.iter().sum::<u64>() - before.jobs.iter().sum::<u64>(),
+        backing.calls
+    );
     assert!(records.failure().is_none());
     assert!(operation.ports().failure().unwrap().is_none());
     println!("INSTALLED_QUALIFY inodes={} directories={} bindings={} inode_pages={} directory_pages={} record_reads={} record_batches={} record_changes={} peak_batch={} owner_jobs={} conversion_peak={} reply_peak={} mount_qualification_jobs=0",
@@ -117,16 +130,24 @@ fn qualify(workspace: &BoundWorkspace, expected: (u64, u64, u64), exact_flat: bo
         work.peak_batch_changes,backing.calls,backing.peak_conversion_heap_bytes,backing.peak_reply_capacity_bytes);
     let custody = records.into_custody();
     assert_eq!(custody.scope, scope);
-    assert!(
-        job(owner, workspace.route(), Command::ReleaseOperation(lease))
-            .result()
-            .is_ok()
-    );
+    assert!(job(
+        owner,
+        workspace.route(),
+        |job_client: &layerfs_daemon::OwnerClient, job_route| job_client
+            .release_operation(job_route, lease)
+    )
+    .result()
+    .is_ok());
     drop(custody);
 }
 fn close(owner: &Owner, workspace: &BoundWorkspace) {
     assert!(matches!(
-        job(&owner.client(), workspace.route(), Command::Close).result(),
+        job(
+            &owner.client(),
+            workspace.route(),
+            |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.close(job_route)
+        )
+        .result(),
         Ok(Response::Done)
     ));
 }

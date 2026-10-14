@@ -110,7 +110,7 @@ class CappedSplices(unittest.TestCase):
             self.assertEqual(row["budget"]["operation_watchdog_ms"], 120000)
             self.assertEqual(row["budget"]["verification_hard_watchdog_ms"], 59000)
             self.assertEqual(row["budget"]["historical_edit_commit_end_watchdog_ms"], 2000)
-            self.assertEqual(row["budget"]["edit_commit_end_watchdog_ms"], 2000)
+            self.assertEqual(row["budget"]["commit_watchdog_ms"], 2000)
 
 
 if __name__ == "__main__":

@@ -8,8 +8,213 @@ use layerfs_content::filesystem::{
 use layerfs_content::object::inode_leaf::InodeKind;
 use layerfs_content::{AuthenticatedObjects, ContentError, ContentResult, ObjectId};
 use layerfs_overlay::{Overlay, ProfileConfig};
-use layerfs_workspace::{BaseView, CanonicalClient, Workspace};
-use std::sync::{atomic::Ordering, Arc, Mutex};
+use layerfs_workspace::{
+    BaseView, CanonicalCache, CanonicalClient, FileLengths, NativeReadDecision,
+    NativeReadOperation, Need, VisitFacts, Workspace,
+};
+use std::sync::{
+    atomic::{AtomicU64, Ordering},
+    Arc, Mutex,
+};
+
+struct CountingLengths {
+    store: Store,
+    calls: AtomicU64,
+}
+impl FileLengths for CountingLengths {
+    fn file_length(&self, id: ObjectId) -> layerfs_workspace::WorkspaceResult<u64> {
+        self.calls.fetch_add(1, Ordering::Relaxed);
+        self.store.file_length(id)
+    }
+}
+
+#[test]
+fn named_inode_length_errors_preserve_absence_and_provider_failure() {
+    struct ErrorLengths(ContentError);
+    impl FileLengths for ErrorLengths {
+        fn file_length(&self, _: ObjectId) -> layerfs_workspace::WorkspaceResult<u64> {
+            Err(self.0.clone().into())
+        }
+    }
+    for error in [ContentError::PathNotFound, ContentError::MissingObject] {
+        let f = common::fixture_with(Vec::new());
+        let client = Arc::new(CanonicalClient::with_lengths(
+            Arc::new(f.store.clone()),
+            Arc::new(ErrorLengths(error.clone())),
+            0,
+        ));
+        let base = BaseView::open(client, f.root, f.scope).unwrap();
+        let result = VisitFacts::default().supply(&base, &[Need::Name(1, name("file"))], None);
+        if error == ContentError::PathNotFound {
+            assert!(
+                result.is_ok(),
+                "retain the existing absent-inode mapping: {result:?}"
+            );
+        } else {
+            assert!(matches!(
+                result,
+                Err(layerfs_workspace::WorkspaceError::Content(
+                    ContentError::MissingObject
+                ))
+            ));
+        }
+    }
+}
+
+#[test]
+fn named_inode_facts_reuse_the_authenticated_child_without_cache_or_length_loss() {
+    for (parent, child, serial, ids, length_calls, size) in [
+        (1, "file", 2, 10, 1, 10),
+        (1, "symlink", 3, 11, 0, b"../.git/index".len() as u64),
+        (7, "result", 8, 10, 1, 0),
+    ] {
+        let f = common::fixture_with(Vec::new());
+        let lengths = Arc::new(CountingLengths {
+            store: f.store.clone(),
+            calls: AtomicU64::new(0),
+        });
+        let client = Arc::new(CanonicalClient::with_lengths(
+            Arc::new(f.store.clone()),
+            lengths.clone(),
+            0,
+        ));
+        let base = BaseView::open(client.clone(), f.root, f.scope).unwrap();
+        let mut facts = VisitFacts::default();
+        facts.supply(&base, &[Need::Inode(parent)], None).unwrap();
+        let before = client.diagnostics().unwrap();
+        let demand = f.store.demand.load(Ordering::Relaxed);
+        let calls = lengths.calls.load(Ordering::Relaxed);
+        facts
+            .supply(&base, &[Need::Name(parent, name(child))], None)
+            .unwrap();
+        let after = client.diagnostics().unwrap();
+        assert_eq!(f.store.demand.load(Ordering::Relaxed) - demand, ids);
+        assert_eq!(lengths.calls.load(Ordering::Relaxed) - calls, length_calls);
+        assert_eq!(after.charged_cache_bytes, 0);
+        assert_eq!(after.cached_objects, 0);
+        assert_eq!(after.file_lengths, 0);
+        assert_eq!(after.directory_count_scans, before.directory_count_scans);
+        println!("NAMED_FACTS child={child} canonical_ids={ids} owning_lengths={length_calls} cache_bytes=0");
+
+        let path = std::env::temp_dir().join(format!(
+            "layerfs-named-facts-{}-{serial}.sqlite",
+            std::process::id(),
+        ));
+        let overlay = Overlay::create(&path, ProfileConfig::default()).unwrap();
+        let workspace = Workspace::open(&overlay, client, f.root, f.scope, [94; 32]).unwrap();
+        let mount = overlay.create_native_mount(workspace.route(), 1).unwrap();
+        let memory = Arc::new(CanonicalClient::resident(Arc::new(CanonicalCache::new(0))));
+        if parent != 1 {
+            facts
+                .supply(
+                    &base,
+                    &[Need::Inode(1), Need::Name(1, name("output"))],
+                    None,
+                )
+                .unwrap();
+            let parent_visit = workspace
+                .native_read_visit(
+                    memory.clone(),
+                    mount,
+                    1,
+                    None,
+                    NativeReadOperation::Lookup {
+                        parent: 1,
+                        name: name("output"),
+                    },
+                    Arc::new(facts.clone()),
+                )
+                .unwrap();
+            let parent_outcome = parent_visit.perform(&overlay);
+            assert!(matches!(parent_outcome.result, Ok(None)));
+            assert!(matches!(parent_outcome.decision,
+                Some(NativeReadDecision::Value(inode)) if inode.serial == parent));
+        }
+        let visit = workspace
+            .native_read_visit(
+                memory,
+                mount,
+                parent,
+                None,
+                NativeReadOperation::Lookup {
+                    parent,
+                    name: name(child),
+                },
+                Arc::new(facts.clone()),
+            )
+            .unwrap();
+        let demand = f.store.demand.load(Ordering::Relaxed);
+        let outcome = visit.perform(&overlay);
+        assert!(matches!(outcome.result, Ok(None)), "{:?}", outcome.result);
+        let Some(NativeReadDecision::Value(inode)) = outcome.decision else {
+            panic!("named facts must decide native lookup")
+        };
+        assert_eq!(f.store.demand.load(Ordering::Relaxed), demand);
+        assert_eq!(inode.serial, serial);
+        assert_eq!(inode.size, size);
+        assert_eq!(inode.inherited_cutoff, size);
+        assert_eq!(inode.mtime_seconds, i64::MAX);
+        assert_eq!(inode.mtime_nanoseconds, 999_999_999);
+        assert_eq!((inode.entries, inode.subdirs, inode.born), (0, 0, 0));
+        assert_eq!(inode.mode, if serial == 3 { 0o777 } else { 0o644 });
+        assert_eq!(
+            inode.nlink,
+            match serial {
+                2 => 2,
+                3 => 1,
+                8 => 4,
+                _ => unreachable!(),
+            }
+        );
+        assert_eq!(
+            inode.kind,
+            if serial == 3 {
+                layerfs_overlay::InodeKind::Symlink
+            } else {
+                layerfs_overlay::InodeKind::File
+            }
+        );
+        if serial == 2 {
+            facts
+                .supply(&base, &[Need::Name(1, name("alias"))], None)
+                .unwrap();
+            assert_eq!(f.store.demand.load(Ordering::Relaxed) - demand, 3);
+            assert_eq!(lengths.calls.load(Ordering::Relaxed), calls + 1);
+        } else if serial == 3 {
+            assert_eq!(base.readlink(serial).unwrap().as_bytes(), b"../.git/index");
+        }
+        overlay.revoke_native_mount(mount).unwrap();
+        drop(workspace);
+        drop(overlay);
+        std::fs::remove_file(path).unwrap();
+    }
+}
+
+#[test]
+fn base_stat_reads_each_inode_table_path_once() {
+    let f = fixture();
+    let client = Arc::new(CanonicalClient::with_lengths(
+        Arc::new(f.store.clone()),
+        Arc::new(f.store.clone()),
+        1024 * 1024,
+    ));
+    let base = BaseView::open(client.clone(), f.root, f.scope).unwrap();
+    let expected = base.stat_with_lengths(2, &f.store).unwrap();
+    let before = client.diagnostics().unwrap();
+    let demand = f.store.demand.load(Ordering::Relaxed);
+    let observed = base.stat_with_lengths(2, &f.store).unwrap();
+    let after = client.diagnostics().unwrap();
+    assert_eq!(observed, expected);
+    assert_eq!(f.store.demand.load(Ordering::Relaxed), demand);
+    assert_eq!(after.file_lengths, 0);
+    assert_eq!(after.cache_misses, before.cache_misses);
+    assert_eq!(after.upstream_batches, before.upstream_batches);
+    assert_eq!(
+        after.cache_hits - before.cache_hits,
+        1,
+        "inode1 canonical read; the root is the one checked at open and mode and mtime are remembered"
+    );
+}
 
 #[test]
 fn full_root_binding_aliases_metadata_symlinks_and_eof_use_content_apis() {
@@ -151,7 +356,10 @@ fn known_install_advances_selected_base_and_preserves_retained_plans_and_later_r
     ));
     let overlay = Overlay::create(&path, ProfileConfig::default()).unwrap();
     let workspace = Workspace::open(&overlay, client.clone(), f.root, f.scope, [92; 32]).unwrap();
-    let other = Workspace::open(&overlay, client, f.root, f.scope, [93; 32]).unwrap();
+    // Another Workspace has its own database.
+    let other_path = path.with_extension("other.sqlite");
+    let other_overlay = Overlay::create(&other_path, ProfileConfig::default()).unwrap();
+    let other = Workspace::open(&other_overlay, client, f.root, f.scope, [93; 32]).unwrap();
     let old = workspace.base().unwrap();
     let retained = old.plan_read(2, 0, 64).unwrap();
     let changed = b"changed";
@@ -255,10 +463,7 @@ fn known_install_advances_selected_base_and_preserves_retained_plans_and_later_r
     let later_publication = overlay
         .publish(workspace.route(), &later, None, None)
         .unwrap();
-    workspace
-        .install_prepared_base(&overlay, prepared)
-        .map_err(|(error, _)| error)
-        .unwrap();
+    workspace.install_prepared_base(&overlay, prepared).unwrap();
     assert_eq!(workspace.base().unwrap().identity(), root);
     assert_eq!(
         overlay.state(workspace.route()).unwrap().base_root,
@@ -290,7 +495,9 @@ fn known_install_advances_selected_base_and_preserves_retained_plans_and_later_r
     assert_eq!(old.inode(2).unwrap().value.namespace_ref_count, 2);
     assert_eq!(other.base().unwrap().identity(), f.root);
     drop(overlay);
+    drop(other_overlay);
     std::fs::remove_file(path).unwrap();
+    std::fs::remove_file(other_path).unwrap();
 }
 
 fn local(serial: u64, size: u64, links: u64) -> layerfs_overlay::Inode {
@@ -463,21 +670,40 @@ impl AuthenticatedObjects for Gate {
 fn actor_submit(
     client: &layerfs_daemon::OwnerClient,
     route: Option<layerfs_overlay::Route>,
-    command: layerfs_daemon::Command,
-) -> layerfs_daemon::Pending {
-    client
-        .try_submit(route, command)
-        .unwrap_or_else(|(error, _)| panic!("{error:?}"))
+    command: impl FnOnce(
+        &layerfs_daemon::OwnerClient,
+        Option<layerfs_overlay::Route>,
+    ) -> Result<layerfs_daemon::JobReceipt, layerfs_daemon::OwnerError>,
+) -> layerfs_daemon::JobReceipt {
+    command(client, route).unwrap_or_else(|error| panic!("{error:?}"))
+}
+/// Bounded wait until a waiting install has recorded its readiness check.
+fn install_waits(client: &layerfs_daemon::OwnerClient, checks: u64) {
+    let capture = layerfs_daemon::ServiceClass::Capture as usize;
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+    while client.diagnostics().unwrap().jobs[capture] <= checks {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "install readiness check"
+        );
+        std::thread::yield_now();
+    }
 }
 #[test]
 fn actual_provider_wait_allows_shared_progress_and_actor_install_pairs_the_selected_base() {
-    use layerfs_daemon::{Command, Owner, OwnerConfig, Response};
+    use layerfs_daemon::{Owner, OwnerConfig, Response};
     use layerfs_overlay::{Cell, CELL_BYTES, MASK_BYTES};
     let f = fixture();
     let (entered, waiting) = std::sync::mpsc::sync_channel(1);
+    // A base lookup starts at the inode table of the root checked at open.
+    let table = layerfs_content::filesystem::FilesystemRoot::decode(
+        &f.store.read_canonical(f.root.0).unwrap(),
+    )
+    .unwrap()
+    .inode_table();
     let gate = Arc::new(Gate {
         store: f.store.clone(),
-        root: f.root.0,
+        root: table,
         state: Mutex::new((false, false)),
         wake: std::sync::Condvar::new(),
         entered,
@@ -490,18 +716,21 @@ fn actual_provider_wait_allows_shared_progress_and_actor_install_pairs_the_selec
     let base = BaseView::open(client, f.root, f.scope).unwrap();
     let path =
         std::env::temp_dir().join(format!("layerfs-actor-view-{}.sqlite", std::process::id()));
-    let owner = Owner::start(&path, ProfileConfig::default(), OwnerConfig::default()).unwrap();
+    std::fs::create_dir(&path).unwrap();
+    let owner = Owner::start(
+        &path.join("template.sqlite"),
+        ProfileConfig::default(),
+        OwnerConfig::default(),
+    )
+    .unwrap();
     let service = owner.client();
     let opened = actor_submit(
         &service,
         None,
-        Command::Open {
-            incarnation: [102; 32],
-            base_root: f.root.0.to_bytes(),
+        |job_client: &layerfs_daemon::OwnerClient, job_route| {
+            job_client.open(job_route, [102; 32], f.root.0.to_bytes())
         },
-    )
-    .wait()
-    .unwrap();
+    );
     let route = match opened.result() {
         Ok(Response::Opened(r)) => *r,
         x => panic!("{x:?}"),
@@ -522,33 +751,36 @@ fn actual_provider_wait_allows_shared_progress_and_actor_install_pairs_the_selec
     let done = actor_submit(
         &service,
         Some(route),
-        Command::Publish {
-            inode,
-            name: None,
-            cell: Some(Cell {
-                offset: 0,
-                data,
-                validity: mask,
-            }),
+        |job_client: &layerfs_daemon::OwnerClient, job_route| {
+            job_client.publish(
+                job_route,
+                inode,
+                None,
+                Some(Cell {
+                    offset: 0,
+                    data,
+                    validity: mask,
+                }),
+            )
         },
-    )
-    .wait()
-    .unwrap();
+    );
     let p = match done.result() {
         Ok(Response::Published(p)) => *p,
         x => panic!("{x:?}"),
     };
     drop(done);
-    assert!(
-        actor_submit(&service, Some(route), Command::ReplyAttempted(p))
-            .wait()
-            .unwrap()
-            .result()
-            .is_ok()
+    assert!(actor_submit(
+        &service,
+        Some(route),
+        |job_client: &layerfs_daemon::OwnerClient, _| job_client.reply_attempted(p)
+    )
+    .result()
+    .is_ok());
+    let captured = actor_submit(
+        &service,
+        Some(route),
+        |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.capture(job_route),
     );
-    let captured = actor_submit(&service, Some(route), Command::Capture)
-        .wait()
-        .unwrap();
     let capture = match captured.result() {
         Ok(Response::Captured(c)) => *c,
         x => panic!("{x:?}"),
@@ -578,10 +810,10 @@ fn actual_provider_wait_allows_shared_progress_and_actor_install_pairs_the_selec
     let source_done = actor_submit(
         &service,
         Some(route),
-        Command::AcquireBaseSource { owner: 7 },
-    )
-    .wait()
-    .unwrap();
+        |job_client: &layerfs_daemon::OwnerClient, job_route| {
+            job_client.acquire_base_source(job_route, 7)
+        },
+    );
     let source = match source_done.result() {
         Ok(Response::BaseSource(s)) => *s,
         x => panic!("{x:?}"),
@@ -594,59 +826,49 @@ fn actual_provider_wait_allows_shared_progress_and_actor_install_pairs_the_selec
     waiting
         .recv_timeout(std::time::Duration::from_secs(2))
         .unwrap();
-    let install = actor_submit(
+    // The install waits before its effect on the calling thread for the
+    // earlier source; other jobs of the Workspace keep running beside it.
+    let checks =
+        service.diagnostics().unwrap().jobs[layerfs_daemon::ServiceClass::Capture as usize];
+    let install = {
+        let (service, ws) = (service.clone(), ws.clone());
+        std::thread::spawn(move || service.install_prepared(Some(route), ws, prepared))
+    };
+    install_waits(&service, checks);
+    assert!(!install.is_finished());
+    let observed = actor_submit(
         &service,
         Some(route),
-        Command::InstallPrepared {
-            workspace: ws.clone(),
-            input: prepared,
-        },
+        |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.state(job_route),
     );
-    let later_source = actor_submit(
-        &service,
-        Some(route),
-        Command::AcquireBaseSource { owner: 8 },
-    );
-    assert!(install.try_complete().unwrap().is_none());
-    assert!(later_source.try_complete().unwrap().is_none());
-    let observed = actor_submit(&service, Some(route), Command::State)
-        .wait()
-        .unwrap();
     assert!(matches!(observed.result(),Ok(Response::State(s)) if s.base_root==f.root.0.to_bytes()));
     drop(observed);
     let done = actor_submit(
         &service,
         Some(route),
-        Command::Publish {
-            inode: local(2, 22, 2),
-            name: None,
-            cell: None,
+        |job_client: &layerfs_daemon::OwnerClient, job_route| {
+            job_client.publish(job_route, local(2, 22, 2), None, None)
         },
-    )
-    .wait()
-    .unwrap();
+    );
     let later = match done.result() {
         Ok(Response::Published(p)) => *p,
         x => panic!("{x:?}"),
     };
     drop(done);
-    assert!(
-        actor_submit(&service, Some(route), Command::ReplyAttempted(later))
-            .wait()
-            .unwrap()
-            .result()
-            .is_ok()
-    );
+    assert!(actor_submit(
+        &service,
+        Some(route),
+        |job_client: &layerfs_daemon::OwnerClient, _| job_client.reply_attempted(later)
+    )
+    .result()
+    .is_ok());
     let unrelated = actor_submit(
         &service,
         None,
-        Command::Open {
-            incarnation: [103; 32],
-            base_root: f.root.0.to_bytes(),
+        |job_client: &layerfs_daemon::OwnerClient, job_route| {
+            job_client.open(job_route, [103; 32], f.root.0.to_bytes())
         },
-    )
-    .wait()
-    .unwrap();
+    );
     assert!(unrelated.result().is_ok());
     drop(unrelated);
     gate.state.lock().unwrap().1 = true;
@@ -656,15 +878,22 @@ fn actual_provider_wait_allows_shared_progress_and_actor_install_pairs_the_selec
         (stat.serial, stat.logical_len, stat.metadata.mode),
         (2, 22, 0o600)
     );
-    assert!(
-        actor_submit(&service, Some(route), Command::ReleaseBaseSource(source))
-            .wait()
-            .unwrap()
-            .result()
-            .is_ok()
+    assert!(actor_submit(
+        &service,
+        Some(route),
+        |job_client: &layerfs_daemon::OwnerClient, job_route| job_client
+            .release_base_source(job_route, source)
+    )
+    .result()
+    .is_ok());
+    assert!(install.join().unwrap().unwrap().result().is_ok());
+    let next = actor_submit(
+        &service,
+        Some(route),
+        |job_client: &layerfs_daemon::OwnerClient, job_route| {
+            job_client.acquire_base_source(job_route, 8)
+        },
     );
-    assert!(install.wait().unwrap().result().is_ok());
-    let next = later_source.wait().unwrap();
     let next_source = match next.result() {
         Ok(Response::BaseSource(s)) => *s,
         x => panic!("{x:?}"),
@@ -675,10 +904,9 @@ fn actual_provider_wait_allows_shared_progress_and_actor_install_pairs_the_selec
     assert!(actor_submit(
         &service,
         Some(route),
-        Command::ReleaseBaseSource(next_source)
+        |job_client: &layerfs_daemon::OwnerClient, job_route| job_client
+            .release_base_source(job_route, next_source)
     )
-    .wait()
-    .unwrap()
     .result()
     .is_ok());
     let mut output = Vec::new();
@@ -693,7 +921,7 @@ fn actual_provider_wait_allows_shared_progress_and_actor_install_pairs_the_selec
         .unwrap();
     assert_eq!(output, bytes);
     owner.stop().unwrap();
-    std::fs::remove_file(path).unwrap();
+    std::fs::remove_dir_all(path).unwrap();
 }
 
 struct Refused;
@@ -706,7 +934,7 @@ impl AuthenticatedObjects for Refused {
 }
 #[test]
 fn source_errors_and_unattempted_actor_install_preserve_exact_custody() {
-    use layerfs_daemon::{Command, Owner, OwnerConfig, OwnerError, Response};
+    use layerfs_daemon::{Owner, OwnerConfig, OwnerError, Response};
     let f = fixture();
     let client = Arc::new(CanonicalClient::with_lengths(
         Arc::new(f.store.clone()),
@@ -716,27 +944,32 @@ fn source_errors_and_unattempted_actor_install_preserve_exact_custody() {
     let base = BaseView::open(client, f.root, f.scope).unwrap();
     let path =
         std::env::temp_dir().join(format!("layerfs-view-cancel-{}.sqlite", std::process::id()));
-    let owner = Owner::start(&path, ProfileConfig::default(), OwnerConfig::default()).unwrap();
+    std::fs::create_dir(&path).unwrap();
+    let owner = Owner::start(
+        &path.join("template.sqlite"),
+        ProfileConfig::default(),
+        OwnerConfig::default(),
+    )
+    .unwrap();
     let service = owner.client();
     let done = actor_submit(
         &service,
         None,
-        Command::Open {
-            incarnation: [104; 32],
-            base_root: f.root.0.to_bytes(),
+        |job_client: &layerfs_daemon::OwnerClient, job_route| {
+            job_client.open(job_route, [104; 32], f.root.0.to_bytes())
         },
-    )
-    .wait()
-    .unwrap();
+    );
     let route = match done.result() {
         Ok(Response::Opened(r)) => *r,
         x => panic!("{x:?}"),
     };
     drop(done);
     let ws = Arc::new(Workspace::bind(route, base));
-    let done = actor_submit(&service, Some(route), Command::Capture)
-        .wait()
-        .unwrap();
+    let done = actor_submit(
+        &service,
+        Some(route),
+        |job_client: &layerfs_daemon::OwnerClient, job_route| job_client.capture(job_route),
+    );
     let capture = match done.result() {
         Ok(Response::Captured(c)) => *c,
         x => panic!("{x:?}"),
@@ -746,32 +979,35 @@ fn source_errors_and_unattempted_actor_install_preserve_exact_custody() {
     let done = actor_submit(
         &service,
         Some(route),
-        Command::AcquireBaseSource { owner: 8 },
-    )
-    .wait()
-    .unwrap();
+        |job_client: &layerfs_daemon::OwnerClient, job_route| {
+            job_client.acquire_base_source(job_route, 8)
+        },
+    );
     let source = match done.result() {
         Ok(Response::BaseSource(s)) => *s,
         x => panic!("{x:?}"),
     };
     drop(done);
-    let pending = actor_submit(
-        &service,
-        Some(route),
-        Command::InstallPrepared {
-            workspace: ws.clone(),
-            input,
-        },
-    );
-    assert!(pending.try_complete().unwrap().is_none());
+    let checks =
+        service.diagnostics().unwrap().jobs[layerfs_daemon::ServiceClass::Capture as usize];
+    let pending = {
+        let (service, ws) = (service.clone(), ws.clone());
+        std::thread::spawn(move || service.install_prepared(Some(route), ws, input))
+    };
+    install_waits(&service, checks);
+    assert!(!pending.is_finished());
     owner.stop().unwrap();
-    let done = pending.wait().unwrap();
+    // Stopped before any effect: the unattempted action owns its original
+    // prepared input and nothing was installed.
+    let refused = pending.join().unwrap().unwrap_err();
     assert!(
-        matches!(done.result(),Err(OwnerError::Unattempted{cause,command}) if matches!(cause.as_ref(),OwnerError::Stopped)&&matches!(command.as_ref(),Command::InstallPrepared{input,..} if input.root()==f.root&&input.capture()==capture))
+        matches!(&refused, OwnerError::Unattempted { cause, .. } if matches!(cause.as_ref(), OwnerError::Stopped)),
+        "{refused:?}"
     );
     assert_eq!(ws.base().unwrap().identity(), f.root);
-    drop(done);
-    std::fs::remove_file(path).unwrap();
+    drop(refused);
+    let _ = (source, capture);
+    std::fs::remove_dir_all(path).unwrap();
     // The source error remains a source failure, never logical absence or fallback.
     let client = Arc::new(CanonicalClient::new(Arc::new(Refused), 0));
     assert!(matches!(

@@ -132,6 +132,18 @@ impl<P: OverlayCapturedNamespace + OverlayOperationRecords + ?Sized> Builder<'_,
             Ok(file) => {
                 let mut owner = self.shared.borrow_mut();
                 add(&mut owner.work.files_constructed, 1);
+                add(
+                    &mut owner.work.file_edge_windows,
+                    attempt.custody.work.edge_windows,
+                );
+                add(
+                    &mut owner.work.file_edge_read_bytes,
+                    attempt.custody.work.edge_read_bytes,
+                );
+                add(
+                    &mut owner.work.file_edge_retained_bytes,
+                    attempt.custody.work.edge_retained_bytes,
+                );
                 if attempt.custody.file.as_ref().map(FileView::root) == Some(file.root) {
                     add(&mut owner.work.files_unchanged, 1);
                 }

@@ -49,17 +49,17 @@ impl NativeFilesystem {
             FRAME.set((request, true));
         }
         self.accounting.forget_unit();
-        let permit = match self.queue.receive().map(|received| received.admit(0)) {
+        let permit = match self.queue.receive().map(|received| received.request(0)) {
             Ok(Ok(permit)) => permit,
             // Terminal admission: the kernel reference stays in indexed custody
             // until drain-qualified revocation. No decrement is guessed.
-            Ok(Err(_)) | Err(_) => return self.accounting.disposed(Disposal::Unadmitted),
+            Ok(Err(_)) | Err(_) => return self.accounting.disposed(Disposal::Terminal),
         };
         let mount = self.queue.identity();
         let serial = self.identity.serial(inode);
         let services = self.services.clone();
         let fence = self.fence.clone();
-        self.handoff(
+        self.serve(
             permit,
             Box::pin(async move {
                 let outcome = async {

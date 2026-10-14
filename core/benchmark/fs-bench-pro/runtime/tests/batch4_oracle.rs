@@ -23,6 +23,10 @@ pub(crate) mod edit_oracle;
 #[allow(dead_code)]
 #[path = "../src/events.rs"]
 pub(crate) mod events;
+#[path = "support/namespace_cases.rs"]
+mod namespace_cases;
+#[path = "support/one_mib_alloc.rs"]
+mod one_mib_alloc;
 #[allow(dead_code)]
 #[path = "../src/workspace_oracle.rs"]
 pub(crate) mod workspace_oracle;
@@ -137,7 +141,8 @@ fn constructed(scope: InodeScope, entries: &[Entry]) -> (ObjectId, Bag) {
         let kind = match entry.kind {
             EntryKind::Directory => InodeKind::Directory,
             EntryKind::File(_) => InodeKind::RegularFile,
-            _ => panic!("test file/directory fixture required"),
+            EntryKind::Symlink(_) => InodeKind::Symlink,
+            _ => panic!("test file/directory/symlink fixture required"),
         };
         let content_root = match &entry.kind {
             EntryKind::File(content) => {
@@ -156,6 +161,16 @@ fn constructed(scope: InodeScope, entries: &[Entry]) -> (ObjectId, Bag) {
                 .0
                 .unwrap()
                 .root
+            }
+            EntryKind::Symlink(target) => {
+                let target = layerfs_content::filesystem::symlink::SymlinkTarget::new(
+                    target.as_bytes().to_vec(),
+                )
+                .unwrap();
+                let object = target.finalize().unwrap();
+                let id = object.id();
+                bag.accept(object).unwrap();
+                id
             }
             _ => ObjectId::for_bytes(b"directory replaced by public builder"),
         };
@@ -235,6 +250,164 @@ fn selective() -> edit_model::M1State {
         directory_modes: BTreeMap::from([("dir".into(), 0o750)]),
         required_created_directory_modes: BTreeSet::new(),
     }
+}
+
+fn tiny_scratch_fixture() -> (ObjectId, Bag, Vec<Entry>) {
+    let entries = vec![
+        Entry::directory("."),
+        Entry::directory("dir"),
+        Entry::file("dir/a", Content::Literal(vec![0x11; 32])),
+        Entry::file("dir/b", Content::Literal(vec![0x22; 32])),
+        Entry::file("dir/c", Content::Literal(vec![0x33; 32])),
+        Entry::file("dir/d", Content::Literal(vec![0x44; 32])),
+    ];
+    let (root, bag) = constructed(
+        layerfs_content::filesystem::root::scope_for_seed([91; 32]),
+        &entries,
+    );
+    assert!(bag
+        .bytes
+        .values()
+        .all(|bytes| bytes.len() < one_mib_alloc::ONE_MIB));
+    (root, bag, entries)
+}
+
+#[test]
+fn listed_bindings_share_inode_acquisition_with_point_name_validation() {
+    use std::cell::RefCell;
+    struct Counted<'a> {
+        reader: &'a Bag,
+        batches: RefCell<Vec<Vec<ObjectId>>>,
+    }
+    impl AuthenticatedObjects for Counted<'_> {
+        fn read_canonical_batch(&self, ids: &[ObjectId]) -> ContentResult<Vec<Vec<u8>>> {
+            self.batches.borrow_mut().push(ids.to_vec());
+            self.reader.read_canonical_batch(ids)
+        }
+    }
+    let (root, bag, entries) = tiny_scratch_fixture();
+    let roles = bag
+        .objects
+        .iter()
+        .map(|object| (object.id(), format!("{:?}", object.role())))
+        .collect::<BTreeMap<_, _>>();
+    let reader = Counted {
+        reader: &bag,
+        batches: RefCell::new(Vec::new()),
+    };
+    let proof = workspace_oracle::verify_tree(&reader, root, &entries, false, None, true).unwrap();
+    assert_eq!(proof.paths, 6);
+    assert_eq!(proof.bytes, 128);
+    assert_eq!(proof.files.len(), 4);
+    let batches = reader.batches.into_inner();
+    let mut histogram = BTreeMap::<&str, usize>::new();
+    for id in batches.iter().flatten() {
+        *histogram.entry(roles[id].as_str()).or_default() += 1;
+    }
+    println!(
+        "NAMESPACE_CANONICAL_REQUESTS {histogram:?} batches={}",
+        batches.len()
+    );
+    assert!(batches.iter().all(|ids| ids.len() == 1));
+    assert_eq!(histogram["FilesystemRoot"], 1);
+    assert_eq!(histogram["AttributeLeaf"], 6);
+    assert_eq!(histogram["FileState"], 12);
+    assert_eq!(histogram["ExtentLeaf"], 12);
+    assert_eq!(histogram["Chunk"], 12);
+    assert_eq!(histogram["WholeFile"], 4);
+    assert_eq!(batches.len(), 61);
+    assert_eq!(histogram["InodeLeaf"], 7);
+    assert_eq!(histogram["DirectoryLeaf"], 7);
+}
+
+#[test]
+fn persisted_proof_uses_one_scratch_pair_for_the_root() {
+    let (root, bag, entries) = tiny_scratch_fixture();
+    let guard = one_mib_alloc::Guard::start();
+    let result = workspace_oracle::verify_tree(&bag, root, &entries, false, None, true);
+    let allocations = guard.finish();
+    let proof = result.expect("complete persisted proof");
+    assert_eq!(proof.paths, 6);
+    assert_eq!(proof.bytes, 128);
+    assert_eq!(proof.files.len(), 4);
+    println!("ROOT_SCRATCH_ALLOCATIONS {allocations:?}");
+    assert_eq!(allocations.realloc, 0);
+    assert_eq!(allocations.requests(), 2, "one scratch pair per root");
+}
+
+#[test]
+fn scratch_count_controls_exclude_namespace_and_file_views() {
+    let (root, bag, entries) = tiny_scratch_fixture();
+    let guard = one_mib_alloc::Guard::start();
+    let result = workspace_oracle::verify_tree(&bag, root, &entries, true, None, true);
+    let allocations = guard.finish();
+    let proof = result.expect("complete membership-only proof");
+    assert_eq!(proof.paths, 6);
+    assert_eq!(proof.bytes, 0);
+    assert_eq!(allocations.requests(), 0);
+    assert_eq!(allocations.realloc, 0);
+    let mut tree = layerfs_content::filesystem::read::FilesystemRead::new(
+        &bag,
+        layerfs_content::filesystem::root::FilesystemRootId(root),
+    )
+    .unwrap();
+    let roots = entries[2..]
+        .iter()
+        .map(|entry| {
+            tree.resolve(&layerfs_content::LogicalPath::new(&entry.path).unwrap())
+                .unwrap()
+                .value
+                .content_root
+        })
+        .collect::<Vec<_>>();
+    let guard = one_mib_alloc::Guard::start();
+    let result = Timing::disabled("external.scratch.control", |timer| -> Result<usize> {
+        let mut bytes = 0;
+        for root in roots {
+            let view = FileView::open(&bag, root, timer.child("open"))?;
+            workspace_oracle::verify_mapping(&bag, &view)?;
+            let mut sink = Vec::with_capacity(32);
+            view.read_range(&bag, 0..32, &mut sink, timer)?;
+            bytes += sink.len();
+        }
+        Ok(bytes)
+    })
+    .0;
+    let allocations = guard.finish();
+    assert_eq!(result.unwrap(), 128);
+    assert_eq!(allocations.requests(), 0);
+    assert_eq!(allocations.realloc, 0);
+    println!("SCRATCH_NEGATIVE_CONTROLS namespace=0 file_views=0");
+}
+
+#[test]
+fn scratch_reuse_checks_the_last_file_and_final_short_window() {
+    let entries = vec![
+        Entry::directory("."),
+        Entry::directory("dir"),
+        Entry::file("dir/a-small", Content::Literal(vec![0x11; 32])),
+        Entry::file(
+            "dir/z-last",
+            Content::Literal(vec![0x55; 2 * one_mib_alloc::ONE_MIB + 31]),
+        ),
+    ];
+    let scope = layerfs_content::filesystem::root::scope_for_seed([92; 32]);
+    let (root, bag) = constructed(scope, &entries);
+    let proof = workspace_oracle::verify_tree(&bag, root, &entries, false, None, true).unwrap();
+    assert_eq!(proof.paths, 4);
+    assert_eq!(proof.bytes, (32 + 2 * one_mib_alloc::ONE_MIB + 31) as u64);
+    let mut actual = entries.clone();
+    let EntryKind::File(Content::Literal(bytes)) = &mut actual[3].kind else {
+        unreachable!()
+    };
+    *bytes.last_mut().unwrap() ^= 1;
+    let (root, bag) = constructed(scope, &actual);
+    let error = workspace_oracle::verify_tree(&bag, root, &entries, false, None, true)
+        .err()
+        .expect("final-byte corruption must fail");
+    assert!(error
+        .to_string()
+        .contains("persisted exact bytes differ: dir/z-last at 2097152"));
 }
 fn selective_proof(expected: &edit_model::M1State, actual: &[Entry]) -> bool {
     let (root, bag) = constructed(
@@ -376,7 +549,7 @@ fn batch4_current_boundary_and_complete_mapping_totals_reject_forged_forms() {
 #[test]
 fn batch4_created_mode_domain_and_original_case_limits_are_not_global_caps() {
     assert_eq!(
-        workspace_oracle::history_limit("dedup-history-recurring-500").unwrap(),
+        workspace_oracle::history_limit("dedup-history-distributed-500").unwrap(),
         500
     );
     assert_eq!(
@@ -612,7 +785,7 @@ fn batch4_actual_public_boundary_history_rejects_omissions_parent_and_manifest_s
 
 #[test]
 fn batch4_recurring_public_history_accepts_repeated_roots_and_checks_ab_identity() {
-    let case = "dedup-history-recurring-10";
+    let case = "dedup-history-recurring-100";
     let home = prepared(case, "recurring");
     assert!(prove(&home, case, "good", None));
     assert!(fs::read_to_string(home.join("good.jsonl"))

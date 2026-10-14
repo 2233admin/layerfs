@@ -233,17 +233,13 @@ fn the_five_jobs_of_one_created_file_cost_exactly_this_at_any_directory_size() {
         last.jobs, last.total
     );
 
-    // One fence, then the directory's local row.
-    let getattr: Cost = vec![("Workspace", 1, 1), ("Inode", 1, 1)];
-    // The fence; then the directory's row, and one seek of the name's rows
-    // twice: the first evaluation needs the base's answer for the name, takes
-    // it from resident objects, and the second evaluation reads the name's
-    // rows again. The job keeps the directory's row it read.
-    let lookup: Cost = vec![
-        ("Workspace", 1, 1),
-        ("Inode", 1, 1),
-        ("DirectoryEntry", 2, 2),
-    ];
+    // One fence, which reads the directory's local row with the Workspace's.
+    let getattr: Cost = vec![("Workspace", 1, 1)];
+    // The fence, with the directory's row; then one seek of the name's rows.
+    // The first evaluation needs the base's answer for the name and takes it
+    // from resident objects; the second evaluation uses the rows the job
+    // read, the directory's and the name's.
+    let lookup: Cost = vec![("Workspace", 1, 1), ("DirectoryEntry", 1, 1)];
     let expected = [
         getattr,
         lookup,
@@ -280,50 +276,23 @@ fn the_five_jobs_of_one_created_file_cost_exactly_this_at_any_directory_size() {
     );
     b.overlay.revoke_native_mount(mount).unwrap();
 }
-/// CREATE, in order. Reads: the fence [Workspace]; the directory's row, once
-/// for the job [Inode]; the name's rows for the first evaluation, again for
-/// the second and again for the published binding's inheritance [3
-/// DirectoryEntry]. Then one transaction, begun by its admission pragma
-/// [Startup] and BEGIN: the new inode, inserted without a read of its
-/// reserved serial [Inode, with its count trigger]; the directory's time and
-/// entry counts, updated over the row the job read [Inode]; the name's rows
-/// and its binding [2 DirectoryEntry, the binding with its trigger], the
-/// frontier [Workspace], and the reply's kernel custody [Lease]: the lookup
-/// row, the descriptor row, which names its mount and request, and one
-/// custody row for both references, each with its trigger. COMMIT.
-const CREATE: [(&str, u64, u64); 7] = [
-    ("Startup", 1, 1),
+/// CREATE publishes SQL state and its memory custody in one atomic job.
+const CREATE: [(&str, u64, u64); 5] = [
     ("Begin", 1, 1),
     ("Commit", 1, 1),
     ("Workspace", 2, 2),
-    ("Inode", 3, 4),
-    ("DirectoryEntry", 5, 6),
-    ("Lease", 3, 6),
+    ("Inode", 2, 3),
+    ("DirectoryEntry", 2, 3),
 ];
-/// WRITE, in order. Reads: the fence with the descriptor [Workspace]; the
-/// file's row, which carries its layer columns [Inode]. Then one
-/// transaction: the inode's new size and time, updated over that row
-/// [Inode], the one partly covered cell read and written [2 Payload, the
-/// write with its trigger] and the frontier [Workspace].
-const WRITE: [(&str, u64, u64); 6] = [
-    ("Startup", 1, 1),
+/// WRITE still stores the inode, window and frontier in one transaction.
+const WRITE: [(&str, u64, u64); 5] = [
     ("Begin", 1, 1),
     ("Commit", 1, 1),
     ("Workspace", 2, 2),
-    ("Inode", 2, 2),
+    ("Inode", 1, 1),
     ("Payload", 2, 3),
 ];
-/// RELEASE, in order. The fence with the descriptor [Workspace]; then one
-/// transaction [Lease]: the descriptor row is deleted (with its trigger)
-/// and the file reference is dropped by a statement that returns the
-/// references that remain.
-const RELEASE: [(&str, u64, u64); 5] = [
-    ("Startup", 1, 1),
-    ("Begin", 1, 1),
-    ("Commit", 1, 1),
-    ("Workspace", 1, 1),
-    ("Lease", 2, 3),
-];
-/// Attempts and executions of the whole cycle: 28 statements of the five
-/// jobs and the admission pragma, BEGIN and COMMIT of three transactions.
-const TOTAL: (u64, u64) = (37, 44);
+/// RELEASE checks the remembered Workspace row and removes exact custody in
+/// memory: no statement.
+const RELEASE: [(&str, u64, u64); 0] = [];
+const TOTAL: (u64, u64) = (18, 21);

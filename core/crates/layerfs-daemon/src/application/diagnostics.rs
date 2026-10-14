@@ -173,9 +173,9 @@ impl Application {
         // The operation keeps its exact original result independently of every
         // later counter acquisition and diagnostic sink outcome.
         let outcome = self.control_operation(operation, slot);
-        // One explicitly charged read-only observer job. The caller drops its
-        // Completion before the snapshot, but publisher credit may remain
-        // transiently. This observation never replaces the original outcome.
+        // One explicitly charged read-only observer job. The caller dropped its
+        // JobReceipt before the snapshot. This observation never replaces the
+        // original outcome.
         let resources = resources::ResourceObservation::acquire(&self.owner.client());
         let store = service.as_ref().map(|service| service.observed_store());
         let result = (|| {
@@ -203,6 +203,17 @@ impl Application {
             )?;
             resources::emit(&mut rows, &resources)?;
             schema::owner(&mut rows, self.owner.client().diagnostics().ok())?;
+            rows.row(
+                33,
+                0,
+                Some(&[u64::from(
+                    self.owner
+                        .profile()
+                        .compile_options
+                        .iter()
+                        .any(|option| option == "ENABLE_MEMORY_MANAGEMENT"),
+                )]),
+            )?;
             if let Some(store) = &store {
                 schema::store(&mut rows, store)?;
             } else {
@@ -210,13 +221,6 @@ impl Application {
                     rows.row(section, 0, None)?;
                 }
             }
-            #[cfg(target_os = "linux")]
-            schema::dispatch(
-                &mut rows,
-                self.native.as_ref().and_then(|native| native.work()),
-            )?;
-            #[cfg(not(target_os = "linux"))]
-            rows.row(11, 0, None)?;
             #[cfg(target_os = "linux")]
             {
                 let observer = observer.or_else(|| {
@@ -280,6 +284,7 @@ fn operation_code(operation: &Request) -> u64 {
         Request::Unmount(_) => 4,
         Request::Fork(_) => 5,
         Request::History(_) => 6,
+        Request::Branches { .. } => 14,
         Request::Hello(_) => 7,
         Request::EndSession => 8,
         Request::Attach(_) => 9,

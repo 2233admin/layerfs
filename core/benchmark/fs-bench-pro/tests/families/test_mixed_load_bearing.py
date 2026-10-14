@@ -12,7 +12,7 @@ FAMILY = BENCH / "families/mixed_load_bearing"
 SOURCE = "d296981ace76fe751bebf00dee52818fe18a3eef"
 TAG = "ae3310fada4a1fe35cb99ab02270b7538a0d03f7"
 EPISODES = [f"agent-episodes-{tier}" + ("-compact-v2" if tier <= 10 else "")
-            for tier in (1, 10, 100, 500)]
+            for tier in (1, 100, 500)]
 REGULAR = [f"v016-mixed-development-{load}-k{commits}-v1"
            for load in ("100mb-5000", "500mb-30000") for commits in (10, 100)]
 EXHAUSTIVE = [f"v016-mixed-exhaustive-{load}-k100-v1"
@@ -54,7 +54,7 @@ class MixedLoadBearing(unittest.TestCase):
         rows = self.document["cases"]
         self.assertEqual(self.document["family"], "mixed_load_bearing")
         self.assertEqual([row["id"] for row in rows], EPISODES + REGULAR + EXHAUSTIVE)
-        for row in rows[:4]:
+        for row in rows[:len(EPISODES)]:
             tier = int(row["registry"]["tier"])
             paths, directories, shards, cells = episode_census(tier)
             fixture = row["fixture"]
@@ -65,7 +65,7 @@ class MixedLoadBearing(unittest.TestCase):
             self.assertEqual(fixture["logical_bytes"], shards * 1048576 + cells * 32768)
             self.assertEqual(row["operation_model"]["final_paths"], fixture["paths"] + 2 * tier)
             self.assertEqual(row["original_operation_counts"], {"completed_episode_count": tier})
-        for row in rows[4:]:
+        for row in rows[len(EPISODES):]:
             large = "500mb" in row["id"]
             # Independent frozen class rows: empty, tiny, two medium classes,
             # exact boundary triple, moderate large and anchors.
@@ -123,12 +123,14 @@ class MixedLoadBearing(unittest.TestCase):
                 self.assertTrue(row["proof_only"])
                 self.assertIsNone(row["budget"]["command_ms"])
                 self.assertEqual(row["budget"]["verifier_ms"], original)
-                self.assertEqual(row["owner_test_ceiling_ms"], 120000)
+                self.assertEqual(row["owner_test_ceiling_ms"], 275000 if row["id"] == "v016-mixed-exhaustive-500mb-30000-k100-v1" else 120000)
                 self.assertIn("VERIFY-ONLY", row["performance_mode"])
             else:
                 self.assertEqual(row["budget"]["command_ms"], 15000)
                 self.assertEqual(row["budget"]["performance_hard_watchdog_ms"], 60000)
-                self.assertEqual(row["budget"]["verifier_ms"], 25000)
+                # Owner direction 2026-10-12 (#319 phase 13): the two named 500 MiB development cases only.
+                self.assertEqual((row["budget"]["verifier_ms"], row["budget"]["verification_hard_watchdog_ms"]),
+                                 (50000, 60000) if "500mb" in row["id"] else (25000, 35000))
                 self.assertEqual(row["budget"]["verification_cleanup_reserve_ms"], 3000)
 
     def test_recovery_source_hashes_and_ordered_shell_members(self):

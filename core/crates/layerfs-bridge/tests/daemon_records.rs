@@ -19,11 +19,7 @@ fn setup() -> DaemonSetup {
             read_handles: 2,
             handshake_ms: 3000,
             cache_bytes: 4096,
-            owner_bytes: 16 * 1024 * 1024,
-            lifecycle_reserve: 1024 * 1024,
             namespaces: 2,
-            ordinary_jobs: 2,
-            lifecycle_jobs: 2,
             pager_kib: 1024,
             serial_low_water: 0,
         },
@@ -71,7 +67,7 @@ fn serial_low_water_round_trips_and_the_previous_record_is_refused() {
     assert_eq!(decoded, value);
 
     // Exact placement: the last limit, before the existing-Store flag.
-    assert_eq!(&bytes[..5], b"LFSD\x02");
+    assert_eq!(&bytes[..5], b"LFSD\x03");
     let at = bytes.len() - 9;
     assert_eq!(bytes[at..at + 8], LOW.to_be_bytes());
     assert_eq!(bytes[at - 4..at], value.limits.pager_kib.to_be_bytes());
@@ -91,9 +87,10 @@ fn serial_low_water_round_trips_and_the_previous_record_is_refused() {
     let mut old_magic = bytes.clone();
     old_magic[4] = 1;
     assert!(DaemonSetup::decode(&old_magic).is_err());
-    previous[4] = 2;
+    previous[4] = 3;
     assert!(DaemonSetup::decode(&previous).is_err());
-    for magic in [0, 3, 0xff] {
+    // Magic 2 carried the retired owner admission limits.
+    for magic in [0, 2, 4, 0xff] {
         let mut other = bytes.clone();
         other[4] = magic;
         assert!(DaemonSetup::decode(&other).is_err(), "magic {magic}");

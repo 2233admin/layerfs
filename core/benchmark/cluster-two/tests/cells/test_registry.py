@@ -160,6 +160,28 @@ class Receipts(unittest.TestCase):
     def test_no_resource_pass_with_unavailable_bytes(self):
         self.reject(lambda row: row.__setitem__("resource_status", "PASS"), "actual memory and disk")
 
+    @staticmethod
+    def resources(row, retired):
+        for name in ("scheduler_bytes", "peak_credited_bytes", "immutable_cache_allowance_bytes", "daemon_vmhwm_bytes",
+                     "store_logical_bytes", "store_allocated_bytes", "overlay_logical_bytes", "overlay_allocated_bytes"):
+            row["observations"][name] = {"status": "AVAILABLE", "value": 1, "provenance": "synthetic"}
+        for name, reason in retired.items():
+            row["observations"][name] = receipts.unavailable(reason, not_applicable=True)
+        row["resource_status"] = "PASS"
+
+    def test_resource_pass_needs_scheduler_and_credit_bytes_observed_or_both_exactly_retired(self):
+        both = dict.fromkeys(("scheduler_bytes", "peak_credited_bytes"), receipts.RETIRED_OWNER_BYTES)
+        for retired in ({}, both):
+            row = diagnostic()
+            self.resources(row, retired)
+            try:
+                receipts.validate_receipt(row)
+            except ValueError as error:
+                self.assertNotIn("actual memory and disk", str(error))
+        for retired in ({"scheduler_bytes": receipts.RETIRED_OWNER_BYTES}, dict.fromkeys(both, "not selected"),
+                        {**both, "overlay_logical_bytes": receipts.RETIRED_OWNER_BYTES}):
+            self.reject(lambda row: self.resources(row, retired), "actual memory and disk")
+
     def test_no_fallback_route(self):
         self.reject(lambda row: row.__setitem__("fallback_count", 1), "forbidden/fallback")
 

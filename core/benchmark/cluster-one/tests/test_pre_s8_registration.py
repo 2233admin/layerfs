@@ -23,7 +23,9 @@ class Registration(unittest.TestCase):
         binary = Path(self.temp.name) / "engine_finite"
         binary.write_bytes(b"external unit registration fixture; not a route proof")
         registry = json.loads((ROOT / registration.REGISTRY).read_text())
-        source = "core/crates/layerfs-daemon/examples/engine_finite.rs"
+        # The engine_finite driver was retired with the owner queue (#321 Step B). Its frozen
+        # registry case still fixes this fixture's workload; any retained source pins the hash rule.
+        source = "core/crates/layerfs-daemon/examples/store_accounting.rs"
         self.value = {"schema": registration.SCHEMA, "case": "engine-finite",
                       "registry_sha256": registration.digest(ROOT / registration.REGISTRY),
                       "mode": "diagnostic", "numeric_acceptance": "OWNER_DEFERRED",

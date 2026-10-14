@@ -34,21 +34,19 @@ impl Overlay {
             _ if offset < floor => return Ok(NativeDirectoryCursor::Rewound),
             _ => {}
         }
-        let (first, names) = self
-            .query(
-                StatementKind::Lease,
-                sql::COOKIE_PAGE,
-                &[
-                    &directory.mount.route.ns,
-                    &integer(directory.owner)?,
-                    &integer(offset)?,
-                    &integer(floor)?,
-                ],
-                32,
-                |r| Ok((unsigned(r, 0)?, r.get::<_, Vec<u8>>(1)?)),
-            )?
-            .pop()
-            .ok_or(OverlayError::Stale)?;
+        let (first, names) = {
+            let state = self.open.borrow();
+            let store = state
+                .cookies
+                .get(&(directory.mount.route.ns, directory.owner))
+                .ok_or(OverlayError::Stale)?;
+            let (first, page) = store
+                .offsets
+                .range(floor..=offset)
+                .next_back()
+                .ok_or(OverlayError::Stale)?;
+            (*first, page.names.clone())
+        };
         // Only an accepted entry's number is an offset: one past the reply's
         // last name was never handed out.
         let mut names = decode_names(&names).ok_or(OverlayError::Invalid("cookie names"))?;
@@ -112,7 +110,7 @@ impl Overlay {
             0 | 1 => Some(self.native_parent(mount, serial)?),
             _ => None,
         };
-        let parent_inode = self.inode_at(mount.route, serial, state.active, state.installed)?;
+        let parent_inode = self.inode_at(serial, state.active, state.installed)?;
         let after = after.or(cursor.after_name()).map(<[u8]>::to_vec);
         let start = after.as_deref().unwrap_or(&[]);
         let mut local_kinds = Vec::new();
@@ -121,7 +119,6 @@ impl Overlay {
                 StatementKind::DirectoryEntry,
                 sql::SOURCE_NAMES_KINDS,
                 &[
-                    &mount.route.ns,
                     &generation,
                     &integer(serial)?,
                     &start,

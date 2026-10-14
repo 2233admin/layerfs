@@ -17,7 +17,6 @@ class NamespaceMutation(unittest.TestCase):
         family = json.loads((FAMILY / "family.json").read_text())
         expected = [
             "namespace-subtree-relocate-delete-1-compact-v2",
-            "namespace-subtree-relocate-delete-10-compact-v2",
             "namespace-subtree-relocate-delete-100-mixed-v4",
             "namespace-subtree-relocate-delete-500-mixed-v4",
         ]

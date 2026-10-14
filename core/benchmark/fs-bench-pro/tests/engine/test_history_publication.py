@@ -15,7 +15,7 @@ from engine import receipts
 class HistoryPublication(unittest.TestCase):
     def record(self,run):
         row={"schema":"fs-bench-pro-workspace-family-v1","family":"dedup_branch_history",
-             "case":"dedup-history-metadata-10","source_commit":"a"*40,"product_tree":"b"*40,
+             "case":"dedup-history-metadata-1","source_commit":"a"*40,"product_tree":"b"*40,
              "image":"pinned","status":"INELIGIBLE","functional_status":"PASS","proof_status":"PASS",
              "proof_wall_ns":123,"cleanup":"Gone","custody":"KNOWN_STOP"}
         receipts.write_new(run/"run.json",{"family":row["family"],"source_commit":row["source_commit"],

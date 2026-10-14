@@ -3,7 +3,7 @@ use crate::{
     mount::{AbortWrite, MountEntry, Negotiation},
     ports::{FailedDemands, Fence},
     request::{Accounting, OpcodeWork},
-    DispatchError, MountQueue, MountWork,
+    DispatchError, MountRequests, MountWork,
 };
 use fuser::{SessionMonitor, SessionOutcome, SessionPhase, SessionSnapshot};
 use layerfs_overlay::NativeMount;
@@ -46,8 +46,8 @@ pub struct SessionConfig {
 pub struct NativeSession {
     pub(super) mount: NativeMount,
     pub(super) directory: PathBuf,
-    pub(super) queue: MountQueue,
-    /// The lane's fence, kept so its count outlives the lane's release.
+    pub(super) queue: MountRequests,
+    /// The mount's fence, kept so its count outlives the request owner's release.
     pub(super) fence: Fence,
     pub(super) accounting: Arc<Accounting>,
     pub(super) negotiation: Option<Negotiation>,
@@ -151,7 +151,7 @@ impl NativeSession {
 #[derive(Clone)]
 pub struct SessionObserver {
     mount: NativeMount,
-    queue: MountQueue,
+    queue: MountRequests,
     accounting: Arc<Accounting>,
     monitor: Option<SessionMonitor>,
     detached: Arc<AtomicBool>,
@@ -209,9 +209,9 @@ pub enum AttachPhase {
 /// What remains of a failed attach after its one owned disposal attempt.
 #[derive(Debug)]
 pub enum AttachRemainder {
-    /// No mount, loop, request, lane or directory of this attempt remains.
+    /// No mount, loop, request owner or directory of this attempt remains.
     Disposed(Option<Box<Drained>>),
-    /// A directory removal or lane release before any mount effect failed.
+    /// A directory removal or request-owner release before any mount effect failed.
     Unmounted {
         directory: Option<io::Error>,
         lane: Option<DispatchError>,
@@ -247,9 +247,9 @@ pub enum DrainStage {
     Join,
     /// The session owner or admission watcher did not return normally.
     Owner,
-    /// Received, admitted or retained request ownership remains.
+    /// Received, running or retained request ownership remains.
     Requests,
-    /// The dispatcher refused to release this mount's fixed lane.
+    /// This mount's request owner refused its release.
     Lane,
 }
 /// The connection stays owned with its exact stopping stage; a later drain call
@@ -282,7 +282,7 @@ impl fmt::Debug for Undrained {
     }
 }
 /// Connection-drained receipt: detached, every created loop joined, no request
-/// or receive unit left and the lane released. It is necessary for terminal
+/// or receive unit left and the request owner released. It is necessary for terminal
 /// unmount and never sufficient: engine, Store and control owners are separate.
 #[derive(Debug)]
 pub struct Drained {

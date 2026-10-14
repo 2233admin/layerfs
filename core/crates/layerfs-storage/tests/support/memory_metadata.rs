@@ -2,7 +2,7 @@
 #![allow(dead_code)]
 use layerfs_content::ObjectId;
 use layerfs_storage::{
-    location::{LocatedObject, ObjectLocation, SignatureRow, ValueGroupRow},
+    location::{InodeValueRow, LocatedObject, ObjectLocation, SignatureRow},
     policy::{StoragePolicy, DEPENDENCY_PACK_CACHE_BYTES, READ_OBJECT_LIMIT},
     port::*,
 };
@@ -15,10 +15,8 @@ pub struct MetadataState {
     pub policy: StoragePolicy,
     pub packs: BTreeMap<i64, PublishedPack>,
     pub objects: BTreeMap<ObjectId, ObjectLocation>,
-    pub groups: BTreeMap<u32, ValueGroupRow>,
+    pub values: BTreeMap<u32, [u8; 73]>,
     pub signatures: BTreeMap<usize, SignatureRow>,
-    pub window: u32,
-    pub window_values: usize,
     pub next_pack: i64,
     pub next_ordinal: u64,
     pub registrations: Vec<Publication>,
@@ -30,10 +28,8 @@ impl Default for MetadataState {
             policy: StoragePolicy::frozen_default(),
             packs: BTreeMap::new(),
             objects: BTreeMap::new(),
-            groups: BTreeMap::new(),
+            values: BTreeMap::new(),
             signatures: BTreeMap::new(),
-            window: 1,
-            window_values: 0,
             next_pack: 1,
             next_ordinal: 1,
             registrations: Vec::new(),
@@ -136,47 +132,26 @@ impl PackPersistence for MemoryMetadata {
         );
         Ok(())
     }
-    fn value_groups(&self, query: ValueGroupQuery<'_>) -> Result<ValueGroups, PersistenceError> {
-        self.calls.lock().unwrap().push(("value_groups", 1));
+    fn inode_values(
+        &self,
+        ordinals: &[u32],
+        out: &mut Vec<InodeValueRow>,
+    ) -> Result<(), PersistenceError> {
+        self.calls
+            .lock()
+            .unwrap()
+            .push(("inode_values", ordinals.len()));
+        assert!(ordinals.len() <= READ_OBJECT_LIMIT);
+        assert!(ordinals.windows(2).all(|pair| pair[0] < pair[1]));
         let state = self.state.lock().unwrap();
-        let (rows, next) = match query {
-            ValueGroupQuery::Ordinals(ids) => {
-                assert!(ids.len() <= READ_OBJECT_LIMIT);
-                let mut groups = BTreeMap::new();
-                for ordinal in ids {
-                    if let Some((first, row)) = state.groups.range(..=ordinal).next_back() {
-                        if u64::from(*ordinal) < u64::from(*first) + row.count as u64 {
-                            groups.insert(*first, *row);
-                        }
-                    }
-                }
-                (groups.into_values().collect(), None)
-            }
-            ValueGroupQuery::Page { from, limit } => {
-                assert!(limit <= READ_OBJECT_LIMIT);
-                let rows: Vec<_> = state
-                    .groups
-                    .range(from..)
-                    .take(limit)
-                    .map(|(_, row)| *row)
-                    .collect();
-                let next = if limit == 0 {
-                    None
-                } else {
-                    state
-                        .groups
-                        .range(from..)
-                        .nth(limit)
-                        .map(|(first, _)| *first)
-                };
-                (rows, next)
-            }
-        };
-        Ok(ValueGroups {
-            rows,
-            next,
-            window_start: state.window,
-        })
+        out.clear();
+        out.extend(ordinals.iter().filter_map(|ordinal| {
+            state.values.get(ordinal).map(|value| InodeValueRow {
+                ordinal: *ordinal,
+                value: *value,
+            })
+        }));
+        Ok(())
     }
     fn signatures(&self, out: &mut Vec<SignatureRow>) -> Result<(), PersistenceError> {
         self.calls.lock().unwrap().push(("signatures", 1));
@@ -233,23 +208,14 @@ impl PackPersistence for MemoryMetadata {
                 }
             }
         }
-        for row in &batch.value_groups {
-            if next.window_values + row.count > layerfs_storage::policy::METADATA_INDEX_VALUES {
-                next.window = row.first_ordinal;
-                next.window_values = row.count;
-            } else {
-                next.window_values += row.count;
+        for row in &batch.inode_values {
+            if row.ordinal == 0 || next.values.insert(row.ordinal, row.value).is_some() {
+                return Err(PersistenceError::Malformed);
             }
-            next.groups.insert(row.first_ordinal, *row);
-            next.next_ordinal = next
-                .next_ordinal
-                .max(u64::from(row.first_ordinal) + row.count as u64);
+            next.next_ordinal = next.next_ordinal.max(u64::from(row.ordinal) + 1);
         }
         for row in &batch.signatures {
             next.signatures.insert(row.slot, *row);
-        }
-        if let Some(start) = batch.window_start {
-            next.window = next.window.max(start);
         }
         if let Some((first, count)) = batch.release_ordinals {
             if u64::from(first) + count as u64 == next.next_ordinal {
