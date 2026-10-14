@@ -1,7 +1,8 @@
 // LayerFS SDK simulator: an in-memory model of the *proposed* agent-facing SDK
 // (sdk_js.md, issue #322). It reproduces the decision rules only; it is not the
-// product. Branch publication is overwrite-only (BRANCH-OVERWRITE-DECISION) and
-// main-line publication follows History add_layer (fast-forward only).
+// product. Proposals simulated here: Commit kinds normal/overwrite with
+// three-way merge of a stale Workspace, Branch merge, .lww rules and
+// overwrite-only publish to main.
 (function (global) {
   "use strict";
 
@@ -157,6 +158,111 @@
     return entries;
   }
 
+  // ---------------------------------------------------------------- merge
+  // Proposal only: three-way merge with conflict markers and .lww rules.
+  const MARKERS = /^<<<<<<< .*$[\s\S]*?^=======$[\s\S]*?^>>>>>>> .*$/m;
+  const hasMarkers = (text) => typeof text === "string" && MARKERS.test(text);
+  const sameEntry = (x, y) => (!x && !y) || (!!x && !!y && x.type === y.type && (x.content ?? null) === (y.content ?? null));
+
+  // For each line of `a`, the index of the matching line of `b` (or -1).
+  function matchLines(a, b) {
+    const m = new Array(a.length).fill(-1);
+    let i = 0, j = 0;
+    for (const op of lineDiff(a.join("\n"), b.join("\n"))) {
+      if (op.op === " ") { m[i] = j; i++; j++; } else if (op.op === "-") i++; else j++;
+    }
+    return m;
+  }
+
+  // Line merge: chunks between lines unchanged on both sides take the side
+  // that changed; both changing them differently is a conflict block.
+  function merge3Lines(base, ours, theirs, labels) {
+    const b = (base ?? "").split("\n"), o = ours.split("\n"), t = theirs.split("\n");
+    const mo = matchLines(b, o), mt = matchLines(b, t);
+    const out = [];
+    let conflicts = 0, bi = 0, oi = 0, ti = 0;
+    const eq = (x, y) => x.length === y.length && x.every((v, k) => v === y[k]);
+    const chunk = (be, oe, te) => {
+      const cb = b.slice(bi, be), co = o.slice(oi, oe), ct = t.slice(ti, te);
+      if (eq(co, cb)) out.push(...ct);
+      else if (eq(ct, cb) || eq(co, ct)) out.push(...co);
+      else { conflicts++; out.push(`<<<<<<< ${labels[0]}`, ...co, "=======", ...ct, `>>>>>>> ${labels[1]}`); }
+    };
+    for (let k = 0; k < b.length; k++) {
+      if (mo[k] < 0 || mt[k] < 0 || mo[k] < oi || mt[k] < ti) continue;
+      chunk(k, mo[k], mt[k]);
+      out.push(b[k]);
+      bi = k + 1; oi = mo[k] + 1; ti = mt[k] + 1;
+    }
+    chunk(b.length, o.length, t.length);
+    return { text: out.join("\n"), conflicts };
+  }
+
+  // gitignore-style rules from /.lww; "%include <file>" reads another file
+  // of the same tree (for example .gitignore). Last matching rule wins.
+  function lwwRules(tree, file = "/.lww", seen = new Set()) {
+    const e = tree[file];
+    if (!e || e.type !== "file" || seen.has(file)) return [];
+    seen.add(file);
+    const rules = [];
+    for (let line of e.content.split("\n")) {
+      line = line.trim();
+      if (!line || line.startsWith("#")) continue;
+      const inc = line.match(/^%include\s+(\S+)$/);
+      if (inc) { rules.push(...lwwRules(tree, "/" + inc[1].replace(/^\/+/, ""), seen)); continue; }
+      const neg = line.startsWith("!");
+      let pat = (neg ? line.slice(1) : line).replace(/\/$/, "");
+      const anchored = pat.includes("/");
+      pat = pat.replace(/^\//, "");
+      const rx = pat.split("**").map((s) => s.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, "[^/]*").replace(/\?/g, "[^/]")).join(".*");
+      rules.push({ pattern: line, neg, re: new RegExp((anchored ? "^" : "(^|/)") + rx + "($|/)") });
+    }
+    return rules;
+  }
+  const lwwMatch = (rules, path) => {
+    let hit = null;
+    for (const r of rules) if (r.re.test(path.replace(/^\//, ""))) hit = r.neg ? null : r;
+    return hit;
+  };
+
+  // Three-way tree merge. opts: { labels: [ours, theirs], rules, timeOurs(p),
+  // timeTheirs(p) }. Returns { tree, conflicts, lww, clean }.
+  function merge3Trees(base, ours, theirs, opts, newInode) {
+    const tree = {}, conflicts = [], lww = [];
+    const [lo, lt] = opts.labels;
+    for (const p of [...new Set([...Object.keys(base), ...Object.keys(ours), ...Object.keys(theirs)])].sort()) {
+      const b = base[p], o = ours[p], t = theirs[p];
+      let r;
+      if (sameEntry(o, t)) r = o;
+      else if (sameEntry(b, o)) r = t;
+      else if (sameEntry(b, t)) r = o;
+      else {
+        const rule = lwwMatch(opts.rules || [], p);
+        if (rule) {
+          const to = opts.timeOurs(p), tt = opts.timeTheirs(p), keepOurs = to >= tt;
+          r = keepOurs ? o : t;
+          lww.push({ path: p, kept: keepOurs ? lo : lt, deleted: !r, rule: rule.pattern });
+        } else if (o && t && o.type === "file" && t.type === "file") {
+          const m = merge3Lines(b && b.type === "file" ? b.content : "", o.content, t.content, opts.labels);
+          r = { ...o, content: m.text };
+          if (m.conflicts) conflicts.push({ path: p, kind: b ? "content" : "add/add", blocks: m.conflicts });
+        } else if ((o && o.type === "file") || (t && t.type === "file")) {
+          const kept = o || t;
+          r = { ...kept, content: o ? `<<<<<<< ${lo}\n${o.content}\n=======\n>>>>>>> ${lt} (deleted)` : `<<<<<<< ${lo} (deleted)\n=======\n${t.content}\n>>>>>>> ${lt}` };
+          conflicts.push({ path: p, kind: o ? "modify/delete" : "delete/modify", blocks: 1 });
+        } else {
+          r = o || t;
+          conflicts.push({ path: p, kind: "type", blocks: 0 });
+        }
+      }
+      if (r) tree[p] = clone(r);
+    }
+    for (const p of Object.keys(tree)) // a kept path needs its folders
+      for (let d = parentOf(p); d !== "/" && !tree[d]; d = parentOf(d))
+        tree[d] = clone(ours[d] && ours[d].type === "dir" ? ours[d] : theirs[d] && theirs[d].type === "dir" ? theirs[d] : { type: "dir", inode: newInode() });
+    return { tree, conflicts, lww, clean: conflicts.length === 0 };
+  }
+
   // ---------------------------------------------------------------- the model
   class Sim {
     constructor() {
@@ -164,7 +270,7 @@
         project: null, main: null,
         roots: {}, rootKeys: {}, commits: {}, layers: {},
         branches: {}, branchOrder: [], sandboxes: {}, sandboxOrder: [],
-        seq: { root: 0, commit: 0, layer: 0, inode: 0, sandbox: 0, proc: 0, slot: 0 },
+        seq: { root: 0, commit: 0, layer: 0, inode: 0, sandbox: 0, proc: 0, slot: 0, clock: 0 },
       };
     }
 
@@ -173,6 +279,7 @@
     // -- identities
     newInode() { return "i" + ++this.s.seq.inode; }
     slot() { return this.s.seq.slot++; }
+    tick() { return ++this.s.seq.clock; }
     intern(tree) {
       const key = treeKey(tree);
       if (this.s.rootKeys[key]) return this.s.rootKeys[key];
@@ -266,9 +373,55 @@
       if (root === currentRoot)
         return { kind: "UpToDate", branch: b.name, head: b.head, root, capturedHead, displacedHead: null };
       const id = "C" + ++this.s.seq.commit;
-      this.s.commits[id] = { id, parent: capturedHead, root, base: b.base, branch: b.name, slot: this.slot(), by: "fs", via };
+      this.s.commits[id] = { id, parent: capturedHead, root, base: b.base, branch: b.name, slot: this.slot(), by: "fs", via, time: this.tick() };
       b.head = id;
       return { kind: "Committed", branch: b.name, head: id, root, capturedHead, displacedHead: null };
+    }
+
+    // -- history graph: nodes are Commits ("C#") and Layers ("L#")
+    node(id) { return this.s.commits[id] || this.s.layers[id]; }
+    nodeTree(id) { return this.s.roots[this.node(id).root]; }
+    firstParent(id) { const c = this.s.commits[id]; return c ? c.parent || c.base : this.s.layers[id].parent; }
+    // The node a merge source names: main's head, or a Branch head (its fork point before any Commit).
+    sourceNode(ref) {
+      if (ref === "main") return this.s.main.head;
+      if (/^[CL]\d+$/.test(ref)) { if (!this.node(ref)) refuse("NoSuchCommit", `no Commit or Layer ${ref}`); return ref; }
+      const b = this.branch(ref);
+      return b.head || b.from;
+    }
+    // Every node reachable through parents, merge sources and published sources.
+    ancestors(id) {
+      const out = new Set(), todo = [id];
+      while (todo.length) {
+        const n = todo.pop();
+        if (!n || out.has(n)) continue;
+        out.add(n);
+        const c = this.s.commits[n];
+        if (c) todo.push(c.parent || c.base, c.mergedFrom);
+        else todo.push(this.s.layers[n].parent, this.s.layers[n].sourceCommit);
+      }
+      return out;
+    }
+    // Latest common ancestor of two nodes.
+    mergeBase(a, b) {
+      const A = this.ancestors(a);
+      let best = null;
+      for (const n of this.ancestors(b)) if (A.has(n) && (!best || this.node(n).time > this.node(best).time)) best = n;
+      return best;
+    }
+    // Time of the newest first-parent node after `stop` that changed `path`.
+    changeTime(id, path, stop) {
+      for (let n = id; n && n !== stop; n = this.firstParent(n)) {
+        const prev = this.firstParent(n);
+        if (!sameEntry(this.nodeTree(n)[path], prev ? this.nodeTree(prev)[path] : undefined)) return this.node(n).time;
+      }
+      return 0;
+    }
+    merge(base, ours, theirs, opts) { return merge3Trees(base, ours, theirs, opts, () => this.newInode()); }
+    // Changed files of a Workspace that still hold a conflict block.
+    markersIn(ws) {
+      return diffTrees(this.s.roots[ws.baseRoot], ws.live)
+        .filter((d) => d.kind !== "Removed" && d.type === "file" && hasMarkers(ws.live[d.path].content)).map((d) => d.path);
     }
   }
 
@@ -287,7 +440,7 @@
       }
       const root = this.intern(tree);
       const id = "L" + this.s.seq.layer++;
-      this.s.layers[id] = { id, parent: null, root, sourceBranch: null, sourceCommit: null, slot: this.slot() };
+      this.s.layers[id] = { id, parent: null, root, sourceBranch: null, sourceCommit: null, slot: this.slot(), time: this.tick() };
       this.s.project = { name: a.name };
       this.s.main = { head: id };
       return { kind: "Initialized", project: a.name, main: { headLayer: id, root } };
@@ -327,8 +480,9 @@
         refuse("InvalidInput", "diff_branches takes Branches or main");
       return { kind: "ok", from: { ref: a.from, label: l.label, root: l.root }, to: { ref: a.to, label: r.label, root: r.root }, items: diffTrees(l.tree, r.tree) };
     },
-    // Mirrors History add_layer: published-source UpToDate, head/base checks,
-    // stack head must equal the Branch base (fast-forward only), NoChanges.
+    // Proposal: publish is overwrite-only. The new Layer sits on main's current
+    // head and holds exactly the Branch head's files, whatever main gained since
+    // the Branch's base (reported as `overwrote`; those Layers stay in history).
     "branch.publish"(a) {
       const b = this.branch(a.branch);
       const cid = a.commit || b.head;
@@ -337,14 +491,62 @@
       const already = Object.values(this.s.layers).find((l) => l.sourceBranch === b.name && l.sourceCommit === cid);
       if (already) return { kind: "UpToDate", layer: already.id, main: { headLayer: this.s.main.head, root: this.s.layers[this.s.main.head].root } };
       if (b.head !== cid) refuse("HeadMoved", `${b.name} head is ${b.head}, not ${cid}`);
-      if (c.base !== b.base) refuse("BaseMismatch", `${cid} base ${c.base} differs from Branch base ${b.base}`);
-      if (this.s.main.head !== b.base)
-        refuse("StackMoved", `main moved to ${this.s.main.head}; ${b.name} is based on ${b.base}`, { expected: b.base, actual: this.s.main.head });
-      if (c.root === this.s.layers[b.base].root) return { kind: "NoChanges", main: { headLayer: this.s.main.head } };
+      const marked = Object.keys(this.s.roots[c.root]).filter((p) => hasMarkers(this.s.roots[c.root][p].content));
+      if (marked.length) refuse("Conflict", `${cid} still has conflict markers in ${marked.length} file${marked.length === 1 ? "" : "s"}`,
+        { conflicts: marked.map((p) => ({ path: p, kind: "markers" })) });
+      const parent = this.s.main.head;
+      if (c.root === this.s.layers[parent].root) return { kind: "NoChanges", main: { headLayer: parent } };
       const id = "L" + this.s.seq.layer++;
-      this.s.layers[id] = { id, parent: b.base, root: c.root, sourceBranch: b.name, sourceCommit: cid, slot: this.slot() };
+      this.s.layers[id] = { id, parent, root: c.root, sourceBranch: b.name, sourceCommit: cid, slot: this.slot(), time: this.tick() };
       this.s.main.head = id;
-      return { kind: "Added", source: { branch: b.name, commit: cid }, publishedLayer: { id, parent: b.base, root: c.root }, main: { headLayer: id, root: c.root } };
+      // main's previous head is covered when it is in the Commit's history or was published from it.
+      const anc = this.ancestors(cid), pl = this.s.layers[parent];
+      const overwrote = anc.has(parent) || (pl.sourceCommit && anc.has(pl.sourceCommit)) ? null : parent;
+      return { kind: "Added", source: { branch: b.name, commit: cid }, publishedLayer: { id, parent, root: c.root }, main: { headLayer: id, root: c.root }, basedOn: b.base, overwrote };
+    },
+    // Proposal: a + b = c. Merging never changes either input: it forks a new
+    // Branch `name` from a's head whose first Commit is the three-way merge of
+    // a and b (either may be main). On a conflict c is still created, its
+    // conflicting files carry markers, and the call rejects with Conflict
+    // (err.branch names c). Fix them in a Workspace on c and commit. Publish
+    // is refused while the head still holds a marker block.
+    "branch.merge"(a) {
+      const left = a.branch, right = a.with;
+      if (left === right) refuse("InvalidInput", "merge takes two different sources");
+      if (!a.name) refuse("InvalidInput", "merge needs a name for the new Branch");
+      if (a.name === "main") refuse("ReservedName", `"main" names the project's main line`);
+      if (this.s.branches[a.name]) refuse("NameTaken", `Branch ${a.name} already exists`);
+      const ln = this.sourceNode(left), rn = this.sourceNode(right);
+      // One side already contains the other: c just points at the newer node (metadata only).
+      const newer = this.ancestors(ln).has(rn) ? ln : this.ancestors(rn).has(ln) ? rn : null;
+      if (newer) {
+        const c = this.s.commits[newer];
+        const b = { name: a.name, base: c ? c.base : newer, head: c ? newer : null, from: newer, slot: this.slot() };
+        this.s.branches[a.name] = b;
+        this.s.branchOrder.push(a.name);
+        return { kind: "Merged", fastForward: true, branch: a.name, head: newer, root: this.node(newer).root,
+          sources: [{ ref: left, node: ln }, { ref: right, node: rn }], mergeBase: newer === ln ? rn : ln, conflicts: [], lww: [] };
+      }
+      const mb = this.mergeBase(ln, rn);
+      const ours = this.nodeTree(ln);
+      const m = this.merge(this.nodeTree(mb), ours, this.nodeTree(rn), {
+        labels: [`${left}@${ln}`, `${right}@${rn}`], rules: lwwRules(ours),
+        timeOurs: (p) => this.changeTime(ln, p, mb), timeTheirs: (p) => this.changeTime(rn, p, mb) });
+      // c's base Layer: main's head when main is one side, else a's base.
+      const base = left === "main" ? ln : right === "main" ? rn : this.s.commits[ln] ? this.s.commits[ln].base : ln;
+      const b = { name: a.name, base, head: null, from: ln, slot: this.slot() };
+      this.s.branches[a.name] = b;
+      this.s.branchOrder.push(a.name);
+      const root = this.intern(m.tree);
+      const id = "C" + ++this.s.seq.commit;
+      this.s.commits[id] = { id, parent: this.s.commits[ln] ? ln : null, root, base, branch: a.name, slot: this.slot(), by: "merge", via: `merge ${left} + ${right}`,
+        mergedFrom: rn, mergeBase: mb, lww: m.lww, conflicts: m.conflicts, time: this.tick() };
+      b.head = id;
+      const out = { branch: a.name, head: id, root, sources: [{ ref: left, node: ln }, { ref: right, node: rn }], mergeBase: mb, conflicts: m.conflicts, lww: m.lww };
+      // A conflict still creates c (with markers) but rejects, so a script stops.
+      if (!m.clean)
+        refuse("Conflict", `${left} + ${right} conflict in ${m.conflicts.length} file${m.conflicts.length === 1 ? "" : "s"}; ${a.name} was created with markers`, out);
+      return { kind: "Merged", ...out };
     },
 
     // ---------------------------------------------------------- fs reads
@@ -420,7 +622,7 @@
       const b = this.branch(a.branch);
       const path = "/workspaces/" + sb.nextWs++;
       const root = this.branchRoot(b);
-      sb.workspaces[path] = { sandbox: sb.id, path, branch: b.name, baseCommit: b.head, baseLayer: b.base, baseRoot: root, live: clone(this.s.roots[root]), mounted: true, slot: this.slot() };
+      sb.workspaces[path] = { sandbox: sb.id, path, branch: b.name, baseCommit: b.head, baseLayer: b.base, baseRoot: root, live: clone(this.s.roots[root]), mounted: true, slot: this.slot(), times: {} };
       sb.wsOrder.push(path);
       return { kind: "Mounted", sandbox: sb.id, path, branch: b.name, base: b.head || b.base, root };
     },
@@ -442,6 +644,8 @@
           const before = ws.live;
           ws.live = applyChanges(ws.live, a.writes, () => this.newInode());
           changed = diffTrees(before, ws.live).map((d) => d.path);
+          const t = this.tick();
+          for (const p of changed) ws.times[p] = t;
         } catch (e) {
           if (!(e instanceof Refusal)) throw e;
           exitCode = 1; stdout = e.message;
@@ -473,37 +677,65 @@
       return { kind: "ok", workspace: `${a.sandbox}:${a.path}`, branch: ws.branch, base: ws.baseCommit || ws.baseLayer, branchHead: b.head,
         headMovedSinceMount: b.head !== ws.baseCommit, overlay: diffTrees(this.s.roots[ws.baseRoot], ws.live).map((d) => `${d.kind[0]} ${d.path}`) };
     },
-    // Mirrors commit_staged: the new Commit keeps the captured parent; UpToDate
-    // compares against the *current* Branch root. A stale Workspace (head moved
-    // since mount or its last Commit) is refused unless force overwrites it.
+    // Proposal: two Commit kinds, and commit is the only Workspace verb.
+    // Normal: parent = the Branch head. A stale Workspace (head moved since
+    // mount or its last Commit) is merged three-way with the head first:
+    //   clean    -> a normal Commit on the head (result.merged);
+    //   conflict -> refused, nothing committed; the merge is written into the
+    //               Workspace (clean files applied, markers in conflicting
+    //               files) and its base moves to the head. Fix the markers and
+    //               commit again. Commit is refused while a marker block remains.
+    // Overwrite (force): commits the Workspace as it is, displacing the head.
     "sandbox.commit"(a) {
       const ws = this.workspace(a.sandbox, a.path);
       const b = this.s.branches[ws.branch];
       const capturedHead = ws.baseCommit;
+      const stale = b.head !== capturedHead;
+      const markers = this.markersIn(ws);
+      if (markers.length)
+        refuse("Conflict", `${markers.length} ${markers.length === 1 ? "file still contains" : "files still contain"} conflict markers`,
+          { head: b.head, base: capturedHead || ws.baseLayer, conflicts: markers.map((p) => ({ path: p, kind: "markers" })), lww: [], markers: true });
+      let merged = null;
+      if (stale && !a.force) {
+        const theirs = this.s.roots[this.branchRoot(b)];
+        const m = this.merge(this.s.roots[ws.baseRoot], ws.live, theirs, {
+          labels: ["workspace", `${b.name}@${b.head}`], rules: lwwRules(theirs),
+          timeOurs: (p) => ws.times[p] || 0, timeTheirs: (p) => this.changeTime(b.head, p, capturedHead || ws.baseLayer) });
+        merged = { from: capturedHead || ws.baseLayer, head: b.head, lww: m.lww };
+        if (!m.clean) {
+          const changed = diffTrees(ws.live, m.tree).map((d) => d.path);
+          ws.live = m.tree; ws.baseCommit = b.head; ws.baseLayer = b.base; ws.baseRoot = this.branchRoot(b);
+          refuse("Conflict", `${b.name} head moved to ${b.head} and ${m.conflicts.length} ${m.conflicts.length === 1 ? "file conflicts" : "files conflict"} with this Workspace; nothing committed`,
+            { head: b.head, base: merged.from, conflicts: m.conflicts, lww: m.lww, written: changed });
+        }
+        ws.live = m.tree;
+      }
       const currentRoot = this.branchRoot(b);
       const root = this.intern(ws.live);
       if (root === currentRoot) {
-        ws.baseCommit = b.head; ws.baseRoot = root;
-        return { kind: "UpToDate", branch: b.name, head: b.head, root, capturedHead, displacedHead: null };
+        ws.baseCommit = b.head; ws.baseLayer = b.base; ws.baseRoot = root;
+        return { kind: "UpToDate", branch: b.name, head: b.head, root, capturedHead, displacedHead: null, merged };
       }
-      if (b.head !== capturedHead && !a.force)
-        refuse("Stale", `${b.name} head is ${b.head}; this Workspace mounted ${capturedHead || b.base}`, { head: b.head, base: capturedHead || b.base });
       const id = "C" + ++this.s.seq.commit;
-      const displacedHead = b.head !== capturedHead ? b.head : null;
-      this.s.commits[id] = { id, parent: capturedHead, root, base: b.base, branch: b.name, slot: this.slot(), by: "workspace", via: `${a.sandbox}:${a.path}` };
+      const displacedHead = stale && a.force ? b.head : null;
+      this.s.commits[id] = { id, parent: a.force ? capturedHead : b.head, root, base: b.base, branch: b.name, slot: this.slot(), by: "workspace", via: `${a.sandbox}:${a.path}`,
+        time: this.tick(), ...(merged ? { merged } : {}) };
       if (displacedHead) this.s.commits[displacedHead].displacedBy = id;
       b.head = id;
-      ws.baseCommit = id; ws.baseRoot = root;
-      return { kind: "Committed", branch: b.name, head: id, root, capturedHead, displacedHead };
+      ws.baseCommit = id; ws.baseLayer = b.base; ws.baseRoot = root;
+      return { kind: "Committed", branch: b.name, head: id, root, capturedHead, displacedHead, merged };
     },
+    // Proposal: refused while uncommitted changes exist, unless discard.
     "sandbox.unmount"(a) {
       const ws = this.workspace(a.sandbox, a.path);
       const sb = this.s.sandboxes[a.sandbox];
       const busy = sb.procOrder.filter((id) => sb.processes[id].status === "running" && sb.processes[id].path === a.path);
       if (busy.length) refuse("Busy", `${a.sandbox}:${a.path} is busy: ${busy.join(", ")} still running`, { processes: busy });
-      const discarded = diffTrees(this.s.roots[ws.baseRoot], ws.live).map((d) => d.path);
+      const changed = diffTrees(this.s.roots[ws.baseRoot], ws.live).map((d) => d.path);
+      if (changed.length && !a.discard)
+        refuse("Dirty", `${a.sandbox}:${a.path} has ${changed.length} uncommitted change${changed.length === 1 ? "" : "s"}`, { changed });
       ws.mounted = false;
-      return { kind: "Unmounted", workspace: `${a.sandbox}:${a.path}`, discardedUncommitted: discarded };
+      return { kind: "Unmounted", workspace: `${a.sandbox}:${a.path}`, discardedUncommitted: changed };
     },
     "sandbox.close"(a) {
       const sb = this.sandbox(a.sandbox);
@@ -549,6 +781,10 @@
         body = `const result = await layerfs.branch.diff_branches({\n  from: ${sel(a.from)},\n  to: ${sel(a.to)},\n});\n${print}`; break;
       }
       case "branch.publish": conn.branch = a.branch; body = `const result = await layerfs.branch.publish(${a.commit ? `{ commit: ${J(a.commit)} }` : ""});\n${print}`; break;
+      case "branch.merge": {
+        const sel = (r) => (r === "main" ? "layerfs.project.main" : J(r));
+        body = `const result = await layerfs.branch.merge(${sel(a.branch)}, ${sel(a.with)}, { name: ${J(a.name)} });\n${print}`; break;
+      }
       case "fs.read":
         if (a.ref !== "main") conn.branch = a.ref;
         body = `const result = await ${onRef(a.ref)}.read(${J(a.path)}${a.commit ? `, { commit: ${J(a.commit)} }` : ""});\n${print}`; break;
@@ -584,7 +820,7 @@
       case "process.cancel": body = `${sb()}const proc = await sandbox.get_process(${J(a.process)});\nconst result = await proc.cancel();\n${print}`; break;
       case "sandbox.status": body = `${sb()}const result = await sandbox.status(${J(a.path)});\n${print}`; break;
       case "sandbox.commit": body = `${sb()}const result = await sandbox.commit(${J(a.path)}${a.force ? ", { force: true }" : ""});\n${print}`; break;
-      case "sandbox.unmount": body = `${sb()}const result = await sandbox.unmount(${J(a.path)});\n${print}`; break;
+      case "sandbox.unmount": body = `${sb()}const result = await sandbox.unmount(${J(a.path)}${a.discard ? ", { discard: true }" : ""});\n${print}`; break;
       case "sandbox.close": body = `${sb()}const result = await sandbox.close();\n${print}`; break;
       default: body = `// ${step.call}`;
     }
@@ -617,7 +853,7 @@
     return { scenario: scn, initial, steps, sim };
   }
 
-  const api = { Sim, Refusal, applyChanges, diffTrees, lineDiff, treeKey, scriptFor, runScenario, childrenOf, parentOf, baseName };
+  const api = { Sim, Refusal, applyChanges, diffTrees, lineDiff, merge3Lines, merge3Trees, lwwRules, hasMarkers, treeKey, scriptFor, runScenario, childrenOf, parentOf, baseName };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else global.LayerSim = api;
 })(typeof globalThis !== "undefined" ? globalThis : this);

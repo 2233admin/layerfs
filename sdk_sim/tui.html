@@ -143,6 +143,10 @@ body.nosel, body.nosel * { user-select: none !important; -webkit-user-select: no
 #hist-svg .edge { fill: none; stroke: var(--term-dim); stroke-width: 1.8; }
 #hist-svg .edge.main { stroke: var(--purple); stroke-width: 2.4; }
 #hist-svg .edge.publish { stroke: var(--purple); stroke-width: 1.5; stroke-dasharray: 4 4; }
+#hist-svg .edge.merge { stroke: var(--bc); stroke-width: 1.6; stroke-dasharray: 5 3; }
+#hist-svg .mergehead { fill: none; stroke: var(--bc); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+#hist-svg .commit .inner { fill: var(--term); pointer-events: none; }
+#hist-svg .commit.marked .shape { stroke: var(--red); stroke-width: 2.5; stroke-dasharray: 3 2; }
 #hist-svg .node { cursor: pointer; }
 #hist-svg .node .shape { transform-box: fill-box; transform-origin: center; transition: transform .15s; }
 #hist-svg .node:hover .shape { transform: scale(1.2); }
@@ -265,6 +269,7 @@ body.nosel, body.nosel * { user-select: none !important; -webkit-user-select: no
 .player { position: fixed; left: 50%; bottom: 44px; transform: translateX(-50%); z-index: 50; width: min(720px, calc(100vw - 32px)); background: color-mix(in srgb, var(--card) 86%, transparent); backdrop-filter: saturate(180%) blur(24px); -webkit-backdrop-filter: saturate(180%) blur(24px); border-radius: 12px; box-shadow: 0 14px 44px rgba(0,0,0,.25), 0 0 0 .5px var(--sep-strong); padding: 8px 10px 10px; display: none; }
 .player.open { display: block; animation: grow .2s ease-out; }
 .player .row { display: flex; align-items: center; gap: 4px; }
+.player select { font: 600 12px var(--font); color: var(--text); background: var(--well); border: 1px solid var(--sep-strong); border-radius: 6px; height: 26px; padding: 0 4px; margin-left: 4px; }
 .player .count { font: 600 12px var(--mono); color: var(--text-2); margin: 0 6px; white-space: nowrap; }
 .player .dots { display: flex; gap: 3px; flex: 1; min-width: 0; }
 .player .dots i { flex: 1; height: 5px; border-radius: 3px; background: var(--sep-strong); cursor: pointer; transition: background .2s; }
@@ -333,6 +338,7 @@ body.nosel, body.nosel * { user-select: none !important; -webkit-user-select: no
     <button class="ib" id="d-play" title="Play / pause"></button>
     <button class="ib" id="d-step" title="Next step"><svg viewBox="0 0 16 16"><path d="M3 3l7 5-7 5zM12.5 3v10" fill="currentColor" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg></button>
     <button class="ib" id="d-speed" title="Speed">1×</button>
+    <select id="d-story" title="Demo story"></select>
     <span class="count" id="d-count"></span>
     <span class="dots" id="d-dots"></span>
     <button class="ib" id="d-close" title="Close the player"><svg viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button>
@@ -545,7 +551,7 @@ function renderFs() {
   dock.hidden = !S.docks.fs; $("vh-fs").hidden = !S.docks.fs;
   const mounts = b === "main" ? [] : mountsOf(b);
   const prompt = eng.fsPrompt(b, f.state);
-  const pill = b === "main" ? '<span class="pill">read-only</span>' : mounts.length ? `<span class="pill lock" title="Mounted at ${esc(mounts.join(", "))}. An fs write moves the head past them; their commit then needs --force.">⛓ ${mounts.length} mount${mounts.length === 1 ? "" : "s"}</span>` : '<span class="pill">writes go to the Store</span>';
+  const pill = b === "main" ? '<span class="pill">read-only</span>' : mounts.length ? `<span class="pill lock" title="Mounted at ${esc(mounts.join(", "))}. An fs write moves the head past them; their commit then merges with the new head first.">⛓ ${mounts.length} mount${mounts.length === 1 ? "" : "s"}</span>` : '<span class="pill">writes go to the Store</span>';
   dock.innerHTML = `<div class="thead"><span class="kind fs">FS</span><span class="ttl">${esc(b)} @ ${headOf(b)}</span><span class="pills">${pill}</span></div>
     <div class="tbody">${transcript(f.lines)}${inputRow("fs", prompt, fsPc(prompt))}</div>`;
   scrollBottom(dock);
@@ -559,7 +565,9 @@ function paneHtml(id) {
   const pills = [`<span class="pill" title="This Workspace is on ${w ? w.baseCommit || w.baseLayer : "?"} of ${esc(p.branch)}">@ ${w ? w.baseCommit || w.baseLayer : "?"}</span>`];
   if (dirty) pills.push(`<span class="pill dirty">+${dirty} uncommitted</span>`);
   for (const pr of procs) pills.push(`<span class="pill run" title="${esc(pr.command)}">● ${pr.id}<button class="stop" data-stop="${p.sandbox}|${pr.id}" title="Stop ${pr.id} (process.cancel)">■</button></span>`);
-  if (stale) pills.push(`<span class="pill warn" title="${esc(p.branch)} head is ${b.head}; this Workspace is on ${w.baseCommit || w.baseLayer}. commit is refused as Stale; commit --force overwrites ${b.head}.">⚠ stale · head ${b.head}</span>`);
+  const marks = w ? sim.markersIn(w) : [];
+  if (marks.length) pills.push(`<span class="pill warn" title="Conflict markers in ${esc(marks.join(", "))}. Remove every block, then commit.">✕ ${marks.length} conflict${marks.length === 1 ? "" : "s"}</span>`);
+  if (stale) pills.push(`<span class="pill warn" title="${esc(p.branch)} head is ${b.head}; this Workspace is on ${w.baseCommit || w.baseLayer}. commit merges with ${b.head} first: clean commits normally, a conflict writes markers here and commits nothing. commit --force overwrites ${b.head}.">⚠ stale · head ${b.head}</span>`);
   if (others.length) pills.push(`<span class="pill lock" title="Also mounted at ${esc(others.join(", "))}: whichever commits first makes the others stale">⛓ shared</span>`);
   const prompt = eng.sandboxPrompt(p);
   return `<section class="term pane${S.focus === id ? " focused" : ""}${S.enter === id ? " enter" : ""}" data-pane="${id}" aria-label="Sandbox terminal ${esc(wsKey(p))}">
@@ -823,6 +831,13 @@ function renderHistory() {
     }
   }
   for (const l of Object.values(s.layers)) if (l.sourceCommit) { const a = L.pos[l.sourceCommit], b = L.pos[l.id]; g += `<path class="edge publish" d="M${a.x},${a.y} C${a.x},${(a.y + b.y) / 2} ${b.x},${(a.y + b.y) / 2} ${b.x},${b.y}"/>`; }
+  // Merge link: dashed, in the source lane's colour, from the merged node into the merge Commit.
+  for (const c of Object.values(s.commits)) if (c.mergedFrom) {
+    const a = L.pos[c.mergedFrom], b = L.pos[c.id], src = s.commits[c.mergedFrom];
+    const bc = src ? branchColor(src.branch) : "var(--purple)", ex = b.x - 9, ey = b.y + (a.y < b.y ? -4 : 4), dy = a.y < b.y ? -1 : 1;
+    g += `<g style="--bc:${bc}"><path class="edge merge" d="M${a.x},${a.y} C${a.x + 18},${b.y + dy * 22} ${b.x - 28},${b.y + dy * 10} ${ex},${ey}"><title>${c.id} merges ${c.mergedFrom}</title></path><path class="mergehead" d="M${ex - 5},${ey + dy * 4.5} L${ex},${ey} L${ex - 6},${ey - dy * 1}"/></g>`;
+  }
+  const marked = (c) => Object.values(s.roots[c.root]).some((e) => LayerSim.hasMarkers(e.content));
   const cls = (id) => `${isNew(id) && !reduced ? " popin" : ""}${hl.has(id) ? " hl" : ""}`;
   const badge = (name, id, p) => {
     const ms = L.info[name].mountsAt[id]; if (!ms) return "";
@@ -831,7 +846,7 @@ function renderHistory() {
   };
   for (const l of Object.values(s.layers)) { const p = L.pos[l.id]; g += `<g class="node layer${cls(l.id)}" data-pick="${l.id}"><rect class="shape" x="${p.x - 8}" y="${p.y - 8}" width="16" height="16" rx="4"/><text class="lbl" x="${p.x}" y="${p.y + 21}" text-anchor="middle">${l.id}</text></g>`; }
   for (const name of s.branchOrder) { const p = L.pos["fork:" + name]; g += `<g class="node fork${cls("fork:" + name)}" style="--bc:${branchColor(name)}" data-pick="${esc(name)}" data-card="fork:${esc(name)}"><circle class="shape" cx="${p.x}" cy="${p.y}" r="4.5"/>${badge(name, "fork:" + name, p)}</g>`; }
-  for (const c of Object.values(s.commits)) { const p = L.pos[c.id]; g += `<g class="node commit ${c.by}${cls(c.id)}" style="--bc:${branchColor(c.branch)}" data-pick="${c.id}"><circle class="shape" cx="${p.x}" cy="${p.y}" r="7.5"/><text class="lbl" x="${p.x}" y="${p.y + 20}" text-anchor="middle">${c.id}</text>${badge(c.branch, c.id, p)}</g>`; }
+  for (const c of Object.values(s.commits)) { const p = L.pos[c.id]; g += `<g class="node commit ${c.by}${marked(c) ? " marked" : ""}${cls(c.id)}" style="--bc:${branchColor(c.branch)}" data-pick="${c.id}"><circle class="shape" cx="${p.x}" cy="${p.y}" r="7.5"/>${c.mergedFrom ? `<circle class="inner" cx="${p.x}" cy="${p.y}" r="2.8"/>` : ""}<text class="lbl" x="${p.x}" y="${p.y + 20}" text-anchor="middle">${c.id}</text>${badge(c.branch, c.id, p)}</g>`; }
   svg.innerHTML = g + `<g id="hlabels">${lab}</g>`;
   if (knownNodes && [...ids].some((id) => !knownNodes.has(id))) wrap.scrollLeft = wrap.scrollWidth;
   knownNodes = ids;
@@ -855,6 +870,7 @@ function wsRows(name, nodeId) {
   }).join("");
 }
 function cardHtml(id) {
+  const marked = (c) => Object.values(sim.s.roots[c.root]).some((e) => LayerSim.hasMarkers(e.content));
   const s = sim.s, head = '<span class="tag">head</span>';
   const hint = (x, ref = x) => `<div class="cbtns"><button class="cbtn" data-files-at="${esc(ref)}">Browse files</button><button class="cbtn" data-files-cmp="${esc(ref)}">Diff vs parent</button></div><div class="hint">Click: type ${esc(x)} into History · Shift-click: compare the Files pane with it</div>`;
   if (s.layers[id]) {
@@ -867,8 +883,13 @@ function cardHtml(id) {
     const over = Object.values(s.commits).filter((x) => x.displacedBy === id).map((x) => x.id);
     const jump = info.prev[id] !== from ? `<div class="sec">Jump</div><div class="meta">comes from ${c.parent || "the fork point"}, not ${info.prev[id].replace("fork:", "")}${over.length ? `<br>commit --force over ${over.join(", ")}` : ""}</div>` : "";
     const after = c.displacedBy ? `<div class="sec">Off the line</div><div class="meta">${c.displacedBy} was committed from ${s.commits[c.displacedBy].parent || "the fork point"} with --force, so ${c.id} is no longer an ancestor of the head. Still stored and readable by id.</div>` : "";
+    const lww = (list) => (list && list.length ? "<br>" + list.map((d) => `last-writer-wins ${esc(d.path)} ← ${esc(d.kept)}`).join("<br>") : "");
+    const owner = (n) => (s.commits[n] ? `${esc(s.commits[n].branch)} ${n}` : `main ${n}`);
+    const mrg = c.mergedFrom ? `<div class="sec">Merge</div><div class="meta">merged from ${owner(c.mergedFrom)} into ${c.parent ? owner(c.parent) : "main " + c.base}<br>merge base ${c.mergeBase}${c.conflicts && c.conflicts.length ? `<br><span style="color:var(--red)">written with markers in ${c.conflicts.map((x) => esc(x.path)).join(", ")}</span>` : ""}${lww(c.lww)}</div>`
+      : c.merged ? `<div class="sec">Merged on commit</div><div class="meta">the Workspace was on ${c.merged.from}; merged with head ${c.merged.head}${lww(c.merged.lww)}</div>` : "";
+    const mk = marked(c) ? `<div class="meta" style="color:var(--red)">still holds conflict markers: publish is refused</div>` : "";
     return `<div class="h"><b>${c.id}</b>${esc(c.branch)}${b.head === id ? head : ""}</div>
-      <div class="meta">parent ${c.parent || "Branch base"} · root ${c.root}<br>by ${esc(c.by === "fs" ? c.via || "fs" : short(c.via))}</div>${jump}${after}${wsRows(c.branch, id)}${hint(id)}`;
+      <div class="meta">parent ${c.parent || "Branch base"} · root ${c.root}<br>by ${esc(c.by === "fs" ? c.via || "fs" : c.by === "merge" ? c.via : short(c.via))}</div>${mrg}${mk}${jump}${after}${wsRows(c.branch, id)}${hint(id)}`;
   }
   const name = id.slice(5), b = s.branches[name];
   return `<div class="h"><b>${esc(name)}</b>fork point${b.head ? "" : head}</div><div class="meta">forked from ${b.from}${b.head ? "" : " · no Commits yet"}</div>${wsRows(name, id)}${hint(name, id)}`;
@@ -1132,7 +1153,11 @@ function applyTheme(t) { if (t === "auto") document.documentElement.removeAttrib
 $("theme").onclick = () => { const t = THEMES[(THEMES.indexOf(store.get("lfs.theme3", "auto")) + 1) % 3]; store.set("lfs.theme3", t); applyTheme(t); };
 applyTheme(store.get("lfs.theme3", "auto"));
 // ---------------------------------------------------------------- demo player
-const DEMO = LAYERFS_DEMO;
+const STORIES = LAYERFS_DEMO;
+let story = STORIES[new URLSearchParams(location.search).get("demo")] ? new URLSearchParams(location.search).get("demo") : "tour";
+let DEMO = STORIES[story].steps;
+$("d-story").innerHTML = Object.entries(STORIES).map(([k, v]) => `<option value="${k}"${k === story ? " selected" : ""}>${esc(v.title)} · ${v.steps.length}</option>`).join("");
+$("d-story").onchange = (e) => { story = e.target.value; DEMO = STORIES[story].steps; demoRestart(true); };
 const D = { i: 0, playing: false, speed: 1, token: 0, panes: {}, busy: false };
 const PLAY = '<svg viewBox="0 0 16 16"><path d="M4.5 2.8v10.4L13 8z" fill="currentColor"/></svg>', PAUSE = '<svg viewBox="0 0 16 16"><path d="M4 3h3v10H4zM9 3h3v10H9z" fill="currentColor"/></svg>';
 const wait = (ms) => new Promise((r) => setTimeout(r, reduced ? 0 : ms / D.speed));
@@ -1142,7 +1167,7 @@ function renderPlayer(result) {
   $("d-dots").innerHTML = DEMO.map((st, k) => `<i class="${k < D.i ? "done" : k === D.i && D.busy ? "now" : ""}" title="${k + 1}. ${esc(st.note)}" data-dstep="${k}"></i>`).join("");
   const st = DEMO[Math.min(D.busy ? D.i : D.i - 1, DEMO.length - 1)];
   if (D.i >= DEMO.length && !D.busy) $("d-cap").innerHTML = `Done: ${DEMO.length} steps. Restart to replay, or keep typing in any terminal.`;
-  else if (st && (D.busy || D.i > 0)) $("d-cap").innerHTML = esc(st.note) + (result ? `<span class="res ${result === st.expect && !/Busy|Stale|StackMoved|exit:1/.test(result) ? "good" : "bad"}">${esc(result)}</span>` : "");
+  else if (st && (D.busy || D.i > 0)) $("d-cap").innerHTML = esc(st.note) + (result ? `<span class="res ${result === st.expect && !/Busy|Conflict|Dirty|exit:1/.test(result) ? "good" : "bad"}">${esc(result)}</span>` : "");
   else $("d-cap").textContent = "Press play. Each step types a real command into a terminal.";
 }
 function lastCode(before) {
@@ -1172,6 +1197,7 @@ async function demoStep() {
   const tok = D.token, st = DEMO[D.i], t0 = stamp;
   let result = "";
   D.busy = true; renderPlayer();
+  if (st.branch && S.active !== st.branch) { openTab(st.branch); render(); await wait(500); if (tok !== D.token) return; }
   if (st.ui === "open") {
     S.active = S.active === "main" ? S.tabs[S.tabs.length - 1].branch : S.active; render();
     await hl($("new-sb"));

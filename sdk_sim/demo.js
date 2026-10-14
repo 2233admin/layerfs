@@ -1,11 +1,12 @@
-// The 25-step demo story played by tui.html and checked by test_demo.js.
+// Demo stories played by tui.html and checked by test_demo.js.
 // term: "history" | "fs" (the active tab's Branch) | a Sandbox terminal alias.
+// branch: switch to that Branch's tab first (fs steps and ui "open").
 // ui:   "open" (new Sandbox terminal), "split" (new Workspace in the same
 //       Sandbox as `from`), "stop" (stop the running process of `term`).
 // expect: the outcome code of the step's last SDK call.
 (function (global) {
   "use strict";
-  const DEMO = [
+  const TOUR = [
     { term: "history", lines: ["fork feature-home"], expect: "Forked",
       note: "Fork a Branch from main. A Branch opens as its own tab." },
     { term: "fs", lines: ['edit app/page.tsx "Hello world" "Welcome to LayerFS"'], expect: "Committed",
@@ -34,10 +35,8 @@
       note: "fs still writes while the Branch is mounted. The head moves to C5, so the Workspace on C4 is now stale." },
     { term: "sb1", lines: ['echo "PORT=3000" > .env.example'], expect: "exit:0",
       note: "The stale Workspace keeps working on its own base: it cannot see CHANGELOG.md." },
-    { term: "sb1", lines: ["commit"], expect: "Stale",
-      note: "Commit is refused: it would drop C5. Nothing is lost yet." },
-    { term: "sb1", lines: ["commit --force"], expect: "Committed",
-      note: "--force commits from C4 anyway. C6 jumps over C5, so the changelog is no longer an ancestor of the head; C5 stays in history." },
+    { term: "sb1", lines: ["commit"], expect: "Committed",
+      note: "Commit merges the stale Workspace with the head: no file changed on both sides, so C6 sits on C5 and keeps the changelog." },
     { ui: "split", from: "sb1", as: "sb2", expect: "Mounted",
       note: "Split: a second Workspace in the same Sandbox, mounted from the current head." },
     { term: "sb2", lines: ['echo "Built with LayerFS" >> README.md'], expect: "exit:0",
@@ -49,14 +48,69 @@
     { term: "sb2", lines: ["unmount"], expect: "Unmounted",
       note: "The Branch has no mounts left." },
     { term: "history", lines: ["fork header from C4"], expect: "Forked",
-      note: "Fork a second Branch from a feature-home Commit: header starts at C4, before the changelog and the forced commit." },
+      note: "Fork a second Branch from a feature-home Commit: header starts at C4, before the changelog." },
     { term: "fs", lines: ['write app/header.tsx "export const Header = () => <header/>;"'], expect: "Committed",
       note: "Work on header directly through fs." },
     { term: "history", lines: ["publish feature-home"], expect: "Added",
       note: "Publish adds the Branch head to main as a new Layer." },
-    { term: "history", lines: ["publish header"], expect: "StackMoved",
-      note: "Publish is fast-forward only: main moved, so header must be forked again from the new main." },
+    { term: "history", lines: ["publish header"], expect: "Added",
+      note: "Publish overwrites: main now has exactly header's files, so feature-home's changes leave main (L1 stays in history). Merge first to keep both." },
   ];
-  if (typeof module !== "undefined" && module.exports) module.exports = DEMO;
-  else global.LAYERFS_DEMO = DEMO;
+
+  // Commit, commit conflict, merge, merge conflict.
+  const DEL = (keep) => `sed -i '/${keep}\\|^<<<<<<<\\|^=======\\|^>>>>>>>/d' app/page.tsx`;
+  const MERGE = [
+    { term: "history", lines: ["fork feature"], expect: "Forked",
+      note: "Fork feature from main." },
+    { ui: "open", as: "sb1", expect: "Mounted",
+      note: "Mount a Workspace on feature." },
+    { term: "sb1", lines: ['sed -i "s/Hello world/Hello from the Workspace/" app/page.tsx'], expect: "exit:0",
+      note: "The Workspace edits the page." },
+    { term: "fs", lines: ['edit README.md "# Website" "# Website (feature)"'], expect: "Committed",
+      note: "Meanwhile fs commits C1 on feature. The Workspace is now stale." },
+    { term: "sb1", lines: ["commit"], expect: "Committed",
+      note: "Commit: a stale Workspace merges with the head first. Different files changed, so the merge is clean and C2 sits on C1." },
+    { term: "fs", lines: ['edit app/page.tsx "Hello from the Workspace" "Hello from fs"'], expect: "Committed",
+      note: "fs changes the same line: C3." },
+    { term: "sb1", lines: ['sed -i "s/Hello from the Workspace/Hello, Workspace/" app/page.tsx'], expect: "exit:0",
+      note: "The Workspace changes that line too, differently." },
+    { term: "sb1", lines: ["commit"], expect: "Conflict",
+      note: "Commit conflict: rejected, nothing committed, so a script stops here. The merge is written into the Workspace, which now sits on C3." },
+    { term: "sb1", lines: ["cat app/page.tsx"], expect: "exit:0",
+      note: "The conflicting line carries both versions between markers." },
+    { term: "sb1", lines: ["commit"], expect: "Conflict",
+      note: "Commit is refused while a marker block remains." },
+    { term: "sb1", lines: [DEL("Hello from fs")], expect: "exit:0",
+      note: "Fix it: keep the Workspace's line, drop fs's line and the markers." },
+    { term: "sb1", lines: ["commit"], expect: "Committed",
+      note: "A normal Commit on the head C3." },
+    { term: "sb1", lines: ["unmount"], expect: "Unmounted",
+      note: "Nothing uncommitted, so unmount closes the terminal." },
+    { term: "history", lines: ["fork header"], expect: "Forked",
+      note: "A second Branch from main." },
+    { term: "fs", lines: ['write app/header.tsx "export const Header = () => <header/>;"'], expect: "Committed",
+      note: "header adds a component." },
+    { term: "history", lines: ["merge feature header as release"], expect: "Merged",
+      note: "Merge: a + b = c. feature and header stay as they are; release is a new Branch whose first Commit holds both." },
+    { term: "fs", branch: "header", lines: ['edit app/page.tsx "Hello world" "Hello from header"'], expect: "Committed",
+      note: "header changes the page line that feature also changed." },
+    { term: "history", lines: ["merge release header as release-2"], expect: "Conflict",
+      note: "Merge conflict: rejected so a script stops, but release-2 exists with markers in the page. The merge base is header's C5, through release's merge link." },
+    { term: "history", lines: ["publish release-2"], expect: "Conflict",
+      note: "Publish refuses a head that still holds markers, so they never reach main." },
+    { ui: "open", as: "sb2", branch: "release-2", expect: "Mounted",
+      note: "Fix it like any conflict: a Workspace on release-2." },
+    { term: "sb2", lines: ["cat app/page.tsx"], expect: "exit:0",
+      note: "release's line against header's line." },
+    { term: "sb2", lines: [DEL("Hello from header")], expect: "exit:0",
+      note: "Keep release's line." },
+    { term: "sb2", lines: ["commit"], expect: "Committed",
+      note: "A normal Commit on release-2." },
+    { term: "history", lines: ["publish release-2"], expect: "Added",
+      note: "Publish: main now has feature's and header's work." },
+  ];
+
+  const STORIES = { tour: { title: "Tour", steps: TOUR }, merge: { title: "Commit & merge", steps: MERGE } };
+  if (typeof module !== "undefined" && module.exports) module.exports = STORIES;
+  else global.LAYERFS_DEMO = STORIES;
 })(this);

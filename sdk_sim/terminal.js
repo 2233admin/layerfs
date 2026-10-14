@@ -64,8 +64,14 @@
     if (!o.ok) return refusal(o);
     const r = o.result;
     if (r.kind === "UpToDate") return L("= UpToDate · nothing changed", "dim");
-    return L(`✓ Committed ${r.head} · parent ${r.capturedHead || "none (Branch base)"} · root ${r.root}${r.displacedHead ? ` · displaced ${r.displacedHead}` : ""}`, "ok");
+    const parent = r.merged && !r.displacedHead ? r.merged.head : r.capturedHead;
+    return L(`✓ Committed ${r.head} · parent ${parent || "none (Branch base)"} · root ${r.root}${r.displacedHead ? ` · displaced ${r.displacedHead}` : ""}`, "ok");
   }
+  // Conflict listing shared by commit, merge and publish.
+  function conflictLines(list) {
+    return list.map((c) => L(`  C ${rel(c.path).padEnd(22)} ${c.kind}${c.blocks > 1 ? ` · ${c.blocks} blocks` : c.blocks === 1 ? " · 1 block" : ""}`, "del"));
+  }
+  const lwwLines = (list) => list.map((d) => L(`  = last-writer-wins: ${rel(d.path)} ← ${d.deleted ? "deleted by " : ""}${d.kept}  (rule ${d.rule})`, "dim"));
 
   // ---------------------------------------------------------------- engine
   class Engine {
@@ -241,7 +247,7 @@
       const s = this.sim.s;
       for (const key of this.sim.liveMountsOf(branch)) {
         const [sb, path] = key.split(":"), ws = s.sandboxes[sb].workspaces[path];
-        rec.lines.push(L(`! ${key} is now stale (mounted ${ws.baseCommit || ws.baseLayer}); its commit needs --force`, "warn"));
+        rec.lines.push(L(`! ${key} is now stale (mounted ${ws.baseCommit || ws.baseLayer}); its commit will merge with ${o.result.head}`, "warn"));
       }
     }
 
@@ -268,20 +274,43 @@
       const t = line.trim();
       if (!t) return rec;
       const verb = t.split(/\s+/)[0];
-      if (verb === "help") { rec.lines.push(L("<shell command>       run it in this Workspace via sandbox.exec (append & for a server)", "dim"), L("commit [--force]      save this Workspace to its Branch; --force overwrites a newer head", "dim"), L("unmount               release the Workspace and close this terminal", "dim")); return rec; }
+      if (verb === "help") { rec.lines.push(L("<shell command>       run it in this Workspace via sandbox.exec (append & for a server)", "dim"), L("commit [--force]      save to the Branch head; a stale Workspace merges first (conflict: markers written, nothing committed)", "dim"), L("                      --force: overwrite, the Workspace's files as they are, displacing a newer head", "dim"), L("unmount [--discard]   release the Workspace and close this terminal; --discard drops uncommitted changes", "dim")); return rec; }
       if (verb === "commit") {
         const rest = t.split(/\s+/).slice(1);
         if (rest.some((x) => x !== "--force")) { rec.lines.push(L("usage: commit [--force]", "err")); return rec; }
         const force = rest.includes("--force");
         const o = this.call(rec, "sandbox.commit", force ? { sandbox: b.sandbox, path: b.path, force } : { sandbox: b.sandbox, path: b.path });
         rec.lines.push(publication(o));
-        if (!o.ok && o.code === "Stale") rec.lines.push(L(`  commit --force commits from ${o.refusal.base} anyway, leaving ${o.refusal.head} off the head's line · or unmount and mount again from ${o.refusal.head}`, "dim"));
+        if (!o.ok && o.code === "Conflict") {
+          const r = o.refusal;
+          rec.lines.push(...conflictLines(r.conflicts));
+          if (r.markers) rec.lines.push(L("  remove every <<<<<<< ======= >>>>>>> block, then commit", "dim"));
+          else {
+            const applied = (r.written || []).filter((p) => !r.conflicts.some((c) => c.path === p));
+            if (applied.length) rec.lines.push(L(`  ↻ applied from ${r.head}: ${applied.map(rel).join(", ")}`, "dim"));
+            rec.lines.push(...lwwLines(r.lww));
+            rec.lines.push(L(`  this Workspace is now on ${r.head} with markers written · fix them, then commit`, "dim"));
+          }
+          rec.conflicts = r.conflicts.length;
+        }
+        if (o.ok && o.result.merged) {
+          const m = o.result.merged;
+          rec.lines.push(L(`  ⇣ merged with ${m.head} (Workspace was on ${m.from})${m.lww.length ? ` · ${m.lww.length} last-writer-wins` : ""}`, "info"));
+          rec.lines.push(...lwwLines(m.lww));
+        }
+        if (o.ok) rec.conflicts = 0;
         if (o.ok && o.result.displacedHead) rec.lines.push(L(`! ${o.result.head} jumps from ${o.result.capturedHead || "the fork point"} over ${o.result.displacedHead}: ${o.result.displacedHead} stays stored but is no longer an ancestor of the head`, "warn"));
         return rec;
       }
       if (verb === "unmount") {
-        const o = this.call(rec, "sandbox.unmount", { sandbox: b.sandbox, path: b.path });
-        if (!o.ok) { rec.lines.push(refusal(o)); return rec; }
+        const rest = t.split(/\s+/).slice(1);
+        if (rest.some((x) => x !== "--discard")) { rec.lines.push(L("usage: unmount [--discard]", "err")); return rec; }
+        const o = this.call(rec, "sandbox.unmount", rest.length ? { sandbox: b.sandbox, path: b.path, discard: true } : { sandbox: b.sandbox, path: b.path });
+        if (!o.ok) {
+          rec.lines.push(refusal(o));
+          if (o.code === "Dirty") rec.lines.push(L(`  ${o.refusal.changed.slice(0, 6).map(rel).join(", ")}${o.refusal.changed.length > 6 ? " …" : ""} · commit them, or unmount --discard`, "dim"));
+          return rec;
+        }
         const d = o.result.discardedUncommitted;
         rec.lines.push(L(`✓ unmounted${d.length ? ` · discarded ${d.length} uncommitted change${d.length === 1 ? "" : "s"}` : ""}`, d.length ? "warn" : "ok"));
         rec.closed = true;
@@ -310,7 +339,9 @@
       const s = this.sim.s;
       switch (cmd) {
         case "help":
-          rec.lines.push(L("branches · log <branch|main> · fork <name> [from <branch|main|C#>] · publish <branch> · diff <a> <b>", "dim"));
+          rec.lines.push(L("branches · log <branch|main> · fork <name> [from <branch|main|C#>] · diff <a> <b>", "dim"));
+          rec.lines.push(L("merge <a> <b> as <c>   new Branch c = a + b (either may be main); conflicts carry markers in c", "dim"));
+          rec.lines.push(L("publish <branch>       replace main's files with the Branch head (overwrite only)", "dim"));
           return rec;
         case "branches": {
           const o = this.call(rec, "project.list_branches", {});
@@ -350,17 +381,37 @@
           rec.forked = name;
           return rec;
         }
+        case "merge": {
+          const ws = a.filter((x) => x !== "+");
+          if (ws.length !== 4 || ws[2] !== "as") { rec.lines.push(L("usage: merge <a> <b> as <c>", "err")); return rec; }
+          const [left, right, , name] = ws;
+          const o = this.call(rec, "branch.merge", { branch: left, with: right, name });
+          if (!o.ok && o.code !== "Conflict") { rec.lines.push(refusal(o)); return rec; }
+          const r = o.ok ? o.result : o.refusal;
+          if (o.ok && r.fastForward) rec.lines.push(L(`✓ Merged ${name} = ${left}@${r.sources[0].node} + ${right}@${r.sources[1].node} · ${r.mergeBase} is already in ${r.head}'s history, so ${name} points at ${r.head} (no new Commit) · opened in a new tab`, "ok"));
+          else if (o.ok) rec.lines.push(L(`✓ Merged ${name} = ${left}@${r.sources[0].node} + ${right}@${r.sources[1].node} · head ${r.head} · merge base ${r.mergeBase} · opened in a new tab`, "ok"));
+          else rec.lines.push(refusal(o));
+          rec.lines.push(...lwwLines(r.lww));
+          if (!o.ok) {
+            rec.lines.push(...conflictLines(r.conflicts));
+            rec.lines.push(L(`  ${name} = ${left}@${r.sources[0].node} + ${right}@${r.sources[1].node} · head ${r.head} with markers · merge base ${r.mergeBase}`, "dim"));
+            rec.lines.push(L(`  ${left} and ${right} are unchanged · open a Sandbox on ${name}, fix the markers, commit`, "dim"));
+          }
+          rec.forked = name;
+          return rec;
+        }
         case "publish": {
           if (!a[0]) { rec.lines.push(L("usage: publish <branch>", "err")); return rec; }
           const o = this.call(rec, "branch.publish", { branch: a[0] });
           if (!o.ok) {
             rec.lines.push(refusal(o));
-            if (o.code === "StackMoved") rec.lines.push(L(`publish is fast-forward only · fork from main and reapply: fork ${a[0]}-2`, "dim"));
+            if (o.code === "Conflict") { rec.lines.push(...conflictLines(o.refusal.conflicts)); rec.lines.push(L(`  fix the markers on ${a[0]} first (a Sandbox on ${a[0]}, then commit)`, "dim")); }
             return rec;
           }
           const r = o.result;
           rec.lines.push(r.kind === "Added" ? L(`✓ Added ${r.publishedLayer.id} from ${r.source.commit} · main is now ${r.main.headLayer}`, "ok")
-            : r.kind === "UpToDate" ? L(`= UpToDate · already published as ${r.layer}`, "dim") : L("= NoChanges · Branch root equals its base", "dim"));
+            : r.kind === "UpToDate" ? L(`= UpToDate · already published as ${r.layer}`, "dim") : L("= NoChanges · Branch head equals main", "dim"));
+          if (r.overwrote) rec.lines.push(L(`! main had moved to ${r.overwrote} since ${a[0]} was based on ${r.basedOn}: main now has ${a[0]}'s files; ${r.overwrote} stays in main's history`, "warn"));
           return rec;
         }
         case "diff": {
@@ -481,9 +532,17 @@
       case "sed": {
         const expr = args[0], file = args[1];
         const m = expr && expr.match(/^s(.)(.*?)\1(.*?)\1(g?)$/);
-        if (!flags.includes("i") || !m || !file) { res = err("sed: only sed -i 's/old/new/[g]' <file> is simulated"); break; }
+        const del = expr && expr.match(/^\/(.*)\/d$/);
+        if (!flags.includes("i") || !(m || del) || !file) { res = err("sed: only sed -i 's/old/new/[g]' or '/pattern/d' <file> is simulated"); break; }
         const p = abs(file);
         if (!exists(p)) { res = err(`sed: ${file}: No such file or directory`); break; }
+        if (del) {
+          // basic regular expression: \| alternates, other ERE operators are literal
+          const re = new RegExp(del[1].split("\\|").map((x) => x.replace(/[+?(){}|]/g, "\\$&")).join("|"));
+          const content = tree[p].content.split("\n").filter((ln) => !re.test(ln)).join("\n");
+          res = { out: [], code: 0, writes: content === tree[p].content ? [] : [{ kind: "write", path: p, content }] };
+          break;
+        }
         const [, , from, to, g] = m;
         const lit = from.replace(/\\(.)/g, "$1");
         const repl = (match) => to.replace(/\\&|&/g, (x) => (x === "&" ? match : "&")).replace(/\\(.)/g, "$1");
