@@ -1,10 +1,10 @@
 //! One synchronous Content/Save/history producer and exact paired local install.
 use super::{
-    bind::checked_base, BoundWorkspace, CommitError, CommitFailure, CommitPhase, CommitSuccess,
-    MergeReport,
+    bind::checked_base, BoundWorkspace, CommitError, CommitFailure, CommitOptions, CommitPhase,
+    CommitSuccess, MergeReport,
 };
 use layerfs_content::filesystem::FilesystemRootId;
-use layerfs_history::{BranchSnapshot, CommitOutcome, CommitRequest};
+use layerfs_history::{BranchSnapshot, CommitMeta, CommitOutcome, CommitRequest, CommitVia};
 use layerfs_overlay::Capture;
 use layerfs_storage::Save;
 use layerfs_workspace::WorkspaceError;
@@ -41,7 +41,7 @@ impl BoundWorkspace {
         ) -> Result<FilesystemRootId, CommitError>,
     ) -> Result<CommitSuccess, Box<CommitFailure>> {
         let mut admission = self.admit_commit()?;
-        let result = self.commit_admitted(construct, || (), false);
+        let result = self.commit_admitted(construct, || (), &CommitOptions::default());
         admission.released = match &result {
             Ok(_) => true,
             Err(failure) => failure.locally_settled,
@@ -81,8 +81,9 @@ impl BoundWorkspace {
             &BranchSnapshot,
         ) -> Result<FilesystemRootId, CommitError>,
         published: impl FnOnce(),
-        force: bool,
+        options: &CommitOptions,
     ) -> Result<CommitSuccess, Box<CommitFailure>> {
+        let force = options.force;
         let mut retained = CommitFailure::new(
             CommitError::Context("incomplete Commit"),
             self.identity,
@@ -165,6 +166,12 @@ impl BoundWorkspace {
                     profile: snapshot.profile,
                     scope: snapshot.scope,
                     second_parent: None,
+                    meta: CommitMeta {
+                        agent: options.agent.clone(),
+                        call: options.call.clone(),
+                        merged_from: merge.as_ref().and_then(|report| report.from),
+                        ..CommitMeta::new(CommitVia::Workspace)
+                    },
                     force: force && moved,
                 });
             }

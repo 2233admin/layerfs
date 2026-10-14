@@ -29,6 +29,8 @@ impl WorkspaceApi<'_> {
         let request = Request::Commit(CommitControl {
             token,
             force: false,
+            agent: None,
+            call: None,
         });
         match self.exchange(request.clone())? {
             Reply::Committed(outcome) => Ok(outcome),
@@ -38,14 +40,13 @@ impl WorkspaceApi<'_> {
     }
 
     /// Requests one Commit; `force` publishes over a moved head instead of
-    /// merging. Returns the publication, the merged publication or the
+    /// merging, and `agent` and `call` are recorded on the Commit. Returns the publication, the merged publication or the
     /// conflict refusal.
     pub fn commit_with(
         &mut self,
-        token: WorkspaceToken,
-        force: bool,
+        control: CommitControl,
     ) -> Result<CommitReply, Box<OperationFailure>> {
-        let request = Request::Commit(CommitControl { token, force });
+        let request = Request::Commit(control);
         match self.exchange(request.clone())? {
             Reply::Committed(outcome) => Ok(CommitReply::Committed(Box::new(outcome))),
             Reply::MergeCommitted(merged) => Ok(CommitReply::Merged(merged)),

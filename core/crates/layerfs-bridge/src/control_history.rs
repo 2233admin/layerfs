@@ -5,8 +5,9 @@ use crate::{
 };
 use layerfs_content::ObjectId;
 use layerfs_history::{
-    error::MovedState, BranchId, BranchRecord, BranchSnapshot, CommitId, CommitOutcome,
-    CommitRecord, HistoryName, LayerId, LayerStackId, NodeId, WorkspaceId,
+    error::MovedState, BranchId, BranchRecord, BranchSnapshot, CommitId, CommitMeta, CommitOutcome,
+    CommitRecord, CommitVia, HistoryName, LayerId, LayerStackId, NodeId, WorkspaceId,
+    MAXIMUM_ATTRIBUTION_BYTES,
 };
 pub(crate) fn history<T>(value: layerfs_history::HistoryResult<T>) -> Result<T, ControlError> {
     value.map_err(|_| ControlError("history control value"))
@@ -142,7 +143,51 @@ pub(crate) fn put_commit(out: &mut Writer, value: &CommitRecord) -> Result<(), C
     out.put(&value.root.to_bytes())?;
     put_head(out, value.parent)?;
     out.put(&value.base_layer.to_bytes())?;
-    put_node(out, value.second_parent)
+    put_node(out, value.second_parent)?;
+    put_meta(out, &value.meta)
+}
+/// Commit metadata: Branch, via, agent, call, merge origin and time.
+pub(crate) fn put_meta(out: &mut Writer, value: &CommitMeta) -> Result<(), ControlError> {
+    out.byte(u8::from(value.branch.is_some()))?;
+    if let Some(branch) = value.branch {
+        out.put(&branch.to_bytes())?;
+    }
+    out.byte(value.via.code())?;
+    for field in [&value.agent, &value.call] {
+        out.byte(u8::from(field.is_some()))?;
+        if let Some(text) = field {
+            if text.len() > MAXIMUM_ATTRIBUTION_BYTES {
+                return Err(ControlError("Commit attribution"));
+            }
+            out.blob(text.as_bytes())?;
+        }
+    }
+    put_head(out, value.merged_from)?;
+    out.put(&value.time_ms.to_be_bytes())
+}
+pub(crate) fn meta(input: &mut Reader<'_>) -> Result<CommitMeta, ControlError> {
+    let branch = if boolean(input)? {
+        Some(history(BranchId::from_bytes(input.array()?))?)
+    } else {
+        None
+    };
+    let via = history(CommitVia::from_code(input.byte()?))?;
+    let mut text = || -> Result<Option<String>, ControlError> {
+        if boolean(input)? {
+            Ok(Some(input.text(MAXIMUM_ATTRIBUTION_BYTES)?))
+        } else {
+            Ok(None)
+        }
+    };
+    let (agent, call) = (text()?, text()?);
+    Ok(CommitMeta {
+        branch,
+        via,
+        agent,
+        call,
+        merged_from: head(input)?,
+        time_ms: i64::from_be_bytes(input.array()?),
+    })
 }
 pub(crate) fn put_node(out: &mut Writer, value: Option<NodeId>) -> Result<(), ControlError> {
     out.byte(u8::from(value.is_some()))?;
@@ -166,6 +211,7 @@ pub(crate) fn commit(input: &mut Reader<'_>) -> Result<CommitRecord, ControlErro
         parent: head(input)?,
         base_layer: history(LayerId::from_bytes(input.array()?))?,
         second_parent: node(input)?,
+        meta: meta(input)?,
     })
 }
 pub(crate) fn put_outcome(out: &mut Writer, value: &CommitOutcome) -> Result<(), ControlError> {
@@ -185,7 +231,7 @@ pub(crate) fn put_outcome(out: &mut Writer, value: &CommitOutcome) -> Result<(),
 pub(crate) fn outcome(input: &mut Reader<'_>) -> Result<CommitOutcome, ControlError> {
     match input.byte()? {
         1 => Ok(CommitOutcome::Committed {
-            record: commit(input)?,
+            record: Box::new(commit(input)?),
             displaced: head(input)?,
         }),
         2 => Ok(CommitOutcome::UpToDate {

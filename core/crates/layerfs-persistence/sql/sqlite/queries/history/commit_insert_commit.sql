@@ -1,1 +1,1 @@
-INSERT INTO "commit" (commit_id, layer_stack_id, root_id, parent_commit_id, base_layer_id, second_parent_id) VALUES ($1, $2, $3, $4, $5, $6) RETURNING 1;
+INSERT INTO "commit" (commit_id, layer_stack_id, root_id, parent_commit_id, base_layer_id, second_parent_id, branch_id, via, agent, call, merged_from_id, created_ms) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING 1;

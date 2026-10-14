@@ -24,6 +24,21 @@
 > `is_ancestor` walk Commit parents (or the base Layer), second parents, Layer
 > parents and each Layer's source Commit, bounded by `MAXIMUM_LINEAGE_ROWS`.
 
+> **Commit metadata, overwrite publish and Branch merge, 2026-10-15 (#327):**
+> every Commit records `CommitMeta`: the Branch it was made on, how it was made
+> (`Workspace`, `Files`, `Merge`), the caller's `agent` and `call` (at most 128
+> bytes each), the head a merge-on-commit started from, and the insert time in
+> milliseconds. All of it except the time is part of the Commit identity, so two
+> Branches never share one Commit record. `add_layer` is overwrite-only: the new
+> Layer's parent is the stack head, whatever main gained since the Branch's
+> base, and `Added { overwrote }` lists the skipped Layers newest first. A Layer
+> is skipped when neither it nor the Commit it was published from is an ancestor
+> of the published Commit. `merge_branch(BranchMergeRequest)` creates a Branch
+> in one transaction. Both sides must still be at the nodes the caller merged
+> (`HeadMoved` for a Branch, `StackMoved` for main). The new Branch starts
+> either at an existing node (fast-forward) or with one new Commit whose second
+> parent is the right side.
+
 **Atomic publication update,2026-10-07 (parent `e2f2e62c7`):** current
 HistoryCatalog adds one required `stage_and_commit` operation. The combined
 Persistence provider stages and publishes in one short transaction; a definite

@@ -6,7 +6,7 @@ use super::{
 };
 use crate::store::{
     BindPhase, BindRequest, BoundWorkspace, CapturedConstruction, CommitError, CommitFailure,
-    CommitSuccess,
+    CommitOptions, CommitSuccess,
 };
 use layerfs_bridge::control::{
     Activity, ConflictReport, ControlCode, MergedCommit, Reply, Request, WorkspaceToken,
@@ -83,7 +83,11 @@ impl Service {
             Request::Status(token) => self.status(*token),
             Request::Cleanup(token) => self.cleanup(*token),
             Request::Commit(control) => self.commit(control.token, |workspace| {
-                workspace.commit_captured(control.force)
+                workspace.commit_captured(&CommitOptions {
+                    force: control.force,
+                    agent: control.agent.clone(),
+                    call: control.call.clone(),
+                })
             }),
             Request::Unmount(token) => self.unmount(*token),
             Request::ForceUnmount {

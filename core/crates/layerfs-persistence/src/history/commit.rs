@@ -7,10 +7,11 @@
 
 use super::params;
 use super::transaction::Transaction;
+use layerfs_content::ObjectId;
 use layerfs_history::error::{HistoryError, HistoryResult, Missing, MovedState};
-use layerfs_history::identity::{CatalogId, CommitId};
+use layerfs_history::identity::{BranchId, CatalogId, CommitId, LayerId, LayerStackId, NodeId};
 use layerfs_history::records::{
-    CommitHistoryRequest, CommitOutcome, CommitRecord, CommitRequest, PageResult,
+    CommitHistoryRequest, CommitMeta, CommitOutcome, CommitRecord, CommitRequest, PageResult,
     MAXIMUM_LINEAGE_ROWS,
 };
 
@@ -38,6 +39,10 @@ pub(crate) fn verify_commit(tx: &Transaction<'_>, record: &CommitRecord) -> Hist
                 && stored.base_layer == record.base_layer
                 && stored.second_parent == record.second_parent
                 && stored.stack == record.stack
+                && (CommitMeta {
+                    time_ms: record.meta.time_ms,
+                    ..stored.meta
+                }) == record.meta
             {
                 Ok(true)
             } else {
@@ -117,33 +122,16 @@ pub(crate) fn commit_branch(
             root: current_root,
         });
     }
-    let record = CommitRecord {
-        id: CommitId::derive(
-            request.candidate_root,
-            request.expected_head,
-            request.expected_base,
-            request.second_parent,
-        ),
-        stack: branch.stack,
-        root: request.candidate_root,
-        parent: request.expected_head,
-        base_layer: request.expected_base,
-        second_parent: request.second_parent,
-    };
-    if !verify_commit(tx, &record)? {
-        tx.execute(
-            INSERT_COMMIT,
-            params![
-                record.id.as_slice(),
-                record.stack.as_slice(),
-                record.root.as_bytes().as_slice(),
-                record.parent.map(|id| id.to_bytes().to_vec()),
-                record.base_layer.as_slice(),
-                record.second_parent.map(|id| id.as_slice().to_vec()),
-            ],
-        )
-        .map_err(sql)?;
-    }
+    let record = new_commit(
+        tx,
+        branch.stack,
+        request.branch,
+        request.candidate_root,
+        request.expected_head,
+        request.expected_base,
+        request.second_parent,
+        &request.meta,
+    )?;
     let advanced = tx
         .execute(
             ADVANCE_BRANCH,
@@ -158,7 +146,67 @@ pub(crate) fn commit_branch(
         return Err(HistoryError::Integrity("Branch advance"));
     }
     let displaced = branch.head_commit.filter(|_| moved);
-    Ok(CommitOutcome::Committed { record, displaced })
+    Ok(CommitOutcome::Committed {
+        record: Box::new(record),
+        displaced,
+    })
+}
+
+/// Derives, checks and inserts one Commit made on `branch` now, or verifies
+/// the identical record that already exists.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn new_commit(
+    tx: &Transaction<'_>,
+    stack: LayerStackId,
+    branch: BranchId,
+    root: ObjectId,
+    parent: Option<CommitId>,
+    base_layer: LayerId,
+    second_parent: Option<NodeId>,
+    meta: &CommitMeta,
+) -> HistoryResult<CommitRecord> {
+    meta.check()?;
+    let meta = CommitMeta {
+        branch: Some(branch),
+        time_ms: std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |elapsed| {
+                i64::try_from(elapsed.as_millis()).unwrap_or(i64::MAX)
+            }),
+        ..meta.clone()
+    };
+    let record = CommitRecord {
+        id: CommitId::derive(root, parent, base_layer, second_parent, &meta),
+        stack,
+        root,
+        parent,
+        base_layer,
+        second_parent,
+        meta,
+    };
+    if !verify_commit(tx, &record)? {
+        tx.execute(
+            INSERT_COMMIT,
+            params![
+                record.id.as_slice(),
+                record.stack.as_slice(),
+                record.root.as_bytes().as_slice(),
+                record.parent.map(|id| id.to_bytes().to_vec()),
+                record.base_layer.as_slice(),
+                record.second_parent.map(|id| id.as_slice().to_vec()),
+                record.meta.branch.map(|id| id.to_bytes().to_vec()),
+                i64::from(record.meta.via.code()),
+                record.meta.agent.clone(),
+                record.meta.call.clone(),
+                record.meta.merged_from.map(|id| id.to_bytes().to_vec()),
+                record.meta.time_ms,
+            ],
+        )
+        .map_err(sql)?;
+        return Ok(record);
+    }
+    // An identical Commit already exists: it keeps its own recorded time.
+    commit(tx, record.id)?.ok_or(HistoryError::Integrity("Commit identity"))
 }
 
 /// Walks one Branch's ancestry from an immutable start, newest first.

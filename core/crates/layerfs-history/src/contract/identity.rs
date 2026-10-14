@@ -267,11 +267,15 @@ impl CommitId {
     /// Derives the Commit identity of one `(root, parent, base Layer)` triple,
     /// extended by a merge's second parent. A Commit without a second parent
     /// keeps the identity it had before second parents existed.
+    ///
+    /// The metadata's Branch, kind, attribution and merge origin are part of
+    /// the identity; its time is not.
     pub fn derive(
         root: ObjectId,
         parent: Option<Self>,
         base_layer: LayerId,
         second_parent: Option<NodeId>,
+        meta: &crate::records::CommitMeta,
     ) -> Self {
         let mut hasher = blake3::Hasher::new();
         hasher.update(b"layerfs/commit/v2\0");
@@ -282,6 +286,15 @@ impl CommitId {
             hasher.update(b"\0second-parent\0");
             hasher.update(second.as_slice());
         }
+        hasher.update(b"\0meta\0");
+        update_optional(&mut hasher, meta.branch.as_ref().map(BranchId::as_slice));
+        hasher.update(&[meta.via.code()]);
+        for field in [&meta.agent, &meta.call] {
+            let bytes = field.as_deref().map(str::as_bytes);
+            hasher.update(&(bytes.map_or(0, <[u8]>::len) as u64).to_be_bytes());
+            update_optional(&mut hasher, bytes);
+        }
+        update_optional(&mut hasher, meta.merged_from.as_ref().map(Self::as_slice));
         Self(tagged_hash(COMMIT_TAG, hasher.finalize()))
     }
 }

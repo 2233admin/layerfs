@@ -6,6 +6,7 @@ mod branch;
 mod catalog;
 mod commit;
 mod layerstack;
+mod merge;
 mod provider;
 mod rows;
 mod transaction;

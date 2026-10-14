@@ -30,6 +30,11 @@ impl From<Option<Vec<u8>>> for Param {
         Self::OptionalBytes(v)
     }
 }
+impl From<Option<String>> for Param {
+    fn from(v: Option<String>) -> Self {
+        Self::OptionalText(v)
+    }
+}
 impl From<&str> for Param {
     fn from(v: &str) -> Self {
         Self::Text(v.to_owned())

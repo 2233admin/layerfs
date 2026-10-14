@@ -2,8 +2,8 @@
 //! unchanged driver. Its reader and operation owner are released only after
 //! the driver's outcome is known; unresolved custody stays with the failure.
 use super::{
-    BoundWorkspace, CapturedConstruction, CommitError, CommitFailure, CommitSuccess, PortError,
-    ReleasedOwner, StoreOperation,
+    BoundWorkspace, CapturedConstruction, CommitError, CommitFailure, CommitOptions, CommitSuccess,
+    PortError, ReleasedOwner, StoreOperation,
 };
 use crate::OwnerError;
 use layerfs_content::{
@@ -38,7 +38,10 @@ impl BoundWorkspace {
     /// whichever process made it. One attempt; this thread runs the
     /// synchronous captured ports, so it is never a kernel receive or
     /// request-service worker.
-    pub fn commit_captured(&self, force: bool) -> Result<CommitSuccess, Box<CommitFailure>> {
+    pub fn commit_captured(
+        &self,
+        options: &CommitOptions,
+    ) -> Result<CommitSuccess, Box<CommitFailure>> {
         let mut admission = self.admit_commit()?;
         let held = RefCell::new(None);
         // What construction staged for the shared cache. It is placed there
@@ -63,7 +66,7 @@ impl BoundWorkspace {
                     let _ = self.store.cache.admit_constructed(staged);
                 }
             },
-            force,
+            options,
         );
         let mut held = held.into_inner();
         match result {

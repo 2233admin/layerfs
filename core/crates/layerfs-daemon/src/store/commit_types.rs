@@ -79,6 +79,16 @@ impl CapturedConstruction {
         self.reader.is_some() || self.operation.is_some()
     }
 }
+/// What one Workspace Commit asks for besides the Workspace itself.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct CommitOptions {
+    /// Publish over a moved head instead of merging.
+    pub force: bool,
+    /// Agent recorded on the Commit.
+    pub agent: Option<String>,
+    /// Tool call recorded on the Commit.
+    pub call: Option<String>,
+}
 /// A Commit merged with a Branch head that moved since the Workspace bound.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MergeReport {

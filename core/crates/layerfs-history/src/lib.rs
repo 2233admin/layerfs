@@ -30,8 +30,9 @@ pub use identity::{
     BranchId, CatalogId, CommitId, HistoryName, LayerId, LayerStackId, NodeId, WorkspaceId,
 };
 pub use records::{
-    AddLayerOutcome, AddLayerRequest, BranchRecord, BranchSnapshot, CommitHistoryRequest,
-    CommitOutcome, CommitRecord, CommitRequest, ForkRequest, ForkSource, LayerHistoryRequest,
-    LayerRecord, LayerStackRecord, Page, PageResult, RecordKind, Reservation, ReserveRequest,
-    StackInitialization, MAXIMUM_PAGE_RECORDS,
+    AddLayerOutcome, AddLayerRequest, BranchMergeRequest, BranchRecord, BranchSnapshot,
+    CommitHistoryRequest, CommitMeta, CommitOutcome, CommitRecord, CommitRequest, CommitVia,
+    ForkRequest, ForkSource, LayerHistoryRequest, LayerRecord, LayerStackRecord, MergeCommit,
+    MergeHead, MergeSide, Page, PageResult, RecordKind, Reservation, ReserveRequest,
+    StackInitialization, MAXIMUM_ATTRIBUTION_BYTES, MAXIMUM_PAGE_RECORDS,
 };

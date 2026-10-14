@@ -9,7 +9,7 @@ use crate::{
     wire::{Reader, Writer, LIMIT},
 };
 use layerfs_content::merge::{Conflict, ConflictKind, Hunk, LwwDecision};
-use layerfs_history::{CommitId, CommitOutcome};
+use layerfs_history::{CommitId, CommitOutcome, MAXIMUM_ATTRIBUTION_BYTES};
 
 /// Longest path or line carried.
 pub const TEXT_FIELD_LIMIT: usize = 4096;
@@ -17,12 +17,16 @@ pub const TEXT_FIELD_LIMIT: usize = 4096;
 const RESERVE: usize = 1024;
 
 /// One Workspace Commit request.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CommitControl {
     /// Workspace token.
     pub token: WorkspaceToken,
     /// Publish over a moved head instead of merging.
     pub force: bool,
+    /// Agent recorded on the Commit.
+    pub agent: Option<String>,
+    /// Tool call recorded on the Commit.
+    pub call: Option<String>,
 }
 
 /// A Commit published after merging with a moved head.
@@ -62,13 +66,35 @@ pub(crate) fn put_commit_control(
     value: &CommitControl,
 ) -> Result<(), ControlError> {
     put_token(out, value.token)?;
-    out.byte(u8::from(value.force))
+    out.byte(u8::from(value.force))?;
+    for field in [&value.agent, &value.call] {
+        out.byte(u8::from(field.is_some()))?;
+        if let Some(text) = field {
+            if text.len() > MAXIMUM_ATTRIBUTION_BYTES {
+                return Err(ControlError("Commit attribution"));
+            }
+            out.blob(text.as_bytes())?;
+        }
+    }
+    Ok(())
 }
 
 pub(crate) fn commit_control(input: &mut Reader<'_>) -> Result<CommitControl, ControlError> {
+    let token = token(input)?;
+    let force = boolean(input)?;
+    let mut text = || -> Result<Option<String>, ControlError> {
+        if boolean(input)? {
+            Ok(Some(input.text(MAXIMUM_ATTRIBUTION_BYTES)?))
+        } else {
+            Ok(None)
+        }
+    };
+    let (agent, call) = (text()?, text()?);
     Ok(CommitControl {
-        token: token(input)?,
-        force: boolean(input)?,
+        token,
+        force,
+        agent,
+        call,
     })
 }
 

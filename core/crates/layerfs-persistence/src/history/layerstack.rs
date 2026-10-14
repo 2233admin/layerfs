@@ -263,15 +263,12 @@ pub(crate) fn add_layer(
         return Err(HistoryError::Integrity("Commit ownership"));
     }
     if let Some(id) = published_source(tx, request.branch, request.commit)? {
-        let expected = LayerRecord {
-            id: LayerId::derive(request.stack, Some(commit.base_layer), commit.root),
-            stack: request.stack,
-            parent: Some(commit.base_layer),
-            root: commit.root,
-            source_branch: Some(request.branch),
-            source_commit: Some(request.commit),
-        };
-        if id != expected.id || !verify_layer(tx, &expected)? {
+        let stored = layer(tx, id)?.ok_or(HistoryError::Integrity("Layer provenance"))?;
+        if stored.stack != request.stack
+            || stored.root != commit.root
+            || stored.source_branch != Some(request.branch)
+            || stored.source_commit != Some(request.commit)
+        {
             return Err(HistoryError::Integrity("Layer provenance"));
         }
         return Ok(AddLayerOutcome::UpToDate { layer: id });
@@ -302,21 +299,18 @@ pub(crate) fn add_layer(
             actual: stack.head_layer,
         });
     }
-    if stack.head_layer != branch.base_layer {
-        return Err(HistoryError::StackMoved {
-            expected: branch.base_layer,
-            actual: stack.head_layer,
-        });
-    }
-    if commit.root == layer_root(tx, branch.base_layer)? {
+    // Overwrite-only: the new Layer sits on the stack head, whatever main
+    // gained since the Branch's base.
+    if commit.root == layer_root(tx, stack.head_layer)? {
         return Ok(AddLayerOutcome::NoChanges {
             head: stack.head_layer,
         });
     }
+    let overwrote = skipped_layers(tx, stack.head_layer, request.commit)?;
     let layer = LayerRecord {
-        id: LayerId::derive(request.stack, Some(branch.base_layer), commit.root),
+        id: LayerId::derive(request.stack, Some(stack.head_layer), commit.root),
         stack: request.stack,
-        parent: Some(branch.base_layer),
+        parent: Some(stack.head_layer),
         root: commit.root,
         source_branch: Some(request.branch),
         source_commit: Some(request.commit),
@@ -355,7 +349,37 @@ pub(crate) fn add_layer(
             actual: LayerId::from_slice(&actual)?,
         });
     }
-    Ok(AddLayerOutcome::Added(layer))
+    Ok(AddLayerOutcome::Added { layer, overwrote })
+}
+
+/// Stack Layers from `head` down that the Commit does not contain: neither
+/// the Layer nor the Commit it was published from is the Commit's ancestor.
+fn skipped_layers(
+    tx: &Transaction<'_>,
+    head: LayerId,
+    commit: layerfs_history::identity::CommitId,
+) -> HistoryResult<Vec<LayerId>> {
+    use layerfs_history::identity::NodeId;
+    let target = NodeId::Commit(commit);
+    let mut out = Vec::new();
+    let mut current = Some(head);
+    while let Some(id) = current {
+        if out.len() as u64 >= layerfs_history::records::MAXIMUM_LINEAGE_ROWS {
+            return Err(HistoryError::Capacity("lineage work"));
+        }
+        let record = layer(tx, id)?.ok_or(HistoryError::Integrity("Layer chain"))?;
+        let covered = super::ancestry::is_ancestor(tx, NodeId::Layer(id), target)?
+            || match record.source_commit {
+                Some(source) => super::ancestry::is_ancestor(tx, NodeId::Commit(source), target)?,
+                None => false,
+            };
+        if covered {
+            break;
+        }
+        out.push(id);
+        current = record.parent;
+    }
+    Ok(out)
 }
 
 fn published_source(

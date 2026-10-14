@@ -19,9 +19,10 @@
 use crate::error::HistoryResult;
 use crate::identity::{BranchId, CatalogId, CommitId, LayerId, LayerStackId, NodeId};
 use crate::records::{
-    AddLayerOutcome, AddLayerRequest, BranchRecord, BranchSnapshot, CommitHistoryRequest,
-    CommitOutcome, CommitRecord, CommitRequest, ForkRequest, LayerHistoryRequest, LayerRecord,
-    LayerStackRecord, Page, PageResult, Reservation, ReserveRequest, StackInitialization,
+    AddLayerOutcome, AddLayerRequest, BranchMergeRequest, BranchRecord, BranchSnapshot,
+    CommitHistoryRequest, CommitOutcome, CommitRecord, CommitRequest, ForkRequest,
+    LayerHistoryRequest, LayerRecord, LayerStackRecord, Page, PageResult, Reservation,
+    ReserveRequest, StackInitialization,
 };
 /// Checked inputs that establish one catalog binding.
 #[derive(Clone, Eq, PartialEq)]
@@ -127,6 +128,9 @@ pub trait HistoryCatalog: Send + Sync {
 
     /// Publishes one Commit root as a new Layer against the expected stack head.
     fn add_layer(&self, request: &AddLayerRequest) -> HistoryResult<AddLayerOutcome>;
+
+    /// Creates a Branch from a merge of two sides, atomically.
+    fn merge_branch(&self, request: &BranchMergeRequest) -> HistoryResult<BranchSnapshot>;
 
     /// Consumes one checked half-open inode range for a scope.
     fn reserve_inodes(&self, request: &ReserveRequest) -> HistoryResult<Reservation>;

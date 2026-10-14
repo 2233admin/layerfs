@@ -85,6 +85,91 @@ pub struct CommitRecord {
     pub base_layer: LayerId,
     /// The other side of a Branch merge: a Commit or a Layer.
     pub second_parent: Option<NodeId>,
+    /// Who made the Commit and how.
+    pub meta: CommitMeta,
+}
+
+/// How a Commit was made.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CommitVia {
+    /// A Workspace Commit (a mounted Workspace's captured changes).
+    Workspace,
+    /// A direct Branch file operation.
+    Files,
+    /// A Branch merge.
+    Merge,
+}
+
+impl CommitVia {
+    /// Stored code.
+    pub const fn code(self) -> u8 {
+        match self {
+            Self::Workspace => 1,
+            Self::Files => 2,
+            Self::Merge => 3,
+        }
+    }
+
+    /// Decodes a stored code.
+    pub fn from_code(code: u8) -> crate::error::HistoryResult<Self> {
+        match code {
+            1 => Ok(Self::Workspace),
+            2 => Ok(Self::Files),
+            3 => Ok(Self::Merge),
+            _ => Err(crate::error::HistoryError::Integrity("Commit via")),
+        }
+    }
+}
+
+/// Bytes one attribution field (`agent`, `call`) may hold.
+pub const MAXIMUM_ATTRIBUTION_BYTES: usize = 128;
+
+/// Who made a Commit and how. Every field but the time is part of the
+/// Commit identity, so two Branches never share one Commit record.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CommitMeta {
+    /// Branch the Commit was made on; the catalog sets it from the request.
+    pub branch: Option<BranchId>,
+    /// How it was made.
+    pub via: CommitVia,
+    /// Agent that made it, as the caller named it.
+    pub agent: Option<String>,
+    /// Tool call that made it, as the caller named it.
+    pub call: Option<String>,
+    /// Head a merge-on-commit started from, when one ran.
+    pub merged_from: Option<CommitId>,
+    /// Milliseconds since the Unix epoch; the catalog sets it on insert.
+    pub time_ms: i64,
+}
+
+impl CommitMeta {
+    /// Metadata of one way of committing, with no attribution.
+    pub const fn new(via: CommitVia) -> Self {
+        Self {
+            branch: None,
+            via,
+            agent: None,
+            call: None,
+            merged_from: None,
+            time_ms: 0,
+        }
+    }
+
+    /// Checks the attribution bounds: at most
+    /// [`MAXIMUM_ATTRIBUTION_BYTES`] bytes and no control character.
+    pub fn check(&self) -> crate::error::HistoryResult<()> {
+        for field in [&self.agent, &self.call].into_iter().flatten() {
+            if field.is_empty()
+                || field.len() > MAXIMUM_ATTRIBUTION_BYTES
+                || field.chars().any(char::is_control)
+            {
+                return Err(crate::error::HistoryError::InvalidInput(
+                    "Commit attribution",
+                ));
+            }
+        }
+        Ok(())
+    }
 }
 
 /// One immutable Layer publication.
@@ -232,8 +317,60 @@ pub struct CommitRequest {
     pub scope: ObjectId,
     /// The other side of a Branch merge, recorded as the second parent.
     pub second_parent: Option<NodeId>,
+    /// How the Commit was made; the catalog fills its Branch and time.
+    pub meta: CommitMeta,
     /// Overwrite a head that moved instead of refusing.
     pub force: bool,
+}
+
+/// One side of a Branch merge.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum MergeSide {
+    /// The stack's main line of Layers.
+    Main,
+    /// A Branch.
+    Branch(BranchId),
+}
+
+/// The first state of a Branch created by a merge.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum MergeHead {
+    /// Fast-forward: the Branch starts at an existing node, a Commit (with
+    /// that Commit's base) or a Layer (as its base, with no head).
+    Node(NodeId),
+    /// One new Commit with two parents.
+    Commit(Box<MergeCommit>),
+}
+
+/// The Commit a non-fast-forward Branch merge creates.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MergeCommit {
+    /// Base Layer of the new Branch and Commit.
+    pub base: LayerId,
+    /// First parent, when the left side is a Commit.
+    pub parent: Option<CommitId>,
+    /// The right side.
+    pub second_parent: NodeId,
+    /// Saved merged root.
+    pub root: ObjectId,
+    /// How the Commit was made; the catalog fills its Branch and time.
+    pub meta: CommitMeta,
+}
+
+/// Creates one Branch from two sides that must still be at the nodes the
+/// caller merged, in one transaction. Neither side changes.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct BranchMergeRequest {
+    /// Stack of both sides and the new Branch.
+    pub stack: LayerStackId,
+    /// New Branch identity supplied by the application authority.
+    pub branch: BranchId,
+    /// New Branch name.
+    pub name: HistoryName,
+    /// Both sides and the node each must still be at.
+    pub sides: [(MergeSide, NodeId); 2],
+    /// The new Branch's first state.
+    pub head: MergeHead,
 }
 
 /// Layer publication request.
@@ -292,7 +429,7 @@ pub enum CommitOutcome {
     /// A new immutable Commit was inserted and the Branch advanced.
     Committed {
         /// The Commit the Branch now holds.
-        record: CommitRecord,
+        record: Box<CommitRecord>,
         /// Head a forced publication overwrote, when it was not the parent.
         displaced: Option<CommitId>,
     },
@@ -308,8 +445,16 @@ pub enum CommitOutcome {
 /// Successful result of a Layer publication attempt.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AddLayerOutcome {
-    /// A new immutable Layer was inserted and the stack advanced.
-    Added(LayerRecord),
+    /// A new immutable Layer was inserted on the stack head and the stack
+    /// advanced. Publication is overwrite-only: `overwrote` lists, newest
+    /// first, the stack's Layers since the Branch's base that the published
+    /// Commit does not contain; they stay in history.
+    Added {
+        /// The new Layer.
+        layer: LayerRecord,
+        /// Skipped Layers, newest first.
+        overwrote: Vec<LayerId>,
+    },
     /// The selected source Commit already published in this stack.
     UpToDate {
         /// Layer that already publishes this source.
@@ -378,5 +523,5 @@ macro_rules! encoded_width {
 
 encoded_width!(LayerStackRecord, 179);
 encoded_width!(BranchRecord, 166);
-encoded_width!(CommitRecord, 183);
+encoded_width!(CommitRecord, 504);
 encoded_width!(LayerRecord, 168);

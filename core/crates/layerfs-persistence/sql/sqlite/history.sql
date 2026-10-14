@@ -81,6 +81,20 @@ CREATE TABLE "commit" (
             second_parent_id IS NULL
             OR (length(second_parent_id) = 33 AND substr(second_parent_id, 1, 1) IN (X'12', X'32'))
         ),
+    branch_id BLOB
+        CHECK (
+            branch_id IS NULL
+            OR (length(branch_id) = 17 AND substr(branch_id, 1, 1) = X'11')
+        ),
+    via INTEGER NOT NULL CHECK (via IN (1, 2, 3)),
+    agent TEXT CHECK (agent IS NULL OR length(CAST(agent AS BLOB)) BETWEEN 1 AND 128),
+    call TEXT CHECK (call IS NULL OR length(CAST(call AS BLOB)) BETWEEN 1 AND 128),
+    merged_from_id BLOB
+        CHECK (
+            merged_from_id IS NULL
+            OR (length(merged_from_id) = 33 AND substr(merged_from_id, 1, 1) = X'12')
+        ),
+    created_ms INTEGER NOT NULL,
     FOREIGN KEY (layer_stack_id, base_layer_id)
         REFERENCES layer(layer_stack_id, layer_id) DEFERRABLE INITIALLY DEFERRED,
     FOREIGN KEY (layer_stack_id, parent_commit_id)

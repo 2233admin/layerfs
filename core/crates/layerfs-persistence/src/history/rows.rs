@@ -5,7 +5,7 @@ use layerfs_content::ObjectId;
 use layerfs_history::{
     error::{HistoryError, HistoryResult},
     identity::{BranchId, CommitId, HistoryName, LayerId, LayerStackId, NodeId},
-    records::{BranchRecord, CommitRecord, LayerRecord, LayerStackRecord},
+    records::{BranchRecord, CommitMeta, CommitRecord, CommitVia, LayerRecord, LayerStackRecord},
 };
 /// Reads one column through the engine's own conversion, typed on failure.
 pub(crate) fn cell<T: FromValue>(row: &Row, index: usize) -> HistoryResult<T> {
@@ -81,6 +81,17 @@ pub(crate) fn commit_row(row: &Row) -> HistoryResult<CommitRecord> {
         second_parent: cell::<Option<Vec<u8>>>(row, 5)?
             .map(|bytes| NodeId::from_slice(&bytes))
             .transpose()?,
+        meta: CommitMeta {
+            branch: branch_column(row, 6)?,
+            via: CommitVia::from_code(
+                u8::try_from(cell::<i64>(row, 7)?)
+                    .map_err(|_| HistoryError::Integrity("Commit via"))?,
+            )?,
+            agent: cell(row, 8)?,
+            call: cell(row, 9)?,
+            merged_from: commit_column(row, 10)?,
+            time_ms: cell(row, 11)?,
+        },
     })
 }
 

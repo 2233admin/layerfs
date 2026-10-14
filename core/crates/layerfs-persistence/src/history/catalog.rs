@@ -1,5 +1,5 @@
 //! shared backend history catalog contract delegation.
-use super::{allocation, ancestry, branch, commit, layerstack, provider::HistoryProvider};
+use super::{allocation, ancestry, branch, commit, layerstack, merge, provider::HistoryProvider};
 use layerfs_history::*;
 impl HistoryCatalog for HistoryProvider {
     fn catalog_id(&self) -> CatalogId {
@@ -114,6 +114,10 @@ impl HistoryCatalog for HistoryProvider {
 
     fn add_layer(&self, request: &AddLayerRequest) -> HistoryResult<AddLayerOutcome> {
         self.write(|tx| layerstack::add_layer(tx, request))
+    }
+
+    fn merge_branch(&self, request: &BranchMergeRequest) -> HistoryResult<BranchSnapshot> {
+        self.write(|tx| merge::merge_branch(tx, request))
     }
 
     fn reserve_inodes(&self, request: &ReserveRequest) -> HistoryResult<Reservation> {
