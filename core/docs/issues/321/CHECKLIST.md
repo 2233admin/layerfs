@@ -61,10 +61,10 @@ source/build pins. Steps proceed in order: 1, A, B, C, D, E.
 
 | Checklist item | Disposition | Source/evidence |
 | --- | --- | --- |
-| review accounting triggers | NOT_RUN |  |
-| remove repeated attributes | NOT_RUN |  |
-| reduce write frame | NOT_RUN |  |
-| reduce Commit jobs/new file | NOT_RUN |  |
+| review accounting triggers | COMPLETE D; reviewed, unchanged | three insert triggers per created file, one keyed row update each since C; counts are the exact row counts reclamation proofs assert on, and the two byte sums travel in diagnostics row 28 and the harness decoders; no trigger removed |
+| remove repeated attributes | NOT_DONE D; kernel-issued | reply validity is already 60 s; the 6.12 kernel invalidates a parent directory's attributes on every namespace change and `default_permissions` refreshes them (GETATTR 5,766 of 26,078 tier-1 requests); avoiding it means the daemon enforcing permissions itself |
+| reduce write frame | COMPLETE D; partly | the write's seven statements are each needed and unchanged; RELEASE and every fence that reads only the Workspace row issue no statement; one created file 19 -> 18 statements |
+| reduce Commit jobs/new file | COMPLETE D | engine memory of the `workspace`, `commit_run` and `commit_reader` fence rows; 1,024-slot cursor answer window; anatomy large case 41,931 -> 25,941 statements and 8,085 -> 4,938 record jobs; the four plan jobs per file are unchanged |
 
 ## Step E — re-qualify once
 
@@ -219,3 +219,21 @@ methods are dropped; the rest are converted. Details and retained failures:
 [#320 ledger](../320/PROGRESS.md#issue-321-step-c--table-revision-2026-10-14).
 Twelve-cell exact accounting and the harness storage oracle stay for E.
 D begins next; E NOT_RUN.
+
+Step D finished 2026-10-14 at `a6d1ef177` (LOC 81,006 -> 81,054, delta +48).
+Selections, one sample each on build `2026-10-14-issue321-d-source-1-build`:
+exec at 2 CPUs and without a CPU limit exit 0; session 16 x 50 Commits plus a
+fresh daemon on the evicted Store exit 0 (summed Commit 10,924.7 ms; C
+11,529.0); tier 1 INELIGIBLE with functional/proof PASS and Gone (26,078 /
+88,818 / 461,908; command 6,935.5 ms, Commit 1,739.0 ms; statements -17.9%,
+VM steps -12.0%); four Workspaces INELIGIBLE with functional/proof PASS and
+Gone (104,310 / 353,058 / 1,843,807; external wall 11,444.7 ms; summed Commit
+13,647.1 ms). Recorded against D: tier-1 command time +210.3 ms and the
+four-Workspace summed command time +377.9 ms while lock hold fell; most exec
+diagnostic cells slower in this sample with lock service per job equal or
+within a few µs; neither attributed nor resampled. Attribute requests are not
+reduced (kernel-issued) and no accounting trigger is removed; both reasons are
+in the
+[#320 ledger](../320/PROGRESS.md#issue-321-step-d--fewer-statements-and-round-trips-2026-10-14).
+No test is removed in D. Twelve-cell exact accounting, the `request_path`
+pins and the harness storage oracle stay for E. E begins next.

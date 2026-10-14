@@ -1587,3 +1587,189 @@ first-parent and committed-tree Git archives; committed tree
 absent (retired R9c; last counted 65,417 at tree 498dd1917812). Net A+B+C:
 84,220 -> 81,006 (delta -3,214).
 
+## Issue 321 Step D — fewer statements and round trips (2026-10-14)
+
+Source commit `a6d1ef177` (tag `i321-d-source-1`), first parent `1d8583471`.
+Sealed build `2026-10-14-issue321-d-source-1-build`, the same
+`LIBSQLITE3_FLAGS=-USQLITE_ENABLE_MEMORY_MANAGEMENT` and
+`LAYERFS_CONSTRUCTION_WORKERS=1` as Steps B and C. Disposable Store / WAL /
+synchronous=OFF. Durable execution: NOT_RUN — disabled by owner until explicit
+reauthorization. One sample per case; shared machine; the two harness cases
+are INELIGIBLE on cache state as before, so no time here is a claim.
+
+### The four items
+
+| Item | Disposition | What was done or why not |
+| --- | --- | --- |
+| Commit jobs and statements per new file | DONE, two changes | (1) The engine remembers the `workspace` row and the Commit's two custody rows, so a record or reader job reads no fence row. (2) The namespace cursor's fixed window of sealed point answers is 1,024 slots per kind instead of 64, so a change whose serials fit it reads each sealed record once. The four plan jobs of one constructed file are unchanged: each is one resumable step of that file's record protocol. |
+| Transaction frame per write | PARTLY | The write itself is the same seven statements (begin; the fence that reads the inode's row; one read of the window's row shapes; the cell; the inode; the frontier; commit), each of which the job needs. The RELEASE after it and every other fence that reads only the Workspace row is now no statement, and the frontier advance returns the row it wrote. One created file (lookup, getattr, create, write, release) is 18 statements, was 19. |
+| Repeated attribute requests | NOT_DONE, kernel-issued | See below. |
+| Accounting triggers | REVIEWED, unchanged in D | A created file changes ten rows, three of them the accounting row by the three insert triggers (inode, name, cell), one keyed row update each since Step C. The counts are the only exact row counts of a Workspace file and reclamation proofs assert on them; the two byte sums could be answered by the file's size, but they travel in diagnostics row 28 and in every harness decoder, and removing them would change that wire layout for a small part of one file's work. Not done; no trigger was removed. |
+
+Rejected for the Commit path: merging the guard read and the write of a
+record change into one conditional statement. A mismatch found after earlier
+changes of the same job were written would need a rollback and a replay of
+the job to report the first mismatch, which the one-attempt rule forbids;
+single-change jobs alone would save about 1% of a Commit's statements.
+
+Attribute requests. In the Step C tier-1 sample GETATTR is the largest
+request kind: 5,766 of 26,078. The reply validity is already 60 s
+(`layerfs-fuse/src/request/reply.rs`), so these are not expiries. The kernel
+of the measurement host is 6.12 (`6.12.76-linuxkit`); in its
+`fs/fuse/dir.c` every create, mkdir, symlink, link, unlink, rmdir and rename
+calls `fuse_dir_changed(dir)`, which invalidates all basic attributes of the
+parent directory, and `fuse_permission` under `default_permissions` issues a
+GETATTR whenever the mode, owner or group bits are invalid. The next path
+walk through that directory therefore asks for its attributes once, whatever
+the daemon replied before: the sample's 4,880 namespace changes can each
+cause one (an inference from the kernel source and the request counts, not
+a traced measurement). The daemon can avoid them only by not mounting
+with `default_permissions` and checking every permission itself, which is a
+change of who owns permission enforcement, not a reduction, and is not made
+here. The request is one job and one statement.
+
+### How the fence memory stays exact
+
+The connection of a Workspace file is the only one, holds the exclusive lock
+and runs one job at a time. A writing statement whose text names `workspace`,
+`commit_run` or `commit_reader` forgets what is remembered of that table
+before it executes; SQLite cannot change a table a statement does not name,
+and the triggers of this schema write `accounting` alone. Only the Workspace,
+Capture and Lease statement families write these tables, so other writing
+statements are not searched, and a debug assertion fails any test in which
+another family names one. A job that began a transaction and failed forgets
+everything, because it may have read its own writes. Refusals and their order
+are unchanged. Written up in
+[overlay terminology](../../architecture/64-overlay-terminology.md#rows-the-engine-remembers).
+
+### Counted effect (host, exact pins)
+
+| Measure | C | D |
+| --- | ---: | ---: |
+| `commit_record_anatomy` small: statements / record jobs | 1,027 / 201 | 647 / 177 |
+| step (27 files constructed): statements / record jobs | 3,592 / 499 | 2,485 / 390 |
+| large (384 files constructed): statements / record jobs | 41,931 / 8,085 | 25,941 / 4,938 |
+| large: Workspace / custody statements | 10,076 / 1,991 | 2 / 11 |
+| large: producer point reads (fresh, header, value) | 1,466 / 1,469 / 1,912 | 595 / 465 / 672 |
+| one created file: statements / executions | 19 / 22 | 18 / 21 |
+| record read job / one-change record write: statements | 2 / 5 | 1 / 4 |
+| RELEASE, RELEASEDIR, FORGET of a linked file, drained revocation | 1 each | 0 |
+| READ, READDIR, READLINK fence | 1 | 0 |
+
+### Tests
+
+No test is removed. Exact statement pins are restaged in 11 overlay, 5 daemon
+and 3 Workspace test files. New assertions: the fence test pins the one read
+after another owner's acquisition, after the close and after the release; the
+rollback test pins that a failed writing job forgets the advanced row and
+that the next read is one statement holding the earlier revision; the cursor
+growth test holds a change larger than the answer window to the same per-row
+ceilings.
+
+Results at `a6d1ef177` (each binary one invocation, 30 s wall limit):
+
+| Scope | Result |
+| --- | --- |
+| host + Linux all-targets Clippy `-D warnings` | clean |
+| `cargo fmt --check`, product boundary guard, 999/200-line ceilings | PASS |
+| static SQL check (`c_verify.py`, scratch tool) | 133 statement texts prepare against schema 34; bound counts match |
+| overlay, 41 host binaries | PASS except `reply_tickets` ×2 (unchanged since Step A) |
+| daemon/fuse/bridge/workspace/sdk, 96 host binaries | PASS except `complete_installed_roots::huge_native...` and `host_handoff` (need prepared inputs) and `request_path_anatomy` ×5 (statement pins; Step E) |
+| Linux mounted/proof binaries, 43 | PASS |
+
+Process notes, retained: the first Linux test build reached its 120 s limit
+and left a half-written object for one test target; that target's artifacts
+were removed from this worktree's Linux build cache and the build repeated.
+Two host batches overlapped once (the first exceeded the shell limit), four
+binaries got no result from lock contention and were run again alone; no test
+outcome changed.
+
+### Required selections
+
+Before = Step C at `c8a7bcd1d`, after = Step D at `a6d1ef177`.
+
+| Field | C | D | Signed raw delta |
+| --- | ---: | ---: | ---: |
+| tier 1 status | INELIGIBLE; PASS/PASS; Gone | INELIGIBLE; PASS/PASS; Gone | |
+| tier 1 command ms | 6,725.2 | 6,935.5 | +210.3 |
+| tier 1 Commit ms | 1,824.2 | 1,739.0 | -85.2 |
+| tier 1 mount / unmount ms | 7.8 / 5.4 | 8.5 / 4.6 | +0.7 / -0.8 |
+| tier 1 requests / owner jobs | 26,078 / 93,601 | 26,078 / 88,818 | 0 / -4,783 |
+| tier 1 statements | 562,849 | 461,908 | -100,941 |
+| tier 1 VM steps | 16,177,323 | 14,237,545 | -1,939,778 |
+| tier 1 lock hold / lock wait ms | 1,130.0 / 79.5 | 1,073.6 / 96.4 | -56.4 / +16.9 |
+| tier 1 command and Commit time outside the lock ms | 7,339.9 | 7,504.5 | +164.6 |
+| tier 1 maintenance jobs / rows | 2,679 / 39,886 | 2,679 / 39,886 | 0 / 0 |
+| tier 1 Store logical = allocated B | 114,528,256 | 114,606,080 | +77,824 |
+| tier 1 overlay logical B (template after cleanup) | 122,880 | 122,880 | 0 |
+| tier 1 daemon peak B | 88,813,568 | 87,035,904 | -1,777,664 |
+| four: status | INELIGIBLE; PASS/PASS; Gone | INELIGIBLE; PASS/PASS; Gone | |
+| four: external wall ms | 11,496.9 | 11,444.7 | -52.2 |
+| four: summed command ms | 28,077.6 | 28,455.5 | +377.9 |
+| four: summed Commit ms | 14,188.4 | 13,647.1 | -541.3 |
+| four: requests / owner jobs | 104,311 / 372,337 | 104,310 / 353,058 | -1 / -19,279 |
+| four: statements | 2,246,971 | 1,843,807 | -403,164 |
+| four: VM steps | 64,598,945 | 56,849,079 | -7,749,866 |
+| four: lock hold / lock wait ms | 8,076.7 / 659.6 | 7,660.6 / 648.5 | -416.1 / -11.1 |
+| four: Store logical / allocated B | 133,865,472 / 133,865,472 | 132,026,368 / 132,030,464 | -1,839,104 / -1,835,008 |
+| four: overlay logical B | 122,880 | 122,880 | 0 |
+| four: daemon peak B | 134,938,624 | 130,838,528 | -4,100,096 |
+| session: exits (16 × 50 Commits, then fresh daemon on evicted Store × 50) | 0 / 0 / 0 | 0 / 0 / 0 | |
+| session: summed Commit ms (17 sessions) | 11,529.0 | 10,924.7 | -604.3 |
+| session: Commit median, first / sixteenth / cold session ms | 11.91 / 13.72 / 15.18 | 11.16 / 13.38 / 14.67 | |
+| session: final Store logical B | 119,603,200 | 119,533,568 | -69,632 |
+| session: daemon VmHWM at the last runtime snapshot KiB | 112,808 | 113,060 | +252 |
+
+Concurrent exec diagnostic (2,000 files per writer; per file µs:
+create / append / read; the Commit is of the three-writer run):
+
+| Run | C, 2 CPUs | D, 2 CPUs | C, no CPU limit | D, no CPU limit |
+| --- | ---: | ---: | ---: | ---: |
+| 1 writer | 244.2 / 122.2 / 188.8 | 287.2 / 147.9 / 244.0 | 239.9 / 119.8 / 187.2 | 124.3 / 71.1 / 71.7 |
+| 2 writers | 246.9 / 129.0 / 204.9 | 295.4 / 143.8 / 250.9 | 245.1 / 126.8 / 202.6 | 303.8 / 153.7 / 252.4 |
+| 3 writers | 356.8 / 288.0 / 273.8 | 411.0 / 228.7 / 278.8 | 299.3 / 172.3 / 236.4 | 364.8 / 223.6 / 281.2 |
+| 4 writers | 665.8 / 335.9 / 414.8 | 661.7 / 340.1 / 428.5 | 354.7 / 174.2 / 265.1 | 435.9 / 219.2 / 291.6 |
+| 3 writers + Commit | 583.0 / 212.9 / 258.7 | 545.2 / 200.2 / 249.4 | 353.4 / 154.6 / 233.0 | 378.9 / 188.2 / 285.8 |
+| that Commit ms | 1,084.0 | 943.1 | 699.9 | 605.8 |
+| that Commit's record jobs | 45,710 | 37,381 | 45,710 | 37,381 |
+
+Reading, with the limits of one shared-machine sample each:
+
+- Counts are exact and move as the pins predict: statements fall 17.9% in
+  both harness cases, VM steps 12.0%, owner jobs 5.1% (all of it record
+  jobs: 49,539 → 44,756 in tier 1). Requests are unchanged.
+- Commit time falls in every sample that has one: tier 1 -4.7%, four
+  Workspaces -3.8%, the session -5.2%, the concurrent Commit -13%. One sample
+  each; no speed claim is made.
+- Tier-1 command time is 3.1% higher and the four-Workspace sum 1.3% higher,
+  while the time under the Workspace lock fell (-56.4 ms and -416.1 ms); the
+  difference is outside the daemon's jobs. Recorded as measured, not
+  explained.
+- The exec diagnostic is slower in most cells of this sample (for example
+  no-limit create with two to four writers +22 to +24%) and one cell is half
+  its usual value (no-limit, one writer). The same runs report equal or
+  runs report lock service per job of Lifecycle 4 to 6 µs → 1 to 2 µs, Read
+  within 1 µs of C, and Mutation 0 to +5 µs (+12 µs with four writers on
+  2 CPUs), which is far less than the per-file differences, so most of the
+  difference is outside the daemon's jobs. Not attributed, not resampled; the
+  final samples of Step E will show whether it repeats.
+- Storage is not traded: tier-1 Store +77,824 B, session -69,632 B,
+  four-Workspace -1.8 MB, all inside the spread of earlier samples of the
+  same content; the overlay template is unchanged. The four-Workspace Store
+  reports 4,096 B more allocated than logical in this sample.
+- Memory: tier-1 peak -1.8 MB, four-Workspace peak -4.1 MB, session high
+  water +252 KiB. The wider answer window is about 150 KiB for one
+  construction and is not visible against these.
+
+Test copies of the two harness samples were removed after their receipts were
+read (450.2 MB and 519.8 MB); the originals stay.
+
+### Source size
+
+Production LOC: 81,006 -> 81,054 (delta +48), `core/crates` product source,
+pinned `tools/production_loc.py`
+(`c0fe7f36a0d4144bbd2b61c272c7579cc0d56ffe23f9588287ea30e793624adb`) on the
+first-parent and committed-tree Git archives; committed tree
+`a9f816ce61a144dc175f4c64c638e65d34e798e1` equals the counted tree. Reference
+absent (retired R9c; last counted 65,417 at tree
+498dd1917812). Net A+B+C+D: 84,220 -> 81,054 (delta -3,166).
