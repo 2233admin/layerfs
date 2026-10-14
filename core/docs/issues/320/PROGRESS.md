@@ -3290,3 +3290,29 @@ inherits it.
 Durable execution: NOT_RUN — disabled by owner until explicit
 reauthorization. Reference absent (retired R9c; last counted 65,417 at tree
 498dd1917812).
+
+## Overlay open-state cuts and test-only removal (2026-10-14)
+
+Branch `overlay-open-state-cuts` from `265843629`, unpushed. Owner direction:
+"remove aggressively including the tests".
+
+| Commit | Change | Production LOC |
+| --- | --- | --- |
+| `11b2a452d` | Open-state keys without the constant namespace; one journaled `OwnerTable` for files, reads, lookups and directory handles; Status open-state counts are map lengths (totals and meaning unchanged) | 80,476 -> 80,299 (-177) |
+| `253291435` | Product functions only tests reached, removed; tests that existed for them deleted, elsewhere only the calling assertions; kept and restored items listed in the commit message | 80,299 -> 79,447 (-852) |
+
+Checks on `253291435`, each once:
+
+| Check | Result |
+| --- | --- |
+| fmt, product boundary guard (684 files), tool tests (50) | PASS |
+| Whole-workspace Clippy `-D warnings`, host and Linux | 0 errors |
+| Host test binaries, all 315, 30 s each | 1,312 passed, 4 ignored; 2 NOT_RUN-equivalent failures needing absent inputs (`LAYERFS_Q1_PREPARED`, a Linux daemon binary), as before; 1 failure fixed (a reader's one-time setup that a removed plan probe used to pay) and rerun 5/5 |
+| Linux test binaries, 43 | all pass |
+| fs-bench-pro engine and families suites, cluster-two suite | NOT_RUN — need a sealed build; first task of the next agent |
+
+Timings: none taken. Durable execution: NOT_RUN — disabled by owner until
+explicit reauthorization. Next work and its order: the handoff
+[PROMPT-SIMPLIFY-NEXT-AGENT-20261014.md](PROMPT-SIMPLIFY-NEXT-AGENT-20261014.md).
+Production LOC of this record: unchanged (documentation only). Reference
+absent (retired R9c; last counted 65,417 at tree 498dd1917812).
