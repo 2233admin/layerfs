@@ -3884,3 +3884,25 @@ along with LFSD v3 and the setup producer. Decoder support for the candidate
 and all raw evidence stays, including failures. The design is marked rejected.
 No test was run; tests remain pending the separate Phase 2 pass.
 Durable: NOT_RUN — disabled by owner until explicit reauthorization.
+
+
+### Phase 1: typed-call reachability pass
+
+Removed 24 unused daemon forwarding methods; their underlying independently
+usable Overlay methods and real Workspace/Fuse behavior stay in place:
+acquire_lookup, retained_lookup, release_lookup, acquire_lookup_read,
+retained_operation, retained_file, retained_file_read, retained_captured_reader,
+open_file, close_file, acquire_file_read, release_file_read, maintenance_idle,
+retained_capture, retained_base_source, release_closed_capture, captured_inodes,
+captured_directory_entries, publish, install, native_file, pending_publications,
+inode and captured_cell. Product src, trait ports, examples and benchmark runtime
+references were scanned; only the deleted forwarding definitions remained on the
+daemon client. Initial check's unused imports were followed to removal.
+
+Kept native_retained_mount/native_state and retained_native operator inspection,
+all named constructor/operator/custody exceptions, actual captured-reader/run/
+namespace ports, typed Commit install/settlement and whole-Store stop/read failures.
+No mechanism or behavior implementation moves into tests/tools. The source-only
+pass leaves tests pending; no test file was opened/edited/run. Host/Linux product
+check and Clippy cover lib/bins/examples; fmt/whitespace checked. A formatting-only
+roster pin advances with its normalized source. Durable remains owner-disabled.

@@ -1,6 +1,6 @@
 //! Direct connection operations, each one counted short job on the calling thread.
 use crate::{OwnerClient, OwnerError, ServiceClass};
-use layerfs_overlay::{BaseSource, Capture, CapturedReader, FileRead};
+use layerfs_overlay::{BaseSource, CapturedReader, FileRead};
 use layerfs_workspace::Route;
 impl OwnerClient {
     pub fn reader_inodes(
@@ -121,15 +121,6 @@ impl OwnerClient {
             db.source_cell(source, serial, generation, offset)
         })
     }
-    pub fn pending_publications(
-        &self,
-        route: Route,
-        after: u64,
-    ) -> Result<Vec<layerfs_overlay::Publication>, OwnerError> {
-        self.call(route, ServiceClass::General, None, move |db| {
-            db.pending_publications(after)
-        })
-    }
     pub fn acquire_base_source(
         &self,
         route: Route,
@@ -169,26 +160,6 @@ impl OwnerClient {
     ) -> Result<layerfs_overlay::DirectoryEntryWindow, OwnerError> {
         self.call(route, ServiceClass::General, None, move |db| {
             db.source_directory_entry_window(source, parent, after.as_deref())
-        })
-    }
-    pub fn inode(
-        &self,
-        route: Route,
-        serial: u64,
-    ) -> Result<Option<layerfs_overlay::Inode>, OwnerError> {
-        self.call(route, ServiceClass::General, None, move |db| {
-            db.inode(serial)
-        })
-    }
-    pub fn captured_cell(
-        &self,
-        route: Route,
-        capture: Capture,
-        serial: u64,
-        offset: u64,
-    ) -> Result<Option<layerfs_overlay::Cell>, OwnerError> {
-        self.call(route, ServiceClass::General, None, move |db| {
-            db.captured_cell(capture, serial, offset)
         })
     }
 }

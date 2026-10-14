@@ -16,17 +16,6 @@ impl OwnerClient {
             db.create_native_mount(root)
         })
     }
-    pub fn native_file(
-        &self,
-        route: Route,
-        mount: NativeMount,
-        serial: u64,
-        handle: u64,
-    ) -> Result<layerfs_overlay::OpenFile, OwnerError> {
-        self.call(route, ServiceClass::General, None, move |db| {
-            db.native_file(mount, serial, handle)
-        })
-    }
     pub fn native_close_file(
         &self,
         route: Route,
