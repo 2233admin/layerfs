@@ -2984,3 +2984,34 @@ Not covered by these samples:
 Production LOC 81,018 -> 81,018 (delta +0); tool and documentation only.
 Pinned `tools/production_loc.py` (`c0fe7f36…`). Reference absent (retired
 R9c; last counted 65,417 at tree 498dd1917812).
+
+## Landing the #321 follow-ups (2026-10-14)
+
+Three branches are merged onto `main` (`9d3f44e4d`), one merge commit each:
+- `fix-project-example-includes` (`e759b5f0c`);
+- the fs-bench-pro I/O-stall label (`51708c241`);
+- the source-size trace with the open-state memory results (`be09d00fa`).
+
+The two appended ledger sections conflicted and were both kept.
+
+The source-size cut had removed an unused EXPLAIN helper from
+`layerfs-overlay/src/lifetime/close.rs`. The closed-overlay storage oracle pins
+that file, and the trace did not run the harness suites, so the engine suite
+refused 26 subtests on the pin. The pin moved to the new hash in `4ad3f2ee4`;
+the behaviour it binds is unchanged.
+
+Checks at the landing tip, each once:
+
+| Check | Result |
+| --- | --- |
+| Formatting, product boundary guard (689 files), tool tests (50) | PASS |
+| Whole-workspace Clippy `-D warnings`, host and Linux | **0 errors** (the two example errors are gone) |
+| fs-bench-pro engine suite, native inputs from sealed build `2026-10-14-issue321-land-1-build` | 384 run, OK, 3 skipped |
+| fs-bench-pro families suite, same inputs | 90 run, OK |
+| cluster-two harness suite | 281 run, OK |
+| Daemon and overlay test binaries | not rerun: product tree identical to `9c783fbd7`, where 137 binaries passed (350 tests; 2 environmental NOT_RUN) |
+
+Durable execution: NOT_RUN — disabled by owner until explicit reauthorization.
+Production LOC 81,054 -> 81,018 (delta -36) across the landing; this record
+is documentation only. Reference absent (retired R9c; last counted 65,417 at
+tree 498dd1917812).
