@@ -123,7 +123,42 @@ Only tests call these, but removing them would delete whole suites or a custody 
   - the persistence/project host-file sense;
   - the bridge's native control channel.
 
-### 4.4 Optimize (measure first)
+### 4.4 Expectations and the measurement subset (owner: "we should just run a small subset")
+
+Production LOC expected from 4.2. These are estimates from file sizes at `253291435`, not commitments:
+
+| Item | Expected cut |
+| --- | --- |
+| Overlay `Route` parameter and checks | 80–150 |
+| Constant namespaces, `ServiceClass` | 30–60 |
+| Job/receipt layer: the four `*_operations.rs` (789), `results.rs`, `receipt.rs`, `job_sql.rs`, `owner_work.rs`, part of `owner.rs` and the ports | 400–700 net |
+| Store read pool (639 in the four `read_*` files) → per-Workspace reader | 450–550 net, if the owner approves |
+| Further reachability passes | 0–200 |
+| Rename | 0 |
+
+That is about 1,000–1,700 lines, or 1.3–2.1% of 79,447. The optimizations in 4.5 will probably add code (daemon-owned permission checks, write gathering). Report that growth honestly.
+
+Expected speed, based on the #321 record in `core/docs/issues/320/PROGRESS.md`:
+- In the twelve cells at Step E, statements fell 25–57% while command time stayed flat. Owner jobs now equal kernel requests. So command time is set by kernel round trips per request, not by SQL or the job layer.
+- In tier 1, statements fell 57% while the command fell 10% and the Commit 53%.
+- Expected effect of each change:
+
+| Change | Expected effect |
+| --- | --- |
+| 4.2 removals and the rename | about 0 on command and Commit (a few % CPU at most) |
+| Per-Workspace readers | less waiting only when several Workspaces read the Store at once |
+| GETATTR | 22% of requests in the tier-1 sample, each cheap: perhaps 5–15% of command time, unmeasured |
+| Commit step sizes | perhaps 10–30% of Commit time, unmeasured |
+| Write gathering | small for command time, since statements are not the bottleneck; measure before designing further |
+
+Measure only this subset, one sample each, at three points: the branch tip before 4.2, after 4.2, and after each optimization. Each item is one command of at most 2 minutes:
+1. The cells C01 (create-heavy, 5,002 requests), C03 (mixed) and C06 (small) through `go.py run cells:C01 …`.
+2. `core/docs/issues/320/tools/exec_concurrency.py`, at 1 and 4 Workspaces.
+3. Tier 1 `v016-mixed-development-100mb-5000-k100-v1`: command and Commit, with request, job and statement counts.
+
+Don't run the full tiers or the four-Workspace context case (its preparation order is fragile). Counts are the evidence; times on this shared machine stay INELIGIBLE.
+
+### 4.5 Optimize (measure first)
 
 Priority from the owner (2026-10-13): exec under concurrent Workspaces first, then Commit, then mount. Don't chase a few milliseconds on a Commit, and never buy speed with storage, unbounded memory or benchmark-fitting.
 
