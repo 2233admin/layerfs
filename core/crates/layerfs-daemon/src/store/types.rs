@@ -18,10 +18,6 @@ pub enum BindPhase {
 }
 #[derive(Debug)]
 pub enum BindError {
-    Cleanup {
-        original: Box<BindError>,
-        cause: Arc<PortError>,
-    },
     MissingBranch(BranchId),
     History(HistoryError),
     Read(Arc<PortError>),
@@ -38,17 +34,6 @@ pub struct BindRefusal {
     pub snapshot: Option<BranchSnapshot>,
     pub error: BindError,
 }
-#[derive(Debug)]
-pub enum CloseError {
-    Owner(OwnerError),
-    Reader(Arc<PortError>),
-}
-impl fmt::Display for CloseError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Workspace Close: {self:?}")
-    }
-}
-impl std::error::Error for CloseError {}
 pub struct BindSuccess {
     pub workspace: BoundWorkspace,
 }

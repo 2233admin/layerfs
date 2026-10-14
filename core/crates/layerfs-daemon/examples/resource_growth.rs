@@ -98,7 +98,7 @@ fn main() {
         }
     }
     observe::phase("close");
-    bound.close().unwrap();
+    owner.client().close(bound.route()).unwrap();
     drop(bound);
     observe::phase("drain");
     let until = Instant::now() + Duration::from_secs(2);

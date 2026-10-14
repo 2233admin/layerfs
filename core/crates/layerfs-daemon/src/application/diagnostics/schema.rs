@@ -152,7 +152,6 @@ pub(super) fn store<W: Write>(
         ]),
     )?;
     let w = store.read_work();
-    rows.row(39, 0, Some(&[1]))?;
     rows.row(
         9,
         0,
@@ -161,9 +160,15 @@ pub(super) fn store<W: Write>(
             w.poisoned as u64,
             w.readers as u64,
             w.quarantined as u64,
-            w.opening_failures as u64,
-            w.requests,
-            w.lock_wait_ns,
+            w.waiting as u64,
+            w.assigned as u64,
+            w.leased as u64,
+            w.outstanding as u64,
+            w.peak_outstanding as u64,
+            w.grants,
+            w.queue_wait_ns,
+            w.maximum_queue_wait_ns,
+            w.scheduler_bytes as u64,
         ]),
     )?;
     match store.cache_work() {

@@ -1,5 +1,5 @@
 //! One operation's original failures over batched public Store demands.
-use super::{ReadAdmissionError, Store};
+use super::{ReadAdmissionError, ReadLease, ReadTicket, Store};
 use layerfs_content::{AuthenticatedObjects, ContentError, ContentResult, ObjectId};
 use layerfs_history::{HistoryError, ReserveRequest, WorkspaceId};
 use layerfs_storage::StorageError;
@@ -68,6 +68,20 @@ impl Store {
     }
 }
 impl StorePorts {
+    /// Bind one already admitted reader to the existing canonical client/cache.
+    /// Its last client/view consumer returns the reader. No admission or wait
+    /// occurs inside these provider calls; a concurrent demand is refused.
+    pub fn client_on(
+        self: &Arc<Self>,
+        reader: ReadLease,
+    ) -> Result<Arc<CanonicalClient>, Arc<PortError>> {
+        self.check_reader(&reader)?;
+        Ok(super::read_scope::client(
+            self.clone(),
+            reader,
+            self.store.cache.clone(),
+        ))
+    }
     pub fn resident(&self) -> Arc<CanonicalClient> {
         self.store.resident.clone()
     }
@@ -115,6 +129,15 @@ impl StorePorts {
             *first = Some(error.clone());
         })
     }
+    /// Native callers await admission before executing a provider demand.
+    pub fn read_ticket(&self) -> Result<ReadTicket, Arc<PortError>> {
+        if let Some(error) = self.failure().map_err(Arc::new)? {
+            return Err(error);
+        }
+        self.store
+            .read_ticket(self.workspace)
+            .map_err(|e| Arc::new(PortError::ReadAdmission(e)))
+    }
     /// One unused serial for a create. An early refill below the Store's
     /// low-water is made in a custody scope of its own: its failure is
     /// returned beside the serial and never becomes this operation's.
@@ -125,12 +148,41 @@ impl StorePorts {
         let low_water = self.store.serial_low_water.load(Ordering::Relaxed);
         workspace.next_serial_with_low_water(self, &EarlyRefill(self), low_water)
     }
+    fn check_reader(&self, reader: &ReadLease) -> Result<(), Arc<PortError>> {
+        if Arc::ptr_eq(&reader.pool, &self.store.readers) && reader.workspace() == self.workspace {
+            Ok(())
+        } else {
+            Err(Arc::new(PortError::Storage(StorageError::Integrity(
+                "foreign Store/Workspace reader",
+            ))))
+        }
+    }
+    pub fn objects_on(
+        &self,
+        reader: &mut ReadLease,
+        ids: &[ObjectId],
+    ) -> Result<Vec<Vec<u8>>, Arc<PortError>> {
+        self.attempt(|| {
+            self.check_reader(reader)?;
+            reader.objects(ids)
+        })
+    }
+    pub fn file_lengths_on(
+        &self,
+        reader: &mut ReadLease,
+        ids: &[ObjectId],
+    ) -> Result<Vec<u64>, Arc<PortError>> {
+        self.attempt(|| {
+            self.check_reader(reader)?;
+            reader.file_lengths(ids)
+        })
+    }
     /// Bounded grouped metadata demand, with original cardinality/order.
     pub fn file_lengths(&self, ids: &[ObjectId]) -> Result<Vec<u64>, Arc<PortError>> {
         self.attempt(|| {
-            let reader = self
-                .store
-                .reader(self.workspace)
+            let mut reader = self
+                .read_ticket()?
+                .wait()
                 .map_err(|e| Arc::new(PortError::ReadAdmission(e)))?;
             reader.file_lengths(ids)
         })
@@ -139,9 +191,9 @@ impl StorePorts {
 impl AuthenticatedObjects for StorePorts {
     fn read_canonical_batch(&self, ids: &[ObjectId]) -> ContentResult<Vec<Vec<u8>>> {
         self.attempt(|| {
-            let reader = self
-                .store
-                .reader(self.workspace)
+            let mut reader = self
+                .read_ticket()?
+                .wait()
                 .map_err(|e| Arc::new(PortError::ReadAdmission(e)))?;
             reader.objects(ids)
         })

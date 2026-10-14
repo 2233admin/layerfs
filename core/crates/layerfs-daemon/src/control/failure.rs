@@ -57,9 +57,6 @@ impl Failure {
 
             Self::Bind(failed) => {
                 let (code, moved, detail) = match &failed.error {
-                    BindError::Cleanup { cause, .. } => {
-                        (port(Some(cause), false), None, cause.to_string())
-                    }
                     BindError::History(error) => {
                         let (code, moved) = history(error);
                         (code, moved, error.to_string())
@@ -177,6 +174,7 @@ fn port(error: Option<&PortError>, opaque: bool) -> ControlCode {
         Some(PortError::ReadAdmission(error)) => match error {
             crate::store::ReadAdmissionError::Capacity => ControlCode::Capacity,
             crate::store::ReadAdmissionError::Poisoned => ControlCode::Unknown,
+            crate::store::ReadAdmissionError::InvalidLimits => ControlCode::Invalid,
             _ => ControlCode::Failed,
         },
         None if opaque => ControlCode::Unknown,

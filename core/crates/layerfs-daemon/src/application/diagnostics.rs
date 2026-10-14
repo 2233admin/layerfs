@@ -29,7 +29,7 @@ impl<'a, W: Write> Records<'a, W> {
     fn new(
         sink: W,
         call: u64,
-        readers: usize,
+        readers: u16,
         scope: &'a [u8; 32],
         daemon: &'a [u8; 32],
         slot: usize,
@@ -40,7 +40,7 @@ impl<'a, W: Write> Records<'a, W> {
             scope,
             daemon,
             slot,
-            maximum: FIXED_RECORDS + 2 * readers,
+            maximum: FIXED_RECORDS + 2 * usize::from(readers),
             bytes: 0,
             records: 0,
             numbers: 0,
@@ -196,7 +196,7 @@ impl Application {
             let mut rows = Records::new(
                 io::stderr().lock(),
                 call.id,
-                self.setup.limits.namespaces as usize + 2,
+                self.setup.limits.read_handles,
                 scope,
                 &self.instance,
                 slot,
@@ -206,7 +206,7 @@ impl Application {
                 token.map_or(0, |token| token.namespace),
                 Some(&[
                     operation_code(operation),
-                    u64::from(self.setup.limits.namespaces) + 2,
+                    u64::from(self.setup.limits.read_handles),
                     self.setup.limits.cache_bytes,
                 ]),
             )?;
@@ -254,16 +254,11 @@ impl Application {
             #[cfg(not(target_os = "linux"))]
             rows.row(12, 0, None)?;
             schema::sql(&mut rows, 13, -1, self.observed_sql(None))?;
-            for index in self.observed_reader_indices() {
-                let reader_index = if index == usize::MAX {
-                    -2
-                } else {
-                    index as i64
-                };
-                schema::sql(&mut rows, 14, reader_index, self.observed_sql(Some(index)))?;
+            for index in 0..usize::from(self.setup.limits.read_handles) {
+                schema::sql(&mut rows, 14, index as i64, self.observed_sql(Some(index)))?;
                 schema::reader_storage(
                     &mut rows,
-                    reader_index,
+                    index as i64,
                     store
                         .as_ref()
                         .and_then(|store| store.reader_storage_diagnostics(index)),
@@ -273,18 +268,6 @@ impl Application {
             rows.finish()
         })();
         (outcome, resources.into_diagnostic_error(result.err()))
-    }
-    fn observed_reader_indices(&self) -> Vec<usize> {
-        let Ok(state) = self.state.lock() else {
-            return Vec::new();
-        };
-        state
-            .startup
-            .installed
-            .as_ref()
-            .map(|value| &value.opened)
-            .or(state.startup.existing.as_ref())
-            .map_or_else(Vec::new, |opened| opened.reader_indices())
     }
     fn observed_sql(&self, reader: Option<usize>) -> Option<layerfs_persistence::SqlWork> {
         let state = self.state.lock().ok()?;

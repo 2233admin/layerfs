@@ -329,9 +329,12 @@ impl Workspaces {
             if terminal {
                 backing.terminal();
             }
-            state
-                .slots
-                .insert(namespace, Slot::Retiring { incarnation });
+            state.slots.insert(
+                namespace,
+                Slot::Retiring {
+                    incarnation,
+                },
+            );
             owner
         };
         let client = owner.client();

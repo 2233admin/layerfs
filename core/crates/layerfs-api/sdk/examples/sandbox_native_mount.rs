@@ -91,6 +91,7 @@ fn setup(private: [u8; 32], peer: [u8; 32]) -> DaemonSetup {
         limits: DaemonLimits {
             connections: 4,
             handshake_ms: 2000,
+            read_handles: 2,
             cache_bytes: 65536,
             namespaces: 8,
             pager_kib: 1024,

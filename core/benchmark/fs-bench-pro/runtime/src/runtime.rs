@@ -61,6 +61,7 @@ fn start_inner(
         limits: DaemonLimits {
             connections: 4,
             handshake_ms: 2000,
+            read_handles: 2,
             cache_bytes: 8 * 1024 * 1024,
             namespaces: 16,
             pager_kib: 1024,

@@ -149,7 +149,7 @@ fn main() {
     }
     drop((base, op));
     phase("release");
-    bound.close().unwrap();
+    owner.client().close(bound.route()).unwrap();
     drop(bound);
     phase("idle");
     let until = Instant::now() + Duration::from_secs(2);

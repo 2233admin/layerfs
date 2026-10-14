@@ -3851,3 +3851,36 @@ lose four base-source custody statements and one Workspace-state statement
 (14 -> 9); the fixed prefix/suffix loses four further custody statements
 (15 -> 11). 512 * 9 + 11 = 4,619, independently reproduced by the raw logs.
 Request/job expectations remain unchanged. No workload/cache/timeout changes.
+
+
+### Reader decision: restore the pool under the owner's rule
+
+Before product e7e65dab9 versus candidate 9b9964673 (priced arm sealed at
+1d7fd30c9): W4 complete phase 1552.4 -> 1575.4 ms, +23.0 ms / 1552.4 =
++1.48158%. W4 create/append/read means 325.9/158.8/255.9 ->
+325.8/158.4/257.8 us per file. W1 means 243.4/114.7/220.7 ->
+237.7/125.8/210.6. Each is one sample with 2000 files per writer. No resampling;
+all raw timings remain INELIGIBLE on the shared machine. These tiny deltas are
+not an isolated/confident speed claim, but the owner's conservative acceptance
+condition is explicit: keep the pool if four-Workspace time worsens.
+
+Observed sampler peaks (79/80 rows): RSS 36044 -> 39556 KiB; anonymous
+28964 -> 32540 KiB. Lifetime HWM is not a phase peak. The candidate is below
+the proposed 64 MiB per-Workspace allowance in this small sample, but that
+passes neither a continuous bound proof nor the failed time condition.
+Candidate C06 command 115.6 ms; full proof PASS/Gone, INELIGIBLE. Counts
+518 requests / 518 jobs / 4619 statements; overlay logical/allocated 69632 B,
+Store logical 204880 / allocated 208896 B. Before C06 command 127.1 ms,
+proof PASS/Gone, original instrumentation FAIL preserved; recovered counts
+are identical. Both series use sealed release builds and independently cloned
+closed empty inputs, declared warm fresh-mount C06 contract, no cold credit,
+one construction worker and the same pinned image. No other containers were
+listed at the exec samples' start/end; shared-machine interference remains.
+
+The candidate code is restored to its first parent; its 179-line cut does not
+pay under acceptance and is not part of the retained simplification. Reader
+shutdown/quarantine/operator failure custody and shared fair pool are restored,
+along with LFSD v3 and the setup producer. Decoder support for the candidate
+and all raw evidence stays, including failures. The design is marked rejected.
+No test was run; tests remain pending the separate Phase 2 pass.
+Durable: NOT_RUN — disabled by owner until explicit reauthorization.

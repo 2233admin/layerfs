@@ -21,16 +21,6 @@ pub struct StoreOperation {
     owner: OwnerClient,
 }
 impl BoundWorkspace {
-    /// Terminal local close, then the Workspace's opened Store reader.
-    /// A failed boundary retains its original cause and permits no replay.
-    pub fn close(&self) -> Result<(), super::CloseError> {
-        self.owner
-            .close(self.route())
-            .map_err(super::CloseError::Owner)?;
-        self.store
-            .close_reader(self.identity)
-            .map_err(super::CloseError::Reader)
-    }
     pub fn operation(&self) -> WorkspaceResult<StoreOperation> {
         let ports = self.store.ports_for(self.snapshot()?.scope, self.identity);
         let client = ports.client();
@@ -56,8 +46,12 @@ impl BoundWorkspace {
     }
 }
 impl StoreOperation {
-    pub(crate) fn client_handle(&self) -> Arc<CanonicalClient> {
-        self.client.clone()
+    /// One native bounded step's provider uses an already admitted reader.
+    pub fn admitted_client(
+        &self,
+        reader: super::ReadLease,
+    ) -> Result<Arc<CanonicalClient>, Arc<super::PortError>> {
+        self.ports.client_on(reader)
     }
     pub const fn workspace(&self) -> &Workspace {
         &self.workspace

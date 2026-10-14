@@ -1,6 +1,6 @@
 //! Authenticated one-time file installation and concrete Store bootstrap.
 use crate::{
-    bootstrap::open_store_observed,
+    bootstrap::open_store_observed_with_limits,
     install_file,
     install_types::{InstallError, InstallFailure, InstallWork, InstalledStore, StoreSettings},
     store::checked_base,
@@ -80,7 +80,7 @@ fn install_manifest(
             .reservations
             .validate()
             .map_err(InstallError::Store)?;
-        if settings.workspace_capacity == 0 {
+        if settings.read_handles == 0 {
             return Err(InstallError::Protocol(ControlError("empty Store read set")));
         }
         let (target, temporary) = install_file::paths(destination).map_err(InstallError::Io)?;
@@ -140,13 +140,14 @@ fn install_manifest(
             StoreProfile::Disposable => SqlitePersistenceProfile::Disposable,
         };
         retained.opened = Some(
-            open_store_observed(
+            open_store_observed_with_limits(
                 PersistenceConfig::sqlite(target).with_sqlite_profile(profile),
                 &manifest.binding,
                 manifest.cursor_key,
-                settings.workspace_capacity,
+                settings.read_handles,
                 settings.cache_bytes,
                 settings.reservations,
+                settings.read_limits,
             )
             .map_err(InstallError::Store)?,
         );
