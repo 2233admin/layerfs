@@ -93,7 +93,7 @@ def main():
     others = subprocess.run([*docker, "ps", "--format", "{{.Names}}"], capture_output=True, text=True).stdout.split()
     result = {"label": "issue 320 concurrent exec diagnostic; one-off; not a harness case; no oracle or proof; "
                        "exit codes only; shared machine; times not eligible for a claim",
-              "case_tree": prepared["case"], "build": build_folder.name, "source_commit": build["identity"]["source_commit"],
+              "case_tree": prepared.get("case"), "recipe": prepared["recipe"], "build": build_folder.name, "source_commit": build["identity"]["source_commit"],
               "source_tree": build["identity"]["source_tree"],
               "sqlite_compile_flags": build.get("explicit_sqlite_flags"),
               "resident_observations": [],

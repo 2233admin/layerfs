@@ -3440,3 +3440,20 @@ implements the owner's small-subset instruction and changes no product or
 workload body. Exec baseline is pending at this commit. Syntax and whitespace
 checks apply; no Rust source changes. Durable remains NOT_RUN — disabled by
 owner until explicit reauthorization.
+
+### Exec baseline metadata failure (retained)
+
+Attempt `2026-10-14-issue320-open-state-exec-baseline` at `562c06d9d`
+failed with `KeyError: 'case'` in result metadata construction, before clone
+and runtime effects. The empty cell original has `recipe="empty"`, no `case`
+field; workload originals have both. The helper previously assumed only
+workload originals. No mounted phase or timing exists from this attempt.
+The observer waited its declared 90 s startup bound and reported no daemon.
+[Attempt receipt](../../../target/issue321/open-state-exec-baseline.json) and
+sibling output files retain both outcomes; the output directory is empty.
+
+The corrected helper records nullable `case_tree` and the required `recipe`
+separately, preserving actual input metadata without fabricating a case. This
+is the sole repair of the traced failing expression. A new output identity
+will run the requested phases; the failed attempt is never overwritten.
+Product source and production LOC remain unchanged.
