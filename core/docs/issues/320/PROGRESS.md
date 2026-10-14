@@ -3339,3 +3339,67 @@ Documentation only. It changes the plan in
   - the bridge → `mount` and `duplex`.
 
 Expected production LOC for 4.2 is revised to 1,150–2,200, an estimate. Production LOC of this record: unchanged (documentation only). Reference absent (retired R9c; last counted 65,417 at tree 498dd1917812).
+
+## Open-state branch: pre-landing verification (2026-10-14)
+
+Section 4.1 of the current handoff is verified locally; pushing still needs the
+owner's explicit approval. Branch `overlay-open-state-cuts`, clean source
+`e50c010637c3d48e7c28abd7b4cc7078c60d9f6f`, source tree
+`d3cf1584454f827852c3677a705e1cd18a184b20`, product tree
+`58a49646eae98774b41720cb44d02a35678302d2`. The only changes after
+`253291435` were the progress record and current handoff documentation; product
+source and compiled inputs are unchanged. No product or test source changed in
+this verification step.
+
+**Build.** One locked release seal, `open-state-land`, completed in 100.0 s
+under a 115 s wall stop. Command, from the assigned perf worktree:
+
+```sh
+bash /Users/yifanxu/Ephemeral-AI-Lab/layerfs-perf-run/core/target/issue320/busy.sh && python3 -B /Users/yifanxu/Ephemeral-AI-Lab/layerfs-perf-run/core/target/issue321/go.py open-state-land 115 build
+```
+
+[Build receipt](../../../../benchmark-results/fs-bench-pro/2026-10-14-issue321-open-state-land-build/build.json),
+SHA-256 `30228713a9b520feaa8e5109c96ad9bc21c535a49307ec2fbe85ce8480bd4d1c`,
+records PASS, both locked host/Linux release attempts, reused worktree-local
+Cargo caches, binary hashes, unchanged source before/after and image
+`sha256:378b799ef43343fc64008b6a5ef456dd6bf0cb8f6ea4cec72e7b42dfc17d2cd6`.
+Global Store: explicitly Disposable/WAL/OFF. Overlay: MEMORY/OFF/EXCLUSIVE.
+Construction workers: 1. The fuser check retains its two known OWNER-3
+passthrough refusals, exit 1; no checker PASS is claimed.
+
+**Suites.** Each ran once, serially, after a successful absolute-path busy gate,
+with the worktree-local lock and an explicit 120 s wall stop. The sealed
+workspace-writer, workload-host and edit-host paths were supplied through the
+handoff's native-input environment variables. The Darwin metadata-call
+interposer was compiled from `tests/fixtures/lstat_counter.c` with
+`cc -dynamiclib`, separately gated and bounded at 30 s.
+
+| Check | Result | Complete invocation wall | Receipt |
+| --- | --- | ---: | --- |
+| fs-bench-pro engine | OK: 384 tests, 3 skipped | 22.991 s / 120 s | [engine](../../../target/issue321/open-state-land-engine.json) |
+| fs-bench-pro families | OK: 90 tests, no skips | 42.008 s / 120 s | [families](../../../target/issue321/open-state-land-families.json) |
+| cluster-two | OK: 281 tests, no skips | 86.239 s / 120 s | [cluster-two](../../../target/issue321/open-state-land-cluster-two.json) |
+
+Exact reproduction: gate with the absolute `busy.sh` above, then invoke
+`python3 -B /Users/yifanxu/Ephemeral-AI-Lab/layerfs-perf-run/core/target/issue321/open_state_suites.py <suite>`,
+where `<suite>` is `engine`, `families` or `cluster-two`. Each JSON receipt
+records the underlying `unittest discover` command, environment and source;
+its sibling `.stdout` and `.stderr` files retain all output. These are
+correctness suites, not performance samples: no cold cache preconditioning or
+performance eligibility is claimed. Shared-machine timing is INELIGIBLE for
+performance comparison.
+
+**Skips and unrun work.** Engine skipped the separate public canonical census
+fixture proof, compiler-only native CLI proof and pinned-image staging proof
+for absent explicit inputs. No new test failure or timeout occurred. The
+previous host missing-input outcomes (`LAYERFS_Q1_PREPARED` and Linux daemon
+binary) remain as recorded above; the earlier passing host/Linux checks were
+reused, not rerun. No cells, exec concurrency or tier-1 performance sample ran
+in this step; their baseline remains pending before the product sweep.
+Durable execution: NOT_RUN — disabled by owner until explicit reauthorization.
+
+This documentation-only record changes no production source. Production LOC
+comparison is attached to its counted commit: 79,447 -> 79,447 (delta +0).
+Reference absent (retired R9c; last counted 65,417 at tree 498dd1917812). Next:
+owner approval to push the verified branch to `origin/main`, then the section
+4.4 baseline and product-first removal sweep in the handoff's order.
