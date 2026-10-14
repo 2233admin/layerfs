@@ -7,7 +7,7 @@
 //! service thread or a future Workspace.
 
 use crate::error::{HistoryError, HistoryResult};
-use crate::identity::{BranchId, CommitId, HistoryName, LayerId, LayerStackId};
+use crate::identity::{BranchId, CommitId, HistoryName, LayerId, LayerStackId, NodeId};
 use layerfs_content::ObjectId;
 
 /// Default and maximum records one bounded page returns.
@@ -83,6 +83,8 @@ pub struct CommitRecord {
     pub parent: Option<CommitId>,
     /// Base Layer the Commit was built from.
     pub base_layer: LayerId,
+    /// The other side of a Branch merge: a Commit or a Layer.
+    pub second_parent: Option<NodeId>,
 }
 
 /// One immutable Layer publication.
@@ -228,6 +230,8 @@ pub struct CommitRequest {
     pub profile: ObjectId,
     /// Allocation scope the candidate was constructed under.
     pub scope: ObjectId,
+    /// The other side of a Branch merge, recorded as the second parent.
+    pub second_parent: Option<NodeId>,
     /// Overwrite a head that moved instead of refusing.
     pub force: bool,
 }
@@ -374,5 +378,5 @@ macro_rules! encoded_width {
 
 encoded_width!(LayerStackRecord, 179);
 encoded_width!(BranchRecord, 166);
-encoded_width!(CommitRecord, 149);
+encoded_width!(CommitRecord, 183);
 encoded_width!(LayerRecord, 168);

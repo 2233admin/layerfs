@@ -36,6 +36,7 @@ pub(crate) fn verify_commit(tx: &Transaction<'_>, record: &CommitRecord) -> Hist
             if stored.root == record.root
                 && stored.parent == record.parent
                 && stored.base_layer == record.base_layer
+                && stored.second_parent == record.second_parent
                 && stored.stack == record.stack
             {
                 Ok(true)
@@ -121,11 +122,13 @@ pub(crate) fn commit_branch(
             request.candidate_root,
             request.expected_head,
             request.expected_base,
+            request.second_parent,
         ),
         stack: branch.stack,
         root: request.candidate_root,
         parent: request.expected_head,
         base_layer: request.expected_base,
+        second_parent: request.second_parent,
     };
     if !verify_commit(tx, &record)? {
         tx.execute(
@@ -136,6 +139,7 @@ pub(crate) fn commit_branch(
                 record.root.as_bytes().as_slice(),
                 record.parent.map(|id| id.to_bytes().to_vec()),
                 record.base_layer.as_slice(),
+                record.second_parent.map(|id| id.as_slice().to_vec()),
             ],
         )
         .map_err(sql)?;

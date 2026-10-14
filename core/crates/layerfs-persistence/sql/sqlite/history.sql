@@ -76,6 +76,11 @@ CREATE TABLE "commit" (
         ),
     base_layer_id BLOB NOT NULL
         CHECK (length(base_layer_id) = 33 AND substr(base_layer_id, 1, 1) = X'32'),
+    second_parent_id BLOB
+        CHECK (
+            second_parent_id IS NULL
+            OR (length(second_parent_id) = 33 AND substr(second_parent_id, 1, 1) IN (X'12', X'32'))
+        ),
     FOREIGN KEY (layer_stack_id, base_layer_id)
         REFERENCES layer(layer_stack_id, layer_id) DEFERRABLE INITIALLY DEFERRED,
     FOREIGN KEY (layer_stack_id, parent_commit_id)

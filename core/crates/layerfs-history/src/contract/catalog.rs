@@ -17,7 +17,7 @@
 //!   semantic conflict and not a silent retry.
 
 use crate::error::HistoryResult;
-use crate::identity::{BranchId, CatalogId, CommitId, LayerId, LayerStackId};
+use crate::identity::{BranchId, CatalogId, CommitId, LayerId, LayerStackId, NodeId};
 use crate::records::{
     AddLayerOutcome, AddLayerRequest, BranchRecord, BranchSnapshot, CommitHistoryRequest,
     CommitOutcome, CommitRecord, CommitRequest, ForkRequest, LayerHistoryRequest, LayerRecord,
@@ -98,6 +98,17 @@ pub trait HistoryCatalog: Send + Sync {
         &self,
         request: &LayerHistoryRequest,
     ) -> HistoryResult<PageResult<LayerRecord>>;
+
+    /// The newest common ancestor of two history nodes, through Commit parents
+    /// (including second parents), base Layers, Layer parents and the Commit
+    /// each Layer was published from. Absent when the two share no ancestor.
+    /// Each side's walk is bounded by [`crate::records::MAXIMUM_LINEAGE_ROWS`];
+    /// exhausting it is `Capacity`, never a guessed base.
+    fn merge_base(&self, left: NodeId, right: NodeId) -> HistoryResult<Option<NodeId>>;
+
+    /// True when `ancestor` equals `descendant` or is reachable from it over
+    /// the same edges as [`HistoryCatalog::merge_base`], with the same bound.
+    fn is_ancestor(&self, ancestor: NodeId, descendant: NodeId) -> HistoryResult<bool>;
 
     /// Creates the genesis Layer and the stack atomically.
     fn initialize_layerstack(

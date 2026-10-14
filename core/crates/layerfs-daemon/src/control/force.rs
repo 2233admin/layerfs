@@ -69,7 +69,9 @@ fn guard(
     let commit = match (value.activity, &value.published) {
         (Activity::Idle, _) => CommitKnowledge::Absent,
         // A known publication is forced with its original outcome.
-        (Activity::LocalFailure, Some(published)) => CommitKnowledge::Published(published.clone()),
+        (Activity::LocalFailure, Some(published)) => {
+            CommitKnowledge::Published(Box::new(published.clone()))
+        }
         (Activity::Uncertain, _) if relinquish_unknown => CommitKnowledge::Unknown,
         (Activity::LocalFailure, None) => {
             return Err(refused(

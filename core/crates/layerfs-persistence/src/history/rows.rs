@@ -4,7 +4,7 @@ use crate::backend::records::{FromValue, Record as Row};
 use layerfs_content::ObjectId;
 use layerfs_history::{
     error::{HistoryError, HistoryResult},
-    identity::{BranchId, CommitId, HistoryName, LayerId, LayerStackId},
+    identity::{BranchId, CommitId, HistoryName, LayerId, LayerStackId, NodeId},
     records::{BranchRecord, CommitRecord, LayerRecord, LayerStackRecord},
 };
 /// Reads one column through the engine's own conversion, typed on failure.
@@ -78,6 +78,9 @@ pub(crate) fn commit_row(row: &Row) -> HistoryResult<CommitRecord> {
         root: object(row, 2)?,
         parent: commit_column(row, 3)?,
         base_layer: required(layer_column(row, 4)?, "Layer identity")?,
+        second_parent: cell::<Option<Vec<u8>>>(row, 5)?
+            .map(|bytes| NodeId::from_slice(&bytes))
+            .transpose()?,
     })
 }
 

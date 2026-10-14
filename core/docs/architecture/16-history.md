@@ -18,6 +18,12 @@
 > `force` an overwrite that keeps the captured parent and reports the displaced
 > head. The text below keeps its original source pin.
 
+> **Second parent and ancestry, 2026-10-15 (#327):** a Commit may record a second
+> parent, a Commit or a Layer (`NodeId`, one 33-byte tagged `second_parent_id`
+> column), which extends its derived identity only when present. `merge_base` and
+> `is_ancestor` walk Commit parents (or the base Layer), second parents, Layer
+> parents and each Layer's source Commit, bounded by `MAXIMUM_LINEAGE_ROWS`.
+
 **Atomic publication update,2026-10-07 (parent `e2f2e62c7`):** current
 HistoryCatalog adds one required `stage_and_commit` operation. The combined
 Persistence provider stages and publishes in one short transaction; a definite

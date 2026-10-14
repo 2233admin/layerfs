@@ -132,6 +132,7 @@ impl BoundWorkspace {
                 candidate_root: candidate.0,
                 profile: snapshot.profile,
                 scope: snapshot.scope,
+                second_parent: None,
                 force: false,
             });
             retained.phase = CommitPhase::Validate;

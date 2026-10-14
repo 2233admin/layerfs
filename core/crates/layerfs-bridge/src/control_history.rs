@@ -6,7 +6,7 @@ use crate::{
 use layerfs_content::ObjectId;
 use layerfs_history::{
     error::MovedState, BranchId, BranchRecord, BranchSnapshot, CommitId, CommitOutcome,
-    CommitRecord, HistoryName, LayerId, LayerStackId, WorkspaceId,
+    CommitRecord, HistoryName, LayerId, LayerStackId, NodeId, WorkspaceId,
 };
 pub(crate) fn history<T>(value: layerfs_history::HistoryResult<T>) -> Result<T, ControlError> {
     value.map_err(|_| ControlError("history control value"))
@@ -141,7 +141,22 @@ pub(crate) fn put_commit(out: &mut Writer, value: &CommitRecord) -> Result<(), C
     out.put(&value.stack.to_bytes())?;
     out.put(&value.root.to_bytes())?;
     put_head(out, value.parent)?;
-    out.put(&value.base_layer.to_bytes())
+    out.put(&value.base_layer.to_bytes())?;
+    put_node(out, value.second_parent)
+}
+pub(crate) fn put_node(out: &mut Writer, value: Option<NodeId>) -> Result<(), ControlError> {
+    out.byte(u8::from(value.is_some()))?;
+    if let Some(id) = value {
+        out.put(id.as_slice())?;
+    }
+    Ok(())
+}
+pub(crate) fn node(input: &mut Reader<'_>) -> Result<Option<NodeId>, ControlError> {
+    if boolean(input)? {
+        Ok(Some(history(NodeId::from_slice(&input.array::<33>()?))?))
+    } else {
+        Ok(None)
+    }
 }
 pub(crate) fn commit(input: &mut Reader<'_>) -> Result<CommitRecord, ControlError> {
     Ok(CommitRecord {
@@ -150,6 +165,7 @@ pub(crate) fn commit(input: &mut Reader<'_>) -> Result<CommitRecord, ControlErro
         root: object(input)?,
         parent: head(input)?,
         base_layer: history(LayerId::from_bytes(input.array()?))?,
+        second_parent: node(input)?,
     })
 }
 pub(crate) fn put_outcome(out: &mut Writer, value: &CommitOutcome) -> Result<(), ControlError> {

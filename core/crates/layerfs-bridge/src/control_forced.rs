@@ -36,7 +36,7 @@ pub enum CommitKnowledge {
     /// No Commit custody was retained; this is not a not-published verdict.
     Absent,
     /// Original known publication, kept even when local installation failed.
-    Published(CommitOutcome),
+    Published(Box<CommitOutcome>),
     /// Original unknown custody, explicitly relinquished and still unknown.
     Unknown,
 }
@@ -111,7 +111,7 @@ pub(crate) fn facts(input: &mut Reader<'_>) -> Result<ForcedFacts, ControlError>
     };
     let commit = match input.byte()? {
         1 => CommitKnowledge::Absent,
-        2 => CommitKnowledge::Published(outcome(input)?),
+        2 => CommitKnowledge::Published(Box::new(outcome(input)?)),
         3 => CommitKnowledge::Unknown,
         _ => return Err(ControlError("Commit knowledge")),
     };

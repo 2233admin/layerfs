@@ -264,14 +264,56 @@ authority_identity!(BranchId, BRANCH_BYTES, BRANCH_TAG);
 authority_identity!(LayerStackId, LAYER_STACK_BYTES, LAYER_STACK_TAG);
 
 impl CommitId {
-    /// Derives the Commit identity of one `(root, parent, base Layer)` triple.
-    pub fn derive(root: ObjectId, parent: Option<Self>, base_layer: LayerId) -> Self {
+    /// Derives the Commit identity of one `(root, parent, base Layer)` triple,
+    /// extended by a merge's second parent. A Commit without a second parent
+    /// keeps the identity it had before second parents existed.
+    pub fn derive(
+        root: ObjectId,
+        parent: Option<Self>,
+        base_layer: LayerId,
+        second_parent: Option<NodeId>,
+    ) -> Self {
         let mut hasher = blake3::Hasher::new();
         hasher.update(b"layerfs/commit/v2\0");
         hasher.update(root.as_bytes());
         update_optional(&mut hasher, parent.as_ref().map(Self::as_slice));
         hasher.update(base_layer.as_slice());
+        if let Some(second) = second_parent {
+            hasher.update(b"\0second-parent\0");
+            hasher.update(second.as_slice());
+        }
         Self(tagged_hash(COMMIT_TAG, hasher.finalize()))
+    }
+}
+
+/// One node of the history graph: a Commit or a published Layer.
+///
+/// Both identities are 33 bytes with a distinct leading tag, so one stored
+/// value names either kind without a separate discriminant column.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum NodeId {
+    /// An immutable Commit.
+    Commit(CommitId),
+    /// A published Layer.
+    Layer(LayerId),
+}
+
+impl NodeId {
+    /// The tagged identity bytes of either kind.
+    pub fn as_slice(&self) -> &[u8] {
+        match self {
+            Self::Commit(id) => id.as_slice(),
+            Self::Layer(id) => id.as_slice(),
+        }
+    }
+
+    /// Checks the tag and wraps one tagged identity.
+    pub fn from_slice(bytes: &[u8]) -> HistoryResult<Self> {
+        match bytes.first() {
+            Some(&COMMIT_TAG) => Ok(Self::Commit(CommitId::from_slice(bytes)?)),
+            Some(&LAYER_TAG) => Ok(Self::Layer(LayerId::from_slice(bytes)?)),
+            _ => Err(HistoryError::InvalidInput("history node identity")),
+        }
     }
 }
 
