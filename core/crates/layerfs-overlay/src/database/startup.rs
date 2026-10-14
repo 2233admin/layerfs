@@ -147,30 +147,24 @@ fn initialize(path: &Path, config: ProfileConfig, template: Option<(&Path, i64)>
             super::profile::readback(&connection, &sql, "PRAGMA user_version", |row| row.get(0))?;
         let application: i64 =
             super::profile::readback(&connection, &sql, "PRAGMA application_id", |row| row.get(0))?;
-        if profile.schema_version != 35 || application != 1279676210 {
+        if profile.schema_version != 36 || application != 1279676210 {
             return Err(crate::OverlayError::Invalid("overlay schema readback"));
         }
-        if let Some((_, namespace)) = template {
-            let populated: i64 = super::profile::readback(
+        if template.is_some() {
+            let populated: bool = super::profile::readback(
                 &connection,
                 &sql,
-                "SELECT EXISTS(SELECT 1 FROM workspace WHERE ns>0 LIMIT 1)",
+                "SELECT EXISTS(SELECT 1 FROM fs_inode) OR EXISTS(SELECT 1 FROM fs_entry)
+                 OR EXISTS(SELECT 1 FROM fs_data) OR EXISTS(SELECT 1 FROM fs_data_ref)
+                 OR EXISTS(SELECT 1 FROM fs_truncate) OR EXISTS(SELECT 1 FROM commit_record)
+                 OR EXISTS(SELECT 1 FROM commit_pin) OR EXISTS(SELECT 1 FROM commit_base_pin)
+                 OR EXISTS(SELECT 1 FROM commit_run) OR EXISTS(SELECT 1 FROM commit_reader)
+                 OR EXISTS(SELECT 1 FROM cleanup_task)",
                 |row| row.get(0),
             )?;
-            if populated != 0 {
+            if populated {
                 return Err(crate::OverlayError::Invalid("populated overlay template"));
             }
-            // The existing INSERT/RETURNING job remains unchanged. Seed its
-            // ordinary AUTOINCREMENT allocator with the daemon's next identity.
-            // The copy is still private and has no Workspace row or owner.
-            crate::diagnostics::startup::batch(
-                &connection,
-                &sql,
-                &format!(
-                    "INSERT INTO sqlite_sequence(name,seq) VALUES('workspace',{})",
-                    namespace - 1
-                ),
-            )?;
         }
         work.cache_configuration_calls = 1;
         // The capacity covers the engine's fixed statement set, about 224
@@ -190,8 +184,12 @@ fn initialize(path: &Path, config: ProfileConfig, template: Option<(&Path, i64)>
             work: RefCell::new(*sql.borrow()),
             payload_work: Cell::new(crate::PayloadWork::default()),
             quarantined: Cell::new(false),
-            namespace: Cell::new(0),
-            workspace_seen: Cell::new(None),
+            namespace: Cell::new(match template {
+                Some((_, namespace)) => namespace,
+                None => i64::try_from(identity)
+                    .map_err(|_| crate::OverlayError::Invalid("engine identity exhausted"))?,
+            }),
+            workspace: Cell::new(None),
             operation_seen: Cell::new(None),
             reader_seen: Cell::new(None),
             maintenance_ready: Cell::new(false),

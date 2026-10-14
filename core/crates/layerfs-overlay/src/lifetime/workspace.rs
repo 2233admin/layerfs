@@ -1,31 +1,9 @@
-//! Indexed Workspace routing and maintained bounded observation.
-use crate::{
-    db::unsigned, Generation, Overlay, OverlayError, OverlayResult, Route, StatementKind,
-    WorkspaceState,
-};
+//! One Workspace's journaled runtime state; the database owns its filesystem rows.
+use crate::{Generation, Overlay, OverlayError, OverlayResult, Route, WorkspaceState};
 
-/// The Workspace row in the column order of `state` and of every native fence.
-pub(crate) fn decode(r: &rusqlite::Row<'_>) -> rusqlite::Result<WorkspaceState> {
-    let root: Vec<u8> = r.get(3)?;
-    let base_root = root.try_into().map_err(|_| rusqlite::Error::InvalidQuery)?;
-    Ok(WorkspaceState {
-        active: Generation(r.get(0)?),
-        captured: r.get::<_, Option<i64>>(1)?.map(Generation),
-        captured_revision: r.get(8)?,
-        installed: r.get(7)?,
-        revision: r.get(2)?,
-        base_root,
-        dirty_inodes: unsigned(r, 4)?,
-        dirty_directory_entries: unsigned(r, 5)?,
-        closed: r.get::<_, i64>(6)? != 0,
-        base_readers: unsigned(r, 9)?,
-        consolidating: r.get::<_, Option<i64>>(10)?.map(Generation),
-    })
-}
 impl Overlay {
-    /// Binds one complete root as the one Workspace of this database, without
-    /// scanning it. A database that already holds a Workspace refuses another.
-    /// Authority/root validation is performed by the Workspace/runtime caller.
+    /// Binds one complete root without scanning it. Authority/root validation
+    /// belongs to the Workspace/runtime caller; a second binding is refused.
     pub fn open_workspace(
         &self,
         incarnation: [u8; 32],
@@ -34,54 +12,53 @@ impl Overlay {
         if incarnation == [0; 32] {
             return Err(OverlayError::Invalid("zero incarnation"));
         }
-        // Rows of this database carry no Workspace key: it holds one.
-        if self.namespace.get() != 0 {
-            return Err(OverlayError::Invalid("database already holds a Workspace"));
-        }
-        let route = self.atomic(|| {
-            let ns = self.query(
-                StatementKind::Workspace,
-                "INSERT INTO workspace(incarnation,base_root,active) VALUES(?1,?2,1) RETURNING ns",
-                &[&incarnation.as_slice(), &base_root.as_slice()],
-                64,
-                |r| r.get(0),
-            )?[0];
-            Ok(Route {
+        self.atomic(|| {
+            if self.workspace.get().is_some() {
+                return Err(OverlayError::Invalid("database already holds a Workspace"));
+            }
+            let route = Route {
                 engine: self.identity,
-                ns,
+                ns: self.namespace.get(),
                 incarnation,
-            })
-        })?;
-        self.namespace.set(route.ns);
-        Ok(route)
+            };
+            self.workspace.set(Some((
+                incarnation,
+                WorkspaceState {
+                    active: Generation(1),
+                    captured: None,
+                    captured_revision: None,
+                    installed: 0,
+                    revision: 0,
+                    base_root,
+                    dirty_inodes: 0,
+                    dirty_directory_entries: 0,
+                    closed: false,
+                    base_readers: 0,
+                    consolidating: None,
+                },
+            )));
+            Ok(route)
+        })
     }
-    /// One route-qualified point observation. It does not enumerate/count payload.
-    /// The row is read when this connection does not remember it.
+    /// Exact current state, with no SQL observation or stale remembered row.
     pub fn state(&self, route: Route) -> OverlayResult<WorkspaceState> {
         self.check_route(route)?;
-        if let Some((incarnation, state)) = self.workspace_seen.get() {
-            if incarnation == route.incarnation && route.ns == self.namespace.get() {
-                return Ok(state);
-            }
+        let (incarnation, state) = self.workspace.get().ok_or(OverlayError::Stale)?;
+        if incarnation != route.incarnation || route.ns != self.namespace.get() {
+            return Err(OverlayError::Stale);
         }
-        let state = self
-            .query(
-                StatementKind::Workspace,
-                crate::sql::FENCE_LOOKUP,
-                &[&route.ns, &route.incarnation.as_slice()],
-                40,
-                decode,
-            )?
-            .pop()
-            .ok_or(OverlayError::Stale)?;
-        self.remember(route, state);
         Ok(state)
     }
-    /// Remembers the row that a statement of this connection just returned.
-    pub(crate) fn remember(&self, route: Route, state: WorkspaceState) {
-        if route.ns == self.namespace.get() {
-            self.workspace_seen.set(Some((route.incarnation, state)));
-        }
+    /// The atomic job snapshots this fixed state and restores known failures.
+    pub(crate) fn change_state(
+        &self,
+        route: Route,
+        change: impl FnOnce(&mut WorkspaceState) -> OverlayResult<()>,
+    ) -> OverlayResult<()> {
+        let mut state = self.state(route)?;
+        change(&mut state)?;
+        self.workspace.set(Some((route.incarnation, state)));
+        Ok(())
     }
     pub(crate) fn live(&self, route: Route) -> OverlayResult<WorkspaceState> {
         let state = self.state(route)?;
@@ -91,4 +68,36 @@ impl Overlay {
             Ok(state)
         }
     }
+    pub(crate) fn route_for_ns(&self, ns: i64) -> OverlayResult<Route> {
+        self.available()?;
+        let (incarnation, _) = self.workspace.get().ok_or(OverlayError::Stale)?;
+        if ns != self.namespace.get() {
+            return Err(OverlayError::Stale);
+        }
+        Ok(Route {
+            engine: self.identity,
+            ns,
+            incarnation,
+        })
+    }
+    pub(crate) fn source_count(&self, route: Route, add: bool) -> OverlayResult<()> {
+        self.change_state(route, |state| {
+            state.base_readers = changed_count(state.base_readers, if add { 1 } else { -1 })?;
+            Ok(())
+        })
+    }
+    pub(crate) fn dirty_counts(&self, route: Route, inodes: i64, names: i64) -> OverlayResult<()> {
+        self.change_state(route, |state| {
+            state.dirty_inodes = changed_count(state.dirty_inodes, inodes)?;
+            state.dirty_directory_entries = changed_count(state.dirty_directory_entries, names)?;
+            Ok(())
+        })
+    }
+}
+/// Preserve the former nonnegative signed SQLite counter domain.
+fn changed_count(value: u64, delta: i64) -> OverlayResult<u64> {
+    value
+        .checked_add_signed(delta)
+        .filter(|value| *value <= i64::MAX as u64)
+        .ok_or(OverlayError::Invalid("Workspace counter range"))
 }

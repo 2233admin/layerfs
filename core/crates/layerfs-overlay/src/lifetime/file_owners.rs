@@ -257,12 +257,7 @@ impl Overlay {
             &[&integer(owner)?, &source.root.as_slice(), &1_i64],
             56,
         )?;
-        self.execute(
-            StatementKind::Workspace,
-            sql::BASE_SOURCE_INCREMENT,
-            &[&source.route.ns],
-            8,
-        )?;
+        self.source_count(source.route, true)?;
         self.execute(
             StatementKind::Lease,
             "INSERT INTO commit_pin VALUES(5,?1,?2)",

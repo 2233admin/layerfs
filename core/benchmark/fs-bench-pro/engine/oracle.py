@@ -780,25 +780,25 @@ if __name__ == "__main__":
 
 
 # Closed accounting observation is separate from the existing content/census routes.
-OVERLAY_SCHEMA_VERSION = 35
+OVERLAY_SCHEMA_VERSION = 36
 OVERLAY_DIRECTORY = '/layerfs-local/overlay'
 OVERLAY_TEMPLATE = OVERLAY_DIRECTORY + '/overlay.sqlite'
 
 
 def _overlay_storage_source():
-    """Schema 35 (issue 320): one overlay file per mounted Workspace.
+    """Schema 36 (issue 320): one overlay file per mounted Workspace.
 
     The configured overlay path is the daemon's closed template: the empty
-    schema, never a Workspace. Each mounted Workspace owns `<namespace>.sqlite`
+    schema, with Workspace state held only in engine memory. Each mounted Workspace owns `<namespace>.sqlite`
     beside it, copied at mount and deleted at terminal unmount. Table
     membership and trigger definitions are checked independently; source pins
     bind the reviewed schema, accounting and file-lifetime model.
     """
     pins = {
-        'core/crates/layerfs-overlay/sql/schema.sql': '0c35daf5726381a057fc6ad1c15c264661cb6b46c792ce18cbed01ee7b232612',
-        'core/crates/layerfs-overlay/src/database/accounting.rs': '6bc10d5187c613bf2a26e6e2eac6d1689a6acf511f250933895e34ae97c6e693',
+        'core/crates/layerfs-overlay/sql/schema.sql': '88d18eeb731d97735dcf9d8b97fb9091e5550170c5dc012c069d47fc0ada44d3',
+        'core/crates/layerfs-overlay/src/database/accounting.rs': '8a4f66afaa6291bd0ed891c90e6911788d06b628bfacf65ad8ba2aa71f69c4cb',
         'core/crates/layerfs-overlay/src/database/physical.rs': '90bc4c7bdc3a597b927d2e2255b614e7da32f264e9b5d34fbce616a653c6f9de',
-        'core/crates/layerfs-overlay/src/lifetime/close.rs': 'ba6210d91123913a08cab624ea7b953ac77ace56810d326ac3aa44dc492672f5',
+        'core/crates/layerfs-overlay/src/lifetime/close.rs': '92fd1889c9a9f69d22b8ef4fe2800060bca7cbbb78c1b6f3a8863ece0be21c0b',
         'core/crates/layerfs-daemon/src/overlay/workspaces.rs': '7037616a53cc5246b48ec9a77246173c6988739b165888ee63b428ee7f3bdebb',
         'core/crates/layerfs-bridge/src/control_types.rs': '1047a09284a17bc49ebe31da53ddb60445b3e68375d06736680b3c7e8b2a0bc9',
     }

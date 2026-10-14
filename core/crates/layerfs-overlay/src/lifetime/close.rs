@@ -12,9 +12,6 @@ pub enum CleanupState {
     Gone,
 }
 const HELD: &str = "SELECT EXISTS(SELECT 1 FROM commit_pin)";
-const OBSERVE: &str = "SELECT w.incarnation,w.lifecycle,
-    (SELECT seq FROM sqlite_sequence WHERE name='workspace')
-    FROM (SELECT ?1 AS ns) AS selected LEFT JOIN workspace w ON w.ns=selected.ns";
 impl Overlay {
     fn terminal_state(&self, state: &crate::WorkspaceState) -> OverlayResult<CleanupState> {
         if !state.closed {
@@ -56,23 +53,8 @@ impl Overlay {
         if namespace <= 0 || incarnation == [0; 32] {
             return Err(OverlayError::Stale);
         }
-        let row = self
-            .query(StatementKind::Workspace, OBSERVE, &[&namespace], 8, |r| {
-                Ok((
-                    r.get::<_, Option<Vec<u8>>>(0)?,
-                    r.get::<_, Option<i64>>(1)?,
-                    r.get::<_, Option<i64>>(2)?,
-                ))
-            })?
-            .pop()
-            .ok_or(OverlayError::Stale)?;
-        if row.2.is_none_or(|last| namespace > last) {
-            return Err(OverlayError::Stale);
-        }
-        let Some(stored) = row.0 else {
-            return Ok(CleanupState::Gone);
-        };
-        if stored.as_slice() != incarnation {
+        let (stored, _) = self.workspace.get().ok_or(OverlayError::Stale)?;
+        if namespace != self.namespace.get() || stored != incarnation {
             return Err(OverlayError::Stale);
         }
         let route = Route {
@@ -87,12 +69,10 @@ impl Overlay {
     pub fn close(&self, route: Route) -> OverlayResult<()> {
         self.atomic_cleanup(|| {
             self.live(route)?;
-            self.execute(
-                StatementKind::Workspace,
-                "UPDATE workspace SET lifecycle=1 WHERE ns=?1",
-                &[&route.ns],
-                8,
-            )?;
+            self.change_state(route, |state| {
+                state.closed = true;
+                Ok(())
+            })?;
             Ok(())
         })
     }
@@ -104,12 +84,11 @@ impl Overlay {
             if !state.closed {
                 return Err(OverlayError::Stale);
             }
-            self.execute(
-                StatementKind::Capture,
-                "UPDATE workspace SET captured=NULL,captured_revision=NULL WHERE ns=?1",
-                &[&capture.route().ns],
-                8,
-            )?;
+            self.change_state(capture.route(), |state| {
+                state.captured = None;
+                state.captured_revision = None;
+                Ok(())
+            })?;
             self.wake_orphan_sources(capture.generation.0)
         })
     }

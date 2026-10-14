@@ -3560,3 +3560,43 @@ count/reclamation assertions are deferred to Phase 2. All historical schema
 size/count evidence keeps its source pin; no schema-35 storage or performance
 sample has run. Durable remains NOT_RUN — disabled by owner until explicit
 reauthorization.
+
+### Phase 1: Workspace runtime state to memory (schema 36)
+
+`workspace`, its AUTOINCREMENT allocator and the SQL state decoder are removed.
+The engine holds one fixed incarnation/state value. Atomic jobs retain its
+pre-job value and restore it only after known whole-job failure/SQL rollback;
+memory-only jobs obey the same restoration. Unknown COMMIT/rollback results
+retain attempted state with the quarantined connection. Counters remain
+nonnegative and bounded by the former signed SQLite range. No runtime rows
+are moved into tests/tools or a second backing representation.
+
+Capture/install/failure-resolution, revision/dirty counts and base-source
+acquisition/release update that journaled state. Kernel visits read it and
+their indexed inode under the same job lock. Retained capture remains exact
+and observable during close. Read/operation pin rows and the cleanup table
+remain for their later cuts. Template copies check all eleven remaining
+product tables for rows, then bind fresh memory; namespace diagnostics/routing
+are still transitional runtime fields, not SQL keys. The install SQL-plan
+observer has no SQL mechanism to observe and is removed.
+
+**Table-count correction.** The preceding schema-35 section and commit message
+incorrectly said eleven product tables: source DDL has twelve (plus
+`sqlite_sequence`). Removing Workspace yields eleven product tables and no
+allocator table in schema 36. The accounting cut itself removed one table
+and 27 triggers; the source/LOC comparison and receipts are unchanged.
+
+Host product check passed with one unused StatementKind import; the import
+was removed. Host Clippy and Linux check/Clippy, workspace lib/bins/examples,
+PASS under 120 s stops. Fmt/whitespace PASS. Logs use
+`simplify-workspace-{host,linux}-{check,clippy}`. Source pins for schema,
+accounting and close advance in the storage oracle; canonical definition and
+empty-template checks remain. Architecture and core guidance describe current
+placement and preserve old evidence/anchor access.
+
+Tests: not yet updated; no test opened/edited/run during this step. Capture
+boundary/install-later-write/open-reader, lost-reply, refusal and reclamation
+proofs stay on the Phase 2 keep list. No schema-36 sample or runtime PASS is
+claimed. Next: remove remaining overlay Route/ns checks and runtime pin/run/
+reader/cleanup tables, then direct typed calls and rename in the product sweep.
+Durable: NOT_RUN — disabled by owner until explicit reauthorization.

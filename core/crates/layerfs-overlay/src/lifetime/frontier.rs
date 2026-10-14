@@ -1,8 +1,5 @@
 //! Bounded exact custody observations; observing never replays or releases work.
-use crate::{
-    db::integer, sql, Capture, Generation, Overlay, OverlayError, OverlayResult, Publication,
-    Route, StatementKind,
-};
+use crate::{db::integer, Capture, Overlay, OverlayResult, Publication, Route};
 
 impl Overlay {
     /// Observes the retained capture after a lost completion, including during
@@ -10,27 +7,13 @@ impl Overlay {
     /// None means the routed Workspace exists without a capture; Stale means
     /// the routed incarnation is absent. No upstream history outcome is inferred.
     pub fn retained_capture(&self, route: Route) -> OverlayResult<Option<Capture>> {
-        self.check_route(route)?;
-        self.query(
-            StatementKind::Capture,
-            sql::RETAINED_CAPTURE,
-            &[&route.ns, &route.incarnation.as_slice()],
-            40,
-            |row| {
-                let Some(generation) = row.get::<_, Option<i64>>(0)? else {
-                    return Ok(None);
-                };
-                let root: Vec<u8> = row.get(2)?;
-                Ok(Some(Capture {
-                    route,
-                    generation: Generation(generation),
-                    revision: row.get(1)?,
-                    base_root: root.try_into().map_err(|_| rusqlite::Error::InvalidQuery)?,
-                }))
-            },
-        )?
-        .pop()
-        .ok_or(OverlayError::Stale)
+        let state = self.state(route)?;
+        Ok(state.captured.map(|generation| Capture {
+            route,
+            generation,
+            revision: state.captured_revision.expect("paired captured revision"),
+            base_root: state.base_root,
+        }))
     }
     /// Fixed keyset page of still-owned reply-send-attempt tickets, read from
     /// the engine's memory. A lost completion never removes these records. The caller must perform/fence the

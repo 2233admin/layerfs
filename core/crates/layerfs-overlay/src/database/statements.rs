@@ -114,18 +114,12 @@ pub(crate) const LAYER_LOWER: &str = "SELECT size FROM fs_inode
 pub(crate) const NAME_LAYERS: &str = "SELECT generation,inode,inherited FROM fs_entry
     WHERE parent=?1 AND name=?2 AND generation<=?3 AND generation>?4 ORDER BY generation DESC LIMIT 2";
 pub(crate) const DIRECTORY_ENTRY_LOOKUP:&str="SELECT inode,inherited FROM fs_entry WHERE parent=?1 AND name=?2 AND generation<=?3 AND generation>?4 ORDER BY generation DESC LIMIT 1";
-pub(crate) const RETAINED_CAPTURE: &str = "SELECT captured,captured_revision,base_root
-    FROM workspace WHERE ns=?1 AND incarnation=?2";
 pub(crate) const BASE_SOURCE_LOOKUP: &str =
     "SELECT base_root FROM commit_base_pin WHERE holder=?1 AND kind=?2";
 pub(crate) const BASE_SOURCE_INSERT: &str =
     "INSERT INTO commit_base_pin(holder,base_root,kind) VALUES(?1,?2,?3)";
 pub(crate) const BASE_SOURCE_DELETE: &str =
     "DELETE FROM commit_base_pin WHERE holder=?1 AND base_root=?2 AND kind=?3";
-pub(crate) const BASE_SOURCE_INCREMENT: &str =
-    "UPDATE workspace SET base_readers=base_readers+1 WHERE ns=?1";
-pub(crate) const BASE_SOURCE_DECREMENT: &str =
-    "UPDATE workspace SET base_readers=base_readers-1 WHERE ns=?1";
 pub(crate) const DIRECTORY_ENTRY_CAPTURE: &str = "SELECT parent,name,inode,inherited
     FROM fs_entry INDEXED BY fs_entry_capture WHERE generation=?1
     AND (parent,name)>(?2,?3) ORDER BY parent,name LIMIT 64";
@@ -158,13 +152,6 @@ pub(crate) const DIRECTORY_ENTRY_PUT: &str = "INSERT INTO fs_entry VALUES(?1,?2,
     ON CONFLICT(parent,name,generation) DO UPDATE SET inode=excluded.inode,inherited=excluded.inherited";
 pub(crate) const DIRECTORY_ENTRY_DROP: &str =
     "DELETE FROM fs_entry WHERE parent=?1 AND name=?2 AND generation=?3";
-/// The publication of one job, returning the row in the order of
-/// `FENCE_LOOKUP` so that the next job's fence needs no statement.
-pub(crate) const FRONTIER_ADVANCE: &str = "UPDATE workspace SET revision=?2,
-    dirty_inodes=dirty_inodes+?3,dirty_directory_entries=dirty_directory_entries+?4 WHERE ns=?1
-    RETURNING active,captured,revision,base_root,dirty_inodes,dirty_directory_entries,lifecycle,
-    installed,captured_revision,base_readers,consolidating";
-
 pub(crate) const OPERATION_CUSTODY: &str = "SELECT 1 FROM commit_run WHERE holder=?1";
 
 pub(crate) const INDEXED_OPERATION_RECORD_CONTAINS: &str = "SELECT 1 FROM commit_record
@@ -196,20 +183,8 @@ pub(crate) const INDEXED_OPERATION_RECORD_RECLAIM_OPERATION: &str =
 pub(crate) const GENERATION_HELD: &str = "SELECT 1 FROM commit_pin INDEXED BY commit_pin_resource
             WHERE kind=6 AND resource=?1 LIMIT 1";
 
-/// Workspace metadata read alongside in-memory request custody in one owner turn.
-pub(crate) const FENCE_LOOKUP: &str = "SELECT active,captured,revision,base_root,dirty_inodes,
-    dirty_directory_entries,lifecycle,installed,captured_revision,base_readers,consolidating
-    FROM workspace WHERE ns=?1 AND incarnation=?2";
-/// Whether the row of layer ?3 of serial ?2 may be deleted once the layer
-/// is empty: it is installed, or a later row of the view supersedes it. No
-/// row when the namespace is gone.
-pub(crate) const LAYER_SUPERSEDED: &str = "SELECT ?3<=w.installed OR EXISTS(SELECT 1
-    FROM fs_inode i WHERE i.inode=?2 AND i.generation<=w.active
-    AND i.generation>max(?3,w.installed)) FROM workspace w WHERE w.ns=?1";
-/// The same Workspace point and the inode that the deciding visit names.
-pub(crate) const FENCE_LOOKUP_ROW: &str = "SELECT w.active,w.captured,w.revision,w.base_root,w.dirty_inodes,
-    w.dirty_directory_entries,w.lifecycle,w.installed,w.captured_revision,w.base_readers,w.consolidating,
-    i.inode,i.kind,i.mode,i.mtime_seconds,i.mtime_nanoseconds,i.nlink,i.size,
-    i.inherited_cutoff,i.born,i.entries,i.subdirs,i.generation,i.epoch,i.height,i.referenced,i.sequence
-    FROM workspace w LEFT JOIN fs_inode i ON i.inode=?3 AND i.generation<=w.active AND i.generation>w.installed
-    WHERE w.ns=?1 AND w.incarnation=?2 ORDER BY i.generation DESC LIMIT 1";
+/// Whether layer ?2 of serial ?1 is installed below floor ?3 or superseded
+/// by a later row up to the runtime active frontier ?4.
+pub(crate) const LAYER_SUPERSEDED: &str = "SELECT ?2<=?3 OR EXISTS(SELECT 1
+    FROM fs_inode i WHERE i.inode=?1 AND i.generation<=?4
+    AND i.generation>max(?2,?3))";

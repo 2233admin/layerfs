@@ -48,36 +48,42 @@ physical limits: creation fails if its schema exceeds the chosen quota. The
 schema-34 30-page observation precedes accounting removal and is not a
 schema-35 size claim.
 
-`user_version` is 35. The file is created fresh and is never reopened: there
+`user_version` is 36. The file is created fresh and is never reopened: there
 is no migration, conversion or retry.
 
-## Rows the engine remembers
+<a id="rows-the-engine-remembers"></a>
 
-Issue #321 Step D. The connection of a Workspace file is the only one, holds
-the exclusive lock and runs one job at a time, so three rows change only by
-its own statements. The engine keeps what it last read or wrote of each:
+## Runtime Workspace state and remembered SQL custody
+
+Schema 36 removes `workspace` and its AUTOINCREMENT allocator. The engine owns
+one fixed runtime value: incarnation, base root, active/captured/installed
+frontiers, captured revision, current revision, lifecycle, dirty counts,
+base-reader count and consolidation frontier. It is authoritative state, not
+an evictable SQL cache. `Overlay::state` reads it under the Workspace job lock.
+
+Every atomic job retains one fixed pre-job value, alongside its mount slot.
+Known whole-job failure restores those values after SQL rollback and withdraws
+only that job's issued reply tickets; memory-only jobs have the same restoration
+without a SQL BEGIN. Unknown SQL/rollback outcomes quarantine and retain the
+attempted memory and original custody. No replay or guessed restoration occurs.
+Counters retain the former nonnegative signed SQLite range. Capture freezes its
+paired generation/revision; install preserves later active state and the same
+visible view. Base-source acquisition/release no longer updates SQL counters.
+
+Only operation and captured-reader SQL custody remain remembered:
 
 | Remembered | Read by | Forgotten by |
 | --- | --- | --- |
-| The `workspace` row with its incarnation | `Overlay::state` and every fence built on it | a writing statement whose text names `workspace` |
-| The operation owner last found in `commit_run` | `check_operation`, `fence_operation` | a writing statement whose text names `commit_run` |
-| The captured reader last found in `commit_reader` | `check_captured_reader` | a writing statement whose text names `commit_reader` |
+| The operation owner last found in `commit_run` | `check_operation`, `fence_operation` | a writing statement naming `commit_run` |
+| The captured reader last found in `commit_reader` | `check_captured_reader` | a writing statement naming `commit_reader` |
 
-A statement cannot change a table that its text does not name; schema 35 has
-no triggers. Only statements of the Workspace,
-Capture and Lease families write these tables, so the text of any other
-writing statement is not searched (a debug assertion checks the rule). A job
-that began a transaction and failed forgets all three, because it may have
-read its own writes before they were rolled back; a job that failed before
-its first write wrote nothing and forgets nothing. An owner or reader that is
-not found is not remembered.
-
-The frontier advance of a publication returns the row it wrote
-(`FRONTIER_ADVANCE ... RETURNING`), and the fence that reads an inode's row
-with the Workspace's (`FENCE_LOOKUP_ROW`) returns it too, so both refresh the
-memory. A fence that needs only the Workspace row and a custody that is
-remembered is then no statement: the fences of RELEASE, RELEASEDIR, READ,
-READDIR and FORGET, and of every record and reader job of a Commit.
+Schema 36 has no triggers. Writes naming either remembered table forget its
+hint; a failed job that began SQL forgets both, because it may have read its own
+writes. Runtime Workspace state never becomes an absent/stale hint. A kernel
+visit reads the runtime frontier and its indexed local inode in the same locked
+job; no Workspace-table join or namespace allocator query remains. Templates
+are closed empty SQL files; each copy verifies absence of rows in every remaining
+product table before binding a fresh runtime Workspace.
 
 ## Earlier terminology (schema 16 to 33)
 

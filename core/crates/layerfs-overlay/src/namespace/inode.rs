@@ -374,16 +374,11 @@ impl Overlay {
             .revision
             .checked_add(1)
             .ok_or(OverlayError::Invalid("revision exhausted"))?;
-        let advanced = self.query(
-            StatementKind::Workspace,
-            sql::FRONTIER_ADVANCE,
-            &[&route.ns, &revision, &inodes, &directory_entries],
-            32,
-            crate::lifetime::workspace::decode,
-        )?;
-        if let Some(advanced) = advanced.into_iter().next() {
-            self.remember(route, advanced);
-        }
+        self.dirty_counts(route, inodes, directory_entries)?;
+        self.change_state(route, |state| {
+            state.revision = revision;
+            Ok(())
+        })?;
         let publication = Publication {
             route,
             revision,

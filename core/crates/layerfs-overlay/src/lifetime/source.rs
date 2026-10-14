@@ -21,12 +21,7 @@ impl Overlay {
                 &[&key, &state.base_root.as_slice(), &0_i64],
                 48,
             )?;
-            self.execute(
-                StatementKind::Workspace,
-                sql::BASE_SOURCE_INCREMENT,
-                &[&route.ns],
-                8,
-            )?;
+            self.source_count(route, true)?;
             Ok(BaseSource {
                 route,
                 owner,
@@ -136,12 +131,7 @@ impl Overlay {
         if changed != 1 {
             return Err(OverlayError::Stale);
         }
-        self.execute(
-            StatementKind::Workspace,
-            sql::BASE_SOURCE_DECREMENT,
-            &[&source.route.ns],
-            8,
-        )?;
+        self.source_count(source.route, false)?;
         Ok(())
     }
 }

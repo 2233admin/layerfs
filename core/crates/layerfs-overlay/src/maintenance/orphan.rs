@@ -446,13 +446,14 @@ impl Overlay {
         // Active tombstones prevent serial lookup falling through to the old
         // base. Only already-installed metadata may be physically removed:
         // a row at or below the install frontier, or one a later row of the
-        // view supersedes. One statement reads the Workspace's frontier and
-        // the serial's later rows.
+        // view supersedes. The fixed runtime frontier and this serial's
+        // indexed later rows decide the same predicate.
+        let state = self.state(self.route_for_ns(ns)?)?;
         let removable = self
             .query(
                 StatementKind::Inode,
                 sql::LAYER_SUPERSEDED,
-                &[&ns, &serial, &gen],
+                &[&serial, &gen, &state.installed, &state.active.0],
                 24,
                 |r| r.get::<_, bool>(0),
             )?

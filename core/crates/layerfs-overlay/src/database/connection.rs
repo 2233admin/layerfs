@@ -26,11 +26,9 @@ pub struct Overlay {
     /// established only by an exact empty ready query; enqueue/release marks
     /// possible work. A rolled-back enqueue can leave only a false positive.
     pub(crate) maintenance_ready: Cell<bool>,
-    /// The Workspace row as this connection last read or wrote it, with its
-    /// incarnation. This connection is the only one and holds the exclusive
-    /// lock, so the row changes only by its own statements: a writing
-    /// statement that names the table forgets it, and so does a failed job.
-    pub(crate) workspace_seen: Cell<Option<([u8; 32], crate::WorkspaceState)>>,
+    /// Runtime state of the one bound Workspace. Atomic jobs snapshot this fixed
+    /// value; known rollback restores it and unknown outcomes retain custody.
+    pub(crate) workspace: Cell<Option<([u8; 32], crate::WorkspaceState)>>,
     /// The operation owner last found holding custody, forgotten the same way.
     pub(crate) operation_seen: Cell<Option<u64>>,
     /// The captured reader last found holding custody, forgotten the same way.
@@ -235,15 +233,12 @@ impl Overlay {
             // SQLite, and writes nothing.
             debug_assert!(
                 kind == StatementKind::Explain
-                    || !["workspace", "commit_run", "commit_reader"]
+                    || !["commit_run", "commit_reader"]
                         .iter()
                         .any(|table| sql.contains(table)),
                 "{kind:?} writes a remembered table: {sql}"
             );
             return;
-        }
-        if sql.contains("workspace") {
-            self.workspace_seen.set(None);
         }
         if sql.contains("commit_run") {
             self.operation_seen.set(None);
@@ -255,7 +250,6 @@ impl Overlay {
     /// Forgets every remembered row: a failed job that wrote may have read
     /// its own writes before they were rolled back.
     fn forget_all(&self) {
-        self.workspace_seen.set(None);
         self.operation_seen.set(None);
         self.reader_seen.set(None);
     }
@@ -342,7 +336,7 @@ impl Overlay {
     /// Runs one job atomically. Reads before the job's first writing statement
     /// execute in autocommit: this connection is the only one, holds the
     /// exclusive lock and runs one job at a time, so they see the same state.
-    /// A job that writes nothing begins and commits nothing.
+    /// A job with no SQL writes begins and commits no SQLite transaction.
     fn transaction<T>(&self, job: impl FnOnce() -> OverlayResult<T>) -> OverlayResult<T> {
         self.available()?;
         if self.transaction.get() != Transaction::None {
@@ -355,6 +349,7 @@ impl Overlay {
             self.pieces_seen.get(),
             self.open.borrow().mount,
         );
+        let workspace = self.workspace.get();
         let result = job();
         let issued = std::mem::take(&mut *self.issued.borrow_mut());
         let begun = self.transaction.get() == Transaction::Begun;
@@ -383,8 +378,8 @@ impl Overlay {
             Err(cause) => self.failed(cause),
         };
         self.transaction.set(Transaction::None);
-        // A job that began no transaction wrote nothing: what it read and
-        // remembered is still what the database holds.
+        // With no SQL transaction, remembered SQL rows did not change.
+        // Runtime state still rolls back below on a known failure.
         if begun {
             self.forget_all();
         }
@@ -408,6 +403,7 @@ impl Overlay {
         self.pieces_seen.set(pieces);
         self.open.borrow_mut().rollback();
         self.open.borrow_mut().mount = mount;
+        self.workspace.set(workspace);
         for revision in issued {
             self.tickets.withdraw(revision);
         }

@@ -3,7 +3,7 @@ use crate::{
     db::integer,
     inode,
     maintenance::{Item, FOLD, PAGE, RETIRE},
-    sql, Capture, Generation, Overlay, OverlayError, OverlayResult, Route, StatementKind,
+    sql, Capture, Generation, Overlay, OverlayError, OverlayResult, StatementKind,
 };
 
 impl Overlay {
@@ -16,32 +16,14 @@ impl Overlay {
             if self.state(capture.route)?.closed {
                 return Err(OverlayError::Closed);
             };
-            self.execute(
-                StatementKind::Capture,
-                "UPDATE workspace SET consolidating=captured,
-                captured=NULL,captured_revision=NULL WHERE ns=?1",
-                &[&capture.route.ns],
-                8,
-            )?;
+            self.change_state(capture.route, |state| {
+                state.consolidating = state.captured;
+                state.captured = None;
+                state.captured_revision = None;
+                Ok(())
+            })?;
             self.wake_orphan_sources(capture.generation.0)?;
             self.enqueue(FOLD, 0, capture.generation.0)
-        })
-    }
-    pub(crate) fn route_for_ns(&self, ns: i64) -> OverlayResult<Route> {
-        let incarnation = self
-            .query(
-                StatementKind::Workspace,
-                "SELECT incarnation FROM workspace WHERE ns=?1",
-                &[&ns],
-                8,
-                |row| row.get::<_, Vec<u8>>(0),
-            )?
-            .pop()
-            .ok_or(OverlayError::Stale)?;
-        Ok(Route {
-            engine: self.identity,
-            ns,
-            incarnation: incarnation.try_into().map_err(|_| OverlayError::Stale)?,
         })
     }
     pub(crate) fn fold_namespace(&self, item: &Item) -> OverlayResult<(u64, u64, bool)> {
@@ -103,12 +85,7 @@ impl Overlay {
                     0
                 };
                 if delta != 0 {
-                    self.execute(
-                        StatementKind::Workspace,
-                        "UPDATE workspace SET dirty_directory_entries=dirty_directory_entries+?2 WHERE ns=?1",
-                        &[&item.ns, &delta],
-                        16,
-                    )?;
+                    self.dirty_counts(route, 0, delta)?;
                 }
                 self.execute(
                     StatementKind::Reclaim,
@@ -127,12 +104,10 @@ impl Overlay {
              FROM fs_inode INDEXED BY fs_inode_capture WHERE generation=?1 AND inode>=?2 ORDER BY inode LIMIT 1",
             &[&item.target,&item.cursor],24,inode::decode)?.pop();
         let Some(lower) = lower else {
-            self.execute(
-                StatementKind::Capture,
-                "UPDATE workspace SET consolidating=NULL WHERE ns=?1",
-                &[&item.ns],
-                8,
-            )?;
+            self.change_state(route, |state| {
+                state.consolidating = None;
+                Ok(())
+            })?;
             self.enqueue(RETIRE, 0, item.target)?;
             self.finish_item(item)?;
             return Ok((0, 0, true));
@@ -147,24 +122,17 @@ impl Overlay {
                     .is_empty()
             {
                 self.put_inode(&state, &lower)?;
-                self.execute(
-                    StatementKind::Workspace,
-                    "UPDATE workspace SET dirty_inodes=dirty_inodes+1 WHERE ns=?1",
-                    &[&item.ns],
-                    8,
-                )?;
+                self.dirty_counts(route, 1, 0)?;
             }
             if let Some(next) = serial.checked_add(1) {
                 self.advance_item(item, 1, next, -1, &[])?;
                 return Ok((1, 0, false));
             }
             // The maximum representable serial is already the last key.
-            self.execute(
-                StatementKind::Capture,
-                "UPDATE workspace SET consolidating=NULL WHERE ns=?1",
-                &[&item.ns],
-                8,
-            )?;
+            self.change_state(route, |state| {
+                state.consolidating = None;
+                Ok(())
+            })?;
             self.enqueue(RETIRE, 0, item.target)?;
             self.finish_item(item)?;
             return Ok((1, 0, true));
@@ -178,12 +146,7 @@ impl Overlay {
             Some(layer) => *layer,
             None => {
                 let (_, layer) = self.put_inode(&state, &lower)?;
-                self.execute(
-                    StatementKind::Workspace,
-                    "UPDATE workspace SET dirty_inodes=dirty_inodes+1 WHERE ns=?1",
-                    &[&item.ns],
-                    8,
-                )?;
+                self.dirty_counts(route, 1, 0)?;
                 layer
             }
         };

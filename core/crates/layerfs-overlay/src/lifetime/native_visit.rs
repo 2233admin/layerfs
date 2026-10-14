@@ -7,7 +7,7 @@ use crate::namespace::job_rows::{JobRows, LocalRow};
 use crate::{
     db::integer, inode, BaseSource, Changes, InodeKind, LocalRead, NativeApplied, NativeDecision,
     NativeEffect, NativeMount, NativeObservation, OpenFile, Overlay, OverlayError, OverlayResult,
-    SourceRows, StatementKind, WorkspaceState,
+    SourceRows, WorkspaceState,
 };
 
 /// The kernel's own reference on the inode a native request names.
@@ -106,28 +106,11 @@ impl Overlay {
     ) -> OverlayResult<(WorkspaceState, i64, Option<LocalRow>)> {
         self.check_route(mount.route)?;
         let key = integer(serial)?;
-        let (state, local) = if row {
-            let found = self
-                .query(
-                    StatementKind::Workspace,
-                    crate::sql::FENCE_LOOKUP_ROW,
-                    &[&mount.route.ns, &mount.route.incarnation.as_slice(), &key],
-                    48,
-                    |r| {
-                        let local = if r.get::<_, Option<i64>>(11)?.is_some() {
-                            Some(inode::local_row_at(r, 11)?)
-                        } else {
-                            None
-                        };
-                        Ok((crate::lifetime::workspace::decode(r)?, local))
-                    },
-                )?
-                .pop()
-                .ok_or(OverlayError::Stale)?;
-            self.remember(mount.route, found.0);
-            found
+        let state = self.state(mount.route)?;
+        let local = if row {
+            self.local_row(key, state.active, state.installed)?
         } else {
-            (self.state(mount.route)?, None)
+            None
         };
         if live && state.closed {
             return Err(OverlayError::Closed);

@@ -1,22 +1,5 @@
 -- Disposable overlay schema; its version is the user_version at the end.
--- One database holds one Workspace: only its `workspace` row names it.
-CREATE TABLE workspace (
-    ns INTEGER PRIMARY KEY AUTOINCREMENT,
-    incarnation BLOB NOT NULL UNIQUE CHECK(length(incarnation)=32),
-    base_root BLOB NOT NULL CHECK(length(base_root)=32),
-    active INTEGER NOT NULL CHECK(active>0),
-    captured INTEGER CHECK(captured>0),
-    captured_revision INTEGER CHECK(captured_revision>=0),
-    installed INTEGER NOT NULL DEFAULT 0 CHECK(installed>=0),
-    revision INTEGER NOT NULL DEFAULT 0 CHECK(revision>=0),
-    lifecycle INTEGER NOT NULL DEFAULT 0 CHECK(lifecycle IN (0,1)),
-    dirty_inodes INTEGER NOT NULL DEFAULT 0 CHECK(dirty_inodes>=0),
-    dirty_directory_entries INTEGER NOT NULL DEFAULT 0 CHECK(dirty_directory_entries>=0),
-    base_readers INTEGER NOT NULL DEFAULT 0 CHECK(base_readers>=0),
-    consolidating INTEGER CHECK(consolidating>0),
-    CHECK(captured IS NULL OR consolidating IS NULL),
-    CHECK((captured IS NULL)=(captured_revision IS NULL))
-) STRICT;
+-- One database holds one Workspace; runtime custody is in the engine.
 CREATE TABLE fs_inode (
     inode INTEGER NOT NULL CHECK(inode>0),
     generation INTEGER NOT NULL CHECK(generation=-1 OR generation>0),
@@ -138,4 +121,4 @@ CREATE TABLE commit_record (
     PRIMARY KEY(operation,file_scope,kind,key)
 ) STRICT, WITHOUT ROWID;
 
-PRAGMA user_version=35;
+PRAGMA user_version=36;

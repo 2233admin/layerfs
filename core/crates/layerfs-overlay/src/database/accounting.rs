@@ -31,7 +31,7 @@ pub struct Resources {
     pub debt_upper_bytes: u64,
 }
 const COUNTS: &str = "SELECT
-    (SELECT count(*) FROM workspace),
+    ?1,
     (SELECT count(*) FROM fs_inode),
     (SELECT count(*) FROM fs_entry),
     (SELECT count(*) FROM fs_data),
@@ -57,25 +57,31 @@ impl Overlay {
         // never payload values. Ordinary mutations maintain no accounting row.
         // The daemon sums separate Workspace observations where requested.
         let counts = self
-            .query(StatementKind::Startup, COUNTS, &[], 8, |r| {
-                Ok(StoredCounts {
-                    namespaces: unsigned(r, 0)?,
-                    inode_rows: unsigned(r, 1)?,
-                    directory_entry_rows: unsigned(r, 2)?,
-                    payload_cells: unsigned(r, 3)?,
-                    payload_bytes: unsigned(r, 4)?,
-                    shrink_rows: unsigned(r, 5)?,
-                    reference_rows: unsigned(r, 13)?,
-                    operation_record_rows: unsigned(r, 6)?,
-                    operation_record_bytes: unsigned(r, 7)?,
-                    owner_rows: unsigned(r, 8)?,
-                    source_rows: unsigned(r, 9)?,
-                    owner_details: unsigned(r, 10)?,
-                    reply_tickets: 0,
-                    maintenance_targets: unsigned(r, 11)?,
-                    ready_targets: unsigned(r, 12)?,
-                })
-            })?
+            .query(
+                StatementKind::Startup,
+                COUNTS,
+                &[&i64::from(self.workspace.get().is_some())],
+                8,
+                |r| {
+                    Ok(StoredCounts {
+                        namespaces: unsigned(r, 0)?,
+                        inode_rows: unsigned(r, 1)?,
+                        directory_entry_rows: unsigned(r, 2)?,
+                        payload_cells: unsigned(r, 3)?,
+                        payload_bytes: unsigned(r, 4)?,
+                        shrink_rows: unsigned(r, 5)?,
+                        reference_rows: unsigned(r, 13)?,
+                        operation_record_rows: unsigned(r, 6)?,
+                        operation_record_bytes: unsigned(r, 7)?,
+                        owner_rows: unsigned(r, 8)?,
+                        source_rows: unsigned(r, 9)?,
+                        owner_details: unsigned(r, 10)?,
+                        reply_tickets: 0,
+                        maintenance_targets: unsigned(r, 11)?,
+                        ready_targets: unsigned(r, 12)?,
+                    })
+                },
+            )?
             .pop()
             .unwrap_or_default();
         // Reply tickets are held in the engine's memory, not in a row.

@@ -2,6 +2,13 @@
 
 > **Status:** Current implemented architecture; S2 closure after `7019801f9`, not complete native/runtime/Commit qualification.
 
+Schema 36 update (owner-directed #320 sweep, 2026-10-14): captured generation
+and revision now belong to the engine's journaled Workspace state rather than a
+SQLite Workspace row. Their exact pairing, retained capture observation,
+install/release validation and original unknown custody are unchanged. SQL
+capture rows remain sealed indexed input; no bulk copy is introduced. The
+historical schema-5 mechanism below is superseded only in state placement.
+
 Schema5 records `workspace.captured_revision` alongside the sealed generation.
 Capture sets both atomically from existing published state, then advances active
 and resets only active dirty counts. The installed base cannot change while that
