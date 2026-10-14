@@ -39,6 +39,24 @@ own checkout lock and explicit wall stop. Both masters can also be placed in
 `bench.py verify <run>` reads retained independent evidence; `bench.py report
 <run>` creates the two CSVs once, including all twelve registered cells.
 
+Each `bench.py run` case has a read-only kernel observer beside it
+([engine/io_observer.py](engine/io_observer.py)). It runs
+[`cgroup_observer.py`](../../docs/issues/320/tools/cgroup_observer.py) in its
+own container of the pinned image, outside every timer, and keeps its rows in
+`<sample>/io-observer/`. Before the receipt is written, the receipt's
+interference line declares the observer and `io_observer` records, for each
+Commit, the counts of
+[`commit_kernel_window.py`](../../docs/issues/320/tools/commit_kernel_window.py):
+container I/O pressure, container dirty-page peak, VM dirty plus write-back
+peak with its two limits, and container and VM pages scanned. Its `label` is
+`IO_STALLED` when the container waited on I/O for more than 20% of the
+observed Commit interval, else `NOT_STALLED`; `NO_COMMIT` and `UNAVAILABLE`
+say why there is none. The threshold comes from four dense-rewrite samples:
+unstalled 0.1% and 8.5%, stalled 38.0% and 43.7% ("Issue 321 follow-up —
+Store-write stall cause" in [PROGRESS](../../docs/issues/320/PROGRESS.md)). The
+label is diagnostic: no status, verdict or limit depends on it; `report` only
+appends it to the row's tag.
+
 Read [AGENTS.md](AGENTS.md) before changing or running the harness. It identifies
 current paths, profiles, lock and test requirements. The frozen root harness
 remains read-only. Durable remains disabled. All first-iteration numbers will

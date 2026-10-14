@@ -9,7 +9,7 @@ import sys
 import time
 import uuid
 
-from . import cache, fixtures, identity, oracle, receipts
+from . import cache, fixtures, identity, io_observer, oracle, receipts
 
 sys.path.insert(0, str(identity.ROOT / "core/benchmark/cluster-two"))
 from cells import counts, runner as cell_runner, workloads
@@ -490,6 +490,7 @@ def one_cell(cell, prepared_folder, build_folder, output):
         row["external_driver_wall_ns"] = time.monotonic_ns() - started
         row["timing_scope"] = "matrix controller: measured mount through terminal unmount, independent verifier excluded; setup/cache residency/cleanup/Stop separate; original control observation overhead retained"
         row["evidence"] = str(output.relative_to(identity.ROOT.resolve()))
+        io_observer.attach(output, row)
         receipts.write_new(output / "receipt.json", row)
         receipts.manifest(output)
     return row
@@ -1631,6 +1632,7 @@ def one_family_case(family, case, prepared_folder, build_folder, output, *, prep
             row["proof_wall_ns"]=time.monotonic_ns()-started_test_ns
             row["proof_wall_scope"]="verification-only complete invocation from source/build/prepared admission through setup, all original calls/Commits, native/public/census proof, required cleanup/Stop and prepublication close; declared owner invocation ceiling separately enforced"
         row["evidence"] = str(output.relative_to(identity.ROOT.resolve()))
+        io_observer.attach(output, row)
         if (case.get("git_workflow") or batch4 or reuse or footprint) and publication_stop is not None:
             if proof_started is not None:
                 if not proof_only:
@@ -1942,6 +1944,7 @@ def one_access_case(family, case, prepared_folder, build_folder, output):
         row['proof_wall_ns'] = time.monotonic_ns() - started_ns
         row['proof_wall_scope'] = 'verification-only complete invocation including setup; original25s worker/cleanup and35s publication scopes separately bound; owner120 ceiling'
         row['evidence'] = str(output.relative_to(identity.ROOT.resolve()))
+        io_observer.attach(output, row)
         if deadlines is not None:
             if time.monotonic() >= deadlines['cleanup']:
                 row.update(status='FAIL', proof_status='FAIL', tag='original access25s completion/cleanup deadline exhausted')
@@ -2529,6 +2532,7 @@ def one_context_case(family, case, prepared_folder, build_folder, output, *, pre
         if proof_start is not None:
             row['proof_wall_ns'] = time.monotonic_ns() - proof_start
         row['evidence'] = str(output.relative_to(identity.ROOT.resolve()))
+        io_observer.attach(output, row)
         if deadlines is not None:
             if time.monotonic() >= deadlines['cleanup']:
                 row.update(status='FAIL', proof_status='FAIL', tag='original complete proof/cleanup deadline reached before publication')
