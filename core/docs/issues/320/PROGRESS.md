@@ -3222,3 +3222,71 @@ Checks per slice:
 Tooling (scratch, not committed): a name-based scan for unreferenced
 functions, items and re-exports, and an approximate closure over test-only
 entry points.
+
+## Issue 321 follow-up — fuser receive buffers sized by max_write (2026-10-14)
+
+**Change.** The owner authorized a fuser patch ("you are allowed to modify
+fuser with patch").
+- Each receive loop now allocates `max_write + 4096` bytes, negotiated at
+  INIT (128 KiB + 4 KiB), instead of fuser's 16 MiB + 4 KiB.
+- The handshake buffer is unchanged.
+- The delta is a third pinned record beside the timestamp and lifecycle
+  patches: [decision](../321/FUSER-RECEIVE-BUFFER-DECISION-20261014.md),
+  commit `0d357b191`.
+- Production LOC is unchanged at 80,476 (third-party code).
+
+**Result.** Each case ran one sample with
+[`daemon_memory_sampler.py`](../321/tools/daemon_memory_sampler.py) beside it.
+All are INELIGIBLE; functional, proof and cleanup PASS.
+
+| Case | Before | After | Lifetime peak (sampler VmHWM) |
+| --- | --- | --- | --- |
+| Dense rewrite 500 | h-peak-2 (`e24e0d762`, daemon `3e8261fc9f66`) | buf-1 (`0d357b191`, daemon `8d9ceb64d345`) | 150,488 -> 101,556 KiB (**-32.5%**); receipt 154,112,000 -> 104,005,632 B |
+| Four Workspaces (`v016-workspace-four-100mb-5000-k100-v1`) | land-2 (`ae15551a0`, the same product without the patch) | buf-1 | 214,220 -> 168,480 KiB (**-21.4%**) |
+
+Daemon anonymous memory, MiB, at the first row of each mount:
+
+| Mount | Dense before | Dense after | Four before | Four after |
+| --- | ---: | ---: | ---: | ---: |
+| measured mount (dense mount 2; four mounts 1–4) | 32 | 17 | 6 | 6 |
+| first remount (dense verify; four mount 5) | 116 | 70 | 135 | 119 |
+| four: mounts 6 / 7 / 8, max after each | — | — | 189 / 200 / 201 | 142 / 155 / 157 |
+
+- The four concurrent first mounts cost the same in both builds. First
+  mounts never touched their buffers; the cost arose only on remounts, after
+  a free had raised glibc's threshold. That cost is gone.
+- The four-Workspace receipts record VmHWM at their external snapshot,
+  before the verification mounts: 132,395,008 and 132,640,768 B, about
+  equal. The lifetime peak is visible only in the sampler rows.
+- Receipts:
+  - dense after `654bb7d4`;
+  - four before `f2221537`;
+  - four after `c0360f0f`.
+- Counts are equal to earlier samples: dense 33,359 / 134,879 / 530,261; four
+  within 85 statements.
+- Dense Commit 6,435.1 ms, unstalled: the writer's `COMMIT` step took
+  640.4 ms. No timing claim is made.
+
+**Encoder workspace (option 3) dropped.** The remaining 16 MiB encoder
+workspace comes from the heap:
+- fuser's one-time handshake buffer and the workspace's own free both raise
+  glibc's threshold;
+- it is reused across saves, a fixed cost rather than a per-mount one;
+- a zeroed allocation would not avoid it while it comes from the heap.
+
+The container-environment tunable of h-peak-3 removed it too (81 MB). That
+route remains rejected, because every command executed in the container
+inherits it.
+
+**Checks.**
+- The patched package verifies against all three records; the checker's
+  self-tests and the tool tests pass.
+- The whole checker still reports OWNER-3's two passthrough refusals, as on
+  `main` and as every build records.
+- Linux workspace Clippy `-D warnings`: 0 errors, with fuser rebuilt from the
+  patched copy.
+- 43 Linux test binaries pass.
+
+Durable execution: NOT_RUN — disabled by owner until explicit
+reauthorization. Reference absent (retired R9c; last counted 65,417 at tree
+498dd1917812).
