@@ -2244,3 +2244,223 @@ production code including shipped SQL; pinned `tools/production_loc.py`
 first-parent and committed-tree Git archives. Reference absent (retired R9c;
 last counted 65,417 at tree 498dd1917812). The two added files are diagnostic
 tools under `core/docs`, outside the count.
+
+## Issue 321 follow-up — Store-write stall cause (2026-10-14)
+
+**Finding.** A writer stall of Step E's size was captured, twice. Both times it
+ran under a declared second writer on the same disk. In both, the global Store
+writer spent about 5.5 s more stepping its statements than in an unstalled run.
+The container's CPU did not rise. The container waited on I/O for 4.5 to 5.3 s,
+and its dirty pages rose to about 400 MiB, against about 294 MiB in unstalled
+runs. In one of the two, the VM's dirty pages reached the kernel's hard limit.
+The stall did not land where Step E's did: Step E stalled in the `COMMIT`
+statement's step, and these two stalled in the other statements' steps. Their
+`COMMIT` steps stayed unstalled.
+
+So the mechanism is reproduced: writeback to the disk falls behind, dirty pages
+rise to the throttling limits, and the writer's buffered writes wait. That Step
+E's own stall had this cause is likely but not established: no observer ran
+then, and the stalled phase differs. Two causes are refuted:
+- a full, clean page cache;
+- reclamation, whether the kernel's or LayerFS's in-Commit row reclamation.
+
+Recommendation: accept; no product change. No product source changed. Every
+timing is diagnostic and INELIGIBLE. Durable execution: NOT_RUN — disabled by
+owner until explicit reauthorization.
+
+### Hypothesis tested
+
+Before any new sample, the retained evidence was:
+- Step E's Commit used 11.07 s of container CPU in total against 10.62 s for
+  the unstalled diagnostic. Both figures are cumulative to the post-Commit
+  snapshot.
+- Step E's kernel reclaim was kswapd only: 6,592 pages scanned, none direct.
+
+So Step E's extra ~6 s was waiting, not work. The hypothesis was that the
+writer's buffered writes waited in the kernel. Candidates:
+1. page-cache state: a full cache forcing reclaim, or dirty pages at the
+   throttling limits;
+2. slow writeback because of other I/O on the shared VM;
+3. the in-Commit row reclamation that Step B (`a2d0640fd`) moved onto the
+   calling thread.
+
+### Samples
+
+All samples ran one case, `workspace_change_locality:workspace-dense-rewrite-500-mixed-v4`,
+one command each, with `tools/cgroup_observer.py` beside it. Each sealed build's
+daemon binary is byte-identical to Step E's (`49a0f534d35d…`). The condition
+column is the declared condition, which the receipt's interference line also
+states.
+
+| Sample | Source | Condition | Verdict | Commit, ms | Receipt |
+| --- | --- | --- | --- | ---: | --- |
+| S1 filled | `c92c44de8` | VM page cache filled first by reading this worktree's own volumes read-only: 105 MB free, 3.4 GB cached. No second writer. | INELIGIBLE; functional, proof PASS; cleanup Gone | 7,757.6 | `c61686ea` |
+| refused | `c92c44de8` | 4 KiB synchronous-write load, same identity | Refused before running: the harness claim file already existed (one sample per case and identity). No receipt. Kept as its folder and observer rows. | — | — |
+| S2 load | `622fff56c` | Declared load: container `issue321-io-load`, 60 s of 4 KiB writes with `oflag=dsync` (about 6 MB/s) on its own scratch volume. VM up 614 s, 1.6 GB free. | INELIGIBLE; functional, proof PASS; cleanup Gone | 12,168.8 | `8554434a` |
+| S3 dirty | `5e2b3504b` | Declared load: the same container for 60 s, rewriting a 256 MiB file through the page cache, never synced. VM up 167 s, 2.9 GB free. | INELIGIBLE; functional, proof PASS; cleanup Gone | 11,805.2 | `afa8ab96` |
+
+- Counts in every sample: 33,359 / 134,879 / 530,261, equal to Step E.
+- New identities came from real commits:
+  - `622fff56c` added [`tools/commit_kernel_window.py`](tools/commit_kernel_window.py);
+  - `5e2b3504b` aligned it on all three unmounts rather than the largest page drop.
+- The diagnostic of the previous section is the unstalled reference:
+  `0a57b780d`, fresh VM, Commit 6,077.4 ms.
+
+### Where the wall went
+
+From [`tools/store_writer_split.py`](tools/store_writer_split.py) and the
+receipts' section 13 and 14 counters over the Commit call. Statements, VM
+steps, transactions and pack bytes are equal in all five, to within 15
+statements.
+
+| Wall, ms | Step E | Diag-1 | S1 filled | S2 load | S3 dirty |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Commit | 12,026.4 | 6,077.4 | 7,757.6 | 12,168.8 | 11,805.2 |
+| Writer: step, all statements | 5,784.2 | 982.1 | 1,325.3 | 6,458.7 | 6,467.6 |
+| of it, the `COMMIT` statement | 5,298.3 | 497.4 | 614.2 | 498.2 | 566.3 |
+| of it, every other statement | 485.9 | 484.7 | 711.1 | 5,960.5 | 5,901.3 |
+| Commit without the writer's step | 6,242.2 | 5,095.3 | 6,432.3 | 5,710.1 | 5,337.6 |
+| Two Store readers, transactions | 510.0 | 141.5 | 851.8 | 343.8 | 166.7 |
+| Operation-record lock hold | 1,138.5 | 388.6 | 472.3 | 453.6 | 413.3 |
+| In-Commit row reclamation (15,569 jobs, 526,492,222 B in each) | 497.0 | 498.3 | 593.0 | 564.3 | 514.3 |
+| Store pages not resident after (of about 259,460) | 16,132 | 0 | 107,387 | 91,831 | 15,886 |
+
+- The writer's extra step time over diag-1:
+  - Step E +4,802.1 ms
+  - S2 +5,476.6 ms
+  - S3 +5,485.5 ms
+  - S1 +343.2 ms
+- With the writer's step removed, the five Commits lie within 5.1 to 6.4 s.
+- The writer's blob reads are 19 to 26 ms in every sample. Reads from the
+  Store (non-resident pages) do not explain the stall: S1 had the most pages
+  not resident and did not stall, and S3 had as few as Step E and did.
+
+### Kernel counters, stalled against unstalled
+
+From [`tools/commit_kernel_window.py`](tools/commit_kernel_window.py). Observer
+rows are every 100 ms, aligned on the three unmounts: 3 of 3 matched in each
+sample. Diag-1's and S1's values are unchanged by the alignment fix.
+
+| Over the Commit | Diag-1 (unstalled) | S1 filled (unstalled) | S2 load (stalled) | S3 dirty (stalled) |
+| --- | ---: | ---: | ---: | ---: |
+| Observer rows | 56 | 75 | 119 | 115 |
+| Container CPU, ms | 5,897.8 | 7,026.1 | 6,569.7 | 6,477.5 |
+| Container stalled on I/O (some = full), ms | 8.2 | 657.0 | 5,319.5 | 4,483.3 |
+| Container stalled on memory, ms | 0.0 | 1.1 | 0.2 | 0.0 |
+| Container dirty pages, peak MiB | 294.4 | 293.5 | 403.6 | 390.4 |
+| Container writeback pages, peak MiB | 176.0 | 98.8 | 51.0 | 76.4 |
+| Container bytes written by the kernel, MiB | 512.1 | 486.5 | 436.2 | 698.0 |
+| Container pages scanned / stolen for reclaim | 0 / 0 | 38,988 / 38,983 | 22,656 / 22,656 | 0 / 0 |
+| VM free memory at start / minimum, MiB | 714.7 / 174.6 | 68.5 / 59.7 | 78.3 / 60.4 | 521.3 / 65.0 |
+| VM dirty + writeback, peak MiB | 302.9 | 301.3 | 411.6 | 655.2 |
+| VM dirty limits, hard / background, MiB | 641.3 / 320.3 | 652.2 / 325.7 | 655.8 / 327.5 | 652.1 / 325.7 |
+| VM pages scanned by kswapd / directly | 0 / 0 | 195,371 / 0 | 231,214 / 0 | 33,806 / 0 |
+| VM pages written out, MiB | 622.5 | 599.5 | 1,686.2 | 1,345.2 |
+| VM stalled on I/O (some), ms | 198.2 | 705.0 | 5,449.4 | 2,353.1 |
+
+- In the stalled runs the I/O wait equals the writer's extra step time, within
+  about 1 s. CPU is no higher than in S1.
+- S3 reached the VM's hard dirty limit (655.2 MiB of 652.1).
+- S2 stayed below the VM-wide point at which throttling begins (about
+  490 MiB, half-way between the limits) and still stalled.
+- In both stalled runs the container's own dirty pages peaked at about 400 MiB.
+- My reading, not measured: the container's memory cgroup has its own dirty
+  limits, taken from its 2 GiB limit.
+  - 10% and 20% of about 1.95 GiB are 196 and 392 MiB; their midpoint is 294 MiB.
+  - The unstalled peaks sit at that midpoint (294.4 and 293.5).
+  - The stalled peaks sit near the upper limit (403.6 and 390.4).
+  - If so, the cgroup's limits, not the VM's, are what throttled S2. The
+    observer does not read those limits.
+
+### Verdicts
+
+- **Was a stall captured?** Yes, twice (S2, S3). Each was a writer stall of
+  Step E's size, with I/O wait and dirty pages at the throttling limits. It was
+  not the same signature: the stalled phase was the other statements' steps,
+  not the `COMMIT` statement's.
+- **Page-cache state.**
+  - Refuted for a full, clean cache. S1 filled it, and kswapd scanned
+    195,371 VM pages and 38,988 container pages during the Commit. The writer
+    gained 343 ms and the `COMMIT` step 117 ms; no stall.
+  - Confirmed as the mechanism for dirty pages held at the throttling limits by
+    writeback that falls behind (S2, S3). It produces a writer stall of
+    Step E's size with CPU unchanged.
+  - Not established as Step E's cause:
+    - Step E had no observer.
+    - Its stall sat in the `COMMIT` step.
+    - What slowed writeback then is unknown. Other agents share the VM; the
+      receipt's interference line declares that, but not their activity.
+- **In-Commit reclamation.**
+  - Refuted as the cause.
+    - LayerFS's row reclamation is present at 497 to 593 ms in all five
+      samples, stalled or not, so it is not sufficient.
+    - The 12 October sample of code before #320 stalled with 0.2 ms of it, so
+      it is not necessary.
+    - Its wall did not grow in the stalled runs.
+    - Kernel reclaim is refuted too. It was kswapd only, never direct, in every
+      sample, Step E included. S3 stalled with no container reclaim at all.
+  - Not established: how much the reclamation's own overlay writes add to the
+    container's dirty pages during a stall. No counter separates them.
+- **Not established: why Step E's stall sat in `COMMIT`.**
+  - The writer appends frames to the WAL during statement steps when its page
+    cache spills, and at `COMMIT`. The `COMMIT` step also runs the
+    auto-checkpoint, which writes into the Store file.
+  - Throttling stops whichever `write()` crosses the limit, so the phase is
+    plausibly an accident of timing. This is a hypothesis, not tested.
+
+### Recommendation and owner decisions
+
+1. Accept the Step E row; no product change follows from this.
+   - The stall is the kernel throttling buffered writes when writeback falls
+     behind on the shared VM.
+   - Its size depends on other I/O, not on LayerFS work.
+2. For this case, compare the Commit without the writer's whole step time,
+   not only without the `COMMIT` step. Read
+   [`tools/commit_kernel_window.py`](tools/commit_kernel_window.py) beside any
+   sample whose writer step rises.
+3. Owner decision, not proposed as a fix: whether a large Commit should limit
+   its own dirty pages. A write-behind or pacing of Store writes could keep a
+   Commit off the throttling limit. It would change no total work. It would
+   need a design and measurement with the same declared load. It touches the
+   Store write path, so it is not decided here.
+4. Not done: no sample of the baseline binary under load, no rate of stalls,
+   no reading of the memory cgroup's dirty limits.
+
+### Evidence, storage and cleanup
+
+- Sample folders: `benchmark-results/fs-bench-pro/2026-10-14-issue321-g-stall-1-diag-filled-…`,
+  `…-g-stall-2-diag-load-…` and `…-g-stall-3-diag-dirty-…`, each under
+  `workspace_change_locality/`. The refused attempt is `…-g-stall-1-diag-load-…`.
+- Observer folders beside them hold `rows.jsonl`, the VM state before and after,
+  and the declared condition:
+
+  | Folder | Rows | sha256 |
+  | --- | ---: | --- |
+  | `…-g-stall-1-filled-observer` | 457 | `bc6adb9c` |
+  | `…-g-stall-1-load-observer` (refused attempt) | 85 | `331e1579` |
+  | `…-g-stall-2-load-observer` | 505 | `70a5406e` |
+  | `…-g-stall-3-dirty-observer` | 518 | `b59b6105` |
+
+  The load containers were stopped before they printed their pass counts, so
+  `load.txt` is empty.
+- Commands, each bounded:
+  - builds: `g-stall-1`, `g-stall-2` and `g-stall-3` (104.1 s);
+  - samples: three runs plus the refused attempt.
+- Each test copy was removed after its manifest check (1,062.8 MB each); the
+  one original stays.
+- The scratch volume `issue321-fill-scratch` was created for the loads at
+  03:33:58Z and removed. No container of this session remains, and the volume
+  count is back to 253. Free space: 350 GiB.
+- Interference: the Docker VM restarts after idle, and other agents may use it.
+  Neither Docker was restarted nor caches were dropped machine-wide. S1 filled
+  the cache by reading, not by dropping it.
+
+### Source size
+
+Production LOC 81,054 -> 81,054 (delta +0) for each of `622fff56c`,
+`5e2b3504b` and this record. Scope: first-party `core/crates` production code,
+including shipped SQL. Counter: pinned `tools/production_loc.py`
+(`c0fe7f36a0d4144bbd2b61c272c7579cc0d56ffe23f9588287ea30e793624adb`), run on
+the first-parent and committed-tree Git archives. Reference absent (retired
+R9c; last counted 65,417 at tree 498dd1917812). The tool is under `core/docs`,
+outside the count.
