@@ -24,7 +24,7 @@ mod sql_observer;
 mod vfs_observer;
 #[rustfmt::skip]
 #[allow(clippy::needless_range_loop)]
-#[path="../../../benchmark/fs-bench-pro-storage-content/src/workload/digest.rs"]mod digest;
+#[path="../../../benchmark/cluster-one/storage-content/src/workload/digest.rs"]mod digest;
 pub use error::{ProjectError, ProjectResult};
 use layerfs_history::{HistoryCatalogConfig, HistoryName, LayerStackId};
 use layerfs_persistence::{Handles, PersistenceConfig};
