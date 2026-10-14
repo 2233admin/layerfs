@@ -546,6 +546,10 @@ def result_rows(selection, recorded):
                    status=actual_case_status(selection, case, result),
                    cache_class=result.get("cache_class", case.get("cache_class", "UNAVAILABLE")),
                    tag=result.get("tag", result.get("original_failure", case.get("not_applicable_reason", case.get("reason", "not sampled" if not result else "")))))
+        io = result.get("io_observer", {})
+        if io.get("label") == "IO_STALLED":
+            note = f"IO_STALLED: container I/O wait {io['ct_io_pressure_fraction']:.0%} of its Commits (diagnostic label; status unchanged)"
+            row["tag"] = "; ".join(filter(None, (row["tag"], note)))
         for name in ("complete_wall_ns", "declared_limit_ns", "cleanup", "source_commit", "product_tree", "daemon_sha256", "image", "evidence"):
             row[name] = result.get(name, selection.get(name, "UNAVAILABLE"))
         for name in ("mount_ns", "command_ns", "commit_ns", "unmount_ns"):

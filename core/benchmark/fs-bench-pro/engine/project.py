@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 import time
 
-from . import identity, receipts
+from . import identity, io_observer, receipts
 
 
 class ParityFailure(ValueError):
@@ -484,6 +484,7 @@ def one_init(case, prepared_folder, build_folder, output, *, family="init_namesp
         if imported and proof_started is not None:
             row["proof_wall_ns"] = time.monotonic_ns()-proof_started
             row["proof_wall_scope"] = "independent typed reopen, sealed sample install, public Fork/fresh mounted native proof, original guards, End/Gone/Stop and observations; boundary includes its verification-only Init; publication separately bound"
+        io_observer.attach(output, row)
         if imported and publication_stop is not None:
             row.update(receipts.finalize_guarded(output, row, publication_stop, scope=receipts.HISTORY_PUBLICATION_SCOPE))
         else:
@@ -1095,6 +1096,7 @@ def one_repository_history(case, prepared_folder, build_folder, output):
         row['external_driver_wall_ns']=time.monotonic_ns()-begun
         if proof_start is not None:row['proof_wall_ns']=time.monotonic_ns()-proof_start
         row['evidence']=str(output.relative_to(identity.ROOT.resolve()))
+        io_observer.attach(output,row)
         row.update(receipts.finalize_guarded(output,row,stop,scope=receipts.HISTORY_PUBLICATION_SCOPE))
     return row
 

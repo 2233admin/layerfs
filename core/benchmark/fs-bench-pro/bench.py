@@ -79,7 +79,7 @@ def main(argv=None):
                           "binaries": result["binaries"]}, indent=2))
         return
     if args.command == "run":
-        from engine import fixtures, identity, project, receipts, workspace
+        from engine import fixtures, identity, io_observer, project, receipts, workspace
         current = identity.source_identity()
         if args.family not in ("cluster-two/cells", "init_namespace", *fixtures.IMPORT_FAMILIES, *fixtures.WORKSPACE_FAMILIES):
             parser.error("family workload runner is not implemented yet; all workload cases remain visible in list")
@@ -112,14 +112,19 @@ def main(argv=None):
             case = next(item for item in registered if item["id"] == cell)
             recipe = fixtures.CELL_RECIPES[cell] if args.family == "cluster-two/cells" else case["fixture"]["recipe"]
             prepared = args.prepared if (args.prepared / "prepared.json").exists() else args.prepared / recipe
-            if args.family == "cluster-two/cells":
-                result = workspace.one_cell(cell, prepared, args.build, output / cell)
-            elif args.family in ("init_namespace", *fixtures.IMPORT_FAMILIES):
-                result = project.one_init(case, prepared, args.build, output / cell, family=args.family)
-            elif args.family=="repository_history":
-                result = project.one_repository_history(case,prepared,args.build,output/cell)
-            else:
-                result = workspace.one_family_case(args.family, case, prepared, args.build, output / cell)
+            # Diagnostic kernel observer beside the case, outside every timer; see engine/io_observer.py.
+            io_observer.start(output / (cell + ".io-observer"), args.build)
+            try:
+                if args.family == "cluster-two/cells":
+                    result = workspace.one_cell(cell, prepared, args.build, output / cell)
+                elif args.family in ("init_namespace", *fixtures.IMPORT_FAMILIES):
+                    result = project.one_init(case, prepared, args.build, output / cell, family=args.family)
+                elif args.family=="repository_history":
+                    result = project.one_repository_history(case,prepared,args.build,output/cell)
+                else:
+                    result = workspace.one_family_case(args.family, case, prepared, args.build, output / cell)
+            finally:
+                io_observer.stop(output / cell)
             proof_only = case.get("proof_only") is True
             if proof_only and (result.get("proof_only") is not True or result.get("performance_mode") != "verification-only"
                                or type(result.get("sample_count")) is not int or result["sample_count"] != 0
@@ -129,7 +134,8 @@ def main(argv=None):
                 receipts.acknowledge_guarded(output / cell, result)
             if args.family in (*fixtures.IMPORT_FAMILIES, *fixtures.WORKSPACE_FAMILIES):
                 workspace.dispose_family_resources(output / cell, result)
-            print(json.dumps({key: result.get(key) for key in ("case", "status", "counts", "cleanup", "container", "original_failure", "evidence")}))
+            print(json.dumps({**{key: result.get(key) for key in ("case", "status", "counts", "cleanup", "container", "original_failure", "evidence")},
+                              "io_label": result.get("io_observer", {}).get("label")}))
             failed |= ((result.get("proof_status") != "PASS" or result.get("functional_status") != "PASS" or result["status"] == "FAIL")
                        if proof_only else result["status"] != "PASS")
         return 1 if failed else 0

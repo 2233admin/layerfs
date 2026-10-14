@@ -76,6 +76,10 @@ best-of result or hidden setup warmth. Commit registration before sampling.
 Declare and enforce each cache class; unknown preconditions are INELIGIBLE.
 Independent verification is outside product timers. Retain every failed,
 ineligible, not-applicable and unrun case.
+Every `bench.py run` case also starts the read-only kernel observer of
+[engine/io_observer.py](engine/io_observer.py) and declares it in the
+interference line. Its `IO_STALLED` label marks a Commit that the shared
+Docker VM held on I/O; it is diagnostic and changes no verdict.
 
 A first-iteration functional PASS needs completed work, passing verification
 and clean terminal unmount. Record time, storage and exact request/owner-job/
