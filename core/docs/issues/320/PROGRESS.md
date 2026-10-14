@@ -2013,7 +2013,8 @@ was not established here.
   other test change since D).
 - C12's pin is an estimate, not a model result.
 - The dense-rewrite Commit rise and the 64 MiB cells' command rise are
-  recorded without a cause.
+  recorded without a cause. Followed up in
+  [the next section](#issue-321-follow-up--dense-rewrite-commit-and-the-64-mib-cells-2026-10-14).
 - The harness's shared-input order dependency is worked around, not fixed.
 - No push, pull request or issue closure.
 
@@ -2025,3 +2026,221 @@ scope first-party `core/crates` production code including shipped SQL; pinned
 (`c0fe7f36a0d4144bbd2b61c272c7579cc0d56ffe23f9588287ea30e793624adb`) on the
 first-parent and committed-tree Git archives. Reference absent (retired R9c;
 last counted 65,417 at tree 498dd1917812).
+
+## Issue 321 follow-up — dense-rewrite Commit and the 64 MiB cells (2026-10-14)
+
+**Finding.** The +45.0% Commit of `workspace-dense-rewrite-500-mixed-v4` in
+Step E is not a regression of #320 or #321. That Commit does equal or less
+work by every large counter; the few counters that rose are listed below and
+account for about 0.5 s. The whole rise, and more, sits in one place: the wall
+of the global Store writer's `COMMIT` statement, which does buffered file
+writes of the same bytes. A retained sample of the code before
+#320 shows the same stall, and one labelled diagnostic of the Step E daemon
+binary, byte for byte, committed in 6,077.4 ms. Why the kernel stalled those
+writes in the Step E sample is not established. Recommendation: accept; no
+product change.
+
+No product source changed. Timing stays diagnostic and INELIGIBLE throughout.
+Durable execution: NOT_RUN — disabled by owner until explicit reauthorization.
+
+### Samples compared
+
+| Label | Source | Daemon binary | What it is |
+| --- | --- | --- | --- |
+| Baseline | `587e9a8be` | `040b0ffef9f8…` | the #319 row (receipt `e4ad9ea2…`) |
+| 12 October | `fc45a1bc4` | `96fe3bed11d7…` | an earlier retained sample of the same case (receipt `baa2be92…`) |
+| Step E | `2c11fe8aa` | `49a0f534d35d…` | the sample in the table above (receipt `7783e00d…`) |
+| Diagnostic | `0a57b780d` | `49a0f534d35d…` | one new labelled sample, see below (receipt `e155368d…`) |
+
+The first two are read from their own worktrees, never written:
+`layerfs-sdk-refactor/benchmark-results/fs-bench-pro/tier-sdk-baseline-587/run-workspace_change_locality/`
+and
+`layerfs-issue319-terminal/benchmark-results/fs-bench-pro/2026-10-12-issue318-p319t15-run-workspace_change_locality/`.
+`git diff fc45a1bc4 587e9a8be` is empty for the persistence, storage, content,
+overlay, workspace and fuse crates, so those two ran the same data path.
+
+### Counters that do not depend on timing
+
+Baseline against Step E. The 12 October sample equals the baseline exactly in
+the first nine rows and differs from it by less than 4% in the others.
+
+| Counter | Baseline | Step E |
+| --- | ---: | ---: |
+| Requests | 33,359 | 33,359 |
+| Overlay jobs / of them operation-record | 222,679 / 153,245 | 134,879 / 65,445 |
+| Overlay statements | 1,154,213 | 530,261 |
+| Payload bytes read back from the overlay (blob bytes of the payload family) | 573,440,000 | 573,440,000 |
+| Construction: inode rows, pages, values, points, opens (30 fields) | equal | equal |
+| Construction record jobs | 45,507 | 36,129 |
+| Content objects read / read waves | 104 / 2 | 103 / 103 |
+| Save: publications | 223 | 223 |
+| Save: pack bytes written | 526,091,133 | 525,875,207 |
+| Save: pack bytes read / payload reads | 319,179 / 356 | 97,060 / 281 |
+| Save: ranged selections / bytes | 987 / 77,231,686 | 1,058 / 83,693,223 |
+| Global writer inside the Commit call: statements | 128,889 (12 October 128,904) | 128,555 |
+| Global writer: transactions / write transactions | 41,804 / 225 | 41,792 / 225 |
+| Global writer: sealed inserts / bound bytes | 2,324 / 532,018,599 | 2,320 / 532,199,644 |
+| Global writer: VM steps | 4,194,085 | 4,303,600 |
+| Two Store readers inside the Commit call: statements / blob bytes | 31,695 / 271,495,043 | 31,545 / 269,906,608 |
+| Reclamation between the measured mount and the Commit's reply | 2 steps, 0 B | 15,569 steps, 526,492,222 B |
+| Store logical bytes | 1,066,643,456 | 1,066,889,216 |
+
+Higher in Step E: the writer's VM steps (+2.6%), ranged pack reads (+6.5 MB),
+content read waves (101 more point reads), Store logical bytes (+245,760),
+and the reclamation, which Step B moved onto the calling thread. Peak daemon
+memory is also higher (119,418,880 -> 151,957,504 B); Step B has a section on
+peak memory. No other counter rose.
+
+### Where the wall went
+
+Differences across the one control call that ran the Commit, from
+[`tools/store_writer_split.py`](tools/store_writer_split.py):
+
+| Wall, ms | Baseline | 12 October | Step E | Diagnostic |
+| --- | ---: | ---: | ---: | ---: |
+| Commit | 8,292.1 | 13,112.6 | 12,026.4 | 6,077.4 |
+| Global writer, step of `COMMIT` (225 write transactions each) | 562.2 | 4,027.7 | 5,298.3 | 497.4 |
+| Commit without that step | 7,729.9 | 9,084.9 | 6,728.1 | 5,580.0 |
+| Overlay operation-record jobs (owner service; lock hold since #321) | 2,076.0 | 2,201.7 | 1,138.5 | 388.6 |
+| Two Store readers, transactions | 248.5 | 573.4 | 510.0 | 141.5 |
+| Reclamation inside the interval | 0.2 | 0.2 | 497.0 | 498.3 |
+| Store pages not resident right after (of about 259,400) | 46,712 | 95,498 | 16,132 | 0 |
+
+- Step E against the baseline: the `COMMIT` step is +4,736.1 ms and the rest
+  of the Commit is -1,001.8 ms; together +3,734.3 ms.
+- That step is SQLite appending frames to the WAL and, at 1,000 pages, copying
+  them into the Store file. The profile is unchanged since the baseline
+  (WAL, synchronous OFF, auto-checkpoint 1,000, journal limit 4 MiB;
+  `profile.rs` has no diff). It issues no sync, so its wall is the kernel
+  accepting buffered writes: the 526 MB of packs, into the WAL and again into
+  the Store file.
+- The code before #320 took 562.2 ms for it in one sample and 4,027.7 ms in
+  the other, with identical statements and bytes. The baseline row is the
+  unstalled one.
+- Step E against the diagnostic, same binary: 5,949.0 ms apart, of which
+  4,800.9 ms is this step, 749.9 ms the operation-record lock holds (the same
+  65,445 jobs, also buffered writes, to the overlay file) and 368.5 ms the
+  readers.
+
+### The diagnostic
+
+One labelled sample, not a repeat for the table. Sealed build
+`2026-10-14-issue321-f-diag-1-build` at `0a57b780d` (the harness commit made
+after Step E; product tree `79d85d8e…` and all nine binaries equal Step E's).
+The stale original was dropped and prepared again (23.7 s). A read-only
+observer container, [`tools/cgroup_observer.py`](tools/cgroup_observer.py),
+sampled the Docker VM's and the sampled container's kernel counters every
+100 ms; it was declared in the receipt's interference line. The Docker VM had
+started 207 s before the observer's first row, so its page cache held only this
+session's build and preparation.
+
+Result: INELIGIBLE, functional PASS, proof PASS, cleanup Gone; counts 33,359 /
+134,879 / 530,261, equal to Step E; command 2,436.0 ms, Commit 6,077.4 ms;
+Store 1,066,991,616 B; daemon VmHWM 154,542,080 B.
+
+Observer, Commit interval (57 rows; the two clocks are aligned on the two
+unmounts, to about 0.1 s):
+
+| Count | Value |
+| --- | --- |
+| Container CPU used | 5,996 ms in the 6,077 ms interval |
+| Container stalled on I/O (pressure, some) | 8.2 ms |
+| Container stalled on memory; CPU throttled | 0 ms; 0 ms |
+| Pages scanned for reclaim, container and VM | 0 |
+| Times the container reached its 2 GiB limit | 0 |
+| Container memory | 1,108 -> 1,653 MiB, the peak of the run |
+| Container dirty pages, peak | 294 MiB (VM limits 642 MiB hard, 320 MiB background) |
+| Bytes the kernel wrote for the container | 680 -> 1,192 MiB, in two bursts |
+| VM free memory | 715 -> 174 MiB, of 3,918 MiB |
+
+So an unstalled Commit of this source is about 6.0 s of one CPU and nothing
+else. The Step E sample spent a further 5.9 s, nearly all of it in buffered
+writes that did not return at once. The case leaves the VM with 174 MiB free
+even from a fresh start. At the measured unmount the container's file pages
+fell by 1,017 MiB, twice the 512 MiB overlay file, so about a third of the
+peak is the kernel's own cache of the files the command wrote through the
+mount; the rest is the overlay file and the new Store pages.
+
+### Established and not established
+
+- Established: equal or lower work; the rise located in one statement's
+  kernel time; the same stall in the code before #320; 6,077.4 ms from the
+  Step E binary without it.
+- Established, small, from #321 Step B (`a2d0640fd`): the committed payload is
+  reclaimed before the Commit replies, 15,569 steps and 497.0 ms here (498.3
+  in the diagnostic). The baseline did it after the reply, 526.5 MB over
+  3,546 ms of owner-thread wall, while verification ran. This is the behaviour
+  Step B recorded; it is inside both Step E numbers.
+- Not established: what made the kernel stall in the Step E sample. No
+  observer ran then. Its receipt shows 16,132 Store pages not resident right
+  after the Commit, so the kernel was reclaiming pages, but the baseline has
+  more such pages and no stall.
+- Not established: how often either binary stalls. Two samples each; no rate.
+- Ruled out as the cause: more statements, transactions, pack bytes or
+  payload read-back; a changed Store profile; the overlay lock (wait 14.5 ms).
+- The same binary's two samples differ by 102,400 B of Store logical bytes and
+  by one sealed byte, so part of Step E's +245,760 B is not a format cost.
+
+### Recommendation
+
+1. Accept the dense-rewrite row as it stands; change no product code for it.
+2. Do not compare this case's Commit across sources by its total. Compare the
+   Commit without the writer's `COMMIT` step, and run the observer beside any
+   further sample so a stalled one is caught with its kernel counts.
+3. Candidate, not done and not measured: a Workspace unmounted right after its
+   Commit pays the 0.5 s of row reclamation for a file that unmount deletes.
+   Whether a Commit may reply before that reclamation is an owner decision.
+
+### The 64 MiB cells
+
+Same comparison for C06 and C08 to C11, plus C03. The baseline daemon binary
+`040b0ffef9f8…` has six retained runs of the cells (`cdf115c67`, `196c70fba`,
+`b232bfc1d`, `820a2c395`, `109a97ac4` and the #319 row at `587e9a8be`). Lock
+wall is Read plus Mutation over the daemon's life: owner service in the
+baseline, lock hold in Step E.
+
+| Cell | #319 row, ms | Its rank in the six | Six runs, ms | Step E, two samples, ms | Six runs, lock wall ms | Step E, lock wall ms |
+| --- | ---: | --- | --- | --- | --- | --- |
+| C03 | 511.8 | lowest | 511.8 to 677.6 | 604.3, 578.8 | 293.3 to 349.3 | 232.3, 237.8 |
+| C06 | 146.6 | fourth | 139.2 to 164.1 | 158.7, 166.1 | 111.5 to 137.0 | 122.7, 126.1 |
+| C08 | 128.6 | lowest | 128.6 to 178.5 | 172.6, 175.9 | 110.8 to 133.5 | 121.6, 124.2 |
+| C09 | 83.2 | lowest | 83.2 to 125.0 | 91.7, 103.0 | 7.9 to 12.3 | 5.2, 5.3 |
+| C10 | 175.1 | lowest | 175.1 to 207.2 | 206.8, 206.4 | 144.9 to 186.8 | 149.1, 149.5 |
+| C11 | 125.7 | second | 109.9 to 157.6 | 164.3, 155.9 | 110.6 to 131.6 | 124.0, 123.0 |
+
+- Requests and jobs are equal, statements 25% to 52% lower, lock wait lower,
+  lock wall inside the baseline's range or below it.
+- Ten of the twelve Step E values lie inside the range of the baseline
+  binary's own six runs. Two lie above it: C06 by 2.0 ms and C11 by 6.7 ms.
+- Most of the 20 to 47 ms came from comparing against the fastest of the six
+  runs in C03, C08, C09 and C10, and the second fastest in C11.
+- Cause of a regression: not established, and the retained samples do not
+  show one. Not excluded: the four cells that write 64 MiB (C06, C08, C10,
+  C11) sit in the upper half of the range in both samples, a shift of up to
+  about 20 ms that two samples cannot separate from the spread. Its lock wall
+  is not higher, so it would lie outside the overlay lock.
+- Recommendation: accept; when cells are next compared, use the six-run
+  range, not the single #319 row.
+
+### Evidence, storage and cleanup
+
+- Diagnostic sample:
+  `benchmark-results/fs-bench-pro/2026-10-14-issue321-f-diag-1-run-workspace_change_locality/`;
+  observer rows beside it in `…-f-diag-1-observer/rows.jsonl` (384 rows,
+  sha256 `f8c05f3f…`). Both stay local, like every receipt.
+- Three bounded commands: build 104.8 s, preparation 23.7 s, sample 38.5 s.
+  The test copy was removed after its manifest check (1,062.8 MB); one
+  original stays. The observer container removed itself; no container of this
+  session remains and the volume count is unchanged at 253. Free space before:
+  351 GiB.
+- Not done: no second diagnostic, no sample of the baseline source, no cell
+  sample, no host or Linux test (no product or test source changed).
+
+### Source size
+
+Production LOC 81,054 -> 81,054 (delta +0); scope first-party `core/crates`
+production code including shipped SQL; pinned `tools/production_loc.py`
+(`c0fe7f36a0d4144bbd2b61c272c7579cc0d56ffe23f9588287ea30e793624adb`) on the
+first-parent and committed-tree Git archives. Reference absent (retired R9c;
+last counted 65,417 at tree 498dd1917812). The two added files are diagnostic
+tools under `core/docs`, outside the count.
