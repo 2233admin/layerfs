@@ -53,7 +53,14 @@ file::FileView            one authenticated base, opened once per operation
 file::EditStream/Edit/EditSource   validated ordered edits and replacement bytes
 file::apply_edits         known-edit construction over an immutable base
 policy::ConstructionPolicy / ConstructionCapacities
+compare::root_changes     bounded path-level difference of two roots
+compare::line_diff        bounded line difference of two texts
+merge::merge_roots        three-way merge of roots, built on theirs
+merge::paths_with_markers named text files still holding a marker block
 ```
+
+Compare and merge are described in
+[architecture 81](../../docs/architecture/81-compare-and-merge.md).
 
 Every entry point takes a `layerfs_telemetry::timer::TimingScope`; recording
 enabled or disabled changes no product work and no result.

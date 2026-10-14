@@ -16,10 +16,12 @@
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
+pub mod compare;
 mod contract;
 pub use contract::error;
 pub mod file;
 pub mod filesystem;
+pub mod merge;
 pub mod object;
 pub use contract::policy;
 
