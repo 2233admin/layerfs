@@ -140,6 +140,9 @@ pub struct Session<FS: Filesystem> {
     /// FUSE protocol version, as reported by the kernel.
     /// The field is set to `Some` when the init message is received.
     pub(crate) proto_version: Option<Version>,
+    /// Bytes each receive loop reads into: fuser's maximum until INIT negotiates
+    /// `max_write`.
+    pub(crate) receive_buffer: usize,
     pub(crate) config: Config,
 }
 
@@ -197,6 +200,7 @@ impl<FS: Filesystem> Session<FS> {
             allowed: options.acl,
             session_owner: geteuid(),
             proto_version: None,
+            receive_buffer: crate::read_buf::BUFFER_SIZE,
             config: options.clone(),
         };
 
@@ -225,6 +229,7 @@ impl<FS: Filesystem> Session<FS> {
             allowed: acl,
             session_owner: geteuid(),
             proto_version: None,
+            receive_buffer: crate::read_buf::BUFFER_SIZE,
             config,
         };
 
@@ -263,6 +268,7 @@ impl<FS: Filesystem> Session<FS> {
             allowed,
             session_owner,
             proto_version: _,
+            receive_buffer,
             config,
         } = self;
 
@@ -310,6 +316,7 @@ impl<FS: Filesystem> Session<FS> {
                 ch,
                 allowed,
                 session_owner,
+                receive_buffer,
             };
             threads.push(
                 thread::Builder::new()
@@ -443,6 +450,7 @@ impl<FS: Filesystem> Session<FS> {
 
             // Remember the ABI version supported by kernel and mark the session initialized.
             self.proto_version = Some(v);
+            self.receive_buffer = crate::read_buf::negotiated_size(config.max_write);
 
             // Log capability status for debugging
             for bit in 0..64 {
@@ -530,6 +538,7 @@ pub(crate) struct SessionEventLoop<FS: Filesystem> {
     pub(crate) filesystem: Arc<FilesystemHolder<FS>>,
     pub(crate) allowed: SessionACL,
     pub(crate) session_owner: Uid,
+    pub(crate) receive_buffer: usize,
 }
 
 impl<FS: Filesystem> SessionEventLoop<FS> {
@@ -540,7 +549,7 @@ impl<FS: Filesystem> SessionEventLoop<FS> {
     fn event_loop_started(&self, started: impl FnOnce() -> io::Result<()>) -> io::Result<()> {
         // Buffer for receiving requests from the kernel. Only one is allocated and
         // it is reused immediately after dispatching to conserve memory and allocations.
-        let mut buf = FuseReadBuf::new();
+        let mut buf = FuseReadBuf::with_size(self.receive_buffer);
         let buf = buf.as_mut();
         started()?;
         loop {

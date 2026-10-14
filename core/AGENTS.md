@@ -486,6 +486,14 @@ cache states and budgets are evidence contracts, not product runtime limits.
 
 ### Fuser provenance and authorized-patch checks
 
+Additional owner authorization 2026-10-14: "you are allowed to modify fuser with
+patch". The [receive-buffer decision](docs/issues/321/FUSER-RECEIVE-BUFFER-DECISION-20261014.md)
+records the scope. Receive loops read into the `max_write + 4096` bytes
+negotiated at INIT instead of fuser's 16 MiB + 4 KiB maximum. The delta is in
+`read_buf.rs`, `session.rs` and `session/lifecycle.rs`, applied after the
+lifecycle patch. `receive-buffer.patch` and `receive-buffer-provenance.json`
+pin it, and the focused check verifies it. The earlier records stay unchanged.
+
 Additional owner authorization2026-10-08: the [scoped receive-loop lifecycle
 extension](docs/issues/307/FUSER-LIFECYCLE-DECISION-20261008.md) may extend the
 pinned fuser0.18.0 package beyond time.rs to establish loop entry/exit, retained

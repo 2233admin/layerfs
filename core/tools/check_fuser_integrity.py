@@ -3,8 +3,9 @@
 
 This is a focused dependency check, not an aggregate pre-push/CI wrapper.
 Registry packages are checked against their locked archive checksum and every
-archived file. The owner-authorized timestamp and receive-loop lifecycle patches
-have separate pinned identities; all other fuser overrides remain rejected.
+archived file. The owner-authorized timestamp, receive-loop lifecycle and
+receive-buffer patches have separate pinned identities; all other fuser
+overrides remain rejected.
 """
 from __future__ import annotations
 
@@ -28,6 +29,9 @@ PROVENANCE_CHECKSUM = "0b31522ec62aff6bc87def615e19386598b63f1ce6d9acedf0fc2d0e2
 LIFECYCLE_PROVENANCE_CHECKSUM = "5c118bfa89447b02628025e04058af6822466f03541a50be2c5fcdefad94182a"
 LIFECYCLE_PATCH_CHECKSUM = "926f4d134babce182421f7dc82c12617acee821b9e78cf499f0fb00187696af5"
 LIFECYCLE_FILES = {"CHANGELOG.md", "src/lib.rs", "src/session.rs", "src/session/lifecycle.rs"}
+BUFFER_PROVENANCE_CHECKSUM = "f3c129457d4eadaf41574c2c1b8da40fb80724e5f42602d3766ab140fdd6d39a"
+BUFFER_PATCH_CHECKSUM = "7af34aeed231619f4757e40614c13b5f5393aa966bd8545a169f1e9fa746303f"
+BUFFER_FILES = {"src/read_buf.rs", "src/session.rs", "src/session/lifecycle.rs"}
 PATCH_MANIFESTS = {
     "core/Cargo.toml": "vendor/fuser-0.18.0",
     "core/benchmark/cluster-two/platform/Cargo.toml": "../../../vendor/fuser-0.18.0",
@@ -122,7 +126,7 @@ def lock_errors(document, approved=APPROVED_REVISIONS, patched=False):
 
 
 def patched_package_errors(root: Path):
-    """Verify the complete archive copy and both separately authorized deltas."""
+    """Verify the complete archive copy and the three separately authorized deltas."""
     record = root / PATCH_RECORD
     source = root / PATCH_PACKAGE
     try:
@@ -158,6 +162,22 @@ def patched_package_errors(root: Path):
         expected |= lifecycle["files"]
         if len(expected) != 86:
             return ["fuser lifecycle inventory is incomplete"]
+        buffer_raw = (record / "receive-buffer-provenance.json").read_bytes()
+        if hashlib.sha256(buffer_raw).hexdigest() != BUFFER_PROVENANCE_CHECKSUM:
+            return ["fuser receive-buffer provenance changed"]
+        buffer = json.loads(buffer_raw)
+        if (buffer["timestamp_provenance_sha256"] != PROVENANCE_CHECKSUM
+                or buffer["lifecycle_provenance_sha256"] != LIFECYCLE_PROVENANCE_CHECKSUM
+                or buffer["archive_sha256"] != BASE_CHECKSUM
+                or set(buffer["files"]) != BUFFER_FILES):
+            return ["fuser receive-buffer delta has an unauthorized base or file scope"]
+        if (buffer["patch_sha256"] != BUFFER_PATCH_CHECKSUM
+                or hashlib.sha256((record / "receive-buffer.patch").read_bytes()).hexdigest()
+                != BUFFER_PATCH_CHECKSUM):
+            return ["fuser receive-buffer diff changed"]
+        expected |= buffer["files"]
+        if len(expected) != 86:
+            return ["fuser receive-buffer inventory is incomplete"]
         errors = []
         actual = set()
         for path in source.rglob("*"):

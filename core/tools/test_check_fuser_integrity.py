@@ -77,7 +77,8 @@ class FuserIntegrityTests(unittest.TestCase):
             shutil.copytree(repository / PATCH_RECORD, root / PATCH_RECORD)
             shutil.copytree(repository / PATCH_PACKAGE, root / PATCH_PACKAGE)
             self.assertFalse(patched_package_errors(root))
-            for name in ['src/time.rs', 'src/session.rs', 'src/session/lifecycle.rs', 'src/lib.rs', 'CHANGELOG.md']:
+            for name in ['src/time.rs', 'src/session.rs', 'src/session/lifecycle.rs', 'src/lib.rs', 'CHANGELOG.md',
+                         'src/read_buf.rs']:
                 path = root / PATCH_PACKAGE / name
                 original = path.read_bytes()
                 path.write_bytes(original + b'// unauthorized edit\n')
@@ -102,7 +103,8 @@ class FuserIntegrityTests(unittest.TestCase):
             shutil.copytree(repository / PATCH_RECORD, root / PATCH_RECORD)
             shutil.copytree(repository / PATCH_PACKAGE, root / PATCH_PACKAGE)
             self.assertFalse(patched_package_errors(root))
-            for name in ['lifecycle-provenance.json', 'session-lifecycle.patch']:
+            for name in ['lifecycle-provenance.json', 'session-lifecycle.patch',
+                         'receive-buffer-provenance.json', 'receive-buffer.patch']:
                 path = root / PATCH_RECORD / name
                 original = path.read_bytes()
                 path.write_bytes(original + b'\n')

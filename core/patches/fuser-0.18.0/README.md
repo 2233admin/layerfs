@@ -1,4 +1,4 @@
-# fuser 0.18.0 authorized timestamp and lifecycle patches
+# fuser 0.18.0 authorized timestamp, lifecycle and receive-buffer patches
 
 > **Status:** Current general guide.
 
@@ -77,3 +77,23 @@ changed, missing, redirected or added file. Its original timestamp constants
 are unchanged. The [dependency proof receipts](../../docs/issues/307/checks/r2-fuser-lifecycle-20261008/18-proof-summary.json)
 include public parser/loop fixtures, real resource-driven partial spawn failure
 and one native mount/Ready/detach/join. Full LayerFS R2–R5 remains unfinished.
+
+## Receive buffer sized by the negotiated max_write, 2026-10-14
+
+The owner [authorized this delta](../../docs/issues/321/FUSER-RECEIVE-BUFFER-DECISION-20261014.md)
+after the dense-rewrite peak investigation. Each receive loop allocated fuser's
+16 MiB + 4 KiB maximum although LayerFS negotiates a 128 KiB `max_write`. glibc
+made those buffers resident from the second mount on: about 32 MiB per
+concurrently mounted Workspace.
+
+The `Session` now records `max_write + 4096` at INIT, and each receive loop
+allocates that size. The handshake buffer stays at fuser's maximum.
+
+[receive-buffer-provenance.json](receive-buffer-provenance.json) pins:
+- the original archive;
+- the unchanged timestamp and lifecycle provenance records;
+- the [receive-buffer diff](receive-buffer.patch);
+- the resulting `read_buf.rs`, `session.rs` and `session/lifecycle.rs`.
+
+No file is added, so the package still has 86 files. Reconstruction applies
+this patch after `session-lifecycle.patch`.

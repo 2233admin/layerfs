@@ -234,6 +234,7 @@ impl<FS: Filesystem> SessionRunner<FS> {
             allowed,
             session_owner,
             proto_version: _,
+            receive_buffer,
             config,
         } = session;
         let shared = &monitor.0;
@@ -275,6 +276,7 @@ impl<FS: Filesystem> SessionRunner<FS> {
                     ch: channel,
                     allowed,
                     session_owner,
+                    receive_buffer,
                 };
                 let monitor = monitor.clone();
                 match thread::Builder::new()

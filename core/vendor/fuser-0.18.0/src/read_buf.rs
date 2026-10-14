@@ -3,9 +3,17 @@ use std::mem::align_of;
 use crate::ll::fuse_abi as abi;
 use crate::session::MAX_WRITE_SIZE;
 
+/// Space beyond a write's payload for the request headers.
+const HEADROOM: usize = 4096;
 /// Size of the buffer for reading a request from the kernel. Since the kernel may send
 /// up to `MAX_WRITE_SIZE` bytes in a write request, we use that value plus some extra space.
-const BUFFER_SIZE: usize = MAX_WRITE_SIZE + 4096;
+pub(crate) const BUFFER_SIZE: usize = MAX_WRITE_SIZE + HEADROOM;
+
+/// Receive buffer for a session whose INIT reply negotiated `max_write`: the kernel
+/// never sends a larger write, and every other request is smaller.
+pub(crate) fn negotiated_size(max_write: u32) -> usize {
+    max_write as usize + HEADROOM
+}
 
 /// A buffer that provides an aligned sub-slice for FUSE operations.
 ///
@@ -21,8 +29,13 @@ impl FuseReadBuf {
     ///
     /// The actual buffer may be slightly larger to accommodate alignment requirements.
     pub(crate) fn new() -> Self {
+        Self::with_size(BUFFER_SIZE)
+    }
+
+    /// Creates a `FuseReadBuf` of `size` bytes.
+    pub(crate) fn with_size(size: usize) -> Self {
         Self {
-            buffer: vec![0; BUFFER_SIZE],
+            buffer: vec![0; size],
         }
     }
 
