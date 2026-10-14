@@ -26,9 +26,13 @@ BASELINE_SHA256 = "a6ada570050f14bb6ff5bd61c74c0d0fda439f323f695fdea1212b26b590d
 # them again. Each statement count below is the per-request model of the final #321
 # source (core/docs/issues/320/REQUEST-PATH.md section 10) applied to the cell's frozen
 # request mix. C10 keeps its phase 14 request and owner-job correction.
+# #320 runtime-row removal: each of C06's 512 WRITE requests loses four
+# SQL base-source custody updates and one Workspace-state update (14 -> 9).
+# Its constant prefix/suffix loses four more custody statements (15 -> 11).
+# Thus 512 * 9 + 11 = 4619. Retained C06 raw logs independently reproduce it.
 CELL_COUNT_CORRECTIONS = {
     "C01": {"statements": 21002}, "C02": {"statements": 22002}, "C04": {"statements": 19612},
-    "C05": {"statements": 20269}, "C06": {"statements": 7183}, "C07": {"statements": 17440},
+    "C05": {"statements": 20269}, "C06": {"statements": 4619}, "C07": {"statements": 17440},
     "C08": {"statements": 7185}, "C09": {"statements": 517},
     "C10": {"requests": 1547, "owner_jobs": 1546, "statements": 10773}, "C11": {"statements": 7174}}
 # Two cells cannot be one number: a request that runs while a removed file still waits

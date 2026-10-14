@@ -3835,3 +3835,19 @@ and Read for retained arrays, checking endpoint schema equality. Exec uses the
 actual decoded class keys. Raw retained logs permit a separate count recovery;
 that analysis does not run the operation again or alter the original verdict.
 Tests remain deferred to Phase 2. Durable remains owner-disabled.
+
+
+A second retained-log decode exposed the remaining Status Lifecycle class
+assumption; that and the candidate reader's requests/grants distinction are now
+explicitly schema-dependent. The warm-to-measured mount interval also contains
+terminal Cleanup calls with no live Workspace and explicit attempted=false.
+Those are known no-attempt observations, not missing successful counters: only
+actual completed observers are subtracted; unknown/missing cost still refuses
+pricing. The final retained C06 analysis recovers 518 requests, 518 owner jobs
+and 4,619 statements, without changing its original FAIL.
+
+C06's current statement model is updated from source: 512 WRITE requests each
+lose four base-source custody statements and one Workspace-state statement
+(14 -> 9); the fixed prefix/suffix loses four further custody statements
+(15 -> 11). 512 * 9 + 11 = 4,619, independently reproduced by the raw logs.
+Request/job expectations remain unchanged. No workload/cache/timeout changes.

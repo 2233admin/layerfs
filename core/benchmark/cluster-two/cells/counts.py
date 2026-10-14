@@ -309,7 +309,10 @@ def phase_counts(groups, before_identity, end_identity, *, exclusive_observer_sc
                 "original endpoint owner/SQL snapshot unavailable")
         interval = [value for key,value in snapshots.items() if key[:2] == before_identity[:2] and before_identity[2] < key[2] <= end_identity[2]]
         require(len(interval) == end_identity[2]-before_identity[2], "original interval observer call missing")
-        require(all(value.get("observer", {}).get("completion_available") for value in interval), "exact observer work unavailable in interval")
+        require(all(value.get("observer", {}).get("completion_available") or
+                    (value.get("resource_scope") == "workspace" and value.get("observer", {}).get("attempted") is False)
+                    for value in interval), "exact observer work unavailable in interval")
+        observed = [value for value in interval if value.get("observer", {}).get("completion_available")]
         statement_keys = tuple(key for key in STATEMENT if key != "elapsed_ns")
         direct_mode = before.get("service_schema") == "issue321-direct-workspace"
         require(direct_mode == (end.get("service_schema") == "issue321-direct-workspace"), "mixed service schemas in one interval")
@@ -322,8 +325,8 @@ def phase_counts(groups, before_identity, end_identity, *, exclusive_observer_sc
         raw_classes = difference(before["owner"][class_count], end["owner"][class_count], classes)
         observer_class = "General" if "General" in classes else "Read"
         raw_sql = [difference(left,right,statement_keys) for left,right in zip(before["sql_foreground"],end["sql_foreground"])]
-        observer_sql = {key: sum(value["observer"]["sql"][key] for value in interval) for key in statement_keys}
-        observer_jobs = sum(value["observer"]["jobs"] for value in interval) if direct_mode else len(interval)
+        observer_sql = {key: sum(value["observer"]["sql"][key] for value in observed) for key in statement_keys}
+        observer_jobs = sum(value["observer"]["jobs"] for value in observed) if direct_mode else len(observed)
         require(raw_owner[owner_count] >= observer_jobs and raw_classes[observer_class] >= observer_jobs, "observer jobs exceed original cumulative delta")
         adjusted_owner, adjusted_classes = dict(raw_owner), dict(raw_classes)
         adjusted_owner[owner_count] -= observer_jobs
@@ -334,18 +337,20 @@ def phase_counts(groups, before_identity, end_identity, *, exclusive_observer_sc
             adjusted_sql[0][key] -= observer_sql[key]
         result.update(status="AVAILABLE", raw={"owner": raw_owner, class_count: raw_classes, "sql_foreground": raw_sql},
                       observer={"jobs": observer_jobs, "Read_completions": observer_jobs, "Startup_statement_work": observer_sql,
-                                "original_costs": [value["observer"] for value in interval]},
+                                "original_costs": [value["observer"] for value in observed],
+                                "explicit_no_attempt": [value["identity"] for value in interval if value not in observed]},
                       adjusted={"owner": adjusted_owner, class_count: adjusted_classes, "sql_foreground": adjusted_sql})
         status_calls = {value["identity"] for value in interval if value["operation_tag"] == 3}
         states = {tuple((tuple(key[0]),tuple(key[1]),key[2])): item.get("status_state", {})
                   for item in (control_correlation or []) if item["event"] == "workspace_status" for key in item["identities"]}
         if all(states.get(key, {}).get("status") == "AVAILABLE" for key in status_calls):
             jobs = sum(states[key]["Lifecycle_jobs"] for key in status_calls)
-            require(adjusted_owner[owner_count] >= jobs and adjusted_classes["Lifecycle"] >= jobs,
+            state_class = "General" if "General" in classes else "Lifecycle"
+            require(adjusted_owner[owner_count] >= jobs and adjusted_classes[state_class] >= jobs,
                     "typed Status State jobs exceed original post-Resources cumulative delta")
             without_status_owner, without_status_classes = dict(adjusted_owner), dict(adjusted_classes)
             without_status_owner[owner_count] -= jobs
-            without_status_classes["Lifecycle"] -= jobs
+            without_status_classes[state_class] -= jobs
             result["status_state_attribution"] = {"status": "AVAILABLE", "Lifecycle_jobs": jobs,
                         "original_operands": [states[key] for key in sorted(status_calls)],
                         "sql_work": "UNAVAILABLE: no exact original State StatementWork supplied"}
@@ -357,7 +362,9 @@ def phase_counts(groups, before_identity, end_identity, *, exclusive_observer_sc
             if key in before and key in end:
                 result["raw"][key] = difference(before[key],end[key],fields)
         if "reader" in before and "reader" in end:
-            result["raw"]["reader"] = difference(before["reader"],end["reader"],("grants",))
+            reader_counter = "requests" if "requests" in before["reader"] else "grants"
+            require(reader_counter in end["reader"], "mixed reader schemas in one interval")
+            result["raw"]["reader"] = difference(before["reader"],end["reader"],(reader_counter,))
         if "native" in before and "native" in end and before["native"]["owner_id"] == end["native"]["owner_id"] and "opcodes" in before and "opcodes" in end:
             left, right = before["opcodes"], end["opcodes"]
             if before["native"]["detached"] and not end["native"]["detached"]:
