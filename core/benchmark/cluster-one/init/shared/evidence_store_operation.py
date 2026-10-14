@@ -59,7 +59,7 @@ def validate(path):
         counter_map(row["engine_payload"], PAYLOAD, "whole Commit payload")
         counter_map(row["engine_allocation"], ALLOCATION, "whole Commit allocation")
         sql(row["store_writer"])
-        require(len(row["store_readers"]) == 4, "fixed reader inventory")
+        require(len(row["store_readers"]) == (4 if row["schema"] == "cluster-two-store-accounting-v1" else 3), "reader inventory including retired-work summary")
         for reader in row["store_readers"]:
             sql(reader)
         storage = counter_map(row["storage"], STORAGE, "Storage counters")

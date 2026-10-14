@@ -1,7 +1,7 @@
 //! One startup lifecycle owner, Store transfer and bounded connection custody.
 use super::{ApplicationError, ConnectionFailure};
 use crate::{
-    bootstrap::{open_store_observed_with_limits, OpenedStore},
+    bootstrap::{open_store_observed, OpenedStore},
     control::Service,
     install_types::{InstallFailure, InstalledStore},
     Owner, OwnerConfig,
@@ -90,15 +90,14 @@ impl Application {
             }
         };
         let existing = match &setup.existing_store {
-            Some(m) => match open_store_observed_with_limits(
+            Some(m) => match open_store_observed(
                 PersistenceConfig::sqlite(&setup.store)
                     .with_sqlite_profile(SqlitePersistenceProfile::Disposable),
                 &m.binding,
                 m.cursor_key,
-                usize::from(l.read_handles),
+                l.namespaces as usize,
                 cache_bytes,
                 ReservationBlocks::default(),
-                super::config::read_limits(l),
             ) {
                 Ok(opened) => Some(opened),
                 Err(cause) => {

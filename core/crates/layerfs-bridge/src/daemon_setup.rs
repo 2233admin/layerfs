@@ -5,7 +5,7 @@ use crate::{
     wire::{Reader, Writer},
 };
 use std::fmt;
-const MAGIC: &[u8] = b"LFSD\x03";
+const MAGIC: &[u8] = b"LFSD\x04";
 /// Explicit daemon startup resources; these are windows/admission, not file caps.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct DaemonLimits {
@@ -14,8 +14,6 @@ pub struct DaemonLimits {
     /// Maximum blocking I/O wait during authentication and the first metadata record.
     /// Cleared before product operations; never applies to commands.
     pub handshake_ms: u32,
-    /// Fixed global Store reader count.
-    pub read_handles: u16,
     /// Shared immutable cache allowance, separate from whole-process memory.
     pub cache_bytes: u64,
     /// Explicit simultaneously admitted Workspace count.
@@ -65,7 +63,6 @@ impl DaemonSetup {
         out.put(&self.command_gid.to_be_bytes())?;
         let l = self.limits;
         out.put(&l.connections.to_be_bytes())?;
-        out.put(&l.read_handles.to_be_bytes())?;
         out.put(&l.handshake_ms.to_be_bytes())?;
         out.put(&l.cache_bytes.to_be_bytes())?;
         for v in [l.namespaces, l.pager_kib] {
@@ -91,7 +88,6 @@ impl DaemonSetup {
         let command_gid = u32::from_be_bytes(input.array()?);
         let limits = DaemonLimits {
             connections: u16::from_be_bytes(input.array()?),
-            read_handles: u16::from_be_bytes(input.array()?),
             handshake_ms: u32::from_be_bytes(input.array()?),
             cache_bytes: u64::from_be_bytes(input.array()?),
             namespaces: u32::from_be_bytes(input.array()?),
@@ -144,12 +140,7 @@ impl DaemonSetup {
             }
         }
         let l = self.limits;
-        if l.handshake_ms == 0
-            || l.connections == 0
-            || l.read_handles == 0
-            || l.namespaces == 0
-            || l.pager_kib == 0
-        {
+        if l.handshake_ms == 0 || l.connections == 0 || l.namespaces == 0 || l.pager_kib == 0 {
             return Err(ControlError("daemon resources"));
         }
         if let Some(m) = &self.existing_store {

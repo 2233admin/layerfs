@@ -14,10 +14,10 @@ def validate(path, case):
 
     def point(stage, index):
         value = next(stream)
-        require(value.get("schema") in ("pre-s8-growth-point-v1", "pre-s8-growth-point-v2") and
+        require(value.get("schema") in ("pre-s8-growth-point-v1", "pre-s8-growth-point-v2", "pre-s8-growth-point-v3") and
                 value["stage"] == stage and value["index"] == index, "original point order")
         require(all(integer(v) for k, v in value.items() if k not in {"schema", "stage"}), "point counter type")
-        require(value["read_handles"] == 4 and value["cache_bytes"] <= 8388608, "fixed read/cache capacity")
+        require((value["read_handles"] == (1 if stage == "drained" else 2) if value["schema"] == "pre-s8-growth-point-v3" else value["read_handles"] == 4) and value["cache_bytes"] <= 8388608, "declared reader/cache inventory")
         retired = ("credited_bytes", "outstanding", "queued", "receipt_overruns")
         if value["schema"] == "pre-s8-growth-point-v1":
             # Historical receipts of the queued owner: its gauges must read released.

@@ -33,7 +33,7 @@ product mental model or campaign-specific benchmark procedures.
   budget are removed. See the [terminology guide](docs/architecture/64-overlay-terminology.md)
   and the [#321 record](docs/issues/321/CHECKLIST.md).
   Daemon also exposes a direct global Store adapter with a
-  fixed read set with fair admission/quarantine and read-only bind snapshots,
+  mount-time reader per Workspace, exact quarantine and read-only bind snapshots,
   one immutable cache shared across Workspaces, bounded root
   binding and operation-owned exact failures. Concrete opening stays outside
   the provider-independent adapter; see the

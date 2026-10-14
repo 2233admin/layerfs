@@ -15,12 +15,7 @@ use layerfs_workspace::{
     NativeWindow, Recognition, RecognizeWork, VisitFacts, WorkspaceError, WriteData,
     RECOGNIZE_BYTES,
 };
-use std::{
-    future::{poll_fn, Future},
-    pin::Pin,
-    sync::Arc,
-    task::Poll,
-};
+use std::sync::Arc;
 
 /// One request's operation scope and its mount's fence.
 ///
@@ -85,46 +80,10 @@ impl FilesystemPort {
             Ok(ServiceReply::new(value, client.clone()))
         })
     }
-    /// One admitted Store reader as this request's canonical client. A reader
-    /// that cannot be had is a failed base demand of this request: nothing
-    /// was read and nothing is asked again.
-    async fn admitted(&self) -> Result<Arc<CanonicalClient>, ServiceError> {
+    /// Provider calls lock only this Workspace's already opened reader.
+    fn base_client(&self) -> Result<Arc<CanonicalClient>, ServiceError> {
         self.fenced(true)?;
-        let lease = {
-            let mut ticket = self
-                .0
-                .ports()
-                .read_ticket()
-                .map_err(|cause| self.demand(cause))?;
-            // Leaving this block on a stop cancels the unstarted ticket.
-            poll_fn(|cx| match self.fenced(true) {
-                Ok(()) => Pin::new(&mut ticket)
-                    .poll(cx)
-                    .map_err(|error| self.demand(Arc::new(PortError::ReadAdmission(error)))),
-                Err(fenced) => Poll::Ready(Err(fenced)),
-            })
-            .await?
-        };
-        // A reader of another Store or Workspace is a wiring failure,
-        // not this request's base demand.
-        self.0
-            .admitted_client(lease)
-            .map_err(|cause| -> ServiceError { Box::new(cause) })
-    }
-    /// One admitted reader for a recognition pass, in demand custody of its
-    /// own: nothing it fails at becomes this request's failure. No reader
-    /// is no claim. Only a stopped fence is an error.
-    async fn recognizer_client(&self) -> Result<Option<Arc<CanonicalClient>>, ServiceError> {
-        let ports = self.0.ports().fresh();
-        let Ok(mut ticket) = ports.read_ticket() else {
-            return Ok(None);
-        };
-        let lease = poll_fn(|cx| match self.fenced(true) {
-            Ok(()) => Pin::new(&mut ticket).poll(cx).map(Ok),
-            Err(fenced) => Poll::Ready(Err(fenced)),
-        })
-        .await?;
-        Ok(lease.ok().and_then(|lease| ports.client_on(lease).ok()))
+        Ok(self.0.client_handle())
     }
 }
 impl RequestServices for FilesystemPort {
@@ -235,7 +194,7 @@ impl RequestServices for FilesystemPort {
     }
     fn base(&self) -> ServiceFuture<'_, BaseView> {
         Box::pin(async move {
-            let client = self.admitted().await?;
+            let client = self.base_client()?;
             let base = self
                 .0
                 .workspace()
@@ -353,12 +312,11 @@ impl RequestServices for FilesystemPort {
             let resident = base.with_client(self.0.resident());
             let mut outcome = run.recognize(&resident, serial, offset, &data, &mut work);
             if outcome == Recognition::NeedsBase {
-                outcome = match self.recognizer_client().await {
-                    Ok(Some(client)) => {
+                outcome = match self.fenced(true).map(|()| self.0.ports().fresh().client()) {
+                    Ok(client) => {
                         let admitted = base.with_client(client);
                         run.recognize(&admitted, serial, offset, &data, &mut work)
                     }
-                    Ok(None) => Recognition::Decided(None),
                     Err(fenced) => {
                         slots.put(route, serial, run, &work);
                         return Err(fenced);

@@ -130,7 +130,10 @@ def decode(group):
         slices = (("jobs_by_class",6),("lock_wait_ns",6+class_count),("hold_ns",6+2*class_count)) if direct_mode else (("completed",14),("queue_wait_ns",20),("service_ns",26))
         for key, offset in slices:
             result["owner"][key] = names(scalar[offset:offset+class_count], classes)
-    for key, section, fields in (("store",8,STORE), ("reader",9,READER), ("cache",10,CACHE),
+    reader_marker = row(group, 39)
+    require(reader_marker is None or reader_marker == [1], "Workspace reader schema marker")
+    reader_fields = ("stopping", "poisoned", "readers", "quarantined", "opening_failures", "requests", "lock_wait_ns") if reader_marker is not None else READER
+    for key, section, fields in (("store",8,STORE), ("reader",9,reader_fields), ("cache",10,CACHE),
                                  ("construction",15,CONSTRUCTION), ("storage",16,STORAGE), ("dispatch",11,DISPATCH),
                                  ("native",12,NATIVE), ("loops",24,LOOPS), ("mount",25,MOUNT),
                                  ("payload_foreground",4,PAYLOAD), ("payload_maintenance",5,PAYLOAD),

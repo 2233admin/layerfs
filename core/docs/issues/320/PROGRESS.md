@@ -3754,3 +3754,55 @@ not yet updated, with no further test file opened, edited or run. Source pins
 advance; pinned engine suite is deferred to Phase 2. No runtime sample or
 performance acceptance is claimed. Durable: NOT_RUN — disabled by owner until
 explicit reauthorization.
+
+
+### Phase 1: per-Workspace Store reader candidate, measurement pending
+
+The owner-approved candidate replaces the fixed shared reader pool with one
+control reader and a mount-time reader per Workspace. Read tickets, fair lanes,
+FIFO rotation, per-Workspace request quota, exclusive lease and admitted-client
+wrapper are removed. Each original bounded provider call takes its Workspace's
+reader lock and ends its read transaction before returning. Persistence already
+sets/verifies cache_size=-2048 and mmap_size=0; no cache setting or Store profile
+is weakened. The immutable CanonicalCache remains one shared bounded cache.
+
+Bind opens the reader before snapshot/root checks and readiness. Failed bind
+closes a healthy acquired reader while preserving original and cleanup failures;
+unknown opening/reader outcomes retain exact registration/provider/error custody
+and permit no guessed reopen. BoundWorkspace::close combines the original overlay
+Close and reader close; normal/forced teardown and the diagnostic examples use
+it. Whole-Store stop closes healthy readers and refuses new demand, preserving
+unknown custody and reader_failures. A factory finishing beside shutdown closes
+its newly opened healthy reader before returning the original stopped admission.
+Provider panic poisons its owning reader and retains the original connection.
+
+Concrete SQL observation holds weak providers. Healthy close moves final work
+into one fixed retired sum, then removes the registration, so diagnostic state
+neither holds a connection open nor grows with completed mounts. Unavailable
+final counters invalidate that sum instead of inventing zero. Numeric reader
+index -2 is the retired sum. Section 39 declares demand/lock fields; historical
+pool arrays stay readable. Private DaemonSetup advances to LFSD v4 and removes
+the now unused fixed read_handles field; both producers and consumers advance.
+
+The [candidate design](WORKSPACE-READER-DESIGN-20261014.md) records lifecycle,
+bounds and pending acceptance. Initial host checks found width conversions, then
+an overly wide internal visibility and two unused index observers; these were
+corrected/removed. Initial Linux check found two SDK examples' cfg-only setup
+field initializers; they were mechanically updated. Logs remain under
+workspace-reader labels. Host/Linux product check and Clippy cover workspace
+lib/bins/examples, with 120 s stops. Fmt/whitespace are checked.
+
+Tests: not yet updated. No test was run or opened outside the earlier authorized
+shared-helper exception, whose Close call now uses the paired typed close.
+Acceptance is pending the required before/after exec_concurrency w1/w4 and C06
+samples with daemon_memory_sampler. Timings remain INELIGIBLE, and the candidate
+will be kept only if the four-Workspace command does not worsen and observed
+peak stays inside the stated per-Workspace memory budget. No speed claim is
+made by this source cut. Durable: NOT_RUN — disabled by owner until explicit
+reauthorization.
+
+The first final Linux check was refused by its checksum guard: the oracle pin
+was updated while that check was running. This is a source-stability failure,
+not a product compile result. It is retained under workspace-reader-linux-check-final;
+the subsequent check-stable and clippy-stable runs use frozen source/pins and
+pass. Host check-final and clippy-accepted-source pass. No test rerun occurs.

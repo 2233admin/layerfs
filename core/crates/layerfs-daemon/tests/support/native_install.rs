@@ -207,7 +207,7 @@ pub fn oracle(installed: &InstalledStore, overlay: &Path) {
         );
         assert!(operation.ports().failure().unwrap().is_none());
     }
-    owner.client().close(bound.workspace.route()).unwrap();
+    bound.workspace.close().unwrap();
     drop(bound);
     owner.stop().unwrap();
     println!("INSTALL_ROOT_ORACLE paths=6 full_regular_bytes={} hardlink=true raw_symlink=true host_sqlite={} daemon_sqlite={} work={:?}",2*FILE_BYTES+14,installed.manifest.host_sqlite,installed.manifest.daemon_sqlite.as_deref().unwrap(),installed.work);

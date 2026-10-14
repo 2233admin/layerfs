@@ -118,15 +118,3 @@ fn secure_process() -> io::Result<()> {
 fn invalid(message: &'static str) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidInput, message)
 }
-
-/// Store-read tickets one namespace may have waiting: sixteen native requests
-/// plus the fixed control connection population. One additional namespace
-/// serves explicitly unscoped constructor callers.
-pub(super) fn read_limits(
-    limits: layerfs_bridge::daemon_setup::DaemonLimits,
-) -> crate::store::ReadLimits {
-    crate::store::ReadLimits {
-        namespaces: limits.namespaces as usize + 1,
-        requests_per_namespace: 16 + usize::from(limits.connections),
-    }
-}
