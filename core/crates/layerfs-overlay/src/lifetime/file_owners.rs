@@ -62,7 +62,7 @@ impl Overlay {
             if !matches!(kind, LeaseKind::Lookup | LeaseKind::LookupOwner)
                 && self.orphan(ns, serial)?.is_some()
             {
-                self.enqueue(ns, crate::maintenance::ORPHAN, serial, -1)?;
+                self.enqueue(crate::maintenance::ORPHAN, serial, -1)?;
             }
         } else if refs.total() == 0 {
             match self.orphan(ns, serial)? {
@@ -71,8 +71,8 @@ impl Overlay {
                     self.finish_release(ns, serial, orphan)?
                 }
                 Some(_) => {
-                    self.enqueue(ns, crate::maintenance::ORPHAN, serial, -1)?;
-                    self.wake_orphan(ns, serial)?;
+                    self.enqueue(crate::maintenance::ORPHAN, serial, -1)?;
+                    self.wake_orphan(serial)?;
                 }
             }
         }
@@ -111,7 +111,7 @@ impl Overlay {
                 return Err(OverlayError::Closed);
             }
             let current = self
-                .inode_at(source.route, base.serial, state.active, state.installed)?
+                .inode_at(base.serial, state.active, state.installed)?
                 .unwrap_or_else(|| base.clone());
             if current.kind != InodeKind::File || current.nlink == 0 {
                 return Err(OverlayError::Missing);
@@ -307,12 +307,7 @@ impl Overlay {
         self.execute(
             StatementKind::Lease,
             sql::BASE_SOURCE_INSERT,
-            &[
-                &source.route.ns,
-                &integer(owner)?,
-                &source.root.as_slice(),
-                &1_i64,
-            ],
+            &[&integer(owner)?, &source.root.as_slice(), &1_i64],
             56,
         )?;
         self.execute(
@@ -323,8 +318,8 @@ impl Overlay {
         )?;
         self.execute(
             StatementKind::Lease,
-            "INSERT INTO lease VALUES(?1,5,?2,?3)",
-            &[&source.route.ns, &integer(owner)?, &serial],
+            "INSERT INTO commit_pin VALUES(5,?1,?2)",
+            &[&integer(owner)?, &serial],
             24,
         )?;
         self.file_ref(source.route.ns, serial, LeaseKind::FileReader, true)?;
@@ -391,8 +386,8 @@ impl Overlay {
             }
             self.execute(
                 StatementKind::Lease,
-                "DELETE FROM lease WHERE ns=?1 AND kind=5 AND owner=?2 AND resource=?3",
-                &[&ns, &owner, &serial],
+                "DELETE FROM commit_pin WHERE kind=5 AND holder=?1 AND resource=?2",
+                &[&owner, &serial],
                 24,
             )?;
             self.file_ref(ns, serial, LeaseKind::FileReader, false)?;

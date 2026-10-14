@@ -110,7 +110,7 @@ impl Overlay {
             0 | 1 => Some(self.native_parent(mount, serial)?),
             _ => None,
         };
-        let parent_inode = self.inode_at(mount.route, serial, state.active, state.installed)?;
+        let parent_inode = self.inode_at(serial, state.active, state.installed)?;
         let after = after.or(cursor.after_name()).map(<[u8]>::to_vec);
         let start = after.as_deref().unwrap_or(&[]);
         let mut local_kinds = Vec::new();
@@ -119,7 +119,6 @@ impl Overlay {
                 StatementKind::DirectoryEntry,
                 sql::SOURCE_NAMES_KINDS,
                 &[
-                    &mount.route.ns,
                     &generation,
                     &integer(serial)?,
                     &start,

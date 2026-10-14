@@ -319,15 +319,14 @@ impl Overlay {
         if self.orphan_seen.get() {
             if let Some(orphan) = self.orphan(ns, key)? {
                 // Without a descriptor a removed regular file is gone.
-                if handle.is_none() && self.orphan_layer(ns, key)?.kind == InodeKind::File {
+                if handle.is_none() && self.orphan_layer(key)?.kind == InodeKind::File {
                     return Err(OverlayError::Missing);
                 }
-                let local = self.orphan_read(ns, key, orphan, offset, length)?;
+                let local = self.orphan_read(key, orphan, offset, length)?;
                 return Ok((orphan.root, local));
             }
         }
-        let local =
-            self.read_layers(ns, serial, state.active.0, state.installed, offset, length)?;
+        let local = self.read_layers(serial, state.active.0, state.installed, offset, length)?;
         Ok((state.base_root, local))
     }
     /// One native mutation in one visit. The callback decides over current

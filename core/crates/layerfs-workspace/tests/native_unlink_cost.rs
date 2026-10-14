@@ -482,34 +482,9 @@ fn one_removed_file_costs_exactly_this_beside_any_files_and_after_any_orphans() 
             sized.push((late, early));
         }
     }
-    // A second Workspace of the same engine, mounted after those orphans.
-    let client = Arc::new(CanonicalClient::with_cache(
-        Arc::new(b.fixture.store.clone()),
-        Some(Arc::new(b.fixture.store.clone())),
-        b.cache.clone(),
-    ));
-    let second = Workspace::open(
-        &b.overlay,
-        client,
-        b.fixture.root,
-        b.fixture.scope,
-        [43; 32],
-    )
-    .unwrap();
-    let two = Mounted {
-        b: &b,
-        workspace: &second,
-        resident,
-        mount: b.overlay.create_native_mount(second.route(), 1).unwrap(),
-        requests: Cell::new(0),
-    };
-    two.keep("k0");
-    let later = two.removed("f0", false);
-    println!("NATIVE_UNLINK_COST second Workspace {later:?}");
     assert_eq!(b.demand(), demand, "an owner visit asked the provider");
-    // The second Workspace keeps an orphan under its lookup while the first
-    // Workspace's releases reclaim: its rows are another namespace's.
-    let parked = two.parked("p");
+    // One orphan stays parked under its lookup while other releases reclaim.
+    let parked = one.parked("p");
     let orphans = || b.overlay.resources(None).unwrap().open.orphan_files;
     assert_eq!((orphans(), b.overlay.maintenance_pending()), (1, false));
     // While the engine holds that orphan, a live file's last reference
@@ -521,7 +496,7 @@ fn one_removed_file_costs_exactly_this_beside_any_files_and_after_any_orphans() 
     println!("NATIVE_UNLINK_COST four pages {large:?}");
     println!("NATIVE_UNLINK_COST open at unlink {open:?}");
     assert_eq!(orphans(), 1);
-    b.overlay.forget_native(two.mount, parked, 1).unwrap();
+    b.overlay.forget_native(one.mount, parked, 1).unwrap();
     assert_eq!((orphans(), b.overlay.maintenance_pending()), (0, false));
 
     // A live file's last reference deletes its custody row itself and
@@ -572,13 +547,11 @@ fn one_removed_file_costs_exactly_this_beside_any_files_and_after_any_orphans() 
     );
     // Inode reads probe the orphan domain only while the engine holds an
     // orphan. Each of these orphans was reclaimed, so the files after them
-    // and a Workspace mounted after them pay what the fresh engine paid.
+    // pay what the fresh engine paid.
     assert_eq!(late, &fresh);
     assert_eq!(early.jobs, fresh.jobs);
-    assert_eq!(later, fresh);
 
     b.overlay.revoke_native_mount(one.mount).unwrap();
-    b.overlay.revoke_native_mount(two.mount).unwrap();
 }
 /// The six jobs' Inode-family attempts for one created and removed file:
 /// 7 of the requests' own, and the two of the reclamation in FORGET. The

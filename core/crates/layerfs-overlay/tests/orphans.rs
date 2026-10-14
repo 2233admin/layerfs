@@ -155,47 +155,20 @@ fn captured_reader_preserves_sealed_bytes_across_install_and_blocks_failed_fold(
 }
 
 #[test]
-fn operation_custody_never_reuses_an_exposed_owner_and_cleanup_cannot_delete_new_operation_record()
-{
+fn operation_custody_never_reuses_an_exposed_owner() {
     let temp = Temp::new();
     let db = temp.db();
     let route = db.open_workspace([121; 32], [122; 32]).unwrap();
     let first = db.acquire_operation(route, 1).unwrap();
     assert_eq!(db.retained_operation(route, 1).unwrap(), Some(first));
-    let record = OperationRecord {
-        kind: 4,
-        key: 1,
-        value: vec![3; OPERATION_RECORD_BYTES],
-    };
-    for key in 0..8 {
-        db.put_owned_operation_record(
-            first,
-            &OperationRecord {
-                key,
-                ..record.clone()
-            },
-        )
-        .unwrap();
-    }
     assert!(db.acquire_operation(route, 1).is_err());
     db.release_operation(first).unwrap();
     let second = db.acquire_operation(route, 1).unwrap();
     assert_ne!(first, second);
     assert!(db.release_operation(first).is_err());
-    assert!(db.put_owned_operation_record(first, &record).is_err());
-    db.put_owned_operation_record(second, &record).unwrap();
     maintain(&db);
-    assert_eq!(
-        db.owned_operation_record_page(second, 4, None).unwrap(),
-        vec![record.clone()]
-    );
     db.close(route).unwrap();
     assert_eq!(db.cleanup_state(route).unwrap(), CleanupState::Held);
-    assert_eq!(
-        db.owned_operation_record_page(second, 4, None).unwrap(),
-        vec![record.clone()]
-    );
-    assert!(db.put_owned_operation_record(second, &record).is_err());
     db.release_operation(second).unwrap();
     maintain(&db);
     assert_eq!(db.cleanup_state(route).unwrap(), CleanupState::Queued);
@@ -472,9 +445,7 @@ fn inode_reads_probe_the_orphan_domain_only_while_an_orphan_exists() {
     let temp = Temp::new();
     let db = temp.db();
     let route = db.open_workspace([141; 32], [142; 32]).unwrap();
-    let other = db.open_workspace([143; 32], [144; 32]).unwrap();
     let source = db.acquire_base_source(route, 1).unwrap();
-    let elsewhere = db.acquire_base_source(other, 1).unwrap();
     // One inode observation and the Inode-family statements it attempted.
     let read = |source: BaseSource, serial: u64| {
         let before = db.diagnostics();
@@ -507,7 +478,6 @@ fn inode_reads_probe_the_orphan_domain_only_while_an_orphan_exists() {
     // No orphan has been created by this engine: one seek per inode.
     assert_eq!(read(source, 7).1, 1);
     assert_eq!(read(source, 9), (None, 1));
-    assert_eq!(read(elsewhere, 7), (None, 1));
     // An unlink with no owner creates none either: its row is a tombstone.
     unlink(&unowned);
     let (tombstone, attempts) = read(source, 8);
@@ -525,7 +495,6 @@ fn inode_reads_probe_the_orphan_domain_only_while_an_orphan_exists() {
     // every namespace: a miss costs the probe and the seek.
     assert_eq!(read(source, 9), (None, 2));
     assert_eq!(read(source, 8).1, 2);
-    assert_eq!(read(elsewhere, 7), (None, 2));
 
     // A descriptor write lands in the orphan domain and is read back from it.
     let publication = db
@@ -560,7 +529,6 @@ fn inode_reads_probe_the_orphan_domain_only_while_an_orphan_exists() {
     maintain(&db);
     assert_eq!(db.resources(None).unwrap().open.orphan_files, 1);
     assert_eq!(read(source, 9), (None, 2));
-    assert_eq!(read(elsewhere, 7), (None, 2));
     // The engine's last orphan is reclaimed: the probe stops in every
     // namespace, one seek per inode.
     db.close_file(held).unwrap();
@@ -568,23 +536,14 @@ fn inode_reads_probe_the_orphan_domain_only_while_an_orphan_exists() {
     assert_eq!(db.resources(None).unwrap().open.orphan_files, 0);
     assert_eq!(read(source, 7).1, 1);
     assert_eq!(read(source, 9), (None, 1));
-    assert_eq!(read(elsewhere, 7), (None, 1));
 }
 
 #[test]
-fn a_closed_namespace_that_takes_the_last_orphan_stops_the_probe() {
+fn a_closed_workspace_keeps_its_last_orphan_for_file_disposal() {
     let temp = Temp::new();
     let db = temp.db();
     let route = db.open_workspace([145; 32], [146; 32]).unwrap();
-    let other = db.open_workspace([147; 32], [148; 32]).unwrap();
     let source = db.acquire_base_source(route, 1).unwrap();
-    let elsewhere = db.acquire_base_source(other, 1).unwrap();
-    // Inode-family statements one inode read of the other Workspace attempts.
-    let attempts = || {
-        let before = db.diagnostics();
-        assert_eq!(db.source_inode(elsewhere, 9).unwrap(), None);
-        db.diagnostics().since(&before).statements[StatementKind::Inode as usize].attempts
-    };
     // More cells than the one page its last owner's release drops itself:
     // rows of eight and six cells are exactly that page, and one more row.
     const SIZE: u64 = 15 * 4096;
@@ -604,7 +563,6 @@ fn a_closed_namespace_that_takes_the_last_orphan_stops_the_probe() {
         )
         .unwrap();
     db.reply_attempted(publication).unwrap();
-    assert_eq!(attempts(), 2);
 
     // The Workspace closes and its last owner leaves with no live
     // maintenance turn in between. The release drops one page and leaves
@@ -615,11 +573,6 @@ fn a_closed_namespace_that_takes_the_last_orphan_stops_the_probe() {
     db.close_file(open).unwrap();
     assert_eq!(db.resources(None).unwrap().open.orphan_files, 1);
     assert_eq!(db.cleanup_state(route).unwrap(), CleanupState::Queued);
-    assert_eq!(
-        attempts(),
-        2,
-        "terminal close does not probe or delete orphan payload"
-    );
     db.close_database().unwrap();
 }
 
@@ -690,19 +643,6 @@ fn a_failed_release_keeps_exact_custody_until_terminal_file_disposal() {
     )
     .unwrap();
     let route = db.open_workspace([153; 32], [154; 32]).unwrap();
-    // A second Workspace provides independent retained SQL state. Terminal
-    // close leaves its rows for whole-file disposal.
-    let spare = db.open_workspace([155; 32], [156; 32]).unwrap();
-    let held = db.acquire_base_source(spare, 1).unwrap();
-    put(
-        &db,
-        held,
-        plain(3, 131072, 1),
-        Some((0, pattern(131072, 5))),
-    )
-    .unwrap();
-    db.release_base_source(held).unwrap();
-
     let source = db.acquire_base_source(route, 1).unwrap();
     let mut file = File::new(&db, source, ORPHAN, Vec::new());
     file.write(0, &pattern(SIZE as usize, 3));
@@ -722,6 +662,12 @@ fn a_failed_release_keeps_exact_custody_until_terminal_file_disposal() {
     for serial in 2000..4000 {
         put(&db, source, plain(serial, 0, 1), None).unwrap();
     }
+    // Removals in the active generation, before the quota is near: their
+    // queue rows fill the leaves beside the row the release will park, in
+    // each index of the queue, whichever of them later needs a page.
+    for serial in 2000..2800 {
+        put(&db, source, plain(serial, 0, 0), None).unwrap();
+    }
 
     // The quota is reached by payload, then by rows that need a page only
     // when a leaf splits, then by removals: each adds one queue row after
@@ -740,7 +686,7 @@ fn a_failed_release_keeps_exact_custody_until_terminal_file_disposal() {
     let rows = (0..65536)
         .find(|at| full(put(&db, source, plain(10_000 + at, 0, 1), None)))
         .expect("the page quota is reached by rows");
-    let removed = (2000..4000)
+    let removed = (2800..4000)
         .find(|serial| full(put(&db, source, plain(*serial, 0, 0), None)))
         .expect("the page quota is reached by a queue row");
 
@@ -804,7 +750,6 @@ fn a_failed_release_keeps_exact_custody_until_terminal_file_disposal() {
 
     assert_eq!(view(&db), file.expect);
     db.close(route).unwrap();
-    db.close(spare).unwrap();
     assert!(
         db.check_file(open, false).is_ok(),
         "failed release keeps its exact descriptor"

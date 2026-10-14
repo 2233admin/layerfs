@@ -192,13 +192,10 @@ impl World {
 #[test]
 fn a_refused_forget_is_refused_by_one_statement_and_writes_nothing() {
     let world = world();
-    let (seat, other, revoked) = (world.seat(61), world.seat(62), world.seat(63));
-    for each in [seat, other, revoked] {
-        world.make(each, 50, 1);
-    }
-    world.db.revoke_native_mount(revoked.mount).unwrap();
+    let seat = world.seat(61);
+    world.make(seat, 50, 1);
     world.settle();
-    let before = (world.left(seat), world.left(other), world.left(revoked));
+    let before = world.left(seat);
     let attempt = |mount: NativeMount, serial: u64, count: u64| {
         let work = world.work();
         let result = world.db.forget_native(mount, serial, count);
@@ -215,14 +212,11 @@ fn a_refused_forget_is_refused_by_one_statement_and_writes_nothing() {
         "{result:?}"
     );
     assert_eq!(work, (0, 0, 0));
-    // No lookup count on the inode, a mount of another Workspace for an
-    // inode that Workspace holds no count on, and a revoked mount: Stale,
-    // by the fence alone, before any transaction.
-    for (mount, serial) in [(seat.mount, 51), (other.mount, 77), (revoked.mount, 50)] {
-        let (result, work) = attempt(mount, serial, 1);
-        assert!(matches!(result, Err(OverlayError::Stale)), "{result:?}");
-        assert_eq!(work, (1, 0, 0), "{serial}");
-    }
+    // No lookup count on the inode: Stale, by the fence alone, before any
+    // transaction.
+    let (result, work) = attempt(seat.mount, 51, 1);
+    assert!(matches!(result, Err(OverlayError::Stale)), "{result:?}");
+    assert_eq!(work, (1, 0, 0));
     // More than the kernel holds: refused after the fence, nothing written.
     let (result, work) = attempt(seat.mount, 50, 2);
     assert!(
@@ -236,38 +230,30 @@ fn a_refused_forget_is_refused_by_one_statement_and_writes_nothing() {
         matches!(result, Err(OverlayError::Invalid(_))),
         "{result:?}"
     );
-    assert_eq!(
-        (world.left(seat), world.left(other), world.left(revoked)),
-        before
-    );
+    assert_eq!(world.left(seat), before);
     assert_eq!(
         world.db.native_lookup_count(seat.mount, 50).unwrap(),
         Some(1)
     );
 
-    // A closed Workspace still gives its references back, and the one
-    // beside it is untouched.
+    // A closed Workspace still gives its references back.
     world.db.close(seat.route).unwrap();
     let (result, work) = attempt(seat.mount, 50, 1);
     assert!(result.is_ok(), "{result:?}");
     assert_eq!((work.0, work.2), (1, 0));
     let (result, _) = attempt(seat.mount, 50, 1);
     assert!(matches!(result, Err(OverlayError::Stale)), "{result:?}");
-    assert_eq!(
-        world.db.native_lookup_count(other.mount, 50).unwrap(),
-        Some(1)
-    );
-    assert_eq!(world.left(other).1, before.1 .1);
+    // A revoked mount answers for nothing.
+    world.db.revoke_native_mount(seat.mount).unwrap();
+    let (result, _) = attempt(seat.mount, 1, 1);
+    assert!(matches!(result, Err(OverlayError::Stale)), "{result:?}");
 }
 
 /// One removed file of `rows` one-cell rows, forgotten: what the FORGET's
 /// own job left, the owner's turns after it and what they left.
 fn released(rows: u64, installed: bool) -> (Left, u64, Left, Option<Inode>) {
     let world = world();
-    // Another Workspace of the engine keeps its own file throughout.
-    let (seat, beside) = (world.seat(64), world.seat(65));
-    world.make(beside, 50, 2);
-    let kept = world.left(beside).1;
+    let seat = world.seat(64);
     world.make(seat, 50, rows);
     let size = match rows {
         0 => 0,
@@ -282,11 +268,6 @@ fn released(rows: u64, installed: bool) -> (Left, u64, Left, Option<Inode>) {
     let own = world.left(seat);
     let turns = world.settle();
     let end = world.left(seat);
-    assert_eq!(world.left(beside).1, kept, "another Workspace's rows");
-    assert_eq!(
-        world.db.native_lookup_count(beside.mount, 50).unwrap(),
-        Some(1)
-    );
     let row = match world.db.inode(seat.route, 50) {
         Ok(row) => row,
         Err(error) => panic!("{error:?}"),

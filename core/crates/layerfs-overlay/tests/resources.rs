@@ -42,6 +42,7 @@ fn physical_observation_counts_logical_rows_and_reusable_pages_without_reserve()
     let retained = db.resources(None).unwrap().counts;
     assert_eq!(retained.namespaces, 1);
     assert_eq!(retained.payload_cells, cleaned.counts.payload_cells);
+    // The counts are the one row of the database's Workspace, by its key.
     let plan = db.explain_accounting().unwrap();
     assert!(plan
         .iter()

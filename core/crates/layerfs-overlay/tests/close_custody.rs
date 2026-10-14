@@ -59,32 +59,16 @@ fn maintain(db: &Overlay) {
 }
 
 #[test]
-fn each_kind_of_custody_alone_holds_a_closed_workspace_and_another_workspace_never_does() {
-    let (_temp, db) = engine();
-    let workspace = |tag: u8| db.open_workspace([tag; 32], [9; 32]).unwrap();
-
-    // A bystander that owns every kind of custody throughout.
-    let bystander = workspace(1);
-    let source = db.acquire_base_source(bystander, 1).unwrap();
-    let kept_file = db.open_file(source, 1, &base(7), true).unwrap();
-    let kept_lookup = db.acquire_lookup(source, 2, &base(8), 1).unwrap();
-    db.release_base_source(source).unwrap();
-    let kept_mount = db.create_native_mount(bystander, 1).unwrap();
-    let resources = db.resources(Some(bystander)).unwrap();
-    let counts = resources.counts;
-    // No `lease` row stands for a descriptor or a lookup reference: the
-    // memory has the handle, lookup owner, mount and root count, root parent,
-    // and three inode custody entries. SQL has no rows for these owners.
-    assert_eq!((counts.owner_rows, counts.owner_details), (0, 0));
-    assert_eq!(resources.open.values(), [1, 1, 1, 0, 1, 3, 0, 0, 1, 0, 0]);
-
+fn each_kind_of_custody_alone_holds_a_closed_workspace() {
     // Nothing held: Close queues the cleanup itself.
-    let none = workspace(2);
+    let (_temp, db) = engine();
+    let none = db.open_workspace([2; 32], [9; 32]).unwrap();
     db.close(none).unwrap();
     assert_eq!(state(&db, none), CleanupState::Queued);
 
     // A descriptor alone.
-    let route = workspace(3);
+    let (_temp, db) = engine();
+    let route = db.open_workspace([3; 32], [9; 32]).unwrap();
     let source = db.acquire_base_source(route, 1).unwrap();
     let file = db.open_file(source, 1, &base(7), false).unwrap();
     db.release_base_source(source).unwrap();
@@ -94,7 +78,8 @@ fn each_kind_of_custody_alone_holds_a_closed_workspace_and_another_workspace_nev
     assert_eq!(state(&db, route), CleanupState::Queued);
 
     // A lookup owner alone.
-    let route = workspace(4);
+    let (_temp, db) = engine();
+    let route = db.open_workspace([4; 32], [9; 32]).unwrap();
     let source = db.acquire_base_source(route, 1).unwrap();
     let lookup = db.acquire_lookup(source, 1, &base(7), 1).unwrap();
     db.release_base_source(source).unwrap();
@@ -104,7 +89,8 @@ fn each_kind_of_custody_alone_holds_a_closed_workspace_and_another_workspace_nev
     assert_eq!(state(&db, route), CleanupState::Queued);
 
     // A native connection alone: its row and its root's kernel count.
-    let route = workspace(5);
+    let (_temp, db) = engine();
+    let route = db.open_workspace([5; 32], [9; 32]).unwrap();
     let mount = db.create_native_mount(route, 1).unwrap();
     db.close(route).unwrap();
     assert_eq!(state(&db, route), CleanupState::Held);
@@ -112,29 +98,42 @@ fn each_kind_of_custody_alone_holds_a_closed_workspace_and_another_workspace_nev
     assert_eq!(state(&db, route), CleanupState::Queued);
     maintain(&db);
     assert_eq!(state(&db, route), CleanupState::Queued);
+}
 
-    // None of that touched the bystander, and its rows held none of them.
-    assert_eq!(state(&db, bystander), CleanupState::Live);
+#[test]
+fn a_closed_workspace_is_held_until_the_last_of_its_owners_is_released() {
+    let (_temp, db) = engine();
+    let route = db.open_workspace([1; 32], [9; 32]).unwrap();
+    let source = db.acquire_base_source(route, 1).unwrap();
+    let kept_file = db.open_file(source, 1, &base(7), true).unwrap();
+    let kept_lookup = db.acquire_lookup(source, 2, &base(8), 1).unwrap();
+    db.release_base_source(source).unwrap();
+    let kept_mount = db.create_native_mount(route, 1).unwrap();
+    let resources = db.resources(Some(route)).unwrap();
+    let counts = resources.counts;
+    // No pin row stands for a descriptor or a lookup reference: the memory
+    // has the handle, lookup owner, mount and root count, root parent, and
+    // three inode custody entries. SQL has no rows for these owners.
+    assert_eq!((counts.owner_rows, counts.owner_details), (0, 0));
+    assert_eq!(resources.open.values(), [1, 1, 1, 0, 1, 3, 0, 0, 1, 0, 0]);
+    assert_eq!(state(&db, route), CleanupState::Live);
     db.check_file(kept_file, true).unwrap();
     db.check_lookup(kept_lookup).unwrap();
     assert_eq!(
         db.native_mount_state(kept_mount).unwrap(),
         NativeMountState::Live
     );
-    assert_eq!(db.resources(Some(bystander)).unwrap().counts, counts);
-    assert_eq!(db.resources(Some(bystander)).unwrap().open, resources.open);
 
-    // Closed, it is held until the last of its owners is released.
-    db.close(bystander).unwrap();
-    assert_eq!(state(&db, bystander), CleanupState::Held);
+    db.close(route).unwrap();
+    assert_eq!(state(&db, route), CleanupState::Held);
     db.close_file(kept_file).unwrap();
-    assert_eq!(state(&db, bystander), CleanupState::Held);
+    assert_eq!(state(&db, route), CleanupState::Held);
     db.release_lookup(kept_lookup).unwrap();
-    assert_eq!(state(&db, bystander), CleanupState::Held);
+    assert_eq!(state(&db, route), CleanupState::Held);
     db.revoke_native_mount(kept_mount).unwrap();
     maintain(&db);
-    assert_eq!(state(&db, bystander), CleanupState::Queued);
-    let left = db.resources(Some(bystander)).unwrap().counts;
+    assert_eq!(state(&db, route), CleanupState::Queued);
+    let left = db.resources(Some(route)).unwrap().counts;
     assert_eq!((left.owner_rows, left.owner_details), (0, 0));
 }
 
@@ -143,15 +142,16 @@ fn the_remaining_sql_custody_probe_is_indexed_and_open_custody_is_memory() {
     let (_temp, db) = engine();
     let plans = db.explain_close_held().unwrap();
     println!("CLOSE_HELD_PLANS {plans:#?}");
+    // Every pin of the database is this Workspace's: the probe asks only
+    // whether one exists, and stops at the first entry of a covering index.
     assert!(
-        plans.iter().any(|plan| plan.starts_with("SEARCH lease ")),
+        plans
+            .iter()
+            .any(|plan| plan.starts_with("SCAN commit_pin USING COVERING INDEX")),
         "{plans:?}"
     );
-    // The statement selects from no table: its one outer row is constant.
     assert!(
-        plans.iter().all(|plan| {
-            (!plan.contains("SCAN") || plan == "SCAN CONSTANT ROW") && !plan.contains("TEMP B-TREE")
-        }),
+        plans.iter().all(|plan| !plan.contains("TEMP B-TREE")),
         "{plans:?}"
     );
 }

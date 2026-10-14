@@ -297,7 +297,7 @@ fn every_window_is_the_ordinary_read_and_takes_the_base_only_for_what_it_inherit
 }
 
 #[test]
-fn a_visit_is_refused_for_another_workspace_and_fenced_by_the_kernel_reference() {
+fn a_visit_is_fenced_by_the_kernel_reference() {
     let b = Bench::new("native-data-fence");
     let mount = b.overlay.create_native_mount(b.route(), 1).unwrap();
     // The root is held by the mount itself; nothing else is yet.
@@ -311,13 +311,6 @@ fn a_visit_is_refused_for_another_workspace_and_fenced_by_the_kernel_reference()
         job.perform(&b.overlay),
         Err(layerfs_overlay::OverlayError::Stale)
     ));
-    // A mount of another Workspace is refused before any job is made.
-    let other = b.overlay.open_workspace([61; 32], [62; 32]).unwrap();
-    let elsewhere = b.overlay.create_native_mount(other, 1).unwrap();
-    assert!(b
-        .workspace
-        .native_data_visit(empty(), elsewhere, 1, None, 0, 4096)
-        .is_err());
     // After revocation every visit of the mount is stale.
     hold(&b, mount, 8, InodeKind::File);
     visit(&b, empty(), mount, 8, 0, 4096);

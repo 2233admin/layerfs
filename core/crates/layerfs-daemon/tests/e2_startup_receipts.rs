@@ -114,7 +114,7 @@ fn failed_schema_attempt_retains_real_sql_and_created_artifact() {
         &out,
         &identity,
         ProfileConfig {
-            max_pages: Some(32),
+            max_pages: Some(24),
             ..Default::default()
         },
         OwnerConfig::default(),

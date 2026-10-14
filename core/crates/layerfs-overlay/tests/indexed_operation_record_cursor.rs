@@ -64,7 +64,7 @@ fn sealed_pass_preserves_all_records_across_windows_and_exact_prefixes() {
         .explain_indexed_operation_record(scope, key(9, 63), key(9, 63).key)
         .unwrap();
     assert!(plans.iter().any(|p| p.starts_with("keys-after:")
-        && p.contains("SEARCH indexed_operation_record USING PRIMARY KEY")
+        && p.contains("SEARCH commit_record USING PRIMARY KEY")
         && p.contains("key>?")));
     assert!(plans.iter().any(|p| p.starts_with("keys-after-vm:")));
     assert!(!plans.iter().any(|p| p.contains("USE TEMP B-TREE")));

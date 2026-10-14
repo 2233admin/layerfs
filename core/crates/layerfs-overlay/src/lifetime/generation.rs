@@ -27,7 +27,7 @@ impl Overlay {
                 &[&capture.route.ns, &root.as_slice(), &capture.generation.0],
                 48,
             )?;
-            self.enqueue(capture.route.ns,crate::maintenance::RETIRE,0,capture.generation.0)?;
+            self.enqueue(crate::maintenance::RETIRE,0,capture.generation.0)?;
             self.wake_orphan_sources(capture.route.ns,capture.generation.0)?;
             Ok(())
         })
@@ -53,12 +53,7 @@ impl Overlay {
         self.query(
             StatementKind::Capture,
             sql::DIRECTORY_ENTRY_CAPTURE,
-            &[
-                &capture.route.ns,
-                &capture.generation.0,
-                &integer(parent)?,
-                &name,
-            ],
+            &[&capture.generation.0, &integer(parent)?, &name],
             24 + name.len() as u64,
             |row| {
                 Ok(crate::DirectoryEntry {
@@ -82,12 +77,7 @@ impl Overlay {
         self.query(
             StatementKind::Explain,
             &format!("EXPLAIN QUERY PLAN {}", sql::DIRECTORY_ENTRY_CAPTURE),
-            &[
-                &capture.route.ns,
-                &capture.generation.0,
-                &0_i64,
-                &&[] as &dyn rusqlite::ToSql,
-            ],
+            &[&capture.generation.0, &0_i64, &&[] as &dyn rusqlite::ToSql],
             24,
             |row| row.get(3),
         )
@@ -164,7 +154,7 @@ impl Overlay {
         self.query(
             StatementKind::Capture,
             sql::INODE_CAPTURE,
-            &[&capture.route.ns, &capture.generation.0, &integer(after)?],
+            &[&capture.generation.0, &integer(after)?],
             24,
             inode::decode,
         )
@@ -186,7 +176,7 @@ impl Overlay {
         self.query(
             StatementKind::Explain,
             &format!("EXPLAIN QUERY PLAN {}", sql::INODE_CAPTURE),
-            &[&capture.route.ns, &capture.generation.0, &0_i64],
+            &[&capture.generation.0, &0_i64],
             24,
             |r| r.get(3),
         )
@@ -197,12 +187,7 @@ impl Overlay {
         self.query(
             StatementKind::Explain,
             &format!("EXPLAIN QUERY PLAN {}", sql::INODE_LOOKUP),
-            &[
-                &route.ns,
-                &integer(serial)?,
-                &state.active.0,
-                &state.installed,
-            ],
+            &[&integer(serial)?, &state.active.0, &state.installed],
             32,
             |r| r.get(3),
         )

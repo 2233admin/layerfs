@@ -219,30 +219,11 @@ fn every_visit_statement_is_an_indexed_seek() {
 }
 
 #[test]
-fn a_descriptor_of_another_mount_or_inode_and_a_missing_reference_are_stale() {
+fn a_descriptor_of_another_inode_and_a_missing_reference_are_stale() {
     let w = world();
     let file = w.open(w.mount, 1, 50, true);
-    let other = w.db.open_workspace([33; 32], [34; 32]).unwrap();
-    let elsewhere = w.db.create_native_mount(other, 1).unwrap();
-    let theirs = w.open(elsewhere, 2, 50, true);
-    assert_ne!(file.owner_id(), theirs.owner_id());
 
-    let before = (w.snapshot(w.route), w.snapshot(other));
-    // This mount's descriptor through the other mount, and the reverse.
-    for (mount, handle) in [(elsewhere, file.owner_id()), (w.mount, theirs.owner_id())] {
-        assert!(matches!(
-            w.grow(mount, 50, Some(handle), None),
-            Err(OverlayError::Stale)
-        ));
-        assert!(matches!(
-            w.read(mount, 50, Some(handle)),
-            OverlayError::Stale
-        ));
-        assert!(matches!(
-            w.db.close_native_file(mount, 50, handle),
-            Err(OverlayError::Stale)
-        ));
-    }
+    let before = w.snapshot(w.route);
     // The descriptor on another inode, and a handle that was never issued.
     for (serial, handle) in [(1, file.owner_id()), (50, u64::MAX >> 1)] {
         assert!(matches!(
@@ -260,7 +241,7 @@ fn a_descriptor_of_another_mount_or_inode_and_a_missing_reference_are_stale() {
         Err(OverlayError::Stale)
     ));
     assert!(matches!(w.read(w.mount, 77, None), OverlayError::Stale));
-    assert_eq!((w.snapshot(w.route), w.snapshot(other)), before);
+    assert_eq!(w.snapshot(w.route), before);
 
     // The kernel forgets the created inode while its descriptor stays open:
     // a visit by that inode is stale, a visit by the descriptor is not.

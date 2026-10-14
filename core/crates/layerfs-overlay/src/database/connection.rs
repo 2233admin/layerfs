@@ -19,6 +19,9 @@ pub struct Overlay {
     pub(crate) work: RefCell<DatabaseWork>,
     pub(crate) payload_work: Cell<crate::PayloadWork>,
     pub(crate) quarantined: Cell<bool>,
+    /// The namespace of this database's one Workspace; zero until it is
+    /// opened. A database is created empty and is never reopened.
+    pub(crate) namespace: Cell<i64>,
     /// Connection-local readiness hints, never namespace/owner data. False is
     /// established only by an exact empty ready query; enqueue/release marks
     /// possible work. A rolled-back enqueue can leave only a false positive.

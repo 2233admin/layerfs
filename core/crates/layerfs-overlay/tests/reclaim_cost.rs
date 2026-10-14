@@ -64,13 +64,13 @@ fn terminal_close_never_visits_the_workspace_population() {
 fn value_reads(raw: &rusqlite::Connection, statement: &str) -> Vec<bool> {
     let root: i64 = raw
         .query_row(
-            "SELECT rootpage FROM sqlite_schema WHERE name='payload'",
+            "SELECT rootpage FROM sqlite_schema WHERE name='fs_data'",
             [],
             |row| row.get(0),
         )
         .unwrap();
     let values: Vec<i64> = raw
-        .prepare("SELECT cid FROM pragma_table_info('payload') WHERE name IN('data','validity')")
+        .prepare("SELECT cid FROM pragma_table_info('fs_data') WHERE name IN('data','validity')")
         .unwrap()
         .query_map([], |row| row.get(0))
         .unwrap()
@@ -132,21 +132,21 @@ fn deleting_payload_rows_reads_their_lengths_and_never_their_bytes() {
     // The statements that delete payload rows: by row, by a range of one
     // file's cells, and live stale-cell ranges.
     for statement in [
-        "DELETE FROM payload WHERE rowid=1",
-        "DELETE FROM payload WHERE ns=1 AND serial=7 AND gen=-1 AND cell_offset>=0 AND cell_offset<32768",
+        "DELETE FROM fs_data WHERE rowid=1",
+        "DELETE FROM fs_data WHERE inode=7 AND generation=-1 AND cell_offset>=0 AND cell_offset<32768",
     ] {
         let reads = value_reads(&raw, statement);
         // The trigger takes both lengths; nothing loads a value.
         assert_eq!(reads, [true, true], "{statement}");
     }
     // The same listing does see a statement that loads a value.
-    assert!(value_reads(&raw, "SELECT data FROM payload WHERE rowid=1").contains(&false));
+    assert!(value_reads(&raw, "SELECT data FROM fs_data WHERE rowid=1").contains(&false));
     // The counts follow the rows: deleting one row of eight cells.
-    raw.execute("DELETE FROM payload WHERE rowid=1", [])
+    raw.execute("DELETE FROM fs_data WHERE rowid=1", [])
         .unwrap();
     let left: (i64, i64) = raw
         .query_row(
-            "SELECT payload_cells,payload_bytes FROM accounting WHERE ns=1",
+            "SELECT payload_cells,payload_bytes FROM accounting",
             [],
             |row| Ok((row.get(0)?, row.get(1)?)),
         )
@@ -155,14 +155,14 @@ fn deleting_payload_rows_reads_their_lengths_and_never_their_bytes() {
     // The trigger this one replaced named the old values, and the delete
     // then loaded both in full.
     raw.execute_batch(
-        "DROP TRIGGER payload_account_delete;
-        CREATE TRIGGER payload_account_delete AFTER DELETE ON payload BEGIN
-            UPDATE accounting SET payload_cells=payload_cells-1,payload_bytes=payload_bytes-(length(OLD.data)+ifnull(length(OLD.validity),0)) WHERE ns=OLD.ns;
+        "DROP TRIGGER fs_data_account_delete;
+        CREATE TRIGGER fs_data_account_delete AFTER DELETE ON fs_data BEGIN
+            UPDATE accounting SET payload_cells=payload_cells-1,payload_bytes=payload_bytes-(length(OLD.data)+ifnull(length(OLD.validity),0)) WHERE id=1;
         END;",
     )
     .unwrap();
     assert_eq!(
-        value_reads(&raw, "DELETE FROM payload WHERE rowid=2"),
+        value_reads(&raw, "DELETE FROM fs_data WHERE rowid=2"),
         [false, false]
     );
 }

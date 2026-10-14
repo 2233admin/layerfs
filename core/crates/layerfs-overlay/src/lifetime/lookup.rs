@@ -25,7 +25,7 @@ impl Overlay {
                 return Err(OverlayError::Closed);
             }
             let current = self
-                .inode_at(source.route, base.serial, state.active, state.installed)?
+                .inode_at(base.serial, state.active, state.installed)?
                 .unwrap_or_else(|| base.clone());
             if current.nlink == 0
                 && !(current.kind == InodeKind::Directory && current.serial == root)

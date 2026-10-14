@@ -8,8 +8,8 @@ use crate::{
 /// One page of a layer's payload rows: `PAGE.cells` rows at most, so fewer
 /// rows are all the layer holds.
 const LAYER_PAYLOAD_PAGE: &str =
-    "SELECT cell_offset,length(data)+ifnull(length(validity),0) FROM payload
-            WHERE ns=?1 AND serial=?2 AND gen=?3 ORDER BY cell_offset LIMIT 14";
+    "SELECT cell_offset,length(data)+ifnull(length(validity),0) FROM fs_data
+            WHERE inode=?1 AND generation=?2 ORDER BY cell_offset LIMIT 14";
 const _: () = assert!(PAGE.cells == 14);
 /// Step calls one releasing job makes: two for the orphan and two for each
 /// of its at most two lower layers.
@@ -142,19 +142,19 @@ impl Overlay {
             // An earlier descriptor or reader may have queued the orphan.
             self.finish_item(&item(ORPHAN, DOMAIN))?;
         } else {
-            self.enqueue(ns, ORPHAN, serial, DOMAIN)?;
-            self.wake_orphan(ns, serial)?;
+            self.enqueue(ORPHAN, serial, DOMAIN)?;
+            self.wake_orphan(serial)?;
             left = true;
         }
         for (gen, next, _) in &layers[..released] {
             match next {
                 Next::Done => {}
                 Next::Held => {
-                    self.enqueue(ns, SERIAL_RETIRE, serial, *gen)?;
+                    self.enqueue(SERIAL_RETIRE, serial, *gen)?;
                     self.hold_item(&item(SERIAL_RETIRE, *gen))?;
                 }
                 _ => {
-                    self.queue_retirement(ns, serial, *gen)?;
+                    self.queue_retirement(serial, *gen)?;
                     left = true;
                 }
             }
@@ -169,7 +169,7 @@ impl Overlay {
     /// queued, the item advanced, parked or finished.
     fn settle_item(&self, item: &Item, step: Step) -> OverlayResult<(u64, u64, bool)> {
         if let Some(gen) = step.released {
-            self.queue_retirement(item.ns, item.resource, gen)?;
+            self.queue_retirement(item.resource, gen)?;
         }
         match step.next {
             Next::Ready => {}
@@ -182,12 +182,12 @@ impl Overlay {
     /// A generation cursor that already skipped this independent source
     /// does not restart: the layer an orphan released is retired by its own
     /// ready item.
-    fn queue_retirement(&self, ns: i64, serial: i64, gen: i64) -> OverlayResult<()> {
-        self.enqueue(ns, SERIAL_RETIRE, serial, gen)?;
+    fn queue_retirement(&self, serial: i64, gen: i64) -> OverlayResult<()> {
+        self.enqueue(SERIAL_RETIRE, serial, gen)?;
         self.execute(
             StatementKind::Reclaim,
-            "UPDATE maintenance SET ready=1 WHERE ns=?1 AND kind=?2 AND resource=?3 AND target=?4",
-            &[&ns, &SERIAL_RETIRE, &serial, &gen],
+            "UPDATE cleanup_task SET ready=1 WHERE kind=?1 AND resource=?2 AND target=?3",
+            &[&SERIAL_RETIRE, &serial, &gen],
             32,
         )?;
         Ok(())
@@ -238,13 +238,13 @@ impl Overlay {
     ) -> OverlayResult<Step> {
         if orphan.top > orphan.floor {
             let lower = self
-                .layers(ns, serial, orphan.top, orphan.floor)?
+                .layers(serial, orphan.top, orphan.floor)?
                 .first()
                 .copied();
             if let Some(lower) = lower {
                 let state = self.state(self.route_for_ns(ns)?)?;
                 if state.captured.is_some_and(|g| g.0 == lower.gen)
-                    || self.generation_held(ns, lower.gen)?
+                    || self.generation_held(lower.gen)?
                 {
                     let mut state = self.open.borrow_mut();
                     let key = (ns, lower.gen, serial);
@@ -254,22 +254,22 @@ impl Overlay {
                     }
                     return Ok(step(0, 0, Next::Held));
                 }
-                let upper = self.orphan_layer(ns, serial)?;
-                let cell=self.query(StatementKind::Reclaim,"SELECT cell_offset FROM payload
-                    WHERE ns=?1 AND serial=?2 AND gen=?3 AND cell_offset>?4 ORDER BY cell_offset LIMIT 1",
-                    &[&ns,&serial,&lower.gen,&if cursor.0==lower.gen {cursor.1}else{-1}],32,|r|r.get::<_,i64>(0))?.pop();
+                let upper = self.orphan_layer(serial)?;
+                let cell=self.query(StatementKind::Reclaim,"SELECT cell_offset FROM fs_data
+                    WHERE inode=?1 AND generation=?2 AND cell_offset>?3 ORDER BY cell_offset LIMIT 1",
+                    &[&serial,&lower.gen,&if cursor.0==lower.gen {cursor.1}else{-1}],32,|r|r.get::<_,i64>(0))?.pop();
                 if let Some(cell) = cell {
                     // Snapshot owners are fenced above: the row moves into
                     // the orphan's domain, keeping its physical custody.
-                    let bytes = self.transfer_row(ns, serial, &lower, &upper, cell)?;
+                    let bytes = self.transfer_row(serial, &lower, &upper, cell)?;
                     return Ok(step(1, bytes, Next::From(lower.gen, cell)));
                 }
                 // Its cells have moved: its pieces follow, one step each.
-                if lower.referenced && self.transfer_piece(ns, serial, &lower, &upper)? {
+                if lower.referenced && self.transfer_piece(serial, &lower, &upper)? {
                     return Ok(step(1, 0, Next::Ready));
                 }
-                self.execute(StatementKind::Inode,"UPDATE inode SET inherited_cutoff=min(inherited_cutoff,?3) WHERE ns=?1 AND serial=?2 AND gen=-1",
-                    &[&ns,&serial,&integer(lower.cutoff)?],24)?;
+                self.execute(StatementKind::Inode,"UPDATE fs_inode SET inherited_cutoff=min(inherited_cutoff,?2) WHERE inode=?1 AND generation=-1",
+                    &[&serial,&integer(lower.cutoff)?],24)?;
                 self.release_orphan_layer(
                     ns,
                     serial,
@@ -306,7 +306,7 @@ impl Overlay {
         // only already-retired source rows; future installs own remaining ones.
         if orphan.top > orphan.floor {
             let lower = self
-                .layers(ns, serial, orphan.top, orphan.floor)?
+                .layers(serial, orphan.top, orphan.floor)?
                 .first()
                 .copied();
             if let Some(lower) = lower {
@@ -321,9 +321,9 @@ impl Overlay {
         }
         let rows = self.query(
             StatementKind::Reclaim,
-            "SELECT cell_offset,length(data)+ifnull(length(validity),0) FROM payload
-            WHERE ns=?1 AND serial=?2 AND gen=-1 ORDER BY cell_offset LIMIT 14",
-            &[&ns, &serial],
+            "SELECT cell_offset,length(data)+ifnull(length(validity),0) FROM fs_data
+            WHERE inode=?1 AND generation=-1 ORDER BY cell_offset LIMIT 14",
+            &[&serial],
             16,
             |r| Ok((r.get::<_, i64>(0)?, crate::db::unsigned(r, 1)?)),
         )?;
@@ -334,7 +334,7 @@ impl Overlay {
                 self.execute(
                     StatementKind::Reclaim,
                     sql::CELL_DROP,
-                    &[&ns, &serial, &DOMAIN, cell],
+                    &[&serial, &DOMAIN, cell],
                     32,
                 )?;
                 bytes += size;
@@ -342,15 +342,15 @@ impl Overlay {
             return Ok(dropped(page, fit, bytes));
         }
         if self.pieces_seen.get() {
-            let pieces = self.drop_pieces(ns, serial, DOMAIN, page.rows)?;
+            let pieces = self.drop_pieces(serial, DOMAIN, page.rows)?;
             if pieces != 0 {
                 return Ok(step(pieces, 0, Next::Ready));
             }
         }
         let mut steps = self.query(
             StatementKind::Reclaim,
-            "SELECT depth FROM shrink WHERE ns=?1 AND serial=?2 AND gen=-1 ORDER BY depth LIMIT 64",
-            &[&ns, &serial],
+            "SELECT depth FROM fs_truncate WHERE inode=?1 AND generation=-1 ORDER BY depth LIMIT 64",
+            &[ &serial],
             16,
             |r| r.get::<_, i64>(0),
         )?;
@@ -359,8 +359,8 @@ impl Overlay {
             for depth in &steps {
                 self.execute(
                     StatementKind::Reclaim,
-                    "DELETE FROM shrink WHERE ns=?1 AND serial=?2 AND gen=-1 AND depth=?3",
-                    &[&ns, &serial, depth],
+                    "DELETE FROM fs_truncate WHERE inode=?1 AND generation=-1 AND depth=?2",
+                    &[&serial, depth],
                     24,
                 )?;
             }
@@ -368,8 +368,8 @@ impl Overlay {
         }
         self.execute(
             StatementKind::Reclaim,
-            "DELETE FROM inode WHERE ns=?1 AND serial=?2 AND gen=-1",
-            &[&ns, &serial],
+            "DELETE FROM fs_inode WHERE inode=?1 AND generation=-1",
+            &[&serial],
             16,
         )?;
         {
@@ -402,7 +402,7 @@ impl Overlay {
         page: Page,
         known: &mut Retiring,
     ) -> OverlayResult<Step> {
-        if (!known.free && self.generation_held(ns, gen)?)
+        if (!known.free && self.generation_held(gen)?)
             || match orphan {
                 Some(orphan) => orphan.holds(gen),
                 None => self.orphan_holds(ns, serial, gen)?,
@@ -416,7 +416,7 @@ impl Overlay {
             false => self.query(
                 StatementKind::Reclaim,
                 LAYER_PAYLOAD_PAGE,
-                &[&ns, &serial, &gen],
+                &[&serial, &gen],
                 24,
                 |r| Ok((r.get::<_, i64>(0)?, crate::db::unsigned(r, 1)?)),
             )?,
@@ -429,7 +429,7 @@ impl Overlay {
                 self.execute(
                     StatementKind::Reclaim,
                     sql::CELL_DROP,
-                    &[&ns, &serial, &gen, cell],
+                    &[&serial, &gen, cell],
                     32,
                 )?;
                 bytes += size;
@@ -437,15 +437,15 @@ impl Overlay {
             return Ok(dropped(page, fit, bytes));
         }
         if self.pieces_seen.get() {
-            let pieces = self.drop_pieces(ns, serial, gen, page.rows)?;
+            let pieces = self.drop_pieces(serial, gen, page.rows)?;
             if pieces != 0 {
                 return Ok(step(pieces, 0, Next::Ready));
             }
         }
         let mut steps = self.query(
             StatementKind::Reclaim,
-            "SELECT depth FROM shrink WHERE ns=?1 AND serial=?2 AND gen=?3 ORDER BY depth LIMIT 64",
-            &[&ns, &serial, &gen],
+            "SELECT depth FROM fs_truncate WHERE inode=?1 AND generation=?2 ORDER BY depth LIMIT 64",
+            &[ &serial, &gen],
             24,
             |r| r.get::<_, i64>(0),
         )?;
@@ -454,8 +454,8 @@ impl Overlay {
             for depth in &steps {
                 self.execute(
                     StatementKind::Reclaim,
-                    "DELETE FROM shrink WHERE ns=?1 AND serial=?2 AND gen=?3 AND depth=?4",
-                    &[&ns, &serial, &gen, depth],
+                    "DELETE FROM fs_truncate WHERE inode=?1 AND generation=?2 AND depth=?3",
+                    &[&serial, &gen, depth],
                     32,
                 )?;
             }
@@ -479,18 +479,18 @@ impl Overlay {
         if removable {
             self.execute(
                 StatementKind::Reclaim,
-                "DELETE FROM inode WHERE ns=?1 AND serial=?2 AND gen=?3",
-                &[&ns, &serial, &gen],
+                "DELETE FROM fs_inode WHERE inode=?1 AND generation=?2",
+                &[&serial, &gen],
                 24,
             )?;
         }
         Ok(step(1, 0, Next::Done))
     }
-    pub(crate) fn wake_orphan(&self, ns: i64, serial: i64) -> OverlayResult<()> {
+    pub(crate) fn wake_orphan(&self, serial: i64) -> OverlayResult<()> {
         let changed = self.execute(
             StatementKind::Reclaim,
-            "UPDATE maintenance SET ready=1 WHERE ns=?1 AND kind=?2 AND resource=?3 AND target=-1",
-            &[&ns, &ORPHAN, &serial],
+            "UPDATE cleanup_task SET ready=1 WHERE kind=?1 AND resource=?2 AND target=-1",
+            &[&ORPHAN, &serial],
             24,
         )?;
         if changed != 0 {

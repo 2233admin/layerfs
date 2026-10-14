@@ -30,12 +30,12 @@ impl Overlay {
     }
     /// The orphan-domain row of one serial. This engine holds no orphan
     /// while `orphan_seen` is false, so nothing is read then.
-    pub(crate) fn orphan_inode(&self, ns: i64, serial: i64) -> OverlayResult<Option<Inode>> {
+    pub(crate) fn orphan_inode(&self, serial: i64) -> OverlayResult<Option<Inode>> {
         if !self.orphan_seen.get() {
             return Ok(None);
         }
-        self.query(StatementKind::Inode,"SELECT serial,kind,mode,mtime_seconds,mtime_nanoseconds,nlink,size,inherited_cutoff,born,entries,subdirs
-            FROM inode WHERE ns=?1 AND serial=?2 AND gen=-1",&[&ns,&serial],16,inode::decode).map(|mut rows|rows.pop())
+        self.query(StatementKind::Inode,"SELECT inode,kind,mode,mtime_seconds,mtime_nanoseconds,nlink,size,inherited_cutoff,born,entries,subdirs
+            FROM fs_inode WHERE inode=?1 AND generation=-1",&[&serial],16,inode::decode).map(|mut rows|rows.pop())
     }
     /// After a transaction deleted orphan rows: the engine's exact count of
     /// them, kept by the orphan triggers in accounting namespace zero. At
@@ -74,7 +74,7 @@ impl Overlay {
         let (holders, users) = (refs.total(), refs.opens + refs.readers);
         if holders == 0 {
             // Nothing holds the file: its active layer retires directly.
-            return self.enqueue(route.ns, SERIAL_RETIRE, serial, state.active.0);
+            return self.enqueue(SERIAL_RETIRE, serial, state.active.0);
         }
         // The orphan holds its lower layers, whose retirement is queued by
         // the step that releases each of them.
@@ -101,7 +101,6 @@ impl Overlay {
             StatementKind::Inode,
             sql::INODE_INSERT,
             &[
-                &route.ns,
                 &serial,
                 &DOMAIN,
                 &(inode.kind as i64),
@@ -124,12 +123,12 @@ impl Overlay {
         // alone nothing is queued: the last lookup's release queues the
         // orphan's item and an earlier open or read queues it then.
         if users != 0 {
-            self.enqueue(route.ns, ORPHAN, serial, DOMAIN)?;
+            self.enqueue(ORPHAN, serial, DOMAIN)?;
         }
         Ok(())
     }
-    pub(crate) fn orphan_layer(&self, ns: i64, serial: i64) -> OverlayResult<Layer> {
-        self.layers(ns, serial, DOMAIN, DOMAIN - 1)?
+    pub(crate) fn orphan_layer(&self, serial: i64) -> OverlayResult<Layer> {
+        self.layers(serial, DOMAIN, DOMAIN - 1)?
             .pop()
             .ok_or(OverlayError::Stale)
     }
@@ -171,22 +170,21 @@ impl Overlay {
         let Some(orphan) = self.orphan(ns, serial)? else {
             return self.source_read(read.source, read.serial, offset, length);
         };
-        self.orphan_read(ns, serial, orphan, offset, length)
+        self.orphan_read(serial, orphan, offset, length)
     }
     pub(crate) fn orphan_read(
         &self,
-        ns: i64,
         serial: i64,
         orphan: Orphan,
         offset: u64,
         length: u32,
     ) -> OverlayResult<Option<LocalRead>> {
-        let mut layers = vec![self.orphan_layer(ns, serial)?];
-        layers.extend(self.layers(ns, serial, orphan.top, orphan.floor)?);
+        let mut layers = vec![self.orphan_layer(serial)?];
+        layers.extend(self.layers(serial, orphan.top, orphan.floor)?);
         if layers.len() > 3 {
             return Err(OverlayError::Invalid("orphan composition invariant"));
         }
-        let mut plan = self.compose_layers(ns, serial, offset, length, layers)?;
+        let mut plan = self.compose_layers(serial, offset, length, layers)?;
         if let Some(ref mut plan) = plan {
             plan.base_root = Some(orphan.root)
         }

@@ -9,13 +9,12 @@ impl Overlay {
     /// retained reader. Diagnostic preparation is separate from measured jobs.
     pub fn explain_captured_run(&self, cursor: CapturedRunCursor) -> OverlayResult<Vec<String>> {
         self.check_captured_reader(cursor.reader())?;
-        let ns = cursor.reader().capture().route().ns;
         let serial = integer(cursor.serial())?;
         let generation = cursor.reader().capture().generation.number();
         let offset = integer(cursor.offset() - cursor.offset() % CELL_BYTES as u64)?;
         let after = integer(cursor.offset() - cursor.offset() % RUN_BYTES as u64)?;
         let size = integer(cursor.logical_size())?;
-        let params: [&dyn rusqlite::ToSql; 6] = [&ns, &serial, &generation, &after, &size, &offset];
+        let params: [&dyn rusqlite::ToSql; 5] = [&serial, &generation, &after, &size, &offset];
         let mut rows = self.query(
             StatementKind::Explain,
             &format!("EXPLAIN QUERY PLAN {}", sql::CAPTURED_CELL_METADATA),
@@ -53,36 +52,32 @@ impl Overlay {
     /// has no plan row: its line is its VM program.
     pub fn explain_pieces(&self, source: crate::BaseSource) -> OverlayResult<Vec<String>> {
         let state = self.source_state(source)?;
-        let (ns, gen, one) = (source.route().ns, state.active.0, 1_i64);
+        let (gen, one) = (state.active.0, 1_i64);
         let root: &[u8] = &[0; 32];
         let mut plans = Vec::new();
         for (label, statement, params) in [
             (
                 "piece-cover",
                 sql::PIECE_COVER,
-                vec![&ns as &dyn rusqlite::ToSql, &gen, &one, &one],
+                vec![&gen as &dyn rusqlite::ToSql, &one, &one],
             ),
             (
                 "piece-window",
                 sql::PIECE_WINDOW,
-                vec![&ns, &gen, &one, &one, &one],
+                vec![&gen, &one, &one, &one],
             ),
             (
                 "piece-length",
                 sql::PIECE_LENGTH,
-                vec![&ns, &gen, &one, &one, &one],
+                vec![&gen, &one, &one, &one],
             ),
             (
                 "pieces-take",
                 sql::PIECES_TAKE,
-                vec![&ns, &gen, &one, &one, &one],
+                vec![&gen, &one, &one, &one],
             ),
-            ("piece-cut", sql::PIECE_CUT, vec![&ns, &gen, &one, &one]),
-            (
-                "layer-referenced",
-                sql::LAYER_REFERENCED,
-                vec![&ns, &one, &gen],
-            ),
+            ("piece-cut", sql::PIECE_CUT, vec![&gen, &one, &one]),
+            ("layer-referenced", sql::LAYER_REFERENCED, vec![&one, &gen]),
         ] {
             plans.extend(self.query(
                 StatementKind::Explain,
@@ -92,7 +87,7 @@ impl Overlay {
                 |row| Ok(format!("{label}: {}", row.get::<_, String>(3)?)),
             )?);
         }
-        let put: [&dyn rusqlite::ToSql; 8] = [&ns, &gen, &one, &0_i64, &one, &0_i64, &root, &0_i64];
+        let put: [&dyn rusqlite::ToSql; 7] = [&gen, &one, &0_i64, &one, &0_i64, &root, &0_i64];
         plans.push(self.explain_program("piece-put", sql::PIECE_PUT, &put)?);
         Ok(plans)
     }

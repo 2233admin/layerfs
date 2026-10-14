@@ -1,8 +1,6 @@
-//! Backed operation records and exact owner references, all namespace-qualified.
+//! Exact independently keyed owner references.
 use crate::{
-    db::{integer, unsigned},
-    sql, Lease, LeaseKind, OperationRecord, Overlay, OverlayError, OverlayResult, Route,
-    StatementKind, OPERATION_RECORD_BYTES,
+    db::integer, Lease, LeaseKind, Overlay, OverlayError, OverlayResult, Route, StatementKind,
 };
 
 impl Overlay {
@@ -27,8 +25,8 @@ impl Overlay {
             self.live(route)?;
             self.execute(
                 StatementKind::Lease,
-                "INSERT INTO lease VALUES(?1,?2,?3,?4)",
-                &[&route.ns, &(lease.kind as i64), &owner, &resource],
+                "INSERT INTO commit_pin VALUES(?1,?2,?3)",
+                &[&(lease.kind as i64), &owner, &resource],
                 32,
             )?;
             if lease.resource != 0 {
@@ -54,9 +52,8 @@ impl Overlay {
             self.state(route)?;
             let changed = self.execute(
                 StatementKind::Lease,
-                "DELETE FROM lease WHERE ns=?1 AND kind=?2 AND owner=?3 AND resource=?4",
+                "DELETE FROM commit_pin WHERE kind=?1 AND holder=?2 AND resource=?3",
                 &[
-                    &route.ns,
                     &(lease.kind as i64),
                     &integer(lease.owner)?,
                     &integer(lease.resource)?,
@@ -72,87 +69,7 @@ impl Overlay {
             if lease.kind == LeaseKind::Reader {
                 self.wake_generation(route.ns, lease.resource)?;
             }
-            if lease.kind == LeaseKind::Operation && lease.resource == 0 {
-                self.enqueue(
-                    route.ns,
-                    crate::maintenance::OPERATION_RECORD,
-                    integer(lease.owner)?,
-                    -2,
-                )?;
-            }
             Ok(())
         })
-    }
-    pub(crate) fn operation(&self, route: Route, owner: u64) -> OverlayResult<()> {
-        self.live(route)?;
-        if self
-            .query(
-                StatementKind::Lease,
-                "SELECT 1 FROM lease WHERE ns=?1 AND kind=?2 AND owner=?3 AND resource=0",
-                &[&route.ns, &(LeaseKind::Operation as i64), &integer(owner)?],
-                24,
-                |r| r.get::<_, i64>(0),
-            )?
-            .is_empty()
-        {
-            return Err(OverlayError::Missing);
-        }
-        Ok(())
-    }
-    /// Stores one bounded operation_record record under an existing operation owner.
-    pub fn put_operation_record(
-        &self,
-        route: Route,
-        operation: u64,
-        record: &OperationRecord,
-    ) -> OverlayResult<()> {
-        if record.value.len() > OPERATION_RECORD_BYTES {
-            return Err(OverlayError::Invalid("operation_record window"));
-        }
-        self.atomic(|| {
-            self.operation(route, operation)?;
-            self.execute(
-                StatementKind::OperationRecord,
-                "INSERT INTO operation_record VALUES(?1,?2,?3,?4,?5)
-                 ON CONFLICT(ns,operation,kind,key) DO UPDATE SET value=excluded.value",
-                &[
-                    &route.ns,
-                    &integer(operation)?,
-                    &i64::from(record.kind),
-                    &integer(record.key)?,
-                    &record.value,
-                ],
-                32 + record.value.len() as u64,
-            )?;
-            Ok(())
-        })
-    }
-    /// Fixed keyset window; caller continues after its last returned key.
-    pub fn operation_record_page(
-        &self,
-        route: Route,
-        operation: u64,
-        kind: u32,
-        after: Option<u64>,
-    ) -> OverlayResult<Vec<OperationRecord>> {
-        self.operation(route, operation)?;
-        self.query(
-            StatementKind::OperationRecord,
-            sql::OPERATION_RECORD_PAGE,
-            &[
-                &route.ns,
-                &integer(operation)?,
-                &i64::from(kind),
-                &after.map(integer).transpose()?.unwrap_or(-1),
-            ],
-            32,
-            |r| {
-                Ok(OperationRecord {
-                    kind: r.get(0)?,
-                    key: unsigned(r, 1)?,
-                    value: r.get(2)?,
-                })
-            },
-        )
     }
 }

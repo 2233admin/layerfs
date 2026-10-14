@@ -86,28 +86,24 @@ impl Overlay {
     /// Latest local inode at the current view; None delegates to immutable base.
     pub fn inode(&self, route: Route, serial: u64) -> OverlayResult<Option<Inode>> {
         let state = self.live(route)?;
-        self.inode_at(route, serial, state.active, state.installed)
+        self.inode_at(serial, state.active, state.installed)
     }
     pub(crate) fn inode_at(
         &self,
-        route: Route,
         serial: u64,
         gen: Generation,
         installed: i64,
     ) -> OverlayResult<Option<Inode>> {
         let serial = integer(serial)?;
-        if let Some(orphan) = self.orphan_inode(route.ns, serial)? {
+        if let Some(orphan) = self.orphan_inode(serial)? {
             return Ok(Some(orphan));
         }
-        Ok(self
-            .local_row(route.ns, serial, gen, installed)?
-            .map(|row| row.inode))
+        Ok(self.local_row(serial, gen, installed)?.map(|row| row.inode))
     }
     /// The latest local row of one serial within `(installed, gen]`, with
     /// the generation that holds it and its payload-layer columns.
     pub(crate) fn local_row(
         &self,
-        ns: i64,
         serial: i64,
         gen: Generation,
         installed: i64,
@@ -116,7 +112,7 @@ impl Overlay {
             .query(
                 StatementKind::Inode,
                 sql::INODE_LOOKUP,
-                &[&ns, &serial, &gen.0, &installed],
+                &[&serial, &gen.0, &installed],
                 32,
                 |row| local_row_at(row, 0),
             )?
@@ -190,7 +186,7 @@ impl Overlay {
                 .query(
                     StatementKind::Inode,
                     sql::LAYER_ACTIVE,
-                    &[&route.ns, &serial, &gen],
+                    &[&serial, &gen],
                     24,
                     |r| {
                         Ok((
@@ -207,7 +203,7 @@ impl Overlay {
                         .query(
                             StatementKind::Inode,
                             sql::LAYER_LOWER,
-                            &[&route.ns, &serial, &gen, &state.installed],
+                            &[&serial, &gen, &state.installed],
                             32,
                             |r| unsigned(r, 0),
                         )?
@@ -229,7 +225,7 @@ impl Overlay {
             sequence,
         };
         if inode.kind == InodeKind::File && inode.size < layer.size {
-            self.shrink(route.ns, serial, &mut layer, inode.size)?;
+            self.shrink(serial, &mut layer, inode.size)?;
         }
         layer.size = inode.size;
         let changed = self.execute(
@@ -240,7 +236,6 @@ impl Overlay {
                 sql::INODE_INSERT
             },
             &[
-                &route.ns,
                 &serial,
                 &gen,
                 &(inode.kind as i64),
@@ -270,7 +265,6 @@ impl Overlay {
     /// `(floor, top]`, in one seek of the name's rows.
     pub(crate) fn name_layers(
         &self,
-        ns: i64,
         parent: i64,
         name: &[u8],
         top: i64,
@@ -280,7 +274,7 @@ impl Overlay {
             .query(
                 StatementKind::DirectoryEntry,
                 sql::NAME_LAYERS,
-                &[&ns, &parent, &name, &top, &floor],
+                &[&parent, &name, &top, &floor],
                 32 + name.len() as u64,
                 |row| {
                     Ok((
@@ -305,7 +299,6 @@ impl Overlay {
     /// the statement runs for the job's first read of the name only.
     pub(crate) fn name_layers_seen(
         &self,
-        ns: i64,
         state: &WorkspaceState,
         parent: i64,
         name: &[u8],
@@ -314,7 +307,7 @@ impl Overlay {
         if let Some(layers) = seen.and_then(|seen| seen.name(parent, name)) {
             return Ok(layers);
         }
-        let layers = self.name_layers(ns, parent, name, state.active.0, state.installed)?;
+        let layers = self.name_layers(parent, name, state.active.0, state.installed)?;
         if let Some(seen) = seen {
             seen.record_name(parent, name, layers);
         }
@@ -328,13 +321,12 @@ impl Overlay {
     pub(crate) fn name_inheritance(
         &self,
         state: &WorkspaceState,
-        ns: i64,
         parent: i64,
         name: &[u8],
         base: bool,
         seen: Option<&JobRows>,
     ) -> OverlayResult<(bool, bool)> {
-        let layers = self.name_layers_seen(ns, state, parent, name, seen)?;
+        let layers = self.name_layers_seen(state, parent, name, seen)?;
         Ok(match layers.active_inherited {
             Some(inherited) => (false, inherited),
             None => (true, layers.lower.map_or(base, |serial| serial.is_some())),
@@ -344,7 +336,6 @@ impl Overlay {
     /// with the inheritance its job computed once.
     pub(crate) fn bind_name(
         &self,
-        ns: i64,
         state: &WorkspaceState,
         parent: i64,
         name: &[u8],
@@ -354,7 +345,7 @@ impl Overlay {
         self.execute(
             StatementKind::DirectoryEntry,
             sql::DIRECTORY_ENTRY_PUT,
-            &[&ns, &parent, &name, &state.active.0, &target, &inherited],
+            &[&parent, &name, &state.active.0, &target, &inherited],
             33 + name.len() as u64,
         )?;
         Ok(())
@@ -363,16 +354,14 @@ impl Overlay {
     /// transaction; true when the active generation gained a row.
     pub(crate) fn put_directory_entry(
         &self,
-        route: Route,
         state: &WorkspaceState,
         parent: i64,
         name: &[u8],
         target: Option<i64>,
         base: bool,
     ) -> OverlayResult<bool> {
-        let (added, inherited) =
-            self.name_inheritance(state, route.ns, parent, name, base, None)?;
-        self.bind_name(route.ns, state, parent, name, target, inherited)?;
+        let (added, inherited) = self.name_inheritance(state, parent, name, base, None)?;
+        self.bind_name(state, parent, name, target, inherited)?;
         Ok(added)
     }
     /// One reply-attempt ticket and revision for a whole atomic job.
@@ -432,7 +421,6 @@ impl Overlay {
             let mut directory_entries = 0;
             if let (Some(name), Some((parent, target))) = (name, key) {
                 directory_entries = i64::from(self.put_directory_entry(
-                    route,
                     &state,
                     parent,
                     &name.name,
@@ -441,7 +429,7 @@ impl Overlay {
                 )?);
             }
             if let Some(cell) = cell {
-                self.put_cell(route, integer(inode.serial)?, &layer, cell)?;
+                self.put_cell(integer(inode.serial)?, &layer, cell)?;
             }
             if inode.kind == InodeKind::File {
                 self.detach_orphan(route, &state, inode)?;
@@ -462,7 +450,7 @@ impl Overlay {
             .query(
                 StatementKind::DirectoryEntry,
                 sql::DIRECTORY_ENTRY_LOOKUP,
-                &[&route.ns, &parent, &name, &state.active.0, &state.installed],
+                &[&parent, &name, &state.active.0, &state.installed],
                 24 + name.len() as u64,
                 |r| {
                     Ok(DirectoryEntry {

@@ -11,7 +11,7 @@ pub enum CleanupState {
     Queued,
     Gone,
 }
-const HELD: &str = "SELECT EXISTS(SELECT 1 FROM lease WHERE ns=?1)";
+const HELD: &str = "SELECT EXISTS(SELECT 1 FROM commit_pin)";
 const OBSERVE: &str = "SELECT w.incarnation,w.lifecycle,
     (SELECT seq FROM sqlite_sequence WHERE name='workspace')
     FROM (SELECT ?1 AS ns) AS selected LEFT JOIN workspace w ON w.ns=selected.ns";
@@ -46,7 +46,7 @@ impl Overlay {
             || state.captured.is_some()
             || state.base_readers != 0
             || self.tickets.pending(route.ns)
-            || self.query(StatementKind::Workspace, HELD, &[&route.ns], 8, |r| {
+            || self.query(StatementKind::Workspace, HELD, &[], 8, |r| {
                 r.get::<_, bool>(0)
             })?[0];
         Ok(if held {
@@ -109,7 +109,7 @@ impl Overlay {
         self.query(
             StatementKind::Explain,
             &format!("EXPLAIN QUERY PLAN {HELD}"),
-            &[&1_i64],
+            &[],
             8,
             |r| r.get(3),
         )

@@ -356,7 +356,10 @@ fn known_install_advances_selected_base_and_preserves_retained_plans_and_later_r
     ));
     let overlay = Overlay::create(&path, ProfileConfig::default()).unwrap();
     let workspace = Workspace::open(&overlay, client.clone(), f.root, f.scope, [92; 32]).unwrap();
-    let other = Workspace::open(&overlay, client, f.root, f.scope, [93; 32]).unwrap();
+    // Another Workspace has its own database.
+    let other_path = path.with_extension("other.sqlite");
+    let other_overlay = Overlay::create(&other_path, ProfileConfig::default()).unwrap();
+    let other = Workspace::open(&other_overlay, client, f.root, f.scope, [93; 32]).unwrap();
     let old = workspace.base().unwrap();
     let retained = old.plan_read(2, 0, 64).unwrap();
     let changed = b"changed";
@@ -492,7 +495,9 @@ fn known_install_advances_selected_base_and_preserves_retained_plans_and_later_r
     assert_eq!(old.inode(2).unwrap().value.namespace_ref_count, 2);
     assert_eq!(other.base().unwrap().identity(), f.root);
     drop(overlay);
+    drop(other_overlay);
     std::fs::remove_file(path).unwrap();
+    std::fs::remove_file(other_path).unwrap();
 }
 
 fn local(serial: u64, size: u64, links: u64) -> layerfs_overlay::Inode {

@@ -145,13 +145,11 @@ impl Overlay {
         directory: crate::NativeDirectory,
     ) -> OverlayResult<Vec<String>> {
         self.state(directory.mount.route)?;
-        let ns = directory.mount.route.ns;
         let mut plans = Vec::new();
         plans.extend(self.query(
             StatementKind::Explain,
             &format!("EXPLAIN QUERY PLAN {}", sql::SOURCE_NAMES_KINDS),
             &[
-                &ns,
                 &1_i64,
                 &integer(directory.serial)?,
                 &b"".as_slice(),

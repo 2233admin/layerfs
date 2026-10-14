@@ -338,7 +338,7 @@ fn waiting_capture_allows_unrelated_progress_and_fences_later_mutations() {
         OwnerConfig::default(),
     )
     .unwrap();
-    assert_eq!(owner.profile().schema_version, 33);
+    assert_eq!(owner.profile().schema_version, 34);
     let client = owner.client();
     let a = open(&client, 1);
     let b = open(&client, 2);

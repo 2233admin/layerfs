@@ -101,7 +101,6 @@ impl Overlay {
     /// piece rows for each claim.
     pub(crate) fn write_claimed(
         &self,
-        ns: i64,
         serial: i64,
         layer: &Layer,
         write: &PayloadWrite,
@@ -137,15 +136,15 @@ impl Overlay {
             }
             // Only the window's own bytes are written by this job.
             if at < first.min(end) {
-                self.write_cells(ns, serial, layer, at, bytes(at, first.min(end)))?;
+                self.write_cells(serial, layer, at, bytes(at, first.min(end)))?;
             }
             let named = (claims.source, integer(source + (first - from))?);
             let cells = (integer(first)?, integer(last)?);
-            self.claim(ns, serial, layer, &mut referenced, cells, named)?;
+            self.claim(serial, layer, &mut referenced, cells, named)?;
             at = at.max(last.min(end));
         }
         if at < end {
-            self.write_cells(ns, serial, layer, at, bytes(at, end))?;
+            self.write_cells(serial, layer, at, bytes(at, end))?;
         }
         Ok(())
     }
@@ -155,20 +154,19 @@ impl Overlay {
     /// what it names before and after it.
     fn claim(
         &self,
-        ns: i64,
         serial: i64,
         layer: &Layer,
         referenced: &mut bool,
         (from, to): (i64, i64),
         (source, source_offset): ([u8; 32], i64),
     ) -> OverlayResult<()> {
-        self.clear_cells(ns, serial, layer, from, to)?;
-        let key = (ns, layer.gen, serial);
+        self.clear_cells(serial, layer, from, to)?;
+        let key = (layer.gen, serial);
         if !*referenced {
             self.execute(
                 StatementKind::Inode,
                 sql::LAYER_REFERENCED,
-                &[&ns, &serial, &layer.gen],
+                &[&serial, &layer.gen],
                 24,
             )?;
             *referenced = true;
@@ -179,10 +177,10 @@ impl Overlay {
         let (mut extended, mut tail) = (None, None);
         let before = match from {
             0 => None,
-            _ => self.piece_cover(ns, layer.gen, serial, from - 1)?,
+            _ => self.piece_cover(layer.gen, serial, from - 1)?,
         };
         if let Some(old) = before.filter(|old| old.end() >= from) {
-            let live = !self.stale(ns, serial, layer, old.offset, old.epoch)?;
+            let live = !self.stale(serial, layer, old.offset, old.epoch)?;
             if live && old.names(from, &source, source_offset) {
                 // The same content continues: one row names all of it.
                 extended = Some(old.offset);
@@ -197,12 +195,12 @@ impl Overlay {
         let taken = self.query(
             StatementKind::Payload,
             sql::PIECES_TAKE,
-            &[&ns, &layer.gen, &serial, &from, &to],
+            &[&layer.gen, &serial, &from, &to],
             40,
             Piece::decode,
         )?;
         if let Some(last) = taken.into_iter().max_by_key(Piece::end) {
-            if last.end() > to && !self.stale(ns, serial, layer, last.offset, last.epoch)? {
+            if last.end() > to && !self.stale(serial, layer, last.offset, last.epoch)? {
                 tail = Some(last);
             }
         }
@@ -210,17 +208,17 @@ impl Overlay {
         // range ends: then one row names all of it.
         let mut end = to;
         let next = match tail {
-            None => self.piece_cover(ns, layer.gen, serial, to)?,
+            None => self.piece_cover(layer.gen, serial, to)?,
             Some(_) => None,
         };
         if let Some(next) = next.filter(|next| next.offset == to) {
             if next.names(to, &source, source_offset + (to - from))
-                && !self.stale(ns, serial, layer, next.offset, next.epoch)?
+                && !self.stale(serial, layer, next.offset, next.epoch)?
             {
                 self.query(
                     StatementKind::Payload,
                     sql::PIECES_TAKE,
-                    &[&ns, &layer.gen, &serial, &to, &(to + 1)],
+                    &[&layer.gen, &serial, &to, &(to + 1)],
                     40,
                     Piece::decode,
                 )?;
@@ -244,22 +242,15 @@ impl Overlay {
     }
     /// Removes the stored cells `[from, to)` of one layer. A live wide row
     /// that crosses either edge keeps its cells outside the range.
-    fn clear_cells(
-        &self,
-        ns: i64,
-        serial: i64,
-        layer: &Layer,
-        from: i64,
-        to: i64,
-    ) -> OverlayResult<()> {
-        let key = (ns, serial, layer.gen);
+    fn clear_cells(&self, serial: i64, layer: &Layer, from: i64, to: i64) -> OverlayResult<()> {
+        let key = (serial, layer.gen);
         let cell = CELL as i64;
         // No row crosses a slot boundary: only an edge inside a slot can be
         // crossed, from the row over its first cell or over its last one.
         if from % RUN != 0 {
-            if let Some((shape, _)) = self.covering(ns, serial, layer.gen, from)? {
+            if let Some((shape, _)) = self.covering(serial, layer.gen, from)? {
                 if shape.offset < from {
-                    if self.stale(ns, serial, layer, shape.offset, shape.epoch)? {
+                    if self.stale(serial, layer, shape.offset, shape.epoch)? {
                         self.drop_row(shape.row)?;
                     } else {
                         self.carve(key, &shape, from, shape.end().min(to))?;
@@ -268,9 +259,9 @@ impl Overlay {
             }
         }
         if to % RUN != 0 {
-            if let Some((shape, _)) = self.covering(ns, serial, layer.gen, to - cell)? {
+            if let Some((shape, _)) = self.covering(serial, layer.gen, to - cell)? {
                 if shape.end() > to {
-                    if self.stale(ns, serial, layer, shape.offset, shape.epoch)? {
+                    if self.stale(serial, layer, shape.offset, shape.epoch)? {
                         self.drop_row(shape.row)?;
                     } else {
                         self.carve(key, &shape, shape.offset, to)?;
@@ -281,7 +272,7 @@ impl Overlay {
         self.execute(
             StatementKind::Payload,
             sql::CELLS_DROP,
-            &[&ns, &serial, &layer.gen, &from, &to],
+            &[&serial, &layer.gen, &from, &to],
             40,
         )?;
         Ok(())
@@ -289,7 +280,6 @@ impl Overlay {
     /// The last piece of one layer that starts at or before byte `at`.
     pub(crate) fn piece_cover(
         &self,
-        ns: i64,
         gen: i64,
         serial: i64,
         at: i64,
@@ -298,7 +288,7 @@ impl Overlay {
             .query(
                 StatementKind::Payload,
                 sql::PIECE_COVER,
-                &[&ns, &gen, &serial, &at],
+                &[&gen, &serial, &at],
                 32,
                 Piece::decode,
             )?
@@ -307,7 +297,7 @@ impl Overlay {
     /// Inserts one piece row. From here a piece row may exist in this engine.
     pub(crate) fn put_piece(
         &self,
-        (ns, gen, serial): (i64, i64, i64),
+        (gen, serial): (i64, i64),
         (offset, length, epoch, source, source_offset): (i64, i64, i64, [u8; 32], i64),
     ) -> OverlayResult<()> {
         self.pieces_seen.set(true);
@@ -315,7 +305,6 @@ impl Overlay {
             StatementKind::Payload,
             sql::PIECE_PUT,
             &[
-                &ns,
                 &gen,
                 &serial,
                 &offset,
@@ -330,25 +319,25 @@ impl Overlay {
     }
     fn piece_length(
         &self,
-        (ns, gen, serial): (i64, i64, i64),
+        (gen, serial): (i64, i64),
         offset: i64,
         length: i64,
     ) -> OverlayResult<()> {
         self.execute(
             StatementKind::Payload,
             sql::PIECE_LENGTH,
-            &[&ns, &gen, &serial, &offset, &length],
+            &[&gen, &serial, &offset, &length],
             40,
         )?;
         Ok(())
     }
     /// Ends the piece of one layer that crosses byte `to` at that byte, for
     /// a shrink of the layer to `to`. One statement; no other piece is read.
-    pub(crate) fn cut_piece(&self, ns: i64, serial: i64, gen: i64, to: u64) -> OverlayResult<()> {
+    pub(crate) fn cut_piece(&self, serial: i64, gen: i64, to: u64) -> OverlayResult<()> {
         self.execute(
             StatementKind::Payload,
             sql::PIECE_CUT,
-            &[&ns, &gen, &serial, &integer(to)?],
+            &[&gen, &serial, &integer(to)?],
             32,
         )?;
         Ok(())
@@ -358,7 +347,6 @@ impl Overlay {
     /// each piece, and returns how many bytes that decided. One statement.
     pub(crate) fn compose_pieces(
         &self,
-        ns: i64,
         serial: i64,
         layer: &Layer,
         (start, end): (u64, u64),
@@ -368,7 +356,7 @@ impl Overlay {
         let rows = self.query(
             StatementKind::Payload,
             sql::PIECE_WINDOW,
-            &[&ns, &layer.gen, &serial, &integer(start)?, &integer(end)?],
+            &[&layer.gen, &serial, &integer(start)?, &integer(end)?],
             48,
             Piece::decode,
         )?;
@@ -379,7 +367,7 @@ impl Overlay {
         for piece in rows {
             let from = start.max(piece.offset as u64);
             let to = end.min(piece.end() as u64);
-            if from >= to || self.stale(ns, serial, layer, piece.offset, piece.epoch)? {
+            if from >= to || self.stale(serial, layer, piece.offset, piece.epoch)? {
                 continue;
             }
             // A range is a run of the piece's cells that still hold an

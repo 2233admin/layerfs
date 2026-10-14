@@ -152,7 +152,7 @@ fn initialize(path: &Path, config: ProfileConfig, template: Option<(&Path, i64)>
             super::profile::readback(&connection, &sql, "PRAGMA user_version", |row| row.get(0))?;
         let application: i64 =
             super::profile::readback(&connection, &sql, "PRAGMA application_id", |row| row.get(0))?;
-        if profile.schema_version != 33 || application != 1279676210 {
+        if profile.schema_version != 34 || application != 1279676210 {
             return Err(crate::OverlayError::Invalid("overlay schema readback"));
         }
         if let Some((_, namespace)) = template {
@@ -195,6 +195,7 @@ fn initialize(path: &Path, config: ProfileConfig, template: Option<(&Path, i64)>
             work: RefCell::new(*sql.borrow()),
             payload_work: Cell::new(crate::PayloadWork::default()),
             quarantined: Cell::new(false),
+            namespace: Cell::new(0),
             maintenance_ready: Cell::new(false),
             orphan_seen: Cell::new(false),
             pieces_seen: Cell::new(false),

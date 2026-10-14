@@ -479,20 +479,6 @@ fn an_open_visit_decides_a_regular_file_and_records_its_descriptor_alone() {
         .perform(&b.overlay);
     assert!(matches!(unreferenced.result, Err(OverlayError::Stale)));
     assert!(unreferenced.decision.is_none() && unreferenced.open_candidate.is_none());
-    // A mount of another Workspace is refused before any job is made.
-    let other = b.overlay.open_workspace([63; 32], [64; 32]).unwrap();
-    let elsewhere = b.overlay.create_native_mount(other, 1).unwrap();
-    assert!(b
-        .workspace
-        .native_open_visit(
-            resident(&b),
-            elsewhere,
-            35,
-            2,
-            false,
-            Arc::new(none.clone())
-        )
-        .is_err());
     assert_eq!((snapshot(&b).0, snapshot(&b).1), (held.0, held.1));
 
     // A local file needs no base fact: created, then opened again by one

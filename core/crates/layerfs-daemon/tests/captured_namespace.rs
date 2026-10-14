@@ -246,23 +246,29 @@ fn direct_provider_pages_and_points_keep_the_exact_capture_after_install_and_clo
     db.close(route).unwrap();
     assert_pages(&db, reader);
     assert_eq!(reader.root(), [192; 32]);
-    // The direct symlink port: the exact local target, or the engine's refusal.
-    let other = db.open_workspace([188; 32], [189; 32]).unwrap();
-    let born = db.active_generation(other).unwrap().number() as u64;
+    // The direct symlink port: the exact local target, or the engine's
+    // refusal. The linked Workspace has its own database.
+    let beside = Temp::new();
+    let linked_db = beside.db();
+    let other = linked_db.open_workspace([188; 32], [189; 32]).unwrap();
+    let born = linked_db.active_generation(other).unwrap().number() as u64;
     let (fresh, cell) = link(7, b"direct/target", born);
-    let ticket = db.publish(other, &fresh, None, Some(&cell)).unwrap();
-    db.reply_attempted(ticket).unwrap();
-    let linked = db
-        .acquire_captured_reader(db.capture(other).unwrap(), 1)
+    let ticket = linked_db.publish(other, &fresh, None, Some(&cell)).unwrap();
+    linked_db.reply_attempted(ticket).unwrap();
+    let linked = linked_db
+        .acquire_captured_reader(linked_db.capture(other).unwrap(), 1)
         .unwrap();
-    assert_eq!(db.captured_symlink(linked, 7).unwrap(), b"direct/target");
+    assert_eq!(
+        linked_db.captured_symlink(linked, 7).unwrap(),
+        b"direct/target"
+    );
     assert!(matches!(
         db.captured_symlink(reader, 1),
         Err(WorkspaceError::Overlay(OverlayError::Missing))
     ));
-    db.release_captured_reader(linked).unwrap();
+    linked_db.release_captured_reader(linked).unwrap();
     assert!(matches!(
-        db.captured_symlink(linked, 7),
+        linked_db.captured_symlink(linked, 7),
         Err(WorkspaceError::Overlay(OverlayError::Stale))
     ));
     db.release_captured_reader(reader).unwrap();

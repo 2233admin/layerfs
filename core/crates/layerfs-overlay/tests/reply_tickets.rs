@@ -391,53 +391,6 @@ fn a_waiting_capture_is_owed_the_last_attempt_and_no_waiter_means_last() {
 }
 
 #[test]
-fn tickets_of_one_namespace_never_affect_another() {
-    let temp = Temp::new();
-    let db = temp.db();
-    let a = db.open_workspace([13; 32], [14; 32]).unwrap();
-    let b = db.open_workspace([15; 32], [14; 32]).unwrap();
-    assert_ne!(a.namespace(), b.namespace());
-    let tickets = db.reply_tickets();
-    let in_a = publish(&db, a, 2);
-    let in_b = publish(&db, b, 2);
-    // Equal revisions and generations in two namespaces are two tickets.
-    assert_eq!(in_a.revision(), in_b.revision());
-    assert_eq!(in_a.generation, in_b.generation);
-    assert_eq!(pending(&db, a), vec![in_a]);
-    assert_eq!(pending(&db, b), vec![in_b]);
-    assert_eq!(counted(&db, a), (1, 2));
-    assert_eq!(counted(&db, b), (1, 2));
-
-    // A waiter of A does not mark B, and B's attempt does not settle A.
-    assert!(!db.capture_ready(a).unwrap());
-    assert_eq!(attempt(&tickets, in_b), Some(Settled::Last));
-    assert_eq!(attempt(&tickets, in_b), None);
-    assert_eq!(pending(&db, a), vec![in_a]);
-    assert!(pending(&db, b).is_empty());
-    assert_eq!(counted(&db, a), (1, 1));
-    assert_eq!(counted(&db, b), (0, 1));
-    assert!(matches!(
-        db.capture(a),
-        Err(OverlayError::ReplyAttemptsPending)
-    ));
-    assert!(!db.capture_ready(a).unwrap());
-    // B captures and closes while A's ticket is pending.
-    assert!(db.capture_ready(b).unwrap());
-    let sealed = db.capture(b).unwrap();
-    db.close(b).unwrap();
-    db.release_closed_capture(sealed).unwrap();
-    assert_eq!(db.cleanup_state(b).unwrap(), CleanupState::Queued);
-    assert_eq!(db.cleanup_state(a).unwrap(), CleanupState::Live);
-    ready_for_file_disposal(&db, b);
-    // A's ticket and its waiter outlive B's whole namespace.
-    assert_eq!(pending(&db, a), vec![in_a]);
-    assert_eq!(counted(&db, a), (1, 1));
-    assert_eq!(attempt(&tickets, in_a), Some(Settled::Watched));
-    assert!(db.capture_ready(a).unwrap());
-    db.capture(a).unwrap();
-}
-
-#[test]
 fn a_closed_workspace_with_a_pending_ticket_is_queued_only_by_the_settling_owner_turn() {
     let temp = Temp::new();
     let db = temp.db();
@@ -449,13 +402,15 @@ fn a_closed_workspace_with_a_pending_ticket_is_queued_only_by_the_settling_owner
     db.close(route).unwrap();
     assert_eq!(db.cleanup_state(route).unwrap(), CleanupState::Held);
     // A stale attempt neither returns the ticket nor queues the cleanup:
-    // the same revision under a generation this namespace never had.
+    // the same revision under a generation this Workspace never had.
     let mut other = only;
     other.generation = {
-        let next = db.open_workspace([19; 32], [18; 32]).unwrap();
-        db.capture(next).unwrap();
-        let later = publish(&db, next, 2);
-        assert_eq!(attempt(&tickets, later), Some(Settled::Last));
+        let elsewhere = Temp::new();
+        let beside = elsewhere.db();
+        let next = beside.open_workspace([19; 32], [18; 32]).unwrap();
+        beside.capture(next).unwrap();
+        let later = publish(&beside, next, 2);
+        assert_eq!(attempt(&beside.reply_tickets(), later), Some(Settled::Last));
         later.generation
     };
     assert_ne!(other, only);
@@ -468,7 +423,13 @@ fn a_closed_workspace_with_a_pending_ticket_is_queued_only_by_the_settling_owner
     db.reply_attempted(only).unwrap();
     assert_eq!(db.cleanup_state(route).unwrap(), CleanupState::Queued);
     ready_for_file_disposal(&db, route);
+}
 
+#[test]
+fn a_closed_workspace_is_queued_by_the_watched_last_attempt_of_a_replying_thread() {
+    let temp = Temp::new();
+    let db = temp.db();
+    let tickets = db.reply_tickets();
     // The replying-thread form: the attempts are recorded without a turn,
     // and only the last one, which the close observed pending, owes it.
     let route = db.open_workspace([23; 32], [24; 32]).unwrap();
@@ -552,16 +513,11 @@ fn pending_publications_page_in_ascending_revision_order_64_per_page() {
     let temp = Temp::new();
     let db = temp.db();
     let route = db.open_workspace([29; 32], [30; 32]).unwrap();
-    let other = db.open_workspace([31; 32], [30; 32]).unwrap();
     let mut published = Vec::new();
     for index in 0..PUBLISHED {
         published.push(publish(&db, route, 2 + index));
-        if index % 50 == 0 {
-            publish(&db, other, 2 + index);
-        }
     }
-    assert_eq!(counted(&db, route), (PUBLISHED, PUBLISHED + 3));
-    assert_eq!(counted(&db, other), (3, PUBLISHED + 3));
+    assert_eq!(counted(&db, route), (PUBLISHED, PUBLISHED));
     let revisions = |page: &[Publication]| page.iter().map(|p| p.revision()).collect::<Vec<_>>();
     let pages = |db: &Overlay| {
         let mut pages = Vec::new();
@@ -627,9 +583,7 @@ fn pending_publications_page_in_ascending_revision_order_64_per_page() {
     assert_eq!(all.concat(), left);
     assert_eq!(all[0][0].revision(), 2);
     assert_eq!(all[0][PAGE - 1].revision(), 67);
-    assert_eq!(counted(&db, route), (PUBLISHED - 5, PUBLISHED - 2));
-    // The other namespace's page is its own three tickets.
-    assert_eq!(revisions(&pending(&db, other)), [1, 2, 3]);
+    assert_eq!(counted(&db, route), (PUBLISHED - 5, PUBLISHED - 5));
 }
 
 #[test]

@@ -8,7 +8,6 @@ impl Overlay {
     /// range of at most one payload row.
     pub(crate) fn live_pieces(
         &self,
-        ns: i64,
         serial: i64,
         layer: &Layer,
         from: i64,
@@ -17,13 +16,13 @@ impl Overlay {
         let mut pieces = self.query(
             StatementKind::Payload,
             sql::PIECE_WINDOW,
-            &[&ns, &layer.gen, &serial, &from, &to],
+            &[&layer.gen, &serial, &from, &to],
             48,
             Piece::decode,
         )?;
         let mut live = Vec::with_capacity(pieces.len());
         for piece in pieces.drain(..).filter(|piece| piece.end() > from) {
-            if !self.stale(ns, serial, layer, piece.offset, piece.epoch)? {
+            if !self.stale(serial, layer, piece.offset, piece.epoch)? {
                 live.push(piece);
             }
         }
@@ -32,7 +31,6 @@ impl Overlay {
     /// The first piece of one layer that starts at or after byte `at`.
     pub(crate) fn piece_next(
         &self,
-        ns: i64,
         gen: i64,
         serial: i64,
         at: i64,
@@ -41,7 +39,7 @@ impl Overlay {
             .query(
                 StatementKind::Payload,
                 sql::PIECE_NEXT,
-                &[&ns, &gen, &serial, &at],
+                &[&gen, &serial, &at],
                 32,
                 Piece::decode,
             )?
@@ -57,26 +55,25 @@ impl Overlay {
     /// holds no piece.
     pub(crate) fn transfer_piece(
         &self,
-        ns: i64,
         serial: i64,
         lower: &Layer,
         upper: &Layer,
     ) -> OverlayResult<bool> {
-        let Some(piece) = self.piece_next(ns, lower.gen, serial, 0)? else {
+        let Some(piece) = self.piece_next(lower.gen, serial, 0)? else {
             return Ok(false);
         };
-        let (below, above) = ((ns, lower.gen, serial), (ns, upper.gen, serial));
+        let (below, above) = ((lower.gen, serial), (upper.gen, serial));
         let end = piece.end().min(integer(lower.size.min(upper.cutoff))?);
-        if piece.offset >= end || self.stale(ns, serial, lower, piece.offset, piece.epoch)? {
+        if piece.offset >= end || self.stale(serial, lower, piece.offset, piece.epoch)? {
             self.drop_piece(below, piece.offset)?;
             return Ok(true);
         }
         // Where the fragment that moves in this step ends.
         let mut to = end;
         if upper.referenced {
-            let cover = self.piece_cover(ns, upper.gen, serial, piece.offset)?;
+            let cover = self.piece_cover(upper.gen, serial, piece.offset)?;
             if let Some(own) = cover.filter(|own| own.end() > piece.offset) {
-                if self.stale(ns, serial, upper, own.offset, own.epoch)? {
+                if self.stale(serial, upper, own.offset, own.epoch)? {
                     // Garbage in the way of the row that moves in next.
                     self.drop_piece(above, own.offset)?;
                 } else {
@@ -85,9 +82,9 @@ impl Overlay {
                 }
                 return Ok(true);
             }
-            let next = self.piece_next(ns, upper.gen, serial, piece.offset + 1)?;
+            let next = self.piece_next(upper.gen, serial, piece.offset + 1)?;
             if let Some(own) = next.filter(|own| own.offset < end) {
-                if self.stale(ns, serial, upper, own.offset, own.epoch)? {
+                if self.stale(serial, upper, own.offset, own.epoch)? {
                     self.drop_piece(above, own.offset)?;
                     return Ok(true);
                 }
@@ -97,7 +94,7 @@ impl Overlay {
             self.execute(
                 StatementKind::Inode,
                 sql::LAYER_REFERENCED,
-                &[&ns, &serial, &upper.gen],
+                &[&serial, &upper.gen],
                 24,
             )?;
         }
@@ -116,7 +113,7 @@ impl Overlay {
     /// `end` nothing reads. What is left starts at `to`, or the row goes.
     fn advance_piece(
         &self,
-        (ns, gen, serial): (i64, i64, i64),
+        (gen, serial): (i64, i64),
         piece: &Piece,
         to: i64,
         end: i64,
@@ -124,14 +121,13 @@ impl Overlay {
         // A piece starts on a cell boundary. A row above ends inside a cell
         // only at its layer's cutoff, and nothing is read beyond that.
         if to >= end || to % CELL_BYTES as i64 != 0 {
-            return self.drop_piece((ns, gen, serial), piece.offset);
+            return self.drop_piece((gen, serial), piece.offset);
         }
         let moved = to - piece.offset;
         self.execute(
             StatementKind::Payload,
             sql::PIECE_START,
             &[
-                &ns,
                 &gen,
                 &serial,
                 &piece.offset,

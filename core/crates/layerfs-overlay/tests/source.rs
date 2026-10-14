@@ -126,7 +126,6 @@ fn source_owner_observation_keeps_indexed_work_as_unrelated_custody_grows() {
     let temp = Temp::new();
     let db = Overlay::create(&temp.0.join("db"), ProfileConfig::default()).unwrap();
     let route = db.open_workspace([11; 32], [12; 32]).unwrap();
-    let other = db.open_workspace([13; 32], [12; 32]).unwrap();
     let source = db.acquire_base_source(route, 7).unwrap();
     let plan = db.explain_base_source(route, 7).unwrap();
     assert!(
@@ -138,7 +137,8 @@ fn source_owner_observation_keeps_indexed_work_as_unrelated_custody_grows() {
     let mut vm = None;
     for count in [128, 1024, 4096] {
         for owner in previous + 1..=count {
-            db.acquire_base_source(other, owner).unwrap();
+            // Unrelated owners of the same Workspace.
+            db.acquire_base_source(route, 1000 + owner).unwrap();
         }
         previous = count;
         let before = db.diagnostics().statements[StatementKind::Lease as usize];
@@ -155,7 +155,7 @@ fn source_owner_observation_keeps_indexed_work_as_unrelated_custody_grows() {
         assert_eq!(after.sorts - before.sorts, 0);
         assert_eq!(after.autoindex_rows - before.autoindex_rows, 0);
         assert_eq!(after.reprepares - before.reprepares, 0);
-        assert_eq!(db.state(other).unwrap().base_readers, count);
+        assert_eq!(db.state(route).unwrap().base_readers, count + 1);
         println!("BASE_SOURCE unrelated_owners={count} point_vm={steps} returned=1 fullscan=0 sorts=0 autoindex=0 reprepare=0 plan={plan:?}");
     }
 }
@@ -219,7 +219,6 @@ fn ordered_source_directory_entry_windows_visit_only_parent_and_generation_with_
     let temp = Temp::new();
     let db = Overlay::create(&temp.0.join("db"), ProfileConfig::default()).unwrap();
     let route = db.open_workspace([31; 32], [32; 32]).unwrap();
-    let other = db.open_workspace([33; 32], [32; 32]).unwrap();
     for n in 0..193 {
         let p = db
             .publish(
@@ -243,12 +242,13 @@ fn ordered_source_directory_entry_windows_visit_only_parent_and_generation_with_
     for count in [128, 1024, 4096] {
         for n in previous..count {
             let p = db
+                // Later names of another directory, in the active generation.
                 .publish(
-                    other,
+                    route,
                     &inode(),
                     Some(&DirectoryEntry {
                         inherited: false,
-                        parent: 1,
+                        parent: 9,
                         name: format!("n{n:04}").into_bytes(),
                         serial: Some(2),
                     }),
@@ -263,7 +263,7 @@ fn ordered_source_directory_entry_windows_visit_only_parent_and_generation_with_
             .unwrap();
         assert!(
             plan.iter().all(|p| p.contains("SEARCH")
-                && p.contains("directory_entry_capture")
+                && p.contains("fs_entry_capture")
                 && !p.contains("TEMP B-TREE")),
             "{plan:?}"
         );

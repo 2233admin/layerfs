@@ -353,19 +353,14 @@ fn an_unlinked_file_nothing_holds_retires_its_pieces() {
 }
 
 #[test]
-fn a_closed_workspace_retains_its_pieces_until_file_disposal_beside_a_live_one() {
+fn a_closed_workspace_retains_its_pieces_until_file_disposal() {
     let temp = Temp::new();
     let db = temp.db();
     let content = noise(2 << 20, 81);
-    let build = |tag: u8| {
-        let route = db.open_workspace([tag; 32], [82; 32]).unwrap();
-        let source = db.acquire_base_source(route, 1).unwrap();
-        let mut file = committed(&db, source, &content);
-        scatter(&mut file, &content, 150);
-        (route, source, file)
-    };
-    let (closed, closed_source, _) = build(81);
-    let (live, _, kept) = build(83);
+    let closed = db.open_workspace([81; 32], [82; 32]).unwrap();
+    let closed_source = db.acquire_base_source(closed, 1).unwrap();
+    let mut file = committed(&db, closed_source, &content);
+    scatter(&mut file, &content, 150);
     db.close(closed).unwrap();
     db.release_base_source(closed_source).unwrap();
     assert_eq!(db.cleanup_state(closed).unwrap(), CleanupState::Queued);
@@ -374,14 +369,5 @@ fn a_closed_workspace_retains_its_pieces_until_file_disposal_beside_a_live_one()
         150,
         "closed file is retained until disposal"
     );
-    assert_eq!(rows(&db, live).0, 150);
-    assert_eq!(db.resources(None).unwrap().counts.reference_rows, 300);
-    kept.check();
-    for plan in db.explain_close_held().unwrap() {
-        assert!(
-            (!plan.contains("SCAN") || plan == "SCAN CONSTANT ROW")
-                && !plan.contains("TEMP B-TREE"),
-            "{plan}"
-        );
-    }
+    assert_eq!(db.resources(None).unwrap().counts.reference_rows, 150);
 }

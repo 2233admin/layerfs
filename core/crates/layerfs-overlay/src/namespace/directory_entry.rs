@@ -23,7 +23,7 @@ impl Overlay {
         after: Option<&[u8]>,
     ) -> OverlayResult<crate::DirectoryEntryWindow> {
         let state = self.source_state(source)?;
-        let parent_inode = self.inode_at(source.route, parent, state.active, state.installed)?;
+        let parent_inode = self.inode_at(parent, state.active, state.installed)?;
         let active = self.source_directory_entries(source, parent, state.active, after)?;
         let captured = if let Some(generation) = state.captured.or(state.consolidating) {
             self.source_directory_entries(source, parent, generation, after)?
@@ -58,13 +58,7 @@ impl Overlay {
         self.query(
             StatementKind::DirectoryEntry,
             sql::DIRECTORY_ENTRY_LOOKUP,
-            &[
-                &source.route.ns,
-                &integer(parent)?,
-                &name,
-                &state.active.0,
-                &state.installed,
-            ],
+            &[&integer(parent)?, &name, &state.active.0, &state.installed],
             32 + name.len() as u64,
             |row| {
                 Ok(DirectoryEntry {
@@ -102,7 +96,7 @@ impl Overlay {
         self.query(
             StatementKind::DirectoryEntry,
             sql::SOURCE_NAMES,
-            &[&source.route.ns, &generation.0, &integer(parent)?, &after],
+            &[&generation.0, &integer(parent)?, &after],
             24 + after.len() as u64,
             decode,
         )
@@ -122,7 +116,7 @@ impl Overlay {
         self.query(
             StatementKind::Explain,
             &format!("EXPLAIN QUERY PLAN {}", sql::SOURCE_NAMES),
-            &[&source.route.ns, &generation.0, &integer(parent)?, &after],
+            &[&generation.0, &integer(parent)?, &after],
             24 + after.len() as u64,
             |row| row.get(3),
         )

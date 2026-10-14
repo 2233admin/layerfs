@@ -454,7 +454,7 @@ fn piece_statements_are_indexed_and_their_work_does_not_grow_with_the_piece() {
         "pieces-take",
         "piece-cut",
     ] {
-        let seek = format!("{label}: SEARCH payload_reference USING PRIMARY KEY");
+        let seek = format!("{label}: SEARCH fs_data_ref USING PRIMARY KEY");
         assert!(
             plans.iter().any(|plan| plan.starts_with(&seek)),
             "{plans:?}"
@@ -462,7 +462,7 @@ fn piece_statements_are_indexed_and_their_work_does_not_grow_with_the_piece() {
     }
     assert!(plans
         .iter()
-        .any(|plan| plan.starts_with("layer-referenced: SEARCH inode USING PRIMARY KEY")));
+        .any(|plan| plan.starts_with("layer-referenced: SEARCH fs_inode USING PRIMARY KEY")));
     assert!(plans
         .iter()
         .any(|plan| plan.starts_with("piece-put: vm-program") && plan.ends_with("scan-opcodes=0")));
@@ -699,12 +699,12 @@ fn captured_steps_report_a_piece_as_one_reference_and_equal_the_sealed_view() {
 
 #[test]
 fn captured_steps_do_not_grow_with_the_length_of_a_piece() {
-    let temp = Temp::new();
-    let db = temp.db();
     let content = noise(8 << 20, 33);
     // A file whose first `windows` windows are one piece with one written
     // cell in its second window; the rest is inherited.
     let pass = |tag: u8, windows: u64| {
+        let temp = Temp::new();
+        let db = temp.db();
         let route = db.open_workspace([tag; 32], [16; 32]).unwrap();
         let source = db.acquire_base_source(route, 1).unwrap();
         let mut file = committed(&db, source, &content);

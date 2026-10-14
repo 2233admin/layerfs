@@ -180,9 +180,7 @@ impl World {
 #[test]
 fn the_fence_row_is_the_indexed_row_in_every_shape_of_the_view() {
     let world = world();
-    // Two Workspaces of one engine: the rows of one are never the other's.
-    let (seat, other) = (world.seat(51), world.seat(52));
-    world.create(other, 50, 1);
+    let seat = world.seat(51);
     // No local row: the base decides, and the fence says so in one statement.
     assert_eq!(world.observed(seat, 1, None), (None, (1, 0)));
     assert_eq!(world.indexed(seat, 1), None);
@@ -194,7 +192,6 @@ fn the_fence_row_is_the_indexed_row_in_every_shape_of_the_view() {
         assert!(row.is_some(), "{serial}");
         assert_eq!(statements, (1, 0), "{serial} {held:?}");
     }
-    assert_eq!(world.observed(other, 50, None).0, world.indexed(other, 50));
     // A mutation over the row the fence read: one update and no read, and
     // the next visit reads what was stored.
     let grown = Inode {
@@ -246,18 +243,13 @@ fn the_fence_row_is_the_indexed_row_in_every_shape_of_the_view() {
     }
     assert_eq!(world.indexed(seat, 50), Some(again));
     assert_eq!(world.indexed(seat, 1), None, "the root's row was installed");
-    // The other Workspace saw none of it.
-    let (row, statements) = world.observed(other, 50, None);
-    assert_eq!(row.map(|row| row.size), Some(0));
-    assert_eq!(statements, (1, 0));
 }
 
 #[test]
 fn an_orphan_held_by_the_engine_keeps_the_read_where_it_was() {
     let world = world();
-    let (seat, other) = (world.seat(53), world.seat(54));
+    let seat = world.seat(53);
     let handle = world.create(seat, 50, 1);
-    world.create(other, 60, 1);
     // The last name of the open file goes: its row becomes an orphan row.
     let applied = world
         .db
@@ -285,7 +277,7 @@ fn an_orphan_held_by_the_engine_keeps_the_read_where_it_was() {
         .expect("published");
     world.db.reply_attempted(applied.publication).unwrap();
     // While the engine holds an orphan, an inode read asks the orphan
-    // domain first: the fence's row is not used, in either Workspace.
+    // domain first: the fence's row is not used.
     let (row, statements) = world.observed(seat, 50, Some(handle.owner_id()));
     assert_eq!(row.as_ref().map(|row| row.nlink), Some(0));
     assert_eq!(row, world.indexed(seat, 50));
@@ -294,9 +286,6 @@ fn an_orphan_held_by_the_engine_keeps_the_read_where_it_was() {
     let (row, statements) = world.observed(seat, 1, None);
     assert_eq!(row, Some(root(0)));
     assert_eq!(statements, (1, 2), "the orphan probe, then the row, once");
-    let (row, statements) = world.observed(other, 60, None);
-    assert_eq!(row, world.indexed(other, 60));
-    assert_eq!(statements, (1, 2), "the engine's orphan, another Workspace");
 }
 
 #[test]
@@ -325,39 +314,42 @@ fn a_refused_visit_is_refused_as_before_and_reads_one_statement() {
     let (result, statements) = attempt(seat.mount, 1, Some(handle.owner_id()));
     assert!(matches!(result, Err(OverlayError::Stale)), "{result:?}");
     assert_eq!(statements, (1, 0));
-    // Another Workspace's mount holds no reference through this descriptor.
-    let other = world.seat(57);
-    let theirs = world.create(other, 50, 1);
-    for (mount, held) in [(other.mount, handle), (seat.mount, theirs)] {
-        let (result, statements) = attempt(mount, 50, Some(held.owner_id()));
-        assert!(matches!(result, Err(OverlayError::Stale)), "{result:?}");
-        assert_eq!(statements, (1, 0));
-    }
-    // A revoked mount.
-    let revoked = world.seat(58);
-    world.create(revoked, 50, 1);
-    world.db.revoke_native_mount(revoked.mount).unwrap();
-    let (result, statements) = attempt(revoked.mount, 50, None);
-    assert!(matches!(result, Err(OverlayError::Stale)), "{result:?}");
-    assert_eq!(statements, (1, 0));
     // A closed Workspace refuses before the mount and the reference are
     // considered, whatever they are.
     world.db.close(seat.route).unwrap();
-    world.db.close(revoked.route).unwrap();
     for (mount, serial, held) in [
         (seat.mount, 50, None),
         (seat.mount, 51, None),
         (seat.mount, 1, Some(handle.owner_id())),
-        (revoked.mount, 50, None),
     ] {
         let (result, statements) = attempt(mount, serial, held);
         assert!(matches!(result, Err(OverlayError::Closed)), "{result:?}");
         assert_eq!(statements, (1, 0));
     }
-    // The Workspaces beside them are served as before.
-    let (result, statements) = attempt(other.mount, 50, Some(theirs.owner_id()));
-    assert!(matches!(result, Ok(None)), "{result:?}");
-    assert_eq!(statements, (1, 0));
+}
+
+#[test]
+fn a_revoked_mount_is_stale_by_the_fence_alone() {
+    let world = world();
+    let revoked = world.seat(58);
+    world.create(revoked, 50, 1);
+    world.db.revoke_native_mount(revoked.mount).unwrap();
+    let before = world.families();
+    let observed = world
+        .db
+        .observe_native_visit(revoked.mount, 50, None, false, |rows, _| {
+            Ok(NativeDecision::Finished {
+                inode: None,
+                value: rows.inode(50)?,
+            })
+        });
+    let after = world.families();
+    assert!(
+        matches!(observed.result, Err(OverlayError::Stale)),
+        "{:?}",
+        observed.result
+    );
+    assert_eq!((after.0 - before.0, after.1 - before.1), (1, 0));
 }
 
 #[test]

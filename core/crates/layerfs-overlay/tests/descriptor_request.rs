@@ -1,9 +1,9 @@
 //! One row per open descriptor. A native descriptor's row names its mount
 //! and the kernel request that received it, so a repeated request identity
 //! is refused whole, a lost visit's descriptor is found by its request, and
-//! neither another mount's rows nor a caller's own request of the same
-//! number ever answer for it. Retiring a mount reads its own descriptors
-//! only, however many others the engine holds.
+//! a caller's own request of the same number never answers for it. Retiring
+//! a mount reads its own descriptors only, however many others the engine
+//! holds.
 use layerfs_overlay::{
     Inode, InodeKind, MaintenanceCursor, NativeDecision, NativeMount, NativeMountState, OpenFile,
     Overlay, OverlayError, ProfileConfig, Route,
@@ -82,7 +82,6 @@ fn plain(db: &Overlay, route: Route, request: u64) -> Result<OpenFile, OverlayEr
 fn a_request_owns_one_descriptor_of_its_mount_and_no_other_row_answers_for_it() {
     let (_temp, db) = engine();
     let (route, mount) = mounted(&db, 1);
-    let (other_route, other_mount) = mounted(&db, 2);
     let rows = |route| {
         let r = db.resources(Some(route)).unwrap();
         (r.counts, r.open)
@@ -112,28 +111,10 @@ fn a_request_owns_one_descriptor_of_its_mount_and_no_other_row_answers_for_it() 
     assert_eq!(db.retained_native_file(mount, 10).unwrap(), Some(first));
     db.check_file(first, false).unwrap();
 
-    // Another request of the mount, and the same number in another mounted
-    // Workspace, each own a descriptor of their own.
+    // Another request of the mount owns a descriptor of its own.
     let second = open(&db, mount, 11).unwrap();
-    let other = open(&db, other_mount, 10).unwrap();
     assert_eq!(db.retained_native_file(mount, 11).unwrap(), Some(second));
-    assert_eq!(
-        db.retained_native_file(other_mount, 10).unwrap(),
-        Some(other)
-    );
     assert_eq!(db.retained_native_file(mount, 10).unwrap(), Some(first));
-    assert_eq!(db.retained_native_file(other_mount, 11).unwrap(), None);
-    // A descriptor answers only through the mount that received it.
-    for (mount, file) in [(mount, other), (other_mount, first), (other_mount, second)] {
-        assert!(matches!(
-            db.native_file(mount, 50, file.owner_id()),
-            Err(OverlayError::Stale)
-        ));
-        assert!(matches!(
-            db.close_native_file(mount, 50, file.owner_id()),
-            Err(OverlayError::Stale)
-        ));
-    }
 
     // A caller's own request of the same number is a different identity,
     // refused when it repeats, and never found through the mount.
@@ -149,7 +130,6 @@ fn a_request_owns_one_descriptor_of_its_mount_and_no_other_row_answers_for_it() 
         ),
         "{repeated:?}"
     );
-    assert_eq!(db.retained_file(other_route, 10).unwrap(), None);
     assert!(matches!(
         db.native_file(mount, 50, caller.owner_id()),
         Err(OverlayError::Stale)
@@ -164,7 +144,6 @@ fn a_request_owns_one_descriptor_of_its_mount_and_no_other_row_answers_for_it() 
         2,
         "the second native descriptor and the caller's"
     );
-    assert_eq!(rows(other_route).1.file_handles - before.1.file_handles, 1);
 }
 
 #[test]
@@ -173,15 +152,11 @@ fn drained_revocation_fences_its_descriptors_without_visiting_other_owners() {
     let retire = |others: u64| {
         let (_temp, db) = engine();
         let (route, mount) = mounted(&db, 1);
-        let (_, other_mount) = mounted(&db, 2);
         let own: Vec<OpenFile> = (0..OWN)
             .map(|index| open(&db, mount, 100 + index).unwrap())
             .collect();
         let callers: Vec<OpenFile> = (0..others)
             .map(|index| plain(&db, route, 100 + index).unwrap())
-            .collect();
-        let foreign: Vec<OpenFile> = (0..others)
-            .map(|index| open(&db, other_mount, 100 + index).unwrap())
             .collect();
 
         let before = db.diagnostics();
@@ -209,13 +184,6 @@ fn drained_revocation_fences_its_descriptors_without_visiting_other_owners() {
             db.check_file(*file, false).unwrap();
             assert_eq!(
                 db.retained_file(route, 100 + index as u64).unwrap(),
-                Some(*file)
-            );
-        }
-        for (index, file) in foreign.iter().enumerate() {
-            assert_eq!(
-                db.retained_native_file(other_mount, 100 + index as u64)
-                    .unwrap(),
                 Some(*file)
             );
         }

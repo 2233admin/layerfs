@@ -1,6 +1,6 @@
-//! The daemon aggregate of `Overlay::resources` against a reference counted
-//! from the stored rows themselves, at one, three and eight namespaces, live,
-//! closed, partly reclaimed and reclaimed. The rows are read through a second
+//! The counts of `Overlay::resources` against a reference counted from the
+//! stored rows themselves of the database's one Workspace: live, closed,
+//! partly reclaimed and reclaimed. The rows are read through a second
 //! plain connection after the engine has closed its database.
 mod payload_support;
 use layerfs_overlay::*;
@@ -108,26 +108,22 @@ fn retire(db: &Overlay, held: Held<'_>) {
 fn counted(raw: &rusqlite::Connection, sql: &str) -> u64 {
     raw.query_row(sql, [], |row| row.get::<_, i64>(0)).unwrap() as u64
 }
-/// The counts of the stored rows of every namespace.
+/// The counts of the stored rows.
 fn reference(raw: &rusqlite::Connection) -> StoredCounts {
     let rows = |table: &str| counted(raw, &format!("SELECT count(*) FROM {table}"));
-    let records = [
-        "operation_record",
-        "owned_operation_record",
-        "indexed_operation_record",
-    ];
-    let details = ["captured_reader", "operation_owner"];
+    let records = ["commit_record"];
+    let details = ["commit_reader", "commit_run"];
     StoredCounts {
         namespaces: rows("workspace"),
-        inode_rows: rows("inode"),
-        directory_entry_rows: rows("directory_entry"),
-        payload_cells: rows("payload"),
+        inode_rows: rows("fs_inode"),
+        directory_entry_rows: rows("fs_entry"),
+        payload_cells: rows("fs_data"),
         payload_bytes: counted(
             raw,
-            "SELECT ifnull(sum(length(data)+ifnull(length(validity),0)),0) FROM payload",
+            "SELECT ifnull(sum(length(data)+ifnull(length(validity),0)),0) FROM fs_data",
         ),
-        shrink_rows: rows("shrink"),
-        reference_rows: rows("payload_reference"),
+        shrink_rows: rows("fs_truncate"),
+        reference_rows: rows("fs_data_ref"),
         operation_record_rows: records.iter().map(|table| rows(table)).sum(),
         operation_record_bytes: records
             .iter()
@@ -138,19 +134,19 @@ fn reference(raw: &rusqlite::Connection) -> StoredCounts {
                 )
             })
             .sum(),
-        owner_rows: rows("lease"),
-        source_rows: rows("base_source"),
+        owner_rows: rows("commit_pin"),
+        source_rows: rows("commit_base_pin"),
         owner_details: details.iter().map(|table| rows(table)).sum(),
         reply_tickets: 0,
-        maintenance_targets: rows("maintenance"),
-        ready_targets: counted(raw, "SELECT ifnull(sum(ready),0) FROM maintenance"),
+        maintenance_targets: rows("cleanup_task"),
+        ready_targets: counted(raw, "SELECT ifnull(sum(ready),0) FROM cleanup_task"),
     }
 }
 
 #[test]
-fn the_aggregate_equals_the_stored_rows_at_one_three_and_eight_namespaces() {
+fn the_counts_equal_the_stored_rows_live_closed_partly_reclaimed_and_reclaimed() {
     let mut seen = Vec::new();
-    for namespaces in [1_u8, 3, 8] {
+    for namespaces in [1_u8] {
         // 0: every namespace live. 1: the odd ones closed, nothing reclaimed.
         // 2: closed and partly reclaimed. 3: all closed and reclaimed.
         for stage in 0..4 {

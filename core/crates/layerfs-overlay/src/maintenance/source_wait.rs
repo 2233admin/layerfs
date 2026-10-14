@@ -2,8 +2,8 @@
 use super::ready::WAKE_ORPHAN;
 use crate::{maintenance::Item, Overlay, OverlayResult, StatementKind};
 pub(crate) const GENERATION_WINDOW: &str =
-    "SELECT kind,resource FROM maintenance INDEXED BY maintenance_generation
-    WHERE ns=?1 AND target=?2 AND kind IN(1,3,7) AND (kind,resource)>(?3,?4)
+    "SELECT kind,resource FROM cleanup_task INDEXED BY cleanup_task_generation
+    WHERE target=?1 AND kind IN(1,3,7) AND (kind,resource)>(?2,?3)
     ORDER BY kind,resource LIMIT 64";
 impl Overlay {
     pub(crate) fn wake_orphan_sources(&self, ns: i64, gen: i64) -> OverlayResult<()> {
@@ -16,7 +16,7 @@ impl Overlay {
             .next()
             .is_some()
         {
-            self.enqueue(ns, WAKE_ORPHAN, 0, gen)?;
+            self.enqueue(WAKE_ORPHAN, 0, gen)?;
         }
         Ok(())
     }
@@ -31,7 +31,7 @@ impl Overlay {
             .map(|(key, _)| key.2)
             .collect::<Vec<_>>();
         for serial in &rows {
-            self.wake_orphan(item.ns, *serial)?;
+            self.wake_orphan(*serial)?;
             let mut state = self.open.borrow_mut();
             state.waits.remove((item.ns, item.target, *serial));
             state.count(item.ns, 7, false);
@@ -45,14 +45,17 @@ impl Overlay {
         let rows = self.query(
             StatementKind::Reclaim,
             GENERATION_WINDOW,
-            &[&item.ns, &item.target, &item.cursor, &item.aux],
+            &[&item.target, &item.cursor, &item.aux],
             32,
             |r| Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?)),
         )?;
         for (kind, resource) in &rows {
-            self.execute(StatementKind::Reclaim,
-                "UPDATE maintenance SET ready=1 WHERE ns=?1 AND kind=?2 AND resource=?3 AND target=?4",
-                &[&item.ns,kind,resource,&item.target],32)?;
+            self.execute(
+                StatementKind::Reclaim,
+                "UPDATE cleanup_task SET ready=1 WHERE kind=?1 AND resource=?2 AND target=?3",
+                &[kind, resource, &item.target],
+                32,
+            )?;
         }
         if let Some((kind, resource)) = rows.last() {
             self.advance_item(item, 0, *kind, *resource, &[])?;

@@ -22,10 +22,8 @@ impl Overlay {
     ) -> OverlayResult<CapturedRunReply> {
         self.check_captured_reader(cursor.reader)?;
         let reader = cursor.reader;
-        let ns = reader.capture().route().ns;
         let serial = integer(cursor.serial)?;
         let layers = self.layers(
-            ns,
             serial,
             reader.capture().generation.number(),
             reader.installed,
@@ -56,12 +54,12 @@ impl Overlay {
         }
         if layers.iter().any(|layer| layer.referenced) {
             // A layer holds pieces: the layers decide in order.
-            return self.captured_piece_step((ns, serial), layers, cursor, work);
+            return self.captured_piece_step(serial, layers, cursor, work);
         }
         let (needed, mut end, zero) = gap_bounds(&layers, cursor.at, cursor.size);
         for (slot, layer) in layers.iter().take(needed).enumerate() {
             let probe = &mut cursor.probes[slot];
-            self.probe_cell(ns, serial, layer, probe, cursor.at, &mut work)?;
+            self.probe_cell(serial, layer, probe, cursor.at, &mut work)?;
         }
         if cursor.probes[..needed].iter().any(|probe| !probe.ready) {
             return Ok(reply(CapturedRunStep::Continue(cursor), work));
@@ -79,7 +77,7 @@ impl Overlay {
                 }
             }
         }
-        let step = if let Some(next) = self.local_shape(ns, serial, &layers, cursor, &mut work)? {
+        let step = if let Some(next) = self.local_shape(serial, &layers, cursor, &mut work)? {
             CapturedRunStep::Local {
                 offset: cursor.at,
                 length: next.at - cursor.at,
@@ -88,7 +86,7 @@ impl Overlay {
         } else if let Some(row_end) = window {
             let to = cursor.size.min(row_end);
             let mut read = self
-                .compose_layers(ns, serial, cursor.at, (to - cursor.at) as u32, layers)?
+                .compose_layers(serial, cursor.at, (to - cursor.at) as u32, layers)?
                 .ok_or(OverlayError::Invalid("captured run layers"))?;
             read.base_root = Some(reader.capture().base_root);
             CapturedRunStep::Window {
@@ -120,7 +118,6 @@ impl Overlay {
     /// first live row of the layer that ends beyond the byte, or none.
     pub(crate) fn probe_cell(
         &self,
-        ns: i64,
         serial: i64,
         layer: &Layer,
         probe: &mut super::captured_types::Probe,
@@ -132,7 +129,7 @@ impl Overlay {
             return Ok(());
         }
         let floor = at - at % CELL;
-        match self.next_cell(ns, serial, layer, probe.after, floor)? {
+        match self.next_cell(serial, layer, probe.after, floor)? {
             None => probe.ready = true,
             Some((cell, epoch)) => {
                 work.metadata_rows += 1;
@@ -141,7 +138,7 @@ impl Overlay {
                     .offset
                     .checked_add(cell.length.div_ceil(CELL) * CELL)
                     .ok_or(OverlayError::Invalid("captured cell boundary"))?;
-                if self.stale(ns, serial, layer, integer(cell.offset)?, epoch)? {
+                if self.stale(serial, layer, integer(cell.offset)?, epoch)? {
                     work.stale_rows += 1;
                 } else if cell.offset + cell.length > at {
                     probe.ready = true;
@@ -155,7 +152,6 @@ impl Overlay {
     /// beyond `floor`, with its epoch. One indexed statement.
     fn next_cell(
         &self,
-        ns: i64,
         serial: i64,
         layer: &Layer,
         after: u64,
@@ -165,7 +161,6 @@ impl Overlay {
             StatementKind::Payload,
             sql::CAPTURED_CELL_METADATA,
             &[
-                &ns,
                 &serial,
                 &layer.gen,
                 &integer(after)?,
@@ -211,7 +206,6 @@ impl Overlay {
     /// payload is composed. None leaves the cursor to the ordinary window.
     pub(crate) fn local_shape(
         &self,
-        ns: i64,
         serial: i64,
         layers: &[Layer],
         mut cursor: CapturedRunCursor,
@@ -234,7 +228,7 @@ impl Overlay {
             if probe.after >= layer.size {
                 break;
             }
-            let Some((cell, epoch)) = self.next_cell(ns, serial, layer, probe.after, to)? else {
+            let Some((cell, epoch)) = self.next_cell(serial, layer, probe.after, to)? else {
                 probe.cell = None;
                 probe.ready = true;
                 break;
@@ -245,7 +239,7 @@ impl Overlay {
                 .offset
                 .checked_add(cell.length.div_ceil(CELL) * CELL)
                 .ok_or(OverlayError::Invalid("captured cell boundary"))?;
-            if self.stale(ns, serial, layer, integer(cell.offset)?, epoch)? {
+            if self.stale(serial, layer, integer(cell.offset)?, epoch)? {
                 work.stale_rows += 1;
                 continue;
             }

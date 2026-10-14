@@ -47,7 +47,9 @@ pub(crate) fn initialize(
     configuration_calls: &mut u64,
 ) -> OverlayResult<DatabaseProfile> {
     let max_pages = config.max_pages.unwrap_or(u32::MAX - 1);
-    if config.pager_kib == 0 || max_pages < 32 || max_pages == u32::MAX {
+    // The floor is below the schema's own pages, so the smallest quota is a
+    // real creation failure rather than a refused setting.
+    if config.pager_kib == 0 || max_pages < 24 || max_pages == u32::MAX {
         return Err(OverlayError::Invalid("profile resource settings"));
     }
     *configuration_calls += 1;

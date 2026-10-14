@@ -338,10 +338,3 @@ pub struct Lease {
     pub owner: u64,
     pub resource: u64,
 }
-/// One operation-keyed construction record.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct OperationRecord {
-    pub kind: u32,
-    pub key: u64,
-    pub value: Vec<u8>,
-}

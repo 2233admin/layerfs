@@ -104,11 +104,11 @@ impl World {
 
 #[test]
 fn a_publication_from_the_jobs_own_read_equals_one_that_reads_for_itself() {
-    let world = world();
-    // Two Workspaces of one engine take the same steps. The jobs of one read
-    // the name three times before they publish; the jobs of the other never
-    // read it, so their publication reads it.
-    let (reading, blind) = (world.seat(41), world.seat(42));
+    let (world, beside) = (world(), world());
+    // Two Workspaces, each in its own database, take the same steps. The jobs
+    // of one read the name three times before they publish; the jobs of the
+    // other never read it, so their publication reads it.
+    let (reading, blind) = (world.seat(41), beside.seat(42));
     let removed = Binding::Removed { inherited: false };
     let steps: [(&str, Binding, Stored); 7] = [
         ("no row: bind", bound(5), Some((Some(5), false))),
@@ -134,36 +134,35 @@ fn a_publication_from_the_jobs_own_read_equals_one_that_reads_for_itself() {
     ];
     for (index, (label, binding, wanted)) in steps.into_iter().enumerate() {
         if index == 3 {
-            for seat in [reading, blind] {
-                world.db.capture(seat.route).unwrap();
-            }
+            world.db.capture(reading.route).unwrap();
+            beside.db.capture(blind.route).unwrap();
         }
         let (seen, statements) = world.publish(reading, 3, binding);
         assert!(seen.windows(2).all(|pair| pair[0] == pair[1]), "{label}");
         // One read and one write of the name row, whatever the job asked.
         assert_eq!(statements, 2, "{label}: reading job");
-        let (_, statements) = world.publish(blind, 0, binding);
+        let (_, statements) = beside.publish(blind, 0, binding);
         assert_eq!(statements, 2, "{label}: blind job");
         assert_eq!(world.published(reading).0, wanted, "{label}");
-        assert_eq!(world.published(reading), world.published(blind), "{label}");
+        assert_eq!(world.published(reading), beside.published(blind), "{label}");
     }
 }
 
 #[test]
 fn a_kept_read_ends_with_its_job_and_never_crosses_workspaces() {
-    let world = world();
-    let (first, second) = (world.seat(43), world.seat(44));
+    let (world, beside) = (world(), world());
+    let (first, second) = (world.seat(43), beside.seat(44));
     // Each job reads what the job before it published, in its own Workspace.
     let (seen, _) = world.publish(first, 2, bound(5));
     assert_eq!(seen[0].active, None);
-    let (seen, _) = world.publish(second, 2, bound(6));
+    let (seen, _) = beside.publish(second, 2, bound(6));
     assert_eq!(seen[0].active, None, "another Workspace's name");
     let (seen, _) = world.publish(first, 2, bound(7));
     assert_eq!(seen[0].active, Some(Some(5)));
-    let (seen, _) = world.publish(second, 2, Binding::Removed { inherited: false });
+    let (seen, _) = beside.publish(second, 2, Binding::Removed { inherited: false });
     assert_eq!(seen[0].active, Some(Some(6)));
     assert_eq!(world.published(first).0, Some((Some(7), false)));
-    assert_eq!(world.published(second).0, None);
+    assert_eq!(beside.published(second).0, None);
 }
 
 #[test]

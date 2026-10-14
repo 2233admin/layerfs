@@ -26,12 +26,7 @@ impl Overlay {
         self.query(
             StatementKind::Capture,
             sql::SOURCE_NAMES,
-            &[
-                &reader.capture.route.ns,
-                &reader.capture.generation.0,
-                &integer(parent)?,
-                &after,
-            ],
+            &[&reader.capture.generation.0, &integer(parent)?, &after],
             24 + after.len() as u64,
             |row| {
                 Ok(DirectoryEntry {
@@ -58,12 +53,7 @@ impl Overlay {
         self.query(
             StatementKind::Capture,
             sql::CAPTURED_DIRECTORY_ENTRY,
-            &[
-                &reader.capture.route.ns,
-                &integer(parent)?,
-                &name,
-                &reader.capture.generation.0,
-            ],
+            &[&integer(parent)?, &name, &reader.capture.generation.0],
             32 + name.len() as u64,
             |row| {
                 Ok(DirectoryEntry {
@@ -106,19 +96,19 @@ impl Overlay {
         if name.len() > 255 {
             return Err(OverlayError::Invalid("captured name"));
         }
-        let (ns, generation) = (reader.capture.route.ns, reader.capture.generation.0);
+        let generation = reader.capture.generation.0;
         let parent = integer(parent)?;
         let mut plans = Vec::new();
         for (label, statement, params) in [
             (
                 "parent-names",
                 sql::SOURCE_NAMES,
-                [&ns as &dyn rusqlite::ToSql, &generation, &parent, &name],
+                [&generation as &dyn rusqlite::ToSql, &parent, &name],
             ),
             (
                 "name-point",
                 sql::CAPTURED_DIRECTORY_ENTRY,
-                [&ns, &parent, &name, &generation],
+                [&parent, &name, &generation],
             ),
         ] {
             plans.extend(self.query(

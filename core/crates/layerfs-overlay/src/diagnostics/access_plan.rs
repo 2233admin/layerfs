@@ -11,7 +11,6 @@ impl Overlay {
                 StatementKind::Lease,
                 sql::LEASE_LOOKUP,
                 &[
-                    &route.ns,
                     &(lease.kind as i64),
                     &integer(lease.owner)?,
                     &integer(lease.resource)?,
@@ -37,7 +36,6 @@ impl Overlay {
             StatementKind::Explain,
             &format!("EXPLAIN QUERY PLAN {}", sql::CELL_COVER),
             &[
-                &route.ns,
                 &integer(serial)?,
                 &generation.0,
                 &crate::payload::runs::slot(integer(offset)?),
@@ -58,13 +56,7 @@ impl Overlay {
         self.query(
             StatementKind::Explain,
             &format!("EXPLAIN QUERY PLAN {}", sql::DIRECTORY_ENTRY_LOOKUP),
-            &[
-                &route.ns,
-                &integer(parent)?,
-                &name,
-                &state.active.0,
-                &state.installed,
-            ],
+            &[&integer(parent)?, &name, &state.active.0, &state.installed],
             32 + name.len() as u64,
             |row| row.get(3),
         )
@@ -77,32 +69,9 @@ impl Overlay {
             StatementKind::Explain,
             &format!("EXPLAIN QUERY PLAN {}", sql::LEASE_LOOKUP),
             &[
-                &route.ns,
                 &(lease.kind as i64),
                 &integer(lease.owner)?,
                 &integer(lease.resource)?,
-            ],
-            32,
-            |row| row.get(3),
-        )
-    }
-    /// Plan for the real operation-owned operation record keyset window.
-    pub fn explain_operation_record(
-        &self,
-        route: Route,
-        operation: u64,
-        kind: u32,
-        after: Option<u64>,
-    ) -> OverlayResult<Vec<String>> {
-        self.operation(route, operation)?;
-        self.query(
-            StatementKind::Explain,
-            &format!("EXPLAIN QUERY PLAN {}", sql::OPERATION_RECORD_PAGE),
-            &[
-                &route.ns,
-                &integer(operation)?,
-                &i64::from(kind),
-                &after.map(integer).transpose()?.unwrap_or(-1),
             ],
             32,
             |row| row.get(3),

@@ -24,7 +24,7 @@ impl Overlay {
                 8,
             )?;
             self.wake_orphan_sources(capture.route.ns, capture.generation.0)?;
-            self.enqueue(capture.route.ns, FOLD, 0, capture.generation.0)
+            self.enqueue(FOLD, 0, capture.generation.0)
         })
     }
     pub(crate) fn route_for_ns(&self, ns: i64) -> OverlayResult<Route> {
@@ -58,9 +58,9 @@ impl Overlay {
             let row = self
                 .query(
                     StatementKind::Reclaim,
-                    "SELECT parent,name,serial,inherited FROM directory_entry INDEXED BY directory_entry_capture
-                WHERE ns=?1 AND gen=?2 AND (parent,name)>(?3,?4) ORDER BY parent,name LIMIT 1",
-                    &[&item.ns, &item.target, &item.cursor, &item.name],
+                    "SELECT parent,name,inode,inherited FROM fs_entry INDEXED BY fs_entry_capture
+                WHERE generation=?1 AND (parent,name)>(?2,?3) ORDER BY parent,name LIMIT 1",
+                    &[&item.target, &item.cursor, &item.name],
                     24 + item.name.len() as u64,
                     |r| {
                         Ok((
@@ -77,7 +77,7 @@ impl Overlay {
                     .query(
                         StatementKind::DirectoryEntry,
                         sql::DIRECTORY_ENTRY_ACTIVE,
-                        &[&item.ns, &parent, &name, &state.active.0],
+                        &[&parent, &name, &state.active.0],
                         24 + name.len() as u64,
                         |r| r.get::<_, Option<i64>>(0),
                     )?
@@ -87,14 +87,7 @@ impl Overlay {
                     self.execute(
                         StatementKind::DirectoryEntry,
                         sql::DIRECTORY_ENTRY_PUT,
-                        &[
-                            &item.ns,
-                            &parent,
-                            &name,
-                            &state.active.0,
-                            &final_serial,
-                            &inherited,
-                        ],
+                        &[&parent, &name, &state.active.0, &final_serial, &inherited],
                         33 + name.len() as u64,
                     )?;
                     i64::from(active.is_none())
@@ -102,7 +95,7 @@ impl Overlay {
                     self.execute(
                         StatementKind::DirectoryEntry,
                         sql::DIRECTORY_ENTRY_DROP,
-                        &[&item.ns, &parent, &name, &state.active.0],
+                        &[&parent, &name, &state.active.0],
                         24 + name.len() as u64,
                     )?;
                     -1
@@ -120,7 +113,7 @@ impl Overlay {
                 self.execute(
                     StatementKind::Reclaim,
                     sql::DIRECTORY_ENTRY_DROP,
-                    &[&item.ns, &parent, &name, &item.target],
+                    &[&parent, &name, &item.target],
                     24 + name.len() as u64,
                 )?;
                 self.advance_item(item, 0, parent, -1, &name)?;
@@ -130,9 +123,9 @@ impl Overlay {
             return Ok((0, 0, false));
         }
         let lower=self.query(StatementKind::Inode,
-            "SELECT serial,kind,mode,mtime_seconds,mtime_nanoseconds,nlink,size,inherited_cutoff,born,entries,subdirs
-             FROM inode INDEXED BY inode_capture WHERE ns=?1 AND gen=?2 AND serial>=?3 ORDER BY serial LIMIT 1",
-            &[&item.ns,&item.target,&item.cursor],24,inode::decode)?.pop();
+            "SELECT inode,kind,mode,mtime_seconds,mtime_nanoseconds,nlink,size,inherited_cutoff,born,entries,subdirs
+             FROM fs_inode INDEXED BY fs_inode_capture WHERE generation=?1 AND inode>=?2 ORDER BY inode LIMIT 1",
+            &[&item.target,&item.cursor],24,inode::decode)?.pop();
         let Some(lower) = lower else {
             self.execute(
                 StatementKind::Capture,
@@ -140,7 +133,7 @@ impl Overlay {
                 &[&item.ns],
                 8,
             )?;
-            self.enqueue(item.ns, RETIRE, 0, item.target)?;
+            self.enqueue(RETIRE, 0, item.target)?;
             self.finish_item(item)?;
             return Ok((0, 0, true));
         };
@@ -150,7 +143,7 @@ impl Overlay {
             // its zero-reference metadata over an unchanged immutable base.
             if lower.nlink == 0
                 && self
-                    .layers(item.ns, serial, state.active.0, state.active.0 - 1)?
+                    .layers(serial, state.active.0, state.active.0 - 1)?
                     .is_empty()
             {
                 self.put_inode(route, &state, &lower)?;
@@ -172,11 +165,11 @@ impl Overlay {
                 &[&item.ns],
                 8,
             )?;
-            self.enqueue(item.ns, RETIRE, 0, item.target)?;
+            self.enqueue(RETIRE, 0, item.target)?;
             self.finish_item(item)?;
             return Ok((1, 0, true));
         }
-        let layers = self.layers(item.ns, serial, state.active.0, state.installed)?;
+        let layers = self.layers(serial, state.active.0, state.installed)?;
         let bottom = layers
             .iter()
             .find(|layer| layer.gen == item.target)
@@ -197,10 +190,9 @@ impl Overlay {
         let cell = self
             .query(
                 StatementKind::Reclaim,
-                "SELECT cell_offset FROM payload
-            WHERE ns=?1 AND serial=?2 AND gen=?3 AND cell_offset>?4 ORDER BY cell_offset LIMIT 1",
+                "SELECT cell_offset FROM fs_data
+            WHERE inode=?1 AND generation=?2 AND cell_offset>?3 ORDER BY cell_offset LIMIT 1",
                 &[
-                    &item.ns,
                     &serial,
                     &item.target,
                     &if serial == item.cursor { item.aux } else { -1 },
@@ -216,12 +208,12 @@ impl Overlay {
                 self.execute(
                     StatementKind::Reclaim,
                     sql::CELL_DROP,
-                    &[&item.ns, &serial, &item.target, &cell],
+                    &[&serial, &item.target, &cell],
                     32,
                 )?;
                 0
             } else {
-                self.transfer_row(item.ns, serial, bottom, &top, cell)?
+                self.transfer_row(serial, bottom, &top, cell)?
             };
             self.advance_item(item, 1, serial, cell, &[])?;
             return Ok((1, bytes, false));
@@ -230,9 +222,9 @@ impl Overlay {
         // each, or go with a file the active generation has unlinked.
         if bottom.referenced {
             let moved = if top.nlink == 0 {
-                self.drop_pieces(item.ns, serial, item.target, PAGE.rows)? != 0
+                self.drop_pieces(serial, item.target, PAGE.rows)? != 0
             } else {
-                self.transfer_piece(item.ns, serial, bottom, &top)?
+                self.transfer_piece(serial, bottom, &top)?
             };
             if moved {
                 return Ok((1, 0, false));
@@ -240,15 +232,15 @@ impl Overlay {
         }
         self.execute(
             StatementKind::Inode,
-            "UPDATE inode SET inherited_cutoff=min(inherited_cutoff,?4)
-            WHERE ns=?1 AND serial=?2 AND gen=?3",
-            &[&item.ns, &serial, &top.gen, &integer(bottom.cutoff)?],
+            "UPDATE fs_inode SET inherited_cutoff=min(inherited_cutoff,?3)
+            WHERE inode=?1 AND generation=?2",
+            &[&serial, &top.gen, &integer(bottom.cutoff)?],
             32,
         )?;
         self.execute(
             StatementKind::Reclaim,
-            "DELETE FROM inode WHERE ns=?1 AND serial=?2 AND gen=?3",
-            &[&item.ns, &serial, &item.target],
+            "DELETE FROM fs_inode WHERE inode=?1 AND generation=?2",
+            &[&serial, &item.target],
             24,
         )?;
         self.advance_item(item, 1, serial, -1, &[])?;

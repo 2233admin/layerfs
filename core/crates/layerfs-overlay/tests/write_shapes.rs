@@ -30,16 +30,6 @@ fn a_window_of_slots_is_one_shape_read_whatever_rows_it_holds() {
     let db = temp.db();
     let route = db.open_workspace([71; 32], [72; 32]).unwrap();
     let source = db.acquire_base_source(route, 1).unwrap();
-    // Another Workspace of the engine writes the same serial: its rows are
-    // never this Workspace's.
-    let beside = db.open_workspace([73; 32], [74; 32]).unwrap();
-    let beside_source = db.acquire_base_source(beside, 1).unwrap();
-    let mut other = File::new(&db, beside_source, 30, Vec::new());
-    for window in 0..3 {
-        other.write(window * WINDOW, &pattern(WINDOW as usize, 4));
-    }
-    let kept = stored(&db, beside);
-
     let mut file = File::new(&db, source, 30, Vec::new());
     // One window of four slots: one shape read and four inserts.
     let fresh = payload(&db, || file.write(0, &pattern(WINDOW as usize, 1)));
@@ -93,8 +83,6 @@ fn a_window_of_slots_is_one_shape_read_whatever_rows_it_holds() {
     println!("WRITE_SHAPES stored rows={} bytes={}", left.0, left.1);
     // What the same sequence stored with one shape read per slot.
     assert_eq!(left, STORED);
-    other.check();
-    assert_eq!(stored(&db, beside), kept, "another Workspace's rows");
     // The wider shape read is the same indexed range: `work` refuses a
     // scan, a sort, an automatic index and a reprepare in any family.
     work(&db, || file.write(SLOT / 2 + 3, &noise(WINDOW as usize, 7)));

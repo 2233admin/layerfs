@@ -8,30 +8,20 @@ use crate::{
 impl Overlay {
     /// Drops the lowest pieces of one layer, at most `rows`, in one
     /// statement, and returns how many it dropped.
-    pub(crate) fn drop_pieces(
-        &self,
-        ns: i64,
-        serial: i64,
-        gen: i64,
-        rows: usize,
-    ) -> OverlayResult<u64> {
+    pub(crate) fn drop_pieces(&self, serial: i64, gen: i64, rows: usize) -> OverlayResult<u64> {
         let last = rows.saturating_sub(1) as i64;
         self.execute(
             StatementKind::Reclaim,
             sql::PIECES_DROP,
-            &[&ns, &gen, &serial, &last],
+            &[&gen, &serial, &last],
             32,
         )
     }
-    pub(crate) fn drop_piece(
-        &self,
-        (ns, gen, serial): (i64, i64, i64),
-        offset: i64,
-    ) -> OverlayResult<()> {
+    pub(crate) fn drop_piece(&self, (gen, serial): (i64, i64), offset: i64) -> OverlayResult<()> {
         self.execute(
             StatementKind::Reclaim,
             sql::PIECE_DROP,
-            &[&ns, &gen, &serial, &offset],
+            &[&gen, &serial, &offset],
             32,
         )?;
         Ok(())
@@ -42,19 +32,19 @@ impl Overlay {
     pub(crate) fn clean_pieces(&self, item: &Item) -> OverlayResult<(u64, u64, bool)> {
         debug_assert_eq!(item.kind, STALE_PIECES);
         let layer = self
-            .layers(item.ns, item.resource, item.target, item.target - 1)?
+            .layers(item.resource, item.target, item.target - 1)?
             .pop();
-        let key = (item.ns, item.target, item.resource);
+        let key = (item.target, item.resource);
         let rows = self.query(
             StatementKind::Reclaim,
             sql::PIECE_PAGE,
-            &[&item.ns, &item.target, &item.resource, &item.cursor],
+            &[&item.target, &item.resource, &item.cursor],
             32,
             |r| Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?)),
         )?;
         for (offset, stamp) in &rows {
             let stale = match layer {
-                Some(ref layer) => self.stale(item.ns, item.resource, layer, *offset, *stamp)?,
+                Some(ref layer) => self.stale(item.resource, layer, *offset, *stamp)?,
                 None => true,
             };
             if stale {
@@ -75,13 +65,13 @@ impl Overlay {
         let rows = self.query(
             StatementKind::Reclaim,
             sql::PIECE_GENERATION_PAGE,
-            &[&ns, &gen, &item.cursor, &item.aux],
+            &[&gen, &item.cursor, &item.aux],
             32,
             |r| Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?)),
         )?;
         for (serial, offset) in &rows {
             if !self.orphan_holds(ns, *serial, gen)? {
-                self.drop_piece((ns, gen, *serial), *offset)?;
+                self.drop_piece((gen, *serial), *offset)?;
             }
         }
         if let Some((serial, offset)) = rows.last() {

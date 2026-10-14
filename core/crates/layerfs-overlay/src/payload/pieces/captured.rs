@@ -31,7 +31,7 @@ impl Overlay {
     /// no piece state. A stale piece only bounds the unit.
     pub(crate) fn captured_piece_step(
         &self,
-        (ns, serial): (i64, i64),
+        serial: i64,
         layers: Vec<Layer>,
         mut cursor: CapturedRunCursor,
         mut work: CapturedRunWork,
@@ -39,14 +39,14 @@ impl Overlay {
         let at = cursor.at;
         let (needed, mut end, zero) = gap_bounds(&layers, at, cursor.size);
         for (slot, layer) in layers.iter().take(needed).enumerate() {
-            self.probe_cell(ns, serial, layer, &mut cursor.probes[slot], at, &mut work)?;
+            self.probe_cell(serial, layer, &mut cursor.probes[slot], at, &mut work)?;
             if !cursor.probes[slot].ready {
                 return Ok(reply(CapturedRunStep::Continue(cursor), work));
             }
             if let Some(cell) = cursor.probes[slot].cell {
                 if cell.offset <= at {
                     if slot == 0 {
-                        let local = self.local_shape(ns, serial, &layers, cursor, &mut work)?;
+                        let local = self.local_shape(serial, &layers, cursor, &mut work)?;
                         if let Some(next) = local {
                             let step = CapturedRunStep::Local {
                                 offset: at,
@@ -60,7 +60,7 @@ impl Overlay {
                         .size
                         .min(cell.offset + cell.length.div_ceil(CELL) * CELL);
                     let mut read = self
-                        .compose_layers(ns, serial, at, (to - at) as u32, layers)?
+                        .compose_layers(serial, at, (to - at) as u32, layers)?
                         .ok_or(OverlayError::Invalid("captured run layers"))?;
                     read.base_root = Some(cursor.reader.capture().base_root);
                     let step = CapturedRunStep::Window {
@@ -75,10 +75,10 @@ impl Overlay {
                 continue;
             }
             let place = crate::db::integer(at)?;
-            if let Some(piece) = self.piece_cover(ns, layer.gen, serial, place)? {
+            if let Some(piece) = self.piece_cover(layer.gen, serial, place)? {
                 work.metadata_rows += 1;
                 if piece.end() as u64 > at {
-                    if !self.stale(ns, serial, layer, piece.offset, piece.epoch)? {
+                    if !self.stale(serial, layer, piece.offset, piece.epoch)? {
                         let to = end.min(piece.end() as u64);
                         if to <= at {
                             return Err(OverlayError::Invalid("captured run progress"));
@@ -96,7 +96,7 @@ impl Overlay {
                 }
             }
             // No piece of this layer starts between the byte and this row.
-            if let Some(piece) = self.piece_next(ns, layer.gen, serial, place + 1)? {
+            if let Some(piece) = self.piece_next(layer.gen, serial, place + 1)? {
                 work.metadata_rows += 1;
                 end = end.min(piece.offset as u64);
             }

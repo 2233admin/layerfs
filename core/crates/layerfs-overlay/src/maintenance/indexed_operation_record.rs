@@ -11,7 +11,6 @@ struct Record {
 impl Overlay {
     pub(crate) fn delete_indexed_operation_record(
         &self,
-        ns: i64,
         operation: i64,
     ) -> OverlayResult<(u64, u64)> {
         let decode = |r: &rusqlite::Row<'_>| {
@@ -25,7 +24,7 @@ impl Overlay {
         let records = self.query(
             StatementKind::Reclaim,
             sql::INDEXED_OPERATION_RECORD_RECLAIM_OPERATION,
-            &[&ns, &operation],
+            &[&operation],
             16,
             decode,
         )?;
@@ -47,7 +46,7 @@ impl Overlay {
         self.execute(
             StatementKind::Reclaim,
             sql::INDEXED_OPERATION_RECORD_DELETE_OPERATION,
-            &[&ns, &operation, &last.file_scope, &last.kind, &last.key],
+            &[&operation, &last.file_scope, &last.kind, &last.key],
             bound,
         )?;
         Ok((count, bytes))

@@ -52,7 +52,7 @@ fn startup_counts_profile_schema_accounting_without_reservation() {
     assert_eq!(physical.cleanup_headroom_bytes, 0);
     assert!(physical.allocated_bytes < 1 << 20);
     assert_eq!(physical.work, work.allocation);
-    assert_eq!(db.profile().schema_version, 33);
+    assert_eq!(db.profile().schema_version, 34);
     println!("S7_STARTUP_SUCCESS {work:?}");
 }
 
@@ -83,7 +83,7 @@ fn real_schema_full_failure_retains_original_error_work_and_artifact() {
     let created = Overlay::create_observed(
         &path,
         ProfileConfig {
-            max_pages: Some(32),
+            max_pages: Some(24),
             ..ProfileConfig::default()
         },
     );

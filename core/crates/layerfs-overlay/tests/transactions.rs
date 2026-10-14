@@ -309,34 +309,3 @@ fn consecutive_writes_do_no_capacity_observation_or_reservation() {
     assert_eq!(after.reserved_tail_bytes, 0);
     assert_eq!(after.cleanup_headroom_bytes, 0);
 }
-
-#[test]
-fn owner_identities_are_unique_and_increasing_across_namespaces() {
-    let temp = Temp::new();
-    let db = temp.db();
-    let routes = [
-        db.open_workspace([9; 32], [10; 32]).unwrap(),
-        db.open_workspace([11; 32], [10; 32]).unwrap(),
-    ];
-    let sources = routes.map(|route| db.acquire_base_source(route, 7).unwrap());
-    let mut minted = Vec::new();
-    for request in 1..=3 {
-        for source in sources {
-            let open = db.open_file(source, request, &file(), false).unwrap();
-            minted.push(open.owner_id());
-        }
-    }
-    // One counter serves the engine; the first identity is 1.
-    assert_eq!(minted, [1, 2, 3, 4, 5, 6]);
-    // A repeated request fails after its identity was minted. The identity
-    // is not handed out again.
-    assert!(db.open_file(sources[0], 1, &file(), false).is_err());
-    let next = db.open_file(sources[1], 4, &file(), false).unwrap();
-    assert!(next.owner_id() > 6);
-    assert_eq!(
-        db.retained_file(routes[1], 4)
-            .unwrap()
-            .map(OpenFile::owner_id),
-        Some(next.owner_id())
-    );
-}

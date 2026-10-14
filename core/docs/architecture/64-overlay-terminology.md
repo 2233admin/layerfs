@@ -1,6 +1,53 @@
 # Directory entries and operation records
 
 > **Status:** Current source terminology following owner direction2026-10-07.
+> The table names and the record shapes below were revised by issue #321
+> Step C (2026-10-14); the section "Schema 34" is current and supersedes the
+> relation names, the `ns` partition and the schema numbers in the older text.
+
+## Schema 34: one Workspace per database
+
+Each Workspace has its own overlay database file, so no row carries a
+Workspace key. Only the `workspace` row names its namespace (`ns`), and the
+engine refuses to open a second Workspace in a database. Open state stays in
+memory, keyed by that namespace. Rust type, method and counter names are
+unchanged; only the SQL relations, their indexes and three column names changed.
+
+| Relation (schema 34) | Was | Holds |
+| --- | --- | --- |
+| `fs_inode` | `inode` | inode rows per generation |
+| `fs_entry` | `directory_entry` | directory entries, including recorded removals |
+| `fs_data` | `payload` | payload cells and dense runs |
+| `fs_data_ref` | `payload_reference` | reference pieces naming committed content |
+| `fs_truncate` | `shrink` | truncation steps |
+| `commit_run` | `operation_owner` | an engine-minted operation owner |
+| `commit_reader` | `captured_reader` | a captured reader |
+| `commit_base_pin` | `base_source` | a base-source owner |
+| `commit_pin` | `lease` | a custody pin |
+| `commit_record` | `indexed_operation_record` | indexed operation records |
+| `cleanup_task` | `maintenance` | the bounded maintenance queue |
+
+Columns `serial`, `gen` and `owner` are `inode`, `generation` and `holder`.
+Indexes follow their tables (`fs_inode_capture`, `fs_entry_capture`,
+`fs_data_generation`, `fs_truncate_generation`, `commit_pin_resource`,
+`cleanup_task_ready`, `cleanup_task_generation`).
+
+The integer-keyed `operation_record` and `owned_operation_record` relations
+and their methods are removed, not merged. One shape cannot serve an integer
+key and an (8-byte file scope, kind, 32-byte key) identity without an untyped
+key, a caller-chosen and an engine-minted operation number could collide in
+one relation, and neither integer-keyed relation had a production writer.
+
+`accounting` is one row with the constant key `id=1`; each trigger seeks it by
+that key. The daemon aggregate is the sum over its Workspace files. The
+maintenance cursor is (kind, resource, target). The smallest accepted page
+quota is 24 pages, below the 30 pages of the schema itself, so that quota is
+a real creation failure rather than a refused setting.
+
+`user_version` is 34. The file is created fresh and is never reopened: there
+is no migration, conversion or retry.
+
+## Earlier terminology (schema 16 to 33)
 
 A `directory_entry` is a directory name-to-inode binding, including a recorded
 removal. The Overlay public DirectoryEntry and its windows/changes describe the

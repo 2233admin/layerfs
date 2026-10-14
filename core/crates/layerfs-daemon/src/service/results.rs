@@ -6,8 +6,7 @@ use std::sync::Arc;
 // Job classes are observations only; results retain their concrete payloads.
 use layerfs_overlay::{
     BaseSource, Capture, CapturedReader, Cell, DirectoryEntry, DirectoryEntryWindow, FileRead,
-    Inode, LookupOwner, OpenFile, OperationOwner, OperationRecord, Publication, Route,
-    WorkspaceState,
+    Inode, LookupOwner, OpenFile, OperationOwner, Publication, Route, WorkspaceState,
 };
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(usize)]
@@ -49,7 +48,6 @@ pub enum Response {
     DirectoryEntry(Option<DirectoryEntry>),
     DirectoryEntryWindow(DirectoryEntryWindow),
     RetainedBaseSource(Option<BaseSource>),
-    OperationRecord(Vec<OperationRecord>),
     Namespace(layerfs_workspace::JobOutcome),
     Read(Option<layerfs_overlay::LocalRead>),
     Symlink(Vec<u8>),

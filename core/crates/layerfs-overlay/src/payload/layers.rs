@@ -28,7 +28,6 @@ impl Overlay {
     /// Rows of one inode, newest first, within `(installed, top]`.
     pub(crate) fn layers(
         &self,
-        ns: i64,
         serial: i64,
         top: i64,
         installed: i64,
@@ -36,7 +35,7 @@ impl Overlay {
         self.query(
             StatementKind::Inode,
             sql::LAYERS,
-            &[&ns, &serial, &top, &installed],
+            &[&serial, &top, &installed],
             32,
             |row| {
                 Ok(Layer {
@@ -58,11 +57,11 @@ impl Overlay {
             },
         )
     }
-    fn step(&self, ns: i64, serial: i64, gen: i64, depth: i64) -> OverlayResult<(i64, i64)> {
+    fn step(&self, serial: i64, gen: i64, depth: i64) -> OverlayResult<(i64, i64)> {
         self.query(
             StatementKind::Payload,
             sql::STEP_GET,
-            &[&ns, &serial, &gen, &depth],
+            &[&serial, &gen, &depth],
             32,
             |row| Ok((row.get(0)?, row.get(1)?)),
         )?
@@ -75,7 +74,6 @@ impl Overlay {
     /// boundary is at or below the cell.
     pub(crate) fn stale(
         &self,
-        ns: i64,
         serial: i64,
         layer: &Layer,
         cell: i64,
@@ -87,7 +85,7 @@ impl Overlay {
         let (mut low, mut high, mut newest) = (1, layer.height, 0);
         while low <= high {
             let middle = low + (high - low) / 2;
-            let (boundary, epoch) = self.step(ns, serial, layer.gen, middle)?;
+            let (boundary, epoch) = self.step(serial, layer.gen, middle)?;
             if boundary <= cell {
                 newest = epoch;
                 low = middle + 1;
@@ -99,7 +97,6 @@ impl Overlay {
     }
     pub(crate) fn store(
         &self,
-        ns: i64,
         serial: i64,
         gen: i64,
         cell: i64,
@@ -112,7 +109,7 @@ impl Overlay {
                 self.execute(
                     StatementKind::Payload,
                     sql::CELL_PUT,
-                    &[&ns, &serial, &gen, &cell, &epoch, &data, &validity],
+                    &[&serial, &gen, &cell, &epoch, &data, &validity],
                     bound as u64,
                 )?;
             }
@@ -120,7 +117,7 @@ impl Overlay {
                 self.execute(
                     StatementKind::Payload,
                     sql::CELL_DROP,
-                    &[&ns, &serial, &gen, &cell],
+                    &[&serial, &gen, &cell],
                     32,
                 )?;
             }
@@ -133,28 +130,22 @@ impl Overlay {
     /// cut off. Work is one row of at most `RUN_BYTES`, one step row and a
     /// binary search; no discarded row is visited. A row is afterwards wholly
     /// below the boundary or wholly stale.
-    pub(crate) fn shrink(
-        &self,
-        ns: i64,
-        serial: i64,
-        layer: &mut Layer,
-        to: u64,
-    ) -> OverlayResult<()> {
+    pub(crate) fn shrink(&self, serial: i64, layer: &mut Layer, to: u64) -> OverlayResult<()> {
         let inside = to % CELL;
         // No row crosses a slot boundary: nothing straddles one.
         if to % RUN_BYTES as u64 != 0 {
             let cell = (to - inside) as i64;
             let found = self
-                .covering(ns, serial, layer.gen, cell)?
+                .covering(serial, layer.gen, cell)?
                 .filter(|(shape, _)| inside != 0 || shape.offset < cell);
             if let Some((shape, stored)) = found {
-                let stale = self.stale(ns, serial, layer, shape.offset, shape.epoch)?;
+                let stale = self.stale(serial, layer, shape.offset, shape.epoch)?;
                 match stored.filter(|_| shape.masked && !stale) {
                     Some(stored) => {
                         let mut window = stored.expand(&self.payload_work)?;
                         window.cut(inside as usize);
                         let kept = window.trim(&self.payload_work);
-                        self.store(ns, serial, layer.gen, cell, stored.epoch, kept)?;
+                        self.store(serial, layer.gen, cell, stored.epoch, kept)?;
                     }
                     // A stale wide row stays wholly stale under the new step.
                     None if stale && !shape.wide() => self.drop_row(shape.row)?,
@@ -164,7 +155,7 @@ impl Overlay {
                     // cell and that cell's bytes below `to`, with its stamp.
                     None if shape.offset < cell => {
                         if inside != 0 {
-                            let layer = (ns, serial, layer.gen);
+                            let layer = (serial, layer.gen);
                             self.part(layer, &shape, cell, inside as i64)?;
                         }
                         self.keep(&shape, cell - shape.offset)?;
@@ -176,7 +167,7 @@ impl Overlay {
         if layer.referenced {
             // The piece that crosses the new size ends at it. It keeps its
             // stamp: it starts below the boundary, so it is not stale.
-            self.cut_piece(ns, serial, layer.gen, to)?;
+            self.cut_piece(serial, layer.gen, to)?;
         }
         let boundary = to.div_ceil(CELL).checked_mul(CELL).map(i64::try_from);
         let Some(Ok(boundary)) = boundary else {
@@ -187,7 +178,7 @@ impl Overlay {
         let (mut low, mut high, mut first) = (1, layer.height, layer.height + 1);
         while low <= high {
             let middle = low + (high - low) / 2;
-            if self.step(ns, serial, layer.gen, middle)?.0 >= boundary {
+            if self.step(serial, layer.gen, middle)?.0 >= boundary {
                 first = middle;
                 high = middle - 1;
             } else {
@@ -202,12 +193,12 @@ impl Overlay {
         self.execute(
             StatementKind::Payload,
             sql::STEP_PUT,
-            &[&ns, &serial, &layer.gen, &first, &boundary, &layer.epoch],
+            &[&serial, &layer.gen, &first, &boundary, &layer.epoch],
             48,
         )?;
         layer.cutoff = layer.cutoff.min(to);
         let cleaned = (layer.gen, layer.referenced);
-        self.schedule_shrink(ns, serial, cleaned, boundary, layer.height)?;
+        self.schedule_shrink(serial, cleaned, boundary, layer.height)?;
         Ok(())
     }
 }

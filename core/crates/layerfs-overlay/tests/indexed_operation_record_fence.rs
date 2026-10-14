@@ -124,7 +124,10 @@ fn each_job_refuses_a_stale_route_then_a_closed_write_then_a_released_owner() {
     assert_eq!(refusals(&db, foreign, 200), ["stale"; 7]);
 
     // Open Workspace, released owner: every job is stale.
-    let released = scope(&db, 41);
+    let released = IndexedOperationRecordScope {
+        owner: db.acquire_operation(held.owner.route(), 2).unwrap(),
+        ..held
+    };
     db.release_operation(released.owner).unwrap();
     assert_eq!(refusals(&db, released, 300), ["stale"; 7]);
 
@@ -212,7 +215,7 @@ fn the_fence_statements_are_point_searches() {
         .any(|plan| plan.contains("SEARCH workspace")));
     assert!(operation
         .iter()
-        .any(|plan| plan.contains("SEARCH operation_owner")));
+        .any(|plan| plan.contains("SEARCH commit_run")));
     for plan in operation {
         assert!(
             plan.contains("SEARCH") || plan.contains("SCALAR SUBQUERY"),

@@ -381,7 +381,6 @@ fn compound_statements_keep_point_work_as_the_namespace_grows() {
     let temp = Temp::new();
     let db = temp.db();
     let route = db.open_workspace([6; 32], [7; 32]).unwrap();
-    let other = db.open_workspace([8; 32], [9; 32]).unwrap();
     let source = db.acquire_base_source(route, 1).unwrap();
     let plans = db.explain_compound(source).unwrap();
     // Eight: the active and lower rows of one name are read by one statement
@@ -423,24 +422,22 @@ fn compound_statements_keep_point_work_as_the_namespace_grows() {
     let mut totals = Vec::new();
     for count in [128_u64, 1024, 4096] {
         while filled < count {
-            // Same-directory siblings, unrelated inodes and another namespace.
+            // Same-directory siblings and unrelated inodes.
             let serial = 1000 + filled;
-            for target in [route, other] {
-                let publication = db
-                    .publish(
-                        target,
-                        &file(serial, 0),
-                        Some(&DirectoryEntry {
-                            inherited: false,
-                            parent: 1,
-                            name: format!("sibling-{filled:05}").into_bytes(),
-                            serial: Some(serial),
-                        }),
-                        None,
-                    )
-                    .unwrap();
-                settle(&db, publication);
-            }
+            let publication = db
+                .publish(
+                    route,
+                    &file(serial, 0),
+                    Some(&DirectoryEntry {
+                        inherited: false,
+                        parent: 1,
+                        name: format!("sibling-{filled:05}").into_bytes(),
+                        serial: Some(serial),
+                    }),
+                    None,
+                )
+                .unwrap();
+            settle(&db, publication);
             filled += 1;
         }
         // One complete replacing-rename-shaped job: its consistent reads and

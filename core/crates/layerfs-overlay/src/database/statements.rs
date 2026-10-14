@@ -3,211 +3,201 @@
 /// its payload-layer columns: a job that publishes the serial reads no layer
 /// row again.
 pub(crate) const INODE_LOOKUP: &str =
-    "SELECT serial,kind,mode,mtime_seconds,mtime_nanoseconds,nlink,size,inherited_cutoff,born,entries,subdirs,gen,epoch,height,referenced,sequence
-    FROM inode WHERE ns=?1 AND serial=?2 AND gen<=?3 AND gen>?4 ORDER BY gen DESC LIMIT 1";
+    "SELECT inode,kind,mode,mtime_seconds,mtime_nanoseconds,nlink,size,inherited_cutoff,born,entries,subdirs,generation,epoch,height,referenced,sequence
+    FROM fs_inode WHERE inode=?1 AND generation<=?2 AND generation>?3 ORDER BY generation DESC LIMIT 1";
 pub(crate) const INODE_CAPTURE: &str =
-    "SELECT serial,kind,mode,mtime_seconds,mtime_nanoseconds,nlink,size,inherited_cutoff,born,entries,subdirs
-    FROM inode INDEXED BY inode_capture WHERE ns=?1 AND gen=?2 AND serial>?3 ORDER BY serial LIMIT 64";
-/// The last row at or before cell ?5 in its slot, which starts at ?4. A row
-/// of one cell at ?5 returns its bytes and mask; any other row only its
+    "SELECT inode,kind,mode,mtime_seconds,mtime_nanoseconds,nlink,size,inherited_cutoff,born,entries,subdirs
+    FROM fs_inode INDEXED BY fs_inode_capture WHERE generation=?1 AND inode>?2 ORDER BY inode LIMIT 64";
+/// The last row at or before cell ?4 in its slot, which starts at ?3. A row
+/// of one cell at ?4 returns its bytes and mask; any other row only its
 /// shape, so a wide row is never loaded to learn that it is there.
 pub(crate) const CELL_COVER: &str = "SELECT rowid,cell_offset,epoch,length(data),
-    CASE WHEN cell_offset=?5 AND length(data)<=4096 THEN data END,
-    CASE WHEN cell_offset=?5 THEN validity END FROM payload
-    WHERE ns=?1 AND serial=?2 AND gen=?3 AND cell_offset>=?4 AND cell_offset<=?5
+    CASE WHEN cell_offset=?4 AND length(data)<=4096 THEN data END,
+    CASE WHEN cell_offset=?4 THEN validity END FROM fs_data
+    WHERE inode=?1 AND generation=?2 AND cell_offset>=?3 AND cell_offset<=?4
     ORDER BY cell_offset DESC LIMIT 1";
-/// Shapes of the rows whose first cell lies in [?4, ?5); no bytes are loaded.
+/// Shapes of the rows whose first cell lies in [?3, ?4); no bytes are loaded.
 pub(crate) const CELL_SHAPES: &str =
-    "SELECT rowid,cell_offset,epoch,length(data),length(validity) FROM payload
-    WHERE ns=?1 AND serial=?2 AND gen=?3 AND cell_offset>=?4 AND cell_offset<?5
+    "SELECT rowid,cell_offset,epoch,length(data),length(validity) FROM fs_data
+    WHERE inode=?1 AND generation=?2 AND cell_offset>=?3 AND cell_offset<?4
     ORDER BY cell_offset";
 pub(crate) const CELL_PUT: &str =
-    "INSERT INTO payload(ns,serial,gen,cell_offset,epoch,data,validity) VALUES(?1,?2,?3,?4,?5,?6,?7)
-    ON CONFLICT(ns,serial,gen,cell_offset) DO UPDATE SET epoch=excluded.epoch,
+    "INSERT INTO fs_data(inode,generation,cell_offset,epoch,data,validity) VALUES(?1,?2,?3,?4,?5,?6)
+    ON CONFLICT(inode,generation,cell_offset) DO UPDATE SET epoch=excluded.epoch,
     data=excluded.data,validity=excluded.validity";
 pub(crate) const CELL_DROP: &str =
-    "DELETE FROM payload WHERE ns=?1 AND serial=?2 AND gen=?3 AND cell_offset=?4";
-pub(crate) const CELLS_DROP: &str = "DELETE FROM payload
-    WHERE ns=?1 AND serial=?2 AND gen=?3 AND cell_offset>=?4 AND cell_offset<?5";
-pub(crate) const ROW_DROP: &str = "DELETE FROM payload WHERE rowid=?1";
+    "DELETE FROM fs_data WHERE inode=?1 AND generation=?2 AND cell_offset=?3";
+pub(crate) const CELLS_DROP: &str = "DELETE FROM fs_data
+    WHERE inode=?1 AND generation=?2 AND cell_offset>=?3 AND cell_offset<?4";
+pub(crate) const ROW_DROP: &str = "DELETE FROM fs_data WHERE rowid=?1";
 /// Cuts a dense row to its first ?2 bytes.
-pub(crate) const ROW_KEEP: &str = "UPDATE payload SET data=substr(data,1,?2) WHERE rowid=?1";
-pub(crate) const ROW_MOVE: &str = "UPDATE payload SET gen=?2,epoch=?3 WHERE rowid=?1";
+pub(crate) const ROW_KEEP: &str = "UPDATE fs_data SET data=substr(data,1,?2) WHERE rowid=?1";
+pub(crate) const ROW_MOVE: &str = "UPDATE fs_data SET generation=?2,epoch=?3 WHERE rowid=?1";
 /// ?3 bytes of a row from its byte ?2, counted from one.
-pub(crate) const ROW_SLICE: &str = "SELECT substr(data,?2,?3) FROM payload WHERE rowid=?1";
-/// Rows that hold a byte of [?6, ?5): a row can start as early as its slot,
-/// ?4, and one that ends at or before ?6 is passed over without its bytes.
-pub(crate) const CELL_RANGE: &str = "SELECT cell_offset,epoch,data,validity FROM payload
-    WHERE ns=?1 AND serial=?2 AND gen=?3 AND cell_offset>=?4 AND cell_offset<?5
-    AND cell_offset+length(data)>?6 ORDER BY cell_offset";
-/// The next row at or after ?4 that reaches past cell ?6.
+pub(crate) const ROW_SLICE: &str = "SELECT substr(data,?2,?3) FROM fs_data WHERE rowid=?1";
+/// Rows that hold a byte of [?5, ?4): a row can start as early as its slot,
+/// ?3, and one that ends at or before ?5 is passed over without its bytes.
+pub(crate) const CELL_RANGE: &str = "SELECT cell_offset,epoch,data,validity FROM fs_data
+    WHERE inode=?1 AND generation=?2 AND cell_offset>=?3 AND cell_offset<?4
+    AND cell_offset+length(data)>?5 ORDER BY cell_offset";
+/// The next row at or after ?3 that reaches past cell ?5.
 pub(crate) const CAPTURED_CELL_METADATA: &str =
-    "SELECT cell_offset,epoch,length(data),length(validity) FROM payload
-    WHERE ns=?1 AND serial=?2 AND gen=?3 AND cell_offset>=?4 AND cell_offset<?5
-    AND cell_offset+length(data)>?6 ORDER BY cell_offset LIMIT 1";
-/// The last piece of one layer that starts at or before byte ?4.
+    "SELECT cell_offset,epoch,length(data),length(validity) FROM fs_data
+    WHERE inode=?1 AND generation=?2 AND cell_offset>=?3 AND cell_offset<?4
+    AND cell_offset+length(data)>?5 ORDER BY cell_offset LIMIT 1";
+/// The last piece of one layer that starts at or before byte ?3.
 pub(crate) const PIECE_COVER: &str =
-    "SELECT file_offset,length,epoch,source,source_offset FROM payload_reference
-    WHERE ns=?1 AND gen=?2 AND serial=?3 AND file_offset<=?4 ORDER BY file_offset DESC LIMIT 1";
-/// The pieces of one layer that can hold a byte of [?4, ?5): the last one
-/// that starts at or before ?4 and those that start inside. The LIMIT is
+    "SELECT file_offset,length,epoch,source,source_offset FROM fs_data_ref
+    WHERE generation=?1 AND inode=?2 AND file_offset<=?3 ORDER BY file_offset DESC LIMIT 1";
+/// The pieces of one layer that can hold a byte of [?3, ?4): the last one
+/// that starts at or before ?3 and those that start inside. The LIMIT is
 /// `pieces::rows::WINDOW_ROWS`, kept equal by hand: a bound limit would make
 /// SQLite prepare the statement again whenever its value is bound.
 pub(crate) const PIECE_WINDOW: &str =
-    "SELECT file_offset,length,epoch,source,source_offset FROM payload_reference
-    WHERE ns=?1 AND gen=?2 AND serial=?3 AND file_offset>=ifnull((SELECT max(file_offset)
-    FROM payload_reference WHERE ns=?1 AND gen=?2 AND serial=?3 AND file_offset<=?4),?4)
-    AND file_offset<?5 ORDER BY file_offset LIMIT 34";
-pub(crate) const PIECE_PUT: &str = "INSERT INTO payload_reference VALUES(?1,?2,?3,?4,?5,?6,?7,?8)";
-pub(crate) const PIECE_LENGTH: &str = "UPDATE payload_reference SET length=?5
-    WHERE ns=?1 AND gen=?2 AND serial=?3 AND file_offset=?4";
-/// Removes the pieces of one layer that start in [?4, ?5) and returns them.
-pub(crate) const PIECES_TAKE: &str = "DELETE FROM payload_reference
-    WHERE ns=?1 AND gen=?2 AND serial=?3 AND file_offset>=?4 AND file_offset<?5
+    "SELECT file_offset,length,epoch,source,source_offset FROM fs_data_ref
+    WHERE generation=?1 AND inode=?2 AND file_offset>=ifnull((SELECT max(file_offset)
+    FROM fs_data_ref WHERE generation=?1 AND inode=?2 AND file_offset<=?3),?3)
+    AND file_offset<?4 ORDER BY file_offset LIMIT 34";
+pub(crate) const PIECE_PUT: &str = "INSERT INTO fs_data_ref VALUES(?1,?2,?3,?4,?5,?6,?7)";
+pub(crate) const PIECE_LENGTH: &str = "UPDATE fs_data_ref SET length=?4
+    WHERE generation=?1 AND inode=?2 AND file_offset=?3";
+/// Removes the pieces of one layer that start in [?3, ?4) and returns them.
+pub(crate) const PIECES_TAKE: &str = "DELETE FROM fs_data_ref
+    WHERE generation=?1 AND inode=?2 AND file_offset>=?3 AND file_offset<?4
     RETURNING file_offset,length,epoch,source,source_offset";
-/// Ends the piece that crosses byte ?4 of one layer at that byte.
-pub(crate) const PIECE_CUT: &str = "UPDATE payload_reference SET length=?4-file_offset
-    WHERE ns=?1 AND gen=?2 AND serial=?3 AND file_offset=(SELECT max(file_offset)
-    FROM payload_reference WHERE ns=?1 AND gen=?2 AND serial=?3 AND file_offset<?4)
-    AND file_offset+length>?4";
-/// The first piece of one layer that starts at or after byte ?4.
+/// Ends the piece that crosses byte ?3 of one layer at that byte.
+pub(crate) const PIECE_CUT: &str = "UPDATE fs_data_ref SET length=?3-file_offset
+    WHERE generation=?1 AND inode=?2 AND file_offset=(SELECT max(file_offset)
+    FROM fs_data_ref WHERE generation=?1 AND inode=?2 AND file_offset<?3)
+    AND file_offset+length>?3";
+/// The first piece of one layer that starts at or after byte ?3.
 pub(crate) const PIECE_NEXT: &str =
-    "SELECT file_offset,length,epoch,source,source_offset FROM payload_reference
-    WHERE ns=?1 AND gen=?2 AND serial=?3 AND file_offset>=?4 ORDER BY file_offset LIMIT 1";
+    "SELECT file_offset,length,epoch,source,source_offset FROM fs_data_ref
+    WHERE generation=?1 AND inode=?2 AND file_offset>=?3 ORDER BY file_offset LIMIT 1";
 /// Moves the start of one piece forward: its new first byte, length and
 /// source offset.
 pub(crate) const PIECE_START: &str =
-    "UPDATE payload_reference SET file_offset=?5,length=?6,source_offset=?7
-    WHERE ns=?1 AND gen=?2 AND serial=?3 AND file_offset=?4";
-pub(crate) const PIECE_DROP: &str = "DELETE FROM payload_reference
-    WHERE ns=?1 AND gen=?2 AND serial=?3 AND file_offset=?4";
-/// The lowest `?4 + 1` pieces of one layer, found by one seek and that many
+    "UPDATE fs_data_ref SET file_offset=?4,length=?5,source_offset=?6
+    WHERE generation=?1 AND inode=?2 AND file_offset=?3";
+pub(crate) const PIECE_DROP: &str = "DELETE FROM fs_data_ref
+    WHERE generation=?1 AND inode=?2 AND file_offset=?3";
+/// The lowest `?3 + 1` pieces of one layer, found by one seek and that many
 /// index steps.
-pub(crate) const PIECES_DROP: &str = "DELETE FROM payload_reference
-    WHERE ns=?1 AND gen=?2 AND serial=?3 AND file_offset<=ifnull((SELECT file_offset
-    FROM payload_reference WHERE ns=?1 AND gen=?2 AND serial=?3
-    ORDER BY file_offset LIMIT 1 OFFSET ?4),9223372036854775807)";
-/// One page of the pieces of one layer after byte ?4, with their stamps.
-pub(crate) const PIECE_PAGE: &str = "SELECT file_offset,epoch FROM payload_reference
-    WHERE ns=?1 AND gen=?2 AND serial=?3 AND file_offset>?4 ORDER BY file_offset LIMIT 64";
+pub(crate) const PIECES_DROP: &str = "DELETE FROM fs_data_ref
+    WHERE generation=?1 AND inode=?2 AND file_offset<=ifnull((SELECT file_offset
+    FROM fs_data_ref WHERE generation=?1 AND inode=?2
+    ORDER BY file_offset LIMIT 1 OFFSET ?3),9223372036854775807)";
+/// One page of the pieces of one layer after byte ?3, with their stamps.
+pub(crate) const PIECE_PAGE: &str = "SELECT file_offset,epoch FROM fs_data_ref
+    WHERE generation=?1 AND inode=?2 AND file_offset>?3 ORDER BY file_offset LIMIT 64";
 /// One page of the pieces of one generation, in key order.
-pub(crate) const PIECE_GENERATION_PAGE: &str = "SELECT serial,file_offset FROM payload_reference
-    WHERE ns=?1 AND gen=?2 AND (serial,file_offset)>(?3,?4) ORDER BY serial,file_offset LIMIT 64";
+pub(crate) const PIECE_GENERATION_PAGE: &str = "SELECT inode,file_offset FROM fs_data_ref
+    WHERE generation=?1 AND (inode,file_offset)>(?2,?3) ORDER BY inode,file_offset LIMIT 64";
 pub(crate) const LAYER_REFERENCED: &str =
-    "UPDATE inode SET referenced=1 WHERE ns=?1 AND serial=?2 AND gen=?3";
+    "UPDATE fs_inode SET referenced=1 WHERE inode=?1 AND generation=?2";
 pub(crate) const STEP_GET: &str =
-    "SELECT cell_offset,epoch FROM shrink WHERE ns=?1 AND serial=?2 AND gen=?3 AND depth=?4";
-pub(crate) const STEP_PUT: &str = "INSERT INTO shrink VALUES(?1,?2,?3,?4,?5,?6)
-    ON CONFLICT(ns,serial,gen,depth) DO UPDATE SET cell_offset=excluded.cell_offset,
+    "SELECT cell_offset,epoch FROM fs_truncate WHERE inode=?1 AND generation=?2 AND depth=?3";
+pub(crate) const STEP_PUT: &str = "INSERT INTO fs_truncate VALUES(?1,?2,?3,?4,?5)
+    ON CONFLICT(inode,generation,depth) DO UPDATE SET cell_offset=excluded.cell_offset,
     epoch=excluded.epoch";
 pub(crate) const LAYERS: &str =
-    "SELECT gen,kind,size,inherited_cutoff,epoch,height,nlink,referenced,sequence FROM inode
-    WHERE ns=?1 AND serial=?2 AND gen<=?3 AND gen>?4 ORDER BY gen DESC LIMIT 4";
+    "SELECT generation,kind,size,inherited_cutoff,epoch,height,nlink,referenced,sequence FROM fs_inode
+    WHERE inode=?1 AND generation<=?2 AND generation>?3 ORDER BY generation DESC LIMIT 4";
 pub(crate) const LAYER_ACTIVE: &str =
     "SELECT size,inherited_cutoff,epoch,height,referenced,sequence
-    FROM inode
-    WHERE ns=?1 AND serial=?2 AND gen=?3";
-pub(crate) const LAYER_LOWER: &str = "SELECT size FROM inode
-    WHERE ns=?1 AND serial=?2 AND gen<?3 AND gen>?4 ORDER BY gen DESC LIMIT 1";
+    FROM fs_inode
+    WHERE inode=?1 AND generation=?2";
+pub(crate) const LAYER_LOWER: &str = "SELECT size FROM fs_inode
+    WHERE inode=?1 AND generation<?2 AND generation>?3 ORDER BY generation DESC LIMIT 1";
 /// The active row and the latest lower row of one name in one seek: the row
 /// whose generation is the upper bound is active, the first below it is lower.
-pub(crate) const NAME_LAYERS: &str = "SELECT gen,serial,inherited FROM directory_entry
-    WHERE ns=?1 AND parent=?2 AND name=?3 AND gen<=?4 AND gen>?5 ORDER BY gen DESC LIMIT 2";
-pub(crate) const DIRECTORY_ENTRY_LOOKUP:&str="SELECT serial,inherited FROM directory_entry WHERE ns=?1 AND parent=?2 AND name=?3 AND gen<=?4 AND gen>?5 ORDER BY gen DESC LIMIT 1";
+pub(crate) const NAME_LAYERS: &str = "SELECT generation,inode,inherited FROM fs_entry
+    WHERE parent=?1 AND name=?2 AND generation<=?3 AND generation>?4 ORDER BY generation DESC LIMIT 2";
+pub(crate) const DIRECTORY_ENTRY_LOOKUP:&str="SELECT inode,inherited FROM fs_entry WHERE parent=?1 AND name=?2 AND generation<=?3 AND generation>?4 ORDER BY generation DESC LIMIT 1";
 pub(crate) const LEASE_LOOKUP: &str =
-    "SELECT 1 FROM lease WHERE ns=?1 AND kind=?2 AND owner=?3 AND resource=?4";
+    "SELECT 1 FROM commit_pin WHERE kind=?1 AND holder=?2 AND resource=?3";
 pub(crate) const RETAINED_CAPTURE: &str = "SELECT captured,captured_revision,base_root
     FROM workspace WHERE ns=?1 AND incarnation=?2";
 pub(crate) const BASE_SOURCE_LOOKUP: &str =
-    "SELECT base_root FROM base_source WHERE ns=?1 AND owner=?2 AND kind=?3";
+    "SELECT base_root FROM commit_base_pin WHERE holder=?1 AND kind=?2";
 pub(crate) const BASE_SOURCE_INSERT: &str =
-    "INSERT INTO base_source(ns,owner,base_root,kind) VALUES(?1,?2,?3,?4)";
+    "INSERT INTO commit_base_pin(holder,base_root,kind) VALUES(?1,?2,?3)";
 pub(crate) const BASE_SOURCE_DELETE: &str =
-    "DELETE FROM base_source WHERE ns=?1 AND owner=?2 AND base_root=?3 AND kind=?4";
+    "DELETE FROM commit_base_pin WHERE holder=?1 AND base_root=?2 AND kind=?3";
 pub(crate) const BASE_SOURCE_INCREMENT: &str =
     "UPDATE workspace SET base_readers=base_readers+1 WHERE ns=?1";
 pub(crate) const BASE_SOURCE_DECREMENT: &str =
     "UPDATE workspace SET base_readers=base_readers-1 WHERE ns=?1";
-pub(crate) const DIRECTORY_ENTRY_CAPTURE: &str = "SELECT parent,name,serial,inherited
-    FROM directory_entry INDEXED BY directory_entry_capture WHERE ns=?1 AND gen=?2
-    AND (parent,name)>(?3,?4) ORDER BY parent,name LIMIT 64";
+pub(crate) const DIRECTORY_ENTRY_CAPTURE: &str = "SELECT parent,name,inode,inherited
+    FROM fs_entry INDEXED BY fs_entry_capture WHERE generation=?1
+    AND (parent,name)>(?2,?3) ORDER BY parent,name LIMIT 64";
 pub(crate) const SOURCE_NAMES: &str =
-    "SELECT parent,name,serial,inherited FROM directory_entry INDEXED BY directory_entry_capture
-    WHERE ns=?1 AND gen=?2 AND parent=?3 AND name>?4 ORDER BY name LIMIT 64";
+    "SELECT parent,name,inode,inherited FROM fs_entry INDEXED BY fs_entry_capture
+    WHERE generation=?1 AND parent=?2 AND name>?3 ORDER BY name LIMIT 64";
 /// The same window with the kind of each bound name's latest local inode
 /// row at the current view, or NULL when the inode has none: one seek per
 /// returned name inside this one statement.
 pub(crate) const SOURCE_NAMES_KINDS: &str =
-    "SELECT e.parent,e.name,e.serial,e.inherited,(SELECT i.kind FROM inode i
-    WHERE i.ns=e.ns AND i.serial=e.serial AND i.gen<=?5 AND i.gen>?6 ORDER BY i.gen DESC LIMIT 1)
-    FROM directory_entry e INDEXED BY directory_entry_capture
-    WHERE e.ns=?1 AND e.gen=?2 AND e.parent=?3 AND e.name>?4 ORDER BY e.name LIMIT 64";
+    "SELECT e.parent,e.name,e.inode,e.inherited,(SELECT i.kind FROM fs_inode i
+    WHERE i.inode=e.inode AND i.generation<=?4 AND i.generation>?5 ORDER BY i.generation DESC LIMIT 1)
+    FROM fs_entry e INDEXED BY fs_entry_capture
+    WHERE e.generation=?1 AND e.parent=?2 AND e.name>?3 ORDER BY e.name LIMIT 64";
 pub(crate) const CAPTURED_DIRECTORY_ENTRY: &str =
-    "SELECT serial,inherited FROM directory_entry WHERE ns=?1 AND parent=?2 AND name=?3 AND gen=?4";
-pub(crate) const OPERATION_RECORD_PAGE: &str = "SELECT kind,key,value FROM operation_record
-    WHERE ns=?1 AND operation=?2 AND kind=?3 AND key>?4 ORDER BY key LIMIT 64";
+    "SELECT inode,inherited FROM fs_entry WHERE parent=?1 AND name=?2 AND generation=?3";
 /// The first row of a serial in a generation. A row that already exists is a
 /// constraint failure, never an update. A new layer holds no reference piece.
-pub(crate) const INODE_INSERT: &str = "INSERT INTO inode
-    VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,0,?16)";
+pub(crate) const INODE_INSERT: &str = "INSERT INTO fs_inode
+    VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,0,?15)";
 /// Every value of a row that exists, with the parameters of the insert. The
 /// reference flag is not a value of the job: only a published piece sets it.
-pub(crate) const INODE_UPDATE: &str = "UPDATE inode SET kind=?4,mode=?5,
-    mtime_seconds=?6,mtime_nanoseconds=?7,nlink=?8,size=?9,inherited_cutoff=?10,
-    born=?11,entries=?12,subdirs=?13,epoch=?14,height=?15,sequence=?16
-    WHERE ns=?1 AND serial=?2 AND gen=?3";
+pub(crate) const INODE_UPDATE: &str = "UPDATE fs_inode SET kind=?3,mode=?4,
+    mtime_seconds=?5,mtime_nanoseconds=?6,nlink=?7,size=?8,inherited_cutoff=?9,
+    born=?10,entries=?11,subdirs=?12,epoch=?13,height=?14,sequence=?15
+    WHERE inode=?1 AND generation=?2";
 pub(crate) const DIRECTORY_ENTRY_ACTIVE: &str =
-    "SELECT serial,inherited FROM directory_entry WHERE ns=?1 AND parent=?2 AND name=?3 AND gen=?4";
-pub(crate) const DIRECTORY_ENTRY_PUT: &str = "INSERT INTO directory_entry VALUES(?1,?2,?3,?4,?5,?6)
-    ON CONFLICT(ns,parent,name,gen) DO UPDATE SET serial=excluded.serial,inherited=excluded.inherited";
+    "SELECT inode,inherited FROM fs_entry WHERE parent=?1 AND name=?2 AND generation=?3";
+pub(crate) const DIRECTORY_ENTRY_PUT: &str = "INSERT INTO fs_entry VALUES(?1,?2,?3,?4,?5)
+    ON CONFLICT(parent,name,generation) DO UPDATE SET inode=excluded.inode,inherited=excluded.inherited";
 pub(crate) const DIRECTORY_ENTRY_DROP: &str =
-    "DELETE FROM directory_entry WHERE ns=?1 AND parent=?2 AND name=?3 AND gen=?4";
+    "DELETE FROM fs_entry WHERE parent=?1 AND name=?2 AND generation=?3";
 pub(crate) const FRONTIER_ADVANCE: &str = "UPDATE workspace SET revision=?2,
     dirty_inodes=dirty_inodes+?3,dirty_directory_entries=dirty_directory_entries+?4 WHERE ns=?1";
 
-pub(crate) const OPERATION_RECORD_DELETE: &str =
-    "DELETE FROM operation_record WHERE ns=?1 AND operation=?2 AND kind=?3 AND key=?4";
-pub(crate) const OWNED_OPERATION_RECORD_DELETE: &str =
-    "DELETE FROM owned_operation_record WHERE ns=?1 AND operation=?2 AND kind=?3 AND key=?4";
-
-pub(crate) const OPERATION_CUSTODY: &str = "SELECT 1 FROM operation_owner WHERE ns=?1 AND owner=?2";
+pub(crate) const OPERATION_CUSTODY: &str = "SELECT 1 FROM commit_run WHERE holder=?1";
 /// The Workspace row of one route and that owner's custody, as two point
 /// searches in one statement: whether it is closed, and whether the owner holds.
 pub(crate) const OPERATION_FENCE: &str = "SELECT lifecycle,
-    EXISTS(SELECT 1 FROM operation_owner WHERE ns=?1 AND owner=?3)
-    FROM workspace WHERE ns=?1 AND incarnation=?2";
+    EXISTS(SELECT 1 FROM commit_run WHERE holder=?2)
+    FROM workspace WHERE incarnation=?1";
 
-pub(crate) const INDEXED_OPERATION_RECORD_CONTAINS: &str = "SELECT 1 FROM indexed_operation_record
-    WHERE ns=?1 AND operation=?2 AND file_scope=?3 AND kind=?4 AND key=?5";
-pub(crate) const INDEXED_OPERATION_RECORD_GET: &str = "SELECT value FROM indexed_operation_record
-    WHERE ns=?1 AND operation=?2 AND file_scope=?3 AND kind=?4 AND key=?5";
+pub(crate) const INDEXED_OPERATION_RECORD_CONTAINS: &str = "SELECT 1 FROM commit_record
+    WHERE operation=?1 AND file_scope=?2 AND kind=?3 AND key=?4";
+pub(crate) const INDEXED_OPERATION_RECORD_GET: &str = "SELECT value FROM commit_record
+    WHERE operation=?1 AND file_scope=?2 AND kind=?3 AND key=?4";
 pub(crate) const INDEXED_OPERATION_RECORD_PUT: &str =
-    "INSERT INTO indexed_operation_record VALUES(?1,?2,?3,?4,?5,?6)
-    ON CONFLICT(ns,operation,file_scope,kind,key) DO UPDATE SET value=excluded.value";
-pub(crate) const INDEXED_OPERATION_RECORD_DELETE: &str = "DELETE FROM indexed_operation_record
-    WHERE ns=?1 AND operation=?2 AND file_scope=?3 AND kind=?4 AND key=?5";
-pub(crate) const INDEXED_OPERATION_RECORD_KEYS: &str = "SELECT key FROM indexed_operation_record
-    WHERE ns=?1 AND operation=?2 AND file_scope=?3 AND kind=?4 AND key<>?5
+    "INSERT INTO commit_record VALUES(?1,?2,?3,?4,?5)
+    ON CONFLICT(operation,file_scope,kind,key) DO UPDATE SET value=excluded.value";
+pub(crate) const INDEXED_OPERATION_RECORD_DELETE: &str = "DELETE FROM commit_record
+    WHERE operation=?1 AND file_scope=?2 AND kind=?3 AND key=?4";
+pub(crate) const INDEXED_OPERATION_RECORD_KEYS: &str = "SELECT key FROM commit_record
+    WHERE operation=?1 AND file_scope=?2 AND kind=?3 AND key<>?4
     ORDER BY key LIMIT 64";
-pub(crate) const INDEXED_OPERATION_RECORD_ALL_KEYS: &str =
-    "SELECT key FROM indexed_operation_record
-    WHERE ns=?1 AND operation=?2 AND file_scope=?3 AND kind=?4
+pub(crate) const INDEXED_OPERATION_RECORD_ALL_KEYS: &str = "SELECT key FROM commit_record
+    WHERE operation=?1 AND file_scope=?2 AND kind=?3
     ORDER BY key LIMIT 64";
-pub(crate) const INDEXED_OPERATION_RECORD_KEYS_AFTER: &str =
-    "SELECT key FROM indexed_operation_record
-    WHERE ns=?1 AND operation=?2 AND file_scope=?3 AND kind=?4 AND key>?5
+pub(crate) const INDEXED_OPERATION_RECORD_KEYS_AFTER: &str = "SELECT key FROM commit_record
+    WHERE operation=?1 AND file_scope=?2 AND kind=?3 AND key>?4
     ORDER BY key LIMIT 64";
 /// Every record of one operation up to one key, in one statement.
-pub(crate) const INDEXED_OPERATION_RECORD_DELETE_OPERATION: &str =
-    "DELETE FROM indexed_operation_record
-    WHERE ns=?1 AND operation=?2 AND (file_scope,kind,key)<=(?3,?4,?5)";
+pub(crate) const INDEXED_OPERATION_RECORD_DELETE_OPERATION: &str = "DELETE FROM commit_record
+    WHERE operation=?1 AND (file_scope,kind,key)<=(?2,?3,?4)";
 /// Every record of one namespace up to one key, in one statement.
 pub(crate) const INDEXED_OPERATION_RECORD_RECLAIM_OPERATION: &str =
     "SELECT file_scope,kind,key,length(value)
-    FROM indexed_operation_record WHERE ns=?1 AND operation=?2 ORDER BY file_scope,kind,key LIMIT 64";
+    FROM commit_record WHERE operation=?1 ORDER BY file_scope,kind,key LIMIT 64";
 
-pub(crate) const GENERATION_HELD: &str = "SELECT 1 FROM lease INDEXED BY lease_resource
-            WHERE ns=?1 AND kind IN(1,6) AND resource=?2 LIMIT 1";
+pub(crate) const GENERATION_HELD: &str = "SELECT 1 FROM commit_pin INDEXED BY commit_pin_resource
+            WHERE kind IN(1,6) AND resource=?1 LIMIT 1";
 
 /// Workspace metadata read alongside in-memory request custody in one owner turn.
 pub(crate) const FENCE_LOOKUP: &str = "SELECT active,captured,revision,base_root,dirty_inodes,
@@ -217,12 +207,12 @@ pub(crate) const FENCE_LOOKUP: &str = "SELECT active,captured,revision,base_root
 /// is empty: it is installed, or a later row of the view supersedes it. No
 /// row when the namespace is gone.
 pub(crate) const LAYER_SUPERSEDED: &str = "SELECT ?3<=w.installed OR EXISTS(SELECT 1
-    FROM inode i WHERE i.ns=w.ns AND i.serial=?2 AND i.gen<=w.active
-    AND i.gen>max(?3,w.installed)) FROM workspace w WHERE w.ns=?1";
+    FROM fs_inode i WHERE i.inode=?2 AND i.generation<=w.active
+    AND i.generation>max(?3,w.installed)) FROM workspace w WHERE w.ns=?1";
 /// The same Workspace point and the inode that the deciding visit names.
 pub(crate) const FENCE_LOOKUP_ROW: &str = "SELECT w.active,w.captured,w.revision,w.base_root,w.dirty_inodes,
     w.dirty_directory_entries,w.lifecycle,w.installed,w.captured_revision,w.base_readers,w.consolidating,
-    i.serial,i.kind,i.mode,i.mtime_seconds,i.mtime_nanoseconds,i.nlink,i.size,
-    i.inherited_cutoff,i.born,i.entries,i.subdirs,i.gen,i.epoch,i.height,i.referenced,i.sequence
-    FROM workspace w LEFT JOIN inode i ON i.ns=w.ns AND i.serial=?3 AND i.gen<=w.active AND i.gen>w.installed
-    WHERE w.ns=?1 AND w.incarnation=?2 ORDER BY i.gen DESC LIMIT 1";
+    i.inode,i.kind,i.mode,i.mtime_seconds,i.mtime_nanoseconds,i.nlink,i.size,
+    i.inherited_cutoff,i.born,i.entries,i.subdirs,i.generation,i.epoch,i.height,i.referenced,i.sequence
+    FROM workspace w LEFT JOIN fs_inode i ON i.inode=?3 AND i.generation<=w.active AND i.generation>w.installed
+    WHERE w.ns=?1 AND w.incarnation=?2 ORDER BY i.generation DESC LIMIT 1";
