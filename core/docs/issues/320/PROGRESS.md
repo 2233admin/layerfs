@@ -3015,3 +3015,157 @@ Durable execution: NOT_RUN — disabled by owner until explicit reauthorization.
 Production LOC 81,054 -> 81,018 (delta -36) across the landing; this record
 is documentation only. Reference absent (retired R9c; last counted 65,417 at
 tree 498dd1917812).
+
+## Issue 321 follow-up — where the dense-rewrite daemon peak comes from (2026-10-14)
+
+**Question.** `workspace-dense-rewrite-500-mixed-v4` shows a daemon lifetime
+peak of about 152 MB (Step E 151,957,504 B; diagnostic 154,542,080 B). The
+E1–E5 open-state samples did not cover it. What makes it?
+
+**Finding.** Nearly half of it is fuser's receive buffers, made resident by
+glibc. Each mount runs 2 receive loops, and each loop allocates
+`vec![0; 16 MiB + 4 KiB]` (pinned fuser 0.18.0, `read_buf.rs`, sized for
+fuser's own maximum write), although the negotiated `max_write` is 128 KiB.
+- The first mount's buffers are fresh mmaps and stay untouched, so they cost
+  nothing.
+- Freeing them at that mount's unmount raises glibc's dynamic mmap threshold
+  above 16 MiB. Every later buffer then comes from a malloc arena, and
+  `calloc` zeroes reused arena memory, so all 16 MiB become resident.
+- The memory is not returned after unmount.
+
+In this case that is +16 MiB at the measured mount and +32 MiB at the
+verification mount: 48 of the 147 MiB.
+
+The rest of the peak:
+- the Commit's encoder workspace, which `Vec::resize` zero-fills (16 MiB
+  resident on every save, `layerfs-storage/src/encoding/codec.rs`);
+- other Commit state;
+- the verification read's kernel references: about 21 MiB for the ~100,000
+  files it reads, which matches the 225 B per file of E1–E5.
+
+Fixing glibc's mmap threshold at 16 MiB removes the buffer cost. In one sample
+the lifetime peak fell **154,112,000 -> 81,399,808 B (-47.2%)**, with equal
+counts, Store bytes within 20,480 B, and functional and proof PASS.
+
+### Samples
+
+Tool: [`daemon_memory_sampler.py`](../321/tools/daemon_memory_sampler.py)
+(`368af4dae`, fixed in `e24e0d762`). It is a read-only container in the
+sample's PID namespace that reads `/proc/1/status` and the daemon's thread
+names every 50 ms. Per-mount threads (`layerfs-mount-N`) mark each mount.
+The interference line of every receipt declares it.
+
+Every sample:
+- ran on branch `issue321-dense-peak` (from `b0d5ec78d`);
+- used one command;
+- used a prepared original, cloned and removed;
+- set `LAYERFS_CONSTRUCTION_WORKERS=1`;
+- used daemon `3e8261fc9f66…` in all three samples (the experiment changes
+  only the host-side sandbox crate).
+
+| Sample | Source | Condition | Result | Command ms | Commit ms | VmHWM B (receipt) | Receipt |
+| --- | --- | --- | --- | ---: | ---: | ---: | --- |
+| h-peak-1 | `368af4dae` | sampler gave up after 30 s: the 1 GB clone took longer. **No memory rows**; kept | INELIGIBLE; PASS / PASS; Gone | 2,839.5 | 11,688.7 | 153,042,944 | `59a92e82` |
+| h-peak-2 | `e24e0d762` | sampler, 503 rows | INELIGIBLE; PASS / PASS; Gone | 2,833.3 | 11,622.6 | 154,112,000 | `6460f49f` |
+| h-peak-3 | `582b7f938` (experiment, reverted in `63a2bce0a`) | sampler, 595 rows; daemon container env `GLIBC_TUNABLES=glibc.malloc.mmap_threshold=16777216` | INELIGIBLE; PASS / PASS; Gone | 2,427.1 | 18,349.9 | 81,399,808 | `524c287b` |
+
+- h-peak-1's build folder carries a doubled tag
+  (`2026-10-14-issue321-2026-10-14-issue321-h-peak-1-…`) because the full date
+  tag was given to the launcher. The launcher finds builds by suffix and used
+  it as is.
+- Counts in all three: 33,359 / 134,879 / 530,261.
+- VM uptime at start: 311 s (h-peak-2) and 721 s (h-peak-3).
+- Every timing is INELIGIBLE. Durable execution: NOT_RUN — disabled by owner
+  until explicit reauthorization.
+
+### Daemon anonymous memory per mount, MiB
+
+From the sampler rows. "First" is the first row with the mount's threads.
+
+| Mount | h-peak-2 first | h-peak-2 max | h-peak-3 first | h-peak-3 max |
+| --- | ---: | ---: | ---: | ---: |
+| 1, warmup command | 5 | 16 | 3 | 14 |
+| 2, measured command and Commit | **32** | 84 | **14** | 66 (49 at unmount) |
+| 3, verification read | **116** | 139 | **48** | 69 |
+
+- **h-peak-2.** RssAnon rose 16 MiB within 50 ms of mount 2's threads
+  appearing, and 32 MiB at mount 3.
+  - The command added 1 MiB.
+  - About 0.4 s into the Commit, 27 MiB arrived within 50 ms (the encoder
+    workspace and the start of construction), and anon reached 84 MiB by the
+    Commit's end.
+  - The verification read added 23 MiB.
+- **h-peak-3.**
+  - The mount jumps are gone.
+  - The Commit still peaks, at 66 MiB, then falls to 49 MiB. The 16 MiB
+    encoder workspace is now unmapped when freed, and glibc's fixed threshold
+    also stops growing the trim threshold.
+  - The verification read adds 21 MiB.
+- RssFile is 6–7 MiB throughout (the binary); VmHWM = RssAnon + RssFile at
+  the peak.
+
+### The allocator mechanism in isolation
+
+`calloc(16 MiB + 4 KiB)` from 2 threads per "mount" was run in Python
+`ctypes` in the same pinned image (glibc 2.36, 2 CPUs), with 4 KiB written to
+each buffer, as a request would.
+
+| Rounds | Default glibc, anon MiB | Threshold fixed at 16 MiB |
+| --- | --- | --- |
+| 10 sequential mounts | 3, 3, then **35** from mount 3 to 10 (plateau) | 3 throughout |
+| 1, 1, then 4 Workspaces at once, 4 again, 1 | 3, 3, **36**, **131**, 131 (never returned) | 3 throughout |
+
+- Sequential remounts reach a plateau of about 32 MiB.
+- Concurrent mounts each make their own buffers resident: about 32 MiB per
+  Workspace mounted at the same time, kept after unmount.
+- With 4 Workspaces in a 2 GiB sandbox that is about 128 MiB, double the
+  64 MiB per-Workspace budget proposed above, before any open state.
+- The E1–E5 two-Workspace samples did not show it: both of their mounts were
+  first mounts, before any buffer had been freed.
+
+### Commit time in these samples
+
+All three Commits hit the known kernel write stall: the Store writer's
+`COMMIT` statement took 5,450.9 / 5,584.6 / 11,920.1 ms, against about 500 ms
+unstalled.
+
+With the writer's step removed (`store_writer_split.py`), the Commits are
+5,586.3 / 5,398.9 / 5,782.7 ms. The operation-record lock hold, also buffered
+writes, doubled with the stall (428.4 -> 932.2 ms).
+
+So one sample does not establish a time cost for the tunable, and it shows
+none outside the stalled writes. The command was 2,427.1 ms against 2,833.3.
+
+### Fix options (owner decision)
+
+1. **Size fuser's receive buffer by the negotiated `max_write`** (128 KiB +
+   4 KiB) instead of 16 MiB + 4 KiB.
+   - Removes 32 MiB of virtual memory per mount and the allocator
+     dependence.
+   - Needs the owner to extend the authorized fuser patch: the current
+     authorization covers time.rs and the receive-loop lifecycle only.
+2. **Fix glibc's mmap threshold for the daemon process.**
+   - A `mallopt` at startup needs an unsafe exception: the daemon is
+     `forbid(unsafe_code)`.
+   - The container-environment tunable used here is inherited by every
+     command executed in the container, so it is not a product route.
+3. **Encoder workspace.** `Vec::resize` writes all 16 MiB on every save. A
+   zeroed allocation leaves untouched pages unmapped under option 2. Without
+   option 2 it would still reuse zeroed arena memory. On stable Rust a
+   fallible zeroed allocation needs `unsafe` (only allowed in the codec's
+   audited FFI module) or an infallible `vec![0; n]`.
+
+Recommendation: option 1. It fixes the cause, is small, and keeps the daemon
+free of allocator tuning. Option 3 can follow once option 1 is measured.
+
+### Not established
+
+- The size of the rest of the Commit's 50 MiB beyond the encoder workspace;
+  no heap profiler ran.
+- Thread-arena behaviour with more than 4 concurrent mounts, or with the
+  daemon's real thread mix rather than the `ctypes` model.
+- Any time effect of the tunable; one stalled sample each.
+
+Production LOC 81,018 -> 81,018 (delta 0): documentation and diagnostic
+tooling only; the experiment was reverted. Reference absent (retired R9c;
+last counted 65,417 at tree 498dd1917812).
