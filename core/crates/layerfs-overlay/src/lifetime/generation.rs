@@ -82,7 +82,7 @@ impl Overlay {
             return Ok(false);
         }
         // The last reply attempt of the namespace owes this waiter a turn.
-        Ok(!self.tickets.watch(route.ns))
+        Ok(!self.tickets.watch())
     }
     /// Records a send attempt, including a lost reply, on the owner's turn.
     /// It never removes published inode/name/byte state and never claims
@@ -100,7 +100,7 @@ impl Overlay {
             let state=self.live(route)?;
             if state.captured.is_some() {return Err(OverlayError::CaptureInFlight);}
             if state.consolidating.is_some() {return Err(OverlayError::Consolidating);}
-            if self.tickets.pending(route.ns) {
+            if self.tickets.pending() {
                 return Err(OverlayError::ReplyAttemptsPending);
             }
             let next=state.active.0.checked_add(1).ok_or(OverlayError::Invalid("generation exhausted"))?;

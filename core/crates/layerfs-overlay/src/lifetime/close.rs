@@ -40,7 +40,7 @@ impl Overlay {
             || lookups
             || state.captured.is_some()
             || state.base_readers != 0
-            || self.tickets.pending(route.ns)
+            || self.tickets.pending()
             || self.query(StatementKind::Workspace, HELD, &[], 8, |r| {
                 r.get::<_, bool>(0)
             })?[0];

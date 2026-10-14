@@ -28,6 +28,10 @@ Measured outcomes are in the [#320 ledger](../issues/320/PROGRESS.md), not here.
   Commit. There is no owner thread, queue, admission credit, shared memory
   budget or notification table, and nothing is shared between two Workspaces'
   overlays.
+- **Reply frontier.** Each Workspace engine keys pending replies by its local
+  publication revision, with one watched-frontier flag. Tickets still validate
+  their engine, incarnation and generation; known rollback withdraws only the
+  revisions issued by that job. No namespace tree or filtered count is needed.
 - **Ordering that remains.** A Capture waiting for earlier reply attempts and a
   known install waiting for earlier base sources each own a finite frontier:
   a later mutation waits behind a waiting Capture, a later source acquisition

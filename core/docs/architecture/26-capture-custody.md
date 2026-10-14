@@ -12,7 +12,7 @@ Known install and known closed release clear both paired fields in one transacti
 `Overlay::retained_capture` is a route-qualified point observation of the exact
 existing capture. It distinguishes a live/closed Workspace without a capture from
 an absent incarnation. `pending_publications` pages revision/generation tickets
-through `(ns,revision)` with64-key windows. Observation neither repeats the
+through revision keys with 64-key windows in this Workspace's engine. Observation neither repeats the
 operation nor releases a ticket or infers upstream history disposition. A caller
 must retain exact uncertainty and settle only the actual reply-attempt/fenced
 operation it owns. There is no automatic recovery, rollback or resend.

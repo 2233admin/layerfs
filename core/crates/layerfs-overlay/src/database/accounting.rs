@@ -65,7 +65,7 @@ impl Overlay {
             .unwrap_or_default();
         // Reply tickets are held in the engine's memory, not in a row.
         let counts = StoredCounts {
-            reply_tickets: self.tickets.count(route.map(|route| route.namespace())),
+            reply_tickets: self.tickets.count(),
             ..counts
         };
         let (database_pages, free_pages) = self.pages()?;

@@ -3457,3 +3457,45 @@ separately, preserving actual input metadata without fabricating a case. This
 is the sole repair of the traced failing expression. A new output identity
 will run the requested phases; the failed attempt is never overwritten.
 Product source and production LOC remain unchanged.
+
+### Corrected exec baseline and Phase 1: reply-ticket namespace cut
+
+Corrected exec output `2026-10-14-issue320-open-state-exec-baseline-fixed`,
+tooling source `22ff7b300`, sealed product/build `open-state-land`, completed
+in 5.559 s under a 100 s outer stop (helper budget 90 s). No workload body,
+file count or cache policy changed. Selected phases `w1,w4`, 2,000 files per
+writer, cloned empty original; every writer and runtime exited 0, and the
+owned container and volume were removed. No correctness oracle is supplied
+by this diagnostic; exit codes and cleanup alone are its functional scope.
+
+| Phase | Create / append / read µs per file | Observation status |
+| --- | --- | --- |
+| container filesystem, one writer | 22.4 / 10.4 / 10.7 | INELIGIBLE |
+| one Workspace writer | 247.5 / 118.9 / 186.7 | INELIGIBLE |
+| four Workspace writers | 368.6 / 175.5 / 257.0 | INELIGIBLE |
+
+[Invocation receipt](../../../target/issue321/open-state-exec-baseline-fixed.json)
+and [diagnostic result](../../../../benchmark-results/fs-bench-pro/2026-10-14-issue320-open-state-exec-baseline-fixed/result.json)
+retain commands, stamps, owner counts, memory and storage observations.
+Read-only memory sampler: 82 rows; max observed RSS 36,988 KiB and anonymous
+29,908 KiB. VmHWM 36,988 KiB is a lifetime observation, not a phase peak or
+proof of a per-Workspace budget. The five mounted Workspaces include the idle
+marker; sampler and shared-machine interference make times INELIGIBLE.
+
+**First product cut.** Reply-ticket keys become local revisions instead of
+(namespace, revision), and the watched-namespace set becomes one flag. Counts
+use map length; rollback stores and withdraws only issued revisions. Exact
+engine/incarnation/generation validation and last-ticket wakeup remain.
+No SQL/schema, capture domain or reply-delivery guarantee changes. This is a
+structural removal, not a speed claim; the mount slot and remaining Route/ns
+work follow. The two changed oracle source pins were advanced.
+
+Host and Linux `check` and warning-denying Clippy cover workspace libraries,
+binaries and examples, each once under the 120 s stop: PASS. Logs use
+`simplify-tickets-{host,linux}-{check,clippy}` under this worktree's issue321
+and issue320/logs folders. Formatting and whitespace checks pass.
+Tests: not yet updated; no test source opened/edited/run during this product
+step. Engine suite rerun after pin updates is deferred to Phase 2, following
+the owner's explicit product-only Phase 1 gates. No removed observer, failure
+custody entrypoint or retained keep-list function is lost. Durable remains
+NOT_RUN — disabled by owner until explicit reauthorization.

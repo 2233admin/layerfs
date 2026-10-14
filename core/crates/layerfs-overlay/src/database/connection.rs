@@ -56,7 +56,7 @@ pub struct Overlay {
     /// that attempt replies.
     pub(crate) tickets: Arc<crate::ReplyTickets>,
     /// Tickets issued by the running atomic job, withdrawn if it fails.
-    pub(crate) issued: RefCell<Vec<(i64, i64)>>,
+    pub(crate) issued: RefCell<Vec<i64>>,
     pub(super) profile: DatabaseProfile,
     pub(super) allocation: crate::database::physical::Allocation,
 }
@@ -319,9 +319,7 @@ impl Overlay {
     pub(crate) fn issue(&self, publication: crate::Publication) {
         self.tickets.issue(publication);
         if self.transaction.get() != Transaction::None {
-            self.issued
-                .borrow_mut()
-                .push((publication.route.ns, publication.revision));
+            self.issued.borrow_mut().push(publication.revision);
         }
     }
     /// Allocation-call counters without performing filesystem or SQL I/O.
@@ -405,8 +403,8 @@ impl Overlay {
         self.orphan_seen.set(orphans);
         self.pieces_seen.set(pieces);
         self.open.borrow_mut().rollback();
-        for (ns, revision) in issued {
-            self.tickets.withdraw(ns, revision);
+        for revision in issued {
+            self.tickets.withdraw(revision);
         }
         if begun {
             if let Err(observation) = self.allocation.state() {
