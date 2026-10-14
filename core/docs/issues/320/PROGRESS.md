@@ -3316,3 +3316,26 @@ explicit reauthorization. Next work and its order: the handoff
 [PROMPT-SIMPLIFY-NEXT-AGENT-20261014.md](PROMPT-SIMPLIFY-NEXT-AGENT-20261014.md).
 Production LOC of this record: unchanged (documentation only). Reference
 absent (retired R9c; last counted 65,417 at tree 498dd1917812).
+
+## Plan update: aggressive simplification scope and test method (2026-10-14)
+
+Documentation only. It changes the plan in
+[PROMPT-SIMPLIFY-NEXT-AGENT-20261014.md](PROMPT-SIMPLIFY-NEXT-AGENT-20261014.md):
+
+- **Method (4.0).** Owner: "a sweep of update then work on test, and assume many test can be dropped rather than wasting time to fix the ones that could be dropped". Phase 1 changes product code only, gated on library, binary and example targets. Phase 2 triages failing tests: the default is to delete them, with a keep list of surviving behaviour, a time box of about 5 minutes per test, and every deleted file named.
+- **Runtime-only overlay rows to memory (4.2.3).**
+  - The `accounting` table and its 27 triggers are dropped; `Resources` counts on demand.
+  - The one-row `workspace` table, `commit_run`, `commit_reader`, `commit_pin`, `commit_base_pin` and `cleanup_task` become journaled memory.
+  - Target: 6 tables and 0 triggers, down from 12 tables and 27 triggers.
+  - The semantics that let a Commit run while commands write stay: captured-generation pins, recovery of a Commit run after a lost reply, and base readers across install.
+- **Generic leases (4.2.2).** `Overlay::acquire`/`release` and LeaseKind kinds 1–4 have no product caller (7 test files), so they are removed.
+- **Owner decisions.**
+  - Per-Workspace Store readers: approved with conditions (4.2.5).
+  - Permission checks stay with the kernel. GETATTR becomes memory-served; its estimated share is corrected to about 3–6% (4.5.2).
+- **Rename (4.3).** No `native` is left in product code, SQL included:
+  - the kernel's view of the mount → `kernel`;
+  - Project Init host files → `host`, including `init_host_file` and `host_path`; this changes the Store schema and goes last;
+  - the pack lane → `Chunk`, with the on-disk value unchanged;
+  - the bridge → `mount` and `duplex`.
+
+Expected production LOC for 4.2 is revised to 1,150–2,200, an estimate. Production LOC of this record: unchanged (documentation only). Reference absent (retired R9c; last counted 65,417 at tree 498dd1917812).

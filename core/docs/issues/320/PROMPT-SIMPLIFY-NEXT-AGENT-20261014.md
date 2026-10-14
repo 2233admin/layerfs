@@ -10,11 +10,19 @@
 In the owner's words:
 - 2026-10-14: "remove aggressively including the tests".
 - 2026-10-14: "work as you recommended, including continous simplification, aggressive removal, rename and optimization".
+- 2026-10-14: "update the docs for the aggressive change".
+- 2026-10-14: have "a sweep of update then work on test, and assume many test can be dropped rather than wasting time to fix the ones that could be dropped".
+
+Owner decisions of 2026-10-14:
+- per-Workspace Store readers are approved with conditions (4.2.5);
+- the kernel keeps permission checks (`default_permissions`; 4.5.2);
+- runtime-only overlay rows move to memory (4.2.3);
+- no `native` names are left in product code, SQL included (4.3).
 
 The recommendation is section 4. Its order:
 1. Verify and land the branch.
-2. Remove what the architecture shift made redundant.
-3. Rename the mount path.
+2. Phase 1, the product sweep (4.0): remove what the architecture shift made redundant (4.2), then rename (4.3).
+3. Phase 2, the test pass (4.0): delete by default, and fix only the behaviour on the keep list.
 4. Then optimize, from measurements.
 
 Work in small counted commits and keep simplifying between them. A removal that only moves code elsewhere is not a removal.
@@ -73,6 +81,39 @@ Only tests call these, but removing them would delete whole suites or a custody 
 
 ## 4. The work, in order
 
+### 4.0 Method: sweep the product first, then the tests (owner, 2026-10-14)
+
+The owner asked for one sweep of product changes first, then a separate test pass, assuming many tests can be dropped rather than spending time fixing ones that could be dropped.
+
+**Phase 1: product sweep (4.2 and 4.3).**
+- Change product code only: `src/`, SQL and the harness readers that parse product receipts.
+- Gate each step on product targets alone: `cargo +1.85.1 check --locked --workspace --lib --bins --examples`, plus Clippy on the same targets, on the host and on Linux.
+- Do not open, edit or run a test during this phase. Commit each step as a counted commit and write `tests: not yet updated` in its message. The branch is unpushed, so broken test targets in between are acceptable.
+- Re-pin `oracle.py` whenever a pinned source changes.
+
+**Phase 2: test pass.**
+1. Compile every target once: `cargo +1.85.1 test --locked --workspace --no-run --keep-going`. List each failing test file with its error count.
+2. **Triage each failing file. The default is to delete it.** Keep and fix a test only if it covers behaviour from the list below and no surviving test or mounted proof already covers that behaviour:
+   - POSIX filesystem semantics: identity, permissions, rename, unlink while open, hard and symbolic links, large and sparse files;
+   - a Commit while commands keep writing: the capture boundary, install keeping later writes, and the base staying readable for open readers;
+   - lost-reply recovery through `commit_record`, and exact refusal returning its input;
+   - reclamation after the last close and after unmount, including during live activity;
+   - bounded memory and streaming for large files and huge namespaces;
+   - the Linux mounted proofs, and the fs-bench-pro engine, families and cluster-two suites.
+3. **Delete without fixing** tests that check internal mechanisms. These include:
+   - job envelopes, `Response`/`NativeReply` unpacking and `JobReceipt` fields;
+   - statement counts, query plans and index shapes;
+   - pin, lease and accounting rows, and `Resources` row counts;
+   - read pool fairness, `ServiceClass` labels and route checks;
+   - counted-work tests whose numbers the removed mechanisms produced.
+
+   Also delete a test that duplicates a mounted proof.
+4. **Time box: about 5 minutes per test.** If a test outside the keep list needs more than a mechanical edit, delete it. If a test on the keep list resists, record it as a gap; don't rebuild the mechanism it tested.
+5. List every deleted test file in the commit message with a one-line reason, and state the coverage given up. Deleting tests does not change production LOC, but the deletion is still reported.
+6. Then run the whole suite once, as in 4.1, plus the measurement subset in 4.4.
+
+This replaces the earlier lesson "remove only the calling statement". Within this pass, deletion is the default and fixing is the exception. Deleting knowingly still matters: name what you drop.
+
 ### 4.1 Verify and land (first)
 
 1. Seal a build of `253291435`; it takes about 105 s, use `core/target/issue321/go.py`.
@@ -82,50 +123,72 @@ Only tests call these, but removing them would delete whole suites or a custody 
 
 ### 4.2 Remove what the architecture shift made redundant
 
-#321 gave each Workspace its own overlay file and replaced the owner thread, queue, credits and completion tracking with one lock per Workspace. Mechanisms that only served one shared database and one writer remain. The order below goes cheapest first.
+#321 gave each Workspace its own overlay file and replaced the owner thread, queue, credits and completion tracking with one lock per Workspace. It moved 11 tables to memory and dropped `reclaim` (26 tables down to 12). What remains below either served the old shared database and single writer, or is state that ends with the daemon but still sits in SQLite. The overlay file is deleted at unmount and never outlives the daemon, so a row that only tracks something in flight can become journaled memory, as the open state did in Step A. Cheapest first:
 
-1. **`Route` and namespace checks inside the overlay.**
-   - 38 overlay functions take `route: Route`, and handles (`OpenFile`, `BaseSource`, `LookupOwner`, `FileRead`, `Capture`, …) carry a route that is checked on every call. One `Overlay` holds exactly one Workspace, so these checks always pass.
-   - Drop the parameter and the checks in the overlay, together with the helpers that took it only for that.
-   - Keep routing in the daemon, where the route picks the Workspace.
-   - The mechanics are the same as `11b2a452d`: change the key, follow the compiler, then follow unused-parameter warnings and drop parameters through callers.
-2. **Remaining constant namespaces:**
-   - `maintenance::Item.ns`, and the `ns` it writes into `cleanup_task` rows if any column still holds it;
-   - reply tickets keyed `(ns, revision)` in `lifetime/tickets.rs`;
-   - `count(Some(ns))` and `pending(ns)`;
-   - the native `mounts` map, which is still keyed by namespace and becomes one journaled slot.
-3. **Job/receipt layer → direct typed calls.**
-   - Today every daemon call goes through `owner_job`/`overlay_job` closures that return the `Response` or `NativeReply` enums plus a `JobReceipt` (157 mentions in daemon `src`); tests then unpack the enum.
+1. **`Route` and constant namespaces.**
+   - 38 overlay functions take `route: Route`. Handles (`OpenFile`, `BaseSource`, `LookupOwner`, `FileRead`, `Capture`, …) carry a route that is checked on every call. One `Overlay` holds exactly one Workspace, so these checks always pass. Drop the parameter, the checks and the helpers that took it only for that. Routing stays in the daemon, where the route picks the Workspace.
+   - Drop the remaining constant `ns`:
+     - `workspace.ns AUTOINCREMENT`;
+     - `maintenance::Item.ns`;
+     - reply tickets keyed `(ns, revision)` in `lifetime/tickets.rs`;
+     - `count(Some(ns))` and `pending(ns)`;
+     - the `mounts` map, which becomes one journaled slot.
+   - The mechanics are the same as `11b2a452d`: change the key, follow the compiler, then follow unused-parameter warnings.
+2. **Generic leases (test-only).**
+   - `Overlay::acquire`/`release` and the daemon's `acquire`/`release` jobs (`overlay/lifetime_operations.rs`) are the only producers of `LeaseKind` `Reader`, `Open`, `Lookup` and `Operation` (kinds 1–4). No product code calls them; 7 test files do.
+   - Remove them with those kinds, and remove kind 1 from `GENERATION_HELD`.
+3. **Runtime-only rows to memory.** Move each one; drop any that has no remaining user. The target is 6 tables (`fs_inode`, `fs_entry`, `fs_data`, `fs_data_ref`, `fs_truncate`, `commit_record`), 0 triggers and no custody rows. Trace each move first; record any that doesn't hold and leave it.
+   - **`accounting` table and its 27 triggers** (`sql/accounting.sql`, `database/accounting.rs`): drop. A created file fires three of them. Only the `Resources` diagnostic reads them; compute its counts on demand with `count(*)` and `sum(length(…))`. The numbers stay identical, so reclamation proofs keep their assertions. Update the harness storage oracle and the pins in the same commit.
+   - **`workspace` (one row)**: make `active`, `captured`, `installed`, `revision`, `lifecycle`, `dirty_*`, `base_readers` and `consolidating` journaled fields of the overlay, committed and rolled back with the SQL transaction (`JournalMap`/`OwnerTable` already do this). This removes `UPDATE workspace SET base_readers±1` from every base read.
+   - **`commit_run`, `commit_reader`, `commit_pin` (kinds 6 and 8 left after item 2), `commit_base_pin`**: in-memory maps keyed by holder: Commit runs, Commit snapshot readers and base readers. `GENERATION_HELD` becomes a map lookup. Their meaning must not change:
+     - `CapturedReader` stops cleanup from folding or deleting the captured generation while a Commit reads it;
+     - `Processing` and `commit_run` let a Commit be found again by its request id after a lost reply;
+     - the base pin keeps the old base root readable for open readers after install moves the base forward.
+
+     Together these are what let a Commit run while commands keep writing.
+   - **`cleanup_task`** (12 kinds): an in-memory list. This changes how a failed cleanup step recovers: write a short design first (what is retried, and what stays as exact custody) and keep the automatic, bounded reclamation during live activity. This was §4.5.5.
+   - Rename `LeaseKind`/`Lease` and the `StatementKind::Lease` paths to whatever remains (for example `Pin`), or delete them if nothing remains. The daemon's "global, route-free" `Resources` job becomes per-Workspace.
+4. **Job/receipt layer → direct typed calls.**
+   - Today every daemon call goes through `owner_job`/`overlay_job` closures that return the `Response` or `NativeReply` enums plus a `JobReceipt` (157 mentions in daemon `src`).
    - Replace this with methods on the Workspace handle: take the lock, call the overlay, return the typed result, and count the work in the same place.
-   - Keep the exact-refusal rule: a call refused before any effect returns its original input, as `OwnerError::Unattempted` does.
-   - Keep the frontier wait, the readiness checks and the counted work.
+   - Keep the exact-refusal rule: a call refused before any effect returns its original input, as `OwnerError::Unattempted` does. Keep the frontier wait, the readiness checks and the counted work.
    - Shrink `ServiceClass` to what still changes behaviour: Mutation and Source drive the frontier wait; the rest only label diagnostics.
-   - This is the largest remaining cut. Expect about 470 test sites; convert them mechanically and delete tests that only checked the old envelope.
-4. **Store read pool.**
-   - `store/read_service.rs`, `read_state.rs` and `read_handle.rs` (about 600 lines) are fair admission to shared Store readers: per-Workspace lanes, FIFO rotation and a 17 Workspaces × 18 requests quota.
-   - With one Store reader per Workspace there is nothing to arbitrate, and it matches the owner's rule that each Workspace's memory is independent.
+   - This is the largest remaining cut. About 470 test sites depend on the envelope; per 4.0 most of those tests are deleted, not converted.
+5. **Store read pool → one reader per Workspace.**
+   - `store/read_service.rs`, `read_state.rs`, `read_handle.rs` and `read_scope.rs` (639 lines) are fair admission to shared Store readers: per-Workspace lanes, FIFO rotation and a 17 Workspaces × 18 requests quota. With one reader per Workspace there is nothing to arbitrate.
    - **Owner decision (2026-10-14): approved, with conditions.** This reverses part of the #308/#314 decision of one shared pager. The conditions:
      - **Bound each connection's page cache** to a few MiB. The OS page cache sits underneath, and an unbounded cache per Workspace would eat into the per-Workspace memory budget.
      - **Keep read transactions short**, one per request or step. A snapshot held open blocks WAL checkpoints of the shared Store while Commits publish.
      - **Open the reader at mount and close it at unmount.** Never open one lazily in the middle of a request.
      - **Accept only on measurement.** Use the 4.4 subset: `exec_concurrency.py` at 1 and 4 Workspaces plus cell C06, before and after. Record peak memory with `core/docs/issues/321/tools/daemon_memory_sampler.py`. Keep the pool if time at 4 Workspaces worsens or the peak leaves the per-Workspace budget, and record why.
-5. **Continue the reachability passes.**
-   - After each structural cut, re-run the dead-code and test-only reachability pass.
-   - The method is in `253291435`'s message: product `src/` only, with trait methods and functions the benchmark harnesses call counted as live.
-   - Also check the Linux-only tests: compile them with the Linux check, since the host never builds them.
+6. **Continue the reachability passes** after each structural cut: the dead-code and test-only pass from `253291435`'s message, over product `src/` only, counting trait methods and functions the benchmark harnesses call as live. Compile Linux-only code with the Linux check, since the host never builds it.
 
-### 4.3 Rename the mount path (after 4.2.3, which deletes many `native` names)
+### 4.3 Rename: no `native` left in product code (after 4.2.4, which deletes many of these names)
 
-- In overlay, workspace, daemon and fuse, `native` means the kernel's view of the mount. Rename it to `kernel`, which the overlay already uses for this state (`KernelReference`):
-  - `NativeMount` → `KernelMount`
-  - `native_file` → `kernel_file`
-  - `native_visit` → `kernel_visit`
-  - and the same for the rest.
-- Do it as one or two commits with no behaviour change; update the oracle pins and the docs that name these items.
-- Leave the other meanings alone:
-  - the storage `Native` pack lane, part of the on-disk format (`VERSION_NATIVE`);
-  - the persistence/project host-file sense;
-  - the bridge's native control channel.
+"native" has four meanings, so it gets four replacement words. Apply them to file and module names, types, functions, fields, error and label strings, SQL tables, columns and query files, test file names and the SDK example. Leave historical docs, receipts and ledgers unchanged. Collisions with existing `Kernel*` or `Mount*` names are caught by the compiler; choose a more specific name there. Each group below is one commit with no behaviour change. Update the oracle pins and the docs that name these items.
+
+1. **The kernel's view of the mount → `kernel`** (overlay, workspace, daemon, fuse, api). The rule is mechanical: `Native…` → `Kernel…` and `native_…` → `kernel_…`. The overlay already says `KernelReference`.
+   - Types: `NativeMount`, `NativeMountState`, `NativeSession`, `NativeServing`, `NativeVisitRequest`, `Native{Read,Mutation,Directory,Data}Visit`, `NativeDirectory*`, `NativeCookieOffer`, `NativeWindow`, `NativeEffect`, `NativeDecision`, `NativeObservation`, the fuse `NativeFilesystem`/`NativeRead*`/`NativeMutation*`/`NativeData`, and the daemon `NativeReply`/`NativeWork`/`NativeReceipt`/`NativeStatus`/`NativeConfig`/`NativeFailure`/`NativeEvidence` (those still alive after 4.2.4). Each becomes `Kernel…`.
+   - Functions: `native_visit`, `open_native_visit`, `create_native_mount`, `revoke_native_mount`, `retained_native_mount`, `unmount_native`, `with_native`, `native()` → `kernel_visit`, `open_kernel_visit`, `create_kernel_mount`, `revoke_kernel_mount`, `retained_kernel_mount`, `unmount_kernel`, `with_kernel`, `kernel()`. Collapse the doubled forms (`forget_native`/`native_forget`, `close_native_file`/`native_close_file`) to one `kernel_…` name each.
+   - Files: the 15 `native*.rs` source files (`lifetime/`, `operations/`, `contract/`, `control/native.rs`, `overlay/native_operations.rs`, `diagnostics/native.rs`) and 19 test files (`native_mount.rs`, `native_visit.rs`, …) become `kernel*.rs`. The SDK example `sandbox_native_mount.rs` becomes `sandbox_kernel_mount.rs`.
+   - Strings: the `"native"` label (8 sites) and messages such as `"native teardown"` become `"kernel…"`. The fs-bench-pro readers (`receipts.py`, `oracle.py`, `workspace.py`, `identity.py`, `prepared_inputs.py`, `project.py`, `fixtures.py`, recipes) change in the same commit.
+2. **Host files at Project Init → `host`** (project, persistence, storage acquisition port).
+   - `NativeIdentity` → `HostIdentity`, and the field `native` → `host`.
+   - `native_path`, `natives`, `native_rows`, `native_bytes`, `native_statement`, `native_binding_bytes`, `native_one` → `host_path`, `host_files`, `host_rows`, `host_bytes`, `host_statement`, `host_binding_bytes`, `host_one`.
+   - `put_native`, `bind_native`, `remove_native`, `unplaced_native`, `discard_native*` → `put_host_file`, `bind_host_file`, `remove_host_file`, `unplaced_host_file`, `discard_host_file*`.
+   - **SQL**:
+     - the table `init_native_file` → `init_host_file`, and its index → `init_host_file_identity`;
+     - the columns `native_path` → `host_path` and `native` → `host_identity`;
+     - the query files `put_native.sql`, `bind_native.sql`, `discard_native*.sql` → `put_host_file.sql`, `bind_host_file.sql`, `discard_host_file*.sql`.
+
+     This changes the Store schema. The owner allows format changes for #320. Commit it last, and first check whether prepared benchmark originals still open. If they must be prepared again, say so and ask before spending the disk and time.
+3. **Storage pack lane → `chunk`.** `PackLane::Native` (chunk payload records, beside `Ordinary`, `WholeFile` and `Singleton`) → `PackLane::Chunk`, and `VERSION_NATIVE` → `VERSION_CHUNK`. Only the Rust names change; the on-disk version number stays.
+4. **Bridge → `mount` and `duplex`.**
+   - `control_native.rs` (host↔daemon attach records) → `control_mount.rs`, and `NativePhase`, `NativeReceipt`, `NativeStatus`, `NativeWork` → `MountPhase`, `MountReceipt`, `MountStatus`, `MountWork`. This keeps them distinct from the daemon's `Kernel*`.
+   - `src/native/` (the authenticated duplex channel) → `src/duplex/`; `put_native` and `tests/native.rs` follow.
+5. **Prose.** Comments in telemetry, sandbox and project ("native assembly", "native process start identity", "native mounting") become "platform", "host" or "kernel mount" by meaning. The error "native telemetry requires…" becomes "platform telemetry requires…".
+
+Done means `grep -rnw -e 'native' -e 'Native' --include='*.rs' --include='*.sql' crates/*/src crates/*/sql crates/*/tests` finds nothing, and `find crates -name '*native*'` finds no file.
 
 ### 4.4 Expectations and the measurement subset (owner: "we should just run a small subset")
 
@@ -133,14 +196,15 @@ Production LOC expected from 4.2. These are estimates from file sizes at `253291
 
 | Item | Expected cut |
 | --- | --- |
-| Overlay `Route` parameter and checks | 80–150 |
-| Constant namespaces, `ServiceClass` | 30–60 |
+| Overlay `Route` parameter, constant namespaces, `ServiceClass` | 110–210 |
+| Generic leases, kinds 1–4 (test-only) | 40–80 |
+| Runtime-only rows to memory: `accounting.sql` (104 lines) and 27 triggers, `workspace` row, Commit pins and runs, `cleanup_task` | 150–400 net (memory maps replace SQL and statements) |
 | Job/receipt layer: the four `*_operations.rs` (789), `results.rs`, `receipt.rs`, `job_sql.rs`, `owner_work.rs`, part of `owner.rs` and the ports | 400–700 net |
-| Store read pool (639 in the four `read_*` files) → per-Workspace reader | 450–550 net, if it passes the 4.2.4 conditions |
+| Store read pool (639 in the four `read_*` files) → per-Workspace reader | 450–550 net, if it passes the 4.2.5 conditions |
 | Further reachability passes | 0–200 |
 | Rename | 0 |
 
-That is about 1,000–1,700 lines, or 1.3–2.1% of 79,447. The optimizations in 4.5 may add code (memory-served GETATTR, write gathering). Report that growth honestly.
+That is about 1,150–2,200 lines, or 1.5–2.8% of 79,447. The optimizations in 4.5 may add code (memory-served GETATTR, write gathering). Report that growth honestly.
 
 Expected speed, based on the #321 record in `core/docs/issues/320/PROGRESS.md`:
 - In the twelve cells at Step E, statements fell 25–57% while command time stayed flat. Owner jobs now equal kernel requests. So command time is set by kernel round trips per request, not by SQL or the job layer.
@@ -149,7 +213,7 @@ Expected speed, based on the #321 record in `core/docs/issues/320/PROGRESS.md`:
 
 | Change | Expected effect |
 | --- | --- |
-| 4.2 removals and the rename | about 0 on command and Commit (a few % CPU at most) |
+| 4.2 removals and the rename | about 0 on command and Commit (a few % CPU at most). 4.2.3 removes statements and trigger runs per write, create and read, but #321 showed statements are not what limits command time |
 | Per-Workspace readers | less waiting only when several Workspaces read the Store at once |
 | GETATTR | 22% of requests in the tier-1 sample. At C01's ~68 µs per request (339 ms / 5,002), 5,766 GETATTRs are roughly 0.2–0.4 s of the 6.7 s command, about 3–6%. Arithmetic, not a measurement; memory-served GETATTR saves only the daemon's share of that |
 | Commit step sizes | perhaps 10–30% of Commit time, unmeasured |
@@ -183,7 +247,7 @@ Priority from the owner (2026-10-13): exec under concurrent Workspaces first, th
    - Commit plan steps and cleanup pages were sized for one writer shared by every Workspace.
    - They now only need to keep this Workspace's own FUSE requests flowing during its Commit, a rule the owner kept.
    - Measure Commit time and the latency of concurrent requests at two or three step sizes before changing anything.
-5. **In-memory cleanup list.** `cleanup_task` is a durable queue in a database that never outlives the daemon, so it could be an in-memory list like the open state. It changes how a failed cleanup step recovers: design it first.
+5. **In-memory cleanup list.** Moved into 4.2.3.
 
 ## 5. Lessons from this pass
 
@@ -191,7 +255,7 @@ Priority from the owner (2026-10-13): exec under concurrent Workspaces first, th
   - Delete the product function, then compile `--workspace --all-targets --keep-going`.
   - For each test error, remove only the statement holding the call, and follow the follow-on "cannot find value" errors.
   - Delete a whole test only when the test exists for the removed function, such as plan, index-shape and envelope tests.
-  - A whole-test delete over one incidental assertion lost about 2,000 lines of unrelated coverage and was reverted.
+  - A whole-test delete over one incidental assertion lost about 2,000 lines of unrelated coverage and was reverted. In the phase-2 test pass (4.0), deletion is the default: check the file against the keep list, then delete it and name it.
   - Check that removed calls were observers. An action, such as a release or a stop, changes what later assertions see; that test either goes whole or keeps the function.
   - Watch counted-work tests: a removed call may have paid a one-time cost before the measured loop. Give that cost an explicit untimed call with a comment.
   - Look for comments the removal left orphaned.
@@ -209,4 +273,9 @@ Each commit message carries the Production LOC comparison, with removed, kept an
 - what was not run, and why;
 - every failure, as it happened.
 
-Report a removal that doesn't pay as such, and stop it. Ask the owner on the three decisions marked above: per-Workspace Store readers, daemon-owned permission checks, and every push.
+Report a removal that doesn't pay as such, and stop it. Ask the owner before:
+- every push;
+- preparing benchmark originals again for the 4.3.2 schema rename;
+- bringing back daemon-owned permission checks, if GETATTR measures well above 5%.
+
+The test pass reports deleted test files and the coverage given up (4.0).
