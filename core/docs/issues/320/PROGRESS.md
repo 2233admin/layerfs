@@ -2711,3 +2711,188 @@ production code including shipped SQL; pinned `tools/production_loc.py`
 (`c0fe7f36…`). Reference absent (retired R9c; last counted 65,417 at tree
 498dd1917812). This is removal of unused code, not an algorithmic
 simplification.
+
+## Issue 321 follow-up — open-state and Commit memory, E1–E5 at 1 and 2 Workspaces (2026-10-14)
+
+**Question (owner).** How large is the memory risk of keeping a Workspace's
+open state in daemon memory? Is it bounded? Does it limit file count or file
+size? This was measured for 1 and then 2 Workspaces in one sandbox, matching
+the fs-bench-pro harness (2 CPUs, 2 GiB, no swap). Mutation and Commit are
+included.
+
+**Findings.**
+- **Kernel-reference map.**
+  - It costs the daemon about 225 B of anonymous memory per file the kernel
+    references.
+  - The kernel's own slab costs about 1,150 B for each of the same files,
+    plus a page-cache page per written file.
+  - The map is bounded in practice by kernel reclaim. Under pressure in the
+    same cgroup, the kernel reclaimed its slab and sent FORGET, and the map
+    fell from 48,603 to 1,008 entries (one Workspace) and from 97,206 to 2,016
+    (two). The daemon survived, and only the files still held open stayed.
+- **Directory listing positions** are held while a handle is open and
+  released on close: 313 pages for a listed directory of 20,000 names.
+- **Deleted-but-open files and open handles** returned to zero after close.
+- **File size costs nothing in open state.**
+  - Writing 128 MiB raised the daemon by about 1.4 MiB.
+  - Each Commit peaked about 26–34 MiB above the level before it, at 20k or
+    50k files and at 128 MiB alike.
+- **No count or size limit was met.**
+
+Every value is a single diagnostic observation on the shared VM: INELIGIBLE.
+No product source changed. Durable execution: NOT_RUN — disabled by owner
+until explicit reauthorization.
+
+### Samples
+
+The tool is [`open_state_memory.py`](../321/tools/open_state_memory.py)
+(`d7c157f9c`; filler revised in `f5f539921`). Every sample uses:
+- build `2026-10-14-issue321-g-stall-3-build` (source `5e2b3504b`), whose
+  daemon `49a0f534d35d…` is byte-identical to the one on `main`;
+- prepared original `issue320-originals/empty`, cloned per sample and removed
+  with its container;
+- `LAYERFS_CONSTRUCTION_WORKERS=1`;
+- no other container running at start or end of any sample.
+
+| Sample | Workspaces | Load | Wall s | result.json | Verdict |
+| --- | ---: | --- | ---: | --- | --- |
+| `…-mem-w1-files-a` | 1 | 20,000 files, directory of 10,000 | 21.1 | `0e4e94bd` | runs; the filler stopped 96 MiB short by `memory.current`, so it forced **no** reclaim (pgscan 0). E2 is not established by this sample; kept, superseded by b |
+| `…-mem-w1-files-b` | 1 | 50,000 files, directory of 20,000 | 37.1 | `6630a361` | runs; reclaim forced |
+| `…-mem-w2-files-b` | 2 | 50,000 files each, directory of 20,000 each | 50.8 | `ddd0816f` | runs; reclaim forced |
+| `…-mem-w1-large` | 1 | one 128 MiB file of random bytes | 7.0 | `a6e50414` | runs |
+| `…-mem-w2-large` | 2 | one 128 MiB file each | 9.4 | `8955def2` | runs |
+
+Phases of the `files` mode, all Workspaces at once:
+- **E1 create:** files in 100 directories plus the big directory, then an
+  lstat walk of everything.
+- **E3:** a process lists the big directory to its end through a descriptor
+  and keeps it open.
+- **E4:** rewrite every 10th file; open 1,000 files and keep them open, then
+  unlink them; unlink every 20th other file; rename the 100 directories.
+- **E2:** a filler grows anonymous memory in the sandbox to 64 MiB below the
+  limit.
+- **Then:** Commit each Workspace, close the handles, unmount to Gone.
+
+### Daemon and sandbox memory
+
+KiB values are the daemon's `/proc/1/status`. Other values are bytes from the
+sandbox cgroup.
+
+| Phase | w1 files-b RssAnon KiB | w2 files-b RssAnon KiB | w1 slab B | w2 slab B | w1 file B | w2 file B |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| mounted | 5,080 | 5,416 | 664,216 | 729,784 | 294,912 | 421,888 |
+| created and walked | 16,092 | 27,396 | 58,276,160 | 115,901,656 | 212,725,760 | 425,721,856 |
+| big directory listed and held | 16,180 | 27,524 | 58,298,912 | 115,940,472 | 212,729,856 | 425,730,048 |
+| mutated, unlinked files held | 16,632 | 28,520 | 57,526,472 | 114,395,704 | 206,827,520 | 413,937,664 |
+| after memory pressure | 17,100 | 28,960 | 2,540,448 | 4,537,704 | 3,571,712 | 7,290,880 |
+| committed | 47,332 | 62,352 | 4,717,352 | 8,755,656 | 79,126,528 | 154,353,664 |
+| handles released | 47,332 | 62,352 | 2,921,592 | 5,179,032 | 79,126,528 | 154,353,664 |
+| unmounted, Gone | 47,332 | 62,352 | — | — | — | — |
+
+Per kernel-referenced file:
+
+| Arithmetic | Daemon, anon B | Kernel slab, B |
+| --- | ---: | ---: |
+| w1-b: 50,102 more entries | (16,092 − 5,080) × 1,024 / 50,102 = **225.1** | (58,276,160 − 664,216) / 50,102 = **1,149.9** |
+| w2-b: 100,204 more entries | (27,396 − 5,416) × 1,024 / 100,204 = **224.6** | (115,901,656 − 729,784) / 100,204 = **1,149.4** |
+| w1-a: 20,102 more entries | (10,376 − 5,080) × 1,024 / 20,102 = 269.8 | (24,054,136 − 714,608) / 20,102 = 1,161.0 |
+
+- The daemon figure includes allocator overhead and anything else the create
+  phase allocated. Step A's isolated estimate was 171 requested B per entry.
+- The kernel also kept about one 4 KiB page-cache page per written file:
+  212 MB of `file` for 50,000 files. That page cache is reclaimable.
+- Idle cost of a Workspace: 5,080 to 5,416 KiB, so about 0.33 MiB more for a
+  second mounted Workspace.
+
+### Open-state counts
+
+The Status rows are **daemon-wide totals**, not per Workspace: both Workspaces
+report the same numbers.
+
+| Phase | w1-b kernel entries | w1-b held / orphans / dir handles / cookie pages | w2-b kernel entries | w2-b held / orphans / dir handles / cookie pages |
+| --- | ---: | --- | ---: | --- |
+| mounted | 1 | 0 / 0 / 0 / 0 | 2 | 0 / 0 / 0 / 0 |
+| created and walked | 50,103 | 0 / 0 / 0 / 0 | 100,206 | 0 / 0 / 0 / 0 |
+| listed and held | 50,103 | 0 / 0 / 1 / 313 | 100,206 | 0 / 0 / 2 / 626 |
+| mutated | 48,603 | 1,000 / 1,000 / 1 / 313 | 97,206 | 2,000 / 2,000 / 2 / 626 |
+| after pressure | **1,008** | 1,000 / 1,000 / 1 / 313 | **2,016** | 2,000 / 2,000 / 2 / 626 |
+| committed | 1,008 | 1,000 / 1,000 / 1 / 313 | 2,016 | 2,000 / 2,000 / 2 / 626 |
+| handles released | 8 | 0 / 0 / 0 / 0 | 16 | 0 / 0 / 0 / 0 |
+
+- Pressure counters: pgscan 49,632 (w1) and 99,288 (w2). The filler reached
+  the 2 GiB limit and exited normally; no OOM kill.
+- In w2, the first of the two "handles released" Status calls (Workspace 1)
+  still showed 715 handles and 718 orphans. The kernel's RELEASE requests were
+  in flight after the holders exited. The second call, moments later, shows
+  zero; the table gives the second.
+- Cookie pages hold 64 names each; the names here are 8 bytes. RSS cannot
+  resolve their bytes, because the allocator reuses memory freed by earlier
+  phases.
+
+### Commit and large files
+
+| Sample | Before Commit RssAnon KiB | Commit peak RssAnon KiB | Rise KiB | Commit wall s |
+| --- | ---: | ---: | ---: | --- |
+| w1-a, 20,000 files | 10,744 | 36,828 | 26,084 | 4.10 |
+| w1-b, 50,000 files | 17,100 | 47,332 | 30,232 | 11.32 |
+| w2-b, 2 × 50,000 files (sequential) | 28,960 | 62,352 | 33,392 | 11.11, 12.03 |
+| w1-large, 128 MiB | 6,464 | 37,452 | 30,988 | 1.26 |
+| w2-large, 2 × 128 MiB (sequential) | 8,160 | 41,924 | 33,764 | 1.31, 1.42 |
+
+- Writing 128 MiB raised daemon anonymous memory by 1,388 KiB (w1) and
+  2,740 KiB (w2). Data streams through; nothing proportional to file size is
+  held.
+- The sandbox's page cache held the written bytes: 287 MB, and 573 MB for
+  two. It is charged to the same 2 GiB cgroup and is reclaimable.
+
+### Answers
+
+| Question | Answer |
+| --- | --- |
+| Is the kernel-reference map bounded? | Yes, by kernel reclaim in the same cgroup. The kernel spends about 5× as much slab per entry, plus page cache, and reclaims them under pressure; FORGET then empties the daemon's entries. Pinned only by files actually open. |
+| Are listing positions bounded? | Only by close or rewind; pressure does not touch them. 313 pages per 20,000 names per open handle; bytes not resolvable here. |
+| Is memory returned? | Map entries are; RSS is not (allocator high-water). |
+| File count or file size limits? | None from open state. Cost is about 225 B per kernel-referenced file and about 30 MiB of transient Commit peak. Nothing grows with file size. |
+| Does the root AGENTS.md "one resident exception" wording cover what was seen? | Mostly ("grows with open files and with the files the kernel currently references"). It does not name listing positions, which grow with names listed per open directory handle. Amending it is an owner decision. |
+
+### Per-Workspace budget, a proposal from these numbers
+
+Steady state is about 0.3 MiB per idle Workspace plus 225 B per
+kernel-referenced file. Commit adds a transient of about 26–34 MiB.
+
+With 4 Workspaces in a 2 GiB sandbox, 64 MiB per Workspace covers:
+- the Commit peak;
+- about 130,000 kernel-referenced files per Workspace, at (64 − 34) MiB /
+  225 B.
+
+Beyond that, the kernel's own cost (about 1.4 KB per file including a page)
+and its reclaim keep it in check.
+
+Not covered by these samples:
+- The dense in-place rewrite of a 500 MiB file, whose daemon peak earlier
+  reached about 152 MB.
+- Concurrent Commits: the harness control channel is serial, so these
+  Commits ran one after another.
+- Directory listings of many more names held open in many handles.
+
+### Limits of this evidence
+
+- One sample per condition; 2 Workspaces at most, as the owner asked.
+- 50,000 files per Workspace; 8-byte names in the big directory.
+- No cross-cgroup case: the daemon and the commands share the sandbox cgroup.
+- The w1-a filler did not force reclaim and is not evidence for E2.
+
+### Evidence, storage and cleanup
+
+- Samples are under `benchmark-results/fs-bench-pro/2026-10-14-issue321-mem-*`.
+- Each removed its container and cloned volume; the prepared original stays.
+- The volume count went from 253 to 254. The extra volume is
+  `layerfs-fsb-master-workspace-change-locality-ce2febdb…`, created at
+  04:54Z by the I/O-label session's labelled sample, not by these samples.
+- Free disk: 317 GiB before.
+
+### Source size
+
+Production LOC 81,018 -> 81,018 (delta +0); tool and documentation only.
+Pinned `tools/production_loc.py` (`c0fe7f36…`). Reference absent (retired
+R9c; last counted 65,417 at tree 498dd1917812).
