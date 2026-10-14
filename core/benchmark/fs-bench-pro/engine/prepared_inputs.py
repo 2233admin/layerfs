@@ -90,6 +90,31 @@ def load_source(case, build):
     return result
 
 
+def require_context_producer(case, build):
+    """A context case shares an initial input only if the context writer made it.
+
+    Its admission binds role, step, scope and recipe to that writer's step-0
+    receipt. An ordinary summary carries none of them and the complete manifest
+    cannot supply them, so the reverse derivation of make_initial does not
+    exist. This only refuses, before any output; load_source still admits.
+    """
+    summary = source_path(case, build).parent / "input.json"
+    if not summary.exists():
+        return
+    cached = json.loads(summary.read_text())
+    argv, fixture = cached["generation"]["argv"], cached["fixture"]
+    missing = [field for field in ("role", "step", "manifest_sha256", "recipe_sha256") if field not in fixture]
+    if len(argv) == 6 and argv[1] == "materialize-context" and argv[4] == "0" and not missing:
+        return
+    raise ValueError(
+        "shared initial input " + str(summary.parent) + " was first produced by case " + str(cached["producer_case"])
+        + " with `" + (argv[1] if len(argv) > 1 else "an undeclared generator") + "`, not by the context writer's"
+        " `materialize-context CASE ROLE 0`; its summary lacks " + (", ".join(missing) or "that generation")
+        + ". Required order: prepare a context case sharing this input (such as " + case["id"]
+        + ") before any ordinary case that shares it. The closed input is retained unchanged and never"
+        " refreshed; nothing was created for this request")
+
+
 def make_initial(case, build, argv, output, label="native-fixture", environment=None):
     """One original generation; each case still pays its independent native oracle."""
     root = source_path(case, build); cached = load_source(case, build)

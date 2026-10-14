@@ -705,6 +705,7 @@ def prepare_context_native(case, folder, build, binding):
         if result.get("verification_status") != "pass":
             raise ValueError("original contextual full native input verification failed")
         native[label] = result
+    prepared_inputs.require_context_producer(case, build)
     source = prepared_inputs.source_path(case, build)
     argv = [writer["path"], "materialize-context", case["v016_case"], plan["initial_role"], "0", str(source)]
     fixture = prepared_inputs.make_initial(case, build, argv, folder, "native-context-initial")
@@ -1015,6 +1016,8 @@ def prepare_context_workspace(family, case, folder, build_folder):
     plan = context_plan(case)
     build, current = identity.load_build(build_folder), identity.source_identity()
     binding = context_source_binding(case, current)
+    # An input made first by the ordinary writer is refused before this folder exists.
+    prepared_inputs.require_context_producer(case, build)
     folder = Path(folder).resolve(); folder.mkdir(parents=True, exist_ok=False)
     fixture, expectation, native, checkpoints, initial_recipe = prepare_context_native(case, folder, build, binding)
     source = prepared_inputs.source_path(case, build)

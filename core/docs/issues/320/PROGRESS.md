@@ -1859,6 +1859,27 @@ Step D and every E commit 81,054. The branch against its rebased base is
   four-Workspace preparation also failed ("shared initial input pointer
   changed") while the stale tier-1 original still existed. No sample was
   affected; the order dependency remains in the harness.
+- **Follow-up, 2026-10-14: the order is now an explicit refusal.** The context
+  case no longer fails with `KeyError`; `prepared_inputs.require_context_producer`
+  refuses an initial tree first produced by the ordinary writer, before the
+  preparation folder, a tool or a reuse claim exists, and the message names the
+  required order (a context case sharing the input first). The retained input
+  is unchanged and still serves ordinary cases. The context view is not derived
+  from an ordinary input: `validate_context_helpers` binds the initial tree to
+  a `materialize-context CASE ROLE 0` generation and its role/step/manifest
+  receipt at preparation and at every sample admission, an M1 scope digest is
+  not in the complete manifest, and no context writer mode reports a step-0
+  recipe for an existing tree. Both writers call the same
+  `workspace_common::recipe_identity` and the retained receipts of this pair
+  agree (`711ec2f6…`, manifest `6f7eef4c…`), but that equality cannot be
+  checked at preparation, so it is not assumed. Context-first is unchanged.
+  Product-free `tests/engine/test_shared_initial_order.py` (5 tests) prepares
+  both orders; engine suite 362 run, the same 3 native-input errors. Editing
+  `fixtures.py` and `prepared_inputs.py` changes every case's preparation key,
+  so `tier.py` would answer NOT_READY for a kept case until it is prepared
+  again. This worktree has no `kept-fixtures`; originals opened by their folder
+  and closed native inputs (`native_key` unchanged) are not affected. No sample
+  was taken.
 - **Unit suites.** Cells 315 pass. Engine 357 run, 3 errors; families 87 run,
   2 errors and 1 failure: all six need native build inputs named by
   environment variables this session does not have (`FSB_CONTEXT_NATIVE`,

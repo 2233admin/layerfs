@@ -23,6 +23,12 @@ empty-observation header at step zero. Full initial-byte verification remains. W
 initial tree also used by an ordinary case, ordinary summary fields are derived
 from the sealed complete manifest; its hash must equal the original producer
 summary. The original cached summary and generation receipts remain unchanged.
+The reverse derivation does not exist. A contextual case refuses an initial tree
+first produced by the ordinary writer, before it creates any output, and names
+the required order: a contextual case sharing that input is prepared first. Its
+admission binds role, step, scope and recipe to the contextual writer's own
+step-zero receipt, which an ordinary summary and the complete manifest do not
+carry. The refused input is retained unchanged and still serves ordinary cases.
 Selected later checkpoints, automatic-mode evidence, SDK payloads, Storage
 readback and proofs retain their original scope and limits.
 
