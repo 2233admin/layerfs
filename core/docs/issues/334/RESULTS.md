@@ -2,15 +2,15 @@
 
 > **Status:** Dated planning checkpoint; not release evidence or a product contract.
 
-Completed 2026-10-16 on `issue334-shop-run`, in the isolated worktree `/Users/yifanxu/.codex/worktrees/issue334-shop-run/layerfs`. Every numerical observation in this report is **diagnostic**, from one traced run with uncontrolled caches. These are not benchmark results, cold-cache evidence, release qualification, or an aggregate CI verdict. No push, PR, or merge to repository `main` was performed. Durable: `NOT_RUN — disabled by owner until explicit reauthorization`. Stores selected Disposable/WAL/OFF and construction used `LAYERFS_CONSTRUCTION_WORKERS=1`.
+Completed 2026-10-16 on `issue334-shop-run`, in the isolated worktree `/Users/yifanxu/.codex/worktrees/issue334-shop-run/layerfs`. Every numerical observation in this report is **diagnostic**, from one traced run with uncontrolled caches. These are not benchmark results, cold-cache evidence, release qualification, or an aggregate CI verdict. The original campaign stopped before repository publication; subsequent owner-authorized review and closure are recorded in [CLOSURE.md](CLOSURE.md). Durable: `NOT_RUN — disabled by owner until explicit reauthorization`. Stores selected Disposable/WAL/OFF and construction used `LAYERFS_CONSTRUCTION_WORKERS=1`. Portable raw receipts and stopped Store exports are linked in [EVIDENCE.md](EVIDENCE.md).
 
 ## Phase outcomes and evidence
 
 | Phase | Outcome | Evidence |
 | --- | --- | --- |
-| A | Every group/method/conflict/observation example exercised; skill corrected | [raw A](../../../target/issue334/phase-a/) and [bug ledger](BUGS.md) |
-| B | M1–M6, fresh-Branch install/test/build/HTTP acceptance; one product bug fixed | [Builder 1 report](../../../target/issue334/phase-b/REPORT.md) |
-| C | M1–M6 and fresh-Branch acceptance passed; 14 tests, build, smoke; no SDK blocker | [raw C](../../../target/issue334/phase-c/) |
+| A | Every group/method/conflict/observation example exercised; skill corrected | [evidence archive](EVIDENCE.md): `issue334/phase-a/`; [bug ledger](BUGS.md) |
+| B | M1–M6, fresh-Branch install/test/build/HTTP acceptance; one product bug fixed | [evidence archive](EVIDENCE.md): `issue334/phase-b/REPORT.md` |
+| C | M1–M6 and fresh-Branch acceptance passed; 14 tests, build, smoke; no SDK blocker | [evidence archive](EVIDENCE.md): `issue334/phase-c/` |
 | D | Histories, totals, decoded logs, call/step/storage CSVs collected | analysis.json, calls.csv, steps.csv, methods.csv, phases.csv, storage.csv in B/C |
 
 Builder 2 received only `/Users/yifanxu/LayerFS-issue334-builder2`, the installed SDK, copied skill, SPEC, environment, and the verbatim builder instructions. Its prompt prohibited repository/issue/Builder 1 access and product fixes. The SDK was copied into that folder; its package link resolves within the folder. The orchestrator supplied no implementation help. Raw scripts, outputs and report were subsequently preserved under `phase-c/builder2/`; the outside folder also remains.
@@ -229,7 +229,7 @@ Every workload Sandbox log was collected with stdout and stderr before removal; 
 
 ## Bugs, skills and verification
 
-Product bugs: **1 found, 1 fixed, 0 open**. [BUGS.md](BUGS.md) retains the complete row. BUG-001 was the shared `**/` matcher requiring at least one directory. Commit `222240012` makes it match zero or more complete directory names. Three external public-API regressions failed before and passed after; rebuilt live SDK evidence includes direct children. No Store format change or restart was needed. Expected source merge conflicts are recorded as refusals and resolved, not counted as product bugs.
+Original A–D product bugs: **1 found, 1 fixed, 0 open**. [BUGS.md](BUGS.md) retains the complete row and subsequent closure-review finding. BUG-001 was the shared `**/` matcher requiring at least one directory. Commit `222240012` makes it match zero or more complete directory names. Three external public-API regressions failed before and passed after; rebuilt live SDK evidence includes direct children. No Store format change or restart was needed. Expected source merge conflicts are recorded as refusals and resolved, not counted as product bugs.
 
 Phase A corrected Branch ordering and inherited heads, fs.list fields, actual read/diff/output shapes, listening server entrypoint, Docker identifier wording, and the conflict recipe. A one-sided combined resolution can still overlap; the corrected guide writes identical reviewed results on forks of both sides. Builder 1 used that recipe successfully. B exposed the automatic service Sandbox and cleanup gap; the observer verified service() and close separately and corrected the no-container wording. Observation docs now distinguish main Layers, process.list ids, unchanged snapshot shape, file revision logical bytes, and overlapping storage metadata. Builder 2 found the SDK guidance correct and requested a clearer Docker environment description. It made two local tooling errors: host-shell quoting expanded backticks before any SDK call, and log collection treated the daemon socket as an executable, failing before close. Both were inspected and corrected locally with retained evidence; they are not SDK defects. The skill now explicitly distinguishes the Docker socket/endpoint from the docker executable and explains main's synthetic null head/Layer base. The full independent report is appended verbatim.
 
@@ -249,7 +249,19 @@ The report/checklist completion commit also records `Production LOC: 87550 -> 87
 
 ## Retained limits and collection gaps
 
-The C initial snapshot reconstruction is disclosed above. One Phase A group Sandbox was logged using stdout only before close, so that daemon stderr log is unavailable; its SDK trace remains, and B/C logs preserve both streams. Timings have tracing overhead, uncontrolled caches and small counts; p95 for sparse methods is often the maximum. Store file bytes exclude live WAL/OS allocation; no resident-memory or cold-cache claim is made. Main publications and mutable Branch Commits have distinct accounting. There was no repository push, PR, main merge, release or Durable execution.
+The C initial snapshot reconstruction is disclosed above. One Phase A group Sandbox was logged using stdout only before close, so that daemon stderr log is unavailable; its SDK trace remains, and B/C logs preserve both streams. Timings have tracing overhead, uncontrolled caches and small counts; p95 for sparse methods is often the maximum. Store file bytes exclude live WAL/OS allocation; no resident-memory or cold-cache claim is made. Main publications and mutable Branch Commits have distinct accounting. The original campaign performed no repository push, PR, main merge, release or Durable execution. Subsequent publication/merge authorization does not remove these collection limitations or authorize Durable execution.
+
+## Subsequent closure review
+
+The owner authorized all five closure steps after the original campaign. The
+[closure record](CLOSURE.md) documents a second glob bug fixed in `02e0409cb`,
+final scoped checks and a separate rebuilt live SDK proof. Final disposition
+including that review is **2 bugs found, 2 fixed, 0 open**; production LOC is
+87,552, a net +20 against the original main. The original timing/storage tables
+above retain their original identities and are not presented as reruns on the
+closure source. [EVIDENCE.md](EVIDENCE.md) links the portable checksummed archive,
+manifest, stopped Store exports and the exact private-original preservation
+record. The verbatim Builder 2 report below is unchanged.
 
 ## Appendix: Builder 2 REPORT.md (verbatim)
 

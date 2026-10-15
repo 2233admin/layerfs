@@ -1,8 +1,8 @@
 # Issue #334 bug ledger
 
-> **Status:** Current planning checklist; no release candidate exists.
+> **Status:** Archived; retained for historical evidence only.
 
-Raw run evidence is retained under `core/target/issue334/`; timings here are
+Raw run evidence is preserved in the [evidence bundle](EVIDENCE.md); timings here are
 diagnostic, not performance qualification. Global Store execution uses explicitly
 selected Disposable/WAL/OFF. Durable: NOT_RUN — disabled by owner until explicit
 reauthorization.
@@ -10,7 +10,11 @@ reauthorization.
 | ID | Phase / step | Symptom and evidence | Root cause | Fix commit | Regression / verification | State |
 | --- | --- | --- | --- | --- | --- | --- |
 | BUG-001 | A / 025, 031 (`fs-read-01`, `fs-read-07`); B / 005 | `fs.glob('work', 'test/**/*.test.js', '/')` omitted `/test/cart.test.js`; `src/**/*.js` omitted direct children. Phase A outputs and trace retained. | Shared `Rule` parser treated `**` and its following `/` independently: the wildcard could match zero characters but the slash was mandatory. | `222240012` (shared pattern matcher and skill) | External `layerfs-content/tests/glob_directories.rs`: all three tests failed before the fix (`phase-b/glob-before.out`), pass after (`glob-after.out`). All Content tests/examples pass (471 passed, 2 ignored); scoped Clippy, boundary guard and its 50 self-tests pass. Rebuilt daemon and host addon; live SDK step 005 returned `/test/health.test.js` from `test/**/*.test.js`. | FIXED |
-| BUG-002 | Closure review, after the original campaign | Consecutive globstar directories, e.g. `src/**/**/index.js`, still omitted `/src/index.js`. The new external regression failed on that exact path before the fix. | Parsing the first `**/` consumes its slash into a `Directories` token, but the next segment recognized only an empty token stream or literal `/` as a name boundary. | Closure source commit; exact id recorded in the closure receipt | External `consecutive_recursive_directory_globs_include_zero_directories` covers two/three consecutive segments, leading globstars, partial-name rejection and shared LWW rules. All Content tests/examples pass after the fix: 472 passed, 2 existing ignored; scoped Clippy, rustfmt, boundary guard and its 25 discovered self-tests pass. | FIXED; separate from the original B/C source pins |
+| BUG-002 | Closure review, after the original campaign | Consecutive globstar directories, e.g. `src/**/**/index.js`, still omitted `/src/index.js`. The new external regression failed on that exact path before the fix. | Parsing the first `**/` consumes its slash into a `Directories` token, but the next segment recognized only an empty token stream or literal `/` as a name boundary. | `02e0409cb` | External `consecutive_recursive_directory_globs_include_zero_directories` covers two/three consecutive segments, leading globstars, partial-name rejection and shared LWW rules. All Content tests/examples pass after the fix: 472 passed, 2 existing ignored; scoped Clippy, rustfmt, boundary guard and its 25 discovered self-tests pass. Rebuilt live SDK globs with two/three recursive segments both return `/src/server.js`; final Store statistics are unchanged. | FIXED; separate from the original B/C source pins |
+
+Final disposition: **2 found, 2 fixed, 0 open** including closure review. The
+original A–D campaign found and fixed BUG-001; BUG-002 was found afterwards.
+See [CLOSURE.md](CLOSURE.md) for source pins and the scoped final verification.
 
 Phase B completed M1–M6 and fresh-Branch acceptance on the original volume.
 The only SDK refusal was the expected source conflict when merging `orders` and
