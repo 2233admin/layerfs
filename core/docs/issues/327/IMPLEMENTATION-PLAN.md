@@ -14,8 +14,10 @@ needs. The standard governs the public API. #329 holds the open decisions,
 and where a decision is still open this plan gives only a proposal. Nothing
 here claims that a capability exists or has been checked.
 
-The current state is `issue327-sdk-redesign` at `daacdb13c`. That branch is
-local and not pushed.
+The original plan basis is `daacdb13c`. The current implementation checkpoint
+is [PHASE4-20261015.md](PHASE4-20261015.md), with product at `3fb73808c`.
+The branch remains local and unpushed. The [decision record](DECISIONS-20261015.md)
+records delegated judgment and the owner's explicit deferrals.
 - [PHASE2.md](PHASE2.md) records the A–C verification against the real daemon.
 - [PHASE3.md](PHASE3.md) records the live UI (D1–D6) and the UI previews made since.
 - The [SPEC](SPEC.md) stays the architectural and UI-integration background where
@@ -85,179 +87,181 @@ Sources:
 
 ## 5. Source layout
 
-Production LOC from the pinned `tools/production_loc.py --files` at `daacdb13c`.
-Tests are outside `src/` and are not counted: `core/crates/layerfs-api/tests/`,
-and `sdk/js/test/` (`verify/` and the offline fixture).
+Production LOC from `tools/production_loc.py --files` at `3fb73808c`, including
+`sdk/js/operator/`. Counts use Git snapshots, not working-tree totals. Tests and
+build scripts are excluded. API and SDK listings include every existing product
+file; the daemon listing is partial, covering the control/operator dispatch files.
+Planned files contribute no subtotal. `native/src/discovery.rs` is conditional,
+not a scaffolding requirement. Tests live under each package's `tests/` or
+`sdk/js/test/`.
 
-`core/crates/layerfs-api` (complete):
+`layerfs-api`:
 
-```
-layerfs-api/src/                     [1905]
-  lib.rs                                 21  (adds `pub mod operator`; drops `inspect`)
-  base/                               [699]
-    mod.rs                                8
-    control.rs                          221
-    failure.rs                           51
-    install.rs                          142
-    install_types.rs                     44
-    internal.rs                         143
-    recovery.rs                          52
-    sdk.rs                               38  (public call(): refuses operator.* names)
-  project/                            [197]
-    mod.rs                                6
-    init.rs                             161
-    list_branches.rs                     30  (pageSize, pagePos)
-  fs/                                 [112]
-    mod.rs                               28
-    read.rs                               6  (line range)
-    list.rs                               6  (pageSize, pagePos)
-    stat.rs                               6
-    grep.rs                               6  (pageSize, pagePos)
-    glob.rs                               6  (pageSize, pagePos)
-    diff_files.rs                         6
-    blame.rs                              6  (fromLine)
-    write.rs                              6  (message)
-    edit.rs                               6  (message)
-    apply.rs                              6  (message; grammar per #329 A3)
-    mkdir.rs                              6  (message)
-    remove.rs                             6  (renamed rm.rs; message)
-    cp.rs                                 6  (message; recursive, exact destination)
-    mv.rs                                 6  (message; recursive, exact destination)
-  branch/                              [92]
-    mod.rs                               12
-    fork.rs                              28
-    list_commits.rs                      28  (pageSize, pagePos)
-    diff_commits.rs                       6  (pageSize, pagePos)
-    diff_branches.rs                      6  (pageSize, pagePos)
-    merge.rs                              6  (message)
-    publish.rs                            6
-  sandbox/                            [776]
-    mod.rs                               20
-    create.rs                           322  (ID usable across processes, #329 A6)
-    mount.rs                             99
-    exec.rs                              39  (message)
-    status.rs                            15  (paged changes and conflicts, #329 B3)
-    commit.rs                            42  ({ message, force })
-    unmount.rs                           51  ({ discard })
-    close.rs                             36
-    values.rs                           152
-  inspect/                              [8]  (removed; moves to operator/inspect/)
-    mod.rs                                2
-    snapshot.rs                           6
-  operator/                               —   new
-    mod.rs                                —   new  (operator::call())
-    inspect/                              —   new
-      mod.rs                              —   new
-      snapshot.rs                         —   new  (moved from inspect/)
-    store/                                —   new
-      mod.rs                              —   new
-      stats.rs                            —   new
-      commits.rs                          —   new
-    files/                                —   new
-      mod.rs                              —   new
-      stats.rs                            —   new
-      history.rs                          —   new
-    workspace/                            —   new
-      mod.rs                              —   new
-      overlay.rs                          —   new
-      changes.rs                          —   new
-```
-
-`sdk/js` (complete for production sources):
-
-```
-sdk/js/                                 [1146]
-  src/                                   [360]  (public package, @layerfs/sdk)
-    index.js                                66  (new LayerFS(projectName); four groups)
-    client.js                               28  (deployment from the environment)
-    native.js                               11
-    errors.js                               17
-    project/                                [9]
-      init.js                                6
-      list_branches.js                       3
-    fs/                                     [57]
-      index.js                              14
-      read.js                                3
-      list.js                                3
-      stat.js                                3
-      grep.js                                3
-      glob.js                                3
-      diff_files.js                          3
-      blame.js                               3
-      write.js                               4
-      edit.js                                3
-      apply.js                               3
-      mkdir.js                               3
-      remove.js                              3  (renamed rm.js)
-      cp.js                                  3
-      mv.js                                  3
-    branch/                                 [18]
-      fork.js                                3
-      list_commits.js                        3
-      diff_commits.js                        3
-      diff_branches.js                       3
-      merge.js                               3
-      publish.js                             3
-    sandbox/                                [40]
-      create.js                              6
-      mount.js                               4
-      exec.js                                4
-      status.js                              4
-      commit.js                              4
-      unmount.js                             4
-      close.js                               7
-      processes.js                           7  (moves to operator/process/)
-    inspect/                                 [3]  (removed)
-      snapshot.js                            3
-    harness/                               [111]  (removed: agent/call tool-call wrapper)
-      index.js                               3
-      result.js                             29
-      sandboxes.js                          23
-      tool_call.js                          56
-  operator/                                  —   new  (@layerfs/sdk/operator, internal)
-    index.js                                 —   new
-    store/                                   —   new
-      stats.js                               —   new
-      commits.js                             —   new
-    files/                                   —   new
-      stats.js                               —   new
-      history.js                             —   new
-    workspace/                               —   new
-      overlay.js                             —   new
-      changes.js                             —   new
-    inspect/                                 —   new
-      snapshot.js                            —   new
-    process/                                 —   new
-      list.js                                —   new
-      cancel.js                              —   new
-  native/src/                            [786]
-    lib.rs                                  51  (exports call() and operator_call())
-    convert.rs                              87
-    project.rs                              86  (in-process project map goes, #329 A6)
-    registry.rs                             63  (persisted discovery, #329 A6)
-    sandbox.rs                             239
-    exec.rs                                212  (command launch, process records, cancel)
-    job.rs                                  48
-    discovery.rs                             —   cond.  (only if registry.rs cannot hold it)
+```text
+core/crates/layerfs-api/src/               [1930]
+  lib.rs                                       22
+  base/                                     [709]
+    mod.rs                                      8
+    control.rs                                221
+    failure.rs                                 51
+    install.rs                                142
+    install_types.rs                           44
+    internal.rs                               143
+    recovery.rs                                52
+    sdk.rs                                     48
+  branch/                                    [92]
+    mod.rs                                     12
+    diff_branches.rs                            6
+    diff_commits.rs                             6
+    fork.rs                                    28
+    list_commits.rs                            28
+    merge.rs                                    6
+    publish.rs                                  6
+  fs/                                       [112]
+    mod.rs                                     28
+    apply.rs                                    6
+    blame.rs                                    6
+    cp.rs                                       6
+    diff_files.rs                               6
+    edit.rs                                     6
+    glob.rs                                     6
+    grep.rs                                     6
+    list.rs                                     6
+    mkdir.rs                                    6
+    mv.rs                                       6
+    read.rs                                     6
+    remove.rs                                   6  (rename to rm.rs remains)
+    stat.rs                                     6
+    write.rs                                    6
+  operator/                                  [22]
+    mod.rs                                      3
+    call.rs                                    12  (separate operator admission)
+    files/                                 —   new
+      mod.rs                                —   new
+      history.rs                            —   new
+      stats.rs                              —   new
+    inspect/                                  [7]
+      mod.rs                                    2
+      snapshot.rs                               5
+    store/                                 —   new
+      mod.rs                                —   new
+      commits.rs                            —   new
+      stats.rs                              —   new
+    workspace/                             —   new
+      mod.rs                                —   new
+      changes.rs                            —   new
+      overlay.rs                            —   new
+  project/                                  [197]
+    mod.rs                                      6
+    init.rs                                   161
+    list_branches.rs                           30
+  sandbox/                                  [776]
+    mod.rs                                     20
+    close.rs                                   36
+    commit.rs                                  42
+    create.rs                                 322
+    exec.rs                                    39
+    mount.rs                                   99
+    status.rs                                  15
+    unmount.rs                                 51
+    values.rs                                 152
 ```
 
-`core/crates/layerfs-daemon` (only the files that change; the subtotal covers those):
+`sdk/js`:
 
-```
-layerfs-daemon/src/                   [246]  (partial)
-  sdk/                                [246]
-    mod.rs                               44  (public dispatch only)
-    inspect.rs                          202  (moves to operator/)
-  operator/                               —   new
-    mod.rs                                —   new  (operator.* dispatch)
-    inspect.rs                            —   new  (moved)
-    store.rs                              —   new  (Store totals, per-Commit counters)
-    files.rs                              —   new  (first-parent walk by object id)
-    workspace.rs                          —   new  (overlay counts, paged changes)
+```text
+sdk/js/                                    [1086]
+  native/                                   [815]
+    src/                                    [815]
+      lib.rs                                   18
+      convert.rs                               87
+      discovery.rs                          —   cond.  (conditional; A6 investigation first)
+      dispatch.rs                              62
+      exec.rs                                 212
+      job.rs                                   48
+      project.rs                               86
+      registry.rs                              63
+      sandbox.rs                              239
+  operator/                                  [38]
+    index.js                                   12  (internal entry point)
+    files/                                 —   new
+      history.js                            —   new
+      stats.js                              —   new
+    inspect/                                 [18]
+      snapshot.js                              18
+    process/                                  [8]
+      cancel.js                                 4
+      list.js                                   4
+    store/                                 —   new
+      commits.js                            —   new
+      stats.js                              —   new
+    workspace/                             —   new
+      changes.js                            —   new
+      overlay.js                            —   new
+  src/                                      [233]
+    client.js                                  34
+    errors.js                                  17
+    index.js                                   54
+    native.js                                  11
+    branch/                                  [18]
+      diff_branches.js                          3
+      diff_commits.js                           3
+      fork.js                                   3
+      list_commits.js                           3
+      merge.js                                  3
+      publish.js                                3
+    fs/                                      [57]
+      apply.js                                  3
+      blame.js                                  3
+      cp.js                                     3
+      diff_files.js                             3
+      edit.js                                   3
+      glob.js                                   3
+      grep.js                                   3
+      index.js                                 14
+      list.js                                   3
+      mkdir.js                                  3
+      mv.js                                     3
+      read.js                                   3
+      remove.js                                 3  (rename to rm.js remains)
+      stat.js                                   3
+      write.js                                  4
+    project/                                  [9]
+      init.js                                   6
+      list_branches.js                          3
+    sandbox/                                 [33]
+      close.js                                  7
+      commit.js                                 4
+      create.js                                 6
+      exec.js                                   4
+      mount.js                                  4
+      status.js                                 4
+      unmount.js                                4
 ```
 
-`layerfs-daemon/src/sdk/snapshot.rs` (173) stays where it is. It opens the
-Branch or Commit view that reads use, and it is not the operator snapshot.
+`layerfs-daemon` (partial):
+
+```text
+core/crates/layerfs-daemon/src/            [662]
+  lib.rs                                       18
+  control/                                  [381]
+    inspect.rs                                 65
+    operations.rs                             316
+  operator/                                 [218]
+    mod.rs                                      4
+    dispatch.rs                                12
+    files.rs                                —   new
+    inspect.rs                                202
+    store.rs                                —   new
+    workspace.rs                            —   new
+  sdk/                                       [45]
+    mod.rs                                     10
+    dispatch.rs                                35
+```
+
+The daemon's `sdk/snapshot.rs` stays in public read implementation; it resolves
+an immutable selected view and is distinct from the operator read model.
+The old public inspect and process methods and `sdk/js/src/harness/` are removed.
 
 ## 6. Remaining work
 
@@ -304,17 +308,15 @@ The work beyond the API refactor, the operator surface, statistics and timing:
 
 ## 7. Order and decisions
 
-Blocking decisions (#329):
-- **A1** messages and Commit identity;
-- **A2** bounded reads;
-- **A5** offset paging;
-- **A6** cross-process;
-- **the Store version question** in item 6.2.
+The owner authorized agent judgment for A1, A2, A5, A6 and Store compatibility.
+The selected contracts are in [DECISIONS-20261015.md](DECISIONS-20261015.md);
+they are no longer waiting for an owner response. Reaping and replaced-inode
+policy are explicitly deferred. Implementation and qualification remain open.
 
 The other items have proposals that can be taken as defaults.
 
 Order:
-1. **Now, needing no decision.** A written investigation of A6: how a second process could reach a running Sandbox daemon, read-only. Also the Phase 2 cleanups (item 6.4) and packaging (item 6.5).
+1. **Foundation completed at `3fb73808c`.** [A6 investigation](A6-INVESTIGATION-20261015.md), retained-oracle fixture cleanup, archived registry notice, environment configuration, macOS/Linux addon builds, and operator snapshot/process separation. The two failed harness checks remain failures; see Phase 4. Statistics and persistent discovery are still open.
 2. **After A1, B4 and D.** The Store migration (item 6.2), first, because it is the riskiest change and the others build on it.
 3. **After A2 and A5.** The public API migration (section 2), then `status` and the operator (sections 3 and 4).
 4. **Cross-process,** from the investigation's result.
