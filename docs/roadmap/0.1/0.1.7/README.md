@@ -1,6 +1,10 @@
 # LayerFS v0.1.7: Architecture Refactor Migration
 
-> **Status:** Current planning checklist; no release candidate exists.
+> **Status:** Archived; retained for historical evidence only. LayerFS 0.1.7 was
+> released on 2026-10-15 with different content from this plan: see the
+> [0.1.7 manual](../../../versioned/0.1.7/README.md) and the
+> [release record](../../../../release-notes/0.1.7/README.md). Open items here
+> were closed as not planned.
 
 ## Goal
 

@@ -1,9 +1,8 @@
 # Agent Branch Workspace reconciliation and conflict policy
 
-> **Status:** Release-defining main-task folder for LayerFS 0.2.
->
-> The documents describe a target contract. They do not change the released
-> 0.1 behavior.
+> **Status:** Archived; retained for historical evidence only. The owner discarded
+> the v0.2.0 and v0.3.0 plans on 2026-10-15; LayerFS moves from 0.1.7 to the
+> [1.0.0 plan](../../1.0/README.md). Nothing here is a 1.0.0 commitment.
 
 ## Fixed premise
 

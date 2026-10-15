@@ -43,6 +43,14 @@ A release candidate is eligible only when:
   [v0.1.5 release contract](../../release-notes/0.1.5/release-contract.md)
   define this boundary. Benchmark evidence below is single-sample campaign
   evidence, not a universal speed or storage guarantee.
+- The owner-approved v0.1.7 Developer Preview is a broader exception: it
+  replaces the v0.1.6 CLI and public Rust SDK with the JavaScript SDK, changes
+  the daemon protocol, and moves new Stores to schema 16–18 or 22–24 with
+  `layerfs/commit/v3` identity. Every older Store, including v0.1.6 schema-10
+  Stores, is refused without migration. The owner released it as-is with
+  recorded waivers; see the [v0.1.7 release record](../../release-notes/0.1.7/README.md).
+  After 0.1.7 the planned next release is 1.0.0; the 0.2 and 0.3 plans were
+  discarded on 2026-10-15.
 - A pre-1.0 minor release such as `0.2.0` may define a revised public or
   storage contract and must document its compatibility boundary explicitly.
 - A 1.0-or-later major release follows ordinary stable semantic-versioning

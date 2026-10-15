@@ -1,8 +1,16 @@
 # LayerFS documentation
 
-> **Status:** Current documentation entry point; v0.1.6 release documentation.
+> **Status:** Current documentation entry point; v0.1.7 release documentation.
 
-## Use LayerFS v0.1.6
+## Use LayerFS v0.1.7
+
+- [Manual](versioned/0.1.7/README.md)
+- [SDK and terminal UI guide](versioned/0.1.7/sdk-and-ui.md)
+- [SDK reference](versioned/0.1.7/sdk-reference.md)
+- [Release record, compatibility and waivers](../release-notes/0.1.7/README.md)
+- Next: [LayerFS 1.0.0 plan](roadmap/1.0/README.md)
+
+## Historical LayerFS 0.1.6
 
 - [Manual](versioned/0.1.6/README.md)
 - [Quickstart](versioned/0.1.6/quickstart.md)

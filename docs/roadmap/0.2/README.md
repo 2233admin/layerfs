@@ -1,7 +1,8 @@
 # LayerFS 0.2 roadmap
 
-> **Status:** Draft incompatible-minor-release roadmap. No public contract,
-> Store migration, benchmark row, or release candidate is frozen yet.
+> **Status:** Archived; retained for historical evidence only. The owner discarded
+> the v0.2.0 and v0.3.0 plans on 2026-10-15; LayerFS moves from 0.1.7 to the
+> [1.0.0 plan](../1.0/README.md). Nothing here is a 1.0.0 commitment.
 
 ## Problem statement
 

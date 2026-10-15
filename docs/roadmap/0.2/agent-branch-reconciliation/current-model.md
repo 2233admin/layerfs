@@ -1,9 +1,10 @@
 # Current model and target definition
 
-> **Status:** Source-backed 0.1 model plus required 0.2 product semantics.
->
-> This document separates implemented behavior from the proposed mechanism in
-> [proposal.md](proposal.md).
+> **Status:** Archived; retained for historical evidence only. The owner discarded
+> the v0.2.0 and v0.3.0 plans on 2026-10-15; LayerFS moves from 0.1.7 to the
+> [1.0.0 plan](../../1.0/README.md). Nothing here is a 1.0.0 commitment.
+> Its `crates/` source links point at the retired v0.1.6 tree, recoverable at
+> tag `reference-v0.1.6-final`.
 
 ## Scope
 

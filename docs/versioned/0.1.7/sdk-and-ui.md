@@ -1,14 +1,15 @@
 # LayerFS JavaScript SDK and terminal UI
 
-> **Status:** Proposal; target LayerFS 0.1.7; not a released contract.
-> This guide describes what `main` implements at `e4968959b`. LayerFS 0.1.7 is
-> not released. Method details and limits are in the
-> [SDK reference](../../../../sdk/js/README.md). The acceptance record is
-> [PHASE5](../../../../core/docs/issues/327/PHASE5-20261015.md).
+> **Status:** Released for LayerFS 0.1.7.
+> This is part of the [0.1.7 manual](README.md). It describes the tagged source
+> [`v0.1.7`](https://github.com/Ephemeral-AI-Lab/layerfs/releases/tag/v0.1.7).
+> Method details and limits are in the [SDK reference](sdk-reference.md). The
+> acceptance record is
+> [PHASE5](../../../core/docs/issues/327/PHASE5-20261015.md).
 
 The JavaScript SDK, `@layerfs/sdk`, is the way programs use LayerFS: Branches of
 a project's files, Commits, and Sandboxes whose Workspaces run ordinary commands.
-The terminal UI in [`sdk_sim/`](../../../../sdk_sim/) shows the same model in a
+The terminal UI in [`sdk_sim/`](../../../sdk_sim/) shows the same model in a
 browser. It runs either on an in-page simulator or live on the real product,
 through a small local server.
 
@@ -42,7 +43,7 @@ You need Docker, Node 20 or later, the host Rust toolchain `+1.85.1`, and the
 pinned images.
 
 1. **Build the Linux daemon** inside the pinned build image. The command is in
-   [PHASE5, "Exact Linux build"](../../../../core/docs/issues/327/PHASE5-20261015.md).
+   [PHASE5, "Exact Linux build"](../../../core/docs/issues/327/PHASE5-20261015.md).
    It writes `core/target/cluster2-linux/release/layerfs-daemon`.
 2. **Build the host addon:**
    ```bash

@@ -1,7 +1,8 @@
 # LayerFS roadmap
 
-> **Status:** Living roadmap. This checklist is planning material, not part of
-> the LayerFS 0.1.2 product or compatibility contract.
+> **Status:** Living roadmap; planning material, not a product or compatibility
+> contract. Current plan: [LayerFS 1.0.0](1.0/README.md). The 0.2 and 0.3 plans
+> were discarded on 2026-10-15 and are archived.
 
 This file answers two questions: what is implemented in the current source,
 and what should happen next. See [Roadmap architecture](architecture.md) for
@@ -9,8 +10,8 @@ sequencing, architecture, acceptance gates, and rationale.
 
 Active maintainer guidance is co-located with its release checklist. See the
 [0.1.x development guide](0.1/development.md) and
-[benchmark contract](0.1/benchmarking.md). Incompatible multi-agent and
-projection work is tracked in the [0.2 roadmap](0.2/README.md).
+[benchmark contract](0.1/benchmarking.md). The [1.0.0 plan](1.0/README.md) is the next release. The
+[0.2 roadmap](0.2/README.md) is archived.
 
 ## Legend
 
