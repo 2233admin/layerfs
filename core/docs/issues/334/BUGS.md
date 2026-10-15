@@ -9,7 +9,16 @@ reauthorization.
 
 | ID | Phase / step | Symptom and evidence | Root cause | Fix commit | Regression / verification | State |
 | --- | --- | --- | --- | --- | --- | --- |
-| BUG-001 | A / 025, 031 (`fs-read-01`, `fs-read-07`); B / 005 | `fs.glob('work', 'test/**/*.test.js', '/')` omitted `/test/cart.test.js`; `src/**/*.js` omitted direct children. Phase A outputs and trace retained. | Shared `Rule` parser treated `**` and its following `/` independently: the wildcard could match zero characters but the slash was mandatory. | This commit (shared pattern matcher and skill) | External `layerfs-content/tests/glob_directories.rs`: all three tests failed before the fix (`phase-b/glob-before.out`), pass after (`glob-after.out`). All Content tests/examples pass; scoped Clippy, boundary guard and its 50 self-tests pass. Rebuilt daemon and host addon; live SDK step 005 returned `/test/health.test.js` from `test/**/*.test.js`. | FIXED |
+| BUG-001 | A / 025, 031 (`fs-read-01`, `fs-read-07`); B / 005 | `fs.glob('work', 'test/**/*.test.js', '/')` omitted `/test/cart.test.js`; `src/**/*.js` omitted direct children. Phase A outputs and trace retained. | Shared `Rule` parser treated `**` and its following `/` independently: the wildcard could match zero characters but the slash was mandatory. | `222240012` (shared pattern matcher and skill) | External `layerfs-content/tests/glob_directories.rs`: all three tests failed before the fix (`phase-b/glob-before.out`), pass after (`glob-after.out`). All Content tests/examples pass (471 passed, 2 ignored); scoped Clippy, boundary guard and its 50 self-tests pass. Rebuilt daemon and host addon; live SDK step 005 returned `/test/health.test.js` from `test/**/*.test.js`. | FIXED |
+
+Phase B completed M1–M6 and fresh-Branch acceptance on the original volume.
+The only SDK refusal was the expected source conflict when merging `orders` and
+`web` at step 015. Steps 016–017 read both sides and resolved the two server
+hunks identically on working forks; the merge and combined tests passed. This
+was normal conflict handling, with no product defect inferred. All 12 shop tests,
+the clean dependency install, standalone build and HTTP smoke passed. Full run
+details, refs, recoveries and lifecycle evidence are in
+`core/target/issue334/phase-b/REPORT.md`.
 
 ## Skill gaps corrected in Phase A
 
