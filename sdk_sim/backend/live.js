@@ -56,10 +56,17 @@
       return { ok: true, code: "Initialized", result: { kind: "Initialized" } };
     }
     async run(name, args) {
+      const started = performance.now();
       const answer = await this.request("POST", "/api/call", { name, args });
       this.adopt(answer.state);
-      return answer.outcome;
+      const outcome = answer.outcome;
+      outcome.timing = { ...outcome.timing, totalMs: performance.now() - started };
+      return outcome;
     }
+    /** Store size: not reported by the product yet (issue #329 D). */
+    storage() { return null; }
+    /** A Workspace's overlay rows as inspect.snapshot reports them; no bytes yet. */
+    overlayOf(ws) { return ws && ws.overlay ? { inodes: ws.overlay.inodes, entries: ws.overlay.entries } : null; }
     /** Picks up changes made outside a call (a process that exits). */
     async poll() {
       const answer = await this.request("GET", `/api/state?since=${this.version}`);

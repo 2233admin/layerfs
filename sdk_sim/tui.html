@@ -73,7 +73,7 @@ body.nosel, body.nosel * { user-select: none !important; -webkit-user-select: no
 .ib:disabled { opacity: .4; cursor: default; }
 .kbd { font: 10.5px var(--mono); opacity: .65; }
 
-.work { flex: 1; min-height: 0; display: flex; background: var(--grid-bg); padding: 6px; }
+.work { flex: 1; min-height: 0; display: flex; background: var(--grid-bg); padding: 6px; padding-bottom: calc(6px + var(--playerh, 0px)); }
 .vh { width: 6px; flex: none; cursor: col-resize; position: relative; }
 .vh[hidden] { display: none; }
 .vh::after, .hh::after { content: ""; position: absolute; border-radius: 2px; transition: background .15s; }
@@ -114,6 +114,16 @@ body.nosel, body.nosel * { user-select: none !important; -webkit-user-select: no
 .sdk .code { color: var(--term-dim); display: block; margin-bottom: 4px; }
 .sdk .code b { color: var(--t-cyan); font-weight: 600; }
 .sdk pre { margin: 0 0 6px; font: inherit; white-space: pre-wrap; }
+.tm { margin-left: 8px; font: 9.5px var(--mono); color: var(--term-dim); vertical-align: 1px; }
+.sdk .tm { margin-left: 6px; font-size: 10.5px; }
+.store { flex: none; border-top: 1px solid var(--term-border); padding: 7px 10px 8px; font: 11px/1.4 var(--mono); color: var(--term-text); background: var(--well); }
+.store .srow { display: flex; align-items: baseline; gap: 8px; }
+.store .kind { font-weight: 600; font-size: 9.5px; letter-spacing: .06em; color: var(--term-dim); }
+.store b { font-size: 12px; } .store .dim { color: var(--term-dim); } .store .est { margin-left: auto; color: var(--term-dim); font-size: 10px; }
+.store .sbar { display: flex; height: 6px; border-radius: 3px; overflow: hidden; margin: 6px 0 5px; background: var(--term-border); }
+.store .sbar i, .store .sw { display: block; } .store .sw { display: inline-block; width: 7px; height: 7px; border-radius: 2px; margin-right: 4px; vertical-align: 0; }
+.store .p { background: var(--t-cyan); } .store .m { background: var(--orange); } .store .o { background: var(--green); }
+.store .legend { display: flex; flex-wrap: wrap; gap: 2px 12px; }
 .inrow { display: flex; align-items: baseline; }
 .inrow input { flex: 1; min-width: 30px; background: transparent; border: 0; outline: 0; color: var(--term-text); font: 12px/1.55 var(--mono); padding: 0; }
 .term:not(.focused) .inrow input { caret-color: transparent; }
@@ -485,10 +495,27 @@ function equalize(n) { if (!n || n.kind === "pane") return n; const along = (m) 
 const nodeAt = (path) => { let n = tab().layout; for (const c of path) n = n[c]; return n; };
 
 // ---------------------------------------------------------------- commands
+const callView = (c) => ({ call: c.call, code: c.outcome.code, script: c.script, timing: c.outcome.timing || null });
+// Diagnostic timing per call (issue #329 C): live is the SDK call, the server's
+// refresh and the HTTP round trip; sim is the in-page model and says nothing
+// about the product. Neither is a measurement.
+const fmtMs = (ms) => (ms < 1 ? ms.toFixed(2) : ms < 1000 ? ms.toFixed(0) : (ms / 1000).toFixed(2) + " s").replace(/(\d)$/, "$1 ms").replace(/ s ms$/, " s");
+function timingText(t) {
+  if (!t) return "";
+  if (t.simulated) return `${fmtMs(t.totalMs)} in the page (sim)`;
+  const http = Math.max(0, t.totalMs - (t.sdkMs || 0) - (t.refreshMs || 0));
+  return `sdk ${fmtMs(t.sdkMs || 0)} · refresh ${fmtMs(t.refreshMs || 0)} · http ${fmtMs(http)}`;
+}
+function cmdTime(calls) {
+  const ts = calls.map((c) => c.timing).filter(Boolean);
+  if (!ts.length) return "";
+  const sum = ts.reduce((a, t) => a + (t.simulated ? t.totalMs : t.sdkMs || 0), 0);
+  return `<span class="tm" title="${ts[0].simulated ? "Time of the simulator in the page, not the product" : "SDK call time, summed over this line's calls; open sdk for refresh and HTTP. Diagnostic, not a measurement"}">${fmtMs(sum)}${ts[0].simulated ? " sim" : ""}</span>`;
+}
 let stamp = 0, lastRecorded = null; // the newest call outcome, even if its pane has closed since
 function record(lines, prompt, pc, cmd, rec) {
   if (rec.calls.length) lastRecorded = { at: stamp + 1, code: rec.calls[rec.calls.length - 1].outcome.code };
-  lines.push({ k: "cmd", at: ++stamp, p: prompt, pc, t: cmd, calls: rec.calls.map((c) => ({ call: c.call, code: c.outcome.code, script: c.script })) });
+  lines.push({ k: "cmd", at: ++stamp, p: prompt, pc, t: cmd, calls: rec.calls.map(callView) });
   for (const l of rec.lines) lines.push(out(l.t, l.c));
 }
 const fsPc = (prompt) => (prompt.startsWith("fs:main") ? "pr-ro" : prompt.startsWith("fs:") ? "pr-fs" : "pr-dim");
@@ -576,7 +603,7 @@ async function agentFinishUI(n) {
   const id = paneOfBinding(st.open), p = S.panes[id], rec = await eng.agentFinish(st);
   if (p) {
     const cmd = p.lines[p.cmdAt];
-    if (cmd && cmd.calls) cmd.calls.push(...rec.calls.map((c) => ({ call: c.call, code: c.outcome.code, script: c.script })));
+    if (cmd && cmd.calls) cmd.calls.push(...rec.calls.map(callView));
     for (const l of rec.lines) p.lines.push(out(l.t, l.c));
   }
   if (rec.event) queueFx(n, rec.event);
@@ -846,8 +873,8 @@ const ICON = {
 function transcript(lines) {
   return lines.map((l) => {
     if (l.k === "cmd") {
-      const sdk = l.calls && l.calls.length ? `<button class="sdkbtn" data-sdk title="Show the SDK call and inline Node script">sdk${l.calls.length > 1 ? " ×" + l.calls.length : ""}</button><div class="sdk">${l.calls.map((c) => `<span class="code"><b>${esc(c.call)}</b> → ${esc(c.code)}</span><pre>${esc(c.script)}</pre>`).join("")}</div>` : "";
-      return `<div class="ln"><span class="${l.pc || ""}">${esc(l.p)}</span>${esc(l.t)}${sdk}</div>`;
+      const sdk = l.calls && l.calls.length ? `<button class="sdkbtn" data-sdk title="Show the SDK call and inline Node script">sdk${l.calls.length > 1 ? " ×" + l.calls.length : ""}</button><div class="sdk">${l.calls.map((c) => `<span class="code"><b>${esc(c.call)}</b> → ${esc(c.code)}${c.timing ? `<span class="tm">${esc(timingText(c.timing))}</span>` : ""}</span><pre>${esc(c.script)}</pre>`).join("")}</div>` : "";
+      return `<div class="ln"><span class="${l.pc || ""}">${esc(l.p)}</span>${esc(l.t)}${l.calls ? cmdTime(l.calls) : ""}${sdk}</div>`;
     }
     if (l.k === "link" && l.files) return `<div class="ln c-dim">  → <span class="lk" data-filescmp="${esc(JSON.stringify(l.files))}">${esc(l.t)}</span></div>`;
     if (l.k === "link") return `<div class="ln c-dim">  → <span class="lk" data-showmount="${esc(l.b)}">${esc(l.t)}</span></div>`;
@@ -891,7 +918,7 @@ function renderFs() {
   const prompt = eng.fsPrompt(b, f.state);
   const pill = b === "main" ? '<span class="pill">read-only</span>' : mounts.length ? `<span class="pill lock" title="Mounted at ${esc(mounts.join(", "))}. An fs write moves the head past them; their commit then merges with the new head first.">⛓ ${mounts.length} mount${mounts.length === 1 ? "" : "s"}</span>` : '<span class="pill">writes go to the Store</span>';
   dock.innerHTML = `<div class="thead"><span class="kind fs">FS</span><span class="ttl">${esc(b)} @ ${headOf(b)}</span><span class="pills">${pill}</span></div>
-    <div class="tbody">${transcript(f.lines)}${inputRow("fs", prompt, fsPc(prompt))}</div>`;
+    <div class="tbody">${transcript(f.lines)}${inputRow("fs", prompt, fsPc(prompt))}</div>${storeHtml()}`;
   scrollBottom(dock);
 }
 function paneHtml(id) {
@@ -912,7 +939,7 @@ function paneHtml(id) {
     <div class="thead"><span class="grip" data-grip="${id}" title="Drag to move">${ICON.grip}</span><span class="kind sandbox">${p.agent ? "WORKSPACE" : "SANDBOX"}</span>${p.agent ? `<span class="ctl" style="--ac:${rosterOf(p.agent).color}" title="Controlled by ${esc(rosterOf(p.agent).name)}">${esc(rosterOf(p.agent).name)}</span>` : ""}<span class="ttl">${esc(p.sandbox)}:${esc(p.path)}</span><span class="pills">${pills.join("")}</span>
       ${p.agent ? "" : `<button class="pbtn hide-narrow" data-act="right" title="New Workspace to the right (⌘D)">${ICON.right}</button><button class="pbtn hide-narrow" data-act="down" title="New Workspace below (⌘⇧D)">${ICON.down}</button>`}
       <button class="pbtn" data-act="zoom" title="Zoom (⌘⇧↩)">${ICON.zoom}</button><button class="pbtn" data-act="close" title="Close terminal (the Workspace stays mounted)">${ICON.close}</button></div>
-    <div class="tbody">${transcript(p.lines)}${inputRow(id, prompt, "pr-sb")}</div></section>`;
+    <div class="tbody">${transcript(p.lines)}${inputRow(id, prompt, "pr-sb")}</div>${overlayHtml(w)}</section>`;
 }
 function nodeHtml(n, path) {
   if (n.kind === "pane") return paneHtml(n.id);
@@ -1265,6 +1292,29 @@ $("hcard").addEventListener("mouseleave", () => hideCard());
 $("hcard").addEventListener("click", () => hideCard(true));
 $("graph").addEventListener("scroll", () => hideCard(true), { passive: true });
 
+// Store size (issue #329 D): the product does not report it yet, so live says
+// so; sim shows an estimate from the model, to preview the layout.
+const fmtBytes = (n) => (n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(1)} KB` : `${(n / 1048576).toFixed(1)} MB`);
+function storeHtml() {
+  const z = sim.storage ? sim.storage() : null;
+  if (!z) return `<div class="store" title="Physical payload and metadata need a product source (issue #329 D)"><div class="srow"><span class="kind">STORE</span><span class="dim">size not reported by the product yet · issue #329 D</span></div></div>`;
+  const tip = "Global Store (sim estimate). Payload: distinct file contents, once each. Logical: every file in every saved root. Metadata: 64 B per distinct entry + 256 B per Commit or Layer.";
+  return `<div class="store" title="${esc(tip)}"><div class="srow"><span class="kind">STORE</span><b>${fmtBytes(z.store)}</b><span class="dim">project ${esc(sim.s.project ? sim.s.project.name : "")}</span>${z.estimate ? '<span class="est">sim estimate</span>' : ""}</div>
+    <div class="sbar"><i class="p" style="flex:${z.payload} 0 0"></i><i class="m" style="flex:${z.metadata} 0 0"></i></div>
+    <div class="legend"><span><span class="sw p"></span>payload ${fmtBytes(z.payload)} <span class="dim">(logical ${fmtBytes(z.logical)})</span></span><span><span class="sw m"></span>metadata ${fmtBytes(z.metadata)}</span></div></div>`;
+}
+// A Workspace's overlay: its uncommitted changes in the daemon's own database,
+// not in the global Store. Live shows the rows inspect.snapshot reports.
+function overlayHtml(w) {
+  const o = w && sim.overlayOf ? sim.overlayOf(w) : null;
+  if (!o) return "";
+  if (!o.estimate) return `<div class="store" title="Overlay rows from inspect.snapshot; byte sizes need a product source (issue #329 D)"><div class="srow"><span class="kind">OVERLAY</span><b>${o.inodes} inode${o.inodes === 1 ? "" : "s"}</b><span>${o.entries} director${o.entries === 1 ? "y entry" : "y entries"}</span><span class="est">bytes not reported yet · #329 D</span></div></div>`;
+  const n = o.added + o.modified + o.removed;
+  const tip = "This Workspace's overlay (sim estimate): changed files' bytes as payload, 64 B per changed entry as metadata. It lives in the daemon's database, not in the global Store.";
+  return `<div class="store" title="${esc(tip)}"><div class="srow"><span class="kind">OVERLAY</span><b>${fmtBytes(o.payload + o.metadata)}</b><span class="dim">${n} change${n === 1 ? "" : "s"} · +${o.added} ~${o.modified} −${o.removed}</span><span class="est">sim estimate</span></div>
+    <div class="sbar"><i class="p" style="flex:${o.payload} 0 0"></i><i class="m" style="flex:${o.metadata} 0 0"></i></div>
+    <div class="legend"><span><span class="sw p"></span>payload ${fmtBytes(o.payload)}</span><span><span class="sw m"></span>metadata ${fmtBytes(o.metadata)}</span></div></div>`;
+}
 function renderStatus() {
   const s = sim.s, c = [`<span class="lbl">Sandboxes</span>`];
   if (!s.sandboxOrder.length) c.push(`<span class="lbl">none yet</span>`);
@@ -1741,6 +1791,12 @@ $("d-play").onclick = () => { if (D.i >= DEMO.length) return demoRestart(true); 
 $("d-step").onclick = () => { D.playing = false; renderPlayer(D.last); demoStep(); };
 $("d-speed").onclick = () => { D.speed = D.speed === 1 ? 2 : D.speed === 2 ? 4 : 1; $("d-speed").textContent = D.speed + "×"; };
 $("d-close").onclick = () => { D.playing = false; D.token++; D.busy = false; $("player").classList.remove("open"); };
+// The open player floats over the bottom of the work area: reserve its height
+// there so no terminal ends under it (it grows with the caption and live log).
+new ResizeObserver(() => {
+  const h = $("player").classList.contains("open") ? $("player").offsetHeight + 18 : 0;
+  document.documentElement.style.setProperty("--playerh", `${h}px`);
+}).observe($("player"));
 
 if (BACKEND === "live") { $("backend-label").textContent = "JS SDK · live"; $("backend-label").title = "Calls run on the real product through the local server"; }
 (async () => {

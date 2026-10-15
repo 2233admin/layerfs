@@ -56,7 +56,7 @@ export class Mirror {
   // ------------------------------------------------------------ snapshot
   /** Folds one `inspect.snapshot` answer (kind "ok") into the mirror. */
   absorb(snap, sandboxes) {
-    const s = this.s;
+    const s = this.s, before = JSON.stringify(s);
     s.project = { name: snap.project };
     // Layers: the snapshot lists main's chain newest first.
     for (const l of [...snap.layers].reverse()) this.absorbLayer(l);
@@ -75,7 +75,8 @@ export class Mirror {
       } else Object.assign(known, { base, head, from });
     }
     this.absorbWorkspaces(snap, sandboxes);
-    this.bump();
+    // A poll that finds nothing new keeps the version, so the page does not redraw.
+    if (JSON.stringify(s) !== before) this.bump();
   }
   absorbLayer(l) {
     const id = this.label("L", l.id);
@@ -128,7 +129,7 @@ export class Mirror {
         const dirty = w.dirty ? Math.max(w.dirty.inodes, w.dirty.entries) : 0;
         Object.assign(ws, {
           branch: w.branch, baseCommit: this.node(w.base), baseLayer: this.label("L", w.baseLayer), baseRoot: this.root(w.root),
-          mounted: true, live: null, dirty, pendingMerge: w.pendingMerge, stale: w.headMovedSinceMount === true,
+          mounted: true, live: null, dirty, overlay: w.dirty ? { inodes: w.dirty.inodes, entries: w.dirty.entries } : null, pendingMerge: w.pendingMerge, stale: w.headMovedSinceMount === true,
           markers: tracked.markers || [],
         });
       }
@@ -153,10 +154,10 @@ export class Mirror {
   }
 
   // ------------------------------------------------------------ answers
-  /** Command output with every known Commit or Layer id shown as its display
-   *  id (conflict markers name the Commit they merged with). */
+  /** Text with every known Commit, Layer or Sandbox id shown as its display
+   *  id (conflict markers name a Commit; refusals name a Sandbox). */
   text(value) {
-    return typeof value === "string" ? value.replace(/\b[0-9a-f]{66}\b/g, (id) => this.toLabel.get(id) ?? id) : value;
+    return typeof value === "string" ? value.replace(/\b(?:[0-9a-f]{66}|sb_[0-9a-f]+)\b/g, (id) => this.toLabel.get(id) ?? id) : value;
   }
   /** Maps every real id inside an SDK answer to its display id. */
   ids(value) {

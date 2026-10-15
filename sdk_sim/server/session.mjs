@@ -87,20 +87,29 @@ export class Session {
   async call(name, args = {}) {
     const op = OPS[name];
     if (!op) return { ok: false, code: "Unsupported", refusal: { code: "Unsupported", message: `unknown call ${name}` } };
-    let after;
+    // Diagnostic timing (not a measurement): the SDK call, then the refresh
+    // of the mirror. The browser adds its HTTP round trip.
+    let after, sdkMs;
+    const started = performance.now();
     try {
       after = await op.call(this, args);
+      sdkMs = performance.now() - started;
     } catch (error) {
       if (!error || !error.code) throw error;
+      sdkMs = performance.now() - started;
       this.onRefusal(name, args, error.code, error.detail || {});
+      const refreshed = performance.now();
       await this.refresh();
+      const timing = { sdkMs, refreshMs: performance.now() - refreshed };
       const detail = this.m.ids(error.detail || {});
-      const message = String(error.message).replace(`${error.code}: `, "");
-      return { ok: false, code: error.code, refusal: { code: error.code, message, ...detail } };
+      const message = this.m.text(String(error.message).replace(`${error.code}: `, ""));
+      return { ok: false, code: error.code, refusal: { code: error.code, message, ...detail }, timing };
     }
+    const refreshed = performance.now();
     await this.refresh();
+    const timing = { sdkMs, refreshMs: performance.now() - refreshed };
     const result = after();
-    return { ok: true, code: result.kind || "ok", result };
+    return { ok: true, code: result.kind || "ok", result, timing };
   }
 
   onRefusal(name, args, code, detail) {
