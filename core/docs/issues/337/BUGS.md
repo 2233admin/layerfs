@@ -57,7 +57,8 @@ Cargo build from the last published view. No Init or Store replacement occurred.
 | --- | --- | --- | --- |
 | B1-LOCAL-01 | Host orchestration | Host `timeout` is absent. The first bounded read exited 127 before Init. Subsequent host commands use the process-group-bounded Python runner. | Corrected; not a LayerFS defect |
 | B1-APP-01 | Application implementation | M3 first build used Axum Query although the frozen dependency features omit `query`. Step 016 failed with E0432 and its changed files were committed. Built-in RawQuery plus bounded parsing compiled and passed M3 in steps 017–019. | Corrected without dependency changes |
-| P-002 | SDK merge diagnostics | Builder 1 step 026 Branch merge returned Failed/UnexpectedEof after an attempted exchange. The service remained running and retained the original failed slot; step 027 found no combined Branch and unchanged source/publication refs. `sdk/branch.rs` encoded every Cargo LWW decision and conflict hunk into one 65,519-byte control frame. External normal-encoder regressions with 700 Cargo paths and 900 multibyte conflict paths both failed with `control record limit`. | Code fixed; Bridge suite, API conversion regression, scoped Clippy/formatting, boundary guard and 50 guard self-tests pass. Live recovery pending |
+| P-002 | SDK merge diagnostics | Builder 1 step 026 Branch merge returned Failed/UnexpectedEof after an attempted exchange. The service remained running and retained the original failed slot; step 027 found no combined Branch and unchanged source/publication refs. `sdk/branch.rs` encoded every Cargo LWW decision and conflict hunk into one 65,519-byte control frame. External normal-encoder regressions with 700 Cargo paths and 900 multibyte conflict paths both failed with `control record limit`. | Fixed in eaa64f4db; 25 Bridge tests, API conversion regression, scoped Clippy/formatting, boundary guard and 50 guard self-tests pass. Same-Store live recovery returned typed Conflict, reviewed source resolution merged, and full final-main Depot acceptance passed |
+| B1-LOCAL-02 | Host orchestration sequencing | A Git commit command ran before the LOC script produced its message and exited 128 without a commit. Exact first-parent/staged-tree LOC was then completed before the successful source commit and the committed tree was confirmed identical. | Failed attempt retained; no commit without LOC occurred |
 
 P-002 preserves the wire limit and merge semantics. Shared SDK merge-value
 serialization uses separate 16 KiB byte windows for conflict diagnostics and
@@ -67,3 +68,28 @@ whole hunks (`hunksOmitted`). The SDK guide documents paging the unchanged input
 Branch diff and reading both sources/base when the summary is incomplete. No
 source path receives LWW and no total merge-work cap is introduced. Raw evidence
 lives in `core/target/issue337/builder1/026-*`, `027-*` and `p002-*`.
+
+P-002 recovery retained the same volume and all original refs. Both old daemon
+streams were preserved before close. New service step 029 returned `Conflict`
+with `conflictsTruncated=false` and `lwwTruncated=true`, rather than the original
+failed delivery. The actual Store `lib.rs` conflict retained both delete and
+recovery modules on working forks. The other conflict was generated Python
+bytecode: identical `api.py` source had different embedded Workspace paths,
+confirmed by marshal inspection. Both inspected generated files were removed
+on the working forks and rebuilt source was verified without new LWW rules.
+Merge 032 created `combined` with no source conflicts. Original Branches and
+the uncertain step 026 remain retained separately from this successful recovery.
+
+Builder 1 completed M1–M6 and then full acceptance on the distinct
+`final-main-acceptance` Branch forked from post-M6 main Layer
+`3267a5a23faa4dfabe196cef0a90003a8abcd2d8c7982f578a56e08fc51eb04f84`.
+The final acceptance head is
+`121cccbc53ebf7baa8706f087b95057c0bd6b776af6e859be6bd4a509a8c069961`.
+Steps 073–106 include source identity, fresh Workspace clean builds, every
+package's tests/doc checks/warning-denying Clippy/package inspection, formatting,
+real Chromium interaction, concurrency/recovery, all 71 exact frozen fixtures
+and a fresh-remount 32 MiB CLI download. The earlier pre-M6 candidate is labelled
+separately. All processes, Workspaces and Sandboxes, including the service,
+closed after both daemon streams were preserved. The complete diagnostic report,
+92-step command ledger and immutable receipts are retained in the Builder 1 raw
+folder; this is no benchmark, release or power-loss qualification.
