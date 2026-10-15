@@ -199,5 +199,5 @@ Write `RESULTS.md` in this folder:
 
 - [x] Phase A: environment, `npm` reachable, every skill example run and corrected
 - [x] Phase B: Builder 1 finished; every bug fixed or left open with a reason
-- [ ] Phase C: Builder 2 finished or stopped with a recorded blocker
-- [ ] Phase D: `RESULTS.md` written; raw evidence kept under `core/target/issue334/`
+- [x] Phase C: Builder 2 finished or stopped with a recorded blocker
+- [x] Phase D: `RESULTS.md` written; raw evidence kept under `core/target/issue334/`

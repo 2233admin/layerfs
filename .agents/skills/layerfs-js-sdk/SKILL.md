@@ -135,7 +135,10 @@ process of one run must see the same values.
 | Variable | Meaning |
 | --- | --- |
 | `LAYERFS_HOME` | Private folder where LayerFS records your project and Sandboxes |
-| `LAYERFS_DOCKER`, `LAYERFS_IMAGE`, `LAYERFS_VOLUME`, `LAYERFS_DAEMON` | Where and how Sandboxes run |
+| `LAYERFS_DOCKER` | Docker daemon Unix socket/endpoint, such as `/var/run/docker.sock`; use the `docker` executable for log collection |
+| `LAYERFS_IMAGE` | Runtime image id or digest |
+| `LAYERFS_VOLUME` | Existing named Docker volume for this project's Store |
+| `LAYERFS_DAEMON` | Host path to the built Linux daemon executable |
 
 ```js
 const layerfs = new LayerFS("shop");   // a project name; no I/O happens yet

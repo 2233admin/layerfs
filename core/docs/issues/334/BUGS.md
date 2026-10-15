@@ -63,3 +63,31 @@ and shows how to discover and close it last. Observation docs also correct
 `process.list` item `id`, the unchanged snapshot shape, `store.commits(main)`'s
 `NoSuchBranch` refusal, file revision logical bytes, and overlapping stored/metadata
 accounting. These are documentation corrections, not additional product bugs.
+
+## Phase C completion
+
+The independent builder completed M1–M6 and acceptance with 14 tests, a clean
+install/build, and one-command HTTP purchase smoke. It used only the supplied
+outside folder, SDK, specification and skill; no LayerFS/SDK/skill fixes were made.
+No SDK refusal or uncertain outcome occurred. Its final main Layer is
+`32fdced5c175d45e682ca03f08da5be09987e61d3fbe8543873a793461ae56f3b6`.
+The verbatim report is preserved under `phase-c/builder2/REPORT.md` and in RESULTS.
+
+Two builder tooling errors remain in the evidence: step 004 shell quoting
+interpreted backticks while creating a local script (no SDK call reached), and
+step 023 treated `LAYERFS_DOCKER` as a CLI executable (EACCES before close).
+The builder inspected state and corrected the local commands. The skill's
+variable table now says that LAYERFS_DOCKER is a daemon socket/endpoint, and
+log collection uses the docker executable. The main-entry Layer/null-head
+semantics are also explicit. These are tool-use/documentation findings, not
+additional LayerFS defects.
+
+Collection gap: the first Phase C script grouped Init and scaffold, preventing a
+contemporaneous initial operator snapshot. Initial statistics were reconstructed
+read-only from the unchanged sealed host Init file using the exact product query
+and formulas; hash/WAL-header evidence is in
+`phase-c/stats-init-reconstruction.json` and `stats-init-final-hash.json`.
+The reconstruction is never described as a live operator capture. Final canonical
+and stored counters reconcile exactly; Layer logical and SQLite overhead growth
+explain the remaining counter differences. No live Store snapshot was taken while
+the builder mutated the project.

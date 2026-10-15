@@ -58,7 +58,10 @@ the project without it; `fs.*` and `branch.*` calls work right away.
 
 ## `project.list_branches(pageSize?, pagePos?)`
 
-Lists the project's Branches, including `main`.
+Lists the project's Branches, including the synthetic `main` entry. For `main`,
+`id` and `head` are null and `base` is its current publication Layer, even after
+publication. Record the Layer and its published source Commit when reporting the
+final main reference.
 
 | Arg | Type | Required | Meaning |
 | --- | --- | --- | --- |
