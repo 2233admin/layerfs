@@ -1,9 +1,10 @@
 // Command engine for the LayerFS terminal UI. Three CLIs, each line mapping to
-// SDK calls on the simulator model:
+// SDK calls through a backend (backend/sim.js or backend/live.js), awaited:
 //   fs       — file commands on one Branch (direct Store writes, no mount)
 //   sandbox  — shell commands (each one sandbox.exec), commit, unmount
 //   history  — branches / log / fork / publish / diff for the whole project
-// Shell commands are simulated against the Workspace overlay.
+// Shell commands are simulated against the Workspace overlay (simulator), or
+// run for real in the mounted Workspace (live).
 (function (global) {
   "use strict";
   const M = typeof module !== "undefined" && module.exports ? require("./model.js") : global.LayerSim;
@@ -77,10 +78,10 @@
   // ---------------------------------------------------------------- engine
   class Engine {
     constructor(sim, project) { this.sim = sim; this.project = project; }
-    call(rec, name, args) {
+    async call(rec, name, args) {
       // actor: who is typing (a demo label); agent calls pass their own.
       if (this.actor && args.agent === undefined && /^(fs\.(write|edit|mkdir|remove|cp|mv|apply)|branch\.merge)$/.test(name)) args = { ...args, agent: this.actor };
-      const outcome = this.sim.run(name, args);
+      const outcome = await this.sim.run(name, args);
       rec.calls.push({ call: name, args, outcome, script: M.scriptFor({ call: name, args }, this.project) });
       return outcome;
     }
@@ -93,13 +94,13 @@
       if (state.batch) return "apply> ";
       return branch === "main" ? "fs:main (read-only)> " : `fs:${branch}> `;
     }
-    fs(branch, line, state) {
+    async fs(branch, line, state) {
       const rec = this.newRec();
       if (state.heredoc) {
         if (line.trim() === "EOF") {
           const { path, buf } = state.heredoc;
           state.heredoc = null;
-          this.fsChange(rec, branch, state, { kind: "write", path, content: buf.join("\n") });
+          await this.fsChange(rec, branch, state, { kind: "write", path, content: buf.join("\n") });
         } else state.heredoc.buf.push(line);
         return rec;
       }
@@ -120,7 +121,7 @@
           rec.lines.push(L("batch:  apply, then write/edit/cp/mv/mkdir/rm lines, then done (or abort): one Commit", "dim"));
           return rec;
         case "ls": {
-          const o = this.call(rec, "fs.list", { ref, path: abs(args[0]) });
+          const o = await this.call(rec, "fs.list", { ref, path: abs(args[0]) });
           if (!o.ok) rec.lines.push(refusal(o));
           else rec.lines.push(L(o.result.items.map((i) => i.name + (i.type === "dir" ? "/" : "")).join("  ") || "(empty)"));
           return rec;
@@ -128,18 +129,18 @@
         case "cat": {
           if (!args[0]) { rec.lines.push(L("usage: cat <path>", "err")); return rec; }
           const [p, c] = args[0].split("@");
-          const o = this.call(rec, "fs.read", { ref, path: abs(p), commit: c });
+          const o = await this.call(rec, "fs.read", { ref, path: abs(p), commit: c });
           if (!o.ok) rec.lines.push(refusal(o)); else for (const t of o.result.text.split("\n")) rec.lines.push(L(t));
           return rec;
         }
         case "stat": {
-          const o = this.call(rec, "fs.stat", { ref, path: abs(args[0]) });
+          const o = await this.call(rec, "fs.stat", { ref, path: abs(args[0]) });
           rec.lines.push(o.ok ? L(`${o.result.type} · inode ${o.result.inode} · ${o.result.size} B · at ${o.result.snapshot}`) : refusal(o));
           return rec;
         }
         case "grep": {
           if (!args[0]) { rec.lines.push(L("usage: grep <text> [path]", "err")); return rec; }
-          const o = this.call(rec, "fs.grep", { ref, pattern: args[0], path: abs(args[1]) });
+          const o = await this.call(rec, "fs.grep", { ref, pattern: args[0], path: abs(args[1]) });
           if (!o.ok) rec.lines.push(refusal(o));
           else if (!o.result.items.length) rec.lines.push(L("(no matches)", "dim"));
           else for (const m of o.result.items) rec.lines.push(L(`${m.path}:${m.line}: ${m.text}`));
@@ -148,7 +149,7 @@
         case "diff": {
           if (args.length < 2) { rec.lines.push(L("usage: diff <path>[@C#] <path>[@C#]", "err")); return rec; }
           const sel = (s) => { const [p, c] = s.split("@"); return { path: abs(p), commit: c || undefined }; };
-          const o = this.call(rec, "fs.diff_files", { ref, left: sel(args[0]), right: sel(args[1]) });
+          const o = await this.call(rec, "fs.diff_files", { ref, left: sel(args[0]), right: sel(args[1]) });
           if (!o.ok) rec.lines.push(refusal(o));
           else if (o.result.contentEqual) rec.lines.push(L(`= equal content · inodes ${o.result.left.inode} ${o.result.sameInode ? "=" : "≠"} ${o.result.right.inode}`, "info"));
           else rec.lines.push(...hunkLines(o.result.hunks));
@@ -157,10 +158,11 @@
         case "blame": {
           if (!args[0]) { rec.lines.push(L("usage: blame <path>[@ref]", "err")); return rec; }
           const [p, at] = args[0].split("@"), at2 = at || branch, path = abs(p);
+          if (this.sim.live) return this.blameLive(rec, at2, path);
           // Composed client-side: the saved versions, read one by one (no fs.blame yet).
-          if (at2 !== "main" && this.sim.s.branches[at2]) this.call(rec, "branch.list_commits", { branch: at2 });
+          if (at2 !== "main" && this.sim.s.branches[at2]) await this.call(rec, "branch.list_commits", { branch: at2 });
           for (const v of F.chainOf(this.sim, at2)) {
-            const o = this.call(rec, "fs.read", { ref: branch, path, commit: v.id });
+            const o = await this.call(rec, "fs.read", { ref: branch, path, commit: v.id });
             if (!o.ok) break;
           }
           const b = F.blame(this.sim, at2, path);
@@ -197,7 +199,7 @@
           if (!state.batch) { rec.lines.push(L("no batch open", "dim")); return rec; }
           const changes = state.batch; state.batch = null;
           if (!changes.length) { rec.lines.push(L("batch was empty", "dim")); return rec; }
-          this.fsPublish(rec, branch, this.call(rec, "fs.apply", { branch, changes }));
+          this.fsPublish(rec, branch, await this.call(rec, "fs.apply", { branch, changes }));
           return rec;
         }
         case "write": {
@@ -206,31 +208,31 @@
           // `write p <<EOF` arrives as words ["p", "<<EOF"]; `write p "text"` carries the content inline
           if (args[1] && args[1].startsWith("<<")) { state.heredoc = { path: abs(args[0]), buf: [] }; return rec; }
           if (args[1] === undefined) { rec.lines.push(L("usage: write <path> <<EOF … EOF   or   write <path> \"text\"", "err")); return rec; }
-          this.fsChange(rec, branch, state, { kind: "write", path: abs(args[0]), content: args[1] });
+          await this.fsChange(rec, branch, state, { kind: "write", path: abs(args[0]), content: args[1] });
           return rec;
         }
         case "edit":
           if (args.length < 3) { rec.lines.push(L('usage: edit <path> "<old>" "<new>" [--all]', "err")); return rec; }
-          this.fsChange(rec, branch, state, { kind: "edit", path: abs(args[0]), oldText: args[1], newText: args[2], all: a.includes("--all") || undefined });
+          await this.fsChange(rec, branch, state, { kind: "edit", path: abs(args[0]), oldText: args[1], newText: args[2], all: a.includes("--all") || undefined });
           return rec;
         case "mkdir":
           if (!args[0]) { rec.lines.push(L("usage: mkdir [-p] <path>", "err")); return rec; }
-          this.fsChange(rec, branch, state, { kind: "mkdir", path: abs(args[0]), recursive: has("p") || undefined });
+          await this.fsChange(rec, branch, state, { kind: "mkdir", path: abs(args[0]), recursive: has("p") || undefined });
           return rec;
         case "rm":
           if (!args[0]) { rec.lines.push(L("usage: rm [-r] <path>", "err")); return rec; }
-          this.fsChange(rec, branch, state, { kind: "remove", path: abs(args[0]), recursive: has("r") || undefined });
+          await this.fsChange(rec, branch, state, { kind: "remove", path: abs(args[0]), recursive: has("r") || undefined });
           return rec;
         case "cp": case "mv":
           if (args.length < 2) { rec.lines.push(L(`usage: ${cmd} <from> <to>`, "err")); return rec; }
-          this.fsChange(rec, branch, state, { kind: cmd, from: abs(args[0]), to: abs(args[1]), recursive: cmd === "cp" && has("r") ? true : undefined });
+          await this.fsChange(rec, branch, state, { kind: cmd, from: abs(args[0]), to: abs(args[1]), recursive: cmd === "cp" && has("r") ? true : undefined });
           return rec;
         default:
           rec.lines.push(L(`unknown fs command: ${cmd} · type help`, "err"));
           return rec;
       }
     }
-    fsChange(rec, branch, state, change) {
+    async fsChange(rec, branch, state, change) {
       if (branch === "main") { rec.lines.push(L("✕ ReadOnly  main changes only through publish", "err")); return; }
       for (const k of Object.keys(change)) if (change[k] === undefined) delete change[k];
       if (state.batch) {
@@ -243,7 +245,22 @@
         cp: ["fs.cp", { from: change.from, to: change.to, recursive: change.recursive }], mv: ["fs.mv", { from: change.from, to: change.to }] };
       const [call, args] = map[change.kind];
       for (const k of Object.keys(args)) if (args[k] === undefined) delete args[k];
-      this.fsPublish(rec, branch, this.call(rec, call, { branch, ...args }));
+      this.fsPublish(rec, branch, await this.call(rec, call, { branch, ...args }));
+    }
+    // Blame from the SDK (live backend): each line's last Commit and agent.
+    async blameLive(rec, at, path) {
+      const o = await this.call(rec, "fs.blame", { ref: at, path });
+      if (!o.ok) { rec.lines.push(refusal(o)); return rec; }
+      const agents = o.result.lines.some((ln) => ln.agent);
+      let last = null;
+      for (const ln of o.result.lines) {
+        const id = String(ln.commit), chip = id === last ? "  ·" + (agents ? "     " : "") : id.padEnd(3) + (agents ? " " + (ln.agent || "").padEnd(4) : "");
+        last = id;
+        rec.lines.push(L(`${chip}  ${String(ln.n).padStart(3)} │ ${ln.text}`));
+      }
+      rec.lines.push(L(`from ${o.result.versions} saved version${o.result.versions === 1 ? "" : "s"} · fs.blame`, "dim"));
+      rec.files = { subject: at, path, mode: "blame" };
+      return rec;
     }
     // An fs Commit moves the head past every live mount of the Branch.
     fsPublish(rec, branch, o) {
@@ -258,23 +275,23 @@
 
     // ------------------------------------------------------------ sandbox
     // Opening a Sandbox terminal always mounts a new Workspace.
-    openSandbox(branch, sandboxId) {
+    async openSandbox(branch, sandboxId) {
       const rec = this.newRec();
       let sb = sandboxId;
       if (!sb) {
-        const o = this.call(rec, "sandbox.create", {});
+        const o = await this.call(rec, "sandbox.create", {});
         if (!o.ok) { rec.lines.push(refusal(o)); return { rec }; }
         sb = o.result.id;
         rec.lines.push(L(`✓ created ${sb}`, "info"));
       }
-      const m = this.call(rec, "sandbox.mount", { sandbox: sb, branch });
+      const m = await this.call(rec, "sandbox.mount", { sandbox: sb, branch });
       if (!m.ok) { rec.lines.push(refusal(m)); return { rec }; }
       rec.lines.push(L(`✓ mounted ${m.result.branch} @ ${m.result.base} at ${sb}:${m.result.path}`, "info"));
       rec.lines.push(L("type shell commands (each runs via sandbox.exec) · commit · unmount", "dim"));
       return { rec, binding: { sandbox: sb, path: m.result.path } };
     }
     sandboxPrompt(b) { return `${b.agent ? b.agent + " · " : ""}${b.sandbox}:${b.path.replace("/workspaces/", "ws/")} $ `; }
-    sandbox(b, line) {
+    async sandbox(b, line) {
       const rec = this.newRec();
       const t = line.trim();
       if (!t) return rec;
@@ -284,7 +301,7 @@
         const rest = t.split(/\s+/).slice(1);
         if (rest.some((x) => x !== "--force")) { rec.lines.push(L("usage: commit [--force]", "err")); return rec; }
         const force = rest.includes("--force");
-        const o = this.call(rec, "sandbox.commit", force ? { sandbox: b.sandbox, path: b.path, force } : { sandbox: b.sandbox, path: b.path });
+        const o = await this.call(rec, "sandbox.commit", force ? { sandbox: b.sandbox, path: b.path, force } : { sandbox: b.sandbox, path: b.path });
         rec.lines.push(publication(o));
         if (!o.ok && o.code === "Conflict") {
           const r = o.refusal;
@@ -310,7 +327,7 @@
       if (verb === "unmount") {
         const rest = t.split(/\s+/).slice(1);
         if (rest.some((x) => x !== "--discard")) { rec.lines.push(L("usage: unmount [--discard]", "err")); return rec; }
-        const o = this.call(rec, "sandbox.unmount", rest.length ? { sandbox: b.sandbox, path: b.path, discard: true } : { sandbox: b.sandbox, path: b.path });
+        const o = await this.call(rec, "sandbox.unmount", rest.length ? { sandbox: b.sandbox, path: b.path, discard: true } : { sandbox: b.sandbox, path: b.path });
         if (!o.ok) {
           rec.lines.push(refusal(o));
           if (o.code === "Dirty") rec.lines.push(L(`  ${o.refusal.changed.slice(0, 6).map(rel).join(", ")}${o.refusal.changed.length > 6 ? " …" : ""} · commit them, or unmount --discard`, "dim"));
@@ -325,14 +342,27 @@
       const command = t;
       const ws = this.sim.s.sandboxes[b.sandbox] && this.sim.s.sandboxes[b.sandbox].workspaces[b.path];
       if (!ws || !ws.mounted) { rec.lines.push(L("✕ NotMounted  this Workspace is gone", "err")); return rec; }
-      const sim = simulateShell(command, ws, this.sim.s.sandboxes[b.sandbox]);
-      if (sim.refuse) { rec.lines.push(...sim.out); return rec; }
-      const o = this.call(rec, "sandbox.exec", { sandbox: b.sandbox, path: b.path, command, writes: sim.writes, output: sim.out.map((x) => x.t).join("\n"), exitCode: sim.code, background: sim.background || undefined });
-      rec.lines.push(...sim.out);
+      const sh = this.shell(command, ws, b);
+      if (sh.refuse) { rec.lines.push(...sh.out); return rec; }
+      const o = await this.call(rec, "sandbox.exec", sh.args);
+      rec.lines.push(...(sh.out || (o.ok ? execLines(o.result) : [])));
       if (!o.ok) rec.lines.push(refusal(o));
       else if (o.result.process) rec.lines.push(L(`● running in background as ${o.result.process}`, "info"));
       else rec.lines.push(L(`[exit ${o.result.exitCode}]`, o.result.exitCode ? "warn" : "ok"));
       return rec;
+    }
+
+    // The arguments of sandbox.exec for one command: the simulated writes and
+    // output (simulator backend), or the real command (live backend).
+    shell(command, ws, b) {
+      if (this.sim.simulated) {
+        const sh = simulateShell(command, ws, this.sim.s.sandboxes[b.sandbox]);
+        if (sh.refuse) return sh;
+        return { out: sh.out, args: { sandbox: b.sandbox, path: b.path, command, writes: sh.writes, output: sh.out.map((x) => x.t).join("\n"), exitCode: sh.code, background: sh.background || undefined } };
+      }
+      const run = liveCommand(command);
+      if (run.refuse) return run;
+      return { out: null, args: { sandbox: b.sandbox, path: b.path, command: run.command, background: run.background || undefined } };
     }
 
     // ------------------------------------------------------------ agents
@@ -345,14 +375,14 @@
     //   open:   the Workspace of the call in progress
     //   sticky: a Workspace kept after a Conflict; the next call runs in it
     //   server: a Workspace kept for a background process (`cmd &`)
-    sandboxFor(rec, branch) {
+    async sandboxFor(rec, branch) {
       this.branchSandbox ||= {};
       const known = this.branchSandbox[branch], sb = known && this.sim.s.sandboxes[known];
       if (sb && !sb.closed) return known;
-      const o = this.call(rec, "sandbox.create", {});
+      const o = await this.call(rec, "sandbox.create", {});
       return (this.branchSandbox[branch] = o.result.id);
     }
-    agentMount(st, branch) {
+    async agentMount(st, branch) {
       const rec = this.newRec(), s = this.sim.s;
       if (st.open) { rec.lines.push(L("✕ the previous call has not finished", "err")); rec.code = "busy"; return rec; }
       if (st.sticky) {
@@ -361,23 +391,23 @@
         st.open = { ...b }; rec.binding = b; rec.reused = true; rec.code = "Reused";
         return rec;
       }
-      const target = branch || st.branch, sandbox = this.sandboxFor(rec, target);
-      const m = this.call(rec, "sandbox.mount", { sandbox, branch: target });
+      const target = branch || st.branch, sandbox = await this.sandboxFor(rec, target);
+      const m = await this.call(rec, "sandbox.mount", { sandbox, branch: target });
       if (!m.ok) { rec.lines.push(refusal(m)); rec.code = m.code; return rec; }
       const b = { sandbox, path: m.result.path };
       rec.lines.push(L(`⟳ mount ${m.result.branch} @ ${m.result.base} → ${short(b)}`, "dim"));
       st.open = { ...b }; rec.binding = b; rec.code = m.code;
       return rec;
     }
-    agentExec(st, line) {
+    async agentExec(st, line) {
       const rec = this.newRec(), t = line.trim(), s = this.sim.s, b = st.open;
       if (!b) { rec.code = "none"; return rec; }
       const ws = s.sandboxes[b.sandbox].workspaces[b.path];
-      const sh = simulateShell(t, ws, s.sandboxes[b.sandbox]);
+      const sh = this.shell(t, ws, b);
       st.open.command = t;
       if (sh.refuse) { rec.lines.push(...sh.out); rec.code = "refused"; return rec; }
-      const o = this.call(rec, "sandbox.exec", { sandbox: b.sandbox, path: b.path, command: t, writes: sh.writes, output: sh.out.map((x) => x.t).join("\n"), exitCode: sh.code, background: sh.background || undefined });
-      rec.lines.push(...sh.out);
+      const o = await this.call(rec, "sandbox.exec", sh.args);
+      rec.lines.push(...(sh.out || (o.ok ? execLines(o.result) : [])));
       if (o.ok && o.result.process) {
         rec.lines.push(L(`● ${o.result.process} running · ${short(b)} stays mounted while it runs`, "info"));
         st.server = { sandbox: b.sandbox, path: b.path }; st.open = null;
@@ -389,31 +419,31 @@
       return rec;
     }
     // Stops the agent's background process and releases its Workspace.
-    agentStop(st) {
+    async agentStop(st) {
       const rec = this.newRec(), s = this.sim.s, b = st.server;
       if (!b) { rec.lines.push(L("no background process to stop", "dim")); rec.code = "none"; rec.done = true; return rec; }
       const sb = s.sandboxes[b.sandbox];
-      for (const pid of sb.procOrder) if (sb.processes[pid].path === b.path && sb.processes[pid].status === "running") this.call(rec, "process.cancel", { sandbox: b.sandbox, process: pid });
-      const o = this.call(rec, "sandbox.unmount", { sandbox: b.sandbox, path: b.path, discard: true });
+      for (const pid of sb.procOrder) if (sb.processes[pid].path === b.path && sb.processes[pid].status === "running") await this.call(rec, "process.cancel", { sandbox: b.sandbox, process: pid });
+      const o = await this.call(rec, "sandbox.unmount", { sandbox: b.sandbox, path: b.path, discard: true });
       const d = o.ok ? o.result.discardedUncommitted.length : 0;
       rec.lines.push(L(`■ stopped · unmounted${d ? ` · discarded ${d} uncommitted (dev cache)` : ""}`, "info"));
       st.server = null; rec.code = o.code; rec.event = { kind: "stopped" }; rec.done = true; rec.unmounted = b;
       return rec;
     }
     // Mount and run (or stop) in one go: used by bursts and tests.
-    agentStart(st, line, branch) {
-      if (line.trim() === "stop") return this.agentStop(st);
-      const m = this.agentMount(st, branch);
+    async agentStart(st, line, branch) {
+      if (line.trim() === "stop") return await this.agentStop(st);
+      const m = await this.agentMount(st, branch);
       if (!st.open) return { ...m, done: true };
-      const x = this.agentExec(st, line);
+      const x = await this.agentExec(st, line);
       return { ...x, lines: [...m.lines, ...x.lines], calls: [...m.calls, ...x.calls], binding: m.binding };
     }
-    agentFinish(st) {
+    async agentFinish(st) {
       const rec = this.newRec(), b = st.open;
       if (!b) { rec.code = "none"; return rec; }
       st.open = null;
       rec.binding = { sandbox: b.sandbox, path: b.path };
-      const o = this.call(rec, "sandbox.commit", { sandbox: b.sandbox, path: b.path, agent: st.name, call: b.command });
+      const o = await this.call(rec, "sandbox.commit", { sandbox: b.sandbox, path: b.path, agent: st.name, call: b.command });
       rec.code = o.code;
       if (!o.ok) {
         rec.lines.push(refusal(o));
@@ -428,7 +458,7 @@
         return rec;
       }
       const r = o.result;
-      const u = this.call(rec, "sandbox.unmount", { sandbox: b.sandbox, path: b.path });
+      const u = await this.call(rec, "sandbox.unmount", { sandbox: b.sandbox, path: b.path });
       if (r.kind === "UpToDate") rec.lines.push(L(`= nothing to commit${u.ok ? " · unmounted" : ""}`, "dim"));
       else rec.lines.push(L(`✓ commit ${r.head}${r.merged ? ` · was stale on ${r.merged.from}, merged with ${r.merged.head}` : ""}${u.ok ? " · unmounted" : ""}`, "ok"));
       if (r.merged) rec.lines.push(...lwwLines(r.merged.lww));
@@ -438,15 +468,15 @@
       return rec;
     }
     // A whole tool call: start, then finish.
-    agentCall(st, line, branch) {
-      const a = this.agentStart(st, line, branch);
+    async agentCall(st, line, branch) {
+      const a = await this.agentStart(st, line, branch);
       if (a.done || !st.open) return a;
-      const f = this.agentFinish(st);
+      const f = await this.agentFinish(st);
       return { lines: [...a.lines, ...f.lines], calls: [...a.calls, ...f.calls], code: f.code, event: f.event, exit: a.code };
     }
 
     // ------------------------------------------------------------ history
-    history(line) {
+    async history(line) {
       const rec = this.newRec();
       const w = words(tokenize(line));
       if (!w.length) return rec;
@@ -459,7 +489,7 @@
           rec.lines.push(L("publish <branch>       replace main's files with the Branch head (overwrite only)", "dim"));
           return rec;
         case "branches": {
-          const o = this.call(rec, "project.list_branches", {});
+          const o = await this.call(rec, "project.list_branches", {});
           rec.lines.push(L(`main  ${s.main.head}  (read-only main line)`, "info"));
           for (const b of o.result.items) rec.lines.push(L(`${b.name}  ${b.head || "—"}  base ${b.base}${b.mountedBy.length ? `  ⛓ ${b.mountedBy.join(", ")}` : ""}`));
           return rec;
@@ -468,11 +498,11 @@
           const ref = a[0];
           if (!ref) { rec.lines.push(L("usage: log <branch|main>", "err")); return rec; }
           if (ref === "main") {
-            const o = this.call(rec, "main.list_layers", {});
+            const o = await this.call(rec, "main.list_layers", {});
             for (const l of o.result.items) rec.lines.push(L(`${l.id}  root ${l.root}  ${l.sourceCommit ? `from ${l.sourceBranch} ${l.sourceCommit}` : "project.init"}${l.id === s.main.head ? "  ← head" : ""}`));
             return rec;
           }
-          const o = this.call(rec, "branch.list_commits", { branch: ref });
+          const o = await this.call(rec, "branch.list_commits", { branch: ref });
           if (!o.ok) { rec.lines.push(refusal(o)); return rec; }
           if (!o.result.items.length) rec.lines.push(L(`no Commits yet · base ${s.branches[ref].base}`, "dim"));
           o.result.items.forEach((c, i) => rec.lines.push(L(`${c.id}  parent ${c.parent || "—"}  root ${c.root}  ${c.via}${i === 0 ? "  ← head" : ""}`)));
@@ -485,12 +515,12 @@
           if (!name) { rec.lines.push(L("usage: fork <name> [from <branch|main|C#>]", "err")); return rec; }
           const from = a[1] === "from" ? a[2] : "main";
           let o;
-          if (!from || from === "main") o = this.call(rec, "main.fork", { name });
+          if (!from || from === "main") o = await this.call(rec, "main.fork", { name });
           else if (/^C\d+$/.test(from)) {
             const c = s.commits[from];
             if (!c) { rec.lines.push(L(`✕ NoSuchCommit  ${from}`, "err")); return rec; }
-            o = this.call(rec, "branch.fork", { branch: c.branch, name, fromCommit: from });
-          } else o = this.call(rec, "branch.fork", { branch: from, name });
+            o = await this.call(rec, "branch.fork", { branch: c.branch, name, fromCommit: from });
+          } else o = await this.call(rec, "branch.fork", { branch: from, name });
           if (!o.ok) { rec.lines.push(refusal(o)); return rec; }
           rec.lines.push(L(`✓ forked ${name} · base ${o.result.base}${o.result.head ? ` · head ${o.result.head}` : ""} · opened in a new tab`, "ok"));
           rec.forked = name;
@@ -500,7 +530,7 @@
           const ws = a.filter((x) => x !== "+");
           if (ws.length !== 4 || ws[2] !== "as") { rec.lines.push(L("usage: merge <a> <b> as <c>", "err")); return rec; }
           const [left, right, , name] = ws;
-          const o = this.call(rec, "branch.merge", { branch: left, with: right, name });
+          const o = await this.call(rec, "branch.merge", { branch: left, with: right, name });
           if (!o.ok) {
             rec.lines.push(refusal(o));
             if (o.code !== "Conflict") return rec;
@@ -525,7 +555,7 @@
         }
         case "publish": {
           if (!a[0]) { rec.lines.push(L("usage: publish <branch>", "err")); return rec; }
-          const o = this.call(rec, "branch.publish", { branch: a[0] });
+          const o = await this.call(rec, "branch.publish", { branch: a[0] });
           if (!o.ok) {
             rec.lines.push(refusal(o));
             return rec;
@@ -540,8 +570,8 @@
           if (a.length < 2) { rec.lines.push(L("usage: diff <a> <b>   (two Branches/main, or two Commits)", "err")); return rec; }
           const isC = (x) => /^C\d+$/.test(x);
           let o;
-          if (isC(a[0]) && isC(a[1])) o = this.call(rec, "branch.diff_commits", { from: a[0], to: a[1] });
-          else if (!isC(a[0]) && !isC(a[1])) o = this.call(rec, "branch.diff_branches", { from: a[0], to: a[1] });
+          if (isC(a[0]) && isC(a[1])) o = await this.call(rec, "branch.diff_commits", { from: a[0], to: a[1] });
+          else if (!isC(a[0]) && !isC(a[1])) o = await this.call(rec, "branch.diff_branches", { from: a[0], to: a[1] });
           else { rec.lines.push(L("diff takes two Branches/main, or two Commits", "err")); return rec; }
           if (!o.ok) { rec.lines.push(refusal(o)); return rec; }
           rec.lines.push(L(`${a[0]} (${o.result.from.root}) → ${a[1]} (${o.result.to.root})`, "dim"));
@@ -554,6 +584,28 @@
           return rec;
       }
     }
+  }
+
+  // ---------------------------------------------------------------- live commands
+  // A real command: a trailing & runs it in the background. A server started
+  // in the foreground would never return, so it is refused as in the simulator.
+  function liveCommand(command) {
+    const toks = tokenize(command);
+    const background = toks.length > 0 && toks[toks.length - 1].op === "&";
+    if (!background) {
+      let last = [];
+      for (const t of toks) { if (t.op === "&&" || t.op === "|") last = []; else if (t.t !== undefined) last.push(t.t); }
+      if (isServer(last)) { const sub = last[1] === "run" ? last[2] : last[1]; return { refuse: true, out: [L(`npm run ${sub} runs until stopped · use: npm run ${sub} &`, "err")] }; }
+    }
+    return { command: background ? command.replace(/&\s*$/, "").trim() : command, background };
+  }
+  // stdout, then stderr (in red), as the command printed them.
+  function execLines(result) {
+    const lines = [];
+    const add = (text, c) => { if (text) for (const t of text.replace(/\n$/, "").split("\n")) lines.push(L(t, c)); };
+    add(result.stdout, ""); add(result.stderr, "err");
+    if (result.truncated) lines.push(L("… output truncated at 1 MiB per stream", "dim"));
+    return lines;
   }
 
   // ---------------------------------------------------------------- simulated shell
@@ -776,7 +828,7 @@
     return err(`npm error Missing script: "${sub}"`);
   }
 
-  const api = { Engine, tokenize, simulateShell };
+  const api = { Engine, tokenize, simulateShell, liveCommand };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else global.LayerTerm = api;
 })(typeof globalThis !== "undefined" ? globalThis : this);
