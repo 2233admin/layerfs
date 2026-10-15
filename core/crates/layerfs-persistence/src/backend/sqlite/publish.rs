@@ -60,7 +60,11 @@ pub(crate) fn run(tx: &Transaction<'_>, batch: &Publication) -> Result<Published
         .iter()
         .map(|pack| pack.info.length as u64)
         .sum::<u64>();
-    tx.query("UPDATE store_totals SET canonical=canonical+?1,stored=stored+?2,metadata=metadata+?3 WHERE id=1", vec![Param::I64(canonical as i64),Param::I64(stored as i64),Param::I64(metadata as i64)])?;
+    // One totals UPDATE per publication that adds bytes. Signature, inode
+    // value and ordinal-only publications add none and leave the row clean.
+    if canonical != 0 || stored != 0 || metadata != 0 {
+        tx.query("UPDATE store_totals SET canonical=canonical+?1,stored=stored+?2,metadata=metadata+?3 WHERE id=1", vec![Param::I64(canonical as i64),Param::I64(stored as i64),Param::I64(metadata as i64)])?;
+    }
     super::metadata_values::write(tx, &batch.inode_values)?;
     if let Some((first, count)) = batch.release_ordinals {
         tx.query(

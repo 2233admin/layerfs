@@ -171,8 +171,13 @@ impl BoundWorkspace {
                     .store
                     .logical_size(node)
                     .map_err(CommitError::History)?;
+                retained.phase = CommitPhase::Finish;
+                retained.saved = Some(save.finish().map_err(CommitError::Storage)?);
+                // Count only after finish has proved the root's references
+                // closed, so a missing dependency stays a Storage refusal.
+                let reader = storage.reader().map_err(CommitError::Storage)?;
                 let logical = layerfs_content::filesystem::statistics::logical_size_after(
-                    &save,
+                    &reader,
                     FilesystemRootId(current.effective_root),
                     root,
                     known,
@@ -181,8 +186,6 @@ impl BoundWorkspace {
                     error,
                     provider: None,
                 })?;
-                retained.phase = CommitPhase::Finish;
-                retained.saved = Some(save.finish().map_err(CommitError::Storage)?);
                 Ok((root, candidate, current, moved, logical))
             })();
             retained.storage = Some(super::producer::since(storage.diagnostics(), before));

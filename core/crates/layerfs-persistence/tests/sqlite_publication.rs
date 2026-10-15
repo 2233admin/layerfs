@@ -101,8 +101,8 @@ fn wal_full_settings_and_unavailable_engine_are_explicit() {
             |r| r.get::<_, i64>(0),
         )
         .unwrap();
-    // #327 dropped workspace_stage.
-    assert_eq!(names, 11);
+    // #327 dropped workspace_stage and added store_totals.
+    assert_eq!(names, 12);
 }
 #[test]
 fn final_body_multirow_locators_and_first_wins_have_one_atomic_ack() {
@@ -122,10 +122,11 @@ fn final_body_multirow_locators_and_first_wins_have_one_atomic_ack() {
     assert_eq!(after.transactions - before.transactions, 1);
     assert_eq!(after.commits - before.commits, 1);
     assert_eq!(after.sealed_inserts - before.sealed_inserts, 1);
-    // Two control statements, one body INSERT and bounded set-based locator INSERTs.
+    // Two control statements, one body INSERT, bounded set-based locator
+    // INSERTs and one Store totals UPDATE.
     assert_eq!(
         after.statements - before.statements,
-        3 + 512_u64.div_ceil(
+        4 + 512_u64.div_ceil(
             (h.profile().variable_limit / 6).min((h.profile().sql_length_limit - 192) / 32) as u64
         )
     );
@@ -455,8 +456,9 @@ fn pack_insert_pages_preserve_bodies_and_atomic_conflict_refusal() {
     let before = h.diagnostics().unwrap();
     assert!(h.storage.publish(&batch).unwrap().lost.is_empty());
     let after = h.diagnostics().unwrap();
-    // BEGIN, two pack INSERT pages and COMMIT; no per-pack statements.
-    assert_eq!(after.statements - before.statements, 4);
+    // BEGIN, two pack INSERT pages, one totals UPDATE and COMMIT; no
+    // per-pack statements.
+    assert_eq!(after.statements - before.statements, 5);
     assert_eq!(after.write_commits - before.write_commits, 1);
     assert_eq!(after.sealed_inserts - before.sealed_inserts, 513);
     let mut read = Vec::new();
@@ -506,7 +508,8 @@ fn pack_insert_pages_keep_large_blob_binding_ownership_separate() {
     let before = h.diagnostics().unwrap();
     h.storage.publish(&batch).unwrap();
     let after = h.diagnostics().unwrap();
-    assert_eq!(after.statements - before.statements, 5);
+    // Includes the one Store totals UPDATE for the added pack bytes.
+    assert_eq!(after.statements - before.statements, 6);
     assert_eq!(after.write_commits - before.write_commits, 1);
     let mut read = Vec::new();
     h.storage.read_packs(&[1, 2, 3], &mut read).unwrap();

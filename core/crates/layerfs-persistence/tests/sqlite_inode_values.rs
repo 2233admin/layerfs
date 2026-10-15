@@ -226,11 +226,14 @@ fn a_row_changed_in_the_file_fails_the_read_of_its_leaf() {
 fn a_store_of_the_value_group_format_is_refused_at_open() {
     // Versions 1 to 6 are the Stores that kept values in pooled packs behind
     // `metadata_value_group`. Neither the old version number nor the old
-    // table is accepted, with or without the other.
+    // table is accepted, with or without the other. Versions 7 and 13 are
+    // the formats before #327's commit-v3 records, refused without migration.
     for change in [
         "PRAGMA user_version=1",
         "PRAGMA user_version=4",
         "PRAGMA user_version=6",
+        "PRAGMA user_version=7",
+        "PRAGMA user_version=13",
         "CREATE TABLE metadata_value_group (first_ordinal INTEGER PRIMARY KEY) STRICT",
         "DROP TABLE inode_value",
         "DROP TABLE inode_value; CREATE TABLE metadata_value_group (first_ordinal INTEGER PRIMARY KEY) STRICT; PRAGMA user_version=1",
@@ -257,6 +260,6 @@ fn a_store_of_the_value_group_format_is_refused_at_open() {
         .unwrap()
         .query_row("PRAGMA user_version", [], |row| row.get(0))
         .unwrap();
-    assert_eq!(version, 7);
+    assert_eq!(version, 16);
     Handles::open_writable(config(&path), BINDING, [73; 32]).unwrap();
 }
