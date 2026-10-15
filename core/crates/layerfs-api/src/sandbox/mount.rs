@@ -26,6 +26,7 @@ impl<'a> WorkspaceApi<'a> {
             Some(scope) => Request::Observed {
                 scope: *scope,
                 request: Box::new(request),
+                traced: false,
             },
             None => request,
         };

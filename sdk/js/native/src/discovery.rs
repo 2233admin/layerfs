@@ -316,7 +316,7 @@ pub(crate) fn refresh(state: &SandboxState) -> Result<()> {
                     .get_int("namespace")
                     .ok_or_else(|| refused("InvalidInput", "namespace"))?,
             };
-            let status = workspace(&mut *registry::lock(&state.control)?)
+            let status = workspace(&mut *crate::trace::control(&state.control)?)
                 .status(token)
                 .map_err(failed)?;
             let ready = status

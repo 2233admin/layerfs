@@ -119,6 +119,14 @@ The writer overrides the usual Interrupted/short-write continuation and retains
 the first diagnostic error. Partial output has no completed footer and cannot
 be interpreted as a complete observation.
 
+An SDK-traced observation (request tag 21, #333) writes the same records. Its
+diagnostic failure is not held as connection custody: the daemon reports its
+kind and message as `diagnosticError` in the traced reply's telemetry and keeps
+the connection serving. See
+[SDK-traced observations](68-native-workspace-control.md#sdk-traced-observations-333).
+`tools/decode_observations.py` names every section and value below from this
+source order and joins records to SDK trace lines by scope.
+
 Each line has this fixed envelope; values are unsigned numeric counters only:
 
 ```text

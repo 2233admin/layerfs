@@ -34,6 +34,8 @@ private service Sandbox. Mount does not scan or materialize the complete tree.
 | `LAYERFS_VOLUME` | Existing named local VM volume shared by the project's daemons. |
 | `LAYERFS_DAEMON` | Host path to the built Linux daemon executable. |
 | `LAYERFS_NATIVE` | Optional addon path; defaults to `native/layerfs.node`. |
+| `LAYERFS_TRACE` | Optional per-call trace file (see [Call trace](#call-trace)); unset means no trace. |
+| `LAYERFS_TRACE_STEP` | Optional step label put on each trace line as `step`; read at every call. |
 
 The same authorized home permits a fresh Node process to use a saved Sandbox id
 and mount path directly. Reopening validates the full container id, deployment,
@@ -132,6 +134,67 @@ or per-path physical allocation. Per-file physical attribution remains null;
 revision diagnostics explicitly disclose their 1000-revision count bound.
 Overlay payload counts stored cell bytes including validity masks; metadata row
 counts are reported without inventing exclusive byte attribution.
+
+## Call trace
+
+`LAYERFS_TRACE=<file>`, or `new LayerFS(project, { trace: file })` (the option
+wins), appends one JSON line to `file` for every SDK and operator call that
+reaches the native binding, including the client's own `sandbox.service` call.
+Unset, nothing is written and nothing changes. A failed trace write is dropped;
+it never changes a value, a refusal or the call count. Argument checks the
+JavaScript methods make before the call (for example `page` bounds) are refused
+without a trace line.
+
+```json
+{"layerfs_trace":1,"id":"9f3c21aa-12","step":"add product page","method":"fs.write","args":{"branch":"feature","path":"/README.md","contentBytes":6,"message":"Update introduction","sandbox":"sb_…"},"start":"2026-10-15T09:12:01.120Z","scope":"…","ms":41.733,"ok":true,"commit":"…","sizes":{"logical":120,"newCanonical":40,"newStored":30,"newMetadata":8},"daemon":[{"timing":[{"name":"files.bind","ms":1.2,"children":[…]},{"name":"commit","ms":30.4,"children":[…]}],"storage":{…},"construction":{…}}]}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `layerfs_trace` | Format version, `1`. |
+| `id` | `<run>-<n>`: a random per-process run prefix and the call's sequence number. |
+| `step` | The step label, cut to 200 characters; absent when none is set. |
+| `method` | The binding method, for example `fs.read`, `sandbox.commit`, `operator.store.stats`. |
+| `args` | Short summary: text arguments (paths, refs, names, Sandbox id, command, message) cut to 200 characters; numbers and flags; `content`, `bytes`, `oldText` and `newText` as `<name>Bytes` byte counts; `apply` changes as `changes` (count) and `changeBytes`. Never file contents; `project`, `home` and `deploy` are left out. |
+| `start`, `ms` | Wall-clock start (ISO 8601) and elapsed wall milliseconds measured in the calling process, including the native queue and the daemon round trip. |
+| `ok` | `true` for a value; `false` with `code` and `message` for a refusal. |
+| `kind`, `commit`, `layer`, `sizes` | The value's `kind`. Every publishing call that succeeds (`fs` write, edit, apply, mkdir, rm, cp, mv, `sandbox.commit`, `branch.merge`, `branch.publish`) names a `commit`: its new Commit, or the head it was `UpToDate` with; `branch.publish` names the published source Commit and the new `layer`. `sizes` (`logical`, `newCanonical`, `newStored`, `newMetadata`) appear only when the reply carries the Commit record (`fs` writes and `sandbox.commit` that commit); join `commit` to `operator.store.commits` for the rest. No call is added to fetch them. |
+| `scope` | 64 hex characters: the fresh daemon observation scope this call's control exchanges carried. |
+| `daemon` | One entry per traced control exchange the call made (a mount makes at least three: Branch lookup, bind, attach). Absent when the call reached no daemon (for example `project.init`). |
+
+Each `daemon` entry holds:
+
+| Field | Meaning |
+| --- | --- |
+| `timing` | Phase trees the daemon recorded for that exchange: `{ name, ms, children }`, with `outcome` (`error`, `unknown`) and `incomplete` only when they apply. Roots include `commit` (phases `capture`, `producer`, `begin`, `construct` › `captured.namespace`, `head`, `merge`, `logical.known`, `finish`, `logical.count`, `validate`, `publish`, `install`), `sandbox.mount.bind` › `store.bind`, `sandbox.mount.attach` › `kernel.attach`, `files.bind` (the private Workspace of an `fs` write), `sdk.read`, `sdk.lines`, `branch.merge` and `blame.compare`. |
+| `omitted` | Timing nodes left out beyond the 256-node reply bound. |
+| `storage` | When the exchange committed: the Save's storage diagnostics (42 counters such as `pack_write_bytes`, `locator_hits`, `pack_misses`), daemon names in snake_case. |
+| `construction` | When the exchange committed: the captured namespace construction work (31 counters such as `files_constructed`, `inode_rows`). |
+| `diagnosticError` | `{ kind, message }` when the daemon could not write its numeric records, or the telemetry did not fit the reply (`Oversized`). The call's result and connection are unaffected. |
+
+Tracing makes each control exchange an observed one: the daemon also writes
+fixed-schema numeric records (SQL work, owner lock wait/hold, Store reader and
+cache work, FUSE kernel counters on Linux, Workspace resources) to its stderr.
+Decode them and join them to the trace by `scope`:
+
+```sh
+docker logs <container> 2>&1 | python3 tools/decode_observations.py --trace trace.jsonl
+```
+
+Each output line is one daemon call: `daemon`, `scope`, `call`, `operation`,
+`complete`, the joined trace `id` as `trace`, and named `sections` (unavailable
+sections are `null`, never zero). Values are cumulative daemon counters at that
+call, not per-call deltas. The container is the Sandbox id without `sb_`.
+
+A step label groups lines by the caller's own unit of work, such as an agent's
+step. `LAYERFS_TRACE_STEP` is read at each call, so a long-lived process can
+change it between calls; `new LayerFS(project, { trace, traceStep })`, or
+setting `layerfs.options.traceStep` later, overrides it. Unset or empty, lines
+have no `step`. A label alone traces nothing.
+
+Concurrent calls append whole lines; order follows completion, so join by `id`.
+The trace is diagnostic timing, not a benchmark measurement. Off means no scope,
+no observed exchange, no daemon timing and byte-identical replies.
 
 ## Builds and compatibility
 

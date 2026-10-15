@@ -12,6 +12,10 @@ pub struct OperationFailure {
     pub cause: OperationCause,
 }
 /// Distinct original failure boundaries of one facade operation.
+// Clippy cannot size the recursive `Reply` (a traced answer boxes its inner
+// reply), so it compares `Remote` with `Retained` alone; measured, `Reply`
+// is the largest variant and the spread is within the lint's bound.
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug)]
 pub enum OperationCause {
     /// Original transport/protocol phase, attempted flag, reply and fence.

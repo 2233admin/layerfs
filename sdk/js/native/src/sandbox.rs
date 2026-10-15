@@ -223,7 +223,7 @@ pub(crate) fn mount(args: &SdkValue) -> Outcome {
     let branch = text(args, "branch")?;
     let id = WorkspaceId::from_authority(random()?).map_err(failed)?;
     let mounted = {
-        let mut control = lock(&state.control)?;
+        let mut control = crate::trace::control(&state.control)?;
         workspace(&mut control).mount_branch(&state.project, branch, id)
     };
     let mounted = mounted.map_err(|error| match error {
@@ -251,7 +251,7 @@ pub(crate) fn mount(args: &SdkValue) -> Outcome {
 pub(crate) fn status(args: &SdkValue) -> Outcome {
     let state = sandbox(args)?;
     let token = state.token(text(args, "path")?)?;
-    let mut control = lock(&state.control)?;
+    let mut control = crate::trace::control(&state.control)?;
     let status = workspace(&mut control).status(token).map_err(operation)?;
     let head = commits(
         &mut control,
@@ -279,7 +279,7 @@ pub(crate) fn status(args: &SdkValue) -> Outcome {
 pub(crate) fn commit(args: &SdkValue) -> Outcome {
     let state = sandbox(args)?;
     let token = state.token(text(args, "path")?)?;
-    let reply = workspace(&mut *lock(&state.control)?)
+    let reply = workspace(&mut *crate::trace::control(&state.control)?)
         .commit_with(CommitControl {
             token,
             force: args.get_bool("force"),
@@ -313,7 +313,7 @@ pub(crate) fn unmount(args: &SdkValue) -> Outcome {
             )]),
         });
     }
-    let answer = workspace(&mut *lock(&state.control)?)
+    let answer = workspace(&mut *crate::trace::control(&state.control)?)
         .unmount_checked(token, args.get_bool("discard"))
         .map_err(operation)?;
     let value = values::unmounted(&answer)?;

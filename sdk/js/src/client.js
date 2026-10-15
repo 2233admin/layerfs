@@ -1,17 +1,25 @@
 // One call through the native binding. The binding resolves `{ value }` or
-// `{ refused }`; a refusal becomes a LayerFSError. Nothing is retried.
+// `{ refused }` (plus `telemetry` when traced); a refusal becomes a
+// LayerFSError. Nothing is retried.
 import { native } from "./native.js";
 import { LayerFSError } from "./errors.js";
+import { traced } from "./trace.js";
 
-/** Runs one operation once and returns its value or throws its refusal. */
-export async function invoke(op, args) {
-  if (op.startsWith("operator.")) throw new LayerFSError("UnknownMethod", "operator methods require the operator entry point", null);
-  return outcome(await native().call(op, args));
+/** Runs one operation once and returns its value or throws its refusal;
+ * `options` are the client's, whose `trace`/`traceStep` select its trace line. */
+export async function invoke(op, args, options) {
+  return outcome(await traced(options, op, args, (scope) => {
+    if (op.startsWith("operator.")) throw new LayerFSError("UnknownMethod", "operator methods require the operator entry point", null);
+    return native().call(op, observed(args, scope));
+  }));
 }
 
-export async function invokeOperator(op, args) {
-  return outcome(await native().operatorCall(op, args));
+export async function invokeOperator(op, args, options) {
+  return outcome(await traced(options, op, args, (scope) => native().operatorCall(op, observed(args, scope))));
 }
+
+/** A traced call carries its scope; the binding removes it before dispatch. */
+const observed = (args, scope) => (scope ? { ...args, observe: scope } : args);
 
 function outcome(answer) {
   if (answer.refused) {
@@ -45,7 +53,7 @@ export function deployment(options = {}) {
 
 /** One client's deployment selection, including cross-process discovery home. */
 export function invokeClient(client, op, args) {
-  return invoke(op, { ...args, project: client.projectName, home: client.options.home, deploy: client.options.deploy });
+  return invoke(op, { ...args, project: client.projectName, home: client.options.home, deploy: client.options.deploy }, client.options);
 }
 
 export function page(pageSize = 50, pagePos = 0) {

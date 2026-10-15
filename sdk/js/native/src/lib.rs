@@ -7,6 +7,7 @@ mod job;
 mod project;
 mod registry;
 mod sandbox;
+mod trace;
 
 use job::Job;
 use napi::{bindgen_prelude::AsyncTask, JsUnknown};

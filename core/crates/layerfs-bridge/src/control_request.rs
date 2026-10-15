@@ -18,8 +18,8 @@ impl Call {
         let request = self.request.without_observation()?;
         let mut out = Writer::new(MAGIC);
         out.put(&self.id.to_be_bytes())?;
-        if let Request::Observed { scope, .. } = &self.request {
-            out.byte(12)?;
+        if let Request::Observed { scope, traced, .. } = &self.request {
+            out.byte(if *traced { 21 } else { 12 })?;
             out.put(scope)?;
         }
         match request {
@@ -113,7 +113,8 @@ impl Call {
             return Err(ControlError("control correlation"));
         }
         let tag = input.byte()?;
-        let observed = tag == 12;
+        let traced = tag == 21;
+        let observed = tag == 12 || traced;
         let scope = if observed {
             let scope = input.array::<32>()?;
             if scope == [0; 32] {
@@ -125,7 +126,7 @@ impl Call {
         };
         let tag = if observed {
             let inner = input.byte()?;
-            if matches!(inner, 7 | 8 | 12) {
+            if matches!(inner, 7 | 8 | 12 | 21) {
                 return Err(ControlError("invalid observed operation"));
             }
             inner
@@ -199,6 +200,7 @@ impl Call {
             Some(scope) => Request::Observed {
                 scope,
                 request: Box::new(request),
+                traced,
             },
             None => request,
         };

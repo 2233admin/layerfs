@@ -261,11 +261,14 @@ pub(super) fn sql<W: Write>(
     )?;
     Ok(())
 }
-pub(super) fn construction<W: Write>(
-    rows: &mut Records<'_, W>,
+/// The Commit construction receipt and storage diagnostics an outcome holds.
+pub(crate) fn commit_parts(
     outcome: &Result<Success, Failure>,
-) -> io::Result<()> {
-    let (namespace, storage) = match outcome {
+) -> (
+    Option<&crate::store::CapturedConstruction>,
+    Option<&layerfs_storage::Diagnostics>,
+) {
+    match outcome {
         Ok(success) => success
             .commit
             .as_ref()
@@ -278,45 +281,15 @@ pub(super) fn construction<W: Write>(
             .map(|commit| (commit.namespace.as_ref(), Some(&commit.storage)))
             .unwrap_or((None, None)),
         _ => (None, None),
-    };
+    }
+}
+pub(super) fn construction<W: Write>(
+    rows: &mut Records<'_, W>,
+    outcome: &Result<Success, Failure>,
+) -> io::Result<()> {
+    let (namespace, storage) = commit_parts(outcome);
     if let Some(w) = namespace.and_then(|namespace| namespace.work) {
-        rows.row(
-            15,
-            0,
-            Some(&[
-                w.inode_rows,
-                w.entry_rows,
-                w.inode_pages,
-                w.entry_pages,
-                w.change_pages,
-                w.largest_page,
-                w.parent_points,
-                w.base_lookups,
-                w.headers_written,
-                w.headers_dropped,
-                w.values_written,
-                w.fresh_serials,
-                w.tombstones_skipped,
-                w.files_constructed,
-                w.files_unchanged,
-                w.symlinks,
-                w.metadata_built,
-                w.metadata_patched,
-                w.record_jobs,
-                w.header_opens,
-                w.header_rows,
-                w.header_points,
-                w.change_opens,
-                w.change_rows,
-                w.change_points,
-                w.value_opens,
-                w.value_rows,
-                w.value_points,
-                w.fresh_opens,
-                w.fresh_rows,
-                w.fresh_points,
-            ]),
-        )?;
+        rows.row(15, 0, Some(&namespace_values(&w)))?;
     } else {
         rows.row(15, 0, None)?;
     }
@@ -456,56 +429,92 @@ fn storage<W: Write>(
     work: Option<&layerfs_storage::Diagnostics>,
 ) -> io::Result<()> {
     if let Some(w) = work {
-        rows.row(
-            section,
-            index,
-            Some(&[
-                w.policy,
-                w.locate,
-                w.read_packs,
-                w.read_pack_selections,
-                w.whole_selected,
-                w.whole_due_density,
-                w.whole_due_singleton,
-                w.whole_due_small,
-                w.whole_due_reuse,
-                w.range_selected,
-                w.range_scan_bytes,
-                w.range_acquired_bytes,
-                w.range_materialized_bytes,
-                w.value_groups,
-                w.signatures,
-                w.reserve,
-                w.initial_reservations,
-                w.reservation_refills,
-                w.publish,
-                w.payload_reads,
-                w.payload_read_bytes,
-                w.pack_read_bytes,
-                w.pack_write_bytes,
-                w.pooled_packs,
-                w.pooled_groups,
-                w.reserved_directory_bytes,
-                w.ordinal_reservations,
-                w.locator_hits,
-                w.locator_misses,
-                w.locator_evictions,
-                w.locator_eviction_probes,
-                w.locator_second_chances,
-                w.locator_bookkeeping_live_peak_bytes,
-                w.pack_hits,
-                w.pack_misses,
-                w.pack_evictions,
-                w.pack_evicted_bytes,
-                w.directory_validations,
-                w.directory_unshared_walks,
-                w.directory_entry_bounds,
-                w.prefetch_group_decodes,
-                w.forced_seals,
-            ]),
-        )?;
+        rows.row(section, index, Some(&storage_values(w)))?;
     } else {
         rows.row(section, index, None)?;
     }
     Ok(())
+}
+/// Captured namespace work, in section 15 order.
+pub(crate) fn namespace_values(w: &layerfs_workspace::CapturedNamespaceWork) -> [u64; 31] {
+    [
+        w.inode_rows,
+        w.entry_rows,
+        w.inode_pages,
+        w.entry_pages,
+        w.change_pages,
+        w.largest_page,
+        w.parent_points,
+        w.base_lookups,
+        w.headers_written,
+        w.headers_dropped,
+        w.values_written,
+        w.fresh_serials,
+        w.tombstones_skipped,
+        w.files_constructed,
+        w.files_unchanged,
+        w.symlinks,
+        w.metadata_built,
+        w.metadata_patched,
+        w.record_jobs,
+        w.header_opens,
+        w.header_rows,
+        w.header_points,
+        w.change_opens,
+        w.change_rows,
+        w.change_points,
+        w.value_opens,
+        w.value_rows,
+        w.value_points,
+        w.fresh_opens,
+        w.fresh_rows,
+        w.fresh_points,
+    ]
+}
+/// Storage diagnostics, in section 16 and 29 order.
+pub(crate) fn storage_values(w: &layerfs_storage::Diagnostics) -> [u64; 42] {
+    [
+        w.policy,
+        w.locate,
+        w.read_packs,
+        w.read_pack_selections,
+        w.whole_selected,
+        w.whole_due_density,
+        w.whole_due_singleton,
+        w.whole_due_small,
+        w.whole_due_reuse,
+        w.range_selected,
+        w.range_scan_bytes,
+        w.range_acquired_bytes,
+        w.range_materialized_bytes,
+        w.value_groups,
+        w.signatures,
+        w.reserve,
+        w.initial_reservations,
+        w.reservation_refills,
+        w.publish,
+        w.payload_reads,
+        w.payload_read_bytes,
+        w.pack_read_bytes,
+        w.pack_write_bytes,
+        w.pooled_packs,
+        w.pooled_groups,
+        w.reserved_directory_bytes,
+        w.ordinal_reservations,
+        w.locator_hits,
+        w.locator_misses,
+        w.locator_evictions,
+        w.locator_eviction_probes,
+        w.locator_second_chances,
+        w.locator_bookkeeping_live_peak_bytes,
+        w.pack_hits,
+        w.pack_misses,
+        w.pack_evictions,
+        w.pack_evicted_bytes,
+        w.directory_validations,
+        w.directory_unshared_walks,
+        w.directory_entry_bounds,
+        w.prefetch_group_decodes,
+        w.forced_seals,
+    ]
 }

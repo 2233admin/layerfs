@@ -42,7 +42,7 @@ impl Service {
     ) -> Result<Served, Box<ServeFailure>> {
         let call = receive_call(connection)?;
         let outcome = self.execute(&call.request, construct);
-        answer_call(connection, call, outcome)
+        answer_call(connection, call, outcome, None)
     }
     /// Receives one ordinary control without inventing a Commit producer.
     pub fn serve_one_control(
@@ -58,7 +58,7 @@ impl Service {
         call: Call,
     ) -> Result<Served, Box<ServeFailure>> {
         let outcome = self.execute_control(&call.request);
-        answer_call(connection, call, outcome)
+        answer_call(connection, call, outcome, None)
     }
 }
 impl fmt::Display for ServeFailure {
@@ -83,6 +83,7 @@ pub(crate) fn answer_call(
     connection: &mut Connection,
     call: Call,
     outcome: Result<Success, Failure>,
+    telemetry: Option<layerfs_bridge::control::SdkValue>,
 ) -> Result<Served, Box<ServeFailure>> {
     let original = Served { call, outcome };
     let result = (|| {
@@ -91,11 +92,26 @@ pub(crate) fn answer_call(
             Err(Failure::Retained(custody)) => Reply::Retained(custody.clone()),
             Err(failure) => Reply::Refused(failure.wire()),
         };
-        let answer = Answer {
-            id: original.call.id,
-            reply,
+        let id = original.call.id;
+        let answer = match telemetry {
+            None => Answer { id, reply }.encode(),
+            // Telemetry that does not fit beside the reply gives way to a
+            // short note, then to the plain reply; it never fails the answer.
+            Some(telemetry) => [telemetry, crate::telemetry::oversized()]
+                .into_iter()
+                .find_map(|telemetry| {
+                    Answer {
+                        id,
+                        reply: Reply::Observed {
+                            reply: Box::new(reply.clone()),
+                            telemetry,
+                        },
+                    }
+                    .encode()
+                    .ok()
+                })
+                .map_or_else(|| Answer { id, reply }.encode(), Ok),
         }
-        .encode()
         .map_err(ServeCause::Protocol)?;
         connection.send.send(&answer).map_err(ServeCause::Channel)
     })();

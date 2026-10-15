@@ -3,10 +3,12 @@ use super::{
     bind::checked_base, BoundWorkspace, CommitError, CommitFailure, CommitOptions, CommitPhase,
     CommitSuccess, MergeReport,
 };
+use crate::telemetry::phase;
 use layerfs_content::filesystem::FilesystemRootId;
 use layerfs_history::{BranchSnapshot, CommitMeta, CommitOutcome, CommitRequest, CommitVia};
 use layerfs_overlay::Capture;
 use layerfs_storage::Save;
+use layerfs_telemetry::timer::{Active, TimingScope};
 use layerfs_workspace::WorkspaceError;
 use std::sync::{atomic::Ordering, Arc};
 
@@ -41,12 +43,15 @@ impl BoundWorkspace {
         ) -> Result<FilesystemRootId, CommitError>,
     ) -> Result<CommitSuccess, Box<CommitFailure>> {
         let mut admission = self.admit_commit()?;
-        let result = self.commit_admitted(
-            construct,
-            || (),
-            &CommitOptions::default(),
-            CommitVia::Workspace,
-        );
+        let result = crate::telemetry::timed("commit", |timing| {
+            self.commit_admitted(
+                construct,
+                || (),
+                &CommitOptions::default(),
+                CommitVia::Workspace,
+                timing,
+            )
+        });
         admission.released = match &result {
             Ok(_) => true,
             Err(failure) => failure.locally_settled,
@@ -78,6 +83,7 @@ impl BoundWorkspace {
     /// published against that head and installed as the new base. A conflict
     /// publishes nothing: the merge, with marker blocks, is installed as the
     /// Workspace's local base and its history binding moves to the head.
+    /// Each phase is a child of `timing`; untraced, it records nothing.
     pub(super) fn commit_admitted(
         &self,
         construct: impl FnOnce(
@@ -88,6 +94,7 @@ impl BoundWorkspace {
         published: impl FnOnce(),
         options: &CommitOptions,
         via: CommitVia,
+        timing: &TimingScope<'_, Active>,
     ) -> Result<CommitSuccess, Box<CommitFailure>> {
         let force = options.force;
         let mut retained = CommitFailure::new(
@@ -104,9 +111,10 @@ impl BoundWorkspace {
             let local = self.local_root(&snapshot)?;
             let original_base = self.workspace.base().map_err(CommitError::Workspace)?;
             retained.phase = CommitPhase::Capture;
-            let capture = self
-                .job(|job_client: &crate::OwnerClient, job_route| job_client.capture(job_route))
-                .map_err(CommitError::Owner)?;
+            let capture = phase(timing, "capture", || {
+                self.job(|job_client: &crate::OwnerClient, job_route| job_client.capture(job_route))
+                    .map_err(CommitError::Owner)
+            })?;
             retained.capture = Some(capture);
             if capture.base_root != local.to_bytes() || original_base.identity().0 != local {
                 return Err(CommitError::Context(
@@ -114,32 +122,37 @@ impl BoundWorkspace {
                 ));
             }
             retained.phase = CommitPhase::Begin;
-            let (storage, before) = self
-                .producer
-                .take(&self.store)
-                .map_err(CommitError::Storage)?;
+            let (storage, before) = phase(timing, "producer", || {
+                self.producer
+                    .take(&self.store)
+                    .map_err(CommitError::Storage)
+            })?;
             let built = (|| {
-                let save = storage.begin_save().map_err(CommitError::Storage)?;
+                let save = phase(timing, "begin", || {
+                    storage.begin_save().map_err(CommitError::Storage)
+                })?;
                 retained.phase = CommitPhase::Construct;
-                let candidate = match construct(&save, capture, &snapshot) {
-                    Ok(root) => root,
-                    Err(original) => {
-                        return Err(match save.take_failure() {
-                            Some(storage) => CommitError::Construction {
-                                original: Box::new(original),
-                                storage,
-                            },
-                            None => original,
-                        })
-                    }
-                };
-                self.refuse_markers(&save, candidate)?;
-                let current = self
-                    .store
-                    .history
-                    .branch_snapshot(snapshot.branch.id)
-                    .map_err(CommitError::History)?
-                    .ok_or(CommitError::Context("bound Branch is absent"))?;
+                let candidate =
+                    match phase(timing, "construct", || construct(&save, capture, &snapshot)) {
+                        Ok(root) => root,
+                        Err(original) => {
+                            return Err(match save.take_failure() {
+                                Some(storage) => CommitError::Construction {
+                                    original: Box::new(original),
+                                    storage,
+                                },
+                                None => original,
+                            })
+                        }
+                    };
+                let current = phase(timing, "head", || {
+                    self.refuse_markers(&save, candidate)?;
+                    self.store
+                        .history
+                        .branch_snapshot(snapshot.branch.id)
+                        .map_err(CommitError::History)?
+                        .ok_or(CommitError::Context("bound Branch is absent"))
+                })?;
                 let moved = current.branch.head_commit != snapshot.branch.head_commit
                     || current.branch.base_layer != snapshot.branch.base_layer;
                 if moved && via == CommitVia::Files {
@@ -155,8 +168,9 @@ impl BoundWorkspace {
                     ));
                 }
                 let root = if moved && !force {
-                    let (root, report) =
-                        self.merge_candidate(&save, &snapshot, &current, candidate)?;
+                    let (root, report) = phase(timing, "merge", || {
+                        self.merge_candidate(&save, &snapshot, &current, candidate)
+                    })?;
                     merge = Some(report);
                     root
                 } else {
@@ -167,24 +181,27 @@ impl BoundWorkspace {
                     .head_commit
                     .map(layerfs_history::NodeId::Commit)
                     .unwrap_or(layerfs_history::NodeId::Layer(current.branch.base_layer));
-                let known = self
-                    .store
-                    .logical_size(node)
-                    .map_err(CommitError::History)?;
+                let known = phase(timing, "logical.known", || {
+                    self.store.logical_size(node).map_err(CommitError::History)
+                })?;
                 retained.phase = CommitPhase::Finish;
-                retained.saved = Some(save.finish().map_err(CommitError::Storage)?);
+                retained.saved = Some(phase(timing, "finish", || {
+                    save.finish().map_err(CommitError::Storage)
+                })?);
                 // Count only after finish has proved the root's references
                 // closed, so a missing dependency stays a Storage refusal.
-                let reader = storage.reader().map_err(CommitError::Storage)?;
-                let logical = layerfs_content::filesystem::statistics::logical_size_after(
-                    &reader,
-                    FilesystemRootId(current.effective_root),
-                    root,
-                    known,
-                )
-                .map_err(|error| CommitError::Content {
-                    error,
-                    provider: None,
+                let logical = phase(timing, "logical.count", || {
+                    let reader = storage.reader().map_err(CommitError::Storage)?;
+                    layerfs_content::filesystem::statistics::logical_size_after(
+                        &reader,
+                        FilesystemRootId(current.effective_root),
+                        root,
+                        known,
+                    )
+                    .map_err(|error| CommitError::Content {
+                        error,
+                        provider: None,
+                    })
                 })?;
                 Ok((root, candidate, current, moved, logical))
             })();
@@ -247,31 +264,29 @@ impl BoundWorkspace {
                 });
             }
             retained.phase = CommitPhase::Validate;
-            let ports = self.store.ports(snapshot.scope);
-            let client = ports.client();
             let mut next = target.clone();
             next.effective_root = candidate.0;
-            let checked =
-                checked_base(client.clone(), &next).map_err(|error| CommitError::Content {
-                    error,
-                    provider: ports
-                        .failure()
-                        .unwrap_or_else(|error| Some(Arc::new(error))),
-                })?;
-            if checked.root().root_inode() != original_base.root().root_inode() {
-                return Err(CommitError::Context(
-                    "candidate changes root inode identity",
-                ));
-            }
-            let scoped = self
-                .workspace
-                .scoped(client)
-                .map_err(CommitError::Workspace)?;
-            retained.prepared = Some(
-                scoped
+            retained.prepared = Some(phase(timing, "validate", || {
+                let ports = self.store.ports(snapshot.scope);
+                let client = ports.client();
+                let checked =
+                    checked_base(client.clone(), &next).map_err(|error| CommitError::Content {
+                        error,
+                        provider: ports
+                            .failure()
+                            .unwrap_or_else(|error| Some(Arc::new(error))),
+                    })?;
+                if checked.root().root_inode() != original_base.root().root_inode() {
+                    return Err(CommitError::Context(
+                        "candidate changes root inode identity",
+                    ));
+                }
+                self.workspace
+                    .scoped(client)
+                    .map_err(CommitError::Workspace)?
                     .prepare_base_install(capture, candidate)
-                    .map_err(CommitError::Workspace)?,
-            );
+                    .map_err(CommitError::Workspace)
+            })?);
             let pending = if conflicted {
                 // Nothing is published: the history binding follows the head
                 // merged with, and the merge stays the local base.
@@ -285,11 +300,13 @@ impl BoundWorkspace {
                 })
             } else {
                 retained.phase = CommitPhase::Publish;
-                let outcome = self
-                    .store
-                    .history
-                    .commit_branch(retained.intent.as_ref().expect("checked intent"))
-                    .map_err(CommitError::History)?;
+                let intent = retained.intent.as_ref().expect("checked intent");
+                let outcome = phase(timing, "publish", || {
+                    self.store
+                        .history
+                        .commit_branch(intent)
+                        .map_err(CommitError::History)
+                })?;
                 let (head, root) = match &outcome {
                     CommitOutcome::Committed { record, .. } => (Some(record.id), record.root),
                     CommitOutcome::UpToDate { head, root } => (*head, *root),
@@ -306,14 +323,13 @@ impl BoundWorkspace {
                 None
             };
             retained.phase = CommitPhase::Install;
-            self.job(|job_client: &crate::OwnerClient, route| {
-                job_client.install_prepared(
-                    route,
-                    self.workspace.clone(),
-                    retained.prepared.take().expect("prepared install"),
-                )
-            })
-            .map_err(CommitError::Owner)?;
+            let prepared = retained.prepared.take().expect("prepared install");
+            phase(timing, "install", || {
+                self.job(|job_client: &crate::OwnerClient, route| {
+                    job_client.install_prepared(route, self.workspace.clone(), prepared)
+                })
+                .map_err(CommitError::Owner)
+            })?;
             *self
                 .snapshot
                 .lock()

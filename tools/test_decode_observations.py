@@ -1,0 +1,69 @@
+"""Focused tests for the daemon numeric observation decoder."""
+
+import json
+import tempfile
+import unittest
+from pathlib import Path
+
+import decode_observations
+
+SCOPE = [1, 2, 3, 4]
+DAEMON = [9, 9, 9, 9]
+SCOPE_HEX = "".join(f"{word:016x}" for word in SCOPE)
+
+
+def row(call, section, index, values, available=True, scope=SCOPE):
+    return json.dumps({"layerfs_observation": 1, "call": call, "slot": 0, "scope": scope,
+                       "daemon": DAEMON, "section": section, "index": index,
+                       "available": available, "values": values if available else []},
+                      separators=(",", ":"))
+
+
+def group(call, scope=SCOPE):
+    return [
+        row(call, 0, 4, [2, 18, 65536], scope=scope),
+        row(call, 2, 1, list(range(17)), scope=scope),
+        row(call, 14, -2, [0] * 55, scope=scope),
+        row(call, 16, 0, list(range(42)), scope=scope),
+        row(call, 12, 0, [], available=False, scope=scope),
+        row(call, 99, 0, [4, 114, 1], scope=scope),
+    ]
+
+
+class DecoderTests(unittest.TestCase):
+    def test_names_sections_and_values_from_the_source_order(self):
+        lines = ["daemon starting", *group(3), "unrelated text"]
+        [decoded] = list(decode_observations.decode(lines, {}))
+        self.assertEqual(decoded["scope"], SCOPE_HEX)
+        self.assertEqual(decoded["call"], 3)
+        self.assertTrue(decoded["complete"])
+        self.assertEqual(decoded["operation"], "Commit")
+        sections = decoded["sections"]
+        self.assertEqual(sections["operation"]["namespace"], 4)
+        self.assertEqual(sections["sql_foreground.begin"]["elapsed_ns"], 16)
+        self.assertEqual(sections["reader_sql.closed_sum"]["commit_drop_statement_wall_ns"], 0)
+        self.assertEqual(sections["commit_storage"]["forced_seals"], 41)
+        self.assertIsNone(sections["kernel_mount"], "unavailable stays null, never zero")
+        self.assertEqual(sections["footer"]["records"], 4)
+        self.assertNotIn("trace", decoded)
+
+    def test_joins_traced_calls_by_scope_and_leaves_others_unjoined(self):
+        other = [5, 6, 7, 8]
+        lines = [*group(1), *group(2), *group(1, scope=other)[:-1]]
+        with tempfile.TemporaryDirectory() as directory:
+            trace = Path(directory) / "trace.jsonl"
+            trace.write_text(json.dumps({"layerfs_trace": 1, "id": "ab12cd34-7", "scope": SCOPE_HEX}) + "\n"
+                             + "not json\n", encoding="utf-8")
+            decoded = list(decode_observations.decode(lines, decode_observations.trace_scopes(trace)))
+        self.assertEqual([(g["call"], g.get("trace")) for g in decoded],
+                         [(1, "ab12cd34-7"), (2, "ab12cd34-7"), (1, None)])
+        self.assertFalse(decoded[2]["complete"], "no footer means incomplete")
+
+    def test_every_named_section_matches_its_source_width(self):
+        widths = {1: 15, 2: 17, 13: 55, 15: 31, 16: 42, 22: 20, 26: 45, 28: 28, 29: 42, 30: 34, 32: 11}
+        for section, width in widths.items():
+            self.assertEqual(len(decode_observations.SECTIONS[section][1]), width, section)
+
+
+if __name__ == "__main__":
+    unittest.main()

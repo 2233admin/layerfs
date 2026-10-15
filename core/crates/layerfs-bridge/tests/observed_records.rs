@@ -70,6 +70,7 @@ fn one_checked_scoped_layer_preserves_point_request_capacity() {
             request: Request::Observed {
                 scope: [7; 32],
                 request: Box::new(request),
+                traced: false,
             },
         };
         let bytes = observed.encode().unwrap();
@@ -118,12 +119,14 @@ fn observed_lifecycle_and_nesting_are_rejected_before_inner_decode() {
         Request::Observed {
             scope: [7; 32],
             request: Box::new(Request::Status(token())),
+            traced: false,
         },
     ];
     for operation in forbidden {
         let request = Request::Observed {
             scope: [7; 32],
             request: Box::new(operation),
+            traced: false,
         };
         assert!(request.without_observation().is_err());
         assert!(Call { id: 1, request }.encode().is_err());
@@ -146,6 +149,7 @@ fn zero_scope_is_rejected_before_inner_body_decode() {
     let request = Request::Observed {
         scope: [0; 32],
         request: Box::new(Request::Status(token())),
+        traced: false,
     };
     assert_eq!(
         request.without_observation().unwrap_err().0,
@@ -190,5 +194,72 @@ fn cleanup_has_exact_additive_tags_and_checked_state() {
         assert_eq!(Answer::decode(&expected).unwrap(), answer);
         *expected.last_mut().unwrap() = 0;
         assert!(Answer::decode(&expected).is_err());
+    }
+}
+#[test]
+fn traced_observation_differs_only_in_its_prefix_tag() {
+    let request = Request::Status(token());
+    let plain = Call {
+        id: 1,
+        request: Request::Observed {
+            scope: [7; 32],
+            request: Box::new(request.clone()),
+            traced: false,
+        },
+    };
+    let traced = Call {
+        id: 1,
+        request: Request::Observed {
+            scope: [7; 32],
+            request: Box::new(request),
+            traced: true,
+        },
+    };
+    let (plain_bytes, traced_bytes) = (plain.encode().unwrap(), traced.encode().unwrap());
+    assert_eq!(plain_bytes[13], 12);
+    assert_eq!(traced_bytes[13], 21);
+    assert_eq!(plain_bytes[14..], traced_bytes[14..]);
+    assert_eq!(Call::decode(&traced_bytes).unwrap(), traced);
+    let mut nested = prefix(b"LFSC\x01", 21);
+    nested.extend_from_slice(&[7; 32]);
+    nested.push(21);
+    assert!(Call::decode(&nested).is_err());
+}
+#[test]
+fn observed_reply_carries_telemetry_beside_the_unchanged_reply() {
+    use layerfs_bridge::control::SdkValue;
+    let inner = Reply::Cleanup {
+        token: token(),
+        state: CleanupObservation::Gone,
+    };
+    let plain = Answer {
+        id: 1,
+        reply: inner.clone(),
+    }
+    .encode()
+    .unwrap();
+    let telemetry = SdkValue::map([("timing", SdkValue::List(Vec::new()))]);
+    let answer = Answer {
+        id: 1,
+        reply: Reply::Observed {
+            reply: Box::new(inner.clone()),
+            telemetry,
+        },
+    };
+    let bytes = answer.encode().unwrap();
+    assert_eq!(Answer::decode(&bytes).unwrap(), answer);
+    assert_eq!(bytes[..13], plain[..13]);
+    assert_eq!(bytes[13], 23);
+    assert!(bytes.ends_with(&plain[13..]));
+    let nested = Answer {
+        id: 1,
+        reply: Reply::Observed {
+            reply: Box::new(answer.reply.clone()),
+            telemetry: SdkValue::Null,
+        },
+    };
+    assert!(nested.encode().is_err());
+    for end in 0..bytes.len() {
+        assert!(Answer::decode(&bytes[..end]).is_err());
     }
 }

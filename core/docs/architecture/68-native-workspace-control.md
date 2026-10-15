@@ -165,6 +165,39 @@ no used-scope registry or connection nonce. Evidence groups use existing daemon
 instance plus caller scope plus call as identity; slot is attribution only and
 may be reused. An evidence consumer rejects duplicate complete identities.
 
+### SDK-traced observations (#333)
+
+Request tag 21 is the same wrapper with `traced: true`; tag 12 keeps
+`traced: false` and its original bytes. The JavaScript SDK sends it only while
+its per-call trace is on: `internal::trace(&mut Control, Some(scope))` makes
+`Control::call` wrap each later ordinary request (never Hello, EndSession or an
+existing wrapper) until `trace(None)`. A traced request is answered with reply
+tag 23, `Reply::Observed { reply, telemetry }`: the operation's own reply,
+unchanged, and an SDK value beside it. `Control::call` validates correlation
+against the inner reply, keeps the telemetry (at most 16 values) for
+`internal::take_telemetry`, and returns the inner reply, so every typed facade
+method is unchanged. A traced request and its reply are never nested.
+
+The daemon records phase timing only for a traced request: a thread-local flag
+set through the `layerfs_daemon::telemetry::Recording` guard, which clears it on
+every exit including unwinding. Product roots call `telemetry::timed`; untraced
+it is `Timing::disabled`. Telemetry holds `timing` (pre-order nodes
+`[name, parent, microseconds, outcome, incomplete]`, at most 256, with an
+`omitted` count; root reports keep the telemetry crate's node limits),
+`storage` (the Commit's 42 Storage Diagnostics, section 16 order) and
+`construction` (the Commit's 31 captured namespace work fields, section 15
+order) when the operation committed, and `diagnosticError` (`kind`, `message`)
+when the numeric record write failed. On the traced route that failure is
+reported there and the connection keeps serving; the untraced route keeps its
+original close-after-reply custody. Telemetry that does not fit the reply frame
+is replaced by an `Oversized` `diagnosticError`, then by the plain reply; it
+never fails the answer. Timing roots: `commit` (phases `capture`, `producer`,
+`begin`, `construct` with `captured.namespace`, `head` with `markers` while a
+conflict is pending, `merge` with `merge`, `logical.known`, `finish`, `logical.count`, `validate`, `publish`,
+`install`), `sandbox.mount.bind` (`store.bind`), `sandbox.mount.attach`
+(`kernel.attach`), `files.bind`, `sdk.read`, `sdk.lines`, `branch.merge` and
+`blame.compare`.
+
 Cleanup is a separate explicit observation, `WorkspaceApi::cleanup(token)`:
 request tag 13 carries the existing WorkspaceToken, and reply tag 16 carries the
 same token followed by one strict state byte (1 Live, 2 Held, 3 Queued, 4 Gone).

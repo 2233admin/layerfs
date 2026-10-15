@@ -14,7 +14,6 @@ use layerfs_content::filesystem::FilesystemRootId;
 use layerfs_content::object::inode_leaf::InodeKind;
 use layerfs_content::{ContentError, ObjectId};
 use layerfs_history::{LayerStackRecord, NodeId};
-use layerfs_telemetry::timer::Timing;
 use std::sync::Arc;
 
 /// Width of one identity's hex text.
@@ -160,7 +159,7 @@ pub(crate) fn text(
         return Ok(None);
     };
     let mut bytes = Vec::new();
-    let (read, _) = Timing::disabled("sdk.read", |timing| {
+    let read = crate::telemetry::timed("sdk.read", |timing| {
         layerfs_content::file::read_all_bounded(
             reader,
             entry.value.content_root,

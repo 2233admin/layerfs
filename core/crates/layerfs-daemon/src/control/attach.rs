@@ -30,7 +30,11 @@ enum Stop {
 impl Service {
     /// Ready is acknowledged only after the kernel mount exists, the handshake
     /// completed, every receive loop entered and the registry records it.
-    pub(super) fn attach(&self, token: WorkspaceToken) -> Result<Success, Failure> {
+    pub(super) fn attach(
+        &self,
+        token: WorkspaceToken,
+        timing: &layerfs_telemetry::timer::TimingScope<'_, layerfs_telemetry::timer::Active>,
+    ) -> Result<Success, Failure> {
         let Some(serving) = self.kernel.clone() else {
             return Err(Failure::Rejected(
                 ControlCode::Invalid,
@@ -38,7 +42,9 @@ impl Service {
             ));
         };
         let workspace = self.admit_attach(token)?;
-        match self.attach_admitted(&serving, token, &workspace) {
+        match crate::telemetry::phase(timing, "kernel.attach", || {
+            self.attach_admitted(&serving, token, &workspace)
+        }) {
             Ok(attached) => {
                 let reply = Reply::Ready(Box::new(attached.ready.clone()));
                 self.settle(token, Kernel::Ready(Box::new(attached)), Activity::Idle);

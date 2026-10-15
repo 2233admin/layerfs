@@ -57,9 +57,9 @@ fn commit(service: &Service, args: &SdkValue, changes: &[SdkValue]) -> Answer {
             .public,
     )
     .map_err(args::history)?;
-    let bound = service
-        .mount(id, branch.id)
-        .map_err(|e| args::failed(format!("{e:?}")))?;
+    let bound =
+        crate::telemetry::timed("files.bind", |timing| service.mount(id, branch.id, timing))
+            .map_err(|e| args::failed(format!("{e:?}")))?;
     let Reply::Bound { token, .. } = bound.reply else {
         return Err(args::failed("private binding reply"));
     };

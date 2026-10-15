@@ -16,13 +16,12 @@ use layerfs_content::{
     compare::{match_lines, EntryFacts},
     object::inode_leaf::InodeKind,
 };
-use layerfs_telemetry::timer::Timing;
 use std::sync::Arc;
 type Result<T> = std::result::Result<T, SdkRefusal>;
 
 fn range(reader: &StorePorts, file: EntryFacts, offset: u64, count: u64) -> Result<Vec<u8>> {
     let mut out = Vec::new();
-    let (result, _) = Timing::disabled("blame.compare", |timer| {
+    let result = crate::telemetry::timed("blame.compare", |timer| {
         layerfs_content::file::read_range(
             reader,
             file.value.content_root,

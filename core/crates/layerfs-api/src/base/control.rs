@@ -1,6 +1,6 @@
 //! One attempted authenticated control exchange, retaining the original unknown.
 use layerfs_bridge::{
-    control::{Answer, Call, ControlError, Reply, Request},
+    control::{Answer, Call, ControlError, Reply, Request, SdkValue},
     duplex::{ChannelError, ChannelWork, Connection},
 };
 use std::fmt;
@@ -9,7 +9,13 @@ pub struct Control {
     connection: Connection,
     next: u64,
     failed: bool,
+    /// While set, ordinary requests travel as traced observations.
+    traced: Option<[u8; 32]>,
+    /// Telemetry of traced replies, kept until the caller takes it.
+    telemetry: Vec<SdkValue>,
 }
+/// Most traced replies kept between takes; later telemetry is dropped.
+const TELEMETRY: usize = 16;
 /// Exact point at which the original control exchange stopped.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ControlPhase {
@@ -55,11 +61,38 @@ impl Control {
             connection,
             next: 1,
             failed: false,
+            traced: None,
+            telemetry: Vec::new(),
         }
+    }
+    /// Sends later ordinary requests as traced observations under `scope`,
+    /// or plainly again with `None`. Results are unchanged either way.
+    pub(crate) fn trace(&mut self, scope: Option<[u8; 32]>) {
+        self.traced = scope;
+    }
+    /// The telemetry of the traced replies received since the last take.
+    pub(crate) fn take_telemetry(&mut self) -> Vec<SdkValue> {
+        std::mem::take(&mut self.telemetry)
     }
     /// Sends once and awaits the original reply once. Typed remote refusals are
     /// replies; failed delivery retains an unknown, never replays the command.
     pub fn call(&mut self, request: Request) -> Result<Reply, Box<ControlFailure>> {
+        let request = match (self.traced, request) {
+            (Some(scope), request)
+                if !matches!(
+                    request,
+                    Request::Observed { .. } | Request::Hello(_) | Request::EndSession
+                ) =>
+            {
+                Request::Observed {
+                    scope,
+                    request: Box::new(request),
+                    traced: true,
+                }
+            }
+            (_, request) => request,
+        };
+        let traced = matches!(request, Request::Observed { traced: true, .. });
         let call = Call {
             id: self.next,
             request,
@@ -96,7 +129,12 @@ impl Control {
             phase = ControlPhase::Validate;
             received = Some(answer);
             let answer = received.as_ref().expect("original answer");
-            if answer.id != call.id || !matches_reply(&call.request, &answer.reply) {
+            // A traced answer is validated by the operation's own reply.
+            let reply = match &answer.reply {
+                Reply::Observed { reply, .. } if traced => reply.as_ref(),
+                reply => reply,
+            };
+            if answer.id != call.id || !matches_reply(&call.request, reply) {
                 return Err(ControlCause::Protocol(ControlError(
                     "original control correlation or result",
                 )));
@@ -111,7 +149,17 @@ impl Control {
                     .close()
                     .map_err(ControlCause::Channel)?;
             }
-            Ok(received.take().expect("checked original answer").reply)
+            Ok(
+                match received.take().expect("checked original answer").reply {
+                    Reply::Observed { reply, telemetry } => {
+                        if self.telemetry.len() < TELEMETRY {
+                            self.telemetry.push(telemetry);
+                        }
+                        *reply
+                    }
+                    reply => reply,
+                },
+            )
         })();
         match result {
             Ok(reply) => Ok(reply),

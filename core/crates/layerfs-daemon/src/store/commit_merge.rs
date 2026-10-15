@@ -12,7 +12,6 @@ use layerfs_content::{
 };
 use layerfs_history::BranchSnapshot;
 use layerfs_storage::Save;
-use layerfs_telemetry::timer::Timing;
 use layerfs_workspace::{InodeSerials, WorkspaceError};
 
 /// Serials one reservation takes while a merge needs fresh ones.
@@ -67,7 +66,7 @@ impl BoundWorkspace {
             Some(pending) => pending.conflicted.clone(),
             None => return Ok(()),
         };
-        let (marked, _) = Timing::disabled("markers", |timing| {
+        let marked = crate::telemetry::timed("markers", |timing| {
             paths_with_markers(save, candidate, &conflicted, timing)
         });
         let marked = marked.map_err(content)?;
@@ -119,7 +118,7 @@ impl BoundWorkspace {
             policy,
             capacities: &capacities,
         };
-        let (merged, _) = Timing::disabled("merge", |timing| {
+        let merged = crate::telemetry::timed("merge", |timing| {
             merge_roots(save, &mut save.sink(), &input, &mut fresh, timing)
         });
         let merged = match (merged, refused) {

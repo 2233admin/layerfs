@@ -75,6 +75,15 @@ impl InternalWorkspaceApi<'_> {
         self.0.force_unmount(token, relinquish_unknown)
     }
 }
+/// Sends this channel's later ordinary requests as SDK-traced observations
+/// under `scope` (`None` ends it); results are unchanged.
+pub fn trace(control: &mut Control, scope: Option<[u8; 32]>) {
+    control.trace(scope);
+}
+/// Takes the telemetry of the traced replies received since the last take.
+pub fn take_telemetry(control: &mut Control) -> Vec<layerfs_bridge::control::SdkValue> {
+    control.take_telemetry()
+}
 /// Original install on an existing control owner, without a correlation reset.
 pub fn install_project(
     control: &mut Control,
