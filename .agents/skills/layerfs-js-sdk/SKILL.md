@@ -6,7 +6,7 @@ description: Use when building, editing, testing or inspecting a project through
 # LayerFS JavaScript SDK
 
 > **Status:** Current general guide. It describes LayerFS 0.1.7 on `main`. Example
-> outputs show the shape read from source and are not yet captured from a live run.
+> outputs were captured live in issue #334 Phase A at `b30e4fb8f`.
 
 Your project lives in LayerFS, not on your local disk. You read and change it through
 the SDK, from small Node scripts you run with `node`.
@@ -191,7 +191,7 @@ console.log(branches.items.map((b) => b.name));
 
 ```
 Forked work null
-[ 'work', 'main' ]
+[ 'main', 'work' ]
 ```
 
 ### fs.mjs: write and read files on the Branch

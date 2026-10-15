@@ -1,8 +1,8 @@
 # fs read methods
 
-> **Status:** Current general guide. Part of the `layerfs-js-sdk` skill. Fields are
-> read from source on `main`; example outputs show the shape and are not yet captured
-> from a live run. Ids are 66 hex characters, shortened here as `"9f3c…"`.
+> **Status:** Current general guide. Part of the `layerfs-js-sdk` skill. Examples were
+> captured live in issue #334 Phase A at `b30e4fb8f`. Opaque IDs are shortened;
+> the full replies and trace are in `core/target/issue334/phase-a/`.
 
 Examples use `layerfs` as connected in [SKILL.md](../../SKILL.md#connect-to-a-project) and work on the Branch
 `"work"`.
@@ -72,7 +72,19 @@ the shared ones.
 const r = await layerfs.fs.read("work", "/src/cart.js", 1, 40);
 ```
 ```json
-{ "kind": "ok", "snapshot": "work@9f3c0a1b2c4d", "root": "5a07…", "path": "/src/cart.js", "text": "export class Cart {\n…", "startLine": 1, "endLine": 40, "lineTruncated": false, "truncated": true, "nextLine": 41, "size": 3812 }
+{
+  "kind": "ok",
+  "snapshot": "work@6a9c59c9084a",
+  "root": "67fe8ac697a4…",
+  "path": "/src/cart.js",
+  "text": "const TAX = 0.08;\n// TODO: line 2\n// TODO: line 3\n// TODO: line 4\n// TODO: line 5\n// TODO: line 6\n// TODO: line 7\n// TODO: line 8\n// TODO: line 9\n// TODO: line 10\n// TODO: line 11\n// TODO: line 12\n// TODO: line 13\n// TODO: line 14\n// TODO: line 15\n// TODO: line 16\n// TODO: line 17\n// TODO: line 18\n// TODO: line 19\n// TODO: line 20\n// TODO: line 21\n// TODO: line 22\n// TODO: line 23\n// TODO: line 24\n// TODO: line 25\n// TODO: line 26\n// TODO: line 27\n// TODO: line 28\n// TODO: line 29\n// TODO: line 30\n// TODO: line 31\n// TODO: line 32\n// TODO: line 33\n// TODO: line 34\n// TODO: line 35\n// TODO: line 36\n// TODO: line 37\n// TODO: line 38\n// TODO: line 39\n// TODO: line 40\n",
+  "startLine": 1,
+  "endLine": 40,
+  "lineTruncated": false,
+  "truncated": false,
+  "nextLine": null,
+  "size": 1712
+}
 ```
 
 **Read a whole file, window by window**
@@ -95,7 +107,7 @@ Lists one folder.
 | --- | --- | --- | --- |
 | `path` | string | no | Folder, default `/` |
 
-**Returns:** a page; each item is `{ name, type, inode, size }` with `type` one of
+**Returns:** a page; each item is `{ name, path, type, inode }` with `type` one of
 `file`, `dir`, `symlink`. Names are in byte order.
 
 **Refusals:** `NotDirectory`, plus the shared ones.
@@ -104,7 +116,40 @@ Lists one folder.
 const page = await layerfs.fs.list("work", "/src");
 ```
 ```json
-{ "items": [{ "name": "cart.js", "type": "file", "inode": 41, "size": 3812 }, { "name": "routes", "type": "dir", "inode": 42, "size": 0 }], "hasMore": false, "nextPagePos": null }
+{
+  "kind": "ok",
+  "snapshot": "work@6a9c59c9084a",
+  "root": "67fe8ac697a4…",
+  "path": "/src",
+  "items": [
+    {
+      "name": "basket.js",
+      "path": "/src/basket.js",
+      "type": "file",
+      "inode": 2124
+    },
+    {
+      "name": "cart.js",
+      "path": "/src/cart.js",
+      "type": "file",
+      "inode": 2123
+    },
+    {
+      "name": "routes",
+      "path": "/src/routes",
+      "type": "dir",
+      "inode": 2247
+    },
+    {
+      "name": "server.js",
+      "path": "/src/server.js",
+      "type": "file",
+      "inode": 2183
+    }
+  ],
+  "hasMore": false,
+  "nextPagePos": null
+}
 ```
 
 ## `fs.stat(ref, path)`
@@ -132,8 +177,32 @@ counts binary files passed over. Items come in path order, then line order.
 ```js
 const hits = await layerfs.fs.grep("work", "TODO", "/src");
 ```
+This live capture shows the first two of 50 `items`; the raw output retains all rows.
+
 ```json
-{ "items": [{ "path": "/src/cart.js", "line": 88, "text": "  // TODO: tax rounding\n", "lineTruncated": false }], "skipped": 0, "hasMore": false, "nextPagePos": null }
+{
+  "kind": "ok",
+  "snapshot": "work@6a9c59c9084a",
+  "root": "67fe8ac697a4…",
+  "path": "/src",
+  "items": [
+    {
+      "path": "/src/cart.js",
+      "line": 2,
+      "text": "// TODO: line 2\n",
+      "lineTruncated": false
+    },
+    {
+      "path": "/src/cart.js",
+      "line": 3,
+      "text": "// TODO: line 3\n",
+      "lineTruncated": false
+    }
+  ],
+  "skipped": 0,
+  "hasMore": true,
+  "nextPagePos": 50
+}
 ```
 
 **Notes:** searches everything under `path`, `node_modules` included. Keep `path` narrow.
@@ -145,7 +214,7 @@ Finds paths matching a glob pattern.
 
 | Arg | Type | Required | Meaning |
 | --- | --- | --- | --- |
-| `pattern` | string | yes | `*` and `?` match within one name; `**` spans folders |
+| `pattern` | string | yes | `*` and `?` match within one name; `**` spans folders; at this source, `**/` requires a folder and omits direct children (issue #334 BUG-001) |
 | `path` | string | no | Where to search, default `/` |
 
 **Returns:** a page whose `items` are absolute path strings.
@@ -154,7 +223,17 @@ Finds paths matching a glob pattern.
 const tests = await layerfs.fs.glob("work", "test/**/*.test.js", "/");
 ```
 ```json
-{ "items": ["/test/cart.test.js", "/test/routes/cart-api.test.js"], "hasMore": false, "nextPagePos": null }
+{
+  "kind": "ok",
+  "snapshot": "work@6a9c59c9084a",
+  "root": "67fe8ac697a4…",
+  "path": "/",
+  "items": [
+    "/test/routes/cart-api.test.js"
+  ],
+  "hasMore": false,
+  "nextPagePos": null
+}
 ```
 
 ## `fs.diff_files(leftRef, leftPath, rightRef, rightPath)`
@@ -177,7 +256,436 @@ const d = await layerfs.fs.diff_files("main", "/src/cart.js", "work", "/src/cart
 console.log(d.hunks.filter((h) => h.op !== " ").map((h) => h.op + h.text).join(""));
 ```
 ```json
-{ "kind": "Text", "contentEqual": false, "sameInode": true, "hunksOmitted": false, "hunks": [{ "op": "-", "text": "const TAX = 0.07;\n" }, { "op": "+", "text": "const TAX = 0.08;\n" }], "left": { "…": "…" }, "right": { "…": "…" } }
+{
+  "kind": "Text",
+  "left": {
+    "path": "/src/cart.js",
+    "snapshot": "main@79dac7de68cf",
+    "inode": 2123
+  },
+  "right": {
+    "path": "/src/cart.js",
+    "snapshot": "work@6a9c59c9084a",
+    "inode": 2123
+  },
+  "contentEqual": false,
+  "sameInode": true,
+  "hunksOmitted": false,
+  "hunks": [
+    {
+      "op": "-",
+      "text": "const TAX = 0.07;"
+    },
+    {
+      "op": "+",
+      "text": "const TAX = 0.08;"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 2"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 3"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 4"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 5"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 6"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 7"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 8"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 9"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 10"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 11"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 12"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 13"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 14"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 15"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 16"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 17"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 18"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 19"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 20"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 21"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 22"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 23"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 24"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 25"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 26"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 27"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 28"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 29"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 30"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 31"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 32"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 33"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 34"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 35"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 36"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 37"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 38"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 39"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 40"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 41"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 42"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 43"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 44"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 45"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 46"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 47"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 48"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 49"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 50"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 51"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 52"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 53"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 54"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 55"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 56"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 57"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 58"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 59"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 60"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 61"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 62"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 63"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 64"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 65"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 66"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 67"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 68"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 69"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 70"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 71"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 72"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 73"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 74"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 75"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 76"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 77"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 78"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 79"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 80"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 81"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 82"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 83"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 84"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 85"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 86"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 87"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 88"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 89"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 90"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 91"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 92"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 93"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 94"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 95"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 96"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 97"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 98"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 99"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 100"
+    },
+    {
+      "op": " ",
+      "text": "// TODO: line 101"
+    },
+    {
+      "op": " ",
+      "text": ""
+    }
+  ]
+}
 ```
 
 ## `fs.blame(ref, path, fromLine?)`
@@ -195,6 +703,35 @@ was reported as one removed/added block).
 ```js
 const b = await layerfs.fs.blame("work", "/src/cart.js", 80);
 ```
+This live capture shows the first two of 22 `lines`; the raw output retains all rows.
+
 ```json
-{ "lines": [{ "n": 80, "text": "  total() {", "lineTruncated": false, "commit": "9f3c…", "message": "cart: totals" }], "versions": 4, "comparisonCoarse": false }
+{
+  "kind": "ok",
+  "snapshot": "work@6a9c59c9084a",
+  "root": "67fe8ac697a4…",
+  "path": "/src/cart.js",
+  "lines": [
+    {
+      "n": 80,
+      "text": "// TODO: line 80",
+      "lineTruncated": false,
+      "clipped": false,
+      "commit": "12804de7ce8d…",
+      "message": "A: fixtures"
+    },
+    {
+      "n": 81,
+      "text": "// TODO: line 81",
+      "lineTruncated": false,
+      "clipped": false,
+      "commit": "12804de7ce8d…",
+      "message": "A: fixtures"
+    }
+  ],
+  "origins": [],
+  "versions": 5,
+  "comparisonCoarse": false,
+  "nextLine": null
+}
 ```

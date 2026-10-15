@@ -1,8 +1,8 @@
 # Resolving conflicts
 
 > **Status:** Current general guide. Part of the `layerfs-js-sdk` skill. Read from the
-> merge code and the compare-and-merge contract on `main`. Example outputs show the
-> shape and are not yet captured from a live run. Ids are shortened as `9f3c…`.
+> merge code and the compare-and-merge contract on `main`. Examples were
+> exercised live in issue #334 Phase A at `b30e4fb8f`; IDs below are shortened.
 
 ## Two kinds of conflict
 
@@ -13,7 +13,7 @@ LayerFS merges in two places, and each can end in a `Conflict` refusal:
 | **Raised by** | `sandbox.commit`, when the Branch moved since the mount and both sides changed the same lines | `branch.merge(a, b, name)`, when `a` and `b` changed the same lines |
 | **Left behind** | Nothing committed. Markers are written into the conflicted files **in the Workspace**; the other side's clean changes are installed there too, and the Workspace now follows the new head | Nothing created. `a` and `b` are unchanged; no markers are written anywhere |
 | **`detail`** | `base`, `head`, `conflicts`, `written`, `markers`, `lww` | `sources`, `mergeBase`, `conflicts`, `lww` |
-| **Where you resolve** | In that Workspace, then Commit again | On one of the Branches, then merge again |
+| **Where you resolve** | In that Workspace, then Commit again | On working forks of the Branches, then merge again |
 | **Overwrite instead** | `sandbox.commit(…, { force: true })`, only before a conflict is written | Not available |
 
 Each entry of `conflicts` is `{ path, kind, blocks, hunks }`:
@@ -32,7 +32,7 @@ Each entry of `conflicts` is `{ path, kind, blocks, hunks }`:
 
 | Way | When | Commit conflict | Branch-merge conflict |
 | --- | --- | --- | --- |
-| **Fix it** | Source code: both changes matter | Edit the files in the Workspace, then Commit | Make one Branch contain the other's change, then merge |
+| **Fix it** | Source code: both changes matter | Edit the files in the Workspace, then Commit | Write the reviewed result identically on both working forks, then merge |
 | **Rule it** | Generated files: dependencies, lockfiles, build output | Clear the markers, add the path to `/.lww`, Commit | Add the path to `a`'s `/.lww`, merge again |
 | **Overwrite** | One side should win wholesale | `force: true` on the first Commit after the head moved | No `force`: copy the chosen side's files onto `a`, or publish one Branch without merging |
 
@@ -156,8 +156,10 @@ one of them and merging again. `detail.mergeBase` is where they diverged.
 
 ### Scenario 7: both Branches edited the same source lines (fix it)
 
-Make `a` contain `b`'s change as well; the same change on both sides merges cleanly.
-Do it on a fork of `a`, so `a` itself is kept:
+Read both changes, decide the combined file, and write it identically on working forks
+of both sides. A combined file written on only one side can still overlap the other
+side's diff hunk and conflict, even if it contains the other side's lines. Keep the
+original Branches:
 
 ```js
 // merge-fix.mjs: cart and checkout both changed /src/price.js
@@ -174,20 +176,23 @@ console.log("cart:\n" + cartChange.hunks.map((h) => h.op + h.text).join(""));
 ```
 
 ```js
-// merge-apply.mjs: after deciding, write the combined file on a fork of cart
+// merge-apply.mjs: after deciding, write the reviewed result on two working forks
 import { LayerFS } from "@layerfs/sdk";
 
 const layerfs = new LayerFS("shop");
-const combined = "…the resolved file…";
+const combined = "export const rate = 9;\nexport const cartRounding = true;\n"; // replace with your reviewed resolution
 
 await layerfs.branch.fork("cart-fix", "cart");
+await layerfs.branch.fork("checkout-fix", "checkout");
 await layerfs.fs.write("cart-fix", "/src/price.js", combined, "resolve price.js: keep cart's and checkout's changes");
-const m = await layerfs.branch.merge("cart-fix", "checkout", "cart-checkout", "merge cart and checkout");
+await layerfs.fs.write("checkout-fix", "/src/price.js", combined, "resolve price.js identically");
+const m = await layerfs.branch.merge("cart-fix", "checkout-fix", "cart-checkout", "merge cart and checkout");
 console.log(m.kind, m.branch);
 ```
 
-If the merge still conflicts, `combined` didn't contain `checkout`'s lines exactly as
-`checkout` wrote them; compare again.
+If other files still conflict, inspect their hunks and resolve each on both working
+forks. For an add/add conflict the merge base has no file: read both Branches directly
+instead of calling `diff_files` or `read` on the missing base path.
 
 ### Scenario 8: a generated file conflicts (rule it)
 

@@ -1,8 +1,8 @@
 # Operator methods
 
 > **Status:** Current general guide. Part of the `layerfs-sdk-observe` skill. Internal
-> surface, for observation and troubleshooting only. Fields are read from source on
-> `main`; example outputs show the shape and are not yet captured from a live run.
+> surface, for observation and troubleshooting only. Examples were captured live in issue #334
+> Phase A at `b30e4fb8f`; raw replies remain in the phase run folder.
 
 ```js
 import { LayerFS } from "@layerfs/sdk";
@@ -23,7 +23,16 @@ Store totals. Terms are defined in [storage metrics](storage-metrics.md#sources)
 Bytes are integers; `dedupe` and `compression` are numbers or `null`.
 
 ```json
-{ "logical": 412880311, "canonical": 61203377, "stored": 18800412, "metadata": 4210688, "file": 24117248, "free": 1036288, "dedupe": 6.746, "compression": 3.255 }
+{
+  "logical": 101087,
+  "canonical": 132603,
+  "stored": 58521,
+  "metadata": 251680,
+  "file": 270336,
+  "free": 0,
+  "dedupe": 0.762328,
+  "compression": 2.265905
+}
 ```
 
 ## `operator.store.commits(branch, pageSize?, pagePos?)`

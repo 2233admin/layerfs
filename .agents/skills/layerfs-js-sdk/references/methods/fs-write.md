@@ -1,8 +1,8 @@
 # fs write methods
 
-> **Status:** Current general guide. Part of the `layerfs-js-sdk` skill. Fields are
-> read from source on `main`; example outputs show the shape and are not yet captured
-> from a live run. Ids are 66 hex characters, shortened here as `"9f3c…"`.
+> **Status:** Current general guide. Part of the `layerfs-js-sdk` skill. Examples were
+> captured live in issue #334 Phase A at `b30e4fb8f`. Opaque IDs are shortened;
+> the full replies and trace are in `core/target/issue334/phase-a/`.
 
 Examples use `layerfs` as connected in [SKILL.md](../../SKILL.md#connect-to-a-project) and work on the Branch
 `"work"`.
@@ -50,7 +50,12 @@ Creates or replaces one file with `content`.
 const r = await layerfs.fs.write("work", "/src/cart.js", source, "cart: add Cart class");
 ```
 ```json
-{ "kind": "Committed", "branch": "work", "head": "9f3c…", "commit": { "id": "9f3c…", "parent": "77e1…", "message": "cart: add Cart class", "…": "…" } }
+{
+  "kind": "UpToDate",
+  "branch": "work",
+  "head": "12804de7ce8d…",
+  "root": "41a9cf49d9b2…"
+}
 ```
 
 ## `fs.edit(branch, path, oldText, newText, message?)`

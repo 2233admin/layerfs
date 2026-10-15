@@ -18,7 +18,222 @@ traces nothing.
 ## One line
 
 ```json
-{"layerfs_trace":1,"id":"9f3c21aa-12","step":"012 cart: add tests","method":"sandbox.commit","args":{"path":"/workspaces/3","message":"cart: tests pass","sandbox":"sb_…"},"start":"2026-10-15T09:12:01.120Z","scope":"…","ms":184.2,"ok":true,"kind":"Committed","commit":"c41d…","sizes":{"logical":5210344,"newCanonical":48211,"newStored":21007,"newMetadata":9120},"daemon":[{"timing":[{"name":"commit","ms":171.9,"children":[{"name":"capture","ms":12.0},{"name":"construct","ms":121.4},{"name":"publish","ms":31.0},{"name":"install","ms":7.5}]}],"storage":{"pack_write_bytes":21007,"…":0},"construction":{"files_constructed":37,"…":0}}]}
+{
+  "layerfs_trace": 1,
+  "id": "c5c6a04c-4",
+  "step": "005 A: sandbox group",
+  "method": "sandbox.commit",
+  "args": {
+    "sandbox": "sb_2f8874ceab4c25ed246aeaf7f100a03cb6b241a6949b87ec6da5bece5bda40e8",
+    "path": "/workspaces/1",
+    "message": "save hello.txt",
+    "force": false
+  },
+  "start": "2026-10-15T17:28:16.091Z",
+  "scope": "b6941b1af132…",
+  "ms": 9.265,
+  "ok": true,
+  "kind": "Committed",
+  "commit": "12c20c75063c…",
+  "sizes": {
+    "logical": 124,
+    "newCanonical": 1736,
+    "newStored": 1508,
+    "newMetadata": 1073
+  },
+  "daemon": [
+    {
+      "timing": []
+    },
+    {
+      "timing": [
+        {
+          "name": "commit",
+          "ms": 3.881,
+          "children": [
+            {
+              "name": "capture",
+              "ms": 0.008,
+              "children": []
+            },
+            {
+              "name": "producer",
+              "ms": 0.063,
+              "children": []
+            },
+            {
+              "name": "begin",
+              "ms": 1.392,
+              "children": []
+            },
+            {
+              "name": "construct",
+              "ms": 1.223,
+              "children": [
+                {
+                  "name": "captured.namespace",
+                  "ms": 1.205,
+                  "children": [
+                    {
+                      "name": "construct",
+                      "ms": 1.203,
+                      "children": [
+                        {
+                          "name": "file",
+                          "ms": 0.09,
+                          "children": [
+                            {
+                              "name": "content.runs.small",
+                              "ms": 0.002,
+                              "children": [
+                                {
+                                  "name": "content.encode",
+                                  "ms": 0,
+                                  "children": []
+                                },
+                                {
+                                  "name": "content.identify",
+                                  "ms": 0,
+                                  "children": []
+                                },
+                                {
+                                  "name": "content.emit",
+                                  "ms": 0,
+                                  "children": []
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "name": "update",
+                          "ms": 0.392,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "head",
+              "ms": 0.057,
+              "children": []
+            },
+            {
+              "name": "logical.known",
+              "ms": 0.007,
+              "children": []
+            },
+            {
+              "name": "finish",
+              "ms": 0.439,
+              "children": []
+            },
+            {
+              "name": "logical.count",
+              "ms": 0.132,
+              "children": []
+            },
+            {
+              "name": "validate",
+              "ms": 0.282,
+              "children": []
+            },
+            {
+              "name": "publish",
+              "ms": 0.16,
+              "children": []
+            },
+            {
+              "name": "install",
+              "ms": 0.098,
+              "children": []
+            }
+          ]
+        }
+      ],
+      "storage": {
+        "policy": 1,
+        "locate": 9,
+        "read_packs": 0,
+        "read_pack_selections": 8,
+        "whole_selected": 8,
+        "whole_due_density": 0,
+        "whole_due_singleton": 0,
+        "whole_due_small": 8,
+        "whole_due_reuse": 0,
+        "range_selected": 0,
+        "range_scan_bytes": 0,
+        "range_acquired_bytes": 0,
+        "range_materialized_bytes": 0,
+        "value_groups": 3,
+        "signatures": 1,
+        "reserve": 1,
+        "initial_reservations": 1,
+        "reservation_refills": 0,
+        "publish": 2,
+        "payload_reads": 2,
+        "payload_read_bytes": 545,
+        "pack_read_bytes": 5791,
+        "pack_write_bytes": 1508,
+        "pooled_packs": 0,
+        "pooled_groups": 2,
+        "reserved_directory_bytes": 0,
+        "ordinal_reservations": 1,
+        "locator_hits": 82,
+        "locator_misses": 26,
+        "locator_evictions": 0,
+        "locator_eviction_probes": 0,
+        "locator_second_chances": 0,
+        "locator_bookkeeping_live_peak_bytes": 152,
+        "pack_hits": 89,
+        "pack_misses": 8,
+        "pack_evictions": 0,
+        "pack_evicted_bytes": 0,
+        "directory_validations": 189,
+        "directory_unshared_walks": 189,
+        "directory_entry_bounds": 189,
+        "prefetch_group_decodes": 3,
+        "forced_seals": 0
+      },
+      "construction": {
+        "inode_rows": 2,
+        "entry_rows": 1,
+        "inode_pages": 1,
+        "entry_pages": 1,
+        "change_pages": 6,
+        "largest_page": 2,
+        "parent_points": 1,
+        "base_lookups": 1,
+        "headers_written": 1,
+        "headers_dropped": 0,
+        "values_written": 2,
+        "fresh_serials": 1,
+        "tombstones_skipped": 0,
+        "files_constructed": 1,
+        "files_unchanged": 0,
+        "symlinks": 0,
+        "metadata_built": 1,
+        "metadata_patched": 1,
+        "record_jobs": 43,
+        "header_opens": 8,
+        "header_rows": 8,
+        "header_points": 11,
+        "change_opens": 6,
+        "change_rows": 6,
+        "change_points": 2,
+        "value_opens": 4,
+        "value_rows": 8,
+        "value_points": 3,
+        "fresh_opens": 4,
+        "fresh_rows": 4,
+        "fresh_points": 16
+      }
+    }
+  ]
+}
 ```
 
 | Field | Meaning |

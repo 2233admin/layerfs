@@ -1,8 +1,8 @@
 # project methods
 
-> **Status:** Current general guide. Part of the `layerfs-js-sdk` skill. Fields are
-> read from source on `main`; example outputs show the shape and are not yet captured
-> from a live run. Ids are 66 hex characters, shortened here as `"9f3c…"`.
+> **Status:** Current general guide. Part of the `layerfs-js-sdk` skill. Examples were
+> captured live in issue #334 Phase A at `b30e4fb8f`. Opaque IDs are shortened;
+> the full replies and trace are in `core/target/issue334/phase-a/`.
 
 Examples use `layerfs` as connected in [SKILL.md](../../SKILL.md#connect-to-a-project).
 
@@ -41,10 +41,16 @@ printf '# Shop\n' > /work/shop-skeleton/README.md
 
 ```js
 const r = await layerfs.project.init("/work/shop-skeleton");
-console.log(r.kind, r.layer);
+console.log(JSON.stringify(r, null, 2));
 ```
 ```json
-{ "kind": "Initialized", "project": "shop", "layer": "41ab…" }
+{
+  "kind": "Initialized",
+  "project": "shop-a-methods",
+  "layer": "324afe090aa7…",
+  "root": "e34e2dc43565…",
+  "store": "/Users/yifanxu/.codex/worktrees/issue334-shop-run/layerfs/core/target/issue334/phase-a/home/shop-a-methods/sealed.sqlite"
+}
 ```
 
 **Notes:** run it once per project. Later processes with the same `LAYERFS_HOME` find
@@ -75,7 +81,26 @@ Lists the project's Branches, including `main`.
 ```js
 const page = await layerfs.project.list_branches();
 const exists = page.items.some((b) => b.name === "cart");
+console.log(JSON.stringify(page, null, 2));
 ```
 ```json
-{ "items": [{ "name": "cart", "id": "07d2…", "base": "41ab…", "head": "9f3c…", "forkedFrom": "41ab…" }], "hasMore": false, "nextPagePos": null }
+{
+  "items": [
+    {
+      "name": "main",
+      "id": null,
+      "base": "3279dac7de68…",
+      "head": null
+    },
+    {
+      "name": "work",
+      "id": "1190a141ae4473594aaf0536f674a3fb99",
+      "base": "32a35edb1f9f…",
+      "head": "12804de7ce8d…",
+      "forkedFrom": "32a35edb1f9f…"
+    }
+  ],
+  "hasMore": false,
+  "nextPagePos": null
+}
 ```
