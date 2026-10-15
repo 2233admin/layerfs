@@ -155,6 +155,11 @@ The [zero-run derivation](../issues/307/S5-HOLE-CONTRACT.md) preserves the froze
 chooses whole-file representation; chunked holes scan a boundary chunk and tail,
 then reuse complete chunks and mapping subtrees. The existing unfinished-page
 lookahead/final partition produces the same root as ordinary streaming.
+When a short repeated run is consumed while flushing a mixed prefix, the
+remaining pending suffix keeps its original entries. Uniform-page reuse starts
+only while repeated input remains after that prefix has been consumed. The
+external `runs` regression covers short tails that end at this flush boundary;
+issue #337 retains the original Cargo-output Commit failure and diagnosis.
 Worst-case run work is O(chunk bytes + unfinished capacity times tree height),
 with logarithmic height and bounded resident boundary pages. Actual data still
 costs its bytes. Source/consumer failures stop the one attempt, and synchronous
