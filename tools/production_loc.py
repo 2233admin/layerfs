@@ -9,6 +9,11 @@ development tools, docs, manifests and generated artifacts are excluded. Legacy
 inline #[cfg(test)] items are removed before counting, because the reference tree
 keeps tests inside src/.
 
+The JavaScript SDK is its own scope, `sdk`: the Node binding's Rust under
+sdk/js/native/src and the package's JavaScript under sdk/js/src. JavaScript
+comments are blanked by a scanner that knows line and block comments and
+single, double and template strings (the package uses no regex literals).
+
 Runtime SQL is counted for both scopes: a candidate package that ships schema or
 query text under <crate>/sql/ contributes it exactly like the reference schema.
 Per-file reporting uses the same classification as the totals, and prints the
@@ -281,6 +286,36 @@ def item_end(code: str, start: int) -> int:
     return len(code)
 
 
+def blank_js(source: str) -> str:
+    """Blank JavaScript comments, keeping every newline."""
+    out = list(source)
+    index = 0
+    length = len(source)
+    while index < length:
+        if source.startswith("//", index):
+            while index < length and source[index] != "\n":
+                out[index] = " "
+                index += 1
+            continue
+        if source.startswith("/*", index):
+            end = source.find("*/", index + 2)
+            end = length if end < 0 else end + 2
+            for position in range(index, end):
+                if source[position] != "\n":
+                    out[position] = " "
+            index = end
+            continue
+        if source[index] in "'\"`":
+            quote = source[index]
+            index += 1
+            while index < length and source[index] != quote:
+                index += 2 if source[index] == "\\" else 1
+            index += 1
+            continue
+        index += 1
+    return "".join(out)
+
+
 def blank_sql(source: str) -> str:
     """Blank -- line comments and block comments, keeping line numbering."""
     lines = []
@@ -296,19 +331,42 @@ def counted_lines(path: Path) -> int:
         text = blank_inline_tests(blank_rust(text))
     elif path.suffix == ".sql":
         text = blank_sql(text)
+    elif path.suffix == ".js":
+        text = blank_js(text)
     return sum(1 for line in text.splitlines() if line.strip())
+
+
+SCOPES = ("core", "reference", "sdk")
 
 
 def scope_base(root: Path, scope: str) -> Path:
     if scope == "core":
         return root / "core" / "crates"
+    if scope == "sdk":
+        return root / "sdk" / "js"
     return root / "crates"
+
+
+def sdk_files(base: Path) -> list:
+    """The binding's Rust and the package's JavaScript."""
+    files = []
+    if (base / "native" / "src").is_dir():
+        files += sorted((base / "native" / "src").rglob("*.rs"))
+    if (base / "src").is_dir():
+        files += sorted((base / "src").rglob("*.js"))
+    return [path for path in files if not any(part in SKIP_DIRS for part in path.parts)]
+
+
+def sdk_crate(base: Path, path: Path) -> str:
+    return "layerfs-node" if path.relative_to(base).parts[0] == "native" else "@layerfs/sdk"
 
 
 def scope_files(root: Path, scope: str) -> list:
     base = scope_base(root, scope)
     if not base.is_dir():
         return []
+    if scope == "sdk":
+        return sdk_files(base)
     files = []
     for path in sorted(base.rglob("*")):
         if not path.is_file():
@@ -342,14 +400,17 @@ def physical_lines(path: Path) -> int:
 def per_file(root: Path) -> dict:
     """Per-file production LOC and physical lines for both scopes."""
     result = {"root": str(root), "files": []}
-    for scope in ("core", "reference"):
+    for scope in SCOPES:
         base = scope_base(root, scope)
         for path in scope_files(root, scope):
+            crate = (
+                sdk_crate(base, path) if scope == "sdk" else path.relative_to(base).parts[0]
+            )
             result["files"].append(
                 {
                     "path": str(path.relative_to(root)),
                     "scope": scope,
-                    "crate": path.relative_to(base).parts[0],
+                    "crate": crate,
                     "production_loc": counted_lines(path),
                     "physical_lines": physical_lines(path),
                 }
@@ -359,14 +420,17 @@ def per_file(root: Path) -> dict:
 
 def scan(root: Path) -> dict:
     result = {"root": str(root), "scopes": {}, "combined": 0}
-    for scope in ("core", "reference"):
+    for scope in SCOPES:
         per_crate = {}
         total = 0
         for path in scope_files(root, scope):
             lines = counted_lines(path)
             total += lines
             parts = path.relative_to(root).parts
-            crate = parts[2] if scope == "core" else parts[1]
+            if scope == "sdk":
+                crate = sdk_crate(scope_base(root, scope), path)
+            else:
+                crate = parts[2] if scope == "core" else parts[1]
             per_crate[crate] = per_crate.get(crate, 0) + lines
         result["scopes"][scope] = {
             "files": len(scope_files(root, scope)),
@@ -401,7 +465,7 @@ def main() -> int:
     if args.json:
         print(json.dumps(result, indent=2, sort_keys=True))
         return 0
-    for scope in ("core", "reference"):
+    for scope in SCOPES:
         entry = result["scopes"][scope]
         print(f"{scope:9s} {entry['lines']:7d} production lines in {entry['files']:4d} files")
         if args.detail:
