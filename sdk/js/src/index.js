@@ -27,8 +27,9 @@ const bind = (client, methods) =>
   Object.fromEntries(Object.entries(methods).map(([name, method]) => [name, async (...args) => method(client, ...args)]));
 
 export class LayerFS {
-  /** Selects a project without filesystem, native addon or network I/O. */
-  constructor(projectName) {
+  /** Selects a project without filesystem, native addon or network I/O.
+   * `options.trace` names a per-call trace file; it overrides LAYERFS_TRACE. */
+  constructor(projectName, options = {}) {
     if (typeof projectName !== "string" || !/^[a-z0-9](?:[a-z0-9_.-]{0,61}[a-z0-9])?$/.test(projectName)) {
       throw new LayerFSError("InvalidInput", "a project name is required", null);
     }
@@ -36,6 +37,7 @@ export class LayerFS {
     const env = process.env;
     this.options = {
       home: env.LAYERFS_HOME,
+      trace: options.trace ?? (env.LAYERFS_TRACE || undefined),
       deploy: {
         docker: env.LAYERFS_DOCKER,
         image: env.LAYERFS_IMAGE,

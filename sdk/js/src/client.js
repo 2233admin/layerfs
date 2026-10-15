@@ -2,15 +2,19 @@
 // `{ refused }`; a refusal becomes a LayerFSError. Nothing is retried.
 import { native } from "./native.js";
 import { LayerFSError } from "./errors.js";
+import { traced } from "./trace.js";
 
-/** Runs one operation once and returns its value or throws its refusal. */
-export async function invoke(op, args) {
-  if (op.startsWith("operator.")) throw new LayerFSError("UnknownMethod", "operator methods require the operator entry point", null);
-  return outcome(await native().call(op, args));
+/** Runs one operation once and returns its value or throws its refusal;
+ * `trace` names the file that gets this call's trace line. */
+export function invoke(op, args, trace) {
+  return traced(trace, op, args, async () => {
+    if (op.startsWith("operator.")) throw new LayerFSError("UnknownMethod", "operator methods require the operator entry point", null);
+    return outcome(await native().call(op, args));
+  });
 }
 
-export async function invokeOperator(op, args) {
-  return outcome(await native().operatorCall(op, args));
+export function invokeOperator(op, args, trace) {
+  return traced(trace, op, args, async () => outcome(await native().operatorCall(op, args)));
 }
 
 function outcome(answer) {
@@ -45,7 +49,7 @@ export function deployment(options = {}) {
 
 /** One client's deployment selection, including cross-process discovery home. */
 export function invokeClient(client, op, args) {
-  return invoke(op, { ...args, project: client.projectName, home: client.options.home, deploy: client.options.deploy });
+  return invoke(op, { ...args, project: client.projectName, home: client.options.home, deploy: client.options.deploy }, client.options.trace);
 }
 
 export function page(pageSize = 50, pagePos = 0) {

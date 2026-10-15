@@ -34,6 +34,7 @@ private service Sandbox. Mount does not scan or materialize the complete tree.
 | `LAYERFS_VOLUME` | Existing named local VM volume shared by the project's daemons. |
 | `LAYERFS_DAEMON` | Host path to the built Linux daemon executable. |
 | `LAYERFS_NATIVE` | Optional addon path; defaults to `native/layerfs.node`. |
+| `LAYERFS_TRACE` | Optional per-call trace file (see [Call trace](#call-trace)); unset means no trace. |
 
 The same authorized home permits a fresh Node process to use a saved Sandbox id
 and mount path directly. Reopening validates the full container id, deployment,
@@ -132,6 +133,33 @@ or per-path physical allocation. Per-file physical attribution remains null;
 revision diagnostics explicitly disclose their 1000-revision count bound.
 Overlay payload counts stored cell bytes including validity masks; metadata row
 counts are reported without inventing exclusive byte attribution.
+
+## Call trace
+
+`LAYERFS_TRACE=<file>`, or `new LayerFS(project, { trace: file })` (the option
+wins), appends one JSON line to `file` for every SDK and operator call that
+reaches the native binding, including the client's own `sandbox.service` call.
+Unset, nothing is written and nothing changes. A failed trace write is dropped;
+it never changes a value, a refusal or the call count. Argument checks the
+JavaScript methods make before the call (for example `page` bounds) are refused
+without a trace line.
+
+```json
+{"layerfs_trace":1,"id":"9f3c21aa-12","method":"fs.write","args":{"branch":"feature","path":"/README.md","contentBytes":6,"message":"Update introduction","sandbox":"sb_…"},"start":"2026-10-15T09:12:01.120Z","ms":41.733,"ok":true,"commit":"…","sizes":{"logical":120,"newCanonical":40,"newStored":30,"newMetadata":8}}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `layerfs_trace` | Format version, `1`. |
+| `id` | `<run>-<n>`: a random per-process run prefix and the call's sequence number. |
+| `method` | The binding method, for example `fs.read`, `sandbox.commit`, `operator.store.stats`. |
+| `args` | Short summary: text arguments (paths, refs, names, Sandbox id, command, message) cut to 200 characters; numbers and flags; `content`, `bytes`, `oldText` and `newText` as `<name>Bytes` byte counts; `apply` changes as `changes` (count) and `changeBytes`. Never file contents; `project`, `home` and `deploy` are left out. |
+| `start`, `ms` | Wall-clock start (ISO 8601) and elapsed wall milliseconds measured in the calling process, including the native queue and the daemon round trip. |
+| `ok` | `true` for a value; `false` with `code` and `message` for a refusal. |
+| `kind`, `commit`, `sizes` | When the value carries them: its `kind`, the Commit id, and that Commit's `logical`, `newCanonical`, `newStored` and `newMetadata` byte counters. |
+
+Concurrent calls append whole lines; order follows completion, so join by `id`.
+The trace is diagnostic timing, not a benchmark measurement.
 
 ## Builds and compatibility
 
