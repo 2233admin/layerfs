@@ -265,7 +265,9 @@ Added
 6. **One process at a time per Sandbox**; a second one gets `Busy`. Ids are reusable:
    a Sandbox id and mount path work from any later process with the same
    `LAYERFS_HOME`, so a long task can be split into small scripts.
-7. **Clean up:** commit or discard, unmount every Workspace, close your Sandboxes.
+7. **Clean up:** commit or discard, unmount every Workspace, and close your Sandboxes.
+   With `LAYERFS_TRACE` set, first save each container's daemon log as described in
+   [`sandbox.close`](references/methods/sandbox.md#sandboxcloseid); close deletes it.
 
 ## Which method for which job
 

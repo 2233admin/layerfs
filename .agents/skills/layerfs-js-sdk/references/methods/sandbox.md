@@ -336,3 +336,9 @@ Stops and deletes the Sandbox container. The project and its history are unaffec
 **Returns:** `{ kind: "Closed", id }`.
 
 **Refusals:** `MountsActive` (unmount every Workspace first), `Busy`, `NoSuchSandbox`.
+
+When `LAYERFS_TRACE` is set, preserve the daemon log **before** this call: on the
+host, save `docker logs <container-id> > <run>/daemon-<container-id>.log 2>&1`,
+where `<container-id>` is the Sandbox id with `sb_` removed and `<run>` is the
+folder containing `LAYERFS_TRACE`. Closing deletes the container and its log.
+This is diagnostic collection; project reads and changes still use the SDK.
