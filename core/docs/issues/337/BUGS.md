@@ -93,3 +93,29 @@ separately. All processes, Workspaces and Sandboxes, including the service,
 closed after both daemon streams were preserved. The complete diagnostic report,
 92-step command ledger and immutable receipts are retained in the Builder 1 raw
 folder; this is no benchmark, release or power-loss qualification.
+
+## Independent-run environment setup
+
+| ID | Classification | Evidence / diagnosis | Status |
+| --- | --- | --- | --- |
+| C-ENV-01 | Orchestrator setup error | Builder 2 step 001 Init returned `Unauthorized` because the provided HOME was owned by uid 501 but mode 0755. The SDK already documents and enforces a current-user private directory with no group/other access. Original refusal remains `receipts/init.json`. Before changing anything, the orchestrator verified HOME and the assigned volume were empty. | HOME corrected to 0700; a newly identified step 002 Init passed, separate step 003 initial stats preceded all forks/scaffolding. SDK/daemon/skill bytes unchanged; no Store existed before the correction. Full independent acceptance remains separately reported in RESULTS.md. |
+
+The standalone preparation script now creates HOME with mode 0700. This was
+not a product defect or a reason to replay an uncertain operation. The first
+refusal was before effects, and its exact evidence and environment inspection
+remain in the independent raw receipts and `ENVIRONMENT-CORRECTION.json`.
+
+## Independent run completion observations
+
+Builder 2 completed every milestone and full fresh-final-main acceptance without
+product/SDK/skill edits. All 82 Bash exits were 0; the setup-only Init refusal
+above remains retained. Final immutable report and diagnostic evidence are
+reproduced or linked in [RESULTS.md](RESULTS.md).
+
+The final process audit had no live application or browser processes and 24
+exited Chromium zombies, cleared by explicit container close. The explicit
+daemon's final stderr retains a ConnectionFailure/UnexpectedEof with no received
+bytes or decoded request. The committed connection handler transfers precisely
+that unowned connection diagnostic to stderr and releases the slot; handshake
+versus later receive and peer identity remain unknown. All SDK product outcomes
+are known. Neither observation required a product fix or altered acceptance.

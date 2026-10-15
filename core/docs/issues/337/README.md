@@ -48,12 +48,15 @@ require exact first-parent/staged-tree production LOC comparisons.
 ## Progress
 
 - [x] Phase A frozen after live checks; see [PHASE-A.md](PHASE-A.md).
-- [ ] Builder 1 complete.
-- [ ] Fixed product rebuilt and independent environment installed.
-- [ ] Builder 2 full fresh run complete.
-- [ ] Results, exports and issue updates ready for owner closure review.
+- [x] Builder 1 complete.
+- [x] Fixed product rebuilt and independent environment installed.
+- [x] Builder 2 full fresh run complete.
+- [x] Results, exports and issue updates ready for owner closure review.
 
 Frozen inputs: [FREEZE.json](FREEZE.json), [ENVIRONMENT.json](ENVIRONMENT.json),
 [DEPENDENCIES.md](DEPENDENCIES.md), [ACCEPTANCE.md](ACCEPTANCE.md),
 [FIXTURES.md](FIXTURES.md), [BUILDER-COMMON.md](BUILDER-COMMON.md) and
 [BUILDER1.md](BUILDER1.md). No repository push/PR/main merge is authorized.
+
+[Completed results](RESULTS.md) include both acceptance runs, the independent
+report verbatim, product fixes, diagnostic tables and verified external exports.
