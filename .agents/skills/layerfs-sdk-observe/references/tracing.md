@@ -1,9 +1,8 @@
 # Call trace
 
 > **Status:** Current general guide. Part of the `layerfs-sdk-observe` skill. Describes the
-> #333 trace on branch `claude/issue333-telemetry-e4e6cc` (commits `7bf36a288` to
-> `4dd90762d`), not yet merged to `main`. Its source of truth is the "Call trace"
-> section of `sdk/js/README.md` on that branch.
+> #333 trace, merged to `main` in `62b225766`. Its source of truth is the "Call trace"
+> section of [`sdk/js/README.md`](../../../../sdk/js/README.md).
 
 ## Turning it on
 

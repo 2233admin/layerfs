@@ -21,6 +21,7 @@ inputs to 1.0.0 unless a 1.0.0 issue picks them up explicitly.
 | [#331](https://github.com/Ephemeral-AI-Lab/layerfs/issues/331) | Demos a newcomer can run, on the live terminal UI | One-command start; selected stories pass live at the release candidate; walkthrough and manual section published |
 | [#332](https://github.com/Ephemeral-AI-Lab/layerfs/issues/332) | Benchmark campaign preparation | Specification frozen; harness dry run per family on `main`; environment and report template ready |
 | [#333](https://github.com/Ephemeral-AI-Lab/layerfs/issues/333) | Troubleshooting telemetry: SDK call trace, phase timing, observed daemon diagnostics | Trace, Commit/mount/merge phase timing and joined daemon records on and off tested; docs and overhead recorded |
+| [#334](https://github.com/Ephemeral-AI-Lab/layerfs/issues/334) | SDK skill verified live; an e-commerce project built on LayerFS by a bug-fixing agent, then by a fresh agent | Every skill example captured live; both builds finished or blockers recorded; storage and per-operation speed results written ([plan](../../../core/docs/issues/334/README.md)) |
 
 ## Decisions still needed from the owner
 

@@ -1,7 +1,7 @@
 # Storage metrics over a long history
 
 > **Status:** Current general guide. Part of the `layerfs-sdk-observe` skill. The operator
-> statistics exist on `main`; trace `sizes` and `commit` come from #333 (not yet merged).
+> statistics and the trace `sizes` and `commit` fields (#333) are on `main`.
 
 ## Sources
 

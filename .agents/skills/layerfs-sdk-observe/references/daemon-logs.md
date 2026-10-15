@@ -1,8 +1,7 @@
 # Daemon logs and observation records
 
-> **Status:** Current general guide. Part of the `layerfs-sdk-observe` skill. The records
-> exist on `main`, but only #333 (not yet merged) makes SDK calls request them and adds
-> the decoder.
+> **Status:** Current general guide. Part of the `layerfs-sdk-observe` skill. The records,
+> traced SDK calls requesting them and the decoder (#333) are on `main`.
 
 ## What the daemon writes
 
@@ -24,7 +23,7 @@ There is no general log level or logging framework.
 
 ```bash
 docker logs <container> > <run>/daemon-<container>.log 2>&1
-# from the LayerFS checkout (#333 branch until it merges)
+# from the LayerFS checkout
 python3 tools/decode_observations.py --trace <run>/trace.jsonl < <run>/daemon-<container>.log > <run>/daemon-<container>.jsonl
 ```
 
