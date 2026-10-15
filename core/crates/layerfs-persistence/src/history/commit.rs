@@ -220,10 +220,6 @@ pub(crate) fn new_commit(
             ],
         )
         .map_err(sql)?;
-        tx.execute(
-            "statistics_logical",
-            params![record.meta.statistics.logical as i64],
-        )?;
         return Ok(record);
     }
     // An identical Commit already exists: it keeps its own recorded time.

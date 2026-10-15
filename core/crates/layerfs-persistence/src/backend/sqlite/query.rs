@@ -8,9 +8,6 @@ pub(crate) fn history(key: &str) -> Result<&'static str, BackendError> {
         "statistics_totals" => Ok(include_str!(
             "../../../sql/sqlite/queries/history/statistics_totals.sql"
         )),
-        "statistics_logical" => Ok(include_str!(
-            "../../../sql/sqlite/queries/history/statistics_logical.sql"
-        )),
         "allocation_advance_scope" => Ok(include_str!(
             "../../../sql/sqlite/queries/history/allocation_advance_scope.sql"
         )),

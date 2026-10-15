@@ -151,3 +151,10 @@ CREATE UNIQUE INDEX layers_source ON layer(source_branch_id, source_commit_id)
 CREATE UNIQUE INDEX commit_identity ON "commit"(layer_stack_id, commit_id);
 CREATE UNIQUE INDEX branch_identity ON branch(layer_stack_id, branch_id);
 CREATE UNIQUE INDEX branch_names ON branch(layer_stack_id, name);
+
+CREATE TRIGGER commit_logical AFTER INSERT ON "commit" BEGIN
+ UPDATE store_totals SET logical=logical+new.logical WHERE id=1;
+END;
+CREATE TRIGGER layer_logical AFTER INSERT ON layer BEGIN
+ UPDATE store_totals SET logical=logical+new.logical WHERE id=1;
+END;

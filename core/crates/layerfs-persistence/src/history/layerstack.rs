@@ -81,7 +81,6 @@ pub(crate) fn initialize_layerstack(
         ],
     )
     .map_err(sql)?;
-    tx.execute("statistics_logical", params![request.logical as i64])?;
     layer_stack(tx, request.stack)?.ok_or(HistoryError::Integrity("LayerStack insertion"))
 }
 
@@ -341,7 +340,6 @@ pub(crate) fn add_layer(
             ],
         )
         .map_err(sql)?;
-        tx.execute("statistics_logical", params![layer.logical as i64])?;
     }
     let advanced = tx
         .execute(
