@@ -38,8 +38,8 @@ Phase A adds `ENVIRONMENT.json`, `DEPENDENCIES.md`, `LEAD-PROMPT.md`,
 
 ## Progress
 
-- [ ] Phase 0: documents approved by owner.
-- [ ] Phase A: environment pinned, team mechanics and LayerFS team load proved, inputs frozen.
+- [x] Phase 0: documents approved by owner; PR #341 merged at `5d9008e47`.
+- [x] Phase A: environment and live gates passed; revision 1 inputs frozen before Build 1 Init (see PHASE-A.md and FREEZE.json).
 - [ ] Build 1 complete with full acceptance.
 - [ ] Product rebuilt; Build 2 standalone inputs frozen.
 - [ ] Build 2 complete with full acceptance.

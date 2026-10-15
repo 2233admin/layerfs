@@ -12,7 +12,7 @@ original evidence; later understanding is added, never rewritten.
 | `P-` | LayerFS product defect (daemon, Store, FUSE, SDK code) |
 | `G-` | Skill or guidance gap |
 | `T-` | Codex team mechanics (spawning, messaging, slots, handoffs) |
-| `E-` | Environment correction before Init |
+| `E-` | Environment or orchestration correction; state whether before/after Init |
 | `A-` | Application problem owned by the team, recorded only when it affected LayerFS evidence |
 
 ## Entry template
@@ -31,6 +31,93 @@ original evidence; later understanding is added, never rewritten.
 
 ## Entries
 
+### E-006 — Tiny probe fixture omitted parent directories
+
+- Found: Phase A3 setup after Init, probe agent.
+- Evidence: `phase-a/a3/setup.*`, `calls/control-0002.json`,
+  `setup-parents.*` and the probe ledger.
+- Diagnosis: fs.apply write index 3 targeted `/src/` without an earlier explicit
+  mkdir. NoSuchPath was definite; inspection showed no partial package.json.
+- Fix: inspect the retained Branch, then issue a distinctly named atomic change
+  including parent mkdir operations. No product change or blind replay.
+- Regression: all twelve later install/syntax/test/Commit/unmount cycles passed.
+- Verification: corrected fixture and histories remain retained in a3.
+- Effect on the run: probe setup failure; no Crew implementation had started.
+
+### E-007 — Docker log CLI needs a URI for an explicit socket host
+
+- Found: Phase A3 halt cleanup after Init, probe agent.
+- Evidence: `phase-a/a3/halt-close-0.*`, corrected `halt-close-unix-*` receipts
+  and both daemon streams for every closed Sandbox.
+- Diagnosis: the SDK accepts a raw Unix socket pathname; Docker CLI --host
+  interpreted that pathname incorrectly without the unix:// scheme.
+- Fix: normalize the diagnostic CLI host argument before a separately identified
+  log collection. No close occurred until both streams were saved successfully.
+- Regression: every later probe close saved both streams using the corrected URI.
+- Verification: all eighteen explicit Sandbox lifetimes have saved logs and Closed.
+- Effect on the run: retained diagnostic-command failure; no log loss.
+
+### E-008 — Export preparation supplied the wall timeout as a positional argument
+
+- Found: stopped-export tooling preparation after Phase A execution, export agent.
+- Evidence: export agent tool return and its export preparation ledger.
+- Diagnosis: wall.py 115 /bin/cat treated 115 as the executable and raised
+  FileNotFoundError before the instruction read or any volume access.
+- Fix: use the supplied wall.py --seconds 115 -- COMMAND argument form.
+- Regression: all export commands retain the corrected explicit wrapper/deadline.
+- Verification: stopped copy, WAL-visible read-only verification and explicit
+  WAL/OFF portable backup succeeded; final manifest owns the exact results.
+- Effect on the run: orchestration argument correction, no Store or product effect.
+
+### E-005 — Main merge tree differed from the PR head's expected tree
+
+- Found: owner-requested PR #343 main merge, main agent, 2026-10-16.
+- Evidence: receipts `020-pr343-merge-loc.*`, `022-pr343-actual-merge-loc.*`
+  and [public correction](https://github.com/Ephemeral-AI-Lab/layerfs/pull/343#issuecomment-6203080469).
+- Diagnosis: the merge message's expected tree was the reviewed PR head tree
+  `67b9aae440f0f740489b074ec6336714e05da07f`. Actual main also preserved the
+  six #340 planning documents already merged by #341, so its merged tree was
+  `d1383d3448973cf0bf85510d0cf9cd1b713ed1f2`. Product source was identical.
+- Fix: recompute the exact actual first-parent snapshots with the same counter
+  and retain a public correction. Do not rewrite main history.
+- Regression: for the campaign integration, preview `git merge-tree --write-tree`
+  and final `git write-tree` both returned `75bf028b2029d842bbaf071f2893afafa214b64e`.
+- Verification: actual main production LOC remains 87,657 -> 87,680 (+23);
+  campaign integration 87,658 -> 87,681 (+23), exact tree confirmed at commit
+  `123fee2a22171fdb03ebad69e47f76c46231c763`.
+- Effect on the run: source accounting correction retained; owner-requested #342
+  diff fix integrated before the first freeze, then native rebuild repeated at
+  the combined source. No Crew application has started; the existing Store and Branches are retained.
+
+### E-004 — Early read-only build discovery omitted an explicit wall wrapper
+
+- Found: native rebuild preparation, rebuild agent, 2026-10-16 Asia/Singapore.
+- Evidence: `core/target/issue340/builds/LEDGER.md`, initial tool returns.
+- Diagnosis: the agent's initial instruction/discovery reads used the command tool
+  directly before switching to the supplied wall runner. Each finished below two
+  seconds, but the required explicit outer bound was absent.
+- Fix: all subsequent commands and every actual build use the explicit wall runner;
+  builds have outer 115-second and Linux inner 110-second limits. No product change.
+- Regression: actual bounded host and Linux build receipts retain commands/limits.
+- Verification: host dependency/addon and Linux dependency stages passed; final
+  Linux daemon build is pending at this entry. Final build manifest owns outcomes.
+- Effect on the run: retained procedure deviation. Do not claim every historical
+  preparatory command complied with the explicit-wrapper rule.
+
+### E-003 — Login shell removes the pinned Node runtime from PATH
+
+- Found: Phase A5 input review, main, 2026-10-16 Asia/Singapore.
+- Evidence: `core/target/issue340/phase-a/receipts/017-login-shell-runtime.*`.
+- Diagnosis: the image supplies Node/npm through `/opt/node/bin` in its configured
+  PATH. `bash -lc` replaces it with the login profile's PATH; both commands are
+  absent and the retained diagnostic exits 127. Ordinary `bash -c` passed A1.
+- Fix: before the first freeze, use ordinary `timeout 110 bash -c` in lead,
+  worker and acceptance prompts. Record exact executable paths in ENVIRONMENT.
+- Regression: A1 Workspace runtime command and A3's twelve npm/test executions
+  already used the ordinary shell and passed; no rerun of unchanged checks.
+- Verification: pinned Node 22.23.1 ran all 45 counter self-tests, receipt 016.
+- Effect on the run: input correction before Build 1, no product change.
+
 ### P-001 — Existing Sandbox selection was ignored by the JavaScript client
 
 - Found: Phase A3, six persistent clients, 2026-10-16 Asia/Singapore.
@@ -48,12 +135,12 @@ original evidence; later understanding is added, never rewritten.
   validator, preserving lazy construction and default discovery. The team uses
   one own Sandbox per agent for both Store calls and Bash; startup creation is
   sequenced before concurrent work. No connection budget, retry or daemon
-  algorithm changes. Commit and exact production LOC are recorded below when made.
+  algorithm changes. Commit `9f3f466cc9a00f5b3f402fb867bc41ac8c445345`; production LOC 87,657 -> 87,658 (delta +1), core 85,813 unchanged and SDK 1,844 -> 1,845. Exact first-parent/staged-tree counter record is in the commit message and receipt 015.
 - Regression: external `sdk/js/test/service-selection.mjs` covers public and
   operator routing, unchanged default discovery, invalid input, lazy construction
   and an exact selected-route refusal without substitution or replay. Before:
   five failed/two passed. After: seven passed, zero skipped.
-- Verification: six-client live follow-up and remaining scoped checks pending.
+- Verification: six persistent clients using six own selected Sandboxes passed concurrent public fs.read and branch.fork at combined source `123fee2a2`; evidence `a3/r2-public-own-service.*`. No Busy/EOF. Remaining A3/A4 gates continue separately. Both native artifacts were actually rebuilt before resumption.
 - Effect on the run: all six explicit Sandboxes and the shared service closed
   after both log streams were retained. Store and every Branch retained; halt
   snapshot at `a3-halt-snapshot.json`. No Build 1 Init has occurred.
