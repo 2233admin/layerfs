@@ -169,7 +169,7 @@ const OPS = {
   },
   // ---------------------------------------------------------- branch
   async "branch.fork"(a) {
-    const value = await this.layerfs.branch.fork(a.name, a.fromCommit ? this.m.real(a.fromCommit) : a.branch);
+    const value = await this.layerfs.branch.fork(a.name, this.at(a.branch || "main", a.fromCommit));
     return () => ({ kind: "Forked", branch: a.name, base: this.m.label("L", value.base), head: this.m.node(value.head), root: this.rootOf(a.name) });
   },
   async "branch.list_commits"(a) {

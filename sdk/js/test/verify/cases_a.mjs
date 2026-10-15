@@ -158,7 +158,7 @@ export const A = {
     const out = execFileSync(process.execPath, ["--input-type=module", "-e", script], { encoding: "utf8", timeout: 30000 });
     const other = JSON.parse(out.trim());
     check(ctx, "second process uses the same id", other.ok === "ok", other);
-    note(ctx, "Known gap: the binding keeps Sandboxes per process; a second process has no control channel for the id.");
+    note(ctx, "Historical A9 FAIL remains in Phase 2. Current comprehensive reopening proof is XPROCESS; this narrow status probe does not close that historical row.");
   },
 };
 
