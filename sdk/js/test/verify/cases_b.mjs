@@ -231,10 +231,10 @@ export const B = {
     await ctx.layerfs.branch.fork("late");
     await ctx.layerfs.fs.write("late", "/late.txt", "late\n");
     const merged = await ctx.layerfs.branch.merge("a", "b", "c");
-    const before = (await ctx.layerfs.project.list_branches()).items[0].base;
+    const before = (await ctx.layerfs.project.list_branches()).items.find(b => b.name === "main").base;
     const added = await ctx.layerfs.branch.publish("c");
     check(ctx, "Added", added.kind === "Added" && added.source.commit === merged.head && added.basedOn === before && added.overwrote.length === 0, added);
-    const main = (await ctx.layerfs.project.list_branches()).items[0].base;
+    const main = (await ctx.layerfs.project.list_branches()).items.find(b => b.name === "main").base;
     check(ctx, "main's head is the new Layer", main === added.publishedLayer.id && added.publishedLayer.parent === before, { main, layer: added.publishedLayer });
     const again = await ctx.layerfs.branch.publish("c");
     check(ctx, "UpToDate", again.kind === "UpToDate" && again.layer === added.publishedLayer.id, again);
