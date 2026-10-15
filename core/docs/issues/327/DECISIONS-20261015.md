@@ -21,14 +21,16 @@ proposals and Phase 2/3 receipts retain their original status and verdicts.
   participate in the new Commit identity; time remains outside it. Exec
   messages describe execution, appear in results, and create no history.
 - **A2:** Each text read/blame response returns at most 2,000 lines and
-  262,144 UTF-8 bytes, disclosing the requested/returned line positions and
+  262,144 UTF-8 bytes as a ceiling. The implemented control-frame window is
+  48 KiB including bounded reply values, disclosing the requested/returned line positions and
   truncation. Line numbering is 1-based and inclusive. LF separates lines;
   CRLF is preserved in text. An EOF newline creates no extra phantom line.
   A single huge line returns a UTF-8-aligned prefix with `lineTruncated`;
   continuation advances to the following line, so the omitted remainder is
   explicitly unavailable through this method. No byte-read method ships in
   0.1.7. Invalid UTF-8 or NUL is Binary. This is a response bound, not a file
-  size limit.
+  size limit. Blame uses bounded LCS with exact common edges; an oversized
+  changed middle is a removed/added block disclosed by `comparisonCoarse`.
 - **A3:** Apply accepts ordered `{ op, ... }` records for write/edit/mkdir/rm/cp/mv,
   resolves one head and publishes once. Refusals identify the failing index.
 - **A4:** Exact copy/move destinations; existing destination is Exists; same
@@ -36,7 +38,7 @@ proposals and Phase 2/3 receipts retain their original status and verdicts.
   symlinks, modes and copied-set hardlinks are preserved. Move retains
   timestamps; copy gives new timestamps. No overwrite option.
 - **A5:** Defaults 50/0; positive safe-integer pageSize at most 1,000 and
-  nonnegative safe-integer pagePos. Names use byte order, paths use path
+  nonnegative safe-integer pagePos. Names use byte order, paths use component-by-component byte
   order (grep then line), Commit history follows first parents newest first.
   Deep offsets may perform linear skipping in 0.1.7, through bounded windows
   with no resident collection of skipped entries. No silent clipping or

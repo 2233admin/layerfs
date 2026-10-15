@@ -1,6 +1,6 @@
 # SDK redesign and UI wiring: real-case verification
 
-> **Status:** Proposal; target LayerFS 0.1.7; not a released contract.
+> **Status:** Current #328 acceptance specification, 2026-10-15; not a release receipt.
 > Tracking: [issue #327](https://github.com/Ephemeral-AI-Lab/layerfs/issues/327).
 > Companion to [SPEC.md](SPEC.md). These checks prove behaviour against the real
 > product: the daemon, a real Store, a real Sandbox and FUSE Workspaces. They are
@@ -30,15 +30,14 @@
 
 | ID | Case | Steps | Must hold |
 | --- | --- | --- | --- |
-| A1 | Init and lazy client | `new LayerFS({ project })`; first call `project.init` | No I/O before the first call; `Initialized`; main has L0 |
-| A2 | Branch files | `fork feature`; `fs.write`, `edit`, `apply`, `mkdir`, `cp`, `mv`, `remove` with `{ branch }` | Each write is one Commit on `feature`; main unchanged; `apply` is one Commit |
+| A1 | Init and lazy client | `new LayerFS(projectName)`; first call `project.init` | No I/O before the first call; `Initialized`; main has L0 |
+| A2 | Branch files | `fork feature`; positional `fs.write`, `edit`, `apply`, `mkdir`, `cp`, `mv`, `rm` with Branch first and message last | Each write is one Commit on `feature`; main unchanged; `apply` is one Commit |
 | A3 | Reads at history | `fs.read`, `list`, `stat`, `grep` at the head and at an older Commit | Older reads return the older bytes; `NoSuchPath` and `IsDirectory` are typed refusals |
 | A4 | Diffs | `diff_files`, `diff_commits`, `diff_branches` | Equal versus Text; path-level kinds match the writes made |
-| A5 | Fork from a Commit | `branch.fork("try", { from: C3 })` | Metadata only: head is C3, no new objects |
-| A6 | Tool call | `harness.tool_call`: mount → `npm ci` → commit → unmount | Committed; the next mount sees `node_modules` with no reinstall |
-| A7 | Background process | `exec("npm run start &")`; `unmount` | `Busy` while it runs; after cancel through the runtime owner, `Dirty` then `unmount({ discard })` |
+| A5 | Fork from a Commit | `branch.fork("try", C3)` | Metadata only: head is C3, no new objects |
+| A7 | Background process | `operator.process.start(id, path, "npm run start")`; `unmount` | `Busy` while it runs; after cancel through the runtime owner, `Dirty` then `unmount({ discard })` |
 | A8 | Shared localhost | Server in Workspace 1; `curl` from Workspace 2 in the same Sandbox | Workspace 2 reaches the server |
-| A9 | No connect | Two processes use the same Sandbox id | Both work with the id alone; no reattach call exists |
+| A9 | Historical open row | Preserve Phase 2 FAIL and original receipt | Remains open in the historical ledger; new cross-process acceptance is XPROCESS |
 
 ## B. Commit, merge and conflict cases
 
@@ -54,7 +53,7 @@
 | B8 | Force | Stale Workspace, `commit({ force: true })` | Overwrites; the displaced head is reported |
 | B9 | Large and binary files | Both sides change a file above the text bound, and a binary file | Each conflicts whole; resident memory does not grow with file size |
 | B10 | `.lww` (cond.) | `.lww` includes `.gitignore`; two Workspaces build and commit | No conflict on `.next/`; the newer write is kept and reported |
-| B11 | Branch merge, fast-forward | `merge(a, b, { name: c })` where `b` is an ancestor of `a` | `Merged { fastForward }`; `c` points at `a`'s head; no new Commit |
+| B11 | Branch merge, fast-forward | `merge(a, b, c, message?)` where `b` is an ancestor of `a` | `Merged { fastForward }`; `c` points at `a`'s head; no new Commit |
 | B12 | Branch merge, clean | Different files on `a` and `b` | `c` has one new Commit with two parents; `a` and `b` unchanged |
 | B13 | Branch merge, conflict | Same line on `a` and `b` | `Conflict` lists the file with both lines; no Branch `c` exists afterwards |
 | B14 | Merge again | Make `a` and `b` agree on the line; merge again | `Merged`; `c` exists |
@@ -66,10 +65,9 @@
 | ID | Case | Must hold |
 | --- | --- | --- |
 | C1 | Snapshot after each B step | Branch heads, Commit parents and second parents, Layers and Workspace bases match the state the SDK calls produced |
-| C2 | Version | `snapshot({ since })` returns "unchanged" when nothing changed and a new version after any Commit, merge, publish, mount or unmount |
+| C2 | Version | `operator.inspect.snapshot(since)` returns "unchanged" when nothing changed and a new version after any Commit, merge, publish, mount or unmount |
 | C3 | Stale flag | After another Workspace commits, `headMovedSinceMount` is true for the older Workspace |
 | C4 | Process state | The local server lists the process it started and cancels it; the daemon holds no process record |
-| C5 | Blame (cond.) | Each line names the Commit (and agent, if attribution is adopted) that last changed it |
 
 ## D. UI integration with `sdk-sim-terminals`
 
@@ -84,9 +82,33 @@
 
 Each D case runs a story as several commands, one story per command, each under 120 s.
 
+## #328 and operator acceptance
+
+Retired harness A6 and agent/call attribution C5 tests are deleted. Their earlier
+receipts remain historical; no retired feature is adapted into a new test.
+
+| ID | Scope | Required checks |
+| --- | --- | --- |
+| S328 | 29 public methods and operator boundaries | Positional calls/messages; pageSize/pagePos and deep offsets; line windows/huge prefixes; blame messages; atomic apply and failing index; recursive copy/move/remove with symlink/mode/hardlink preservation; streaming large edit; real Store/Commit/file/Workspace statistics/history; merge/publish; public refusal of operator names |
+| XPROCESS | Fresh Node discovery and ownership | Saved Sandbox ID/mount path; status/exec/commit without Init/install; cross-process process list/cancel; project reads reopen shared service; original process sees Commit and can clean up |
+
+Run one case per command, after building host addon and Linux daemon from the
+committed source, with `LAYERFS_CONSTRUCTION_WORKERS=1` and an explicit 120-second
+wall wrapper. `node sdk/js/test/verify/run.mjs <case>` writes a fresh receipt.
+B7 remains a deterministic race-proof gap: no pause hook exists and sleep-based
+race injection is excluded. Do not label SKIP as PASS. B9 checks semantic conflicts,
+not a new memory-flatness qualification. The read bound is 48 KiB/2,000 lines;
+oversized blame middles explicitly disclose `comparisonCoarse`. Deep page offsets
+are documented linear skipping. Null per-file physical attribution is expected.
+
+Counter retention additionally requires its prospective component speed/storage
+screen, independent verification and preserved failed earlier versions. Live
+stories do not substitute for that screen. Durable is NOT_RUN — disabled by owner
+until explicit reauthorization. Reaping and replaced-inode policy remain deferred.
+
 ## Done when
 
-- A, B and C pass against the real daemon in Disposable mode, each command under 120 s.
+- Required public/operator cases and covering A/B/C cases pass against the real daemon in Disposable mode, each command under 120 s; historical/open/skipped rows are explicitly retained.
 - D2 and D3 pass for all four stories; D6 is checked once at the final commit.
 - Results, including any failures, are recorded with the commit and command that
   produced them. Failed or skipped cases stay in the record.
