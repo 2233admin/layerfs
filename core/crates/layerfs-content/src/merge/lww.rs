@@ -121,8 +121,10 @@ fn parse(line: &str) -> Rule {
         tokens.push(match c {
             '*' if chars.peek() == Some(&'*') => {
                 chars.next();
-                if (tokens.is_empty() || tokens.last() == Some(&Token::Char('/')))
-                    && chars.peek() == Some(&'/')
+                if matches!(
+                    tokens.last(),
+                    None | Some(Token::Char('/') | Token::Directories)
+                ) && chars.peek() == Some(&'/')
                 {
                     chars.next();
                     Token::Directories

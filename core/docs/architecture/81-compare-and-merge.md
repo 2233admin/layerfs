@@ -75,6 +75,8 @@ Branch merge.
 The same matcher serves `fs.glob`. A `**/` segment at a name boundary matches
 zero or more complete directory names, so `src/**/*.js` includes both
 `/src/cart.js` and `/src/web/cart.js`. A single `*` stays within one name.
+Consecutive `**/` segments retain that boundary: `src/**/**/index.js` also
+matches `/src/index.js` without requiring a directory for either segment.
 
 `paths_with_markers(reader, root, paths, timing)` reports which of the named
 paths are text files that still hold a complete marker block (an opening
