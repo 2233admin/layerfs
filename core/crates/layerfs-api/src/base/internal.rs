@@ -92,6 +92,19 @@ pub fn into_connection(control: Control) -> Connection {
 pub fn control(sandbox: &mut crate::ManagedSandbox) -> &mut Control {
     &mut sandbox.control
 }
+/// The runtime, control owner and command identity of one Sandbox, taken
+/// apart for an owner that serves several Workspaces at once: commands run on
+/// the runtime while the control owner answers one request at a time.
+#[cfg(unix)]
+pub fn split(
+    sandbox: crate::ManagedSandbox,
+) -> (
+    layerfs_sandbox::backend::docker::Sandbox,
+    Control,
+    layerfs_sandbox::CommandIdentity,
+) {
+    (sandbox.runtime, sandbox.control, sandbox.command_identity)
+}
 /// Original one-attempt startup used by existing-Store deployments and lifecycle proofs.
 #[cfg(unix)]
 pub fn start(

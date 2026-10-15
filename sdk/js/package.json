@@ -1,0 +1,18 @@
+{
+  "name": "@layerfs/sdk",
+  "version": "0.1.6",
+  "description": "LayerFS JavaScript SDK: Branch files, Sandboxes and Workspaces over the native layerfs-api binding",
+  "private": true,
+  "type": "module",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./harness": "./src/harness/index.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build:native": "cargo +1.85.1 build --manifest-path ../../core/Cargo.toml --offline --locked --release -p layerfs-node && cp ../../core/target/release/liblayerfs_node.dylib native/layerfs.node"
+  }
+}

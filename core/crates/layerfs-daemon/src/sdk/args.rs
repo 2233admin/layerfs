@@ -117,7 +117,7 @@ pub(crate) fn project(store: &Arc<Store>, args: &SdkValue) -> Result<LayerStackR
     ))
 }
 
-/// Every Branch of a stack, in name order.
+/// Every Branch of a stack, in name order, except Init's `main`.
 pub(crate) fn branches(
     store: &Arc<Store>,
     stack: &LayerStackRecord,
@@ -129,7 +129,14 @@ pub(crate) fn branches(
     let mut out = Vec::new();
     for _ in 0..MAXIMUM_NAME_PAGES {
         let found = store.history().branches(stack.id, &page).map_err(history)?;
-        out.extend(found.records);
+        // Project Init's first Branch is named `main`; the SDK's `main` is the
+        // line of Layers, so that Branch is never shown or addressed.
+        out.extend(
+            found
+                .records
+                .into_iter()
+                .filter(|branch| branch.name.as_str() != super::branch::MAIN),
+        );
         match found.continuation {
             Some(cursor) => page.cursor = Some(cursor),
             None => return Ok(out),

@@ -170,3 +170,13 @@ out `{group}/{method}`, one function per JavaScript method:
   with stable codes.
 - The typed history pages (`ProjectApi::fork`, `commits`, `branches`) stay for
   internal callers; the JavaScript methods use the SDK channel.
+
+## JavaScript package and Node binding
+
+The package is at [`sdk/js/`](../../../sdk/js/README.md). Its addon crate
+`layerfs-node` (napi-rs, owner-approved) is a member of the core workspace and
+exports one function, `call(op, args)`. Workspace operations go through the
+typed control above; every other method is one SDK channel call through a
+Sandbox of the client. The binding is the Sandbox runtime owner: it runs
+commands with the runtime directly and keeps background processes; the daemon
+holds no process record.
