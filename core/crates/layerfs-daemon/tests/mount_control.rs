@@ -9,10 +9,7 @@ mod support;
 use layerfs_api::{internal::Control, OperationCause};
 use layerfs_bridge::control::{Activity, ControlCode, Reply, Request, WorkspaceToken};
 use layerfs_daemon::control::Service;
-use layerfs_history::{
-    BranchId, CommitHistoryRequest, CommitStagedOutcome, ForkRequest, ForkSource, HistoryName,
-    Page, WorkspaceId,
-};
+use layerfs_history::{BranchId, CommitOutcome, WorkspaceId};
 use std::sync::{
     atomic::{AtomicU8, Ordering},
     mpsc, Arc,
@@ -36,7 +33,7 @@ fn committed(client: &mut Control, token: WorkspaceToken) -> layerfs_history::Co
         .commit(token)
         .unwrap()
     {
-        CommitStagedOutcome::Committed(value) => value,
+        CommitOutcome::Committed { record: value, .. } => *value,
         other => panic!("{other:?}"),
     }
 }
@@ -77,7 +74,7 @@ fn serve(
                     );
                 }
             }
-            let done = matches!(served.call.request,Request::Unmount(token) if token.workspace==last)
+            let done = matches!(served.call.request,Request::Unmount(layerfs_bridge::control::UnmountControl { token, .. }) if token.workspace==last)
                 && served.outcome.is_ok();
             drop(served);
             if done {
@@ -86,140 +83,6 @@ fn serve(
         }
     });
     (Control::new(channel), worker)
-}
-#[test]
-fn kernel_mount_commit_status_fork_history_and_terminal_unmount() {
-    let f = fixture::Fixture::new("control-flow");
-    let branch = f.host.project.branch.branch.id;
-    let tag = Arc::new(AtomicU8::new(b'A'));
-    let last = identity(79);
-    let (mut client, worker) = serve(
-        f.service.clone(),
-        tag.clone(),
-        last,
-        f.installed.opened.store.policy().construction(),
-    );
-    let (a, original) = mount(&mut client, identity(71), branch);
-    let before = f.installed.opened.store.work();
-    let (b, _) = mount(&mut client, identity(72), branch);
-    let after = f.installed.opened.store.work();
-    assert_eq!(
-        after.object_batches, before.object_batches,
-        "warm mount has no object demands; history snapshot remains paid"
-    );
-    let sql = f.statements();
-    let observed = status(&mut client, a);
-    assert_eq!(observed.activity, Activity::Idle);
-    assert_eq!(f.statements(), sql, "Status must issue zero Store SQL");
-    assert_eq!(observed.binding, original);
-    fixture::write(&f.service, a, b'A');
-    fixture::write(&f.service, b, b'B');
-    let first = committed(&mut client, a);
-    assert!(
-        matches!(layerfs_api::internal::workspace(&mut client).commit(a).unwrap(),CommitStagedOutcome::UpToDate{head:Some(head),root} if head==first.id&&root==first.root)
-    );
-    let sql = f.statements();
-    let stale = status(&mut client, b);
-    assert_eq!(stale.binding, original);
-    assert_eq!(
-        f.statements(),
-        sql,
-        "Status never refreshes the moved Branch"
-    );
-    tag.store(b'B', Ordering::Release);
-    let overwritten = committed(&mut client, b);
-    assert_eq!(overwritten.parent, original.branch.head_commit);
-    assert_ne!(overwritten.root, first.root);
-    let fork = BranchId::from_authority([75; 16]);
-    let forked = layerfs_api::internal::fork(
-        &mut client,
-        ForkRequest {
-            stack: original.branch.stack,
-            branch: fork,
-            name: HistoryName::new("fork").unwrap(),
-            source: ForkSource::Commit {
-                branch,
-                commit: overwritten.id,
-            },
-        },
-    )
-    .unwrap();
-    assert_eq!(forked.effective_root, overwritten.root);
-    let first_page = layerfs_api::internal::branches(
-        &mut client,
-        original.branch.stack,
-        Page {
-            cursor: None,
-            limit: 1,
-        },
-    )
-    .unwrap();
-    assert_eq!(first_page.records, [forked.branch.clone()]);
-    let second_page = layerfs_api::internal::branches(
-        &mut client,
-        original.branch.stack,
-        Page {
-            cursor: Some(first_page.continuation.unwrap()),
-            limit: 1,
-        },
-    )
-    .unwrap();
-    assert_eq!(second_page.records[0].id, branch);
-    assert_eq!(second_page.records[0].head_commit, Some(overwritten.id));
-    assert!(second_page.continuation.is_none());
-    let (c, binding) = mount(&mut client, identity(73), fork);
-    assert_eq!(binding.effective_root, overwritten.root);
-    fixture::write(&f.service, a, b'C');
-    tag.store(b'C', Ordering::Release);
-    let second = committed(&mut client, a);
-    assert_eq!(second.parent, Some(first.id));
-    let page = layerfs_api::internal::commits(
-        &mut client,
-        CommitHistoryRequest {
-            branch,
-            start: None,
-            cursor: None,
-            limit: 1,
-        },
-    )
-    .unwrap();
-    assert_eq!(page.records, vec![second.clone()]);
-    let cursor = page.continuation.unwrap();
-    fixture::write(&f.service, a, b'D');
-    tag.store(b'D', Ordering::Release);
-    let third = committed(&mut client, a);
-    assert_eq!(third.parent, Some(second.id));
-    let page = layerfs_api::internal::commits(
-        &mut client,
-        CommitHistoryRequest {
-            branch,
-            start: None,
-            cursor: Some(cursor),
-            limit: 1,
-        },
-    )
-    .unwrap();
-    assert_eq!(page.records, vec![first]);
-    assert!(page.continuation.is_none());
-    let stale_token = WorkspaceToken {
-        namespace: a.namespace + 100,
-        ..a
-    };
-    assert!(
-        matches!(client.call(Request::Status(stale_token)).unwrap(),Reply::Refused(value) if value.code==ControlCode::Invalid)
-    );
-    close(&mut client, a);
-    assert!(
-        matches!(client.call(Request::Status(a)).unwrap(),Reply::Refused(value) if value.code==ControlCode::Missing)
-    );
-    close(&mut client, b);
-    close(&mut client, c);
-    let (end, _) = mount(&mut client, last, branch);
-    close(&mut client, end);
-    let count = worker.join();
-    assert_eq!(count, 22);
-    println!("CONTROL_FLOW overwrite_last_effect=true captured_parent_preserved=true calls={count} Store_SQL_for_status=0 history_anchor_stable=true stale_namespace_fenced=true");
-    f.cleanup();
 }
 #[test]
 fn control_busy_keeps_the_channel_healthy_for_a_later_explicit_call() {
@@ -282,7 +145,15 @@ fn original_lost_control_reply_is_not_replayed_or_settled_by_an_observer() {
     server_fence.close().unwrap();
     send_release.send(()).unwrap();
     let failure = calling.join().unwrap().unwrap_err();
-    assert_eq!(failure.request, Request::Commit(token));
+    assert_eq!(
+        failure.request,
+        Request::Commit(layerfs_bridge::control::CommitControl {
+            token,
+            force: false,
+            agent: None,
+            call: None
+        })
+    );
     let OperationCause::Exchange(original) = &failure.cause else {
         panic!("expected original exchange custody: {failure:?}");
     };
@@ -294,7 +165,7 @@ fn original_lost_control_reply_is_not_replayed_or_settled_by_an_observer() {
     let published = success.commit.as_ref().unwrap();
     assert!(matches!(
         published.history,
-        CommitStagedOutcome::Committed(_)
+        Some(CommitOutcome::Committed { .. })
     ));
     let observer = f
         .installed
@@ -307,7 +178,7 @@ fn original_lost_control_reply_is_not_replayed_or_settled_by_an_observer() {
     assert_eq!(
         observer.effective_root,
         match &published.history {
-            CommitStagedOutcome::Committed(record) => record.root,
+            Some(CommitOutcome::Committed { record, .. }) => record.root,
             _ => unreachable!(),
         }
     );
@@ -346,7 +217,14 @@ fn another_control_channel_observes_running_commit_and_refuses_unmount_before_ef
     let mut client = Control::new(channel);
     let (token, original) = mount(&mut client, identity(88), branch);
     fixture::write(&f.service, token, b'R');
-    let calling = std::thread::spawn(move || client.call(Request::Commit(token)));
+    let calling = std::thread::spawn(move || {
+        client.call(Request::Commit(layerfs_bridge::control::CommitControl {
+            token,
+            force: false,
+            agent: None,
+            call: None,
+        }))
+    });
     entered.recv_timeout(Duration::from_secs(3)).unwrap();
     let service = f.service.clone();
     let (channel, observing) = support::pair(move |connection| {
@@ -365,13 +243,13 @@ fn another_control_channel_observes_running_commit_and_refuses_unmount_before_ef
     assert!(observed.local.as_ref().unwrap().captured.is_some());
     assert_eq!(f.statements(), sql);
     assert!(
-        matches!(observer.call(Request::Unmount(token)).unwrap(),Reply::Refused(value) if value.code==ControlCode::Busy)
+        matches!(observer.call(Request::Unmount(layerfs_bridge::control::UnmountControl { token, discard: true })).unwrap(),Reply::Refused(value) if value.code==ControlCode::Busy)
     );
     observing.join();
     send_release.send(()).unwrap();
     assert!(matches!(
         calling.join().unwrap().unwrap(),
-        Reply::Committed(CommitStagedOutcome::Committed(_))
+        Reply::Committed(CommitOutcome::Committed { .. })
     ));
     let completed = worker.join().unwrap();
     assert!(completed.outcome.is_ok());
@@ -417,20 +295,22 @@ fn an_original_unknown_blocks_another_commit_and_normal_unmount() {
     let (token, binding) = mount(&mut client, identity(89), branch);
     fixture::write(&f.service, token, b'U');
     assert!(
-        matches!(client.call(Request::Commit(token)).unwrap(),Reply::Refused(value) if value.code==ControlCode::Unknown)
+        matches!(client.call(Request::Commit(layerfs_bridge::control::CommitControl { token, force: false, agent: None, call: None })).unwrap(),Reply::Refused(value) if value.code==ControlCode::Unknown)
     );
     let observed = status(&mut client, token);
     assert_eq!(observed.activity, Activity::Uncertain);
     assert_eq!(observed.binding, binding);
     assert!(observed.published.is_none());
     assert!(observed.local.unwrap().captured.is_some());
-    assert!(matches!(f.service.execute_control(&Request::Commit(token)),
-        Err(layerfs_daemon::control::Failure::Custody(value)) if value.code == ControlCode::Unknown && value.published.is_none()));
     assert!(
-        matches!(client.call(Request::Unmount(token)).unwrap(),Reply::Refused(value) if value.code==ControlCode::Unknown)
+        matches!(f.service.execute_control(&Request::Commit(layerfs_bridge::control::CommitControl { token, force: false, agent: None, call: None })),
+        Err(layerfs_daemon::control::Failure::Custody(value)) if value.code == ControlCode::Unknown && value.published.is_none())
     );
     assert!(
-        matches!(client.call(Request::Commit(token)).unwrap(),Reply::Refused(value) if value.code==ControlCode::Unknown)
+        matches!(client.call(Request::Unmount(layerfs_bridge::control::UnmountControl { token, discard: true })).unwrap(),Reply::Refused(value) if value.code==ControlCode::Unknown)
+    );
+    assert!(
+        matches!(client.call(Request::Commit(layerfs_bridge::control::CommitControl { token, force: false, agent: None, call: None })).unwrap(),Reply::Refused(value) if value.code==ControlCode::Unknown)
     );
     let retained = worker.join();
     assert!(retained.outcome.is_err());
@@ -481,7 +361,12 @@ fn status_retains_known_publication_when_the_engine_is_unavailable() {
     let (token, binding) = mount(&mut client, identity(90), branch);
     fixture::write(&f.service, token, b'V');
     let calling = std::thread::spawn(move || {
-        let reply = client.call(Request::Commit(token));
+        let reply = client.call(Request::Commit(layerfs_bridge::control::CommitControl {
+            token,
+            force: false,
+            agent: None,
+            call: None,
+        }));
         (client, reply)
     });
     entered.recv_timeout(Duration::from_secs(3)).unwrap();
@@ -503,7 +388,7 @@ fn status_retains_known_publication_when_the_engine_is_unavailable() {
         before
     );
     assert!(
-        matches!(client.call(Request::Unmount(token)).unwrap(),Reply::Refused(value) if value.code==ControlCode::Unknown)
+        matches!(client.call(Request::Unmount(layerfs_bridge::control::UnmountControl { token, discard: true })).unwrap(),Reply::Refused(value) if value.code==ControlCode::Unknown)
     );
     let original = worker.join();
     assert!(original.outcome.is_err());
@@ -542,10 +427,16 @@ fn product_control_commit_captures_the_frontier_releases_its_owners_and_is_then_
     // A stale namespace is refused before admission, capture or Save.
     let sql = f.statements();
     assert!(matches!(
-        f.service.execute_control(&Request::Commit(WorkspaceToken {
-            namespace: token.namespace + 1,
-            ..token
-        })),
+        f.service
+            .execute_control(&Request::Commit(layerfs_bridge::control::CommitControl {
+                token: WorkspaceToken {
+                    namespace: token.namespace + 1,
+                    ..token
+                },
+                force: false,
+                agent: None,
+                call: None
+            })),
         Err(layerfs_daemon::control::Failure::Rejected(
             ControlCode::Invalid,
             _
@@ -554,9 +445,17 @@ fn product_control_commit_captures_the_frontier_releases_its_owners_and_is_then_
     assert_eq!(status(token), before, "no epoch, capture or install effect");
     assert_eq!(f.statements(), sql, "no Store SQL for a refused token");
     // The product route: no caller constructor exists on this path.
-    let done = f.service.execute_control(&Request::Commit(token)).unwrap();
+    let done = f
+        .service
+        .execute_control(&Request::Commit(layerfs_bridge::control::CommitControl {
+            token,
+            force: false,
+            agent: None,
+            call: None,
+        }))
+        .unwrap();
     let record = match &done.reply {
-        Reply::Committed(CommitStagedOutcome::Committed(record)) => record.clone(),
+        Reply::Committed(CommitOutcome::Committed { record, .. }) => record.clone(),
         other => panic!("{other:?}"),
     };
     assert_ne!(record.root, bound.effective_root);
@@ -582,9 +481,17 @@ fn product_control_commit_captures_the_frontier_releases_its_owners_and_is_then_
     assert_eq!(after.binding.effective_root, record.root);
     assert_eq!(after.binding.branch.head_commit, Some(record.id));
     // Unchanged: the same head and root, no new Commit record.
-    let again = f.service.execute_control(&Request::Commit(token)).unwrap();
+    let again = f
+        .service
+        .execute_control(&Request::Commit(layerfs_bridge::control::CommitControl {
+            token,
+            force: false,
+            agent: None,
+            call: None,
+        }))
+        .unwrap();
     assert!(
-        matches!(&again.reply, Reply::Committed(CommitStagedOutcome::UpToDate { head: Some(head), root }) if *head == record.id && *root == record.root),
+        matches!(&again.reply, Reply::Committed(CommitOutcome::UpToDate { head: Some(head), root }) if *head == record.id && *root == record.root),
         "{:?}",
         again.reply
     );
@@ -608,8 +515,18 @@ fn product_control_commit_captures_the_frontier_releases_its_owners_and_is_then_
         }
         other => panic!("{other:?}"),
     };
-    f.service.execute_control(&Request::Unmount(other)).unwrap();
-    f.service.execute_control(&Request::Unmount(token)).unwrap();
+    f.service
+        .execute_control(&Request::Unmount(layerfs_bridge::control::UnmountControl {
+            token: other,
+            discard: true,
+        }))
+        .unwrap();
+    f.service
+        .execute_control(&Request::Unmount(layerfs_bridge::control::UnmountControl {
+            token,
+            discard: true,
+        }))
+        .unwrap();
     f.cleanup();
 }
 #[test]
@@ -730,7 +647,12 @@ fn a_definite_commit_failure_whose_capture_is_not_resolved_answers_unknown() {
     let (token, binding) = mount(&mut client, identity(93), branch);
     fixture::write(&f.service, token, b'W');
     let calling = std::thread::spawn(move || {
-        let reply = client.call(Request::Commit(token));
+        let reply = client.call(Request::Commit(layerfs_bridge::control::CommitControl {
+            token,
+            force: false,
+            agent: None,
+            call: None,
+        }));
         (client, reply)
     });
     entered.recv_timeout(Duration::from_secs(3)).unwrap();
@@ -828,7 +750,12 @@ fn an_unresolved_moved_head_failure_is_answered_and_not_dropped() {
     let (token, _) = mount(&mut client, identity(94), branch);
     fixture::write(&f.service, token, b'W');
     let calling = std::thread::spawn(move || {
-        let reply = client.call(Request::Commit(token));
+        let reply = client.call(Request::Commit(layerfs_bridge::control::CommitControl {
+            token,
+            force: false,
+            agent: None,
+            call: None,
+        }));
         (client, reply)
     });
     entered.recv_timeout(Duration::from_secs(3)).unwrap();

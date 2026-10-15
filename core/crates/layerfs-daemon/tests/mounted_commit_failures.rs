@@ -8,7 +8,7 @@
 //!
 //! - F1: a real external python3 process holds the Store's SQLite writer when
 //!   the Commit begins.
-//! - F2: the same real held writer, taken around the real `stage_and_commit`
+//! - F2: the same real held writer, taken around the real `commit_branch`
 //!   by the external catalog wrapper of `support/history_boundary.rs`.
 //! - F3: external catalog boundary scope; not a kernel SQLite I/O failure. The
 //!   wrapper performs the real publication and reports an unknown outcome.
@@ -72,7 +72,7 @@ use layerfs_daemon::{
     },
 };
 use layerfs_history::{
-    CommitId, CommitRecord, CommitStagedOutcome, HistoryCatalog, HistoryError, WorkspaceId,
+    CommitId, CommitOutcome, CommitRecord, HistoryCatalog, HistoryError, WorkspaceId,
 };
 use layerfs_overlay::{Capture, CapturedReader, OperationOwner};
 use layerfs_persistence::{Handles, SqlitePersistenceProfile};
@@ -591,7 +591,7 @@ struct Left {
     error: String,
     /// The error is exactly the original variant the case staged.
     original: bool,
-    published: Option<CommitStagedOutcome>,
+    published: Option<CommitOutcome>,
     settled: bool,
     capture: Capture,
     candidate: Option<ObjectId>,
@@ -740,7 +740,7 @@ impl Case {
             }
         };
         let record = match &done.reply {
-            Reply::Committed(CommitStagedOutcome::Committed(record)) => record.clone(),
+            Reply::Committed(CommitOutcome::Committed { record, .. }) => (**record).clone(),
             other => {
                 expect!(
                     self.checks,
@@ -1192,7 +1192,7 @@ fn f1_store_busy_before_save_is_settled_and_a_later_commit_is_exact() {
 fn f2_store_busy_at_publication_is_settled_and_releases_both_owners() {
     let mut case = Case::start(
         "F2",
-        "external python3 process holds the Store SQLite writer around the real stage_and_commit (support/history_boundary.rs Boundary::HeldWriter)",
+        "external python3 process holds the Store SQLite writer around the real commit_branch (support/history_boundary.rs Boundary::HeldWriter)",
         Staging::History(Boundary::HeldWriter),
         &[CHANGES],
     );

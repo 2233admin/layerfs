@@ -48,7 +48,7 @@ use history_gate::Point;
 use layerfs_bridge::control::{Activity, Reply, Request, WorkspaceToken};
 use layerfs_content::ObjectId;
 use layerfs_daemon::store::{Store, StoreReader};
-use layerfs_history::{CommitRecord, CommitStagedOutcome, HistoryCatalog, WorkspaceId};
+use layerfs_history::{CommitOutcome, CommitRecord, HistoryCatalog, WorkspaceId};
 use layerfs_persistence::{Handles, SqlitePersistenceProfile};
 use layerfs_storage::{
     location::{InodeValueRow, LocatedObject, SignatureRow},
@@ -373,7 +373,7 @@ fn r5_10_each_mounted_commit_has_one_producer_on_the_one_open_disposable_writer_
         rig::receipt(&done, name);
         let commit = done.commit.as_ref().expect("the Commit receipt");
         let record = match &commit.history {
-            CommitStagedOutcome::Committed(record) => record.clone(),
+            Some(CommitOutcome::Committed { record, .. }) => (**record).clone(),
             other => panic!("{name}: Commit {round}: {other:?}"),
         };
         // The public receipt of this Commit's one producer handle. A bound

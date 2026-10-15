@@ -28,7 +28,7 @@ use layerfs_daemon::{
     store::{CapturedConstruction, ReleasedOwner, Store},
 };
 use layerfs_history::{
-    CommitHistoryRequest, CommitId, CommitRecord, CommitStagedOutcome, PageResult, WorkspaceId,
+    CommitHistoryRequest, CommitId, CommitOutcome, CommitRecord, PageResult, WorkspaceId,
 };
 use layerfs_storage::ReservationBlocks;
 use nix::{
@@ -130,7 +130,7 @@ impl Rig {
             .unwrap_or_else(|failure| panic!("{what}: {failure:?}"));
         receipt(&done, what);
         match &done.reply {
-            Reply::Committed(CommitStagedOutcome::Committed(record)) => record.clone(),
+            Reply::Committed(CommitOutcome::Committed { record, .. }) => (**record).clone(),
             other => panic!("{what}: {other:?}"),
         }
     }
@@ -141,7 +141,7 @@ impl Rig {
             .unwrap_or_else(|failure| panic!("{what}: {failure:?}"));
         receipt(&done, what);
         match &done.reply {
-            Reply::Committed(CommitStagedOutcome::UpToDate { head, root }) => (*head, *root),
+            Reply::Committed(CommitOutcome::UpToDate { head, root }) => (*head, *root),
             other => panic!("{what}: {other:?}"),
         }
     }
@@ -273,8 +273,9 @@ pub fn receipt<'a>(done: &'a Success, what: &str) -> &'a CapturedConstruction {
         "{what}: {namespace:?}"
     );
     let outcome = match &commit.history {
-        CommitStagedOutcome::Committed(_) => "Committed",
-        CommitStagedOutcome::UpToDate { .. } => "UpToDate",
+        Some(CommitOutcome::Committed { .. }) => "Committed",
+        Some(CommitOutcome::UpToDate { .. }) => "UpToDate",
+        None => "Conflict",
     };
     println!(
         "MOUNTED_COMMIT {what}: outcome={outcome} released={} retained=false work={:?} counters={:?}",

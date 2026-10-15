@@ -97,7 +97,10 @@ fn an_idle_workspace_is_forced_with_one_abort_and_one_detach() {
             token: ready.token,
             relinquish_unknown: false,
         },
-        Request::Unmount(ready.token),
+        Request::Unmount(layerfs_bridge::control::UnmountControl {
+            token: ready.token,
+            discard: true,
+        }),
         Request::Status(ready.token),
         Request::Attach(ready.token),
     ] {

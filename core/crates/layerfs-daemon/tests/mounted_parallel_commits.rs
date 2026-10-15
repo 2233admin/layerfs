@@ -1,7 +1,9 @@
 //! Owner clarification: one Commit per Workspace, concurrent Commit producers
 //! on separate Workspaces, independent captures/roots and short Store writer
 //! admission. A real external flock stages before-effect admission; every
-//! process and observation has an independent finite bound.
+//! process and observation has an independent finite bound. Both Workspaces
+//! bind one Branch head, so after #327 the second publication is answered
+//! `HeadMoved` once (no overwrite, no second merge).
 #![cfg(target_os = "linux")]
 #[allow(dead_code)]
 #[path = "support/installed_store.rs"]
@@ -17,7 +19,7 @@ mod mounted;
 mod rig;
 use layerfs_bridge::control::{Activity, Reply};
 use layerfs_daemon::{control::Failure, store::CommitError};
-use layerfs_history::CommitStagedOutcome;
+use layerfs_history::{CommitOutcome, HistoryError};
 use mounted::COMMAND;
 use rig::{bash_in, host, passed, root, Rig};
 use std::{
@@ -102,7 +104,14 @@ fn parallel_workspace_commits_keep_distinct_captures_and_one_admission_each() {
             if ready.send(tag).is_err() || started.recv_timeout(Duration::from_secs(1)).is_err() {
                 return;
             }
-            let result = service.execute_control(&layerfs_bridge::control::Request::Commit(token));
+            let result = service.execute_control(&layerfs_bridge::control::Request::Commit(
+                layerfs_bridge::control::CommitControl {
+                    token,
+                    force: false,
+                    agent: None,
+                    call: None,
+                },
+            ));
             let _ = tx.send((tag, result));
         }));
     }
@@ -157,11 +166,21 @@ fn parallel_workspace_commits_keep_distinct_captures_and_one_admission_each() {
         thread.join().unwrap();
     }
     let mut roots = Vec::new();
+    let mut moved = 0;
     let mut outcomes = Vec::new();
     for (tag, result) in results {
         outcomes.push(format!("workspace={tag} result={result:?}"));
+        if let Err(Failure::Commit(failure)) = &result {
+            if matches!(
+                failure.error,
+                CommitError::History(HistoryError::HeadMoved(_))
+            ) && failure.published.is_none()
+            {
+                moved += 1;
+            }
+        }
         if let Ok(done) = result {
-            if let Reply::Committed(CommitStagedOutcome::Committed(record)) = done.reply {
+            if let Reply::Committed(CommitOutcome::Committed { record, .. }) = done.reply {
                 let operation = rig
                     .harness
                     .service
@@ -187,10 +206,12 @@ fn parallel_workspace_commits_keep_distinct_captures_and_one_admission_each() {
         "both public Commits overlap while awaiting Store admission"
     );
     assert!(duplicate_refused, "one ongoing Commit per Workspace");
+    // Both read the head before Store admission; the second publication
+    // finds it moved and is answered once, with nothing published or merged.
     assert_eq!(
-        roots.len(),
-        2,
-        "each original concurrent Commit acknowledges once"
+        (roots.len(), moved),
+        (1, 1),
+        "one Commit publishes, the other's head moved during publication"
     );
     for (tag, _, actual) in &roots {
         model::assert_same(
@@ -201,5 +222,4 @@ fn parallel_workspace_commits_keep_distinct_captures_and_one_admission_each() {
     }
     model::assert_same(&ea, &live_a, "Workspace A live install stays isolated");
     model::assert_same(&eb, &live_b, "Workspace B live install stays isolated");
-    assert_ne!(roots[0].1, roots[1].1, "distinct immutable roots");
 }

@@ -1037,12 +1037,6 @@ fn simultaneous_mounts_over_related_roots_are_isolated_and_a_stale_token_never_r
         "written on the descendant",
         "the Branch's fresh bind after D",
     );
-    let record_a = rig.committed(a.token, "FP-24 Branch Workspace at the base");
-    assert_eq!(record_a.parent, None, "the captured parent");
-    let stored_a = rig.published(record_a.root);
-    assert_same(&tree_a, &stored_a, "A's published root");
-    own(&stored_a, "written in A", "the Branch's fresh bind after A");
-    absent(&stored_a, &["descend-1.txt", "descend-2.txt"], "A's root");
     assert_eq!(
         branch_now(&rig, fork).effective_root,
         record_f.root,
@@ -1053,10 +1047,10 @@ fn simultaneous_mounts_over_related_roots_are_isolated_and_a_stale_token_never_r
         &published_on(&rig, 101, fork, record_f.root),
         "the fork's root after the Branch's Commits",
     );
-    isolated("after the three Commits");
+    isolated("after the two Commits");
     println!(
-        "FP_24 commits: fork={:?} parent={:?} | descendant={:?} parent={:?} | A={:?} parent={:?}",
-        record_f.id, record_f.parent, record_d.id, record_d.parent, record_a.id, record_a.parent
+        "FP_24 commits: fork={:?} parent={:?} | descendant={:?} parent={:?}",
+        record_f.id, record_f.parent, record_d.id, record_d.parent
     );
 
     // Tokens. A refused request changes nothing of any mounted Workspace.
@@ -1070,9 +1064,17 @@ fn simultaneous_mounts_over_related_roots_are_isolated_and_a_stale_token_never_r
     let requests = |token: WorkspaceToken| {
         [
             Request::Status(token),
-            Request::Commit(token),
+            Request::Commit(layerfs_bridge::control::CommitControl {
+                token,
+                force: false,
+                agent: None,
+                call: None,
+            }),
             Request::Attach(token),
-            Request::Unmount(token),
+            Request::Unmount(layerfs_bridge::control::UnmountControl {
+                token,
+                discard: true,
+            }),
         ]
     };
     let refused = |token: WorkspaceToken, code: ControlCode, what: &str| {

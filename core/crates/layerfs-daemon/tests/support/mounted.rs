@@ -103,10 +103,20 @@ impl Harness {
     /// One product control Commit: the captured namespace producer through
     /// `execute_control`, attempted once on the caller's thread.
     pub fn try_commit(&self, token: WorkspaceToken) -> Result<Success, Failure> {
-        self.service.execute_control(&Request::Commit(token))
+        self.service
+            .execute_control(&Request::Commit(layerfs_bridge::control::CommitControl {
+                token,
+                force: false,
+                agent: None,
+                call: None,
+            }))
     }
     pub fn try_unmount(&self, token: WorkspaceToken) -> Result<Success, Failure> {
-        self.service.execute_control(&Request::Unmount(token))
+        self.service
+            .execute_control(&Request::Unmount(layerfs_bridge::control::UnmountControl {
+                token,
+                discard: true,
+            }))
     }
     /// One forced terminal unmount, attempted once.
     pub fn try_force(

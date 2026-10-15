@@ -229,7 +229,13 @@ fn an_unmount_of_an_already_revoked_mount_keeps_exact_retained_custody() {
         "{kept}"
     );
     // Later operations answer with the same custody and attempt nothing.
-    for request in [Request::Unmount(token), Request::Attach(token)] {
+    for request in [
+        Request::Unmount(layerfs_bridge::control::UnmountControl {
+            token,
+            discard: true,
+        }),
+        Request::Attach(token),
+    ] {
         match h.service.execute_control(&request) {
             Err(Failure::Retained(again)) => assert_eq!(*again, custody, "{request:?}"),
             other => panic!("{request:?}: {other:?}"),

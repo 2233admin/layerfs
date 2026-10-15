@@ -1,6 +1,6 @@
 //! External orchestration at a real public history provider, never product
 //! hooks: the Commit thread's one publication is held on a chosen side of the
-//! real `stage_and_commit` until the test releases it.
+//! real `commit_branch` until the test releases it.
 //!
 //! Every wait is bounded. The held thread proceeds by itself when its limit
 //! expires and records that it did; the test's `Hold` releases it when
@@ -136,31 +136,29 @@ impl HistoryCatalog for GatedHistory {
         branches(stack: LayerStackId, page: &Page) -> HistoryResult<PageResult<BranchRecord>>;
         commit(id: CommitId) -> HistoryResult<Option<CommitRecord>>;
         layer(id: LayerId) -> HistoryResult<Option<LayerRecord>>;
-        stage(workspace: WorkspaceId) -> HistoryResult<Option<StageRecord>>;
-        stages(branch: BranchId, page: &Page) -> HistoryResult<PageResult<StageRecord>>;
         commit_history(request: &CommitHistoryRequest) -> HistoryResult<PageResult<CommitRecord>>;
         layer_history(request: &LayerHistoryRequest) -> HistoryResult<PageResult<LayerRecord>>;
         initialize_layerstack(request: &StackInitialization) -> HistoryResult<LayerStackRecord>;
         fork(request: &ForkRequest) -> HistoryResult<BranchSnapshot>;
-        stage_changes(request: &StageRequest) -> HistoryResult<StageRecord>;
-        commit_staged(request: &CommitStagedRequest) -> HistoryResult<CommitStagedOutcome>;
+        merge_base(left: NodeId, right: NodeId) -> HistoryResult<Option<NodeId>>;
+        is_ancestor(ancestor: NodeId, descendant: NodeId) -> HistoryResult<bool>;
         add_layer(request: &AddLayerRequest) -> HistoryResult<AddLayerOutcome>;
-        discard_stage(request: &DiscardRequest) -> HistoryResult<DiscardOutcome>;
+        merge_branch(request: &BranchMergeRequest) -> HistoryResult<BranchSnapshot>;
         reserve_inodes(request: &ReserveRequest) -> HistoryResult<Reservation>;
     }
-    fn stage_and_commit(&self, request: &StageRequest) -> HistoryResult<CommitStagedOutcome> {
+    fn commit_branch(&self, request: &CommitRequest) -> HistoryResult<CommitOutcome> {
         let held = std::mem::take(&mut self.shared.lock().armed);
         if !held {
-            return self.handles.history.stage_and_commit(request);
+            return self.handles.history.commit_branch(request);
         }
         match self.point {
             Point::BeforePublication => {
                 self.shared.hold();
-                self.handles.history.stage_and_commit(request)
+                self.handles.history.commit_branch(request)
             }
             Point::BeforeInstall => {
                 // The real, original outcome; only its return is delayed.
-                let outcome = self.handles.history.stage_and_commit(request);
+                let outcome = self.handles.history.commit_branch(request);
                 self.shared.hold();
                 outcome
             }

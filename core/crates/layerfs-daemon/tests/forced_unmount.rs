@@ -405,7 +405,13 @@ fn later(harness: &Harness, token: WorkspaceToken) -> Vec<(&'static str, Teardow
                 relinquish_unknown: true,
             },
         ),
-        ("Unmount", Request::Unmount(token)),
+        (
+            "Unmount",
+            Request::Unmount(layerfs_bridge::control::UnmountControl {
+                token,
+                discard: true,
+            }),
+        ),
         ("Attach", Request::Attach(token)),
     ]
     .into_iter()

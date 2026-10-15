@@ -20,7 +20,7 @@ mod records;
 mod support;
 use layerfs_content::filesystem::{FilesystemRootId, PathName};
 use layerfs_daemon::{store::BindRequest, Owner, OwnerConfig};
-use layerfs_history::{CommitStagedOutcome, WorkspaceId};
+use layerfs_history::{CommitOutcome, WorkspaceId};
 use std::{
     fs::OpenOptions,
     io::{BufRead, Write},
@@ -95,8 +95,8 @@ fn main() {
             .unwrap();
         assert!(matches!(
             (&result.history, changed),
-            (CommitStagedOutcome::Committed(_), true)
-                | (CommitStagedOutcome::UpToDate { .. }, false)
+            (Some(CommitOutcome::Committed { .. }), true)
+                | (Some(CommitOutcome::UpToDate { .. }), false)
         ));
         let after = f.opened.diagnostics().unwrap();
         let local_after = owner.client().diagnostics().unwrap();

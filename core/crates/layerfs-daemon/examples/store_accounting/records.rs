@@ -79,8 +79,11 @@ pub fn commit(
     out.raw("{\"schema\":\"cluster-two-store-accounting-v2\",\"attempt_count\":1,\"mode\":\"diagnostic\",\"namespace_files\":100000,").unwrap();
     out.text("outcome", kind).unwrap();
     let (head, root) = match &original.history {
-        layerfs_history::CommitStagedOutcome::Committed(record) => (Some(record.id), record.root),
-        layerfs_history::CommitStagedOutcome::UpToDate { head, root } => (*head, *root),
+        Some(layerfs_history::CommitOutcome::Committed { record, .. }) => {
+            (Some(record.id), record.root)
+        }
+        Some(layerfs_history::CommitOutcome::UpToDate { head, root }) => (*head, *root),
+        None => unreachable!("one Workspace never merges"),
     };
     out.raw(",").unwrap();
     out.text("root", &root.to_string()).unwrap();

@@ -41,7 +41,10 @@ fn terminal_unmount_deletes_only_its_file_after_retained_requests_release() {
     fixture::write(&f.service, b_token, 88);
     let closed = f
         .service
-        .execute_control(&Request::Unmount(a_token))
+        .execute_control(&Request::Unmount(layerfs_bridge::control::UnmountControl {
+            token: a_token,
+            discard: true,
+        }))
         .unwrap();
     assert_eq!(closed.reply, Reply::Unmounted(a_token));
     drop(closed);
@@ -69,13 +72,19 @@ fn terminal_unmount_deletes_only_its_file_after_retained_requests_release() {
     assert_eq!(std::fs::read(&template).unwrap(), pristine);
     drop(
         f.service
-            .execute_control(&Request::Unmount(b_token))
+            .execute_control(&Request::Unmount(layerfs_bridge::control::UnmountControl {
+                token: b_token,
+                discard: true,
+            }))
             .unwrap(),
     );
     drop(b);
     drop(
         f.service
-            .execute_control(&Request::Unmount(c_token))
+            .execute_control(&Request::Unmount(layerfs_bridge::control::UnmountControl {
+                token: c_token,
+                discard: true,
+            }))
             .unwrap(),
     );
     drop(c);
@@ -100,7 +109,10 @@ fn a_replaced_terminal_path_is_retained_and_never_deleted_on_a_guess() {
     let path = f.host.directory.join("1.sqlite");
     drop(
         f.service
-            .execute_control(&Request::Unmount(selected))
+            .execute_control(&Request::Unmount(layerfs_bridge::control::UnmountControl {
+                token: selected,
+                discard: true,
+            }))
             .unwrap(),
     );
     let original = std::fs::read(&path).unwrap();
@@ -126,7 +138,10 @@ fn a_replaced_terminal_path_is_retained_and_never_deleted_on_a_guess() {
     fixture::write(&f.service, other_token, 89);
     drop(
         f.service
-            .execute_control(&Request::Unmount(other_token))
+            .execute_control(&Request::Unmount(layerfs_bridge::control::UnmountControl {
+                token: other_token,
+                discard: true,
+            }))
             .unwrap(),
     );
     drop(other);

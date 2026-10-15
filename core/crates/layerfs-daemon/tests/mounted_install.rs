@@ -1,7 +1,7 @@
 //! Real kernel mounts: the known local install of a control Commit on a live
-//! mount, and the overwrite-only Branch head with its captured parent.
+//! mount.
 //!
-//! No notification is sent at install, so every proof here reads the mount
+//! An install of the Workspace's own captured root sends no notification, so every proof here reads the mount
 //! after install the way an ordinary process does: through descriptors that
 //! were open before the Commit, through the kernel's caches, around them with
 //! `O_DIRECT`, and with attributes the kernel fetches from the daemon for that
@@ -33,17 +33,15 @@ mod rig;
 mod support;
 use layerfs_bridge::control::{Activity, ReadyMount, Reply, Request, WorkspaceToken};
 use layerfs_content::ObjectId;
-use layerfs_daemon::control::{Failure, Service};
-use layerfs_history::{
-    CommitHistoryRequest, CommitId, CommitRecord, CommitStagedOutcome, HistoryError,
-};
+use layerfs_daemon::control::Service;
+use layerfs_history::CommitRecord;
 use model::{assert_same, Flat, Seen, DIRECTORY, FILE};
-use mounted::{mount_entry, until, COMMAND};
+use mounted::{until, COMMAND};
 use mutating::{c, direct, frames, path_only};
 use nix::{errno::Errno, libc};
 use rig::{
-    assert_kernel, bash, bash_in, host, kernel, passed, pattern, receipt, root, Background, Kernel,
-    Rig, Stat,
+    assert_kernel, bash, bash_in, host, kernel, passed, pattern, root, Background, Kernel, Rig,
+    Stat,
 };
 use std::{
     collections::BTreeMap,
@@ -403,22 +401,6 @@ impl Kept {
     }
 }
 
-/// The Branch as History holds it now, read from the Store.
-fn head(rig: &Rig) -> (Option<CommitId>, ObjectId) {
-    let snapshot = rig
-        .store
-        .history()
-        .branch_snapshot(rig.harness.branch)
-        .unwrap()
-        .expect("the Branch");
-    (snapshot.branch.head_commit, snapshot.effective_root)
-}
-/// The Branch's current ancestry, head first.
-fn ancestry(rig: &Rig) -> Vec<CommitId> {
-    let page = rig.history();
-    assert!(page.continuation.is_none(), "one page holds the ancestry");
-    page.records.iter().map(|record| record.id).collect()
-}
 /// Any stored root, the Branch's current one or not, walked completely
 /// through the client of a short bind that is closed again.
 fn stored(rig: &Rig, tag: u8, root: ObjectId) -> Flat {
@@ -1303,268 +1285,6 @@ fn writes_during_a_commit_stay_live_and_reach_the_next_commit_fifty_to_a_directo
         label: "r5-5b-50",
         shard: 50,
     });
-}
-
-const IN_A: &str = r#"
-set -euo pipefail
-umask 022
-printf 'only in A\n' > only-a.txt
-printf 'A changed the readme\n' >> README.md
-mkdir -p from-a/sub
-head -c 50000 /dev/zero | tr '\0' 'a' > from-a/sub/big.bin
-ln from-a/sub/big.bin from-a/big-alias.bin
-rm -f debug.log
-mv -T src/main.rs src/main-a.rs
-chmod 0600 docs/guide.md
-"#;
-const IN_B: &str = r#"
-set -euo pipefail
-umask 022
-printf 'only in B\n' > only-b.txt
-printf 'B changed the readme differently\n' >> README.md
-mkdir -p from-b
-printf 'b' > from-b/small
-ln -s only-b.txt link-b
-rm -rf spare
-mv -T src/lib.rs src/lib-b.rs
-printf 'seed changed by B\n' > seed.txt
-touch -d '2012-12-12 12:12:12.5 UTC' docs
-"#;
-
-/// R5-4: two Workspaces of one Branch mounted at once on one daemon.
-#[test]
-fn a_later_commit_overwrites_the_branch_head_and_keeps_its_captured_parent() {
-    let rig = Rig::new("r5-4");
-    // A first Commit, so the head both Workspaces capture is a Commit.
-    let seed = rig.mount(3);
-    passed(
-        &bash_in(COMMAND, root(&seed), "printf 'seeded\\n' > seed.txt"),
-        "seed",
-    );
-    let seeded = host(root(&seed));
-    let h0 = rig.committed(seed.token, "R5-4 seed");
-    rig.unmount(&seed);
-    assert_eq!(head(&rig), (Some(h0.id), h0.root));
-
-    let a = rig.mount(1);
-    let b = rig.mount(2);
-    let (mount_a, mount_b) = (root(&a), root(&b));
-    for ready in [&a, &b] {
-        let binding = rig.harness.status(ready.token).binding;
-        assert_eq!(
-            (binding.branch.head_commit, binding.effective_root),
-            (Some(h0.id), h0.root)
-        );
-    }
-    // Two kernel mounts.
-    assert_ne!(a.directory, b.directory);
-    let (entry_a, entry_b) = (
-        mount_entry(&a.directory).expect("mount A"),
-        mount_entry(&b.directory).expect("mount B"),
-    );
-    let (device_a, device_b) = (
-        fs::metadata(mount_a).unwrap().dev(),
-        fs::metadata(mount_b).unwrap().dev(),
-    );
-    assert_ne!(device_a, device_b, "one kernel superblock each");
-    assert_same(&seeded, &host(mount_a), "A at the head");
-    assert_same(&seeded, &host(mount_b), "B at the head");
-
-    // Each changed differently; neither sees the other's change.
-    passed(&bash_in(COMMAND, mount_a, IN_A), "changes in A");
-    passed(&bash_in(COMMAND, mount_b, IN_B), "changes in B");
-    let tree_a = host(mount_a);
-    let tree_b = host(mount_b);
-    let isolated = |when: &str| {
-        for (mount, missing) in [(mount_a, "only-b.txt"), (mount_b, "only-a.txt")] {
-            assert_eq!(
-                fs::symlink_metadata(mount.join(missing))
-                    .unwrap_err()
-                    .kind(),
-                io::ErrorKind::NotFound,
-                "{when}: {missing} under {mount:?}"
-            );
-        }
-        assert_same(&tree_a, &host(mount_a), &format!("{when}: mount A"));
-        assert_same(&tree_b, &host(mount_b), &format!("{when}: mount B"));
-    };
-    assert_eq!(file(&tree_a, "only-a.txt"), b"only in A\n");
-    assert_eq!(file(&tree_b, "only-b.txt"), b"only in B\n");
-    assert_eq!(
-        file(&tree_a, "README.md"),
-        b"# base\nA changed the readme\n"
-    );
-    assert_eq!(
-        file(&tree_b, "README.md"),
-        b"# base\nB changed the readme differently\n"
-    );
-    assert_eq!(file(&tree_a, "seed.txt"), b"seeded\n");
-    assert_eq!(file(&tree_b, "seed.txt"), b"seed changed by B\n");
-    absent(&tree_a, &["only-b.txt", "from-b", "link-b", "debug.log"]);
-    absent(&tree_b, &["only-a.txt", "from-a", "spare"]);
-    isolated("before either Commit");
-
-    // A commits.
-    let record_a = rig.committed(a.token, "R5-4 A");
-    assert_eq!(record_a.parent, Some(h0.id));
-    assert_eq!(head(&rig), (Some(record_a.id), record_a.root));
-    assert_eq!(ancestry(&rig), [record_a.id, h0.id]);
-    assert_same(&tree_a, &rig.published(record_a.root), "A's published root");
-    // B is still bound at the earlier head.
-    let stale = rig.harness.status(b.token).binding;
-    assert_eq!(
-        (stale.branch.head_commit, stale.effective_root),
-        (Some(h0.id), h0.root)
-    );
-    isolated("after A's Commit");
-
-    // B commits: the head is overwritten, the parent is the captured head.
-    let record_b = rig.committed(b.token, "R5-4 B");
-    assert_eq!(record_b.parent, Some(h0.id), "the captured parent");
-    assert_ne!(record_b.parent, Some(record_a.id));
-    assert_ne!(record_b.id, record_a.id);
-    assert_ne!(record_b.root, record_a.root);
-    assert_eq!(head(&rig), (Some(record_b.id), record_b.root));
-    assert_eq!(ancestry(&rig), [record_b.id, h0.id]);
-    assert_same(&tree_b, &rig.published(record_b.root), "B's published root");
-    // A's Commit is displaced from the ancestry, and still stored whole.
-    assert_eq!(
-        rig.store.history().commit(record_a.id).unwrap(),
-        Some(record_a.clone())
-    );
-    assert_same(
-        &tree_a,
-        &stored(&rig, 10, record_a.root),
-        "A's displaced root",
-    );
-    let anchored = rig
-        .harness
-        .service
-        .execute_control(&Request::History(CommitHistoryRequest {
-            branch: rig.harness.branch,
-            start: Some(record_a.id),
-            cursor: None,
-            limit: rig::HISTORY,
-        }));
-    let anchored = match anchored {
-        Err(Failure::History(HistoryError::NotInHistory(what))) => what,
-        Err(other) => panic!("ancestry from the displaced Commit: {other:?}"),
-        Ok(done) => panic!("ancestry from the displaced Commit: {:?}", done.reply),
-    };
-    // Each mounted Workspace keeps its own installed view.
-    for (ready, record) in [(&a, &record_a), (&b, &record_b)] {
-        let binding = rig.harness.status(ready.token).binding;
-        assert_eq!(
-            (binding.branch.head_commit, binding.effective_root),
-            (Some(record.id), record.root)
-        );
-    }
-    isolated("after B's Commit");
-    println!(
-        "R5-4 h0={:?} a={{id={:?} parent={:?}}} b={{id={:?} parent={:?}}} head_after_a=a head_after_b=b ancestry_after_b=[b,h0] a_stored=true a_root_readable_paths={} ancestry_from_a=NotInHistory({anchored}) mounts={{a={} {} dev={device_a}, b={} {} dev={device_b}}}",
-        h0.id,
-        record_a.id,
-        record_a.parent,
-        record_b.id,
-        record_b.parent,
-        tree_a.len(),
-        entry_a.filesystem,
-        entry_a.source,
-        entry_b.filesystem,
-        entry_b.source
-    );
-
-    // A third Workspace, bound and mounted now, shows B's tree exactly.
-    let third = rig.mount(4);
-    let mount_c = root(&third);
-    let binding = rig.harness.status(third.token).binding;
-    assert_eq!(
-        (binding.branch.head_commit, binding.effective_root),
-        (Some(record_b.id), record_b.root)
-    );
-    assert_same(&tree_b, &host(mount_c), "the third mount");
-    assert_kernel(&tree_b, &kernel(mount_c), "R5-4 third mount");
-
-    // The stale unchanged candidate: A, installed at its own root, changes
-    // nothing and commits while the head is B's.
-    let mut findings = Findings::default();
-    let (before_cached, before_forced) = tables(mount_a);
-    let done = rig
-        .commit(a.token)
-        .unwrap_or_else(|failure| panic!("R5-4 stale unchanged A: {failure:?}"));
-    receipt(&done, "R5-4 stale unchanged A");
-    let again: CommitRecord = match &done.reply {
-        Reply::Committed(CommitStagedOutcome::Committed(record)) => record.clone(),
-        other => panic!(
-            "R5-4 stale unchanged A: the Branch overwrite decision says Committed; observed {other:?}"
-        ),
-    };
-    drop(done);
-    println!(
-        "R5-4 stale_unchanged observed=Committed id={:?} parent={:?} root_is_a={} head_before=b",
-        again.id,
-        again.parent,
-        again.root == record_a.root
-    );
-    assert_eq!(again.root, record_a.root, "the unchanged root");
-    assert_eq!(again.parent, Some(record_a.id), "A's captured head");
-    assert!(again.id != record_a.id && again.id != record_b.id);
-    assert_eq!(head(&rig), (Some(again.id), record_a.root));
-    assert_eq!(ancestry(&rig), [again.id, record_a.id, h0.id]);
-    assert_same(&tree_a, &rig.published(record_a.root), "the head again");
-    let (after_cached, after_forced) = tables(mount_a);
-    findings.table(
-        "stale unchanged install: lstat table of A",
-        &before_cached,
-        &after_cached,
-    );
-    findings.table(
-        "stale unchanged install: forced stat table of A",
-        &before_forced,
-        &after_forced,
-    );
-    // B's Commit is displaced in turn, and still stored whole.
-    assert_eq!(
-        rig.store.history().commit(record_b.id).unwrap(),
-        Some(record_b.clone())
-    );
-    assert_same(
-        &tree_b,
-        &stored(&rig, 11, record_b.root),
-        "B's displaced root",
-    );
-    // Every mounted Workspace still shows its own tree.
-    for (ready, head_commit, effective) in [
-        (&a, again.id, record_a.root),
-        (&b, record_b.id, record_b.root),
-        (&third, record_b.id, record_b.root),
-    ] {
-        let binding = rig.harness.status(ready.token).binding;
-        assert_eq!(
-            (binding.branch.head_commit, binding.effective_root),
-            (Some(head_commit), effective)
-        );
-    }
-    isolated("after the stale unchanged Commit");
-    assert_same(&tree_b, &host(mount_c), "the third mount, still B's tree");
-    // Immediately again, A describes the head.
-    assert_eq!(
-        rig.up_to_date(a.token, "R5-4 A again"),
-        (Some(again.id), record_a.root)
-    );
-    let fourth = rig.mount(5);
-    assert_same(&tree_a, &host(root(&fourth)), "the fourth mount");
-    assert_kernel(&tree_a, &kernel(root(&fourth)), "R5-4 fourth mount");
-    println!(
-        "R5-4 head_after_stale_unchanged=a2 ancestry=[a2,a,h0] b_stored=true mounts_now={{a=A's tree, b=B's tree, third=B's tree, fourth=A's tree}} paths_a={} paths_b={}",
-        tree_a.len(),
-        tree_b.len()
-    );
-    for ready in [&a, &b, &third, &fourth] {
-        rig.unmount(ready);
-    }
-    rig.finish();
-    findings.finish("R5-4");
 }
 
 /// Directories of 65 names: one of names too long for 64 of them to fit one

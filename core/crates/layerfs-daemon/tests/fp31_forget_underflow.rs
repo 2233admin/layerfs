@@ -492,7 +492,13 @@ fn refused_at_the_service(reduced: Reduced) {
     assert!(kept.contains("stage: Requests"), "{kept}");
     // Later operations answer with the same custody and attempt nothing.
     let later = client.diagnostics().unwrap().jobs.iter().sum::<u64>();
-    for request in [Request::Unmount(token), Request::Attach(token)] {
+    for request in [
+        Request::Unmount(layerfs_bridge::control::UnmountControl {
+            token,
+            discard: true,
+        }),
+        Request::Attach(token),
+    ] {
         match h.service.execute_control(&request) {
             Err(Failure::Retained(again)) => assert_eq!(*again, custody, "{request:?}"),
             other => panic!("{name}: {request:?}: {}", brief(&other)),

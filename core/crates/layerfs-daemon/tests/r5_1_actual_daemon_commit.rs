@@ -39,9 +39,7 @@ use layerfs_bridge::{
     daemon_setup::{DaemonLimits, DaemonSetup},
     duplex,
 };
-use layerfs_history::{
-    BranchId, CommitHistoryRequest, CommitRecord, CommitStagedOutcome, WorkspaceId,
-};
+use layerfs_history::{BranchId, CommitHistoryRequest, CommitOutcome, CommitRecord, WorkspaceId};
 use model::{assert_same, Flat};
 use mounted::COMMAND;
 use rig::{assert_kernel, bash_in, clock_masked, clocked, host as tree, kernel, passed};
@@ -369,7 +367,7 @@ fn r5_1_the_actual_daemon_commits_a_change_by_external_bash_and_a_fresh_mount_is
         .commit(bound.token)
         .unwrap()
     {
-        CommitStagedOutcome::Committed(record) => record,
+        CommitOutcome::Committed { record, .. } => *record,
         other => panic!("{name}: the Commit replied {other:?}"),
     };
     assert_eq!(record.parent, None);
@@ -434,7 +432,7 @@ fn r5_1_the_actual_daemon_commits_a_change_by_external_bash_and_a_fresh_mount_is
     // An unchanged fresh Workspace commits nothing new.
     assert!(matches!(
         layerfs_api::internal::workspace(&mut control).commit(fresh.token).unwrap(),
-        CommitStagedOutcome::UpToDate { head, root } if head == Some(record.id) && root == record.root
+        CommitOutcome::UpToDate { head, root } if head == Some(record.id) && root == record.root
     ));
     assert_eq!(history(&mut control, branch), [record.clone()]);
     unmount(&mut control, &again);

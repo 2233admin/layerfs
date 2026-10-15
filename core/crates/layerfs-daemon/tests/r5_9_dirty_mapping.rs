@@ -198,9 +198,10 @@ fn r5_9_a_still_dirty_mapped_page_is_outside_the_commit_and_in_the_next_after_ms
     let done = done.unwrap_or_else(|failure| panic!("first Commit: {failure:?}"));
     rig::receipt(&done, "R5-9-DIRTY first");
     let first = match &done.reply {
-        layerfs_bridge::control::Reply::Committed(
-            layerfs_history::CommitStagedOutcome::Committed(record),
-        ) => record.clone(),
+        layerfs_bridge::control::Reply::Committed(layerfs_history::CommitOutcome::Committed {
+            record,
+            ..
+        }) => (**record).clone(),
         other => panic!("first Commit: {other:?}"),
     };
     assert_eq!(first.parent, bound.branch.head_commit);

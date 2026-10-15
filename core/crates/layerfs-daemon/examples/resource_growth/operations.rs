@@ -2,7 +2,7 @@
 use super::{allocation, bytes, produce};
 use layerfs_content::{filesystem::PathName, ContentResult, FinalizedConsumer, FinalizedObject};
 use layerfs_daemon::{bootstrap::OpenedStore, store::BoundWorkspace, Owner};
-use layerfs_history::CommitStagedOutcome;
+use layerfs_history::CommitOutcome;
 use layerfs_storage::Save;
 use layerfs_telemetry::timer::Timing;
 use std::{
@@ -29,7 +29,7 @@ pub fn commit(
     let after = opened.diagnostics().unwrap().writer;
     let local_after = owner.client().diagnostics().unwrap();
     let record = match &result.history {
-        CommitStagedOutcome::Committed(value) => value,
+        Some(CommitOutcome::Committed { record: value, .. }) => value,
         other => panic!("{other:?}"),
     };
     let whole = local_after.sql_foreground.since(&local.sql_foreground);

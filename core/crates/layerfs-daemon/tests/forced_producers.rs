@@ -8,7 +8,7 @@
 //!   closure that blocks on a bounded gate and then returns the bound root.
 //! - A Commit held before publication and before its local install: the
 //!   product control Commit over `support/history_gate.rs`, which holds the
-//!   Commit thread on a chosen side of the real `stage_and_commit`.
+//!   Commit thread on a chosen side of the real `commit_branch`.
 //! - Unknown History custody: `support/history_boundary.rs`
 //!   `LostAcknowledgement`, as case F3 of `mounted_commit_failures.rs`.
 //!   External catalog boundary scope; not a kernel SQLite I/O failure.
@@ -74,7 +74,7 @@ use layerfs_daemon::{
     control::{Failure, Service, Success},
     store::{CommitError, CommitPhase, ReleasedOwner, Store, StoreReader},
 };
-use layerfs_history::{CommitStagedOutcome, HistoryCatalog, HistoryError, WorkspaceId};
+use layerfs_history::{CommitOutcome, HistoryCatalog, HistoryError, WorkspaceId};
 use layerfs_overlay::CleanupState;
 use layerfs_persistence::Handles;
 use layerfs_storage::{port::PackPersistence, ReservationBlocks, Storage};
@@ -473,7 +473,10 @@ fn departed(
             token,
             relinquish_unknown: true,
         },
-        Request::Unmount(token),
+        Request::Unmount(layerfs_bridge::control::UnmountControl {
+            token,
+            discard: true,
+        }),
         Request::Status(token),
     ] {
         assert!(
@@ -577,7 +580,7 @@ impl Drop for Hold {
 /// on that thread.
 struct Finished {
     /// The Commit's own reply, or its failure.
-    outcome: Result<CommitStagedOutcome, String>,
+    outcome: Result<CommitOutcome, String>,
     /// The product constructor's receipt: reader, then owner, both released
     /// and nothing retained. Absent when a caller's constructor ran.
     released: Option<bool>,
@@ -591,7 +594,12 @@ fn commit(
     gate: Option<Arc<Gate>>,
 ) -> JoinHandle<Finished> {
     thread::spawn(move || {
-        let request = Request::Commit(token);
+        let request = Request::Commit(layerfs_bridge::control::CommitControl {
+            token,
+            force: false,
+            agent: None,
+            call: None,
+        });
         let result = match gate {
             Some(gate) => service.execute(&request, move |_, _, snapshot| {
                 gate.hold();
@@ -747,7 +755,7 @@ fn busy_while_a_commit_is_held(name: &'static str, label: &str, point: Option<Po
     let idle = fx.harness.status(token);
     match (&tree, &ended.outcome) {
         // The caller constructor returned the bound root.
-        (None, Ok(CommitStagedOutcome::UpToDate { head, root })) => checks.that(
+        (None, Ok(CommitOutcome::UpToDate { head, root })) => checks.that(
             *head == bound.binding.branch.head_commit && *root == bound.binding.effective_root,
             || {
                 format!(
@@ -757,7 +765,7 @@ fn busy_while_a_commit_is_held(name: &'static str, label: &str, point: Option<Po
             },
         ),
         // The product Commit published exactly the tree captured before it.
-        (Some(tree), Ok(CommitStagedOutcome::Committed(record))) => {
+        (Some(tree), Ok(CommitOutcome::Committed { record, .. })) => {
             checks.that(
                 record.parent == bound.binding.branch.head_commit
                     && record.root != bound.binding.effective_root

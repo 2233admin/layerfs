@@ -14,7 +14,7 @@ use layerfs_daemon::{
     store::{BindRequest, BoundWorkspace, StoreOperation},
     Owner, OwnerConfig, Response,
 };
-use layerfs_history::{BranchId, CommitStagedOutcome, WorkspaceId};
+use layerfs_history::{BranchId, CommitOutcome, WorkspaceId};
 use layerfs_overlay::ProfileConfig;
 use layerfs_persistence::{
     PersistenceConfig, SqlWork, SqliteAcquisitionSchema, SqlitePersistenceProfile,
@@ -487,7 +487,10 @@ pub fn extend(kept: &Kept, shape: Shape, commits: usize, checkpoints: &[usize]) 
             let success = workspace
                 .commit_captured()
                 .unwrap_or_else(|failure| panic!("{failure:?}"));
-            assert!(matches!(success.history, CommitStagedOutcome::Committed(_)));
+            assert!(matches!(
+                success.history,
+                Some(CommitOutcome::Committed { .. })
+            ));
         }
         evidence(format_args!(
             "LONG_BRANCH_EXTEND shape={} commits={}..{} wall_ms={}",

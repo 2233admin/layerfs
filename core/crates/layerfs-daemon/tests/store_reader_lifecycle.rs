@@ -164,18 +164,16 @@ impl HistoryCatalog for FaultHistory {
         branches(stack: LayerStackId, page: &Page) -> HistoryResult<PageResult<BranchRecord>>;
         commit(id: CommitId) -> HistoryResult<Option<CommitRecord>>;
         layer(id: LayerId) -> HistoryResult<Option<LayerRecord>>;
-        stage(workspace: WorkspaceId) -> HistoryResult<Option<StageRecord>>;
-        stages(branch: BranchId, page: &Page) -> HistoryResult<PageResult<StageRecord>>;
         commit_history(request: &CommitHistoryRequest) -> HistoryResult<PageResult<CommitRecord>>;
         layer_history(request: &LayerHistoryRequest) -> HistoryResult<PageResult<LayerRecord>>;
         initialize_layerstack(request: &StackInitialization) -> HistoryResult<LayerStackRecord>;
         fork(request: &ForkRequest) -> HistoryResult<BranchSnapshot>;
-        stage_changes(request: &StageRequest) -> HistoryResult<StageRecord>;
-        commit_staged(request: &CommitStagedRequest) -> HistoryResult<CommitStagedOutcome>;
+        merge_base(left: NodeId, right: NodeId) -> HistoryResult<Option<NodeId>>;
+        is_ancestor(ancestor: NodeId, descendant: NodeId) -> HistoryResult<bool>;
+        commit_branch(request: &CommitRequest) -> HistoryResult<CommitOutcome>;
         add_layer(request: &AddLayerRequest) -> HistoryResult<AddLayerOutcome>;
-        discard_stage(request: &DiscardRequest) -> HistoryResult<DiscardOutcome>;
+        merge_branch(request: &BranchMergeRequest) -> HistoryResult<BranchSnapshot>;
         reserve_inodes(request: &ReserveRequest) -> HistoryResult<Reservation>;
-        stage_and_commit(request: &StageRequest) -> HistoryResult<CommitStagedOutcome>;
     }
     fn branch_snapshot(&self, branch: BranchId) -> HistoryResult<Option<BranchSnapshot>> {
         let Some(fault) = self.fault else {

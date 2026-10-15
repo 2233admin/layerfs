@@ -35,27 +35,25 @@ impl HistoryCatalog for ObservedHistory {
         branches(stack: LayerStackId, page: &Page) -> HistoryResult<PageResult<BranchRecord>>;
         commit(id: CommitId) -> HistoryResult<Option<CommitRecord>>;
         layer(id: LayerId) -> HistoryResult<Option<LayerRecord>>;
-        stage(workspace: WorkspaceId) -> HistoryResult<Option<StageRecord>>;
-        stages(branch: BranchId, page: &Page) -> HistoryResult<PageResult<StageRecord>>;
         commit_history(request: &CommitHistoryRequest) -> HistoryResult<PageResult<CommitRecord>>;
         layer_history(request: &LayerHistoryRequest) -> HistoryResult<PageResult<LayerRecord>>;
         initialize_layerstack(request: &StackInitialization) -> HistoryResult<LayerStackRecord>;
         fork(request: &ForkRequest) -> HistoryResult<BranchSnapshot>;
-        stage_changes(request: &StageRequest) -> HistoryResult<StageRecord>;
-        commit_staged(request: &CommitStagedRequest) -> HistoryResult<CommitStagedOutcome>;
+        merge_base(left: NodeId, right: NodeId) -> HistoryResult<Option<NodeId>>;
+        is_ancestor(ancestor: NodeId, descendant: NodeId) -> HistoryResult<bool>;
         add_layer(request: &AddLayerRequest) -> HistoryResult<AddLayerOutcome>;
-        discard_stage(request: &DiscardRequest) -> HistoryResult<DiscardOutcome>;
+        merge_branch(request: &BranchMergeRequest) -> HistoryResult<BranchSnapshot>;
         reserve_inodes(request: &ReserveRequest) -> HistoryResult<Reservation>;
     }
-    fn stage_and_commit(&self, request: &StageRequest) -> HistoryResult<CommitStagedOutcome> {
+    fn commit_branch(&self, request: &CommitRequest) -> HistoryResult<CommitOutcome> {
         if !self.once.swap(false, Ordering::SeqCst) {
-            return self.handles.history.stage_and_commit(request);
+            return self.handles.history.commit_branch(request);
         }
         match self.boundary {
             Boundary::HeldWriter => {
                 let held = super::held_writer::HeldWriter::acquire(&self.database);
                 let before = self.handles.diagnostics().unwrap();
-                let result = self.handles.history.stage_and_commit(request);
+                let result = self.handles.history.commit_branch(request);
                 let after = self.handles.diagnostics().unwrap();
                 assert_eq!(result, Err(HistoryError::Busy));
                 assert_eq!(after.statements - before.statements, 1);
@@ -64,7 +62,7 @@ impl HistoryCatalog for ObservedHistory {
                 result
             }
             Boundary::LostAcknowledgement => {
-                self.handles.history.stage_and_commit(request).unwrap();
+                self.handles.history.commit_branch(request).unwrap();
                 // Public-port acknowledgement loss, explicitly not a SQLite
                 // I/O/quarantine qualification. Original caller remains unknown.
                 Err(HistoryError::UnknownOutcome)

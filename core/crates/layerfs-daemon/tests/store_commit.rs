@@ -17,7 +17,7 @@ use layerfs_daemon::{
     store::{BindRequest, BoundWorkspace, CommitError, CommitPhase, Store},
     Owner, OwnerClient, OwnerConfig,
 };
-use layerfs_history::{BranchSnapshot, CommitStagedOutcome, HistoryError, WorkspaceId};
+use layerfs_history::{BranchSnapshot, CommitOutcome, HistoryError, WorkspaceId};
 use layerfs_overlay::ProfileConfig;
 use layerfs_storage::{ReservationBlocks, Save, StorageError};
 use layerfs_telemetry::timer::Timing;
@@ -202,90 +202,6 @@ fn close(_owner: &Owner, workspace: &BoundWorkspace) {
 }
 
 #[test]
-fn committed_up_to_date_overwrite_and_new_bind_preserve_exact_roots() {
-    let (f, store, owner) = setup("commit-outcomes");
-    let first = bind(&store, &owner, &f, 1);
-    let loser = bind(&store, &owner, &f, 2);
-    let original = first.snapshot().unwrap();
-    write(&first, &bytes(b'A'));
-    write(&loser, &bytes(b'B'));
-    let result = first
-        .commit(|save, _, snapshot| {
-            construct(save, snapshot, &bytes(b'A'), store.policy().construction())
-        })
-        .unwrap();
-    let record = match &result.history {
-        CommitStagedOutcome::Committed(record) => record.clone(),
-        other => panic!("{other:?}"),
-    };
-    assert_eq!(result.storage.initial_reservations, 1);
-    assert_eq!(result.storage.reservation_refills, 0);
-    assert_eq!(result.storage.reserve, 1);
-    assert!(result.storage.publish > 0);
-    assert_eq!(read(&first), bytes(b'A'));
-    assert_eq!(
-        first.snapshot().unwrap().branch.head_commit,
-        Some(record.id)
-    );
-    assert!(store.history().stage(first.identity()).unwrap().is_none());
-    println!(
-        "STORE_COMMIT count={} initial={} refills={} publication={} history=1 installed=true",
-        result.storage.reserve + result.storage.publish + 1,
-        result.storage.initial_reservations,
-        result.storage.reservation_refills,
-        result.storage.publish
-    );
-    drop(result);
-    let same = first
-        .commit(|_, _, snapshot| Ok(FilesystemRootId(snapshot.effective_root)))
-        .unwrap();
-    assert_eq!(
-        same.history,
-        CommitStagedOutcome::UpToDate {
-            head: Some(record.id),
-            root: record.root
-        }
-    );
-    println!(
-        "STORE_UP_TO_DATE count={} initial={} refills={} publication={} history=1",
-        same.storage.reserve + same.storage.publish + 1,
-        same.storage.initial_reservations,
-        same.storage.reservation_refills,
-        same.storage.publish
-    );
-    drop(same);
-    let overwritten = loser
-        .commit(|save, _, snapshot| {
-            construct(save, snapshot, &bytes(b'B'), store.policy().construction())
-        })
-        .unwrap();
-    let later = match &overwritten.history {
-        CommitStagedOutcome::Committed(record) => record.clone(),
-        other => panic!("{other:?}"),
-    };
-    assert_eq!(later.parent, original.branch.head_commit);
-    assert!(store.history().stage(loser.identity()).unwrap().is_none());
-    assert_eq!(loser.snapshot().unwrap().effective_root, later.root);
-    assert_eq!(read(&loser), bytes(b'B'));
-    assert_eq!(
-        read(&first),
-        bytes(b'A'),
-        "another Workspace's view stays bound"
-    );
-    drop(overwritten);
-    let rebound = bind(&store, &owner, &f, 3);
-    assert_eq!(rebound.snapshot().unwrap().effective_root, later.root);
-    assert_eq!(read(&rebound), bytes(b'B'));
-    println!("STORE_OVERWRITE both_candidates_installed=true captured_parent_preserved=true new_bind=last_root old_workspace_view_preserved=true");
-    for workspace in [&first, &loser, &rebound] {
-        close(&owner, workspace);
-    }
-    drop((first, loser, rebound, store));
-    owner.stop().unwrap();
-    f.cleanup();
-}
-
-#[test]
 fn busy_missing_dependency_and_read_failure_leave_no_stage_or_local_data_loss() {
     let (f, store, owner) = setup("commit-refusals");
     let workspace = bind(&store, &owner, &f, 1);
@@ -306,11 +222,6 @@ fn busy_missing_dependency_and_read_failure_leave_no_stage_or_local_data_loss() 
     ));
     assert_eq!(busy.phase, CommitPhase::Begin);
     assert!(busy.locally_settled && busy.published.is_none());
-    assert!(store
-        .history()
-        .stage(workspace.identity())
-        .unwrap()
-        .is_none());
     assert_eq!(read(&workspace), bytes(b'C'));
     assert_eq!(workspace.snapshot().unwrap(), original);
     held.release();
@@ -336,11 +247,6 @@ fn busy_missing_dependency_and_read_failure_leave_no_stage_or_local_data_loss() 
         "{missing:?}"
     );
     assert!(missing.locally_settled && missing.published.is_none());
-    assert!(store
-        .history()
-        .stage(workspace.identity())
-        .unwrap()
-        .is_none());
     drop(missing);
     let missing_read = workspace
         .commit(|save, _, _| {
@@ -359,7 +265,10 @@ fn busy_missing_dependency_and_read_failure_leave_no_stage_or_local_data_loss() 
             construct(save, snapshot, &bytes(b'C'), store.policy().construction())
         })
         .unwrap();
-    assert!(matches!(later.history, CommitStagedOutcome::Committed(_)));
+    assert!(matches!(
+        later.history,
+        Some(CommitOutcome::Committed { .. })
+    ));
     assert_eq!(read(&workspace), bytes(b'C'));
     println!("STORE_COMMIT_REFUSALS busy_before_construction=true no_new_stage=true effective_bytes_preserved=true original_missing_dependency=true original_read_failure=true later_explicit_call=Committed");
     drop(later);
@@ -390,7 +299,7 @@ fn known_publication_survives_an_unattempted_local_install() {
     ));
     assert!(matches!(
         failed.published,
-        Some(CommitStagedOutcome::Committed(_))
+        Some(CommitOutcome::Committed { .. })
     ));
     assert_eq!(workspace.snapshot().unwrap(), original);
     assert!(failed.capture.is_some());
@@ -447,7 +356,7 @@ fn a_held_producer_does_not_hold_workspace_metadata_or_read_capacity() {
     assert_eq!(read(&workspace), support::bytes(0));
     release.send(()).unwrap();
     let done = worker.join().unwrap().unwrap();
-    assert!(matches!(done.history, CommitStagedOutcome::UpToDate { .. }));
+    assert!(matches!(done.history, Some(CommitOutcome::UpToDate { .. })));
     drop(done);
     close(&owner, &workspace);
     drop((workspace, store));
@@ -468,7 +377,7 @@ fn later_mutation_survives_capture_publication_and_known_install() {
         })
         .unwrap();
     let first_record = match first.history {
-        CommitStagedOutcome::Committed(ref record) => record.clone(),
+        Some(CommitOutcome::Committed { ref record, .. }) => record.clone(),
         ref other => panic!("{other:?}"),
     };
     assert_eq!(read(&workspace), bytes(b'H'));
@@ -481,7 +390,7 @@ fn later_mutation_survives_capture_publication_and_known_install() {
         })
         .unwrap();
     assert!(
-        matches!(&second.history, CommitStagedOutcome::Committed(record) if record.parent == Some(first_record.id))
+        matches!(&second.history, Some(CommitOutcome::Committed { record, .. }) if record.parent == Some(first_record.id))
     );
     assert_eq!(read(&workspace), bytes(b'H'));
     assert_eq!(
@@ -548,7 +457,6 @@ fn observed_store(
 
 #[test]
 fn history_busy_after_save_has_no_stage_and_counts_only_acknowledged_save_writes() {
-    use layerfs_history::HistoryCatalog;
     let f = support::Fixture::new(8, "commit-history-busy");
     let (store, handles) = observed_store(&f, history_boundary::Boundary::HeldWriter);
     let owner = Owner::start(
@@ -583,11 +491,6 @@ fn history_busy_after_save_has_no_stage_and_counts_only_acknowledged_save_writes
         after.write_transactions - before.write_transactions,
         counts.reserve + counts.publish
     );
-    assert!(handles
-        .history
-        .stage(workspace.identity())
-        .unwrap()
-        .is_none());
     assert_eq!(workspace.snapshot().unwrap(), original);
     assert_eq!(read(&workspace), bytes(b'E'));
     drop(failed);
@@ -704,11 +607,6 @@ fn nested_storage_unknown_keeps_original_capture_and_blocks_another_commit() {
         ));
         assert_eq!(workspace.snapshot().unwrap(), original);
         assert_eq!(read(&workspace), value);
-        assert!(store
-            .history()
-            .stage(workspace.identity())
-            .unwrap()
-            .is_none());
         if index < 3 {
             assert!(
                 !failed.locally_settled,
@@ -731,7 +629,10 @@ fn nested_storage_unknown_keeps_original_capture_and_blocks_another_commit() {
                     construct(save, snapshot, &value, store.policy().construction())
                 })
                 .unwrap();
-            assert!(matches!(later.history, CommitStagedOutcome::Committed(_)));
+            assert!(matches!(
+                later.history,
+                Some(CommitOutcome::Committed { .. })
+            ));
             drop(later);
             close(&owner, &workspace);
         }

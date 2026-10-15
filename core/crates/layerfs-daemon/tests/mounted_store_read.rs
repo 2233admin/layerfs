@@ -634,7 +634,12 @@ fn unmount_apart(harness: &Harness, token: WorkspaceToken) -> (Receiver<Left>, J
     let service = harness.service.clone();
     let (sender, receiver) = mpsc::channel();
     let worker = thread::spawn(move || {
-        let left = match service.execute_control(&Request::Unmount(token)) {
+        let left = match service.execute_control(&Request::Unmount(
+            layerfs_bridge::control::UnmountControl {
+                token,
+                discard: true,
+            },
+        )) {
             Ok(done) => Left::Unmounted {
                 exact: done.reply == Reply::Unmounted(token),
                 closed: matches!(done.reply, Reply::Unmounted(_) | Reply::ForceUnmounted(_)),
@@ -868,7 +873,13 @@ fn force_beside_a_read_inside_its_store_read_stops_at_requests_and_revokes_nothi
         format!("{name}: the Workspace was revoked or closed after the release")
     });
     for (what, request) in [
-        ("Unmount", Request::Unmount(token)),
+        (
+            "Unmount",
+            Request::Unmount(layerfs_bridge::control::UnmountControl {
+                token,
+                discard: true,
+            }),
+        ),
         (
             "ForceUnmount",
             Request::ForceUnmount {

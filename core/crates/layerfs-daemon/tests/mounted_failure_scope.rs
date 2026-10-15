@@ -103,17 +103,15 @@ mod counted {
             branches(stack: LayerStackId, page: &Page) -> HistoryResult<PageResult<BranchRecord>>;
             commit(id: CommitId) -> HistoryResult<Option<CommitRecord>>;
             layer(id: LayerId) -> HistoryResult<Option<LayerRecord>>;
-            stage(workspace: WorkspaceId) -> HistoryResult<Option<StageRecord>>;
-            stages(branch: BranchId, page: &Page) -> HistoryResult<PageResult<StageRecord>>;
             commit_history(request: &CommitHistoryRequest) -> HistoryResult<PageResult<CommitRecord>>;
             layer_history(request: &LayerHistoryRequest) -> HistoryResult<PageResult<LayerRecord>>;
             initialize_layerstack(request: &StackInitialization) -> HistoryResult<LayerStackRecord>;
             fork(request: &ForkRequest) -> HistoryResult<BranchSnapshot>;
-            stage_changes(request: &StageRequest) -> HistoryResult<StageRecord>;
-            commit_staged(request: &CommitStagedRequest) -> HistoryResult<CommitStagedOutcome>;
-            stage_and_commit(request: &StageRequest) -> HistoryResult<CommitStagedOutcome>;
+            merge_base(left: NodeId, right: NodeId) -> HistoryResult<Option<NodeId>>;
+            is_ancestor(ancestor: NodeId, descendant: NodeId) -> HistoryResult<bool>;
+            commit_branch(request: &CommitRequest) -> HistoryResult<CommitOutcome>;
             add_layer(request: &AddLayerRequest) -> HistoryResult<AddLayerOutcome>;
-            discard_stage(request: &DiscardRequest) -> HistoryResult<DiscardOutcome>;
+            merge_branch(request: &BranchMergeRequest) -> HistoryResult<BranchSnapshot>;
         }
         fn reserve_inodes(&self, request: &ReserveRequest) -> HistoryResult<Reservation> {
             let result = self.handles.history.reserve_inodes(request);
