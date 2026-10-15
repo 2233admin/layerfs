@@ -173,6 +173,17 @@ Each `daemon` entry holds:
 Tracing makes each control exchange an observed one: the daemon also writes
 fixed-schema numeric records (SQL work, owner lock wait/hold, Store reader and
 cache work, FUSE kernel counters on Linux, Workspace resources) to its stderr.
+Decode them and join them to the trace by `scope`:
+
+```sh
+docker logs <container> 2>&1 | python3 tools/decode_observations.py --trace trace.jsonl
+```
+
+Each output line is one daemon call: `daemon`, `scope`, `call`, `operation`,
+`complete`, the joined trace `id` as `trace`, and named `sections` (unavailable
+sections are `null`, never zero). Values are cumulative daemon counters at that
+call, not per-call deltas. The container is the Sandbox id without `sb_`.
+
 Concurrent calls append whole lines; order follows completion, so join by `id`.
 The trace is diagnostic timing, not a benchmark measurement. Off means no scope,
 no observed exchange, no daemon timing and byte-identical replies.

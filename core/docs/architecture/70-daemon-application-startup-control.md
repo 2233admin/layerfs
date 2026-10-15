@@ -124,6 +124,8 @@ diagnostic failure is not held as connection custody: the daemon reports its
 kind and message as `diagnosticError` in the traced reply's telemetry and keeps
 the connection serving. See
 [SDK-traced observations](68-native-workspace-control.md#sdk-traced-observations-333).
+`tools/decode_observations.py` names every section and value below from this
+source order and joins records to SDK trace lines by scope.
 
 Each line has this fixed envelope; values are unsigned numeric counters only:
 
