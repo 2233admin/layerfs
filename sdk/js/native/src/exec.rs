@@ -1,6 +1,6 @@
 //! Commands in a mounted Workspace, run by the Sandbox runtime owner.
 //!
-//! `exec` runs `bash -lc <command>` as the Sandbox's command identity in the
+//! `exec` runs `bash -c <command>` as the Sandbox's command identity in the
 //! Workspace directory and returns the exit code and output when it ends; the
 //! daemon is not involved. A background command is started in its own session
 //! with its output in a log file, and this binding keeps its process id. The
@@ -12,6 +12,8 @@ use layerfs_bridge::control::{SdkRefusal, SdkValue};
 use std::io::Write;
 use std::time::Duration;
 
+/// Home of the command identity, which has no account in the image.
+const HOME: &str = "HOME=/tmp";
 /// Output bytes kept per stream; the rest is counted.
 const KEPT: usize = 1 << 20;
 /// Checks that a cancelled process group is gone.
@@ -48,7 +50,7 @@ fn run(
         &state.runtime,
         state.identity,
         arguments,
-        Vec::new(),
+        vec![HOME.to_owned()],
         directory.to_owned(),
         false,
     )
@@ -81,7 +83,7 @@ pub(crate) fn exec(args: &SdkValue) -> Outcome {
         let (code, stdout, stderr) = run(
             &state,
             &directory,
-            vec!["bash".into(), "-lc".into(), command.into()],
+            vec!["bash".into(), "-c".into(), command.into()],
         )?;
         return Ok(SdkValue::map([
             ("kind", SdkValue::Text(format!("exit:{code}"))),
@@ -95,7 +97,7 @@ pub(crate) fn exec(args: &SdkValue) -> Outcome {
         ]));
     }
     let id = format!("proc_{:02}", lock(&state.processes)?.len() + 1);
-    let script = format!("setsid bash -lc \"$0\" >/tmp/layerfs-{id}.log 2>&1 </dev/null & echo $!");
+    let script = format!("setsid bash -c \"$0\" >/tmp/layerfs-{id}.log 2>&1 </dev/null & echo $!");
     let (code, stdout, stderr) = run(
         &state,
         &directory,
@@ -129,18 +131,33 @@ pub(crate) fn exec(args: &SdkValue) -> Outcome {
     ]))
 }
 
-/// True while the process group of `pid` has a member.
+/// True while the process group of `pid` has a member that is not a zombie.
+/// The container's first process is the daemon, which does not reap orphans,
+/// so a finished member can stay a zombie that `kill -0` still finds.
 fn alive(state: &SandboxState, pid: u32) -> Result<bool, SdkRefusal> {
-    let (code, _, _) = run(
-        state,
-        "/tmp",
-        vec![
-            "bash".into(),
-            "-c".into(),
-            format!("kill -0 -- -{pid} 2>/dev/null"),
-        ],
-    )?;
+    // After the `(comm) ` field: state, parent, process group.
+    let probe = format!(
+        "for f in /proc/[0-9]*/stat; do s=$(cat \"$f\" 2>/dev/null) || continue; \
+         set -- ${{s##*) }}; [ \"$1\" != Z ] && [ \"$3\" = {pid} ] && exit 0; done; exit 1"
+    );
+    let (code, _, _) = run(state, "/tmp", vec!["bash".into(), "-c".into(), probe])?;
     Ok(code == 0)
+}
+
+/// Background processes still running in the Workspace at `path`.
+pub(crate) fn running_in(state: &SandboxState, path: &str) -> Result<Vec<String>, SdkRefusal> {
+    let started = lock(&state.processes)?
+        .iter()
+        .filter(|(_, process)| process.path == path && !process.stopped)
+        .map(|(id, process)| (id.clone(), process.pid))
+        .collect::<Vec<_>>();
+    let mut running = Vec::new();
+    for (id, pid) in started {
+        if alive(state, pid)? {
+            running.push(id);
+        }
+    }
+    Ok(running)
 }
 
 /// `sandbox.list_processes(sandbox)`: the processes this binding started.

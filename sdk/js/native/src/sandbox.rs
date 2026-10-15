@@ -226,11 +226,29 @@ pub(crate) fn commit(args: &SdkValue) -> Outcome {
     values::commit(&reply)
 }
 
-/// `sandbox.unmount(sandbox, path, { discard? })`.
+/// `sandbox.unmount(sandbox, path, { discard? })`: `Busy` while a background
+/// process this binding started still runs there, then the daemon's answer.
 pub(crate) fn unmount(args: &SdkValue) -> Outcome {
     let state = sandbox(args)?;
     let path = text(args, "path")?;
     let token = state.token(path)?;
+    // The runtime owner knows its own processes; the daemon's kernel probe
+    // still answers Busy for any other holder.
+    let running = crate::exec::running_in(&state, path)?;
+    if !running.is_empty() {
+        return Err(SdkRefusal {
+            code: "Busy".to_owned(),
+            message: format!(
+                "{}:{path} is busy: {} still running",
+                state.id,
+                running.join(", ")
+            ),
+            detail: SdkValue::map([(
+                "processes",
+                SdkValue::List(running.into_iter().map(SdkValue::Text).collect()),
+            )]),
+        });
+    }
     let answer = workspace(&mut *lock(&state.control)?)
         .unmount_checked(token, args.get_bool("discard"))
         .map_err(operation)?;

@@ -57,12 +57,19 @@ sdk/js/
   addon path.
 - **Init.** The Store is Disposable. Init's first Branch is named `main` and is
   never shown: `main` is the line of Layers.
-- **Commands.** `sandbox.exec` runs `bash -lc <command>` as the Sandbox's command
+- **Commands.** `sandbox.exec` runs `bash -c <command>` (with `HOME=/tmp`, since
+  the command identity has no account in the image) as the Sandbox's command
   identity in the Workspace and returns `{ exitCode, stdout, stderr }` at the end
   (no streaming; the first 1 MiB of each stream is kept). A background command
   runs in its own session with output in `/tmp/layerfs-<process>.log`. The Engine
   has no per-exec cancel, so `cancel` signals the process group from a second
-  command and waits up to 5 s for it to go.
+  command and waits up to 5 s for it to go. A group counts as running while it
+  has a member that is not a zombie: the container's first process is the
+  daemon, which does not reap orphans, so stopped members stay as zombies.
+- **Unmount.** `sandbox.unmount` is refused with `Busy` (detail `processes`)
+  while a background process this binding started still runs in that
+  Workspace, before the daemon is asked; the daemon then answers `Dirty` or
+  `Unmounted`.
 - **Inspect.** `inspect.snapshot({ since })` joins history from the service
   Sandbox with the Workspaces of every Sandbox this client created.
 
