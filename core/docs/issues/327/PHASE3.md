@@ -132,6 +132,34 @@ new.
 `sdk_sim` is demo tooling outside the production scope (SPEC section 1.4). The
 fixture and the verify helpers are tests.
 
+## Since Phase 3: UI previews (2026-10-15)
+
+These commits came after the D results above. They preview the UI for the
+operation timer and the Store size work in
+[#329](https://github.com/Ephemeral-AI-Lab/layerfs/issues/329) sections C and D.
+They are demo tooling. They are not product capabilities, they are not
+measurements, and they do not change the D results. The plan to build the real
+surfaces is [IMPLEMENTATION-PLAN.md](IMPLEMENTATION-PLAN.md).
+
+| Commit | Change | Production LOC |
+| --- | --- | --- |
+| `7dd758c63` | (22) Per-command timing (the SDK call, the refresh and HTTP in live mode; marked as simulated on the simulator). A Store footer under the fs terminal and an overlay footer on each Workspace terminal. Sandbox ids mapped in refusal text. The mirror bumps its version only when something changed. Space reserved for the player | 84,814 → 84,814 (0) |
+| `0f713d55f` | (23) Per-file revisions, sizes and rates, and a History tab in the Files pane | 84,814 → 84,814 (0) |
+| `daacdb13c` | (24) More compact Store and overlay footers | 84,814 → 84,814 (0) |
+
+What live mode reads from the product:
+- **Read from the product:** timing, overlay row counts (inodes and entries from `inspect.snapshot`), and per-file revisions and sizes from fs reads.
+- **Not reported:** the Store's stored bytes and metadata, which no surface reports yet.
+
+The simulator's sizes are estimates:
+- dedupe is whole-file only;
+- deflate stands in for zstd, with no deltas;
+- metadata uses fixed sizes per entry.
+
+After these commits, the sim suites (`test.js` 97/97, `test_demo.js` 112/112,
+`test_terminal.js`) and the live tour and conflicts stories still passed. No D
+case was rerun as a receipt-bearing check.
+
 ## Open items for the owner
 
 These are new in Phase 3. The Phase 2 items stand, and A9 is still open.
