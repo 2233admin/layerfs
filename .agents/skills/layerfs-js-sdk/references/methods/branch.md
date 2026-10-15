@@ -1,8 +1,8 @@
 # branch methods
 
-> **Status:** Current general guide. Part of the `layerfs-js-sdk` skill. Fields are
-> read from source on `main`; example outputs show the shape and are not yet captured
-> from a live run. Ids are 66 hex characters, shortened here as `"9f3c…"`.
+> **Status:** Current general guide. Part of the `layerfs-js-sdk` skill. Examples were
+> captured live in issue #334 Phase A at `b30e4fb8f`. Opaque IDs are shortened;
+> the full replies and trace are in `core/target/issue334/phase-a/`.
 
 Examples use `layerfs` as connected in [SKILL.md](../../SKILL.md#connect-to-a-project) and work on the Branch
 `"work"`. Paging works as described
@@ -17,8 +17,8 @@ Creates a Branch. Metadata only: nothing is copied, so it's instant.
 | `name` | string | yes | New Branch name |
 | `fromRef` | string | no | `main` (default), a Branch, a Commit or a Layer |
 
-**Returns:** `{ kind: "Forked", branch, base, head }`. `head` is `null` until the
-first Commit.
+**Returns:** `{ kind: "Forked", branch, base, head }`. Forking a `main` Layer gives `head: null`; forking a Branch with a Commit inherits
+that head.
 
 **Refusals**
 
@@ -32,7 +32,7 @@ first Commit.
 await layerfs.branch.fork("cart");
 ```
 ```json
-{ "kind": "Forked", "branch": "cart", "base": "41ab…", "head": null }
+{ "kind": "Forked", "branch": "cart", "base": "3279dac7de68…", "head": null }
 ```
 
 **Notes:** one working Branch is enough for linear work. Fork per feature when work

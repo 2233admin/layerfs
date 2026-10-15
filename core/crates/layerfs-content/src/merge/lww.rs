@@ -26,6 +26,8 @@ enum Token {
     Name,
     /// `**`: any run.
     Any,
+    /// `**/` at a name boundary: zero or more complete directory names.
+    Directories,
 }
 
 /// One parsed rule.
@@ -119,7 +121,16 @@ fn parse(line: &str) -> Rule {
         tokens.push(match c {
             '*' if chars.peek() == Some(&'*') => {
                 chars.next();
-                Token::Any
+                if matches!(
+                    tokens.last(),
+                    None | Some(Token::Char('/') | Token::Directories)
+                ) && chars.peek() == Some(&'/')
+                {
+                    chars.next();
+                    Token::Directories
+                } else {
+                    Token::Any
+                }
             }
             '*' => Token::Name,
             '?' => Token::One,
@@ -195,6 +206,16 @@ impl Rule {
                 Token::Any => {
                     if let Some(first) = current.iter().position(|reached| *reached) {
                         next[first..].iter_mut().for_each(|reached| *reached = true);
+                    }
+                }
+                Token::Directories => {
+                    if let Some(first) = current.iter().position(|reached| *reached) {
+                        next.clone_from(&current);
+                        for p in first..n {
+                            if path[p] == '/' {
+                                next[p + 1] = true;
+                            }
+                        }
                     }
                 }
             }

@@ -1,6 +1,13 @@
 # Issue 334: verify the SDK skill live, then build "shop" on LayerFS with two agents
 
-> **Status:** Current planning checklist; no release candidate exists.
+> **Status:** Archived; retained for historical evidence only.
+
+The A–D exercise completed on 2026-10-16. [RESULTS.md](RESULTS.md) preserves the
+original diagnostic results and Builder 2 report. [CLOSURE.md](CLOSURE.md) records
+the subsequent owner-authorized review, publication and merge disposition;
+[EVIDENCE.md](EVIDENCE.md) locates the portable receipts and stopped Store exports.
+The two collection deviations remain disclosed. This completed run plan is not a
+new assignment, a release qualification or a benchmark campaign.
 
 ## Goal
 
@@ -38,6 +45,8 @@ not be reported as one.
 - One attempted operation; no blind retries. Preserve every failure with its evidence.
 - Every repository commit records production LOC before, after and the delta
   (`tools/production_loc.py`). No push, PR or merge to `main` unless the owner asks.
+  The owner subsequently authorized all five closure steps, including publication
+  and merge; that authorization is recorded in [CLOSURE.md](CLOSURE.md).
 - Work on branch `issue334-shop-run` in its own worktree. The orchestrator and
   Builder 1 commit there, one after the other, never at the same time. Builder 2
   never writes to the repository.
@@ -197,7 +206,7 @@ Write `RESULTS.md` in this folder:
 
 ## Checklist
 
-- [ ] Phase A: environment, `npm` reachable, every skill example run and corrected
-- [ ] Phase B: Builder 1 finished; every bug fixed or left open with a reason
-- [ ] Phase C: Builder 2 finished or stopped with a recorded blocker
-- [ ] Phase D: `RESULTS.md` written; raw evidence kept under `core/target/issue334/`
+- [x] Phase A: environment, `npm` reachable, every skill example run and corrected
+- [x] Phase B: Builder 1 finished; every bug fixed or left open with a reason
+- [x] Phase C: Builder 2 finished or stopped with a recorded blocker
+- [x] Phase D: `RESULTS.md` written; raw evidence kept under `core/target/issue334/`

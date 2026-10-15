@@ -1,8 +1,8 @@
 # sandbox methods
 
-> **Status:** Current general guide. Part of the `layerfs-js-sdk` skill. Fields are
-> read from source on `main`; example outputs show the shape and are not yet captured
-> from a live run. Ids are 66 hex characters, shortened here as `"9f3c…"`.
+> **Status:** Current general guide. Part of the `layerfs-js-sdk` skill. Examples were
+> captured live in issue #334 Phase A at `b30e4fb8f`. Opaque IDs are shortened;
+> the full replies and trace are in `core/target/issue334/phase-a/`.
 
 A Sandbox is one container with one LayerFS daemon. A Workspace is a complete, writable
 view of a Branch mounted inside it, where ordinary commands run. **Use the Sandbox for
@@ -89,7 +89,17 @@ is the Commit it shows.
 const ws = await layerfs.sandbox.mount(id, "work");   // a NEW Workspace with a new path: use ws.path, never hard-code it
 ```
 ```json
-{ "kind": "Mounted", "path": "/workspaces/3", "workspace": "5be0…", "branch": "work", "base": "9f3c…", "sandbox": "sb_7a1c…", "…": "…" }
+{
+  "kind": "Mounted",
+  "path": "/workspaces/1",
+  "workspace": "f4282e27124e…",
+  "namespace": 1,
+  "branch": "work",
+  "base": "125d54ec6a82…",
+  "baseLayer": "32a35edb1f9f…",
+  "root": "024fffcbc8bc…",
+  "sandbox": "sb_256f47dd8daa0d3573e96be4d6ba3f392ee71b97f854341f95c7bacbb4465ee1"
+}
 ```
 
 **Notes:** every call mounts a new Workspace with its own `path`, even on the same
@@ -140,12 +150,19 @@ Runs one shell command in a mounted Workspace and waits for it to end.
 ```js
 // ws.path: from sandbox.mount. Every mount creates a new Workspace with a new path; never hard-code one.
 const run = await layerfs.sandbox.exec(id, ws.path, "timeout 110 npm test 2>&1", "cart tests");
-console.log(run.exitCode, run.stdout.slice(-4000));
+console.log(JSON.stringify(run, null, 2));
 const saved = await layerfs.sandbox.commit(id, ws.path, { message: `step 12: npm test (exit ${run.exitCode})` });
 console.log(saved.kind);                  // "UpToDate" when the command changed nothing
 ```
 ```json
-{ "kind": "exit:1", "exitCode": 1, "stdout": "✖ total (2.1ms)\n…", "stderr": "", "message": "cart tests", "truncated": false }
+{
+  "kind": "exit:0",
+  "exitCode": 0,
+  "stdout": "\n> test\n> node --test\n\nTAP version 13\n# Subtest: cart\nok 1 - cart\n  ---\n  duration_ms: 0.433125\n  type: 'test'\n  ...\n# Subtest: cart-api\nok 2 - cart-api\n  ---\n  duration_ms: 0.453209\n  type: 'test'\n  ...\n# Subtest: loads\nok 3 - loads\n  ---\n  duration_ms: 0.533125\n  type: 'test'\n  ...\n1..3\n# tests 3\n# suites 0\n# pass 3\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 56.672166\n",
+  "stderr": "",
+  "message": "cart tests",
+  "truncated": false
+}
 ```
 
 Commit whatever the command did, failure or not, so the step is recorded. If
@@ -167,7 +184,7 @@ to `/tmp`, so it doesn't hold `exec` open or land in the Workspace.
 // ws.path: from sandbox.mount. Every mount creates a new Workspace with a new path; never hard-code one.
 const cmd = [
   "timeout 60 bash -c '",
-  "node src/server.js >/tmp/server.log 2>&1 & pid=$!;",
+  "node src/main.js >/tmp/server.log 2>&1 & pid=$!;",
   "sleep 2;",
   "node -e \"fetch(\\\"http://127.0.0.1:3000/health\\\").then(r => { console.log(r.status); process.exit(r.ok ? 0 : 1) }).catch(e => { console.error(e.message); process.exit(1) })\";",
   "s=$?; kill $pid; cat /tmp/server.log; exit $s'",
@@ -211,7 +228,20 @@ const s = await layerfs.sandbox.status(id, ws.path);
 if (s.headMovedSinceMount) console.log("the next commit will merge with", s.branchHead);
 ```
 ```json
-{ "kind": "ok", "base": "9f3c…", "branchHead": "9f3c…", "headMovedSinceMount": false, "overlay": { "inodes": 214, "entries": 37, "pendingMerge": false }, "branch": "work", "…": "…" }
+{
+  "kind": "ok",
+  "base": "123648aa594a…",
+  "baseLayer": "32a35edb1f9f…",
+  "branchHead": "123648aa594a…",
+  "headMovedSinceMount": false,
+  "activity": "Idle",
+  "overlay": {
+    "inodes": 0,
+    "entries": 0,
+    "pendingMerge": false
+  },
+  "branch": "work"
+}
 ```
 
 ## `sandbox.commit(id, path, { message?, force? }?)`
@@ -243,7 +273,32 @@ moved since the mount, it merges first. The Workspace stays mounted.
 const c = await layerfs.sandbox.commit(id, ws.path, { message: "deps: npm install" });
 ```
 ```json
-{ "kind": "Committed", "head": "c41d…", "commit": { "id": "c41d…", "message": "deps: npm install", "…": "…" }, "displacedHead": "9f3c…", "merged": null, "lww": [] }
+{
+  "kind": "Committed",
+  "head": "122215f69eba…",
+  "commit": {
+    "id": "122215f69eba…",
+    "branch": null,
+    "parent": "12df71934c6f…",
+    "secondParent": null,
+    "base": "32a35edb1f9f…",
+    "root": "caf388018578…",
+    "via": "exec",
+    "message": "A: resolved both changes",
+    "mergedFrom": null,
+    "time": 1792085429866,
+    "logical": 2478,
+    "newCanonical": 2849,
+    "newStored": 1204,
+    "newMetadata": 783,
+    "displaced": null,
+    "lww": [],
+    "lwwTruncated": false
+  },
+  "displacedHead": null,
+  "merged": null,
+  "lww": []
+}
 ```
 
 **When Commit reports a `Conflict`:** nothing was committed, and the conflicted files in
@@ -281,3 +336,17 @@ Stops and deletes the Sandbox container. The project and its history are unaffec
 **Returns:** `{ kind: "Closed", id }`.
 
 **Refusals:** `MountsActive` (unmount every Workspace first), `Busy`, `NoSuchSandbox`.
+
+When `LAYERFS_TRACE` is set, preserve the daemon log **before** this call: on the
+host, save `docker logs <container-id> > <run>/daemon-<container-id>.log 2>&1`,
+where `<container-id>` is the Sandbox id with `sb_` removed and `<run>` is the
+folder containing `LAYERFS_TRACE`. Closing deletes the container and its log.
+This is diagnostic collection; project reads and changes still use the SDK.
+
+Direct Store calls also create or reuse an automatic service Sandbox. At the end,
+after all `fs.*` and Branch calls, obtain its id with `await layerfs.service()`,
+save its log, and call `sandbox.close` for that id too. `service()` creates one if
+none exists, so use it to finish a client that has already made Store calls; do
+not use it merely to probe for a service after cleanup. A cached service id on
+that client is invalid after close. The method return and close were captured in
+issue #334 Phase B `observe-service-cleanup.out`.

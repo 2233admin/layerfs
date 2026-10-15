@@ -6,7 +6,7 @@ description: Use when building, editing, testing or inspecting a project through
 # LayerFS JavaScript SDK
 
 > **Status:** Current general guide. It describes LayerFS 0.1.7 on `main`. Example
-> outputs show the shape read from source and are not yet captured from a live run.
+> outputs were captured live in issue #334 Phase A at `b30e4fb8f`.
 
 Your project lives in LayerFS, not on your local disk. You read and change it through
 the SDK, from small Node scripts you run with `node`.
@@ -32,8 +32,8 @@ Use `fs.*` for the reads and small changes your own file tools make: read a file
 folder, search, diff, write or edit one file, move or delete a path, or a handful of
 related changes as one Commit (`fs.apply`).
 
-- **Why:** an `fs.*` call goes straight to the Branch, with no container and no mount,
-  so it's the cheapest way in. A change is atomic and is exactly one Commit with your
+- **Why:** an `fs.*` call goes to the Branch through a reusable service Sandbox, without
+  an explicit user Workspace or kernel mount, so it avoids the Bash mount lifecycle. A change is atomic and is exactly one Commit with your
   message, so the Branch records each edit as its own step. A read returns the Branch's
   latest Commit, so it sees what every Workspace and every other writer has committed.
 - **When:** reading code before you change it, creating a file, editing source, renaming
@@ -135,14 +135,25 @@ process of one run must see the same values.
 | Variable | Meaning |
 | --- | --- |
 | `LAYERFS_HOME` | Private folder where LayerFS records your project and Sandboxes |
-| `LAYERFS_DOCKER`, `LAYERFS_IMAGE`, `LAYERFS_VOLUME`, `LAYERFS_DAEMON` | Where and how Sandboxes run |
+| `LAYERFS_DOCKER` | Docker daemon Unix socket/endpoint, such as `/var/run/docker.sock`; use the `docker` executable for log collection |
+| `LAYERFS_IMAGE` | Runtime image id or digest |
+| `LAYERFS_VOLUME` | Existing named Docker volume for this project's Store |
+| `LAYERFS_DAEMON` | Host path to the built Linux daemon executable |
 
 ```js
 const layerfs = new LayerFS("shop");   // a project name; no I/O happens yet
 ```
 
 A new project needs `project.init(folder)` once. After that, `new LayerFS("shop")` in
-any later process connects to the same project.
+any later process connects to the same project. Store calls (`fs.*`, Branch calls
+and branch listing) automatically start or reuse a service Sandbox. The client's
+`await layerfs.service()` returns its id, creating that service if none exists.
+Close it last during final cleanup, after all Store reads and publications:
+`const serviceId = await layerfs.service();` then preserve its daemon log and
+`await layerfs.sandbox.close(serviceId)`. Close explicit Bash Sandboxes too. After
+closing the service, finish that client; use a new client for later work. This
+cleanup was observed live in issue #334 Phase B
+`observe-service-cleanup.out`.
 
 ## One script for each group
 
@@ -191,7 +202,7 @@ console.log(branches.items.map((b) => b.name));
 
 ```
 Forked work null
-[ 'work', 'main' ]
+[ 'main', 'work' ]
 ```
 
 ### fs.mjs: write and read files on the Branch
@@ -265,7 +276,9 @@ Added
 6. **One process at a time per Sandbox**; a second one gets `Busy`. Ids are reusable:
    a Sandbox id and mount path work from any later process with the same
    `LAYERFS_HOME`, so a long task can be split into small scripts.
-7. **Clean up:** commit or discard, unmount every Workspace, close your Sandboxes.
+7. **Clean up:** commit or discard, unmount every Workspace, and close your Sandboxes.
+   With `LAYERFS_TRACE` set, first save each container's daemon log as described in
+   [`sandbox.close`](references/methods/sandbox.md#sandboxcloseid); close deletes it.
 
 ## Which method for which job
 

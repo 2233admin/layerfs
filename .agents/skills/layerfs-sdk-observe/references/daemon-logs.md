@@ -6,7 +6,7 @@
 ## What the daemon writes
 
 Each Sandbox daemon writes to its stderr, which Docker keeps as the container log. The
-container name is the Sandbox id without `sb_`.
+container identifier is the Sandbox id without `sb_`.
 
 - **Failures:** a fatal startup cause, or a control-connection failure.
 - **Observation records (tracing on):** for every traced control exchange,
