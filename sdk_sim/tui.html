@@ -1758,8 +1758,18 @@ async function milestone(st, tok) {
   c.animate([{ opacity: 0, scale: .92 }, { opacity: 1, scale: 1, offset: .12 }, { opacity: 1, offset: .85 }, { opacity: 0 }], { duration: hold, easing: "ease-out" }).finished.then(() => c.remove());
   await wait(2800);
 }
-async function demoStep() {
-  if (D.busy || D.i >= DEMO.length) return;
+// One step at a time. A caller that arrives while a step runs waits for that
+// step: returning at once let a play loop resumed mid-step spin on resolved
+// promises, which starves the event loop and freezes the page.
+function demoStep() {
+  if (D.busy) return D.running;
+  if (D.i >= DEMO.length) return Promise.resolve();
+  const tok = D.token;
+  const running = runStep().finally(() => { if (D.running === running && tok === D.token) D.busy = false; });
+  D.running = running;
+  return running;
+}
+async function runStep() {
   const tok = D.token, st = DEMO[D.i], t0 = stamp, agentStory = !!STORIES[story].roster, fast = agentStory && !st.beat;
   let result = "";
   D.busy = true; D.live = []; if (!D.instant) renderPlayer();
@@ -1804,9 +1814,17 @@ async function demoStep() {
   if (!D.instant) renderPlayer(D.last);
   await wait(agentStory ? (st.beat ? 2600 : 520) : st.lines && st.lines.length > 2 ? 1500 : 1300);
 }
+// One play loop per run: resuming while the loop still waits on its step
+// lets that loop carry on instead of starting a second one.
 async function demoLoop() {
   const tok = D.token;
-  while (D.playing && tok === D.token && D.i < DEMO.length) await demoStep();
+  if (D.looping === tok) return;
+  D.looping = tok;
+  try {
+    while (D.playing && tok === D.token && D.i < DEMO.length) await demoStep();
+  } finally {
+    if (D.looping === tok) D.looping = null;
+  }
   if (tok === D.token) { D.playing = false; renderPlayer(D.last); }
 }
 async function demoRestart(autoplay) {
