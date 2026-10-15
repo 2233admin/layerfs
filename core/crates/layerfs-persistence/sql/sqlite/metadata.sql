@@ -26,3 +26,12 @@ CREATE TABLE content_signature (
  object_id BLOB NOT NULL REFERENCES object_location(object_id),
  signature BLOB NOT NULL CHECK(length(signature)=32)
 ) STRICT;
+
+CREATE TABLE store_totals (
+ id INTEGER PRIMARY KEY CHECK(id=1),
+ logical INTEGER NOT NULL DEFAULT 0 CHECK(logical>=0),
+ canonical INTEGER NOT NULL DEFAULT 0 CHECK(canonical>=0),
+ stored INTEGER NOT NULL DEFAULT 0 CHECK(stored>=0),
+ metadata INTEGER NOT NULL DEFAULT 0 CHECK(metadata>=0)
+) STRICT;
+INSERT INTO store_totals(id) VALUES(1);

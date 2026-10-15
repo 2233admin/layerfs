@@ -130,7 +130,10 @@ pub(crate) fn commit_branch(
         request.expected_head,
         request.expected_base,
         request.second_parent,
-        &request.meta,
+        &CommitMeta {
+            displaced: branch.head_commit.filter(|_| moved),
+            ..request.meta.clone()
+        },
     )?;
     let advanced = tx
         .execute(
@@ -167,6 +170,11 @@ pub(crate) fn new_commit(
 ) -> HistoryResult<CommitRecord> {
     meta.check()?;
     let meta = CommitMeta {
+        message: Some(
+            meta.message
+                .clone()
+                .unwrap_or_else(|| format!("{:?} filesystem change", meta.via)),
+        ),
         branch: Some(branch),
         time_ms: std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -196,13 +204,26 @@ pub(crate) fn new_commit(
                 record.second_parent.map(|id| id.as_slice().to_vec()),
                 record.meta.branch.map(|id| id.to_bytes().to_vec()),
                 i64::from(record.meta.via.code()),
-                record.meta.agent.clone(),
-                record.meta.call.clone(),
-                record.meta.merged_from.map(|id| id.to_bytes().to_vec()),
+                record.meta.message.clone(),
+                record.meta.merged_from.map(|id| id.as_slice().to_vec()),
                 record.meta.time_ms,
+                i64::try_from(record.meta.statistics.logical)
+                    .map_err(|_| HistoryError::Capacity("logical bytes"))?,
+                i64::try_from(record.meta.statistics.new_canonical)
+                    .map_err(|_| HistoryError::Capacity("canonical bytes"))?,
+                i64::try_from(record.meta.statistics.new_stored)
+                    .map_err(|_| HistoryError::Capacity("stored bytes"))?,
+                i64::try_from(record.meta.statistics.new_metadata)
+                    .map_err(|_| HistoryError::Capacity("metadata bytes"))?,
+                super::facts::encode(&record.meta.lww)?,
+                record.meta.displaced.map(|id| id.to_bytes().to_vec()),
             ],
         )
         .map_err(sql)?;
+        tx.execute(
+            "statistics_logical",
+            params![record.meta.statistics.logical as i64],
+        )?;
         return Ok(record);
     }
     // An identical Commit already exists: it keeps its own recorded time.

@@ -1,6 +1,5 @@
-// `fs.apply`: one Commit for every change, each `{ kind, ... }`.
-
-/** `fs.apply(changes, { branch, agent, call } = {})` */
-export function apply(client, changes, { branch, agent, call } = {}) {
-  return client.call("fs.apply", { changes, branch, agent, call });
+// fs.apply: one positional SDK operation.
+import { checkedMessage } from "../client.js";
+export function apply(client, branch, changes, message) {
+  return client.call("fs.apply", { branch, changes, message: checkedMessage(message) });
 }

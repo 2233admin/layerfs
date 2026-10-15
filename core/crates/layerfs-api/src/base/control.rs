@@ -143,10 +143,17 @@ impl Control {
         &mut self,
         project: &crate::SealedProject,
     ) -> Result<crate::Installed, Box<crate::InstallFailure>> {
+        self.install_file(&project.store, &project.manifest)
+    }
+    pub(crate) fn install_file(
+        &mut self,
+        store: &layerfs_persistence::SealedStore,
+        manifest: &layerfs_bridge::provision::StoreManifest,
+    ) -> Result<crate::Installed, Box<crate::InstallFailure>> {
         if self.failed {
             return Err(Box::new(crate::InstallFailure {
-                source: project.store.path.clone(),
-                manifest: project.manifest.clone(),
+                source: store.path.clone(),
+                manifest: manifest.clone(),
                 phase: layerfs_bridge::control::InstallPhase::Request,
                 request_attempted: false,
                 accepted: false,
@@ -156,11 +163,13 @@ impl Control {
                 fence_error: None,
             }));
         }
-        crate::base::install::install(project, &mut self.connection).inspect_err(|failure| {
-            if failure.request_attempted {
-                self.failed = true;
-            }
-        })
+        crate::base::install::install_file(store, manifest, &mut self.connection).inspect_err(
+            |failure| {
+                if failure.request_attempted {
+                    self.failed = true;
+                }
+            },
+        )
     }
     pub(crate) fn clear_io_waits(&self) -> Result<(), ChannelError> {
         self.connection.clear_io_waits()

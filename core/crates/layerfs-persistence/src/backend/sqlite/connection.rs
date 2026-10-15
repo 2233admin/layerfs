@@ -182,13 +182,13 @@ impl Session {
             // Versions 1 to 6 kept inode values in pooled packs behind an
             // ordinal catalogue. Such a Store is refused here, never misread.
             let acquisition = match stored {
-                7..=9 => crate::SqliteAcquisitionSchema::Absent,
-                13..=15 => crate::SqliteAcquisitionSchema::Tables,
+                16..=18 => crate::SqliteAcquisitionSchema::Absent,
+                22..=24 => crate::SqliteAcquisitionSchema::Tables,
                 _ => return Err(BackendError::Integrity),
             };
             let layout = match stored - acquisition.version_offset() {
-                7 => crate::SqlitePackLayout::Monolithic,
-                8 => crate::SqlitePackLayout::GroupRows,
+                16 => crate::SqlitePackLayout::Monolithic,
+                17 => crate::SqlitePackLayout::GroupRows,
                 _ => crate::SqlitePackLayout::GroupRowsIndexed,
             };
             (layout, acquisition)

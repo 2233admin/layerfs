@@ -23,7 +23,6 @@ pub mod file;
 pub mod filesystem;
 pub mod merge;
 pub mod object;
-pub mod paths;
 pub use contract::policy;
 
 pub use error::{ContentError, ContentResult};

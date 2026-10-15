@@ -1,6 +1,4 @@
-// `fs.stat`: `{ snapshot, path, type, inode, size }`.
-
-/** `fs.stat(path, { branch, commit } = {})` */
-export function stat(client, path, { branch, commit } = {}) {
-  return client.call("fs.stat", { path, branch, commit });
+// fs.stat: one positional SDK operation.
+export function stat(client, ref, path) {
+  return client.call("fs.stat", { branch: ref, path });
 }

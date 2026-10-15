@@ -292,7 +292,7 @@ impl CommitId {
         meta: &crate::records::CommitMeta,
     ) -> Self {
         let mut hasher = blake3::Hasher::new();
-        hasher.update(b"layerfs/commit/v2\0");
+        hasher.update(b"layerfs/commit/v3\0");
         hasher.update(root.as_bytes());
         update_optional(&mut hasher, parent.as_ref().map(Self::as_slice));
         hasher.update(base_layer.as_slice());
@@ -303,12 +303,11 @@ impl CommitId {
         hasher.update(b"\0meta\0");
         update_optional(&mut hasher, meta.branch.as_ref().map(BranchId::as_slice));
         hasher.update(&[meta.via.code()]);
-        for field in [&meta.agent, &meta.call] {
-            let bytes = field.as_deref().map(str::as_bytes);
-            hasher.update(&(bytes.map_or(0, <[u8]>::len) as u64).to_be_bytes());
-            update_optional(&mut hasher, bytes);
-        }
-        update_optional(&mut hasher, meta.merged_from.as_ref().map(Self::as_slice));
+        let bytes = meta.message.as_deref().map(str::as_bytes);
+        hasher.update(&(bytes.map_or(0, <[u8]>::len) as u64).to_be_bytes());
+        update_optional(&mut hasher, bytes);
+        update_optional(&mut hasher, meta.merged_from.as_ref().map(NodeId::as_slice));
+        update_optional(&mut hasher, meta.displaced.as_ref().map(Self::as_slice));
         Self(tagged_hash(COMMIT_TAG, hasher.finalize()))
     }
 }

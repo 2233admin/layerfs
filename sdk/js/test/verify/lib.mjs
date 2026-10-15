@@ -65,14 +65,14 @@ export async function refusal(promise) {
 
 /** Mounts a Workspace and tracks it for teardown. */
 export async function mount(ctx, sandbox, branch) {
-  const mounted = await ctx.layerfs.sandbox.mount(sandbox, { branch });
+  const mounted = await ctx.layerfs.sandbox.mount(sandbox, branch);
   const ws = { sandbox, path: mounted.path, branch, mounted };
   ctx.mounts.push(ws);
   return ws;
 }
 
 export function sh(ctx, ws, command, options) {
-  return ctx.layerfs.sandbox.exec(ws.sandbox, ws.path, command, options);
+  return options?.background ? ctx.operator.process.start(ws.sandbox, ws.path, command) : ctx.layerfs.sandbox.exec(ws.sandbox, ws.path, command, options?.message);
 }
 
 export async function unmount(ctx, ws, options) {

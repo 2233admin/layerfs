@@ -54,6 +54,7 @@ fn a_consumed_reservation_survives_a_later_failure() {
     // range was consumed when it was handed out, not when it was used.
     assert!(catalog
         .initialize_layerstack(&StackInitialization {
+            logical: 0,
             stack: stack(0xb1),
             name: name("main"),
             scope,
@@ -63,6 +64,7 @@ fn a_consumed_reservation_survives_a_later_failure() {
         .is_ok());
     assert!(catalog
         .initialize_layerstack(&StackInitialization {
+            logical: 0,
             stack: stack(0xb1),
             name: name("other"),
             scope,

@@ -40,12 +40,6 @@ export function startServer({ port = 8327, host = "127.0.0.1", log = () => {} } 
       session = await Session.open(resets === 1 ? "website" : `website-${resets}`);
       return { state: session.state() };
     }),
-    "POST /api/call": (body) => serial(async () => {
-      const s = need();
-      const outcome = await s.call(body.name, body.args || {});
-      log(`${body.name} → ${outcome.code}`);
-      return { outcome, state: s.state() };
-    }),
     "GET /api/state": (_, query) => serial(async () => {
       const s = need();
       await s.refresh();
@@ -66,6 +60,17 @@ export function startServer({ port = 8327, host = "127.0.0.1", log = () => {} } 
       response.end(type === "application/json" ? JSON.stringify(body) : body);
     };
     try {
+      const table = /^\/api\/(sdk|operator)\/([a-z]+)\/([a-z_]+)$/.exec(url.pathname);
+      if (table) {
+        const [,surface,group,method] = table;
+        const reads = new Set(["list_branches","list_commits","diff_commits","diff_branches","read","list","stat","grep","glob","diff_files","blame","status","stats","commits","history","overlay","changes","snapshot"]);
+        const expected = reads.has(method) ? "GET" : "POST";
+        if (request.method !== expected) return send(405,{error:`${method} requires ${expected}`});
+        let raw="";for await (const chunk of request) {raw+=chunk;if(raw.length>1024*1024) return send(413,{error:"request too large"});}
+        const args=expected==="GET" ? JSON.parse(url.searchParams.get("args")||"[]") : JSON.parse(raw||"{}").args;
+        if(url.searchParams.get("ui")==="1") return send(200,await serial(async()=>{const s=need();const outcome=await s.uiCall(surface,group,method,args,url.searchParams.get("view"));return {outcome,state:s.state()};}));
+        return send(200,await serial(async()=>{const s=need();const answer=await s.table(surface,group,method,args);if(url.searchParams.get("labels")==="1")answer.value=s.m.ids(answer.value);return answer;}));
+      }
       const route = api[`${request.method} ${url.pathname}`];
       if (route) {
         let raw = "";

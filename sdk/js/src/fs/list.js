@@ -1,6 +1,5 @@
-// `fs.list`: one window of a directory: `{ items: { name, path, type, inode }[], nextCursor }`.
-
-/** `fs.list(path = "/", { branch, commit, cursor } = {})` */
-export function list(client, path = "/", { branch, commit, cursor } = {}) {
-  return client.call("fs.list", { path, branch, commit, cursor });
+// fs.list: one positional SDK operation.
+import { page } from "../client.js";
+export function list(client, ref, path = "/", pageSize = 50, pagePos = 0) {
+  return client.call("fs.list", { branch: ref, path, ...page(pageSize, pagePos) });
 }

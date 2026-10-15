@@ -6,11 +6,16 @@ pub(crate) mod args;
 mod blame;
 pub(crate) mod branch;
 mod compare;
-mod files;
+pub(crate) mod files;
 mod reads;
-mod snapshot;
+pub(crate) mod snapshot;
+pub(crate) mod window;
 
 pub(crate) use args::hex;
 
 mod dispatch;
 pub(crate) use dispatch::dispatch;
+
+mod edit;
+mod mutation;
+mod recursive;

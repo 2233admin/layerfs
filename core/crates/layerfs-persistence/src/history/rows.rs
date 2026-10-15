@@ -67,12 +67,15 @@ pub(crate) fn branch_row(row: &Row) -> HistoryResult<BranchRecord> {
         name: name_column(row, 2)?,
         base_layer: required(layer_column(row, 3)?, "Layer identity")?,
         head_commit: commit_column(row, 4)?,
+        forked_from: cell::<Option<Vec<u8>>>(row, 5)?
+            .map(|bytes| NodeId::from_slice(&bytes))
+            .transpose()?,
     })
 }
 
 /// Decodes one Commit row.
 pub(crate) fn commit_row(row: &Row) -> HistoryResult<CommitRecord> {
-    Ok(CommitRecord {
+    let record = CommitRecord {
         id: required(commit_column(row, 0)?, "Commit identity")?,
         stack: required(stack_column(row, 1)?, "LayerStack identity")?,
         root: object(row, 2)?,
@@ -87,23 +90,56 @@ pub(crate) fn commit_row(row: &Row) -> HistoryResult<CommitRecord> {
                 u8::try_from(cell::<i64>(row, 7)?)
                     .map_err(|_| HistoryError::Integrity("Commit via"))?,
             )?,
-            agent: cell(row, 8)?,
-            call: cell(row, 9)?,
-            merged_from: commit_column(row, 10)?,
-            time_ms: cell(row, 11)?,
+            message: cell(row, 8)?,
+            merged_from: cell::<Option<Vec<u8>>>(row, 9)?
+                .map(|bytes| NodeId::from_slice(&bytes))
+                .transpose()?,
+            time_ms: cell(row, 10)?,
+            statistics: layerfs_history::CommitStatistics {
+                logical: cell::<i64>(row, 11)? as u64,
+                new_canonical: cell::<i64>(row, 12)? as u64,
+                new_stored: cell::<i64>(row, 13)? as u64,
+                new_metadata: cell::<i64>(row, 14)? as u64,
+            },
+            lww: super::facts::decode(&cell::<Vec<u8>>(row, 15)?)?,
+            lww_truncated: false,
+            displaced: commit_column(row, 16)?,
         },
-    })
+    };
+    record.meta.check()?;
+    if CommitId::derive(
+        record.root,
+        record.parent,
+        record.base_layer,
+        record.second_parent,
+        &record.meta,
+    ) != record.id
+    {
+        return Err(HistoryError::Integrity("Commit v3 identity"));
+    }
+    Ok(record)
 }
 
 /// Decodes one Layer row.
 pub(crate) fn layer_row(row: &Row) -> HistoryResult<LayerRecord> {
     Ok(LayerRecord {
+        overwrote: {
+            let bytes: Vec<u8> = cell(row, 7)?;
+            if bytes.len() % 33 != 0 {
+                return Err(HistoryError::Integrity("displaced Layer facts"));
+            }
+            bytes
+                .chunks_exact(33)
+                .map(LayerId::from_slice)
+                .collect::<HistoryResult<Vec<_>>>()?
+        },
         id: required(layer_column(row, 0)?, "Layer identity")?,
         stack: required(stack_column(row, 1)?, "LayerStack identity")?,
         parent: layer_column(row, 2)?,
         root: object(row, 3)?,
         source_branch: branch_column(row, 4)?,
         source_commit: commit_column(row, 5)?,
+        logical: cell::<i64>(row, 6)? as u64,
     })
 }
 

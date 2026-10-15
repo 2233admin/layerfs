@@ -5,6 +5,7 @@ use support::*;
 
 fn init(c: &dyn HistoryCatalog, n: u8, text: &str) -> LayerStackRecord {
     c.initialize_layerstack(&StackInitialization {
+        logical: 0,
         stack: stack(n),
         name: name(text),
         scope: root(200),

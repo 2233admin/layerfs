@@ -2,6 +2,9 @@
 use super::{allocation, ancestry, branch, commit, layerstack, merge, provider::HistoryProvider};
 use layerfs_history::*;
 impl HistoryCatalog for HistoryProvider {
+    fn statistics(&self) -> HistoryResult<StoreStatistics> {
+        HistoryProvider::statistics(self)
+    }
     fn catalog_id(&self) -> CatalogId {
         self.catalog_id
     }

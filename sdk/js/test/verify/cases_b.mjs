@@ -10,9 +10,9 @@ const branch = "feature";
 
 /** Init, fork `feature`, one Commit C1 of `files`, a Sandbox and mounts A and B at C1. */
 async function prepare(ctx, files) {
-  await ctx.layerfs.project.init(ctx.source, { name: "website" });
+  await ctx.layerfs.project.init(ctx.source);
   await ctx.layerfs.branch.fork(branch);
-  const c1 = await ctx.layerfs.fs.apply(Object.entries(files).map(([path, content]) => ({ kind: "write", path, content })), { branch });
+  const c1 = await ctx.layerfs.fs.apply(branch, Object.entries(files).map(([path, content]) => ({ op: "write", path, content })));
   const sandbox = await ctx.layerfs.service();
   const a = await mount(ctx, sandbox, branch);
   const b = await mount(ctx, sandbox, branch);
@@ -22,7 +22,7 @@ async function prepare(ctx, files) {
 
 const commit = (ctx, ws, options) => ctx.layerfs.sandbox.commit(ws.sandbox, ws.path, options);
 const status = (ctx, ws) => ctx.layerfs.sandbox.status(ws.sandbox, ws.path);
-const read = async (ctx, path, at = branch) => (await ctx.layerfs.fs.read(path, { branch: at })).text;
+const read = async (ctx, path, at = branch) => (await ctx.layerfs.fs.read(at, path)).text;
 const heads = async (ctx) => Object.fromEntries((await ctx.layerfs.project.list_branches()).items.map((i) => [i.name, i.head]));
 
 async function write(ctx, ws, path, text) {
@@ -43,11 +43,11 @@ async function conflicted(ctx) {
 
 /** Two Branches forked from main; `a` and `b` each write `files`. */
 async function sides(ctx, a, b) {
-  await ctx.layerfs.project.init(ctx.source, { name: "website" });
+  await ctx.layerfs.project.init(ctx.source);
   await ctx.layerfs.branch.fork("a");
   await ctx.layerfs.branch.fork("b");
-  const ha = await ctx.layerfs.fs.apply(Object.entries(a).map(([path, content]) => ({ kind: "write", path, content })), { branch: "a" });
-  const hb = await ctx.layerfs.fs.apply(Object.entries(b).map(([path, content]) => ({ kind: "write", path, content })), { branch: "b" });
+  const ha = await ctx.layerfs.fs.apply("a", Object.entries(a).map(([path, content]) => ({ op: "write", path, content })));
+  const hb = await ctx.layerfs.fs.apply("b", Object.entries(b).map(([path, content]) => ({ op: "write", path, content })));
   return { ha: ha.head, hb: hb.head };
 }
 
@@ -182,23 +182,23 @@ export const B = {
   },
 
   async B11(ctx) {
-    await ctx.layerfs.project.init(ctx.source, { name: "website" });
+    await ctx.layerfs.project.init(ctx.source);
     await ctx.layerfs.branch.fork("a");
-    const a1 = await ctx.layerfs.fs.write("/one.txt", "1\n", { branch: "a" });
-    await ctx.layerfs.branch.fork("b", { from: a1.head });
-    const a2 = await ctx.layerfs.fs.write("/two.txt", "2\n", { branch: "a" });
-    const merged = await ctx.layerfs.branch.merge("a", "b", { name: "c" });
+    const a1 = await ctx.layerfs.fs.write("a", "/one.txt", "1\n");
+    await ctx.layerfs.branch.fork("b", a1.head);
+    const a2 = await ctx.layerfs.fs.write("a", "/two.txt", "2\n");
+    const merged = await ctx.layerfs.branch.merge("a", "b", "c");
     check(ctx, "Merged { fastForward }", merged.kind === "Merged" && merged.fastForward === true, merged);
     check(ctx, "c points at a's head", merged.head === a2.head && (await heads(ctx)).c === a2.head);
-    const { items } = await ctx.layerfs.branch.list_commits({ branch: "c" });
+    const { items } = await ctx.layerfs.branch.list_commits("c");
     check(ctx, "no new Commit", items[0].id === a2.head && items.length === 2, items.map((c) => c.id));
   },
 
   async B12(ctx) {
     const s = await sides(ctx, { "/left.txt": "L\n" }, { "/right.txt": "R\n" });
-    const merged = await ctx.layerfs.branch.merge("a", "b", { name: "c" });
+    const merged = await ctx.layerfs.branch.merge("a", "b", "c");
     check(ctx, "Merged, not fast-forward", merged.kind === "Merged" && merged.fastForward === false, merged);
-    const { items } = await ctx.layerfs.branch.list_commits({ branch: "c" });
+    const { items } = await ctx.layerfs.branch.list_commits("c");
     check(ctx, "one new Commit with two parents", items[0].id === merged.head && items[0].parent === s.ha && items[0].secondParent === s.hb && items[0].via === "merge", items[0]);
     check(ctx, "c has both files", (await read(ctx, "/left.txt", "c")) === "L\n" && (await read(ctx, "/right.txt", "c")) === "R\n");
     const h = await heads(ctx);
@@ -207,7 +207,7 @@ export const B = {
 
   async B13(ctx) {
     await sides(ctx, { "/f.txt": "start\nalpha\nend\n" }, { "/f.txt": "start\nbeta\nend\n" });
-    const refused = await refusal(ctx.layerfs.branch.merge("a", "b", { name: "c" }));
+    const refused = await refusal(ctx.layerfs.branch.merge("a", "b", "c"));
     check(ctx, "Conflict", refused && refused.code === "Conflict", refused && refused.message);
     const conflicts = refused && refused.detail ? refused.detail.conflicts : [];
     const lines = conflicts.flatMap((c) => c.hunks.flatMap((h) => [...h.ours, ...h.theirs]));
@@ -217,10 +217,10 @@ export const B = {
 
   async B14(ctx) {
     await sides(ctx, { "/f.txt": "start\nalpha\nend\n" }, { "/f.txt": "start\nbeta\nend\n" });
-    const first = await refusal(ctx.layerfs.branch.merge("a", "b", { name: "c" }));
+    const first = await refusal(ctx.layerfs.branch.merge("a", "b", "c"));
     check(ctx, "first merge conflicts", first && first.code === "Conflict");
-    await ctx.layerfs.fs.write("/f.txt", "start\nalpha\nend\n", { branch: "b" });
-    const merged = await ctx.layerfs.branch.merge("a", "b", { name: "c" });
+    await ctx.layerfs.fs.write("b", "/f.txt", "start\nalpha\nend\n");
+    const merged = await ctx.layerfs.branch.merge("a", "b", "c");
     check(ctx, "Merged", merged.kind === "Merged", merged);
     check(ctx, "c exists", (await heads(ctx)).c === merged.head);
     check(ctx, "c has the agreed line", (await read(ctx, "/f.txt", "c")) === "start\nalpha\nend\n");
@@ -229,18 +229,18 @@ export const B = {
   async B15(ctx) {
     await sides(ctx, { "/left.txt": "L\n" }, { "/right.txt": "R\n" });
     await ctx.layerfs.branch.fork("late");
-    await ctx.layerfs.fs.write("/late.txt", "late\n", { branch: "late" });
-    const merged = await ctx.layerfs.branch.merge("a", "b", { name: "c" });
+    await ctx.layerfs.fs.write("late", "/late.txt", "late\n");
+    const merged = await ctx.layerfs.branch.merge("a", "b", "c");
     const before = (await ctx.layerfs.project.list_branches()).items[0].base;
-    const added = await ctx.layerfs.branch.publish({ branch: "c" });
+    const added = await ctx.layerfs.branch.publish("c");
     check(ctx, "Added", added.kind === "Added" && added.source.commit === merged.head && added.basedOn === before && added.overwrote.length === 0, added);
     const main = (await ctx.layerfs.project.list_branches()).items[0].base;
     check(ctx, "main's head is the new Layer", main === added.publishedLayer.id && added.publishedLayer.parent === before, { main, layer: added.publishedLayer });
-    const again = await ctx.layerfs.branch.publish({ branch: "c" });
+    const again = await ctx.layerfs.branch.publish("c");
     check(ctx, "UpToDate", again.kind === "UpToDate" && again.layer === added.publishedLayer.id, again);
-    const late = await ctx.layerfs.branch.publish({ branch: "late" });
+    const late = await ctx.layerfs.branch.publish("late");
     check(ctx, "Added with overwrote", late.kind === "Added" && late.basedOn === before && JSON.stringify(late.overwrote) === JSON.stringify([added.publishedLayer.id]), late);
-    const onMain = await refusal(ctx.layerfs.fs.read("/left.txt", { branch: "main" }));
+    const onMain = await refusal(ctx.layerfs.fs.read("main", "/left.txt"));
     check(ctx, "main is late's tree (overwrite)", onMain && onMain.code === "NoSuchPath" && (await read(ctx, "/late.txt", "main")) === "late\n");
   },
 

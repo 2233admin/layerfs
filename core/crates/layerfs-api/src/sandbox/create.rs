@@ -160,9 +160,18 @@ impl SandboxApi {
         request: SandboxCreate,
         project: &crate::SealedProject,
     ) -> Result<ManagedSandbox, Box<SandboxFailure>> {
+        self.create_file(request, &project.store, &project.manifest)
+    }
+    /// Creates a new daemon using exact persisted sealed-file and manifest facts.
+    pub fn create_file(
+        &self,
+        request: SandboxCreate,
+        store: &layerfs_persistence::SealedStore,
+        manifest: &layerfs_bridge::provision::StoreManifest,
+    ) -> Result<ManagedSandbox, Box<SandboxFailure>> {
         let existing = request.setup.existing_store.is_some();
         if let Some(selected) = &request.setup.existing_store {
-            let mut expected = project.manifest.clone();
+            let mut expected = manifest.clone();
             expected.daemon_sqlite = selected.daemon_sqlite.clone();
             if *selected != expected {
                 return Err(Box::new(SandboxFailure {
@@ -183,18 +192,21 @@ impl SandboxApi {
             // Installing again would change the existing one-attempt lifecycle.
             return Ok(owner);
         }
-        let installed = owner.control.install_project(project).map_err(|cause| {
-            Box::new(SandboxFailure {
-                request: owner.request.clone(),
-                phase: SandboxPhase::Install,
-                sandbox: None,
-                control: None,
-                handshake: owner.handshake,
-                observed: Some(owner.startup.clone()),
-                installed: None,
-                cause: SandboxCause::Install(cause),
-            })
-        });
+        let installed = owner
+            .control
+            .install_file(store, manifest)
+            .map_err(|cause| {
+                Box::new(SandboxFailure {
+                    request: owner.request.clone(),
+                    phase: SandboxPhase::Install,
+                    sandbox: None,
+                    control: None,
+                    handshake: owner.handshake,
+                    observed: Some(owner.startup.clone()),
+                    installed: None,
+                    cause: SandboxCause::Install(cause),
+                })
+            });
         let installed = match installed {
             Ok(installed) => installed,
             Err(mut failure) => {

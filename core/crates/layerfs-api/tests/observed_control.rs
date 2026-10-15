@@ -176,6 +176,7 @@ fn unmount_force_selects_one_original_request_without_unknown_relinquishment() {
 
 fn branch_record(stack: layerfs_history::LayerStackId) -> layerfs_history::BranchRecord {
     layerfs_history::BranchRecord {
+        forked_from: None,
         id: layerfs_history::BranchId::from_authority([4; 16]),
         stack,
         name: layerfs_history::HistoryName::new("main").unwrap(),

@@ -1,234 +1,258 @@
-//! `fs.blame`: each line of a file with the oldest saved version in its chain
-//! from which the line is unchanged, as the simulator composes it.
-//!
-//! The chain starts at the named node. A Commit continues to its parent, or to
-//! its base Layer when it has none. A published Layer continues through its
-//! source Commit, so main's lines are credited to the Commit that wrote them;
-//! any other Layer is a version itself and continues to its parent Layer. A
-//! version whose file has the same content as the newer one is passed without
-//! reading it. The chain holds at most [`MAXIMUM_VERSIONS`]; the oldest one
-//! read owns every line still open. Lines are returned in windows from
-//! `fromLine`, each with its Commit (or Layer) and agent; a line longer than
-//! 1 KiB is shown clipped.
-use super::args::{self, hex, node_text, refuse, text, Answer};
-use super::files::path as checked;
-use super::reads::{preview, REPLY_BUDGET};
-use super::snapshot::{self, answer, existing};
-use crate::store::{Store, StorePorts};
+//! Bounded blame along persisted first parents. Comparison uses exact byte
+//! prefix/suffix and bounded LCS for the changed middle. A larger middle is a
+//! removed/added block, matching Content's bounded diff policy; it is disclosed.
+use super::{
+    args::{self, Answer},
+    files::path as checked,
+    reads::line_arg,
+    snapshot, window,
+};
+use crate::{
+    operator::files::{entry, revision},
+    store::{Store, StorePorts},
+};
 use layerfs_bridge::control::{SdkRefusal, SdkValue};
-use layerfs_content::compare::{lines, match_lines, EntryFacts, TreeTable};
-use layerfs_content::filesystem::FilesystemRootId;
-use layerfs_content::ObjectId;
-use layerfs_history::{BranchId, LayerStackRecord, NodeId};
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use layerfs_content::{
+    compare::{match_lines, EntryFacts},
+    object::inode_leaf::InodeKind,
+};
+use layerfs_telemetry::timer::Timing;
 use std::sync::Arc;
+type Result<T> = std::result::Result<T, SdkRefusal>;
 
-/// Saved versions one blame may walk.
-const MAXIMUM_VERSIONS: usize = 1024;
-
-/// One saved version in the chain.
-struct Version {
-    node: NodeId,
-    root: ObjectId,
-    value: SdkValue,
-    agent: Option<String>,
-}
-
-/// Saved versions behind `start`, newest first.
-fn chain(
-    store: &Arc<Store>,
-    stack: &LayerStackRecord,
-    start: NodeId,
-) -> Result<Vec<Version>, SdkRefusal> {
-    let names: BTreeMap<BranchId, String> = args::branches(store, stack)?
-        .into_iter()
-        .map(|branch| (branch.id, branch.name.as_str().to_owned()))
-        .collect();
+fn range(reader: &StorePorts, file: EntryFacts, offset: u64, count: u64) -> Result<Vec<u8>> {
     let mut out = Vec::new();
-    let mut seen = HashSet::new();
-    let mut next = Some(start);
-    while let Some(node) = next {
-        if out.len() == MAXIMUM_VERSIONS || !seen.insert(node) {
-            break;
-        }
-        next = match node {
-            NodeId::Commit(id) => {
-                let record = args::commit(store, id)?;
-                let branch = record.meta.branch.and_then(|id| names.get(&id).cloned());
-                out.push(Version {
-                    node,
-                    root: record.root,
-                    agent: record.meta.agent.clone(),
-                    value: SdkValue::map([
-                        ("id", SdkValue::text(node_text(node))),
-                        ("kind", SdkValue::text("commit")),
-                        ("branch", SdkValue::opt_text(branch)),
-                        ("agent", SdkValue::opt_text(record.meta.agent.clone())),
-                        ("call", SdkValue::opt_text(record.meta.call.clone())),
-                        ("via", SdkValue::text(args::via(record.meta.via))),
-                    ]),
-                });
-                Some(
-                    record
-                        .parent
-                        .map_or(NodeId::Layer(record.base_layer), NodeId::Commit),
-                )
-            }
-            NodeId::Layer(id) => {
-                let record = args::layer(store, id)?;
-                match record.source_commit {
-                    Some(source) if !seen.contains(&NodeId::Commit(source)) => {
-                        Some(NodeId::Commit(source))
-                    }
-                    _ => {
-                        let via = record.source_commit.map_or_else(
-                            || "project.init".to_owned(),
-                            |source| format!("published from {}", hex(source.as_slice())),
-                        );
-                        out.push(Version {
-                            node,
-                            root: record.root,
-                            agent: None,
-                            value: SdkValue::map([
-                                ("id", SdkValue::text(node_text(node))),
-                                ("kind", SdkValue::text("layer")),
-                                ("branch", SdkValue::text(super::branch::MAIN)),
-                                ("agent", SdkValue::Null),
-                                ("call", SdkValue::Null),
-                                ("via", SdkValue::Text(via)),
-                            ]),
-                        });
-                        record.parent.map(NodeId::Layer)
-                    }
-                }
-            }
-        };
-    }
+    let (result, _) = Timing::disabled("blame.compare", |timer| {
+        layerfs_content::file::read_range(
+            reader,
+            file.value.content_root,
+            offset..offset + count,
+            &mut out,
+            timer.child("read"),
+        )
+    });
+    result.map_err(args::content)?;
     Ok(out)
 }
-
-/// The file's entry at one version's root.
-fn entry_at(
-    reader: &StorePorts,
-    root: ObjectId,
-    path: &str,
-) -> Result<Option<EntryFacts>, SdkRefusal> {
-    let tree = TreeTable::open(reader, FilesystemRootId(root)).map_err(args::content)?;
-    snapshot::entry(reader, &tree, path)
+struct Track {
+    number: u64,
+    text: String,
+    clipped: bool,
+    owner: Option<SdkValue>,
+}
+struct Text {
+    lines: u64,
+    prefix: Vec<String>,
+    complete: bool,
+}
+fn text(reader: &StorePorts, file: EntryFacts) -> Result<Text> {
+    let (mut lines, mut prefix, mut bytes, mut complete) = (0, Vec::new(), 0, true);
+    window::lines(reader, &file, window::BYTES, None, |_, line| {
+        lines += 1;
+        if complete
+            && !line.truncated
+            && prefix.len() < window::LINES
+            && bytes + line.text.len() <= window::BYTES
+        {
+            bytes += line.text.len();
+            prefix.push(line.text);
+        } else {
+            complete = false;
+        }
+        Ok(true)
+    })?;
+    Ok(Text {
+        lines,
+        prefix,
+        complete,
+    })
+}
+fn equal_edges(reader: &StorePorts, newer: EntryFacts, older: EntryFacts) -> Result<(u64, u64)> {
+    let (a, b) = (
+        snapshot::size(reader, &newer)?,
+        snapshot::size(reader, &older)?,
+    );
+    let min = a.min(b);
+    let mut prefix = 0;
+    while prefix < min {
+        let count = 16384.min(min - prefix);
+        let (x, y) = (
+            range(reader, newer, prefix, count)?,
+            range(reader, older, prefix, count)?,
+        );
+        let same = x.iter().zip(&y).take_while(|(a, b)| a == b).count() as u64;
+        prefix += same;
+        if same < count {
+            break;
+        }
+    }
+    let mut suffix = 0;
+    while suffix < min - prefix {
+        let count = 16384.min(min - prefix - suffix);
+        let (x, y) = (
+            range(reader, newer, a - suffix - count, count)?,
+            range(reader, older, b - suffix - count, count)?,
+        );
+        let same = x
+            .iter()
+            .rev()
+            .zip(y.iter().rev())
+            .take_while(|(a, b)| a == b)
+            .count() as u64;
+        suffix += same;
+        if same < count {
+            break;
+        }
+    }
+    Ok((prefix, suffix))
 }
 
-/// The owning version of each line of `tip`.
-fn owners(
-    reader: &StorePorts,
-    chain: &[Version],
-    path: &str,
-    tip: (EntryFacts, &str),
-) -> Result<Vec<usize>, SdkRefusal> {
-    let count = lines(tip.1).len();
-    let mut track = (0..count).collect::<Vec<_>>();
-    let mut owner: Vec<Option<usize>> = vec![None; count];
-    let mut open = count;
-    let (mut current, mut current_text) = (tip.0, tip.1.to_owned());
-    for k in 0..chain.len() {
-        if open == 0 {
-            break;
+pub(crate) fn blame(store: &Arc<Store>, args: &SdkValue) -> Answer {
+    let (_, reader, snap) = snapshot::open(store, args)?;
+    let path = checked(args::text(args, "path")?)?;
+    let tip = snapshot::existing(&reader, &snap, &path)?;
+    if tip.value.kind != InodeKind::RegularFile {
+        return Err(args::refuse(
+            "NotFile",
+            "blame requires a regular file",
+            SdkValue::Null,
+        ));
+    }
+    let from = line_arg(args, "fromLine", 1)?;
+    let (mut tracks, mut spent, mut next_line) = (Vec::new(), 0, None);
+    window::lines(&reader, &tip, window::BYTES, None, |n, line| {
+        if n < from {
+            return Ok(true);
         }
-        let older = match chain.get(k + 1) {
-            Some(version) => entry_at(reader, version.root, path)?
-                .filter(|entry| entry.value.kind == current.value.kind),
-            None => None,
-        };
-        let older_text = match older {
-            Some(entry) if entry.value.content_root == current.value.content_root => continue,
-            Some(entry) => snapshot::text(reader, Some(entry))?.map(|text| (entry, text)),
-            None => None,
-        };
-        let Some((entry, older_text)) = older_text else {
-            owner
-                .iter_mut()
-                .filter(|o| o.is_none())
-                .for_each(|o| *o = Some(k));
-            break;
-        };
-        // Line j of the current text is line map[j] of the older one.
-        let mut map = vec![None; lines(&current_text).len()];
-        for (i, j) in match_lines(&lines(&older_text), &lines(&current_text))
-            .into_iter()
-            .enumerate()
+        // Include maximum message/identity overhead for each origin on the wire.
+        if tracks.len() == window::LINES
+            || (!tracks.is_empty() && spent + line.text.len() + 256 > window::BYTES - 8192)
         {
-            if let Some(j) = j {
-                map[j] = Some(i);
-            }
+            next_line = Some(n);
+            return Ok(false);
         }
-        for (i, own) in owner.iter_mut().enumerate() {
-            if own.is_some() {
+        let mut shown = line.text;
+        let mut end = shown.len().min(window::BYTES - 8192 - 256 - spent);
+        while !shown.is_char_boundary(end) {
+            end -= 1;
+        }
+        let clipped = line.truncated || end < shown.len();
+        shown.truncate(end);
+        spent += shown.len() + 256;
+        tracks.push(Track {
+            number: n,
+            text: shown,
+            clipped,
+            owner: None,
+        });
+        Ok(true)
+    })?;
+    let (mut node, mut current, mut versions, mut coarse) = (snap.node, tip, 0i64, false);
+
+    loop {
+        let (_, parent, value) = revision(store, node)?;
+        versions += 1;
+        let older = parent
+            .map(|p| revision(store, p))
+            .transpose()?
+            .map(|r| entry(&reader, r.0, &path))
+            .transpose()?
+            .flatten()
+            .filter(|e| e.value.kind == InodeKind::RegularFile);
+        if tracks.iter().all(|t| t.owner.is_some()) {
+            break;
+        }
+        if let Some(older) = older {
+            if current.value.content_root == older.value.content_root {
+                node = parent.expect("parent");
+                current = older;
                 continue;
             }
-            match map[track[i]] {
-                Some(j) => track[i] = j,
-                None => {
-                    *own = Some(k);
-                    open -= 1;
+            let (new, old) = (text(&reader, current)?, text(&reader, older)?);
+            if new.complete && old.complete {
+                let a = old.prefix.iter().map(String::as_str).collect::<Vec<_>>();
+                let b = new.prefix.iter().map(String::as_str).collect::<Vec<_>>();
+                let mapping = match_lines(&a, &b);
+                for t in tracks.iter_mut().filter(|t| t.owner.is_none()) {
+                    if let Some(n) = mapping
+                        .iter()
+                        .position(|n| *n == Some(t.number as usize - 1))
+                    {
+                        t.number = n as u64 + 1;
+                    } else {
+                        t.owner = Some(value.clone());
+                    }
+                }
+            } else {
+                coarse = true;
+                let (prefix, suffix) = equal_edges(&reader, current, older)?;
+                let size = snapshot::size(&reader, &current)?;
+                let (mut offset, mut ranges) = (0u64, Vec::new());
+                window::lines(&reader, &current, 0, None, |n, line| {
+                    let start = offset;
+                    offset += line.bytes;
+                    if tracks.iter().any(|t| t.owner.is_none() && t.number == n) {
+                        ranges.push((n, start, offset));
+                    }
+                    Ok(true)
+                })?;
+                for t in tracks.iter_mut().filter(|t| t.owner.is_none()) {
+                    let (_, start, end) = ranges
+                        .iter()
+                        .find(|(n, _, _)| *n == t.number)
+                        .copied()
+                        .ok_or_else(|| args::failed("blame line mapping"))?;
+                    if end <= prefix {
+                        continue;
+                    }
+                    if start >= size - suffix {
+                        t.number = (t.number as i128 + old.lines as i128 - new.lines as i128)
+                            .try_into()
+                            .map_err(args::failed)?;
+                    } else {
+                        t.owner = Some(value.clone());
+                    }
                 }
             }
-        }
-        (current, current_text) = (entry, older_text);
-    }
-    let last = chain.len().saturating_sub(1);
-    Ok(owner.into_iter().map(|o| o.unwrap_or(last)).collect())
-}
 
-/// `fs.blame(path, { branch | commit, fromLine? })`.
-pub(crate) fn blame(store: &Arc<Store>, args: &SdkValue) -> Answer {
-    let (stack, reader, snap) = snapshot::open(store, args)?;
-    let path = checked(text(args, "path")?)?;
-    let entry = existing(&reader, &snap, &path)?;
-    let Some(content) = snapshot::text(&reader, Some(entry))? else {
-        return Err(refuse(
-            "NotText",
-            format!("{path} is not a text file within 1 MiB"),
-            SdkValue::map([("path", SdkValue::text(path.as_str()))]),
-        ));
-    };
-    let chain = chain(store, &stack, snap.node)?;
-    if chain.is_empty() {
-        return Err(args::failed("the snapshot has no saved version"));
-    }
-    let owner = owners(&reader, &chain, &path, (entry, &content))?;
-    let all = lines(&content);
-    let from = usize::try_from(args.get_int("fromLine").unwrap_or(1).max(1)).unwrap_or(1);
-    let mut budget = REPLY_BUDGET;
-    let (mut shown, mut used, mut next) = (Vec::new(), BTreeSet::new(), None);
-    for (index, line) in all.iter().enumerate().skip(from - 1) {
-        let version = &chain[owner[index]];
-        let text = preview(line);
-        let cost = text.len() + 160;
-        if cost > budget && !shown.is_empty() {
-            next = Some(index + 1);
+            node = parent.expect("parent");
+            current = older;
+        } else {
+            for t in tracks.iter_mut().filter(|t| t.owner.is_none()) {
+                t.owner = Some(value.clone());
+            }
             break;
         }
-        budget = budget.saturating_sub(cost);
-        used.insert(owner[index]);
-        shown.push(SdkValue::map([
-            ("n", SdkValue::Int(index as i64 + 1)),
-            ("text", SdkValue::text(text)),
-            ("clipped", SdkValue::Bool(text.len() < line.len())),
-            ("commit", SdkValue::text(node_text(version.node))),
-            ("agent", SdkValue::opt_text(version.agent.clone())),
+    }
+    // Origins carry only identifiers here; each line already carries its message.
+    let (mut lines, mut bytes) = (Vec::new(), 0usize);
+    for (i, t) in tracks.into_iter().enumerate() {
+        let owner = t.owner.unwrap_or_default();
+        let cost = t.text.len() + owner.get_text("message").map_or(0, str::len) + 256;
+        if bytes + cost > window::BYTES && !lines.is_empty() {
+            next_line = Some(from + i as u64);
+            break;
+        }
+        bytes += cost;
+        lines.push(SdkValue::map([
+            ("n", SdkValue::Int((from + i as u64) as i64)),
+            ("text", SdkValue::text(t.text.trim_end_matches('\n'))),
+            ("lineTruncated", SdkValue::Bool(t.clipped)),
+            ("clipped", SdkValue::Bool(t.clipped)),
+            ("commit", owner.get("id").cloned().unwrap_or_default()),
+            ("message", owner.get("message").cloned().unwrap_or_default()),
         ]));
     }
     let mut fields = snapshot::header(&snap, &path);
     fields.extend([
-        ("versions", SdkValue::Int(chain.len() as i64)),
-        ("lines", SdkValue::List(shown)),
-        (
-            "origins",
-            SdkValue::List(used.into_iter().map(|k| chain[k].value.clone()).collect()),
-        ),
+        ("lines", SdkValue::List(lines)),
+        ("origins", SdkValue::List(Vec::new())),
+        ("versions", SdkValue::Int(versions)),
+        ("comparisonCoarse", SdkValue::Bool(coarse)),
         (
             "nextLine",
-            next.map_or(SdkValue::Null, |n| SdkValue::Int(n as i64)),
+            next_line.map_or(SdkValue::Null, |n| SdkValue::Int(n as i64)),
         ),
     ]);
-    answer(fields)
+    snapshot::answer(fields)
 }

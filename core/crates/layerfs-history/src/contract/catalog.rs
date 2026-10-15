@@ -111,6 +111,11 @@ pub trait HistoryCatalog: Send + Sync {
     /// the same edges as [`HistoryCatalog::merge_base`], with the same bound.
     fn is_ancestor(&self, ancestor: NodeId, descendant: NodeId) -> HistoryResult<bool>;
 
+    /// Reads maintained Store totals; no full object/history scan.
+    fn statistics(&self) -> HistoryResult<crate::records::StoreStatistics> {
+        Err(crate::HistoryError::Unsupported("Store statistics"))
+    }
+
     /// Creates the genesis Layer and the stack atomically.
     fn initialize_layerstack(
         &self,

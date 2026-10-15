@@ -20,6 +20,8 @@
       this.onchange = null;
       this.version = null;
       this.state = null;
+      this.fileReports = {};
+      this.fileLoading = {};
     }
     get s() { return this.state; }
     set s(_) { /* the server owns the state: saved worlds are not restored */ }
@@ -55,18 +57,36 @@
       this.adopt(answer.state);
       return { ok: true, code: "Initialized", result: { kind: "Initialized" } };
     }
-    async run(name, args) {
+    async run(name, args = {}) {
       const started = performance.now();
-      const answer = await this.request("POST", "/api/call", { name, args });
+      const selected = methodArgs(name,args);
+      const query = new URLSearchParams({ui:"1",...(selected.view?{view:selected.view}:{})});
+      const path=`/api/${selected.surface || "sdk"}/${selected.group}/${selected.method}`;
+      let answer;
+      if(selected.read){query.set("args",JSON.stringify(selected.args));answer=await this.request("GET",`${path}?${query}`);}
+      else answer=await this.request("POST",`${path}?${query}`,{args:selected.args});
       this.adopt(answer.state);
       const outcome = answer.outcome;
       outcome.timing = { ...outcome.timing, totalMs: performance.now() - started };
       return outcome;
     }
-    /** Store size: not reported by the product yet (issue #329 D). */
-    storage() { return null; }
-    /** A Workspace's overlay rows as inspect.snapshot reports them; no bytes yet. */
-    overlayOf(ws) { return ws && ws.overlay ? { inodes: ws.overlay.inodes, entries: ws.overlay.entries } : null; }
+    fileReport(ref,path) {
+      const key=JSON.stringify([this.version,ref,path]);
+      if(this.fileReports[key]) return this.fileReports[key];
+      if(!this.fileLoading[key]) {
+        const get=(group,method,args)=>this.request("GET",`/api/${group==="fs"?"sdk":"operator"}/${group}/${method}?labels=1&args=${encodeURIComponent(JSON.stringify(args))}`);
+        this.fileLoading[key]=Promise.all([get("files","stats",[ref,path]),get("files","history",[ref,path,50,0]),get("fs","blame",[ref,path]).catch(error=>({value:{lines:[],versions:0,error:error.message}}))]).then(([stats,history,blame])=>{
+          const f=stats.value,h=history.value,b=blame.value;
+          this.fileReports[key]={...f,unique:f.canonical,pending:false,reported:true,hasMore:h.hasMore,rows:h.items.map(r=>({node:{id:r.commit,kind:r.commit.startsWith("L")?"layer":"commit",branch:r.branch||ref},change:r.change.toLowerCase(),size:r.size,added:r.newCanonical,stored:r.newStored,content:r.size===null?null:""})),blame:b};
+          if(this.onchange)this.onchange();
+        }).catch(error=>{this.fileReports[key]={error:error.message,rows:[],revisions:null,logical:null,unique:null,stored:null,metadata:null,pending:false};if(this.onchange)this.onchange();});
+      }
+      return {rows:[],revisions:null,logical:null,unique:null,stored:null,metadata:null,pending:true};
+    }
+    /** Store statistics reported by the product. */
+    storage() { const z = this.state?.store?.stats; return z ? { ...z, store: z.file, payload: z.canonical, estimate: false } : null; }
+    /** Actual overlay payload and row counts from the operator. */
+    overlayOf(ws) { return ws?.overlay ?? null; }
     /** Picks up changes made outside a call (a process that exits). */
     async poll() {
       const answer = await this.request("GET", `/api/state?since=${this.version}`);
@@ -107,6 +127,25 @@
     }
     markersIn(ws) { return ws.markers || []; }
     dirtyOf(ws) { return ws.dirty || 0; }
+  }
+
+  function methodArgs(name,a) {
+    let [group,method]=name.split(".");let surface="sdk",view;
+    if(name==="main.fork"){group="branch";method="fork";a={...a,branch:"main"};}
+    if(name==="main.list_layers"){return {surface:"operator",group:"inspect",method:"snapshot",args:[],read:true,view:"layers"};}
+    if(name==="sandbox.list_processes"){return {surface:"operator",group:"process",method:"list",args:[a.sandbox],read:true};}
+    if(name==="process.cancel"){return {surface:"operator",group:"process",method:"cancel",args:[a.sandbox,a.process],read:false};}
+    if(name==="sandbox.exec"&&a.background){return {surface:"operator",group:"process",method:"start",args:[a.sandbox,a.path,a.command],read:false};}
+    const keys={
+      "project.list_branches":[a.pageSize,a.pagePos],"branch.fork":[a.name,a.fromCommit||a.branch||"main"],"branch.list_commits":[a.branch,a.pageSize,a.pagePos],
+      "branch.diff_commits":[a.from,a.to,a.pageSize,a.pagePos],"branch.diff_branches":[a.from,a.to,a.pageSize,a.pagePos],"branch.publish":[a.branch,a.commit],"branch.merge":[a.branch,a.with,a.name,a.message],
+      "fs.read":[a.commit||a.ref,a.path,a.startLine,a.endLine],"fs.list":[a.ref,a.path,a.pageSize,a.pagePos],"fs.stat":[a.ref,a.path],"fs.grep":[a.ref,a.pattern,a.path,a.pageSize,a.pagePos],"fs.blame":[a.commit||a.ref,a.path,a.fromLine],
+      "fs.write":[a.branch,a.path,a.content,a.message],"fs.edit":[a.branch,a.path,a.oldText,a.newText,a.message],"fs.mkdir":[a.branch,a.path,a.message],"fs.rm":[a.branch,a.path,a.message],"fs.cp":[a.branch,a.from,a.to,a.message],"fs.mv":[a.branch,a.from,a.to,a.message],"fs.apply":[a.branch,a.changes,a.message],
+      "sandbox.create":[],"sandbox.mount":[a.sandbox,a.branch],"sandbox.exec":[a.sandbox,a.path,a.command,a.message],"sandbox.status":[a.sandbox,a.path],"sandbox.commit":[a.sandbox,a.path,{force:a.force,message:a.message}],"sandbox.unmount":[a.sandbox,a.path,{discard:a.discard}],"sandbox.close":[a.sandbox],
+    };
+    if(group==="fs"&&method==="diff_files")keys[name]=[a.left.commit||a.ref,a.left.path,a.right.commit||a.ref,a.right.path];
+    const read=new Set(["list_branches","list_commits","diff_commits","diff_branches","read","list","stat","grep","glob","diff_files","blame","status"]).has(method);
+    return {surface,group,method,args:keys[`${group}.${method}`],read,view};
   }
 
   const api = { LiveBackend };

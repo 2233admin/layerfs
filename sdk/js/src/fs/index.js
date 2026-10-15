@@ -10,6 +10,6 @@ export { write } from "./write.js";
 export { edit } from "./edit.js";
 export { apply } from "./apply.js";
 export { mkdir } from "./mkdir.js";
-export { remove } from "./remove.js";
+export { rm } from "./rm.js";
 export { cp } from "./cp.js";
 export { mv } from "./mv.js";

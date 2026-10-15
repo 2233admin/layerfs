@@ -46,6 +46,7 @@ impl<'a> RetainedHistory<'a> {
         root: ObjectId,
     ) -> HistoryResult<Self> {
         let initialized = catalog.initialize_layerstack(&StackInitialization {
+            logical: 0,
             stack: stack(),
             name: HistoryName::new("retained")?,
             scope: scope.object(),

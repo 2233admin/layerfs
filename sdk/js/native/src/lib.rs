@@ -1,5 +1,6 @@
 //! Node entry points for the public SDK and internal operator.
 mod convert;
+mod discovery;
 mod dispatch;
 mod exec;
 mod job;

@@ -1067,8 +1067,7 @@ fn simultaneous_mounts_over_related_roots_are_isolated_and_a_stale_token_never_r
             Request::Commit(layerfs_bridge::control::CommitControl {
                 token,
                 force: false,
-                agent: None,
-                call: None,
+                message: None,
             }),
             Request::Attach(token),
             Request::Unmount(layerfs_bridge::control::UnmountControl {

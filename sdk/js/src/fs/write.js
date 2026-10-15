@@ -1,7 +1,5 @@
-// `fs.write`: one Commit writing a file; `content` is text or a Buffer.
-
-/** `fs.write(path, content, { branch, agent, call } = {})` */
-export function write(client, path, content, { branch, agent, call } = {}) {
-  const body = typeof content === "string" ? { content } : { bytes: content };
-  return client.call("fs.write", { path, ...body, branch, agent, call });
+// fs.write: one positional SDK operation.
+import { checkedMessage } from "../client.js";
+export function write(client, branch, path, content, message) {
+  return client.call("fs.write", { branch, path, ...(typeof content === "string" ? { content } : { bytes: content }), message: checkedMessage(message) });
 }

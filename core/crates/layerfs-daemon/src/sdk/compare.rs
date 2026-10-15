@@ -12,16 +12,11 @@ use super::reads::REPLY_BUDGET;
 use super::snapshot::{self, answer, existing, kind_name, Kind, Snap};
 use crate::store::{Store, StorePorts};
 use layerfs_bridge::control::{SdkRefusal, SdkValue};
-use layerfs_content::compare::{
-    line_diff, root_changes, ChangeKind, DiffLine, EntryFacts, LineOp, PathChange,
-};
-use layerfs_content::filesystem::FilesystemRootId;
+use layerfs_content::compare::{line_diff, ChangeKind, DiffLine, EntryFacts, LineOp, PathChange};
 use layerfs_content::object::inode_leaf::InodeKind;
 use layerfs_history::LayerStackRecord;
 use std::sync::Arc;
 
-/// Path changes one tree comparison may list.
-const CHANGE_LIMIT: usize = 4096;
 /// Budget one listed change costs besides its path and lines.
 const ITEM_COST: usize = 160;
 
@@ -57,7 +52,7 @@ fn hunks(lines: &[DiffLine], budget: &mut usize) -> Option<SdkValue> {
 pub(crate) fn diff_files(store: &Arc<Store>, args: &SdkValue) -> Answer {
     let stack = args::project(store, args)?;
     let reader = snapshot::reader(store, &stack);
-    let branch = text(args, "branch")?;
+    let branch = args.get_text("branch").unwrap_or("main");
     let side = |name: &str| -> Result<(String, Snap, EntryFacts, Option<String>), SdkRefusal> {
         let selector = args
             .get(name)
@@ -180,33 +175,80 @@ fn changes(
     reader: &StorePorts,
     left: &Snap,
     right: &Snap,
-    cursor: Option<&str>,
-) -> Result<(Vec<SdkValue>, Option<String>, bool), SdkRefusal> {
-    let found = root_changes(
-        reader,
-        FilesystemRootId(left.root),
-        FilesystemRootId(right.root),
-        CHANGE_LIMIT,
-    )
-    .map_err(args::content)?;
-    let mut budget = REPLY_BUDGET;
-    let mut items = Vec::new();
-    let mut last: Option<&str> = None;
-    for entry in &found.entries {
-        if cursor.is_some_and(|after| entry.path.as_str() <= after) {
+    args: &SdkValue,
+) -> Result<(Vec<SdkValue>, SdkValue), SdkRefusal> {
+    let (limit, pos) = args::paging(args)?;
+    let mut l = super::window::Walker::new(reader, left, "/")?;
+    let mut r = super::window::Walker::new(reader, right, "/")?;
+    let (mut a, mut b) = (l.next()?, r.next()?);
+    let (mut items, mut seen, mut budget, mut more) = (Vec::new(), 0u64, REPLY_BUDGET, false);
+    while a.is_some() || b.is_some() {
+        let order = match (&a, &b) {
+            (Some((x, _)), Some((y, _))) => x.split('/').cmp(y.split('/')),
+            (Some(_), None) => std::cmp::Ordering::Less,
+            _ => std::cmp::Ordering::Greater,
+        };
+        let (path, before, after) = match order {
+            std::cmp::Ordering::Less => {
+                let (p, e) = a.take().expect("left");
+                a = l.next()?;
+                (p, Some(e), None)
+            }
+            std::cmp::Ordering::Greater => {
+                let (p, e) = b.take().expect("right");
+                b = r.next()?;
+                (p, None, Some(e))
+            }
+            std::cmp::Ordering::Equal => {
+                let (p, x) = a.take().expect("left");
+                let (_, y) = b.take().expect("right");
+                a = l.next()?;
+                b = r.next()?;
+                (p, Some(x), Some(y))
+            }
+        };
+        if before == after {
             continue;
         }
-        let cost = entry.path.len() + ITEM_COST;
-        if cost > budget {
-            return Ok((items, last.map(str::to_owned), found.truncated));
+        if let (Some(x), Some(y)) = (before, after) {
+            if x.serial == y.serial
+                && x.value.kind == InodeKind::Directory
+                && y.value.kind == InodeKind::Directory
+                && x.value.metadata_root == y.value.metadata_root
+            {
+                continue;
+            }
+        }
+        if seen < pos {
+            seen += 1;
+            continue;
+        }
+        let cost = path.len() + ITEM_COST;
+        if items.len() == limit || cost > budget {
+            more = true;
+            break;
         }
         budget -= cost;
-        if let Some(item) = change(reader, entry, &mut budget)? {
+        let kind = match (before, after) {
+            (None, _) => ChangeKind::Added,
+            (_, None) => ChangeKind::Removed,
+            _ => ChangeKind::Modified,
+        };
+        if let Some(item) = change(
+            reader,
+            &PathChange {
+                path,
+                kind,
+                left: before,
+                right: after,
+            },
+            &mut budget,
+        )? {
             items.push(item);
         }
-        last = Some(entry.path.as_str());
     }
-    Ok((items, None, found.truncated))
+    let next = args::next_page(pos, items.len(), more);
+    Ok((items, next))
 }
 
 fn both(
@@ -227,15 +269,15 @@ fn listed(
     args: &SdkValue,
     sides: [SdkValue; 2],
 ) -> Answer {
-    let (items, next, truncated) = changes(reader, from, to, args.get_text("cursor"))?;
+    let (items, next) = changes(reader, from, to, args)?;
     let [from, to] = sides;
     answer(vec![
         ("kind", SdkValue::text("ok")),
         ("from", from),
         ("to", to),
         ("items", SdkValue::List(items)),
-        ("nextCursor", SdkValue::opt_text(next)),
-        ("truncated", SdkValue::Bool(truncated)),
+        ("hasMore", SdkValue::Bool(!matches!(next, SdkValue::Null))),
+        ("nextPagePos", next),
     ])
 }
 

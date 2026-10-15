@@ -20,7 +20,7 @@ pub(super) enum Departure {
 }
 impl Service {
     /// Refuses uncommitted changes with their paths unless `discard`.
-    pub(super) fn unmount(&self, control: UnmountControl) -> Result<Success, Failure> {
+    pub(crate) fn unmount(&self, control: UnmountControl) -> Result<Success, Failure> {
         let token = control.token;
         if !control.discard {
             if let Some(report) = self.dirty(token)? {

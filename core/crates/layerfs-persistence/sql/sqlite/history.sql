@@ -4,7 +4,7 @@ CREATE TABLE history_meta (
     catalog_incarnation INTEGER NOT NULL
         CHECK (catalog_incarnation BETWEEN 1 AND 9223372036854775807),
     binding_key BLOB NOT NULL CHECK (length(binding_key) BETWEEN 1 AND 128),
-    identity_format INTEGER NOT NULL CHECK (identity_format = 1),
+    identity_format INTEGER NOT NULL CHECK (identity_format = 3),
     schema_version INTEGER NOT NULL CHECK(schema_version=1),
     schema_source TEXT NOT NULL,
     schema_definition TEXT NOT NULL
@@ -43,6 +43,8 @@ CREATE TABLE layer (
             source_branch_id IS NULL
             OR (length(source_branch_id) = 17 AND substr(source_branch_id, 1, 1) = X'11')
         ),
+    logical INTEGER NOT NULL DEFAULT 0 CHECK(logical>=0),
+    overwrote BLOB NOT NULL,
     source_commit_id BLOB
         CHECK (
             source_commit_id IS NULL
@@ -87,14 +89,19 @@ CREATE TABLE "commit" (
             OR (length(branch_id) = 17 AND substr(branch_id, 1, 1) = X'11')
         ),
     via INTEGER NOT NULL CHECK (via IN (1, 2, 3)),
-    agent TEXT CHECK (agent IS NULL OR length(CAST(agent AS BLOB)) BETWEEN 1 AND 128),
-    call TEXT CHECK (call IS NULL OR length(CAST(call AS BLOB)) BETWEEN 1 AND 128),
+    message TEXT CHECK (message IS NULL OR length(CAST(message AS BLOB)) <= 4096),
     merged_from_id BLOB
         CHECK (
             merged_from_id IS NULL
-            OR (length(merged_from_id) = 33 AND substr(merged_from_id, 1, 1) = X'12')
+            OR (length(merged_from_id) = 33 AND substr(merged_from_id, 1, 1) IN (X'12',X'32'))
         ),
     created_ms INTEGER NOT NULL,
+    logical INTEGER NOT NULL DEFAULT 0 CHECK(logical>=0),
+    new_canonical INTEGER NOT NULL DEFAULT 0 CHECK(new_canonical>=0),
+    new_stored INTEGER NOT NULL DEFAULT 0 CHECK(new_stored>=0),
+    new_metadata INTEGER NOT NULL DEFAULT 0 CHECK(new_metadata>=0),
+    lww BLOB NOT NULL,
+    displaced_id BLOB CHECK(displaced_id IS NULL OR length(displaced_id)=33),
     FOREIGN KEY (layer_stack_id, base_layer_id)
         REFERENCES layer(layer_stack_id, layer_id) DEFERRABLE INITIALLY DEFERRED,
     FOREIGN KEY (layer_stack_id, parent_commit_id)
@@ -114,6 +121,7 @@ CREATE TABLE branch (
         CHECK (substr(name, -1, 1) GLOB '[a-z0-9]'),
     base_layer_id BLOB NOT NULL
         CHECK (length(base_layer_id) = 33 AND substr(base_layer_id, 1, 1) = X'32'),
+    forked_from_id BLOB CHECK(forked_from_id IS NULL OR length(forked_from_id)=33),
     head_commit_id BLOB
         CHECK (
             head_commit_id IS NULL

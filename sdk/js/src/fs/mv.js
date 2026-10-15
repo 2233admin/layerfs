@@ -1,6 +1,5 @@
-// `fs.mv`: one Commit moving a path.
-
-/** `fs.mv(from, to, { branch, agent, call } = {})` */
-export function mv(client, from, to, { branch, agent, call } = {}) {
-  return client.call("fs.mv", { from, to, branch, agent, call });
+// fs.mv: one positional SDK operation.
+import { checkedMessage } from "../client.js";
+export function mv(client, branch, fromPath, toPath, message) {
+  return client.call("fs.mv", { branch, from: fromPath, to: toPath, message: checkedMessage(message) });
 }

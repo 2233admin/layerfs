@@ -286,7 +286,18 @@ impl State<'_> {
                 }
             }
         }
+        self.outcome.metadata_bytes += batch
+            .packs
+            .iter()
+            .filter(|pack| pack.info.domain == crate::location::PackDomain::Metadata)
+            .map(|pack| pack.info.length as u64)
+            .sum::<u64>();
         self.outcome.packs += batch.packs.len() as u64;
+        self.outcome.stored_bytes += batch
+            .packs
+            .iter()
+            .map(|pack| pack.info.length as u64)
+            .sum::<u64>();
         for row in &batch.signatures {
             self.signatures.borrow_mut().remove(&row.slot);
         }

@@ -54,24 +54,81 @@ fn side(
 /// `project.list_branches`: every Branch, and main.
 pub(crate) fn list(store: &Arc<Store>, args: &SdkValue) -> Answer {
     let stack = args::project(store, args)?;
-    let mut items = vec![SdkValue::map([
+    let (limit, pos) = args::paging(args)?;
+    let mut page = layerfs_history::Page {
+        cursor: None,
+        limit: MAXIMUM_PAGE_RECORDS,
+    };
+    let (mut seen, mut items, mut more, mut spent) = (0u64, Vec::new(), false, 0);
+    // Main participates in the same byte-name ordering as the Branches.
+    let mut main = Some(SdkValue::map([
         ("name", SdkValue::text(MAIN)),
         ("id", SdkValue::Null),
         ("base", SdkValue::text(hex(stack.head_layer.as_slice()))),
         ("head", SdkValue::Null),
-    ])];
-    for branch in args::branches(store, &stack)? {
-        items.push(SdkValue::map([
-            ("name", SdkValue::text(branch.name.as_str())),
-            ("id", SdkValue::text(hex(branch.id.as_slice()))),
-            ("base", SdkValue::text(hex(branch.base_layer.as_slice()))),
-            (
-                "head",
-                SdkValue::opt_text(branch.head_commit.map(|id| hex(id.as_slice()))),
-            ),
-        ]));
+    ]));
+    let mut add = |value: SdkValue| -> bool {
+        if seen < pos {
+            seen += 1;
+            return true;
+        }
+        let cost = value.get_text("name").map_or(0, str::len) + 512;
+        if items.len() == limit || spent + cost > super::reads::REPLY_BUDGET {
+            more = true;
+            return false;
+        }
+        spent += cost;
+        items.push(value);
+        true
+    };
+    'pages: loop {
+        let found = store.history().branches(stack.id, &page).map_err(history)?;
+        for branch in found.records {
+            if branch.name.as_str() == MAIN {
+                continue;
+            }
+            if branch.name.as_str() > MAIN {
+                if let Some(value) = main.take() {
+                    if !add(value) {
+                        break 'pages;
+                    }
+                }
+            }
+            let value = SdkValue::map([
+                ("name", SdkValue::text(branch.name.as_str())),
+                ("id", SdkValue::text(hex(branch.id.as_slice()))),
+                ("base", SdkValue::text(hex(branch.base_layer.as_slice()))),
+                (
+                    "head",
+                    SdkValue::opt_text(branch.head_commit.map(|id| hex(id.as_slice()))),
+                ),
+                (
+                    "forkedFrom",
+                    branch
+                        .forked_from
+                        .map_or(SdkValue::Null, |node| SdkValue::text(node_text(node))),
+                ),
+            ]);
+            if !add(value) {
+                break 'pages;
+            }
+        }
+        match found.continuation {
+            Some(cursor) => page.cursor = Some(cursor),
+            None => {
+                if let Some(value) = main.take() {
+                    add(value);
+                }
+                break;
+            }
+        }
     }
-    Ok(SdkValue::map([("items", SdkValue::List(items))]))
+    let next = args::next_page(pos, items.len(), more);
+    Ok(SdkValue::map([
+        ("items", SdkValue::List(items)),
+        ("hasMore", SdkValue::Bool(!matches!(next, SdkValue::Null))),
+        ("nextPagePos", next),
+    ]))
 }
 
 /// `branch.fork(name, { from })`: metadata only.
@@ -144,33 +201,41 @@ pub(crate) fn fork(store: &Arc<Store>, args: &SdkValue) -> Answer {
 pub(crate) fn list_commits(store: &Arc<Store>, args: &SdkValue) -> Answer {
     let stack = args::project(store, args)?;
     let branch = args::branch(store, &stack, text(args, "branch")?)?;
-    let cursor = match args.get_text("cursor") {
-        Some(cursor) => Some(args::unhex(cursor).ok_or_else(|| invalid("cursor"))?),
-        None => None,
-    };
-    let page = store
-        .history()
-        .commit_history(&CommitHistoryRequest {
-            branch: branch.id,
-            start: None,
-            cursor,
-            limit: MAXIMUM_PAGE_RECORDS,
-        })
-        .map_err(history)?;
+    let (limit, pos) = args::paging(args)?;
+    let (mut cursor, mut seen, mut items, mut spent, mut more) = (None, 0u64, Vec::new(), 0, false);
+    'pages: loop {
+        let page = store
+            .history()
+            .commit_history(&CommitHistoryRequest {
+                branch: branch.id,
+                start: branch.head_commit,
+                cursor,
+                limit: MAXIMUM_PAGE_RECORDS,
+            })
+            .map_err(history)?;
+        for record in page.records {
+            if seen < pos {
+                seen += 1;
+                continue;
+            }
+            let cost = record.meta.message.as_ref().map_or(0, String::len) + 1024;
+            if items.len() == limit || spent + cost > super::reads::REPLY_BUDGET {
+                more = true;
+                break 'pages;
+            }
+            spent += cost;
+            items.push(commit_value(&record, Some(branch.name.as_str())));
+        }
+        match page.continuation {
+            Some(next) => cursor = Some(next),
+            None => break,
+        }
+    }
+    let next = args::next_page(pos, items.len(), more);
     Ok(SdkValue::map([
-        (
-            "items",
-            SdkValue::List(
-                page.records
-                    .iter()
-                    .map(|record| commit_value(record, Some(branch.name.as_str())))
-                    .collect(),
-            ),
-        ),
-        (
-            "nextCursor",
-            SdkValue::opt_text(page.continuation.as_deref().map(hex)),
-        ),
+        ("items", SdkValue::List(items)),
+        ("hasMore", SdkValue::Bool(!matches!(next, SdkValue::Null))),
+        ("nextPagePos", next),
     ]))
 }
 
@@ -309,7 +374,15 @@ pub(crate) fn merge(store: &Arc<Store>, args: &SdkValue) -> Answer {
             ]),
         ));
     }
-    save.finish().map_err(args::failed)?;
+    let known = store.logical_size(ln).map_err(history)?;
+    let logical = layerfs_content::filesystem::statistics::logical_size_after(
+        &save,
+        input.ours,
+        merged.root,
+        known,
+    )
+    .map_err(args::content)?;
+    let saved = save.finish().map_err(args::failed)?;
     let base = match (left_side, right_side, rn) {
         (MergeSide::Main, _, _) => match ln {
             NodeId::Layer(layer) => layer,
@@ -320,7 +393,7 @@ pub(crate) fn merge(store: &Arc<Store>, args: &SdkValue) -> Answer {
             .as_ref()
             .map_or(stack.head_layer, |b| b.base_layer),
     };
-    let agent = args.get_text("agent").map(str::to_owned);
+    let message = args.get_text("message").map(str::to_owned);
     let snapshot = catalog
         .merge_branch(&request(MergeHead::Commit(Box::new(MergeCommit {
             base,
@@ -331,7 +404,14 @@ pub(crate) fn merge(store: &Arc<Store>, args: &SdkValue) -> Answer {
             second_parent: rn,
             root: merged.root.0,
             meta: CommitMeta {
-                agent,
+                message: Some(message.unwrap_or_else(|| format!("Merge {left} and {right}"))),
+                lww: merged.lww.clone(),
+                statistics: layerfs_history::CommitStatistics {
+                    logical,
+                    new_canonical: saved.canonical_bytes,
+                    new_stored: saved.stored_bytes,
+                    new_metadata: saved.metadata_bytes,
+                },
                 ..CommitMeta::new(CommitVia::Merge)
             },
         }))))

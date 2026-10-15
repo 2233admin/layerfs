@@ -597,8 +597,7 @@ fn commit(
         let request = Request::Commit(layerfs_bridge::control::CommitControl {
             token,
             force: false,
-            agent: None,
-            call: None,
+            message: None,
         });
         let result = match gate {
             Some(gate) => service.execute(&request, move |_, _, snapshot| {

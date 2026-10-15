@@ -6,7 +6,7 @@
 //! binding) also keeps the background processes it started; the daemon holds
 //! no process record.
 use crate::job::refused;
-use layerfs_api::{internal::Control, MountedWorkspace, SealedProject};
+use layerfs_api::{internal::Control, MountedWorkspace};
 use layerfs_bridge::control::{SdkRefusal, SdkValue, WorkspaceToken};
 use layerfs_bridge::provision::StoreManifest;
 use layerfs_sandbox::{backend::docker::Sandbox, CommandIdentity};
@@ -15,7 +15,8 @@ use std::sync::{Arc, LazyLock, Mutex, MutexGuard};
 
 /// One project initialized by this process.
 pub(crate) struct Project {
-    pub(crate) sealed: SealedProject,
+    pub(crate) store: layerfs_persistence::SealedStore,
+    pub(crate) manifest: StoreManifest,
     /// The daemon's manifest once a Sandbox installed the Store.
     pub(crate) installed: Option<StoreManifest>,
 }
@@ -32,12 +33,14 @@ pub(crate) struct Process {
     pub(crate) command: String,
     pub(crate) pid: u32,
     pub(crate) stopped: bool,
+    pub(crate) start: String,
 }
 
 /// One live Sandbox.
 pub(crate) struct SandboxState {
     pub(crate) id: String,
     pub(crate) project: String,
+    pub(crate) directory: std::path::PathBuf,
     pub(crate) runtime: Sandbox,
     pub(crate) identity: CommandIdentity,
     pub(crate) control: Mutex<Control>,
@@ -66,10 +69,22 @@ pub(crate) fn text<'a>(args: &'a SdkValue, name: &str) -> Result<&'a str, SdkRef
 /// The Sandbox an operation names.
 pub(crate) fn sandbox(args: &SdkValue) -> Result<Arc<SandboxState>, SdkRefusal> {
     let id = text(args, "sandbox")?;
-    lock(&SANDBOXES)?
-        .get(id)
-        .cloned()
-        .ok_or_else(|| refused("NoSuchSandbox", format!("no Sandbox {id} in this process")))
+    let existing = lock(&SANDBOXES)?.get(id).cloned();
+    let state = match existing {
+        Some(state) => state,
+        None => {
+            let state = crate::discovery::reopen(args)?;
+            lock(&SANDBOXES)?.insert(id.to_owned(), state.clone());
+            state
+        }
+    };
+    if state.project != text(args, "project")?
+        || state.directory != crate::discovery::project_dir(args)?.join(id)
+    {
+        return Err(refused("Unauthorized", "Sandbox/project/home mismatch"));
+    }
+    crate::discovery::refresh(&state)?;
+    Ok(state)
 }
 
 impl SandboxState {

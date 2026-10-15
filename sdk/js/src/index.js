@@ -2,7 +2,7 @@
 // calls name their Branch, and Sandbox calls take the Sandbox (or its id).
 // Calls that are not about a Workspace reach the Store through one service
 // Sandbox, created on the first such call unless `sandbox` names one.
-import { invoke } from "./client.js";
+import { invokeClient } from "./client.js";
 import { LayerFSError } from "./errors.js";
 import * as fsMethods from "./fs/index.js";
 import { init } from "./project/init.js";
@@ -24,12 +24,12 @@ import { unmount } from "./sandbox/unmount.js";
 export { LayerFSError, isRefusal, CODES } from "./errors.js";
 
 const bind = (client, methods) =>
-  Object.fromEntries(Object.entries(methods).map(([name, method]) => [name, (...args) => method(client, ...args)]));
+  Object.fromEntries(Object.entries(methods).map(([name, method]) => [name, async (...args) => method(client, ...args)]));
 
 export class LayerFS {
   /** Selects a project without filesystem, native addon or network I/O. */
   constructor(projectName) {
-    if (typeof projectName !== "string" || !/^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/.test(projectName)) {
+    if (typeof projectName !== "string" || !/^[a-z0-9](?:[a-z0-9_.-]{0,61}[a-z0-9])?$/.test(projectName)) {
       throw new LayerFSError("InvalidInput", "a project name is required", null);
     }
     this.projectName = projectName;
@@ -53,7 +53,7 @@ export class LayerFS {
 
   /** The Sandbox that serves Store calls, created once on first use. */
   service() {
-    this.serviceSandbox ??= create(this).then((sandbox) => sandbox.id);
+    this.serviceSandbox ??= invokeClient(this, "sandbox.service", {}).then((value) => { this.sandboxes.add(value.id); return value.id; });
     return this.serviceSandbox;
   }
 
@@ -61,7 +61,7 @@ export class LayerFS {
   async call(method, args) {
     if (method.startsWith("operator.")) throw new LayerFSError("UnknownMethod", "use @layerfs/sdk/operator", null);
     const sandbox = await this.service();
-    return invoke(method, { ...args, project: this.projectName, sandbox });
+    return invokeClient(this, method, { ...args, sandbox });
   }
 
 }

@@ -69,22 +69,40 @@ impl WorkspaceApi<'_> {
         branch: &str,
         workspace: WorkspaceId,
     ) -> Result<MountedWorkspace, crate::SdkError> {
-        let listed = crate::project::list_branches(
-            self.control,
-            layerfs_bridge::control::SdkValue::map([(
-                "project",
-                layerfs_bridge::control::SdkValue::text(project),
-            )]),
-        )?;
-        let id = match listed.get("items") {
-            Some(layerfs_bridge::control::SdkValue::List(items)) => items
-                .iter()
-                .find(|item| item.get_text("name") == Some(branch))
-                .and_then(|item| item.get_text("id"))
-                .and_then(layerfs_bridge::sdk_values::unhex)
-                .and_then(|bytes| bytes.try_into().ok())
-                .and_then(|bytes| BranchId::from_bytes(bytes).ok()),
-            _ => None,
+        let mut position = 0i64;
+        let id = loop {
+            let listed = crate::project::list_branches(
+                self.control,
+                layerfs_bridge::control::SdkValue::map([
+                    ("project", layerfs_bridge::control::SdkValue::text(project)),
+                    ("pageSize", layerfs_bridge::control::SdkValue::Int(1000)),
+                    ("pagePos", layerfs_bridge::control::SdkValue::Int(position)),
+                ]),
+            )?;
+            let id = match listed.get("items") {
+                Some(layerfs_bridge::control::SdkValue::List(items)) => items
+                    .iter()
+                    .find(|item| item.get_text("name") == Some(branch))
+                    .and_then(|item| item.get_text("id"))
+                    .and_then(layerfs_bridge::sdk_values::unhex)
+                    .and_then(|bytes| bytes.try_into().ok())
+                    .and_then(|bytes| BranchId::from_bytes(bytes).ok()),
+                _ => None,
+            };
+            if id.is_some() {
+                break id;
+            }
+            if !listed.get_bool("hasMore") {
+                break None;
+            }
+            let count = match listed.get("items") {
+                Some(layerfs_bridge::control::SdkValue::List(v)) => v.len(),
+                _ => 0,
+            };
+            if count == 0 {
+                break None;
+            }
+            position += count as i64;
         };
         let Some(id) = id else {
             return Err(crate::SdkError::Refused(

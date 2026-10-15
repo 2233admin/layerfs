@@ -84,6 +84,7 @@ pub(crate) fn check(
         "pack",
         "scope_allocator",
         "store_policy",
+        "store_totals",
     ];
     if layout.uses_units() {
         expected.push("pack_unit");
@@ -119,7 +120,7 @@ impl super::connection::Session {
    tx.query(&format!("PRAGMA user_version={version}"),vec![])?;
    tx.query(&format!("INSERT INTO store_policy(id,schema_version,format_profile,small_file_threshold_bytes,whole_file_delta_max_depth,chunk_delta_max_depth,metadata_delta_max_depth) VALUES(1,{version},?1,?2,?3,?4,?5)"),vec![Param::I64(i64::from(policy.format_profile())),Param::I64(policy.small_file_threshold_bytes() as i64),Param::I64(i64::from(policy.whole_file_delta_max_depth())),Param::I64(i64::from(policy.chunk_delta_max_depth())),Param::I64(i64::from(policy.metadata_delta_max_depth()))])?;
    let definition=definition(tx.connection,tx.work)?;
-   tx.query(&format!("INSERT INTO history_meta(id,catalog_id,catalog_incarnation,binding_key,identity_format,schema_version,schema_source,schema_definition) VALUES(1,?1,?2,?3,1,{version},?4,?5)"),vec![Param::Bytes(catalog_id.as_slice().to_vec()),Param::I64(history.incarnation as i64),Param::Bytes(history.binding_key.clone()),Param::Text(source(selection)),Param::Text(definition)])?;
+   tx.query(&format!("INSERT INTO history_meta(id,catalog_id,catalog_incarnation,binding_key,identity_format,schema_version,schema_source,schema_definition) VALUES(1,?1,?2,?3,3,{version},?4,?5)"),vec![Param::Bytes(catalog_id.as_slice().to_vec()),Param::I64(history.incarnation as i64),Param::Bytes(history.binding_key.clone()),Param::Text(source(selection)),Param::Text(definition)])?;
    Ok(())
   })?;
         Ok(())
@@ -135,7 +136,7 @@ impl super::connection::Session {
    let rows=tx.query("SELECT catalog_id,catalog_incarnation,binding_key,identity_format,schema_version,schema_source,schema_definition FROM history_meta WHERE id=1",vec![])?;
    let r=rows.first().filter(|_|rows.len()==1).ok_or(BackendError::Integrity)?;
    let incarnation:i64=r.get(1)?;
-   if r.get::<Vec<u8>>(0)?!=catalog_id.as_slice() || r.get::<Vec<u8>>(2)?!=binding || incarnation<=0 || r.get::<i64>(3)?!=1 || r.get::<i64>(4)?!=self.schema_version() || r.get::<String>(5)?!=source(selection) || r.get::<String>(6)?!=definition(tx.connection,tx.work)? {return Err(BackendError::Integrity);}
+   if r.get::<Vec<u8>>(0)?!=catalog_id.as_slice() || r.get::<Vec<u8>>(2)?!=binding || incarnation<=0 || r.get::<i64>(3)?!=3 || r.get::<i64>(4)?!=self.schema_version() || r.get::<String>(5)?!=source(selection) || r.get::<String>(6)?!=definition(tx.connection,tx.work)? {return Err(BackendError::Integrity);}
    Ok(incarnation as u64)
   })
     }

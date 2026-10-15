@@ -365,7 +365,7 @@
 
     // -- fs mutation shared by write/edit/mkdir/remove/cp/mv/apply. Allowed
     // while mounted: it advances the head, so live mounts become stale.
-    mutate(branchName, changes, via, agent) {
+    mutate(branchName, changes, via, message) {
       const b = this.branch(branchName);
       const capturedHead = b.head;
       const currentRoot = this.branchRoot(b);
@@ -374,7 +374,7 @@
       if (root === currentRoot)
         return { kind: "UpToDate", branch: b.name, head: b.head, root, capturedHead, displacedHead: null };
       const id = "C" + ++this.s.seq.commit;
-      this.s.commits[id] = { id, parent: capturedHead, root, base: b.base, branch: b.name, slot: this.slot(), by: "fs", via, time: this.tick(), ...(agent ? { agent } : {}) };
+      this.s.commits[id] = { id, parent: capturedHead, root, base: b.base, branch: b.name, slot: this.slot(), by: "fs", via, time: this.tick(), ...(message ? { message } : {}) };
       b.head = id;
       return { kind: "Committed", branch: b.name, head: id, root, capturedHead, displacedHead: null };
     }
@@ -540,7 +540,7 @@
       const root = this.intern(m.tree);
       const id = "C" + ++this.s.seq.commit;
       this.s.commits[id] = { id, parent: this.s.commits[ln] ? ln : null, root, base, branch: a.name, slot: this.slot(), by: "merge", via: `merge ${left} + ${right}`,
-        mergedFrom: rn, mergeBase: mb, lww: m.lww, time: this.tick(), ...(a.agent ? { agent: a.agent } : {}) };
+        mergedFrom: rn, mergeBase: mb, lww: m.lww, time: this.tick(), ...(a.message ? { message: a.message } : {}) };
       b.head = id;
       return { kind: "Merged", branch: a.name, head: id, root, sources, mergeBase: mb, conflicts: [], lww: m.lww };
     },
@@ -592,13 +592,13 @@
     },
 
     // ---------------------------------------------------------- fs writes
-    "fs.write"(a) { return this.mutate(a.branch, [{ kind: "write", path: a.path, content: a.content }], "fs.write", a.agent); },
-    "fs.edit"(a) { return this.mutate(a.branch, [{ kind: "edit", path: a.path, oldText: a.oldText, newText: a.newText, all: a.all }], "fs.edit", a.agent); },
-    "fs.mkdir"(a) { return this.mutate(a.branch, [{ kind: "mkdir", path: a.path, recursive: a.recursive }], "fs.mkdir", a.agent); },
-    "fs.remove"(a) { return this.mutate(a.branch, [{ kind: "remove", path: a.path, recursive: a.recursive }], "fs.remove", a.agent); },
-    "fs.cp"(a) { return this.mutate(a.branch, [{ kind: "cp", from: a.from, to: a.to, recursive: a.recursive }], "fs.cp", a.agent); },
-    "fs.mv"(a) { return this.mutate(a.branch, [{ kind: "mv", from: a.from, to: a.to }], "fs.mv", a.agent); },
-    "fs.apply"(a) { return this.mutate(a.branch, a.changes, "fs.apply", a.agent); },
+    "fs.write"(a) { return this.mutate(a.branch, [{ kind: "write", path: a.path, content: a.content }], "fs.write", a.message); },
+    "fs.edit"(a) { return this.mutate(a.branch, [{ kind: "edit", path: a.path, oldText: a.oldText, newText: a.newText, all: a.all }], "fs.edit", a.message); },
+    "fs.mkdir"(a) { return this.mutate(a.branch, [{ kind: "mkdir", path: a.path, recursive: a.recursive }], "fs.mkdir", a.message); },
+    "fs.rm"(a) { return this.mutate(a.branch, [{ kind: "remove", path: a.path, recursive: a.recursive }], "fs.rm", a.message); },
+    "fs.cp"(a) { return this.mutate(a.branch, [{ kind: "cp", from: a.from, to: a.to, recursive: a.recursive }], "fs.cp", a.message); },
+    "fs.mv"(a) { return this.mutate(a.branch, [{ kind: "mv", from: a.from, to: a.to }], "fs.mv", a.message); },
+    "fs.apply"(a) { return this.mutate(a.branch, a.changes, "fs.apply", a.message); },
 
     // ---------------------------------------------------------- sandbox
     "sandbox.create"() {
@@ -715,7 +715,7 @@
       const id = "C" + ++this.s.seq.commit;
       const displacedHead = stale && a.force ? b.head : null;
       this.s.commits[id] = { id, parent: a.force ? capturedHead : b.head, root, base: b.base, branch: b.name, slot: this.slot(), by: "workspace", via: `${a.sandbox}:${a.path}`,
-        time: this.tick(), ...(merged ? { merged } : {}), ...(a.agent ? { agent: a.agent } : {}), ...(a.call ? { call: a.call } : {}) };
+        time: this.tick(), ...(merged ? { merged } : {}), ...(a.message ? { message: a.message } : {}),  };
       if (displacedHead) this.s.commits[displacedHead].displacedBy = id;
       b.head = id;
       ws.baseCommit = id; ws.baseLayer = b.base; ws.baseRoot = root;
@@ -756,74 +756,42 @@
   // ---------------------------------------------------------------- scripts
   // Generates the inline Node tool call an agent would send for one step.
   function scriptFor(step, project) {
-    const a = step.args || {};
-    const conn = { project };
-    let body;
-    const sb = () => `const sandbox = await layerfs.sandbox.connect(${J(a.sandbox)});\n`;
-    const onRef = (ref) => (ref === "main" ? "layerfs.project.main.fs" : "layerfs.fs");
-    const print = "console.log(JSON.stringify(result));";
-    switch (step.call) {
-      case "project.init":
-        delete conn.project;
-        body = `const result = await layerfs.project.init("./${a.name}", { name: ${J(a.name)} });\n${print}`; break;
-      case "project.list_branches": body = `const result = await layerfs.project.list_branches();\n${print}`; break;
-      case "main.fork": body = `const branch = await layerfs.project.main.fork(${J(a.name)});\nconsole.log(JSON.stringify(branch.branchRef));`; break;
-      case "main.list_layers": body = `const result = await layerfs.project.main.list_layers();\n${print}`; break;
-      case "branch.fork": conn.branch = a.branch; body = `const branch = await layerfs.branch.fork(${J(a.name)});\nconsole.log(JSON.stringify(branch.branchRef));`; break;
-      case "branch.list_commits": conn.branch = a.branch; body = `const result = await layerfs.branch.list_commits();\n${print}`; break;
-      case "branch.diff_commits": body = `const result = await layerfs.branch.diff_commits({ from: ${J(a.from)}, to: ${J(a.to)} });\n${print}`; break;
-      case "branch.diff_branches": {
-        const sel = (r) => (r === "main" ? "layerfs.project.main" : J(r));
-        body = `const result = await layerfs.branch.diff_branches({\n  from: ${sel(a.from)},\n  to: ${sel(a.to)},\n});\n${print}`; break;
-      }
-      case "branch.publish": conn.branch = a.branch; body = `const result = await layerfs.branch.publish(${a.commit ? `{ commit: ${J(a.commit)} }` : ""});\n${print}`; break;
-      case "branch.merge": {
-        const sel = (r) => (r === "main" ? "layerfs.project.main" : J(r));
-        body = `const result = await layerfs.branch.merge(${sel(a.branch)}, ${sel(a.with)}, { name: ${J(a.name)} });\n${print}`; break;
-      }
-      case "fs.read":
-        if (a.ref !== "main") conn.branch = a.ref;
-        body = `const result = await ${onRef(a.ref)}.read(${J(a.path)}${a.commit ? `, { commit: ${J(a.commit)} }` : ""});\n${print}`; break;
-      case "fs.list": if (a.ref !== "main") conn.branch = a.ref; body = `const result = await ${onRef(a.ref)}.list(${J(a.path || "/")});\n${print}`; break;
-      case "fs.stat": if (a.ref !== "main") conn.branch = a.ref; body = `const result = await ${onRef(a.ref)}.stat(${J(a.path)});\n${print}`; break;
-      case "fs.grep": if (a.ref !== "main") conn.branch = a.ref; body = `const result = await ${onRef(a.ref)}.grep(${J(a.pattern)}, { path: ${J(a.path || "/")} });\n${print}`; break;
-      case "fs.diff_files": {
-        if (a.ref !== "main") conn.branch = a.ref;
-        const sel = (x) => `{ path: ${J(x.path)}${x.commit ? `, commit: ${J(x.commit)}` : ""} }`;
-        body = `const result = await ${onRef(a.ref)}.diff_files({\n  left: ${sel(a.left)},\n  right: ${sel(a.right)},\n});\n${print}`; break;
-      }
-      case "fs.write": conn.branch = a.branch; body = `const result = await layerfs.fs.write(${J(a.path)}, ${J(a.content)});\n${print}`; break;
-      case "fs.edit": conn.branch = a.branch; body = `const result = await layerfs.fs.edit(${J(a.path)}, {\n  oldText: ${J(a.oldText)},\n  newText: ${J(a.newText)},\n});\n${print}`; break;
-      case "fs.mkdir": conn.branch = a.branch; body = `const result = await layerfs.fs.mkdir(${J(a.path)}${a.recursive ? ", { recursive: true }" : ""});\n${print}`; break;
-      case "fs.remove": conn.branch = a.branch; body = `const result = await layerfs.fs.remove(${J(a.path)}${a.recursive ? ", { recursive: true }" : ""});\n${print}`; break;
-      case "fs.cp": conn.branch = a.branch; body = `const result = await layerfs.fs.cp(${J(a.from)}, ${J(a.to)});\n${print}`; break;
-      case "fs.mv": conn.branch = a.branch; body = `const result = await layerfs.fs.mv(${J(a.from)}, ${J(a.to)});\n${print}`; break;
-      case "fs.apply": {
-        conn.branch = a.branch;
-        const lines = a.changes.map((c) => "  " + JSON.stringify(c).replace(/"(\w+)":/g, "$1: ").replace(/,(?=\w+: )/g, ", ").replace(/^\{/, "{ ").replace(/\}$/, " }") + ",");
-        body = `const result = await layerfs.fs.apply([\n${lines.join("\n")}\n]);\n${print}`; break;
-      }
-      case "sandbox.create": body = `const sandbox = await layerfs.sandbox.create();\nconsole.log(JSON.stringify({ id: sandbox.id }));`; break;
-      case "sandbox.list": body = `const result = await layerfs.sandbox.list();\n${print}`; break;
-      case "sandbox.mount": body = `${sb()}const path = await sandbox.mount({ branch: ${J(a.branch)} });\nconsole.log(JSON.stringify({ sandbox: sandbox.id, path }));`; break;
-      case "sandbox.list_mounts": body = `${sb()}const result = await sandbox.list_mounts();\n${print}`; break;
-      case "sandbox.list_processes": body = `${sb()}const result = await sandbox.list_processes();\n${print}`; break;
-      case "sandbox.exec":
-        body = a.background
-          ? `${sb()}const proc = await sandbox.exec(${J(a.path)}, ${J(a.command)}, {\n  background: true,\n});\nconsole.log(JSON.stringify({ process: proc.id }));`
-          : `${sb()}const result = await sandbox.exec(${J(a.path)}, ${J(a.command)});\n${print}`;
-        break;
-      case "process.cancel": body = `${sb()}const proc = await sandbox.get_process(${J(a.process)});\nconst result = await proc.cancel();\n${print}`; break;
-      case "sandbox.status": body = `${sb()}const result = await sandbox.status(${J(a.path)});\n${print}`; break;
-      case "sandbox.commit": body = `${sb()}const result = await sandbox.commit(${J(a.path)}${a.force ? ", { force: true }" : ""});\n${print}`; break;
-      case "sandbox.unmount": body = `${sb()}const result = await sandbox.unmount(${J(a.path)}${a.discard ? ", { discard: true }" : ""});\n${print}`; break;
-      case "sandbox.close": body = `${sb()}const result = await sandbox.close();\n${print}`; break;
-      default: body = `// ${step.call}`;
+    const a=step.args||{};let target="layerfs",method=step.call,args=[];
+    switch(method){
+      case "project.init": args=[`./${a.name||project}`];break;
+      case "project.list_branches": args=[a.pageSize,a.pagePos];break;
+      case "main.fork":method="branch.fork";args=[a.name,"main"];break;
+      case "main.list_layers":target="operator";method="inspect.snapshot";break;
+      case "branch.fork":args=[a.name,a.fromCommit||a.branch||"main"];break;
+      case "branch.list_commits":args=[a.branch,a.pageSize,a.pagePos];break;
+      case "branch.diff_commits":case "branch.diff_branches":args=[a.from,a.to,a.pageSize,a.pagePos];break;
+      case "branch.publish":args=[a.branch,a.commit];break;
+      case "branch.merge":args=[a.branch,a.with,a.name,a.message];break;
+      case "fs.read":args=[a.commit||a.ref,a.path,a.startLine,a.endLine];break;
+      case "fs.list":args=[a.ref,a.path||"/",a.pageSize,a.pagePos];break;
+      case "fs.stat":args=[a.ref,a.path];break;
+      case "fs.grep":case "fs.glob":args=[a.ref,a.pattern,a.path||"/",a.pageSize,a.pagePos];break;
+      case "fs.blame":args=[a.commit||a.ref,a.path,a.fromLine];break;
+      case "fs.diff_files":args=[a.left.commit||a.ref,a.left.path,a.right.commit||a.ref,a.right.path];break;
+      case "fs.write":args=[a.branch,a.path,a.content,a.message];break;
+      case "fs.edit":args=[a.branch,a.path,a.oldText,a.newText,a.message];break;
+      case "fs.mkdir":case "fs.rm":args=[a.branch,a.path,a.message];break;
+      case "fs.cp":case "fs.mv":args=[a.branch,a.from,a.to,a.message];break;
+      case "fs.apply":args=[a.branch,a.changes.map(({kind,...rest})=>({op:kind==="remove"?"rm":kind,...rest})),a.message];break;
+      case "sandbox.create":break;
+      case "sandbox.mount":args=[a.sandbox,a.branch];break;
+      case "sandbox.status":args=[a.sandbox,a.path];break;
+      case "sandbox.close":args=[a.sandbox];break;
+      case "sandbox.exec":args=[a.sandbox,a.path,a.command,a.message];if(a.background){target="operator";method="process.start";args=args.slice(0,3);}break;
+      case "sandbox.list_processes":target="operator";method="process.list";args=[a.sandbox];break;
+      case "process.cancel":target="operator";args=[a.sandbox,a.process];break;
+      case "sandbox.commit":args=[a.sandbox,a.path,{force:a.force,message:a.message}];break;
+      case "sandbox.unmount":args=[a.sandbox,a.path,{discard:a.discard}];break;
+      default:return `// ${method} is a UI action`;
     }
-    const connArgs = Object.keys(conn).length
-      ? `{\n${Object.entries(conn).map(([k, v]) => `  ${k}: ${J(v)},`).join("\n")}\n}`
-      : "";
-    return `node --input-type=module <<'JS'\nimport { LayerFS } from "@layerfs/sdk";\nconst layerfs = await LayerFS.connect(${connArgs});\n${body}\nJS`;
+    while(args.length&&args[args.length-1]===undefined)args.pop();
+    const imports=target==="operator"?'\nimport { LayerFSOperator } from "@layerfs/sdk/operator";':"";
+    return `node --input-type=module <<'JS'\nimport { LayerFS } from "@layerfs/sdk";${imports}\nconst layerfs = new LayerFS(${J(project)});\n${target==="operator"?"const operator = new LayerFSOperator(layerfs);\n":""}const result = await ${target}.${method}(${args.map(v=>v===undefined?"undefined":J(v)).join(", ")});\nconsole.log(JSON.stringify(result));\nJS`;
   }
 
   // ---------------------------------------------------------------- scenarios

@@ -113,6 +113,11 @@ pub fn init(
         .child("history.finish_tree_save")
         .run(|_| save.finish().map_err(storage))?;
     progress.tick()?;
+    let logical = layerfs_content::filesystem::statistics::logical_size(
+        &store.reader().map_err(storage)?,
+        layerfs_content::filesystem::FilesystemRootId(root),
+    )
+    .map_err(ProjectError::Content)?;
     let stack = timer.child("history.initialize_layerstack").run(|_| {
         catalog
             .initialize_layerstack(&StackInitialization {
@@ -121,6 +126,7 @@ pub fn init(
                 scope: scope.object(),
                 profile: profile_id(),
                 genesis_root: root,
+                logical,
             })
             .map_err(ProjectError::History)
     })?;

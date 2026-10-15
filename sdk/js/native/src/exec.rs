@@ -90,13 +90,18 @@ pub(crate) fn exec(args: &SdkValue) -> Outcome {
             ("exitCode", SdkValue::Int(i64::from(code))),
             ("stdout", shown(&stdout)),
             ("stderr", shown(&stderr)),
+            ("message", SdkValue::opt_text(args.get_text("message"))),
             (
                 "truncated",
                 SdkValue::Bool(stdout.total > KEPT || stderr.total > KEPT),
             ),
         ]));
     }
-    let id = format!("proc_{:02}", lock(&state.processes)?.len() + 1);
+    let _guard = crate::discovery::guard(&state.directory)?;
+    let id = format!(
+        "proc_{}",
+        layerfs_bridge::sdk_values::hex(&crate::registry::random()?[..12])
+    );
     let script = format!("setsid bash -c \"$0\" >/tmp/layerfs-{id}.log 2>&1 </dev/null & echo $!");
     let (code, stdout, stderr) = run(
         &state,
@@ -115,15 +120,21 @@ pub(crate) fn exec(args: &SdkValue) -> Outcome {
                 ),
             )
         })?;
-    lock(&state.processes)?.insert(
-        id.clone(),
-        Process {
-            path: path.to_owned(),
-            command: command.to_owned(),
-            pid,
-            stopped: false,
-        },
-    );
+    let start = start_time(&state, pid)?.ok_or_else(|| {
+        refused(
+            "Unknown",
+            "background process exited before its identity was observed",
+        )
+    })?;
+    let process = Process {
+        path: path.to_owned(),
+        command: command.to_owned(),
+        pid,
+        stopped: false,
+        start,
+    };
+    crate::discovery::save_process(&state, &id, &process)?;
+    lock(&state.processes)?.insert(id.clone(), process);
     Ok(SdkValue::map([
         ("kind", SdkValue::text("running")),
         ("process", SdkValue::Text(id)),
@@ -134,6 +145,14 @@ pub(crate) fn exec(args: &SdkValue) -> Outcome {
 /// True while the process group of `pid` has a member that is not a zombie.
 /// The container's first process is the daemon, which does not reap orphans,
 /// so a finished member can stay a zombie that `kill -0` still finds.
+fn start_time(state: &SandboxState, pid: u32) -> Result<Option<String>, SdkRefusal> {
+    let (code, out, _) = run(state, "/tmp", vec!["bash".into(), "-c".into(), format!("s=$(cat /proc/{pid}/stat 2>/dev/null) || exit 1; set -- ${{s##*) }}; shift 19; printf '%s' \"$1\"")])?;
+    if code == 0 {
+        Ok(Some(String::from_utf8_lossy(&out.bytes).into_owned()))
+    } else {
+        Ok(None)
+    }
+}
 fn alive(state: &SandboxState, pid: u32) -> Result<bool, SdkRefusal> {
     // After the `(comm) ` field: state, parent, process group.
     let probe = format!(
@@ -144,16 +163,29 @@ fn alive(state: &SandboxState, pid: u32) -> Result<bool, SdkRefusal> {
     Ok(code == 0)
 }
 
+fn owned_alive(state: &SandboxState, pid: u32, start: &str) -> Result<bool, SdkRefusal> {
+    if !alive(state, pid)? {
+        return Ok(false);
+    }
+    if start_time(state, pid)?.as_deref() != Some(start) {
+        return Err(refused(
+            "Unknown",
+            "process group identity is no longer provable; no signal sent",
+        ));
+    }
+    Ok(true)
+}
+
 /// Background processes still running in the Workspace at `path`.
 pub(crate) fn running_in(state: &SandboxState, path: &str) -> Result<Vec<String>, SdkRefusal> {
     let started = lock(&state.processes)?
         .iter()
         .filter(|(_, process)| process.path == path && !process.stopped)
-        .map(|(id, process)| (id.clone(), process.pid))
+        .map(|(id, process)| (id.clone(), process.pid, process.start.clone()))
         .collect::<Vec<_>>();
     let mut running = Vec::new();
-    for (id, pid) in started {
-        if alive(state, pid)? {
+    for (id, pid, start) in started {
+        if owned_alive(state, pid, &start)? {
             running.push(id);
         }
     }
@@ -172,12 +204,13 @@ pub(crate) fn processes(args: &SdkValue) -> Outcome {
                 process.command.clone(),
                 process.pid,
                 process.stopped,
+                process.start.clone(),
             )
         })
         .collect::<Vec<_>>();
     let mut items = Vec::new();
-    for (id, path, command, pid, stopped) in listed {
-        let running = !stopped && alive(&state, pid)?;
+    for (id, path, command, pid, stopped, start) in listed {
+        let running = !stopped && owned_alive(&state, pid, &start)?;
         items.push(SdkValue::map([
             ("id", SdkValue::Text(id)),
             ("path", SdkValue::Text(path)),
@@ -205,15 +238,23 @@ pub(crate) fn processes(args: &SdkValue) -> Outcome {
 pub(crate) fn cancel(args: &SdkValue) -> Outcome {
     let state = sandbox(args)?;
     let id = text(args, "process")?;
-    let pid = lock(&state.processes)?
+    let _guard = crate::discovery::guard(&state.directory)?;
+    let (pid, start, stopped) = lock(&state.processes)?
         .get(id)
-        .map(|process| process.pid)
+        .map(|process| (process.pid, process.start.clone(), process.stopped))
         .ok_or_else(|| {
             refused(
                 "NoSuchProcess",
                 format!("{id} is not owned by {}", state.id),
             )
         })?;
+    if stopped || !owned_alive(&state, pid, &start)? {
+        return Ok(SdkValue::map([
+            ("kind", SdkValue::text("Stopped")),
+            ("process", SdkValue::text(id)),
+            ("status", SdkValue::text("stopped")),
+        ]));
+    }
     run(
         &state,
         "/tmp",
@@ -233,6 +274,7 @@ pub(crate) fn cancel(args: &SdkValue) -> Outcome {
     }
     if let Some(process) = lock(&state.processes)?.get_mut(id) {
         process.stopped = gone;
+        crate::discovery::save_process(&state, id, process)?;
     }
     Ok(SdkValue::map([
         ("kind", SdkValue::text("Stopped")),

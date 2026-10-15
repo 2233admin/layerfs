@@ -20,6 +20,8 @@ impl HistoryCatalog for MemoryHistory {
             return Err(HistoryError::Integrity("LayerStack identity"));
         }
         let layer = LayerRecord {
+            overwrote: Vec::new(),
+            logical: 0,
             id: LayerId::derive(r.stack, None, r.genesis_root),
             stack: r.stack,
             parent: None,

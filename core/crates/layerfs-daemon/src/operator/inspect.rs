@@ -23,7 +23,7 @@ const BUDGET: usize = 56 * 1024;
 /// Bytes the Layers may use.
 const LAYER_BUDGET: usize = 12 * 1024;
 /// Estimated bytes of one Commit value, for page sizes.
-const COMMIT_COST: usize = 600;
+const COMMIT_COST: usize = 5400;
 
 /// One Workspace this daemon holds, copied from its control registry.
 pub(crate) struct WorkspaceView {
@@ -36,6 +36,7 @@ pub(crate) struct WorkspaceView {
     /// Changed inodes and names not yet captured, when observed.
     pub(crate) dirty: Option<(u64, u64)>,
     pub(crate) pending_merge: bool,
+    pub(crate) revision: Option<i64>,
 }
 
 /// Encoded size estimate of one value.
@@ -43,11 +44,11 @@ fn cost(value: &SdkValue) -> usize {
     match value {
         SdkValue::Null | SdkValue::Bool(_) => 1,
         SdkValue::Int(_) => 9,
-        SdkValue::Text(text) => text.len() + 3,
+        SdkValue::Text(text) => text.len() + 5,
         SdkValue::Bytes(bytes) => bytes.len() + 5,
-        SdkValue::List(items) => 3 + items.iter().map(cost).sum::<usize>(),
+        SdkValue::List(items) => 5 + items.iter().map(cost).sum::<usize>(),
         SdkValue::Map(fields) => {
-            3 + fields
+            5 + fields
                 .iter()
                 .map(|(name, value)| name.len() + 2 + cost(value))
                 .sum::<usize>()
@@ -100,13 +101,32 @@ fn workspace_value(
             }),
         ),
         ("pendingMerge", SdkValue::Bool(view.pending_merge)),
+        (
+            "revision",
+            view.revision.map_or(SdkValue::Null, SdkValue::Int),
+        ),
     ])
 }
 
 /// The snapshot answer, or `unchanged` when `since` names its version.
 pub(crate) fn snapshot(store: &Arc<Store>, args: &SdkValue, views: &[WorkspaceView]) -> Answer {
     let stack = args::project(store, args)?;
-    let branches = args::branches(store, &stack)?;
+    let page = store
+        .history()
+        .branches(
+            stack.id,
+            &layerfs_history::Page {
+                cursor: None,
+                limit: 64,
+            },
+        )
+        .map_err(args::history)?;
+    let more_branches = page.continuation.is_some();
+    let branches = page
+        .records
+        .into_iter()
+        .filter(|branch| branch.name.as_str() != MAIN)
+        .collect::<Vec<_>>();
     let names = branches
         .iter()
         .map(|branch| {
@@ -129,6 +149,12 @@ pub(crate) fn snapshot(store: &Arc<Store>, args: &SdkValue, views: &[WorkspaceVi
     for branch in &branches {
         branch_items.push(take(SdkValue::map([
             ("name", SdkValue::text(branch.name.as_str())),
+            (
+                "forkedFrom",
+                branch
+                    .forked_from
+                    .map_or(SdkValue::Null, |node| SdkValue::text(args::node_text(node))),
+            ),
             ("base", SdkValue::text(hex(branch.base_layer.as_slice()))),
             (
                 "head",
@@ -188,6 +214,10 @@ pub(crate) fn snapshot(store: &Arc<Store>, args: &SdkValue, views: &[WorkspaceVi
                     .and_then(|id| names.get(&id))
                     .map(|n| n.0.as_str());
                 let value = commit_value(record, name);
+                if spent + cost(&value) > BUDGET {
+                    more.push((branch.name.as_str().to_owned(), SdkValue::Null));
+                    break;
+                }
                 spent += cost(&value);
                 commits.push(value);
             }
@@ -197,8 +227,13 @@ pub(crate) fn snapshot(store: &Arc<Store>, args: &SdkValue, views: &[WorkspaceVi
         }
     }
     let body = vec![
+        (
+            "store".to_owned(),
+            SdkValue::map([("stats", super::store::stats(store)?)]),
+        ),
         ("project".to_owned(), SdkValue::text(stack.name.as_str())),
         ("branches".to_owned(), SdkValue::List(branch_items)),
+        ("moreBranches".to_owned(), SdkValue::Bool(more_branches)),
         ("commits".to_owned(), SdkValue::List(commits)),
         ("more".to_owned(), SdkValue::Map(more)),
         ("layers".to_owned(), SdkValue::List(layers)),

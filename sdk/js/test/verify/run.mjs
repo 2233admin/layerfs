@@ -2,12 +2,13 @@
 //   node sdk/js/test/verify/run.mjs A1
 // Fresh volume and Init, the case once, teardown always, then a receipt under
 // core/target/issue327/verify/. Exit 0 on PASS or SKIP, 1 on FAIL.
+import { STANDARD } from "./cases_standard.mjs";
 import { A } from "./cases_a.mjs";
 import { B } from "./cases_b.mjs";
 import { C } from "./cases_c.mjs";
 import { receipt, setup, teardown } from "./lib.mjs";
 
-const CASES = { ...A, ...B, ...C };
+const CASES = { ...A, ...B, ...C, ...STANDARD };
 const id = process.argv[2];
 if (!CASES[id]) {
   console.error(`usage: run.mjs <case>; one of ${Object.keys(CASES).join(" ")}`);

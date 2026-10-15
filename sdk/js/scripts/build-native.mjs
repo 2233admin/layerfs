@@ -1,7 +1,7 @@
 // Build the addon on its actual host. Cargo discovers the repository's ARM64
 // profile from cwd; explicit RUSTFLAGS remain the caller's declared input.
 import { spawnSync } from "node:child_process";
-import { copyFileSync, mkdirSync } from "node:fs";
+import { copyFileSync, mkdirSync, renameSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -27,5 +27,7 @@ const output = process.env.LAYERFS_NATIVE_OUTPUT
   ? resolve(root, process.env.LAYERFS_NATIVE_OUTPUT)
   : fileURLToPath(new URL("../native/layerfs.node", import.meta.url));
 mkdirSync(dirname(output), { recursive: true });
-copyFileSync(artifact, output);
+const staged = `${output}.${process.pid}.new`;
+copyFileSync(artifact, staged);
+renameSync(staged, output);
 console.log(`Built ${process.platform}/${process.arch}: ${output}`);

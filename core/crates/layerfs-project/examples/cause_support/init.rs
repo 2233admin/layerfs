@@ -85,6 +85,7 @@ pub fn init(
         let _observed = crate::observer::span(crate::observer::Step::Genesis);
         catalog
             .initialize_layerstack(&StackInitialization {
+                logical: 0,
                 stack: request.stack,
                 name: request.name,
                 scope: scope.object(),

@@ -150,8 +150,7 @@ fn original_lost_control_reply_is_not_replayed_or_settled_by_an_observer() {
         Request::Commit(layerfs_bridge::control::CommitControl {
             token,
             force: false,
-            agent: None,
-            call: None
+            message: None,
         })
     );
     let OperationCause::Exchange(original) = &failure.cause else {
@@ -221,8 +220,7 @@ fn another_control_channel_observes_running_commit_and_refuses_unmount_before_ef
         client.call(Request::Commit(layerfs_bridge::control::CommitControl {
             token,
             force: false,
-            agent: None,
-            call: None,
+            message: None,
         }))
     });
     entered.recv_timeout(Duration::from_secs(3)).unwrap();
@@ -295,7 +293,7 @@ fn an_original_unknown_blocks_another_commit_and_normal_unmount() {
     let (token, binding) = mount(&mut client, identity(89), branch);
     fixture::write(&f.service, token, b'U');
     assert!(
-        matches!(client.call(Request::Commit(layerfs_bridge::control::CommitControl { token, force: false, agent: None, call: None })).unwrap(),Reply::Refused(value) if value.code==ControlCode::Unknown)
+        matches!(client.call(Request::Commit(layerfs_bridge::control::CommitControl { token, force: false, message: None, })).unwrap(),Reply::Refused(value) if value.code==ControlCode::Unknown)
     );
     let observed = status(&mut client, token);
     assert_eq!(observed.activity, Activity::Uncertain);
@@ -303,14 +301,14 @@ fn an_original_unknown_blocks_another_commit_and_normal_unmount() {
     assert!(observed.published.is_none());
     assert!(observed.local.unwrap().captured.is_some());
     assert!(
-        matches!(f.service.execute_control(&Request::Commit(layerfs_bridge::control::CommitControl { token, force: false, agent: None, call: None })),
+        matches!(f.service.execute_control(&Request::Commit(layerfs_bridge::control::CommitControl { token, force: false, message: None, })),
         Err(layerfs_daemon::control::Failure::Custody(value)) if value.code == ControlCode::Unknown && value.published.is_none())
     );
     assert!(
         matches!(client.call(Request::Unmount(layerfs_bridge::control::UnmountControl { token, discard: true })).unwrap(),Reply::Refused(value) if value.code==ControlCode::Unknown)
     );
     assert!(
-        matches!(client.call(Request::Commit(layerfs_bridge::control::CommitControl { token, force: false, agent: None, call: None })).unwrap(),Reply::Refused(value) if value.code==ControlCode::Unknown)
+        matches!(client.call(Request::Commit(layerfs_bridge::control::CommitControl { token, force: false, message: None, })).unwrap(),Reply::Refused(value) if value.code==ControlCode::Unknown)
     );
     let retained = worker.join();
     assert!(retained.outcome.is_err());
@@ -364,8 +362,7 @@ fn status_retains_known_publication_when_the_engine_is_unavailable() {
         let reply = client.call(Request::Commit(layerfs_bridge::control::CommitControl {
             token,
             force: false,
-            agent: None,
-            call: None,
+            message: None,
         }));
         (client, reply)
     });
@@ -434,8 +431,7 @@ fn product_control_commit_captures_the_frontier_releases_its_owners_and_is_then_
                     ..token
                 },
                 force: false,
-                agent: None,
-                call: None
+                message: None,
             })),
         Err(layerfs_daemon::control::Failure::Rejected(
             ControlCode::Invalid,
@@ -450,8 +446,7 @@ fn product_control_commit_captures_the_frontier_releases_its_owners_and_is_then_
         .execute_control(&Request::Commit(layerfs_bridge::control::CommitControl {
             token,
             force: false,
-            agent: None,
-            call: None,
+            message: None,
         }))
         .unwrap();
     let record = match &done.reply {
@@ -486,8 +481,7 @@ fn product_control_commit_captures_the_frontier_releases_its_owners_and_is_then_
         .execute_control(&Request::Commit(layerfs_bridge::control::CommitControl {
             token,
             force: false,
-            agent: None,
-            call: None,
+            message: None,
         }))
         .unwrap();
     assert!(
@@ -650,8 +644,7 @@ fn a_definite_commit_failure_whose_capture_is_not_resolved_answers_unknown() {
         let reply = client.call(Request::Commit(layerfs_bridge::control::CommitControl {
             token,
             force: false,
-            agent: None,
-            call: None,
+            message: None,
         }));
         (client, reply)
     });
@@ -753,8 +746,7 @@ fn an_unresolved_moved_head_failure_is_answered_and_not_dropped() {
         let reply = client.call(Request::Commit(layerfs_bridge::control::CommitControl {
             token,
             force: false,
-            agent: None,
-            call: None,
+            message: None,
         }));
         (client, reply)
     });

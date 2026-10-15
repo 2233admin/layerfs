@@ -3,6 +3,15 @@ use crate::{OwnerClient, OwnerError, ServiceClass};
 use layerfs_overlay::{BaseSource, CapturedReader, FileRead};
 use layerfs_workspace::Route;
 impl OwnerClient {
+    pub(crate) fn acquire_diagnostic_source(
+        &self,
+        route: layerfs_workspace::Route,
+    ) -> Result<BaseSource, OwnerError> {
+        self.call(route, crate::ServiceClass::Source, None, move |db| {
+            db.acquire_diagnostic_source()
+        })
+    }
+
     pub fn reader_inodes(
         &self,
         route: Route,

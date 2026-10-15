@@ -20,6 +20,8 @@ pub(super) struct Binding {
     pub activity: Activity,
     pub epoch: u64,
     pub published: Option<CommitOutcome>,
+    /// Original private filesystem publication failure and its construction custody.
+    pub file_failure: Option<Box<crate::store::CommitFailure>>,
 }
 pub(super) enum Entry {
     Binding,
@@ -27,7 +29,7 @@ pub(super) enum Entry {
 }
 /// One daemon's kernel control owner. Whole operations run outside its registry mutex.
 pub struct Service {
-    pub(super) store: Arc<Store>,
+    pub(crate) store: Arc<Store>,
     pub(super) owner: OwnerClient,
     pub(super) capacity: usize,
     pub(super) entries: Mutex<BTreeMap<WorkspaceId, Entry>>,

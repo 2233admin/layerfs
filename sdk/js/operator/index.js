@@ -1,14 +1,26 @@
-// Internal UI/runtime surface. Import explicitly from @layerfs/sdk/operator.
+// Internal operator surface; public dispatch cannot admit these names.
 import { snapshot } from "./inspect/snapshot.js";
-import { list } from "./process/list.js";
-import { cancel } from "./process/cancel.js";
-
+import { invokeOperator, sandboxId, page } from "../src/client.js";
 export class LayerFSOperator {
   constructor(client) {
-    this.inspect = { snapshot: (since) => snapshot(client, since) };
+    const call = async (method, args = {}, sandbox) => invokeOperator(`operator.${method}`, { ...args, project: client.projectName, home: client.options.home, sandbox: sandbox ? sandboxId(sandbox) : await client.service() });
+    this.store = {
+      stats: async () => { const v = await call("store.stats"); return { ...v, dedupe: v.dedupe === null ? null : Number(v.dedupe), compression: v.compression === null ? null : Number(v.compression) }; },
+      commits: (branch, pageSize, pagePos) => call("store.commits", { branch, ...page(pageSize,pagePos) }),
+    };
+    this.files = {
+      stats: (ref,path) => call("files.stats", { branch: ref,path }),
+      history: (ref,path,pageSize,pagePos) => call("files.history", { branch:ref,path,...page(pageSize,pagePos) }),
+    };
+    this.workspace = {
+      overlay: (sandbox,path) => call("workspace.overlay", { path }, sandbox),
+      changes: (sandbox,path,pageSize,pagePos) => call("workspace.changes", { path,...page(pageSize,pagePos) },sandbox),
+    };
+    this.inspect = { snapshot: (since) => snapshot(client,since) };
     this.process = {
-      list: (sandbox) => list(client, sandbox),
-      cancel: (sandbox, process) => cancel(client, sandbox, process),
+      start: (sandbox,path,command) => call("process.start", { path,command,background:true },sandbox),
+      list: (sandbox) => call("process.list", {},sandbox),
+      cancel: (sandbox,process) => call("process.cancel", { process },sandbox),
     };
   }
 }

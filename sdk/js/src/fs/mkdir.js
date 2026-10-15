@@ -1,6 +1,5 @@
-// `fs.mkdir`: one Commit creating a directory.
-
-/** `fs.mkdir(path, { branch, recursive, agent, call } = {})` */
-export function mkdir(client, path, { branch, recursive, agent, call } = {}) {
-  return client.call("fs.mkdir", { path, branch, recursive, agent, call });
+// fs.mkdir: one positional SDK operation.
+import { checkedMessage } from "../client.js";
+export function mkdir(client, branch, path, message) {
+  return client.call("fs.mkdir", { branch, path, recursive: true, message: checkedMessage(message) });
 }

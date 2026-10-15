@@ -497,8 +497,7 @@ fn commit(rig: &Rig, token: WorkspaceToken, what: &str) -> CommitRecord {
             layerfs_bridge::control::CommitControl {
                 token,
                 force: false,
-                agent: None,
-                call: None,
+                message: None,
             },
         )) {
             Ok(done) => {

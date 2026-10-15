@@ -36,6 +36,10 @@ pub struct WriteOutcome {
     pub packs: u64,
     /// Canonical bytes of new acknowledged objects.
     pub canonical_bytes: u64,
+    /// Complete newly published pack bodies, including first-wins race leftovers.
+    pub stored_bytes: u64,
+    /// Complete newly published metadata-domain pack bytes.
+    pub metadata_bytes: u64,
     /// Actual pooled selection and value assignment counts, including race trials.
     pub pool: crate::save::PoolCounters,
 }

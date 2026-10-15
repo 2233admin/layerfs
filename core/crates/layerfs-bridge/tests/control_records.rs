@@ -10,6 +10,7 @@ fn binding() -> BranchSnapshot {
     let root = ObjectId::for_bytes(b"control root");
     BranchSnapshot {
         branch: BranchRecord {
+            forked_from: None,
             id: BranchId::from_authority([1; 16]),
             stack: LayerStackId::from_authority([2; 16]),
             name: HistoryName::new("main").unwrap(),
@@ -53,8 +54,7 @@ fn commands_are_bounded_exact_and_reject_every_truncated_prefix() {
         Request::Commit(CommitControl {
             token,
             force: false,
-            agent: Some("agent".into()),
-            call: None,
+            message: Some("agent".into()),
         }),
         Request::Status(token),
         Request::Unmount(UnmountControl {

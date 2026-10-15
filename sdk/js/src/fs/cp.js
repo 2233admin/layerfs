@@ -1,6 +1,5 @@
-// `fs.cp`: one Commit copying a path.
-
-/** `fs.cp(from, to, { branch, recursive, agent, call } = {})` */
-export function cp(client, from, to, { branch, recursive, agent, call } = {}) {
-  return client.call("fs.cp", { from, to, branch, recursive, agent, call });
+// fs.cp: one positional SDK operation.
+import { checkedMessage } from "../client.js";
+export function cp(client, branch, fromPath, toPath, message) {
+  return client.call("fs.cp", { branch, from: fromPath, to: toPath, recursive: true, message: checkedMessage(message) });
 }

@@ -2,6 +2,23 @@
 use crate::{db::integer, BaseSource, Inode, Overlay, OverlayError, OverlayResult, WorkspaceState};
 
 impl Overlay {
+    /// A diagnostic uses its own minted source class, disjoint from kernel request ids.
+    pub fn acquire_diagnostic_source(&self) -> OverlayResult<BaseSource> {
+        self.atomic(|| {
+            let state = self.live()?;
+            let source = BaseSource {
+                engine: self.identity,
+                owner: self.mint_owner()?,
+                class: 4,
+                root: state.base_root,
+                installed: state.installed,
+            };
+            self.insert_source(source)?;
+            self.source_count(true)?;
+            Ok(source)
+        })
+    }
+
     /// Acquires the current base for one bounded request window. Duplicate
     /// operation IDs fail atomically. Kernel service fences later acquisitions
     /// behind known install readiness, without attempting/retrying install.
@@ -97,7 +114,7 @@ impl Overlay {
         self.atomic_cleanup(|| self.release_source_inner(source))
     }
     pub(crate) fn release_class(&self, source: BaseSource) -> OverlayResult<()> {
-        if source.class != 0 {
+        if source.class != 0 && source.class != 4 {
             return Err(OverlayError::Invalid(
                 "file read source requires file-read release",
             ));

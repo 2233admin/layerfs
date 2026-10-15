@@ -78,12 +78,10 @@ impl Service {
             Request::Sdk(call) if call.method.starts_with("operator.") => {
                 Ok(Success::reply(crate::operator::dispatch(self, call)))
             }
-            Request::Sdk(call) => Ok(Success::reply(
-                match crate::sdk::dispatch(&self.store, call) {
-                    Ok(value) => Reply::Sdk(value),
-                    Err(refusal) => Reply::SdkRefused(refusal),
-                },
-            )),
+            Request::Sdk(call) => Ok(Success::reply(match crate::sdk::dispatch(self, call) {
+                Ok(value) => Reply::Sdk(value),
+                Err(refusal) => Reply::SdkRefused(refusal),
+            })),
             Request::Hello(_) => Err(Failure::Rejected(
                 ControlCode::Invalid,
                 "daemon Hello requires application startup owner",
@@ -94,8 +92,7 @@ impl Service {
             Request::Commit(control) => self.commit(control.token, |workspace| {
                 workspace.commit_captured(&CommitOptions {
                     force: control.force,
-                    agent: control.agent.clone(),
-                    call: control.call.clone(),
+                    message: control.message.clone(),
                 })
             }),
             Request::Unmount(control) => self.unmount(*control),
@@ -139,7 +136,11 @@ impl Service {
             }
         }
     }
-    fn mount(&self, workspace: WorkspaceId, branch: BranchId) -> Result<Success, Failure> {
+    pub(crate) fn mount(
+        &self,
+        workspace: WorkspaceId,
+        branch: BranchId,
+    ) -> Result<Success, Failure> {
         {
             let mut entries = self.entries.lock().map_err(|_| Failure::Poisoned)?;
             if entries.contains_key(&workspace) {
@@ -213,6 +214,7 @@ impl Service {
                     activity: Activity::Idle,
                     epoch: 1,
                     published: None,
+                    file_failure: None,
                 })),
             )
         });

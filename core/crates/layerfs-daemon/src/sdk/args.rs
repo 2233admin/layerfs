@@ -14,11 +14,8 @@ use layerfs_history::{
 use std::sync::Arc;
 
 pub(crate) use layerfs_bridge::sdk_values::{
-    commit_value, hex, layer_value, node_text, short, unhex, via,
+    commit_value, hex, layer_value, node_text, short, unhex,
 };
-
-/// Pages one name search may read.
-const MAXIMUM_NAME_PAGES: usize = 1024;
 
 /// The result of one SDK call.
 pub(crate) type Answer = Result<SdkValue, SdkRefusal>;
@@ -96,7 +93,7 @@ pub(crate) fn project(store: &Arc<Store>, args: &SdkValue) -> Result<LayerStackR
         cursor: None,
         limit: MAXIMUM_PAGE_RECORDS,
     };
-    for _ in 0..MAXIMUM_NAME_PAGES {
+    loop {
         let found = store.history().layer_stacks(&page).map_err(history)?;
         if let Some(stack) = found
             .records
@@ -117,50 +114,35 @@ pub(crate) fn project(store: &Arc<Store>, args: &SdkValue) -> Result<LayerStackR
     ))
 }
 
-/// Every Branch of a stack, in name order, except Init's `main`.
-pub(crate) fn branches(
-    store: &Arc<Store>,
-    stack: &LayerStackRecord,
-) -> Result<Vec<BranchRecord>, SdkRefusal> {
-    let mut page = Page {
-        cursor: None,
-        limit: MAXIMUM_PAGE_RECORDS,
-    };
-    let mut out = Vec::new();
-    for _ in 0..MAXIMUM_NAME_PAGES {
-        let found = store.history().branches(stack.id, &page).map_err(history)?;
-        // Project Init's first Branch is named `main`; the SDK's `main` is the
-        // line of Layers, so that Branch is never shown or addressed.
-        out.extend(
-            found
-                .records
-                .into_iter()
-                .filter(|branch| branch.name.as_str() != super::branch::MAIN),
-        );
-        match found.continuation {
-            Some(cursor) => page.cursor = Some(cursor),
-            None => return Ok(out),
-        }
-    }
-    Err(refuse("Capacity", "too many Branches", SdkValue::Null))
-}
-
 /// One Branch by name.
 pub(crate) fn branch(
     store: &Arc<Store>,
     stack: &LayerStackRecord,
     wanted: &str,
 ) -> Result<BranchRecord, SdkRefusal> {
-    branches(store, stack)?
-        .into_iter()
-        .find(|branch| branch.name.as_str() == wanted)
-        .ok_or_else(|| {
-            refuse(
-                "NoSuchBranch",
-                format!("Branch {wanted} does not exist"),
-                SdkValue::map([("branch", SdkValue::text(wanted))]),
-            )
-        })
+    let mut page = Page {
+        cursor: None,
+        limit: MAXIMUM_PAGE_RECORDS,
+    };
+    loop {
+        let found = store.history().branches(stack.id, &page).map_err(history)?;
+        if let Some(branch) = found
+            .records
+            .into_iter()
+            .find(|branch| branch.name.as_str() == wanted && wanted != super::branch::MAIN)
+        {
+            return Ok(branch);
+        }
+        match found.continuation {
+            Some(cursor) => page.cursor = Some(cursor),
+            None => break,
+        }
+    }
+    Err(refuse(
+        "NoSuchBranch",
+        format!("Branch {wanted} does not exist"),
+        SdkValue::Null,
+    ))
 }
 
 /// A Branch's newest node: its head Commit, else its base Layer.
@@ -198,4 +180,30 @@ pub(crate) fn root(store: &Arc<Store>, node: NodeId) -> Result<ObjectId, SdkRefu
         NodeId::Commit(id) => commit(store, id)?.root,
         NodeId::Layer(id) => layer(store, id)?.root,
     })
+}
+
+/// Safe numeric page arguments. Offset skipping is linear and uses bounded windows.
+pub(crate) fn paging(value: &SdkValue) -> Result<(usize, u64), SdkRefusal> {
+    let integer = |name: &str, default: i64| -> Result<i64, SdkRefusal> {
+        match value.get(name) {
+            None => Ok(default),
+            Some(SdkValue::Int(n)) if *n >= 0 && *n <= 9_007_199_254_740_991 => Ok(*n),
+            _ => Err(invalid(format!(
+                "{name} must be a nonnegative safe integer"
+            ))),
+        }
+    };
+    let size = integer("pageSize", 50)?;
+    if !(1..=1000).contains(&size) {
+        return Err(invalid("pageSize must be in 1..=1000"));
+    }
+    Ok((size as usize, integer("pagePos", 0)? as u64))
+}
+
+pub(crate) fn next_page(pos: u64, count: usize, more: bool) -> SdkValue {
+    if more {
+        SdkValue::Int((pos + count as u64) as i64)
+    } else {
+        SdkValue::Null
+    }
 }

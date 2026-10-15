@@ -1,207 +1,191 @@
-//! Direct Branch writes: each call is one Commit (`via: fs`) on the Branch.
-//!
-//! The change list is applied to the Branch head's root in one Save through
-//! Content's path changes and the canonical filesystem update, then published
-//! against that head. One attempt: a head that moved meanwhile is `HeadMoved`.
-//! An invalid change refuses the whole call and the unfinished Save is dropped.
-//! `main` changes only by publishing a Branch.
-use super::args::{self, history, invalid, refuse, text, Answer};
-use crate::store::Store;
-use layerfs_bridge::control::{SdkRefusal, SdkValue};
-use layerfs_content::paths::{apply_paths, PathOp, PathsInput};
-use layerfs_history::{CommitMeta, CommitOutcome, CommitRequest, CommitVia};
-use layerfs_telemetry::timer::Timing;
-use layerfs_workspace::InodeSerials;
-use std::sync::Arc;
+//! Atomic filesystem calls over a private, indexed Workspace. One capture and
+//! canonical construction publishes the whole change list; validation failures
+//! close only that private overlay. Uncertain ownership remains in the registry.
+use super::{
+    args::{self, text, Answer},
+    mutation::Mutation,
+};
+use crate::control::Service;
+use layerfs_bridge::control::{Reply, SdkValue, UnmountControl};
+use layerfs_history::{CommitOutcome, CommitVia, WorkspaceId};
 
-/// Serials one write reservation takes.
-const WRITE_SERIALS: u64 = 64;
-
-/// A checked absolute path: no empty, `.` or `..` name, no trailing slash.
-pub(crate) fn path(text: &str) -> Result<String, SdkRefusal> {
-    let valid = text == "/"
-        || (text.starts_with('/')
-            && !text.ends_with('/')
-            && text[1..]
-                .split('/')
-                .all(|name| !name.is_empty() && name != "." && name != ".."));
-    if valid {
-        Ok(text.to_owned())
-    } else {
-        Err(invalid(format!("`{text}` is not an absolute path")))
+pub(crate) fn path(value: &str) -> Result<String, layerfs_bridge::control::SdkRefusal> {
+    if value.len() > 4096
+        || value.as_bytes().contains(&0)
+        || !(value == "/"
+            || (value.starts_with('/')
+                && !value.ends_with('/')
+                && value[1..]
+                    .split('/')
+                    .all(|s| !s.is_empty() && s != "." && s != "..")))
+    {
+        return Err(args::invalid(
+            "expected an absolute path without empty, dot or parent components",
+        ));
     }
+    Ok(value.to_owned())
 }
-
-fn arg_path(value: &SdkValue, name: &str) -> Result<String, SdkRefusal> {
-    path(text(value, name)?)
-}
-
-/// One change from its SDK form.
-fn op(kind: &str, value: &SdkValue) -> Result<PathOp, SdkRefusal> {
-    Ok(match kind {
-        "write" => PathOp::Write {
-            path: arg_path(value, "path")?,
-            bytes: match (value.get("content"), value.get("bytes")) {
-                (Some(SdkValue::Text(text)), _) => text.clone().into_bytes(),
-                (_, Some(SdkValue::Bytes(bytes))) => bytes.clone(),
-                _ => return Err(invalid("write needs `content` text or `bytes`")),
-            },
-        },
-        "edit" => PathOp::Edit {
-            path: arg_path(value, "path")?,
-            old: text(value, "oldText")?.to_owned(),
-            new: text(value, "newText")?.to_owned(),
-            all: value.get_bool("all"),
-        },
-        "mkdir" => PathOp::Mkdir {
-            path: arg_path(value, "path")?,
-            recursive: value.get_bool("recursive"),
-        },
-        "remove" => PathOp::Remove {
-            path: arg_path(value, "path")?,
-            recursive: value.get_bool("recursive"),
-        },
-        "cp" => PathOp::Copy {
-            from: arg_path(value, "from")?,
-            to: arg_path(value, "to")?,
-            recursive: value.get_bool("recursive"),
-        },
-        "mv" => PathOp::Move {
-            from: arg_path(value, "from")?,
-            to: arg_path(value, "to")?,
-        },
-        other => return Err(invalid(format!("unknown change kind `{other}`"))),
-    })
-}
-
-/// `fs.write`, `fs.edit`, `fs.mkdir`, `fs.remove`, `fs.cp` and `fs.mv`: the
-/// arguments are the change itself.
-pub(crate) fn single(store: &Arc<Store>, kind: &str, args: &SdkValue) -> Answer {
-    commit(store, args, vec![op(kind, args)?])
-}
-
-/// `fs.apply({ changes })`: one Commit for every change.
-pub(crate) fn apply(store: &Arc<Store>, args: &SdkValue) -> Answer {
-    let Some(SdkValue::List(changes)) = args.get("changes") else {
-        return Err(invalid("apply needs a `changes` list"));
+pub(crate) fn single(service: &Service, kind: &str, args: &SdkValue) -> Answer {
+    let mut fields = match args.clone() {
+        SdkValue::Map(v) => v,
+        _ => Vec::new(),
     };
-    let ops = changes
-        .iter()
-        .map(|change| op(text(change, "kind")?, change))
-        .collect::<Result<Vec<_>, _>>()?;
-    commit(store, args, ops)
+    fields.push(("op".into(), SdkValue::text(kind)));
+    commit(service, args, &[SdkValue::Map(fields)])
 }
-
-fn commit(store: &Arc<Store>, args: &SdkValue, ops: Vec<PathOp>) -> Answer {
+pub(crate) fn apply(service: &Service, args: &SdkValue) -> Answer {
+    let Some(SdkValue::List(changes)) = args.get("changes") else {
+        return Err(args::invalid("apply requires a changes array"));
+    };
+    commit(service, args, changes)
+}
+fn commit(service: &Service, args: &SdkValue, changes: &[SdkValue]) -> Answer {
+    let store = &service.store;
     let stack = args::project(store, args)?;
-    let name = text(args, "branch")?;
-    if name == super::branch::MAIN {
-        return Err(refuse(
+    let branch_name = text(args, "branch")?;
+    if branch_name == "main" {
+        return Err(args::refuse(
             "ReadOnly",
-            "main changes only by publishing a Branch",
+            "main changes only through publish",
             SdkValue::Null,
         ));
     }
-    let branch = args::branch(store, &stack, name)?;
-    let snapshot = store
-        .history()
-        .branch_snapshot(branch.id)
-        .map_err(history)?
-        .ok_or_else(|| {
-            refuse(
-                "NoSuchBranch",
-                format!("Branch {name} does not exist"),
-                SdkValue::Null,
-            )
-        })?;
-    let storage = store.producer().map_err(args::failed)?;
-    let save = storage.begin_save().map_err(args::failed)?;
-    let ports = store.ports(stack.scope);
-    let mut range = (0u64, 0u64);
-    let mut fresh = || {
-        if range.0 == range.1 {
-            let (start, count) = ports.reserve(WRITE_SERIALS).map_err(|_| {
-                layerfs_content::ContentError::ResourceUnavailable {
-                    what: "write inode serials",
+    let branch = args::branch(store, &stack, branch_name)?;
+    let id = WorkspaceId::from_authority(
+        layerfs_bridge::duplex::generate_keypair()
+            .map_err(args::failed)?
+            .public,
+    )
+    .map_err(args::history)?;
+    let bound = service
+        .mount(id, branch.id)
+        .map_err(|e| args::failed(format!("{e:?}")))?;
+    let Reply::Bound { token, .. } = bound.reply else {
+        return Err(args::failed("private binding reply"));
+    };
+    let workspace = service
+        .files_workspace(token)
+        .map_err(|e| args::failed(format!("{e:?}")))?;
+    let mut mutation = Mutation::new(&workspace)?;
+    let mut result = Ok(());
+    for (index, change) in changes.iter().enumerate() {
+        result = (|| {
+            let kind = text(change, "op")?;
+            let p = |key| path(text(change, key)?);
+            match kind {
+                "write" => {
+                    let bytes = match (change.get("content"), change.get("bytes")) {
+                        (Some(SdkValue::Text(s)), _) => s.as_bytes(),
+                        (_, Some(SdkValue::Bytes(b))) => b.as_slice(),
+                        _ => return Err(args::invalid("write content must be text or bytes")),
+                    };
+                    mutation.write(&p("path")?, bytes)
                 }
-            })?;
-            range = (start, start.saturating_add(count));
+                "edit" => mutation.edit(
+                    &p("path")?,
+                    text(change, "oldText")?,
+                    text(change, "newText")?,
+                ),
+                "mkdir" => mutation.mkdir(&p("path")?),
+                "rm" => mutation.remove(&p("path")?),
+                "cp" => mutation.copy(&p("from")?, &p("to")?, index as u64),
+                "mv" => mutation.rename(&p("from")?, &p("to")?),
+                _ => Err(args::invalid(format!("unknown change op {kind}"))),
+            }
+        })()
+        .map_err(|mut e| {
+            if let SdkValue::Map(fields) = &mut e.detail {
+                fields.push(("index".into(), SdkValue::Int(index as i64)));
+            } else {
+                e.detail = SdkValue::map([("index", SdkValue::Int(index as i64))]);
+            }
+            e
+        });
+        if result.is_err() {
+            break;
         }
-        range.0 += 1;
-        Ok(range.0 - 1)
-    };
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default();
-    let policy = store.policy().construction();
-    let capacities = policy.capacities();
-    let input = PathsInput {
-        root: layerfs_content::filesystem::FilesystemRootId(snapshot.effective_root),
-        ops: &ops,
-        policy,
-        capacities: &capacities,
-        time: (
-            i64::try_from(now.as_secs()).unwrap_or(i64::MAX),
-            now.subsec_nanos(),
-        ),
-    };
-    let (built, _) = Timing::disabled("fs.write", |timing| {
-        apply_paths(&save, &mut save.sink(), &input, &mut fresh, timing)
-    });
-    let candidate = match built.map_err(args::content)? {
-        Ok(root) => root,
-        Err(refused) => {
-            drop(save);
-            return Err(refuse(
-                refused.code,
-                format!("{}: {}", refused.code, refused.path),
-                SdkValue::map([
-                    ("path", SdkValue::text(refused.path)),
-                    (
-                        "matches",
-                        refused
-                            .matches
-                            .map_or(SdkValue::Null, |n| SdkValue::Int(n as i64)),
-                    ),
-                ]),
-            ));
-        }
-    };
-    save.finish().map_err(args::failed)?;
-    let outcome = store
-        .history()
-        .commit_branch(&CommitRequest {
-            branch: branch.id,
-            expected_head: snapshot.branch.head_commit,
-            expected_base: snapshot.branch.base_layer,
-            expected_root: snapshot.effective_root,
-            candidate_root: candidate.0,
-            profile: snapshot.profile,
-            scope: snapshot.scope,
-            second_parent: None,
-            meta: CommitMeta {
-                agent: args.get_text("agent").map(str::to_owned),
-                call: args.get_text("call").map(str::to_owned),
-                ..CommitMeta::new(CommitVia::Files)
-            },
+    }
+    if result.as_ref().is_err_and(|e| e.code == "Unknown") {
+        return result.map(|()| SdkValue::Null);
+    }
+    mutation.finish()?;
+    if let Err(error) = result {
+        service
+            .unmount(UnmountControl {
+                token,
+                discard: true,
+            })
+            .map_err(|e| args::failed(format!("{e:?}")))?;
+        return Err(error);
+    }
+    let outcome = workspace.commit_captured_via(
+        &crate::store::CommitOptions {
             force: false,
-        })
-        .map_err(history)?;
-    Ok(match outcome {
-        CommitOutcome::Committed { record, .. } => SdkValue::map([
-            ("kind", SdkValue::text("Committed")),
-            ("branch", SdkValue::text(name)),
-            ("head", SdkValue::text(args::hex(record.id.as_slice()))),
-            ("commit", args::commit_value(&record, Some(name))),
-        ]),
-        CommitOutcome::UpToDate { head, root } => SdkValue::map([
-            ("kind", SdkValue::text("UpToDate")),
-            ("branch", SdkValue::text(name)),
-            (
-                "head",
-                SdkValue::opt_text(head.map(|id| args::hex(id.as_slice()))),
+            message: Some(
+                args.get_text("message")
+                    .unwrap_or("Apply filesystem changes")
+                    .to_owned(),
             ),
-            ("root", SdkValue::text(args::hex(root.as_bytes()))),
-        ]),
-    })
+        },
+        CommitVia::Files,
+    );
+    let outcome = match outcome {
+        Ok(outcome) => outcome,
+        Err(failure) => {
+            if failure.locally_settled
+                && failure.local_error.is_none()
+                && failure
+                    .namespace
+                    .as_ref()
+                    .is_none_or(|held| !held.retained())
+            {
+                let code = match &failure.error {
+                    crate::store::CommitError::History(
+                        layerfs_history::HistoryError::HeadMoved(_),
+                    ) => "HeadMoved",
+                    crate::store::CommitError::History(layerfs_history::HistoryError::Busy) => {
+                        "Busy"
+                    }
+                    _ => "Failed",
+                };
+                let refusal = args::refuse(code, failure.to_string(), SdkValue::Null);
+                service
+                    .unmount(UnmountControl {
+                        token,
+                        discard: true,
+                    })
+                    .map_err(|e| args::failed(format!("{e:?}")))?;
+                return Err(refusal);
+            }
+            return Err(service.retain_files_failure(token, failure));
+        }
+    };
+    service
+        .unmount(UnmountControl {
+            token,
+            discard: true,
+        })
+        .map_err(|e| args::failed(format!("{e:?}")))?;
+    Ok(
+        match outcome
+            .history
+            .ok_or_else(|| args::failed("private mutation produced a merge conflict"))?
+        {
+            CommitOutcome::Committed { record, .. } => SdkValue::map([
+                ("kind", SdkValue::text("Committed")),
+                ("branch", SdkValue::text(branch_name)),
+                ("head", SdkValue::text(args::hex(record.id.as_slice()))),
+                ("commit", args::commit_value(&record, Some(branch_name))),
+            ]),
+            CommitOutcome::UpToDate { head, root } => SdkValue::map([
+                ("kind", SdkValue::text("UpToDate")),
+                ("branch", SdkValue::text(branch_name)),
+                (
+                    "head",
+                    SdkValue::opt_text(head.map(|id| args::hex(id.as_slice()))),
+                ),
+                ("root", SdkValue::text(args::hex(root.as_bytes()))),
+            ]),
+        },
+    )
 }

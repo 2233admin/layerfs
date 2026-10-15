@@ -1,6 +1,5 @@
-// `branch.diff_branches`: path-level changes between two Branches or main.
-
-/** `branch.diff_branches({ from, to, cursor } = {})` */
-export function diff_branches(client, { from, to, cursor } = {}) {
-  return client.call("branch.diff_branches", { from, to, cursor });
+// branch.diff_branches: one positional SDK operation.
+import { page } from "../client.js";
+export function diff_branches(client, fromBranch, toBranch, pageSize = 50, pagePos = 0) {
+  return client.call("branch.diff_branches", { from: fromBranch, to: toBranch, ...page(pageSize, pagePos) });
 }

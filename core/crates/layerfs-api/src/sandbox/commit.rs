@@ -29,8 +29,7 @@ impl WorkspaceApi<'_> {
         let request = Request::Commit(CommitControl {
             token,
             force: false,
-            agent: None,
-            call: None,
+            message: None,
         });
         match self.exchange(request.clone())? {
             Reply::Committed(outcome) => Ok(outcome),

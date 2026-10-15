@@ -11,14 +11,30 @@ pub(crate) fn call(op: String, args: JsUnknown) -> napi::Result<AsyncTask<Job>> 
 }
 
 fn dispatch(op: &str, args: SdkValue) -> Outcome {
+    if let Some(value) = args.get("message") {
+        if !matches!(value, SdkValue::Null) {
+            let SdkValue::Text(message) = value else {
+                return Err(refused("InvalidInput", "message must be text"));
+            };
+            let mut meta = layerfs_history::CommitMeta::new(layerfs_history::CommitVia::Files);
+            meta.message = Some(message.clone());
+            meta.check()
+                .map_err(|error| refused("InvalidInput", error.to_string()))?;
+        }
+    }
     match op {
         "project.init" => project::init(&args),
         "sandbox.create" => sandbox::create(&args),
+        "sandbox.service" => sandbox::service(&args),
         "sandbox.close" => sandbox::close(&args),
         "sandbox.mount" => sandbox::mount(&args),
         "sandbox.status" => sandbox::status(&args),
         "sandbox.commit" => sandbox::commit(&args),
         "sandbox.unmount" => sandbox::unmount(&args),
+        "sandbox.exec" if args.get_bool("background") => Err(refused(
+            "InvalidInput",
+            "background launch requires the operator process table",
+        )),
         "sandbox.exec" => exec::exec(&args),
         _ if op.starts_with("operator.") => Err(refused(
             "UnknownMethod",
@@ -59,9 +75,16 @@ fn sdk(op: &str, args: SdkValue) -> Outcome {
 pub(crate) fn operator_call(op: String, args: JsUnknown) -> napi::Result<AsyncTask<Job>> {
     let args = convert::from_js(args)?;
     Ok(AsyncTask::new(Job::new(move || match op.as_str() {
+        "operator.process.start" => exec::exec(&args),
         "operator.process.list" => exec::processes(&args),
         "operator.process.cancel" => exec::cancel(&args),
-        "operator.inspect.snapshot" => sdk(&op, args),
+        "operator.inspect.snapshot"
+        | "operator.store.stats"
+        | "operator.store.commits"
+        | "operator.files.stats"
+        | "operator.files.history"
+        | "operator.workspace.overlay"
+        | "operator.workspace.changes" => sdk(&op, args),
         _ => Err(refused(
             "UnknownMethod",
             format!("no operator operation {op}"),

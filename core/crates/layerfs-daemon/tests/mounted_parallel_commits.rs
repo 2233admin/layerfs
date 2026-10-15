@@ -108,8 +108,7 @@ fn parallel_workspace_commits_keep_distinct_captures_and_one_admission_each() {
                 layerfs_bridge::control::CommitControl {
                     token,
                     force: false,
-                    agent: None,
-                    call: None,
+                    message: None,
                 },
             ));
             let _ = tx.send((tag, result));

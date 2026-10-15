@@ -42,6 +42,13 @@ impl BoundWorkspace {
         &self,
         options: &CommitOptions,
     ) -> Result<CommitSuccess, Box<CommitFailure>> {
+        self.commit_captured_via(options, layerfs_history::CommitVia::Workspace)
+    }
+    pub(crate) fn commit_captured_via(
+        &self,
+        options: &CommitOptions,
+        via: layerfs_history::CommitVia,
+    ) -> Result<CommitSuccess, Box<CommitFailure>> {
         let mut admission = self.admit_commit()?;
         let held = RefCell::new(None);
         // What construction staged for the shared cache. It is placed there
@@ -67,6 +74,7 @@ impl BoundWorkspace {
                 }
             },
             options,
+            via,
         );
         let mut held = held.into_inner();
         match result {

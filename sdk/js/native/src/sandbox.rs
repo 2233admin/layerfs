@@ -6,7 +6,7 @@
 //! failed create keeps whatever container it made and names it in the
 //! refusal; nothing is cleaned up or retried on the caller's behalf.
 use crate::job::{failed, refused, Outcome};
-use crate::registry::{lock, random, sandbox, text, Mount, SandboxState, PROJECTS, SANDBOXES};
+use crate::registry::{lock, random, sandbox, text, Mount, SandboxState, SANDBOXES};
 use layerfs_api::internal::{commits, split, workspace};
 use layerfs_api::sandbox::values;
 use layerfs_api::{OperationFailure, SandboxApi, SandboxCreate};
@@ -53,28 +53,51 @@ fn setup(private: [u8; 32], peer: [u8; 32]) -> DaemonSetup {
 
 /// `sandbox.create({ project, deploy: { docker, image, volume, daemon } })`.
 pub(crate) fn create(args: &SdkValue) -> Outcome {
+    create_selected(args, false)
+}
+pub(crate) fn service(args: &SdkValue) -> Outcome {
+    create_selected(args, true)
+}
+fn create_selected(args: &SdkValue, service: bool) -> Outcome {
     let name = text(args, "project")?;
     let deploy = args
         .get("deploy")
         .ok_or_else(|| refused("InvalidInput", "missing `deploy`"))?;
-    let project = lock(&PROJECTS)?.get(name).cloned().ok_or_else(|| {
-        refused(
-            "NoSuchProject",
-            format!("project {name} was not initialized here"),
-        )
-    })?;
-    // Held for the whole create, so one Sandbox installs the Store.
-    let mut project = lock(&project)?;
+    let directory = crate::discovery::project_dir(args)?;
+    let _guard = crate::discovery::guard(&directory)?;
+    if service && directory.join("service.record").exists() {
+        let saved = crate::discovery::load(&directory.join("service.record"))?;
+        let id = text(&saved, "id")?;
+        let mut fields = match args.clone() {
+            SdkValue::Map(fields) => fields,
+            _ => Vec::new(),
+        };
+        fields.push(("sandbox".into(), SdkValue::text(id)));
+        let state = sandbox(&SdkValue::Map(fields))?;
+        return Ok(SdkValue::map([("id", SdkValue::text(&state.id))]));
+    }
+    let mut project = crate::discovery::project(args)?;
+    // An interrupted first installation is never silently attempted again.
+    if directory.join("create.intent").exists() {
+        return Err(refused(
+            "Unknown",
+            "a prior Sandbox creation has an unresolved discovery intent",
+        ));
+    }
+    crate::discovery::save(
+        &directory.join("create.intent"),
+        SdkValue::text("creation in progress"),
+    )?;
     let controller = layerfs_bridge::duplex::generate_keypair().map_err(failed)?;
     let daemon = layerfs_bridge::duplex::generate_keypair().map_err(failed)?;
     let mut daemon_setup = setup(daemon.private, controller.public);
     daemon_setup.existing_store = project.installed.as_ref().map(|installed| {
-        let mut manifest = project.sealed.manifest.clone();
+        let mut manifest = project.manifest.clone();
         manifest.daemon_sqlite = installed.daemon_sqlite.clone();
         manifest
     });
     let docker = Docker::new(text(deploy, "docker")?, ENGINE).map_err(failed)?;
-    let created = SandboxApi::new(docker).create(
+    let created = SandboxApi::new(docker).create_file(
         SandboxCreate {
             deployment: SandboxRequest {
                 image: text(deploy, "image")?.to_owned(),
@@ -87,7 +110,8 @@ pub(crate) fn create(args: &SdkValue) -> Outcome {
             daemon_peer: daemon.public,
             startup_wait: STARTUP,
         },
-        &project.sealed,
+        &project.store,
+        &project.manifest,
     );
     let mut owner = created.map_err(|failure| {
         let container = failure
@@ -107,20 +131,38 @@ pub(crate) fn create(args: &SdkValue) -> Outcome {
         project.installed = Some(installed.manifest);
     }
     let container = owner.runtime.identity().to_string();
-    let id = format!("sb_{}", &container[..12.min(container.len())]);
+    let id = format!("sb_{container}");
+    let instance = owner.startup.instance;
     let (runtime, control, identity) = split(owner);
-    lock(&SANDBOXES)?.insert(
-        id.clone(),
-        Arc::new(SandboxState {
-            id: id.clone(),
-            project: name.to_owned(),
-            runtime,
-            identity,
-            control: Mutex::new(control),
-            mounts: Default::default(),
-            processes: Default::default(),
-        }),
-    );
+    let saved_directory = directory.join(&id);
+    crate::discovery::directory(&saved_directory)?;
+    let state = Arc::new(SandboxState {
+        id: id.clone(),
+        project: name.to_owned(),
+        directory: saved_directory,
+        runtime,
+        identity,
+        control: Mutex::new(control),
+        mounts: Default::default(),
+        processes: Default::default(),
+    });
+    crate::discovery::save_project(&directory, &project)?;
+    crate::discovery::save_sandbox(
+        &state.directory,
+        &state,
+        args,
+        controller.private,
+        daemon.public,
+        instance,
+    )?;
+    if service {
+        crate::discovery::save(
+            &directory.join("service.record"),
+            SdkValue::map([("id", SdkValue::text(&id))]),
+        )?;
+    }
+    std::fs::remove_file(directory.join("create.intent")).map_err(failed)?;
+    lock(&SANDBOXES)?.insert(id.clone(), state);
     Ok(SdkValue::map([
         ("kind", SdkValue::text("Ready")),
         ("id", SdkValue::Text(id)),
@@ -158,8 +200,16 @@ pub(crate) fn close(args: &SdkValue) -> Outcome {
             ));
         }
     };
+    let _guard = crate::discovery::guard(&owned.directory)?;
     owned.runtime.stop(1).map_err(failed)?;
     owned.runtime.delete().map_err(failed)?;
+    std::fs::remove_file(owned.directory.join("sandbox.record")).map_err(failed)?;
+    let project_dir = crate::discovery::project_dir(args)?;
+    let _project_guard = crate::discovery::guard(&project_dir)?;
+    let service = project_dir.join("service.record");
+    if service.exists() && crate::discovery::load(&service)?.get_text("id") == Some(&id) {
+        std::fs::remove_file(service).map_err(failed)?;
+    }
     Ok(SdkValue::map([
         ("kind", SdkValue::text("Closed")),
         ("id", SdkValue::Text(id)),
@@ -169,6 +219,7 @@ pub(crate) fn close(args: &SdkValue) -> Outcome {
 /// `sandbox.mount(sandbox, { branch })`: the Workspace's path.
 pub(crate) fn mount(args: &SdkValue) -> Outcome {
     let state = sandbox(args)?;
+    let _guard = crate::discovery::guard(&state.directory)?;
     let branch = text(args, "branch")?;
     let id = WorkspaceId::from_authority(random()?).map_err(failed)?;
     let mounted = {
@@ -184,6 +235,7 @@ pub(crate) fn mount(args: &SdkValue) -> Outcome {
     if let SdkValue::Map(fields) = &mut value {
         fields.push(("sandbox".to_owned(), SdkValue::text(state.id.as_str())));
     }
+    crate::discovery::save_mount(&state, &mounted, branch)?;
     lock(&state.mounts)?.insert(
         mounted.ready.directory.clone(),
         Mount {
@@ -231,8 +283,7 @@ pub(crate) fn commit(args: &SdkValue) -> Outcome {
         .commit_with(CommitControl {
             token,
             force: args.get_bool("force"),
-            agent: args.get_text("agent").map(str::to_owned),
-            call: args.get_text("call").map(str::to_owned),
+            message: args.get_text("message").map(str::to_owned),
         })
         .map_err(operation)?;
     values::commit(&reply)
@@ -242,6 +293,7 @@ pub(crate) fn commit(args: &SdkValue) -> Outcome {
 /// process this binding started still runs there, then the daemon's answer.
 pub(crate) fn unmount(args: &SdkValue) -> Outcome {
     let state = sandbox(args)?;
+    let _guard = crate::discovery::guard(&state.directory)?;
     let path = text(args, "path")?;
     let token = state.token(path)?;
     // The runtime owner knows its own processes; the daemon's kernel probe
@@ -265,6 +317,7 @@ pub(crate) fn unmount(args: &SdkValue) -> Outcome {
         .unmount_checked(token, args.get_bool("discard"))
         .map_err(operation)?;
     let value = values::unmounted(&answer)?;
+    std::fs::remove_file(crate::discovery::mount_file(&state, token)).map_err(failed)?;
     lock(&state.mounts)?.remove(path);
     Ok(value)
 }

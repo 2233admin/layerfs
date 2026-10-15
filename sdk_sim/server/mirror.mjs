@@ -18,10 +18,7 @@ export class Mirror {
       project: null, main: null, roots: {}, commits: {}, layers: {},
       branches: {}, branchOrder: [], sandboxes: {}, sandboxOrder: [],
     };
-    // Facts only the calls know: fork points, merge details, displaced heads.
-    this.forkedFrom = {};
-    this.mergeOf = {};
-    this.displaced = {};
+
   }
 
   // ------------------------------------------------------------ ids
@@ -58,6 +55,7 @@ export class Mirror {
   absorb(snap, sandboxes) {
     const s = this.s, before = JSON.stringify(s);
     s.project = { name: snap.project };
+    s.store = snap.store;
     // Layers: the snapshot lists main's chain newest first.
     for (const l of [...snap.layers].reverse()) this.absorbLayer(l);
     const main = snap.branches.find((b) => b.name === "main");
@@ -68,7 +66,7 @@ export class Mirror {
       if (b.name === "main") continue;
       const known = s.branches[b.name];
       const base = this.label("L", b.base), head = this.node(b.head) ?? (b.head ? this.commitLabel(b.head) : null);
-      const from = this.forkedFrom[b.name] ?? base;
+      const from = this.node(b.forkedFrom) ?? base;
       if (!known) {
         s.branches[b.name] = { name: b.name, base, head, from, slot: this.slot++ };
         s.branchOrder.push(b.name);
@@ -89,25 +87,19 @@ export class Mirror {
   absorbCommit(c) {
     const id = this.commitLabel(c.id);
     if (this.s.commits[id]) {
-      if (this.displaced[id]) this.s.commits[id].displacedBy = this.displaced[id];
+
       return;
     }
-    const merge = this.mergeOf[id];
+
     const record = {
       id, parent: this.node(c.parent), root: this.root(c.root), base: this.label("L", c.base), branch: c.branch,
       slot: this.slot++, time: c.time, by: c.via === "fs" ? "fs" : c.via === "merge" ? "merge" : "workspace",
-      via: c.via === "merge" && merge ? `merge ${merge.left} + ${merge.right}` : c.via === "exec" ? "commit" : c.via,
+      via: c.via === "exec" ? "commit" : c.via,
+      message: c.message, logical: c.logical, newCanonical: c.newCanonical, newStored: c.newStored, newMetadata: c.newMetadata,
     };
-    if (c.agent) record.agent = c.agent;
-    if (c.call) record.call = c.call;
-    if (c.secondParent) {
-      record.mergedFrom = this.node(c.secondParent);
-      if (merge) Object.assign(record, { mergeBase: merge.mergeBase, lww: merge.lww });
-    } else if (c.mergedFrom || (merge && merge.from)) {
-      // A Workspace that was stale: merged with the head on commit.
-      record.merged = { from: this.node(c.mergedFrom) ?? merge.from, head: record.parent, lww: (merge && merge.lww) || [] };
-    }
-    if (this.displaced[id]) record.displacedBy = this.displaced[id];
+    if (c.secondParent) { record.mergedFrom = this.node(c.secondParent); record.lww = this.ids(c.lww || []); }
+    if (c.mergedFrom) record.merged = { from: this.node(c.mergedFrom), head: record.parent, lww: this.ids(c.lww || []) };
+    if (c.displaced) { const displaced = this.commitLabel(c.displaced); if (this.s.commits[displaced]) this.s.commits[displaced].displacedBy = id; }
     this.s.commits[id] = record;
   }
   absorbWorkspaces(snap, sandboxes) {
@@ -129,8 +121,9 @@ export class Mirror {
         const dirty = w.dirty ? Math.max(w.dirty.inodes, w.dirty.entries) : 0;
         Object.assign(ws, {
           branch: w.branch, baseCommit: this.node(w.base), baseLayer: this.label("L", w.baseLayer), baseRoot: this.root(w.root),
-          mounted: true, live: null, dirty, overlay: w.dirty ? { inodes: w.dirty.inodes, entries: w.dirty.entries } : null, pendingMerge: w.pendingMerge, stale: w.headMovedSinceMount === true,
-          markers: tracked.markers || [],
+          mounted: true, live: null, dirty, overlay: tracked.overlay ?? null, pendingMerge: w.pendingMerge, stale: w.headMovedSinceMount === true,
+          markers: (tracked.changes?.items || []).filter((c) => c.markers).map((c) => c.path),
+          changes: tracked.changes,
         });
       }
       box.processes = {};

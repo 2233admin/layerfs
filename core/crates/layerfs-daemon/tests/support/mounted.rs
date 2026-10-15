@@ -107,8 +107,7 @@ impl Harness {
             .execute_control(&Request::Commit(layerfs_bridge::control::CommitControl {
                 token,
                 force: false,
-                agent: None,
-                call: None,
+                message: None,
             }))
     }
     pub fn try_unmount(&self, token: WorkspaceToken) -> Result<Success, Failure> {

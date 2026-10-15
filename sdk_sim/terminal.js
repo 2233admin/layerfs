@@ -80,7 +80,7 @@
     constructor(sim, project) { this.sim = sim; this.project = project; }
     async call(rec, name, args) {
       // actor: who is typing (a demo label); agent calls pass their own.
-      if (this.actor && args.agent === undefined && /^(fs\.(write|edit|mkdir|remove|cp|mv|apply)|branch\.merge)$/.test(name)) args = { ...args, agent: this.actor };
+      if (this.actor && args.message === undefined && /^(fs\.(write|edit|mkdir|rm|cp|mv|apply)|branch\.merge)$/.test(name)) args = { ...args, message: `${this.actor}: ${name}` };
       const outcome = await this.sim.run(name, args);
       rec.calls.push({ call: name, args, outcome, script: M.scriptFor({ call: name, args }, this.project) });
       return outcome;
@@ -117,7 +117,7 @@
         case "help":
           rec.lines.push(L("read:   ls [path] · cat <path> · stat <path> · grep <text> [path] · diff <a>[@C#] <b>[@C#]", "dim"));
           rec.lines.push(L("view:   blame <path>[@ref] · open <path>[@ref]   (ref: C#, L#, main or a Branch; opens the Files pane)", "dim"));
-          rec.lines.push(L("write:  write <path> <<EOF … EOF · edit <path> <old> <new> [--all] · cp · mv · mkdir [-p] · rm [-r]", "dim"));
+          rec.lines.push(L("write:  write <path> <<EOF … EOF · edit <path> <old> <new> · cp · mv · mkdir [-p] · rm [-r]", "dim"));
           rec.lines.push(L("batch:  apply, then write/edit/cp/mv/mkdir/rm lines, then done (or abort): one Commit", "dim"));
           return rec;
         case "ls": {
@@ -159,7 +159,7 @@
           if (!args[0]) { rec.lines.push(L("usage: blame <path>[@ref]", "err")); return rec; }
           const [p, at] = args[0].split("@"), at2 = at || branch, path = abs(p);
           if (this.sim.live) return this.blameLive(rec, at2, path);
-          // Composed client-side: the saved versions, read one by one (no fs.blame yet).
+          // Simulator attribution over its saved versions; live uses fs.blame.
           if (at2 !== "main" && this.sim.s.branches[at2]) await this.call(rec, "branch.list_commits", { branch: at2 });
           for (const v of F.chainOf(this.sim, at2)) {
             const o = await this.call(rec, "fs.read", { ref: branch, path, commit: v.id });
@@ -168,14 +168,14 @@
           const b = F.blame(this.sim, at2, path);
           if (!b) { rec.lines.push(L(`✕ NoSuchPath  ${path} does not exist at ${at2}`, "err")); return rec; }
           let last = null;
-          const who = (id) => (this.sim.s.commits[id] && this.sim.s.commits[id].agent) || "";
-          const agents = b.lines.some((ln) => who(ln.origin.id));
+          const who = (id) => (this.sim.s.commits[id] && this.sim.s.commits[id].message) || "";
+          const messages = b.lines.some((ln) => who(ln.origin.id));
           for (const ln of b.lines) {
-            const id = ln.origin.id, chip = id === last ? "  ·" + (agents ? "     " : "") : id.padEnd(3) + (agents ? " " + who(id).padEnd(4) : "");
+            const id = ln.origin.id, chip = id === last ? "  ·" + (messages ? "     " : "") : id.padEnd(3) + (messages ? " " + who(id).padEnd(4) : "");
             last = id;
             rec.lines.push(L(`${chip}  ${String(ln.n).padStart(3)} │ ${ln.text}`));
           }
-          rec.lines.push(L(`composed from ${b.versions} saved version${b.versions === 1 ? "" : "s"} · proposed SDK call: fs.blame`, "dim"));
+          rec.lines.push(L(`composed from ${b.versions} saved version${b.versions === 1 ? "" : "s"} · fs.blame`, "dim"));
           rec.files = { subject: at2, path, mode: "blame" };
           return rec;
         }
@@ -212,8 +212,8 @@
           return rec;
         }
         case "edit":
-          if (args.length < 3) { rec.lines.push(L('usage: edit <path> "<old>" "<new>" [--all]', "err")); return rec; }
-          await this.fsChange(rec, branch, state, { kind: "edit", path: abs(args[0]), oldText: args[1], newText: args[2], all: a.includes("--all") || undefined });
+          if (args.length < 3) { rec.lines.push(L('usage: edit <path> "<old>" "<new>"', "err")); return rec; }
+          await this.fsChange(rec, branch, state, { kind: "edit", path: abs(args[0]), oldText: args[1], newText: args[2], all: undefined });
           return rec;
         case "mkdir":
           if (!args[0]) { rec.lines.push(L("usage: mkdir [-p] <path>", "err")); return rec; }
@@ -241,20 +241,20 @@
         return;
       }
       const map = { write: ["fs.write", { path: change.path, content: change.content }], edit: ["fs.edit", { path: change.path, oldText: change.oldText, newText: change.newText, all: change.all }],
-        mkdir: ["fs.mkdir", { path: change.path, recursive: change.recursive }], remove: ["fs.remove", { path: change.path, recursive: change.recursive }],
+        mkdir: ["fs.mkdir", { path: change.path, recursive: change.recursive }], remove: ["fs.rm", { path: change.path, recursive: change.recursive }],
         cp: ["fs.cp", { from: change.from, to: change.to, recursive: change.recursive }], mv: ["fs.mv", { from: change.from, to: change.to }] };
       const [call, args] = map[change.kind];
       for (const k of Object.keys(args)) if (args[k] === undefined) delete args[k];
       this.fsPublish(rec, branch, await this.call(rec, call, { branch, ...args }));
     }
-    // Blame from the SDK (live backend): each line's last Commit and agent.
+    // Blame from the SDK (live backend): each line's last Commit and message.
     async blameLive(rec, at, path) {
       const o = await this.call(rec, "fs.blame", { ref: at, path });
       if (!o.ok) { rec.lines.push(refusal(o)); return rec; }
-      const agents = o.result.lines.some((ln) => ln.agent);
+      const messages = o.result.lines.some((ln) => ln.message);
       let last = null;
       for (const ln of o.result.lines) {
-        const id = String(ln.commit), chip = id === last ? "  ·" + (agents ? "     " : "") : id.padEnd(3) + (agents ? " " + (ln.agent || "").padEnd(4) : "");
+        const id = String(ln.commit), chip = id === last ? "  ·" + (messages ? "     " : "") : id.padEnd(3) + (messages ? " " + (ln.message || "") : "");
         last = id;
         rec.lines.push(L(`${chip}  ${String(ln.n).padStart(3)} │ ${ln.text}`));
       }
@@ -443,7 +443,7 @@
       if (!b) { rec.code = "none"; return rec; }
       st.open = null;
       rec.binding = { sandbox: b.sandbox, path: b.path };
-      const o = await this.call(rec, "sandbox.commit", { sandbox: b.sandbox, path: b.path, agent: st.name, call: b.command });
+      const o = await this.call(rec, "sandbox.commit", { sandbox: b.sandbox, path: b.path, message: `${st.name}: ${b.command}` });
       rec.code = o.code;
       if (!o.ok) {
         rec.lines.push(refusal(o));

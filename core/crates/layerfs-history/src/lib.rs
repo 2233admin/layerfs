@@ -31,8 +31,8 @@ pub use identity::{
 };
 pub use records::{
     AddLayerOutcome, AddLayerRequest, BranchMergeRequest, BranchRecord, BranchSnapshot,
-    CommitHistoryRequest, CommitMeta, CommitOutcome, CommitRecord, CommitRequest, CommitVia,
-    ForkRequest, ForkSource, LayerHistoryRequest, LayerRecord, LayerStackRecord, MergeCommit,
-    MergeHead, MergeSide, Page, PageResult, RecordKind, Reservation, ReserveRequest,
-    StackInitialization, MAXIMUM_ATTRIBUTION_BYTES, MAXIMUM_PAGE_RECORDS,
+    CommitHistoryRequest, CommitMeta, CommitOutcome, CommitRecord, CommitRequest, CommitStatistics,
+    CommitVia, ForkRequest, ForkSource, LayerHistoryRequest, LayerRecord, LayerStackRecord,
+    MergeCommit, MergeHead, MergeSide, Page, PageResult, RecordKind, Reservation, ReserveRequest,
+    StackInitialization, StoreStatistics, MAXIMUM_MESSAGE_BYTES, MAXIMUM_PAGE_RECORDS,
 };

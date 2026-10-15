@@ -54,6 +54,7 @@ impl Service {
                     activity: activity(state),
                     mounted: kernel.phase == MountPhase::Ready,
                     directory: kernel.ready.map(|ready| ready.directory),
+                    revision: observed.map(|s| s.revision),
                     dirty: observed.map(|s| (s.dirty_inodes, s.dirty_directory_entries)),
                     pending_merge: pending
                         || observed

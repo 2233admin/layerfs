@@ -6,6 +6,35 @@ use super::{
 use crate::{ContainerId, RuntimeError, WireFailure};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 impl Sandbox {
+    /// Reopens an exact saved container only after validating immutable deployment and topology.
+    /// This performs no create, upload, start, installation or command replay.
+    pub fn reopen(
+        docker: super::Docker,
+        id: ContainerId,
+        request: super::SandboxRequest,
+    ) -> Result<Self, Box<WireFailure>> {
+        let owner = Self {
+            docker,
+            id,
+            request,
+            upload_attempted: true,
+            uploaded: true,
+            start_attempted: true,
+            started: true,
+            listen_attempted: true,
+            stop_attempted: false,
+            stopped: false,
+            delete_attempted: false,
+            deleted: false,
+        };
+        owner
+            .request
+            .check()
+            .map_err(|_| owner.invalid("saved deployment"))?;
+        owner.endpoint()?;
+        Ok(owner)
+    }
+
     /// Observes one exact running container and its single expected loopback port mapping.
     /// Neither port allocation nor Running is filesystem Ready.
     pub fn endpoint(&self) -> Result<SocketAddr, Box<WireFailure>> {

@@ -136,6 +136,7 @@ pub(crate) fn merge_branch(
             request.name.as_str(),
             base.as_slice(),
             head_commit.map(|id| id.to_bytes().to_vec()),
+            request.sides[0].1.as_slice().to_vec(),
         ],
     )
     .map_err(sql)?;

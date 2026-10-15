@@ -1,6 +1,5 @@
-// `fs.grep`: literal matches per line: `{ items: { path, line, text }[], nextCursor }`.
-
-/** `fs.grep(pattern, { branch, commit, path = "/", cursor } = {})` */
-export function grep(client, pattern, { branch, commit, path = "/", cursor } = {}) {
-  return client.call("fs.grep", { pattern, branch, commit, path, cursor });
+// fs.grep: one positional SDK operation.
+import { page } from "../client.js";
+export function grep(client, ref, pattern, path = "/", pageSize = 50, pagePos = 0) {
+  return client.call("fs.grep", { branch: ref, pattern, path, ...page(pageSize, pagePos) });
 }

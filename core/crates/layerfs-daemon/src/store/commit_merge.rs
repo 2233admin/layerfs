@@ -195,9 +195,9 @@ impl BoundWorkspace {
                 visited = Some(error);
                 return Err(ContentError::OutputRejected);
             }
-            let Some(now) = now.filter(|now| {
-                now.kind == InodeKind::Directory && was.kind == InodeKind::Directory
-            }) else {
+            let Some(now) = now
+                .filter(|now| now.kind == InodeKind::Directory && was.kind == InodeKind::Directory)
+            else {
                 return Ok(());
             };
             let mut inner = DifferenceWork::default();

@@ -54,6 +54,15 @@ pub fn via(via: CommitVia) -> &'static str {
 /// A Commit as the SDK shows it.
 pub fn commit_value(record: &CommitRecord, branch: Option<&str>) -> SdkValue {
     let meta = &record.meta;
+    let mut bytes = 0usize;
+    let count = meta
+        .lww
+        .iter()
+        .take_while(|fact| {
+            bytes += fact.path.len() + fact.rule.len() + 96;
+            bytes <= 4096
+        })
+        .count();
     SdkValue::map([
         ("id", SdkValue::text(hex(record.id.as_slice()))),
         ("branch", SdkValue::opt_text(branch)),
@@ -68,19 +77,56 @@ pub fn commit_value(record: &CommitRecord, branch: Option<&str>) -> SdkValue {
         ("base", SdkValue::text(hex(record.base_layer.as_slice()))),
         ("root", SdkValue::text(hex(record.root.as_bytes()))),
         ("via", SdkValue::text(via(meta.via))),
-        ("agent", SdkValue::opt_text(meta.agent.clone())),
-        ("call", SdkValue::opt_text(meta.call.clone())),
+        ("message", SdkValue::opt_text(meta.message.clone())),
         (
             "mergedFrom",
             SdkValue::opt_text(meta.merged_from.map(|id| hex(id.as_slice()))),
         ),
         ("time", SdkValue::Int(meta.time_ms)),
+        ("logical", SdkValue::Int(meta.statistics.logical as i64)),
+        (
+            "newCanonical",
+            SdkValue::Int(meta.statistics.new_canonical as i64),
+        ),
+        (
+            "newStored",
+            SdkValue::Int(meta.statistics.new_stored as i64),
+        ),
+        (
+            "newMetadata",
+            SdkValue::Int(meta.statistics.new_metadata as i64),
+        ),
+        (
+            "displaced",
+            SdkValue::opt_text(meta.displaced.map(|id| hex(id.as_slice()))),
+        ),
+        ("lww", lww(&meta.lww[..count])),
+        (
+            "lwwTruncated",
+            SdkValue::Bool(meta.lww_truncated || meta.lww.len() > count),
+        ),
     ])
 }
 
 /// A Layer as the SDK shows it.
 pub fn layer_value(record: &LayerRecord, source_branch: Option<&str>) -> SdkValue {
     SdkValue::map([
+        (
+            "overwrote",
+            SdkValue::List(
+                record
+                    .overwrote
+                    .iter()
+                    .take(32)
+                    .map(|id| SdkValue::text(hex(id.as_slice())))
+                    .collect(),
+            ),
+        ),
+        (
+            "overwroteTruncated",
+            SdkValue::Bool(record.overwrote.len() > 32),
+        ),
+        ("logical", SdkValue::Int(record.logical as i64)),
         ("id", SdkValue::text(hex(record.id.as_slice()))),
         (
             "parent",

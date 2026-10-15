@@ -51,6 +51,8 @@ pub struct BranchRecord {
     pub base_layer: LayerId,
     /// Recorded head Commit, absent for a freshly forked Branch.
     pub head_commit: Option<CommitId>,
+    /// Immutable source node selected when this Branch was created.
+    pub forked_from: Option<NodeId>,
 }
 
 /// One coherent Branch snapshot with its resolved roots.
@@ -121,23 +123,30 @@ impl CommitVia {
     }
 }
 
-/// Bytes one attribution field (`agent`, `call`) may hold.
-pub const MAXIMUM_ATTRIBUTION_BYTES: usize = 128;
+/// Maximum encoded UTF-8 bytes in a Commit or execution message.
+pub const MAXIMUM_MESSAGE_BYTES: usize = 4096;
 
-/// Who made a Commit and how. Every field but the time is part of the
-/// Commit identity, so two Branches never share one Commit record.
+/// Commit provenance and publication facts. Branch, via, message, merge origin
+/// and displaced head participate in identity; time, byte statistics and LWW
+/// details are persisted facts outside that identity.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CommitMeta {
     /// Branch the Commit was made on; the catalog sets it from the request.
     pub branch: Option<BranchId>,
     /// How it was made.
     pub via: CommitVia,
-    /// Agent that made it, as the caller named it.
-    pub agent: Option<String>,
-    /// Tool call that made it, as the caller named it.
-    pub call: Option<String>,
+    /// Description of the filesystem change; participates in Commit identity.
+    pub message: Option<String>,
     /// Head a merge-on-commit started from, when one ran.
-    pub merged_from: Option<CommitId>,
+    pub merged_from: Option<NodeId>,
+    /// Persisted newer-write-wins decisions.
+    pub lww: Vec<layerfs_content::merge::LwwDecision>,
+    /// True when a transport observation omitted persisted decisions.
+    pub lww_truncated: bool,
+    /// Snapshot logical size and this producer's acknowledged new bytes.
+    pub statistics: CommitStatistics,
+    /// Head displaced by the original forced publication.
+    pub displaced: Option<CommitId>,
     /// Milliseconds since the Unix epoch; the catalog sets it on insert.
     pub time_ms: i64,
 }
@@ -148,24 +157,26 @@ impl CommitMeta {
         Self {
             branch: None,
             via,
-            agent: None,
-            call: None,
+            message: None,
             merged_from: None,
+            lww: Vec::new(),
+            lww_truncated: false,
+            statistics: CommitStatistics::ZERO,
+            displaced: None,
             time_ms: 0,
         }
     }
 
     /// Checks the attribution bounds: at most
-    /// [`MAXIMUM_ATTRIBUTION_BYTES`] bytes and no control character.
+    /// [`MAXIMUM_MESSAGE_BYTES`] bytes and no control character.
     pub fn check(&self) -> crate::error::HistoryResult<()> {
-        for field in [&self.agent, &self.call].into_iter().flatten() {
-            if field.is_empty()
-                || field.len() > MAXIMUM_ATTRIBUTION_BYTES
-                || field.chars().any(char::is_control)
+        for field in [&self.message].into_iter().flatten() {
+            if field.len() > MAXIMUM_MESSAGE_BYTES
+                || field
+                    .chars()
+                    .any(|c| c.is_control() && c != '\n' && c != '\t')
             {
-                return Err(crate::error::HistoryError::InvalidInput(
-                    "Commit attribution",
-                ));
+                return Err(crate::error::HistoryError::InvalidInput("Commit message"));
             }
         }
         Ok(())
@@ -175,6 +186,8 @@ impl CommitMeta {
 /// One immutable Layer publication.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct LayerRecord {
+    /// Earlier main Layers displaced by this publication, recorded atomically.
+    pub overwrote: Vec<LayerId>,
     /// Layer identity.
     pub id: LayerId,
     /// Owning stack.
@@ -187,6 +200,8 @@ pub struct LayerRecord {
     pub source_branch: Option<BranchId>,
     /// Commit whose root was published; absent only for genesis.
     pub source_commit: Option<CommitId>,
+    /// Complete logical regular-file bytes, counting every hardlink path.
+    pub logical: u64,
 }
 
 /// One consumed half-open inode reservation.
@@ -262,6 +277,8 @@ pub struct StackInitialization {
     pub profile: ObjectId,
     /// Root of the already-published genesis filesystem.
     pub genesis_root: ObjectId,
+    /// Complete logical regular-file bytes of the acquired root.
+    pub logical: u64,
 }
 
 /// Where a new Branch starts.
@@ -522,6 +539,46 @@ macro_rules! encoded_width {
 }
 
 encoded_width!(LayerStackRecord, 179);
-encoded_width!(BranchRecord, 166);
-encoded_width!(CommitRecord, 504);
-encoded_width!(LayerRecord, 168);
+encoded_width!(BranchRecord, 200);
+encoded_width!(CommitRecord, 4510);
+encoded_width!(LayerRecord, 176);
+
+/// Byte facts acknowledged by a construction producer and stored at publication.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct CommitStatistics {
+    /// Complete snapshot regular-file bytes, counting every namespace link.
+    pub logical: u64,
+    /// Newly inserted canonical object bytes from this Save.
+    pub new_canonical: u64,
+    /// Complete new pack bytes from this Save, including any losing-race packs.
+    pub new_stored: u64,
+    /// Complete newly published metadata-domain pack bytes from this Save.
+    pub new_metadata: u64,
+}
+impl CommitStatistics {
+    /// No acknowledged bytes, for callers that have no construction output.
+    pub const ZERO: Self = Self {
+        logical: 0,
+        new_canonical: 0,
+        new_stored: 0,
+        new_metadata: 0,
+    };
+}
+
+/// Store-wide byte facts read from publication-maintained totals.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct StoreStatistics {
+    /// Sum of logical bytes across immutable Commit and Layer history records.
+    pub logical: u64,
+    /// Unique registered canonical object bytes, including structural objects.
+    pub canonical: u64,
+    /// Published physical pack bytes, including structural objects.
+    pub stored: u64,
+    /// Metadata-domain pack bytes plus occupied SQLite space outside all pack bodies.
+    pub metadata: u64,
+    /// SQLite logical pages in bytes, including free pages and pages currently in WAL.
+    /// This is database size, not main-file length or extra WAL-file allocation.
+    pub file: u64,
+    /// Free SQLite pages in bytes, reusable within the file.
+    pub free: u64,
+}

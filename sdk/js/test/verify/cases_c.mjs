@@ -4,9 +4,9 @@ import { check, mount, note, sh, unmount } from "./lib.mjs";
 const branch = "feature";
 
 async function start(ctx, files) {
-  await ctx.layerfs.project.init(ctx.source, { name: "website" });
+  await ctx.layerfs.project.init(ctx.source);
   await ctx.layerfs.branch.fork(branch);
-  const c1 = await ctx.layerfs.fs.apply(Object.entries(files).map(([path, content]) => ({ kind: "write", path, content })), { branch });
+  const c1 = await ctx.layerfs.fs.apply(branch, Object.entries(files).map(([path, content]) => ({ op: "write", path, content })));
   const sandbox = await ctx.layerfs.service();
   return { c1: c1.head, sandbox };
 }
@@ -35,12 +35,12 @@ export const C = {
     check(ctx, "after B: head, parent, no second parent", headOf(view, branch) === cb.head && commitOf(view, cb.head).parent === ca.head && commitOf(view, cb.head).secondParent === null, commitOf(view, cb.head));
     check(ctx, "after B: B's base is the head", byPath(view, b.path).base === cb.head);
     await ctx.layerfs.branch.fork("other");
-    const co = await ctx.layerfs.fs.write("/z.txt", "z\n", { branch: "other" });
-    const merged = await ctx.layerfs.branch.merge(branch, "other", { name: "c" });
+    const co = await ctx.layerfs.fs.write("other", "/z.txt", "z\n");
+    const merged = await ctx.layerfs.branch.merge(branch, "other", "c");
     view = await snap(ctx);
     const mc = commitOf(view, merged.head);
     check(ctx, "after merge: Commit with second parent", mc && mc.parent === cb.head && mc.secondParent === co.head && headOf(view, "c") === merged.head, mc);
-    const published = await ctx.layerfs.branch.publish({ branch: "c" });
+    const published = await ctx.layerfs.branch.publish("c");
     view = await snap(ctx);
     check(ctx, "after publish: main's Layer", view.layers[0].id === published.publishedLayer.id && view.layers[0].sourceCommit === merged.head && view.layers[0].sourceBranch === "c" && headOf(view, "main") === null && view.branches[0].base === published.publishedLayer.id, view.layers[0]);
     await unmount(ctx, a, { discard: true });
@@ -66,9 +66,9 @@ export const C = {
     await sh(ctx, ws, "echo 2 > x.txt");
     await step("commit", () => ctx.layerfs.sandbox.commit(ws.sandbox, ws.path));
     await ctx.layerfs.branch.fork("other");
-    await step("fs write", () => ctx.layerfs.fs.write("/o.txt", "o\n", { branch: "other" }));
-    await step("merge", () => ctx.layerfs.branch.merge(branch, "other", { name: "c" }));
-    await step("publish", () => ctx.layerfs.branch.publish({ branch: "c" }));
+    await step("fs write", () => ctx.layerfs.fs.write("other", "/o.txt", "o\n"));
+    await step("merge", () => ctx.layerfs.branch.merge(branch, "other", "c"));
+    await step("publish", () => ctx.layerfs.branch.publish("c"));
     await step("unmount", () => unmount(ctx, ws));
   },
 
@@ -110,17 +110,4 @@ export const C = {
     check(ctx, "the daemon holds no process record", !keys.some((k) => /process|pid|command/i.test(k)), [...new Set(keys)]);
   },
 
-  async C5(ctx) {
-    await ctx.layerfs.project.init(ctx.source, { name: "website" });
-    await ctx.layerfs.branch.fork(branch);
-    const one = await ctx.layerfs.fs.write("/f.txt", "one\ntwo\nthree\n", { branch, agent: "alice", call: "c1" });
-    const two = await ctx.layerfs.fs.edit("/f.txt", { oldText: "two", newText: "TWO" }, { branch, agent: "bob", call: "c2" });
-    const blame = await ctx.layerfs.fs.blame("/f.txt", { branch });
-    const rows = blame.lines.map((l) => [l.n, l.text, l.commit === one.head ? "one" : l.commit === two.head ? "two" : l.commit, l.agent]);
-    check(ctx, "each line names its Commit and agent", JSON.stringify(rows) === JSON.stringify([[1, "one", "one", "alice"], [2, "TWO", "two", "bob"], [3, "three", "one", "alice"], [4, "", "one", "alice"]]), rows);
-    note(ctx, "Like the simulator, every newline ends a line, so a final newline shows an empty last line.");
-    check(ctx, "origins carry attribution", blame.origins.some((o) => o.agent === "bob" && o.call === "c2" && o.via === "fs"), blame.origins);
-    const readme = await ctx.layerfs.fs.blame("/README.md", { branch });
-    check(ctx, "Init's lines name the first Layer", readme.lines.every((l) => readme.origins.some((o) => o.id === l.commit && o.kind === "layer" && o.via === "project.init")), readme.origins);
-  },
 };

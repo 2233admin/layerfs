@@ -1,6 +1,5 @@
-// `branch.diff_commits`: path-level changes between two Commits.
-
-/** `branch.diff_commits({ from, to, cursor } = {})` */
-export function diff_commits(client, { from, to, cursor } = {}) {
-  return client.call("branch.diff_commits", { from, to, cursor });
+// branch.diff_commits: one positional SDK operation.
+import { page } from "../client.js";
+export function diff_commits(client, fromCommit, toCommit, pageSize = 50, pagePos = 0) {
+  return client.call("branch.diff_commits", { from: fromCommit, to: toCommit, ...page(pageSize, pagePos) });
 }

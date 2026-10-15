@@ -48,8 +48,7 @@ fn one_checked_scoped_layer_preserves_point_request_capacity() {
         Request::Commit(CommitControl {
             token,
             force: false,
-            agent: None,
-            call: None,
+            message: None,
         }),
         Request::Status(token),
         Request::Unmount(UnmountControl {

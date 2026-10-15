@@ -1,7 +1,5 @@
-// `sandbox.status`: the Workspace's base, the Branch head now and its changes.
-import { invoke, sandboxId } from "../client.js";
-
-/** `sandbox.status(sandbox, path)`: `{ base, branchHead, headMovedSinceMount, overlay }`. */
+// sandbox.status: one positional SDK operation.
+import { invokeClient, sandboxId } from "../client.js";
 export function status(client, sandbox, path) {
-  return invoke("sandbox.status", { sandbox: sandboxId(sandbox), path });
+  return invokeClient(client, "sandbox.status", { sandbox: sandboxId(sandbox), path });
 }

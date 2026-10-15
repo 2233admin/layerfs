@@ -84,10 +84,8 @@ impl CapturedConstruction {
 pub struct CommitOptions {
     /// Publish over a moved head instead of merging.
     pub force: bool,
-    /// Agent recorded on the Commit.
-    pub agent: Option<String>,
-    /// Tool call recorded on the Commit.
-    pub call: Option<String>,
+    /// Description of the captured filesystem change.
+    pub message: Option<String>,
 }
 /// A Commit merged with a Branch head that moved since the Workspace bound.
 #[derive(Clone, Debug, Eq, PartialEq)]

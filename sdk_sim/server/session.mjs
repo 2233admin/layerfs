@@ -10,16 +10,6 @@ import { Mirror } from "./mirror.mjs";
 
 const fail = (code, message, detail = {}) => Object.assign(new Error(`${code}: ${message}`), { code, detail });
 const clean = (o) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined));
-// Commit attribution is at most 128 bytes with no control character
-// (MAXIMUM_ATTRIBUTION_BYTES); a longer call line is shortened with an ellipsis.
-const ATTRIBUTION_BYTES = 128;
-const attribution = (text) => {
-  if (text === undefined || text === null) return undefined;
-  let out = String(text).replace(/\p{Cc}/gu, " ");
-  if (Buffer.byteLength(out) <= ATTRIBUTION_BYTES) return out;
-  while (Buffer.byteLength(out) > ATTRIBUTION_BYTES - 3) out = [...out].slice(0, -1).join("");
-  return out + "\u2026";
-};
 
 export class Session {
   /** `project` names the project: the addon keeps every name a process has
@@ -27,7 +17,7 @@ export class Session {
   static async open(project = "website") {
     const session = new Session(await setup("ui", { project }));
     try {
-      await session.layerfs.project.init(session.ctx.source, { name: project });
+      await session.layerfs.project.init(session.ctx.source);
       await session.refresh();
     } catch (error) {
       await session.close();
@@ -62,6 +52,11 @@ export class Session {
         box.processes = await this.executor.list(box);
         box.watch = box.processes.some((p) => p.status === "running");
       }
+      if (!box.closed) for (const path of Object.keys(box.workspaces)) {
+        const changes = await this.operator.workspace.changes(box.real, path, 1000, 0);
+        box.workspaces[path].changes = changes;
+        box.workspaces[path].overlay = await this.operator.workspace.overlay(box.real, path);
+      }
       boxes.push(box);
     }
     this.m.absorb(snap, boxes);
@@ -75,10 +70,10 @@ export class Session {
   }
   /** Read options for a ref: a Branch, "main", or a C#/L# node. */
   at(ref, commit) {
-    if (commit) return { commit: this.m.real(commit) };
-    if (ref === "main") return { commit: this.m.real(this.m.s.main.head) };
-    if (/^[CL]\d+$/.test(ref)) return { commit: this.m.real(ref) };
-    return { branch: ref };
+    if (commit) return this.m.real(commit);
+    if (ref === "main") return this.m.real(this.m.s.main.head);
+    if (/^[CL]\d+$/.test(ref)) return this.m.real(ref);
+    return ref;
   }
   rootOf(name) {
     const b = this.m.s.branches[name];
@@ -116,7 +111,7 @@ export class Session {
   onRefusal(name, args, code, detail) {
     if (name !== "sandbox.commit" || code !== "Conflict") return;
     const ws = this.boxes[args.sandbox] && this.boxes[args.sandbox].workspaces[args.path];
-    if (ws) ws.markers = (detail.conflicts || []).map((c) => c.path);
+
   }
 
   /** Every entry of a saved root, files with their text, for the Files pane. */
@@ -127,25 +122,26 @@ export class Session {
     const commit = this.m.real(owner.id), tree = {}, dirs = ["/"];
     while (dirs.length) {
       const dir = dirs.shift();
-      let cursor;
+      let position = 0;
       do {
-        const page = await this.layerfs.fs.list(dir, { commit, cursor });
+        const page = await this.layerfs.fs.list(commit, dir, 50, position);
         for (const item of page.items) {
           if (item.type === "dir") { tree[item.path] = { type: "dir", inode: item.inode }; dirs.push(item.path); continue; }
           tree[item.path] = { type: "file", inode: item.inode, content: item.type === "file" ? await this.text(item.path, commit) : `→ ${item.type}` };
         }
-        cursor = page.nextCursor;
-      } while (cursor);
+        position = page.hasMore ? position + page.items.length : null;
+      } while (position !== null);
     }
     return (this.trees[root] = tree);
   }
   async text(path, commit) {
-    let text = "", offset;
+    let text = "", nextLine = 1;
     do {
-      const window = await this.layerfs.fs.read(path, { commit, offset });
+      const window = await this.layerfs.fs.read(commit, path, nextLine);
       text += window.text ?? `(${window.size} bytes, binary)`;
-      offset = window.text === undefined ? null : window.nextOffset;
-    } while (offset);
+      if (window.lineTruncated) text += "\n[huge-line remainder omitted]\n";
+      nextLine = window.nextLine;
+    } while (nextLine !== null);
     return text;
   }
 }
@@ -168,30 +164,28 @@ const OPS = {
     };
   },
   async "main.fork"(a) {
-    const value = await this.layerfs.branch.fork(a.name, { from: "main" });
-    this.m.forkedFrom[a.name] = this.m.label("L", value.base);
+    const value = await this.layerfs.branch.fork(a.name, "main");
     return () => ({ kind: "Forked", branch: a.name, base: this.m.label("L", value.base), head: null, root: this.rootOf(a.name) });
   },
   // ---------------------------------------------------------- branch
   async "branch.fork"(a) {
-    const value = await this.layerfs.branch.fork(a.name, { from: a.fromCommit ? this.m.real(a.fromCommit) : a.branch });
-    this.m.forkedFrom[a.name] = this.m.node(value.head) ?? this.m.label("L", value.base);
+    const value = await this.layerfs.branch.fork(a.name, a.fromCommit ? this.m.real(a.fromCommit) : a.branch);
     return () => ({ kind: "Forked", branch: a.name, base: this.m.label("L", value.base), head: this.m.node(value.head), root: this.rootOf(a.name) });
   },
   async "branch.list_commits"(a) {
-    const value = await this.layerfs.branch.list_commits({ branch: a.branch });
+    const value = await this.layerfs.branch.list_commits(a.branch, a.pageSize, a.pagePos);
     return () => ({ kind: "ok", nextCursor: null, items: value.items.map((c) => ({ ...this.m.s.commits[this.m.commitLabel(c.id)] })) });
   },
   async "branch.diff_commits"(a) {
-    const value = await this.layerfs.branch.diff_commits({ from: this.m.real(a.from), to: this.m.real(a.to) });
+    const value = await this.layerfs.branch.diff_commits(this.m.real(a.from), this.m.real(a.to), a.pageSize, a.pagePos);
     return () => this.m.ids(value);
   },
   async "branch.diff_branches"(a) {
-    const value = await this.layerfs.branch.diff_branches({ from: a.from, to: a.to });
+    const value = await this.layerfs.branch.diff_branches(a.from, a.to, a.pageSize, a.pagePos);
     return () => this.m.ids(value);
   },
   async "branch.publish"(a) {
-    const value = await this.layerfs.branch.publish(clean({ branch: a.branch, commit: a.commit ? this.m.real(a.commit) : undefined }));
+    const value = await this.layerfs.branch.publish(a.branch, a.commit ? this.m.real(a.commit) : undefined);
     return () => {
       const v = this.m.ids(value), main = { headLayer: this.m.s.main.head };
       if (v.kind !== "Added") return { ...v, main };
@@ -199,56 +193,54 @@ const OPS = {
     };
   },
   async "branch.merge"(a) {
-    const value = await this.layerfs.branch.merge(a.branch, a.with, clean({ name: a.name, agent: a.agent }));
+    const value = await this.layerfs.branch.merge(a.branch, a.with, a.name, a.message);
     const head = this.m.commitLabel(value.head);
-    if (!value.fastForward) this.m.mergeOf[head] = { left: a.branch, right: a.with, mergeBase: this.m.ids(value.mergeBase), lww: this.m.ids(value.lww) };
-    this.m.forkedFrom[a.name] = value.fastForward ? head : this.m.ids(value.sources[0].node);
     return () => this.m.ids(value);
   },
   // ---------------------------------------------------------- fs reads
   async "fs.read"(a) {
-    const value = await this.layerfs.fs.read(a.path, this.at(a.ref, a.commit));
+    const value = await this.layerfs.fs.read(this.at(a.ref, a.commit), a.path, a.startLine, a.endLine);
     return () => this.m.ids(value);
   },
   async "fs.list"(a) {
-    const value = await this.layerfs.fs.list(a.path || "/", this.at(a.ref));
+    const value = await this.layerfs.fs.list(this.at(a.ref), a.path || "/", a.pageSize, a.pagePos);
     return () => this.m.ids(value);
   },
   async "fs.stat"(a) {
-    const value = await this.layerfs.fs.stat(a.path, this.at(a.ref));
+    const value = await this.layerfs.fs.stat(this.at(a.ref), a.path);
     return () => this.m.ids(value);
   },
   async "fs.grep"(a) {
-    const value = await this.layerfs.fs.grep(a.pattern, { ...this.at(a.ref), path: a.path || "/" });
+    const value = await this.layerfs.fs.grep(this.at(a.ref), a.pattern, a.path || "/", a.pageSize, a.pagePos);
     return () => this.m.ids(value);
   },
   async "fs.diff_files"(a) {
     const side = (sel) => clean({ path: sel.path, commit: sel.commit ? this.m.real(sel.commit) : undefined });
-    const value = await this.layerfs.fs.diff_files({ left: side(a.left), right: side(a.right) }, this.at(a.ref));
+    const value = await this.layerfs.fs.diff_files(this.at(a.ref, a.left.commit), a.left.path, this.at(a.ref, a.right.commit), a.right.path);
     return () => this.m.ids(value);
   },
   async "fs.blame"(a) {
-    const value = await this.layerfs.fs.blame(a.path, this.at(a.ref, a.commit));
+    const value = await this.layerfs.fs.blame(this.at(a.ref, a.commit), a.path, a.fromLine);
     return () => this.m.ids(value);
   },
   // ---------------------------------------------------------- fs writes
-  "fs.write"(a) { return this.write(a, () => this.layerfs.fs.write(a.path, a.content, opts(a))); },
-  "fs.edit"(a) { return this.write(a, () => this.layerfs.fs.edit(a.path, clean({ oldText: a.oldText, newText: a.newText, all: a.all }), opts(a))); },
-  "fs.mkdir"(a) { return this.write(a, () => this.layerfs.fs.mkdir(a.path, { ...opts(a), recursive: a.recursive })); },
-  "fs.remove"(a) { return this.write(a, () => this.layerfs.fs.remove(a.path, { ...opts(a), recursive: a.recursive })); },
-  "fs.cp"(a) { return this.write(a, () => this.layerfs.fs.cp(a.from, a.to, { ...opts(a), recursive: a.recursive })); },
-  "fs.mv"(a) { return this.write(a, () => this.layerfs.fs.mv(a.from, a.to, opts(a))); },
-  "fs.apply"(a) { return this.write(a, () => this.layerfs.fs.apply(a.changes.map(clean), opts(a))); },
+  "fs.write"(a) { return this.write(a, () => this.layerfs.fs.write(a.branch, a.path, a.content, a.message)); },
+  "fs.edit"(a) { return this.write(a, () => this.layerfs.fs.edit(a.branch, a.path, a.oldText, a.newText, a.message)); },
+  "fs.mkdir"(a) { return this.write(a, () => this.layerfs.fs.mkdir(a.branch, a.path, a.message)); },
+  "fs.rm"(a) { return this.write(a, () => this.layerfs.fs.rm(a.branch, a.path, a.message)); },
+  "fs.cp"(a) { return this.write(a, () => this.layerfs.fs.cp(a.branch, a.from, a.to, a.message)); },
+  "fs.mv"(a) { return this.write(a, () => this.layerfs.fs.mv(a.branch, a.from, a.to, a.message)); },
+  "fs.apply"(a) { return this.write(a, () => this.layerfs.fs.apply(a.branch, a.changes.map((c) => { const { kind, ...rest } = clean(c); return { op: (c.op || kind) === "remove" ? "rm" : (c.op || kind), ...rest }; }), a.message)); },
   // ---------------------------------------------------------- sandbox
   async "sandbox.create"() {
     const value = await this.layerfs.sandbox.create();
-    const label = this.m.label("sb", value.id);
-    this.boxes[label] = { label, real: value.id, closed: false, workspaces: {}, processes: [], watch: false };
+    const label = this.m.label("sb", value);
+    this.boxes[label] = { label, real: value, closed: false, workspaces: {}, processes: [], watch: false };
     return () => ({ kind: "Ready", id: label, mounted: false });
   },
   async "sandbox.mount"(a) {
     const box = this.box(a.sandbox);
-    const value = await this.layerfs.sandbox.mount(box.real, { branch: a.branch });
+    const value = await this.layerfs.sandbox.mount(box.real, a.branch);
     box.workspaces[value.path] = { markers: [] };
     this.ctx.mounts.push({ sandbox: box.real, path: value.path });
     return () => ({ kind: "Mounted", sandbox: box.label, path: value.path, branch: a.branch,
@@ -279,13 +271,11 @@ const OPS = {
   async "sandbox.commit"(a) {
     const box = this.box(a.sandbox), ws = this.workspace(box, a.path), captured = ws ? ws.baseCommit : null;
     const bound = ws ? ws.baseCommit || ws.baseLayer : null;
-    const value = await this.layerfs.sandbox.commit(box.real, a.path, clean({ force: a.force, agent: attribution(a.agent), call: attribution(a.call) }));
+    const value = await this.layerfs.sandbox.commit(box.real, a.path, clean({ force: a.force, message: a.message }));
     if (value.kind === "Committed") {
       const head = this.m.commitLabel(value.head);
       // A Commit record names the Commit a Workspace merged from, not a
       // Layer it was bound to: the answer keeps both.
-      this.m.mergeOf[head] = { lww: this.m.ids(value.lww || []), from: value.merged ? this.m.ids(value.merged.from) || bound : null };
-      if (value.displacedHead) this.m.displaced[this.m.ids(value.displacedHead)] = head;
     }
     box.workspaces[a.path].markers = [];
     return () => {
@@ -311,7 +301,6 @@ const OPS = {
   },
 };
 
-const opts = (a) => clean({ branch: a.branch, agent: attribution(a.agent), call: attribution(a.call) });
 
 Object.assign(Session.prototype, {
   /** A Store write: one Commit (or UpToDate) on the Branch. */
@@ -328,3 +317,63 @@ Object.assign(Session.prototype, {
     return mirrored && mirrored.workspaces[path] && mirrored.workspaces[path].mounted ? mirrored.workspaces[path] : null;
   },
 });
+
+// Direct public/operator HTTP method tables. Arguments retain their positional
+// SDK shapes; display-id translation is confined to reference/id positions.
+Session.prototype.table = async function(surface, group, method, args) {
+  const target = surface === "sdk" ? this.layerfs : this.operator;
+  const fn = target[group]?.[method];
+  if (!Object.hasOwn(target,group) || !Object.hasOwn(target[group],method) || typeof fn !== "function" || method.startsWith("_") || !Array.isArray(args)) throw fail("UnknownMethod", `${surface}.${group}.${method}`);
+  const actual = [...args];
+  const positions = group === "sandbox" || group === "workspace" || group === "process" ? [0] : group === "files" || group === "fs" ? (method === "diff_files" ? [0,2] : [0]) : group === "branch" ? (method === "fork" || method === "publish" ? [1] : method.startsWith("diff_") ? [0,1] : []) : [];
+  for (const index of positions) if (actual[index] !== undefined) actual[index] = this.m.real(actual[index]);
+  const started = performance.now();
+  const value = await fn(...actual);
+  if (surface === "sdk" && group === "sandbox") {
+    if (method === "create") {
+      const label=this.m.label("sb",value);
+      this.boxes[label]={label,real:value,closed:false,workspaces:{},processes:[],watch:false};
+    } else {
+      const box=Object.values(this.boxes).find((box)=>box.real===actual[0]);
+      if (method === "mount") {
+        if (box) box.workspaces[value.path]={};
+        this.ctx.mounts.push({sandbox:actual[0],path:value.path});
+      } else if (method === "unmount") {
+        if(box) delete box.workspaces[actual[1]];
+        this.ctx.mounts=this.ctx.mounts.filter((m)=>m.sandbox!==actual[0]||m.path!==actual[1]);
+      } else if(method === "close" && box) box.closed=true;
+    }
+  }
+  const sdkMs=performance.now()-started;
+  const refreshed=performance.now();await this.refresh();
+  return {value,state:this.state(),timing:{sdkMs,refreshMs:performance.now()-refreshed}};
+};
+
+Session.prototype.uiCall = function(surface,group,method,args,view) {
+  args=args.map((value)=>value===null?undefined:value);
+  if(surface === "operator") {
+    if(group==="process"&&method==="list") return this.call("sandbox.list_processes",{sandbox:args[0]});
+    if(group==="process"&&method==="cancel") return this.call("process.cancel",{sandbox:args[0],process:args[1]});
+    if(group==="process"&&method==="start") return this.call("sandbox.exec",{sandbox:args[0],path:args[1],command:args[2],background:true});
+    if(group==="inspect"&&method==="snapshot"&&view==="layers") return this.call("main.list_layers");
+    throw fail("UnknownMethod",`${surface}.${group}.${method}`);
+  }
+  const parameters = {
+    "project.list_branches":["pageSize","pagePos"],
+    "branch.fork":["name","branch"],"branch.list_commits":["branch","pageSize","pagePos"],
+    "branch.diff_commits":["from","to","pageSize","pagePos"],"branch.diff_branches":["from","to","pageSize","pagePos"],
+    "branch.publish":["branch","commit"],"branch.merge":["branch","with","name","message"],
+    "fs.read":["ref","path","startLine","endLine"],"fs.list":["ref","path","pageSize","pagePos"],"fs.stat":["ref","path"],
+    "fs.grep":["ref","pattern","path","pageSize","pagePos"],"fs.blame":["ref","path","fromLine"],
+    "fs.write":["branch","path","content","message"],"fs.edit":["branch","path","oldText","newText","message"],
+    "fs.mkdir":["branch","path","message"],"fs.rm":["branch","path","message"],"fs.cp":["branch","from","to","message"],"fs.mv":["branch","from","to","message"],"fs.apply":["branch","changes","message"],
+    "sandbox.create":[],"sandbox.mount":["sandbox","branch"],"sandbox.exec":["sandbox","path","command","message"],"sandbox.status":["sandbox","path"],"sandbox.commit":["sandbox","path","options"],"sandbox.unmount":["sandbox","path","options"],"sandbox.close":["sandbox"],
+  };
+  const name=`${group}.${method}`;
+  if(name==="fs.diff_files") return this.call(name,{ref:args[0],left:{path:args[1],commit:args[0]},right:{path:args[3],commit:args[2]}});
+  const keys=parameters[name];if(!keys) throw fail("UnknownMethod",name);
+  const a=Object.fromEntries(keys.map((key,i)=>[key,args[i]]));
+  if(a.options){Object.assign(a,a.options);delete a.options;}
+  if(name==="branch.fork") a.branch??="main";
+  return this.call(name,a);
+};

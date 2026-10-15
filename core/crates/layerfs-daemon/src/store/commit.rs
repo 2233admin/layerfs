@@ -41,7 +41,12 @@ impl BoundWorkspace {
         ) -> Result<FilesystemRootId, CommitError>,
     ) -> Result<CommitSuccess, Box<CommitFailure>> {
         let mut admission = self.admit_commit()?;
-        let result = self.commit_admitted(construct, || (), &CommitOptions::default());
+        let result = self.commit_admitted(
+            construct,
+            || (),
+            &CommitOptions::default(),
+            CommitVia::Workspace,
+        );
         admission.released = match &result {
             Ok(_) => true,
             Err(failure) => failure.locally_settled,
@@ -82,6 +87,7 @@ impl BoundWorkspace {
         ) -> Result<FilesystemRootId, CommitError>,
         published: impl FnOnce(),
         options: &CommitOptions,
+        via: CommitVia,
     ) -> Result<CommitSuccess, Box<CommitFailure>> {
         let force = options.force;
         let mut retained = CommitFailure::new(
@@ -136,6 +142,18 @@ impl BoundWorkspace {
                     .ok_or(CommitError::Context("bound Branch is absent"))?;
                 let moved = current.branch.head_commit != snapshot.branch.head_commit
                     || current.branch.base_layer != snapshot.branch.base_layer;
+                if moved && via == CommitVia::Files {
+                    return Err(CommitError::History(
+                        layerfs_history::HistoryError::HeadMoved(Box::new(
+                            layerfs_history::error::MovedState {
+                                expected_head: snapshot.branch.head_commit,
+                                actual_head: current.branch.head_commit,
+                                expected_base: snapshot.branch.base_layer,
+                                actual_base: current.branch.base_layer,
+                            },
+                        )),
+                    ));
+                }
                 let root = if moved && !force {
                     let (root, report) =
                         self.merge_candidate(&save, &snapshot, &current, candidate)?;
@@ -144,12 +162,31 @@ impl BoundWorkspace {
                 } else {
                     candidate
                 };
+                let node = current
+                    .branch
+                    .head_commit
+                    .map(layerfs_history::NodeId::Commit)
+                    .unwrap_or(layerfs_history::NodeId::Layer(current.branch.base_layer));
+                let known = self
+                    .store
+                    .logical_size(node)
+                    .map_err(CommitError::History)?;
+                let logical = layerfs_content::filesystem::statistics::logical_size_after(
+                    &save,
+                    FilesystemRootId(current.effective_root),
+                    root,
+                    known,
+                )
+                .map_err(|error| CommitError::Content {
+                    error,
+                    provider: None,
+                })?;
                 retained.phase = CommitPhase::Finish;
                 retained.saved = Some(save.finish().map_err(CommitError::Storage)?);
-                Ok((root, candidate, current, moved))
+                Ok((root, candidate, current, moved, logical))
             })();
             retained.storage = Some(super::producer::since(storage.diagnostics(), before));
-            let (candidate, ours, current, moved) = built?;
+            let (candidate, ours, current, moved, logical) = built?;
             if candidate != ours {
                 replaced = Some((ours.0, candidate.0));
             }
@@ -171,10 +208,37 @@ impl BoundWorkspace {
                     scope: snapshot.scope,
                     second_parent: None,
                     meta: CommitMeta {
-                        agent: options.agent.clone(),
-                        call: options.call.clone(),
-                        merged_from: merge.as_ref().and_then(|report| report.from),
-                        ..CommitMeta::new(CommitVia::Workspace)
+                        message: Some(
+                            options
+                                .message
+                                .clone()
+                                .unwrap_or_else(|| "Commit Workspace changes".into()),
+                        ),
+                        statistics: {
+                            let saved = retained
+                                .saved
+                                .as_ref()
+                                .ok_or(CommitError::Context("finished Save"))?;
+                            layerfs_history::CommitStatistics {
+                                logical,
+                                new_canonical: saved.canonical_bytes,
+                                new_stored: saved.stored_bytes,
+                                new_metadata: saved.metadata_bytes,
+                            }
+                        },
+                        merged_from: merge.as_ref().map(|_| {
+                            snapshot
+                                .branch
+                                .head_commit
+                                .map(layerfs_history::NodeId::Commit)
+                                .unwrap_or(layerfs_history::NodeId::Layer(
+                                    snapshot.branch.base_layer,
+                                ))
+                        }),
+                        lww: merge
+                            .as_ref()
+                            .map_or_else(Vec::new, |report| report.lww.clone()),
+                        ..CommitMeta::new(via)
                     },
                     force: force && moved,
                 });

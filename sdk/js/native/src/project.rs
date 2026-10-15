@@ -30,12 +30,7 @@ fn sixteen(bytes: [u8; 32]) -> [u8; 16] {
 pub(crate) fn init(args: &SdkValue) -> Outcome {
     let name = text(args, "name")?;
     let source = PathBuf::from(text(args, "path")?);
-    let home = match args.get_text("home") {
-        Some(home) => PathBuf::from(home),
-        None => std::env::var_os("LAYERFS_HOME")
-            .map(PathBuf::from)
-            .ok_or_else(|| refused("InvalidInput", "set `home` or LAYERFS_HOME"))?,
-    };
+    let home = crate::discovery::home(args)?;
     if lock(&PROJECTS)?.contains_key(name) {
         return Err(refused(
             "Exists",
@@ -43,9 +38,15 @@ pub(crate) fn init(args: &SdkValue) -> Outcome {
         ));
     }
     let directory = home.join(name);
-    std::fs::create_dir_all(&home).map_err(failed)?;
+
     std::fs::create_dir(&directory)
         .map_err(|error| refused("Exists", format!("{}: {error}", directory.display())))?;
+    std::fs::set_permissions(&directory, {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::Permissions::from_mode(0o700)
+    })
+    .map_err(failed)?;
+    let _guard = crate::discovery::guard(&directory)?;
     let history = |text: &str| HistoryName::new(text).map_err(failed);
     let request = InitRequest {
         source,
@@ -85,12 +86,12 @@ pub(crate) fn init(args: &SdkValue) -> Outcome {
             SdkValue::text(directory.join("sealed.sqlite").display().to_string()),
         ),
     ]);
-    lock(&PROJECTS)?.insert(
-        name.to_owned(),
-        Arc::new(Mutex::new(Project {
-            sealed,
-            installed: None,
-        })),
-    );
+    let project = Project {
+        store: sealed.store,
+        manifest: sealed.manifest,
+        installed: None,
+    };
+    crate::discovery::save_project(&directory, &project)?;
+    lock(&PROJECTS)?.insert(name.to_owned(), Arc::new(Mutex::new(project)));
     Ok(answer)
 }

@@ -253,6 +253,7 @@ fn mounted() -> layerfs_api::MountedWorkspace {
             token,
             binding: BranchSnapshot {
                 branch: BranchRecord {
+                    forked_from: None,
                     id: BranchId::from_authority([1; 16]),
                     stack: LayerStackId::from_authority([2; 16]),
                     name: HistoryName::new("main").unwrap(),

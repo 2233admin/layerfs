@@ -76,9 +76,12 @@ pub(crate) fn initialize_layerstack(
             request.genesis_root.as_bytes().as_slice(),
             Option::<Vec<u8>>::None,
             Option::<Vec<u8>>::None,
+            i64::try_from(request.logical).map_err(|_| HistoryError::Capacity("logical bytes"))?,
+            Vec::<u8>::new(),
         ],
     )
     .map_err(sql)?;
+    tx.execute("statistics_logical", params![request.logical as i64])?;
     layer_stack(tx, request.stack)?.ok_or(HistoryError::Integrity("LayerStack insertion"))
 }
 
@@ -164,6 +167,8 @@ pub(crate) fn verify_layer(tx: &Transaction<'_>, expected: &LayerRecord) -> Hist
                 && stored.stack == expected.stack
                 && stored.source_branch == expected.source_branch
                 && stored.source_commit == expected.source_commit
+                && stored.logical == expected.logical
+                && stored.overwrote == expected.overwrote
             {
                 Ok(true)
             } else {
@@ -308,12 +313,14 @@ pub(crate) fn add_layer(
     }
     let overwrote = skipped_layers(tx, stack.head_layer, request.commit)?;
     let layer = LayerRecord {
+        overwrote: overwrote.clone(),
         id: LayerId::derive(request.stack, Some(stack.head_layer), commit.root),
         stack: request.stack,
         parent: Some(stack.head_layer),
         root: commit.root,
         source_branch: Some(request.branch),
         source_commit: Some(request.commit),
+        logical: commit.meta.statistics.logical,
     };
     if !verify_layer(tx, &layer)? {
         tx.execute(
@@ -325,9 +332,16 @@ pub(crate) fn add_layer(
                 layer.root.as_bytes().as_slice(),
                 layer.source_branch.map(|id| id.to_bytes().to_vec()),
                 layer.source_commit.map(|id| id.to_bytes().to_vec()),
+                layer.logical as i64,
+                layer
+                    .overwrote
+                    .iter()
+                    .flat_map(|id| id.as_slice().iter().copied())
+                    .collect::<Vec<_>>(),
             ],
         )
         .map_err(sql)?;
+        tx.execute("statistics_logical", params![layer.logical as i64])?;
     }
     let advanced = tx
         .execute(

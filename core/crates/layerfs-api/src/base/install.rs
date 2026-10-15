@@ -18,30 +18,37 @@ pub fn install(
     project: &SealedProject,
     connection: &mut Connection,
 ) -> Result<Installed, Box<InstallFailure>> {
+    install_file(&project.store, &project.manifest, connection)
+}
+
+/// Installs the same sealed input after reopening its private discovery record.
+pub fn install_file(
+    store: &layerfs_persistence::SealedStore,
+    manifest: &layerfs_bridge::provision::StoreManifest,
+    connection: &mut Connection,
+) -> Result<Installed, Box<InstallFailure>> {
     let mut phase = InstallPhase::Request;
     let mut work = InstallWork::default();
     let mut request_attempted = false;
     let mut accepted = false;
     let mut acknowledged = None;
     let result = (|| {
-        if project.manifest.profile != StoreProfile::Disposable
-            || project.store.profile != SqlitePersistenceProfile::Disposable
+        if manifest.profile != StoreProfile::Disposable
+            || store.profile != SqlitePersistenceProfile::Disposable
         {
             return Err(InstallError::Protocol(ControlError(
                 "explicit Disposable Store profile required",
             )));
         }
-        if project.manifest.daemon_sqlite.is_some() {
+        if manifest.daemon_sqlite.is_some() {
             return Err(InstallError::Protocol(ControlError(
                 "already installed manifest",
             )));
         }
-        let record = project.manifest.encode().map_err(InstallError::Protocol)?;
-        let mut file = File::open(&project.store.path).map_err(InstallError::Io)?;
+        let record = manifest.encode().map_err(InstallError::Protocol)?;
+        let mut file = File::open(&store.path).map_err(InstallError::Io)?;
         let metadata = file.metadata().map_err(InstallError::Io)?;
-        if !metadata.is_file()
-            || metadata.len() != project.manifest.bytes
-            || project.store.bytes != metadata.len()
+        if !metadata.is_file() || metadata.len() != manifest.bytes || store.bytes != metadata.len()
         {
             return Err(InstallError::Protocol(ControlError(
                 "sealed file length or kind",
@@ -65,7 +72,7 @@ pub fn install(
         phase = InstallPhase::Transfer;
         let mut buffer = vec![0; MAX_PLAINTEXT_BYTES];
         work.buffer_bytes = buffer.len();
-        let mut remaining = project.manifest.bytes;
+        let mut remaining = manifest.bytes;
         while remaining != 0 {
             let wanted = remaining.min(buffer.len() as u64) as usize;
             work.read_calls = work.read_calls.saturating_add(1);
@@ -99,7 +106,7 @@ pub fn install(
         match reply(connection)? {
             InstallReply::Installed(value) => {
                 acknowledged = Some(value.clone());
-                let mut expected = project.manifest.clone();
+                let mut expected = manifest.clone();
                 expected.daemon_sqlite = value.daemon_sqlite.clone();
                 if value.daemon_sqlite.is_none() || value != expected {
                     return Err(InstallError::Protocol(ControlError(
@@ -123,8 +130,8 @@ pub fn install(
                 connection.send.close().err()
             };
             Err(Box::new(InstallFailure {
-                source: project.store.path.clone(),
-                manifest: project.manifest.clone(),
+                source: store.path.clone(),
+                manifest: manifest.clone(),
                 phase,
                 request_attempted,
                 accepted,

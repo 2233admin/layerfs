@@ -17,6 +17,7 @@ pub mod root;
 pub mod rows;
 pub mod sorted;
 mod state;
+pub mod statistics;
 pub mod symlink;
 pub mod update;
 pub mod validate;

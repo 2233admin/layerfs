@@ -12,6 +12,7 @@ mod read_handle;
 mod read_service;
 mod recognizer;
 mod settle;
+mod statistics;
 mod types;
 pub(crate) use bind::checked_base;
 pub use commit_merge::{Stale, StaleError};

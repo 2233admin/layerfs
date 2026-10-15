@@ -180,6 +180,10 @@ pub(crate) fn fork(tx: &Transaction<'_>, request: &ForkRequest) -> HistoryResult
             request.name.as_str(),
             base_layer.as_slice(),
             head_commit.map(|id| id.to_bytes().to_vec()),
+            match request.source {
+                ForkSource::Layer(id) => id.as_slice().to_vec(),
+                ForkSource::Commit { commit, .. } => commit.as_slice().to_vec(),
+            },
         ],
     )
     .map_err(sql)?;

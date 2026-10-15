@@ -7,7 +7,7 @@ use layerfs_content::ObjectId;
 use layerfs_history::{
     error::MovedState, BranchId, BranchRecord, BranchSnapshot, CommitId, CommitMeta, CommitOutcome,
     CommitRecord, CommitVia, HistoryName, LayerId, LayerStackId, NodeId, WorkspaceId,
-    MAXIMUM_ATTRIBUTION_BYTES,
+    MAXIMUM_MESSAGE_BYTES,
 };
 pub(crate) fn history<T>(value: layerfs_history::HistoryResult<T>) -> Result<T, ControlError> {
     value.map_err(|_| ControlError("history control value"))
@@ -79,7 +79,8 @@ pub(crate) fn put_branch(out: &mut Writer, value: &BranchRecord) -> Result<(), C
     out.put(&value.stack.to_bytes())?;
     out.blob(value.name.as_str().as_bytes())?;
     out.put(&value.base_layer.to_bytes())?;
-    put_head(out, value.head_commit)
+    put_head(out, value.head_commit)?;
+    put_node(out, value.forked_from)
 }
 pub(crate) fn branch(input: &mut Reader<'_>) -> Result<BranchRecord, ControlError> {
     Ok(BranchRecord {
@@ -88,6 +89,7 @@ pub(crate) fn branch(input: &mut Reader<'_>) -> Result<BranchRecord, ControlErro
         name: history(HistoryName::new(&input.text(63)?))?,
         base_layer: history(LayerId::from_bytes(input.array()?))?,
         head_commit: head(input)?,
+        forked_from: node(input)?,
     })
 }
 pub(crate) fn put_binding(out: &mut Writer, value: &BranchSnapshot) -> Result<(), ControlError> {
@@ -97,6 +99,7 @@ pub(crate) fn put_binding(out: &mut Writer, value: &BranchSnapshot) -> Result<()
     out.blob(b.name.as_str().as_bytes())?;
     out.put(&b.base_layer.to_bytes())?;
     put_head(out, b.head_commit)?;
+    put_node(out, b.forked_from)?;
     out.byte(u8::from(value.head_root.is_some()))?;
     if let Some(root) = value.head_root {
         out.put(&root.to_bytes())?;
@@ -117,6 +120,7 @@ pub(crate) fn binding(input: &mut Reader<'_>) -> Result<BranchSnapshot, ControlE
     let name = history(HistoryName::new(&input.text(63)?))?;
     let base_layer = history(LayerId::from_bytes(input.array()?))?;
     let head_commit = head(input)?;
+    let forked_from = node(input)?;
     let head_root = if boolean(input)? {
         Some(object(input)?)
     } else {
@@ -129,6 +133,7 @@ pub(crate) fn binding(input: &mut Reader<'_>) -> Result<BranchSnapshot, ControlE
             name,
             base_layer,
             head_commit,
+            forked_from,
         },
         head_root,
         base_root: object(input)?,
@@ -153,17 +158,27 @@ pub(crate) fn put_meta(out: &mut Writer, value: &CommitMeta) -> Result<(), Contr
         out.put(&branch.to_bytes())?;
     }
     out.byte(value.via.code())?;
-    for field in [&value.agent, &value.call] {
-        out.byte(u8::from(field.is_some()))?;
-        if let Some(text) = field {
-            if text.len() > MAXIMUM_ATTRIBUTION_BYTES {
-                return Err(ControlError("Commit attribution"));
-            }
-            out.blob(text.as_bytes())?;
+    out.byte(u8::from(value.message.is_some()))?;
+    if let Some(text) = &value.message {
+        if text.len() > MAXIMUM_MESSAGE_BYTES {
+            return Err(ControlError("Commit message"));
         }
+        out.blob(text.as_bytes())?;
     }
-    put_head(out, value.merged_from)?;
-    out.put(&value.time_ms.to_be_bytes())
+    put_node(out, value.merged_from)?;
+    out.put(&value.time_ms.to_be_bytes())?;
+    for count in [
+        value.statistics.logical,
+        value.statistics.new_canonical,
+        value.statistics.new_stored,
+        value.statistics.new_metadata,
+    ] {
+        out.put(&count.to_be_bytes())?;
+    }
+    put_head(out, value.displaced)?;
+    // Full decisions remain in the Store and the separate merge report. A
+    // bounded typed history record discloses their omission explicitly.
+    out.byte(u8::from(value.lww_truncated || !value.lww.is_empty()))
 }
 pub(crate) fn meta(input: &mut Reader<'_>) -> Result<CommitMeta, ControlError> {
     let branch = if boolean(input)? {
@@ -174,19 +189,27 @@ pub(crate) fn meta(input: &mut Reader<'_>) -> Result<CommitMeta, ControlError> {
     let via = history(CommitVia::from_code(input.byte()?))?;
     let mut text = || -> Result<Option<String>, ControlError> {
         if boolean(input)? {
-            Ok(Some(input.text(MAXIMUM_ATTRIBUTION_BYTES)?))
+            Ok(Some(input.text(MAXIMUM_MESSAGE_BYTES)?))
         } else {
             Ok(None)
         }
     };
-    let (agent, call) = (text()?, text()?);
+    let message = text()?;
     Ok(CommitMeta {
         branch,
         via,
-        agent,
-        call,
-        merged_from: head(input)?,
+        message,
+        merged_from: node(input)?,
         time_ms: i64::from_be_bytes(input.array()?),
+        statistics: layerfs_history::CommitStatistics {
+            logical: u64::from_be_bytes(input.array()?),
+            new_canonical: u64::from_be_bytes(input.array()?),
+            new_stored: u64::from_be_bytes(input.array()?),
+            new_metadata: u64::from_be_bytes(input.array()?),
+        },
+        displaced: head(input)?,
+        lww: Vec::new(),
+        lww_truncated: boolean(input)?,
     })
 }
 pub(crate) fn put_node(out: &mut Writer, value: Option<NodeId>) -> Result<(), ControlError> {

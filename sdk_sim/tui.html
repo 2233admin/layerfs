@@ -1061,32 +1061,26 @@ function treeHtml(p, subj, base, ch, dir, depth) {
   }).join("");
 }
 function sdkCalls(p, sv, bv) {
-  const at = (r) => { const v = FM.resolveRef(sim, r); return v ? v.node : r; };
-  const kind = (r) => (r === "main" || sim.s.branches[r] ? "branch" : /^C\d+$/.test(at(r)) ? "commit" : "layer");
-  const calls = [`fs.list(dir, { commit: ${JSON.stringify(at(p.subject))} })   // per open folder`];
-  if (p.base) {
-    const a = kind(p.base), b = kind(p.subject);
-    calls.push(a === "branch" && b === "branch" ? `branch.diff_branches({ from: ${JSON.stringify(p.base)}, to: ${JSON.stringify(p.subject)} })   // badges`
-      : a === "commit" && b === "commit" ? `branch.diff_commits({ from: ${JSON.stringify(at(p.base))}, to: ${JSON.stringify(at(p.subject))} })   // badges`
-      : `// badges: no single SDK call compares a ${a} with a ${b}; composed from both trees`);
-  }
+  const ref = JSON.stringify(p.subject), path = JSON.stringify(p.path || "/");
+  const calls = [`layerfs.fs.list(${ref}, dir, pageSize, pagePos) // per open folder`];
+  if (p.base) calls.push(`layerfs.branch.diff_branches(${JSON.stringify(p.base)}, ${ref}, pageSize, pagePos)`);
   if (p.path) {
-    if (p.mode === "view") calls.push(`fs.read(${JSON.stringify(p.path)}, { commit: ${JSON.stringify(at(p.subject))} })`);
-    if (p.mode === "blame") calls.push(`branch.list_commits() + fs.read(${JSON.stringify(p.path)}, { commit }) per saved version`, `// proposed, not in the SDK yet: fs.blame(path, { commit })`);
-    if (p.mode === "diff" && p.base) calls.push(`fs.diff_files({ left: { path: ${JSON.stringify(p.path)}, commit: ${JSON.stringify(at(p.base))} }, right: { path: ${JSON.stringify(p.path)}, commit: ${JSON.stringify(at(p.subject))} } })`);
+    if (p.mode === "view") calls.push(`layerfs.fs.read(${ref}, ${path}, startLine, endLine)`);
+    if (p.mode === "blame") calls.push(`layerfs.fs.blame(${ref}, ${path}, fromLine)`);
+    if (p.mode === "diff" && p.base) calls.push(`layerfs.fs.diff_files(${JSON.stringify(p.base)}, ${path}, ${ref}, ${path})`);
+    calls.push(`operator.files.stats(${ref}, ${path})`, `operator.files.history(${ref}, ${path}, pageSize, pagePos)`);
   }
   return calls.map(esc).join("\n");
 }
 function codeLines(text, extra) {
   return text.split("\n").map((t, i) => `<div class="cl">${extra ? extra(i) : ""}<span class="no">${i + 1}</span><span class="tx">${esc(t) || " "}</span></div>`).join("");
 }
-// Per-file stats (issue #329 preview). Revisions, sizes and dedupe come from
-// the saved versions (sim: the model; live: fs reads). Stored bytes and
-// metadata are sim estimates; live does not report them yet.
+// Live statistics and revision facts come from operator methods; simulator values are estimates.
 const bytesOf = (t) => new TextEncoder().encode(t || "").length;
 const ratio = (a, b) => (b > 0 ? `×${(a / b).toFixed(a / b >= 10 ? 0 : 1)}` : "–");
 const INODE_BYTES = 73; // one inode value row; directory entries and pooling ignored
 function fileStats(p) {
+  if(sim.live) return sim.fileReport(p.subject,p.path);
   const revs = FM.history(sim, p.subject, p.path), seen = new Set();
   let logical = 0, unique = 0, stored = 0, pending = false;
   const rows = [...revs].reverse().map((r) => {
@@ -1107,13 +1101,13 @@ function fileStats(p) {
 function fileStatsHtml(p, sv) {
   const e = sv.tree[p.path];
   if (e && e.type !== "file") return "";
-  const f = fileStats(p), cur = e ? bytesOf(e.content) : null;
+  const f = fileStats(p), cur = sim.live ? f.size : e ? bytesOf(e.content) : null;
   const size = cur == null ? "deleted here" : fmtBytes(cur);
   const phys = sim.simulated
     ? `<span>stored ≈ <b>${fmtBytes(f.stored)}</b> ${ratio(f.unique, f.stored)}</span><span>metadata ≈ <b>${fmtBytes(f.metadata)}</b></span><span class="est">sim estimate${f.pending ? " · compressing…" : ""}</span>`
-    : `<span class="est">stored and metadata bytes not reported yet · #329</span>`;
+    : `<span class="est">physical per-file attribution unavailable</span>`;
   return `<div class="fstats" title="Revisions: saved versions where this file changed. Logical: every revision's size. Unique: distinct versions once (dedupe). Stored: after compression (sim: deflate as a stand-in for zstd, no deltas).">
-    <span><b>${f.revisions}</b> revision${f.revisions === 1 ? "" : "s"}</span><span>current <b>${size}</b></span>
+    <span title="${f.hasMore ? "History shows the first 50 revisions; more are available through operator.files.history" : ""}"><b>${f.revisions ?? "…"}${f.revisionsMore ? "+" : ""}</b> revision${f.revisions === 1 ? "" : "s"}</span><span>current <b>${size}</b></span>
     <span>history <b>${fmtBytes(f.logical)}</b> logical</span><span>unique <b>${fmtBytes(f.unique)}</b> ${ratio(f.logical, f.unique)}</span>${phys}</div>`;
 }
 function fileHistoryHtml(p) {
@@ -1143,7 +1137,9 @@ function viewHtml(p, sv, bv, ch) {
   }
   if (p.mode === "history") return fileHistoryHtml(p);
   if (p.mode === "blame") {
-    const b = FM.blame(sim, p.subject, p.path);
+    const report = sim.live ? sim.fileReport(p.subject,p.path) : null;
+    if(sim.live && !report.blame) return `<div class="fempty">${esc(report.error || "Loading attributed lines…")}</div>`;
+    const b = sim.live ? { ...report.blame, lines:report.blame.lines.map(l=>({...l,origin:{id:l.commit,kind:l.commit.startsWith("L")?"layer":"commit",branch:(sim.s.commits[l.commit]||{}).branch||p.subject,via:l.message||"",by:"fs"}})) } : FM.blame(sim, p.subject, p.path);
     if (!b) return `<div class="fempty">${esc(p.path)} does not exist at ${esc(scopeLabel(p.subject))}.</div>`;
     let last = null;
     const rows = b.lines.map((ln) => {
@@ -1283,7 +1279,7 @@ function renderHistory() {
   };
   for (const l of Object.values(s.layers)) { const p = L.pos[l.id]; g += `<g class="node layer${cls(l.id)}" data-pick="${l.id}"><rect class="shape" x="${p.x - 8}" y="${p.y - 8}" width="16" height="16" rx="4"/><text class="lbl" x="${p.x}" y="${p.y + 21}" text-anchor="middle">${l.id}</text></g>`; }
   for (const name of s.branchOrder) { const p = L.pos["fork:" + name]; g += `<g class="node fork${cls("fork:" + name)}" style="--bc:${branchColor(name)}" data-pick="${esc(name)}" data-card="fork:${esc(name)}"><circle class="shape" cx="${p.x}" cy="${p.y}" r="4.5"/>${badge(name, "fork:" + name, p)}</g>`; }
-  for (const c of Object.values(s.commits)) { const p = L.pos[c.id]; g += `<g class="node commit ${c.by}${cls(c.id)}" style="--bc:${branchColor(c.branch)}" data-pick="${c.id}"><circle class="shape" cx="${p.x}" cy="${p.y}" r="7.5"/>${c.mergedFrom ? `<circle class="inner" cx="${p.x}" cy="${p.y}" r="2.8"/>` : c.agent && S.roster && S.roster[c.agent] ? `<text class="ini" x="${p.x}" y="${p.y + 3}" text-anchor="middle">${rosterOf(c.agent).initial}</text>` : ""}<text class="lbl" x="${p.x}" y="${p.y + 20}" text-anchor="middle">${c.id}</text>${badge(c.branch, c.id, p)}</g>`; }
+  for (const c of Object.values(s.commits)) { const p = L.pos[c.id]; g += `<g class="node commit ${c.by}${cls(c.id)}" style="--bc:${branchColor(c.branch)}" data-pick="${c.id}"><circle class="shape" cx="${p.x}" cy="${p.y}" r="7.5"/>${c.mergedFrom ? `<circle class="inner" cx="${p.x}" cy="${p.y}" r="2.8"/>` : c.message && S.roster && S.roster[c.message] ? `<text class="ini" x="${p.x}" y="${p.y + 3}" text-anchor="middle">${rosterOf(c.message).initial}</text>` : ""}<text class="lbl" x="${p.x}" y="${p.y + 20}" text-anchor="middle">${c.id}</text>${badge(c.branch, c.id, p)}</g>`; }
   svg.innerHTML = g + `<g id="hlabels">${lab}</g>`;
   if (knownNodes && [...ids].some((id) => !knownNodes.has(id))) wrap.scrollLeft = wrap.scrollWidth;
   knownNodes = ids;
@@ -1324,7 +1320,7 @@ function cardHtml(id) {
     const mrg = c.mergedFrom ? `<div class="sec">Merge</div><div class="meta">merged from ${owner(c.mergedFrom)} into ${c.parent ? owner(c.parent) : "main " + c.base}<br>merge base ${c.mergeBase}${lww(c.lww)}</div>`
       : c.merged ? `<div class="sec">Merged on commit</div><div class="meta">the Workspace was on ${c.merged.from}; merged with head ${c.merged.head}${lww(c.merged.lww)}</div>` : "";
     return `<div class="h"><b>${c.id}</b>${esc(c.branch)}${b.head === id ? head : ""}</div>
-      <div class="meta">parent ${c.parent || "Branch base"} · root ${c.root}<br>by ${c.agent ? `<b>${esc(rosterOf(c.agent).name)}</b> · ` : ""}${esc(c.call ? c.call : c.by === "fs" ? c.via || "fs" : c.by === "merge" ? c.via : short(c.via))}</div>${mrg}${jump}${after}${wsRows(c.branch, id)}${hint(id)}`;
+      <div class="meta">parent ${c.parent || "Branch base"} · root ${c.root}<br>by ${c.message ? `<b>${esc(rosterOf(c.message).name)}</b> · ` : ""}${esc(c.message || (c.by === "fs" ? c.via || "fs" : c.by === "merge" ? c.via : short(c.via)))}</div>${mrg}${jump}${after}${wsRows(c.branch, id)}${hint(id)}`;
   }
   const name = id.slice(5), b = s.branches[name];
   return `<div class="h"><b>${esc(name)}</b>fork point${b.head ? "" : head}</div><div class="meta">forked from ${b.from}${b.head ? "" : " · no Commits yet"}</div>${wsRows(name, id)}${hint(name, id)}`;
@@ -1348,13 +1344,13 @@ $("graph").addEventListener("scroll", () => hideCard(true), { passive: true });
 
 // Store size (issue #329 D): the product does not report it yet, so live says
 // so; sim shows an estimate from the model, to preview the layout.
-const fmtBytes = (n) => (n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(1)} KB` : `${(n / 1048576).toFixed(1)} MB`);
+const fmtBytes = (n) => (n == null ? "not reported" : n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(1)} KB` : `${(n / 1048576).toFixed(1)} MB`);
 // Compact one-line footers; the tooltip holds the detail.
 const bar = (p, m) => `<span class="sbar"><i class="p" style="flex:${p} 0 0"></i><i class="m" style="flex:${m} 0 0"></i></span>`;
 function storeHtml() {
   const z = sim.storage ? sim.storage() : null;
   if (!z) return `<div class="store" title="Physical payload and metadata need a product source (issue #329 D)"><div class="srow"><span class="kind">STORE</span><span>size not reported yet · #329 D</span></div></div>`;
-  const tip = `Global Store, project ${sim.s.project ? sim.s.project.name : ""} (sim estimate). Logical ${fmtBytes(z.logical)}: every file in every saved root. Dedupe to ${fmtBytes(z.payload)}: distinct contents once (whole files; the product also dedupes chunks). Payload ${fmtBytes(z.stored)}: those contents compressed with deflate as a stand-in for zstd, no deltas. Metadata ${fmtBytes(z.metadata)}: 64 B per distinct entry + 256 B per Commit or Layer.`;
+  const tip = !z.estimate ? `Store publication counters: logical history states ${fmtBytes(z.logical)}, unique canonical objects ${fmtBytes(z.payload)}, complete pack bodies ${fmtBytes(z.stored)}; metadata includes metadata-domain bodies and occupied SQLite overhead. DB logical pages ${fmtBytes(z.store)}, reusable pages ${fmtBytes(z.free)}. WAL allocation is separate.` : `Global Store, project ${sim.s.project ? sim.s.project.name : ""} (sim estimate). Logical ${fmtBytes(z.logical)}: every file in every saved root. Dedupe to ${fmtBytes(z.payload)}: distinct contents once (whole files; the product also dedupes chunks). Payload ${fmtBytes(z.stored)}: those contents compressed with deflate as a stand-in for zstd, no deltas. Metadata ${fmtBytes(z.metadata)}: 64 B per distinct entry + 256 B per Commit or Layer.`;
   return `<div class="store" title="${esc(tip)}"><div class="srow"><span class="kind">STORE</span><b>${fmtBytes(z.store)}</b>${bar(z.stored, z.metadata)}<span><span class="pc">payload</span> ${fmtBytes(z.stored)} · <span class="mc">meta</span> ${fmtBytes(z.metadata)}</span></div>
     <div class="srow"><span class="kind">RATE</span><span>dedupe <b>${ratio(z.logical, z.payload)}</b> · compression <b>${ratio(z.payload, z.stored)}</b>${z.pending ? " · compressing…" : ""}</span>${z.estimate ? '<span class="est">sim est.</span>' : ""}</div></div>`;
 }
@@ -1363,7 +1359,7 @@ function storeHtml() {
 function overlayHtml(w) {
   const o = w && sim.overlayOf ? sim.overlayOf(w) : null;
   if (!o) return "";
-  if (!o.estimate) return `<div class="store" title="Overlay rows from inspect.snapshot; byte sizes need a product source (issue #329 D)"><div class="srow"><span class="kind">OVERLAY</span><span><b>${o.inodes}</b> inode${o.inodes === 1 ? "" : "s"} · <b>${o.entries}</b> entr${o.entries === 1 ? "y" : "ies"}</span><span class="est">bytes · #329</span></div></div>`;
+  if (!o.estimate) return `<div class="store" title="Workspace operator counters; payload is stored overlay cell bytes, including validity masks. Metadata rows have no invented exclusive byte attribution."><div class="srow"><span class="kind">OVERLAY</span><b>${fmtBytes(o.payload)}</b> payload · ${o.inodes} inodes · ${o.entries} names · +${o.changes.added} ~${o.changes.modified} −${o.changes.removed}</div></div>`;
   const n = o.added + o.modified + o.removed;
   const tip = `This Workspace's overlay (sim estimate): ${n} change${n === 1 ? "" : "s"} (+${o.added} added, ~${o.modified} modified, −${o.removed} removed); payload ${fmtBytes(o.payload)} is the changed files' bytes, metadata ${fmtBytes(o.metadata)} is 64 B per changed entry. It lives in the daemon's database, not in the global Store.`;
   return `<div class="store" title="${esc(tip)}"><div class="srow"><span class="kind">OVERLAY</span><b>${fmtBytes(o.payload + o.metadata)}</b>${bar(o.payload, o.metadata)}<span>+${o.added} ~${o.modified} −${o.removed} · <span class="pc">payload</span> ${fmtBytes(o.payload)} · <span class="mc">meta</span> ${fmtBytes(o.metadata)}</span><span class="est">sim est.</span></div></div>`;

@@ -7,7 +7,7 @@ import { check, mount, note, refusal, sh, unmount } from "./lib.mjs";
 const HERE = dirname(fileURLToPath(import.meta.url));
 
 async function init(ctx) {
-  return ctx.layerfs.project.init(ctx.source, { name: "website" });
+  return ctx.layerfs.project.init(ctx.source);
 }
 
 /** fork feature, then seven writes; returns the Commit ids oldest first. */
@@ -16,13 +16,13 @@ async function writes(ctx) {
   const branch = "feature";
   await ctx.layerfs.branch.fork(branch);
   const results = [
-    await fs.write("/notes.txt", "one\n", { branch }),
-    await fs.edit("/notes.txt", { oldText: "one", newText: "two" }, { branch }),
-    await fs.apply([{ kind: "write", path: "/a.txt", content: "a\n" }, { kind: "write", path: "/b.txt", content: "b\n" }], { branch }),
-    await fs.mkdir("/docs", { branch }),
-    await fs.cp("/a.txt", "/docs/a.txt", { branch }),
-    await fs.mv("/b.txt", "/docs/b.txt", { branch }),
-    await fs.remove("/a.txt", { branch }),
+    await fs.write(branch, "/notes.txt", "one\n"),
+    await fs.edit(branch, "/notes.txt", "one", "two"),
+    await fs.apply(branch, [{ op: "write", path: "/a.txt", content: "a\n" }, { op: "write", path: "/b.txt", content: "b\n" }]),
+    await fs.mkdir(branch, "/docs"),
+    await fs.cp(branch, "/a.txt", "/docs/a.txt"),
+    await fs.mv(branch, "/b.txt", "/docs/b.txt"),
+    await fs.rm(branch, "/a.txt"),
   ];
   return results;
 }
@@ -44,15 +44,15 @@ export const A = {
     check(ctx, "every write is Committed", results.every((r) => r.kind === "Committed"), results.map((r) => r.kind));
     const heads = results.map((r) => r.head);
     check(ctx, "each write is a new Commit", new Set(heads).size === heads.length);
-    const { items } = await ctx.layerfs.branch.list_commits({ branch: "feature" });
+    const { items } = await ctx.layerfs.branch.list_commits("feature");
     check(ctx, "seven Commits on feature (apply is one)", items.length === 7, items.length);
     check(ctx, "Commits are via fs", items.every((c) => c.via === "fs"), items.map((c) => c.via));
     check(ctx, "parents chain the writes", items.every((c, i) => i === items.length - 1 ? c.parent === null : c.parent === items[i + 1].id));
     const listed = await ctx.layerfs.project.list_branches();
     check(ctx, "main unchanged", listed.items[0].base === init0.layer);
-    const onMain = await refusal(ctx.layerfs.fs.read("/notes.txt", { branch: "main" }));
+    const onMain = await refusal(ctx.layerfs.fs.read("main", "/notes.txt"));
     check(ctx, "main has no notes.txt", onMain && onMain.code === "NoSuchPath", onMain && onMain.code);
-    const readOnly = await refusal(ctx.layerfs.fs.write("/x", "x", { branch: "main" }));
+    const readOnly = await refusal(ctx.layerfs.fs.write("main", "/x", "x"));
     check(ctx, "main is read-only", readOnly && readOnly.code === "ReadOnly");
   },
 
@@ -60,22 +60,22 @@ export const A = {
     await init(ctx);
     const results = await writes(ctx);
     const fs = ctx.layerfs.fs;
-    const now = await fs.read("/notes.txt", { branch: "feature" });
+    const now = await fs.read("feature", "/notes.txt");
     check(ctx, "head bytes", now.text === "two\n", now.text);
-    const then = await fs.read("/notes.txt", { branch: "feature", commit: results[0].head });
+    const then = await fs.read(results[0].head, "/notes.txt");
     check(ctx, "older Commit bytes", then.text === "one\n", then.text);
-    const list = await fs.list("/", { branch: "feature" });
+    const list = await fs.list("feature", "/");
     const names = list.items.map((i) => `${i.name}:${i.type}`);
     check(ctx, "list", names.includes("notes.txt:file") && names.includes("docs:dir") && !names.includes("a.txt:file"), names);
-    const stat = await fs.stat("/docs/b.txt", { branch: "feature" });
+    const stat = await fs.stat("feature", "/docs/b.txt");
     check(ctx, "stat", stat.type === "file" && stat.size === 2, stat);
-    const grep = await fs.grep("two", { branch: "feature" });
+    const grep = await fs.grep("feature", "two", "/");
     check(ctx, "grep", grep.items.length === 1 && grep.items[0].path === "/notes.txt" && grep.items[0].line === 1, grep.items);
-    const glob = await fs.glob("docs/*.txt", { branch: "feature" });
+    const glob = await fs.glob("feature", "docs/*.txt", "/");
     check(ctx, "glob", JSON.stringify(glob.items) === JSON.stringify(["/docs/a.txt", "/docs/b.txt"]), glob.items);
-    const missing = await refusal(fs.read("/missing", { branch: "feature" }));
+    const missing = await refusal(fs.read("feature", "/missing"));
     check(ctx, "NoSuchPath", missing && missing.code === "NoSuchPath");
-    const dir = await refusal(fs.read("/docs", { branch: "feature" }));
+    const dir = await refusal(fs.read("feature", "/docs"));
     check(ctx, "IsDirectory", dir && dir.code === "IsDirectory");
   },
 
@@ -83,15 +83,15 @@ export const A = {
     await init(ctx);
     const results = await writes(ctx);
     const fs = ctx.layerfs.fs;
-    const same = await fs.diff_files({ left: { path: "/docs/a.txt" }, right: { path: "/docs/a.txt" } }, { branch: "feature" });
+    const same = await fs.diff_files("feature", "/docs/a.txt", "feature", "/docs/a.txt");
     check(ctx, "Equal", same.kind === "Equal" && same.contentEqual && same.sameInode, same);
-    const text = await fs.diff_files({ left: { path: "/notes.txt", commit: results[0].head }, right: { path: "/notes.txt" } }, { branch: "feature" });
+    const text = await fs.diff_files(results[0].head, "/notes.txt", "feature", "/notes.txt");
     const ops = text.hunks.map((h) => `${h.op}${h.text}`);
     check(ctx, "Text with hunks", text.kind === "Text" && ops.includes("-one") && ops.includes("+two"), ops);
-    const commits = await ctx.layerfs.branch.diff_commits({ from: results[0].head, to: results[6].head });
+    const commits = await ctx.layerfs.branch.diff_commits(results[0].head, results[6].head);
     const kinds = Object.fromEntries(commits.items.map((i) => [i.path, i.kind]));
     check(ctx, "diff_commits kinds", JSON.stringify(kinds) === JSON.stringify({ "/docs": "Added", "/docs/a.txt": "Added", "/docs/b.txt": "Added", "/notes.txt": "Modified" }), kinds);
-    const branches = await ctx.layerfs.branch.diff_branches({ from: "main", to: "feature" });
+    const branches = await ctx.layerfs.branch.diff_branches("main", "feature");
     const added = branches.items.filter((i) => i.kind === "Added").map((i) => i.path);
     check(ctx, "diff_branches", branches.items.every((i) => i.kind === "Added") && added.includes("/notes.txt") && added.includes("/docs/b.txt"), branches.items.map((i) => `${i.kind} ${i.path}`));
   },
@@ -99,11 +99,11 @@ export const A = {
   async A5(ctx) {
     await init(ctx);
     const results = await writes(ctx);
-    const forked = await ctx.layerfs.branch.fork("try", { from: results[2].head });
+    const forked = await ctx.layerfs.branch.fork("try", results[2].head);
     check(ctx, "Forked at C3", forked.kind === "Forked" && forked.head === results[2].head, forked);
-    const { items } = await ctx.layerfs.branch.list_commits({ branch: "try" });
+    const { items } = await ctx.layerfs.branch.list_commits("try");
     check(ctx, "metadata only: no new Commit", items.length === 3 && items[0].id === results[2].head, items.map((c) => c.id));
-    const read = await ctx.layerfs.fs.read("/b.txt", { branch: "try" });
+    const read = await ctx.layerfs.fs.read("try", "/b.txt");
     check(ctx, "try sees C3's files", read.text === "b\n");
   },
 
