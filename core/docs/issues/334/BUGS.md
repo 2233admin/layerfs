@@ -47,3 +47,19 @@ Node commands. Additional fixtures, cp, LWW merges and every operator method wer
 exercised explicitly. jq examples and decoder joins also ran once. One group Sandbox
 was closed after collecting stdout only from `docker logs`; its stderr observation
 log is unavailable, but its SDK trace remains. Other Phase A daemon logs were decoded.
+
+## Phase B completion and subsequent observer corrections
+
+Builder 1 completed M1–M6 and clean acceptance, preserving the original Store.
+Its report is `core/target/issue334/phase-b/REPORT.md`. The expected orders/web
+source conflict was resolved on two working forks, with no discarded work.
+All Workspaces were unmounted and the three workload Sandboxes closed.
+
+The observer then verified `await layerfs.service()` and its `Closed` reply in
+`phase-b/observe-service-cleanup.out`, under an `OBS` trace label excluded from
+workload statistics. This separate observer Sandbox was also logged and closed.
+The skill now explains the automatic service, corrects the old no-container claim,
+and shows how to discover and close it last. Observation docs also correct
+`process.list` item `id`, the unchanged snapshot shape, `store.commits(main)`'s
+`NoSuchBranch` refusal, file revision logical bytes, and overlapping stored/metadata
+accounting. These are documentation corrections, not additional product bugs.

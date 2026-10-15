@@ -342,3 +342,11 @@ host, save `docker logs <container-id> > <run>/daemon-<container-id>.log 2>&1`,
 where `<container-id>` is the Sandbox id with `sb_` removed and `<run>` is the
 folder containing `LAYERFS_TRACE`. Closing deletes the container and its log.
 This is diagnostic collection; project reads and changes still use the SDK.
+
+Direct Store calls also create or reuse an automatic service Sandbox. At the end,
+after all `fs.*` and Branch calls, obtain its id with `await layerfs.service()`,
+save its log, and call `sandbox.close` for that id too. `service()` creates one if
+none exists, so use it to finish a client that has already made Store calls; do
+not use it merely to probe for a service after cleanup. A cached service id on
+that client is invalid after close. The method return and close were captured in
+issue #334 Phase B `observe-service-cleanup.out`.

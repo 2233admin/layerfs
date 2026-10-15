@@ -22,7 +22,10 @@
 | compression | canonical / stored (`null` when stored is 0) |
 
 `newCanonical`, `newStored` and `newMetadata` describe that Commit's acknowledged
-Save. They are not exclusive per-path allocation. Per-file physical bytes are not
+Save. `newStored` includes metadata-domain packs; `newMetadata` is that subset,
+not additional bytes. Store `metadata` adds SQLite overhead to that same subset.
+Do not add `stored + metadata` to derive physical space. The exact accounted
+SQLite overhead is `file - free - stored`. They are not exclusive per-path allocation. Per-file physical bytes are not
 reported.
 
 ## The curve over history
@@ -35,9 +38,11 @@ Order the Commits oldest first. For Commit i:
 - C_0, S_0 and M_0 come from the start snapshot of `store.stats()` (Init and anything
   before the run).
 
-Then check the end snapshot: `store.stats().canonical` should be close to C_n. A gap
-means work outside the per-Commit counters (Layer records from `publish`, merges,
-other Branches you didn't page).
+Then check the end snapshot: `store.stats().canonical` should be close to C_n. Report any gap rather than hiding it. Logical Store totals also include
+publication Layers. Per-Commit `newMetadata` omits SQLite overhead growth, so
+compare the metadata gap against the change in `file - free - stored`. Unrecorded
+Saves, failed constructions or omitted histories can leave other gaps; preserve
+that uncertainty. `store.commits("main")` refuses because main is a Layer chain.
 
 ## Blow-up signals
 
@@ -48,7 +53,7 @@ other Branches you didn't page).
 | `newCanonical` on a re-install of unchanged `node_modules` | Near 0 (deduplicated) | Near the size of `node_modules` |
 | Store `dedupe` over time | Rises as history repeats content | Falls steadily |
 | Store `compression` over time | Stable | Falls steadily |
-| `file` vs `stored + metadata` | Close; `free` small | `free` or the gap grows each Commit |
+| `file - free - stored` | SQLite overhead, separate from pack bodies | Overhead grows disproportionately to object and history counts |
 
 Paths changed per Commit: `branch.diff_commits(parent, commit)` (count `items`; skip
 directories). Bytes changed: sum the sizes of changed files from `fs.stat` on both

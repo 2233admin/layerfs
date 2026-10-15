@@ -37,7 +37,10 @@ Bytes are integers; `dedupe` and `compression` are numbers or `null`.
 
 ## `operator.store.commits(branch, pageSize?, pagePos?)`
 
-Per-Commit size counters, newest first along first parents.
+Per-Commit size counters for a mutable Branch, newest first along first parents.
+`main` is a Layer chain: this method refuses it with `NoSuchBranch`. Preserve that
+refusal if collecting every name from `project.list_branches`; collect its
+publication Layers through the final inspection snapshot instead.
 
 **Returns:** a page whose items are `{ commit, logical, newCanonical, newStored,
 newMetadata }`. `logical` is the Commit's whole tree; the `new*` counters are that
@@ -47,7 +50,7 @@ Commit's Save.
 
 One file's current size and revision count.
 
-**Returns:** the file's size and type, `revisions` (exact up to 1000), `revisionsMore`
+**Returns:** the file's `size`, cumulative revision `logical` bytes, `revisions` (exact up to 1000), `revisionsMore`
 (true beyond that), and `canonical`, `stored`, `metadata` as `null`: per-file physical
 bytes are not attributed.
 
@@ -87,7 +90,7 @@ markers.
 
 The read model the terminal UI draws: Branches, Workspaces, Sandboxes and Store
 statistics, with a `version`. Pass the last `version` as `since` to get
-`{ unchanged: true }` when nothing changed.
+`{ kind: "unchanged", version }` when nothing changed.
 
 ## `operator.process.start(id, path, command)`
 
@@ -98,7 +101,7 @@ filesystem daemon supervises nothing.
 
 ## `operator.process.list(id)`
 
-**Returns:** the Sandbox's background processes, each with its `process` id, `path`,
+**Returns:** the Sandbox's background processes, each with its `id`, `path`,
 `command` and `status` (`running` or `exited`, with `exitCode` when known).
 
 ## `operator.process.cancel(id, process)`
