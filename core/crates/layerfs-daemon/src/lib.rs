@@ -11,6 +11,7 @@ pub mod bootstrap;
 pub mod install;
 mod install_file;
 pub mod install_types;
+mod operator;
 mod overlay;
 mod sdk;
 mod service;

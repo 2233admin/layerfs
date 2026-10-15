@@ -54,7 +54,7 @@ ALLOWED_DEPENDENCIES = {
     "layerfs-fuse": {"layerfs-content", "layerfs-overlay", "layerfs-workspace"},
     # Concrete Store open/install belongs to application composition. The
     # provider-independent daemon store/ subtree has a narrower source boundary.
-    "layerfs-daemon": {"layerfs-overlay", "layerfs-workspace", "layerfs-fuse", "layerfs-bridge", "layerfs-content", "layerfs-storage", "layerfs-history", "layerfs-persistence"},
+    "layerfs-daemon": {"layerfs-overlay", "layerfs-workspace", "layerfs-fuse", "layerfs-bridge", "layerfs-content", "layerfs-storage", "layerfs-history", "layerfs-persistence", "layerfs-telemetry"},
     "layerfs-api": {"layerfs-content", "layerfs-storage", "layerfs-history", "layerfs-persistence", "layerfs-telemetry", "layerfs-bridge", "layerfs-project", "layerfs-sandbox"},
     "layerfs-bridge": {"layerfs-content", "layerfs-history"},
     "layerfs-sandbox": set(),
@@ -232,6 +232,10 @@ def production_files(core):
         files.update(path for path in (package / "src").rglob("*")
                      if path.is_file() and path.suffix in (".rs", ".sql"))
         files.update(path for path in (package / "sql").rglob("*.sql") if path.is_file())
+    sdk = core.parent / "sdk" / "js"
+    files.update((sdk / "native" / "src").rglob("*.rs"))
+    for directory in (sdk / "src", sdk / "operator"):
+        files.update(directory.rglob("*.js"))
     return sorted(files)
 
 
@@ -241,7 +245,7 @@ def main():
     failures = 0
     for path in files:
         for line, reason in violations(path, path.read_text()):
-            print(f"{path.relative_to(core)}:{line}: {reason}")
+            print(f"{path.relative_to(core.parent)}:{line}: {reason}")
             failures += 1
     for name in RETIRED_PACKAGES:
         if (core / "crates" / name).exists():
@@ -255,7 +259,7 @@ def main():
     if failures:
         print(f"FAIL: {failures} product-source boundary violations")
         return 1
-    print(f"PASS: scanned {len(files)} production Rust/SQL files; semantic review still required")
+    print(f"PASS: scanned {len(files)} production Rust/SQL/JavaScript files; semantic review still required")
     if not files:
         print("No product source exists yet; this is only a policy setup check.")
     return 0

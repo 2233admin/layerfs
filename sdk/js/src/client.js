@@ -5,7 +5,15 @@ import { LayerFSError } from "./errors.js";
 
 /** Runs one operation once and returns its value or throws its refusal. */
 export async function invoke(op, args) {
-  const answer = await native().call(op, args);
+  if (op.startsWith("operator.")) throw new LayerFSError("UnknownMethod", "operator methods require the operator entry point", null);
+  return outcome(await native().call(op, args));
+}
+
+export async function invokeOperator(op, args) {
+  return outcome(await native().operatorCall(op, args));
+}
+
+function outcome(answer) {
   if (answer.refused) {
     const { code, message, detail } = answer.refused;
     throw new LayerFSError(code, message, detail);

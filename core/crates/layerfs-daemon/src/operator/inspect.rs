@@ -1,4 +1,4 @@
-//! `inspect.snapshot({ project, since? })`: the operator read model.
+//! `operator.inspect.snapshot({ project, since? })`: the operator read model.
 //!
 //! One answer holds the project's Branches, its newest Commits and Layers, and
 //! this daemon's Workspaces on the project. It is not agent-facing. Commits
@@ -7,8 +7,8 @@
 //! says older Layers were left out. `version` is a digest of the answer, so a
 //! caller polling with `since` gets `unchanged` until something it shows
 //! changes: a Commit, merge, publish, fork, mount, unmount or Workspace write.
-use super::args::{self, commit_value, hex, layer_value, Answer};
-use super::branch::MAIN;
+use crate::sdk::args::{self, commit_value, hex, layer_value, Answer};
+use crate::sdk::branch::MAIN;
 use crate::store::Store;
 use layerfs_bridge::control::SdkValue;
 use layerfs_history::{

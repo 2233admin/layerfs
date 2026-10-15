@@ -10,9 +10,10 @@ inline #[cfg(test)] items are removed before counting, because the reference tre
 keeps tests inside src/.
 
 The JavaScript SDK is its own scope, `sdk`: the Node binding's Rust under
-sdk/js/native/src and the package's JavaScript under sdk/js/src. JavaScript
-comments are blanked by a scanner that knows line and block comments and
-single, double and template strings (the package uses no regex literals).
+sdk/js/native/src and the package's JavaScript under sdk/js/src and
+sdk/js/operator. JavaScript comments are blanked by a scanner that knows line
+and block comments and single, double and template strings. Current regex
+literals contain no comment delimiters or string quotes.
 
 Runtime SQL is counted for both scopes: a candidate package that ships schema or
 query text under <crate>/sql/ contributes it exactly like the reference schema.
@@ -354,7 +355,9 @@ def sdk_files(base: Path) -> list:
         files += sorted((base / "native" / "src").rglob("*.rs"))
     if (base / "src").is_dir():
         files += sorted((base / "src").rglob("*.js"))
-    return [path for path in files if not any(part in SKIP_DIRS for part in path.parts)]
+    if (base / "operator").is_dir():
+        files += sorted((base / "operator").rglob("*.js"))
+    return [path for path in files if not any(part in SKIP_DIRS for part in path.relative_to(base).parts)]
 
 
 def sdk_crate(base: Path, path: Path) -> str:

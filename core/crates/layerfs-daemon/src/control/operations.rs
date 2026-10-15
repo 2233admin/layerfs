@@ -75,8 +75,8 @@ impl Service {
                 "observed control requires application diagnostic owner",
             )),
             Request::EndSession => Ok(Success::reply(Reply::SessionEnded)),
-            Request::Sdk(call) if call.method == "inspect.snapshot" => {
-                Ok(Success::reply(self.inspect(call)))
+            Request::Sdk(call) if call.method.starts_with("operator.") => {
+                Ok(Success::reply(crate::operator::dispatch(self, call)))
             }
             Request::Sdk(call) => Ok(Success::reply(
                 match crate::sdk::dispatch(&self.store, call) {

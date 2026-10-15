@@ -1,7 +1,10 @@
 //! The operator read model's Workspace half: this daemon's bound Workspaces,
 //! copied from the registry, with one engine observation each.
 use super::{registry::Entry, Service};
-use crate::sdk::{self, WorkspaceView};
+use crate::{
+    operator::{self, WorkspaceView},
+    sdk,
+};
 use layerfs_bridge::control::{Activity, MountPhase, Reply, SdkCall, SdkRefusal, SdkValue};
 
 fn activity(value: Activity) -> &'static str {
@@ -17,7 +20,7 @@ fn activity(value: Activity) -> &'static str {
 
 impl Service {
     /// `inspect.snapshot`: history from the Store, Workspaces from here.
-    pub(super) fn inspect(&self, call: &SdkCall) -> Reply {
+    pub(crate) fn inspect(&self, call: &SdkCall) -> Reply {
         let copies = match self.entries.lock() {
             Ok(entries) => entries
                 .values()
@@ -59,7 +62,7 @@ impl Service {
                 }
             })
             .collect::<Vec<_>>();
-        match sdk::inspect(&self.store, &call.args, &views) {
+        match operator::snapshot(&self.store, &call.args, &views) {
             Ok(value) => Reply::Sdk(value),
             Err(refusal) => Reply::SdkRefused(refusal),
         }

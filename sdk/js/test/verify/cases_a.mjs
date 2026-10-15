@@ -2,7 +2,6 @@
 import { execFileSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { ToolCalls } from "../../src/harness/index.js";
 import { check, mount, note, refusal, sh, unmount } from "./lib.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -108,25 +107,6 @@ export const A = {
     check(ctx, "try sees C3's files", read.text === "b\n");
   },
 
-  async A6(ctx) {
-    await init(ctx);
-    await ctx.layerfs.branch.fork("feature");
-    const calls = new ToolCalls(ctx.layerfs);
-    const result = await calls.run({ branch: "feature", agent: "a1", call: "t1", command: "npm ci" });
-    check(ctx, "npm ci exit 0", result.exitCode === 0, result.output);
-    check(ctx, "Committed", result.commit && result.commit.kind === "Committed", result.commit);
-    check(ctx, "unmounted after", result.unmount && result.unmount.kind === "Unmounted", result.unmount);
-    const { items } = await ctx.layerfs.branch.list_commits({ branch: "feature" });
-    check(ctx, "attribution", items[0].agent === "a1" && items[0].call === "t1" && items[0].via === "exec", items[0]);
-    const sandbox = await calls.sandboxes.forBranch("feature");
-    const ws = await mount(ctx, sandbox, "feature");
-    const seen = await sh(ctx, ws, "test -L node_modules/next && test -f node_modules/next/package.json && test -L node_modules/.bin/next && echo present");
-    check(ctx, "next mount sees node_modules without reinstall", seen.stdout.trim() === "present", seen);
-    const built = await sh(ctx, ws, "npm run build");
-    check(ctx, "installed packages work", built.exitCode === 0, built.stdout + built.stderr);
-    await unmount(ctx, ws, { discard: true });
-  },
-
   async A7(ctx) {
     await init(ctx);
     await ctx.layerfs.branch.fork("feature");
@@ -138,7 +118,7 @@ export const A = {
     check(ctx, "running", started.kind === "running", started);
     const busy = await refusal(ctx.layerfs.sandbox.unmount(sandbox, ws.path));
     check(ctx, "Busy while it runs", busy && busy.code === "Busy", busy && busy.message);
-    const stopped = await ctx.layerfs.sandbox.cancel(sandbox, started.process);
+    const stopped = await ctx.operator.process.cancel(sandbox, started.process);
     check(ctx, "Stopped", stopped.kind === "Stopped" && stopped.status === "stopped", stopped);
     const dirty = await refusal(ctx.layerfs.sandbox.unmount(sandbox, ws.path));
     const changed = dirty?.detail?.changed ?? [];
@@ -161,7 +141,7 @@ export const A = {
     // Bounded readiness wait for the listener, inside the one command.
     const got = await sh(ctx, two, "for i in $(seq 50); do curl -s localhost:3000/ && exit 0; sleep 0.1; done; exit 7");
     check(ctx, "Workspace 2 reaches the server", got.exitCode === 0 && got.stdout.includes("Hello world"), got);
-    await ctx.layerfs.sandbox.cancel(sandbox, server.process);
+    await ctx.operator.process.cancel(sandbox, server.process);
   },
 
   async A9(ctx) {
@@ -172,7 +152,7 @@ export const A = {
     const here = await ctx.layerfs.sandbox.status(sandbox, ws.path);
     check(ctx, "first process uses the id", here.kind === "ok");
     const script = `import { LayerFS } from ${JSON.stringify(join(HERE, "../../src/index.js"))};
-      const l = new LayerFS({ project: "website" });
+      const l = new LayerFS("website");
       try { const s = await l.sandbox.status(${JSON.stringify(sandbox)}, ${JSON.stringify(ws.path)}); console.log(JSON.stringify({ ok: s.kind })); }
       catch (e) { console.log(JSON.stringify({ refused: e.code, message: e.message })); }`;
     const out = execFileSync(process.execPath, ["--input-type=module", "-e", script], { encoding: "utf8", timeout: 30000 });

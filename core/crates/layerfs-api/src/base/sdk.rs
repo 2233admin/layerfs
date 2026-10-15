@@ -39,6 +39,17 @@ impl std::error::Error for SdkError {}
 
 /// Calls one daemon SDK method once; nothing is retried.
 pub fn call(control: &mut Control, method: &str, args: SdkValue) -> SdkResult {
+    if method.starts_with("operator.") {
+        return Err(SdkError::Refused(SdkRefusal {
+            code: "UnknownMethod".into(),
+            message: "operator methods require operator::call".into(),
+            detail: SdkValue::Null,
+        }));
+    }
+    exchange_call(control, method, args)
+}
+
+pub(crate) fn exchange_call(control: &mut Control, method: &str, args: SdkValue) -> SdkResult {
     let request = Request::Sdk(SdkCall {
         method: method.to_owned(),
         args,

@@ -205,3 +205,21 @@ MountReceipt, MountStatus and MountWork from control_mount. The authenticated
 channel is layerfs_bridge::duplex (feature duplex). Encoded attach tags and
 fields, and the fixed authentication domain bytes, are unchanged. Source tests
 follow in the separate test pass; historical receipts keep their original names.
+
+
+## Issue #327 internal operator boundary (2026-10-15)
+
+The operator read model moved from `sdk/inspect.rs` to the daemon's `operator/`
+module. Public `layerfs-api::call` rejects `operator.*` before encoding/sending;
+`layerfs_api::operator::call` admits its own table. The native addon likewise
+exports separate `call` and `operatorCall` entry points. Both use the existing
+authenticated control record channel; the daemon routes the operator prefix to
+its separate table, while public SDK dispatch has no operator or inspect arm.
+The control registry still supplies the Workspace observations in a snapshot.
+
+The JS package exposes this through `@layerfs/sdk/operator`, independently of
+its main entry point. Process list/cancel route only to the native executor;
+they do not enter the filesystem daemon. The demo server uses both entry points,
+with HTTP confined to that server. This split does not implement persistent
+Sandbox discovery, new statistics or cross-process command ownership; those
+remain tracked in the [#327 plan](../issues/327/IMPLEMENTATION-PLAN.md).

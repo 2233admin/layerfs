@@ -7,7 +7,8 @@ mod base;
 pub use base::internal;
 pub mod branch;
 pub mod fs;
-pub mod inspect;
+#[doc(hidden)]
+pub mod operator;
 pub mod project;
 pub mod sandbox;
 pub use base::failure::{OperationCause, OperationFailure};

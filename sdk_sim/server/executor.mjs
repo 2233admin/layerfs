@@ -7,8 +7,9 @@
 const MARKER = "^<<<<<<< ";
 
 export class Executor {
-  constructor(layerfs) {
+  constructor(layerfs, operator) {
     this.layerfs = layerfs;
+    this.operator = operator;
   }
 
   /** One command to its end, or started in the background. */
@@ -28,11 +29,11 @@ export class Executor {
   }
 
   async list(box) {
-    const { items } = await this.layerfs.sandbox.list_processes(box.real);
+    const { items } = await this.operator.process.list(box.real);
     return items;
   }
 
   cancel(box, process) {
-    return this.layerfs.sandbox.cancel(box.real, process);
+    return this.operator.process.cancel(box.real, process);
   }
 }

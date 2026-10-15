@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { LayerFS } from "../../src/index.js";
+import { LayerFSOperator } from "../../operator/index.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 export const REPO = join(HERE, "../../../..");
@@ -33,8 +34,12 @@ export async function setup(id, { project = "website" } = {}) {
   mkdirSync(join(source, ".git"));
   writeFileSync(join(source, ".git/HEAD"), "ref: refs/heads/main\n");
   const deploy = { docker: dockerSocket(), image: IMAGE, volume, daemon: DAEMON };
-  const layerfs = new LayerFS({ project, home: join(work, "home"), deploy });
-  return { id, stamp, volume, work, source, deploy, layerfs, mounts: [], checks: [], notes: [] };
+  Object.assign(process.env, {
+    LAYERFS_HOME: join(work, "home"), LAYERFS_DOCKER: deploy.docker,
+    LAYERFS_IMAGE: deploy.image, LAYERFS_VOLUME: deploy.volume, LAYERFS_DAEMON: deploy.daemon,
+  });
+  const layerfs = new LayerFS(project);
+  return { id, stamp, volume, work, source, deploy, layerfs, operator: new LayerFSOperator(layerfs), mounts: [], checks: [], notes: [] };
 }
 
 /** Records one check; a failed check fails the case but the case goes on. */
@@ -86,8 +91,8 @@ export const head = async (ctx, branch) => {
 export async function teardown(ctx) {
   const problems = [];
   for (const ws of ctx.mounts) {
-    for (const process of (await ctx.layerfs.sandbox.list_processes(ws.sandbox).catch(() => ({ items: [] }))).items) {
-      if (process.status === "running") await ctx.layerfs.sandbox.cancel(ws.sandbox, process.id).catch((e) => problems.push(`cancel ${process.id}: ${e.message}`));
+    for (const process of (await ctx.operator.process.list(ws.sandbox).catch(() => ({ items: [] }))).items) {
+      if (process.status === "running") await ctx.operator.process.cancel(ws.sandbox, process.id).catch((e) => problems.push(`cancel ${process.id}: ${e.message}`));
     }
     await ctx.layerfs.sandbox.unmount(ws.sandbox, ws.path, { discard: true }).catch((e) => problems.push(`unmount ${ws.path}: ${e.message}`));
   }

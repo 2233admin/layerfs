@@ -39,8 +39,9 @@ export class Session {
   constructor(ctx) {
     this.ctx = ctx;
     this.layerfs = ctx.layerfs;
+    this.operator = ctx.operator;
     this.m = new Mirror();
-    this.executor = new Executor(this.layerfs);
+    this.executor = new Executor(this.layerfs, this.operator);
     this.boxes = {};
     this.trees = {};
   }
@@ -54,7 +55,7 @@ export class Session {
   }
 
   async refresh() {
-    const snap = await this.layerfs.inspect.snapshot();
+    const snap = await this.operator.inspect.snapshot();
     const boxes = [];
     for (const box of Object.values(this.boxes)) {
       if (box.watch && !box.closed) {

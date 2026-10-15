@@ -11,7 +11,7 @@ async function start(ctx, files) {
   return { c1: c1.head, sandbox };
 }
 
-const snap = (ctx, since) => ctx.layerfs.inspect.snapshot({ since });
+const snap = (ctx, since) => ctx.operator.inspect.snapshot(since);
 const workspaces = (s) => s.sandboxes.flatMap((sb) => sb.workspaces);
 const byPath = (s, path) => workspaces(s).find((w) => w.directory === path);
 const headOf = (s, name) => (s.branches.find((b) => b.name === name) || {}).head;
@@ -92,12 +92,12 @@ export const C = {
     const s = await start(ctx, { "/x.txt": "x\n" });
     const ws = await mount(ctx, s.sandbox, branch);
     const started = await sh(ctx, ws, "sleep 60", { background: true });
-    const listed = await ctx.layerfs.sandbox.list_processes(s.sandbox);
+    const listed = await ctx.operator.process.list(s.sandbox);
     const found = listed.items.find((p) => p.id === started.process);
     check(ctx, "lists the process it started", found && found.status === "running" && found.path === ws.path && found.command === "sleep 60", listed.items);
-    const stopped = await ctx.layerfs.sandbox.cancel(s.sandbox, started.process);
+    const stopped = await ctx.operator.process.cancel(s.sandbox, started.process);
     check(ctx, "cancels it", stopped.kind === "Stopped", stopped);
-    const after = (await ctx.layerfs.sandbox.list_processes(s.sandbox)).items.find((p) => p.id === started.process);
+    const after = (await ctx.operator.process.list(s.sandbox)).items.find((p) => p.id === started.process);
     check(ctx, "listed as stopped", after && after.status !== "running", after);
     // Live members only: the container's first process is the daemon, which does
     // not reap orphans, so a stopped member can remain as a zombie.
