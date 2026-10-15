@@ -91,6 +91,7 @@ impl BoundWorkspace {
         );
         let mut producer = None;
         let mut merge = None;
+        let mut replaced = None;
         let result = (|| {
             let snapshot = self.snapshot().map_err(CommitError::Workspace)?;
             retained.binding = Some(snapshot.clone());
@@ -145,10 +146,13 @@ impl BoundWorkspace {
                 };
                 retained.phase = CommitPhase::Finish;
                 retained.saved = Some(save.finish().map_err(CommitError::Storage)?);
-                Ok((root, current, moved))
+                Ok((root, candidate, current, moved))
             })();
             retained.storage = Some(super::producer::since(storage.diagnostics(), before));
-            let (candidate, current, moved) = built?;
+            let (candidate, ours, current, moved) = built?;
+            if candidate != ours {
+                replaced = Some((ours.0, candidate.0));
+            }
             producer = Some(storage);
             let conflicted = merge
                 .as_ref()
@@ -267,6 +271,7 @@ impl BoundWorkspace {
             storage: retained.storage.expect("producer observations"),
             capture: retained.capture.expect("known capture"),
             namespace: None,
+            replaced,
         })
     }
 }

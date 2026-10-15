@@ -4,7 +4,7 @@ use crate::OwnerError;
 use layerfs_content::{
     filesystem::FilesystemUpdateCounters,
     merge::{Conflict, LwwDecision},
-    ContentError,
+    ContentError, ObjectId,
 };
 use layerfs_history::{
     BranchSnapshot, CommitId, CommitOutcome, CommitRequest, HistoryError, WorkspaceId,
@@ -116,6 +116,10 @@ pub struct CommitSuccess {
     pub capture: Capture,
     /// The product constructor's receipt; None under a caller's constructor.
     pub namespace: Option<CapturedConstruction>,
+    /// The Workspace's own captured root and the different root installed
+    /// in its place (a merge, clean or with markers); the kernel may cache
+    /// what changed between them.
+    pub replaced: Option<(ObjectId, ObjectId)>,
 }
 /// No part of an original failed attempt is inferred from a subsequent read.
 #[derive(Debug)]

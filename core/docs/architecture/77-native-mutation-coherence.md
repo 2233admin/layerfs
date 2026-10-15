@@ -292,6 +292,15 @@ requires. No notification is sent: after mkdir, rmdir and rename the kernel
 drops the attributes of the parents it changed by itself. The mounted proof is
 [`mounted_links.rs`](../../crates/layerfs-daemon/tests/mounted_links.rs).
 
+#327 update, 2026-10-15 (merged install): the one exception to "no
+notification" is a Commit that installs a root other than the one the
+Workspace showed (merge-on-commit, clean or with markers). That change does not
+arrive as a request on the connection, so the daemon invalidates the changed
+inodes and rebound names before the Commit's answer, as the FUSE contract
+requires for an install that is not identical. See
+[architecture 81](81-compare-and-merge.md#merge-on-commit), step 6. An ordinary
+Commit installs the Workspace's own captured view and still sends nothing.
+
 ## Removed references
 
 Kernel lookup custody, open handles and processing sources are independent

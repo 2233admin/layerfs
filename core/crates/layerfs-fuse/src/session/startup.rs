@@ -81,6 +81,7 @@ impl KernelSession {
             outcome: None,
             detached: Arc::default(),
             drain_wait: config.drain_wait,
+            invalidator: None,
         };
         let mut options = Config::default();
         // The command identity differs from the mount owner; kernel permission
@@ -93,6 +94,7 @@ impl KernelSession {
             Err(cause) => return Err(session.abandon(AttachPhase::Handshake, cause)),
         };
         session.negotiation = negotiated.get().copied();
+        session.invalidator = Some(super::Invalidator::new(kernel.notifier(), identity));
         let runner = kernel.into_runner();
         let monitor = runner.monitor();
         session.monitor = Some(monitor.clone());

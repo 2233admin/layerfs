@@ -231,6 +231,15 @@ impl Service {
     ) -> Result<Success, Failure> {
         let workspace = self.admit(token, Activity::Committing)?;
         let result = run(&workspace);
+        // An install that replaced what the Workspace showed is invalidated
+        // in the kernel before the answer.
+        let invalidated = match &result {
+            Ok(CommitSuccess {
+                replaced: Some((shown, installed)),
+                ..
+            }) => self.invalidate(token, &workspace, *shown, *installed),
+            _ => Ok(()),
+        };
         // A Commit whose reader or operation owner could not be released
         // keeps that custody, published or settled: nothing later is admitted
         // past it.
@@ -275,7 +284,7 @@ impl Service {
             Ok(commit) => {
                 let mut success = Success::reply(committed(&commit));
                 success.commit = Some(commit);
-                if let Err(cause) = update {
+                if let Err(cause) = update.and(invalidated) {
                     return Err(Failure::After {
                         cause: Box::new(cause),
                         original: Box::new(success),

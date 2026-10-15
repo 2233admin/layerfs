@@ -14,6 +14,7 @@ mod recognizer;
 mod settle;
 mod types;
 pub(crate) use bind::checked_base;
+pub use commit_merge::{Stale, StaleError};
 
 pub use commit_types::{
     CapturedConstruction, CommitError, CommitFailure, CommitOptions, CommitPhase, CommitSuccess,

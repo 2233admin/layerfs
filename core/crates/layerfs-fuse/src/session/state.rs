@@ -64,6 +64,8 @@ pub struct KernelSession {
     pub(super) outcome: Option<SessionOutcome>,
     pub(super) detached: Arc<AtomicBool>,
     pub(super) drain_wait: Duration,
+    /// Kernel cache invalidation for this connection, once it is serving.
+    pub(super) invalidator: Option<super::Invalidator>,
 }
 /// Maintained observations only: no syscall, SQL job or filesystem request.
 #[derive(Clone, Copy, Debug)]
@@ -118,6 +120,10 @@ impl KernelSession {
     }
     pub fn entry(&self) -> Option<&MountEntry> {
         self.entry.as_ref()
+    }
+    /// Invalidation for this connection; absent before the handshake.
+    pub fn invalidator(&self) -> Option<super::Invalidator> {
+        self.invalidator.clone()
     }
     pub fn facts(&self) -> SessionFacts {
         self.observer().facts()

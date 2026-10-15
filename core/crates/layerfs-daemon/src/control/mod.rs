@@ -8,6 +8,7 @@ mod dirty;
 mod failure;
 mod force;
 mod inspect;
+mod invalidate;
 mod kernel;
 mod observation;
 mod operations;

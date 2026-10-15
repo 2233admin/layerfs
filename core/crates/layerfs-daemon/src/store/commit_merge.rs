@@ -2,9 +2,10 @@
 //! a Branch head that moved since the Workspace was bound, and a conflicted
 //! Workspace is refused while its marker blocks remain.
 use super::{BoundWorkspace, CommitError, MergeReport};
+use layerfs_content::object::inode_leaf::InodeKind;
 use layerfs_content::ObjectId;
 use layerfs_content::{
-    compare::root_changes,
+    compare::{binding_changes, inode_changes, root_changes, DifferenceWork, TreeTable},
     filesystem::FilesystemRootId,
     merge::{merge_roots, paths_with_markers, MergeInput, RulesFrom},
     ContentError, ContentResult,
@@ -146,6 +147,82 @@ impl BoundWorkspace {
                 written,
             },
         ))
+    }
+}
+
+/// One kernel cache entry an install made stale.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Stale<'a> {
+    /// The inode's attributes, pages or listing.
+    Inode(u64),
+    /// One name's binding in a directory.
+    Entry { parent: u64, name: &'a str },
+}
+
+/// Why a walk of what an install changed stopped.
+#[derive(Debug)]
+pub enum StaleError {
+    Workspace(WorkspaceError),
+    Content(ContentError),
+    Visit(std::io::Error),
+}
+
+impl BoundWorkspace {
+    /// Visits what the kernel may cache from the root the Workspace showed
+    /// that the installed root changed: every inode whose value changed or
+    /// vanished, and every rebound name of a directory present in both. An
+    /// inode only the installed root has is not visited; nothing could have
+    /// cached it. The walk streams; it holds no list of the changes.
+    pub fn stale_after_install(
+        &self,
+        shown: ObjectId,
+        installed: ObjectId,
+        mut visit: impl FnMut(Stale<'_>) -> std::io::Result<()>,
+    ) -> Result<(), StaleError> {
+        let scope = self.snapshot().map_err(StaleError::Workspace)?.scope;
+        let ports = self.store.ports(scope);
+        let reader = &*ports;
+        let open = |root| TreeTable::open(reader, FilesystemRootId(root));
+        let (before, after) = (
+            open(shown).map_err(StaleError::Content)?,
+            open(installed).map_err(StaleError::Content)?,
+        );
+        let mut visited = None;
+        let mut work = DifferenceWork::default();
+        let walked = inode_changes(reader, &before, &after, &mut work, |serial, was, now| {
+            let Some(was) = was else { return Ok(()) };
+            if let Err(error) = visit(Stale::Inode(serial)) {
+                visited = Some(error);
+                return Err(ContentError::OutputRejected);
+            }
+            let Some(now) = now.filter(|now| {
+                now.kind == InodeKind::Directory && was.kind == InodeKind::Directory
+            }) else {
+                return Ok(());
+            };
+            let mut inner = DifferenceWork::default();
+            binding_changes(
+                reader,
+                Some(was.content_root),
+                Some(now.content_root),
+                &mut inner,
+                |name, _, _| {
+                    visit(Stale::Entry {
+                        parent: serial,
+                        name: name.as_str(),
+                    })
+                    .map_err(|error| {
+                        visited = Some(error);
+                        ContentError::OutputRejected
+                    })
+                },
+            )
+        });
+        match (walked, visited) {
+            (_, Some(error)) => Err(StaleError::Visit(error)),
+            (Err(error), None) => Err(StaleError::Content(error)),
+            (Ok(()), None) => Ok(()),
+        }
     }
 }
 

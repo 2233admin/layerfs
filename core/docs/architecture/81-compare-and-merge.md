@@ -112,6 +112,22 @@ run it inside the Commit's one Save, after the captured candidate is built.
    is `Conflict` with `head`, `base`, the conflicts with their hunks, the `lww`
    decisions and the paths the merge changed in the Workspace (at most 4096).
    The next Commit merges against the head it now follows.
+6. **Kernel caches.** A clean or conflicted merge installs a root other than
+   the one the Workspace showed, so the kernel may hold entries, attributes and
+   pages that the install changed. Before answering, the control Commit walks
+   the two roots with `inode_changes` and sends `inval_inode` for every inode
+   the shown root had and the installed root changed or dropped, and
+   `inval_entry` for every name rebound in a directory both roots hold
+   ([`control/invalidate.rs`](../../crates/layerfs-daemon/src/control/invalidate.rs),
+   [`session/invalidate.rs`](../../crates/layerfs-fuse/src/session/invalidate.rs)).
+   The walk streams and has no cap. An entry the kernel does not cache answers
+   ENOENT, which counts as done. A failed notification turns the known answer
+   into a failure after it (`Failure::After`); nothing is resent. A process
+   that still holds a descriptor or working directory on a replaced inode gets
+   a failed request, which is retained as any other and makes the mount
+   terminal. Found by VERIFICATION B10: without the step, a directory both sides
+   created (`.next`) stayed cached under the Workspace's own serial and failed
+   with ENOENT and EIO after the install.
 
 The SPEC asks for the merge to be written into the Workspace overlay. This
 implementation instead installs the merged root as the local base, which
