@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 // Offline stand-in for the Next.js CLI in the LayerFS demo fixture. It follows
 // the SDK simulator's rules: build lints JSX text for an unescaped apostrophe
-// and writes .next/, start and dev serve on port 3000, test fails on an
-// unresolved "@/" import.
+// and writes .next/ with a new build id, start and dev serve on port 3000,
+// test fails on an unresolved "@/" import.
 "use strict";
 const fs = require("fs");
 const path = require("path");
 const http = require("http");
+const crypto = require("crypto");
 
 const root = process.cwd();
 const sub = process.argv[2];
@@ -35,7 +36,8 @@ function build() {
   }
   const out = path.join(root, ".next/server/app");
   fs.mkdirSync(out, { recursive: true });
-  fs.writeFileSync(path.join(root, ".next/BUILD_ID"), `b${pages().length}`);
+  // Like Next.js, every build gets a new random id.
+  fs.writeFileSync(path.join(root, ".next/BUILD_ID"), `b${pages().length}-${crypto.randomBytes(6).toString("base64url")}`);
   for (const p of pages()) {
     const target = path.join(out, `${nameOf(p)}.html`);
     fs.mkdirSync(path.dirname(target), { recursive: true });

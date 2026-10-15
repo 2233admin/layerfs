@@ -23,7 +23,7 @@ function dockerSocket() {
   return host.slice("unix://".length);
 }
 
-export async function setup(id) {
+export async function setup(id, { project = "website" } = {}) {
   const stamp = `${id.toLowerCase()}-${Date.now().toString(36)}`;
   const volume = `layerfs-327-${stamp}`;
   execFileSync("docker", ["volume", "create", volume], { stdio: "ignore" });
@@ -33,7 +33,7 @@ export async function setup(id) {
   mkdirSync(join(source, ".git"));
   writeFileSync(join(source, ".git/HEAD"), "ref: refs/heads/main\n");
   const deploy = { docker: dockerSocket(), image: IMAGE, volume, daemon: DAEMON };
-  const layerfs = new LayerFS({ project: "website", home: join(work, "home"), deploy });
+  const layerfs = new LayerFS({ project, home: join(work, "home"), deploy });
   return { id, stamp, volume, work, source, deploy, layerfs, mounts: [], checks: [], notes: [] };
 }
 

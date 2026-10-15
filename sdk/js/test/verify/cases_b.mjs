@@ -161,7 +161,7 @@ export const B = {
 
   async B10(ctx) {
     const s = await prepare(ctx, { "/.lww": "%include .gitignore\n" });
-    // The fixture's build is deterministic; each Workspace also writes its own trace.
+    // Each build writes a new BUILD_ID; each Workspace also writes its own trace.
     const ba = await sh(ctx, s.a, "npm ci && npm run build && echo a > .next/trace");
     const bb = await sh(ctx, s.b, "npm ci && npm run build && echo b > .next/trace");
     check(ctx, "both build", ba.exitCode === 0 && bb.exitCode === 0, [ba.stderr, bb.stderr]);
