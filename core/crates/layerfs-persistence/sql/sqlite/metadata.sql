@@ -35,3 +35,11 @@ CREATE TABLE store_totals (
  metadata INTEGER NOT NULL DEFAULT 0 CHECK(metadata>=0)
 ) STRICT;
 INSERT INTO store_totals(id) VALUES(1);
+
+CREATE TRIGGER object_totals AFTER INSERT ON object_location BEGIN
+ UPDATE store_totals SET canonical=canonical+new.canonical_length WHERE id=1;
+END;
+CREATE TRIGGER pack_totals AFTER INSERT ON pack BEGIN
+ UPDATE store_totals SET stored=stored+new.length,
+ metadata=metadata+CASE WHEN new.domain=0 THEN new.length ELSE 0 END WHERE id=1;
+END;
