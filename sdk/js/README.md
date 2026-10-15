@@ -145,7 +145,7 @@ JavaScript methods make before the call (for example `page` bounds) are refused
 without a trace line.
 
 ```json
-{"layerfs_trace":1,"id":"9f3c21aa-12","method":"fs.write","args":{"branch":"feature","path":"/README.md","contentBytes":6,"message":"Update introduction","sandbox":"sb_…"},"start":"2026-10-15T09:12:01.120Z","ms":41.733,"ok":true,"commit":"…","sizes":{"logical":120,"newCanonical":40,"newStored":30,"newMetadata":8}}
+{"layerfs_trace":1,"id":"9f3c21aa-12","method":"fs.write","args":{"branch":"feature","path":"/README.md","contentBytes":6,"message":"Update introduction","sandbox":"sb_…"},"start":"2026-10-15T09:12:01.120Z","scope":"…","ms":41.733,"ok":true,"commit":"…","sizes":{"logical":120,"newCanonical":40,"newStored":30,"newMetadata":8},"daemon":[{"timing":[{"name":"files.bind","ms":1.2,"children":[…]},{"name":"commit","ms":30.4,"children":[…]}],"storage":{…},"construction":{…}}]}
 ```
 
 | Field | Meaning |
@@ -157,9 +157,25 @@ without a trace line.
 | `start`, `ms` | Wall-clock start (ISO 8601) and elapsed wall milliseconds measured in the calling process, including the native queue and the daemon round trip. |
 | `ok` | `true` for a value; `false` with `code` and `message` for a refusal. |
 | `kind`, `commit`, `sizes` | When the value carries them: its `kind`, the Commit id, and that Commit's `logical`, `newCanonical`, `newStored` and `newMetadata` byte counters. |
+| `scope` | 64 hex characters: the fresh daemon observation scope this call's control exchanges carried. |
+| `daemon` | One entry per traced control exchange the call made (a mount makes at least three: Branch lookup, bind, attach). Absent when the call reached no daemon (for example `project.init`). |
 
+Each `daemon` entry holds:
+
+| Field | Meaning |
+| --- | --- |
+| `timing` | Phase trees the daemon recorded for that exchange: `{ name, ms, children }`, with `outcome` (`error`, `unknown`) and `incomplete` only when they apply. Roots include `commit` (phases `capture`, `producer`, `begin`, `construct` › `captured.namespace`, `head`, `merge`, `logical.known`, `finish`, `logical.count`, `validate`, `publish`, `install`), `sandbox.mount.bind` › `store.bind`, `sandbox.mount.attach` › `kernel.attach`, `files.bind` (the private Workspace of an `fs` write), `sdk.read`, `sdk.lines`, `branch.merge` and `blame.compare`. |
+| `omitted` | Timing nodes left out beyond the 256-node reply bound. |
+| `storage` | When the exchange committed: the Save's storage diagnostics (42 counters such as `pack_write_bytes`, `locator_hits`, `pack_misses`), daemon names in snake_case. |
+| `construction` | When the exchange committed: the captured namespace construction work (31 counters such as `files_constructed`, `inode_rows`). |
+| `diagnosticError` | `{ kind, message }` when the daemon could not write its numeric records, or the telemetry did not fit the reply (`Oversized`). The call's result and connection are unaffected. |
+
+Tracing makes each control exchange an observed one: the daemon also writes
+fixed-schema numeric records (SQL work, owner lock wait/hold, Store reader and
+cache work, FUSE kernel counters on Linux, Workspace resources) to its stderr.
 Concurrent calls append whole lines; order follows completion, so join by `id`.
-The trace is diagnostic timing, not a benchmark measurement.
+The trace is diagnostic timing, not a benchmark measurement. Off means no scope,
+no observed exchange, no daemon timing and byte-identical replies.
 
 ## Builds and compatibility
 

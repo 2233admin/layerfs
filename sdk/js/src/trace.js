@@ -46,26 +46,52 @@ function committed(value) {
   return out;
 }
 
-/** Runs `call` once and, when `file` is set, appends its trace line. */
-export async function traced(file, method, args, call) {
-  if (!file) return call();
+/** One daemon telemetry value with its flat timing nodes as a tree. */
+function daemon(telemetry) {
+  const { timing, ...rest } = telemetry ?? {};
+  const nodes = [];
+  const roots = [];
+  for (const [name, parent, us, outcome, incomplete] of timing?.nodes ?? []) {
+    const node = { name, ms: us / 1000, ...(outcome === "ok" ? {} : { outcome }), ...(incomplete ? { incomplete } : {}), children: [] };
+    nodes.push(node);
+    (parent >= 0 && nodes[parent] ? nodes[parent].children : roots).push(node);
+  }
+  return { timing: roots, ...(timing?.omitted ? { omitted: timing.omitted } : {}), ...rest };
+}
+
+/** Sends one call once through `send(scope)` and returns the binding's
+ * answer. When `file` is set the call is traced: `send` gets a fresh scope,
+ * the answer's telemetry goes to the trace line and is removed from it. */
+export async function traced(file, method, args, send) {
+  if (!file) return send(null);
   const id = `${RUN}-${++next}`;
+  const scope = randomBytes(32).toString("hex");
   const start = new Date();
   const began = performance.now();
   let line;
   try {
-    line = { layerfs_trace: 1, id, method, args: summary(args), start: start.toISOString() };
+    line = { layerfs_trace: 1, id, method, args: summary(args), start: start.toISOString(), scope };
   } catch {
-    line = { layerfs_trace: 1, id, method, args: null, start: start.toISOString() };
+    line = { layerfs_trace: 1, id, method, args: null, start: start.toISOString(), scope };
   }
+  let answer;
   try {
-    const value = await call();
-    write(file, { ...line, ms: elapsed(began), ok: true, ...committed(value) });
-    return value;
+    answer = await send(scope);
   } catch (error) {
     write(file, { ...line, ms: elapsed(began), ok: false, code: error?.code ?? null, message: error?.message ?? String(error) });
     throw error;
   }
+  const { telemetry, ...plain } = answer;
+  const ms = elapsed(began);
+  try {
+    const result = plain.refused
+      ? { ok: false, code: plain.refused.code, message: plain.refused.message }
+      : { ok: true, ...committed(plain.value) };
+    write(file, { ...line, ms, ...result, ...(telemetry ? { daemon: telemetry.map(daemon) } : {}) });
+  } catch {
+    write(file, { ...line, ms, ok: !plain.refused });
+  }
+  return plain;
 }
 
 const elapsed = (began) => Math.round((performance.now() - began) * 1000) / 1000;

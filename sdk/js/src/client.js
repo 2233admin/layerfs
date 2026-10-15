@@ -1,21 +1,25 @@
 // One call through the native binding. The binding resolves `{ value }` or
-// `{ refused }`; a refusal becomes a LayerFSError. Nothing is retried.
+// `{ refused }` (plus `telemetry` when traced); a refusal becomes a
+// LayerFSError. Nothing is retried.
 import { native } from "./native.js";
 import { LayerFSError } from "./errors.js";
 import { traced } from "./trace.js";
 
 /** Runs one operation once and returns its value or throws its refusal;
  * `trace` names the file that gets this call's trace line. */
-export function invoke(op, args, trace) {
-  return traced(trace, op, args, async () => {
+export async function invoke(op, args, trace) {
+  return outcome(await traced(trace, op, args, (scope) => {
     if (op.startsWith("operator.")) throw new LayerFSError("UnknownMethod", "operator methods require the operator entry point", null);
-    return outcome(await native().call(op, args));
-  });
+    return native().call(op, observed(args, scope));
+  }));
 }
 
-export function invokeOperator(op, args, trace) {
-  return traced(trace, op, args, async () => outcome(await native().operatorCall(op, args)));
+export async function invokeOperator(op, args, trace) {
+  return outcome(await traced(trace, op, args, (scope) => native().operatorCall(op, observed(args, scope))));
 }
+
+/** A traced call carries its scope; the binding removes it before dispatch. */
+const observed = (args, scope) => (scope ? { ...args, observe: scope } : args);
 
 function outcome(answer) {
   if (answer.refused) {

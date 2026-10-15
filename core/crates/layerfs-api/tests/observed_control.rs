@@ -106,6 +106,7 @@ fn observed_reply_keeps_original_exact_token_validation() {
         .call(Request::Observed {
             scope: [7; 32],
             request: Box::new(Request::Cleanup(token())),
+            traced: false,
         })
         .unwrap_err();
     assert!(failed.attempted);

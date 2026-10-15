@@ -25,6 +25,11 @@ pub enum Request {
         scope: [u8; 32],
         /// One original ordinary operation, never another observation wrapper.
         request: Box<Request>,
+        /// The SDK trace route: the daemon also records phase timing and
+        /// answers [`Reply::Observed`] with that telemetry, and a failed
+        /// diagnostic write is reported there instead of ending the
+        /// connection. False keeps the original records-only observation.
+        traced: bool,
     },
     /// Observe physical cleanup of one allocated namespace without repeating
     /// its terminal operation or retaining its deleted control binding.
@@ -78,7 +83,7 @@ impl Request {
     /// layer. This validation never allocates, traverses or executes a request.
     pub fn without_observation(&self) -> Result<&Self, crate::control::ControlError> {
         match self {
-            Self::Observed { scope, request } => {
+            Self::Observed { scope, request, .. } => {
                 if *scope == [0; 32] {
                     return Err(crate::control::ControlError("zero observation scope"));
                 }
@@ -246,6 +251,14 @@ pub enum Reply {
     Retained(Box<crate::control_mount::TeardownCustody>),
     /// Forced terminal close acknowledged with its dispositions and cleanup state.
     ForceUnmounted(Box<crate::control_forced::ForceUnmounted>),
+    /// The answer to a traced observation: the operation's own reply,
+    /// unchanged, and diagnostic telemetry beside it. Never nested.
+    Observed {
+        /// The original operation's reply.
+        reply: Box<Reply>,
+        /// Phase timing and diagnostics; never part of the operation result.
+        telemetry: crate::control_sdk::SdkValue,
+    },
 }
 /// Maintained cleanup state in the current daemon's allocated namespace domain.
 /// A live row must match the token incarnation; missing allocated rows are Gone.

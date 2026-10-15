@@ -54,28 +54,31 @@ impl BoundWorkspace {
         // What construction staged for the shared cache. It is placed there
         // only by the publication callback; every other path drops it.
         let constructed = RefCell::new(None);
-        let result = self.commit_admitted(
-            |save, capture, _| {
-                let mut slot = held.borrow_mut();
-                let mut staged = self.store.cache.constructed().ok();
-                let root = self.construct_captured(
-                    save,
-                    capture,
-                    slot.insert(CapturedConstruction::default()),
-                    staged.as_mut(),
-                )?;
-                *constructed.borrow_mut() = staged;
-                Ok(root)
-            },
-            || {
-                if let Some(staged) = constructed.borrow_mut().take() {
-                    // Cache policy can lose a hit, never fail a known Commit.
-                    let _ = self.store.cache.admit_constructed(staged);
-                }
-            },
-            options,
-            via,
-        );
+        let result = crate::telemetry::timed("commit", |timing| {
+            self.commit_admitted(
+                |save, capture, _| {
+                    let mut slot = held.borrow_mut();
+                    let mut staged = self.store.cache.constructed().ok();
+                    let root = self.construct_captured(
+                        save,
+                        capture,
+                        slot.insert(CapturedConstruction::default()),
+                        staged.as_mut(),
+                    )?;
+                    *constructed.borrow_mut() = staged;
+                    Ok(root)
+                },
+                || {
+                    if let Some(staged) = constructed.borrow_mut().take() {
+                        // Cache policy can lose a hit, never fail a known Commit.
+                        let _ = self.store.cache.admit_constructed(staged);
+                    }
+                },
+                options,
+                via,
+                timing,
+            )
+        });
         let mut held = held.into_inner();
         match result {
             Ok(mut success) => {
@@ -134,11 +137,25 @@ impl BoundWorkspace {
             sink: save.sink(),
             constructed,
         };
+        let attempt = crate::telemetry::timed("captured.namespace", |scope| {
+            Ok::<_, std::convert::Infallible>(
+                CapturedNamespace::new(operation.workspace(), operation.overlay(), reader, owner)
+                    .construct(
+                        policy,
+                        &policy.capacities(),
+                        save,
+                        &mut sink,
+                        scope.child("construct"),
+                    ),
+            )
+        });
         let CapturedNamespaceAttempt {
             result,
             mut custody,
-        } = CapturedNamespace::new(operation.workspace(), operation.overlay(), reader, owner)
-            .construct_untimed(policy, &policy.capacities(), save, &mut sink);
+        } = match attempt {
+            Ok(attempt) => attempt,
+            Err(never) => match never {},
+        };
         held.work = Some(custody.work);
         // Exactly one slot holds the first original cause: the namespace's or
         // reader's, else the failing file's own or its record scope's, else

@@ -21,7 +21,6 @@ use layerfs_history::{
     CommitMeta, CommitVia, ForkRequest, ForkSource, LayerStackRecord, MergeCommit, MergeHead,
     MergeSide, NodeId, MAXIMUM_PAGE_RECORDS,
 };
-use layerfs_telemetry::timer::Timing;
 use layerfs_workspace::InodeSerials;
 use std::sync::Arc;
 
@@ -349,7 +348,7 @@ pub(crate) fn merge(store: &Arc<Store>, args: &SdkValue) -> Answer {
         policy,
         capacities: &capacities,
     };
-    let (merged, _) = Timing::disabled("branch.merge", |timing| {
+    let merged = crate::telemetry::timed("branch.merge", |timing| {
         merge_roots(&save, &mut save.sink(), &input, &mut fresh, timing)
     });
     let merged = merged.map_err(args::content)?;

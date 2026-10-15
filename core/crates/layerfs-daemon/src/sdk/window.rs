@@ -11,7 +11,6 @@ use layerfs_content::{
     },
     object::inode_leaf::InodeKind,
 };
-use layerfs_telemetry::timer::Timing;
 
 pub(crate) const BYTES: usize = 48 * 1024;
 pub(crate) const LINES: usize = 2000;
@@ -62,7 +61,7 @@ pub(crate) fn lines(
     while offset < size {
         let end = size.min(offset + 16384);
         let mut bytes = Vec::new();
-        let (read, _) = Timing::disabled("sdk.lines", |timing| {
+        let read = crate::telemetry::timed("sdk.lines", |timing| {
             layerfs_content::file::read_range(
                 reader,
                 entry.value.content_root,

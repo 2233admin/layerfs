@@ -6,8 +6,11 @@ use napi::{bindgen_prelude::AsyncTask, JsUnknown};
 
 /// Runs one SDK operation; the Promise resolves `{ value }` or `{ refused }`.
 pub(crate) fn call(op: String, args: JsUnknown) -> napi::Result<AsyncTask<Job>> {
-    let args = convert::from_js(args)?;
-    Ok(AsyncTask::new(Job::new(move || dispatch(&op, args))))
+    let mut args = convert::from_js(args)?;
+    let scope = crate::trace::take_scope(&mut args);
+    Ok(AsyncTask::new(
+        Job::new(move || dispatch(&op, args)).traced(scope),
+    ))
 }
 
 fn dispatch(op: &str, args: SdkValue) -> Outcome {
@@ -58,9 +61,9 @@ fn sdk(op: &str, args: SdkValue) -> Outcome {
         other => other,
     };
     let answer = if op.starts_with("operator.") {
-        layerfs_api::operator::call(&mut *registry::lock(&state.control)?, op, args)
+        layerfs_api::operator::call(&mut *crate::trace::control(&state.control)?, op, args)
     } else {
-        layerfs_api::call(&mut *registry::lock(&state.control)?, op, args)
+        layerfs_api::call(&mut *crate::trace::control(&state.control)?, op, args)
     };
     answer.map_err(|error| match error {
         layerfs_api::SdkError::Refused(refusal) => refusal,
@@ -73,21 +76,25 @@ fn sdk(op: &str, args: SdkValue) -> Outcome {
 
 /// Runs one internal operator call through its separate method table.
 pub(crate) fn operator_call(op: String, args: JsUnknown) -> napi::Result<AsyncTask<Job>> {
-    let args = convert::from_js(args)?;
-    Ok(AsyncTask::new(Job::new(move || match op.as_str() {
-        "operator.process.start" => exec::exec(&args),
-        "operator.process.list" => exec::processes(&args),
-        "operator.process.cancel" => exec::cancel(&args),
-        "operator.inspect.snapshot"
-        | "operator.store.stats"
-        | "operator.store.commits"
-        | "operator.files.stats"
-        | "operator.files.history"
-        | "operator.workspace.overlay"
-        | "operator.workspace.changes" => sdk(&op, args),
-        _ => Err(refused(
-            "UnknownMethod",
-            format!("no operator operation {op}"),
-        )),
-    })))
+    let mut args = convert::from_js(args)?;
+    let scope = crate::trace::take_scope(&mut args);
+    Ok(AsyncTask::new(
+        Job::new(move || match op.as_str() {
+            "operator.process.start" => exec::exec(&args),
+            "operator.process.list" => exec::processes(&args),
+            "operator.process.cancel" => exec::cancel(&args),
+            "operator.inspect.snapshot"
+            | "operator.store.stats"
+            | "operator.store.commits"
+            | "operator.files.stats"
+            | "operator.files.history"
+            | "operator.workspace.overlay"
+            | "operator.workspace.changes" => sdk(&op, args),
+            _ => Err(refused(
+                "UnknownMethod",
+                format!("no operator operation {op}"),
+            )),
+        })
+        .traced(scope),
+    ))
 }

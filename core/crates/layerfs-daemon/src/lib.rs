@@ -16,6 +16,7 @@ mod overlay;
 mod sdk;
 mod service;
 pub mod store;
+pub mod telemetry;
 pub(crate) use overlay::owner;
 
 pub use owner::{OriginalInput, Owner, OwnerClient, OwnerConfig, OwnerError, WorkspacePanic};

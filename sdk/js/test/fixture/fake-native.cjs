@@ -11,6 +11,19 @@ const answer = (op, args) => {
   if (op === "operator.store.stats") return { value: { dedupe: "2", compression: null } };
   return { value: { items: [], hasMore: false } };
 };
+// A traced call (args.observe) gets daemon telemetry like the real binding:
+// flat timing nodes [name, parent, us, outcome, incomplete].
+const telemetry = (op) => [{
+  timing: { nodes: [["commit", -1, 2500, "ok", false], ["capture", 0, 400, "ok", false], ["construct", 0, 1500, "ok", false], ["captured.namespace", 2, 1400, "ok", false]], omitted: 0 },
+  ...(op === "sandbox.commit" ? { storage: { pack_write_bytes: 4096 }, construction: { files_constructed: 1 } } : {}),
+}];
 exports.calls = [];
-exports.call = async (op, args) => (exports.calls.push(op), answer(op, args));
-exports.operatorCall = async (op, args) => (exports.calls.push(op), answer(op, args));
+exports.observed = [];
+const traced = (op, args) => {
+  exports.calls.push(op);
+  exports.observed.push(args.observe ?? null);
+  const plain = answer(op, args);
+  return args.observe ? { ...plain, telemetry: telemetry(op) } : plain;
+};
+exports.call = async (op, args) => traced(op, args);
+exports.operatorCall = async (op, args) => traced(op, args);

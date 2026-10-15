@@ -172,7 +172,11 @@ impl Service {
     }
     /// Attach is a Linux capability; elsewhere it is refused before effects.
     #[cfg(not(target_os = "linux"))]
-    pub(super) fn attach(&self, _token: WorkspaceToken) -> Result<Success, Failure> {
+    pub(super) fn attach(
+        &self,
+        _token: WorkspaceToken,
+        _timing: &layerfs_telemetry::timer::TimingScope<'_, layerfs_telemetry::timer::Active>,
+    ) -> Result<Success, Failure> {
         Err(Failure::Rejected(
             layerfs_bridge::control::ControlCode::Invalid,
             "kernel serving requires Linux",

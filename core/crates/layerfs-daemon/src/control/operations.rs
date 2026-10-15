@@ -86,7 +86,11 @@ impl Service {
                 ControlCode::Invalid,
                 "daemon Hello requires application startup owner",
             )),
-            Request::Mount { workspace, branch } => self.mount(*workspace, *branch),
+            Request::Mount { workspace, branch } => {
+                crate::telemetry::timed("sandbox.mount.bind", |timing| {
+                    self.mount(*workspace, *branch, timing)
+                })
+            }
             Request::Status(token) => self.status(*token),
             Request::Cleanup(token) => self.cleanup(*token),
             Request::Commit(control) => self.commit(control.token, |workspace| {
@@ -100,7 +104,9 @@ impl Service {
                 token,
                 relinquish_unknown,
             } => self.force_unmount(*token, *relinquish_unknown),
-            Request::Attach(token) => self.attach(*token),
+            Request::Attach(token) => crate::telemetry::timed("sandbox.mount.attach", |timing| {
+                self.attach(*token, timing)
+            }),
             Request::Locate(workspace) => self.locate(*workspace),
             Request::Fork(request) => self
                 .store
@@ -140,6 +146,7 @@ impl Service {
         &self,
         workspace: WorkspaceId,
         branch: BranchId,
+        timing: &layerfs_telemetry::timer::TimingScope<'_, layerfs_telemetry::timer::Active>,
     ) -> Result<Success, Failure> {
         {
             let mut entries = self.entries.lock().map_err(|_| Failure::Poisoned)?;
@@ -168,10 +175,10 @@ impl Service {
             }
             entries.insert(workspace, Entry::Binding);
         }
-        let bound = match self
-            .store
-            .bind(self.owner.clone(), BindRequest { workspace, branch })
-        {
+        let bound = match crate::telemetry::phase(timing, "store.bind", || {
+            self.store
+                .bind(self.owner.clone(), BindRequest { workspace, branch })
+        }) {
             Ok(value) => value,
             Err(value) => {
                 let phase = value.phase;

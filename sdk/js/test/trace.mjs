@@ -75,6 +75,7 @@ try {
     const reference = await script(new LayerFS("website"));
     const native = (await import(FAKE)).default;
     const before = native.calls.length;
+    assert.ok(native.observed.every((scope) => scope === null), "untraced calls carry no scope");
     process.env.LAYERFS_TRACE = file;
     const traced = await script(new LayerFS("website"));
     assert.deepEqual(traced, reference, "tracing changes no value or refusal");
@@ -89,7 +90,10 @@ try {
       assert.equal(typeof line.ok, "boolean");
       assert.equal(line.args.deploy, undefined);
       assert.equal(line.args.home, undefined);
+      assert.match(line.scope, /^[0-9a-f]{64}$/);
+      assert.equal(line.args.observe, undefined);
     }
+    assert.deepEqual(lines.map((line) => line.scope), native.observed.slice(before), "the binding got each line's scope");
     assert.equal(new Set(lines.map((line) => line.id)).size, lines.length);
     const groups = new Set(lines.map((line) => line.method.replace(/^operator\./, "operator:").split(".")[0]));
     for (const group of ["project", "fs", "branch", "sandbox", "operator:store", "operator:files", "operator:workspace", "operator:inspect", "operator:process"]) assert.ok(groups.has(group), group);
@@ -104,6 +108,13 @@ try {
     const commit = lines.find((line) => line.method === "sandbox.commit");
     assert.equal(commit.kind, "Committed");
     assert.equal(commit.commit, "c0ffee");
+    const [tree] = commit.daemon[0].timing;
+    assert.equal(tree.name, "commit");
+    assert.equal(tree.ms, 2.5);
+    assert.deepEqual(tree.children.map((child) => child.name), ["capture", "construct"]);
+    assert.equal(tree.children[1].children[0].name, "captured.namespace");
+    assert.equal(commit.daemon[0].storage.pack_write_bytes, 4096);
+    assert.equal(commit.daemon[0].construction.files_constructed, 1);
     const refused = lines.find((line) => line.args.path === "/missing");
     assert.equal(refused.ok, false);
     assert.equal(refused.code, "NoSuchPath");

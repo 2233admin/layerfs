@@ -181,11 +181,11 @@ impl Application {
                     }
                 }
                 InitialRecord::Control(call) => {
-                    let (outcome, diagnostic_error) =
+                    let (outcome, diagnostic_error, telemetry) =
                         if matches!(call.request, Request::Observed { .. }) {
                             self.observed_control(&call, slot)
                         } else {
-                            (self.control(&call, slot), None)
+                            (self.control(&call, slot), None, None)
                         };
                     let session_end =
                         matches!(call.request, Request::EndSession) && outcome.is_ok();
@@ -197,7 +197,12 @@ impl Application {
                                 _
                             ))
                         );
-                    let served = match crate::control::answer_call(&mut connection, call, outcome) {
+                    let served = match crate::control::answer_call(
+                        &mut connection,
+                        call,
+                        outcome,
+                        telemetry,
+                    ) {
                         Ok(served) => served,
                         Err(cause) => {
                             return Err(ConnectionFailure {

@@ -366,6 +366,114 @@ fn diagnostic_sink_failure_does_not_repeat_or_hide_successful_bind() {
     drop(process);
     f.cleanup();
 }
+/// The names of a traced reply's timing nodes.
+fn timing_names(telemetry: &layerfs_bridge::control::SdkValue) -> Vec<String> {
+    use layerfs_bridge::control::SdkValue;
+    match telemetry
+        .get("timing")
+        .and_then(|timing| timing.get("nodes"))
+    {
+        Some(SdkValue::List(nodes)) => nodes
+            .iter()
+            .filter_map(|node| match node {
+                SdkValue::List(fields) => match fields.first() {
+                    Some(SdkValue::Text(name)) => Some(name.clone()),
+                    _ => None,
+                },
+                _ => None,
+            })
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+#[test]
+fn traced_diagnostic_failure_is_reported_and_keeps_the_connection() {
+    let f = support::Fixture::new("observed-traced-sink", None);
+    let (process, _address, mut control) =
+        start(&f, File::options().write(true).open("/dev/full").unwrap());
+    layerfs_api::internal::trace(&mut control, Some([7; 32]));
+    let bound = layerfs_api::internal::workspace(&mut control)
+        .bind(
+            WorkspaceId::from_authority([77; 32]).unwrap(),
+            f.project.branch.branch.id,
+        )
+        .unwrap();
+    let telemetry = layerfs_api::internal::take_telemetry(&mut control);
+    assert_eq!(telemetry.len(), 1);
+    let error = telemetry[0]
+        .get("diagnosticError")
+        .expect("reported write failure");
+    assert!(error.get_text("kind").is_some() && error.get_text("message").is_some());
+    let names = timing_names(&telemetry[0]);
+    assert_eq!(
+        names.first().map(String::as_str),
+        Some("sandbox.mount.bind")
+    );
+    assert!(names.iter().any(|name| name == "store.bind"));
+    // The same connection keeps serving, traced and then untraced.
+    let status = layerfs_api::internal::workspace(&mut control)
+        .status(bound.token)
+        .unwrap();
+    assert_eq!(status.token, bound.token);
+    let telemetry = layerfs_api::internal::take_telemetry(&mut control);
+    assert_eq!(telemetry.len(), 1);
+    assert!(telemetry[0].get("diagnosticError").is_some());
+    layerfs_api::internal::trace(&mut control, None);
+    let status = layerfs_api::internal::workspace(&mut control)
+        .status(bound.token)
+        .unwrap();
+    assert_eq!(status.binding, bound.binding);
+    assert!(layerfs_api::internal::take_telemetry(&mut control).is_empty());
+    layerfs_api::internal::workspace(&mut control)
+        .unmount(bound.token, false)
+        .unwrap();
+    assert_eq!(
+        control.call(Request::EndSession).unwrap(),
+        Reply::SessionEnded
+    );
+    drop(process);
+    f.cleanup();
+}
+#[test]
+fn traced_records_share_the_scope_and_untraced_replies_stay_plain() {
+    let f = support::Fixture::new("observed-traced-records", None);
+    let log = f.directory.join("stderr.log");
+    let (process, _address, mut control) = start(&f, File::create(&log).unwrap());
+    let bound = layerfs_api::internal::workspace(&mut control)
+        .bind(
+            WorkspaceId::from_authority([78; 32]).unwrap(),
+            f.project.branch.branch.id,
+        )
+        .unwrap();
+    assert!(layerfs_api::internal::take_telemetry(&mut control).is_empty());
+    layerfs_api::internal::trace(&mut control, Some([5; 32]));
+    let status = layerfs_api::internal::workspace(&mut control)
+        .status(bound.token)
+        .unwrap();
+    assert_eq!(status.token, bound.token);
+    let telemetry = layerfs_api::internal::take_telemetry(&mut control);
+    assert_eq!(telemetry.len(), 1);
+    assert!(telemetry[0].get("diagnosticError").is_none());
+    assert!(telemetry[0].get("storage").is_none());
+    layerfs_api::internal::trace(&mut control, None);
+    let text = fs::read_to_string(&log).unwrap();
+    assert!(accepts_unique_completed_groups(&text));
+    let word = u64::from_be_bytes([5; 8]);
+    let rows: Vec<_> = text
+        .lines()
+        .filter(|line| identity_words(line, "scope") == [word; 4])
+        .collect();
+    validate(&rows);
+    layerfs_api::internal::workspace(&mut control)
+        .unmount(bound.token, false)
+        .unwrap();
+    assert_eq!(
+        control.call(Request::EndSession).unwrap(),
+        Reply::SessionEnded
+    );
+    drop(process);
+    f.cleanup();
+}
 #[test]
 fn resource_and_output_failure_preserve_original_status_reply() {
     let f = support::Fixture::new("observed-resource-and-sink", None);

@@ -2,10 +2,11 @@
 mod kernel;
 pub(super) mod resources;
 mod schema;
+pub(crate) use schema::{commit_parts, namespace_values, storage_values};
 
 use super::Application;
 use crate::control::{Failure, Success};
-use layerfs_bridge::control::{Call, ControlCode, Request};
+use layerfs_bridge::control::{Call, ControlCode, Request, SdkValue};
 use std::io::{self, Write};
 
 const RECORD_BYTES: usize = 4096;
@@ -133,12 +134,15 @@ impl<W: Write> Write for Records<'_, W> {
     }
 }
 
+/// An observed control's outcome, the diagnostic failure that ends its
+/// connection (untraced only), and a traced request's telemetry.
+pub(super) type Observed = (
+    Result<Success, Failure>,
+    Option<io::Error>,
+    Option<SdkValue>,
+);
 impl Application {
-    pub(super) fn observed_control(
-        &self,
-        call: &Call,
-        slot: usize,
-    ) -> (Result<Success, Failure>, Option<io::Error>) {
+    pub(super) fn observed_control(&self, call: &Call, slot: usize) -> Observed {
         let operation = match call.request.without_observation() {
             Ok(operation) => operation,
             Err(_) => {
@@ -148,15 +152,17 @@ impl Application {
                         "invalid observed operation",
                     )),
                     None,
+                    None,
                 )
             }
         };
-        let Request::Observed { scope, .. } = &call.request else {
+        let Request::Observed { scope, traced, .. } = &call.request else {
             return (
                 Err(Failure::Rejected(
                     ControlCode::Invalid,
                     "observation wrapper absent",
                 )),
+                None,
                 None,
             );
         };
@@ -172,7 +178,11 @@ impl Application {
         });
         // The operation keeps its exact original result independently of every
         // later counter acquisition and diagnostic sink outcome.
+        // A traced request records this thread's timing roots; the guard
+        // ends recording on every exit, unwinding included.
+        let recording = traced.then(crate::telemetry::Recording::start);
         let outcome = self.control_operation(operation, slot);
+        let reports = recording.map(crate::telemetry::Recording::finish);
         // One explicitly charged read-only observer call. It transfers its typed
         // value before the snapshot. This observation never replaces the
         // original outcome.
@@ -272,7 +282,16 @@ impl Application {
             schema::construction(&mut rows, &outcome)?;
             rows.finish()
         })();
-        (outcome, resources.into_diagnostic_error(result.err()))
+        let diagnostic = resources.into_diagnostic_error(result.err());
+        match reports {
+            // The SDK trace route reports a failed diagnostic write beside
+            // the reply and keeps its connection.
+            Some(reports) => {
+                let telemetry = crate::telemetry::value(reports, &outcome, diagnostic.as_ref());
+                (outcome, None, Some(telemetry))
+            }
+            None => (outcome, diagnostic, None),
+        }
     }
     fn observed_reader_indices(&self) -> Vec<usize> {
         let Ok(state) = self.state.lock() else {

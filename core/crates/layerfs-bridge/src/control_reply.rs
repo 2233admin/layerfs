@@ -19,7 +19,16 @@ impl Answer {
         }
         let mut out = Writer::new(MAGIC);
         out.put(&self.id.to_be_bytes())?;
-        match &self.reply {
+        let reply = match &self.reply {
+            Reply::Observed { reply, telemetry } => {
+                out.byte(23)?;
+                crate::control_sdk::put_value(&mut out, telemetry, 0)?;
+                reply.as_ref()
+            }
+            reply => reply,
+        };
+        match reply {
+            Reply::Observed { .. } => return Err(ControlError("nested observed reply")),
             Reply::Cleanup { token, state } => {
                 out.byte(16)?;
                 put_token(&mut out, *token)?;
@@ -142,7 +151,15 @@ impl Answer {
         if id == 0 {
             return Err(ControlError("control correlation"));
         }
-        let reply = match input.byte()? {
+        let mut tag = input.byte()?;
+        let telemetry = if tag == 23 {
+            let telemetry = crate::control_sdk::value(&mut input, 0)?;
+            tag = input.byte()?;
+            Some(telemetry)
+        } else {
+            None
+        };
+        let reply = match tag {
             17 => {
                 let count = u16::from_be_bytes(input.array()?);
                 if count > HISTORY_WINDOW {
@@ -221,6 +238,13 @@ impl Answer {
             _ => return Err(ControlError("control reply")),
         };
         input.finish()?;
+        let reply = match telemetry {
+            Some(telemetry) => Reply::Observed {
+                reply: Box::new(reply),
+                telemetry,
+            },
+            None => reply,
+        };
         Ok(Self { id, reply })
     }
 }
