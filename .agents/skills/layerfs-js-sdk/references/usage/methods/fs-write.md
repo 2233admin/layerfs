@@ -1,0 +1,171 @@
+# fs write methods
+
+> **Status:** Current general guide. Part of the `layerfs-js-sdk` skill. Fields are
+> read from source on `main`; example outputs show the shape and are not yet captured
+> from a live run. Ids are 66 hex characters, shortened here as `"9f3c…"`.
+
+Snippets are the `// the step` part of the
+[script template](../scripts.md#3-the-step-script-template).
+
+**Shared rules**
+
+- Each call changes one Branch (never `main`) and publishes **one** Commit, or nothing.
+- An already-mounted Workspace doesn't see the change: mount again, or let its next
+  `sandbox.commit` merge it in.
+- Parent folders must exist before a write. `fs.mkdir` creates missing parents.
+- `message` is optional UTF-8, at most 4096 bytes; newline and tab are allowed.
+
+**Returns (all seven)**
+
+| `kind` | Fields | Meaning |
+| --- | --- | --- |
+| `"Committed"` | `branch`, `head`, `commit` | A new Commit; `head` is its id; `commit` is its record: `id`, `parent`, `secondParent`, `base`, `root`, `message`, `time`, … |
+| `"UpToDate"` | `branch`, `head`, `root` | Nothing changed, so no Commit was made |
+
+**Shared refusals**
+
+| Code | Meaning | Do |
+| --- | --- | --- |
+| `ReadOnly` | The Branch is `main` | Write on your Branch, then `branch.publish` |
+| `NoSuchBranch` | No such Branch | `branch.fork` it, or check the name |
+| `HeadMoved` | Another writer published on the Branch during the call; nothing was published | Read the files you changed again, then decide whether to apply your change |
+| `NoSuchPath` | A path or its parent folder is missing | `fs.list` the parent; `fs.mkdir` first |
+| `TooLarge` | The change didn't fit one call | Split it into smaller calls |
+| `InvalidInput` | A bad argument (message bytes, relative path, …) | Read `message`; fix the call |
+
+## `fs.write(branch, path, content, message?)`
+
+Creates or replaces one file with `content`.
+
+| Arg | Type | Required | Meaning |
+| --- | --- | --- | --- |
+| `branch` | string | yes | Your Branch |
+| `path` | string | yes | Absolute file path |
+| `content` | string | yes | The whole new content |
+| `message` | string | no | Commit message |
+
+**Refusals:** `IsDirectory`, plus the shared ones.
+
+```js
+const r = await layerfs.fs.write(state.branch, "/src/cart.js", source, "cart: add Cart class");
+```
+```json
+{ "kind": "Committed", "branch": "work", "head": "9f3c…", "commit": { "id": "9f3c…", "parent": "77e1…", "message": "cart: add Cart class", "…": "…" } }
+```
+
+## `fs.edit(branch, path, oldText, newText, message?)`
+
+Replaces exactly one occurrence of `oldText` with `newText`. Streams large files, so it's
+the cheap way to change a few lines of a big file.
+
+**Refusals**
+
+| Code | Meaning | Do |
+| --- | --- | --- |
+| `NoMatch` | `oldText` doesn't occur | `fs.read` the area; the text differs (whitespace, an earlier edit) |
+| `AmbiguousMatch` | `oldText` occurs more than once | Include more surrounding lines to make it unique |
+| `NotText` | Binary file | Use `fs.write` |
+| shared | | See above |
+
+```js
+try {
+  await layerfs.fs.edit(state.branch, "/src/cart.js", "const TAX = 0.07;", "const TAX = 0.08;", "cart: tax 8%");
+} catch (error) {
+  if (!isRefusal(error, "NoMatch") && !isRefusal(error, "AmbiguousMatch")) throw error;
+  const hits = await layerfs.fs.grep(state.branch, "TAX", "/src/cart.js");
+  console.log(JSON.stringify({ ok: false, code: error.code, lines: hits.items }));
+  process.exit(1);                         // pick a unique oldText in the next step
+}
+```
+
+## `fs.apply(branch, changes, message?)`
+
+Applies an ordered list of changes and publishes them as **one** Commit, or nothing. The
+best way to scaffold or make any multi-file change.
+
+| Change | Fields |
+| --- | --- |
+| write | `{ op: "write", path, content }` |
+| edit | `{ op: "edit", path, oldText, newText }` |
+| mkdir | `{ op: "mkdir", path }` |
+| rm | `{ op: "rm", path }` |
+| cp | `{ op: "cp", from, to }` |
+| mv | `{ op: "mv", from, to }` |
+
+Later changes see earlier ones: a `mkdir` before a `write` into that folder works.
+
+**Refusals:** the refusal of the first change that fails, with `detail.index`
+(zero-based) naming it. Nothing is published.
+
+**Scaffold many files**
+
+```js
+const files = {
+  "/package.json": JSON.stringify({ name: "shop", type: "module", scripts: { test: "node --test" } }, null, 2) + "\n",
+  "/src/server.js": "export function start() {}\n",
+  "/test/server.test.js": "import { test } from 'node:test';\ntest('loads', () => {});\n",
+};
+const dirs = [...new Set(Object.keys(files).map((p) => p.slice(0, p.lastIndexOf("/"))).filter(Boolean))];
+const r = await layerfs.fs.apply(state.branch, [
+  ...dirs.map((path) => ({ op: "mkdir", path })),
+  ...Object.entries(files).map(([path, content]) => ({ op: "write", path, content })),
+], "scaffold: package, server, first test");
+done({ kind: r.kind, head: r.head });
+```
+
+**Find the failing change**
+
+```js
+const changes = [/* … */];
+try {
+  await layerfs.fs.apply(state.branch, changes, "cart: routes");
+} catch (error) {
+  if (!error.code) throw error;
+  const bad = changes[error.detail?.index];
+  console.log(JSON.stringify({ ok: false, code: error.code, failed: bad?.op, path: bad?.path ?? bad?.from }));
+  process.exit(1);
+}
+```
+
+## `fs.mkdir(branch, path, message?)`
+
+Creates a folder and any missing parents. An existing folder is a no-op (`UpToDate`).
+
+**Refusals:** `NotDirectory` (a file is in the way), plus the shared ones.
+
+```js
+await layerfs.fs.mkdir(state.branch, "/src/routes/admin", "routes: admin folder");
+```
+
+## `fs.rm(branch, path, message?)`
+
+Removes a file or a whole folder tree.
+
+**Refusals:** `NoSuchPath`, plus the shared ones.
+
+```js
+await layerfs.fs.rm(state.branch, "/src/legacy", "remove legacy folder");
+```
+
+## `fs.cp(branch, from, to, message?)`
+
+Copies a file or folder tree. Keeps modes, symlinks and hardlinks within the copied set;
+timestamps are new.
+
+**Refusals**
+
+| Code | Meaning | Do |
+| --- | --- | --- |
+| `Exists` | `to` already exists | Choose a new destination, or `fs.rm` it first |
+| `InvalidInput` | Same path, or a copy into its own subtree | Pick a destination outside `from` |
+| shared | | See above |
+
+## `fs.mv(branch, from, to, message?)`
+
+Moves or renames a file or folder tree. Keeps identity and timestamps.
+
+**Refusals:** the same as `fs.cp`.
+
+```js
+await layerfs.fs.mv(state.branch, "/src/basket.js", "/src/cart.js", "cart: rename basket");
+```

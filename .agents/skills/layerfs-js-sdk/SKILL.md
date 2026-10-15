@@ -29,22 +29,20 @@ There's no wrapper CLI. This page is the hub; open a reference page only when yo
 ## Rules
 
 1. **Full CLI.** Write each step as a script under your run folder
-   (`steps/NNN-name.mjs`) and run it with `node`. Keep the scripts: they are the record
-   of what you did.
+   (`steps/NNN-name.mjs`), from the [script template](references/usage/scripts.md#3-the-step-script-template),
+   and run it with `node`. Keep the scripts: they are the record of what you did.
 2. **Every command finishes in under 2 minutes.** `exec` has no timeout of its own, so
    wrap long commands inside it: `timeout 110 npm test`.
 3. **One attempt.** A refusal throws a `LayerFSError` with a stable `code`. Read the
    code and decide; never resend blindly. On `Unknown` (an uncertain outcome), stop,
-   inspect with `list_commits`/`read`, and report. See [errors](references/errors.md).
+   inspect with `list_commits`/`read`, and report.
 4. **A non-zero exit is not a refusal.** `exec` returns `{ exitCode, stdout, stderr,
    truncated }`; always check `exitCode`.
 5. **A Workspace shows the head as of its mount.** After `fs.*` writes on the same
    Branch, mount a fresh Workspace before you build or test.
 6. **Commit at every working step, with a message**, and publish to `main` only at
    milestones.
-7. **Label every step** for the trace: `LAYERFS_TRACE_STEP="cart: add tests" node
-   steps/012-cart-tests.mjs`. See [tracing](references/tracing.md).
-8. **Clean up.** Commit or discard, unmount every Workspace, then close the Sandboxes
+7. **Clean up.** Commit or discard, unmount every Workspace, then close the Sandboxes
    you created.
 
 ## The step loop
@@ -58,7 +56,8 @@ fs.apply / fs.edit on your Branch      (source edits: one Commit each)
   → branch.publish(branch)             (milestones only)
 ```
 
-Details and variations are in the [workflow](references/workflow.md).
+Why this order, the long-lived alternative and a complete worked example are in
+[writing SDK scripts](references/usage/scripts.md).
 
 ## Which method for which job
 
@@ -77,15 +76,16 @@ Details and variations are in the [workflow](references/workflow.md).
 ## Method signatures
 
 Copied from [`sdk/js/README.md`](../../../sdk/js/README.md), which is the source of truth.
-Every method is positional and returns a Promise.
+Every method is positional and returns a Promise. Each group's page has, for every
+method, its arguments, result fields, refusals with what to do, limits and examples.
 
 | Group | Methods |
 | --- | --- |
-| project | `init(sourcePath)`, `list_branches(pageSize?, pagePos?)` |
-| fs reads | `read(ref, path, startLine?, endLine?)`, `list(ref, path?, pageSize?, pagePos?)`, `stat(ref, path)`, `grep(ref, pattern, path?, pageSize?, pagePos?)`, `glob(ref, pattern, path?, pageSize?, pagePos?)`, `diff_files(leftRef, leftPath, rightRef, rightPath)`, `blame(ref, path, fromLine?)` |
-| fs writes | `write(branch, path, content, message?)`, `edit(branch, path, oldText, newText, message?)`, `apply(branch, changes, message?)`, `mkdir(branch, path, message?)`, `rm(branch, path, message?)`, `cp(branch, from, to, message?)`, `mv(branch, from, to, message?)` |
-| branch | `fork(name, fromRef?)`, `list_commits(branch, pageSize?, pagePos?)`, `diff_commits(from, to, pageSize?, pagePos?)`, `diff_branches(from, to, pageSize?, pagePos?)`, `merge(a, b, name, message?)`, `publish(branch, commit?)` |
-| sandbox | `create()`, `mount(id, branch)`, `exec(id, path, command, message?)`, `status(id, path)`, `commit(id, path, {message?, force?}?)`, `unmount(id, path, {discard?}?)`, `close(id)` |
+| [project](references/usage/methods/project.md) | `init(sourcePath)`, `list_branches(pageSize?, pagePos?)` |
+| [fs reads](references/usage/methods/fs-read.md) | `read(ref, path, startLine?, endLine?)`, `list(ref, path?, pageSize?, pagePos?)`, `stat(ref, path)`, `grep(ref, pattern, path?, pageSize?, pagePos?)`, `glob(ref, pattern, path?, pageSize?, pagePos?)`, `diff_files(leftRef, leftPath, rightRef, rightPath)`, `blame(ref, path, fromLine?)` |
+| [fs writes](references/usage/methods/fs-write.md) | `write(branch, path, content, message?)`, `edit(branch, path, oldText, newText, message?)`, `apply(branch, changes, message?)`, `mkdir(branch, path, message?)`, `rm(branch, path, message?)`, `cp(branch, from, to, message?)`, `mv(branch, from, to, message?)` |
+| [branch](references/usage/methods/branch.md) | `fork(name, fromRef?)`, `list_commits(branch, pageSize?, pagePos?)`, `diff_commits(from, to, pageSize?, pagePos?)`, `diff_branches(from, to, pageSize?, pagePos?)`, `merge(a, b, name, message?)`, `publish(branch, commit?)` |
+| [sandbox](references/usage/methods/sandbox.md) | `create()`, `mount(id, branch)`, `exec(id, path, command, message?)`, `status(id, path)`, `commit(id, path, {message?, force?}?)`, `unmount(id, path, {discard?}?)`, `close(id)` |
 
 A `ref` is `main`, a Branch name, a Commit id or a Layer id. Paths are absolute in the
 view (`/src/index.js`). Pages are `{ items, hasMore }`; advance with
@@ -95,12 +95,12 @@ view (`/src/index.js`). Pages are `{ items, hasMore }`; advance with
 
 | When you need to… | Read |
 | --- | --- |
-| Set up the environment, import the SDK, keep state between commands | [setup](references/setup.md) |
-| Plan the work: per-step loop, long-lived Workspace, merging, publishing | [workflow](references/workflow.md) |
-| Copy a working snippet for a common task | [recipes](references/recipes.md) |
-| Handle a refusal: `Conflict`, `Dirty`, `Busy`, `NoMatch`, `Unknown`, … | [errors](references/errors.md) |
-| Label steps, write the trace, read Store statistics | [tracing](references/tracing.md) |
-| Know the 0.1.7 limits: output caps, read bounds, no restart recovery | [limits](references/limits.md) |
+| Set up, write a step script, follow the rules, see a whole run end to end | [writing SDK scripts](references/usage/scripts.md) |
+| Use one method: arguments, results, refusals and what to do, limits, demonstrations | [project](references/usage/methods/project.md), [fs reads](references/usage/methods/fs-read.md), [fs writes](references/usage/methods/fs-write.md), [branch](references/usage/methods/branch.md), [sandbox](references/usage/methods/sandbox.md) |
+| A refusal arrived and you don't know where to look | [refusal index](references/usage/scripts.md#7-when-a-refusal-arrives) |
 
 Deeper material: the [SDK reference](../../../sdk/js/README.md) and the
 [0.1.7 SDK and UI guide](../../../docs/versioned/0.1.7/sdk-and-ui.md).
+
+Observing or troubleshooting a run (call trace, storage metrics, daemon records,
+operator surface) is not part of production use: see [debug and trace](references/debug/README.md).
