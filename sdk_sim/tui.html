@@ -116,14 +116,14 @@ body.nosel, body.nosel * { user-select: none !important; -webkit-user-select: no
 .sdk pre { margin: 0 0 6px; font: inherit; white-space: pre-wrap; }
 .tm { margin-left: 8px; font: 9.5px var(--mono); color: var(--term-dim); vertical-align: 1px; }
 .sdk .tm { margin-left: 6px; font-size: 10.5px; }
-.store { flex: none; border-top: 1px solid var(--term-border); padding: 7px 10px 8px; font: 11px/1.4 var(--mono); color: var(--term-text); background: var(--well); }
-.store .srow { display: flex; align-items: baseline; gap: 8px; }
-.store .kind { font-weight: 600; font-size: 9.5px; letter-spacing: .06em; color: var(--term-dim); }
-.store b { font-size: 12px; } .store .dim { color: var(--term-dim); } .store .est { margin-left: auto; color: var(--term-dim); font-size: 10px; }
-.store .sbar { display: flex; height: 6px; border-radius: 3px; overflow: hidden; margin: 6px 0 5px; background: var(--term-border); }
-.store .sbar i, .store .sw { display: block; } .store .sw { display: inline-block; width: 7px; height: 7px; border-radius: 2px; margin-right: 4px; vertical-align: 0; }
-.store .p { background: var(--t-cyan); } .store .m { background: var(--orange); } .store .o { background: var(--green); }
-.store .legend { display: flex; flex-wrap: wrap; gap: 2px 12px; }
+.store { flex: none; border-top: 1px solid var(--term-border); padding: 3px 10px 4px; font: 10.5px/1.6 var(--mono); color: var(--term-dim); background: var(--well); }
+.store .srow { display: flex; align-items: center; gap: 7px; white-space: nowrap; overflow: hidden; }
+.store .srow > span:not(.sbar):not(.est) { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.store .kind { flex: none; font-weight: 600; font-size: 9px; letter-spacing: .06em; }
+.store b { color: var(--term-text); font-weight: 600; } .store .est { margin-left: auto; flex: none; font-size: 9.5px; opacity: .8; }
+.store .sbar { flex: none; display: flex; width: 44px; height: 5px; border-radius: 3px; overflow: hidden; background: var(--term-border); }
+.store .sbar i { display: block; } .store .p { background: var(--t-cyan); } .store .m { background: var(--orange); }
+.store .pc { color: var(--t-cyan); } .store .mc { color: var(--orange); }
 .inrow { display: flex; align-items: baseline; }
 .inrow input { flex: 1; min-width: 30px; background: transparent; border: 0; outline: 0; color: var(--term-text); font: 12px/1.55 var(--mono); padding: 0; }
 .term:not(.focused) .inrow input { caret-color: transparent; }
@@ -273,7 +273,6 @@ body.nosel, body.nosel * { user-select: none !important; -webkit-user-select: no
 .frev { width: 100%; border-collapse: collapse; font-size: 11.5px; } .frev th { text-align: left; font-weight: 600; color: var(--term-dim); padding: 4px 6px; border-bottom: 1px solid var(--term-border); }
 .frev td { padding: 3px 6px; border-bottom: 1px solid var(--term-border); white-space: nowrap; } .frev td.n { text-align: right; } .frev th.n { text-align: right; }
 .frev .zero { color: var(--term-dim); }
-.store .rates { display: flex; gap: 12px; margin-top: 3px; color: var(--term-dim); } .store .rates b { color: var(--term-text); }
 .fsum b { color: var(--term-text); font-weight: 600; }
 .fempty { padding: 18px 12px; color: var(--term-dim); line-height: 1.6; }
 .code { padding: 2px 0 10px; }
@@ -1350,26 +1349,24 @@ $("graph").addEventListener("scroll", () => hideCard(true), { passive: true });
 // Store size (issue #329 D): the product does not report it yet, so live says
 // so; sim shows an estimate from the model, to preview the layout.
 const fmtBytes = (n) => (n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(1)} KB` : `${(n / 1048576).toFixed(1)} MB`);
+// Compact one-line footers; the tooltip holds the detail.
+const bar = (p, m) => `<span class="sbar"><i class="p" style="flex:${p} 0 0"></i><i class="m" style="flex:${m} 0 0"></i></span>`;
 function storeHtml() {
   const z = sim.storage ? sim.storage() : null;
-  if (!z) return `<div class="store" title="Physical payload and metadata need a product source (issue #329 D)"><div class="srow"><span class="kind">STORE</span><span class="dim">size not reported by the product yet · issue #329 D</span></div></div>`;
-  const tip = "Global Store (sim estimate). Logical: every file in every saved root. Dedupe: distinct contents once (whole files; the product also dedupes chunks). Payload: those contents compressed with deflate as a stand-in for zstd, no deltas. Metadata: 64 B per distinct entry + 256 B per Commit or Layer.";
-  return `<div class="store" title="${esc(tip)}"><div class="srow"><span class="kind">STORE</span><b>${fmtBytes(z.store)}</b><span class="dim">project ${esc(sim.s.project ? sim.s.project.name : "")}</span>${z.estimate ? '<span class="est">sim estimate</span>' : ""}</div>
-    <div class="sbar"><i class="p" style="flex:${z.stored} 0 0"></i><i class="m" style="flex:${z.metadata} 0 0"></i></div>
-    <div class="legend"><span><span class="sw p"></span>payload ${fmtBytes(z.stored)} <span class="dim">(logical ${fmtBytes(z.logical)})</span></span><span><span class="sw m"></span>metadata ${fmtBytes(z.metadata)}</span></div>
-    <div class="rates"><span>dedupe <b>${ratio(z.logical, z.payload)}</b> <span class="dim">${fmtBytes(z.logical)} → ${fmtBytes(z.payload)}</span></span><span>compression <b>${ratio(z.payload, z.stored)}</b> <span class="dim">→ ${fmtBytes(z.stored)}${z.pending ? " · compressing…" : ""}</span></span></div></div>`;
+  if (!z) return `<div class="store" title="Physical payload and metadata need a product source (issue #329 D)"><div class="srow"><span class="kind">STORE</span><span>size not reported yet · #329 D</span></div></div>`;
+  const tip = `Global Store, project ${sim.s.project ? sim.s.project.name : ""} (sim estimate). Logical ${fmtBytes(z.logical)}: every file in every saved root. Dedupe to ${fmtBytes(z.payload)}: distinct contents once (whole files; the product also dedupes chunks). Payload ${fmtBytes(z.stored)}: those contents compressed with deflate as a stand-in for zstd, no deltas. Metadata ${fmtBytes(z.metadata)}: 64 B per distinct entry + 256 B per Commit or Layer.`;
+  return `<div class="store" title="${esc(tip)}"><div class="srow"><span class="kind">STORE</span><b>${fmtBytes(z.store)}</b>${bar(z.stored, z.metadata)}<span><span class="pc">payload</span> ${fmtBytes(z.stored)} · <span class="mc">meta</span> ${fmtBytes(z.metadata)}</span></div>
+    <div class="srow"><span class="kind">RATE</span><span>dedupe <b>${ratio(z.logical, z.payload)}</b> · compression <b>${ratio(z.payload, z.stored)}</b>${z.pending ? " · compressing…" : ""}</span>${z.estimate ? '<span class="est">sim est.</span>' : ""}</div></div>`;
 }
 // A Workspace's overlay: its uncommitted changes in the daemon's own database,
 // not in the global Store. Live shows the rows inspect.snapshot reports.
 function overlayHtml(w) {
   const o = w && sim.overlayOf ? sim.overlayOf(w) : null;
   if (!o) return "";
-  if (!o.estimate) return `<div class="store" title="Overlay rows from inspect.snapshot; byte sizes need a product source (issue #329 D)"><div class="srow"><span class="kind">OVERLAY</span><b>${o.inodes} inode${o.inodes === 1 ? "" : "s"}</b><span>${o.entries} director${o.entries === 1 ? "y entry" : "y entries"}</span><span class="est">bytes not reported yet · #329 D</span></div></div>`;
+  if (!o.estimate) return `<div class="store" title="Overlay rows from inspect.snapshot; byte sizes need a product source (issue #329 D)"><div class="srow"><span class="kind">OVERLAY</span><span><b>${o.inodes}</b> inode${o.inodes === 1 ? "" : "s"} · <b>${o.entries}</b> entr${o.entries === 1 ? "y" : "ies"}</span><span class="est">bytes · #329</span></div></div>`;
   const n = o.added + o.modified + o.removed;
-  const tip = "This Workspace's overlay (sim estimate): changed files' bytes as payload, 64 B per changed entry as metadata. It lives in the daemon's database, not in the global Store.";
-  return `<div class="store" title="${esc(tip)}"><div class="srow"><span class="kind">OVERLAY</span><b>${fmtBytes(o.payload + o.metadata)}</b><span class="dim">${n} change${n === 1 ? "" : "s"} · +${o.added} ~${o.modified} −${o.removed}</span><span class="est">sim estimate</span></div>
-    <div class="sbar"><i class="p" style="flex:${o.payload} 0 0"></i><i class="m" style="flex:${o.metadata} 0 0"></i></div>
-    <div class="legend"><span><span class="sw p"></span>payload ${fmtBytes(o.payload)}</span><span><span class="sw m"></span>metadata ${fmtBytes(o.metadata)}</span></div></div>`;
+  const tip = `This Workspace's overlay (sim estimate): ${n} change${n === 1 ? "" : "s"} (+${o.added} added, ~${o.modified} modified, −${o.removed} removed); payload ${fmtBytes(o.payload)} is the changed files' bytes, metadata ${fmtBytes(o.metadata)} is 64 B per changed entry. It lives in the daemon's database, not in the global Store.`;
+  return `<div class="store" title="${esc(tip)}"><div class="srow"><span class="kind">OVERLAY</span><b>${fmtBytes(o.payload + o.metadata)}</b>${bar(o.payload, o.metadata)}<span>+${o.added} ~${o.modified} −${o.removed} · <span class="pc">payload</span> ${fmtBytes(o.payload)} · <span class="mc">meta</span> ${fmtBytes(o.metadata)}</span><span class="est">sim est.</span></div></div>`;
 }
 function renderStatus() {
   const s = sim.s, c = [`<span class="lbl">Sandboxes</span>`];
