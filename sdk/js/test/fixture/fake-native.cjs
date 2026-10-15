@@ -6,7 +6,11 @@ const answer = (op, args) => {
   if (op === "sandbox.service" || op === "sandbox.create") return { value: { kind: "Ready", id: "sb_fake" } };
   if (op === "sandbox.mount") return { value: { path: "/workspaces/w1" } };
   if (op === "sandbox.commit") return { value: { kind: "Committed", head: commit.id, commit } };
-  if (/^fs\.(write|edit|apply|mkdir|rm|cp|mv)$/.test(op)) return { value: { commit } };
+  if (op === "fs.rm") return { value: { kind: "UpToDate", head: "h3ad" } };
+  if (op === "branch.merge") return { value: { kind: "Merged", head: "m3rge" } };
+  if (op === "branch.publish") return { value: { kind: "Added", source: { branch: "feature", commit: "pub1" }, publishedLayer: { id: "lay1" } } };
+  if (op === "branch.fork") return { value: { kind: "Forked", head: "not-a-publication" } };
+  if (/^fs\.(write|edit|apply|mkdir|cp|mv)$/.test(op)) return { value: { commit } };
   if (op === "operator.inspect.snapshot") return { value: { version: "1", workspaces: [] } };
   if (op === "operator.store.stats") return { value: { dedupe: "2", compression: null } };
   return { value: { items: [], hasMore: false } };

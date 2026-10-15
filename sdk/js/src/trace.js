@@ -32,14 +32,21 @@ export function summary(args = {}) {
   return out;
 }
 
-/** The Commit id and its size counters, when the value carries a Commit. */
-function committed(value) {
+/** Methods that publish a Commit (or answer UpToDate with the head). */
+const PUBLISHING = new Set(["fs.write", "fs.edit", "fs.apply", "fs.mkdir", "fs.rm", "fs.cp", "fs.mv", "sandbox.commit", "branch.merge", "branch.publish"]);
+
+/** The Commit id, and its size counters when the value carries the record. A
+ * publishing call names its new Commit (`commit.id`), its merge or UpToDate
+ * head (`head`), or the published source Commit and Layer. */
+function committed(method, value) {
   if (!value || typeof value !== "object") return {};
   const record = value.commit && typeof value.commit === "object" ? value.commit : null;
   const out = {};
   if (value.kind) out.kind = value.kind;
-  const id = record?.id ?? (typeof value.commit === "string" ? value.commit : undefined);
+  const publishing = PUBLISHING.has(method);
+  const id = record?.id ?? (typeof value.commit === "string" ? value.commit : undefined) ?? (publishing ? value.source?.commit ?? value.head : undefined);
   if (id) out.commit = id;
+  if (publishing && value.publishedLayer?.id) out.layer = value.publishedLayer.id;
   if (record && "logical" in record) {
     out.sizes = { logical: record.logical, newCanonical: record.newCanonical, newStored: record.newStored, newMetadata: record.newMetadata };
   }
@@ -59,10 +66,19 @@ function daemon(telemetry) {
   return { timing: roots, ...(timing?.omitted ? { omitted: timing.omitted } : {}), ...rest };
 }
 
+/** The step label for a call: the client's `traceStep`, else
+ * LAYERFS_TRACE_STEP as it is at the call; empty means none. */
+function step(options) {
+  const label = options?.traceStep ?? process.env.LAYERFS_TRACE_STEP;
+  return typeof label === "string" && label ? { step: short(label) } : {};
+}
+
 /** Sends one call once through `send(scope)` and returns the binding's
- * answer. When `file` is set the call is traced: `send` gets a fresh scope,
- * the answer's telemetry goes to the trace line and is removed from it. */
-export async function traced(file, method, args, send) {
+ * answer. When `options.trace` names a file the call is traced: `send` gets
+ * a fresh scope, the answer's telemetry goes to the trace line and is
+ * removed from it. */
+export async function traced(options, method, args, send) {
+  const file = options?.trace;
   if (!file) return send(null);
   const id = `${RUN}-${++next}`;
   const scope = randomBytes(32).toString("hex");
@@ -70,7 +86,7 @@ export async function traced(file, method, args, send) {
   const began = performance.now();
   let line;
   try {
-    line = { layerfs_trace: 1, id, method, args: summary(args), start: start.toISOString(), scope };
+    line = { layerfs_trace: 1, id, ...step(options), method, args: summary(args), start: start.toISOString(), scope };
   } catch {
     line = { layerfs_trace: 1, id, method, args: null, start: start.toISOString(), scope };
   }
@@ -86,7 +102,7 @@ export async function traced(file, method, args, send) {
   try {
     const result = plain.refused
       ? { ok: false, code: plain.refused.code, message: plain.refused.message }
-      : { ok: true, ...committed(plain.value) };
+      : { ok: true, ...committed(method, plain.value) };
     write(file, { ...line, ms, ...result, ...(telemetry ? { daemon: telemetry.map(daemon) } : {}) });
   } catch {
     write(file, { ...line, ms, ok: !plain.refused });

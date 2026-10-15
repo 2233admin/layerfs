@@ -35,6 +35,7 @@ private service Sandbox. Mount does not scan or materialize the complete tree.
 | `LAYERFS_DAEMON` | Host path to the built Linux daemon executable. |
 | `LAYERFS_NATIVE` | Optional addon path; defaults to `native/layerfs.node`. |
 | `LAYERFS_TRACE` | Optional per-call trace file (see [Call trace](#call-trace)); unset means no trace. |
+| `LAYERFS_TRACE_STEP` | Optional step label put on each trace line as `step`; read at every call. |
 
 The same authorized home permits a fresh Node process to use a saved Sandbox id
 and mount path directly. Reopening validates the full container id, deployment,
@@ -145,18 +146,19 @@ JavaScript methods make before the call (for example `page` bounds) are refused
 without a trace line.
 
 ```json
-{"layerfs_trace":1,"id":"9f3c21aa-12","method":"fs.write","args":{"branch":"feature","path":"/README.md","contentBytes":6,"message":"Update introduction","sandbox":"sb_…"},"start":"2026-10-15T09:12:01.120Z","scope":"…","ms":41.733,"ok":true,"commit":"…","sizes":{"logical":120,"newCanonical":40,"newStored":30,"newMetadata":8},"daemon":[{"timing":[{"name":"files.bind","ms":1.2,"children":[…]},{"name":"commit","ms":30.4,"children":[…]}],"storage":{…},"construction":{…}}]}
+{"layerfs_trace":1,"id":"9f3c21aa-12","step":"add product page","method":"fs.write","args":{"branch":"feature","path":"/README.md","contentBytes":6,"message":"Update introduction","sandbox":"sb_…"},"start":"2026-10-15T09:12:01.120Z","scope":"…","ms":41.733,"ok":true,"commit":"…","sizes":{"logical":120,"newCanonical":40,"newStored":30,"newMetadata":8},"daemon":[{"timing":[{"name":"files.bind","ms":1.2,"children":[…]},{"name":"commit","ms":30.4,"children":[…]}],"storage":{…},"construction":{…}}]}
 ```
 
 | Field | Meaning |
 | --- | --- |
 | `layerfs_trace` | Format version, `1`. |
 | `id` | `<run>-<n>`: a random per-process run prefix and the call's sequence number. |
+| `step` | The step label, cut to 200 characters; absent when none is set. |
 | `method` | The binding method, for example `fs.read`, `sandbox.commit`, `operator.store.stats`. |
 | `args` | Short summary: text arguments (paths, refs, names, Sandbox id, command, message) cut to 200 characters; numbers and flags; `content`, `bytes`, `oldText` and `newText` as `<name>Bytes` byte counts; `apply` changes as `changes` (count) and `changeBytes`. Never file contents; `project`, `home` and `deploy` are left out. |
 | `start`, `ms` | Wall-clock start (ISO 8601) and elapsed wall milliseconds measured in the calling process, including the native queue and the daemon round trip. |
 | `ok` | `true` for a value; `false` with `code` and `message` for a refusal. |
-| `kind`, `commit`, `sizes` | When the value carries them: its `kind`, the Commit id, and that Commit's `logical`, `newCanonical`, `newStored` and `newMetadata` byte counters. |
+| `kind`, `commit`, `layer`, `sizes` | The value's `kind`. Every publishing call that succeeds (`fs` write, edit, apply, mkdir, rm, cp, mv, `sandbox.commit`, `branch.merge`, `branch.publish`) names a `commit`: its new Commit, or the head it was `UpToDate` with; `branch.publish` names the published source Commit and the new `layer`. `sizes` (`logical`, `newCanonical`, `newStored`, `newMetadata`) appear only when the reply carries the Commit record (`fs` writes and `sandbox.commit` that commit); join `commit` to `operator.store.commits` for the rest. No call is added to fetch them. |
 | `scope` | 64 hex characters: the fresh daemon observation scope this call's control exchanges carried. |
 | `daemon` | One entry per traced control exchange the call made (a mount makes at least three: Branch lookup, bind, attach). Absent when the call reached no daemon (for example `project.init`). |
 
@@ -183,6 +185,12 @@ Each output line is one daemon call: `daemon`, `scope`, `call`, `operation`,
 `complete`, the joined trace `id` as `trace`, and named `sections` (unavailable
 sections are `null`, never zero). Values are cumulative daemon counters at that
 call, not per-call deltas. The container is the Sandbox id without `sb_`.
+
+A step label groups lines by the caller's own unit of work, such as an agent's
+step. `LAYERFS_TRACE_STEP` is read at each call, so a long-lived process can
+change it between calls; `new LayerFS(project, { trace, traceStep })`, or
+setting `layerfs.options.traceStep` later, overrides it. Unset or empty, lines
+have no `step`. A label alone traces nothing.
 
 Concurrent calls append whole lines; order follows completion, so join by `id`.
 The trace is diagnostic timing, not a benchmark measurement. Off means no scope,

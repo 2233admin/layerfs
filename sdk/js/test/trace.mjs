@@ -13,6 +13,7 @@ Object.assign(process.env, {
   LAYERFS_IMAGE: "fake-image", LAYERFS_VOLUME: "fake-volume", LAYERFS_DAEMON: "/fake/daemon",
 });
 delete process.env.LAYERFS_TRACE;
+delete process.env.LAYERFS_TRACE_STEP;
 const { LayerFS } = await import("@layerfs/sdk");
 const { LayerFSOperator } = await import("@layerfs/sdk/operator");
 
@@ -119,11 +120,36 @@ try {
     assert.equal(refused.ok, false);
     assert.equal(refused.code, "NoSuchPath");
     assert.match(refused.message, /does not exist/);
+    // Every publishing call names its Commit; other calls name none.
+    assert.equal(lines.find((line) => line.method === "branch.merge").commit, "m3rge");
+    const publish = lines.find((line) => line.method === "branch.publish");
+    assert.deepEqual([publish.commit, publish.layer], ["pub1", "lay1"]);
+    const rm = lines.find((line) => line.method === "fs.rm");
+    assert.deepEqual([rm.kind, rm.commit], ["UpToDate", "h3ad"]);
+    const PUBLISHING = ["fs.write", "fs.edit", "fs.apply", "fs.mkdir", "fs.rm", "fs.cp", "fs.mv", "sandbox.commit", "branch.merge", "branch.publish"];
+    for (const line of lines) assert.equal("commit" in line, PUBLISHING.includes(line.method) && line.ok, line.method);
+    // Unset, no line has a step.
+    assert.ok(lines.every((line) => !("step" in line)));
+    // The step label is read at each call, bounded, and the option wins.
+    const stepped = join(dir, "step.jsonl");
+    const labelled = new LayerFS("website", { trace: stepped });
+    for (const label of ["install deps", "s".repeat(300), undefined, ""]) {
+      if (label === undefined) delete process.env.LAYERFS_TRACE_STEP; else process.env.LAYERFS_TRACE_STEP = label;
+      await labelled.project.list_branches();
+    }
+    labelled.options.traceStep = "option step";
+    process.env.LAYERFS_TRACE_STEP = "environment step";
+    await labelled.project.list_branches();
+    delete process.env.LAYERFS_TRACE_STEP;
+    const steps = readFileSync(stepped, "utf8").trimEnd().split("\n").map((line) => JSON.parse(line)).filter((line) => line.method === "project.list_branches").map((line) => line.step);
+    assert.deepEqual(steps, ["install deps", `${"s".repeat(200)}…`, undefined, undefined, "option step"]);
     // The client option overrides the environment.
     const other = join(dir, "option.jsonl");
     await new LayerFS("website", { trace: other }).project.list_branches();
     assert.equal(readFileSync(other, "utf8").trimEnd().split("\n").length, 2);
   } else if (selected === "off") {
+    // A step label alone traces nothing.
+    process.env.LAYERFS_TRACE_STEP = "unused step";
     const results = await script(new LayerFS("website"));
     assert.equal(results.at(29).code, "NoSuchPath");
     assert.equal(existsSync(file), false);
