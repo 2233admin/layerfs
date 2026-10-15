@@ -1,9 +1,9 @@
 //! Differences between saved snapshots: two files, two Commits, two Branches.
 //!
-//! Tree differences come from Content's path-level root comparison, file
-//! differences from its bounded line difference. A directory whose only change
-//! is its children is not listed, as in the simulator. Every answer fits one
-//! control record: tree differences resume after `nextCursor`, and a file's
+//! Tree differences use Content's bounded directory listings and grouped inode
+//! demands; file differences use its bounded line difference. A directory whose
+//! only change is its children is not listed, as in the simulator. Every answer
+//! fits one control record: tree differences resume after `nextPagePos`, and a file's
 //! lines that do not fit the remaining budget are left out (`hunksOmitted`)
 //! for `fs.diff_files` to show.
 use super::args::{self, invalid, refuse, text, Answer};
@@ -137,12 +137,12 @@ fn change(
     if let (Some(l), Some(r)) = (change.left, change.right) {
         let directories = l.value.kind == InodeKind::Directory && l.value.kind == r.value.kind;
         identity = l.serial != r.serial;
-        if directories && !identity {
+        metadata = l.value.metadata_root != r.value.metadata_root;
+        if directories && !identity && !metadata {
             return Ok(None);
         }
         content = !directories
             && (l.value.kind != r.value.kind || l.value.content_root != r.value.content_root);
-        metadata = l.value.metadata_root != r.value.metadata_root;
         if content && l.value.kind == InodeKind::RegularFile && r.value.kind == l.value.kind {
             if let (Some(a), Some(b)) = (
                 snapshot::text(reader, Some(l))?,
@@ -178,6 +178,9 @@ fn changes(
     args: &SdkValue,
 ) -> Result<(Vec<SdkValue>, SdkValue), SdkRefusal> {
     let (limit, pos) = args::paging(args)?;
+    if left.root == right.root {
+        return Ok((Vec::new(), SdkValue::Null));
+    }
     let mut l = super::window::Walker::new(reader, left, "/")?;
     let mut r = super::window::Walker::new(reader, right, "/")?;
     let (mut a, mut b) = (l.next()?, r.next()?);

@@ -9,7 +9,7 @@ use layerfs_content::{
         path::PathName,
         sorted::DirectoryRoot,
     },
-    object::inode_leaf::InodeKind,
+    object::inode_leaf::{InodeKind, InodeValue},
 };
 
 pub(crate) const BYTES: usize = 48 * 1024;
@@ -138,11 +138,29 @@ fn line(bytes: &mut Vec<u8>, length: usize, matched: bool) -> Line {
     }
 }
 
-/// One directory frame holds one continuation, rather than all child names.
+/// Names and inode demands acquired together, bounded independently of the tree.
+const DIRECTORY_WINDOW: usize = 64;
+const DIRECTORY_BYTES: usize = 8192;
+type Child = (PathName, u64, Option<InodeValue>);
+
+/// One directory frame retains one bounded window and its next-name boundary.
 struct Frame {
     path: String,
     entry: EntryFacts,
     after: Option<PathName>,
+    pending: std::vec::IntoIter<Child>,
+    exhausted: bool,
+}
+impl Frame {
+    fn new(path: String, entry: EntryFacts) -> Self {
+        Self {
+            path,
+            entry,
+            after: None,
+            pending: Vec::new().into_iter(),
+            exhausted: false,
+        }
+    }
 }
 
 pub(crate) struct Walker<'a> {
@@ -159,14 +177,7 @@ impl<'a> Walker<'a> {
     ) -> Result<Self, SdkRefusal> {
         let entry = snapshot::existing(reader, snap, path)?;
         let (stack, top) = if entry.value.kind == InodeKind::Directory {
-            (
-                vec![Frame {
-                    path: path.to_owned(),
-                    entry,
-                    after: None,
-                }],
-                None,
-            )
+            (vec![Frame::new(path.to_owned(), entry)], None)
         } else {
             (Vec::new(), Some((path.to_owned(), entry)))
         };
@@ -182,34 +193,45 @@ impl<'a> Walker<'a> {
             return Ok(Some(top));
         }
         while let Some(frame) = self.stack.last_mut() {
-            let page = list_after(
-                self.reader,
-                DirectoryRoot(frame.entry.value.content_root),
-                frame.after.as_ref(),
-                1,
-                8192,
-                &mut DirectoryReadWork::default(),
-            )
-            .map_err(args::content)?;
-            let Some((name, serial)) = page.entries.into_iter().next() else {
+            if frame.pending.len() == 0 && !frame.exhausted {
+                let page = list_after(
+                    self.reader,
+                    DirectoryRoot(frame.entry.value.content_root),
+                    frame.after.as_ref(),
+                    DIRECTORY_WINDOW,
+                    DIRECTORY_BYTES,
+                    &mut DirectoryReadWork::default(),
+                )
+                .map_err(args::content)?;
+                frame.exhausted = page.continuation.is_none();
+                frame.after = page.continuation;
+                let serials = page
+                    .entries
+                    .iter()
+                    .map(|(_, serial)| *serial)
+                    .collect::<Vec<_>>();
+                let values = self
+                    .snap
+                    .tree
+                    .values(self.reader, &serials)
+                    .map_err(args::content)?;
+                frame.pending = page
+                    .entries
+                    .into_iter()
+                    .zip(values)
+                    .map(|((name, serial), value)| (name, serial, value))
+                    .collect::<Vec<_>>()
+                    .into_iter();
+            }
+            let Some((name, serial, value)) = frame.pending.next() else {
                 self.stack.pop();
                 continue;
             };
             let path = layerfs_content::compare::tree::join(&frame.path, &name);
-            frame.after = Some(name);
-            let value = self
-                .snap
-                .tree
-                .value(self.reader, serial)
-                .map_err(args::content)?
-                .ok_or_else(|| args::failed("missing bound inode"))?;
+            let value = value.ok_or_else(|| args::failed("missing bound inode"))?;
             let entry = EntryFacts { serial, value };
             if value.kind == InodeKind::Directory {
-                self.stack.push(Frame {
-                    path: path.clone(),
-                    entry,
-                    after: None,
-                });
+                self.stack.push(Frame::new(path.clone(), entry));
             }
             return Ok(Some((path, entry)));
         }
