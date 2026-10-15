@@ -1,13 +1,15 @@
-# Issue 334 bug ledger
+# Issue #334 bug ledger
 
 > **Status:** Current planning checklist; no release candidate exists.
 
-All observations are diagnostic, tracing on, without cache control. Durable is
-`NOT_RUN — disabled by owner until explicit reauthorization`.
+Raw run evidence is retained under `core/target/issue334/`; timings here are
+diagnostic, not performance qualification. Global Store execution uses explicitly
+selected Disposable/WAL/OFF. Durable: NOT_RUN — disabled by owner until explicit
+reauthorization.
 
-| ID | Phase / step | Symptom | Evidence | Root cause | Fix commit | Regression / verification | Status |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| BUG-001 | A / 025, 031 | `fs.glob("work", "test/**/*.test.js", "/")` omits `/test/cart.test.js`, returns only `/test/routes/cart-api.test.js`; `src/**/*.js` returns empty for direct children | `phase-a/fs-read-01.out`, `fs-read-07.out`, `trace.jsonl` | Not yet diagnosed; assigned to Builder 1 | pending | Live explicit fixture contains both paths; regression pending | OPEN; does not block Phase A |
+| ID | Phase / step | Symptom and evidence | Root cause | Fix commit | Regression / verification | State |
+| --- | --- | --- | --- | --- | --- | --- |
+| BUG-001 | A / 025, 031 (`fs-read-01`, `fs-read-07`); B / 005 | `fs.glob('work', 'test/**/*.test.js', '/')` omitted `/test/cart.test.js`; `src/**/*.js` omitted direct children. Phase A outputs and trace retained. | Shared `Rule` parser treated `**` and its following `/` independently: the wildcard could match zero characters but the slash was mandatory. | This commit (shared pattern matcher and skill) | External `layerfs-content/tests/glob_directories.rs`: all three tests failed before the fix (`phase-b/glob-before.out`), pass after (`glob-after.out`). All Content tests/examples pass; scoped Clippy, boundary guard and its 50 self-tests pass. Rebuilt daemon and host addon; live SDK step 005 returned `/test/health.test.js` from `test/**/*.test.js`. | FIXED |
 
 ## Skill gaps corrected in Phase A
 

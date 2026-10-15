@@ -214,7 +214,7 @@ Finds paths matching a glob pattern.
 
 | Arg | Type | Required | Meaning |
 | --- | --- | --- | --- |
-| `pattern` | string | yes | `*` and `?` match within one name; `**` spans folders; at this source, `**/` requires a folder and omits direct children (issue #334 BUG-001) |
+| `pattern` | string | yes | `*` and `?` match within one name; `**` spans folders; `**/` at a name boundary matches zero or more folders, including direct children |
 | `path` | string | no | Where to search, default `/` |
 
 **Returns:** a page whose `items` are absolute path strings.
@@ -235,6 +235,13 @@ const tests = await layerfs.fs.glob("work", "test/**/*.test.js", "/");
   "nextPagePos": null
 }
 ```
+
+The output above preserves the Phase A capture at `b30e4fb8f`, which exposed
+issue #334 BUG-001 by omitting a direct child. After the matcher fix, Phase B
+step 005 checked `fs.glob('work', 'test/**/*.test.js', '/')` against the new
+project and returned `items: ['/test/health.test.js']`; its full reply is retained
+in `core/target/issue334/phase-b/005-test-m1.out`. The external matcher regression
+also covers direct children and several nested levels.
 
 ## `fs.diff_files(leftRef, leftPath, rightRef, rightPath)`
 

@@ -72,6 +72,10 @@ The `/.lww` rules are gitignore-style, with `%include <file>`. They are read
 from the side `RulesFrom` names: theirs for a Workspace Commit, ours for a
 Branch merge.
 
+The same matcher serves `fs.glob`. A `**/` segment at a name boundary matches
+zero or more complete directory names, so `src/**/*.js` includes both
+`/src/cart.js` and `/src/web/cart.js`. A single `*` stays within one name.
+
 `paths_with_markers(reader, root, paths, timing)` reports which of the named
 paths are text files that still hold a complete marker block (an opening
 `<<<<<<< ` line, a later `=======` line and a later `>>>>>>> ` line).
