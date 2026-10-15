@@ -3,8 +3,8 @@ use layerfs_bridge::control::*;
 use layerfs_content::ObjectId;
 use layerfs_history::{
     error::MovedState, BranchId, BranchRecord, BranchSnapshot, CommitHistoryRequest, CommitId,
-    CommitRecord, CommitStagedOutcome, ForkRequest, ForkSource, HistoryName, LayerId, LayerStackId,
-    Page, PageResult, WorkspaceId,
+    CommitMeta, CommitOutcome, CommitRecord, CommitVia, ForkRequest, ForkSource, HistoryName,
+    LayerId, LayerStackId, Page, PageResult, WorkspaceId,
 };
 fn binding() -> BranchSnapshot {
     let root = ObjectId::for_bytes(b"control root");
@@ -37,6 +37,8 @@ fn record() -> CommitRecord {
         root: value.effective_root,
         parent: None,
         base_layer: value.branch.base_layer,
+        second_parent: None,
+        meta: CommitMeta::new(CommitVia::Workspace),
     }
 }
 #[test]
@@ -48,9 +50,17 @@ fn commands_are_bounded_exact_and_reject_every_truncated_prefix() {
             workspace: token.workspace,
             branch: binding.branch.id,
         },
-        Request::Commit(token),
+        Request::Commit(CommitControl {
+            token,
+            force: false,
+            agent: Some("agent".into()),
+            call: None,
+        }),
         Request::Status(token),
-        Request::Unmount(token),
+        Request::Unmount(UnmountControl {
+            token,
+            discard: true,
+        }),
         Request::Attach(token),
         Request::Locate(token.workspace),
         Request::Fork(ForkRequest {
@@ -116,7 +126,10 @@ fn commands_are_bounded_exact_and_reject_every_truncated_prefix() {
 fn replies_preserve_scoped_status_conflict_and_known_publication() {
     let binding = binding();
     let token = token();
-    let outcome = CommitStagedOutcome::Committed(record());
+    let outcome = CommitOutcome::Committed {
+        record: Box::new(record()),
+        displaced: None,
+    };
     let replies = [
         Reply::Bound {
             token,

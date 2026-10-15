@@ -4,7 +4,7 @@ use layerfs_api::{
     WorkspaceApi,
 };
 use layerfs_bridge::{
-    control::{Answer, Call, CleanupObservation, Reply, Request, WorkspaceToken},
+    control::{Answer, Call, CleanupObservation, Reply, Request, UnmountControl, WorkspaceToken},
     duplex,
 };
 use layerfs_history::WorkspaceId;
@@ -143,7 +143,14 @@ fn unmount_force_selects_one_original_request_without_unknown_relinquishment() {
                     detail: "original owner retained".into(),
                 })
             } else {
-                assert_eq!(call.request, Request::Unmount(token()));
+                // The plain facade unmount discards uncommitted changes.
+                assert_eq!(
+                    call.request,
+                    Request::Unmount(UnmountControl {
+                        token: token(),
+                        discard: true,
+                    })
+                );
                 Reply::Unmounted(token())
             };
             channel

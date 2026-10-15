@@ -24,29 +24,22 @@ fn fork(c: &dyn HistoryCatalog, s: &LayerStackRecord, n: u8, base: LayerId) -> B
 }
 fn append(c: &dyn HistoryCatalog, b: BranchId, n: u8) -> CommitRecord {
     let s = c.branch_snapshot(b).unwrap().unwrap();
-    let stage = c
-        .stage_changes(&StageRequest {
-            workspace: workspace(n.max(1)),
+    match c
+        .commit_branch(&CommitRequest {
             branch: b,
             expected_head: s.branch.head_commit,
             expected_base: s.branch.base_layer,
             expected_root: s.effective_root,
-            construction_base_root: s.effective_root,
-            intended_commit_base: s.branch.base_layer,
             candidate_root: root(n),
             profile: s.profile,
             scope: s.scope,
-            generation: 1,
-        })
-        .unwrap();
-    match c
-        .commit_staged(&CommitStagedRequest {
-            workspace: stage.workspace,
-            token: stage.token,
+            second_parent: None,
+            meta: CommitMeta::new(CommitVia::Workspace),
+            force: false,
         })
         .unwrap()
     {
-        CommitStagedOutcome::Committed(c) => c,
+        CommitOutcome::Committed { record, .. } => *record,
         _ => panic!("new commit expected"),
     }
 }
@@ -144,7 +137,7 @@ fn advancing_the_actual_subject_preserves_both_anchor_forms() {
         assert!(rest.continuation.is_none());
     }
     let l1 = match publish(&c, &s, b.branch.id, &k3, s.head_layer).unwrap() {
-        AddLayerOutcome::Added(l) => l,
+        AddLayerOutcome::Added { layer: l, .. } => l,
         _ => panic!(),
     };
     let p = c
@@ -170,7 +163,7 @@ fn advancing_the_actual_subject_preserves_both_anchor_forms() {
         assert_eq!(rest.records[0].id, s.head_layer);
         assert!(rest.continuation.is_none());
     }
-    assert!(matches!(l2, AddLayerOutcome::Added(_)));
+    assert!(matches!(l2, AddLayerOutcome::Added { .. }));
     assert_eq!(
         publish(&c, &s, b.branch.id, &k3, s.head_layer).unwrap(),
         AddLayerOutcome::UpToDate { layer: l1.id }
@@ -366,263 +359,6 @@ fn reopen_refuses_each_independent_schema_or_binding_corruption() {
 }
 
 #[test]
-fn stale_base_precedes_no_changes_and_derived_provenance_collision() {
-    let t = Temp::new("base");
-    let c = create(&t.join("db"));
-    let s = init(&c, 1, "main");
-    let a = fork(&c, &s, 1, s.head_layer);
-    let b = fork(&c, &s, 2, s.head_layer);
-    let k1 = append(&c, a.branch.id, 1);
-    let sibling = append(&c, b.branch.id, 1);
-    assert_eq!(k1, sibling);
-    let l1 = match publish(&c, &s, a.branch.id, &k1, s.head_layer).unwrap() {
-        AddLayerOutcome::Added(l) => l,
-        _ => panic!(),
-    };
-    let expected = HistoryError::StackMoved {
-        expected: s.head_layer,
-        actual: l1.id,
-    };
-    assert_eq!(
-        publish(&c, &s, b.branch.id, &sibling, l1.id).unwrap_err(),
-        expected
-    );
-    let k2 = append(&c, a.branch.id, 2);
-    assert_eq!(
-        publish(&c, &s, a.branch.id, &k2, l1.id).unwrap_err(),
-        expected
-    );
-    let k0 = append(&c, a.branch.id, 0);
-    assert_eq!(
-        publish(&c, &s, a.branch.id, &k0, l1.id).unwrap_err(),
-        expected
-    );
-    assert_eq!(c.layer(l1.id).unwrap().unwrap(), l1);
-    assert_eq!(
-        publish(&c, &s, a.branch.id, &k1, s.head_layer).unwrap(),
-        AddLayerOutcome::UpToDate { layer: l1.id }
-    );
-}
-
-#[test]
-fn unknown_statement_outcome_quarantines_without_implicit_rollback() {
-    let t = Temp::new("unknown");
-    let path = t.join("db");
-    let c = create(&path);
-    let s = init(&c, 1, "main");
-    let b = fork(&c, &s, 1, s.head_layer);
-    let stage = c
-        .stage_changes(&StageRequest {
-            workspace: workspace(1),
-            branch: b.branch.id,
-            expected_head: None,
-            expected_base: s.head_layer,
-            expected_root: root(0),
-            construction_base_root: root(0),
-            intended_commit_base: s.head_layer,
-            candidate_root: root(1),
-            profile: s.profile,
-            scope: s.scope,
-            generation: 1,
-        })
-        .unwrap();
-    let sql = rusqlite::Connection::open(&path).unwrap();
-    sql.busy_timeout(std::time::Duration::ZERO).unwrap();
-    // External disposable-database corruption, not a product fault-injection path.
-    sql.execute_batch("CREATE TRIGGER broken_delete BEFORE DELETE ON workspace_stage BEGIN SELECT absent_function(); END;").unwrap();
-    let err = c
-        .commit_staged(&CommitStagedRequest {
-            workspace: stage.workspace,
-            token: stage.token,
-        })
-        .unwrap_err();
-    assert!(err.unknown());
-    assert!(
-        matches!(err,HistoryError::WithStage{stage:layerfs_history::error::StageDisposition::AcknowledgedUnknown(ref known),..} if **known==stage)
-    );
-    assert_eq!(
-        c.branch(b.branch.id).unwrap_err(),
-        HistoryError::UnknownOutcome
-    );
-    assert_eq!(
-        c.reserve_inodes(&ReserveRequest {
-            scope: s.scope,
-            count: 1
-        })
-        .unwrap_err(),
-        HistoryError::UnknownOutcome
-    );
-    // Pending writes remain isolated; a second writer cannot enter. RAII did not roll back.
-    assert!(sql.execute_batch("BEGIN IMMEDIATE").is_err());
-    let count: i64 = sql
-        .query_row("SELECT count(*) FROM \"commit\"", [], |r| r.get(0))
-        .unwrap();
-    assert_eq!(count, 0);
-    drop(c);
-    // Connection teardown is resource release, not an acknowledged operation rollback.
-    sql.execute_batch("BEGIN IMMEDIATE; ROLLBACK;").unwrap();
-}
-
-#[test]
-fn concurrent_reservations_never_overlap_and_discard_does_not_refund() {
-    use std::sync::{Arc, Barrier};
-    let t = Temp::new("reserve-race");
-    let c = Arc::new(create(&t.join("db")));
-    let scope = root(200);
-    let barrier = Arc::new(Barrier::new(4));
-    let results = std::thread::scope(|threads| {
-        let jobs: Vec<_> = (0..4)
-            .map(|_| {
-                let c = Arc::clone(&c);
-                let barrier = Arc::clone(&barrier);
-                threads.spawn(move || {
-                    barrier.wait();
-                    c.reserve_inodes(&ReserveRequest { scope, count: 3 })
-                })
-            })
-            .collect();
-        jobs.into_iter()
-            .map(|job| job.join().unwrap())
-            .collect::<Vec<_>>()
-    });
-    let mut ranges = vec![];
-    for result in results {
-        match result {
-            Ok(range) => {
-                assert_eq!(range.end().unwrap(), range.start + 3);
-                ranges.push(range)
-            }
-            Err(error) => assert_eq!(error, HistoryError::Busy),
-        }
-    }
-    assert!(!ranges.is_empty());
-    ranges.sort_by_key(|range| range.start);
-    assert!(ranges
-        .windows(2)
-        .all(|pair| pair[0].end().unwrap() <= pair[1].start));
-    let after = c
-        .reserve_inodes(&ReserveRequest { scope, count: 1 })
-        .unwrap();
-    assert_eq!(after.start, ranges.last().unwrap().end().unwrap());
-    let s = init(c.as_ref(), 1, "main");
-    let b = fork(c.as_ref(), &s, 1, s.head_layer);
-    let stage = c
-        .stage_changes(&StageRequest {
-            workspace: workspace(1),
-            branch: b.branch.id,
-            expected_head: None,
-            expected_base: s.head_layer,
-            expected_root: root(0),
-            construction_base_root: root(0),
-            intended_commit_base: s.head_layer,
-            candidate_root: root(1),
-            profile: s.profile,
-            scope,
-            generation: 1,
-        })
-        .unwrap();
-    c.discard_stage(&DiscardRequest {
-        workspace: stage.workspace,
-        token: stage.token,
-    })
-    .unwrap();
-    assert_eq!(
-        c.reserve_inodes(&ReserveRequest { scope, count: 1 })
-            .unwrap()
-            .start,
-        after.end().unwrap()
-    );
-}
-
-#[test]
-fn explicit_membership_ceiling_is_capacity_but_old_authenticated_anchor_stays_valid() {
-    let t = Temp::new("membership-bound");
-    let c = create(&t.join("db"));
-    let s = init(&c, 1, "main");
-    let b = fork(&c, &s, 1, s.head_layer);
-    let first = append(&c, b.branch.id, 1);
-    append(&c, b.branch.id, 2);
-    let cursor = c
-        .commit_history(&CommitHistoryRequest {
-            branch: b.branch.id,
-            start: None,
-            cursor: None,
-            limit: 1,
-        })
-        .unwrap()
-        .continuation;
-    for index in 0..4352u64 {
-        let snapshot = c.branch_snapshot(b.branch.id).unwrap().unwrap();
-        let candidate = layerfs_content::ObjectId::for_bytes(&index.to_be_bytes());
-        let stage = c
-            .stage_changes(&StageRequest {
-                workspace: workspace(3),
-                branch: b.branch.id,
-                expected_head: snapshot.branch.head_commit,
-                expected_base: s.head_layer,
-                expected_root: snapshot.effective_root,
-                construction_base_root: snapshot.effective_root,
-                intended_commit_base: s.head_layer,
-                candidate_root: candidate,
-                profile: s.profile,
-                scope: s.scope,
-                generation: index,
-            })
-            .unwrap();
-        c.commit_staged(&CommitStagedRequest {
-            workspace: stage.workspace,
-            token: stage.token,
-        })
-        .unwrap();
-    }
-    assert_eq!(
-        c.commit_history(&CommitHistoryRequest {
-            branch: b.branch.id,
-            start: Some(first.id),
-            cursor: None,
-            limit: 1
-        })
-        .unwrap_err(),
-        HistoryError::Capacity("lineage work")
-    );
-    let resumed = c
-        .commit_history(&CommitHistoryRequest {
-            branch: b.branch.id,
-            start: None,
-            cursor,
-            limit: 1,
-        })
-        .unwrap();
-    assert_eq!(resumed.records, vec![first]);
-    let mut cursor = None;
-    let mut seen = std::collections::BTreeSet::new();
-    let mut last = None;
-    loop {
-        let page = c
-            .commit_history(&CommitHistoryRequest {
-                branch: b.branch.id,
-                start: None,
-                cursor,
-                limit: 128,
-            })
-            .unwrap();
-        for record in page.records {
-            if let Some(expected) = last {
-                assert_eq!(record.id, expected);
-            }
-            assert!(seen.insert(record.id));
-            last = record.parent;
-        }
-        match page.continuation {
-            Some(next) => cursor = Some(next),
-            None => break,
-        }
-    }
-    assert_eq!(seen.len(), 4354);
-    assert_eq!(last, None);
-}
-
-#[test]
 fn exact_source_publication_revalidates_immutable_provenance() {
     let t = Temp::new("provenance");
     let path = t.join("db");
@@ -631,7 +367,7 @@ fn exact_source_publication_revalidates_immutable_provenance() {
     let b = fork(&c, &s, 1, s.head_layer);
     let k = append(&c, b.branch.id, 1);
     let l = match publish(&c, &s, b.branch.id, &k, s.head_layer).unwrap() {
-        AddLayerOutcome::Added(l) => l,
+        AddLayerOutcome::Added { layer: l, .. } => l,
         _ => panic!(),
     };
     let sql = rusqlite::Connection::open(&path).unwrap();

@@ -1,10 +1,10 @@
-//! Real v4 C5 fork/stage/commit/layer transitions on supplied shared authority.
+//! Real v4 C5 fork/commit/layer transitions on supplied shared authority.
 #![allow(dead_code)]
 use layerfs_content::{filesystem::root::profile_id, InodeScope, ObjectId};
 use layerfs_history::{
-    AddLayerOutcome, AddLayerRequest, BranchId, CommitId, CommitStagedOutcome, CommitStagedRequest,
-    ForkRequest, ForkSource, HistoryCatalog, HistoryCatalogConfig, HistoryError, HistoryName,
-    HistoryResult, LayerId, LayerStackId, StackInitialization, StageRequest, WorkspaceId,
+    AddLayerOutcome, AddLayerRequest, BranchId, CommitId, CommitMeta, CommitOutcome, CommitRequest,
+    CommitVia, ForkRequest, ForkSource, HistoryCatalog, HistoryCatalogConfig, HistoryError,
+    HistoryName, HistoryResult, LayerId, LayerStackId, StackInitialization,
 };
 pub fn config() -> HistoryCatalogConfig {
     HistoryCatalogConfig {
@@ -20,9 +20,6 @@ fn branch(ordinal: usize) -> BranchId {
     let mut body = [0x29; 16];
     body[15] = ordinal as u8;
     BranchId::from_authority(body)
-}
-fn workspace() -> WorkspaceId {
-    WorkspaceId::from_authority([0x2a; 32]).expect("fixed nonzero authority")
 }
 
 /// C5 identity returned by one timed state publication.
@@ -92,24 +89,19 @@ impl<'a> RetainedHistory<'a> {
             .catalog
             .branch_snapshot(branch(ordinal))?
             .ok_or(HistoryError::Integrity("retained Branch"))?;
-        let stage = self.catalog.stage_changes(&StageRequest {
-            workspace: workspace(),
+        let commit = match self.catalog.commit_branch(&CommitRequest {
             branch: branch(ordinal),
             expected_head: old.branch.head_commit,
             expected_base: old.branch.base_layer,
             expected_root: old.effective_root,
-            construction_base_root: old.effective_root,
-            intended_commit_base: old.branch.base_layer,
             candidate_root: root,
             profile: old.profile,
             scope: old.scope,
-            generation: ordinal as u64,
-        })?;
-        let commit = match self.catalog.commit_staged(&CommitStagedRequest {
-            workspace: workspace(),
-            token: stage.token,
+            second_parent: None,
+            meta: CommitMeta::new(CommitVia::Workspace),
+            force: false,
         })? {
-            CommitStagedOutcome::Committed(commit) => commit,
+            CommitOutcome::Committed { record, .. } => *record,
             _ => {
                 return Err(HistoryError::Integrity(
                     "retained state requires a new Commit",
@@ -123,7 +115,7 @@ impl<'a> RetainedHistory<'a> {
             expected_stack_head: self.head,
             expected_branch_base: old.branch.base_layer,
         })? {
-            AddLayerOutcome::Added(layer) => layer,
+            AddLayerOutcome::Added { layer, .. } => layer,
             _ => {
                 return Err(HistoryError::Integrity(
                     "retained state requires a new Layer",
@@ -167,7 +159,11 @@ pub fn verify(
             None
         } else {
             let base = parent.expect("non-genesis has a parent");
-            let commit_id = CommitId::derive(root, None, base);
+            let meta = CommitMeta {
+                branch: Some(branch(index + 1)),
+                ..CommitMeta::new(CommitVia::Workspace)
+            };
+            let commit_id = CommitId::derive(root, None, base, None, &meta);
             let commit = catalog
                 .commit(commit_id)?
                 .ok_or(HistoryError::Integrity("retained Commit"))?;
@@ -200,7 +196,6 @@ pub fn verify(
         || snapshot.scope != scope.object()
         || snapshot.profile != profile_id()
         || held_stack.head_layer != parent.expect("nonempty")
-        || catalog.stage(workspace())?.is_some()
     {
         return Err(HistoryError::Integrity("retained final context"));
     }

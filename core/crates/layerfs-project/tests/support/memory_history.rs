@@ -77,12 +77,6 @@ impl HistoryCatalog for MemoryHistory {
     fn commit(&self, _id: CommitId) -> HistoryResult<Option<CommitRecord>> {
         Err(HistoryError::Unsupported("memory Init fixture operation"))
     }
-    fn stage(&self, _workspace: WorkspaceId) -> HistoryResult<Option<StageRecord>> {
-        Err(HistoryError::Unsupported("memory Init fixture operation"))
-    }
-    fn stages(&self, _branch: BranchId, _page: &Page) -> HistoryResult<PageResult<StageRecord>> {
-        Err(HistoryError::Unsupported("memory Init fixture operation"))
-    }
     fn commit_history(
         &self,
         _request: &CommitHistoryRequest,
@@ -98,19 +92,19 @@ impl HistoryCatalog for MemoryHistory {
     fn fork(&self, _request: &ForkRequest) -> HistoryResult<BranchSnapshot> {
         Err(HistoryError::Unsupported("memory Init fixture operation"))
     }
-    fn stage_changes(&self, _request: &StageRequest) -> HistoryResult<StageRecord> {
+    fn merge_base(&self, _left: NodeId, _right: NodeId) -> HistoryResult<Option<NodeId>> {
         Err(HistoryError::Unsupported("memory Init fixture operation"))
     }
-    fn commit_staged(&self, _request: &CommitStagedRequest) -> HistoryResult<CommitStagedOutcome> {
+    fn is_ancestor(&self, _ancestor: NodeId, _descendant: NodeId) -> HistoryResult<bool> {
         Err(HistoryError::Unsupported("memory Init fixture operation"))
     }
-    fn stage_and_commit(&self, _request: &StageRequest) -> HistoryResult<CommitStagedOutcome> {
+    fn commit_branch(&self, _request: &CommitRequest) -> HistoryResult<CommitOutcome> {
+        Err(HistoryError::Unsupported("memory Init fixture operation"))
+    }
+    fn merge_branch(&self, _request: &BranchMergeRequest) -> HistoryResult<BranchSnapshot> {
         Err(HistoryError::Unsupported("memory Init fixture operation"))
     }
     fn add_layer(&self, _request: &AddLayerRequest) -> HistoryResult<AddLayerOutcome> {
-        Err(HistoryError::Unsupported("memory Init fixture operation"))
-    }
-    fn discard_stage(&self, _request: &DiscardRequest) -> HistoryResult<DiscardOutcome> {
         Err(HistoryError::Unsupported("memory Init fixture operation"))
     }
 }

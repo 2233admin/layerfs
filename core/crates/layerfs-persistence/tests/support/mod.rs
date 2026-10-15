@@ -7,8 +7,7 @@
 
 use layerfs_content::ObjectId;
 use layerfs_history::{
-    BranchId, CatalogId, HistoryCatalogConfig, HistoryName, LayerId, LayerStackId, StageToken,
-    WorkspaceId,
+    BranchId, CatalogId, HistoryCatalogConfig, HistoryName, LayerId, LayerStackId, WorkspaceId,
 };
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -101,11 +100,6 @@ pub fn name(text: &str) -> HistoryName {
 /// The genesis Layer identity of one stack and root.
 pub fn genesis(stack: LayerStackId, root: ObjectId) -> LayerId {
     LayerId::derive(stack, None, root)
-}
-
-/// One checked stage token.
-pub fn token(value: u64) -> StageToken {
-    StageToken::new(value).expect("stage token")
 }
 
 // Test-only public API fixture facade; no engine imports in domain source.

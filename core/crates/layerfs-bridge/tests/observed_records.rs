@@ -1,6 +1,7 @@
 //! Additive controls preserve old bytes and reject recursive observation input.
 use layerfs_bridge::control::{
-    Answer, Call, CleanupObservation, HelloRequest, Reply, Request, WorkspaceToken,
+    Answer, Call, CleanupObservation, CommitControl, HelloRequest, Reply, Request, UnmountControl,
+    WorkspaceToken,
 };
 use layerfs_history::WorkspaceId;
 
@@ -44,9 +45,17 @@ fn actual_inline_initial_record_layout_has_no_large_variant_gap() {
 fn one_checked_scoped_layer_preserves_point_request_capacity() {
     let token = token();
     for request in [
-        Request::Commit(token),
+        Request::Commit(CommitControl {
+            token,
+            force: false,
+            agent: None,
+            call: None,
+        }),
         Request::Status(token),
-        Request::Unmount(token),
+        Request::Unmount(UnmountControl {
+            token,
+            discard: false,
+        }),
         Request::Attach(token),
         Request::Locate(token.workspace),
         Request::Cleanup(token),

@@ -101,7 +101,8 @@ fn wal_full_settings_and_unavailable_engine_are_explicit() {
             |r| r.get::<_, i64>(0),
         )
         .unwrap();
-    assert_eq!(names, 12);
+    // #327 dropped workspace_stage.
+    assert_eq!(names, 11);
 }
 #[test]
 fn final_body_multirow_locators_and_first_wins_have_one_atomic_ack() {
