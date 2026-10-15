@@ -10,7 +10,7 @@
 
 | Item | Value |
 | --- | --- |
-| Commit | `10e5991c4` (tree `7e14b7cd1d95`), branch `sdk-sim-terminals` |
+| Commit | `10e5991c4` (tree `7e14b7cd1d95`), branch `issue327-sdk-redesign` |
 | Linux daemon | `core/target/issue327/layerfs-daemon`, sha256 `9ed262055417a20509e87949ae1def6de9493c125f44a8bcf8518672445f6898`, release build in the pinned image |
 | Build image | `sha256:378b799ef43343fc64008b6a5ef456dd6bf0cb8f6ea4cec72e7b42dfc17d2cd6` |
 | Node addon | `sdk/js/native/layerfs.node` (debug `layerfs-node`), sha256 `652d34d6c855fb6c…` |
