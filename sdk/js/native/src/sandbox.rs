@@ -7,12 +7,12 @@
 //! refusal; nothing is cleaned up or retried on the caller's behalf.
 use crate::job::{failed, refused, Outcome};
 use crate::registry::{lock, random, sandbox, text, Mount, SandboxState, PROJECTS, SANDBOXES};
-use layerfs_api::internal::{split, workspace};
+use layerfs_api::internal::{commits, split, workspace};
 use layerfs_api::sandbox::values;
 use layerfs_api::{OperationFailure, SandboxApi, SandboxCreate};
 use layerfs_bridge::control::{CommitControl, SdkRefusal, SdkValue};
 use layerfs_bridge::daemon_setup::{DaemonLimits, DaemonSetup};
-use layerfs_history::WorkspaceId;
+use layerfs_history::{CommitHistoryRequest, WorkspaceId};
 use layerfs_sandbox::backend::docker::{Docker, SandboxRequest};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -194,14 +194,26 @@ pub(crate) fn mount(args: &SdkValue) -> Outcome {
     Ok(value)
 }
 
-/// `sandbox.status(sandbox, path)`.
+/// `sandbox.status(sandbox, path)`: the daemon's Status, which reads no
+/// Store, and the Branch head from one separate newest-first History read.
 pub(crate) fn status(args: &SdkValue) -> Outcome {
     let state = sandbox(args)?;
     let token = state.token(text(args, "path")?)?;
-    let status = workspace(&mut *lock(&state.control)?)
-        .status(token)
-        .map_err(operation)?;
-    let mut value = values::status(&status);
+    let mut control = lock(&state.control)?;
+    let status = workspace(&mut control).status(token).map_err(operation)?;
+    let head = commits(
+        &mut control,
+        CommitHistoryRequest {
+            branch: status.binding.branch.id,
+            start: None,
+            cursor: None,
+            limit: 1,
+        },
+    )
+    .ok()
+    .map(|page| page.records.first().map(|record| record.id));
+    drop(control);
+    let mut value = values::status(&status, head);
     if let SdkValue::Map(fields) = &mut value {
         let branch = lock(&state.mounts)?
             .get(text(args, "path")?)

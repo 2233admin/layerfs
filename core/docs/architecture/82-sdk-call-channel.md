@@ -137,10 +137,14 @@ the daemon serving it, so a caller with several Sandboxes asks each one.
 
 ## Workspace control changes
 
-- **Status** carries `current_head`: the Branch's head read at the
-  observation, unknown when that read fails. It differs from the binding's
-  head when another Workspace committed since this one was bound or last
-  committed; the SDK reports that as `headMovedSinceMount`.
+- **Status** is unchanged and still reads no Store: it reports maintained
+  local state only. The SDK's `sandbox.status` adds the Branch head from one
+  separate newest-first `Request::History` read (limit 1) on the bound
+  Branch, unknown when that read fails. It differs from the binding's head
+  when another Workspace committed since this one was bound or last
+  committed; the SDK reports that as `headMovedSinceMount`. (Phase 2,
+  2026-10-15: the first version read the head inside Status and broke the
+  zero-Store-SQL Status contract that `mount_control` checks.)
 - **Unmount** carries `discard`. Without it, a Workspace with uncommitted
   changes is refused with `Reply::Dirty` and nothing is closed. A Workspace is
   dirty when its active generation holds changed inodes or names, a capture is

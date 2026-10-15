@@ -51,8 +51,9 @@ pub fn mounted(workspace: &MountedWorkspace, branch: &str) -> SdkValue {
 }
 
 /// `sandbox.status`: base, the Branch head now, whether it moved, and the
-/// uncaptured change counts.
-pub fn status(status: &WorkspaceStatus) -> SdkValue {
+/// uncaptured change counts. Status itself reads no Store; `current_head` is
+/// the head the caller read separately (`None` when that read failed).
+pub fn status(status: &WorkspaceStatus, current_head: Option<Option<CommitId>>) -> SdkValue {
     let binding = &status.binding;
     SdkValue::map([
         ("kind", SdkValue::text("ok")),
@@ -61,13 +62,10 @@ pub fn status(status: &WorkspaceStatus) -> SdkValue {
             "baseLayer",
             SdkValue::text(hex(binding.branch.base_layer.as_slice())),
         ),
-        (
-            "branchHead",
-            status.current_head.map_or(SdkValue::Null, head),
-        ),
+        ("branchHead", current_head.map_or(SdkValue::Null, head)),
         (
             "headMovedSinceMount",
-            status.current_head.map_or(SdkValue::Null, |current| {
+            current_head.map_or(SdkValue::Null, |current| {
                 SdkValue::Bool(current != binding.branch.head_commit)
             }),
         ),

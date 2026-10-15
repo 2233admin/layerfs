@@ -47,14 +47,6 @@ impl Service {
                 self.kernel.as_ref().map(|_| value.kernel.block()),
             )
         };
-        // Read apart from the binding copy; a failed read is reported as unknown.
-        let current_head = self
-            .store
-            .history()
-            .branch_snapshot(binding.branch.id)
-            .ok()
-            .flatten()
-            .map(|current| current.branch.head_commit);
         let observed = self.job(
             workspace.route(),
             |job_client: &crate::OwnerClient, job_route| job_client.state(job_route),
@@ -85,7 +77,6 @@ impl Service {
                 epoch,
                 epoch_saturated: epoch == u64::MAX,
                 published,
-                current_head,
                 local,
                 local_failure,
                 kernel,

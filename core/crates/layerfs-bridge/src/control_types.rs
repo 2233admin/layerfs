@@ -154,10 +154,6 @@ pub struct WorkspaceStatus {
     pub epoch_saturated: bool,
     /// Known publication retained after a local failure, when available.
     pub published: Option<CommitOutcome>,
-    /// The Branch's head read at this observation: `None` when the read
-    /// failed, `Some(None)` for a Branch without Commits. It differs from the
-    /// binding's head when another Workspace committed since the binding.
-    pub current_head: Option<Option<layerfs_history::CommitId>>,
     /// Separately scoped indexed engine observation taken after the control copy.
     pub local: Option<LocalObservation>,
     /// Original engine observation refusal when local fields are unavailable.
