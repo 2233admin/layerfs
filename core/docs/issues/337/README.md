@@ -42,7 +42,8 @@ before every Sandbox close, including the automatic service Sandbox.
 
 All numerical observations are diagnostics with tracing enabled and unknown
 OS cache state; no benchmark, release qualification or aggregate CI claim.
-No repository push, PR or merge to main is authorized. Local campaign commits
+The owner authorized publication on 2026-10-16; the original campaign merged
+through [PR #338](https://github.com/Ephemeral-AI-Lab/layerfs/pull/338). Local campaign commits
 require exact first-parent/staged-tree production LOC comparisons.
 
 ## Progress
@@ -56,7 +57,7 @@ require exact first-parent/staged-tree production LOC comparisons.
 Frozen inputs: [FREEZE.json](FREEZE.json), [ENVIRONMENT.json](ENVIRONMENT.json),
 [DEPENDENCIES.md](DEPENDENCIES.md), [ACCEPTANCE.md](ACCEPTANCE.md),
 [FIXTURES.md](FIXTURES.md), [BUILDER-COMMON.md](BUILDER-COMMON.md) and
-[BUILDER1.md](BUILDER1.md). No repository push/PR/main merge is authorized.
+[BUILDER1.md](BUILDER1.md). Publication was subsequently authorized and completed through PR #338.
 
 [Completed results](RESULTS.md) include both acceptance runs, the independent
 report verbatim, product fixes, diagnostic tables and verified external exports.

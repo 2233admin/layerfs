@@ -60,3 +60,16 @@ All observations are diagnostic, with tracing enabled, unknown OS cache state
 and declared host archival activity. The builders implement different programs
 and histories. No latency ranking, cold-cache, resident-memory, release or
 power-loss claim follows from these tables.
+
+## Additional Builder 2 census and operation detail
+
+The [Builder 2 detail section](../RESULTS.md#builder-2-file-data-encoding-and-operation-detail)
+separates the original independent run from the later read-only final-Commit
+census. Derived tables retain [authored files](builder2-detail-authored-files.csv),
+[directory sizes](builder2-detail-filesystem-groups.csv),
+[operation groups and Commit outcomes](builder2-detail-operation-groups.csv),
+[bulk-save outliers](builder2-detail-bulk-save-outliers.csv),
+[kernel maxima sums](builder2-detail-kernel-maxima-sums.json),
+[summary](builder2-detail-detail-summary.json) and
+[input hashes](builder2-detail-analysis-inputs.json). The census changed no
+Store counters or application data and created no new Commit.

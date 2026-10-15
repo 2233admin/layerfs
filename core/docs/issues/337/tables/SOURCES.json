@@ -196,6 +196,55 @@
       "sha256": "cde39597ed4454c60eb97150860e69fd1a80ba799b000085b0f67147b82641f4",
       "source_sha256": "cde39597ed4454c60eb97150860e69fd1a80ba799b000085b0f67147b82641f4",
       "transformation": "Byte-identical JSON copy"
+    },
+    {
+      "destination": "builder2-detail-authored-files.csv",
+      "source": "/Users/yifanxu/.codex/issue337-builder2-detail/authored-files.csv",
+      "sha256": "bffb730343cc535cff368b2f4d13add6ecaac28507cc6400b4d857a84506518e",
+      "source_sha256": "bffb730343cc535cff368b2f4d13add6ecaac28507cc6400b4d857a84506518e",
+      "transformation": "Byte-identical derived CSV/JSON; LF record terminators"
+    },
+    {
+      "destination": "builder2-detail-filesystem-groups.csv",
+      "source": "/Users/yifanxu/.codex/issue337-builder2-detail/filesystem-groups.csv",
+      "sha256": "9ff686bac2c1825eb26b7f72d592fa1e8a6d64d22eba0e1d61af36e8a9b3790a",
+      "source_sha256": "9ff686bac2c1825eb26b7f72d592fa1e8a6d64d22eba0e1d61af36e8a9b3790a",
+      "transformation": "Byte-identical derived CSV/JSON; LF record terminators"
+    },
+    {
+      "destination": "builder2-detail-operation-groups.csv",
+      "source": "/Users/yifanxu/.codex/issue337-builder2-detail/operation-groups.csv",
+      "sha256": "0c35979bba98d764762413052316c812cb3f4bf0492b87cb04cea1e4545f989a",
+      "source_sha256": "0c35979bba98d764762413052316c812cb3f4bf0492b87cb04cea1e4545f989a",
+      "transformation": "Byte-identical derived CSV/JSON; LF record terminators"
+    },
+    {
+      "destination": "builder2-detail-bulk-save-outliers.csv",
+      "source": "/Users/yifanxu/.codex/issue337-builder2-detail/bulk-save-outliers.csv",
+      "sha256": "109806ad08e6925a7b151d94fabb76c9d64a6c6268143fafc823e4da96865bfd",
+      "source_sha256": "109806ad08e6925a7b151d94fabb76c9d64a6c6268143fafc823e4da96865bfd",
+      "transformation": "Byte-identical derived CSV/JSON; LF record terminators"
+    },
+    {
+      "destination": "builder2-detail-kernel-maxima-sums.json",
+      "source": "/Users/yifanxu/.codex/issue337-builder2-detail/kernel-maxima-sums.json",
+      "sha256": "d58c802415a207d04c9fb4147dbc0402823f19d916eba7524f311c8e811055f5",
+      "source_sha256": "d58c802415a207d04c9fb4147dbc0402823f19d916eba7524f311c8e811055f5",
+      "transformation": "Byte-identical derived CSV/JSON; LF record terminators"
+    },
+    {
+      "destination": "builder2-detail-detail-summary.json",
+      "source": "/Users/yifanxu/.codex/issue337-builder2-detail/detail-summary.json",
+      "sha256": "5ee4a67878a96fa12cbd6c10bbed55c666bbdeafbdc20ebf0877bc277241053c",
+      "source_sha256": "5ee4a67878a96fa12cbd6c10bbed55c666bbdeafbdc20ebf0877bc277241053c",
+      "transformation": "Byte-identical derived CSV/JSON; LF record terminators"
+    },
+    {
+      "destination": "builder2-detail-analysis-inputs.json",
+      "source": "/Users/yifanxu/.codex/issue337-builder2-detail/analysis-inputs.json",
+      "sha256": "dc4e7994a5c616df6261703c8237151c313e3050f22cc4620533f8dc587f7884",
+      "source_sha256": "dc4e7994a5c616df6261703c8237151c313e3050f22cc4620533f8dc587f7884",
+      "transformation": "Byte-identical derived CSV/JSON; LF record terminators"
     }
   ],
   "raw_evidence_root": "/Users/yifanxu/.codex/issue337-evidence"
