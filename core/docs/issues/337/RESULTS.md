@@ -8,8 +8,8 @@ Date: 2026-10-16, Asia/Singapore. Scope: issue
 
 Phases A–D are complete. Both builders finished M1–M6 and full acceptance
 on separate Branches forked from their post-M6 main Layers. Independent
-Builder 2 needed no product or skill fix. The campaign is ready for owner
-closure review; the GitHub issues remain open.
+Builder 2 needed no product or skill fix. The original campaign was published through PR #338; the additional Builder 2
+reporting detail below is preserved as a documentation follow-up.
 Both builders implemented the full six-milestone Rust Depot application from
 the same frozen inputs. [SPEC.md](SPEC.md) defines application behavior;
 [ACCEPTANCE.md](ACCEPTANCE.md) defines the command and lifecycle requirements.
@@ -312,7 +312,9 @@ of the declared unknown diagnostic conditions.
 The global Store policy and application recovery checks do not promise power-loss
 durability, process/memory/socket checkpointing or preservation of runtime logs
 unless saved as explicit artifacts. Package listings do not publish packages.
-No repository push, PR, Git main merge, release or issue closure is authorized.
+The original campaign checkpoint preceded publication authorization. The owner
+subsequently authorized push and merge, completed through PR #338; this record
+retains the original qualification and limits.
 
 ## Production source comparison
 
@@ -328,7 +330,10 @@ retained with each receipt.
 | `608d15a2fe651625ad6707bce8e5cd86c18b2f4d` | 87,555 -> 87,555 | 0 | 85,711 unchanged | 1,844 unchanged |
 | `eaa64f4db050420155e2693720fcf654d1491630` | 87,555 -> 87,657 | +102 | 85,711 -> 85,813 | 1,844 unchanged |
 | `0cf3d39cae3e6f391c391998728b14d757450efd` | 87,657 -> 87,657 | 0 | 85,813 unchanged | 1,844 unchanged |
-| Final collection/docs commit (this tree) | 87,657 -> 87,657 | 0 | 85,813 unchanged | 1,844 unchanged |
+| `4cbd35d32d9d7de9d01ac4977c114dafb8432e26` | 87,657 -> 87,657 | 0 | 85,813 unchanged | 1,844 unchanged |
+| `9021aa0398dc8317eba0caeed6f530d9cd0f889e` (PR #338 merge, first parent) | 87,552 -> 87,657 | +105 | 85,708 -> 85,813 | 1,844 unchanged |
+| Builder 2 detail docs commit (this tree) | 87,657 -> 87,657 | 0 | 85,813 unchanged | 1,844 unchanged |
+| Builder 2 detail publication merge (this tree, first parent) | 87,657 -> 87,657 | 0 | 85,813 unchanged | 1,844 unchanged |
 
 Reference absent (retired R9c; last counted 65,417 at tree `498dd1917812`).
 This source-size comparison is not a performance or algorithmic simplification
@@ -393,16 +398,263 @@ The dispatch SHA256 is
 `6d0644942d7b1060d56f0e86b968d1f12a75f1cde74f74529b9f67d38e5eda7c`.
 No application implementation or recovery help was supplied to the agent.
 
-## Owner review disposition
+## Builder 2 file, data, encoding and operation detail
 
-All requested preparation, fixing, fresh independent execution and collection
-work is complete. [Issue #337 completion](https://github.com/Ephemeral-AI-Lab/layerfs/issues/337#issuecomment-6201845433)
-and [collection #336](https://github.com/Ephemeral-AI-Lab/layerfs/issues/336)
-carry actual outcome updates and remain open for owner review. The dedicated branch is local; product fixes, evidence scope,
-known deviations and source growth remain explicit. External
-`EVIDENCE-INDEX.json` and `FINAL-SHA256.json` identify the final preserved evidence.
-The final collection commit changes documentation/tables only; scoped product
-checks are reused from their unchanged committed source identities.
+This section answers the owner's additional reporting request after publication
+of the original campaign through [PR #338](https://github.com/Ephemeral-AI-Lab/layerfs/pull/338).
+Original Builder 2 statistics still come from its closed 258-call trace. A
+separate post-run inspection read the immutable final acceptance Commit
+`1220d5463170a32ed6c5fde50cf95cc6ba8bec25d3d279333bec8e5489e7f4cb9a`
+through SDK reads and a bounded metadata-only filesystem walk. It performed no
+Init, build, application test, source edit or publication. Its sole read-only
+Bash step returned UpToDate; before/after Store counters were identical. Both
+streams were saved before every diagnostic Sandbox closed. These later calls
+are excluded from all original-run operation counts and latency distributions.
+The independent builder was not resumed and its verbatim report is unchanged.
+
+### Maintained project and code
+
+The final Commit contains **34 maintained first-party project files, 64,274
+bytes**, excluding the supplied 38,402-byte Cargo.lock, seed `.git/HEAD`, Cargo
+cache/output, generated fixture hashes, bytecode, fixtures and runtime data.
+"Maintained" includes configuration/manifests assembled from the frozen templates;
+it does not claim that the builder invented the supplied dependency definitions.
+The 21 code files comprise eight production Rust files, one production web page,
+four external Rust test files and eight Python test/support files. The other
+13 maintained files are eight configuration/manifests and five README documents.
+
+Production Rust alone is **25,901 bytes, 778 production LOC and 782 physical
+lines across eight files**. Production LOC uses the pinned repository counter's
+Rust-aware comment and test-only-item removal, then counts nonblank source
+lines. Imports, declarations and embedded runtime SQL count; external tests,
+docs and configuration do not. The same eight physical line counts match the
+original step 103 audit. The HTML/JavaScript page is separately 5,526 bytes and
+16 physical/nonblank lines; the Rust counter does not parse mixed HTML/JS, so
+these lines are not silently added to a purported Rust production LOC total.
+There is no application-source duplication in the LayerFS Git product count.
+
+[Per-file classifications, bytes, lines and hashes](tables/builder2-detail-authored-files.csv)
+pin this census. Counter SHA256 is
+`cb9cdb1a5d00b908763894133f97a9f2b1889066651f27ce6f66009976b46197`.
+The generated 9,148-byte `tests/fixture-hashes.json` is excluded from maintained
+source and retained as test data. All authored counts are observed from committed
+bytes, rather than estimated from package listings or host orchestration LOC.
+
+### Largest committed view and directory sizes
+
+The largest of all 75 saved Commit trees is the final acceptance head above:
+**1,049,230,674 regular-file bytes, 12,025 regular-file paths and 2,524
+directories**, with no symlinks observed. The post-run census reproduces that
+Commit's persisted logical count exactly. Sizes below sum `lstat().st_size` for
+regular-file paths, counting hardlink paths separately and following no symlink.
+They describe bytes in the immutable view, not allocated host blocks or compressed
+exclusive Store allocation. The cache and target sizes were directly observed
+in this later census; they were not measured separately during the original run.
+
+| Committed subtree | Regular files | Logical regular-file bytes |
+| --- | --- | --- |
+| `/.cargo-home/` | 9,515 | 232,571,167 |
+| `/target/` | 2,119 | 513,789,926 |
+| `/fixtures/` | 71 | 100,687,889 |
+| `/acceptance-data/` | 174 | 201,531,702 |
+| `/test-data/` | 107 | 507,354 |
+| `/depot-data/` | 1 | 20,480 |
+| `/crates/` | 21 | 36,908 |
+| `/tests/` | 10 | 36,987 |
+
+The 71 fixture input files total 100,687,889 bytes. This includes three distinct
+32 MiB version files (v1, identical bytes, and one-byte-changed v2); application
+acceptance writes independent object-version files rather than hardlinking them
+to hide data. The 20,480-byte `/depot-data/` catalog is application data, distinct
+from the global Store database below. All directory groups remain in the [complete size census](tables/builder2-detail-filesystem-groups.csv).
+
+Per-step cache/target sizes, peak resident bytes, allocated blocks and an exact
+historical split of newly stored pack bytes among source/cache/output/data were
+not collected and remain unavailable. A Commit's newStored is not a directory's
+size: exact reuse, compression, delta encoding and shared metadata cross those
+boundaries. The first dependency-fetch Commit's 232,615,913-byte full tree and
+58,506,790 newStored bytes therefore must not be relabeled as the final cache's
+exclusive compressed allocation. There is no inferred cache/output size here.
+
+### Store bytes, SQLite and ratios
+
+| Quantity | Final observed value | Definition |
+| --- | ---: | --- |
+| Logical history | 58,339,171,210 bytes | Full regular-file tree bytes summed across every Commit and Layer |
+| Canonical | 801,677,583 bytes | Distinct canonical registered object bytes |
+| Stored pack bodies | 278,192,281 bytes | Encoded/compressed/delta pack bodies, including metadata bodies |
+| Metadata pack bodies | 5,126,419 bytes | Component of stored bodies; not additional physical bytes |
+| SQLite overhead | 10,317,671 bytes | Database logical file bytes − free bytes − stored bodies |
+| Metadata including overhead | 15,444,090 bytes | Metadata pack bodies + SQLite overhead |
+| SQLite database logical pages | 70,437 × 4,096 = 288,509,952 bytes | WAL-visible page_count × page_size |
+| Free pages | 0 | freelist_count=0 |
+| Stopped raw main file | 288,436,224 bytes | Exported main file; WAL supplies the remaining logical database state |
+| Stopped WAL file | 4,194,304 bytes | Raw exported WAL length, not a second logical Store |
+| Stopped SHM file | 32,768 bytes | Raw exported shared-memory file |
+| Portable Store tar | 292,669,440 bytes | Main/WAL/SHM plus tar headers/padding |
+| Logical / canonical | 72.771364 | History reuse/deduplication ratio |
+| Canonical / stored | 2.881739 | Combined encoding/compression/delta ratio |
+
+Logical history repeatedly counts whole trees: 75 Commits contribute
+54,332,680,273 bytes and seven Layers contribute 4,006,490,937. It is neither
+the current Workspace size nor a per-artifact data size. The 72.771364 history
+reuse ratio is separate from the 2.881739 encoding ratio. These observations
+do not isolate standalone compression-codec savings from delta-encoding savings;
+that breakdown is unavailable. The initial operator counters plus acknowledged
+Save increments exactly match final canonical/stored/metadata-pack totals.
+Read-only restored database rows, WAL-visible page counts and every exported
+file hash are pinned by the external `builder2-final/verification.json`,
+`restored-files-before-read.json` and `SHA256.json`; the tracked
+[export reconciliation](tables/builder2-export-reconciliation.json) joins all
+75 Commit records and all seven Layers.
+
+### Original-run calls and latency distributions
+
+The original 258 calls comprise 231 public SDK, 19 internal service and eight
+operator calls. The 11 fs.* calls are a subset of public calls (nine mutation
+calls and two reads), not an additional category. Group distributions mix
+different methods/workloads and describe this run only. Median is the ordinary
+sample median; p95 is nearest rank `ceil(0.95*n)`; all durations are milliseconds.
+
+| Group / Commit outcome | Count | Median ms | p95 ms | Max ms |
+| --- | --- | --- | --- | --- |
+| public_sdk | 231 | 174.64 | 11,298.321 | 35,779.826 |
+| internal_service | 19 | 17.943 | 333.541 | 333.541 |
+| operator | 8 | 2.797 | 4.086 | 4.086 |
+| fs_subset_of_public_sdk | 11 | 17.308 | 22.155 | 22.155 |
+| sandbox.commit Committed | 65 | 96.961 | 1,519.385 | 5,089.991 |
+| sandbox.commit UpToDate | 17 | 7.412 | 9.61 | 9.61 |
+
+The complete per-method distribution, including original Init refusal, is:
+
+| Method | Class | Count | Median ms | p95 ms | Max ms |
+| --- | --- | --- | --- | --- | --- |
+| branch.diff_branches | public_sdk | 3 | 9,811.69 | 10,569.22 | 10,569.22 |
+| branch.fork | public_sdk | 4 | 2.224 | 3.028 | 3.028 |
+| branch.list_commits | public_sdk | 10 | 2.747 | 3.505 | 3.505 |
+| branch.merge | public_sdk | 1 | 158.989 | 158.989 | 158.989 |
+| branch.publish | public_sdk | 6 | 3.735 | 4.967 | 4.967 |
+| fs.apply | public_sdk | 7 | 18.399 | 22.155 | 22.155 |
+| fs.edit | public_sdk | 1 | 11.651 | 11.651 | 11.651 |
+| fs.read | public_sdk | 2 | 5.632 | 6.765 | 6.765 |
+| fs.write | public_sdk | 1 | 16.008 | 16.008 | 16.008 |
+| operator.inspect.snapshot | operator | 1 | 3.034 | 3.034 | 3.034 |
+| operator.store.commits | operator | 5 | 2.56 | 4.086 | 4.086 |
+| operator.store.stats | operator | 2 | 2.7235 | 3.262 | 3.262 |
+| project.init | public_sdk | 2 | 556.2435 | 1,078.7 | 1,078.7 |
+| project.list_branches | public_sdk | 2 | 3.3145 | 4.099 | 4.099 |
+| sandbox.close | public_sdk | 2 | 1,261.005 | 1,286.541 | 1,286.541 |
+| sandbox.commit | public_sdk | 82 | 37.973 | 1,450.171 | 5,089.991 |
+| sandbox.create | public_sdk | 1 | 267.704 | 267.704 | 267.704 |
+| sandbox.exec | public_sdk | 82 | 1,306.9305 | 14,116.757 | 35,779.826 |
+| sandbox.mount | public_sdk | 12 | 26.3315 | 39.272 | 39.272 |
+| sandbox.service | internal_service | 19 | 17.943 | 333.541 | 333.541 |
+| sandbox.status | public_sdk | 1 | 29.662 | 29.662 | 29.662 |
+| sandbox.unmount | public_sdk | 12 | 45.257 | 92.545 | 92.545 |
+
+There were 65 new Commits from sandbox.commit and 17 UpToDate results. Nine
+fs.* mutations and one Branch merge account for the other ten unique Commits,
+giving 75 total. UpToDate created no new history solely for a command message.
+The single failed SDK call is the before-effect Init permission refusal;
+all 82 Bash commands exited 0. Process fault exits 86/87 inside passing recovery
+checks are expected test events, not failing SDK operations.
+
+### Build classes and bulk-save outliers
+
+These separately labeled steps retain fetch, first build, unchanged context,
+source-edit rebuild and clean final-main rebuild. Exec and Commit are separate
+SDK durations and are not sums of nested phase timers. The in-view dependency
+cache is retained for clean compilation; neither warm nor cold OS residency was
+enforced. Different builder programs, dependency feature contexts and histories
+make Builder 1/2 aggregate medians unsuitable as matched-workload comparisons.
+
+| Original step | Exec ms | Commit ms | Commit outcome |
+| --- | --- | --- | --- |
+| 005-m1-dependency-fetch | 35,779.826 | 5,089.991 | Committed |
+| 006-m1-domain-first-build | 7,170.72 | 360.468 | Committed |
+| 007-m1-store-first-build | 12,424.242 | 1,519.385 | Committed |
+| 008-m1-server-first-build | 9,956.281 | 876.974 | Committed |
+| 009-m1-cli-first-build | 12,600.148 | 1,179.044 | Committed |
+| 010-m1-unchanged-build | 600.694 | 9.414 | Committed |
+| 016-m2-source-edit-rebuild | 660.525 | 22.857 | Committed |
+| 073-final-main | 8,647.191 | 602.73 | Committed |
+| 074-final-main | 12,712.412 | 1,446.592 | Committed |
+| 075-final-main | 11,298.321 | 864.703 | Committed |
+| 076-final-main | 14,116.757 | 1,179.343 | Committed |
+
+The following union selects the five largest newStored Saves and the three
+slowest sandbox.commit calls; overlaps appear once. Values describe exact
+observed operations, not a fitted distribution or resampled benchmark. The
+[outlier CSV](tables/builder2-detail-bulk-save-outliers.csv) includes full Commit
+IDs, canonical/stored/metadata growth and individual phase values.
+
+| Step | New stored bytes | SDK Commit ms | Construct ms | Capture ms |
+| --- | --- | --- | --- | --- |
+| 005-m1-dependency-fetch | 58,506,790 | 5,089.991 | 4,362.922 | 0.005 |
+| 041-m6-candidate | 33,716,693 | 774.163 | 675.584 | 0.007 |
+| 007-m1-store-first-build | 29,009,975 | 1,519.385 | 1,359.292 | 0.012 |
+| 009-m1-cli-first-build | 24,961,981 | 1,179.044 | 1,040.022 | 0.009 |
+| 008-m1-server-first-build | 17,396,668 | 876.974 | 763.59 | 0.008 |
+| 019-m3-server-build | 6,783,785 | 1,827.198 | 1,570.771 | 0.007 |
+| 034-m5-merged-rebuild | 6,083,304 | 1,840.275 | 1,582.887 | 0.009 |
+
+The dependency-fetch Save is the largest encoded increment and slowest Commit:
+58,506,790 newStored bytes, 5,089.991 SDK ms, with 4,362.922 observed construct ms.
+The candidate fixture Save adds 33,716,693 stored bytes after introducing the
+deterministic large fixture payload; its construct phase is 675.584 ms. These
+step labels identify their workloads, but do not establish exclusive path-level
+allocation. First builds and later server rebuilds remain separate outliers.
+Finish/publication/install nodes omitted by the bounded trace are unavailable,
+not zero. Parent and child times overlap and must not be added.
+
+| sandbox.commit phase | Observed nodes | Median ms | p95 ms | Max ms |
+| --- | --- | --- | --- | --- |
+| commit/capture | 82 | 0.006 | 0.011 | 0.023 |
+| commit/construct | 82 | 17.9285 | 1,266.841 | 4,362.922 |
+| commit/finish | 64 | 2.0865 | 11.893 | 18.09 |
+| commit/install | 64 | 0.052 | 0.102 | 0.147 |
+| commit/publish | 64 | 0.0825 | 0.154 | 0.212 |
+
+### Available FUSE observations and limits
+
+The original run has 443 complete joined daemon observations, including 373
+kernel boundaries across 12 mounts, with no counter reset in retained emission
+order. Summed per-mount observed maxima include lookup 145,399; getattr 93,578;
+read 139,544; write 787,048; create 19,389; served 1,410,223; inline 429; refused
+724; terminal 0; FORGET ownership units 9,889; WRITE store units 143.
+These are distinct frame/callback/ownership quantities. They are not OS syscall
+totals, cannot be added into one request number, and are not exact per-Exec
+attribution. Maxima do not prove that every terminal event was observed.
+Zero is reported only for an available observed field; absent sections and first
+deltas remain unavailable. Per-mount rows remain in
+[kernel maxima](tables/builder2-kernel-observed-maxima.csv); the
+[explicit sum definitions](tables/builder2-detail-kernel-maxima-sums.json) preserve
+the aggregation. Public fs.* calls are never substituted for these counters.
+
+The original trace contains 10,650 observed timing nodes and 15,908 bounded
+omissions. All statistics remain **diagnostic, not benchmarks**, with tracing
+overhead, unknown OS cache state and declared host activity. No continuous
+resident-memory, cold-cache, power-loss, release or CI-green claim is made.
+Raw source responses, census commands, unchanged-counter checks, separate traces
+and closed Sandbox receipts are preserved outside Git under
+`/Users/yifanxu/.codex/issue337-builder2-detail/`. The
+[detail summary](tables/builder2-detail-detail-summary.json) and
+[analysis input pins](tables/builder2-detail-analysis-inputs.json) link those
+receipts to the published derived tables.
+
+## Publication disposition
+
+All requested preparation, fixing, independent execution and collection work
+is complete. The owner authorized push and merge on 2026-10-16;
+[PR #338](https://github.com/Ephemeral-AI-Lab/layerfs/pull/338) published the
+original report and product fixes at main Commit
+`9021aa0398dc8317eba0caeed6f530d9cd0f889e`. The additional Builder 2 detail is
+a documentation follow-up using preserved receipts and the separately declared
+read-only census. It changes no product source or independent acceptance result.
+The original external `EVIDENCE-INDEX.json` and `FINAL-SHA256.json` remain
+sealed at their original campaign identity; later publication and census
+receipts are preserved separately. Scoped product checks are reused at their
+unchanged source identities.
 
 ## Builder 2 REPORT.md — verbatim
 
