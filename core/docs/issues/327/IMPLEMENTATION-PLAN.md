@@ -42,9 +42,9 @@ Changes from the pre-standard SDK:
 
 ## 3. Operator surface
 
-UI and harness views live behind an internal entry point, `@layerfs/sdk/operator`.
-It uses the same `{group}/{method}` layout and positional paging. The public
-package does not export it, and a public call cannot reach it.
+UI and diagnostic views live behind an internal entry point, `@layerfs/sdk/operator`.
+It uses the same `{group}/{method}` layout and positional paging. The public root
+entry point does not export it, and a public call cannot reach it.
 
 | Group | Method | Returns |
 | --- | --- | --- |
@@ -54,13 +54,13 @@ package does not export it, and a public call cannot reach it.
 | | `history(ref, path, pageSize?, pagePos?)` | Revisions newest first: `{ commit, change, size, object, newCanonical, newStored }` |
 | `workspace` | `overlay(sandbox, path)` | `{ inodes, entries, payload, metadata, changes: { added, modified, removed } }` |
 | | `changes(sandbox, path, pageSize?, pagePos?)` | Changed paths and the paths that still hold conflict markers |
-| `process` | `list(sandbox)`, `cancel(sandbox, process)` | The Sandbox's processes; Stopped |
+| `process` | `start(sandbox, path, command)`, `list(sandbox)`, `cancel(sandbox, process)` | The Sandbox's processes; Stopped |
 | `inspect` | `snapshot(since?)` | The UI read model, including `store.stats` and each Workspace's overlay |
 
 Where each part lives:
 - **Rust.** Operator methods are in `layerfs-api/src/operator/` with their own `operator::call()`, and in `layerfs-daemon/src/operator/` with their own dispatch.
 - **Method names.** Operator names are `operator.<group>.<method>`. Public dispatch refuses them at every layer: `layerfs-api`'s `call()`, the daemon's `sdk/` dispatch and the native `call()`.
-- **Process control.** `process.list` and `process.cancel` stay in the native binding's executor (`sdk/js/native/src/exec.rs`). The Sandbox, or an external executor, owns command launch and cancellation, and the filesystem daemon supervises no commands.
+- **Process control.** `process.start`, `process.list` and `process.cancel` stay in the native binding's executor (`sdk/js/native/src/exec.rs`). The Sandbox, or an external executor, owns command launch and cancellation, and the filesystem daemon supervises no commands.
 - **HTTP.** HTTP is not a product surface. The demo server in `sdk_sim/server/` maps `/api/{sdk|operator}/{group}/{method}` onto the two method tables: GET with query parameters for reads, POST `{ "args": [...] }` for anything that changes state. This respects the rule against reviving a host data-path server. A remote or multi-user operator API would be a separate product decision.
 
 ## 4. Statistics and timing
@@ -69,10 +69,11 @@ All sizes are bytes.
 
 | Term | Meaning |
 | --- | --- |
-| logical | file bytes as written, counted every place a file appears |
+| logical | regular-file sizes across immutable Commit and Layer states, counting hardlink paths |
 | canonical | bytes of distinct canonical objects, after CAS dedupe, chunking and framing |
 | stored | physical bytes after compression and delta encoding (`pack.length`) |
-| metadata | namespace, inode and directory objects, history records and indexes |
+| metadata | metadata-domain pack bodies plus occupied SQLite bytes outside all pack bodies |
+| file / free | logical database pages / reusable pages in bytes; file includes pages currently in WAL, not separate WAL allocation |
 | dedupe | `logical / canonical` |
 | compression | `canonical / stored` |
 

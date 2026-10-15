@@ -24,6 +24,17 @@
 > `is_ancestor` walk Commit parents (or the base Layer), second parents, Layer
 > parents and each Layer's source Commit, bounded by `MAXIMUM_LINEAGE_ROWS`.
 
+> **Current #328 update, 2026-10-15 (product `ce41af000`):** messages replace
+> agent/call attribution. UTF-8 messages are at most 4096 bytes, permit newline/tab
+> and participate in `layerfs/commit/v3` identity. Time, statistics and LWW details
+> are outside identity. Branch fork origins, merge origin/second parent, force
+> displacement, LWW facts and Layer overwrite lists are persistent facts.
+> History logical totals update once on new Commit/Layer insertion through SQL
+> triggers in the original transaction. Object/pack totals update inside storage
+> publication. The earlier metadata paragraph below is historical; its attribution
+> fields and identity description are superseded. See the [SDK channel](82-sdk-call-channel.md)
+> and [counter screen](../issues/327/COUNTER-SCREEN-20261015.md).
+
 > **Commit metadata, overwrite publish and Branch merge, 2026-10-15 (#327):**
 > every Commit records `CommitMeta`: the Branch it was made on, how it was made
 > (`Workspace`, `Files`, `Merge`), the caller's `agent` and `call` (at most 128

@@ -1,186 +1,81 @@
-# SDK call channel
+# SDK call channel and operator boundary
 
-> **Status:** Implemented for #327 step 7. It serves the JavaScript SDK's
-> non-Workspace methods. No timing claim has been measured.
+> **Status:** Implemented #327/#328 source description, 2026-10-15. Correctness
+> receipts and the component counter screen are distinct from this architecture.
 
-The JavaScript SDK is the only public SDK, and its arguments and results are
-plain objects. The Workspace control operations (Mount, Attach, Commit, Status,
-Unmount) keep their typed records. Every other SDK method travels as one
-`Request::Sdk(SdkCall { method, args })` and is answered with
-`Reply::Sdk(value)` or `Reply::SdkRefused(SdkRefusal { code, message, detail })`.
+The JavaScript SDK has 29 positional methods in four groups. The
+[SDK guide](../../../sdk/js/README.md) lists signatures, environment configuration,
+read/page limits and compatibility. [SPEC](../issues/327/SPEC.md) describes the
+UI/server integration; [VERIFICATION](../issues/327/VERIFICATION.md) owns acceptance.
+No harness, agent/call metadata, remove alias or public inspect is retained.
 
-## Values
+JS wrappers form SdkValue maps internally. Workspace Mount/Attach/Commit/Status/
+Unmount retain typed control records. Other filesystem/history methods use
+`Request::Sdk(SdkCall { method, args })`, answered once as `Reply::Sdk` or
+`SdkRefused { code, message, detail }`. The stable refusal code decides behavior.
+SdkValue supports null, bool, integer, text, bytes, list and unique-key map;
+nesting is at most 16 levels. One authenticated record fits `u16::MAX - 16` bytes.
+Methods therefore use bounded windows rather than whole-history/tree replies.
 
-[`control_sdk.rs`](../../crates/layerfs-bridge/src/control_sdk.rs) defines
-`SdkValue`: null, boolean, 64-bit integer, text, bytes, list, and a map of
-unique field names. A value nests at most 16 levels. A whole record fits one
-control record (`u16::MAX - 16` bytes), so a large result is windowed by its
-method. A refusal's `code` is stable and alone decides; the message is for
-people.
+The root public table refuses `operator.*`. `@layerfs/sdk/operator` uses a
+separate native entrypoint and Rust API/daemon admission table. Store/Commit
+statistics, file statistics/history, Workspace overlay/changes and snapshot are
+internal diagnostics. Process start/list/cancel stays in the native Sandbox
+executor; no command process record or supervision belongs to the filesystem
+daemon. HTTP exists only in the demo server, which maps GET reads and positional
+POST `{args:[...]}` writes to the two tables. No server filesystem data path.
 
-[`sdk_values.rs`](../../crates/layerfs-bridge/src/sdk_values.rs) encodes
-Commits, Layers, conflicts and `.lww` decisions as values, once, for both the
-daemon's SDK calls and the internal API's Workspace answers.
+Project is the named stack; main is its line of Layers. Branches have unique
+names and named IDs; immutable Commit/Layer IDs use lowercase tagged hex. Public
+pageSize/pagePos defaults are 50/0 with maximum size 1,000 and safe integers.
+Names sort by bytes; recursive paths use component-by-component byte order;
+Commit history is first-parent newest-first. Numeric deep positions skip bounded
+windows linearly. Byte bounds may shorten a page and `hasMore` discloses more.
+A live ref resolves once per call, so independent calls can observe new heads.
 
-## Names and identities
+Direct Branch mutations bind a private indexed Workspace, drive ordinary
+Workspace operations and publish one captured Content construction through the
+shared Save and History ports. Apply uses ordered `{op,...}` changes, one
+publication, and detail.index on refusal. Recursive operations use bounded name
+windows and a backed copied-hardlink map. Large edits stream chunks. Definite
+validation failure closes the private overlay; uncertain construction/publication
+retains the original failure and custody. There is no resident paths draft or
+separate canonical encoder. Main is read-only except through publish.
 
-A project is named by its stack name. A Branch is named by its name; `main` is
-the stack's line of Layers. Commits and Layers travel as the lowercase hex of
-their tagged identity. A Branch the SDK creates (fork, merge) gets
-`BranchId::named(stack, name)`. Branch names are unique in their stack and are
-not reused.
+Immutable reads use 1-based inclusive lines, at most 2,000 lines/48 KiB reply
+payload. Huge-line UTF-8 prefixes, omitted remainder and nextLine are explicit;
+there is no byte-read method. Grep streams literal matching. Blame follows
+immutable first parents without retaining the entire chain, skips unchanged
+content IDs and uses bounded LCS with exact common edges. Oversized changed
+middles are removed/added blocks with comparisonCoarse. Diff hunks may be omitted
+explicitly under comparison/reply bounds; equality uses immutable identity.
 
-## Methods
+Commit-v3 includes the message and operation/origin/displacement metadata in
+identity, excluding time/counters/LWW details. History persists fork origins,
+second parents, merge origins, displacement, LWW facts and overwritten Layers.
+The UI consumes those facts. Store accounting is maintained in original atomic
+publication/insertion transactions and read from one fixed row plus page PRAGMAs;
+per-file physical attribution stays null. Definitions and the retained v5
+speed/storage screen are in the linked SDK guide and issue checkpoint.
 
-The table lists what [`sdk/`](../../crates/layerfs-daemon/src/sdk/mod.rs)
-serves today.
+Private LAYERFS_HOME ownership/mode authorizes persistent project/Sandbox records.
+A fresh process validates full saved deployment/container/Noise/daemon identity
+and can use an ID and mount path without Init, reinstall or attach replay.
+Nonblocking OS locks and persisted create intent prevent guessing after an
+uncertain create. Restart recovery and failed-operation replay are excluded.
 
-| Method | Arguments | Result | Refusals |
-| --- | --- | --- | --- |
-| `project.list_branches` | `project` | `items[]`: name, id, base, head (main first; main has no id) | `NoSuchProject` |
-| `branch.fork` | `project, name, from?` (Branch, `main`, or a Commit or Layer id) | `Forked` | `ReservedName`, `NameTaken`, `NoSuchBranch` |
-| `branch.list_commits` | `project, branch, cursor?` | `items[]` (newest first), `nextCursor` | `NoSuchBranch` |
-| `branch.merge` | `project, branch, with, name, agent?` | `Merged` with `fastForward`, `head`, `root`, `sources`, `mergeBase`, `lww` | `Conflict` (detail: sources, mergeBase, conflicts with hunks, lww), `NameTaken`, `ReservedName`, `HeadMoved` |
-| `branch.publish` | `project, branch, commit?` | `Added` with `overwrote[]`, `UpToDate`, `NoChanges` | `NoCommit`, `HeadMoved` |
-| `fs.write` | `project, branch, path, content` or `bytes`, `agent?, call?` | `Committed` or `UpToDate` | `NoSuchPath`, `IsDirectory`, `ReadOnly` (main), `HeadMoved` |
-| `fs.edit` | `project, branch, path, oldText, newText, all?` | as `fs.write` | `NoMatch`, `AmbiguousMatch` (with `matches`), `NotText`, `TooLarge` |
-| `fs.mkdir`, `fs.remove` | `project, branch, path, recursive?` | as `fs.write` | `Exists`, `NotDirectory`, `NotEmpty` |
-| `fs.cp`, `fs.mv` | `project, branch, from, to, recursive?` | as `fs.write` | `Exists`, `InvalidMove`, `IsDirectory` |
-| `fs.apply` | `project, branch, changes[]` (each with `kind`) | one Commit for all changes | the first invalid change |
-| `fs.read` | `project, branch` or `commit, path, offset?` | `snapshot, root, path, inode, size, offset, text` or `bytes`, `nextOffset` | `NoSuchPath`, `IsDirectory`, `NotFile` |
-| `fs.list` | `project, branch` or `commit, path?, cursor?` | `items[]`: name, path, type, inode; `nextCursor` | `NoSuchPath`, `NotDirectory` |
-| `fs.stat` | `project, branch` or `commit, path` | `type, inode, size` | `NoSuchPath` |
-| `fs.grep` | `project, branch` or `commit, pattern, path?, cursor?` | `items[]`: path, line, text; `skipped`, `nextCursor` | `TooLarge` |
-| `fs.glob` | `project, branch` or `commit, pattern, path?, cursor?` | `items[]` (paths), `nextCursor` | `TooLarge` |
-| `fs.diff_files` | `project, branch, left, right` (each `path, commit?`) | `Equal`, `Text` or `Binary`, with `contentEqual`, `sameInode`, `hunks` | `NoSuchPath`, `IsDirectory` |
-| `fs.blame` | `project, branch` or `commit, path, fromLine?` | `versions`, `lines[]`: n, text, commit, agent, clipped; `origins[]`, `nextLine` | `NotText` |
-| `branch.diff_commits` | `project, from, to` (Commit ids) | `from, to, items[]` (changes), `nextCursor`, `truncated` | `InvalidInput` |
-| `branch.diff_branches` | `project, from, to` (Branches or `main`) | as `diff_commits` | `InvalidInput` |
-| `inspect.snapshot` | `project, since?` | `version`, `branches[]`, `commits[]`, `more`, `layers[]`, `moreLayers`, `workspaces[]`; or `unchanged` | `NoSuchProject` |
+`operator.inspect.snapshot` joins the client's service and known Sandboxes,
+including each mounted Workspace's real overlay data. The bounded daemon answer
+discloses moreBranches/more/moreLayers. Its version includes local publication
+revision as well as history/binding facts; JS combines daemon versions. The demo
+may poll; it has no event-stream or reconstructed marker authority. Individual
+operator Workspace reads are observations and are not an atomic global snapshot.
 
-### Branch merge
+Typed Status remains a local observation with no Store SQL. The binding separately
+reads one newest Commit to add head/stale information. Unmount without discard
+refuses Dirty and preserves ownership; discard closes the Workspace explicitly.
+The Dirty detail is bounded. Busy still represents held runtime/kernel/operation
+ownership. Reaping and requests on replaced inodes retain the owner's deferral.
 
-`branch.merge` never changes either side. When one side is an ancestor of the
-other, the new Branch starts at the newer node (`fastForward: true`, no new
-Commit). Otherwise the two roots are merged against their merge base in one
-Save, with the left side's `/.lww`. The labels are `<name>@<short id>`. A
-clean result becomes one Commit (`via: merge`) whose parent is the left head
-(when it is a Commit) and whose second parent is the right node. Its base is
-main's head when main is a side, else the left Branch's base. A conflict drops
-the unfinished Save and creates nothing. Both sides must still be at the merged
-nodes when the Branch is created (`HeadMoved` otherwise, one attempt).
-
-### Direct Branch writes
-
-Every `fs` write is one Commit with `via: fs` on the named Branch.
-[`paths/`](../../crates/layerfs-content/src/paths/mod.rs) in Content applies
-the ordered changes to the head's root. It follows the simulator's
-`applyChanges` rules and refusal codes, and the first invalid change refuses
-the whole list. Only the touched paths are kept, keyed by their current path;
-every other path resolves through its parent into the base tree. The result is
-built by one `update_filesystem` call in one Save:
-
-- A written file keeps its serial and mode and gets the new modification time.
-- A new file (`0o644`) or directory (`0o755`) gets a fresh serial from the
-  Store's allocator.
-- A copy gets fresh serials and the source values.
-- A move keeps serials.
-
-The Commit is published against the head it was built on, in one attempt.
-`main` is refused (`ReadOnly`); it changes only by `branch.publish`. Edits read
-a file as text within 1 MiB (`TooLarge` above it). A call's bytes are bounded
-by one control record, and one change list may draft at most 65,536 paths.
-
-### Reads, differences and blame
-
-Reads name a saved snapshot: `commit` (a Commit or Layer id) when given, else
-`branch` (a Branch's newest node, or `main`'s head Layer). They walk the
-snapshot's immutable tree from its root and never read a live Workspace. Each
-answer fits one control record:
-
-- `fs.read` returns at most 48 KiB from `offset`; a window ending inside a
-  character stops before it. Text is valid UTF-8 without NUL, else bytes.
-- `fs.list` returns one directory window and the next name.
-- `fs.grep` (literal, per line, text files within 1 MiB, lines shown up to
-  1 KiB) and `fs.glob` (the `/.lww` pattern syntax, matching the whole path)
-  walk at most 65,536 entries below their path and refuse a larger subtree
-  with `TooLarge`. Both resume after `nextCursor`.
-
-Tree differences come from Content's path-level root comparison (at most 4,096
-changes, reported as `truncated` beyond). A directory whose only change is its
-children is not listed. Each change has `content`, `identity` (a different
-inode) and `metadata` flags, and the line difference of a text file while the
-reply budget lasts (`hunksOmitted` after). `fs.diff_files` compares two files
-within 1 MiB; larger or binary files compare by content identity.
-
-`fs.blame` follows the simulator: the chain walks a Commit's parents, then its
-base Layer; a published Layer continues through its source Commit. A line is
-owned by the oldest version from which it is unchanged, found with the same
-line matching as the difference. The chain is at most 1,024 versions, and the
-oldest owns the lines still open. A version whose file has the same content
-identity is passed without reading it.
-
-### Inspect
-
-`inspect.snapshot` is the operator read model, not an agent method. It returns
-the project's Branches (main first), its newest Commits (deduplicated across
-Branches, newest first per Branch) and Layers (from main's head), and this
-daemon's bound Workspaces on the project, within one control record. `more`
-holds the `branch.list_commits` cursor for each Branch that has older Commits;
-`moreLayers` says older Layers were left out. Each Workspace has its id and
-namespace, Branch, base Commit, base Layer and root, activity, whether it is
-mounted and where, `headMovedSinceMount`, its uncaptured change counts and
-`pendingMerge`. `version` is a digest of everything else in the answer, so
-`since: version` answers `unchanged` until a Commit, merge, publish, fork,
-mount, unmount or Workspace write changes what the answer shows. A Sandbox is
-the daemon serving it, so a caller with several Sandboxes asks each one.
-
-## Workspace control changes
-
-- **Status** is unchanged and still reads no Store: it reports maintained
-  local state only. The SDK's `sandbox.status` adds the Branch head from one
-  separate newest-first `Request::History` read (limit 1) on the bound
-  Branch, unknown when that read fails. It differs from the binding's head
-  when another Workspace committed since this one was bound or last
-  committed; the SDK reports that as `headMovedSinceMount`. (Phase 2,
-  2026-10-15: the first version read the head inside Status and broke the
-  zero-Store-SQL Status contract that `mount_control` checks.)
-- **Unmount** carries `discard`. Without it, a Workspace with uncommitted
-  changes is refused with `Reply::Dirty` and nothing is closed. A Workspace is
-  dirty when its active generation holds changed inodes or names, a capture is
-  in flight, or its local base differs from the history binding (an
-  unpublished conflicted merge). The report names the changed paths, at most
-  256, from the same indexed windows a capture reads: active bindings first,
-  then a bounded walk of the local base. The check is an observation before
-  terminal admission; a write that lands after it is closed with the
-  Workspace. With `discard` the Workspace is closed as before. `Busy` keeps
-  its meaning: an operation in progress or a kernel holder.
-
-## Internal Rust library
-
-[`layerfs-api`](../../crates/layerfs-api/src/lib.rs) is the internal library
-the JavaScript SDK's native binding calls; it is never published. It is laid
-out `{group}/{method}`, one function per JavaScript method:
-
-- `fs/`, `branch/`, `inspect/` and `project::list_branches` are each one
-  `call(control, "<group>.<method>", args)`: plain arguments in, a value or an
-  `SdkError::Refused` with its stable code out.
-- `sandbox/` keeps the typed Workspace control operations. `mount_branch`
-  mounts a Branch by name (found with `project.list_branches`), `commit_with`
-  carries force and attribution, and `unmount_checked` carries discard.
-  [`sandbox::values`](../../crates/layerfs-api/src/sandbox/values.rs) gives
-  their answers the SDK's value shapes and turns a Commit conflict, a Dirty
-  unmount and a daemon control refusal (for example `Busy`) into refusals
-  with stable codes.
-- The typed history pages (`ProjectApi::fork`, `commits`, `branches`) stay for
-  internal callers; the JavaScript methods use the SDK channel.
-
-## JavaScript package and Node binding
-
-The package is at [`sdk/js/`](../../../sdk/js/README.md). Its addon crate
-`layerfs-node` (napi-rs, owner-approved) is a member of the core workspace and
-exports one function, `call(op, args)`. Workspace operations go through the
-typed control above; every other method is one SDK channel call through a
-Sandbox of the client. The binding is the Sandbox runtime owner: it runs
-commands with the runtime directly and keeps background processes; the daemon
-holds no process record.
+Disposable/WAL/OFF only; Durable is NOT_RUN pending explicit owner reauthorization.
+New Store schema/identity records reject old Disposable Stores without migration.
