@@ -163,6 +163,7 @@ impl Session {
             OpenFlags::SQLITE_OPEN_READ_ONLY
         } | OpenFlags::SQLITE_OPEN_NO_MUTEX;
         let connection = Connection::open_with_flags(path, flags).map_err(rows::error)?;
+        connection.set_prepared_statement_cache_capacity(64);
         connection
             .busy_timeout(std::time::Duration::ZERO)
             .map_err(rows::error)?;
