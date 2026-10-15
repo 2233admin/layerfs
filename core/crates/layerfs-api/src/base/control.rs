@@ -187,6 +187,7 @@ fn matches_reply(request: &Request, reply: &Reply) -> bool {
             },
         ) => token == observed,
         (Request::EndSession, Reply::SessionEnded) => true,
+        (Request::Sdk(_), Reply::Sdk(_) | Reply::SdkRefused(_)) => true,
         (Request::Hello(request), Reply::Hello(status)) => request
             .expected_instance
             .is_none_or(|expected| expected == status.instance),
