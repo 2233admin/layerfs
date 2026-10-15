@@ -17,8 +17,8 @@ use layerfs_content::{
     ObjectId,
 };
 use layerfs_history::{
-    BranchId, CommitStagedOutcome, HistoryCatalog, HistoryCatalogConfig, HistoryName, LayerStackId,
-    StageRequest, WorkspaceId,
+    BranchId, CommitOutcome, CommitRequest, HistoryCatalog, HistoryCatalogConfig, HistoryName,
+    LayerStackId,
 };
 use layerfs_persistence::{Handles, PersistenceConfig, SqlitePersistenceProfile};
 use layerfs_storage::{Storage, StoragePolicy};
@@ -374,21 +374,20 @@ fn complete_snapshot_history_all_original_states_accept_restored_root_and_reject
         save.finish().unwrap();
         let outcome = handles
             .history
-            .stage_and_commit(&StageRequest {
-                workspace: WorkspaceId::from_authority([75; 32]).unwrap(),
+            .commit_branch(&CommitRequest {
                 branch: branch.branch.id,
                 expected_head: branch.branch.head_commit,
                 expected_base: branch.branch.base_layer,
                 expected_root: branch.effective_root,
-                construction_base_root: branch.effective_root,
-                intended_commit_base: branch.branch.base_layer,
                 candidate_root: root,
                 profile: branch.profile,
                 scope: branch.scope,
-                generation: step as u64,
+                second_parent: None,
+                meta: layerfs_history::CommitMeta::new(layerfs_history::CommitVia::Workspace),
+                force: false,
             })
             .unwrap();
-        let CommitStagedOutcome::Committed(record) = outcome else {
+        let CommitOutcome::Committed { record, .. } = outcome else {
             panic!("distinct state must Commit")
         };
         let state = home.join(format!("state-{step}.tsv"));
@@ -519,21 +518,20 @@ fn complete_history_uses_actual_31_roots_and_rejects_wrong_parent_and_old_root_b
         save.finish().unwrap();
         let outcome = handles
             .history
-            .stage_and_commit(&StageRequest {
-                workspace: WorkspaceId::from_authority([51; 32]).unwrap(),
+            .commit_branch(&CommitRequest {
                 branch: branch.branch.id,
                 expected_head: branch.branch.head_commit,
                 expected_base: branch.branch.base_layer,
                 expected_root: branch.effective_root,
-                construction_base_root: branch.effective_root,
-                intended_commit_base: branch.branch.base_layer,
                 candidate_root: root,
                 profile: branch.profile,
                 scope: branch.scope,
-                generation: u64::from(step),
+                second_parent: None,
+                meta: layerfs_history::CommitMeta::new(layerfs_history::CommitVia::Workspace),
+                force: false,
             })
             .unwrap();
-        let CommitStagedOutcome::Committed(record) = outcome else {
+        let CommitOutcome::Committed { record, .. } = outcome else {
             panic!("external changed candidate must Commit")
         };
         let state = home.join(format!("state-{step}.tsv"));

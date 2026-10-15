@@ -42,8 +42,8 @@ use layerfs_content::{
     ObjectId,
 };
 use layerfs_history::{
-    BranchId, CommitStagedOutcome, ForkRequest, ForkSource, HistoryCatalog, HistoryCatalogConfig,
-    HistoryName, LayerStackId, StageRequest, WorkspaceId,
+    BranchId, CommitOutcome, CommitRequest, ForkRequest, ForkSource, HistoryCatalog,
+    HistoryCatalogConfig, HistoryName, LayerStackId,
 };
 use layerfs_persistence::{Handles, PersistenceConfig, SqlitePersistenceProfile};
 use layerfs_storage::{Storage, StoragePolicy};
@@ -309,21 +309,20 @@ fn compact(home: &Path) {
                 .unwrap();
             let result = handles
                 .history
-                .stage_and_commit(&StageRequest {
-                    workspace: WorkspaceId::from_authority([41 + ordinal as u8; 32]).unwrap(),
+                .commit_branch(&CommitRequest {
                     branch: current.branch.id,
                     expected_head: current.branch.head_commit,
                     expected_base: current.branch.base_layer,
                     expected_root: current.effective_root,
-                    construction_base_root: current.effective_root,
-                    intended_commit_base: current.branch.base_layer,
                     candidate_root: root,
                     profile: current.profile,
                     scope: current.scope,
-                    generation: local as u64,
+                    second_parent: None,
+                    meta: layerfs_history::CommitMeta::new(layerfs_history::CommitVia::Workspace),
+                    force: false,
                 })
                 .unwrap();
-            let CommitStagedOutcome::Committed(record) = result else {
+            let CommitOutcome::Committed { record, .. } = result else {
                 panic!("original compact edit must Commit")
             };
             if role == "trunk" && local == 5 {

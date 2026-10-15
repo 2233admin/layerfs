@@ -494,7 +494,14 @@ fn verify_dedup_store(args: &Args, events: &mut Events, proof_mode: DedupProof) 
             .commit(head)?
             .ok_or("workspace reuse actual Commit missing")?;
         if commit.parent.is_some()
-            || head != CommitId::derive(commit.root, commit.parent, commit.base_layer)
+            || head
+                != CommitId::derive(
+                    commit.root,
+                    commit.parent,
+                    commit.base_layer,
+                    commit.second_parent,
+                    &commit.meta,
+                )
             || commit.stack != stack
             || commit.root != snapshot.effective_root
             || commit.base_layer != base.id
@@ -1920,14 +1927,19 @@ fn topology_proof(args: &Args, events: &mut Events, access_mode: bool) -> Result
         if union.insert(ack.id, tuple).is_some_and(|old| old != tuple) {
             return Err("topology conflicting duplicate full Commit tuple".into());
         }
-        if CommitId::derive(ack.root, ack.parent, ack.base) != ack.id {
-            return Err("topology canonical Commit tuple identity differs".into());
-        }
         let record = handles
             .history
             .commit(ack.id)?
             .ok_or("topology acknowledged Commit missing")?;
-        if (record.stack, record.root, record.parent, record.base_layer) != tuple {
+        if CommitId::derive(
+            record.root,
+            record.parent,
+            record.base_layer,
+            record.second_parent,
+            &record.meta,
+        ) != ack.id
+            || (record.stack, record.root, record.parent, record.base_layer) != tuple
+        {
             return Err("topology persisted five-field acknowledgement differs".into());
         }
         let chosen = selected.contains(&(ack.role.clone(), ack.local));

@@ -173,7 +173,17 @@ pub fn parse_acknowledgements(body: &str) -> Result<Acknowledgements> {
     };
     if ack.base != LayerId::from_bytes(bytes(commit[4])?)?
         || ack.stack != LayerStackId::from_bytes(bytes(commit[5])?)?
-        || ack.commit != CommitId::derive(ack.final_root, None, ack.base)
+        || ack.commit
+            != CommitId::derive(
+                ack.final_root,
+                None,
+                ack.base,
+                None,
+                &layerfs_history::CommitMeta {
+                    branch: Some(ack.branch),
+                    ..layerfs_history::CommitMeta::new(layerfs_history::CommitVia::Workspace)
+                },
+            )
         || ack.initial == ack.final_root
     {
         return Err("footprint canonical exact five-field Commit/Init binding differs".into());

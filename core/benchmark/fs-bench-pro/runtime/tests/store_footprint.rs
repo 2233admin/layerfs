@@ -41,8 +41,8 @@ use layerfs_content::{
     ObjectId,
 };
 use layerfs_history::{
-    BranchId, CommitStagedOutcome, ForkRequest, ForkSource, HistoryCatalog, HistoryCatalogConfig,
-    HistoryName, LayerStackId, StageRequest, WorkspaceId,
+    BranchId, CommitOutcome, CommitRequest, ForkRequest, ForkSource, HistoryCatalog,
+    HistoryCatalogConfig, HistoryName, LayerStackId,
 };
 use layerfs_persistence::{Handles, PersistenceConfig, SqlitePersistenceProfile};
 use layerfs_storage::{Storage, StoragePolicy};
@@ -287,7 +287,16 @@ fn acknowledgement() -> String {
     let initial = ObjectId::for_bytes(b"external footprint initial root");
     let final_root = ObjectId::for_bytes(b"external footprint final root");
     let base = layerfs_history::LayerId::derive(stack, None, initial);
-    let commit = layerfs_history::CommitId::derive(final_root, None, base);
+    let commit = layerfs_history::CommitId::derive(
+        final_root,
+        None,
+        base,
+        None,
+        &layerfs_history::CommitMeta {
+            branch: Some(branch),
+            ..layerfs_history::CommitMeta::new(layerfs_history::CommitVia::Workspace)
+        },
+    );
     format!("fs-bench-pro-store-footprint-ack-v1\nstore-footprint-unique-100-low-v1\ninit\t{}\t{}\t{}\t{}\ncommit\t{}\t{}\t-\t{}\t{}\n",
         hex(branch.as_slice()),hex(initial.as_bytes()),hex(base.as_slice()),hex(stack.as_slice()),
         hex(commit.as_slice()),hex(final_root.as_bytes()),hex(base.as_slice()),hex(stack.as_slice()))
@@ -312,7 +321,17 @@ fn footprint_ack_rejects_changed_tuple_scope_extra_rows_and_noncanonical_identit
         body.replace(commit[2], init[2]),
         body.replace(
             commit[1],
-            &hex(layerfs_history::CommitId::derive(parsed.initial, None, parsed.base).as_slice()),
+            &hex(layerfs_history::CommitId::derive(
+                parsed.initial,
+                None,
+                parsed.base,
+                None,
+                &layerfs_history::CommitMeta {
+                    branch: Some(parsed.branch),
+                    ..layerfs_history::CommitMeta::new(layerfs_history::CommitVia::Workspace)
+                },
+            )
+            .as_slice()),
         ),
         body.replace(init[1], "ff"),
         body.replace(commit[1], &commit[1].to_uppercase()),
@@ -398,21 +417,20 @@ fn fixture(home: &Path, corrupt_boundary: bool, extra_branch: bool) -> args::Arg
     save.finish().unwrap();
     let outcome = handles
         .history
-        .stage_and_commit(&StageRequest {
-            workspace: WorkspaceId::from_authority([101; 32]).unwrap(),
+        .commit_branch(&CommitRequest {
             branch: initial.branch.id,
             expected_head: None,
             expected_base: initial.branch.base_layer,
             expected_root: initial.effective_root,
-            construction_base_root: initial.effective_root,
-            intended_commit_base: initial.branch.base_layer,
             candidate_root: root,
             profile: initial.profile,
             scope: initial.scope,
-            generation: 1,
+            second_parent: None,
+            meta: layerfs_history::CommitMeta::new(layerfs_history::CommitVia::Workspace),
+            force: false,
         })
         .unwrap();
-    let CommitStagedOutcome::Committed(commit) = outcome else {
+    let CommitOutcome::Committed { record: commit, .. } = outcome else {
         panic!("synthetic changed candidate must Commit")
     };
     if extra_branch {
@@ -521,7 +539,16 @@ fn footprint_census_projection_is_exact_and_binds_actual_typed_acknowledgements(
     assert_eq!(projection.lines().count(), 2);
     assert!(projection.lines().all(|row| row.split('\t').count() == 5));
     let changed_root = ObjectId::for_bytes(b"different canonical footprint root");
-    let changed_commit = layerfs_history::CommitId::derive(changed_root, None, ack.base);
+    let changed_commit = layerfs_history::CommitId::derive(
+        changed_root,
+        None,
+        ack.base,
+        None,
+        &layerfs_history::CommitMeta {
+            branch: Some(ack.branch),
+            ..layerfs_history::CommitMeta::new(layerfs_history::CommitVia::Workspace)
+        },
+    );
     let changed = original
         .replace(
             &hex(ack.final_root.as_bytes()),
@@ -581,7 +608,16 @@ fn footprint_canonical_ack_tamper_cannot_publish_a_census_projection() {
     let original = fs::read_to_string(options.history_file.as_ref().unwrap()).unwrap();
     let ack = store_footprint::parse_acknowledgements(&original).unwrap();
     let other_root = ObjectId::for_bytes(b"canonical root not acknowledged by this Store");
-    let other_commit = layerfs_history::CommitId::derive(other_root, None, ack.base);
+    let other_commit = layerfs_history::CommitId::derive(
+        other_root,
+        None,
+        ack.base,
+        None,
+        &layerfs_history::CommitMeta {
+            branch: Some(ack.branch),
+            ..layerfs_history::CommitMeta::new(layerfs_history::CommitVia::Workspace)
+        },
+    );
     let changed = original
         .replace(&hex(ack.final_root.as_bytes()), &hex(other_root.as_bytes()))
         .replace(&hex(ack.commit.as_slice()), &hex(other_commit.as_slice()));

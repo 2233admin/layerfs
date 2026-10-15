@@ -33,7 +33,7 @@ mod session;
 mod workspace_oracle;
 
 use layerfs_api::{BoundWorkspace, MountedWorkspace};
-use layerfs_bridge::control::{NativeReceipt, ReadyMount, WorkspaceToken};
+use layerfs_bridge::control::{MountReceipt, ReadyMount, WorkspaceToken};
 use layerfs_content::ObjectId;
 use layerfs_history::{
     BranchId, BranchRecord, BranchSnapshot, CommitId, ForkSource, HistoryName, LayerId,
@@ -88,7 +88,7 @@ fn mounted(role: &str, channel: usize) -> (String, session::Mounted) {
         scope: root,
         profile: root,
     };
-    let receipt = NativeReceipt {
+    let receipt = MountReceipt {
         mount: 1,
         root: 1,
         mount_id: 1,
@@ -132,7 +132,13 @@ fn protocol_public_fork_request_preserves_typed_source_and_refuses_invalid_autho
     let parent = BranchId::from_authority([41; 16]);
     let child = BranchId::from_authority([42; 16]);
     let branches = BTreeMap::from([("main".into(), parent)]);
-    let commit = CommitId::derive(root, None, base);
+    let commit = CommitId::derive(
+        root,
+        None,
+        base,
+        None,
+        &layerfs_history::CommitMeta::new(layerfs_history::CommitVia::Workspace),
+    );
     let request = session::parse_fork(
         &format!("layer\t{}\ttrunk\n", hex(&child.to_bytes())),
         stack,
@@ -221,7 +227,13 @@ fn protocol_public_fork_request_preserves_typed_source_and_refuses_invalid_autho
 fn protocol_history_is_anchored_and_keeps_original_cursor_and_page_bounds() {
     let (_, base, root) = identities();
     let branch = BranchId::from_authority([11; 16]);
-    let commit = CommitId::derive(root, None, base);
+    let commit = CommitId::derive(
+        root,
+        None,
+        base,
+        None,
+        &layerfs_history::CommitMeta::new(layerfs_history::CommitVia::Workspace),
+    );
     let request =
         session::parse_history(&format!("{}\t-\t32", hex(&commit.to_bytes())), branch).unwrap();
     assert_eq!(request.start, Some(commit));

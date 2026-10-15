@@ -43,8 +43,8 @@ use layerfs_content::{
     ObjectId,
 };
 use layerfs_history::{
-    BranchId, CommitStagedOutcome, HistoryCatalog, HistoryCatalogConfig, HistoryName, LayerStackId,
-    StageRequest, WorkspaceId,
+    BranchId, CommitOutcome, CommitRequest, HistoryCatalog, HistoryCatalogConfig, HistoryName,
+    LayerStackId,
 };
 use layerfs_persistence::{Handles, PersistenceConfig, SqlitePersistenceProfile};
 use layerfs_storage::{Storage, StoragePolicy};
@@ -568,26 +568,25 @@ fn dedup_oracle_real_reuse_initial_and_first_commit_bind_both_immutable_states()
     save.finish().unwrap();
     let outcome = handles
         .history
-        .stage_and_commit(&StageRequest {
-            workspace: WorkspaceId::from_authority([27; 32]).unwrap(),
+        .commit_branch(&CommitRequest {
             branch: snapshot.branch.id,
             expected_head: snapshot.branch.head_commit,
             expected_base: snapshot.branch.base_layer,
             expected_root: snapshot.effective_root,
-            construction_base_root: snapshot.effective_root,
-            intended_commit_base: snapshot.branch.base_layer,
             candidate_root: root,
             profile: snapshot.profile,
             scope: snapshot.scope,
-            generation: 1,
+            second_parent: None,
+            meta: layerfs_history::CommitMeta::new(layerfs_history::CommitVia::Workspace),
+            force: false,
         })
         .unwrap();
-    let CommitStagedOutcome::Committed(commit) = outcome else {
+    let CommitOutcome::Committed { record: commit, .. } = outcome else {
         panic!("actual first changed state must Commit")
     };
     assert_eq!(
         commit.id,
-        layerfs_history::CommitId::derive(root, None, commit.base_layer)
+        layerfs_history::CommitId::derive(root, None, commit.base_layer, None, &commit.meta)
     );
     drop(storage);
     handles.seal().unwrap();
@@ -649,10 +648,14 @@ fn dedup_oracle_real_reuse_initial_and_first_commit_bind_both_immutable_states()
         body.replacen(&hex(&manifest.root), &hex(root.as_bytes()), 1),
         body.replacen(
             &hex(commit.id.as_slice()),
-            &hex(
-                layerfs_history::CommitId::derive(root, Some(commit.id), commit.base_layer)
-                    .as_slice(),
-            ),
+            &hex(layerfs_history::CommitId::derive(
+                root,
+                Some(commit.id),
+                commit.base_layer,
+                None,
+                &commit.meta,
+            )
+            .as_slice()),
             1,
         ),
         body.replacen(&hex(root.as_bytes()), &hex(&manifest.root), 1),

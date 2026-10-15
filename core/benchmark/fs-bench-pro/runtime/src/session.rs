@@ -5,8 +5,8 @@ use layerfs_bridge::{
     provision::StoreManifest,
 };
 use layerfs_history::{
-    BranchId, CommitHistoryRequest, CommitId, CommitStagedOutcome, ForkRequest, ForkSource,
-    HistoryName, LayerId, LayerStackId, WorkspaceId,
+    BranchId, CommitHistoryRequest, CommitId, CommitOutcome, ForkRequest, ForkSource, HistoryName,
+    LayerId, LayerStackId, WorkspaceId,
 };
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -327,15 +327,15 @@ fn commit_ack(
     let span = events.span(begun);
     let after = control.channel_work();
     let (kind, root) = match &outcome {
-        CommitStagedOutcome::Committed(record) => ("Committed", record.root),
-        CommitStagedOutcome::UpToDate { root, .. } => ("UpToDate", *root),
+        CommitOutcome::Committed { record, .. } => ("Committed", record.root),
+        CommitOutcome::UpToDate { root, .. } => ("UpToDate", *root),
     };
     let mut fields = vec![
         ("key", key.into()),
         ("commit_kind", kind.into()),
         ("root", crate::hex(&root.to_bytes())),
     ];
-    if let CommitStagedOutcome::Committed(record) = &outcome {
+    if let CommitOutcome::Committed { record, .. } = &outcome {
         fields.extend([
             ("commit_id", crate::hex(&record.id.to_bytes())),
             (
@@ -901,12 +901,12 @@ pub fn serve(args: &Args, events: &mut Events) -> Result<()> {
                 let after = control.channel_work().0.records;
                 let receive_after = control.channel_work().1.records;
                 let commit_kind = match &outcome {
-                    CommitStagedOutcome::Committed(_) => "Committed",
-                    CommitStagedOutcome::UpToDate { .. } => "UpToDate",
+                    CommitOutcome::Committed { record: _, .. } => "Committed",
+                    CommitOutcome::UpToDate { .. } => "UpToDate",
                 };
                 let root = match &outcome {
-                    CommitStagedOutcome::Committed(record) => record.root,
-                    CommitStagedOutcome::UpToDate { root, .. } => *root,
+                    CommitOutcome::Committed { record, .. } => record.root,
+                    CommitOutcome::UpToDate { root, .. } => *root,
                 };
                 let mut fields = vec![
                     ("key", key.into()),
@@ -915,7 +915,7 @@ pub fn serve(args: &Args, events: &mut Events) -> Result<()> {
                     ("commit_kind", commit_kind.into()),
                     ("root", crate::hex(&root.to_bytes())),
                 ];
-                if let CommitStagedOutcome::Committed(record) = &outcome {
+                if let CommitOutcome::Committed { record, .. } = &outcome {
                     fields.extend([
                         ("commit_id", crate::hex(&record.id.to_bytes())),
                         (

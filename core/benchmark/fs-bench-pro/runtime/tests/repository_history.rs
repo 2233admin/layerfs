@@ -44,8 +44,8 @@ use layerfs_content::{
     ObjectId,
 };
 use layerfs_history::{
-    BranchId, CommitStagedOutcome, HistoryCatalog, HistoryCatalogConfig, HistoryName, LayerStackId,
-    StageRequest, WorkspaceId,
+    BranchId, CommitOutcome, CommitRequest, HistoryCatalog, HistoryCatalogConfig, HistoryName,
+    LayerStackId,
 };
 use layerfs_persistence::{Handles, PersistenceConfig, SqlitePersistenceProfile};
 use layerfs_storage::{Storage, StoragePolicy};
@@ -318,21 +318,20 @@ fn fixture(case: &str, label: &str) -> Fixture {
                 .unwrap();
             let outcome = handles
                 .history
-                .stage_and_commit(&StageRequest {
-                    workspace: WorkspaceId::from_authority([66; 32]).unwrap(),
+                .commit_branch(&CommitRequest {
                     branch: fork.branch.id,
                     expected_head: snapshot.branch.head_commit,
                     expected_base: snapshot.branch.base_layer,
                     expected_root: snapshot.effective_root,
-                    construction_base_root: snapshot.effective_root,
-                    intended_commit_base: snapshot.branch.base_layer,
                     candidate_root: candidate,
                     profile: snapshot.profile,
                     scope: snapshot.scope,
-                    generation: step as u64,
+                    second_parent: None,
+                    meta: layerfs_history::CommitMeta::new(layerfs_history::CommitVia::Workspace),
+                    force: false,
                 })
                 .unwrap();
-            let CommitStagedOutcome::Committed(record) = outcome else {
+            let CommitOutcome::Committed { record, .. } = outcome else {
                 panic!("changed public candidate must createCommit")
             };
             root = record.root;
@@ -356,22 +355,21 @@ fn fixture(case: &str, label: &str) -> Fixture {
                 .unwrap();
             let outcome = handles
                 .history
-                .stage_and_commit(&StageRequest {
-                    workspace: WorkspaceId::from_authority([66; 32]).unwrap(),
+                .commit_branch(&CommitRequest {
                     branch: fork.branch.id,
                     expected_head: snapshot.branch.head_commit,
                     expected_base: snapshot.branch.base_layer,
                     expected_root: snapshot.effective_root,
-                    construction_base_root: snapshot.effective_root,
-                    intended_commit_base: snapshot.branch.base_layer,
                     candidate_root: snapshot.effective_root,
                     profile: snapshot.profile,
                     scope: snapshot.scope,
-                    generation: step as u64,
+                    second_parent: None,
+                    meta: layerfs_history::CommitMeta::new(layerfs_history::CommitVia::Workspace),
+                    force: false,
                 })
                 .unwrap();
             assert!(
-                matches!(outcome, CommitStagedOutcome::UpToDate { root: retained, .. } if retained == root)
+                matches!(outcome, CommitOutcome::UpToDate { root: retained, .. } if retained == root)
             );
         }
         full += &format!(

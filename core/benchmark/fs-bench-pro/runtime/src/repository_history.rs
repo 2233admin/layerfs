@@ -372,7 +372,14 @@ pub fn verify(args: &Args, events: &mut Events) -> Result<()> {
                 || record.root != ack.root
                 || record.stack != stack
                 || record.base_layer != base
-                || record.id != CommitId::derive(record.root, record.parent, record.base_layer)
+                || record.id
+                    != CommitId::derive(
+                        record.root,
+                        record.parent,
+                        record.base_layer,
+                        record.second_parent,
+                        &record.meta,
+                    )
                 || created.insert(id, record.clone()).is_some()
             {
                 return Err("repository canonical Created tuple/parent differs".into());
