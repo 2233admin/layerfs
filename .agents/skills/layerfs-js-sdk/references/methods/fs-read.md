@@ -4,8 +4,8 @@
 > read from source on `main`; example outputs show the shape and are not yet captured
 > from a live run. Ids are 66 hex characters, shortened here as `"9f3c…"`.
 
-Snippets are the `// the step` part of the
-[script template](../scripts.md#3-the-step-script-template).
+Examples use `layerfs` as connected in [SKILL.md](../../SKILL.md#connect-to-a-project) and work on the Branch
+`"work"`.
 
 **Shared rules**
 
@@ -25,7 +25,7 @@ linearly, so narrow the path or pattern rather than paging far.
 ```js
 const all = [];
 for (let pos = 0; ; ) {
-  const page = await layerfs.fs.glob(state.branch, "src/**/*.js", "/", 1000, pos);
+  const page = await layerfs.fs.glob("work", "src/**/*.js", "/", 1000, pos);
   all.push(...page.items);
   if (!page.hasMore) break;
   pos += page.items.length;
@@ -69,7 +69,7 @@ back as a prefix; the rest of that line can't be read with `fs.read` (use `sandb
 the shared ones.
 
 ```js
-const r = await layerfs.fs.read(state.branch, "/src/cart.js", 1, 40);
+const r = await layerfs.fs.read("work", "/src/cart.js", 1, 40);
 ```
 ```json
 { "kind": "ok", "snapshot": "work@9f3c0a1b2c4d", "root": "5a07…", "path": "/src/cart.js", "text": "export class Cart {\n…", "startLine": 1, "endLine": 40, "lineTruncated": false, "truncated": true, "nextLine": 41, "size": 3812 }
@@ -80,7 +80,7 @@ const r = await layerfs.fs.read(state.branch, "/src/cart.js", 1, 40);
 ```js
 let line = 1, text = "";
 for (;;) {
-  const r = await layerfs.fs.read(state.branch, "/src/cart.js", line);
+  const r = await layerfs.fs.read("work", "/src/cart.js", line);
   text += r.text;
   if (r.nextLine == null) break;
   line = r.nextLine;
@@ -101,7 +101,7 @@ Lists one folder.
 **Refusals:** `NotDirectory`, plus the shared ones.
 
 ```js
-const page = await layerfs.fs.list(state.branch, "/src");
+const page = await layerfs.fs.list("work", "/src");
 ```
 ```json
 { "items": [{ "name": "cart.js", "type": "file", "inode": 41, "size": 3812 }, { "name": "routes", "type": "dir", "inode": 42, "size": 0 }], "hasMore": false, "nextPagePos": null }
@@ -114,7 +114,7 @@ Describes one path.
 **Returns:** `{ kind: "ok", snapshot, root, path, type, inode, size }`.
 
 ```js
-const exists = await layerfs.fs.stat(state.branch, "/package.json").then(() => true, (e) => { if (isRefusal(e, "NoSuchPath")) return false; throw e; });
+const exists = await layerfs.fs.stat("work", "/package.json").then(() => true, (e) => { if (isRefusal(e, "NoSuchPath")) return false; throw e; });
 ```
 
 ## `fs.grep(ref, pattern, path?, pageSize?, pagePos?)`
@@ -130,7 +130,7 @@ Finds lines that contain `pattern` in every text file under `path`.
 counts binary files passed over. Items come in path order, then line order.
 
 ```js
-const hits = await layerfs.fs.grep(state.branch, "TODO", "/src");
+const hits = await layerfs.fs.grep("work", "TODO", "/src");
 ```
 ```json
 { "items": [{ "path": "/src/cart.js", "line": 88, "text": "  // TODO: tax rounding\n", "lineTruncated": false }], "skipped": 0, "hasMore": false, "nextPagePos": null }
@@ -151,7 +151,7 @@ Finds paths matching a glob pattern.
 **Returns:** a page whose `items` are absolute path strings.
 
 ```js
-const tests = await layerfs.fs.glob(state.branch, "test/**/*.test.js", "/");
+const tests = await layerfs.fs.glob("work", "test/**/*.test.js", "/");
 ```
 ```json
 { "items": ["/test/cart.test.js", "/test/routes/cart-api.test.js"], "hasMore": false, "nextPagePos": null }
@@ -173,7 +173,7 @@ Compares two files, from any refs and paths.
 | `hunksOmitted` | True if the diff was too large to return |
 
 ```js
-const d = await layerfs.fs.diff_files("main", "/src/cart.js", state.branch, "/src/cart.js");
+const d = await layerfs.fs.diff_files("main", "/src/cart.js", "work", "/src/cart.js");
 console.log(d.hunks.filter((h) => h.op !== " ").map((h) => h.op + h.text).join(""));
 ```
 ```json
@@ -193,7 +193,7 @@ Shows which Commit last changed each line.
 was reported as one removed/added block).
 
 ```js
-const b = await layerfs.fs.blame(state.branch, "/src/cart.js", 80);
+const b = await layerfs.fs.blame("work", "/src/cart.js", 80);
 ```
 ```json
 { "lines": [{ "n": 80, "text": "  total() {", "lineTruncated": false, "commit": "9f3c…", "message": "cart: totals" }], "versions": 4, "comparisonCoarse": false }

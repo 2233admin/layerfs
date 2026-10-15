@@ -4,8 +4,8 @@
 > read from source on `main`; example outputs show the shape and are not yet captured
 > from a live run. Ids are 66 hex characters, shortened here as `"9f3c…"`.
 
-Snippets are the `// the step` part of the
-[script template](../scripts.md#3-the-step-script-template). Paging works as described
+Examples use `layerfs` as connected in [SKILL.md](../../SKILL.md#connect-to-a-project) and work on the Branch
+`"work"`. Paging works as described
 in [fs reads](fs-read.md).
 
 ## `branch.fork(name, fromRef?)`
@@ -30,7 +30,6 @@ first Commit.
 
 ```js
 await layerfs.branch.fork("cart");
-state.branch = "cart"; save();
 ```
 ```json
 { "kind": "Forked", "branch": "cart", "base": "41ab…", "head": null }
@@ -57,7 +56,7 @@ Lists a Branch's Commits, newest first, along first parents.
 | `time` | Commit time |
 
 ```js
-const log = await layerfs.branch.list_commits(state.branch, 10, 0);
+const log = await layerfs.branch.list_commits("work", 10, 0);
 console.log(log.items.map((c) => `${c.id.slice(0, 12)} ${c.message}`).join("\n"));
 ```
 
@@ -83,7 +82,7 @@ those).
 **Refusals:** `InvalidInput` (not two Commits), `NoSuchCommit`.
 
 ```js
-const [newest, previous] = (await layerfs.branch.list_commits(state.branch, 2, 0)).items;
+const [newest, previous] = (await layerfs.branch.list_commits("work", 2, 0)).items;
 const d = await layerfs.branch.diff_commits(previous.id, newest.id);
 console.log(d.items.map((c) => `${c.kind} ${c.path}`).join("\n"));
 ```
@@ -95,7 +94,7 @@ Same as `diff_commits`, between the current heads of two Branches or `main`.
 **Refusals:** `InvalidInput` (a Commit id instead of a Branch), `NoSuchBranch`.
 
 ```js
-const d = await layerfs.branch.diff_branches("main", state.branch);
+const d = await layerfs.branch.diff_branches("main", "work");
 console.log(`${d.items.length}${d.hasMore ? "+" : ""} paths differ from main`);
 ```
 
@@ -105,29 +104,27 @@ Merges Branches `a` and `b` into a **new** Branch `name`. `a` and `b` don't chan
 
 **Returns:** `{ kind: "Merged", fastForward, branch, head, root, sources, mergeBase,
 conflicts: [], lww }`. `fastForward: true` means one side already contained the other.
-`lww` lists files decided last-writer-wins, each `{ path, kept, ours, theirs, deleted,
-rule }`.
+`lww` lists files decided last-writer-wins by `a`'s
+[`/.lww` rules](../rules/lww.md), each `{ path, kept, deleted, rule }`.
 
 **Refusals**
 
 | Code | Meaning | Do |
 | --- | --- | --- |
-| `Conflict` | Overlapping changes; nothing was created. `detail.conflicts` lists `{ path, kind, blocks, hunks }` | Make the files agree on one Branch with `fs.*`, then merge again; or mount one side, commit a resolution there, then merge |
+| `Conflict` | Overlapping changes; nothing was created. `detail` has `sources`, `mergeBase`, `conflicts` (`{ path, kind, blocks, hunks }`) and `lww` | See [resolving conflicts](../rules/conflicts.md#branch-merge-conflicts) |
 | `NoMergeBase` | The Branches share no history | Fork from a common ref |
 | `NameTaken` | `name` exists | Pick a new name |
 | `NoSuchBranch` | `a` or `b` doesn't exist | Check the names |
 
 ```js
-try {
-  const m = await layerfs.branch.merge(state.branch, "main", `${state.branch}-on-main`, "merge main in");
-  state.branch = m.branch; save();
-  done({ branch: m.branch, fastForward: m.fastForward });
-} catch (error) {
-  if (!isRefusal(error, "Conflict")) throw error;
-  console.log(JSON.stringify({ ok: false, code: "Conflict", files: error.detail.conflicts.map((c) => c.path) }));
-  process.exit(1);
-}
+const m = await layerfs.branch.merge("work", "main", "work-on-main", "merge main in");
+console.log(m.branch, m.fastForward);
 ```
+
+**On `Conflict`** nothing is created and both Branches are unchanged. There's no
+overwrite option: fix one side, rule generated files in `a`'s `/.lww`, or copy the
+chosen side's files across, then merge again. See
+[resolving conflicts](../rules/conflicts.md#branch-merge-conflicts).
 
 ## `branch.publish(branch, commit?)`
 
@@ -160,9 +157,9 @@ and `overwrote` lists them. If someone else may have published since you forked,
 `main` in first, check the result, then publish the merged Branch:
 
 ```js
-const m = await layerfs.branch.merge(state.branch, "main", `${state.branch}-release`, "merge main before publish");
+const m = await layerfs.branch.merge("work", "main", "work-release", "merge main before publish");
 // mount m.branch and run the tests here, then:
 const p = await layerfs.branch.publish(m.branch);
 if (p.kind === "Added" && p.overwrote.length) console.log("warning: skipped", p.overwrote);
-done({ kind: p.kind, branch: m.branch });
+console.log(p.kind, m.branch);
 ```

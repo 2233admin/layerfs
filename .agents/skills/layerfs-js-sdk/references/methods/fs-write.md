@@ -4,8 +4,8 @@
 > read from source on `main`; example outputs show the shape and are not yet captured
 > from a live run. Ids are 66 hex characters, shortened here as `"9f3c…"`.
 
-Snippets are the `// the step` part of the
-[script template](../scripts.md#3-the-step-script-template).
+Examples use `layerfs` as connected in [SKILL.md](../../SKILL.md#connect-to-a-project) and work on the Branch
+`"work"`.
 
 **Shared rules**
 
@@ -47,7 +47,7 @@ Creates or replaces one file with `content`.
 **Refusals:** `IsDirectory`, plus the shared ones.
 
 ```js
-const r = await layerfs.fs.write(state.branch, "/src/cart.js", source, "cart: add Cart class");
+const r = await layerfs.fs.write("work", "/src/cart.js", source, "cart: add Cart class");
 ```
 ```json
 { "kind": "Committed", "branch": "work", "head": "9f3c…", "commit": { "id": "9f3c…", "parent": "77e1…", "message": "cart: add Cart class", "…": "…" } }
@@ -68,15 +68,13 @@ the cheap way to change a few lines of a big file.
 | shared | | See above |
 
 ```js
-try {
-  await layerfs.fs.edit(state.branch, "/src/cart.js", "const TAX = 0.07;", "const TAX = 0.08;", "cart: tax 8%");
-} catch (error) {
-  if (!isRefusal(error, "NoMatch") && !isRefusal(error, "AmbiguousMatch")) throw error;
-  const hits = await layerfs.fs.grep(state.branch, "TAX", "/src/cart.js");
-  console.log(JSON.stringify({ ok: false, code: error.code, lines: hits.items }));
-  process.exit(1);                         // pick a unique oldText in the next step
-}
+const r = await layerfs.fs.edit("work", "/src/cart.js", "const TAX = 0.07;", "const TAX = 0.08;", "cart: tax 8%");
+console.log(r.kind, r.head);
 ```
+
+On `NoMatch` or `AmbiguousMatch` nothing changed. Read the file as it is now
+(`fs.grep` for the text, then `fs.read` around those lines) before choosing a new
+`oldText`: the code may have changed since you last looked.
 
 ## `fs.apply(branch, changes, message?)`
 
@@ -106,26 +104,15 @@ const files = {
   "/test/server.test.js": "import { test } from 'node:test';\ntest('loads', () => {});\n",
 };
 const dirs = [...new Set(Object.keys(files).map((p) => p.slice(0, p.lastIndexOf("/"))).filter(Boolean))];
-const r = await layerfs.fs.apply(state.branch, [
+const r = await layerfs.fs.apply("work", [
   ...dirs.map((path) => ({ op: "mkdir", path })),
   ...Object.entries(files).map(([path, content]) => ({ op: "write", path, content })),
 ], "scaffold: package, server, first test");
-done({ kind: r.kind, head: r.head });
+console.log(r.kind, r.head);
 ```
 
-**Find the failing change**
-
-```js
-const changes = [/* … */];
-try {
-  await layerfs.fs.apply(state.branch, changes, "cart: routes");
-} catch (error) {
-  if (!error.code) throw error;
-  const bad = changes[error.detail?.index];
-  console.log(JSON.stringify({ ok: false, code: error.code, failed: bad?.op, path: bad?.path ?? bad?.from }));
-  process.exit(1);
-}
-```
+**When a change fails:** the refusal's `detail.index` points into your `changes` list. Nothing was published, so fix that change (or the state it
+assumed: a missing folder, an `oldText` that moved) and apply the whole batch again.
 
 ## `fs.mkdir(branch, path, message?)`
 
@@ -134,7 +121,7 @@ Creates a folder and any missing parents. An existing folder is a no-op (`UpToDa
 **Refusals:** `NotDirectory` (a file is in the way), plus the shared ones.
 
 ```js
-await layerfs.fs.mkdir(state.branch, "/src/routes/admin", "routes: admin folder");
+await layerfs.fs.mkdir("work", "/src/routes/admin", "routes: admin folder");
 ```
 
 ## `fs.rm(branch, path, message?)`
@@ -144,7 +131,7 @@ Removes a file or a whole folder tree.
 **Refusals:** `NoSuchPath`, plus the shared ones.
 
 ```js
-await layerfs.fs.rm(state.branch, "/src/legacy", "remove legacy folder");
+await layerfs.fs.rm("work", "/src/legacy", "remove legacy folder");
 ```
 
 ## `fs.cp(branch, from, to, message?)`
@@ -167,5 +154,5 @@ Moves or renames a file or folder tree. Keeps identity and timestamps.
 **Refusals:** the same as `fs.cp`.
 
 ```js
-await layerfs.fs.mv(state.branch, "/src/basket.js", "/src/cart.js", "cart: rename basket");
+await layerfs.fs.mv("work", "/src/basket.js", "/src/cart.js", "cart: rename basket");
 ```

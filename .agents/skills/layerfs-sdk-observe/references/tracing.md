@@ -1,6 +1,6 @@
 # Call trace
 
-> **Status:** Current general guide. Part of the `layerfs-js-sdk` skill. Describes the
+> **Status:** Current general guide. Part of the `layerfs-sdk-observe` skill. Describes the
 > #333 trace on branch `claude/issue333-telemetry-e4e6cc` (commits `7bf36a288` to
 > `4dd90762d`), not yet merged to `main`. Its source of truth is the "Call trace"
 > section of `sdk/js/README.md` on that branch.
@@ -19,7 +19,7 @@ traces nothing.
 ## One line
 
 ```json
-{"layerfs_trace":1,"id":"9f3c21aa-12","step":"012 cart: add tests","method":"sandbox.commit","args":{"path":"/layerfs/w/3","message":"cart: tests pass","sandbox":"sb_…"},"start":"2026-10-15T09:12:01.120Z","scope":"…","ms":184.2,"ok":true,"kind":"Committed","commit":"c41d…","sizes":{"logical":5210344,"newCanonical":48211,"newStored":21007,"newMetadata":9120},"daemon":[{"timing":[{"name":"commit","ms":171.9,"children":[{"name":"capture","ms":12.0},{"name":"construct","ms":121.4},{"name":"publish","ms":31.0},{"name":"install","ms":7.5}]}],"storage":{"pack_write_bytes":21007,"…":0},"construction":{"files_constructed":37,"…":0}}]}
+{"layerfs_trace":1,"id":"9f3c21aa-12","step":"012 cart: add tests","method":"sandbox.commit","args":{"path":"/workspaces/3","message":"cart: tests pass","sandbox":"sb_…"},"start":"2026-10-15T09:12:01.120Z","scope":"…","ms":184.2,"ok":true,"kind":"Committed","commit":"c41d…","sizes":{"logical":5210344,"newCanonical":48211,"newStored":21007,"newMetadata":9120},"daemon":[{"timing":[{"name":"commit","ms":171.9,"children":[{"name":"capture","ms":12.0},{"name":"construct","ms":121.4},{"name":"publish","ms":31.0},{"name":"install","ms":7.5}]}],"storage":{"pack_write_bytes":21007,"…":0},"construction":{"files_constructed":37,"…":0}}]}
 ```
 
 | Field | Meaning |

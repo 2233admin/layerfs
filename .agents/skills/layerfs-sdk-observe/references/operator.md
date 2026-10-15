@@ -1,6 +1,6 @@
 # Operator methods
 
-> **Status:** Current general guide. Part of the `layerfs-js-sdk` skill. Internal
+> **Status:** Current general guide. Part of the `layerfs-sdk-observe` skill. Internal
 > surface, for observation and troubleshooting only. Fields are read from source on
 > `main`; example outputs show the shape and are not yet captured from a live run.
 

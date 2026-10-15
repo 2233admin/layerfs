@@ -4,8 +4,7 @@
 > read from source on `main`; example outputs show the shape and are not yet captured
 > from a live run. Ids are 66 hex characters, shortened here as `"9f3c…"`.
 
-Snippets are the `// the step` part of the
-[script template](../scripts.md#3-the-step-script-template).
+Examples use `layerfs` as connected in [SKILL.md](../../SKILL.md#connect-to-a-project).
 
 ## `project.init(sourcePath)`
 
@@ -42,7 +41,7 @@ printf '# Shop\n' > /work/shop-skeleton/README.md
 
 ```js
 const r = await layerfs.project.init("/work/shop-skeleton");
-done({ project: r.project, layer: r.layer });
+console.log(r.kind, r.layer);
 ```
 ```json
 { "kind": "Initialized", "project": "shop", "layer": "41ab…" }

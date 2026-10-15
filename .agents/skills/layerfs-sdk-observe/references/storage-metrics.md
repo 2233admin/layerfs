@@ -1,6 +1,6 @@
 # Storage metrics over a long history
 
-> **Status:** Current general guide. Part of the `layerfs-js-sdk` skill. The operator
+> **Status:** Current general guide. Part of the `layerfs-sdk-observe` skill. The operator
 > statistics exist on `main`; trace `sizes` and `commit` come from #333 (not yet merged).
 
 ## Sources

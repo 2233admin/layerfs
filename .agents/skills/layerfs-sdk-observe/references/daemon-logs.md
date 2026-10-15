@@ -1,6 +1,6 @@
 # Daemon logs and observation records
 
-> **Status:** Current general guide. Part of the `layerfs-js-sdk` skill. The records
+> **Status:** Current general guide. Part of the `layerfs-sdk-observe` skill. The records
 > exist on `main`, but only #333 (not yet merged) makes SDK calls request them and adds
 > the decoder.
 
