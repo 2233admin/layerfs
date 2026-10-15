@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>LayerFS Terminals</title>
+<link rel="icon" href="data:,">
 <style>
 :root {
   --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Helvetica, Arial, sans-serif;
@@ -1117,9 +1118,9 @@ function fileHistoryHtml(p) {
   const rows = f.rows.map((r) => {
     const n = r.node, color = n.kind === "layer" ? "var(--purple)" : branchColor(n.branch);
     return `<tr><td><span class="bch" style="--bc:${color}" data-fblame="${n.id}" title="${esc(n.id + " on " + n.branch)} · click to diff with its parent">${n.id}</span></td><td><span class="fb ${r.change}">${r.change}</span></td>
-      <td class="n">${r.content == null ? "–" : fmtBytes(r.size)}</td><td class="n${r.added ? "" : " zero"}">${r.content == null ? "–" : r.added ? "+" + fmtBytes(r.added) : "reused"}</td>${sim_ ? `<td class="n${r.stored ? "" : " zero"}">${r.stored ? fmtBytes(r.stored) : "–"}</td>` : ""}</tr>`;
+      <td class="n">${r.content == null ? "–" : fmtBytes(r.size)}</td><td class="n${r.added === null ? "" : r.added ? "" : " zero"}">${r.content == null ? "–" : r.added === null ? "not reported" : r.added ? "+" + fmtBytes(r.added) : "reused"}</td>${sim_ ? `<td class="n${r.stored ? "" : " zero"}">${r.stored ? fmtBytes(r.stored) : "–"}</td>` : ""}</tr>`;
   }).join("");
-  return `<div class="fsum">${f.revisions} revision${f.revisions === 1 ? "" : "s"} of ${esc(p.path)} behind <b>${esc(scopeLabel(p.subject))}</b>, newest first · new = bytes this version added (an identical earlier version is reused)</div>
+  return `<div class="fsum">${f.revisions} revision${f.revisions === 1 ? "" : "s"} of ${esc(p.path)} behind <b>${esc(scopeLabel(p.subject))}</b>, newest first${sim.live ? " · per-file physical attribution is not reported" : " · new = bytes this version added (an identical earlier version is reused)"}${f.hasMore ? " · showing first 50 revisions; more available through operator.files.history" : ""}</div>
     <table class="frev"><tr><th>version</th><th></th><th class="n">size</th><th class="n">new</th>${sim_ ? '<th class="n">stored ≈</th>' : ""}</tr>${rows}</table>`;
 }
 function viewHtml(p, sv, bv, ch) {
@@ -1149,7 +1150,7 @@ function viewHtml(p, sv, bv, ch) {
       const chip = `<span class="bch${first ? "" : " cont"}" style="--bc:${color}" data-fblame="${o.id}" title="${esc(tip)}">${first ? o.id : ""}</span>`;
       return `<div class="cl">${chip}<span class="no">${ln.n}</span><span class="tx">${esc(ln.text) || " "}</span></div>`;
     }).join("");
-    return `<div class="fsum">Blame at <b>${esc(scopeLabel(p.subject))}</b> · composed from ${b.versions} saved versions</div><div class="code">${rows}</div>`;
+    return `<div class="fsum">Blame at <b>${esc(scopeLabel(p.subject))}</b>${sim.live ? ` · product attribution${b.comparisonCoarse ? " · oversized changed middle treated as added" : ""}${b.truncated ? " · bounded line window; continue with fs.blame from nextLine" : ""}` : ` · composed from ${b.versions} saved versions`}</div><div class="code">${rows}</div>`;
   }
   // diff
   if (!bv) return `<div class="fempty">Diff needs something to compare against: pick it next to “vs”, or use parent / fork / main.</div>`;
@@ -1317,7 +1318,7 @@ function cardHtml(id) {
     const after = c.displacedBy ? `<div class="sec">Off the line</div><div class="meta">${c.displacedBy} was committed from ${s.commits[c.displacedBy].parent || "the fork point"} with --force, so ${c.id} is no longer an ancestor of the head. Still stored and readable by id.</div>` : "";
     const lww = (list) => (list && list.length ? "<br>" + list.map((d) => `last-writer-wins ${esc(d.path)} ← ${esc(d.kept)}`).join("<br>") : "");
     const owner = (n) => (s.commits[n] ? `${esc(s.commits[n].branch)} ${n}` : `main ${n}`);
-    const mrg = c.mergedFrom ? `<div class="sec">Merge</div><div class="meta">merged from ${owner(c.mergedFrom)} into ${c.parent ? owner(c.parent) : "main " + c.base}<br>merge base ${c.mergeBase}${lww(c.lww)}</div>`
+    const mrg = c.mergedFrom ? `<div class="sec">Merge</div><div class="meta">merged from ${owner(c.mergedFrom)} into ${c.parent ? owner(c.parent) : "main " + c.base}${c.mergeBase ? `<br>merge base ${esc(c.mergeBase)}` : ""}${lww(c.lww)}</div>`
       : c.merged ? `<div class="sec">Merged on commit</div><div class="meta">the Workspace was on ${c.merged.from}; merged with head ${c.merged.head}${lww(c.merged.lww)}</div>` : "";
     return `<div class="h"><b>${c.id}</b>${esc(c.branch)}${b.head === id ? head : ""}</div>
       <div class="meta">parent ${c.parent || "Branch base"} · root ${c.root}<br>by ${c.message ? `<b>${esc(rosterOf(c.message).name)}</b> · ` : ""}${esc(c.message || (c.by === "fs" ? c.via || "fs" : c.by === "merge" ? c.via : short(c.via)))}</div>${mrg}${jump}${after}${wsRows(c.branch, id)}${hint(id)}`;
