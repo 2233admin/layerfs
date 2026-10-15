@@ -107,6 +107,15 @@ conflicts: [], lww }`. `fastForward: true` means one side already contained the 
 `lww` lists files decided last-writer-wins by `a`'s
 [`/.lww` rules](../rules/lww.md), each `{ path, kept, deleted, rule }`.
 
+The lists use byte windows: `lwwTruncated` and `conflictsTruncated` explicitly
+report omitted decisions or conflict paths, including in `Conflict.detail`.
+Each conflict's `blocks` is its original count; `hunksOmitted` says its full
+hunk text did not fit. No merge work or source change is omitted. For an
+incomplete conflict summary preserve the input Branches, page
+`branch.diff_branches(a, b)` through every candidate path and inspect both
+versions and `mergeBase` with `fs.read`/`fs.diff_files`. Resolve on working forks
+of both inputs as described in [conflicts](../rules/conflicts.md).
+
 **Refusals**
 
 | Code | Meaning | Do |

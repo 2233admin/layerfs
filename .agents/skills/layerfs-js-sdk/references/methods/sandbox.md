@@ -306,6 +306,12 @@ the Workspace now hold markers. Read both sides before changing anything. Fixing
 files, ruling generated ones in `/.lww`, and overwriting with `force` are covered,
 scenario by scenario, in [resolving conflicts](../rules/conflicts.md#commit-conflicts).
 
+Merge diagnostic lists use byte windows. `lwwTruncated` marks omitted decisions;
+conflict detail also exposes `conflictsTruncated`, and individual conflicts mark
+`hunksOmitted`. Full marker files remain in the Workspace even when a reply omits
+their text. Inspect those files with bounded `sandbox.exec` commands and Commit
+each command. The omission flags never mean the unresolved source is safe to drop.
+
 ## `sandbox.unmount(id, path, { discard? }?)`
 
 Unmounts a Workspace.

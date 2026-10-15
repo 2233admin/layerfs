@@ -296,6 +296,8 @@ Added
 | Combine Branches | `branch.merge(a, b, name)`, then `branch.publish(name)` |
 | Resolve a `Conflict` | [resolving conflicts](references/rules/conflicts.md) |
 
+For Rust projects, follow the live-checked [Cargo workflow](references/rules/cargo.md).
+
 ## Methods
 
 Copied from [`sdk/js/README.md`](../../../sdk/js/README.md), which is the source of truth.

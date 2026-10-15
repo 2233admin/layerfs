@@ -100,6 +100,23 @@ removed/added block and `comparisonCoarse` discloses that Content diff policy.
 Diff hunks can be omitted explicitly when their bounded comparison/reply cannot
 represent them; equal content is decided by immutable content identity.
 
+Merge diagnostics also use byte windows within the unchanged control frame.
+`branch.merge` returns `lwwTruncated` and `conflictsTruncated` alongside its
+diagnostic lists (including in `Conflict.detail`); `sandbox.commit` reports
+`lwwTruncated` and its conflict detail reports both flags. Each conflict keeps
+its original `blocks` count and reports `hunksOmitted` if whole hunks were left
+out. These flags limit the reply only: every path still participates in the
+merge, and conflict/publication semantics are unchanged. Source text is never
+cut to make a diagnostic fit.
+
+For an incomplete Branch conflict summary, preserve the original input Branches
+and `detail.sources`/`mergeBase`. Page `branch.diff_branches(a, b)` to inspect all
+candidate paths, then read each source and its merge-base version with `fs.read`
+or `fs.diff_files`. Resolve on working forks of both inputs. A Workspace conflict
+keeps its markers in that Workspace; inspect them through ordinary bounded
+Sandbox commands and Commit each command. An omitted diagnostic is not a clean
+merge, and a failed/unknown operation must be inspected before a new operation.
+
 ## Internal operator
 
 ```js

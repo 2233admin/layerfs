@@ -244,3 +244,33 @@ fn invalid_windows_and_consumer_failure_stop_the_single_operation() {
     assert!(matches!(error, ContentError::OutputRejected));
     assert_eq!(sink.0, 1);
 }
+
+#[test]
+fn short_repeated_tail_preserves_mixed_unflushed_extents() {
+    use layerfs_content::file::mapping::ExtentBuilder;
+
+    let capacities = ConstructionPolicy::frozen_default().capacities();
+    for count in [1, 2, 3] {
+        let mut repeated = ExtentBuilder::new(&capacities);
+        let mut actual = TrackingConsumer::new();
+        let mut ordinary = ExtentBuilder::new(&capacities);
+        let mut expected = MemoryStore::new();
+        for i in 0..capacities.stream_flush_entries {
+            let prefix = vec![i as u8; 7 + i % 11];
+            repeated.push_chunk(&prefix, None, &mut actual).unwrap();
+            ordinary.push_chunk(&prefix, None, &mut expected).unwrap();
+        }
+        let raw = [0; 32768];
+        repeated
+            .push_repeated_chunk(&raw, count, &mut actual)
+            .unwrap();
+        for _ in 0..count {
+            ordinary.push_chunk(&raw, None, &mut expected).unwrap();
+        }
+        let got = repeated.finish(&mut actual).unwrap();
+        let want = ordinary.finish(&mut expected).unwrap();
+        assert_eq!(got.logical_len, want.logical_len, "count={count}");
+        assert_eq!(got.root, want.root, "count={count}");
+        actual.assert_children_precede_parents();
+    }
+}

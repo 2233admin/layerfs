@@ -89,6 +89,9 @@ impl ExtentBuilder {
                 return Ok(());
             }
         }
+        if count == 0 {
+            return Ok(());
+        }
         let total = add(self.levels[level].len() as u64, count)?;
         let pages = total
             .saturating_sub(self.flush_at as u64)
