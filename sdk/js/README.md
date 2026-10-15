@@ -26,6 +26,29 @@ subsequent clients discover the existing project without reacquiring its source
 or reinstalling over live state. Ordinary Store calls lazily create or reopen a
 private service Sandbox. Mount does not scan or materialize the complete tree.
 
+Parallel agents can select their own existing Sandbox for every file, Branch and
+operator Store call with `new LayerFS(project, { sandbox: id })`. The option also
+accepts `{ id }`. Construction remains lazy; `service()` returns that exact id
+without discovering or creating an automatic service. A missing, closed or
+unauthorized selection is refused by the attempted operation and never replaced.
+
+```js
+const creator = new LayerFS("website");
+const id = await creator.sandbox.create();
+const worker = new LayerFS("website", { sandbox: id });
+await worker.fs.read("feature", "/README.md");
+// Use this worker's id for mount/exec/commit/unmount, then save daemon logs and close.
+```
+
+Create agent Sandboxes sequentially: creation/discovery changes share a project
+ownership lock and a concurrent attempt can return `Busy` before an effect.
+After creation, independent agents use separate Sandboxes and may work concurrently.
+Keep each agent's operations sequential. The default automatic service is shared
+through discovery and has a bounded connection budget; it is not one private
+daemon per client. Selecting existing agent Sandboxes distributes control work
+across their own daemons, each directly opening the same Store. Finish a selected
+client when its Sandbox closes; construct a new client for a new Sandbox.
+
 | Environment | Meaning |
 | --- | --- |
 | `LAYERFS_HOME` | Absolute private directory for sealed provisioning and discovery. Created as 0700; existing directories must be owned by the current effective user with no group/other access. Records are 0600, not symlinks. |

@@ -144,6 +144,23 @@ process of one run must see the same values.
 const layerfs = new LayerFS("shop");   // a project name; no I/O happens yet
 ```
 
+For several agents, the coordinator first creates each agent's Bash Sandbox in
+sequence, then gives its id to that agent. The agent selects it for Store calls:
+
+```js
+const layerfs = new LayerFS("shop", { sandbox: mySandboxId });
+```
+
+The same selected Sandbox serves `fs.*`, Branch and operator Store calls, and
+`service()` returns its id without starting another service. Use this agent's id
+for its Bash mounts too; one agent runs its own calls sequentially. Independent
+agents use distinct Sandboxes. Creation and automatic service discovery share a
+project lock, so concurrent startup can be refused `Busy` before any effect.
+Create first in sequence, then do parallel work. A selected Sandbox that is closed,
+missing or unauthorized is refused, never replaced automatically. After closing
+it, finish the client and use a new client for its successor. Issue #340's external
+SDK regression covers routing; the six-client live follow-up is recorded separately.
+
 A new project needs `project.init(folder)` once. After that, `new LayerFS("shop")` in
 any later process connects to the same project. Store calls (`fs.*`, Branch calls
 and branch listing) automatically start or reuse a service Sandbox. The client's
