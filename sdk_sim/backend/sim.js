@@ -10,6 +10,28 @@
       this.sim = new M.Sim();
       this.live = false;
       this.simulated = true;
+      this.onchange = null;
+      this.packed = new Map();
+      this.packing = new Set();
+    }
+    /** Stored bytes of one content, estimated with the browser's deflate as a
+     *  stand-in for the product's zstd (no deltas): the smaller of raw and
+     *  deflated, as the product keeps STORED when compression does not help.
+     *  Computed asynchronously; null until ready, then `onchange` fires. */
+    storedSize(text) {
+      if (this.packed.has(text)) return this.packed.get(text);
+      if (typeof CompressionStream === "undefined" || typeof Response === "undefined") return null;
+      if (!this.packing.has(text)) {
+        this.packing.add(text);
+        const raw = new TextEncoder().encode(text);
+        new Response(new Blob([raw]).stream().pipeThrough(new CompressionStream("deflate-raw"))).arrayBuffer().then((b) => {
+          this.packed.set(text, Math.min(raw.length, b.byteLength));
+          this.packing.delete(text);
+          clearTimeout(this.wake);
+          this.wake = setTimeout(() => this.onchange && this.onchange(), 30);
+        });
+      }
+      return null;
     }
     get s() { return this.sim.s; }
     set s(world) { this.sim.s = world; }
@@ -33,18 +55,22 @@
     storage() {
       const s = this.sim.s, bytes = (t) => (typeof Buffer !== "undefined" ? Buffer.byteLength(t) : new TextEncoder().encode(t).length);
       const seen = new Set(), entries = new Set();
-      let logical = 0, payload = 0;
+      let logical = 0, payload = 0, stored = 0, pending = false;
       for (const root of Object.values(s.roots)) {
         for (const [path, e] of Object.entries(root)) {
           entries.add(`${path}\0${e.type}\0${e.content ?? ""}`);
           if (e.type !== "file") continue;
           const n = bytes(e.content || "");
           logical += n;
-          if (!seen.has(e.content)) { seen.add(e.content); payload += n; }
+          if (!seen.has(e.content)) {
+            seen.add(e.content); payload += n;
+            const z = this.storedSize(e.content || "");
+            if (z == null) { pending = true; stored += n; } else stored += z;
+          }
         }
       }
       const metadata = entries.size * 64 + (Object.keys(s.commits).length + Object.keys(s.layers).length) * 256;
-      return { estimate: true, logical, payload, metadata, store: payload + metadata };
+      return { estimate: true, logical, payload, stored, pending, metadata, store: stored + metadata };
     }
     /** One mounted Workspace's overlay, estimated from the model: the changed
      *  files' bytes as payload, 64 bytes per changed entry as metadata. */

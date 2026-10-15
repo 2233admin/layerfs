@@ -268,6 +268,12 @@ body.nosel, body.nosel * { user-select: none !important; -webkit-user-select: no
 .fpath { position: sticky; top: 0; z-index: 1; background: var(--term); padding: 5px 10px; border-bottom: 1px solid var(--term-border); font-weight: 600; }
 .fpath span { font-weight: 400; color: var(--term-dim); }
 .fsum { padding: 6px 10px; color: var(--term-dim); font-size: 11.5px; }
+.fstats { display: flex; flex-wrap: wrap; gap: 3px 14px; padding: 6px 10px; border-bottom: 1px solid var(--term-border); background: var(--well); font-size: 11px; color: var(--term-dim); }
+.fstats b { color: var(--term-text); font-weight: 600; } .fstats .est { margin-left: auto; }
+.frev { width: 100%; border-collapse: collapse; font-size: 11.5px; } .frev th { text-align: left; font-weight: 600; color: var(--term-dim); padding: 4px 6px; border-bottom: 1px solid var(--term-border); }
+.frev td { padding: 3px 6px; border-bottom: 1px solid var(--term-border); white-space: nowrap; } .frev td.n { text-align: right; } .frev th.n { text-align: right; }
+.frev .zero { color: var(--term-dim); }
+.store .rates { display: flex; gap: 12px; margin-top: 3px; color: var(--term-dim); } .store .rates b { color: var(--term-text); }
 .fsum b { color: var(--term-text); font-weight: 600; }
 .fempty { padding: 18px 12px; color: var(--term-dim); line-height: 1.6; }
 .code { padding: 2px 0 10px; }
@@ -446,7 +452,7 @@ const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
 // ---------------------------------------------------------------- state
 let sim, eng, S;
 function newBackend() {
-  if (BACKEND === "sim") return new LayerBackendSim.SimBackend();
+  if (BACKEND === "sim") { const b = new LayerBackendSim.SimBackend(); b.onchange = () => { if (S) render(); }; return b; }
   const b = new LayerBackendLive.LiveBackend();
   b.onchange = () => { if (S) render(); };
   return b;
@@ -1075,6 +1081,54 @@ function sdkCalls(p, sv, bv) {
 function codeLines(text, extra) {
   return text.split("\n").map((t, i) => `<div class="cl">${extra ? extra(i) : ""}<span class="no">${i + 1}</span><span class="tx">${esc(t) || " "}</span></div>`).join("");
 }
+// Per-file stats (issue #329 preview). Revisions, sizes and dedupe come from
+// the saved versions (sim: the model; live: fs reads). Stored bytes and
+// metadata are sim estimates; live does not report them yet.
+const bytesOf = (t) => new TextEncoder().encode(t || "").length;
+const ratio = (a, b) => (b > 0 ? `×${(a / b).toFixed(a / b >= 10 ? 0 : 1)}` : "–");
+const INODE_BYTES = 73; // one inode value row; directory entries and pooling ignored
+function fileStats(p) {
+  const revs = FM.history(sim, p.subject, p.path), seen = new Set();
+  let logical = 0, unique = 0, stored = 0, pending = false;
+  const rows = [...revs].reverse().map((r) => {
+    if (r.content == null) return { ...r, size: 0, added: 0, stored: 0 };
+    const size = bytesOf(r.content), fresh = !seen.has(r.content);
+    logical += size;
+    let z = 0;
+    if (fresh) {
+      seen.add(r.content); unique += size;
+      z = sim.storedSize ? sim.storedSize(r.content) : null;
+      if (z == null) { pending = true; z = size; }
+      stored += z;
+    }
+    return { ...r, size, added: fresh ? size : 0, stored: fresh ? z : 0 };
+  }).reverse();
+  return { rows, revisions: revs.length, logical, unique, stored, pending, metadata: revs.length * INODE_BYTES };
+}
+function fileStatsHtml(p, sv) {
+  const e = sv.tree[p.path];
+  if (e && e.type !== "file") return "";
+  const f = fileStats(p), cur = e ? bytesOf(e.content) : null;
+  const size = cur == null ? "deleted here" : fmtBytes(cur);
+  const phys = sim.simulated
+    ? `<span>stored ≈ <b>${fmtBytes(f.stored)}</b> ${ratio(f.unique, f.stored)}</span><span>metadata ≈ <b>${fmtBytes(f.metadata)}</b></span><span class="est">sim estimate${f.pending ? " · compressing…" : ""}</span>`
+    : `<span class="est">stored and metadata bytes not reported yet · #329</span>`;
+  return `<div class="fstats" title="Revisions: saved versions where this file changed. Logical: every revision's size. Unique: distinct versions once (dedupe). Stored: after compression (sim: deflate as a stand-in for zstd, no deltas).">
+    <span><b>${f.revisions}</b> revision${f.revisions === 1 ? "" : "s"}</span><span>current <b>${size}</b></span>
+    <span>history <b>${fmtBytes(f.logical)}</b> logical</span><span>unique <b>${fmtBytes(f.unique)}</b> ${ratio(f.logical, f.unique)}</span>${phys}</div>`;
+}
+function fileHistoryHtml(p) {
+  const f = fileStats(p);
+  if (!f.rows.length) return `<div class="fempty">${esc(p.path)} has no saved versions behind ${esc(scopeLabel(p.subject))}.</div>`;
+  const sim_ = sim.simulated;
+  const rows = f.rows.map((r) => {
+    const n = r.node, color = n.kind === "layer" ? "var(--purple)" : branchColor(n.branch);
+    return `<tr><td><span class="bch" style="--bc:${color}" data-fblame="${n.id}" title="${esc(n.id + " on " + n.branch)} · click to diff with its parent">${n.id}</span></td><td><span class="fb ${r.change}">${r.change}</span></td>
+      <td class="n">${r.content == null ? "–" : fmtBytes(r.size)}</td><td class="n${r.added ? "" : " zero"}">${r.content == null ? "–" : r.added ? "+" + fmtBytes(r.added) : "reused"}</td>${sim_ ? `<td class="n${r.stored ? "" : " zero"}">${r.stored ? fmtBytes(r.stored) : "–"}</td>` : ""}</tr>`;
+  }).join("");
+  return `<div class="fsum">${f.revisions} revision${f.revisions === 1 ? "" : "s"} of ${esc(p.path)} behind <b>${esc(scopeLabel(p.subject))}</b>, newest first · new = bytes this version added (an identical earlier version is reused)</div>
+    <table class="frev"><tr><th>version</th><th></th><th class="n">size</th><th class="n">new</th>${sim_ ? '<th class="n">stored ≈</th>' : ""}</tr>${rows}</table>`;
+}
 function viewHtml(p, sv, bv, ch) {
   if (!p.path) {
     if (!ch) return `<div class="fempty">Pick a file on the left.<br>Choose something to compare against to see what changed.</div>`;
@@ -1088,6 +1142,7 @@ function viewHtml(p, sv, bv, ch) {
     if (!se) return `<div class="fempty">${esc(p.path)} does not exist at ${esc(scopeLabel(p.subject))}${be ? " (deleted; switch to Diff to see what was removed)" : ""}.</div>`;
     return `<div class="code">${codeLines(se.content)}</div>`;
   }
+  if (p.mode === "history") return fileHistoryHtml(p);
   if (p.mode === "blame") {
     const b = FM.blame(sim, p.subject, p.path);
     if (!b) return `<div class="fempty">${esc(p.path)} does not exist at ${esc(scopeLabel(p.subject))}.</div>`;
@@ -1132,12 +1187,12 @@ function renderFiles() {
     <div class="fbar cmp"><span class="vs">compare with</span>${scopeHtml("base", p.base, true)}
       <button class="pbtn" data-fswap title="Swap the two sides"${p.base ? "" : " disabled"}>⇄</button>
       <span class="presets">${preset(parent, "parent")}${preset(fork, "fork point")}${p.subject !== "main" ? preset("main", "main") : ""}</span></div>
-    <div class="fbar"><span class="segs">${seg("view", "View")}${seg("blame", "Blame")}${seg("diff", "Diff")}</span>
+    <div class="fbar"><span class="segs">${seg("view", "View")}${seg("blame", "Blame")}${seg("diff", "Diff")}${seg("history", "History")}</span>
       <label class="chk${ch ? "" : " off"}"><input type="checkbox" data-fchanged${p.changedOnly ? " checked" : ""}${ch ? "" : " disabled"}> changed only</label>
       <span class="sp"></span>${ch ? `<span class="fcount">${ch.count} change${ch.count === 1 ? "" : "s"}</span>` : ""}<button class="sdkbtn on" data-fsdk title="The SDK calls behind this view">sdk</button></div>
     ${p.sdk ? `<pre class="fsdk">${sdkCalls(p, sv, bv)}</pre>` : ""}
     <div class="fbody"><div class="ftree">${treeHtml(p, sv.tree, bv ? bv.tree : null, ch, "/", 0)}</div>
-      <div class="fview">${p.path ? `<div class="fpath">${esc(p.path)} <span>@ ${esc(scopeLabel(p.subject))}</span></div>` : ""}${viewHtml(p, sv, bv, ch)}</div></div>`;
+      <div class="fview">${p.path ? `<div class="fpath">${esc(p.path)} <span>@ ${esc(scopeLabel(p.subject))}</span></div>${fileStatsHtml(p, sv)}` : ""}${viewHtml(p, sv, bv, ch)}</div></div>`;
   dock.classList.toggle("narrow", dock.clientWidth < 400);
 }
 
@@ -1298,10 +1353,11 @@ const fmtBytes = (n) => (n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFix
 function storeHtml() {
   const z = sim.storage ? sim.storage() : null;
   if (!z) return `<div class="store" title="Physical payload and metadata need a product source (issue #329 D)"><div class="srow"><span class="kind">STORE</span><span class="dim">size not reported by the product yet · issue #329 D</span></div></div>`;
-  const tip = "Global Store (sim estimate). Payload: distinct file contents, once each. Logical: every file in every saved root. Metadata: 64 B per distinct entry + 256 B per Commit or Layer.";
+  const tip = "Global Store (sim estimate). Logical: every file in every saved root. Dedupe: distinct contents once (whole files; the product also dedupes chunks). Payload: those contents compressed with deflate as a stand-in for zstd, no deltas. Metadata: 64 B per distinct entry + 256 B per Commit or Layer.";
   return `<div class="store" title="${esc(tip)}"><div class="srow"><span class="kind">STORE</span><b>${fmtBytes(z.store)}</b><span class="dim">project ${esc(sim.s.project ? sim.s.project.name : "")}</span>${z.estimate ? '<span class="est">sim estimate</span>' : ""}</div>
-    <div class="sbar"><i class="p" style="flex:${z.payload} 0 0"></i><i class="m" style="flex:${z.metadata} 0 0"></i></div>
-    <div class="legend"><span><span class="sw p"></span>payload ${fmtBytes(z.payload)} <span class="dim">(logical ${fmtBytes(z.logical)})</span></span><span><span class="sw m"></span>metadata ${fmtBytes(z.metadata)}</span></div></div>`;
+    <div class="sbar"><i class="p" style="flex:${z.stored} 0 0"></i><i class="m" style="flex:${z.metadata} 0 0"></i></div>
+    <div class="legend"><span><span class="sw p"></span>payload ${fmtBytes(z.stored)} <span class="dim">(logical ${fmtBytes(z.logical)})</span></span><span><span class="sw m"></span>metadata ${fmtBytes(z.metadata)}</span></div>
+    <div class="rates"><span>dedupe <b>${ratio(z.logical, z.payload)}</b> <span class="dim">${fmtBytes(z.logical)} → ${fmtBytes(z.payload)}</span></span><span>compression <b>${ratio(z.payload, z.stored)}</b> <span class="dim">→ ${fmtBytes(z.stored)}${z.pending ? " · compressing…" : ""}</span></span></div></div>`;
 }
 // A Workspace's overlay: its uncommitted changes in the daemon's own database,
 // not in the global Store. Live shows the rows inspect.snapshot reports.

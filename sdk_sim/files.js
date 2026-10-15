@@ -91,6 +91,20 @@
     return { versions: chain.length, lines: lines.map((t, i) => ({ n: i + 1, text: t, origin: owner[i] })) };
   }
 
+  // The saved versions of `path` behind a ref where it changed, newest first:
+  // { node, change: "A" | "M" | "D", content }. A preview of a file-history
+  // read (issue #329); live trees load lazily, so early answers can be short.
+  function history(sim, ref, path) {
+    const s = sim.s, chain = chainOf(sim, ref), out = [];
+    const text = (n) => { const e = n && s.roots[n.root] && s.roots[n.root][path]; return e && e.type === "file" ? e.content : null; };
+    for (let k = 0; k < chain.length; k++) {
+      const cur = text(chain[k]), old = text(chain[k + 1]);
+      if (cur === old) continue;
+      out.push({ node: chain[k], change: cur == null ? "D" : old == null ? "A" : "M", content: cur });
+    }
+    return out;
+  }
+
   // path -> "A" | "M" | "D" from base to subject, plus folder roll-ups.
   function changeMap(subjectTree, baseTree) {
     const files = {}, dirs = {};
@@ -111,7 +125,7 @@
       .map((p) => ({ path: p, name: M.baseName(p), type: typeOf(p), gone: !subjectTree[p] }));
   }
 
-  const api = { resolveRef, parentRef, chainOf, blame, changeMap, listBoth };
+  const api = { resolveRef, parentRef, chainOf, blame, history, changeMap, listBoth };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else global.LayerFiles = api;
 })(this);
