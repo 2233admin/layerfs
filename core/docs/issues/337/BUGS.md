@@ -50,3 +50,20 @@ Cargo build from the last published view. No Init or Store replacement occurred.
 | ID | Classification | Evidence / diagnosis | Status |
 | --- | --- | --- | --- |
 | S-001 | SDK skill guidance | Rust/Cargo cache placement, test prebuilds, package inspection and retained-Workspace build sequences were absent from the skill. Live Phase A calls now cover them. | Added references/rules/cargo.md; no new API |
+
+## Builder 1 merge reply incident
+
+| ID | Classification | Evidence / diagnosis | Status |
+| --- | --- | --- | --- |
+| B1-LOCAL-01 | Host orchestration | Host `timeout` is absent. The first bounded read exited 127 before Init. Subsequent host commands use the process-group-bounded Python runner. | Corrected; not a LayerFS defect |
+| B1-APP-01 | Application implementation | M3 first build used Axum Query although the frozen dependency features omit `query`. Step 016 failed with E0432 and its changed files were committed. Built-in RawQuery plus bounded parsing compiled and passed M3 in steps 017–019. | Corrected without dependency changes |
+| P-002 | SDK merge diagnostics | Builder 1 step 026 Branch merge returned Failed/UnexpectedEof after an attempted exchange. The service remained running and retained the original failed slot; step 027 found no combined Branch and unchanged source/publication refs. `sdk/branch.rs` encoded every Cargo LWW decision and conflict hunk into one 65,519-byte control frame. External normal-encoder regressions with 700 Cargo paths and 900 multibyte conflict paths both failed with `control record limit`. | Code fixed; Bridge suite, API conversion regression, scoped Clippy/formatting, boundary guard and 50 guard self-tests pass. Live recovery pending |
+
+P-002 preserves the wire limit and merge semantics. Shared SDK merge-value
+serialization uses separate 16 KiB byte windows for conflict diagnostics and
+LWW decisions. Omitted paths/decisions are explicit (`conflictsTruncated`,
+`lwwTruncated`); each conflict retains its original block count and marks omitted
+whole hunks (`hunksOmitted`). The SDK guide documents paging the unchanged input
+Branch diff and reading both sources/base when the summary is incomplete. No
+source path receives LWW and no total merge-work cap is introduced. Raw evidence
+lives in `core/target/issue337/builder1/026-*`, `027-*` and `p002-*`.

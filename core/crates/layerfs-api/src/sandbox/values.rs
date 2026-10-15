@@ -7,7 +7,9 @@
 use super::{CommitReply, MountedWorkspace, Unmounted};
 use crate::{OperationCause, OperationFailure};
 use layerfs_bridge::control::{SdkRefusal, SdkValue, WorkspaceStatus};
-use layerfs_bridge::sdk_values::{commit_value, conflicts, hex, lww};
+use layerfs_bridge::sdk_values::{
+    commit_value, conflicts, conflicts_truncated, hex, lww, lww_truncated,
+};
 use layerfs_history::{CommitId, CommitOutcome};
 
 fn head(id: Option<CommitId>) -> SdkValue {
@@ -89,7 +91,12 @@ pub fn status(status: &WorkspaceStatus, current_head: Option<Option<CommitId>>) 
     ])
 }
 
-fn outcome(outcome: &CommitOutcome, merged: SdkValue, lww_value: SdkValue) -> SdkValue {
+fn outcome(
+    outcome: &CommitOutcome,
+    merged: SdkValue,
+    lww_value: SdkValue,
+    lww_omitted: bool,
+) -> SdkValue {
     match outcome {
         CommitOutcome::Committed { record, displaced } => SdkValue::map([
             ("kind", SdkValue::text("Committed")),
@@ -98,6 +105,7 @@ fn outcome(outcome: &CommitOutcome, merged: SdkValue, lww_value: SdkValue) -> Sd
             ("displacedHead", head(*displaced)),
             ("merged", merged),
             ("lww", lww_value),
+            ("lwwTruncated", SdkValue::Bool(lww_omitted)),
         ]),
         CommitOutcome::UpToDate { head: at, root } => SdkValue::map([
             ("kind", SdkValue::text("UpToDate")),
@@ -105,6 +113,7 @@ fn outcome(outcome: &CommitOutcome, merged: SdkValue, lww_value: SdkValue) -> Sd
             ("root", SdkValue::text(hex(root.as_bytes()))),
             ("merged", merged),
             ("lww", lww_value),
+            ("lwwTruncated", SdkValue::Bool(lww_omitted)),
         ]),
     }
 }
@@ -113,13 +122,17 @@ fn outcome(outcome: &CommitOutcome, merged: SdkValue, lww_value: SdkValue) -> Sd
 /// moved; a conflict is the `Conflict` refusal.
 pub fn commit(reply: &CommitReply) -> Result<SdkValue, SdkRefusal> {
     match reply {
-        CommitReply::Committed(done) => {
-            Ok(outcome(done, SdkValue::Null, SdkValue::List(Vec::new())))
-        }
+        CommitReply::Committed(done) => Ok(outcome(
+            done,
+            SdkValue::Null,
+            SdkValue::List(Vec::new()),
+            false,
+        )),
         CommitReply::Merged(done) => Ok(outcome(
             &done.outcome,
             SdkValue::map([("from", head(done.from)), ("head", head(done.head))]),
             lww(&done.lww),
+            lww_truncated(&done.lww),
         )),
         CommitReply::Conflict(report) => Err(SdkRefusal {
             code: "Conflict".to_owned(),
@@ -140,6 +153,14 @@ pub fn commit(reply: &CommitReply) -> Result<SdkValue, SdkRefusal> {
                 ("markers", SdkValue::Bool(report.markers)),
                 ("conflicts", conflicts(&report.conflicts)),
                 ("lww", lww(&report.lww)),
+                (
+                    "conflictsTruncated",
+                    SdkValue::Bool(report.truncated || conflicts_truncated(&report.conflicts)),
+                ),
+                (
+                    "lwwTruncated",
+                    SdkValue::Bool(report.truncated || lww_truncated(&report.lww)),
+                ),
                 (
                     "written",
                     SdkValue::List(report.written.iter().map(SdkValue::text).collect()),

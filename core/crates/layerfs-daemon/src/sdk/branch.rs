@@ -311,6 +311,8 @@ pub(crate) fn merge(store: &Arc<Store>, args: &SdkValue) -> Answer {
             ("mergeBase", SdkValue::text(node_text(older))),
             ("conflicts", SdkValue::List(Vec::new())),
             ("lww", SdkValue::List(Vec::new())),
+            ("conflictsTruncated", SdkValue::Bool(false)),
+            ("lwwTruncated", SdkValue::Bool(false)),
         ]));
     }
     let base_node = catalog
@@ -370,6 +372,16 @@ pub(crate) fn merge(store: &Arc<Store>, args: &SdkValue) -> Answer {
                     layerfs_bridge::sdk_values::conflicts(&merged.conflicts),
                 ),
                 ("lww", lww),
+                (
+                    "conflictsTruncated",
+                    SdkValue::Bool(layerfs_bridge::sdk_values::conflicts_truncated(
+                        &merged.conflicts,
+                    )),
+                ),
+                (
+                    "lwwTruncated",
+                    SdkValue::Bool(layerfs_bridge::sdk_values::lww_truncated(&merged.lww)),
+                ),
             ]),
         ));
     }
@@ -430,6 +442,11 @@ pub(crate) fn merge(store: &Arc<Store>, args: &SdkValue) -> Answer {
         ("mergeBase", SdkValue::text(node_text(base_node))),
         ("conflicts", SdkValue::List(Vec::new())),
         ("lww", lww),
+        ("conflictsTruncated", SdkValue::Bool(false)),
+        (
+            "lwwTruncated",
+            SdkValue::Bool(layerfs_bridge::sdk_values::lww_truncated(&merged.lww)),
+        ),
     ]))
 }
 

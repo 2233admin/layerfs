@@ -17,6 +17,7 @@ mod control_request;
 mod control_sdk;
 mod control_types;
 mod control_unmount;
+mod sdk_merge_values;
 pub mod sdk_values;
 
 pub mod daemon_setup;
