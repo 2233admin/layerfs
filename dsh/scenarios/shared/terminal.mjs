@@ -219,6 +219,9 @@ export const sandbox = (branch) => line(async () => {
 });
 
 // When the original's calls ran (sdk_sim/demo.js schedule): typing, then running.
+// LAYERFS_DEMO_FAST=1 (development runs) skips both: order comes from the
+// scenario's waits, never from time.
+const FAST = process.env.LAYERFS_DEMO_FAST === "1";
 const RUN = [[/install\.sh/, 2600], [/build\.sh/, 2000], [/test\.sh/, 1300], [/&\s*$/, 700], [/^(cat|ls|curl)/, 450]];
 const runMs = (cmd) => (RUN.find(([re]) => re.test(cmd)) ?? [0, 650])[1];
 const typeMs = (cmd) => Math.min(1100, 260 + cmd.length * 6);
@@ -240,10 +243,10 @@ export const call = (agent, branch, text, timing = {}) => line(async () => {
     ws = { sandbox: sb, path: await mount(sb, branch) };
     console.log(`⟳ mount ${branch} → ${ws.path}`);
   }
-  await sleep(timing.type ?? typeMs(cmd));
+  if (!FAST) await sleep(timing.type ?? typeMs(cmd));
   const started = Date.now(), r = await shell(ws.sandbox, ws.path, cmd);
   if (r.process) return keep(`agent-${agent}`, { ...st, sticky: null, server: { ...ws, processes: [r.process] } });
-  await sleep((timing.run ?? runMs(cmd)) - (Date.now() - started));
+  if (!FAST) await sleep((timing.run ?? runMs(cmd)) - (Date.now() - started));
   const c = await commit(ws.sandbox, ws.path, `${agent}: ${cmd}`);
   if (c.refused) {
     keep(`agent-${agent}`, { ...st, sticky: ws });

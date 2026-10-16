@@ -1,6 +1,6 @@
 # dsh demo conversion — #347
 
-> **Status:** Current implementation plan; nothing is converted yet.
+> **Status:** Current implementation plan; Shop (#348) is converted and played, Depot and Crew are in progress.
 
 Convert the three finished application runs of collection
 [#336](https://github.com/Ephemeral-AI-Lab/layerfs/issues/336) into Live demos of
@@ -34,8 +34,10 @@ successful Live run (see [Gates](#gates)). #347 closes when all three have close
   `layerfs-issue337-runtime:frozen` (`sha256:091f785ba7d5d036dfa350e8fd69ee1fcd2d8320c3706841c8c95e6411eee9d2`:
   Node 22.23.1, Rust 1.85.1, Chromium and chromedriver 155, Selenium 4.8.3). A
   scenario's `image` field names it; other demos keep the profile's image.
-- **Each demo Inits from its own seed.** `seed/` holds what the original Init
-  imported. Play Inits the demo's project from it, not from `demo-workspace/`.
+- **Each demo Inits from its own seed.** `seed.json` holds what the original Init
+  imported, with exact modes; Git cannot hold it as a folder because it contains a
+  `.git` folder. Play writes it out once (`packages/mock/src/seed.js`) and Inits
+  the demo's project from that folder, not from `demo-workspace/`.
 - **One attempt per Play.** No automatic retry or resend. A failed run is kept,
   diagnosed and fixed; the next Play is a new run.
 
@@ -48,7 +50,14 @@ successful Live run (see [Gates](#gates)). #347 closes when all three have close
 | Crew | `core/docs/issues/340/tables/b2-r3-final-analysis-r1/primary-final-r1/b2-r3-steps.csv`, archives in `~/.codex/issue340-evidence/` | `b2-r3-store` | Exclude the zero-contribution startup |
 
 The converter reads a restored copy of each stopped Store from its own disposable
-LayerFS home, never the evidence originals.
+LayerFS home, never the evidence originals. The recorded Stores predate the
+`store_totals` columns of `bb8fe890f`, which the current daemon refuses
+(`Malformed`), and a Store is never converted in place, so the converter reads
+them with the SDK and daemon built at `f64d74231` (`bb8fe890f^`), named by
+`LAYERFS_READER`. `dsh/tools/restore-store.mjs` copies the Store folder into a
+new volume (root-owned, `global` 0700) and writes the `project.record` that opens
+it (`sdk/js/native/examples/restore_record.rs`, from `history_meta.binding_key`).
+Replays run on the current SDK and daemon.
 
 ## Files
 
@@ -57,13 +66,20 @@ dsh/tools/import-run.mjs             converter; run once per project; reads reco
 dsh/scenarios/shared/replay.mjs      helpers for replayed steps (the scenario's "lib")
 dsh/scenarios/<id>/scenario.json     generated mock-model steps, as for the existing demos
 dsh/scenarios/<id>/run/NNN.json      generated, one per kept step (fields below)
-dsh/scenarios/<id>/seed/             the original Init's imported folder
-dsh/scenarios/<id>/final.json        generated: each tracked path's SHA-256 on the recorded final main
+dsh/scenarios/<id>/seed.json         the original Init's imported folder (paths, modes, bytes)
+dsh/scenarios/<id>/final.json        generated: each tracked path's SHA-256 on the recorded final
+                                     main, and each Branch's recorded history
+dsh/tools/import/<format>.mjs        one reader per record format
+dsh/tools/restore-store.mjs          opens a copy of a stopped Store (see Inputs)
+dsh/tools/checks/                    the gates, shared by check-demo and run-scenario
+dsh/tools/run-scenario.mjs           headless development runner (no dsh web, no mock model)
 ```
 
 `run/NNN.json` fields: `step` (recorded label), `agent` (role), `kind`, `branch`,
 `writes` (path → text, or null for a removal), `command`, `exit`, `output` (the last
-12 recorded lines, at most 2 KB), `ms`, `expect` (the recorded reply kinds).
+12 recorded lines, at most 2 KB), `ms`, `expect` (the recorded reply kinds), and
+`calls`: the step's SDK calls in recorded order, which `replay.mjs` makes one by
+one (writes as one `fs.apply`, `$PWD` for the recorded Workspace path).
 
 Changes to existing code (paths under `dsh/`):
 - `packages/mock/src/scenario.js`: validate `live` and `image`.
@@ -73,7 +89,14 @@ Changes to existing code (paths under `dsh/`):
   pass the image; offer Live only for `live` demos.
 - `packages/host`: refuse a Sim Init of a `live` demo's project. `sandbox.create`
   uses the scenario's image when one is set.
-- `tools/check-demo.mjs`: the final-tree check against `final.json`.
+- `packages/mock/src/plan.js`: a bash result whose text ends in a non-zero
+  `[exit code: N]`, a signal or a timeout marker stops the agent. dsh's bash tool
+  does not mark those results as errors.
+- `packages/mock` and `scenarios/shared/terminal.mjs`: `LAYERFS_DEMO_FAST=1` skips
+  typing, think-time and terminal delays (development only; it changes no step or
+  its order).
+- `tools/check-demo.mjs`: the closed, order and final-tree checks against
+  `final.json`.
 - `README.md`: the replayed demos, the formula and the gates.
 
 ## Conversion formula
@@ -85,7 +108,7 @@ Recorded calls are grouped into steps by their recorded label, then classified:
 | `sandbox.exec` | `["replay", agent, branch, "NNN"]`: mount a Workspace on the Branch, apply any folded writes, run the command, commit, unmount |
 | only `fs.apply` / `fs.write` | `["write", agent, branch, "NNN"]`: one direct Commit with the recorded writes |
 | `branch.fork` / `branch.merge` / `branch.publish` | `["history", "<verb and recorded arguments>"]` |
-| `sandbox.create` / `sandbox.close` | the agent's Sandbox opened or closed, in recorded order |
+| `sandbox.create` / `sandbox.close` | the agent's Sandbox opened or closed, in recorded order; a `create` moves before the agent's first Store call, so no replayed call goes through the service Sandbox the Host uses; the recorded service Sandbox close is dropped |
 | only reads (`fs.read`, `fs.list`, `fs.glob`, `fs.grep`, `fs.stat`, `branch.list_commits`, `branch.diff_*`, `project.list_branches`, `operator.*`) | dropped; its time joins the next step's pause |
 | `sandbox.service`, observer and collection labels | dropped |
 
@@ -105,7 +128,8 @@ Each field of a kept step comes from the record:
   `sandbox.commit:Committed`, `branch.merge:Merged`, `branch.publish:Added`, or a
   recorded refusal. A recorded `Committed` of a command step whose changes were all
   generated files may come back `UpToDate`; the converter writes
-  `sandbox.commit:Committed|UpToDate` there.
+  `sandbox.commit:Committed|UpToDate` there; the order check treats such a Commit
+  as optional.
 - **Agent.** Shop and Depot: the builder plays as `root`. Crew: lead → `root`;
   `P1…P1f` → `people`; `W1*` → `work-a`; `W2*` → `work-b`; `I1*` → `insight-a`;
   `I2*` → `insight-b`. The observer (`main`) is dropped.
@@ -118,7 +142,9 @@ Each field of a kept step comes from the record:
   demo's target thinking time: Shop 1 min, Depot 4 min, Crew 8 min. The commands'
   real run time comes on top.
 - **Timeouts.** Recorded commands carry their own inner `timeout` (at most 110 s).
-  The converter rejects a command without one.
+  The converter rejects a command without one, except one recorded under 10 s,
+  which it accepts with a note (Shop step 010's two heredocs); the step's tool
+  timeout still bounds it.
 
 ## Gates
 
@@ -126,8 +152,10 @@ A Live run is successful when all of these hold. Each is recorded on the sub-iss
 with the session id, the project name, the image and the dsh and LayerFS commits:
 
 1. The strip reads `Finished · N of N steps`.
-2. `node tools/check-demo.mjs <id>` passes: every step's replies match `expect`,
-   including every command's exit code.
+2. `node tools/check-demo.mjs '<URL>' <session> <id>` passes: every step's replies
+   match `expect`, including every command's exit code, and every Branch's
+   Commits, forks, merges and publishes come in the recorded order (`final.json`
+   `history`).
 3. The final-tree check passes: every tracked path on `main` matches `final.json`
    by SHA-256, and no other tracked path exists.
 4. No Workspace is mounted and every Sandbox of the run, including the service

@@ -33,7 +33,7 @@ export interface DemoStripProps { sessionId: string, services: () => DemoService
 export function DemoStrip({ sessionId, services }: DemoStripProps) {
   const [info, setInfo] = useState<DemoInfo | null>(null)
   const [demo, setDemo] = useState<Demo | null>(null)
-  const [mode, setMode] = useState<DemoMode>(savedMode)
+  const [chosen, setMode] = useState<DemoMode>(savedMode)
   const [playing, setPlaying] = useState<PlayStep | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -63,6 +63,8 @@ export function DemoStrip({ sessionId, services }: DemoStripProps) {
   const halted = running && rootRunning === false && now - movedAt > HALT_MS
 
   if (!info || !demo) return null
+  // a replayed run's demo plays on Live LayerFS only
+  const mode: DemoMode = demo.live ? 'live' : chosen
 
   const play = () => {
     setError(null)
@@ -101,7 +103,7 @@ export function DemoStrip({ sessionId, services }: DemoStripProps) {
         <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: error || halted || run?.state === 'stopped' ? 'var(--dsh-color-fg-danger, #d14343)' : 'var(--dsh-color-fg-muted, inherit)' }}
           title={error ?? line}>{error ?? line}</span>
         <span role="group" aria-label="LayerFS" style={{ display: 'inline-flex', borderRadius: 8, overflow: 'hidden', border: '1px solid color-mix(in srgb, currentColor 18%, transparent)' }}>
-          {choice('sim', 'Sim')}{choice('live', 'Live')}
+          {demo.live ? null : choice('sim', 'Sim')}{choice('live', 'Live')}
         </span>
         {/* Replay works mid-run too: the old Session is archived with its work stopped */}
         <Button variant="secondary" size="sm" disabled={playing !== null} onClick={play} title={running ? 'Stop this run and play the demo again' : undefined}

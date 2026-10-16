@@ -118,6 +118,15 @@ The `dsh-layerfs-demo` bundle adds the LayerFS mock model: an LLM provider that 
 | `merge` | root | the design preview's Commit & merge, 21 steps: a clean stale commit, a commit Conflict, merge into a new Branch, a merge Conflict, publish |
 | `sandbox` | root | one Sandbox with two Workspaces, a background build job, and the MountsActive, Busy and Dirty refusals |
 | `agents` | root and five | the design preview's 5 agents, 52 steps (62 bash calls): a Workspace per call in each Branch's shared Sandbox, stale merges, `.lww`, a same-line Conflict fixed in the kept Workspace, a dev server and curl, a try on a fork, merge, publish and blame |
+| `shop` | root | Live only. #334's Builder 2 replayed, 19 steps: a small web shop built over six milestones, 12 recorded commands (npm, esbuild, node tests, a server smoke) run again |
+
+#### Replayed runs
+
+`shop` (and, as they are converted, `depot` and `crew`; see [#347](../core/docs/issues/347/SPEC.md)) replays a recorded application run on Live LayerFS. Its scenario sets `"live": true`, so the strip offers only Live and the Host refuses a Sim Init of its project; `image` names the runtime image its Sandboxes use, and `seed.json` is the folder the original Init imported, which Play writes out once under `<profile>/dsh-layerfs-demo/seeds/` and Inits from. Each bash step is `step(<NNN>)` of [`scenarios/shared/replay.mjs`](scenarios/shared/replay.mjs), which makes the recorded SDK calls of `run/NNN.json` in order: recorded writes are applied as they were, recorded commands run again in a Workspace of the same Branch, and each reply must be the recorded one (a command's exit code included), or the step exits 1 and the run stops. `final.json` holds each tracked file's SHA-256 on the recorded final `main` and each Branch's recorded history, for check-demo.
+
+`tools/import-run.mjs` generates these folders from a run's records and a restored copy of its stopped Store (`tools/restore-store.mjs`). It keeps steps that write, run a command or change history and drops reads; pauses are `clamp(gap × k, 400, 3000)` ms with `k` set so they add up to the demo's target thinking time.
+
+dsh's bash tool reports a command that exits non-zero as an ordinary result ending in `[exit code: N]`; the mock stops the run on that marker (and on a signal or timeout marker) as it does on an error result.
 
 A scenario is `scenario.json` (format `layerfs-mock-scenario` version 2), with its `scripts/` or a shared `lib`. Each agent has a list of steps:
 - a call step: one preset tool and its arguments. A bash step names a `script` (sent as `node --input-type=module <<'JS'`), a `run` (calls of the scenario's `lib`, imported and awaited in such a script) or a `command`. `expect` lists the LayerFS outcomes its trace should show, `retry` reruns it on matching output, and `as` names a background job;
@@ -199,6 +208,8 @@ You need:
        # home / traceDir: <os temp>/dsh-layerfs/{home,traces}
    ```
 
+   Keep `home` and `traceDir` in the OS temp area: bash calls in Workspace Write mode run in dsh's sandbox, which lets them write only there, and a LayerFS call there writes both (a `sandbox.create` elsewhere fails `PermissionDenied`).
+
 4. Start dsh web (`pnpm dsh web` in the dsh checkout, with `DSH_HOME` set).
    1. Open the LayerFS panel and Init a workspace.
    2. Start a "New LayerFS session".
@@ -213,7 +224,11 @@ Only dsh web is checked; dsh desktop serves the same web client but was not test
 | `node ../sdk_sim/test_dsh_view.mjs sim` | the view model against the simulator's stories |
 | `node tools/init-project.mjs <profile dir> <folder> <image> <daemon>` | Init outside dsh |
 | `node tools/demo.mjs [<demo> <folder>]` | lists the demos, or copies the demo website into another folder |
-| `node tools/check-demo.mjs '<dsh web URL with ?token=…>' <session id> <demo>` | checks a finished demo session: every agent ran, and each bash step with `expect` left those LayerFS outcomes on the trace |
+| `node tools/check-demo.mjs '<dsh web URL with ?token=…>' <session id> <demo> [--wait <s>]` | checks a finished demo session: every agent ran, and each bash step with `expect` left those LayerFS outcomes on the trace. For a replayed run also: no Sandbox of the project is open, every Branch's history is as recorded, and `main`'s tracked files match `final.json` |
+| `node tools/run-scenario.mjs <demo> --out <dir> [--pace] [--keep]` | plays a replayed demo headlessly on Live LayerFS, without dsh web or the mock model, agents at the same time, then runs the same gates and writes `receipt.json`. Pauses are skipped unless `--pace`; order comes only from the recorded order and `until` |
+| `node tools/restore-store.mjs <id> <folder with global/> <work dir> <project>` | opens a copy of a stopped Store in a new volume and LayerFS home, for `import-run.mjs` (needs `LAYERFS_READER`, a checkout built at the Store's schema) |
+| `node tools/import-run.mjs <shop\|depot\|crew> <id> <store.json> key=value…` | generates `scenarios/<id>/` from a recorded run |
+| `LAYERFS_DEMO_FAST=1` (dsh web's environment) | the mock and `terminal.mjs` skip typing, thinking and terminal delays; nothing else changes |
 | `node tools/check-session.mjs '<dsh web URL with ?token=…>' <session id>` | checks that a session's tab draws what LayerFS reports: Branches, heads, `main`, Sandboxes, which agent made each Commit and Layer, and bash-call groups |
 
 The design preview `sdk_sim/dsh_design.html` imports the same model and renderer, so it and the tab draw the same thing.

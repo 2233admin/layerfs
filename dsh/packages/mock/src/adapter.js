@@ -11,11 +11,14 @@ export const PROVIDER = "layerfs-mock";
 /**
  * @param {typeof import("@deepseek-ai/dsh-llm").LlmAdapter} Base dsh's adapter class
  * @param {Map<string, object>} scenarios compiled scenarios by model id
- * @param {{ typingMs?: number, progress?: import("./progress.js").Progress, intro?: string }} [options]
- *   pause between streamed words; where each reply's position is reported;
- *   the question a demo Session opens with, answered with what the demo shows
+ * @param {{ typingMs?: number, fast?: boolean, progress?: import("./progress.js").Progress, intro?: string }} [options]
+ *   pause between streamed words; `fast`: no typing and no scenario pauses
+ *   (development runs: order comes from the scenario's waits, never from
+ *   time); where each reply's position is reported; the question a demo
+ *   Session opens with, answered with what the demo shows
  */
-export function createAdapter(Base, scenarios, { typingMs = 18, progress, intro } = {}) {
+export function createAdapter(Base, scenarios, { typingMs = 18, fast = false, progress, intro } = {}) {
+  if (fast) typingMs = 0;
   class LayerFsMockAdapter extends Base {
     providerInfo(provider) { return { id: provider, name: "LayerFS mock" }; }
 
@@ -43,7 +46,7 @@ export function createAdapter(Base, scenarios, { typingMs = 18, progress, intro 
         const reply = nextReply(scenario, agent, options.messages ?? []);
         progress?.report(scenario.name, agent, reply, options.sessionId);
         if (reply.kind === "error") return yield failure(`LayerFS mock (${scenario.name}, ${agent}): ${reply.message}`, "MOCK_SCENARIO_STOPPED");
-        await sleep(reply.delay, signal);
+        await sleep(fast ? 0 : reply.delay, signal);
         if (reply.kind === "text") return yield* text(reply.text, typingMs, signal);
         const missing = reply.calls.map((c) => c.name).filter((n) => !offered.has(n));
         if (missing.length) return yield failure(`LayerFS mock (${scenario.name}, ${agent}): ${reply.step} calls ${missing.join(", ")}, which this agent's preset does not offer`, "MOCK_TOOL_NOT_OFFERED");
@@ -83,7 +86,7 @@ const firstUserText = (messages) => {
 const introOf = (scenario) => [
   `${scenario.title}: ${scenario.blurb}`.trim(),
   `Agents: ${Object.keys(scenario.agents).join(", ")}.`,
-  "Press Play below to run it on simulated or live LayerFS. Each run starts in a new session.",
+  `Press Play below to run it on ${scenario.live ? "Live" : "simulated or live"} LayerFS. Each run starts in a new session.`,
 ].join("\n\n");
 
 const failure = (message, code) => ({ type: "finish", reason: { kind: "error", failure: { message, code } } });

@@ -8,8 +8,12 @@
 //   GET  /layerfs-demo/<id>                one demo, as in the list
 //   POST /layerfs-demo/<id>/session {sessionId}   the demo's Session from now on
 // A demo's Session is kept in <stateDir>/sessions.json; Replay replaces it.
+// A replayed run's demo (issue #347) also carries `live` (Live LayerFS only),
+// its Sandboxes' `image`, and `seed`, the folder its project is Inited from:
+// its seed.json written out under <stateDir>/seeds (seed.js).
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { seedFolder } from "./seed.js";
 
 const PREFIX = "/layerfs-demo";
 const MAX_BODY = 4 * 1024;
@@ -57,9 +61,18 @@ class SessionFile {
  * @param {{ scenarios: Map<string, object>, progress: import("./progress.js").Progress, workspace: string, stateDir: string, preset: string, provider: string, prompt: string, intro: string }} demo
  */
 export function registerDemoRoutes(ctx, { scenarios, progress, workspace, stateDir, preset, provider, prompt, intro }) {
-  const sessions = new SessionFile(stateDir);
+  const sessions = new SessionFile(stateDir), seeds = new Map();
+  // written once, at the first read; a seed that cannot be written is the demo's error
+  const seedOf = (id, scenario) => {
+    if (!scenario.seed) return { seed: null };
+    if (!seeds.has(id)) {
+      try { seeds.set(id, { seed: seedFolder(scenario.seed, join(stateDir, "seeds"), id) }); } catch (error) { seeds.set(id, { seed: null, seedError: error.message }); }
+    }
+    return seeds.get(id);
+  };
   const view = (id, scenario, saved) => ({
     id, title: scenario.title, blurb: scenario.blurb ?? null, agents: Object.keys(scenario.agents), speed: scenario.speed ?? 1,
+    live: scenario.live === true, image: scenario.image ?? null, ...seedOf(id, scenario),
     sessionId: saved[id] ?? null, run: progress.get(id),
   });
   const handler = async (req, res) => {

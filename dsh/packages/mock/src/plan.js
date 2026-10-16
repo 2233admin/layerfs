@@ -6,7 +6,10 @@
 // Walking the agent's assistant messages against its steps gives the
 // position. A message with a tool call is one call step: a result matching
 // the step's retry rule repeats it, any other error result stops the
-// scenario, otherwise the next step follows. A text-only message is the
+// scenario, otherwise the next step follows. dsh's bash tool does not mark a
+// command that exits non-zero, is killed or times out as an error; its result
+// ends with a marker line instead ("[exit code: 1]"), which stops the
+// scenario the same way. A text-only message is the
 // reply step when one is due, and otherwise what the agent said while it
 // waited to be woken.
 
@@ -14,6 +17,9 @@
 const STARTED = /started subagent ([0-9a-f-]{8,})/;
 const SETTLED = /subagent ([0-9a-f-]{8,}) finished/;
 const JOB = /background job ([A-Za-z0-9_.:-]+)/;
+
+/** The marker dsh's bash tool appends to a command that did not exit 0. */
+const SHELL_FAILURE = /\n\[(exit code: [1-9][0-9]*|killed by signal: [^\]\n]+)\]$|\[timed out after [0-9]+ms\]/;
 
 const textOf = (message) => (message.content ?? []).filter((b) => b.type === "text").map((b) => b.text).join("\n");
 const settledId = (message) => message.role === "user" ? message.source?.childId ?? textOf(message).match(SETTLED)?.[1] : undefined;
@@ -75,7 +81,9 @@ export function nextReply(scenario, agent, messages) {
       attempts++, retrying = true;
       continue;
     }
-    if (result.isError) return reply({ kind: "error", message: `${step.at} failed, so ${agent} stops here: ${result.text.slice(0, 400)}` });
+    if (result.isError || (step.call.name === "bash" && SHELL_FAILURE.test(result.text))) {
+      return reply({ kind: "error", message: `${step.at} failed, so ${agent} stops here: ${result.text.slice(-400)}` });
+    }
     index++, attempts = 0, retrying = false;
   }
 

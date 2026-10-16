@@ -14,7 +14,8 @@ import { Progress } from "../src/progress.js";
 import { compileScenario, loadScenarios, ScenarioError } from "../src/scenario.js";
 
 const scenarios = loadScenarios(fileURLToPath(new URL("../../../scenarios/", import.meta.url)));
-assert.deepEqual([...scenarios.keys()], ["tour", "parallel", "conflicts", "merge", "sandbox", "agents"]);
+assert.deepEqual([...scenarios.keys()], ["tour", "parallel", "conflicts", "merge", "sandbox", "agents", "shop"]);
+assert.equal(scenarios.get("shop").live, true, "a replayed run plays only on Live LayerFS");
 assert.equal(scenarios.get("agents").speed, 2, "5 agents plays at 2× as the original did");
 assert.equal(scenarios.get("tour").speed, 1);
 // a run step imports the scenario's lib and awaits each call
@@ -171,6 +172,13 @@ for (const [name, scenario] of scenarios) {
   root.push({ role: "assistant", id: "x", source: { kind: "model" }, content: [{ type: "tool-call", id: "k", name: "bash", arguments: "{}" }] });
   root.push({ role: "tool", id: "y", toolCallId: "k", isError: true, source: { kind: "tool", callId: "k" }, content: [{ type: "text", text: "Error: NameTaken feature-home" }] });
   assert.match(nextReply(s, "root", root).message, /agents\.root\[1\] failed, so root stops here: Error: NameTaken/);
+  // dsh's bash tool reports a non-zero exit, a signal or a timeout only in the text
+  for (const [text, stops] of [["out\n[exit code: 1]", true], ["out\n[killed by signal: SIGKILL]", true], ["out\n[timed out after 5000ms]", true], ["out\n[exit code: 0]", false], ["ok", false]]) {
+    const ran = [textMessage("user", "Run the demo.", { kind: "user" }), root[1], { ...root[2], isError: false, content: [{ type: "text", text }] }];
+    const next = nextReply(s, "root", ran);
+    assert.equal(next.kind === "error", stops, text);
+    if (stops) assert.match(next.message, /agents\.root\[1\] failed, so root stops here/);
+  }
   const off = [textMessage("user", "Run the demo.", { kind: "user" }), { role: "assistant", id: "x", source: { kind: "model" }, content: [{ type: "tool-call", id: "k", name: "job_list", arguments: "{}" }] }];
   assert.match(nextReply(s, "root", off).message, /calls bash, but the conversation has job_list/);
 }
@@ -224,7 +232,7 @@ assert.match(out.find((c) => c.type === "block-end").block.text, /^Conflicts: [\
 assert.equal(out.at(-1).reason.kind, "stop");
 out = await chunks({ model: "nope", messages: [], tools });
 assert.equal(out.at(-1).reason.failure.code, "MOCK_NO_SCENARIO");
-assert.deepEqual((await adapter.listModels("layerfs-mock")).map((x) => x.name), ["LayerFS mock · Tour", "LayerFS mock · Parallel Branches", "LayerFS mock · Conflicts", "LayerFS mock · Commit & merge", "LayerFS mock · One Sandbox, two Workspaces", "LayerFS mock · 5 agents"]);
+assert.deepEqual((await adapter.listModels("layerfs-mock")).map((x) => x.name), ["LayerFS mock · Tour", "LayerFS mock · Parallel Branches", "LayerFS mock · Conflicts", "LayerFS mock · Commit & merge", "LayerFS mock · One Sandbox, two Workspaces", "LayerFS mock · 5 agents", "LayerFS mock · Shop"]);
 const aborted = new AbortController(); aborted.abort();
 out = await chunks({ model: "tour", messages: [textMessage("user", "Run the demo.", { kind: "user" })], tools, signal: aborted.signal });
 assert.equal(out.at(-1).reason.kind, "aborted");
