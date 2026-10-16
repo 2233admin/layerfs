@@ -36,6 +36,8 @@ private service Sandbox. Mount does not scan or materialize the complete tree.
 | `LAYERFS_NATIVE` | Optional addon path; defaults to `native/layerfs.node`. |
 | `LAYERFS_TRACE` | Optional per-call trace file (see [Call trace](#call-trace)); unset means no trace. |
 | `LAYERFS_TRACE_STEP` | Optional step label put on each trace line as `step`; read at every call. |
+| `LAYERFS_TRACE_START` | `1` adds a start line before each traced call; read at every call. |
+| `DSH_LAYERFS_TRACE`, `DSH_LAYERFS_TRACE_STEP`, `DSH_LAYERFS_TRACE_START` | Used when the `LAYERFS_` name is unset or empty. A host that may only set `DSH_*` names in a command's environment (deepseek-harness) traces through these. |
 
 The same authorized home permits a fresh Node process to use a saved Sandbox id
 and mount path directly. Reopening validates the full container id, deployment,
@@ -154,8 +156,8 @@ counts are reported without inventing exclusive byte attribution.
 
 ## Call trace
 
-`LAYERFS_TRACE=<file>`, or `new LayerFS(project, { trace: file })` (the option
-wins), appends one JSON line to `file` for every SDK and operator call that
+`LAYERFS_TRACE=<file>` (else `DSH_LAYERFS_TRACE`), or
+`new LayerFS(project, { trace: file })` (the option wins), appends one JSON line to `file` for every SDK and operator call that
 reaches the native binding, including the client's own `sandbox.service` call.
 Unset, nothing is written and nothing changes. A failed trace write is dropped;
 it never changes a value, a refusal or the call count. Argument checks the
@@ -163,7 +165,7 @@ JavaScript methods make before the call (for example `page` bounds) are refused
 without a trace line.
 
 ```json
-{"layerfs_trace":1,"id":"9f3c21aa-12","step":"add product page","method":"fs.write","args":{"branch":"feature","path":"/README.md","contentBytes":6,"message":"Update introduction","sandbox":"sb_…"},"start":"2026-10-15T09:12:01.120Z","scope":"…","ms":41.733,"ok":true,"commit":"…","sizes":{"logical":120,"newCanonical":40,"newStored":30,"newMetadata":8},"daemon":[{"timing":[{"name":"files.bind","ms":1.2,"children":[…]},{"name":"commit","ms":30.4,"children":[…]}],"storage":{…},"construction":{…}}]}
+{"layerfs_trace":1,"id":"9f3c21aa-12","step":"add product page","method":"fs.write","args":{"branch":"feature","path":"/README.md","contentBytes":6,"message":"Update introduction","sandbox":"sb_…"},"start":"2026-10-15T09:12:01.120Z","scope":"…","phase":"end","ms":41.733,"ok":true,"commit":"…","sizes":{"logical":120,"newCanonical":40,"newStored":30,"newMetadata":8},"daemon":[{"timing":[{"name":"files.bind","ms":1.2,"children":[…]},{"name":"commit","ms":30.4,"children":[…]}],"storage":{…},"construction":{…}}]}
 ```
 
 | Field | Meaning |
@@ -175,6 +177,8 @@ without a trace line.
 | `args` | Short summary: text arguments (paths, refs, names, Sandbox id, command, message) cut to 200 characters; numbers and flags; `content`, `bytes`, `oldText` and `newText` as `<name>Bytes` byte counts; `apply` changes as `changes` (count) and `changeBytes`. Never file contents; `project`, `home` and `deploy` are left out. |
 | `start`, `ms` | Wall-clock start (ISO 8601) and elapsed wall milliseconds measured in the calling process, including the native queue and the daemon round trip. |
 | `ok` | `true` for a value; `false` with `code` and `message` for a refusal. |
+| `phase` | `end` on the line written when the call returns; `start` on the optional line written before it (see below). |
+| `branch`, `base`, `head`, `sandbox`, `path`, `baseLayer`, `process`, `exitCode` | Result ids, on a successful end line only. `branch.fork`: the new `branch`, its `base` Layer and its `head` (`null` when forked from main). `branch.merge`: the new `branch` and its `head`. `sandbox.create` (and the client's `sandbox.service`): the `sandbox` id. `sandbox.mount`: the `sandbox`, the Workspace `path`, its `branch`, its `base` Commit (`null` on a Branch with no Commit) and `baseLayer`. `operator.process.start`: the `process` id. A foreground `sandbox.exec`: its `exitCode`; its output is never traced. |
 | `kind`, `commit`, `layer`, `sizes` | The value's `kind`. Every publishing call that succeeds (`fs` write, edit, apply, mkdir, rm, cp, mv, `sandbox.commit`, `branch.merge`, `branch.publish`) names a `commit`: its new Commit, or the head it was `UpToDate` with; `branch.publish` names the published source Commit and the new `layer`. `sizes` (`logical`, `newCanonical`, `newStored`, `newMetadata`) appear only when the reply carries the Commit record (`fs` writes and `sandbox.commit` that commit); join `commit` to `operator.store.commits` for the rest. No call is added to fetch them. |
 | `scope` | 64 hex characters: the fresh daemon observation scope this call's control exchanges carried. |
 | `daemon` | One entry per traced control exchange the call made (a mount makes at least three: Branch lookup, bind, attach). Absent when the call reached no daemon (for example `project.init`). |
@@ -209,9 +213,22 @@ change it between calls; `new LayerFS(project, { trace, traceStep })`, or
 setting `layerfs.options.traceStep` later, overrides it. Unset or empty, lines
 have no `step`. A label alone traces nothing.
 
+With `LAYERFS_TRACE_START=1` (or `DSH_LAYERFS_TRACE_START=1`), each traced
+call first writes a start line: the same `layerfs_trace`, `id`, `step`, `method`,
+`args`, `start` and `scope` as its end line, with `phase: "start"` and no
+outcome fields. A viewer can show a call while it runs; a start line with no
+end line is a call that has not returned (or a process that ended first).
+Any other value leaves start lines off.
+
 Concurrent calls append whole lines; order follows completion, so join by `id`.
 The trace is diagnostic timing, not a benchmark measurement. Off means no scope,
 no observed exchange, no daemon timing and byte-identical replies.
+
+Checks: `node sdk/js/test/trace.mjs <case>` runs one case (`on`, `off`,
+`failure`, `dsh-env`, `start`, `ids`, `no-content`) over a stand-in binding;
+`node sdk/js/test/verify/trace_real.mjs <file>` traces a fork, mount, exec,
+process, commit and merge on a fresh Disposable Store with only the `DSH_`
+names set.
 
 ## Builds and compatibility
 

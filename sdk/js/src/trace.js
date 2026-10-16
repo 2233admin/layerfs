@@ -1,7 +1,8 @@
 // Opt-in per-call trace: one JSON line per SDK or operator call, appended to
-// the client's `trace` file (LAYERFS_TRACE). Off when no file is named. The
-// line never holds file contents, and a failed trace write is dropped: it
-// never changes the call's value or refusal.
+// the client's `trace` file (LAYERFS_TRACE, else DSH_LAYERFS_TRACE). Off when
+// no file is named. With LAYERFS_TRACE_START (or DSH_LAYERFS_TRACE_START) set
+// to 1, a start line precedes each call. A line never holds file contents, and
+// a failed trace write is dropped: it never changes the call's value or refusal.
 import { appendFileSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 
@@ -53,6 +54,28 @@ function committed(method, value) {
   return out;
 }
 
+/** Result ids a viewer needs to follow a call: the Branch and head a fork or
+ * merge made, the Sandbox a create made, the Workspace a mount made, and an
+ * exec's process or exit code. Ids and numbers only, never output text. */
+const RESULT_IDS = {
+  "branch.fork": ["branch", "base", "head"],
+  "branch.merge": ["branch", "head"],
+  "sandbox.mount": ["path", "branch", "base", "baseLayer"],
+};
+
+function results(method, args, value) {
+  if (!value || typeof value !== "object") return {};
+  const out = {};
+  if (method === "sandbox.create" || method === "sandbox.service") out.sandbox = value.id;
+  if (method === "sandbox.mount") out.sandbox = args?.sandbox;
+  for (const name of RESULT_IDS[method] ?? []) {
+    if (typeof value[name] === "string" || value[name] === null) out[name] = value[name];
+  }
+  if (typeof value.process === "string") out.process = value.process;
+  if (Number.isInteger(value.exitCode)) out.exitCode = value.exitCode;
+  return out;
+}
+
 /** One daemon telemetry value with its flat timing nodes as a tree. */
 function daemon(telemetry) {
   const { timing, ...rest } = telemetry ?? {};
@@ -67,9 +90,11 @@ function daemon(telemetry) {
 }
 
 /** The step label for a call: the client's `traceStep`, else
- * LAYERFS_TRACE_STEP as it is at the call; empty means none. */
+ * LAYERFS_TRACE_STEP, else DSH_LAYERFS_TRACE_STEP, as they are at the call;
+ * empty means none. */
 function step(options) {
-  const label = options?.traceStep ?? process.env.LAYERFS_TRACE_STEP;
+  const env = process.env;
+  const label = options?.traceStep ?? (env.LAYERFS_TRACE_STEP || env.DSH_LAYERFS_TRACE_STEP);
   return typeof label === "string" && label ? { step: short(label) } : {};
 }
 
@@ -90,6 +115,9 @@ export async function traced(options, method, args, send) {
   } catch {
     line = { layerfs_trace: 1, id, method, args: null, start: start.toISOString(), scope };
   }
+  const env = process.env;
+  if ((env.LAYERFS_TRACE_START || env.DSH_LAYERFS_TRACE_START) === "1") write(file, { ...line, phase: "start" });
+  line.phase = "end";
   let answer;
   try {
     answer = await send(scope);
@@ -102,7 +130,7 @@ export async function traced(options, method, args, send) {
   try {
     const result = plain.refused
       ? { ok: false, code: plain.refused.code, message: plain.refused.message }
-      : { ok: true, ...committed(method, plain.value) };
+      : { ok: true, ...committed(method, plain.value), ...results(method, args, plain.value) };
     write(file, { ...line, ms, ...result, ...(telemetry ? { daemon: telemetry.map(daemon) } : {}) });
   } catch {
     write(file, { ...line, ms, ok: !plain.refused });

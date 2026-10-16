@@ -28,8 +28,9 @@ const bind = (client, methods) =>
 
 export class LayerFS {
   /** Selects a project without filesystem, native addon or network I/O.
-   * `options.trace` names a per-call trace file (overrides LAYERFS_TRACE);
-   * `options.traceStep` labels its lines (overrides LAYERFS_TRACE_STEP). */
+   * `options.trace` names a per-call trace file (overrides LAYERFS_TRACE,
+   * then DSH_LAYERFS_TRACE); `options.traceStep` labels its lines
+   * (overrides LAYERFS_TRACE_STEP, then DSH_LAYERFS_TRACE_STEP). */
   constructor(projectName, options = {}) {
     if (typeof projectName !== "string" || !/^[a-z0-9](?:[a-z0-9_.-]{0,61}[a-z0-9])?$/.test(projectName)) {
       throw new LayerFSError("InvalidInput", "a project name is required", null);
@@ -38,7 +39,7 @@ export class LayerFS {
     const env = process.env;
     this.options = {
       home: env.LAYERFS_HOME,
-      trace: options.trace ?? (env.LAYERFS_TRACE || undefined),
+      trace: options.trace ?? (env.LAYERFS_TRACE || env.DSH_LAYERFS_TRACE || undefined),
       traceStep: options.traceStep,
       deploy: {
         docker: env.LAYERFS_DOCKER,
