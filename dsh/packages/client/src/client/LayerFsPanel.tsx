@@ -4,17 +4,20 @@
 // action, New session, and a menu for Refresh, the attached workspace and
 // Remove (RemoveDialog); tiles for where main is, Branches, Commits, the
 // last publish, and its Store (storage.ts: on disk, saved, the last Commit's
-// cost); then its History and Files (ProjectBoard). ellen_joe sits in
+// cost; they open StorageDetails under them); then its History and Files
+// (ProjectBoard). ellen_joe sits in
 // the header, and full size where there is nothing else to show.
-// Colours, borders and radii are dsh's own tokens (--dsw-*).
+// Colours, borders and radii are dsh's own tokens (--dsw-*, tokens.ts).
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
-import { Button, IconEllipsisOutlineRegular, IconFolderOpenOutlineRegular, IconPlusOutlineRegular, IconRefreshOutlineRegular, IconTrashOutlineRegular, Menu, type MenuEntry } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, IconChevronDownOutlineRegular, IconEllipsisOutlineRegular, IconFolderOpenOutlineRegular, IconPlusOutlineRegular, IconRefreshOutlineRegular, IconTrashOutlineRegular, Menu, type MenuEntry } from '@deepseek-ai/dsh-client-ui-primitives'
 import ellen from '../../../../../sdk_sim/avatars/ellen_joe.gif'
 import { api, type Project, type ProjectState, type Status, type Storage } from './api.ts'
 import { InitDialog } from './InitDialog.tsx'
 import { ProjectBoard } from './ProjectBoard.tsx'
 import { RemoveDialog } from './RemoveDialog.tsx'
 import { storageTiles } from './storage.ts'
+import { StorageDetails } from './StorageDetails.tsx'
+import { card, T } from './tokens.ts'
 
 /** What the panel uses of dsh's workspace services (read with ctx.get). */
 export interface PanelServices {
@@ -27,18 +30,9 @@ const PRESET = 'layerfs-dsh-minimalist'
 const NO_ITEMS = { items: [] as readonly Workspace[] }
 const NOT_LISTED = { getSnapshot: () => NO_ITEMS, subscribe: () => () => {} }
 
-// dsh tokens, and the 4/8/12/16/24 spacing scale
-const T = {
-  text: 'var(--dsw-alias-label-primary)', text2: 'var(--dsw-alias-label-secondary)', caption: 'var(--dsw-alias-label-caption)',
-  border: 'var(--dsw-alias-border-l2)', card: 'var(--dsw-alias-bg-layer-1)', well: 'var(--dsw-alias-bg-skeleton)',
-  hover: 'var(--dsw-alias-interactive-bg-hover)', active: 'var(--dsw-alias-interactive-bg-active)',
-  danger: 'var(--dsw-alias-state-error-primary)', warn: 'var(--dsw-alias-state-warn-primary)',
-  sm: 'var(--dsw-radius-sm)', md: 'var(--dsw-radius-md)',
-} as const
 const ROWS = `.lfs-prow { background: transparent; } .lfs-prow:hover { background: ${T.hover}; } .lfs-prow[aria-current='true'] { background: ${T.active}; }
+.lfs-tile { background: ${T.card}; cursor: pointer; } .lfs-tile:hover, .lfs-tile[aria-expanded='true'] { background: ${T.hover}; }
 .lfs-bone { border-radius: 4px; background: ${T.well}; animation: lfs-bone 1.2s ease-in-out infinite alternate; } @keyframes lfs-bone { to { opacity: .45; } }`
-// a card: dsh's layer fill (white in light mode) inside a hairline, as dsh's settings cards
-const card = { background: T.card, border: `1px solid ${T.border}`, borderRadius: T.md } as const
 
 export function LayerFsIcon({ size }: { size?: number }) {
   const s = size ?? 16
@@ -63,6 +57,19 @@ function stats(state: ProjectState): [string, string, string?][] {
     ['Commits', String(Object.keys(s.commits).length)],
     ['Last publish', last ? `${last.sourceBranch}${by ? ` · ${by}` : ''}` : 'Nothing yet', last ? `${last.sourceBranch} published as ${last.id}${by ? ` by ${by}` : ''}` : undefined],
   ]
+}
+
+/** One tile's label over its value; a storage tile's chevron says whether its details are open. */
+function Tile({ label, value, open }: { label: string, value?: string, open?: boolean }) {
+  return (
+    <>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: T.text2 }}>
+        <span style={{ flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
+        {open !== undefined && <span style={{ display: 'flex', flex: 'none', transform: open ? 'rotate(180deg)' : undefined }}><IconChevronDownOutlineRegular size={12} /></span>}
+      </div>
+      <div style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: value ? T.text : T.caption }}>{value ?? '…'}</div>
+    </>
+  )
 }
 
 /** Why the project could not be read, in words. */
@@ -106,6 +113,7 @@ export function LayerFsPanel({ services }: { services: () => PanelServices }) {
   const [stateError, setStateError] = useState<string | null>(null)
   const [storage, setStorage] = useState<Storage | null>(null)
   const [storageError, setStorageError] = useState<string | null>(null)
+  const [details, setDetails] = useState(false)
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [reads, setReads] = useState(0)
@@ -144,6 +152,7 @@ export function LayerFsPanel({ services }: { services: () => PanelServices }) {
   // the project menu: Refresh, the attached workspace (a submenu), Remove
   const projectMenu: MenuEntry[] = project ? [
     { id: 'refresh', label: 'Refresh', icon: <IconRefreshOutlineRegular size={16} /> },
+    { id: 'storage', label: details ? 'Hide storage details' : 'Storage details', disabled: !storage },
     {
       id: 'attach', label: 'Attached workspace', icon: <IconFolderOpenOutlineRegular size={16} />, submenu: [
         ...items.map((w) => ({ id: `attach:${w.path}`, label: `${w.title} · ${short(w.path)}` })),
@@ -156,6 +165,7 @@ export function LayerFsPanel({ services }: { services: () => PanelServices }) {
   const onProjectMenu = (id: string) => {
     setMenu(null)
     if (id === 'refresh') setReads((n) => n + 1)
+    else if (id === 'storage') setDetails((open) => !open)
     else if (id === 'remove') setRemoving(true)
     else if (id === 'detach') void attach(null)
     else if (id.startsWith('attach:')) void attach(id.slice('attach:'.length))
@@ -206,17 +216,24 @@ export function LayerFsPanel({ services }: { services: () => PanelServices }) {
             {stateError
               ? <Notice title="Couldn't read this project">{problem(stateError)}</Notice>
               : (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 8 }}>
-                  {[
-                    ...(state ? stats(state) : [['main'], ['Branches'], ['Commits'], ['Last publish']] as [string, string?, string?][]),
-                    ...(storage ? storageTiles(storage) : [['On disk', storageError ? '–' : undefined, storageError ?? undefined], ['Last Commit', storageError ? '–' : undefined, storageError ?? undefined]] as [string, string?, string?][]),
-                  ].map(([label, value, title]) => (
-                    <div key={label} title={title} style={{ ...card, padding: '8px 12px', minWidth: 0 }}>
-                      <div style={{ fontSize: 12, color: T.text2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</div>
-                      <div style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: value ? T.text : T.caption }}>{value ?? '…'}</div>
-                    </div>
-                  ))}
-                </div>
+                <>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 8 }}>
+                    {(state ? stats(state) : [['main'], ['Branches'], ['Commits'], ['Last publish']] as [string, string?, string?][]).map(([label, value, title]) => (
+                      <div key={label} title={title} style={{ ...card, padding: '8px 12px', minWidth: 0 }}><Tile label={label} value={value} /></div>
+                    ))}
+                    {storage
+                      ? storageTiles(storage).map(([label, value, title]) => (
+                        <button key={label} type="button" className="lfs-tile" aria-expanded={details} onClick={() => setDetails((open) => !open)} title={`${title} ${details ? "Click to hide the details." : "Click for details."}`}
+                          style={{ border: card.border, borderRadius: card.borderRadius, padding: '8px 12px', minWidth: 0, textAlign: 'left', color: 'inherit', font: 'inherit' }}>
+                          <Tile label={label} value={value} open={details} />
+                        </button>
+                      ))
+                      : (['On disk', 'Last Commit']).map((label) => (
+                        <div key={label} title={storageError ?? undefined} style={{ ...card, padding: '8px 12px', minWidth: 0 }}><Tile label={label} value={storageError ? '–' : undefined} /></div>
+                      ))}
+                  </div>
+                  {details && storage && <StorageDetails storage={storage} labels={state?.labels ?? {}} />}
+                </>
               )}
             {state && <ProjectBoard name={project.name} state={state} />}
             {!state && !stateError && <Skeleton />}
